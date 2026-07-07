@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.370-dev"
+local MOD_VERSION = "0.1.371-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -38,6 +38,13 @@ local _cwv_wield_hook_registration_count = 0
 -- what broke the v0.1.330/331 attempt). Fields keep their original names so the
 -- refactor is a pure `_om.` prefix with no behavior change.
 local _om = {}
+
+-- Single source of truth for the husk override-unit package ref (issue #418).
+-- Used by BOTH the residency force-load producer (_force_load_husk_override_units)
+-- AND the preview/browser mesh-swap consumer's has_loaded gate. A duplicated bare
+-- literal at the two sites silently degraded every preview swap to the base mesh
+-- on any rename (no crash, no log) -- keep both ends on this constant.
+_om.HUSK_OVERRIDE_REF = "cwv_husk_override_units"
 
 mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 -- v0.1.344: removed the in-game chat banner echo per PROJECT_STANDARDS.md
@@ -4486,7 +4493,7 @@ do
 
 	local function _force_load_husk_override_units()
 		if not (Managers and Managers.package) then return end
-		local ref = "cwv_husk_override_units"
+		local ref = _om.HUSK_OVERRIDE_REF
 		for _, d in ipairs(_variant_definitions) do
 			for _, field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
 				local u = _om._husk_override_unit_needs_residency(d, field)
@@ -9036,6 +9043,25 @@ local function _find_def(item_key)
 	return nil
 end
 
+-- Shared override-mesh residency guard (issue #418). Given a base unit path,
+-- return its resident "_3p" override form or nil. Encapsulates the vanilla-
+-- player-mesh prefix + invisible-weapon sentinel + "_3p" suffix + has_loaded
+-- residency check that was inlined (and drifting) across the inventory-preview
+-- swap and the illusion browser. A non-vanilla, sentinel, or non-resident target
+-- returns nil so callers degrade to the base mesh -- never an engine-fatal
+-- World.spawn_unit on a non-resident/custom mesh (issue 403 class). Keyed on the
+-- single _om.HUSK_OVERRIDE_REF constant so producer and consumer can't drift.
+_om._resident_override_3p = function(base_unit)
+	if type(base_unit) ~= "string" or base_unit == "" then return nil end
+	if base_unit:find("units/weapons/player/", 1, true) ~= 1 then return nil end
+	if base_unit:find("wpn_invisible_weapon", 1, true) then return nil end
+	local want = base_unit .. "_3p"
+	if not (Managers and Managers.package) then return nil end
+	local ok, res = pcall(Managers.package.has_loaded, Managers.package, want, _om.HUSK_OVERRIDE_REF)
+	if not (ok and res == true) then return nil end
+	return want
+end
+
 -- ============================================================
 -- Preview mesh-swap (issue 237) — WEAPON_APPEARANCE_STANDARD §4.1
 -- ============================================================
@@ -9072,20 +9098,10 @@ _om._cwv_preview_meshswap_apply = function(item_name, backend_id, skin, info)
 	local def = _find_def(cwv_key)
 	if not def then return end
 
-	-- Vanilla player mesh only, non-sentinel, AND already force-loaded resident by
-	-- the boot residency pass — else World.spawn_unit engine-fatals the inventory
-	-- screen (bypasses pcall). A non-resident target degrades to the base mesh
-	-- (current behavior), never a crash.
-	local function _swap_name(base_unit)
-		if type(base_unit) ~= "string" or base_unit == "" then return nil end
-		if base_unit:find("units/weapons/player/", 1, true) ~= 1 then return nil end
-		if base_unit:find("wpn_invisible_weapon", 1, true) then return nil end
-		local want = base_unit .. "_3p"
-		if not (Managers and Managers.package) then return nil end
-		local ok, res = pcall(Managers.package.has_loaded, Managers.package, want, "cwv_husk_override_units")
-		if not (ok and res == true) then return nil end
-		return want
-	end
+	-- Vanilla player mesh only, non-sentinel, resident-gated -- else World.spawn_unit
+	-- engine-fatals the inventory screen. Extracted to the shared guard (issue #418)
+	-- so this path and the illusion browser can't drift; keyed on _om.HUSK_OVERRIDE_REF.
+	local _swap_name = _om._resident_override_3p
 
 	local swapped = 0
 	for _, entry in ipairs(info.spawn_data) do
@@ -9532,7 +9548,18 @@ for _, def in ipairs(_variant_definitions) do
 			or _resolve_field(def, "right_hand_rotation_1p")
 			or _resolve_field(def, "left_hand_rotation_1p")
 			or _resolve_field(def, "right_hand_rotation_3p")
-			or _resolve_field(def, "left_hand_rotation_3p") then
+			or _resolve_field(def, "left_hand_rotation_3p")
+			-- Issue #417: a variant that OVERRIDES a hand unit (renders its own
+			-- mesh) must resolve a def on every def-keyed path too, or the mesh
+			-- swaps (via _find_def, registration-independent) while transform and
+			-- texture bail at the nil-def guard -- silently. That trap forced the
+			-- per-item `force_register` crutch (the musket, #409). Registering on
+			-- unit-override presence generalizes the crutch: mesh-bearing =>
+			-- def-resolving, so units and every other concern stay coupled for all
+			-- current AND future variants. Behavior-neutral today (WA.apply no-ops
+			-- on nil scale/offset/rotation; texture stays musket-gated).
+			or _resolve_field(def, "right_hand_unit")
+			or _resolve_field(def, "left_hand_unit") then
 		_transform_map[def.item_key] = def
 		if not def.no_skin then
 			_skin_transform_map[def.item_key .. "_skin"] = def
@@ -9542,6 +9569,9 @@ end
 
 -- Exposed for /cwv_regression_test (musket_old_force_registered, #409).
 mod._cwv_transform_registered = function(key) return _transform_map[key] ~= nil end
+-- Exposed for cwv_unit_bearing_variants_registered (#417): the test asserts every
+-- def declaring a hand-unit override is registered (mesh-bearing => def-resolving).
+_om._variant_defs = _variant_definitions
 
 -- Custom illusions with their own scale/offset fields (e.g. greathammer
 -- skins applied to 1H mace targets need to scale the oversized 2H model
@@ -11424,6 +11454,44 @@ _rt_register("cwv_husk_transform_coverage", function()
     end
     if _cwv_husk_wield_diag_installed ~= true then
         return "husk _wield_slot diagnostic hook not installed (issues 395/398 evidence arm)"
+    end
+end)
+
+_rt_register("cwv_unit_bearing_variants_registered", function()
+    -- Issue #417: a variant that overrides a hand unit must resolve a def on every
+    -- def-keyed render path, or its mesh swaps (via _find_def) while transform and
+    -- texture silently bail at the nil-def guard. The registration gate now keys on
+    -- unit-override presence; assert the invariant so a future gate edit can't drop
+    -- it and reintroduce the per-item force_register crutch (the musket, #409).
+    if type(mod._cwv_transform_registered) ~= "function" then
+        return "mod._cwv_transform_registered missing -- #417 invariant unguardable"
+    end
+    local defs = _om._variant_defs
+    if type(defs) ~= "table" then
+        return "_om._variant_defs not exposed -- cannot assert the #417 registration invariant"
+    end
+    local missing = {}
+    for _, def in ipairs(defs) do
+        local ru, lu = def.right_hand_unit, def.left_hand_unit
+        local has_unit = (type(ru) == "string" and ru ~= "") or (type(lu) == "string" and lu ~= "")
+        if has_unit and not mod._cwv_transform_registered(def.item_key) then
+            missing[#missing + 1] = tostring(def.item_key)
+        end
+    end
+    if #missing > 0 then
+        return "unit-bearing variants NOT in _transform_map (#417 reg-gate fork): " .. table.concat(missing, ", ")
+    end
+end)
+
+_rt_register("cwv_husk_override_ref_shared", function()
+    -- Issue #418: the residency producer and the preview/browser swap consumer must
+    -- key on ONE constant, and the swap guard must be the shared helper -- a
+    -- duplicated ref literal silently degraded every swap to the base mesh.
+    if _om.HUSK_OVERRIDE_REF ~= "cwv_husk_override_units" then
+        return "_om.HUSK_OVERRIDE_REF missing/changed -- producer/consumer ref may have drifted (#418)"
+    end
+    if type(_om._resident_override_3p) ~= "function" then
+        return "_om._resident_override_3p missing -- shared preview/browser swap guard lost (#418)"
     end
 end)
 
