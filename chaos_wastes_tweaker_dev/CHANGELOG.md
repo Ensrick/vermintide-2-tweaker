@@ -1,5 +1,13 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.237-dev (2026-07-06) - HOTFIX: client CTD on kill with the kill-heal boon (#406)
+
+**Issue 406 [verify-fix] - a CLIENT taking the "heal on kill" power-up (`ct_kill_heal`) hard-crashes on their next kill:**
+- **Root cause:** `ct_kill_heal_on_kill` called `DamageUtils.heal_network` with no server gate; heal_network fasserts "Only server can heal" on clients (damage_utils.lua:2636). on_kill procs run on the killer's local machine, so a client-side kill = instant fassert. Same class as crt issue 405 (2026-07-07 client crash); found by the issue-405 repo-wide sweep. Latent to date because the user usually hosts.
+- **Fix:** vanilla `Managers.player.is_server` gate (buff_templates.lua:325/:404 pattern); client no-ops, the host's instance of the synced buff grants the +0.25 permanent heal.
+- **STABLE `chaos_wastes_tweaker` carries the same bug** (chaos_wastes_tweaker.lua:10781-10785) until the next user-triggered promotion - not patched per dev/stable doctrine.
+- **Verify in-game:** as a CLIENT in Chaos Wastes on ct_dev, take the kill-heal boon and kill enemies - no crash; green health ticks up when the host runs ct/ct_dev.
+
 ## 0.7.236-dev (2026-07-06) - CLOSE issue 291 (Cataclysm-3 journey-win CTD) - user-confirmed fixed
 
 User confirmed in-game 2026-07-06: winning a CW journey with Progressive Difficulty ramped to

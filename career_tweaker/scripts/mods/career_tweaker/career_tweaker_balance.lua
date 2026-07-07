@@ -3479,6 +3479,12 @@ if ProcFunctions and ProcFunctions.sienna_adept_reduce_activated_ability_cooldow
         _orig_fires_from_ash_fn(owner_unit, buff, params)
         if not mod:get("rework_bw_adept_fires_from_ash_1pct_plus_thp") then return end
         if not ALIVE[owner_unit] then return end
+        -- Issue 405: heal_network fasserts "Only server can heal" on clients
+        -- (damage_utils.lua:2636). Every vanilla heal_from_proc call site gates
+        -- on Managers.player.is_server (buff_templates.lua:325/:404/...); the
+        -- proc also runs on the host for a client's kill, so the host instance
+        -- grants the THP and the client instance must no-op.
+        if not (Managers and Managers.player and Managers.player.is_server) then return end
         if DamageUtils and DamageUtils.heal_network then
             DamageUtils.heal_network(owner_unit, owner_unit, 0.5, "heal_from_proc")
         end

@@ -1,5 +1,12 @@
 # Career Tweaker Changelog
 
+## 0.3.53-dev - 2026-07-06 - HOTFIX: client CTD on Fires from Ash THP heal (#405)
+
+**Issue 405 [verify-fix] - client hard-crash killing a burning enemy as Sienna Adept with `rework_bw_adept_fires_from_ash_1pct_plus_thp` on:**
+- **Root cause (crash block, console-2026-07-07-02.29.14, is_server=false):** the Fires from Ash wrapper (`career_tweaker_balance.lua:3483`) called `DamageUtils.heal_network` unconditionally; that function fasserts "Only server can heal" (damage_utils.lua:2636). Every vanilla `heal_from_proc` call site is gated on `Managers.player.is_server` (buff_templates.lua:325/:404/...) - the wrapper copied the heal but dropped the gate. Host-side play never hits it, which is why 0.3.52 and earlier survived until the first client-side Adept session.
+- **Fix:** vanilla gate added before the heal; the client instance no-ops and the host's own proc instance (host also triggers the proc for a client's kill) grants the +0.5 THP when the host runs crt. Vanilla cooldown reduction unchanged on both sides.
+- **Verify in-game:** as a CLIENT on Sienna Adept with the toggle on, kill burning enemies - no crash; THP still ticks up when the host runs crt.
+
 ## 0.3.52-dev - 2026-07-05 - Fix: Chaos Wastes curse "Unquenchable Thirst" self-DoT eats armor and builds overcharge (#334)
 
 The Chaos Wastes Slaanesh curse "Unquenchable Thirst" (internally `curse_abundance_of_life`) ticks self-damage every 2s through a `custom_dot_tick` that calls `add_damage_network(unit, unit, ...)` with damage_type `"wounded_dot"` and a NIL damage_source (`morris_buff_settings.lua:636-646`). Because the source is nil the tick slips past vanilla's own exemption sets (`INVALID_GROMRIL_DAMAGE_SOURCE` / `INVALID_DAMAGE_TO_OVERHEAT_DAMAGE_SOURCES`, `damage_utils.lua:2114-2127`), so it consumed Ironbreaker Gromril Armour every tick, converted to overcharge under Unchained Blood Magic, and ate a Necromancer Cursed Armor counter. Added an `_is_self_dot` discriminator (damage_type `"wounded_dot"` AND attacker == victim) in `career_tweaker_armor_overcharge.lua` to catch these self-inflicted DoT ticks; the only `wounded_dot` self-tickers are curse / event / mutator DoTs (this curse, skulls_2023, Nurgle's Rot).
