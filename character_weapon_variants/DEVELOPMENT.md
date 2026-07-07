@@ -1010,6 +1010,152 @@ Three distinct ways the bayonet can render where it shouldn't:
 | One-frame "floating bayonet" after stance toggle | `mark_for_deletion` is async; child renders at last world position for one frame | Call `Unit.set_unit_visibility(child, false)` BEFORE `mark_for_deletion` |
 | Extra bayonet on ranged equip ("orphan") | A code path bypasses `destroy_wielded` (cosmetic application, equipment refresh) and re-fires our spawn hook on the same parent → second bayonet attached, first orphans | (a) Make `_attach` idempotent: skip if pair already tracked for the rifle. (b) `_wield_slot` post-hook also destroys orphans (parent dead, child alive) as defensive cleanup |
 
+## Husk rendering path
+
+The single most misdiagnosed CWV surface. A variant that looks and behaves
+perfectly for the LOCAL wielder and their BOTS can be invisible, wrong-mesh,
+wrong-scale, or carry an extra ammo mesh on a REMOTE player's screen (a
+"husk"). See `docs/BUG_CLASSES.md` class 27 for the umbrella. This section is
+the mechanism + doctrine + the per-variant coverage audit.
+
+### Mechanism — the husk only ever sees the BASE item
+
+CWV variants keep `entry.name = base_weapon` (the clone-name-clobber;
+clobbering it to the cwv key crashes the owner equip path — see "Naming flow
+for cwv variants" and `feedback_cwv_clone_name_clobber.md`). The equipment RPC
+encodes an item as `NetworkLookup.item_names[item_data.name]`, so the wire
+carries the **base weapon key**, plus a separately-synced **skin name**.
+
+On the receiving client, `SimpleHuskInventoryExtension.add_equipment`
+(`simple_husk_inventory_extension.lua:185`) does `item_data =
+ItemMasterList[item_name]` — the VANILLA base entry — and stores
+`{ item_data = <base>, skin = <skin_name> }`. The husk therefore knows nothing
+about the CWV instance: no `cwv_variant` marker, no `cwv_<key>_001`
+backend_id. **The only husk-reachable positive signals are the synced skin
+name and a base+career inference.**
+
+Two spawn paths, only one of which husks take:
+
+| Path | Entry | Discriminator | CWV apply lives in |
+|---|---|---|---|
+| Owner / bot | `GearUtils.create_equipment` | has a 1P rig | the create_equipment hook (owner transforms, etc.) |
+| **Husk (remote)** | `SimpleHuskInventoryExtension._wield_slot` -> `GearUtils.spawn_inventory_unit` | `owner_unit_1p == nil` | the `spawn_inventory_unit` hook, husk block gated on `not owner_unit_1p` |
+
+Consequence: **any fix written only on the owner path, or that reads
+`item_data.backend_id` / `.cwv_variant`, is invisible to husks.** Husk fixes
+must live in the `spawn_inventory_unit` hook and resolve via positive signals.
+
+### Residency doctrine — force-load the OVERRIDE units, not the base
+
+The mesh a husk actually spawns for a curated variant is the **synced skin's**
+per-hand units. `_register_variant_skins` sets `skin.right_hand_unit =
+def.right_hand_unit` and `skin.left_hand_unit = def.left_hand_unit`, so **the
+curated skin's meshes ARE the def's override units.** When those override units
+are non-resident on a client not playing the source character, the skin-path
+spawn fails and the husk shows the base mesh (or nothing) — issues 396 / 401.
+
+The client auto-loads the package for the synced *base* name, so:
+
+- **Override DIFFERS from base** -> the base package loads the WRONG mesh; the
+  override package is NOT auto-loaded (the wire name is the base). The override
+  units must be **force-loaded** to be resident. (27 of 30 variants.)
+- **Override EQUALS base, or no override** -> the base name loads the correct
+  mesh; nothing extra to force-load. (musket / rapier / crossbow — the base IS
+  the intended appearance.)
+
+The v0.1.367-dev residency pass is **data-driven**: it walks every def and
+force-loads any `right_hand_unit` / `left_hand_unit` (+ its `_3p` form) that
+differs from `rawget(ItemMasterList, base_weapon)`'s same field, via one shared
+predicate `_om._husk_override_unit_needs_residency` (the regression test asserts
+against the SAME predicate, so a new variant is covered by construction). It is
+**boot-time, at the keep, a bounded ~23-unique-mesh deduped ref-held set** — NOT
+a mission-load blanket force-load (that is the wt+cosmetics 1 GiB Lua-heap crash
+class). The invisible-weapon sentinel (javelin right hand) is skipped.
+
+Two things are intentionally KEPT alongside it:
+1. The `dr_shield_axe` base-unit force-load = the issue-280 **crash floor** for
+   the no-skin base-path spawn (a race / hot-join can spawn the base units
+   before the package lands).
+2. The `SimpleHuskInventoryExtension.start_weapon_fx` nil-slot guard = the
+   **durable crash net** protecting ANY husk weapon from the
+   `equipment.slots[nil]` CTD, independent of residency.
+
+### Positive-signal rule (transform + ammo)
+
+The husk apply resolves the CWV def ONLY via `item_units.skin`
+(`get_item_units` sets `result.skin` when a skin took effect) — NEVER a bare
+`item_data.name` match, which collides with a genuine native wielder of the
+real base weapon. `backend_id` on the husk is always the base's, so it never
+resolves a cwv key. Therefore:
+
+- **Transform** (scale/offset) resolves on the husk **iff the curated skin
+  syncs.** For override-differ variants the skin must sync for the override to
+  render at all, so the transform rides along. For override==base transform
+  variants (musket Y-stretch, rapier broaden) the base mesh always renders, but
+  the SCALE needs the skin; a skinless equip shows the native-scale base mesh.
+- **Ammo strip** (issue 399) uses a base+career POSITIVE inference: a base
+  weapon on a career that CANNOT natively wield it (dwarf-exclusive
+  `dr_deus_01` on a Kruber = only the CWV Outrider). Gated on `(item_data.name
+  == base) AND (career in the variant's careers)` so a genuine dwarf wielding
+  the real Trollhammer is never touched.
+
+**Stays broken until #392:** anything that needs the husk to resolve the CWV
+INSTANCE when NO cwv skin is on the wire — every cim-CRAFTED copy (no skin),
+and any default-rarity blacksmith template equipped without an applied illusion
+(pending in-game confirmation of whether its skin survives sync). The throttled
+`[cwv husk-transform] no cwv def resolved` log is the evidence arm that names
+which equips fall through. #392 is the fix: put a net-safe cwv marker / skin on
+the wire so the husk can see the instance.
+
+### Per-variant husk coverage audit (v0.1.367-dev)
+
+30 defs. "Override vs base": whether the def's per-hand override mesh differs
+from the base weapon's — the residency trigger. "Husk transform": whether the
+variant has a scale/offset (def- or type-level) and how it resolves on the husk.
+
+| Variant | Base | Override vs base | Residency (issue 396/401) | Ammo (399) | Husk transform (397) |
+|---|---|---|---|---|---|
+| cwv_es_axe_shield | dr_shield_axe | DIFFERS (R+L) | force-loaded | - | none |
+| cwv_es_axe_shield_veteran | dr_shield_axe | DIFFERS (R+L) | force-loaded | - | none |
+| cwv_we_sword_shield | es_sword_shield | DIFFERS (R+L) | force-loaded | - | none |
+| cwv_we_sword_shield_veteran | es_sword_shield | DIFFERS (R+L) | force-loaded | - | none |
+| cwv_es_longsword | es_bastard_sword | DIFFERS (R) | force-loaded | - | type; **default-rarity — resolves only if skin syncs (#392 risk)** |
+| cwv_es_longsword_blackguard | es_bastard_sword | DIFFERS (R) | force-loaded | - | type; resolves w/ skin |
+| cwv_es_longsword_nordland | es_bastard_sword | DIFFERS (R) | force-loaded | - | type; skin_only illusion — resolves when applied |
+| cwv_es_longsword_shield | es_sword_shield_breton | DIFFERS (R+L) | force-loaded | - | type; resolves w/ skin |
+| cwv_es_javelin | we_javelin | DIFFERS (L; R=invis sentinel) | force-loaded (boar spear) | - | def; resolves w/ skin |
+| cwv_wh_javelin | we_javelin | DIFFERS (L; R=invis sentinel) | force-loaded (boar spear) | - | def; resolves w/ skin |
+| cwv_es_outrider_grenade_launcher | dr_deus_01 | DIFFERS (R) | force-loaded | **strip (no_ammo_unit)** | none |
+| cwv_es_musket | es_handgun | same (R) | none needed (base loads) | - | type; SCALE needs skin (skinless = native scale) |
+| cwv_es_musket_old | es_handgun | DIFFERS (R, custom mesh) | force-loaded | - | none (native-authored scale) |
+| cwv_dr_priest_greathammer | wh_2h_hammer | DIFFERS (R, dwarf mesh) | force-loaded | - | none |
+| cwv_es_priest_greathammer | wh_2h_hammer | DIFFERS (R) | force-loaded | - | none |
+| cwv_es_warpriest_hammer | wh_1h_hammer | DIFFERS (R) | force-loaded | - | none |
+| cwv_es_maul | bw_1h_mace | DIFFERS (R) | force-loaded | - | type; resolves w/ skin |
+| cwv_es_poleaxe | dr_2h_axe | DIFFERS (R) | force-loaded | - | type; resolves w/ skin |
+| cwv_es_rapier | wh_fencing_sword | same (R) | none needed (base loads) | - | type; SCALE needs skin (skinless = native scale) |
+| cwv_es_crossbow | wh_crossbow | no override | none needed (base loads) | - | none |
+| cwv_es_dual_swords | we_dual_wield_swords | DIFFERS (R+L) | force-loaded | - | def; resolves w/ skin |
+| cwv_es_sword_and_mace | es_dual_wield_hammer_sword | DIFFERS (R+L) | force-loaded | - | none |
+| cwv_es_cudgel | es_1h_mace | DIFFERS (R) | force-loaded | - | none |
+| cwv_es_shortsword | bw_dagger | DIFFERS (R) | force-loaded | - | def; resolves w/ skin |
+| cwv_es_dual_axes | dr_dual_wield_axes | DIFFERS (R+L) | force-loaded | - | none |
+| cwv_wh_dual_axes | dr_dual_wield_axes | DIFFERS (R+L) | force-loaded | - | none |
+| cwv_es_dual_maces | dr_dual_wield_hammers | DIFFERS (R+L) | force-loaded | - | none |
+| cwv_wh_dual_maces | dr_dual_wield_hammers | DIFFERS (R+L) | force-loaded | - | none |
+| cwv_es_dual_warpriest_hammers | wh_dual_hammer | DIFFERS (R+L) | force-loaded | - | def; resolves w/ skin |
+| cwv_es_warpriest_hammer_shield | wh_hammer_shield | DIFFERS (R+L) | force-loaded | - | def; resolves w/ skin |
+
+**Residency:** 27 of 30 force-loaded by the data-driven pass; 3 (musket,
+rapier, crossbow) need none because the synced base name already loads the
+correct mesh. **Ammo:** 1 strip (outrider), disambiguated by dr_deus_01 being
+dwarf-exclusive; no other base carries an ammo mesh the variant should hide
+(crossbow legitimately shows bolts). **Transform:** resolves on the husk only
+when the curated skin syncs; the standout risk is `cwv_es_longsword` (default
+rarity + override-differ — if its skin does not survive sync the husk shows the
+base bastard-sword at native scale), plus every cim-crafted copy of any
+variant. Those await #392.
+
 ## Known Errors / Gotchas
 
 A consolidated catalog of CWV-specific failure modes that have shipped

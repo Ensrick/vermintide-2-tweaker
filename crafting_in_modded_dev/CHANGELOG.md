@@ -1,5 +1,61 @@
 # Crafting in Modded Changelog
 
+## 0.8.52-dev (2026-07-06) - issue 390: CWV variants crafted via cim rendered as the base vanilla weapon [verify-fix]
+
+- SYMPTOM (issue 390, two confirmed repros of one root cause): a Nordland Claymore
+  (`cwv_es_longsword_nordland`) crafted in cim rendered as a Bretonnian sword with
+  wrong grips; a Kruber Rapier (`cwv_es_rapier`) crafted in cim still carried the
+  Saltzpyre off-hand pistol. Both are CWV variants that render the BASE weapon's mesh
+  and inherited attachments instead of the variant.
+- ROOT CAUSE (base-units fallback, traced end-to-end): a CWV clone deliberately keeps
+  the BASE weapon's `name` (name-clobber crashes equip, per CWV
+  `feedback_cwv_clone_name_clobber.md`). The vanilla equip/preview path re-resolves
+  item_data as `item_name = item_data.name` -> `ItemMasterList[item_name]`
+  (world_hero_previewer.lua:674; also the backend_utils path), landing on the BASE
+  entry, so `BackendUtils.get_item_units` returns the base mesh (Bret sword) and the
+  base's inherited `left_hand_unit` (rapier pistol; the CWV entry nils it via
+  `no_left_hand`). CWV compensates with hooks (get_item_units units override,
+  `_resolve_cwv_def` grip transforms, illusion-picker filter) that ALL key on the
+  `cwv_<key>_NNN` backend_id pattern. cim minted the crafted copy with a bare
+  `Application.guid()` backend_id (standard_forge.lua), which matches none of them, so
+  no rescue fired and the base weapon rendered. CWV's own items work because they
+  carry `cwv_<key>_001` backend_ids.
+- FIX 1 (craftable set): synthetic "blacksmith template" injection
+  (`_cim_inject_templates`) now dedups on the item KEY, not `item_type`. CWV variant
+  families share one item_type (Recruit / Black Guard / base longsword all
+  `cwv_imperial_longsword`), so the old item_type dedup appended only ONE random
+  member per family in non-deterministic pairs() order. Per-key makes every registered
+  variant individually and deterministically craftable. skin_only CWV defs (Nordland)
+  are never in ItemMasterList, so no template is minted for them - they stay correctly
+  non-craftable (get the look via the real family member + the Nordland illusion in
+  the cosmetic picker).
+- FIX 2 (crafted-copy backend_id): CWV variant crafts now mint a `cwv_<key>_NNN`
+  backend_id in the 100..999 instance band (CWV's own items are _001.._002, so no
+  collision; uniqueness across crafts incl. restored ones via a persisted-craft scan)
+  instead of a guid, so CWV's render-rescue hooks can recognize the crafted copy.
+- FIX 3 (cim-side units rescue, self-contained): a new cim hook on
+  `(BackendUtils, get_item_units)` (pre-flight grep confirmed cim only CALLED it, never
+  hooked it) forces the CWV entry's `right_hand_unit` / `left_hand_unit` onto crafted
+  CWV copies when no skin is applied. This makes the MESH correct (Nordland variant
+  mesh; rapier drops the pistol) even before the CWV-side pattern widen lands. It
+  leaves user-applied illusions alone (bails when `result.skin` is set).
+- CWV-SIDE FOLLOW-UP (required for grips, routed separately): CWV's `_001`-literal
+  backend_id patterns (character_weapon_variants.lua ~9533 grip transforms, ~9714
+  units, ~9997 illusion filter, ~10094 cosmetic scale) must widen to `_%d%d%d` (the
+  precedent already at ~9859) so grip/scale transforms and the illusion-picker filter
+  also apply to crafted CWV copies. Until then, mesh is fixed cim-side but grips are
+  not. This widen also fixes CWV's own latent `instances >= 2` bug (only _001 was
+  matched).
+- DIAGNOSTIC: `[cim:390]` printf on every CWV craft logs the resolved key, minted
+  backend_id, and the CWV vs BASE entry per-hand units (shows the divergence the
+  rescue bridges). Always-on in dev; fires only on a craft action.
+- TEST: `_rt_register("cim390_cwv_craft_render_fix")` asserts the injection is
+  key-keyed and the cim-side units rescue hook installed.
+- IN-GAME VERIFY (cim_dev 0.8.52-dev; NOT confirmed yet): in the keep, craft a Nordland
+  Claymore (`cwv_es_longsword_nordland` family longsword) - it must render the claymore
+  mesh, not a Bretonnian sword. Craft a Kruber Rapier (`cwv_es_rapier`) - it must NOT
+  carry the Saltzpyre off-hand pistol. Watch the log for `[cim:390] crafted CWV ...`.
+
 ## 0.8.51-dev (2026-07-06) - issue 278: guard clients against unknown item_names ids on loadout sync (receiver side)
 
 - Companion to CWV 0.1.365-dev, which carries the PRIMARY (sender-side) fix and the

@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.366-dev"
+local MOD_VERSION = "0.1.367-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -4405,58 +4405,76 @@ end
 -- likewise non-resident on a client not playing a career that natively loads
 -- them -> invisible husk.
 --
--- Fix: additionally force-load the OVERRIDE units, read straight from the
--- variant DEFS (the authoritative source of the override paths — the built
--- entries don't exist yet this early in the file). This is boot-time (at the
--- keep, NOT mission load), a small fixed set of specific meshes, ref-held for
--- the session — NOT a blanket mission-load force-load (the wt+cosmetics 1 GiB
--- Lua-heap crash class). The dwarf base load above is intentionally KEPT (it
--- is the issue-280 crash floor for the base-path spawn); this block is purely
--- additive residency for the correct override meshes.
+-- The curated skin a CWV variant syncs carries the SAME per-hand override
+-- units as the def (`_register_variant_skins` sets skin.right_hand_unit =
+-- def.right_hand_unit, skin.left_hand_unit = def.left_hand_unit), so the def
+-- override paths ARE the skin-path meshes the husk spawns — covering the def
+-- fields covers the curated skin by construction.
+--
+-- Fix (v0.1.367-dev): DATA-DRIVEN residency. Instead of a hand-maintained key
+-- list (which covered only 5 of the 27 variants whose override differs from
+-- its base — 22 latent invisible-husk gaps, e.g. every dual-wield, the maul,
+-- poleaxe, greathammers, cudgel, shortsword, we_sword_shield, javelin boar
+-- spear, outrider blunderbuss), walk EVERY def and force-load any
+-- right_hand_unit / left_hand_unit (+ its `_3p` form) that DIFFERS from the
+-- base weapon's same-field unit. New variants are covered automatically. Reads
+-- straight from the variant DEFS (the authoritative source of the override
+-- paths — the built entries don't exist yet this early in the file), compares
+-- against `rawget(ItemMasterList, base_weapon)` (vanilla bases are resident at
+-- boot). This is boot-time (at the keep, NOT mission load), a bounded set of
+-- ~23 unique specific meshes deduped + ref-held for the session — NOT a
+-- blanket mission-load force-load (the wt+cosmetics 1 GiB Lua-heap crash
+-- class). The dwarf base load above is intentionally KEPT (it is the issue-280
+-- crash floor for the base-path spawn, i.e. the no-skin case where the husk
+-- spawns the base units); this block is purely additive residency for the
+-- correct override meshes the skin-path spawn needs. Overrides that EQUAL the
+-- base (musket / rapier reuse the base mesh) and the invisible-weapon sentinel
+-- (javelin right hand) are skipped — nothing extra to load.
 do
-	local _HUSK_OVERRIDE_RESIDENCY_KEYS = {
-		"cwv_es_axe_shield",           -- issue 401 (Empire axe + shield)
-		"cwv_es_axe_shield_veteran",   -- issue 401 (Empire hatchet + deus shield)
-		"cwv_es_longsword",            -- issue 396 (Empire greatsword mesh)
-		"cwv_es_longsword_blackguard", -- issue 396 (same family, unique mesh)
-		"cwv_es_longsword_shield",     -- issue 396 (Bretonnian base + shield)
-	}
-
-	local function _def_by_item_key(item_key)
-		for _, d in ipairs(_variant_definitions) do
-			if d.item_key == item_key then return d end
-		end
-		return nil
+	-- Resolve the base weapon's same-field unit so we only force-load OVERRIDES
+	-- that actually differ from what the base already renders. Vanilla bases are
+	-- resident in ItemMasterList at boot; a nil base (e.g. a CW-only base not yet
+	-- merged) is treated as "differs" so we conservatively load the override.
+	local function _base_field_unit(base_weapon, field)
+		local base = type(base_weapon) == "string" and rawget(ItemMasterList, base_weapon)
+		return (type(base) == "table") and base[field] or nil
 	end
 
-	local _loaded = {}   -- path -> true; exposed for the regression test
+	-- Shared predicate: is `u` an override unit that needs its own residency
+	-- (real path, not the invisible-weapon sentinel, and differs from the base
+	-- weapon's same-field unit)? Used by BOTH this pass and the regression test
+	-- so the loaded set and the assertion derive from one rule (issues 396/401).
+	_om._husk_override_unit_needs_residency = function(def, field)
+		local u = def and def[field]
+		if type(u) ~= "string" or u == "" then return nil end
+		if u:find("wpn_invisible_weapon", 1, true) then return nil end
+		if u == _base_field_unit(def.base_weapon, field) then return nil end
+		return u
+	end
+
+	local _loaded = {}   -- path -> true (attempted); exposed for the regression test
 
 	local function _force_load_husk_override_units()
 		if not (Managers and Managers.package) then return end
 		local ref = "cwv_husk_override_units"
-		for _, item_key in ipairs(_HUSK_OVERRIDE_RESIDENCY_KEYS) do
-			local d = _def_by_item_key(item_key)
-			if d then
-				for _, field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
-					local u = d[field]
-					-- Skip the invisible-weapon sentinel (javelin-style variants
-					-- park the held mesh on the other hand) — it has no real unit.
-					if type(u) == "string" and u ~= "" and not u:find("wpn_invisible_weapon", 1, true) then
-						for _, path in ipairs({ u, u .. "_3p" }) do
-							if not _loaded[path] then
-								_loaded[path] = true
-								local ok, err = pcall(function()
-									Managers.package:load(path, ref, nil, true, true)
-								end)
-								if ok then
-									local resident = false
-									pcall(function() resident = Managers.package:has_loaded(path, ref) and true or false end)
-									printf("[cwv husk-override-residency] force-loaded %s (ref=%s, resident=%s, for=%s)",
-										path, ref, tostring(resident), item_key)
-								else
-									printf("[cwv husk-override-residency] FAILED to force-load %s (for=%s): %s",
-										path, item_key, tostring(err))
-								end
+		for _, d in ipairs(_variant_definitions) do
+			for _, field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
+				local u = _om._husk_override_unit_needs_residency(d, field)
+				if u then
+					for _, path in ipairs({ u, u .. "_3p" }) do
+						if not _loaded[path] then
+							_loaded[path] = true
+							local ok, err = pcall(function()
+								Managers.package:load(path, ref, nil, true, true)
+							end)
+							if ok then
+								local resident = false
+								pcall(function() resident = Managers.package:has_loaded(path, ref) and true or false end)
+								printf("[cwv husk-override-residency] force-loaded %s (ref=%s, resident=%s, for=%s.%s)",
+									path, ref, tostring(resident), tostring(d.item_key), field)
+							else
+								printf("[cwv husk-override-residency] FAILED to force-load %s (for=%s.%s): %s",
+									path, tostring(d.item_key), field, tostring(err))
 							end
 						end
 					end
@@ -9530,7 +9548,9 @@ local function _resolve_cwv_def(item_data, skin)
 	-- the BASE weapon key, never the cwv_* key.
 	local bid = item_data.backend_id
 	if bid then
-		local cwv_key = bid:match("^(cwv_.-)_001$")
+		-- `_%d%d%d$` (not `_001$`): matches CWV's own instances (_001/_002) AND
+		-- cim-crafted copies (`cwv_<key>_NNN`, NNN 100-999, cim_dev issue 390).
+		local cwv_key = bid:match("^(cwv_.-)_%d%d%d$")
 		if cwv_key and _transform_map[cwv_key] then return _transform_map[cwv_key] end
 	end
 	-- Vanilla item key fallback (used by the mace_sword_tweak path below; cwv
@@ -9580,6 +9600,9 @@ do
 			_no_ammo_careers_by_base[def.base_weapon] = set
 		end
 	end
+	-- Exposed for the `cwv_no_ammo_strip_coverage` regression test, which
+	-- asserts every no_ammo_unit def contributes its base + careers here.
+	_om._no_ammo_careers_by_base = _no_ammo_careers_by_base
 
 	-- Set of every CWV base_weapon key — used only to scope the "no def
 	-- resolved" husk diagnostic so it doesn't spam on the common native-weapon
@@ -9587,6 +9610,19 @@ do
 	local _cwv_base_weapons = {}
 	for _, def in ipairs(_variant_definitions) do
 		if type(def.base_weapon) == "string" then _cwv_base_weapons[def.base_weapon] = true end
+	end
+
+	-- Once-per-key throttle for the defensive husk diagnostics below. A husk
+	-- weapon spawns on every wield, so an un-throttled printf on a silent-return
+	-- path would spam the log each swap/frame. Key by a stable string (reason +
+	-- base + hand) so each distinct silent-return reason surfaces exactly once,
+	-- giving the next paired peer log the "why a variant didn't get its apply"
+	-- evidence without the noise (task 5 defensive-logging requirement).
+	local _husk_logged_once = {}
+	local function _husk_log_once(key, fmt, ...)
+		if _husk_logged_once[key] then return end
+		_husk_logged_once[key] = true
+		printf(fmt, ...)
 	end
 
 	local function _husk_career_name(owner_unit_3p)
@@ -9608,7 +9644,18 @@ do
 		local careers = base_name and _no_ammo_careers_by_base[base_name]
 		if not careers then return false end
 		local career = _husk_career_name(owner_unit_3p)
-		if not (career and careers[career]) then return false end
+		if not (career and careers[career]) then
+			-- The base IS a no_ammo variant's base (careers table present), but
+			-- the wielder's career isn't in the strip set. Two possibilities: a
+			-- genuine native wielder of the real ammo weapon (correct no-strip),
+			-- or a husk career-lookup miss (career=nil) that WOULD have stripped.
+			-- Log once per (base, career) so a miss is visible in the paired log
+			-- instead of silently leaving the inherited torpedo attached.
+			_husk_log_once("ammo_career_miss:" .. tostring(base_name) .. ":" .. tostring(career),
+				"[cwv husk-ammo-strip] SKIP: base=%s is a no_ammo variant base but career=%s not in strip set -- native wielder OR husk career-lookup miss (issue 399 diag)",
+				tostring(base_name), tostring(career))
+			return false
+		end
 		local alive = false
 		pcall(function() alive = Unit.alive(ammo_unit_3p) and true or false end)
 		if alive then
@@ -9632,13 +9679,33 @@ do
 	-- is a CWV base weapon, log it: that is the disambiguating evidence for the
 	-- #392 base-resolution umbrella (husk never sees the CWV instance).
 	_om._husk_apply_cwv_transform = function(hand, item_data, item_units, weapon_unit_3p)
-		if not (weapon_unit_3p and _is_unit(weapon_unit_3p)) then return end
+		if not (weapon_unit_3p and _is_unit(weapon_unit_3p)) then
+			-- The 3P weapon unit is nil/dead. For a CWV base weapon this means the
+			-- spawn returned nothing (override unit non-resident on this client, or
+			-- the base-path spawn failed) — the deeper cause behind an invisible
+			-- husk. Log once per (base, hand) so it isn't a silent return.
+			local base_name = item_data and item_data.name
+			if base_name and _cwv_base_weapons[base_name] then
+				_husk_log_once("no_unit:" .. tostring(base_name) .. ":" .. tostring(hand),
+					"[cwv husk-transform] SKIP: hand=%s base=%s -- 3P weapon unit nil/dead (spawn failed / override non-resident?) issue 396/397 diag",
+					tostring(hand), tostring(base_name))
+			end
+			return
+		end
 		local skin = item_units and item_units.skin
 		local def = _resolve_cwv_def(item_data, skin)
 		if not def then
 			local base_name = item_data and item_data.name
 			if base_name and _cwv_base_weapons[base_name] then
-				printf("[cwv husk-transform] no cwv def resolved: hand=%s base=%s backend_id=%s skin=%s -- husk saw BASE item only (issue 397/392 diag)",
+				-- Throttled: the husk resolves the BASE item (no cwv_ backend_id, and
+				-- no curated skin synced), so no CWV def is reachable and the
+				-- transform can't apply. This is the issue-392 base-resolution
+				-- umbrella evidence — the husk never sees the CWV instance. Key by
+				-- (base, hand, skin) so a genuinely skinless equip logs once, but a
+				-- later skinned equip (which SHOULD resolve) still surfaces if it
+				-- unexpectedly falls through.
+				_husk_log_once("no_def:" .. tostring(base_name) .. ":" .. tostring(hand) .. ":" .. tostring(skin),
+					"[cwv husk-transform] no cwv def resolved: hand=%s base=%s backend_id=%s skin=%s -- husk saw BASE item only (issue 397/392 diag)",
 					tostring(hand), tostring(base_name),
 					tostring(item_data and item_data.backend_id), tostring(skin))
 			end
@@ -9709,9 +9776,11 @@ if BackendUtils then
 
 		if not backend_id then return result end
 
-		-- Backend_id pattern matches `cwv_<key>_001`. Extract the cwv
-		-- item_key and look up the def. Anything else passes through.
-		local cwv_key = type(backend_id) == "string" and backend_id:match("^(cwv_.-)_001$")
+		-- Backend_id pattern `cwv_<key>_NNN` (NNN = any 3 digits: CWV's own
+		-- _001/_002 instances, plus cim-crafted copies 100-999, cim_dev issue
+		-- 390). Extract the cwv item_key and look up the def; anything else
+		-- passes through.
+		local cwv_key = type(backend_id) == "string" and backend_id:match("^(cwv_.-)_%d%d%d$")
 		if not cwv_key then return result end
 		local def = _find_def(cwv_key)
 		if not def then return result end
@@ -9994,7 +10063,10 @@ end
 local function _is_cwv_item(item)
 	if not item then return false end
 	local backend_id = item.backend_id or item.ItemId
-	if type(backend_id) == "string" and backend_id:match("^cwv_.+_001$") then
+	-- `_%d%d%d$` (not `_001$`): CWV's own _001/_002 instances AND cim-crafted
+	-- copies (`cwv_<key>_NNN`, NNN 100-999, cim_dev issue 390) so the illusion
+	-- picker filters to cwv-only widgets for a crafted variant too.
+	if type(backend_id) == "string" and backend_id:match("^cwv_.+_%d%d%d$") then
 		return true
 	end
 	-- Fallback: the cwv_variant marker on the entry (set in `_build_entry`).
@@ -10091,7 +10163,10 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	local def = _skin_transform_map[weapon_key] or _transform_map[weapon_key]
 	local bid = item.backend_id
 	if bid then
-		local cwv_key = bid:match("^(cwv_.-)_001$")
+		-- `_%d%d%d$` (not `_001$`): CWV's own _001/_002 instances AND cim-crafted
+		-- copies (`cwv_<key>_NNN`, NNN 100-999, cim_dev issue 390) so the
+		-- cosmetic-preview scale applies to a crafted variant too.
+		local cwv_key = bid:match("^(cwv_.-)_%d%d%d$")
 		if cwv_key then
 			def = _transform_map[cwv_key] or _skin_transform_map[cwv_key] or def
 		end
@@ -11033,14 +11108,17 @@ _rt_register("cwv_outrider_no_ammo_unit", function()
 end)
 
 _rt_register("cwv_husk_override_residency", function()
-    -- Issue 401 (confirmed, 2 paired peer logs): the husk-residency force-load
-    -- for the Kruber Axe & Shield loaded the DWARF BASE units (dr_shield_axe ->
-    -- wpn_dw_axe_01_t1 / wpn_dw_shield_01), not the Empire OVERRIDE meshes the
-    -- variant actually spawns. v0.1.366-dev adds a second, additive residency
-    -- pass that force-loads the override units read straight from the defs.
-    -- This locks that target: the loaded set MUST contain the axe & shield
-    -- variant's own def.right_hand_unit and MUST NOT contain any dwarf-base
-    -- (wpn_dw_) mesh (which would mean it regressed to the wrong units).
+    -- Issues 401 / 396 (confirmed, paired peer logs): the husk spawns a CWV
+    -- variant's curated-skin mesh, which carries the def's per-hand OVERRIDE
+    -- units. When those override units are non-resident on a client not playing
+    -- the source character, the skin-path spawn fails and the husk shows the
+    -- base (or nothing). v0.1.366-dev shipped a HARD-CODED 5-key residency list;
+    -- v0.1.367-dev makes the pass DATA-DRIVEN (walks every def, force-loads any
+    -- right/left override unit that differs from its base). This test asserts
+    -- coverage is complete BY CONSTRUCTION: every override unit the shared
+    -- predicate flags as needing residency (+ its `_3p` form) is in the loaded
+    -- set. Derived from the SAME predicate the pass uses, so a new variant with
+    -- an override mesh can never silently slip past residency.
     if _cwv_husk_override_residency_ran ~= true then
         return "husk override-unit residency did not run (issues 401/396 fix missing)"
     end
@@ -11048,20 +11126,73 @@ _rt_register("cwv_husk_override_residency", function()
     if type(loaded) ~= "table" then
         return "_cwv_husk_override_paths not exposed (issue 401 residency-target guard)"
     end
-    -- The Empire override right-hand unit of the axe & shield MUST be resident.
+    local needs = _om._husk_override_unit_needs_residency
+    if type(needs) ~= "function" then
+        return "_om._husk_override_unit_needs_residency predicate not exposed (issues 396/401)"
+    end
+    local n_checked = 0
+    for _, d in ipairs(_variant_definitions) do
+        for _, field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
+            local u = needs(d, field)
+            if u then
+                n_checked = n_checked + 1
+                if not loaded[u] then
+                    return string.format(
+                        "husk override residency missing %s for %s.%s (issues 396/401 -- data-driven pass gap)",
+                        tostring(u), tostring(d.item_key), field)
+                end
+                if not loaded[u .. "_3p"] then
+                    return string.format(
+                        "husk override residency missing %s_3p for %s.%s (issues 396/401 -- _3p form not loaded)",
+                        tostring(u), tostring(d.item_key), field)
+                end
+            end
+        end
+    end
+    -- Sanity floor: the axe & shield Empire override (the original issue-401
+    -- repro) must specifically be present, and we must have covered more than
+    -- the old 5-key hard-coded list (guards against the predicate degenerating
+    -- to nil-for-everything and the loop vacuously passing).
     local axe = _find_def("cwv_es_axe_shield")
     if axe and type(axe.right_hand_unit) == "string" and not loaded[axe.right_hand_unit] then
         return string.format(
-            "husk residency missing the Empire override unit %s for cwv_es_axe_shield (issue 401 -- dwarf-base residency, wrong target)",
+            "husk residency missing the Empire override unit %s for cwv_es_axe_shield (issue 401)",
             tostring(axe.right_hand_unit))
     end
-    -- No dwarf-base mesh may appear in the OVERRIDE residency set (the dwarf
-    -- base is loaded separately as the issue-280 crash floor, not here).
-    for path in pairs(loaded) do
-        if type(path) == "string" and path:find("wpn_dw_", 1, true) then
-            return string.format(
-                "husk override residency loaded a dwarf-base mesh %s -- must be the Empire override, not dr_ base (issue 401)",
-                path)
+    if n_checked < 6 then
+        return string.format(
+            "husk override residency covered only %d override units -- predicate likely degenerated (issues 396/401)",
+            n_checked)
+    end
+end)
+
+_rt_register("cwv_no_ammo_strip_coverage", function()
+    -- Issue 399: the husk resolves the BASE item_data, so a variant that set
+    -- `no_ammo_unit = true` (its base carries an ammo/torpedo unit the variant
+    -- must not show) needs its (base_weapon, career) pair in the husk strip
+    -- lookup. The lookup is built by walking every def, so coverage is
+    -- structural -- this test locks that: every no_ammo_unit def must appear in
+    -- `_om._no_ammo_careers_by_base` with ALL its careers, or the inherited
+    -- ammo mesh would render on the husk (the merged-render bug of issue 279).
+    local cov = _om._no_ammo_careers_by_base
+    if type(cov) ~= "table" then
+        return "_om._no_ammo_careers_by_base not exposed -- husk ammo-strip coverage guard (issue 399)"
+    end
+    for _, d in ipairs(_variant_definitions) do
+        if d.no_ammo_unit then
+            local set = cov[d.base_weapon]
+            if type(set) ~= "table" then
+                return string.format(
+                    "no_ammo_unit def %s (base %s) missing from husk strip lookup -- inherited ammo would render on husk (issue 399)",
+                    tostring(d.item_key), tostring(d.base_weapon))
+            end
+            for _, c in ipairs(d.careers or {}) do
+                if not set[c] then
+                    return string.format(
+                        "no_ammo_unit def %s career %s not covered by husk strip lookup (issue 399)",
+                        tostring(d.item_key), tostring(c))
+                end
+            end
         end
     end
 end)

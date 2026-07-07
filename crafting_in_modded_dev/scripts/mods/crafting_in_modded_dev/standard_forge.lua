@@ -928,6 +928,40 @@ local function _local_career_name()
     return career and career.name
 end
 
+-- issue 390: a craft whose input key is a character_weapon_variants (CWV)
+-- variant needs a backend_id that CWV's render-rescue hooks recognize.
+-- CWV's clone inherits the BASE weapon's `name`, so the vanilla equip path
+-- (`item_name = item_data.name` -> `ItemMasterList[item_name]`, e.g.
+-- world_hero_previewer.lua:674) re-resolves item_data to the BASE entry and
+-- returns the base mesh + inherited attachments (Nordland -> Bretonnian
+-- sword, rapier keeps the Saltzpyre pistol). CWV compensates via a set of
+-- hooks keyed on the `cwv_<key>_NNN` backend_id pattern (get_item_units units
+-- override, _resolve_cwv_def grip transforms, illusion-picker filter). A bare
+-- `Application.guid()` backend_id matches none of them, so the crafted copy is
+-- left rendering the base weapon. We detect CWV keys and mint a matching
+-- backend_id below. See the CHANGELOG 0.8.52-dev entry.
+local function _is_cwv_craft_key(item_key)
+    if type(item_key) ~= "string" or item_key:sub(1, 4) ~= "cwv_" then return false end
+    local entry = rawget(ItemMasterList, item_key)
+    return entry ~= nil and entry.cwv_variant == true
+end
+
+-- Mint a `cwv_<key>_NNN` backend_id in the 100..999 instance band. CWV's own
+-- items live at _001.._00N (N = def.instances, currently max 2), so starting
+-- at 100 never collides with a native CWV registration. Uniqueness across
+-- cim crafts (incl. restored ones) is guaranteed by scanning the persisted
+-- craft table. Returns nil if the band is exhausted (caller falls back to a
+-- guid; the cim-side units rescue below still fixes the mesh).
+local function _mint_cwv_backend_id(item_key)
+    for i = 100, 999 do
+        local bid = string.format("%s_%03d", item_key, i)
+        if not (mod._cim_get_craft and mod._cim_get_craft(bid)) then
+            return bid
+        end
+    end
+    return nil
+end
+
 local function _make_craft_synth(allowed_slots)
     return function(self, item_backend_ids)
         local career_name = _local_career_name()
@@ -1047,7 +1081,14 @@ local function _make_craft_synth(allowed_slots)
             custom_data.traits = cjson_mod.encode(rolled_traits)
         end
 
-        local backend_id = Application.guid()
+        -- issue 390: CWV variant crafts get a `cwv_<key>_NNN` backend_id so the
+        -- CWV render-rescue hooks recognize them; everything else keeps a fresh
+        -- guid. Falls back to a guid if the instance band is exhausted.
+        local backend_id
+        if _is_cwv_craft_key(item_key) then
+            backend_id = _mint_cwv_backend_id(item_key)
+        end
+        backend_id = backend_id or Application.guid()
         local item = {
             ItemId = item_key,
             ItemInstanceId = backend_id,
@@ -1102,6 +1143,26 @@ local function _make_craft_synth(allowed_slots)
         if mod._cim_autodump_craft_synth_result then
             pcall(mod._cim_autodump_craft_synth_result, "standard_forge_synth",
                 career_name, item_key, backend_id, weapon_data, true, nil)
+        end
+
+        -- issue 390: trace the CWV crafted copy's resolved units. The CWV entry
+        -- carries the variant mesh (and nils the inherited left-hand attachment
+        -- via no_left_hand); the BASE entry the vanilla equip path re-resolves
+        -- to via `item_data.name` carries the wrong mesh + attachments. Logging
+        -- both makes the divergence (and whether the rescue must bridge it)
+        -- visible. Always-on in dev; fires only on a craft action.
+        if _is_cwv_craft_key(item_key) then
+            do
+                local cwv_entry = rawget(ItemMasterList, item_key)
+                local base_entry = cwv_entry and cwv_entry.name and rawget(ItemMasterList, cwv_entry.name)
+                printf("[cim:390] crafted CWV key=%s bid=%s base_name=%s | cwv rhu=%s lhu=%s | BASE rhu=%s lhu=%s",
+                    tostring(item_key), tostring(backend_id),
+                    tostring(cwv_entry and cwv_entry.name),
+                    tostring(cwv_entry and cwv_entry.right_hand_unit),
+                    tostring(cwv_entry and cwv_entry.left_hand_unit),
+                    tostring(base_entry and base_entry.right_hand_unit),
+                    tostring(base_entry and base_entry.left_hand_unit))
+            end
         end
 
         return { { backend_id, [3] = 1 } }
@@ -1240,8 +1301,19 @@ mod._cim_rebuild_template_cache = _build_template_cache
 
 -- Called from the shared `get_filtered_items` hook in crafting_in_modded.lua
 -- once it's finished its modded-only filtering pass. Returns the same items
--- table with synthetic templates appended for any item_type not already
--- represented by a real default-rarity entry.
+-- table with a synthetic template appended for every craftable weapon KEY not
+-- already represented by a real entry.
+--
+-- issue 390: this used to dedup on `item_type`, appending only ONE template
+-- per item_type in non-deterministic pairs() order. CWV variant families share
+-- a single item_type across members (Recruit / Black Guard / base longsword all
+-- `cwv_imperial_longsword`), so only one random member was craftable. Keying on
+-- the item `key` makes every distinct variant individually craftable and
+-- deterministic. skin_only CWV defs (e.g. cwv_es_longsword_nordland) are never
+-- registered in ItemMasterList by CWV, so _build_template_cache never mints a
+-- template for them -- they stay correctly non-craftable (get the look via the
+-- real family member + the Nordland illusion in the cosmetic picker).
+mod._cim390_inject_key_keyed = true
 mod._cim_inject_templates = function(items, filter)
     if not _is_active() then return items end
     if type(filter) ~= "string" or not filter:find("can_craft_with", 1, true) then
@@ -1249,17 +1321,17 @@ mod._cim_inject_templates = function(items, filter)
     end
     if not next(_template_cache) then _build_template_cache() end
 
-    local seen_item_types = {}
+    local seen_keys = {}
     for _, it in ipairs(items) do
-        local t = it and it.data and it.data.item_type
-        if t then seen_item_types[t] = true end
+        local k = it and (it.key or (it.data and it.data.key))
+        if k then seen_keys[k] = true end
     end
 
     for _, tpl in pairs(_template_cache) do
-        local t = tpl.data and tpl.data.item_type
-        if t and not seen_item_types[t] then
+        local k = tpl.key
+        if k and not seen_keys[k] then
             items[#items + 1] = tpl
-            seen_item_types[t] = true
+            seen_keys[k] = true
         end
     end
     return items
@@ -1273,6 +1345,47 @@ mod:hook("BackendInterfaceItemPlayfab", "get_item_from_id", function(func, self,
     if tpl then return tpl end
     return func(self, backend_id)
 end)
+
+-- ============================================================
+-- issue 390: units rescue for cim-crafted CWV variants
+-- ============================================================
+-- The vanilla equip/preview path re-resolves item_data from `item_data.name`
+-- (backend_utils / world_hero_previewer:674), which for a CWV clone is the
+-- BASE weapon name -> ItemMasterList[base] -> base mesh + inherited
+-- attachments. CWV's own get_item_units override forces the variant units back
+-- in, but it only fires for backend_ids matching `cwv_<key>_NNN`. We now mint
+-- exactly that pattern (_make_craft_synth), so CWV's hook can rescue our crafts
+-- once its match pattern is widened past the literal `_001`. This hook is the
+-- cim-side safety net that forces the variant units regardless, so the MESH is
+-- correct even before that CWV-side widen lands. Grip/scale transforms still
+-- come from CWV's create_equipment hook (which also keys on the backend_id
+-- pattern) -- those need the widened pattern to apply.
+--
+-- Pre-flight grep confirmed cim does not otherwise hook (BackendUtils,
+-- get_item_units); it only CALLS it. VMF chains this cim hook after CWV's own
+-- (different mod), so we see (and, idempotently, re-affirm) CWV's result.
+if rawget(_G, "BackendUtils") then
+    mod:hook(BackendUtils, "get_item_units", function(func, item_data, backend_id, skin, career_name)
+        local result = func(item_data, backend_id, skin, career_name)
+        if type(result) ~= "table" or type(backend_id) ~= "string" then return result end
+        local craft = mod._cim_get_craft and mod._cim_get_craft(backend_id)
+        local ckey = craft and craft.item_key
+        if type(ckey) ~= "string" or ckey:sub(1, 4) ~= "cwv_" then return result end
+        -- A skin/illusion took effect during resolution -> its per-hand units
+        -- already won; don't trample the user's chosen look.
+        if result.skin and result.skin ~= "" then return result end
+        local cwv_entry = rawget(ItemMasterList, ckey)
+        if not cwv_entry then return result end
+        -- Force the variant's own per-hand meshes. Matches CWV's own rescue
+        -- (character_weapon_variants.lua get_item_units hook): a nil left unit
+        -- (no_left_hand variants like the rapier) correctly drops the inherited
+        -- base attachment.
+        result.right_hand_unit = cwv_entry.right_hand_unit
+        result.left_hand_unit = cwv_entry.left_hand_unit
+        return result
+    end)
+    mod._cim390_units_rescue_installed = true
+end
 
 -- Diagnostic: list every recently-added (post-load) inventory item so we can
 -- see whether crafted items landed in the mirror but failed to surface in the UI.

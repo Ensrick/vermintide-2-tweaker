@@ -1179,3 +1179,45 @@ Then sweep the repo for the idiom: `\(.*and func\(.*\)\) or ` across every activ
 - `general_tweaker_dev/CHANGELOG.md` v0.2.191-dev (fix + repo idiom sweep + `gt_cs_transitioned_one_third_not_forced` check), v0.2.193-dev (#275 close-out).
 - `general_tweaker_dev/POSTMORTEMS.md` — full #275 timeline (why the probe had to be breed-field-wrapped; why BT hooks must wrap before `create_all_trees`).
 - Related: class 2 (multi-return collapse via `return wrapper(func(...))`) — same "don't route a vanilla return through an expression" root, different operator.
+
+## 27. Husk resolves the BASE item_data, never the CWV instance (owner-path logic cannot reach a remote player)
+
+**First seen:** 2026-07-06 (CWV husk-cluster ship v0.1.366-dev; residual gaps hardened v0.1.367-dev)
+**Canonical Issue:** [#392](https://github.com/Ensrick/vermintide-2-tweaker/issues/392) (husk base-resolution umbrella); sub-classes [#280](https://github.com/Ensrick/vermintide-2-tweaker/issues/280) (client CTD), [#396](https://github.com/Ensrick/vermintide-2-tweaker/issues/396)/[#401](https://github.com/Ensrick/vermintide-2-tweaker/issues/401) (invisible/wrong husk mesh), [#397](https://github.com/Ensrick/vermintide-2-tweaker/issues/397)/394 (husk transform not applied), [#399](https://github.com/Ensrick/vermintide-2-tweaker/issues/399) (inherited ammo mesh on husk), 395/398 (stale unequip / sounds)
+**Lives in:** any mod that clones a base weapon into a new item but keeps `entry.name = base_weapon` (the CWV "clone-name-clobber", `feedback_cwv_clone_name_clobber.md`). Applies to every cross-character / duplicate-item mod (CWV, weapons_of_chaos, any future clone-a-template mod).
+
+### Symptoms
+- A modded weapon looks / behaves correctly for the LOCAL wielder and their BOTS, but on a REMOTE player (husk) it is invisible, renders the wrong (base) mesh, wrong scale, an extra inherited ammo/torpedo mesh, or (worst) CTDs every non-source-character client.
+- The bug is peer-relative: peer A (playing the source character, e.g. Kruber) sees it fine; peer B (playing anyone else) sees the break. Single-player and host-only testing never reproduces it.
+
+### Diagnosis pattern
+1. The equipment RPC encodes an item by `NetworkLookup.item_names[item_data.name]`. A CWV clone keeps `entry.name = base_weapon`, so the wire carries the BASE key. The husk looks up the VANILLA `ItemMasterList[base_weapon]` and knows nothing about the CWV instance — no `cwv_variant` marker, no `cwv_<key>_001` backend_id, only whatever `slot.skin` (a real `NetworkLookup.weapon_skins` entry) happened to sync.
+2. Therefore **every owner-path fix is invisible to husks.** Owner/bot spawns go through `GearUtils.create_equipment` (1P rig present); husk spawns go through `SimpleHuskInventoryExtension._wield_slot -> GearUtils.spawn_inventory_unit` with `owner_unit_1p == nil`. A hook that only touches `create_equipment`, or reads `item_data.backend_id`/`.cwv_variant`, never fires for the husk.
+3. The ONLY husk-reachable signals are: the synced `item_units.skin` (present when a curated illusion is applied), and a POSITIVE base+career inference (a base weapon on a career that CANNOT natively wield it — e.g. dwarf-exclusive `dr_deus_01` on a Kruber can only be the CWV Outrider). `item_data.name` alone is NOT a usable signal — it collides with a genuine native wielder of the real base weapon.
+
+### Fix template
+Put husk fixes in the `GearUtils.spawn_inventory_unit` hook, gated on `not owner_unit_1p`, resolving the CWV def only via positive signals:
+```lua
+mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, ...)
+    local v_w3p, v_a3p, v_w1p, v_a1p = func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, ...)
+    if not owner_unit_1p then                 -- husk/bot discriminator (no 1P rig)
+        -- (a) strip inherited ammo only on a base+career POSITIVE match (issue 399)
+        -- (b) apply scale/offset only when a cwv-positive signal resolves a def (issue 397);
+        --     log-once when it can't (issue 392 evidence) — never guess from item_data.name
+    end
+    return v_w3p, v_a3p, v_w1p, v_a1p
+end)
+```
+Residency is the other half: the mesh the husk will spawn (curated-skin override units == `def.right_hand_unit`/`.left_hand_unit`) must be RESIDENT on every client. Force-load override units that DIFFER from the base, data-driven over all defs, ref-held at boot — NOT a mission-load blanket load (class: 1 GiB Lua-heap). Keep the vanilla base-unit force-load as the issue-280 crash floor and a general `start_weapon_fx` nil-slot guard as the durable crash net. Fixes that require the husk to resolve the CWV INSTANCE (transform on a skinless/cim-crafted equip; template-level sound swaps) are blocked until #392 gives the husk a way to see the CWV item (net-safe skin/marker on the wire).
+
+### Fix sites (v0.1.366-dev / v0.1.367-dev, `character_weapon_variants.lua`)
+- `SimpleHuskInventoryExtension.start_weapon_fx` guard — durable nil-slot crash net (issue 280).
+- `dr_shield_axe` base-unit force-load — issue-280 crash floor (base-path spawn).
+- Data-driven override-unit residency pass (`_om._husk_override_unit_needs_residency`) — issues 396/401, covers all 27 override-differ variants by construction.
+- `spawn_inventory_unit` husk block -> `_om._husk_strip_cwv_ammo` (issue 399) + `_om._husk_apply_cwv_transform` (issue 397), throttled `[cwv husk-transform] no cwv def resolved` log = the #392 evidence arm.
+- Regression tests `cwv_husk_override_residency`, `cwv_no_ammo_strip_coverage`, `cwv_husk_transform_coverage`.
+
+### Related Issues / commits
+- v0.1.366-dev ship commit `ff8fa2c`; hardening in v0.1.367-dev (`character_weapon_variants/CHANGELOG.md`).
+- Full mechanism + audit table (which variants are covered, which await #392) in `character_weapon_variants/DEVELOPMENT.md` "Husk rendering path".
+- Related: class 5 (self-owned vs husk extension classes are separate roots) — same "hook the path the husk actually takes" root.

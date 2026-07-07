@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.51-dev"
+local MOD_VERSION = "0.8.52-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -8069,6 +8069,29 @@ _rt_register("open_forge_gate_honors_allow_in_mission", function()
     local hard_needle = "The Athanor (weave forge) only opens" .. " in the Keep."
     if txt:find(hard_needle, 1, true) then
         return "#83 regression: the v0.8.23 hard keep-only gate echo is back in open_forge"
+    end
+end)
+
+_rt_register("cim390_cwv_craft_render_fix", function()
+    -- (#390) CWV variants crafted via cim rendered as the BASE weapon (Nordland
+    -- Claymore -> Bretonnian sword; Kruber Rapier kept the Saltzpyre pistol),
+    -- because the crafted copy got a guid backend_id that matched none of CWV's
+    -- render-rescue hooks. Two guards:
+    --   (a) synthetic-template injection is keyed on item KEY, not item_type,
+    --       so every CWV family member is individually craftable (was: one
+    --       random member per item_type).
+    --   (b) the cim-side units rescue hook is installed, forcing the variant's
+    --       per-hand meshes onto crafted CWV copies (mesh correct even before
+    --       the CWV-side backend_id pattern widen lands).
+    -- Both flags are set at load time in standard_forge.lua.
+    if mod._cim390_inject_key_keyed ~= true then
+        return "#390 regression: template injection is not key-keyed (CWV families collapse to one random craftable member)"
+    end
+    -- BackendUtils is a plain table loaded at boot; if the rescue hook didn't
+    -- install, BackendUtils was somehow unavailable at load (never observed) —
+    -- surface it rather than silently ship the base-mesh bug.
+    if mod._cim390_units_rescue_installed ~= true then
+        return "#390 regression: cim-side get_item_units rescue for crafted CWV variants not installed (crafted copies render base mesh)"
     end
 end)
 
