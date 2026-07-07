@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.365-dev"
+local MOD_VERSION = "0.1.366-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -4390,6 +4390,87 @@ do
 end
 
 -- ============================================================
+-- Cross-character husk OVERRIDE-unit residency  (issues 401, 396)
+-- ============================================================
+-- The axe_shield residency above force-loads the vanilla BASE units
+-- (dr_shield_axe = Bardin's DWARF axe/shield) so the base-path husk spawn
+-- can't CTD (issue 280 crash floor). But those base units are NOT what the
+-- variant renders: the CWV entry overrides them with EMPIRE meshes
+-- (wpn_axe_02_t1 + wpn_emp_shield_02; veteran = wpn_axe_hatchet_t2_magic_01 +
+-- wpn_es_deus_shield_02_magic). Issue 401 confirmed (2 paired peer logs): the
+-- husk showed the dwarf base because only the dwarf units were resident, so
+-- the skin-path spawn of the Empire override units failed. Issue 396 is the
+-- same class for the Imperial Longsword family, whose Empire greatsword mesh
+-- (wpn_empire_2h_sword_04_t1) and Bretonnian-base shield variant units are
+-- likewise non-resident on a client not playing a career that natively loads
+-- them -> invisible husk.
+--
+-- Fix: additionally force-load the OVERRIDE units, read straight from the
+-- variant DEFS (the authoritative source of the override paths — the built
+-- entries don't exist yet this early in the file). This is boot-time (at the
+-- keep, NOT mission load), a small fixed set of specific meshes, ref-held for
+-- the session — NOT a blanket mission-load force-load (the wt+cosmetics 1 GiB
+-- Lua-heap crash class). The dwarf base load above is intentionally KEPT (it
+-- is the issue-280 crash floor for the base-path spawn); this block is purely
+-- additive residency for the correct override meshes.
+do
+	local _HUSK_OVERRIDE_RESIDENCY_KEYS = {
+		"cwv_es_axe_shield",           -- issue 401 (Empire axe + shield)
+		"cwv_es_axe_shield_veteran",   -- issue 401 (Empire hatchet + deus shield)
+		"cwv_es_longsword",            -- issue 396 (Empire greatsword mesh)
+		"cwv_es_longsword_blackguard", -- issue 396 (same family, unique mesh)
+		"cwv_es_longsword_shield",     -- issue 396 (Bretonnian base + shield)
+	}
+
+	local function _def_by_item_key(item_key)
+		for _, d in ipairs(_variant_definitions) do
+			if d.item_key == item_key then return d end
+		end
+		return nil
+	end
+
+	local _loaded = {}   -- path -> true; exposed for the regression test
+
+	local function _force_load_husk_override_units()
+		if not (Managers and Managers.package) then return end
+		local ref = "cwv_husk_override_units"
+		for _, item_key in ipairs(_HUSK_OVERRIDE_RESIDENCY_KEYS) do
+			local d = _def_by_item_key(item_key)
+			if d then
+				for _, field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
+					local u = d[field]
+					-- Skip the invisible-weapon sentinel (javelin-style variants
+					-- park the held mesh on the other hand) — it has no real unit.
+					if type(u) == "string" and u ~= "" and not u:find("wpn_invisible_weapon", 1, true) then
+						for _, path in ipairs({ u, u .. "_3p" }) do
+							if not _loaded[path] then
+								_loaded[path] = true
+								local ok, err = pcall(function()
+									Managers.package:load(path, ref, nil, true, true)
+								end)
+								if ok then
+									local resident = false
+									pcall(function() resident = Managers.package:has_loaded(path, ref) and true or false end)
+									printf("[cwv husk-override-residency] force-loaded %s (ref=%s, resident=%s, for=%s)",
+										path, ref, tostring(resident), item_key)
+								else
+									printf("[cwv husk-override-residency] FAILED to force-load %s (for=%s): %s",
+										path, item_key, tostring(err))
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+		_cwv_husk_override_residency_ran = true
+		_cwv_husk_override_paths = _loaded
+	end
+
+	_force_load_husk_override_units()
+end
+
+-- ============================================================
 -- Defensive guard: husk start_weapon_fx nil-slot crash  (Issue #280)
 -- ============================================================
 -- Belt-and-suspenders behind the force-load above. Even with the units
@@ -4432,6 +4513,44 @@ mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx", function(func, self,
 	return func(self, fx_name)
 end)
 _cwv_husk_fx_guard_installed = true
+
+-- ============================================================
+-- Husk wield diagnostic  (issues 395, 398 — DIAGNOSTICS ONLY)
+-- ============================================================
+-- Neither issue has a confirmed code fix yet; this arms the disambiguating
+-- evidence the next paired CLIENT log needs, without changing behavior.
+--   * Issue 398 (weapon sounds not applied on husk): logs `template` — the
+--     husk resolves item_template via the BASE item_data (name = base
+--     weapon), so for a CWV variant this is expected to be the BASE template,
+--     NOT the CWV template. Template-level sound swaps live on the CWV
+--     template, so they never reach the husk. A log showing template=<base
+--     template> confirms that mechanism (ties to the #392 base-resolution
+--     umbrella, out of scope here).
+--   * Issue 395 (rapier not unequipped on husk after swap): logs the wielded
+--     3P weapon units still live on `equipment` AFTER the swap completed, so a
+--     rapier unit that survived `GearUtils.destroy_equipment` (or a swap whose
+--     item-id resync never reached the husk) is visible in the trace.
+-- hook_safe (post-observation, no return override) so it can never perturb
+-- the wield path. Pre-flight (CLAUDE.md #8): CWV's only other
+-- SimpleHuskInventoryExtension hook is on `start_weapon_fx` (above) — this is
+-- the sole hook on (SimpleHuskInventoryExtension, _wield_slot) in CWV.
+mod:hook_safe("SimpleHuskInventoryExtension", "_wield_slot", function(self, world, equipment, slot_name, unit_1p, unit_3p)
+	pcall(function()
+		local slot = equipment and equipment.slots and equipment.slots[slot_name]
+		local item_data = slot and slot.item_data
+		local item_template = slot and slot.item_template
+		local function _live(u) return (u and Unit.alive(u)) and tostring(u) or "nil" end
+		printf("[cwv husk-wield] slot=%s item_name=%s backend_id=%s skin=%s template=%s | wielded r3p=%s l3p=%s (issues 395/398 diag)",
+			tostring(slot_name),
+			tostring(item_data and item_data.name),
+			tostring(item_data and item_data.backend_id),
+			tostring(slot and slot.skin),
+			tostring(item_template and item_template.name),
+			_live(equipment and equipment.right_hand_wielded_unit_3p),
+			_live(equipment and equipment.left_hand_wielded_unit_3p))
+	end)
+end)
+_cwv_husk_wield_diag_installed = true
 
 local function _spawn_and_link_musket_bayonet(world, rifle_unit, bayonet_unit_path, package_ref)
 	if not world or not rifle_unit or not Unit.alive(rifle_unit) then return nil end
@@ -4525,6 +4644,38 @@ end
 mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
 	local v_w3p, v_a3p, v_w1p, v_a1p =
 		func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
+
+	-- ============================================================
+	-- Husk (remote-player) CWV apply  (issues 397/394/399)
+	-- ============================================================
+	-- This hook is the ONLY GearUtils path that fires for husks:
+	-- SimpleHuskInventoryExtension._wield_slot -> spawn_inventory_unit
+	-- (simple_husk_inventory_extension.lua:666/670). The owner/bot path runs
+	-- GearUtils.create_equipment (which passes a 1P rig as owner_unit_1p and
+	-- applies CWV transforms itself, hook at the bottom of this file); husks
+	-- have no 1P rig, so `owner_unit_1p == nil` is the husk/bot discriminator.
+	-- Everything here is IDEMPOTENT with the create_equipment apply (scale is
+	-- an absolute set; offset is guarded by a weak-keyed applied-set), so a
+	-- bot spawn that reaches both paths is harmless. Bounded to `not
+	-- owner_unit_1p` purely so the local owner's 1P-having spawn is never
+	-- touched. The helpers live on `_om` because they must reference
+	-- `_transform_unit` / `_resolve_field` / `_resolve_cwv_def` which are
+	-- declared far below this line (Lua locals are only visible after their
+	-- declaration point; `_om` is captured as an upvalue and its fields are
+	-- populated at load time, before any in-mission spawn).
+	if not owner_unit_1p then
+		-- issue 399: strip the inherited ammo (Trollhammer torpedo) that the
+		-- husk attaches for a no_ammo_unit variant (the husk resolves the BASE
+		-- item_data, so no_ammo_unit on the CWV entry never reaches it).
+		if _om._husk_strip_cwv_ammo and _om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p) then
+			v_a3p = nil
+		end
+		-- issues 397/394: apply the CWV scale/offset transform to the husk 3P
+		-- weapon unit, mirroring the owner-side create_equipment hook.
+		if _om._husk_apply_cwv_transform then
+			_om._husk_apply_cwv_transform(hand, item_data, item_units, v_w3p)
+		end
+	end
 
 	-- Gate: only attach for the musket variant on its right-hand spawn.
 	-- IMPORTANT: cwv variants inherit `entry.name` from the base weapon
@@ -9403,6 +9554,114 @@ local function _resolve_cwv_def(item_data, skin)
 end
 
 -- ============================================================
+-- Husk apply helpers  (issues 397/394/399) — assigned onto `_om`
+-- ============================================================
+-- These run from the GearUtils.spawn_inventory_unit hook (~line 4525, the
+-- husk-reaching path). They are DEFINED here — below `_transform_unit`,
+-- `_resolve_field`, `_resolve_cwv_def`, `_is_unit` — because Lua locals are
+-- only visible after their declaration point; the hook above can't see these
+-- helpers directly, so it reaches them through the `_om` upvalue table
+-- (declared near the top of the file), whose fields are populated at load
+-- time before any in-mission spawn. See the husk block in that hook.
+do
+	-- issue 399 lookup: base_weapon -> career-set for every no_ammo_unit
+	-- variant. On the husk the item resolves to the BASE item_data (name =
+	-- base weapon), so backend_id/skin/cwv markers are unreliable. But the
+	-- variant's base weapon on a career that CANNOT natively wield it is a
+	-- husk-reliable POSITIVE signal (e.g. dr_deus_01 is Bardin-exclusive, so a
+	-- non-dwarf wielding it can only be the CWV Outrider). We gate strictly on
+	-- (item_data.name == base_weapon) AND (career in the variant's own careers
+	-- list) so a genuine dwarf wielding the real Trollhammer is never touched.
+	local _no_ammo_careers_by_base = {}
+	for _, def in ipairs(_variant_definitions) do
+		if def.no_ammo_unit and type(def.base_weapon) == "string" then
+			local set = _no_ammo_careers_by_base[def.base_weapon] or {}
+			for _, c in ipairs(def.careers or {}) do set[c] = true end
+			_no_ammo_careers_by_base[def.base_weapon] = set
+		end
+	end
+
+	-- Set of every CWV base_weapon key — used only to scope the "no def
+	-- resolved" husk diagnostic so it doesn't spam on the common native-weapon
+	-- wield case (fires only for weapons whose base a CWV variant clones).
+	local _cwv_base_weapons = {}
+	for _, def in ipairs(_variant_definitions) do
+		if type(def.base_weapon) == "string" then _cwv_base_weapons[def.base_weapon] = true end
+	end
+
+	local function _husk_career_name(owner_unit_3p)
+		if not owner_unit_3p then return nil end
+		local name
+		pcall(function()
+			if ScriptUnit.has_extension(owner_unit_3p, "career_system") then
+				name = ScriptUnit.extension(owner_unit_3p, "career_system"):career_name()
+			end
+		end)
+		return name
+	end
+
+	-- Returns true if it stripped a torpedo/ammo unit (caller then nils its
+	-- returned ammo_unit_3p so the husk equipment stops tracking it).
+	_om._husk_strip_cwv_ammo = function(item_data, owner_unit_3p, ammo_unit_3p)
+		if not (item_data and ammo_unit_3p) then return false end
+		local base_name = item_data.name
+		local careers = base_name and _no_ammo_careers_by_base[base_name]
+		if not careers then return false end
+		local career = _husk_career_name(owner_unit_3p)
+		if not (career and careers[career]) then return false end
+		local alive = false
+		pcall(function() alive = Unit.alive(ammo_unit_3p) and true or false end)
+		if alive then
+			pcall(Unit.set_unit_visibility, ammo_unit_3p, false)
+			if Managers and Managers.state and Managers.state.unit_spawner then
+				pcall(function() Managers.state.unit_spawner:mark_for_deletion(ammo_unit_3p) end)
+			end
+		end
+		printf("[cwv husk-ammo-strip] stripped inherited ammo 3P unit (base=%s career=%s) -- issue 399",
+			tostring(base_name), tostring(career))
+		return true
+	end
+
+	-- Apply the CWV scale/offset transform to the husk 3P weapon unit,
+	-- mirroring the owner-side create_equipment hook. Resolves the CWV def
+	-- ONLY via cwv-POSITIVE signals (skin / backend_id / cwv item_data key) —
+	-- NEVER a bare base_weapon match, which would corrupt a genuinely native
+	-- weapon that shares the base key on the husk (e.g. Kruber's own
+	-- es_bastard_sword vs the cwv longsword are indistinguishable on the husk
+	-- once the skin/backend_id are absent). When nothing resolves and the item
+	-- is a CWV base weapon, log it: that is the disambiguating evidence for the
+	-- #392 base-resolution umbrella (husk never sees the CWV instance).
+	_om._husk_apply_cwv_transform = function(hand, item_data, item_units, weapon_unit_3p)
+		if not (weapon_unit_3p and _is_unit(weapon_unit_3p)) then return end
+		local skin = item_units and item_units.skin
+		local def = _resolve_cwv_def(item_data, skin)
+		if not def then
+			local base_name = item_data and item_data.name
+			if base_name and _cwv_base_weapons[base_name] then
+				printf("[cwv husk-transform] no cwv def resolved: hand=%s base=%s backend_id=%s skin=%s -- husk saw BASE item only (issue 397/392 diag)",
+					tostring(hand), tostring(base_name),
+					tostring(item_data and item_data.backend_id), tostring(skin))
+			end
+			return
+		end
+		local scale, offset
+		if hand == "right" then
+			scale  = _resolve_field(def, "right_hand_scale_3p")  or _resolve_field(def, "right_hand_scale")
+			offset = _resolve_field(def, "right_hand_offset_3p") or _resolve_field(def, "right_hand_offset")
+		else
+			scale  = _resolve_field(def, "left_hand_scale_3p")  or _resolve_field(def, "left_hand_scale")
+			offset = _resolve_field(def, "left_hand_offset_3p") or _resolve_field(def, "left_hand_offset")
+		end
+		if scale or offset then
+			_transform_unit(weapon_unit_3p, scale, offset)
+			printf("[cwv husk-transform] applied hand=%s def=%s scale=%s offset=%s -- issues 397/394",
+				tostring(hand), tostring(def.item_key or def.item_type),
+				scale and "y" or "n", offset and "y" or "n")
+		end
+	end
+end
+
+-- ============================================================
 -- BackendUtils.get_item_units override
 -- ============================================================
 -- Force the cwv def's right_hand_unit / left_hand_unit overrides into the
@@ -10770,6 +11029,58 @@ _rt_register("cwv_outrider_no_ammo_unit", function()
         return string.format(
             "outrider ItemMasterList entry still carries ammo units (ammo_unit=%s ammo_unit_3p=%s) — torpedo will merge into no-skin renders (Issue #279)",
             tostring(entry.ammo_unit), tostring(entry.ammo_unit_3p))
+    end
+end)
+
+_rt_register("cwv_husk_override_residency", function()
+    -- Issue 401 (confirmed, 2 paired peer logs): the husk-residency force-load
+    -- for the Kruber Axe & Shield loaded the DWARF BASE units (dr_shield_axe ->
+    -- wpn_dw_axe_01_t1 / wpn_dw_shield_01), not the Empire OVERRIDE meshes the
+    -- variant actually spawns. v0.1.366-dev adds a second, additive residency
+    -- pass that force-loads the override units read straight from the defs.
+    -- This locks that target: the loaded set MUST contain the axe & shield
+    -- variant's own def.right_hand_unit and MUST NOT contain any dwarf-base
+    -- (wpn_dw_) mesh (which would mean it regressed to the wrong units).
+    if _cwv_husk_override_residency_ran ~= true then
+        return "husk override-unit residency did not run (issues 401/396 fix missing)"
+    end
+    local loaded = _cwv_husk_override_paths
+    if type(loaded) ~= "table" then
+        return "_cwv_husk_override_paths not exposed (issue 401 residency-target guard)"
+    end
+    -- The Empire override right-hand unit of the axe & shield MUST be resident.
+    local axe = _find_def("cwv_es_axe_shield")
+    if axe and type(axe.right_hand_unit) == "string" and not loaded[axe.right_hand_unit] then
+        return string.format(
+            "husk residency missing the Empire override unit %s for cwv_es_axe_shield (issue 401 -- dwarf-base residency, wrong target)",
+            tostring(axe.right_hand_unit))
+    end
+    -- No dwarf-base mesh may appear in the OVERRIDE residency set (the dwarf
+    -- base is loaded separately as the issue-280 crash floor, not here).
+    for path in pairs(loaded) do
+        if type(path) == "string" and path:find("wpn_dw_", 1, true) then
+            return string.format(
+                "husk override residency loaded a dwarf-base mesh %s -- must be the Empire override, not dr_ base (issue 401)",
+                path)
+        end
+    end
+end)
+
+_rt_register("cwv_husk_transform_coverage", function()
+    -- Issues 397/394: the husk 3P weapon spawns through
+    -- GearUtils.spawn_inventory_unit (the only GearUtils path husks hit), NOT
+    -- create_equipment where the owner-side transforms live. v0.1.366-dev wires
+    -- the transform apply into that husk hook via `_om._husk_apply_cwv_transform`
+    -- and the ammo strip via `_om._husk_strip_cwv_ammo`. Assert both landed so
+    -- the coverage can't silently disappear on a refactor.
+    if type(_om._husk_apply_cwv_transform) ~= "function" then
+        return "_om._husk_apply_cwv_transform missing -- husk transform coverage lost (issues 397/394)"
+    end
+    if type(_om._husk_strip_cwv_ammo) ~= "function" then
+        return "_om._husk_strip_cwv_ammo missing -- husk ammo-strip coverage lost (issue 399)"
+    end
+    if _cwv_husk_wield_diag_installed ~= true then
+        return "husk _wield_slot diagnostic hook not installed (issues 395/398 evidence arm)"
     end
 end)
 

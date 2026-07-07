@@ -1,5 +1,39 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.366-dev — 2026-07-06 — CWV husk (remote/client) render cluster: transforms, residency, ammo strip + diagnostics (issues 397/394/396/401/399/395/398)
+
+All fixes address the same class: a CWV variant renders correctly on the wielder's own screen but wrong on every remote/client (husk) view. The husk spawns weapons through `SimpleHuskInventoryExtension._wield_slot` -> `GearUtils.spawn_inventory_unit` (`simple_husk_inventory_extension.lua:666/670`), which NEVER runs `GearUtils.create_equipment` where CWV's owner-side logic lives. The husk also resolves the BASE vanilla `item_data` (the equipment RPC encodes `item_data.name`, `simple_inventory_extension.lua:258`, which for a CWV clone is the inherited base weapon key — the clone-name-clobber), so `backend_id`/cwv-key markers are absent on the husk. All log evidence is from KEEP-ONLY tests; every fix below needs a 2-player MISSION re-test.
+
+**Issue 401 [verify-fix] — Imperial Axe & Shield reverts to dwarf base on the husk (LOG-CONFIRMED, 2 paired peer logs):**
+- **Root cause:** `_force_load_axe_shield_husk_units` (the issue-280 crash floor) force-loads the DWARF base units (`dr_shield_axe` -> `wpn_dw_axe_01_t1` / `wpn_dw_shield_01`), but the variant spawns the EMPIRE override meshes (`wpn_axe_02_t1` + `wpn_emp_shield_02`; veteran = `wpn_axe_hatchet_t2_magic_01` + `wpn_es_deus_shield_02_magic`). The Empire overrides were never made resident, so the husk's skin-path spawn of them failed and it showed the dwarf base.
+- **Fix:** new additive boot-time residency pass (`_force_load_husk_override_units`, `character_weapon_variants.lua` ~:4392) force-loads each residency variant's OVERRIDE units read straight from the defs (`def.right_hand_unit` / `left_hand_unit` + `_3p`), ref-held for the session, `printf` `[cwv husk-override-residency] ...`. The dwarf-base load is KEPT (still the issue-280 crash floor). Scoped fixed set at the keep — NOT a mission-load blanket force-load (the wt+cosmetics 1 GiB Lua-heap class).
+- **Verify in-game (2-PLAYER MISSION):** on a real mission (not the keep), a Kruber running Imperial Axe & Shield (both default and the unique veteran) must render the Empire axe + shield on the OTHER player's screen, never Bardin's dwarf axe/shield.
+
+**Issue 396 [verify-fix] — Imperial Longsword family invisible on the husk:**
+- **Root cause:** no husk residency coverage existed for `cwv_es_longsword` / `cwv_es_longsword_blackguard` (Empire greatsword `wpn_empire_2h_sword_04_t1` / `wpn_empire_2h_sword_03_t2`) or `cwv_es_longsword_shield` (Bretonnian base `es_sword_shield_breton` + `wpn_emp_shield_02`), so those override units were non-resident on a client not natively loading them -> invisible husk (same class as issue 280).
+- **Fix:** the longsword family is now in the `_force_load_husk_override_units` list (right-hand sword mesh for all three; shield left-hand mesh for the shield variant).
+- **Verify in-game (2-PLAYER MISSION):** Kruber running the Recruit Longsword, Black Guard Blade, and Imperial Longsword & Shield must be visible (correct mesh, plus the shield) on the other player's screen.
+
+**Issues 397 / 394 [verify-fix] — CWV scale/grip transforms not applied on the husk (Poleaxe Z-offset the obvious case):**
+- **Root cause:** the general `_type_transforms` scale/offset apply lived only in the owner-side `GearUtils.create_equipment` hook, which never fires for husks.
+- **Fix:** the existing `GearUtils.spawn_inventory_unit` hook (the husk-reaching path) now applies the CWV transform to the returned 3P weapon unit, gated to the husk/bot spawn (`owner_unit_1p == nil`; idempotent with the owner path). Logic lives on `_om._husk_apply_cwv_transform` (assigned below the transform helpers, reached via the `_om` upvalue since the hook sits above those helpers). Resolution uses cwv-POSITIVE signals only (skin / backend_id / cwv key) — never a bare base-weapon match, which would corrupt a genuinely native weapon sharing the base key on the husk. `printf` `[cwv husk-transform] applied ...` on success; `[cwv husk-transform] no cwv def resolved ...` when a CWV base weapon appears with no cwv signal (evidence for the issue-392 base-resolution umbrella, out of scope here).
+- **Verify in-game (2-PLAYER MISSION):** Kruber Poleaxe grip Z-offset (and other CWV scale/grip) must match on the other player's screen. NOTE: variants whose skin/backend_id does not survive the husk sync will log `no cwv def resolved` and stay at base transform — that is the issue-392 dependency, tracked separately.
+
+**Issue 399 [verify-fix] — Outrider Grenade Launcher shows the Trollhammer torpedo on the husk:**
+- **Root cause:** issue 279 nils the torpedo ammo on the CWV entry, but the husk resolves the BASE `dr_deus_01` item_data, whose `ammo_unit_3p` (torpedo) still attaches at `gear_utils.lua:169`.
+- **Fix:** the `spawn_inventory_unit` husk block strips the returned 3P ammo unit for no_ammo_unit variants (`_om._husk_strip_cwv_ammo`). Husk-reliable POSITIVE signal: `item_data.name == base_weapon` AND the wielding career is in the variant's own careers list (`dr_deus_01` is Bardin-exclusive, so a non-dwarf wielding it is unambiguously the CWV Outrider; a real Trollhammer on Bardin is never touched). `printf` `[cwv husk-ammo-strip] ...`.
+- **Verify in-game (2-PLAYER MISSION):** Kruber running the Outrider Grenade Launcher must render the blunderbuss ONLY on the other player's screen — no torpedo mesh. A Bardin Engineer's real Trollhammer must still show its torpedo.
+
+**Issue 395 [diagnostics-armed] — CWV rapier not unequipped on the client after a swap:**
+- Mechanism unconfirmed (wield resync never reached husk / `_wield_slot` errored mid-swap / a CWV-spawned unit escaped `destroy_equipment`). No fix guessed. Armed a `hook_safe` on `SimpleHuskInventoryExtension._wield_slot` that logs, per swap, the slot + item + resolved template + the wielded 3P units still live on `equipment` after the wield completes, so a lingering rapier unit surfaces in the next client log. `printf` `[cwv husk-wield] ...`.
+- **Verify in-game (2-PLAYER MISSION):** swap Kruber off the Rapier to another weapon; on the other player's screen the rapier must disappear. Capture the client `[cwv husk-wield]` lines if it lingers.
+
+**Issue 398 [diagnostics-armed] — CWV weapon sounds not applied on the husk:**
+- Log-narrowed: the husk-fx-guard SKIP did not fire; remaining candidate is the husk resolving the BASE template (template-level sound swaps never reach it). The same `[cwv husk-wield]` diagnostic logs the resolved `template.name`; a BASE template name confirms the mechanism (ties to the issue-392 base-resolution umbrella, out of scope here). No fix guessed.
+- **Verify in-game (2-PLAYER MISSION):** confirm CWV weapon sounds on the other player's screen; capture the client `[cwv husk-wield] ... template=` line.
+
+**Regression tests (`/cwv_regression_test`):** `cwv_husk_override_residency` (asserts the override residency ran, contains the Empire axe & shield override unit, and contains NO dwarf-base mesh — locks the issue-401 target) and `cwv_husk_transform_coverage` (asserts `_om._husk_apply_cwv_transform`, `_om._husk_strip_cwv_ammo`, and the `_wield_slot` diagnostic hook all installed).
+
 ## 0.1.365-dev — 2026-07-06 — Fix MP CLIENT CTD on loadout sync of cwv items (issue 278) + crafted outrider merged-render (issue 279)
 
 Two distinct bugs from the same session (crash log `console-2026-07-04-00.57.22-2cb5e90e`, cwv 0.1.359-dev + cim 0.8.46-dev), tracked and fixed separately. Companion cim_dev 0.8.51-dev ships the receiver-side guard for issue 278.
