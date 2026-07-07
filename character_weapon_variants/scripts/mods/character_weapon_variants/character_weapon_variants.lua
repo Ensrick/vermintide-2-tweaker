@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.369-dev"
+local MOD_VERSION = "0.1.370-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -2864,27 +2864,49 @@ do
 	-- `_wt_crossbow_kruber_attach_safe_apply` (v0.12.93-dev) minus the noisy
 	-- per-step diagnostic lines that were only needed during the original
 	-- debug pass — collapsed to a single summary `_dbg` on success.
-	mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_name, slot)
-		if item_name ~= "wh_crossbow" then return end
-		local career = self._current_career_name
-		if not career or career:sub(1, 3) ~= "es_" then return end
+	-- CONSOLIDATED hook_safe on (MenuWorldPreviewer, equip_item) — hook_safe does
+	-- NOT chain on the same Class.method, so both preview-time concerns live here:
+	--   Block A: wh_crossbow Kruber attach-node safety (avoid engine-fatal Unit.node).
+	--   Block B: cwv variant mesh-swap on the inventory preview (issue 237,
+	--            WEAPON_APPEARANCE_STANDARD §4.1 unit-resolution layer).
+	-- Never add a second hook_safe on this pair — merge new concerns in here.
+	mod:hook_safe("MenuWorldPreviewer", "equip_item", function(self, item_name, slot, backend_id, skin, skip_wield_anim)
 		local slot_type = (type(slot) == "table" and slot.type) or nil
 		if not slot_type then return end
 		local info = self._item_info_by_slot and self._item_info_by_slot[slot_type]
 		if not info or not info.spawn_data then return end
 
-		local safe = _build_crossbow_kruber_safe_third_person()
-		if not safe then return end
-
-		local swapped = 0
-		for _, entry in ipairs(info.spawn_data) do
-			if entry.left_hand then
-				entry.unit_attachment_node_linking = safe
-				swapped = swapped + 1
+		-- Block A — wh_crossbow Kruber attach-node safety: substitute the left-hand
+		-- entry's node linking so the previewer never calls
+		-- Unit.node(kruber_body, "a_unwielded_crossbow") (engine-fatal, bypasses pcall).
+		if item_name == "wh_crossbow" then
+			local career = self._current_career_name
+			if career and career:sub(1, 3) == "es_" then
+				local safe = _build_crossbow_kruber_safe_third_person()
+				if safe then
+					local swapped = 0
+					for _, entry in ipairs(info.spawn_data) do
+						if entry.left_hand then
+							entry.unit_attachment_node_linking = safe
+							swapped = swapped + 1
+						end
+					end
+					if swapped > 0 then
+						_dbg("[cwv xbow-kruber attach] swapped=%d on career=%s", swapped, career)
+					end
+				end
 			end
 		end
-		if swapped > 0 then
-			_dbg("[cwv xbow-kruber attach] swapped=%d on career=%s", swapped, career)
+
+		-- Block B — issue 237: rewrite the spawned MESH to the cwv variant's
+		-- authored units on the inventory-preview path (path 3), which otherwise
+		-- spawns the base weapon's mesh (a cwv clone keeps entry.name = base, so
+		-- vanilla resolves the base units). Data mutation on the precomputed
+		-- spawn_data BEFORE vanilla's World.spawn_unit (weapon_tweaker's preview-
+		-- swap pattern). The helper lives near _find_def (defined far below) and
+		-- is reached through the _om upvalue table, exactly like the husk helpers.
+		if _om._cwv_preview_meshswap_apply then
+			_om._cwv_preview_meshswap_apply(item_name, backend_id, skin, info)
 		end
 	end)
 end
@@ -9014,6 +9036,80 @@ local function _find_def(item_key)
 	return nil
 end
 
+-- ============================================================
+-- Preview mesh-swap (issue 237) — WEAPON_APPEARANCE_STANDARD §4.1
+-- ============================================================
+-- Paths 3/4 (inventory preview + illusion browser) receive the variant's BASE
+-- weapon key and spawn the BASE mesh; the owner/husk paths swap at the data
+-- level (`_build_entry` writes the override units onto the cloned entry) but the
+-- previewers do not, so a cross-character melee variant (e.g. the elf Sword &
+-- Shield, cwv_we_sword_shield) shows its base's Kruber mesh on the character-
+-- preview model. This rewrites the previewer's precomputed `spawn_data`
+-- entry.unit_name to the variant's authored 3P unit BEFORE vanilla spawns it
+-- (weapon_tweaker's preview-swap pattern: mutate the recipe, never
+-- despawn/respawn). unit_name ONLY — cwv melee variants reuse the base
+-- template's node vocabulary (`_build_entry` keeps the base template), so the
+-- node linking is already correct and we never risk an engine-fatal Unit.node
+-- on a swapped mesh. Idempotent: when `BackendUtils.get_item_units` already
+-- forced the override (skinless owner-style resolution), entry.unit_name already
+-- equals the target and the rewrite is a no-op.
+--
+-- Reached from the MenuWorldPreviewer.equip_item hook via the `_om` upvalue
+-- (forward-ref: this helper needs `_find_def`, declared just above, but the hook
+-- sits far earlier in the file). `entry.unit_name` already carries the "_3p"
+-- suffix (world_hero_previewer.lua:697/721), so we append it once here.
+--
+-- SAFETY: only vanilla `units/weapons/player/` meshes are swapped — a mod-bundled
+-- custom mesh (the Old Musket's units/cwv_*) has no per-unit `_3p` package and
+-- World.spawn_unit would engine-fatal (issue 403 class); the musket keeps its
+-- bespoke handling. The invisible-weapon sentinel is skipped. Ammo-unit entries
+-- are skipped (ranged variants carry their own handling). A user-selected
+-- illusion (non-empty `skin` arg) wins, mirroring the get_item_units guard.
+_om._cwv_preview_meshswap_apply = function(item_name, backend_id, skin, info)
+	if type(skin) == "string" and skin ~= "" then return end
+	local cwv_key = type(backend_id) == "string" and backend_id:match("^(cwv_.-)_%d%d%d$")
+	if not cwv_key then return end
+	local def = _find_def(cwv_key)
+	if not def then return end
+
+	-- Vanilla player mesh only, non-sentinel, AND already force-loaded resident by
+	-- the boot residency pass — else World.spawn_unit engine-fatals the inventory
+	-- screen (bypasses pcall). A non-resident target degrades to the base mesh
+	-- (current behavior), never a crash.
+	local function _swap_name(base_unit)
+		if type(base_unit) ~= "string" or base_unit == "" then return nil end
+		if base_unit:find("units/weapons/player/", 1, true) ~= 1 then return nil end
+		if base_unit:find("wpn_invisible_weapon", 1, true) then return nil end
+		local want = base_unit .. "_3p"
+		if not (Managers and Managers.package) then return nil end
+		local ok, res = pcall(Managers.package.has_loaded, Managers.package, want, "cwv_husk_override_units")
+		if not (ok and res == true) then return nil end
+		return want
+	end
+
+	local swapped = 0
+	for _, entry in ipairs(info.spawn_data) do
+		if not entry.is_ammo_unit then
+			local want
+			if entry.right_hand then
+				want = _swap_name(def.right_hand_unit)
+			elseif entry.left_hand then
+				want = _swap_name(def.left_hand_unit)
+			end
+			if want and entry.unit_name ~= want then
+				entry.unit_name = want
+				swapped = swapped + 1
+			end
+		end
+	end
+	if swapped > 0 then
+		printf("[cwv:237] preview mesh-swap key=%s bid=%s swapped=%d (R=%s L=%s)",
+			tostring(cwv_key), tostring(backend_id), swapped,
+			tostring(def.right_hand_unit), tostring(def.left_hand_unit))
+	end
+end
+mod._cwv_preview_meshswap_apply = _om._cwv_preview_meshswap_apply  -- exposed for /cwv regression (issue 237)
+
 local function _register_item(def, backend_id)
 	-- v0.1.345-dev: per-call trace. /give-driven registration is sparse
 	-- (one fire per chat command).
@@ -11423,6 +11519,22 @@ _rt_register("musket_old_force_registered", function()
     if not check("cwv_es_musket_old") then
         return "#409 regression: cwv_es_musket_old NOT registered in _transform_map (force_register gate broke)"
     end
+end)
+
+_rt_register("preview_meshswap_guards", function()
+    -- Issue 237 (WEAPON_APPEARANCE_STANDARD §4.1): the inventory-preview
+    -- unit-resolution layer rewrites spawn_data entry.unit_name to the cwv
+    -- variant's authored mesh. The GUARDS are load-bearing: a non-cwv backend_id
+    -- or a user-selected illusion (non-empty skin) must leave spawn_data
+    -- untouched, and the helper must be reachable. The positive rewrite depends
+    -- on runtime package residency, so it is covered by the in-game verify.
+    local apply = mod._cwv_preview_meshswap_apply
+    if type(apply) ~= "function" then return "mod._cwv_preview_meshswap_apply missing" end
+    local function _mk() return { spawn_data = { { right_hand = true, unit_name = "BASE_3p" } } } end
+    local a = _mk(); apply("es_sword_shield", "es_sword_shield_001", nil, a)
+    if a.spawn_data[1].unit_name ~= "BASE_3p" then return "#237 guard: non-cwv backend_id must not rewrite" end
+    local b = _mk(); apply("es_sword_shield", "cwv_we_sword_shield_001", "some_skin", b)
+    if b.spawn_data[1].unit_name ~= "BASE_3p" then return "#237 guard: user-selected illusion (skin) must win, no rewrite" end
 end)
 
 mod:info("Character Weapon Variants v%s loaded", MOD_VERSION)

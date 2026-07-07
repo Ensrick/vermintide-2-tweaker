@@ -1,0 +1,279 @@
+# Weapon Appearance Standard
+
+**Status:** normative. This is the contract every weapon-appearance override in the
+monorepo must satisfy. It exists to kill one recurring bug class: *an attribute
+(mesh / transform / texture / ammo) is correct in ONE render path or for ONE
+observer and wrong in another.* Issues #237, #392, #394, #396, #397, #399, #401,
+#409, #415, #416, #204, #227 are all instances of it.
+
+The rule the whole document enforces:
+
+> **A weapon's appearance is a function of its variant definition, NOT of which
+> code path happens to be spawning it or who is looking at it.** Every render
+> path resolves the SAME five appearance concerns from the SAME source of truth,
+> through the SAME interface. No path may re-implement a concern inline.
+
+Applies to `character_weapon_variants` (CWV), `cosmetics_tweaker`, and
+`weapon_tweaker` — any mod that overrides how a weapon looks.
+
+---
+
+## §1 The four render paths
+
+A weapon unit is spawned by exactly one of four paths depending on WHO is
+looking and WHERE. A fix that only touches one path is by definition incomplete.
+
+| # | Path | Hook target | Who / where | Per-hand handles |
+|---|------|-------------|-------------|------------------|
+| 1 | **Owner in-world** | `GearUtils.create_equipment` | The wielder's own screen (and bots) in keep + mission | `result.{right,left}_unit_{1p,3p}` |
+| 2 | **Husk (remote)** | `GearUtils.spawn_inventory_unit` (discriminator: `owner_unit_1p == nil`) | Every OTHER player's screen — the wielder rendered as a husk | returned 3P weapon units |
+| 3 | **Inventory preview** | `MenuWorldPreviewer._spawn_item` → `_cwv_spawn_item_post` | Hero/inventory character-preview mannequin | `self._equipment_units[slot_index].{right,left}` |
+| 4 | **Illusion browser** | `LootItemUnitPreviewer.spawn_units` | Cosmetic/illusion picker preview pane | returned `units` array (1=left, 2=right) |
+
+**Load-bearing facts (do not relearn the hard way):**
+
+- Paths 1 & 2 are SEPARATE ROOT CLASSES with no inheritance
+  (`SimpleInventoryExtension` vs `SimpleHuskInventoryExtension`,
+  `create_equipment` vs `spawn_inventory_unit`). A hook on one never fires for
+  the other. `[src: scripts/network/unit_extension_templates.lua]`
+- Path 3 MUST hook `MenuWorldPreviewer` (the derived class), never
+  `HeroPreviewer` (the base) — VT2 copies parent methods into the child at
+  class-definition time, so a base-class hook never fires on the runtime
+  instance. `[bugclass: CLAUDE.md "HOOK THE DERIVED CLASS"]`
+- Path 3's `_item_info_by_slot` is STRING-keyed (`"melee"`/`"ranged"`) but
+  `_equipment_units` is NUMERIC-keyed (`slot_index`). Bridge via
+  `info.spawn_data[1].slot_index`. `[bugclass: CLAUDE.md]`
+- Path 4 MUST use `mod:hook` (full wrapper), never `hook_safe` — vanilla writes
+  `self._spawned_units` AFTER `spawn_units` returns. Read the return value.
+- Paths 3 & 4 receive `item_name` = the variant's **base weapon key** (a CWV
+  clone keeps `entry.name = base_weapon`), so vanilla spawns the BASE mesh.
+  Overriding to the variant mesh is the mod's job on these paths (§4.1).
+
+---
+
+## §2 The five appearance concerns (the interface)
+
+Every render path resolves these five concerns. This is the interface; the code
+module that owns each is named. New code calls the module — it never re-derives.
+
+| Concern | Owns | Source of truth | Module |
+|---------|------|-----------------|--------|
+| **Units** | which mesh renders per hand/perspective | `def.right_hand_unit` / `def.left_hand_unit` | `_resolve_variant_units(def)` |
+| **Transform** | scale / offset / position / rotation | `_type_transforms` + per-variant `_1p`/`_3p` fields, via `_resolve_field` | `WA` (WeaponAppearance) |
+| **Texture** | per-material texture set + per-instance persistence | variant custom texture set; LA `_la_persistence` per `backend_id` | `_resolve_variant_textures` (Phase 2) |
+| **Ammo** | attach / strip projectile+ammo units | `def.no_ammo_unit` | husk ammo-strip block |
+| **Residency** | force-load override units so the spawn yields a unit | data-driven walk of every def's override units | `_force_load_husk_override_units` |
+
+Plus a cross-cutting concern:
+
+| **Sync** | make the variant identity survive the network so husks resolve it | net-safe marker on the equipment/loadout wire | §5, issue #392 |
+
+---
+
+## §3 Concern × Path matrix — what each path MUST apply
+
+`✓` = path must apply this concern. `data` = resolved at the data level (the
+cloned `ItemMasterList` entry or a `get_item_units` hook) so vanilla spawns it
+correctly with no per-path apply. `swap` = path spawns the base and must
+explicitly swap. `—` = not applicable.
+
+| Concern | 1 Owner | 2 Husk | 3 Preview | 4 Browser |
+|---------|:-------:|:------:|:---------:|:---------:|
+| Units | data (`_build_entry` + `get_item_units`) | data (entry) | **swap** ✓ | **swap** ✓ |
+| Transform (3P) | ✓ | ✓ | ✓ | ✓ |
+| Transform (1P) | ✓ | — (husks have no 1P) | — | — |
+| Texture | ✓ | ✓ | ✓ | ✓ |
+| Ammo | data | ✓ (strip) | — | — |
+| Residency | ✓ (owner too — #415) | ✓ | n/a (preview world resident) | n/a |
+| Sync | source | consumer (§5) | — | — |
+
+**The gaps this standard is closing** (as of 2026-07-07):
+- Units, paths 3 & 4: only the musket was swapped; every other cross-char melee
+  variant previews as its base mesh (#237). → §4.1.
+- Residency, path 1: owner-side residency not covered, so a variant whose
+  override unit is non-resident on the owner renders absent (#415). → §4.5.
+- Texture, all paths: bespoke `Material.set_texture` copies, no per-instance
+  persistence (#227, #416). → §4.3.
+- Sync: husk resolves BASE `item_data`, so husk-side concern resolution that
+  keys on the cwv identity silently no-ops for skinless variants (#392). → §5.
+
+---
+
+## §4 Per-concern contract
+
+### §4.1 Units — `_resolve_variant_units(def)`
+
+Returns the per-hand mesh paths the variant should render:
+`{ right = def.right_hand_unit, left = def.left_hand_unit }` (either may be nil =
+keep base). Paths 1 & 2 apply this at the data level (`_build_entry` writes the
+paths onto the cloned entry; the `BackendUtils.get_item_units` hook forces them
+when no skin is applied). Paths 3 & 4 receive the base `item_name`, so they MUST
+explicitly swap:
+
+Both previewers spawn from a mutable, precomputed recipe (`spawn_data` /
+`units_to_spawn`), so the swap is **data mutation, not despawn/respawn**
+(weapon_tweaker's proven preview-swap pattern):
+
+1. Resolve the variant `def` by `backend_id` (`^(cwv_.-)_%d%d%d$`) via
+   `_find_def` — a direct walk of `_variant_definitions`, so it resolves EVERY
+   variant including those with no transform (registration-independent; see
+   below). Bail if a user-selected illusion is active (non-empty `skin` arg —
+   the illusion's mesh wins).
+2. In the `equip_item` hook (fires BEFORE vanilla's `World.spawn_unit`), rewrite
+   each matching `spawn_data` entry's `unit_name` to `def.<hand>_hand_unit ..
+   "_3p"` (entries already carry the `_3p` suffix). **unit_name only** — cwv
+   variants reuse the base template's node vocabulary, so the entry's
+   `unit_attachment_node_linking` is already correct; rewriting the node table
+   risks an engine-fatal `Unit.node` on a mesh missing the source's nodes.
+3. Guard, so worst case = today's base mesh, never a crash: swap only vanilla
+   `units/weapons/player/` meshes (a mod-bundled custom mesh has no `_3p`
+   package and `World.spawn_unit` engine-fatals — #403 class), only when the
+   target `_3p` unit is already force-loaded resident (§4.5), never the
+   invisible-weapon sentinel, never ammo-unit entries. Idempotent by keyed
+   assignment (`equip_item` fires twice per equip).
+
+**Registration vs resolution.** Two different lookups, do not conflate:
+- **Unit-swap** (this section) resolves via `_find_def` — registration-INDEPENDENT,
+  so a transform-less cross-character melee variant still previews its own mesh.
+- **Transform apply** (§4.2) on paths 3 & 4 resolves via `_transform_map`
+  (`_resolve_preview_def`), which is gated: a def registers when it contributes
+  ANY transform field or `force_register = true`. A native-scale variant needs
+  no transform, so not being registered is correct — its mesh still swaps.
+
+### §4.2 Transform — `WA` (WeaponAppearance)
+
+The single module that owns scale/offset/position/rotation math. Already unified
+across all four paths (v0.1.369-dev). Conventions:
+
+- **scale** — ABSOLUTE set. Idempotent.
+- **offset** — ADDITIVE from native local position. Guarded-idempotent (weak
+  table) because `MenuWorldPreviewer._spawn_item`'s super-call fires the hook
+  twice per spawn.
+- **position** — ABSOLUTE set (custom-mesh full pose reset; e.g. Old Musket).
+  Mutually exclusive with offset; position wins.
+- **rotation** — ABSOLUTE set. Accepts `{x,y,z}` euler DEGREES
+  (`Quaternion.from_euler_angles_xyz` takes degrees `[memory: reference_vt2_euler_angles_degrees]`)
+  OR a QuaternionBox / raw Quaternion.
+- **1P and 3P are applied to SEPARATE units BY THE CALLER.** `WA` never infers
+  perspective; the caller resolves `<field>_1p` / `<field>_3p` / unified via
+  `_resolve_field` and hands `WA` the resolved value. A 3P change can never
+  touch the 1P grip. Husks and both previewers apply 3P only.
+
+Call `WA.apply(unit, { scale=, offset=, position=, rotation= })`. Never
+re-implement `Unit.set_local_scale/position/rotation` at a call site.
+
+### §4.3 Texture — `_resolve_variant_textures` (Phase 2)
+
+- **Primitive:** `Unit.set_texture_for_materials` (per-UNIT, auto-cleaned on
+  despawn). NEVER `Material.set_texture` — that mutates the SHARED material
+  asset, leaking onto every weapon using it and risking the #199 missing-fallback
+  crash class.
+- **Per-instance persistence:** custom textures (LA armoury paints, variant
+  skins) persist per `backend_id`, exactly like vanilla illusions, via the
+  `cosmetics_tweaker/_la_persistence.lua` store (`illusions[backend_id] =
+  skin_name`, `save_illusion`/`get_saved_illusion`). Re-equip / unequip must
+  restore the same texture on the same instance.
+- Applied on every path that spawns a unit (1–4). On husks the source is the
+  networked cosmetic state (§5), not local selection.
+
+### §4.4 Ammo
+
+Variants with `def.no_ammo_unit` must attach NO projectile/ammo unit. Path 1
+resolves this at the data level; path 2 (husk) must actively STRIP the returned
+3P ammo unit (hide + `mark_for_deletion`, return nil so equipment never tracks
+it). Husk signal must be cwv-POSITIVE (base_weapon + career membership), never a
+bare base-key match that would touch a real vanilla weapon (#399).
+
+### §4.5 Residency
+
+A husk 3P unit must be force-loaded resident on EVERY peer before
+`_wield_slot` can spawn it, else the husk renders absent/base (#396, #401). The
+residency pass is DATA-DRIVEN: walk every def, force-load any per-hand override
+unit (and `_3p`) that differs from the base weapon's. **Extend to the owner
+path** for variants whose override unit lives in a package the wielder's career
+does not natively load (#415, Bretonnian shields on non-GK Empire careers).
+
+---
+
+## §5 Sync contract
+
+Owner paths (self + bots) have the full variant `item_data` and resolve every
+concern correctly. **Husks do not.** The equipment RPC encodes
+`NetworkLookup.item_names[item_data.name]`, and a CWV clone keeps
+`entry.name = base_weapon` — so the husk receives the BASE key plus (maybe) a
+synced skin, never the cwv instance identity. Any husk-side concern resolution
+that keys on the cwv identity silently no-ops for a skinless / cim-crafted
+variant. This is issue #392, the true umbrella under #394/#396/#397/#399/#416.
+
+**Contract:**
+- The loadout-panel RPC deliberately substitutes the vanilla base key to avoid a
+  cross-peer `item_names` divergence CTD (#278) — keep that.
+- To make husks RESOLVE the variant, a **net-safe cwv marker** must ride an
+  independent channel (a small per-wearer cosmetic-state broadcast keyed by
+  `backend_id → { right_hand, left_hand, variant_key }`), consumed on the husk
+  spawn path to drive units + transform + texture + ammo. Hot-join must resync
+  (`AttachmentUtils.hot_join_sync`). This is the generic replacement for the
+  per-item LA-only husk paint bridge (#416, #204).
+- Until the marker ships, husk correctness is limited to variants whose skin
+  survives the vanilla weapon_skin sync. Document that limit; don't claim husk
+  parity without a 2-player mission test.
+
+---
+
+## §6 Verification matrix
+
+No appearance change is "done" until confirmed in EVERY applicable cell (user
+in-game; compile is not verification `[bugclass: CLAUDE.md #10]`).
+
+| Observer / surface | Units | Transform | Texture | Ammo |
+|--------------------|:-----:|:---------:|:-------:|:----:|
+| Owner, keep (3P mannequin body) | ☐ | ☐ | ☐ | ☐ |
+| Owner, mission (3P) | ☐ | ☐ | ☐ | ☐ |
+| Owner, 1P view | — | ☐ (1P sep.) | ☐ | — |
+| Client/husk, mission | ☐ | ☐ | ☐ | ☐ |
+| Inventory preview (path 3) | ☐ | ☐ | ☐ | — |
+| Illusion browser (path 4) | ☐ | ☐ | ☐ | — |
+| Re-equip / unequip (persistence) | ☐ | — | ☐ | — |
+| Hot-join (husk resync) | ☐ | ☐ | ☐ | ☐ |
+
+A row that passes for the owner but fails for the husk is the #392 class. A cell
+that passes in-world but fails in preview is the #237 class.
+
+---
+
+## §7 Open-issue map (each cell → the pipeline gap it is)
+
+| Issue | Concern | Path(s) | Note |
+|-------|---------|---------|------|
+| #237 | Units | 3 | elf sword+shield previews as Kruber base — no mesh-swap |
+| #409 | Units/Texture | 3 | Old Musket preview — resolver bailed (fixed v0.1.369 force_register) |
+| #396 | Residency | 2 | Imperial Longsword invisible on husk |
+| #401 | Residency/Units | 2 | Axe+Shield reverts to dwarf base — wrong units force-loaded |
+| #415 | Residency | 1 | Longsword shield offhand absent for HOST (owner residency) |
+| #394 | Transform | 2 | Poleaxe grip offset not on husk |
+| #397 | Transform | 2 | umbrella: all transforms on husk |
+| #399 | Ammo | 2 | Trollhammer torpedo on husk |
+| #227 | Texture | 4 | Old Musket illusion entry red/transparent in browser |
+| #416 | Texture/Sync | 2 | per-hand illusion picks don't replicate to peers |
+| #204 | Texture/Sync | 2 | LA shield texture warps onto wrong mesh on husk |
+| #392 | Sync | 2 | umbrella: husk resolves base item_data |
+
+---
+
+## §8 DoD gate — `G-APPEARANCE`
+
+Add to `character_weapon_variants/DEFINITION_OF_DONE.md`. Trigger: the variant
+overrides ANY of units / transform / texture / ammo relative to its base weapon
+(i.e. essentially every cross-character variant).
+
+Walk:
+1. Every overridden concern resolves through its §2 module — NO inline
+   `Unit.set_local_*` / `Material.set_texture` / hand-spawned unit at a call site.
+2. The §6 verification matrix is walked for every applicable cell, host AND
+   client, with the user confirming in-game.
+3. If husk correctness depends on the cwv identity surviving the wire, the §5
+   sync marker is in place OR the CHANGELOG explicitly declares the husk limit.
+4. Registration: the variant is in `_transform_map` (transform field,
+   `force_register`, or override unit) so paths 3 & 4 resolve it.
+
+CHANGELOG footer: `**DoD:** ... Gates: G-APPEARANCE (matrix cells verified: <list>).`

@@ -61,6 +61,7 @@ technique.
 | Variant uses cross-character moveset (different character's `state_machine` / `anim_event_3p` / `wield_anim_3p`) | **G-3P-ANIM** | Native moveset only |
 | Variant has a special-key-toggleable second moveset | **G-STANCE** | Single moveset |
 | Variant adds custom illusions to its picker (curated `skin_combination_table`) | **G-CUSTOM-ILLUSION** | Reuses base weapon's vanilla skin pool or has no `item_type` override |
+| Variant overrides ANY of units / transform (scale/offset/rotation) / texture / ammo relative to `base_weapon` (i.e. essentially every cross-character variant) | **G-APPEARANCE** | Renders exactly like `base_weapon` on every path and observer |
 
 ---
 
@@ -499,6 +500,47 @@ gates apply. Reference: `reference_la_offhand_paint.md`,
   (unless designed). Names display correctly. Apply each illusion
   in inventory → mesh changes correctly on the character preview
   AND in mission.
+
+---
+
+## G-APPEARANCE — Weapon appearance across render paths + observers
+
+### Why
+
+The recurring bug class: an attribute (mesh / transform / texture / ammo) is
+correct in ONE render path or for ONE observer and wrong in another — right for
+the wielder, wrong for a teammate's husk; right in-world, wrong on the inventory
+preview. Full contract: `docs/WEAPON_APPEARANCE_STANDARD.md` (the four render
+paths, the five appearance concerns as one interface, the concern×path matrix).
+
+### Gates
+
+- [ ] Every overridden concern resolves through its standard §2 module — NO
+  inline `Unit.set_local_*` (use `WA` / `mod._cwv_weapon_appearance`), NO
+  `Material.set_texture` (use `Unit.set_texture_for_materials`), NO hand-spawned
+  preview unit (mutate `spawn_data.unit_name`). One owner per concern.
+- [ ] The variant renders its own mesh on ALL FOUR paths: owner in-world, husk
+  (remote), inventory preview (`MenuWorldPreviewer`), illusion browser
+  (`LootItemUnitPreviewer`). Preview/browser receive the BASE key, so a mesh
+  override needs an explicit swap there (standard §4.1).
+- [ ] Transform (scale/offset/rotation) applies on the owner AND the husk paths;
+  1P and 3P stay on SEPARATE units.
+- [ ] Custom textures use the per-unit primitive and persist per `backend_id`
+  (re-equip / unequip restores them — like vanilla illusions).
+- [ ] Override units are force-loaded resident on every peer that must render
+  them (husk residency; owner too when the unit is in a package the wielder's
+  career does not natively load).
+- [ ] If husk correctness depends on the cwv identity surviving the wire, the §5
+  sync marker is in place OR the CHANGELOG explicitly declares the husk limit
+  (the husk receives the BASE key — #392).
+- [ ] **Live test:** walk the standard §6 verification matrix — owner keep + owner
+  mission + client/husk mission + inventory preview + illusion browser + re-equip
+  + hot-join. A cell that passes for the owner but fails for the husk is the #392
+  class; a cell that passes in-world but fails in preview is the #237 class. User
+  confirms in-game (compile is not verification).
+
+CHANGELOG footer add-on when this gate applies:
+`Gates: G-APPEARANCE (matrix cells verified: <list; e.g. owner-keep, preview>).`
 
 ---
 
