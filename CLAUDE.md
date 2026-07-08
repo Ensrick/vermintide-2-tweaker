@@ -157,7 +157,7 @@ All active mods build via **VMB** (the launcher). Only frozen legacy `tweaker` u
 
 ## Dev/stable split workflow
 
-**Why + what's split.** The five public-Workshop mods (`ct`, `cim`, `gt`, `verminious_dreams_lighting`, `gut`) run two parallel Workshop items each: dev = friends-only, stable = public. Public subscribers want a stable bundle; the friends cohort wants visibility into in-flight work. Shipping every dev iteration to the public item cost ~80 cim subs in a few days in May 2026, hence the split. Everything else is single-stream (already friends-only or unpublished: `wt`, `cosmetics_tweaker`, `cwv`, `enemy`, `event`, `crt`, `bt`, `dcp`, `mp`).
+**Why + what's split.** The five public-Workshop mods (`ct`, `cim`, `gt`, `verminious_dreams_lighting`, `gut`) run two parallel Workshop items each: dev = friends-only, stable = public. Public subscribers want a stable bundle; the friends cohort wants visibility into in-flight work. Shipping every dev iteration to the public item cost ~80 cim subs in a few days in May 2026, hence the split. Everything else is single-stream (already friends-only or unpublished: `wt`, `cosmetics_tweaker`, `cwv`, `enemy`, `event`, `crt`, `dcp`, `mp`, `WOC`). (`bt` is retired - see the Mod Directory.)
 
 | Stable directory | Stable mod_id | Stable Workshop ID | Dev directory | Dev mod_id | Dev Workshop ID |
 |---|---|---|---|---|---|
@@ -288,7 +288,7 @@ The point is awareness, not enforcement - if a sentinel exists for a mod you nee
 
 ## Mod File Structure
 
-All active mods use the VMB layout. Short internal IDs (`wt`, `ct`, `gt`, `crt`, `cim`, `mp`, `bt`) are the `new_mod()` registration name, not a separate directory pattern - those mods live under the same VMB layout as the long-ID ones.
+All active mods use the VMB layout. Short internal IDs (`wt`, `ct`, `gt`, `crt`, `cim`, `mp`, `gut`) are the `new_mod()` registration name, not a separate directory pattern - those mods live under the same VMB layout as the long-ID ones. (`bt` used the same convention but is retired.)
 
 ```
 <mod_name>/

@@ -1,5 +1,21 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.131-beta (2026-07-07) — HOTFIX: promote issue 406 client heal-crash gate [verify-fix] [crash] [0-critical]
+
+Mode-A cherry-pick promotion (docs/PROMOTION_PROCESS.md) of the issue 406 fix from
+ct_dev v0.7.202-dev. ONLY this gate; no other dev work included.
+
+- SYMPTOM (issue 406): a ct CLIENT (non-host) who takes the "kill heal" boon
+  (ct_kill_heal) hard-crashes on their next kill: `DamageUtils.heal_network` fasserts
+  "Only server can heal" (damage_utils.lua:2636). on_kill procs run on the killer's
+  LOCAL machine, so a client fires the server-only heal.
+- ROOT CAUSE: `ct_kill_heal_on_kill` (chaos_wastes_tweaker.lua:10781) called
+  `heal_network` with no server gate. BUG_CLASSES class 29 (sibling of crt issue 405).
+- FIX: gate the proc on `Managers.player.is_server` (vanilla pattern,
+  buff_templates.lua:325/:404) - the client instance no-ops; the host's instance of the
+  synced buff grants the heal, so no heal is lost.
+- Needs an in-game verify: a ct CLIENT takes the boon and kills something without crashing.
+
 ## 0.7.130-beta (2026-07-03) — Full promotion: stable brought to parity with ct_dev 0.7.211-dev
 
 Wholesale promotion of all `chaos_wastes_tweaker_dev` work through **0.7.211-dev** into the public stable mod (previously cherry-picked one fix at a time; this catches stable up in one pass). Source mirrored with the `ct_dev`→`ct` / `chaos_wastes_tweaker_dev`→`chaos_wastes_tweaker` rename, the dev-only `[untested]`/`[confirmed working]` menu labels stripped (stable carries none), and version normalized to the stable `-beta` line. Committed only — **no Workshop upload** in this change. Per-fix detail lives in the dev CHANGELOG (0.7.140-dev … 0.7.211-dev); the notable user-facing items:

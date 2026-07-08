@@ -41,7 +41,7 @@ local mod = get_mod("ct")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.130-beta"
+local MOD_VERSION = "0.7.131-beta"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -10779,6 +10779,13 @@ do
         -- `health_regen` (which IS in the permanent-heal whitelist + is
         -- registered in NetworkLookup.heal_types).
         buff_funcs.functions.ct_kill_heal_on_kill = function(unit, buff, params)
+            -- Issue 406: heal_network fasserts "Only server can heal" on
+            -- clients (damage_utils.lua:2636) - a CLIENT taking this boon
+            -- crashed on their next kill (same class as crt issue 405).
+            -- Vanilla gate per buff_templates.lua:325/:404: the client
+            -- instance no-ops; the host's instance of the synced buff
+            -- grants the heal. Promoted from ct_dev v0.7.202-dev.
+            if not (Managers and Managers.player and Managers.player.is_server) then return end
             if ALIVE[unit] then
                 DamageUtils.heal_network(unit, unit, 0.25, "health_regen")
             end
