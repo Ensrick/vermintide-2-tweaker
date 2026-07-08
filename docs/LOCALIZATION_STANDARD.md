@@ -604,6 +604,11 @@ Test the **registered value** VMF actually renders:
 - `dev_picker_names_localized` — the freshly-rebuilt-label check (catches the resolver
   itself regressing).
 
+**Detecting the 12.2 trap in a mod:** `grep -c "localization file was not loaded"` in the
+latest console log; any hit means a `mod:localize` is reachable from `loc_keys()` /
+`build_widget_tree()` / a mod-init catalog build. Test the REGISTERED label, not a
+freshly-rebuilt one (the rebuilt check runs post-registration and hides the bug).
+
 Memory: `reference_vmf_localize_before_registration`, `feedback_use_documented_localized_names`.
 
 ---
@@ -781,6 +786,10 @@ carry no tag:
 - [`AUDIT_section_c.md`](./AUDIT_section_c.md) — full localization sweep with the P0/P1/P2/P3 findings this standard is built around.
 - [`AUDIT_2026_05_21.md`](./AUDIT_2026_05_21.md) — master audit; "Documentation gaps surfaced" section lists the gaps this doc closes.
 - Memory: `feedback_ps5_getcontent_utf8.md` — UTF-8 / PowerShell 5.1 reading.
+- `DEVELOPMENT.md` § "Localize description strings run through `string.format`" — the
+  HOOKED-`_G.Localize` variant of the §1 `%%` rule: overrides returned from a `Localize`
+  hook are post-formatted downstream by `UIUtils.format_localized_description`, so
+  literal `%` must be escaped there too (distinct mechanism from `mod:localize`).
 - Memory: `reference_vmf_localize_before_registration.md` — the §12.2 load-order trap (mod:localize fails during loc registration).
 - Memory: `feedback_use_documented_localized_names.md` — the §12.1 single-source-of-truth rule (no parallel hardcoded name maps).
 - `weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua` — canonical reference for trait-description `%%` escaping (post Fix 1).

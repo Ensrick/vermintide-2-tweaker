@@ -339,6 +339,10 @@ VMF provides `mod:hook(class, method, func)` and `mod:hook_safe(class, method, f
 
 ### Three Weapon Rendering Paths
 
+> Owner doc: `docs/WEAPON_APPEARANCE_STANDARD.md` §1 - the normative contract. It
+> defines FOUR paths (the husk/remote path is separate from the owner in-world
+> path) plus the concern-by-path matrix. The table below is the quick summary only.
+
 Any weapon visual override must cover all three:
 
 | Path | Hook Target | Hand Access |

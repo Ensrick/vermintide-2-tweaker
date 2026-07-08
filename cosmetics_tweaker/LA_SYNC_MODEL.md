@@ -2,6 +2,12 @@
 
 Sourced from a read-only audit of `C:\Users\danjo\source\repos\Loremasters-Armoury\` (snapshot dated Apr 29 2026 on disk; no live verification against Workshop bundle).
 
+> LA doc ownership map (issue #432): THIS doc owns LA's own internals + the §6
+> bridge gotcha catalogue. The bridge end-to-end architecture lives in
+> `docs/CROSS_MOD_ARCHITECTURE.md` "Loremaster's Armoury Bridge"; the sync-state
+> invariants/audit in `docs/LA_SYNC_CORE_AUDIT.md`; dependency rows in
+> `MOD_DEPENDENCIES.md`.
+
 ---
 
 ## 1. LA's net-sync architecture

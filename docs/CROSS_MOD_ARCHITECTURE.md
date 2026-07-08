@@ -168,6 +168,13 @@ No hard dependencies. Each mod's core features work standalone.
 
 ## Loremaster's Armoury Bridge (cosmetics_tweaker ↔ LA)
 
+> LA doc ownership map (issue #432): THIS section owns the bridge end-to-end
+> architecture (clone registration, apply gate, loadout cache, preview hooks).
+> `cosmetics_tweaker/LA_SYNC_MODEL.md` owns LA's OWN internals (no-sync evidence,
+> shared-material paint, husk pipeline) + the §6 gotcha catalogue.
+> `docs/LA_SYNC_CORE_AUDIT.md` owns the sync-state invariants + migration status.
+> `MOD_DEPENDENCIES.md` owns the dependency/gating rows. Don't restate across them.
+
 Exposes Loremaster's Armoury (LA) cosmetic recolors as separate equippable items in VT2's native inventory, so the player can have "Pureheart Red" and "Pureheart White" selectable side-by-side without LA's normal mode (which silently overrides a vanilla item's textures based on a VMF settings dropdown).
 
 **Dependencies:** Loremaster's Armoury, MoreItemsLibrary (MIL). Both optional — bridge is a no-op if either is missing.

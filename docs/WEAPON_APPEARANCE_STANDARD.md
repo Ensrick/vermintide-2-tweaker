@@ -48,6 +48,17 @@ looking and WHERE. A fix that only touches one path is by definition incomplete.
 - Paths 3 & 4 receive `item_name` = the variant's **base weapon key** (a CWV
   clone keeps `entry.name = base_weapon`), so vanilla spawns the BASE mesh.
   Overriding to the variant mesh is the mod's job on these paths (§4.1).
+- Path 3's `MenuWorldPreviewer._spawn_item_unit` fires once per unit with NO
+  hand indicator - not usable for per-hand targeting. Use `_spawn_item` /
+  `equip_item` instead.
+- Path 4's spawn order is fixed by `_load_item_units`, which always appends
+  left then right - hence `units[1]` = left (shield), `units[2]` = right
+  (weapon), identified via the `spawn_data` entries.
+- Path 1 career-gated hooks must read career from
+  `ScriptUnit.has_extension(unit, "inventory_system")._career_name`, never
+  `Managers.player:owner(unit):career_name()` - the unit-to-player reverse
+  association is nil at mission-spawn timing, so the hook silently bails.
+  `[memory: feedback_vt2_mission_spawn_career_lookup]`
 
 ---
 

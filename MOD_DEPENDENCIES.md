@@ -55,6 +55,10 @@ Per-edge file:line citations live in the 2026-06-22 audit + `docs/CROSS_MOD_ARCH
 
 Most cross-mod contracts are **presence-flag** checks, not method APIs.
 
+Compatibility rules for these surfaces (never-break-consumers, additive-only
+evolution, retirement path) are binding per `PROJECT_STANDARDS.md` §9a; retirement
+stages per §7.10.
+
 ## Known gap (enhancement, not a bug) — [#82]
 
 `character_weapon_variants` ships **no embedded MoreItemsLibrary**, so standalone CWV

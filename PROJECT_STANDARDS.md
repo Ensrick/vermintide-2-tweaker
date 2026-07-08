@@ -1266,6 +1266,44 @@ Cross-refs:
 
 ---
 
+## 9a. Cross-mod public API compatibility (binding; added 2026-07-08, issue #432)
+
+Applies to every surface another mod may consume: gut's
+`mod_tweaker:{register_category, get, set, ...}` registration API, the
+(retired) bt shared-registration pattern, mp's sibling API, presence flags,
+and the copied `_lib_*.lua` shared libraries. The registry of live surfaces
+is the "Exposed APIs" table in `MOD_DEPENDENCIES.md` - every public surface
+MUST have a row there before a consumer wires against it.
+
+**Never break consumers.** Once a function is on a public surface, its name,
+signature, and return shape are frozen. Evolve additively: new capability =
+new function, or optional trailing parameters with safe defaults. A consumer
+built against version N must keep working against N+1 unchanged.
+
+**Consumers gate; providers degrade.** Consumers follow the
+`MOD_DEPENDENCIES.md` gating convention: nil-guard every `get_mod(...)`
+deref, treat absence as the safe default, resolve only the STABLE mod_id
+(never `*_dev`). Providers retiring a surface follow §7.10: Stage 1 keeps
+the old entry point returning inert values so guarded consumers degrade
+without crashing (the `(get_mod('bt') or {}):is_br_active()` pattern is the
+worked example - bt retired with zero consumer crashes); Stage 2 keeps a
+guarded no-op shim; API names, like setting_ids, are never reused.
+
+**Versioning.** Networked cross-mod channels carry an explicit schema
+version with drop-on-mismatch (`docs/VMF_RECIPES.md` §10 is the canonical
+recipe). Non-networked surfaces need no version constant while evolution
+stays additive; if a breaking change is ever unavoidable, ship it as a NEW
+surface name and retire the old one per §7.10 - do not repurpose in place.
+
+**`_lib_*.lua` copied libraries** (the standalone invariant forbids runtime
+`get_mod` deps between our mods): the master lives in `tools/shared_lib/`;
+per-mod copies are verbatim and are NEVER edited locally - edit the master,
+then re-copy to every consumer in the same pass. A mod needing divergent
+behavior gets a differently-named fork, not a silently drifted copy. Each
+lib's header names its master path so drift is detectable by diff.
+
+---
+
 ## 10. Mod maturity tiers (different bars for different mods)
 
 ### 10.1 Alpha (`-alpha`, `-dev`)

@@ -47,96 +47,25 @@ vermintide-2-tweaker/
 └── tools/vmb-launcher/             <- VMBLauncher.exe — canonical build/deploy/upload entry point. Drive it via `tools\ship\ship.ps1` (build+deploy+upload+release+verify). The per-mod `upload_*.ps1` wrappers (removed 2026-07-07, archived to `../_vt2-tweaker-archive/`) and the `deploy_*.ps1` shims (removed 2026-05-21) are gone — use `ship.ps1` / `VMBLauncher.exe deploy <mod>` directly.
 ```
 
-## Dev Workflow: Build -> Deploy -> Restart
+## Dev Workflow: Build -> Deploy -> Upload
 
-The game loads mods from the real Workshop content folder (`552500/<workshop_id>`).
+> Owner docs for build/deploy/upload doctrine (consolidated 2026-07-08, issue #432):
+> the repo-root `CLAUDE.md` section "Build Commands" (ship doctrine, verbs, post-ship
+> verification) and `tools/vmb-launcher/CLAUDE.md` (launcher mechanics, itemV2.cfg
+> format + visibility policy, first-upload sequence). Do not restate them here.
 
-### Quick iteration loop
-
-```powershell
-# 1. Build via the launcher (VMBLauncher wraps VMB which wraps the Stingray compiler)
-$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
-& $exe build weapon_tweaker
-
-# 2. Deploy to Workshop content folder (hash-verified copy + auto PC-B push; cleans stale .mod / .mod_bundle first)
-& $exe deploy weapon_tweaker
-
-# Or do both in one shot:
-& $exe all weapon_tweaker
-
-# 3. Restart the game
-#    Hot-reload (Ctrl+Shift+R) is NOT safe for weapon_tweaker or cosmetics_tweaker -- see Important Constraints in CLAUDE.md
-```
-
-### Build
-
-```powershell
-$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
-& $exe build <mod_name>
-```
-
-Output goes to `<mod>\bundleV2\`. The launcher wraps `node vmb.js build <mod> --no-workshop --cwd` under the hood; itemV2.cfg's `published_id` is what the eventual upload targets.
-
-### Deploy
-
-```powershell
-& $exe deploy weapon_tweaker                          # single mod, hash-verified copy + auto PC-B push
-& $exe all    weapon_tweaker                          # build + deploy + upload in one shot
-```
-
-The launcher detects the VMB layout (`bundleV2/` exists) and copies the bundle to the Workshop content folder, runs `Clean-StaleBundles` against the destination first — important because the Lua bundle hash changes between builds, and leaving an old bundle alongside the new one would cause duplicate `new_mod()` registration crashes — and pushes to every enabled `RemoteDeployTargets` entry (PC-B) automatically. The legacy `deploy_all.ps1` / `deploy_ct.ps1` / `deploy_gt.ps1` / `deploy_wt.ps1` shims that used to wrap this flow were removed 2026-05-21 — use `VMBLauncher.exe deploy <mod>` (or `tools\ship\ship.ps1`) directly. See `tools/vmb-launcher/CLAUDE.md` for the full verb/flag matrix.
-
-### Verifying the right build is running
-
-Each mod logs its version on init:
-```
-[MOD][wt][INFO] Weapon Tweaker v0.2.1-dev loaded
-```
-And echoes it to in-game chat. Always bump `MOD_VERSION` before every build so the running version is visually verifiable.
-
-## Workshop Upload (VMB pipeline)
-
-After the 2026-05-01 migration, every active mod uploads via `ugc_tool` reading `itemV2.cfg` directly from the mod's source folder. No SDK staging is needed; the ugc_tool resolves `content` and `preview` paths relative to the config file's parent directory.
-
-### Per-mod itemV2.cfg
-
-```ini
-title = "Tweaker: Weapons";
-description = "Weapon unlock and runtime experimentation for Vermintide 2. Requires VMF.";
-preview = "preview.jpg";
-content = "bundleV2";
-language = "english";
-visibility = "private";
-published_id = 3712896117L;
-apply_for_sanctioned_status = false;
-tags = [ ];
-```
-
-- `preview` and `content` are **relative to the cfg file's parent directory**.
-- `content = "bundleV2"` points at VMB's build output folder.
-- `published_id` uses the `L` suffix (64-bit integer literal).
-- Semicolons required on every line (parsed by `libconfig.dll`).
-- **`visibility`**: do NOT set or change without explicit user direction. Two mods were once flipped to `"public"` by an automated change; both got flagged and "removed from community", which is irreversible. Default new mods to `"private"`. Per-mod intended visibility is recorded in `feedback_workshop_metadata_user_dictates.md` in memory.
-- For a **new** Workshop item, set `published_id = 0L;` — the tool populates it on first upload.
-
-### Upload
-
-```powershell
-& .\tools\ship\ship.ps1 -Mod chaos_wastes_tweaker -AllowPublic   # build+deploy+upload+release+verify
-& .\tools\ship\ship.ps1 -Mod weapon_tweaker                      # friends-only, no -AllowPublic
-```
-
-> ⚠️ **Steam removal risk — bolder than it looks.** A `visibility = "public"` flip on a mod that wasn't meant for the public has been flagged and "removed from community" before. That removal is **irreversible**. Before any upload, confirm `itemV2.cfg`'s `visibility` line matches the intended Mod Directory entry. Per-mod intended visibility is locked in by user policy — see `vermintide-2-tweaker/tools/vmb-launcher/CLAUDE.md` for the upload doctrine. The visibility-mismatch check lives in `VMBLauncher.exe upload` (which `ship.ps1` calls); it aborts a `--allow-public` push when `itemV2.cfg` isn't `public`. (The old per-mod `upload_*.ps1` wrappers were removed 2026-07-07, archived to `../_vt2-tweaker-archive/`.)
-
-For other mods, run ugc_tool directly via bash so the `echo y |` EULA workaround works (PowerShell `&` does not pipe stdin reliably to ugc_tool):
-
-```bash
-cd "<mod_dir>" && echo y | "/c/Program Files (x86)/Steam/steamapps/common/Vermintide 2 SDK/ugc_uploader/ugc_tool.exe" -c "<absolute path to itemV2.cfg>" -x
-```
-
-### ALWAYS verify after uploading
-
-ugc_tool prints "Upload finished" even when content fails to transfer. The only reliable confirmation is the **File Size** shown on the Workshop item page (~1.3 MB expected). A 0-byte item means subscribers get nothing. Compare against the local `bundleV2/` total bytes.
+- Loop: `VMBLauncher.exe build <mod>` -> `deploy <mod>` (or `all <mod>`), then a FULL
+  game restart (hot-reload is NOT safe for weapon_tweaker / cosmetics_tweaker - see
+  CLAUDE.md "Important Constraints").
+- Release path: `tools\ship\ship.ps1 -Mod <name>` per the CLAUDE.md ship doctrine.
+- Upload verification: `workshop_log.txt` must show `Uploaded new content`
+  (`ugc_tool` prints success even on failure) - see CLAUDE.md "Post-ship verification".
+- itemV2.cfg field format, the visibility removal-risk warning, and the new-item
+  `published_id` flow: `tools/vmb-launcher/CLAUDE.md`. Low-level cfg facts also in
+  "Key Technical Facts / Workshop / Build" below.
+- Always bump `MOD_VERSION` before every build (version echoes on init, e.g.
+  `[MOD][wt][INFO] Weapon Tweaker v0.2.1-dev loaded`) so the running build is
+  visually verifiable.
 
 ## Weapon Unlocks
 
@@ -579,6 +508,11 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 - **Fix:** Refactor into a function (`Deploy-ToDir`) so variables are passed as parameters rather than relying on outer scope.
 
 ## Stingray / Lua engine quirks
+
+> Owner doc for engine-level quirks (issue #432 consolidation): this section.
+> `CLAUDE.md` "Lua Environment" carries the high-frequency SUMMARY and cites here;
+> `docs/MECHANICS.md` points at these facts via provenance tags. Don't grow a
+> third full copy anywhere.
 
 Cross-cutting engine and Lua 5.1 / LuaJIT gotchas that bite every mod in this
 repo at least once. Most of these are silent failure modes — code "looks
@@ -1350,16 +1284,8 @@ The `cosmetics_tweaker` mod (Workshop 3715714222, internal ID `cosmetics_tweaker
 
 ### Build & Deploy
 
-```powershell
-# Build (from vermintide-2-tweaker/ root)
-$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
-& $exe build cosmetics_tweaker
-
-# Deploy
-& $exe deploy cosmetics_tweaker
-```
-
-Output goes to `cosmetics_tweaker/bundleV2/`. `VMBLauncher.exe` detects the VMB layout and handles the deploy. (The legacy `deploy_all.ps1` shim that used to cover this flow was removed 2026-05-21 — use `VMBLauncher.exe deploy <mod>` or `tools\ship\ship.ps1` directly.)
+Standard pipeline - `VMBLauncher.exe build/deploy cosmetics_tweaker` (or `ship.ps1`).
+Owner docs: repo-root `CLAUDE.md` "Build Commands" + `tools/vmb-launcher/CLAUDE.md`.
 
 **Hot-reload crashes (Ctrl+Shift+R):** weapon_tweaker and cosmetics_tweaker are NOT safe to hot-reload. Both hook unit creation paths (`GearUtils.create_equipment`, `BackendUtils.get_item_units`), and cosmetics_tweaker bundles non-Lua resources (materials/textures). The Stingray engine holds C++-level locks on spawned unit and material resources that cannot be released from Lua — `Mod.release_resource_package` triggers `ensure_unlocked` and crashes. Attempted workarounds (hooking `ModManager.unload_mod`, clearing `loaded_packages` in `on_reload`) either failed to fire (VMF's mod object is not `mod.object` in ModManager) or caused worse cascading failures (wiping third-party atlas handles, increasing lock counts). **Always do a full game restart** after deploying weapon_tweaker or cosmetics_tweaker changes. chaos_wastes_tweaker, general_tweaker, and career_tweaker are Lua-only and may survive hot-reload, but a restart is safest.
 
@@ -1375,20 +1301,12 @@ They are spawned separately, attached to different skeleton nodes (`j_rightweapo
 
 ### Three Rendering Paths
 
-Any visual override must cover **all three** places weapon units are rendered:
-
-| Path | Hook Target | What It Renders | How Units Are Accessed |
-| :--- | :--- | :--- | :--- |
-| **In-game** (keep/mission) | `GearUtils.create_equipment` / `GearUtils.spawn_inventory_unit` | Actual gameplay model | `result.left_unit_1p`, `result.right_unit_1p`, `result.left_unit_3p`, `result.right_unit_3p` — separate unit objects per hand |
-| **Inventory character preview** | **`MenuWorldPreviewer._spawn_item` / `MenuWorldPreviewer.equip_item`** (NOT HeroPreviewer — VT2's `class()` copies parent methods at definition time, so hooks on the base silently miss) | Full character in inventory screen | `self._equipment_units[slot_idx].left` / `.right` — separate unit objects per hand |
-| **Illusion/skin browser** | `LootItemUnitPreviewer.spawn_units` | Weapon close-up in skin selection UI | `self._spawned_units` array — left (shield) at index 1, right (weapon) at index 2. Spawn order matches `_load_item_units` which always appends left then right |
-
-Key differences:
-- `GearUtils` and `MenuWorldPreviewer` provide explicit left/right separation
-- `LootItemUnitPreviewer` uses spawn order (left=1, right=2) — identified via `spawn_data` entries
-- The `MenuWorldPreviewer._spawn_item_unit` hook is **NOT usable** for per-hand targeting — it fires once per unit with no hand indicator. Use `MenuWorldPreviewer._spawn_item` instead.
-- Hooks on `HeroPreviewer.equip_item` / `HeroPreviewer._spawn_item` **never fire on the keep inventory previewer instance** — see `feedback_vt2_class_hook_derived.md` + `feedback_inventory_preview_hook_menuworldpreviewer.md`. weapon_tweaker v0.12.16 shipped this bug and v0.12.17 fixed it; do not regress.
-- For in-game `GearUtils.spawn_inventory_unit` career-gated hooks: read career from `ScriptUnit.has_extension(unit, "inventory_system")._career_name`, not `Managers.player:owner(unit):career_name()` — the latter returns nil at mission-spawn timing. See `feedback_vt2_mission_spawn_career_lookup.md`.
+> Owner doc: `docs/WEAPON_APPEARANCE_STANDARD.md` §1 (consolidated 2026-07-08,
+> issue #432). It defines FOUR render paths - owner in-world, husk (remote),
+> inventory preview, illusion browser - with hook targets, per-hand unit access,
+> and the load-bearing facts (derived-class hooking, string-vs-numeric slot
+> keying, `_spawn_item_unit` no-hand-indicator, spawn-order, career-detection
+> caveat). Do not restate the table here; the subsections below reference it.
 
 ### Weapon Scale Overrides (`_unit_path_scale_overrides`)
 

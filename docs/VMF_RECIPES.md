@@ -1406,48 +1406,12 @@ crafting_in_modded v0.7.57 (overview, timing) → v0.7.58 (timing fixed, still w
 
 ## 14. `mod:localize` FAILS when called during loc registration — read the raw loc DATA
 
-VMF registers a mod's localization only when its `_localization.lua` `return`s its table.
-Any code that runs **before** that point — i.e. *during* the loc file's own execution —
-cannot use `mod:localize` for that mod's own keys: it logs
-`[MOD][<id>][ERROR] (localize): localization file was not loaded for this mod` (once per
-call — floods) and returns nothing usable, so anything you tried to resolve silently
-falls back.
-
-### Why
-
-The classic trigger is a loc file that `mod:dofile`s a dev/feature module and calls its
-`loc_keys()` from inside its own body (to merge dynamically-built keys). That `loc_keys()`
-— and any catalog/label build it does — runs pre-registration. A `mod:localize` on that
-path errors AND returns junk, so the labels VMF actually registers are wrong.
-
-### How to apply
-
-Resolve from the raw loc DATA table, never `mod:localize`, on any path reachable during
-registration / mod-init. Publish the table on the mod object before dofiling the consumer:
-
-```lua
--- <mod>_localization.lua, BEFORE it dofiles the consumer + calls loc_keys():
-mod._wt_loc_raw = loc
--- consumer's resolver (no mod:localize):
-local e = mod._wt_loc_raw and mod._wt_loc_raw["unlock_" .. career .. "_" .. weapon_key]
-if type(e) == "table" and e.en then return (e.en:gsub("^%s*%b[]%s*", "")) end  -- strip status tag
-```
-
-Full doctrine + the tests that guard it: `LOCALIZATION_STANDARD.md` § 12. Distinct from
-§ 7 (mod loc not in global `Localize`): § 7 is about CROSS-mod reads at runtime; this is a
-mod reading its OWN keys too early.
-
-### How to detect in YOUR mod
-
-`grep -c "localization file was not loaded" <latest console log>` > 0. Then grep the mod for
-`mod:localize` reachable from `loc_keys()` / a `_data.lua` `build_widget_tree()` / a mod-init
-catalog build. Add a test that checks the REGISTERED label (`mod:localize(group_sid)` at
-runtime), not a freshly-rebuilt one.
-
-### Burned
-
-weapon_tweaker #197 — v0.12.178 added a `mod:localize` name resolver to the dev anim picker;
-27× error flood every boot AND the "documented names" fix was silently a no-op (labels stayed
-raw keys). Fixed v0.12.183 by reading `mod._wt_loc_raw` directly. The in-game regression test
-masked it because it rebuilds fresh (loc loaded by then). Memory:
-`reference_vmf_localize_before_registration.md`.
+> Owner doc: `docs/LOCALIZATION_STANDARD.md` § 12 (consolidated 2026-07-08, issue
+> #432 - this section previously restated it in full). Rule: any path reachable
+> DURING loc registration / mod-init must resolve labels from the raw loc DATA
+> table (publish it as `mod._<id>_loc_raw`), never via `mod:localize` - the loc
+> is not registered yet, so it error-floods and silently returns junk. § 12 has
+> the mechanism, fix pattern, detection grep, and the wt #197 burn history.
+>
+> Distinct from § 7 above (mod loc not in global `Localize`): § 7 is about
+> CROSS-mod reads at runtime; this is a mod reading its OWN keys too early.
