@@ -20,6 +20,10 @@
 #   3. Run `tools/mod-lint/lint-mod.ps1`. Exit 2 (duplicate-hook errors)
 #      blocks the commit; exit 1 (warnings — forward-ref / late-local /
 #      save-restore / network-bound) prints the warning but continues.
+#   4. Run `qa/check_hook_test_coverage.ps1 -Staged` (issue #429) WARN-ONLY:
+#      a staged mod:hook / NetworkLookup-write add with no regression marker is
+#      surfaced but never blocks (we gather signal first). Escape: a
+#      `-- hook-test: <check>` comment on the added line.
 #
 # Bypass on a single commit with `git commit --no-verify`. See
 # PROJECT_STANDARDS.md § 8 for the escape-hatch convention.
@@ -130,6 +134,21 @@ if ($lintExit -ge 2) {
 if ($lintExit -eq 1) {
     Write-Host ""
     Write-Host "[pre-commit] mod-lint reported warnings (exit 1) — commit allowed but please review." -ForegroundColor Yellow
+}
+
+# --- Step 4: hook-test coverage (WARN-ONLY, issue #429) --------------------
+# If the staged diff adds a mod:hook / mod:hook_safe or a NetworkLookup write in
+# a mod's lua without a regression marker, surface it — but NEVER block (we're
+# gathering signal first). Escape with a `-- hook-test: <check>` comment.
+$hookCovScript = Join-Path $repoRoot 'qa\check_hook_test_coverage.ps1'
+if (Test-Path $hookCovScript) {
+    Write-Host ""
+    Write-Host "[pre-commit] step 4/4: qa/check_hook_test_coverage.ps1 -Staged (advisory)" -ForegroundColor Cyan
+    $covOut = & pwsh -NoProfile -File $hookCovScript -Staged 2>&1
+    $covOut | ForEach-Object { Write-Host $_ }
+    if ($LASTEXITCODE -eq 1) {
+        Write-Host "[pre-commit] hook-test coverage advisory (exit 1) — commit allowed; add an _rt_register or -- hook-test: comment." -ForegroundColor Yellow
+    }
 }
 
 Write-Host ""

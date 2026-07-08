@@ -160,6 +160,23 @@ Run-Check "check_mechanics_citations" { & (Join-Path $here "check_mechanics_cita
 # (and, in CI PRs, GITHUB_BASE_REF) view; pre-commit runs the -Staged variant.
 Run-Check "check_dev_only_edits" { & (Join-Path $here "check_dev_only_edits.ps1") -Quiet:$Quiet }
 
+# check_logging is Advisory (issue #429): logging-hygiene scan encoding
+# PROJECT_STANDARDS § 3.6 + BUG_CLASSES § 17 — (a) mod:echo in a § 3.6 "NEVER"
+# context (module-load banner / on_setting_changed / on_enabled|on_disabled /
+# hook body), (b) mod:info|warning in a per-frame update() body, (c) mod:warning
+# in a dbg/alert helper (the Issue #240 chat-spam class). Nonzero by design —
+# this gathers signal, so it must NEVER block. Escapes: -- allow-echo /
+# -- allow-perframe / -- allow-warn-chat. See qa/CHECKS.md rows 58a/58b/58c.
+Run-Check "check_logging" { & (Join-Path $here "check_logging.ps1") -Quiet:$Quiet } -Policy 'Advisory'
+
+# check_hook_test_coverage is Advisory (issue #429): if the diff (HEAD~1..HEAD by
+# default, or origin/<base>...HEAD in a CI PR) ADDS a mod:hook / mod:hook_safe or
+# a NetworkLookup write in a mod's lua, it must ship a regression marker — a
+# `_rt_register(` addition, a `-- hook-test: <check>` comment, or a pre-existing
+# suite. Warn-only here and in pre-commit (we gather signal first). Self-exits 0
+# on an indeterminate diff. See qa/CHECKS.md row 24a.
+Run-Check "check_hook_test_coverage" { & (Join-Path $here "check_hook_test_coverage.ps1") -Quiet:$Quiet } -Policy 'Advisory'
+
 # check_stale_docs is Advisory (issue #429): staleness is TIME-based (a doc goes
 # stale at $StaleDays=14 with no edit), so it can't be baselined sensibly and must not
 # hard-block a commit/CI run on calendar drift — exactly the "gate that blocks on

@@ -39,6 +39,8 @@ Seven checks are pinned in `run_all.ps1` to a non-default policy via the
 | `check_issue_tag_sync` | `Advisory` | Loc-tag ↔ GitHub-label cross-surface sync (issue #326 part 2). Same reasoning as `check_issue_status_labels`: queries GitHub (self-exits 0 offline), findings are review nudges — stale `[Issue N]` tags, tag/label mismatches in either direction — never hard errors. |
 | `check_stale_docs` | `Advisory` | Doc-hygiene surface (issue #429). Staleness is TIME-based (`check_stale_docs.ps1` flags a doc at its `$StaleDays = 14` default with no edit), so exit 2 must NOT hard-block a commit/CI on calendar drift. Pinned Advisory (formalizing the old CI `continue-on-error`). Remediation: `run_all.ps1 -FixStale`. |
 | `luacheck` | `Advisory` | Lua static-analysis surface (issue #429). The ~415-warning baseline is driven down over sessions, not per-commit (CWV bare-globals cleanup, PROJECT_STANDARDS §11). Pinned Advisory — the policy-engine version of the old CI `\|\| true`. Flip to Standard once the baseline is clean. |
+| `check_logging` | `Advisory` | Logging-hygiene surface (issue #429, rows 58a/b/c). Encodes § 3.6 + BUG_CLASSES § 17; the ~56-finding backlog (mostly the Issue-#240 `_dbg_alert → mod:warning` migration + § 3.6 hook-body echoes) is worked down over sessions, not per-commit. Pinned Advisory — NEVER blocks. Flip to Standard once the backlog is annotated/cleared. |
+| `check_hook_test_coverage` | `Advisory` | Hook/NetworkLookup regression-coverage surface (issue #429, row 24a). Diff-scoped; warn-only in `run_all` AND pre-commit while we gather signal. Self-exits 0 on an indeterminate diff. Consider Standard once the `-- hook-test:` / `_rt_register` convention is established. |
 
 Everything else uses the default `Standard` policy (exit 1 = warning, exit >=2 =
 error). Checks that already hard-fail on exit 2 and never emit exit 1
@@ -131,6 +133,7 @@ the committed baseline always matches CI regardless of the local checkout.
 | 22 | Hook drops vanilla arg through too-narrow signature (`function(func,self,a,b,c)` when vanilla takes 5) | weapon_tweaker_backend.lua audit | PRE-SHIP review pattern | PRE-SHIP |
 | 23 | Guard returns without calling vanilla `func` — silently changes state | PROJECT_STANDARDS §4.2 + ATTACHMENT_STORAGE_AUDIT lesson | PRE-SHIP review pattern | PRE-SHIP |
 | 24 | "Attempting to rehook active hook" (same Class+method hooked twice in one mod handle) | v0.9.8.2 lesson | PRE-SHIP review (grep `mod:hook` for duplicate Class+method pairs per file) | PRE-SHIP |
+| 24a | A diff ADDS a `mod:hook`/`mod:hook_safe` or a `NetworkLookup` write in a mod's lua but ships NO regression marker, so the singleton-hook invariant (#24, CLAUDE.md NON-NEG #8) and the gated-registration invariant (#29) go unchecked as the mod evolves. | CLAUDE.md NON-NEG #8 + `feedback_vmf_no_duplicate_hooks` + `feedback_vt2_gated_registration_diverges.md` | `check_hook_test_coverage.ps1` — parses `git diff -U0` (`-Range` default `HEAD~1..HEAD`, `-Staged`, or `origin/<base>...HEAD` in CI). A file that adds a hook/NL-write is covered iff the diff also adds a `_rt_register(`, carries a `-- hook-test: <check>` comment, OR the mod already ships an `_rt_register` suite. WARNING-only (exit 1), pinned **Advisory** in `run_all` + a warn-only step in pre-commit — gathers signal, never blocks; self-exits 0 on an indeterminate diff. Coverage-EXISTENCE, not per-hook proof (a marker can't be statically matched to one hook). Self-test: `-SelfTest` (synthetic diff through the pure parser + decision fn). | AUTO (script, in run_all + pre-commit) |
 | 25 | 1P animation override per character (breaks universal anim chain) | `feedback_1p_animations_universal.md` | PRE-SHIP review (grep for `anim_event = ` or `wield_anim = ` in cross-character contexts) | PRE-SHIP |
 | 26 | Speculative defense stacking (v0.9.8.3-7 chain) | PROJECT_STANDARDS §9.1 | PRE-SHIP review pattern | PRE-SHIP |
 
@@ -192,6 +195,20 @@ the committed baseline always matches CI regardless of the local checkout.
 | 56 | Deploy to PC-B every time (launcher v0.4.0+ auto-pushes) | `feedback_deploy_both_machines.md` | Handled by VMBLauncher | (HANDLED) |
 | 57 | Always Workshop-upload + publish GitHub release together | `feedback_post_workshop_upload_github_release.md` | (workflow pattern) | MANUAL |
 
+### Logging hygiene (chat-echo / per-frame / warn-chat)
+
+`check_logging.ps1` encodes PROJECT_STANDARDS § 3.6 (Debug logging + "Chat-echo
+policy" matrix) and `docs/BUG_CLASSES.md § 17` (chat-echo spam + Variant B). Three
+advisory sub-checks in one full-repo scan (mirrors `check_unpack_safety.ps1`'s
+comment/string-blanking + block-depth model). Pinned **Advisory** in `run_all`;
+nonzero by design (it gathers signal). Each has a false-positive-safe escape.
+
+| # | Bug class | Memory reference | Detection | Status |
+|---|---|---|---|---|
+| 58a | `mod:echo` in a § 3.6 "NEVER" context — a module-load banner (not the MOD_VERSION dev banner), an `on_setting_changed`/`on_enabled`/`on_disabled` lifecycle body, or a hook-callback body — i.e. the sites BUG_CLASSES § 17 says to audit against the chat-echo matrix. Echoes in ordinary functions and `mod:command`/keybind handler bodies are NOT flagged (a static tool can't trace a reply routed through a private helper without a call graph — favor precision). | PROJECT_STANDARDS § 3.6 "Chat-echo policy" + `docs/BUG_CLASSES.md § 17` | `check_logging.ps1` category **echo**. Escape a legit § 3.6-OK-row site (high-impact toggle, `on_disabled` limitation notice, ct's "Granted N boons" hook reply) with an inline `-- allow-echo: <reason>`. | AUTO (script, advisory) |
+| 58b | `mod:info`/`mod:warning` inside a per-frame callback (`function update`, `mod.update`, `X.update`/`X:update`, inline `mod:hook*(..., "update", …)`) — logs every frame, floods the console + costs a `string.format` per tick. | PROJECT_STANDARDS § 3.6 + `VMF_RECIPES.md § 2b` (traced_hook per-frame caveat) | `check_logging.ps1` category **per-frame**. Escape an intentional throttled/one-shot site with `-- allow-perframe: <reason>`. | AUTO (script, advisory) |
+| 58c | `mod:warning` inside a dbg/alert HELPER (`_dbg_alert`, `_spawn_dbg_alert`, a `dbg`/`alert`-named helper — not a `chat`-named one). The **Issue #240** class: `mod:warning` is believed log-only but VMF `logging.lua` defaults `warning` to mode 3 (`send_to_chat = mode >= 2`), so a "log-only alert" helper spams chat. Sanctioned form is pcall-guarded raw `printf` (et v0.7.25-dev). Genuine failure-path `mod:warning` (ordinary guards, `_safe`) is NOT flagged. | `reference_vmf_warning_channel_posts_to_chat.md` + `docs/BUG_CLASSES.md § 17 Variant B` (#240) | `check_logging.ps1` category **warn-chat**. Escape an intentional in-helper chat warning with `-- allow-warn-chat: <reason>`. | AUTO (script, advisory) |
+
 ## Coverage summary
 
 | Category | AUTO | PRE-SHIP | MANUAL | DEFERRED | HANDED OFF | FIXED |
@@ -248,6 +265,8 @@ clean.
 | `check_mechanics_citations.ps1` | ✅ OK (2026-05-30) | 45 cited factual bullets across 8 domains (`[src:]` decompiled-verified, `[memory:]`, `[bugclass:]`, `[dump:]`), 4 honest `[unverified]` gaps, 0 uncited. Self-test passes. Run the script for the live per-domain breakdown. |
 | `check_file_sizes.ps1` | ⚠ baselined (issue #429) | 13 files over the 2500-line hard limit, all frozen in `qa/baselines/file_sizes.json`; non-blocking until a NEW file crosses the limit or a baselined one grows. Target-tier overages remain plain warnings. |
 | `check_dev_only_edits.ps1` | ✅ OK (2026-07-08) | Dev/stable split guard (row 52b, issue #429). Standard in `run_all`, `-Staged` in pre-commit. Clean working tree = exit 0. Self-test passes. |
+| `check_logging.ps1` | ⚠ 56 findings (2026-07-08, first run) | Rows 58a/b/c (issue #429). echo=36 (§ 3.6 NEVER-context echoes — hook bodies, on_enabled/on_disabled, cim/gt/wt anim-log traces), per-frame=4 (cosmetics `mod.update` LA-sync `mod:info`), warn-chat=16 (every mod's `_dbg_alert` → `mod:warning`, the Issue #240 class — the migration-to-printf backlog). Advisory (never blocks). Self-test 5/5. |
+| `check_hook_test_coverage.ps1` | ✅ OK (2026-07-08, first run) | Row 24a (issue #429). Diff-scoped (default `HEAD~1..HEAD`, `-Staged`, or CI `origin/<base>...HEAD`). Over `HEAD~10..HEAD` all added hooks/NL-writes resolved covered (mods ship suites). Advisory in `run_all` + warn-only pre-commit step 4. Self-exits 0 on indeterminate diff. Self-test 7/7. |
 | `check_stale_docs.ps1` | ⚠ 19 stale (advisory) | Pinned Advisory in `run_all` (issue #429) — TIME-based, non-blocking. 19 docs currently >14 days (script `$StaleDays` default) without a SUPERSEDED banner; fix with `-FixStale`. |
 | `luacheck` | ⚠ ~415 warnings (advisory) | Pinned Advisory in `run_all` AND CI (issue #429; was CI `\|\| true`). Baseline; 141 = CWV finding, 274 net real signal. Drive down, then flip to Standard. |
 
