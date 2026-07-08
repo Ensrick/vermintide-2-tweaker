@@ -44,8 +44,7 @@ vermintide-2-tweaker/
 ├── character_weapon_variants/      <- same VMB layout
 ├── tweaker/                        <- LEGACY -- original monolithic mod, kept as reference (still SDK)
 ├── old-backup/                     <- pre-VMB SDK build/upload scripts and artifacts
-├── tools/vmb-launcher/             <- VMBLauncher.exe — canonical build/deploy/upload entry point (the `deploy_*.ps1` shims that used to live here were removed 2026-05-21 — use `VMBLauncher.exe deploy <mod>` or `tools\ship\ship.ps1` directly)
-└── upload_ct.ps1, upload_wt.ps1    <- per-mod upload wrappers retained for the visibility-regression guard (delegate to `VMBLauncher.exe upload`)
+└── tools/vmb-launcher/             <- VMBLauncher.exe — canonical build/deploy/upload entry point. Drive it via `tools\ship\ship.ps1` (build+deploy+upload+release+verify). The per-mod `upload_*.ps1` wrappers (removed 2026-07-07, archived to `../_vt2-tweaker-archive/`) and the `deploy_*.ps1` shims (removed 2026-05-21) are gone — use `ship.ps1` / `VMBLauncher.exe deploy <mod>` directly.
 ```
 
 ## Dev Workflow: Build -> Deploy -> Restart
@@ -120,14 +119,14 @@ tags = [ ];
 - **`visibility`**: do NOT set or change without explicit user direction. Two mods were once flipped to `"public"` by an automated change; both got flagged and "removed from community", which is irreversible. Default new mods to `"private"`. Per-mod intended visibility is recorded in `feedback_workshop_metadata_user_dictates.md` in memory.
 - For a **new** Workshop item, set `published_id = 0L;` — the tool populates it on first upload.
 
-### Convenience scripts
+### Upload
 
 ```powershell
-& .\upload_ct.ps1   # uploads chaos_wastes_tweaker (visibility=public, intentional)
-& .\upload_wt.ps1   # uploads weapon_tweaker (aborts if itemV2.cfg has visibility="public")
+& .\tools\ship\ship.ps1 -Mod chaos_wastes_tweaker -AllowPublic   # build+deploy+upload+release+verify
+& .\tools\ship\ship.ps1 -Mod weapon_tweaker                      # friends-only, no -AllowPublic
 ```
 
-> ⚠️ **Steam removal risk — bolder than it looks.** A `visibility = "public"` flip on a mod that wasn't meant for the public has been flagged and "removed from community" before. That removal is **irreversible**. Before any upload, confirm `itemV2.cfg`'s `visibility` line matches the intended Mod Directory entry. Per-mod intended visibility is locked in by user policy — see `vermintide-2-tweaker/tools/vmb-launcher/CLAUDE.md` for the upload doctrine. Note: `upload_*.ps1` scripts exist only for `ct` and `wt` for historical reasons; the canonical path for all other mods is `VMBLauncher.exe upload <mod>` (or `all <mod>`), which performs the same visibility-mismatch check. Any new `upload_*.ps1` wrapper authored for a private/friends_only mod must include the same `visibility=public` abort guard `upload_wt.ps1` carries.
+> ⚠️ **Steam removal risk — bolder than it looks.** A `visibility = "public"` flip on a mod that wasn't meant for the public has been flagged and "removed from community" before. That removal is **irreversible**. Before any upload, confirm `itemV2.cfg`'s `visibility` line matches the intended Mod Directory entry. Per-mod intended visibility is locked in by user policy — see `vermintide-2-tweaker/tools/vmb-launcher/CLAUDE.md` for the upload doctrine. The visibility-mismatch check lives in `VMBLauncher.exe upload` (which `ship.ps1` calls); it aborts a `--allow-public` push when `itemV2.cfg` isn't `public`. (The old per-mod `upload_*.ps1` wrappers were removed 2026-07-07, archived to `../_vt2-tweaker-archive/`.)
 
 For other mods, run ugc_tool directly via bash so the `echo y |` EULA workaround works (PowerShell `&` does not pipe stdin reliably to ugc_tool):
 

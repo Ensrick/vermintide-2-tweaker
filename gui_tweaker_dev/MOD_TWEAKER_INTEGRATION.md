@@ -26,7 +26,7 @@ The Mod Tweaker view (`_mod_tweaker_view.lua`) mirrors the vanilla VT2 options m
 - **Top tab strip** — one tab per `_MY_MODS` entry (auto-discovered from VMF). Picking a tab
   shows that mod's options.
 - **Within a tab** — the mod's options are organized into **category collapsibles** (native
-  VMF `group` widgets with an expand/collapse arrow; see `MENU_CONSOLIDATION_PLAN.md`). This
+  VMF `group` widgets with an expand/collapse arrow). This
   is the repo-wide standard: settings live in collapsible `group`s, never as a flat wall and
   never as extra tabs.
 

@@ -700,11 +700,10 @@ Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was a
    per-build approval rule). "Ship it" from earlier in the session does NOT
    carry forward to a stable push. Stable uploads are visible to public
    subscribers irreversibly on flag — re-confirm before each push.
-7. **Upload via the `upload_*.ps1` wrapper** at repo root (`upload_ct.ps1`,
-   `upload_cim.ps1`, `upload_gt.ps1`, etc.) — it carries the
-   visibility-regression guard on top of
-   `VMBLauncher.exe upload <stable-mod> --allow-public`. Don't bypass with a
-   raw `--allow-public` call.
+7. **Upload via `ship.ps1 -Mod <stable> -AllowPublic`** (or `VMBLauncher.exe
+   upload <stable-mod> --allow-public`) — the visibility-regression guard lives
+   in `VMBLauncher.exe upload`, which both call. (The old per-mod `upload_*.ps1`
+   wrappers were removed 2026-07-07, archived to `../_vt2-tweaker-archive/`.)
 8. **`.\tools\publish-release\publish-release.ps1`** — publishes the bundle
    to the GitHub release so `vt2-mod-updater` consumers stay in sync.
 9. **`git add` / `git commit` / `git push`** the stable source + version +
@@ -715,7 +714,7 @@ Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was a
 **Dev uploads are pre-authorized: NO per-build approval.** Per the ship
 doctrine in § 6.6, a `-dev`/`-alpha`/`-beta`-versioned build ships the full
 pipeline on every update. Dev uploads target the friends-only item, skip
-`--allow-public` and the `upload_*.ps1` wrapper, and ride the `ship.ps1`
+`--allow-public`, and ride the `ship.ps1`
 pipeline (which wraps `VMBLauncher.exe upload <mod>-dev`; the launcher's
 visibility check auto-passes for `friends_only`). GitHub release AND the source
 commit/push are part of every dev ship, not optional follow-ups.
