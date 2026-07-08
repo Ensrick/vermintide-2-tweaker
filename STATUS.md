@@ -5,7 +5,24 @@
 > ONLY status surface: `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md` were
 > retired to pointer stubs 2026-07-08 (issue #432; full copies in git history +
 > `_archive/docs/2026-07-08_432_consolidation/`).
-> **Last updated: 2026-07-01.**
+> **Last updated: 2026-07-08.**
+
+## 📌 2026-07-08 SESSION — full OOP audit + plan + wave 1 + enforcement stack + WS3 docs (issue 429-436)
+
+**User directive:** audit all mods one at a time, plan, refactor toward OOP; verify the Opus-era docs/standards (suspicion confirmed: 0/9 binding rules were machine-enforced). Plan = `docs/OOP_REFACTOR_PLAN.md`; audits archived `_archive/audits/2026-07-07_oop_audit/` + external backup.
+
+**✅ Shipped & Workshop-verified** (all -dev; **PC-B SKIPPED - unreachable all session (ssh Permission denied), needs catch-up deploy**): mp 0.2.14-dev (#434 EAC restore), woc 0.1.7-dev (#422 wire-safe loadout), ct_dev 0.7.238-dev (em dashes), cwv 0.1.374-dev (#424 thrown-pickup wire substitution) + 0.1.375-dev (#371 peer-parity beacon, first consumer = javelin-bomb pool gate; `_TJB_FEATURE_ON` still off), cosmetics 0.9.75-dev, crt 0.3.54-dev, gut_dev 0.2.216-dev (regression coverage).
+
+**🔧 Enforcement (#429 CLOSED):** CI now runs `qa/run_all.ps1` full + blocking lint-mod; ratchet baselines (`qa/baselines/`, regenerate only via `-UpdateBaseline` with sign-off); `check_dev_only_edits` pre-commit step 0; new advisory gates check_logging (NEVER-context model; live counts = #427 worklist: 16 warn-chat sites) + check_hook_test_coverage. Ratchet proven live (caught cwv growth, a79a4b1 sign-off).
+
+**📚 WS3 docs COMPLETE (#432 phases 1-3, open for review):** contradictions/stale claims fixed; TODO/WORK_ITEMS/TESTING_STATUS retired to stubs (this board + Issues = only status surfaces); overlap clusters merged to owner docs; root topic docs moved to `docs/`; PROJECT_STANDARDS §7.10 deprecation lifecycle + §9a cross-mod API compat.
+
+**⚠ Open ends (the what-now list):**
+- **User in-game verify queue** (full Steam restart FIRST): cwv 0.1.375-dev 2-player javelin+bomb with a vanilla client (`/cwv_regression_test`, `[cwv:424]` lines), cim v0.8.34 public equip, cosmetics ct_* illusion, woc Blightreaper, ct v0.7.131-beta kill-heal client, mp `/mp_regression_test`, crt/gut suites.
+- **User decisions:** #433 (dead BR code: archive-and-delete vs keep-dormant), #435 (dcp portraits career-scoped - intended?).
+- **Wave 2b (GATED on the cwv beacon verify):** wire `_lib_peer_parity` into crt #425, ct #426, et #430, wt #431, cwv damage axis #423 + gut grey-out surface.
+- **#427:** migrate 16 warn-chat sites to printf (worklist = `pwsh qa/check_logging.ps1`).
+- **PC-B catch-up deploy** when reachable.
 
 ## 📌 2026-07-01 SESSION — repo-wide settings-menu reorg (7 parallel agents, 8 mods shipped)
 
