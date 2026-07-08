@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.6-dev"
+local MOD_VERSION = "0.1.7-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -42,6 +42,71 @@ end
 local function _dbg_alert(fmt, ...)
 	mod:warning("[WOC:dbg] " .. fmt, ...)
 end
+
+-- Applied-marker fingerprint (PROJECT_STANDARDS.md § 3.6 "Applied marker line").
+-- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs; the marker
+-- line at the bottom of this file surfaces the live config in the console log.
+local function _settings_fingerprint()
+	local ok, data = pcall(require, "scripts/mods/weapons_of_chaos/weapons_of_chaos_data")
+	if not ok or type(data) ~= "table" then return "nodata" end
+	local keys = {}
+	local function walk(node)
+		if type(node) ~= "table" then return end
+		if type(node.setting_id) == "string" then keys[#keys + 1] = node.setting_id end
+		for _, child in pairs(node) do
+			if type(child) == "table" then walk(child) end
+		end
+	end
+	walk(data)
+	if #keys == 0 then return "nosettings" end
+	table.sort(keys)
+	local parts = {}
+	for i, k in ipairs(keys) do
+		local v = mod:get(k)
+		if v == true then       parts[i] = k .. "=1"
+		elseif v == false then  parts[i] = k .. "=0"
+		elseif v == nil then    parts[i] = k .. "=?"
+		else                    parts[i] = k .. "=" .. tostring(v) end
+	end
+	local s = table.concat(parts, ";")
+	-- FNV-1a 32-bit, plain-arithmetic XOR (no bit32 in Lua 5.1 sandbox).
+	local h = 2166136261
+	for i = 1, #s do
+		local byte = string.byte(s, i)
+		local xored, place = 0, 1
+		local hh, bb = h, byte
+		for _ = 1, 32 do
+			local hb, bbit = hh % 2, bb % 2
+			if hb ~= bbit then xored = xored + place end
+			place = place * 2
+			hh = (hh - hb) / 2
+			bb = (bb - bbit) / 2
+		end
+		h = (xored * 16777619) % 4294967296
+	end
+	return string.format("%08x", h)
+end
+
+-- Regression self-test scaffold (PROJECT_STANDARDS § 5.1a). Individual checks are
+-- registered inline next to the code they cover (search "_rt_register"); run
+-- in-game via /woc_regression_test.
+local _RT_CHECKS = {}
+local function _rt_register(name, fn)
+	_RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+mod:command("woc_regression_test", "Run WOC regression smoke checks for past bugs", function()
+	local pass, fail = 0, 0
+	mod:echo("=== WOC regression_test (v%s) ===", MOD_VERSION)
+	for _, c in ipairs(_RT_CHECKS) do
+		local ok, err = pcall(c.fn)
+		if ok and err == nil then
+			mod:echo("  PASS: %s", c.name); pass = pass + 1
+		else
+			mod:echo("  FAIL: %s -- %s", c.name, tostring(err)); fail = fail + 1
+		end
+	end
+	mod:echo("=== %d passed, %d failed ===", pass, fail)
+end)
 
 -- ============================================================
 -- Constants
@@ -228,23 +293,81 @@ end)
 -- regardless, since BASE_WEAPON is a universal vanilla index. LoadoutUtils is a plain
 -- table -> table-form hook with a nil guard. Sole WOC hook on (LoadoutUtils,
 -- sync_loadout_slot); other mods hook it from their own registrations (VMF chains fine).
+-- Returns the item to actually put on the wire for `item`: the item UNCHANGED
+-- for a non-WOC key; a shadow keyed to the boot-stable BASE_WEAPON for a "woc_"
+-- key; or nil when the base index can't be resolved -- in which case the caller
+-- MUST skip the send. A raw woc_ key must never be structurally reachable on the
+-- wire (issue 422): if the base guard short-circuits, falling through to send the
+-- woc_ key is the exact non-WOC-peer CTD this hook exists to prevent (issue 278).
+-- The live item is never mutated (the shadow is a shallow copy).
+local function _wire_safe_item(item)
+	local key = item and item.key
+	if type(key) ~= "string" or key:sub(1, 4) ~= "woc_" then
+		return item                                       -- non-WOC: untouched passthrough
+	end
+	if rawget(ItemMasterList, BASE_WEAPON)
+			and NetworkLookup and NetworkLookup.item_names
+			and rawget(NetworkLookup.item_names, BASE_WEAPON) then
+		local shadow = {}
+		for k, v in pairs(item) do shadow[k] = v end
+		shadow.key = BASE_WEAPON
+		shadow.ItemId = BASE_WEAPON
+		return shadow
+	end
+	return nil                                            -- base unresolvable: caller skips (fail-safe)
+end
+
 if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 	mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
-		local key = item and item.key
-		if type(key) == "string" and key:sub(1, 4) == "woc_"
-				and rawget(ItemMasterList, BASE_WEAPON)
-				and NetworkLookup and NetworkLookup.item_names
-				and rawget(NetworkLookup.item_names, BASE_WEAPON) then
-			local shadow = {}
-			for k, v in pairs(item) do shadow[k] = v end
-			shadow.key = BASE_WEAPON
-			shadow.ItemId = BASE_WEAPON
-			printf("[WOC:278] sync_loadout_slot net-safe: %s -> %s (slot=%s)",
-				tostring(key), BASE_WEAPON, tostring(slot_name))
-			return func(player, slot_name, shadow, sync_to_specific_peer_id)
+		local send_item = _wire_safe_item(item)
+		if send_item == nil then
+			-- Only a woc_ item with an unresolvable base reaches here. Skipping the
+			-- sync is the sole crash-safe move (substituting can't help: the base
+			-- itself isn't in NetworkLookup, and sending woc_ raw CTDs non-WOC peers).
+			-- Mirrors CWV's skip branch (character_weapon_variants.lua:10183-10188).
+			printf("[WOC:278] base '%s' unresolvable for woc_ key %s; SKIPPING loadout sync (fail-safe, issue 422)",
+				BASE_WEAPON, tostring(item and item.key))
+			return
 		end
-		return func(player, slot_name, item, sync_to_specific_peer_id)
+		if send_item ~= item then
+			printf("[WOC:278] sync_loadout_slot net-safe: %s -> %s (slot=%s)",
+				tostring(item.key), tostring(send_item.key), tostring(slot_name))
+		end
+		return func(player, slot_name, send_item, sync_to_specific_peer_id)
 	end)
 end
 
-mod:info("[WOC] enabled v%s (Blightreaper)", MOD_VERSION)
+-- issue 422 / class-31 regression: a woc_ item must never leave a woc_ key on the
+-- wire. Registered here because `_wire_safe_item` is a file-local defined just
+-- above. Asserts the hook target exists (install precondition) and that a fake
+-- woc_ item pushed through the substitution yields no woc_ key/ItemId and does
+-- not mutate the live item.
+_rt_register("wire_woc_never_leaves_woc_key", function()
+	if not (rawget(_G, "LoadoutUtils") and type(LoadoutUtils.sync_loadout_slot) == "function") then
+		return "LoadoutUtils.sync_loadout_slot missing -- wire hook cannot install"
+	end
+	local fake = { key = "woc_test", ItemId = "woc_test", power_level = 300 }
+	local out = _wire_safe_item(fake)
+	-- out is a base-keyed shadow (base resolvable) or nil (skip). Both are crash-safe.
+	if out ~= nil then
+		if type(out.key) == "string" and out.key:sub(1, 4) == "woc_" then
+			return "substitution left a woc_ key on the outgoing item"
+		end
+		if type(out.ItemId) == "string" and out.ItemId:sub(1, 4) == "woc_" then
+			return "substitution left a woc_ ItemId on the outgoing item"
+		end
+	end
+	if fake.key ~= "woc_test" or fake.ItemId ~= "woc_test" then
+		return "live item was mutated -- shadow must be a copy"
+	end
+end)
+
+-- Applied marker (§3.6): always fires (operational telemetry); surfaces the live
+-- config hash in the console log even with VMF mod logging off.
+mod:info("[WOC] enabled v%s settings_fp=%s (Blightreaper)", MOD_VERSION, _settings_fingerprint())
+
+-- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print version
+-- to chat on load so the user can see what's active. Stable (>=1.0.0) stays silent.
+if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$") or MOD_VERSION:find("^0%.") then
+	mod:echo(string.format("[WOC] v%s loaded", MOD_VERSION))
+end

@@ -381,7 +381,7 @@ local loc = {
     disable_boon_ct_kill_heal = { en = "Disable Boon: (Mod Boon) Khaine's Communion" },
     start_boon_ct_kill_heal   = { en = "Starting Boon: (Mod Boon) Khaine's Communion" },
     disable_boon_ct_kill_heal_tooltip = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Catalogued under Health by effect. Toggle this off to remove it from the boon pool." },
-    start_boon_ct_kill_heal_tooltip   = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Enable to roll as your starting boon — the boon must be injected into the pool (which happens automatically when this mod is active)." },
+    start_boon_ct_kill_heal_tooltip   = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Enable to roll as your starting boon: the boon must be injected into the pool (which happens automatically when this mod is active)." },
     display_name_ct_kill_heal = { en = "Khaine's Communion" },
     description_ct_kill_heal  = { en = "Killing an enemy heals you for 0.25 permanent (green) health." },
     --]]
@@ -1184,11 +1184,11 @@ local loc = {
     activate_dormant_deus_timed_block_free_shot = { en = "Activate: Timed-Block Free Shot" },
     activate_dormant_deus_timed_block_free_shot_tooltip = { en = "Injects the timed-block-free-shot effect into the active CW boon pool at Exotic rarity. Dormant in vanilla. Requires a new CW run to take effect." },
     activate_dormant_deus_transmute_into_coins = { en = "Activate: Smednir's Transmutation" },
-    activate_dormant_deus_transmute_into_coins_tooltip = { en = "Injects Smednir's Transmutation (items → coins) into the active CW boon pool at Rare rarity. Dormant in vanilla (placeholder icon — likely cut content). Requires a new CW run to take effect." },
+    activate_dormant_deus_transmute_into_coins_tooltip = { en = "Injects Smednir's Transmutation (items → coins) into the active CW boon pool at Rare rarity. Dormant in vanilla (placeholder icon, likely cut content). Requires a new CW run to take effect." },
     activate_dormant_explosive_pushes_on_damage_taken = { en = "Activate: Chotec's Touch" },
-    activate_dormant_explosive_pushes_on_damage_taken_tooltip = { en = "Injects Chotec's Touch (taking damage → push attacks become explosive) into the active CW boon pool at Exotic rarity. Dormant in vanilla (placeholder icon — likely cut content). Functional implementation verified in source. Requires a new CW run to take effect." },
+    activate_dormant_explosive_pushes_on_damage_taken_tooltip = { en = "Injects Chotec's Touch (taking damage → push attacks become explosive) into the active CW boon pool at Exotic rarity. Dormant in vanilla (placeholder icon, likely cut content). Functional implementation verified in source. Requires a new CW run to take effect." },
     activate_dormant_squats = { en = "Activate: Squats" },
-    activate_dormant_squats_tooltip = { en = "Injects 'Squats' into the active CW boon pool at Common rarity. Dormant in vanilla (no description text — placeholder/easter-egg boon). Requires a new CW run to take effect." },
+    activate_dormant_squats_tooltip = { en = "Injects 'Squats' into the active CW boon pool at Common rarity. Dormant in vanilla (no description text, placeholder/easter-egg boon). Requires a new CW run to take effect." },
     --]]
 }
 

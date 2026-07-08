@@ -21,9 +21,12 @@ Major sections (search by name to jump):
 ]]
 
 local mod = get_mod("mp")
-_MEM_PROBE_T0_MP = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
+-- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
+-- File-local (was a bare _G global pre-0.2.14; issue 434 / audit F7): read only
+-- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
+local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.13-dev"
+local MOD_VERSION = "0.2.14-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -166,6 +169,8 @@ _rt_register("localization_format_safe", function()
         end
     end
 end)
+-- NB: the `eac_flag_restored_after_throw` check is registered AFTER `_with_eac_off`
+-- is defined (search "issue 434 regression") to avoid a forward-ref on the local.
 -- ============================================================
 -- Settings / schema versioning
 -- ============================================================
@@ -381,21 +386,56 @@ local function _capture(...) return select("#", ...), { ... } end
 
 -- #174: track whether we are currently inside a `_with_eac_off` window (the
 -- realm is un-gated for a vanilla progression call). Depth counter mirrors the
--- eac-flag set/restore bracket exactly so behaviour is byte-identical; a throw
--- inside func leaks depth the same way the existing code leaks the flag (these
--- vanilla fns don't throw in practice). Read by cosmetics' #174 chokepoint hook.
+-- eac-flag set/restore bracket exactly so behaviour is byte-identical. Read by
+-- cosmetics' #174 chokepoint hook.
 mod._mp_eac_depth = 0
 mod.is_eac_window = function() return (mod._mp_eac_depth or 0) > 0 end
 
+-- issue 434: the flag AND the depth counter MUST be restored on EVERY exit path.
+-- A throw inside `func` used to skip both the decrement and the flag restore,
+-- leaving `script_data["eac-untrusted"] = nil` globally; the commit-suppression
+-- sites (playfab_mirror_base.lua:2826/2839/2857) gate on that flag, so a leaked
+-- nil re-enables real-account PlayFab writes -- exactly what mp exists to prevent.
+-- `AchievementManager.trigger_event` (a hot per-mission hook) is the highest
+-- throw-exposure wrapped fn. We pcall the inner call, restore both in finally
+-- style, then re-raise the original error transparently so callers behave as
+-- vanilla would have (the only difference is the realm is re-gated first).
 local function _with_eac_off(func, self, ...)
     local orig = script_data["eac-untrusted"]
     script_data["eac-untrusted"] = nil
     mod._mp_eac_depth = mod._mp_eac_depth + 1
-    local n, results = _capture(func(self, ...))
+    -- _capture over pcall: results[1] is the pcall `ok`; func's own returns
+    -- (nil holes preserved via the explicit count `n`) start at index 2.
+    local n, results = _capture(pcall(func, self, ...))
     mod._mp_eac_depth = mod._mp_eac_depth - 1
     script_data["eac-untrusted"] = orig
-    return unpack(results, 1, n)
+    if not results[1] then
+        _dbg_alert("_with_eac_off: wrapped fn threw; eac flag restored, re-raising: %s", tostring(results[2]))
+        error(results[2], 0)  -- re-raise with the original message, no added position
+    end
+    return unpack(results, 2, n)
 end
+
+-- issue 434 regression: a throw inside `_with_eac_off` must restore the
+-- eac-untrusted flag AND the depth counter on ALL paths, and re-raise. If the
+-- flag leaks nil, real-account PlayFab commits fire (playfab_mirror_base.lua
+-- :2826/2839/2857). Registered here (not up with the other checks) because
+-- `_with_eac_off` is a file-local defined just above -- registering earlier
+-- would forward-ref a nil global.
+_rt_register("eac_flag_restored_after_throw", function()
+    local saved    = script_data["eac-untrusted"]
+    local depth0   = mod._mp_eac_depth
+    local sentinel = {}                       -- unique identity; unambiguous restore check
+    script_data["eac-untrusted"] = sentinel
+    local ok = pcall(_with_eac_off, function() error("mp_rt_boom") end, nil)
+    local restored = script_data["eac-untrusted"]
+    local depth1   = mod._mp_eac_depth
+    script_data["eac-untrusted"] = saved      -- put the global back before any verdict
+    if ok then return "wrapper swallowed the throw; it must re-raise" end
+    if restored ~= sentinel then return "eac-untrusted flag NOT restored after throw" end
+    if depth1 ~= depth0 then return "eac depth counter leaked after throw" end
+    if mod.is_eac_window() then return "is_eac_window() still true after throw unwound" end
+end)
 
 -- Level-end reward popups (level-up, deed, deus, keep-decoration,
 -- event, win-track, versus-level-up — all skipped in init when

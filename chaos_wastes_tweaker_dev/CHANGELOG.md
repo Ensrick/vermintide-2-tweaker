@@ -1,5 +1,9 @@
 ﻿# Chaos Wastes Tweaker Changelog
 
+## 0.7.238-dev (2026-07-07) - Remove em dashes from menu-facing tooltip strings
+
+Doctrine fix (audit F3): replaced em dashes in 4 user-facing tooltip strings in `chaos_wastes_tweaker_dev_localization.lua` with hyphen/colon/comma phrasing, per the no-em-dash-in-menu-strings non-negotiable. `start_boon_ct_kill_heal_tooltip` (:384), `activate_dormant_deus_transmute_into_coins_tooltip` (:1187), `activate_dormant_explosive_pushes_on_damage_taken_tooltip` (:1189), `activate_dormant_squats_tooltip` (:1191). Code comments (incl. `_data.lua`) untouched. No behavior change. Not built, deployed, uploaded, or committed.
+
 ## 0.7.237-dev (2026-07-06) - HOTFIX: client CTD on kill with the kill-heal boon (#406)
 
 **Issue 406 [verify-fix] - a CLIENT taking the "heal on kill" power-up (`ct_kill_heal`) hard-crashes on their next kill:**

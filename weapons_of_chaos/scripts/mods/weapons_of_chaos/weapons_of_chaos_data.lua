@@ -1,9 +1,10 @@
 local mod = get_mod("WOC")
 
 -- VMF widget tree. `enable_blightreaper` gates registration of the Blightreaper
--- item (takes effect on game restart — registration is boot/keep-time). The
--- universal `enable_debug_logging` checkbox stays LAST, as a direct child of the
--- top-level widgets list (PROJECT_STANDARDS.md § 3.6).
+-- item (takes effect on game restart; registration is boot/keep-time). WOC has no
+-- debug-logging checkbox: it uses the VMF-native debug channels (mod:debug /
+-- mod:warning) gated by VMF output_mode_debug / output_mode_warning, migrated in
+-- v0.1.2-dev (PROJECT_STANDARDS.md § 3.6).
 return {
 	name           = "Weapons of Chaos",
 	description     = mod:localize("mod_description"),

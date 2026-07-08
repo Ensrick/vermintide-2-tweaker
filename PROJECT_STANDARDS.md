@@ -160,12 +160,14 @@ that dumps current state in a copy-pasteable form. Examples:
 >   `_dbg`/`_dbg_alert` route through `mod:debug`/`mod:warning`; zero live reads
 >   of any `enable_debug_logging` key; no menu widget.
 >
-> **Migration status (2026-06-29).** Only `ct_dev` is fully VMF-native. Still on
-> the legacy per-mod gate: `chaos_wastes_tweaker` (stable), `character_weapon_variants`,
+> **Migration status (2026-07-07).** `ct_dev` and `weapons_of_chaos` are fully
+> VMF-native (WOC migrated in v0.1.2-dev: no `enable_debug_logging` widget; routes
+> through `mod:debug`/`mod:warning`). Still on the legacy per-mod gate:
+> `chaos_wastes_tweaker` (stable), `character_weapon_variants`,
 > `general_tweaker_dev` (gate the helper on the legacy key in code, no menu
-> widget); `weapon_tweaker`, `weapon_tweaker_dev`, `weapons_of_chaos` (still
-> expose the menu checkbox). Rolling the VMF-native pattern out to these is a
-> per-mod task — do it when touching each mod, or as a deliberate sweep.
+> widget); `weapon_tweaker`, `weapon_tweaker_dev` (still expose the menu
+> checkbox). Rolling the VMF-native pattern out to these is a per-mod task — do
+> it when touching each mod, or as a deliberate sweep.
 
 ---
 

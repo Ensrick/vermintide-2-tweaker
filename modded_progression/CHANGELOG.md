@@ -1,5 +1,19 @@
 # Modded Progression — Changelog
 
+## 0.2.14-dev (2026-07-07) - pcall-protect the EAC un-gate restore (issue 434)
+
+### Why
+Audit finding F1 (issue 434, P1): `_with_eac_off` restored `script_data["eac-untrusted"]` and its depth counter only on the success path. A throw in any of the 10 wrapped vanilla functions (notably the hot `AchievementManager.trigger_event`) skipped the restore, leaving the realm un-gated globally, which re-enables the exact real-account PlayFab commits mp exists to prevent (the suppression sites gate on that flag at `playfab_mirror_base.lua:2826/2839/2857`).
+
+### Changed
+- `modded_progression.lua:~390` - `_with_eac_off` now pcall-wraps the inner call, restores the flag AND decrements the depth counter on ALL paths (finally style), then re-raises the original error (`error(msg, 0)`) so callers behave as vanilla would; `_dbg_alert` logs the throw. Multi-return nil-holes still preserved (`_capture` over `pcall`; returns start at index 2).
+- `modded_progression.lua` - new `_rt_register("eac_flag_restored_after_throw", ...)` regression check: drives a throwing function through `_with_eac_off` and asserts the flag is restored, the depth counter is balanced, `is_eac_window()` is false, and the error re-raised. Registered directly after `_with_eac_off` to avoid a forward-ref on the file-local.
+- `modded_progression.lua:24` - `_MEM_PROBE_T0_MP` changed from a bare `_G` global to a file-local (audit F7); only read at the bottom of the same chunk.
+- `MOD_VERSION` `0.2.13-dev` -> `0.2.14-dev`.
+
+### Notes
+- Behavior-preserving on the success path (byte-identical returns); only the throw path changes (now restores before propagating). Not built, deployed, uploaded, or committed.
+
 ## 0.2.13-dev (2026-07-04) - Localization: applied dev status-tag doctrine (#301)
 
 ### Changed
