@@ -1,0 +1,20 @@
+{
+  "_comment": "Frozen file-size violations (Lua files over the 2500-line hard limit). Regenerate ONLY with check_file_sizes.ps1 -UpdateBaseline. A baselined file fails only if it GROWS beyond its frozen count; any non-baselined file crossing the hard limit fails immediately. Issue #429 / PROJECT_STANDARDS §11.",
+  "hard_limit": 2500,
+  "generated": "2026-07-08",
+  "files": {
+    "career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua": 3718,
+    "career_tweaker/scripts/mods/career_tweaker/career_tweaker_big_rebalance.lua": 2697,
+    "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua": 13460,
+    "chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua": 12761,
+    "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua": 11202,
+    "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua": 10042,
+    "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua": 7636,
+    "crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua": 6884,
+    "enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker.lua": 3396,
+    "general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua": 2619,
+    "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua": 2816,
+    "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua": 5158,
+    "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua": 7452
+  }
+}

@@ -1,5 +1,64 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.374-dev — 2026-07-08 — issue 424: Tuskgor Javelin throw CTDs non-cwv peers (projectile/pickup wire-safety) [verify-fix] [crash] [0-critical]
+
+### Why
+Cross-mod wire-safety sweep (issue 371 mandate, BUG_CLASSES 31). Throwing a cwv
+Tuskgor Javelin (or the bomb-slot variant) crashes every lobby peer who does not
+have cwv: the thrown-variant spawn puts cwv-only `NetworkLookup` indices onto
+vanilla projectile/pickup RPCs, and a non-cwv peer cold-decodes an index its own
+table lacks -> strict `__index` fatal.
+
+### Changed
+- character_weapon_variants.lua:~5605 — new `_om._tj_pickup_wire_map` +
+  `_om._wire_safe_pickup_name` / `_om._wire_safe_projectile_units` pure helpers
+  (no toggle argument, ungateable, mirroring cim's `_cim_wire_safe_rarity`).
+- character_weapon_variants.lua:~6020 / ~6028 — extended the two existing
+  `PlayerProjectileUnitExtension._spawn_linked_pickup_projectile` /
+  `._spawn_pickup_projectile` sender hooks: substitute the cwv thrown-impact
+  pickup key (`cwv_tuskgor_javelin_pickup` / `_link_pickup`) for a vanilla
+  throwing-axe pickup (`ammo_throwing_axe_01_t1` / `link_ammo_throwing_axe_01_t1`)
+  BEFORE the vanilla body encodes `NetworkLookup.pickup_names[...]` and calls
+  `send_rpc_server` (player_projectile_unit_extension.lua:1354-1359 / 1376-1395).
+  Sender-side so it also protects a non-cwv HOST (a cwv client throwing into a
+  vanilla host's game), which the receiver hooks at ~6036/~6051 cannot.
+- character_weapon_variants.lua:~6035 — new hook on
+  `ProjectileSystem._get_projectile_units_names` (projectile_system.lua:159-176):
+  the bomb variant's in-flight boar-spear unit is a cwv-appended
+  `NetworkLookup.husks` key spawned via `spawn_network_unit`
+  (projectile_system.lua:247-249) and its `projectile_units_template` also rides
+  `TransientPackageLoader.hot_join_sync` (transient_package_loader.lua:187-193).
+  Substituting the resolved projectile_units to the vanilla `"javelin"` entry
+  makes BOTH the projectile GameObject husk and the transient projectile_units
+  index encode vanilla. Cosmetic only (in-flight mesh); impact/damage untouched.
+- character_weapon_variants.lua:~11695 — `_rt_register("cwv_wire_safe_thrown_variant_installed")`:
+  asserts both hooks are installed and drives fake pickup keys / a fake boar-spear
+  projectile through the helpers, asserting no modded index survives and vanilla
+  inputs pass through untouched.
+
+### Scope
+Non-cwv peers (and cwv peers) see the vanilla base render: the thrown/stuck
+javelin pickup shows as a throwing-axe pickup and the bomb's in-flight mesh as
+the slim elf javelin. The crash is replaced by base-render, matching the shipped
+loadout/skin axes. Per-peer custom-render parity for cwv-having peers is deferred
+to the issue 371 peer-parity framework.
+
+### Notes
+- NOT closed (deliberate): the bomb-slot javelin's WORLD/pool pickup
+  (`cwv_tuskgor_javelin_bomb`, ~6708, `enable_cwv_tuskgor_javelin_bomb` default
+  ON) is a GAMEPLAY axis — coercing it to a vanilla grenade would change what a
+  cwv player picks up (frag grenade instead of the javelin bomb), breaking the
+  feature even in cwv-only lobbies. It needs the issue 371 peer-parity gate
+  (disable the pool injection when a peer lacks cwv), same as the issue 423
+  damage_profile axis. Tracked in memory `project_vt2_cross_peer_wire_safety`.
+- Trade-off in cwv-only lobbies: the thrown-impact pickup now renders as a
+  throwing axe and the javelin's walk-over ammo recovery no longer works (the
+  vanilla throwing-axe pickup has a different ammo type); the headshot-replenish
+  trait still recovers ammo. Fidelity here also needs the peer-parity framework.
+- [untested] — needs an in-game 2-player verify (cwv host + vanilla client):
+  throw a Tuskgor Javelin and the bomb-slot javelin; the vanilla client must not
+  CTD. Log lines: `[cwv:424] ... wire-safe ...`.
+
 ## 0.1.373-dev — 2026-07-07 — issue 278 weapon_skin_id axis: crafted/skinned variant CTDs non-cwv peers on equip [verify-fix] [crash] [0-critical]
 
 Cross-mod audit (issue 371 mandate) found the issue-278 fix was HALF-DONE. The loadout

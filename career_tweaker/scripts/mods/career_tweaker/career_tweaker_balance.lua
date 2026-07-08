@@ -73,6 +73,13 @@ local _CRT_BUFF_NAMES = {
     "crt_zealot_holy_fortitude_max_hp",
 }
 
+-- Read-only export of the canonical registration list (v0.3.54-dev, issue 425 coverage).
+-- The /crt_regression_test catalog-parity + sorted-order checks live in career_tweaker.lua,
+-- which cannot see this file-local; expose the exact list they register against so a drift
+-- between the two catalogs (or a reorder that breaks cross-peer NetworkLookup determinism)
+-- is caught. Never mutate through this handle.
+mod._crt_registered_buff_names = _CRT_BUFF_NAMES
+
 local function _crt_pre_register_buffs()
     if not BuffTemplates then return end
     local NL = rawget(_G, "NetworkLookup")

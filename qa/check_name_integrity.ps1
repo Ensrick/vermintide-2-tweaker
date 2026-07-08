@@ -44,13 +44,39 @@ param(
     [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
     [string]$VtSrc    = (Join-Path $PSScriptRoot "..\..\Vermintide-2-Source-Code"),
     [switch]$Quiet,
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [switch]$UpdateBaseline
 )
 
 $ErrorActionPreference = "Stop"
 
 function Read-Utf8([string]$p) { return [System.IO.File]::ReadAllText($p, [System.Text.Encoding]::UTF8) }
 function Log($msg, $color = "DarkGray") { if (-not $Quiet) { Write-Host $msg -ForegroundColor $color } }
+
+# ---- ratchet baseline (issue #429) ----
+# CI checks out ONLY this repo, so the decompiled Vermintide-2-Source-Code is
+# absent and check #2's vanilla-loc-key resolution is empty — which surfaces
+# MORE errors in CI than locally (a mod's reference to a real vanilla key looks
+# unresolvable). The baseline is therefore FROZEN as the no-VtSrc SUPERSET so
+# the same file covers both environments: locally (VtSrc present) fewer errors
+# fire, all a subset of the baseline; in CI the full superset fires and still
+# matches. Only NEW errors (a genuinely typo'd/orphan key that resolves in no
+# environment) fail the gate. Regenerate ONLY with -UpdateBaseline, which forces
+# the no-VtSrc view so the committed baseline always matches CI regardless of
+# whether the maintainer has the sibling repo checked out.
+$baselinePath = Join-Path $PSScriptRoot "baselines\name_integrity.json"
+
+# Error signatures embed a repo-relative path; normalize separators so the
+# baseline compares equal on Windows (backslash) and Linux (forward-slash).
+function Normalize-Sig([string]$s) { return $s.Replace('\', '/') }
+
+function Load-NameIntegrityBaseline {
+    if (-not (Test-Path $baselinePath)) { return @{} }
+    try { $j = Get-Content $baselinePath -Raw | ConvertFrom-Json } catch { return @{} }
+    $set = @{}
+    foreach ($e in $j.errors) { $set[(Normalize-Sig $e)] = $true }
+    return $set
+}
 
 # --- loc parser (same three patterns as check_localization.ps1) ---
 function Parse-LocFile([string]$path) {
@@ -358,32 +384,63 @@ entry.item_type = "weapon_skin"  -- vanilla loc key, should NOT error
 if ($SelfTest) { exit (Invoke-SelfTest) }
 
 $repoRoot = (Resolve-Path $RepoRoot).Path
+
+# The oracle (docs/generated/NAME_MAP.generated.json) is committed, so it loads
+# identically in CI and locally — always use it.
+$oracle = Load-GeneratedOracle $repoRoot
+if ($oracle.keys.Count -gt 0) { Log "Loaded $($oracle.keys.Count) mod keys from NAME_MAP.generated.json as runtime-name oracle." }
+else { Log "NOTE: docs/generated/NAME_MAP.generated.json not found — runtime-registered mod names (cwv/cosmetics) may over-report in check #2. Run gen-name-map.ps1 first." "Yellow" }
+
+# --- -UpdateBaseline: freeze the no-VtSrc SUPERSET and exit (explicit only) ---
+# We force vanillaKeys empty so the committed baseline is the CI-matching
+# superset regardless of whether this machine has the decompiled source.
+if ($UpdateBaseline) {
+    $res = Invoke-IntegrityChecks -repoRoot $repoRoot -vanillaKeys @{} -oracle $oracle
+    $sigs = @($res.errors | ForEach-Object { Normalize-Sig $_ } | Sort-Object -Unique)
+    $payload = [ordered]@{
+        '_comment' = "Frozen check_name_integrity ERRORS. Generated in the no-decompiled-source (CI) view — the SUPERSET — so it matches both CI and local runs. Regenerate ONLY with check_name_integrity.ps1 -UpdateBaseline. The gate fails only on NEW errors (keys that resolve in NO environment). Issue #429."
+        'generated' = (Get-Date).ToString('yyyy-MM-dd')
+        'errors'   = $sigs
+    }
+    $dir = Split-Path $baselinePath -Parent
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    $payload | ConvertTo-Json -Depth 4 | Set-Content -Path $baselinePath -Encoding utf8
+    Write-Host "[check_name_integrity] baseline UPDATED: $($sigs.Count) error(s) frozen -> $baselinePath" -ForegroundColor Cyan
+    foreach ($s in $sigs) { Write-Host "  frozen  $s" -ForegroundColor DarkGray }
+    exit 0
+}
+
 $vanillaKeys = @{}
 if (Test-Path $VtSrc) {
     $vanillaKeys = Build-VanillaLocKeys (Resolve-Path $VtSrc).Path
     Log "Loaded $($vanillaKeys.Count) known vanilla loc keys for check #2 resolution."
 } else {
-    Log "WARNING: Vermintide-2-Source-Code not at $VtSrc — check #2 will lack the vanilla loc-key inventory and may over-report." "Yellow"
+    Log "WARNING: Vermintide-2-Source-Code not at $VtSrc — check #2 will lack the vanilla loc-key inventory and may over-report (expected in CI; the baseline is the no-VtSrc superset)." "Yellow"
 }
-
-$oracle = Load-GeneratedOracle $repoRoot
-if ($oracle.keys.Count -gt 0) { Log "Loaded $($oracle.keys.Count) mod keys from NAME_MAP.generated.json as runtime-name oracle." }
-else { Log "NOTE: docs/generated/NAME_MAP.generated.json not found — runtime-registered mod names (cwv/cosmetics) may over-report in check #2. Run gen-name-map.ps1 first." "Yellow" }
 
 $result = Invoke-IntegrityChecks -repoRoot $repoRoot -vanillaKeys $vanillaKeys -oracle $oracle
 
+# Split errors against the frozen baseline: only NEW errors block.
+$baseline = Load-NameIntegrityBaseline
+$newErrors = @()
+$baselinedCount = 0
+foreach ($e in $result.errors) {
+    if ($baseline.ContainsKey((Normalize-Sig $e))) { $baselinedCount++ } else { $newErrors += $e }
+}
+
 Write-Host ""
-if ($result.errors.Count -eq 0 -and $result.warnings.Count -eq 0) {
-    Write-Host "[check_name_integrity] OK — no integrity issues." -ForegroundColor Green
-    exit 0
+if ($baselinedCount -gt 0) {
+    Write-Host "[check_name_integrity] $baselinedCount pre-existing error(s) are BASELINED (frozen in qa/baselines/name_integrity.json); non-blocking. (baselined: $baselinedCount)" -ForegroundColor DarkCyan
 }
 if ($result.warnings.Count -gt 0) {
     Write-Host "[check_name_integrity] WARNINGS ($($result.warnings.Count)):" -ForegroundColor Yellow
     foreach ($w in $result.warnings) { Write-Host "  ! $w" -ForegroundColor Yellow }
 }
-if ($result.errors.Count -gt 0) {
-    Write-Host "[check_name_integrity] ERRORS ($($result.errors.Count)):" -ForegroundColor Red
-    foreach ($e in $result.errors) { Write-Host "  X $e" -ForegroundColor Red }
+if ($newErrors.Count -gt 0) {
+    Write-Host "[check_name_integrity] NEW ERRORS ($($newErrors.Count)) — not in baseline; fix, or regenerate the baseline with -UpdateBaseline only after maintainer triage:" -ForegroundColor Red
+    foreach ($e in $newErrors) { Write-Host "  X $e" -ForegroundColor Red }
     exit 2
 }
-exit 1
+if ($result.warnings.Count -gt 0) { exit 1 }
+Write-Host "[check_name_integrity] OK — no new integrity errors (baselined: $baselinedCount)." -ForegroundColor Green
+exit 0

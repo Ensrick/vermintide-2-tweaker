@@ -1,5 +1,30 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.75-dev — 2026-07-07 — regression coverage for the skin-axis wire-safety hook (issue 421 / issue 371)
+
+### Why
+The v0.9.74 skin-axis wire-safety hook (`SimpleInventoryExtension.game_object_initialized`)
+shipped with zero regression coverage. BUG_CLASSES §31 mandates a `wire_*_ungated` assertion
+on every sender-side substitution; this was the one uncovered surface (issue-371 audit finding F1).
+
+### Changed
+- cosmetics_tweaker.lua:6061 — extracted the skin null-and-restore from the hook body into a pure
+  helper `_wire_null_custom_skins(slots, send_fn)` (exposed as `mod._cos_wire_null_custom_skins`)
+  so the regression check can drive the exact shipped path. Behavior-preserving: the hook still
+  nulls every `_custom_skin_keys` skin on the wire, runs vanilla, restores the real skin, and
+  threads up to four vanilla returns. The null takes no toggle argument by construction.
+- cosmetics_tweaker.lua — new `/cos_regression_test` check `wire_skin_null_ungated`: seeds a fake
+  `_custom_skin_keys` entry + fake slot table, drives the helper, and asserts the custom skin is
+  nil during the wrapped send, the vanilla skin is untouched, the custom skin is restored after,
+  and vanilla returns are threaded. A default-off gate on the null would leave the skin non-nil
+  at send time and fail the check. Mirrors cim's `wire_rarity_rewrite_ungated`.
+- cosmetics_tweaker.lua:68 — namespaced the bare `_G._MEM_PROBE_T0_COS` global under the mod table
+  (`mod._cos_mem_t0`); updated the boot mem-probe readout reader.
+
+### Notes
+- Coverage + refactor only; no gameplay behavior change. The larger 4-surface `_wire_safe_call`
+  unification (audit finding F5) is deferred and is now guarded by this test.
+
 ## 0.9.74-dev — 2026-07-07 — issue 421: ct_* custom weapon illusions CTD non-mod peers on equip [verify-fix] [crash] [0-critical]
 
 Found by the issue-371 cross-mod wire-safety audit. The three existing net-safe surfaces

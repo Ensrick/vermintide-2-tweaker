@@ -25,7 +25,7 @@ WARNINGS, `2` (or higher) = ERRORS. `run_all.ps1` aggregates these so that:
   code seen. The pre-commit hook (`qa/run_all.ps1 -Quick -SkipLua`) therefore
   blocks only on genuine breakage.
 
-Five checks are pinned in `run_all.ps1` to a non-default policy via the
+Seven checks are pinned in `run_all.ps1` to a non-default policy via the
 `Run-Check -Policy` parameter:
 
 | Check | Policy | Reason |
@@ -35,12 +35,32 @@ Five checks are pinned in `run_all.ps1` to a non-default policy via the
 | `check_loc_tags` | `Advisory` | Dev status-tag doctrine surface (issue #301, `LOCALIZATION_STANDARD.md` § 13). It uses the standard 0/1/2 convention (1 = findings, 2 = self-error) but is pinned Advisory so it NEVER blocks — it exists to flag a known pre-existing leak (7 `[untested]` tags in stable `crafting_in_modded`) plus vocab drift, none of which should stop a commit. |
 | `check_issue_status_labels` | `Advisory` | GitHub issue status-label doctrine surface (PROJECT_STANDARDS §11). Uses the standard 0/1/2 convention (1 = findings, 2 = self/read error) but is pinned Advisory so it NEVER blocks — it queries GitHub (must not fail a commit offline) and its findings are nudges the maintainer reviews, not hard errors. |
 | `check_issue_tag_sync` | `Advisory` | Loc-tag ↔ GitHub-label cross-surface sync (issue #326 part 2). Same reasoning as `check_issue_status_labels`: queries GitHub (self-exits 0 offline), findings are review nudges — stale `[Issue N]` tags, tag/label mismatches in either direction — never hard errors. |
+| `check_stale_docs` | `Advisory` | Doc-hygiene surface (issue #429). Staleness is TIME-based (a doc goes stale at 30 days with no edit), so exit 2 must NOT hard-block a commit/CI on calendar drift. Pinned Advisory (formalizing the old CI `continue-on-error`). Remediation: `run_all.ps1 -FixStale`. |
+| `luacheck` | `Advisory` | Lua static-analysis surface (issue #429). The ~415-warning baseline is driven down over sessions, not per-commit (CWV bare-globals cleanup, PROJECT_STANDARDS §11). Pinned Advisory — the policy-engine version of the old CI `\|\| true`. Flip to Standard once the baseline is clean. |
 
 Everything else uses the default `Standard` policy (exit 1 = warning, exit >=2 =
 error). Checks that already hard-fail on exit 2 and never emit exit 1
 (`check_vmf_widget_types`, `check_event_register_signature`,
-`check_cross_mod_deps`, `check_command_collisions`, `check_mechanics_citations`)
-keep blocking on their errors under this default.
+`check_cross_mod_deps`, `check_command_collisions`, `check_mechanics_citations`,
+`check_dev_only_edits`) keep blocking on their errors under this default.
+
+### Ratchet baselines (issue #429)
+
+Two Standard-policy checks would otherwise be permanently red on pre-existing,
+not-per-session-fixable violations, so they are **ratcheted**: the current
+violation set is frozen in `qa/baselines/*.json` and the check fails only on a
+NEW offender (or growth past a frozen count). This lets the full gate BLOCK on
+regressions without being permanently red.
+
+| Check | Baseline file | Frozen | Fails on |
+|---|---|---|---|
+| `check_file_sizes` | `qa/baselines/file_sizes.json` | 13 files over the 2500-line hard limit | a NEW file crossing the hard limit, or a baselined file GROWING beyond its frozen line count. Target-tier (1500–2500) overages stay plain warnings. |
+| `check_name_integrity` | `qa/baselines/name_integrity.json` | 14 errors (the no-VtSrc SUPERSET) | a NEW error only. The baseline is generated WITHOUT the decompiled `Vermintide-2-Source-Code` so it matches CI (which lacks the sibling repo); locally, with VtSrc present, fewer errors fire — all a subset. |
+
+Regenerating a baseline is an **explicit** action (`<check>.ps1 -UpdateBaseline`),
+never automatic, and requires maintainer sign-off (it can only hide a real new
+violation). `check_name_integrity -UpdateBaseline` forces the no-VtSrc view so
+the committed baseline always matches CI regardless of the local checkout.
 
 ## Legend
 
@@ -77,6 +97,7 @@ keep blocking on their errors under this default.
 | 8 | `tags = [ ]` causes ugc_tool 0x2 error | `feedback_ugc_tool_forward_slashes.md` | `check_cfg.ps1` regex scan | AUTO (script) |
 | 9 | Missing preview file referenced by cfg | various | `check_cfg.ps1` file-exists check | AUTO (script) |
 | 10 | MOD_VERSION constant missing in main lua | `feedback_version_in_workshop_title.md` + CLAUDE.md §"Version bumping" | `check_versions.ps1` regex scan | AUTO (script) |
+| 10a | 4-segment MOD_VERSION (e.g. `0.9.9.4-dev`) — the retired within-patch-hotfix anti-pattern; semver is 3-segment `MAJOR.MINOR.PATCH[-track]`. Burned cosmetics_tweaker 2026-05-23. | CLAUDE.md §"Version bumping" | `check_versions.ps1` — flags a 4th numeric segment as a WARNING (exit 1) instead of silently stripping it (issue #429). Normalize on the next bump. | AUTO (script) |
 | 11 | cfg title doesn't carry current version suffix | `feedback_version_in_workshop_title.md` | `check_versions.ps1` cross-check | AUTO (script) |
 | 12 | Visibility accidentally flipped to public | `feedback_workshop_metadata_user_dictates.md` | `check_cfg.ps1` whitelist visibility per mod | AUTO (script) |
 | 13 | Description doesn't include bug-reporting block | (PROJECT_STANDARDS §7) | `check_cfg.ps1` regex for "issues" link + log path | AUTO (script) |
@@ -152,10 +173,11 @@ keep blocking on their errors under this default.
 
 | # | Bug class | Memory reference | Detection | Status |
 |---|---|---|---|---|
-| 49 | Stale audit/review markdown > 30 days unbanner'd | PROJECT_STANDARDS §7.2 | `check_stale_docs.ps1` date scan | AUTO (script) |
+| 49 | Stale audit/review markdown > 30 days unbanner'd | PROJECT_STANDARDS §7.2 | `check_stale_docs.ps1` date scan. Exit 2, but pinned **Advisory** in `run_all` (issue #429) — TIME-based staleness must not hard-block a commit/CI. Fix with `run_all.ps1 -FixStale`. | AUTO (script, advisory) |
 | 50 | Memory cited claim no longer matches current code | PROJECT_STANDARDS §12.3 | PRE-SHIP review (verify before recommending) | PRE-SHIP |
 | 51 | CHANGELOG entry missing for current MOD_VERSION | PROJECT_STANDARDS §6.4 | `check_versions.ps1` cross-check | AUTO (script) |
-| 52 | File exceeds 2500-line hard limit | PROJECT_STANDARDS §2.1 | `check_file_sizes.ps1` line-count | AUTO (script) |
+| 52 | File exceeds 2500-line hard limit | PROJECT_STANDARDS §2.1 | `check_file_sizes.ps1` line-count, **ratcheted** against `qa/baselines/file_sizes.json` (issue #429): the 13 known-oversized files are frozen; fails only on a NEW file over the limit or a baselined file growing past its frozen count. Target-tier (1500–2500) overages are plain warnings. | AUTO (script) |
+| 52b | Accidental edit to a split-mod STABLE dir (dev/stable split; stable is write-by-promotion-only) — nothing previously flagged it (`promotion-status.ps1` detects the reverse). | CLAUDE.md NON-NEG #3 + `PROMOTION_PROCESS.md` | `check_dev_only_edits.ps1` — flags any staged/diffed change under `chaos_wastes_tweaker/`, `crafting_in_modded/`, `general_tweaker/`, `gui_tweaker/`, `verminious_dreams_lighting/` (NOT their `_dev` twins). ERROR (exit 2); Standard in `run_all`, `-Staged` in pre-commit. Bypass a real promotion with env `VT2_PROMOTION=1`. Self-test: `-SelfTest`. Issue #429. | AUTO (script, in run_all + pre-commit) |
 | 52a | Uncited mechanic claim in the MECHANICS substrate — a factual bullet in `docs/MECHANICS.md` with no provenance tag (the hallucination-propagation class). Cure for "session drifts on a mechanic, hallucinates, wrong claim spreads." | `feedback_vmf_ui_no_guessing` (generalized to ALL mechanics) + PROJECT_STANDARDS §13 | `check_mechanics_citations.ps1` — scans ONLY `docs/MECHANICS.md`; every factual bullet under a `## Domain:` heading must carry `[src:]`/`[dump:]`/`[memory:]`/`[bugclass:]`/`[user:]` or `[unverified]`. `[unverified]` is ALLOWED + counted as the known-gaps backlog metric. ERROR (exit 2) on any untagged bullet. Self-test plants uncited + unverified + cited bullets. Wired into `run_all.ps1` (advisory). | AUTO (script, in run_all) |
 
 ### Process issues
@@ -200,15 +222,17 @@ As of 2026-05-23, after initial config tuning:
   `enemy_tweaker/.spawn_tweaks_ref/` aren't part of active mods)
 
 **Goal**: drive non-CWV warnings below 100 over the next several sessions.
-CI currently runs luacheck in non-blocking mode (`|| true`) — flip to
-blocking once CWV bare globals are refactored.
+As of issue #429, luacheck runs through `run_all.ps1` pinned **Advisory** in
+both CI and local (the policy-engine replacement for the old CI `|| true`) —
+flip it to Standard once CWV bare globals are refactored and the baseline is
+clean.
 
 ## Current state of each check
 
 | Check | Last run (2026-05-23) | Notes |
 |---|---|---|
 | `check_cfg.ps1` | ✅ OK | all 16 cfgs pass |
-| `check_versions.ps1` | ⚠ 11 warnings | cfg title drift (waiting on launcher auto-rewrite) + 2 missing CHANGELOG entries (event_tweaker v0.4.2-dev, material_hijack_patched v0.1.3) |
+| `check_versions.ps1` | ⚠ warnings only | cfg title drift (waiting on launcher auto-rewrite) + missing-CHANGELOG warnings. Now also flags 4-segment MOD_VERSIONs as a warning (row 10a, issue #429). |
 | `check_unpack_safety.ps1` | ✅ OK | all sites in ct/mp/wt either explicit-j or annotated (post-Issue #36 audit) |
 | `check_vmf_widget_types.ps1` | ✅ OK | all 14 active `*_data.lua` clean post-gt v0.2.60-dev `text_input` fix (2026-05-25) |
 | `check_event_register_signature.ps1` | ✅ OK | clean post-gt v0.2.61 → .64 fix cycle (2026-05-25). This static check is the live gate; the former `bt:safe_event_register` runtime safety net (buff_tweaker v0.1.10-alpha+) is RETIRED (bt archived 2026-06). |
@@ -217,12 +241,13 @@ blocking once CWV bare globals are refactored.
 | `check_issue_status_labels.ps1` | ⚠ 1 warning (2026-07-04) | Post label-audit: only #322 (a `tracked-not-fixed` context-mention in ct's #294 crash-fix entry — correctly unlabeled; the check surfaces it for review). All other latest-entry refs are labeled or in skipped loc-sweep entries. Self-test passes. Advisory (never blocks; self-exits 0 offline). |
 | `check_issue_tag_sync.ps1` | ⚠ 78 warnings (2026-07-04, first run) | 0 stale tags, 2 unpaired `[diag]` (career_tweaker rework groups — standing diagnostics, likely fine), 4 label-missing (`[diag]` on #291/#259/#126/#287 without `diagnostics-armed` — reconciled same day: labels added), 72 tag-missing (vice-versa backlog: labeled fixes with no menu-surface tag — mostly legitimate § 13.3 exemptions, reported compactly). Self-test passes. Advisory (never blocks; self-exits 0 offline). |
 | `run_selftests.ps1` | ✅ OK (2026-07-05) | Unit-test entry point: auto-discovers every `qa/check_*.ps1` with a `[switch]$SelfTest` param (9 as of 2026-07-05) plus `tools/ship/ship.ps1` (step-6 labeling logic), runs each `-SelfTest`, replays output on failure. All fixture-based/offline, ~1s total. Exit 2 on any regression — Standard policy in `run_all` (full pass, not `-Quick`) so a broken check BLOCKS; also a blocking CI step in `qa.yml`. Failure path verified with a planted failing check. |
-| `check_name_integrity.ps1` | ⚠ 13 errors / 8 warns (2026-05-30, in run_all full pass; NOT yet in blocking upload preflight) | check2: cwv `cwv_es_musket*` (on-ice commented variant still referenced by live musket-illusion code), career_tweaker `*_perk_*_desc` + gui_tweaker `mod_tweaker_button_name` (vanilla/own keys not in decompiled source). check3: wt `enable_weapon_*` guard toggles + mp `reset_progression`. Self-test passes. Triage the 13 errors before wiring into preflight. |
+| `check_name_integrity.ps1` | ⚠ baselined (issue #429) | 4 errors fire locally (VtSrc present); 14 in CI / no-VtSrc — all frozen in `qa/baselines/name_integrity.json` (the no-VtSrc superset), so the check is NON-BLOCKING on the pre-existing set and blocks only on a NEW error. Wired into `run_all` full (Standard). Self-test passes. |
 | `check_decisions_wired.ps1` | ⚠ exit 1 (2026-05-30, in run_all full pass) | 95 decisions parsed: 77 WIRED, 0 REGRESSION, 0 LEAK, 2 PENDING (`Kruber/dr_dual_wield_hammers` stale doc row, `Kruber/we_javelin` deferred-experimental), 78 ORPHAN (Saltzpyre/Kerillian decision sections stubbed — code ahead of doc), 1 UNCLASSIFIABLE. Self-test passes. |
 | `check_mechanics_citations.ps1` | ✅ OK (2026-05-30) | 45 cited factual bullets across 8 domains (`[src:]` decompiled-verified, `[memory:]`, `[bugclass:]`, `[dump:]`), 4 honest `[unverified]` gaps, 0 uncited. Self-test passes. Run the script for the live per-domain breakdown. |
-| `check_file_sizes.ps1` | ❌ 8 over hard limit | known oversized files on roadmap |
-| `check_stale_docs.ps1` | ✅ OK | 11 stale docs auto-bannered 2026-05-23 |
-| `luacheck` | ⚠ 415 warnings | baseline; 141 = CWV finding, 274 net real signal |
+| `check_file_sizes.ps1` | ⚠ baselined (issue #429) | 13 files over the 2500-line hard limit, all frozen in `qa/baselines/file_sizes.json`; non-blocking until a NEW file crosses the limit or a baselined one grows. Target-tier overages remain plain warnings. |
+| `check_dev_only_edits.ps1` | ✅ OK (2026-07-08) | Dev/stable split guard (row 52b, issue #429). Standard in `run_all`, `-Staged` in pre-commit. Clean working tree = exit 0. Self-test passes. |
+| `check_stale_docs.ps1` | ⚠ 19 stale (advisory) | Pinned Advisory in `run_all` (issue #429) — TIME-based, non-blocking. 19 docs currently >30 days without a SUPERSEDED banner; fix with `-FixStale`. |
+| `luacheck` | ⚠ ~415 warnings (advisory) | Pinned Advisory in `run_all` AND CI (issue #429; was CI `\|\| true`). Baseline; 141 = CWV finding, 274 net real signal. Drive down, then flip to Standard. |
 
 ## Generated name-map (key → display-name) + integrity validator
 
@@ -243,12 +268,15 @@ pwsh -NoProfile -File qa/check_name_integrity.ps1 -SelfTest  # planted-fault pro
 
 `check_name_integrity.ps1` reads `NAME_MAP.generated.json` as a runtime-name
 oracle (so cwv/cosmetics runtime-registered names don't false-positive) — run the
-generator first for best results. It is **standalone by design** and is NOT wired
-into `run_all.ps1` or the launcher's blocking upload preflight yet (the 13 current
-errors need maintainer triage before it becomes a gate). Wiring it later mirrors
-the v0.5.3 `check_localization`/`check_vmf_widget_types` integration in
-`tools/vmb-launcher/Services/ModRunner.cs` (the `QaScriptGate.RunAsync(mod,
-"check_name_integrity.ps1", L, ct)` pattern, exit 2 = block).
+generator first for best results. It **is wired into `run_all.ps1`** (Standard)
+and, as of issue #429, **ratcheted**: the pre-existing errors are frozen in
+`qa/baselines/name_integrity.json` (the no-VtSrc superset, so the same file
+covers CI and local), and the check blocks only on a NEW error. The oracle is
+committed, so it resolves identically in CI and locally; only the decompiled
+`Vermintide-2-Source-Code` differs, which is exactly why the baseline is
+generated in the no-VtSrc view. (Not yet in the launcher's blocking upload
+preflight; that would mirror the `QaScriptGate.RunAsync(mod, ...)` pattern in
+`tools/vmb-launcher/Services/ModRunner.cs`, exit 2 = block.)
 
 ## What's NOT covered yet (gaps)
 

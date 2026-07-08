@@ -1,7 +1,10 @@
 local mod = get_mod("gut_dev")
-_MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
+-- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic). Namespaced under
+-- the mod table (v0.2.216-dev) so it no longer leaks into _G; read at the boot readout near
+-- the end of this file.
+mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.215-dev"
+local MOD_VERSION = "0.2.216-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -120,6 +123,33 @@ _rt_register("dbg_helpers_two_channel", function()
     if not ok then return "_dbg_alert raised" end
 end)
 
+_rt_register("lifecycle_chain_integrity", function()
+    -- issue 425 coverage (audit finding F3): the mod splits ~15 VMF lifecycle callbacks
+    -- across 48 files using the capture-prev idiom (`local prev = mod.X; mod.X = function(...)
+    -- ...; prev(...) end`). Correct everywhere today, but convention-only -- one file that
+    -- forgets the capture silently orphans every earlier-loaded handler with no error. This
+    -- drives the on_setting_changed chain end to end: the root handler recognizes a synthetic
+    -- probe id (an unknown id every feature handler ignores while still calling prev), so
+    -- driving the CURRENT outermost on_setting_changed must walk the whole chain back to the
+    -- root and flip the flag. mod.update / mod.on_game_state_changed / mod.on_disabled use the
+    -- identical idiom under the same discipline; on_setting_changed is the most-wrapped chain
+    -- and the only one an unknown id can drive side-effect-free from any menu state, so it is
+    -- the representative integrity proof.
+    if type(mod.on_setting_changed) ~= "function" then
+        return "mod.on_setting_changed not installed"
+    end
+    if type(mod._gut_chain_probe) ~= "table" then
+        return "chain probe table missing (root handler probe not installed)"
+    end
+    mod._gut_chain_probe.on_setting_changed = false
+    local ok, err = pcall(mod.on_setting_changed, "__gut_chain_probe__")
+    if not ok then
+        return "driving the on_setting_changed chain raised: " .. tostring(err)
+    end
+    if not mod._gut_chain_probe.on_setting_changed then
+        return "on_setting_changed chain BROKEN: a chaining site dropped its predecessor (earlier-loaded handlers are orphaned)"
+    end
+end)
 
 _rt_register("mission_map_backdrop_swap", function()
     -- (#336) Mid-mission map CTD guard: the can_get trust-protocol helper must be
@@ -797,9 +827,21 @@ mod:hook_safe("HeroView", "on_enter", function(self, ...)
     pcall(Customizer.dump_hero_view, self)
 end)
 
+-- Lifecycle-chain integrity probe (v0.2.216-dev, issue 425 coverage). This root
+-- mod.on_setting_changed is the innermost handler in the capture-prev chain that ~7
+-- feature files wrap. The /regression_test `lifecycle_chain_integrity` check drives the
+-- CURRENT (outermost) on_setting_changed with the synthetic id below; reaching this root
+-- flips the flag, proving every wrapper correctly chained its predecessor. A future file
+-- that forgets `local prev = mod.on_setting_changed` orphans this root and fails the check.
+mod._gut_chain_probe = { on_setting_changed = false }
+
 -- VMF emits this callback when the user flips any setting. We use it to log
 -- the debug-mode transition unconditionally (only place that does so).
 mod.on_setting_changed = function(setting_id)
+    if setting_id == "__gut_chain_probe__" then
+        mod._gut_chain_probe.on_setting_changed = true
+        return
+    end
     if setting_id == "gut_mission_inventory_enabled" then
         -- In-mission inventory's InventorySettings loadout-access data patch (body in
         -- _gut_mission_inventory.lua). Hero-select no longer couples in: since the
@@ -2568,4 +2610,4 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/level_loading_screen")
 
 mod:info(string.format("gui_tweaker v%s ready (loadout save/restore + HUD edit mode + mod_tweaker api + bestiary/armory)", MOD_VERSION))
 
-mod:info("[mem-probe] gut boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_GUT) / 1024)
+mod:info("[mem-probe] gut boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - mod._gut_mem_t0) / 1024)

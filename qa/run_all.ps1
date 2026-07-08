@@ -153,11 +153,23 @@ Run-Check "check_command_collisions" { & (Join-Path $here "check_command_collisi
 Run-Check "check_decisions_wired" { & (Join-Path $here "check_decisions_wired.ps1") -Quiet:$Quiet }
 Run-Check "check_name_integrity"  { & (Join-Path $here "check_name_integrity.ps1")  -Quiet:$Quiet }
 Run-Check "check_mechanics_citations" { & (Join-Path $here "check_mechanics_citations.ps1") -Quiet:$Quiet }
+# check_dev_only_edits guards the dev/stable split (issue #429): any staged/diffed
+# change to one of the five split-mod STABLE dirs is an ERROR (edit the *_dev twin;
+# stable is write-by-promotion-only). Standard policy (exit 2 blocks). Bypass a
+# legitimate promotion with env VT2_PROMOTION=1. Runs the broad staged+unstaged
+# (and, in CI PRs, GITHUB_BASE_REF) view; pre-commit runs the -Staged variant.
+Run-Check "check_dev_only_edits" { & (Join-Path $here "check_dev_only_edits.ps1") -Quiet:$Quiet }
 
+# check_stale_docs is Advisory (issue #429): staleness is TIME-based (a doc goes
+# stale at 30 days with no edit), so it can't be baselined sensibly and must not
+# hard-block a commit/CI run on calendar drift — exactly the "gate that blocks on
+# noise -> sessions learn --no-verify" anti-pattern this file's header warns
+# against. This formalizes the old CI `continue-on-error` treatment ("stale audit
+# docs are warnings, not blockers"). Remediation is `run_all.ps1 -FixStale`.
 if ($FixStale) {
-    Run-Check "check_stale_docs (FIX)" { & (Join-Path $here "check_stale_docs.ps1") -Fix }
+    Run-Check "check_stale_docs (FIX)" { & (Join-Path $here "check_stale_docs.ps1") -Fix } -Policy 'Advisory'
 } else {
-    Run-Check "check_stale_docs"   { & (Join-Path $here "check_stale_docs.ps1") }
+    Run-Check "check_stale_docs"   { & (Join-Path $here "check_stale_docs.ps1") } -Policy 'Advisory'
 }
 
 if (-not $SkipLua) {
@@ -172,6 +184,11 @@ if (-not $SkipLua) {
     }
 
     if ($lcExe) {
+        # luacheck is pinned Advisory (issue #429): the ~415-warning baseline is
+        # driven down over time, not per-commit (CWV bare-globals cleanup tracked
+        # in PROJECT_STANDARDS §11). Making it Advisory REPORTS the full report as
+        # a non-blocking notice — the explicit, policy-engine version of the old
+        # CI `|| true`. Flip back to Standard once the baseline is clean.
         Run-Check "luacheck" {
             Push-Location $repoRoot
             try {
@@ -182,7 +199,7 @@ if (-not $SkipLua) {
             } finally {
                 Pop-Location
             }
-        }
+        } -Policy 'Advisory'
     } else {
         Write-Host "===== luacheck =====" -ForegroundColor Cyan
         Write-Host "[luacheck] not found locally. Download portable binary:" -ForegroundColor DarkYellow

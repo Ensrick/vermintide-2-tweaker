@@ -10,68 +10,56 @@ on:
       - "**/*.md"
       - ".luacheckrc"
       - "qa/**"
+      - "tools/mod-lint/**"
+      - "tools/mod-inventory.psd1"
+      - "tools/ship/**"
       - ".github/workflows/qa.yml"
   pull_request:
     branches: [master, main]
   workflow_dispatch:
 
+# CI is the SAME gate as local: it runs qa/run_all.ps1 (the full Standard /
+# Blocking / Advisory policy engine documented in qa/CHECKS.md), not a
+# hand-picked subset with continue-on-error. The policy engine — not the
+# workflow — decides what blocks. luacheck and check_stale_docs are Advisory;
+# check_file_sizes and check_name_integrity block only on regressions past their
+# frozen baselines in qa/baselines/. lint-mod runs as its own blocking step
+# (duplicate-hook gate, CLAUDE.md NON-NEG #8), which run_all does not include.
+# Windows + pwsh because the whole suite is PowerShell-native (backslash path
+# matching, the committed tools/luacheck/luacheck.exe, backslash-relative
+# signatures). Issue #429.
 jobs:
-  static-checks:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+  qa-gate:
+    runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history so check_dev_only_edits can diff a PR against its base
+          # (origin/$GITHUB_BASE_REF). Best-effort — the check degrades to a
+          # no-op, never a false block, if the base ref is unavailable.
+          fetch-depth: 0
 
-      - name: Install luacheck (Linux native — ignore the bundled Windows .exe)
-        run: sudo apt-get update && sudo apt-get install -y lua-check
+      - name: run_all.ps1 (full QA gate — the policy engine decides)
+        shell: pwsh
+        run: ./qa/run_all.ps1
+        # Exits non-zero only when a Standard-policy check hits exit >=2 or a
+        # Blocking-policy check hits any non-zero. Advisory checks (luacheck,
+        # stale-docs, loc-tags, issue-label sync, in-progress) never fail this
+        # step. The gh-querying advisory checks self-exit 0 when unauthenticated,
+        # and are Advisory regardless, so no GH token is required.
 
-      - name: luacheck (Lua static analysis)
+      - name: lint-mod.ps1 (duplicate-hook gate, all mods)
+        shell: pwsh
         run: |
-          set +e
-          luacheck . --codes --formatter plain
-          # Currently ~415 warnings (baseline 2026-05-23). ~141 are the known
-          # CWV bare-globals audit finding tracked in PROJECT_STANDARDS §11.
-          # Don't fail the build until we drive the baseline down — but DO
-          # surface the report. `|| true` exits zero.
-          true
-        # TODO: tighten to fail-on-warning once CWV bare globals are refactored
-        # and the baseline is clean.
-
-      - name: run_selftests.ps1 (unit tests of every QA check + ship.ps1 labeling logic)
-        shell: pwsh
-        run: ./qa/run_selftests.ps1
-        # No continue-on-error: a self-test regression means a QA check's own
-        # logic is broken, which is genuine breakage. All fixture-based and
-        # offline (no gh/network), so this never flakes in CI.
-
-      - name: check_cfg.ps1
-        shell: pwsh
-        run: ./qa/check_cfg.ps1
-
-      - name: check_versions.ps1
-        shell: pwsh
-        run: ./qa/check_versions.ps1
-        continue-on-error: true
-        # cfg-title-vs-MOD_VERSION sync is currently manual; will tighten once
-        # the launcher auto-rewrite ships.
-
-      - name: check_localization.ps1
-        shell: pwsh
-        run: ./qa/check_localization.ps1
-        continue-on-error: true
-        # Many existing mods have orphan localization keys (false-positive heavy);
-        # tighten to hard-fail once cleaned per qa/CHECKS.md.
-
-      - name: check_file_sizes.ps1
-        shell: pwsh
-        run: ./qa/check_file_sizes.ps1
-        continue-on-error: true
-        # cosmetics_tweaker.lua and chaos_wastes_tweaker.lua exceed 2500; both
-        # are tracked for refactor in PROJECT_STANDARDS §11.
-
-      - name: check_stale_docs.ps1
-        shell: pwsh
-        run: ./qa/check_stale_docs.ps1
-        continue-on-error: true
-        # Stale audit docs are warnings, not blockers.
+          ./tools/mod-lint/lint-mod.ps1
+          $code = $LASTEXITCODE
+          # Exit 2 = duplicate VMF hook registration (VMF silently drops the 2nd;
+          # the single most-emphasized rule in the repo, CLAUDE.md NON-NEG #8) ->
+          # BLOCK. Exit 1 = heuristic warnings (forward-ref / late-local /
+          # save-restore / network-bound) -> report, don't block. Mirrors the
+          # local pre-commit hook's severity ladder exactly.
+          if ($code -ge 2) { Write-Host "::error::lint-mod found duplicate-hook error(s) (exit $code)"; exit 1 }
+          if ($code -eq 1) { Write-Host "lint-mod reported non-blocking warnings (exit 1)." }
+          exit 0

@@ -1,5 +1,29 @@
 # Career Tweaker Changelog
 
+## 0.3.54-dev - 2026-07-07 - Regression coverage: buff-name registration parity (issue 425)
+
+### Why
+The issue-371 wire-safety audit (finding F4) flagged that the crt_* buff-template registration
+had no test locking its two load-bearing invariants. The F1 sender-side parity gate itself is
+wave-2 work and is NOT touched here; this adds coverage only.
+
+### Changed
+- career_tweaker_balance.lua:74 - exposed the canonical registration list as a read-only
+  `mod._crt_registered_buff_names` so the regression checks (which live in career_tweaker.lua and
+  cannot see the file-local `_CRT_BUFF_NAMES`) can assert against the exact registered catalog.
+- career_tweaker.lua - new `/crt_regression_test` check `crt_buff_names_deterministic_sorted`:
+  asserts the registration list is strictly ascending (PROJECT_STANDARDS §9.3 - the alphabetical
+  order assigns the cross-peer NetworkLookup indices; a reorder or duplicate diverges peers and
+  CTDs on rpc_add_buff). Also catches a duplicate name.
+- career_tweaker.lua - new check `crt_buff_names_catalog_parity`: asserts the decoupled RT list
+  `_CRT_BUFF_NAMES_EXPECTED` matches the real registration list element-for-element and in order,
+  so a name added/removed/reordered on one side but not the other fails the gate instead of
+  silently validating a stale catalog.
+
+### Notes
+- Both checks pass against current code. The F1 non-crt-peer parity gate (the actual crash fix)
+  remains pending as wave-2 work.
+
 ## 0.3.53-dev - 2026-07-06 - HOTFIX: client CTD on Fires from Ash THP heal (#405)
 
 **Issue 405 [verify-fix] - client hard-crash killing a burning enemy as Sienna Adept with `rework_bw_adept_fires_from_ash_1pct_plus_thp` on:**

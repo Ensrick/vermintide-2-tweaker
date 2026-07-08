@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.74-dev"
+local MOD_VERSION = "0.9.75-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -65,7 +65,10 @@ local MOD_VERSION = "0.9.74-dev"
 -- names (v0.9.70's cos_la_state_req) do NOT bump -- old peers drop/ignore
 -- them harmlessly. Initial = 1.
 local COS_RPC_SCHEMA = 1
-_MEM_PROBE_T0_COS = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
+-- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic). Namespaced
+-- under the mod table (v0.9.75-dev) so it no longer leaks into _G; read once at the
+-- boot readout near the end of this file.
+mod._cos_mem_t0 = collectgarbage("count")
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([cosmetics] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -6058,11 +6061,18 @@ end
 -- unit spawn reads the restored value elsewhere). Remote peers render the base skin either
 -- way. Sole cosmetics hook on this method (grep-verified; the LA name path hooks
 -- PlayerUnitAttachmentExtension.game_object_initialized, a different extension class).
-mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
-    local slots = self and self._equipment and self._equipment.slots
-    if not slots then
-        return func(self, unit, unit_go_id)
-    end
+-- v0.9.75-dev: the null-and-restore is extracted to a pure helper so the
+-- /cos_regression_test `wire_skin_null_ungated` check can drive the EXACT shipped path
+-- (BUG_CLASSES 31 mandates a wire_*_ungated assertion on every sender-side substitution;
+-- the v0.9.74 skin axis was the one uncovered surface). `slots` is the equipment slot
+-- table; `send_fn` is the vanilla continuation that encodes weapon_skin_id + broadcasts
+-- rpc_add_equipment. Every _custom_skin_keys skin is nulled on the WIRE, the send runs,
+-- then each real skin is restored so the LOCAL owner still spawns the custom illusion.
+-- The null takes NO toggle argument by construction, so it can never be gated behind a
+-- mod:get() -- the coercion is UNCONDITIONAL (class-31 never-crash mandate). Preserves up
+-- to four vanilla returns (game_object_initialized's arity, unchanged from the pre-
+-- extraction inline body).
+local function _wire_null_custom_skins(slots, send_fn)
     local saved
     for _, slot_data in pairs(slots) do
         local skin = slot_data and slot_data.skin
@@ -6072,13 +6082,24 @@ mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, s
             slot_data.skin = nil
         end
     end
-    local r1, r2, r3, r4 = func(self, unit, unit_go_id)
+    local r1, r2, r3, r4 = send_fn()
     if saved then
         for slot_data, skin in pairs(saved) do
             slot_data.skin = skin
         end
     end
     return r1, r2, r3, r4
+end
+mod._cos_wire_null_custom_skins = _wire_null_custom_skins
+
+mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
+    local slots = self and self._equipment and self._equipment.slots
+    if not slots then
+        return func(self, unit, unit_go_id)
+    end
+    return _wire_null_custom_skins(slots, function()
+        return func(self, unit, unit_go_id)
+    end)
 end)
 
 -- v0.8.61-dev: THIRD sync surface — attachment-RPC paths that read
@@ -10443,6 +10464,60 @@ _rt_register("localization_format_safe", function()
     end
 end)
 
+_rt_register("wire_skin_null_ungated", function()
+    -- issue 421 / issue 371 (BUG_CLASSES 31): the v0.9.74 skin-axis wire-safety hook
+    -- (SimpleInventoryExtension.game_object_initialized) nulls slot_data.skin for every
+    -- _custom_skin_keys entry BEFORE vanilla encodes weapon_skin_id =
+    -- NetworkLookup.weapon_skins[...] and broadcasts rpc_add_equipment, then restores the
+    -- real skin after the send so the LOCAL owner still spawns the custom illusion. A peer
+    -- WITHOUT cosmetics_tweaker cold-decodes an appended index and fatals; nulling to the
+    -- vanilla "n/a" index is the never-crash invariant and it must NOT be gated behind any
+    -- mod:get() toggle. Drives the SHIPPED helper (_cos_wire_null_custom_skins) with a fake
+    -- slot table so a future edit that gates the null (a default-off gate would leave the
+    -- custom skin non-nil at send time) OR drops the restore fails here, not in a stranger's
+    -- session. Mirrors cim's wire_rarity_rewrite_ungated.
+    if type(mod._cos_wire_null_custom_skins) ~= "function" then
+        return "skin-axis wire-null helper missing (issue 421 crash regression)"
+    end
+    if type(_custom_skin_keys) ~= "table" then
+        return "_custom_skin_keys table missing"
+    end
+    local FAKE_CUSTOM  = "_rt_fake_custom_skin_key"
+    local FAKE_VANILLA = "_rt_fake_vanilla_skin_key"
+    local had = _custom_skin_keys[FAKE_CUSTOM]
+    _custom_skin_keys[FAKE_CUSTOM] = true
+    -- One slot wears the custom illusion (must be nulled on the wire); one wears a
+    -- vanilla skin (must be left untouched).
+    local custom_slot  = { skin = FAKE_CUSTOM }
+    local vanilla_slot = { skin = FAKE_VANILLA }
+    local slots = { slot_ranged = custom_slot, slot_melee = vanilla_slot }
+    local skin_at_send, vanilla_at_send
+    local ok, r1, r2 = pcall(mod._cos_wire_null_custom_skins, slots, function()
+        -- Runs WHILE the RPC would encode/broadcast: the custom skin MUST be nil here
+        -- (else a non-cos peer decodes the modded index and CTDs); the vanilla skin intact.
+        skin_at_send    = custom_slot.skin
+        vanilla_at_send = vanilla_slot.skin
+        return "ret1", "ret2"
+    end)
+    -- Restore the shared table before asserting so a failure can't leak the fake key.
+    if not had then _custom_skin_keys[FAKE_CUSTOM] = nil end
+    if not ok then
+        return "wire-null helper raised: " .. tostring(r1)
+    end
+    if skin_at_send ~= nil then
+        return "custom skin was NOT nulled on the wire -- a non-cos peer would CTD (issue 421 regression; is the null toggle-gated?)"
+    end
+    if vanilla_at_send ~= FAKE_VANILLA then
+        return "vanilla skin was wrongly mutated on the wire (only _custom_skin_keys entries may be nulled)"
+    end
+    if custom_slot.skin ~= FAKE_CUSTOM then
+        return "custom skin not restored after the send -- LOCAL owner would lose the illusion"
+    end
+    if r1 ~= "ret1" or r2 ~= "ret2" then
+        return "vanilla return values not threaded through the wire-null wrapper"
+    end
+end)
+
 -- [mem-probe] cos boot Lua-footprint readout. MUST live at module top-level (runs
 -- once when this file finishes loading), NOT inside the _rt_register closure above
 -- — until v0.9.35-dev it was stranded as the last statement of that regression-test
@@ -10452,7 +10527,7 @@ end)
 -- Measures the static table footprint (e.g. the ~11.9k-line _cosmetic_unlocks table)
 -- at load time — the 74 offhand unit packages load later (lazily, in mod.update) and
 -- are snapshotted separately at the [offhand] force-load completion log.
-mod:info("[mem-probe] cos boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_COS) / 1024)
+mod:info("[mem-probe] cos boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - mod._cos_mem_t0) / 1024)
 
 -- ============================================================
 -- Moonfire Bow cosmetic AOE puff (moved from weapon_tweaker 2026-06-29)

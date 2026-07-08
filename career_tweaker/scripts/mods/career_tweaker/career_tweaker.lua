@@ -1,6 +1,6 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.3.53-dev"
+local MOD_VERSION = "0.3.54-dev"
 _MEM_PROBE_T0_CRT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([crt] enabled v<X> settings_fp=<hash>) is the canonical version surface
@@ -985,6 +985,54 @@ _rt_register("on_disabled_unwinds_talent_swaps", function()
     end
     if not cleared then
         return "restore_talent_swaps did not clear _talent_swap_originals — swaps would persist after disable"
+    end
+end)
+
+_rt_register("crt_buff_names_deterministic_sorted", function()
+    -- issue 425 / PROJECT_STANDARDS §9.3 (registration parity): the crt_* buff names are
+    -- pre-registered into NetworkLookup + BuffTemplates UNCONDITIONALLY at load (present at
+    -- default settings — covered by crt_buffs_preregistered / crt_buffs_in_global_table) and
+    -- in a DETERMINISTIC alphabetical order. The order assigns the sequential NetworkLookup
+    -- indices every peer must agree on; a reorder silently diverges peer indices and CTDs on
+    -- rpc_add_buff (career_tweaker_balance.lua header). Lock the sorted invariant against the
+    -- real registration list exported by career_tweaker_balance.lua (strict ascending also
+    -- catches a duplicate name).
+    local names = mod._crt_registered_buff_names
+    if type(names) ~= "table" then
+        return "mod._crt_registered_buff_names not exported by career_tweaker_balance.lua"
+    end
+    for i = 2, #names do
+        -- >= (not <) so an out-of-order OR duplicate name both fail.
+        if names[i - 1] >= names[i] then
+            return string.format(
+                "registration list not strictly ascending at index %d (%q then %q) -- cross-peer NetworkLookup index order broken",
+                i, tostring(names[i - 1]), tostring(names[i]))
+        end
+    end
+end)
+
+_rt_register("crt_buff_names_catalog_parity", function()
+    -- issue 425: _CRT_BUFF_NAMES_EXPECTED (this file, consumed by crt_buffs_preregistered /
+    -- crt_buffs_in_global_table) is a deliberately decoupled copy of
+    -- career_tweaker_balance.lua's _CRT_BUFF_NAMES (the site that actually registers into
+    -- NetworkLookup + BuffTemplates). If the two drift, the presence checks silently validate
+    -- a stale catalog. Assert exact length + per-index equality so a name added/removed/
+    -- reordered on one side but not the other fails here.
+    local registered = mod._crt_registered_buff_names
+    if type(registered) ~= "table" then
+        return "mod._crt_registered_buff_names not exported (catalog parity cannot be checked)"
+    end
+    if #registered ~= #_CRT_BUFF_NAMES_EXPECTED then
+        return string.format(
+            "catalog size mismatch: registration site has %d, RT expected list has %d",
+            #registered, #_CRT_BUFF_NAMES_EXPECTED)
+    end
+    for i = 1, #registered do
+        if registered[i] ~= _CRT_BUFF_NAMES_EXPECTED[i] then
+            return string.format(
+                "catalog mismatch at index %d: registration=%q vs RT-expected=%q",
+                i, tostring(registered[i]), tostring(_CRT_BUFF_NAMES_EXPECTED[i]))
+        end
     end
 end)
 

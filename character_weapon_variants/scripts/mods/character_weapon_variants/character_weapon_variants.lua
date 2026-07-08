@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.373-dev"
+local MOD_VERSION = "0.1.374-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -5602,6 +5602,83 @@ local _TJ_PICKUP_UNIT           = _TJ_THROWING_AXE_PUP
 -- parent isn't at the contact point we assume.
 local _TJ_VISUAL_PULL_BACK_M    = 0
 
+-- ============================================================================
+-- issue 424 (BUG_CLASSES 31): thrown-variant NetworkLookup wire-safety
+-- ============================================================================
+-- The Tuskgor Javelin family appends cwv-only keys to networked lookup tables
+-- (pickup_names, husks, projectile_units) at a LOCAL `#tbl+1` index. Those
+-- indices ride VANILLA projectile/pickup spawn RPCs, so a peer WITHOUT cwv
+-- cold-decodes an index its own table lacks -> strict `__index` fatal
+-- (network_lookup.lua). Verified SEND sites in the decompiled source:
+--
+--   PICKUP (thrown-impact) -- the thrower (always a cwv peer) encodes and sends:
+--     * Path A (sticks in a wall/enemy): PlayerProjectileUnitExtension
+--       ._spawn_linked_pickup_projectile encodes
+--       `pickup_name_id = NetworkLookup.pickup_names[pickup_name]` then
+--       `send_rpc_server("rpc_spawn_linked_pickup", pickup_name_id, ...)`
+--       (player_projectile_unit_extension.lua:1354-1359). The server relays the
+--       spawn as a networked pickup GameObject whose pickup_name field is
+--       `NetworkLookup.pickup_names[pickup_name]` (game_object_initializers_
+--       extractors.lua:1795/1816); every client extracts it back.
+--     * Path B (bounces/drops): PlayerProjectileUnitExtension
+--       ._spawn_pickup_projectile encodes the same pickup_name_id (+ a husk id
+--       for the pickup unit, which is already a vanilla key) then
+--       `send_rpc_server("rpc_spawn_pickup_projectile", ...)`
+--       (player_projectile_unit_extension.lua:1376-1395).
+--   Substituting the `pickup_name` ARG at these two senders cascades: the
+--   vanilla name re-encodes to a vanilla pickup_names index AND makes the
+--   server spawn the vanilla pickup, so the GameObject a non-cwv peer extracts
+--   is vanilla end to end. Sender-side (not the receiver hooks at 6036/6051)
+--   is what protects a non-cwv HOST too (a cwv client throwing into a vanilla
+--   host's game).
+--
+--   IN-FLIGHT PROJECTILE (Tuskgor Javelin BOMB) -- the boar-spear in-flight
+--   unit is a cwv-appended husks key (_TJ_BOAR_SPEAR_UNIT, injected ~5646):
+--     * ProjectileSystem.spawn_player_projectile spawns it via
+--       `unit_spawner:spawn_network_unit(projectile_unit_name, ...)` where
+--       `projectile_unit_name = _get_projectile_units_names(...).projectile_unit_name`
+--       (projectile_system.lua:159-176, 247-249); the projectile GameObject
+--       encodes that unit through NetworkLookup.husks, so a non-cwv client
+--       cold-decodes it (projectile_system.lua:442 on the pickup path is the
+--       same reverse-lookup shape). The SAME cwv projectile_units_template
+--       (_TJ_PROJECTILE_KEY) also rides TransientPackageLoader.hot_join_sync to
+--       a joining peer as `NetworkLookup.projectile_units[name]`
+--       (transient_package_loader.lua:187-193). Substituting the resolved
+--       projectile_units to the vanilla "javelin" entry makes BOTH the GO husk
+--       and the transient projectile_units index encode vanilla. Cosmetic only:
+--       impact_data / damage come from the action, untouched.
+--
+-- Pure, ungateable helpers (no toggle argument, mirroring cim's
+-- `_cim_wire_safe_rarity`); a vanilla substitute is chosen so the coerced index
+-- exists in every peer's boot-time NetworkLookup regardless of DLC ownership.
+-- NOTE (not closed here): the BOMB's world/pool pickup (_TJB_PICKUP_KEY, ~6708)
+-- is a GAMEPLAY axis -- coercing it to a vanilla grenade would change what a
+-- cwv player picks up -- so it is left for the issue 371 peer-parity gate, per
+-- memory `project_vt2_cross_peer_wire_safety` (which lists #424 under it).
+_om._tj_pickup_wire_map = {
+	-- cwv thrown-impact pickup key -> a base-game pickup with a boot-stable
+	-- pickup_names index on every peer (throwing axe: same pup_ unit, and the
+	-- link_ variant shares our `limited_owned_pickup_unit` template).
+	[_TJ_PICKUP_KEY]      = "ammo_throwing_axe_01_t1",
+	[_TJ_LINK_PICKUP_KEY] = "link_ammo_throwing_axe_01_t1",
+}
+-- Returns a vanilla pickup name for a cwv thrown-impact key, or nil (pass-through).
+function _om._wire_safe_pickup_name(pickup_name)
+	return _om._tj_pickup_wire_map[pickup_name]
+end
+_om._TJ_INFLIGHT_MODDED_UNIT   = _TJ_BOAR_SPEAR_UNIT
+_om._TJ_INFLIGHT_SAFE_TEMPLATE = "javelin"   -- vanilla ProjectileUnits key (elf javelin)
+-- Returns the vanilla "javelin" projectile_units table when `projectile_units`
+-- is our boar-spear entry (so its husk never reaches the wire); else unchanged.
+function _om._wire_safe_projectile_units(projectile_units)
+	if projectile_units and projectile_units.projectile_unit_name == _om._TJ_INFLIGHT_MODDED_UNIT
+		and rawget(_G, "ProjectileUnits") then
+		local safe = ProjectileUnits[_om._TJ_INFLIGHT_SAFE_TEMPLATE]
+		if safe then return safe end
+	end
+	return projectile_units
+end
+
 local function _register_tuskgor_javelin_assets()
 	-- 1. Projectile unit — controls the in-flight + stuck mesh when the throw
 	-- action's `use_weapon_skin = true` resolves to our skin's
@@ -6016,21 +6093,55 @@ mod:command("cwv_dump_javelin_impact", "Dump runtime tuskgor_javelin_template th
 	end
 end)
 
--- Path A entry on thrower's side — log only.
+-- Path A entry on thrower's side — trace + issue 424 wire-safe substitution.
+-- The vanilla body encodes NetworkLookup.pickup_names[pickup_name] and sends
+-- rpc_spawn_linked_pickup (player_projectile_unit_extension.lua:1354-1359);
+-- swapping the cwv key for a vanilla one BEFORE func() keeps a non-cwv peer
+-- from cold-decoding the appended index (BUG_CLASSES 31). Ungateable.
 mod:hook("PlayerProjectileUnitExtension", "_spawn_linked_pickup_projectile", function(func, self, pickup_name, ...)
 	if _is_our_pickup(pickup_name) then
 		_dbg("[cwv stick:trace] _spawn_linked_pickup_projectile fired (pickup=%s)", tostring(pickup_name))
 	end
+	local safe = _om._wire_safe_pickup_name(pickup_name)
+	if safe then
+		printf("[cwv:424] linked pickup wire-safe %s -> %s", tostring(pickup_name), safe)
+		return func(self, safe, ...)
+	end
 	return func(self, pickup_name, ...)
 end)
 
--- Path B entry on thrower's side — log only.
+-- Path B entry on thrower's side — trace + issue 424 wire-safe substitution.
+-- Encodes pickup_name_id (+ pickup-unit husk id, already vanilla) and sends
+-- rpc_spawn_pickup_projectile (player_projectile_unit_extension.lua:1376-1395).
 mod:hook("PlayerProjectileUnitExtension", "_spawn_pickup_projectile", function(func, self, pickup_name, ...)
 	if _is_our_pickup(pickup_name) then
 		_dbg("[cwv stick:trace] _spawn_pickup_projectile (PATH B) fired (pickup=%s)", tostring(pickup_name))
 	end
+	local safe = _om._wire_safe_pickup_name(pickup_name)
+	if safe then
+		printf("[cwv:424] dropped pickup wire-safe %s -> %s", tostring(pickup_name), safe)
+		return func(self, safe, ...)
+	end
 	return func(self, pickup_name, ...)
 end)
+_om._tj_pickup_wire_hook_installed = true
+
+-- issue 424 (BUG_CLASSES 31): in-flight projectile husk / projectile_units axis.
+-- The Tuskgor Javelin BOMB throws a boar-spear in-flight unit that is a cwv-only
+-- NetworkLookup.husks key; ProjectileSystem.spawn_player_projectile spawns it via
+-- spawn_network_unit (projectile_system.lua:247-249), and the same cwv
+-- projectile_units_template rides TransientPackageLoader.hot_join_sync
+-- (transient_package_loader.lua:187-193). Substitute the resolved projectile_units
+-- (returned by _get_projectile_units_names, projectile_system.lua:159-176) to the
+-- vanilla "javelin" entry so the projectile GameObject encodes a vanilla husk and
+-- the transient sync encodes a vanilla projectile_units index; a joining/present
+-- non-cwv peer never cold-decodes an appended index. Cosmetic only (in-flight mesh
+-- becomes the slim vanilla javelin); the action's impact_data/damage are untouched.
+-- Sole cwv hook on this method (grep-verified). Ungateable pure swap.
+mod:hook("ProjectileSystem", "_get_projectile_units_names", function(func, self, projectile_info, owner_unit)
+	return _om._wire_safe_projectile_units(func(self, projectile_info, owner_unit))
+end)
+_om._projectile_wire_hook_installed = true
 
 -- Path A server-side: PickupSystem.rpc_spawn_linked_pickup.
 mod:hook("PickupSystem", "rpc_spawn_linked_pickup", function(func, self, channel_id, pickup_name_id, link_position, link_rotation, spawn_type_id, hit_unit_go_id, node_index, is_level_unit, spawn_limit, material_settings_name_id)
@@ -11689,6 +11800,64 @@ _rt_register("cwv_wire_safe_skin_installed", function()
             if rawget(ws, skin_key) == nil then
                 return string.format("tracked cwv skin key %s absent from NetworkLookup.weapon_skins", tostring(skin_key))
             end
+        end
+    end
+end)
+
+_rt_register("cwv_wire_safe_thrown_variant_installed", function()
+    -- (issue 424 / issue 371, BUG_CLASSES 31) The Tuskgor Javelin thrown axes
+    -- (impact pickup names + the bomb's in-flight boar-spear husk /
+    -- projectile_units) append cwv-only NetworkLookup indices that ride vanilla
+    -- projectile/pickup spawn RPCs. Assert BOTH sender-side substitution hooks
+    -- are installed AND that the pure helpers actually coerce every tracked
+    -- modded index to a REAL vanilla one (taking no toggle argument), so a
+    -- modded index can never survive to the wire path.
+    if _om._tj_pickup_wire_hook_installed ~= true then
+        return "thrown-pickup wire-safety senders not installed (issue 424 non-cwv-peer CTD regression)"
+    end
+    if _om._projectile_wire_hook_installed ~= true then
+        return "in-flight projectile wire-safety hook not installed (issue 424 boar-spear husk CTD regression)"
+    end
+    if type(_om._wire_safe_pickup_name) ~= "function" then
+        return "_om._wire_safe_pickup_name helper missing"
+    end
+    if type(_om._tj_pickup_wire_map) ~= "table" or next(_om._tj_pickup_wire_map) == nil then
+        return "no cwv thrown pickups tracked -- wire-safety would coerce nothing"
+    end
+    local NL = rawget(_G, "NetworkLookup")
+    local pn = NL and NL.pickup_names
+    -- Drive every tracked cwv pickup key through the helper: it must coerce to
+    -- its declared vanilla target, and that target must be a non-cwv key present
+    -- in NetworkLookup.pickup_names on every peer.
+    for cwv_key, vanilla_key in pairs(_om._tj_pickup_wire_map) do
+        local safe = _om._wire_safe_pickup_name(cwv_key)
+        if safe ~= vanilla_key then
+            return string.format("pickup %s did not coerce to its vanilla target (got %s)",
+                tostring(cwv_key), tostring(safe))
+        end
+        if type(safe) ~= "string" or safe:sub(1, 4) == "cwv_" then
+            return string.format("pickup substitute %s is not a vanilla key", tostring(safe))
+        end
+        if type(pn) == "table" and rawget(pn, safe) == nil then
+            return string.format("pickup substitute %s absent from NetworkLookup.pickup_names", tostring(safe))
+        end
+    end
+    -- Negative control: a genuine vanilla pickup must pass through unchanged (nil),
+    -- so the coercion can only ever touch the tracked cwv keys.
+    if _om._wire_safe_pickup_name("ammo_throwing_axe_01_t1") ~= nil then
+        return "wire-safe helper coerced a vanilla pickup name (should only map cwv keys)"
+    end
+    -- In-flight projectile axis: a fake projectile_units carrying the cwv
+    -- boar-spear unit must NEVER survive the helper (its husk would reach the wire).
+    if type(_om._wire_safe_projectile_units) == "function" then
+        local coerced = _om._wire_safe_projectile_units({ projectile_unit_name = _om._TJ_INFLIGHT_MODDED_UNIT })
+        if coerced and coerced.projectile_unit_name == _om._TJ_INFLIGHT_MODDED_UNIT then
+            return "in-flight projectile helper let the cwv boar-spear husk survive to the wire path"
+        end
+        -- And a vanilla projectile_units must pass through untouched.
+        local vanilla_in = { projectile_unit_name = "units/weapons/player/wpn_we_javelin_01/prj_we_javelin_01_3ps" }
+        if _om._wire_safe_projectile_units(vanilla_in) ~= vanilla_in then
+            return "in-flight projectile helper mutated a vanilla projectile (should pass through)"
         end
     end
 end)

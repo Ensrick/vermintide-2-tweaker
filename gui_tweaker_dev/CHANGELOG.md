@@ -5,6 +5,24 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.216-dev (2026-07-07) -- regression coverage: VMF lifecycle-chain integrity (issue 425)
+
+- Audit finding F3: the mod chains ~15 VMF lifecycle callbacks (`mod.update`, `mod.on_setting_changed`,
+  `mod.on_game_state_changed`, `mod.on_disabled`) across 48 files via the capture-prev idiom
+  (`local prev = mod.X; mod.X = function(...) ...; prev(...) end`). It is correct everywhere but
+  convention-only and unguarded -- one future file that forgets the `local prev =` capture would
+  silently orphan every earlier-loaded handler with no error and no test to catch it.
+- **NEW `/regression_test` check `lifecycle_chain_integrity`.** The root `mod.on_setting_changed`
+  (gui_tweaker_dev.lua) now recognizes a synthetic probe id (`__gut_chain_probe__`) and flips
+  `mod._gut_chain_probe.on_setting_changed`. The check drives the current (outermost)
+  on_setting_changed with that id; since every feature handler ignores an unknown id while still
+  calling `prev`, reaching the root proves the whole chain is intact. A dropped predecessor fails
+  the check. on_setting_changed is the most-wrapped chain and the only one drivable side-effect-free
+  from any menu state, so it is the representative proof for the shared idiom.
+- **`_G._MEM_PROBE_T0_GUT` namespaced** under the mod table (`mod._gut_mem_t0`) -- the only global
+  leak in the mod; boot mem-probe readout reader updated.
+- Coverage only; no behavior change. Passes against current code.
+
 ## 0.2.215-dev (2026-07-06) -- issues #387 (FIX) + #402 (prevention proven + repair): loadout-system logic completed [verify-fix]
 
 - Two decompiled-source audits (2026-07-06) closed the two open loadout defects at the source level -- no further user diagnostic needed.

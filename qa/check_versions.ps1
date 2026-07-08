@@ -69,6 +69,14 @@ foreach ($modLua in Find-ModLuas) {
         continue
     }
 
+    # Row #10a (issue #429): flag 4-segment versions instead of silently
+    # stripping the 4th. Semver is 3-segment MAJOR.MINOR.PATCH[-track]; a 4th
+    # numeric segment (e.g. 0.9.9.4-dev) is the retired within-patch-hotfix
+    # anti-pattern — normalize on the next bump per CLAUDE.md §"Version bumping".
+    if ($rawVersion -match '^\d+\.\d+\.\d+\.\d+') {
+        $warnings += "${modName}: MOD_VERSION '$rawVersion' has 4 numeric segments; use 3-segment semver (MAJOR.MINOR.PATCH[-track]) — bump PATCH, drop the 4th (CLAUDE.md §Version bumping)"
+    }
+
     $strippedVersion = Get-StrippedVersion $rawVersion
 
     # Row #11: cfg title should include current version
