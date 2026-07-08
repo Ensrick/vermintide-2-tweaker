@@ -1,5 +1,5 @@
 # check_stale_docs.ps1 — scans audit/review markdown files, warns about
-# 30+ day-old docs without a SUPERSEDED banner.
+# docs older than $StaleDays (default 14) without a SUPERSEDED banner.
 #
 # See qa/CHECKS.md row 49.
 # See PROJECT_STANDARDS.md §7.2 for the banner format.

@@ -1,14 +1,16 @@
 # QA Checks Map
 
 For every documented bug class in this repo's history, the check that catches it
-going forward. **Status as of 2026-05-23.**
+going forward. **Status as of 2026-07-08.**
 
 This doc is the contract between [PROJECT_STANDARDS.md](../PROJECT_STANDARDS.md)
 and the runnable QA tooling in this directory. Every memory file or audit
 finding that names a recurring bug class should appear here with its detection
 method.
 
-Run all checks with: `qa\run_all.ps1` (or via the GitHub Action on push).
+Run all checks with: `qa\run_all.ps1`. CI (`.github/workflows/qa.yml`) runs the
+same `run_all.ps1` full gate (the policy engine below decides what blocks) plus a
+blocking all-mods `lint-mod.ps1` step on every push + PR (issue #429).
 
 ## Gate semantics (run_all exit codes)
 
@@ -35,7 +37,7 @@ Seven checks are pinned in `run_all.ps1` to a non-default policy via the
 | `check_loc_tags` | `Advisory` | Dev status-tag doctrine surface (issue #301, `LOCALIZATION_STANDARD.md` § 13). It uses the standard 0/1/2 convention (1 = findings, 2 = self-error) but is pinned Advisory so it NEVER blocks — it exists to flag a known pre-existing leak (7 `[untested]` tags in stable `crafting_in_modded`) plus vocab drift, none of which should stop a commit. |
 | `check_issue_status_labels` | `Advisory` | GitHub issue status-label doctrine surface (PROJECT_STANDARDS §11). Uses the standard 0/1/2 convention (1 = findings, 2 = self/read error) but is pinned Advisory so it NEVER blocks — it queries GitHub (must not fail a commit offline) and its findings are nudges the maintainer reviews, not hard errors. |
 | `check_issue_tag_sync` | `Advisory` | Loc-tag ↔ GitHub-label cross-surface sync (issue #326 part 2). Same reasoning as `check_issue_status_labels`: queries GitHub (self-exits 0 offline), findings are review nudges — stale `[Issue N]` tags, tag/label mismatches in either direction — never hard errors. |
-| `check_stale_docs` | `Advisory` | Doc-hygiene surface (issue #429). Staleness is TIME-based (a doc goes stale at 30 days with no edit), so exit 2 must NOT hard-block a commit/CI on calendar drift. Pinned Advisory (formalizing the old CI `continue-on-error`). Remediation: `run_all.ps1 -FixStale`. |
+| `check_stale_docs` | `Advisory` | Doc-hygiene surface (issue #429). Staleness is TIME-based (`check_stale_docs.ps1` flags a doc at its `$StaleDays = 14` default with no edit), so exit 2 must NOT hard-block a commit/CI on calendar drift. Pinned Advisory (formalizing the old CI `continue-on-error`). Remediation: `run_all.ps1 -FixStale`. |
 | `luacheck` | `Advisory` | Lua static-analysis surface (issue #429). The ~415-warning baseline is driven down over sessions, not per-commit (CWV bare-globals cleanup, PROJECT_STANDARDS §11). Pinned Advisory — the policy-engine version of the old CI `\|\| true`. Flip to Standard once the baseline is clean. |
 
 Everything else uses the default `Standard` policy (exit 1 = warning, exit >=2 =
@@ -173,12 +175,12 @@ the committed baseline always matches CI regardless of the local checkout.
 
 | # | Bug class | Memory reference | Detection | Status |
 |---|---|---|---|---|
-| 49 | Stale audit/review markdown > 30 days unbanner'd | PROJECT_STANDARDS §7.2 | `check_stale_docs.ps1` date scan. Exit 2, but pinned **Advisory** in `run_all` (issue #429) — TIME-based staleness must not hard-block a commit/CI. Fix with `run_all.ps1 -FixStale`. | AUTO (script, advisory) |
+| 49 | Stale audit/review markdown > 14 days unbanner'd | PROJECT_STANDARDS §7.2 | `check_stale_docs.ps1` date scan (`$StaleDays = 14` default). Exit 2, but pinned **Advisory** in `run_all` (issue #429) — TIME-based staleness must not hard-block a commit/CI. Fix with `run_all.ps1 -FixStale`. | AUTO (script, advisory) |
 | 50 | Memory cited claim no longer matches current code | PROJECT_STANDARDS §12.3 | PRE-SHIP review (verify before recommending) | PRE-SHIP |
 | 51 | CHANGELOG entry missing for current MOD_VERSION | PROJECT_STANDARDS §6.4 | `check_versions.ps1` cross-check | AUTO (script) |
 | 52 | File exceeds 2500-line hard limit | PROJECT_STANDARDS §2.1 | `check_file_sizes.ps1` line-count, **ratcheted** against `qa/baselines/file_sizes.json` (issue #429): the 13 known-oversized files are frozen; fails only on a NEW file over the limit or a baselined file growing past its frozen count. Target-tier (1500–2500) overages are plain warnings. | AUTO (script) |
 | 52b | Accidental edit to a split-mod STABLE dir (dev/stable split; stable is write-by-promotion-only) — nothing previously flagged it (`promotion-status.ps1` detects the reverse). | CLAUDE.md NON-NEG #3 + `PROMOTION_PROCESS.md` | `check_dev_only_edits.ps1` — flags any staged/diffed change under `chaos_wastes_tweaker/`, `crafting_in_modded/`, `general_tweaker/`, `gui_tweaker/`, `verminious_dreams_lighting/` (NOT their `_dev` twins). ERROR (exit 2); Standard in `run_all`, `-Staged` in pre-commit. Bypass a real promotion with env `VT2_PROMOTION=1`. Self-test: `-SelfTest`. Issue #429. | AUTO (script, in run_all + pre-commit) |
-| 52a | Uncited mechanic claim in the MECHANICS substrate — a factual bullet in `docs/MECHANICS.md` with no provenance tag (the hallucination-propagation class). Cure for "session drifts on a mechanic, hallucinates, wrong claim spreads." | `feedback_vmf_ui_no_guessing` (generalized to ALL mechanics) + PROJECT_STANDARDS §13 | `check_mechanics_citations.ps1` — scans ONLY `docs/MECHANICS.md`; every factual bullet under a `## Domain:` heading must carry `[src:]`/`[dump:]`/`[memory:]`/`[bugclass:]`/`[user:]` or `[unverified]`. `[unverified]` is ALLOWED + counted as the known-gaps backlog metric. ERROR (exit 2) on any untagged bullet. Self-test plants uncited + unverified + cited bullets. Wired into `run_all.ps1` (advisory). | AUTO (script, in run_all) |
+| 52a | Uncited mechanic claim in the MECHANICS substrate — a factual bullet in `docs/MECHANICS.md` with no provenance tag (the hallucination-propagation class). Cure for "session drifts on a mechanic, hallucinates, wrong claim spreads." | `feedback_vmf_ui_no_guessing` (generalized to ALL mechanics) + PROJECT_STANDARDS §13 | `check_mechanics_citations.ps1` — scans ONLY `docs/MECHANICS.md`; every factual bullet under a `## Domain:` heading must carry `[src:]`/`[dump:]`/`[memory:]`/`[bugclass:]`/`[user:]` or `[unverified]`. `[unverified]` is ALLOWED + counted as the known-gaps backlog metric. ERROR (exit 2) on any untagged bullet. Self-test plants uncited + unverified + cited bullets. Wired into `run_all.ps1` (Standard policy — exit 2 blocks). | AUTO (script, in run_all) |
 
 ### Process issues
 
@@ -194,18 +196,18 @@ the committed baseline always matches CI regardless of the local checkout.
 
 | Category | AUTO | PRE-SHIP | MANUAL | DEFERRED | HANDED OFF | FIXED |
 |---|---|---|---|---|---|---|
-| Lua static | 8 | 2 | — | — | — | — |
-| cfg/Workshop | 7 | — | 2 | — | — | — |
-| Localization | 3 | — | — | 1 | — | — |
+| Lua static | 13 | 1 | — | — | — | — |
+| cfg/Workshop | 8 | — | 2 | — | — | — |
+| Localization | 10 | — | — | 1 | — | — |
 | Hooks / vanilla-API | — | 6 | — | — | — | — |
 | Network / multiplayer | — | 5 | 1 | 1 | — | — |
 | Vanilla-API drift | — | 3 | — | — | — | 3 |
 | Cosmetics-specific | — | 3 | — | — | 6 | — |
-| Docs hygiene | 4 | 1 | — | — | — | — |
+| Docs hygiene | 5 | 1 | — | — | — | — |
 | Process | — | 1 | 3 | — | — | 1 |
-| **TOTAL** | **22** | **21** | **6** | **2** | **6** | **4** |
+| **TOTAL** | **36** | **20** | **6** | **2** | **6** | **4** |
 
-**36% of documented bug classes are now automatable (22/61).** Another 34%
+**49% of documented bug classes are now automatable (36/74).** Another 27%
 covered by pre-ship review pattern. Remaining are architectural,
 intentionally manual, or handed off.
 
@@ -231,10 +233,10 @@ clean.
 
 | Check | Last run (2026-05-23) | Notes |
 |---|---|---|
-| `check_cfg.ps1` | ✅ OK | all 16 cfgs pass |
+| `check_cfg.ps1` | ✅ OK | all 20 cfgs pass |
 | `check_versions.ps1` | ⚠ warnings only | cfg title drift (waiting on launcher auto-rewrite) + missing-CHANGELOG warnings. Now also flags 4-segment MOD_VERSIONs as a warning (row 10a, issue #429). |
 | `check_unpack_safety.ps1` | ✅ OK | all sites in ct/mp/wt either explicit-j or annotated (post-Issue #36 audit) |
-| `check_vmf_widget_types.ps1` | ✅ OK | all 14 active `*_data.lua` clean post-gt v0.2.60-dev `text_input` fix (2026-05-25) |
+| `check_vmf_widget_types.ps1` | ✅ OK | all 23 active `*_data.lua` clean post-gt v0.2.60-dev `text_input` fix (2026-05-25) |
 | `check_event_register_signature.ps1` | ✅ OK | clean post-gt v0.2.61 → .64 fix cycle (2026-05-25). This static check is the live gate; the former `bt:safe_event_register` runtime safety net (buff_tweaker v0.1.10-alpha+) is RETIRED (bt archived 2026-06). |
 | `check_localization.ps1` | ⚠ 28 warnings | ct BOON_TREE category_ids; et_diff_ + mut_ false-positive prefixes |
 | `check_loc_tags.ps1` | ⚠ 18 warnings (2026-07-04) | 7 stable-cim `[untested]` leaks (known promotion leak, tracked for next cim promotion) + 11 `[confirmed working]` unknown-vocab in gt_dev/gut_dev (should be `[working]`). Self-test passes. Advisory (never blocks). |
@@ -246,7 +248,7 @@ clean.
 | `check_mechanics_citations.ps1` | ✅ OK (2026-05-30) | 45 cited factual bullets across 8 domains (`[src:]` decompiled-verified, `[memory:]`, `[bugclass:]`, `[dump:]`), 4 honest `[unverified]` gaps, 0 uncited. Self-test passes. Run the script for the live per-domain breakdown. |
 | `check_file_sizes.ps1` | ⚠ baselined (issue #429) | 13 files over the 2500-line hard limit, all frozen in `qa/baselines/file_sizes.json`; non-blocking until a NEW file crosses the limit or a baselined one grows. Target-tier overages remain plain warnings. |
 | `check_dev_only_edits.ps1` | ✅ OK (2026-07-08) | Dev/stable split guard (row 52b, issue #429). Standard in `run_all`, `-Staged` in pre-commit. Clean working tree = exit 0. Self-test passes. |
-| `check_stale_docs.ps1` | ⚠ 19 stale (advisory) | Pinned Advisory in `run_all` (issue #429) — TIME-based, non-blocking. 19 docs currently >30 days without a SUPERSEDED banner; fix with `-FixStale`. |
+| `check_stale_docs.ps1` | ⚠ 19 stale (advisory) | Pinned Advisory in `run_all` (issue #429) — TIME-based, non-blocking. 19 docs currently >14 days (script `$StaleDays` default) without a SUPERSEDED banner; fix with `-FixStale`. |
 | `luacheck` | ⚠ ~415 warnings (advisory) | Pinned Advisory in `run_all` AND CI (issue #429; was CI `\|\| true`). Baseline; 141 = CWV finding, 274 net real signal. Drive down, then flip to Standard. |
 
 ## Generated name-map (key → display-name) + integrity validator

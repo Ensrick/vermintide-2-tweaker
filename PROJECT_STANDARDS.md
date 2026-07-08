@@ -28,11 +28,14 @@ Cross-reference: `CLAUDE.md` (technical) describes HOW things work. This doc
   audit docs). See §11a for the full table.
 
 ### What's still weak
-- **File sizes exceed Claude's effective working memory.** 8 lua files remain
-  over the 2500-line hard limit (`character_weapon_variants.lua` at ~8800,
-  `chaos_wastes_tweaker.lua` at ~6100, `cosmetics_tweaker.lua` at ~6000, plus
-  five others). Reading the worst offenders consumes ~80K tokens. Tracked
-  under GitHub Issue #2.
+- **File sizes exceed Claude's effective working memory.** 13 lua files remain
+  over the 2500-line hard limit (`chaos_wastes_tweaker_dev.lua` at ~13500,
+  `chaos_wastes_tweaker.lua` at ~12800, `character_weapon_variants.lua` at
+  ~12200, `cosmetics_tweaker.lua` at ~10000, plus nine others). Reading the
+  worst offenders consumes well over ~80K tokens. The set is now frozen in
+  `qa/baselines/file_sizes.json` (issue #429) so the gate blocks only on growth
+  past a baselined count or a new file crossing the limit. Tracked under GitHub
+  Issue #2.
 - **Logging conventions inconsistent.** The prefix convention in §3.1 is only
   partially adopted across mods. No central enforcement yet.
 - **Error handling has tended toward reactive layering.** The v0.9.8.x chain
@@ -1379,7 +1382,7 @@ see what was open on a given date.
 | `check_stale_docs.ps1` | `qa/` | audit/review markdowns >14 days without SUPERSEDED banner | `.\qa\check_stale_docs.ps1 [-Fix]` |
 | `run_selftests.ps1` | `qa/` | regression in any QA check's own parsing/decision logic + ship.ps1 step-6 labeling logic (runs every script's `-SelfTest`; blocking) | `.\qa\run_selftests.ps1` |
 | `run_all.ps1` | `qa/` | all of the above | `.\qa\run_all.ps1 [-Quick] [-SkipLua]` |
-| GitHub Action | `.github/workflows/qa.yml` | runs all checks on push + PR | automatic |
+| GitHub Action | `.github/workflows/qa.yml` | runs `run_all.ps1` (full policy engine) + an all-mods `lint-mod.ps1` step on push + PR | automatic |
 
 Full check-to-bug-class map: [`qa/CHECKS.md`](qa/CHECKS.md).
 
@@ -1415,7 +1418,8 @@ Stingray mechanics work. It exists to kill one specific failure: a session
 drifts on how a mechanic works, **hallucinates to fill the gap**, and the wrong
 claim propagates into code comments, docs, and crash triage. The substrate only
 accretes GROUNDED inputs. `qa/check_mechanics_citations.ps1` fails on any
-untagged factual bullet (wired into `run_all.ps1`, advisory).
+untagged factual bullet (wired into `run_all.ps1`, Standard policy — its exit 2
+blocks the gate).
 
 Every factual bullet carries one provenance tag: `[src: file:line]` (decompiled
 source, opened and verified — the gold standard), `[dump: file]` (in-game

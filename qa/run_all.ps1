@@ -161,7 +161,7 @@ Run-Check "check_mechanics_citations" { & (Join-Path $here "check_mechanics_cita
 Run-Check "check_dev_only_edits" { & (Join-Path $here "check_dev_only_edits.ps1") -Quiet:$Quiet }
 
 # check_stale_docs is Advisory (issue #429): staleness is TIME-based (a doc goes
-# stale at 30 days with no edit), so it can't be baselined sensibly and must not
+# stale at $StaleDays=14 with no edit), so it can't be baselined sensibly and must not
 # hard-block a commit/CI run on calendar drift — exactly the "gate that blocks on
 # noise -> sessions learn --no-verify" anti-pattern this file's header warns
 # against. This formalizes the old CI `continue-on-error` treatment ("stale audit

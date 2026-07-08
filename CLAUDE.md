@@ -456,7 +456,7 @@ The DLC id lives on the master entry (`required_dlc` field). For tables that don
 
 For weapon DLCs (Bogenhafen / Karak Azgaraz / Lake), grep `scripts/settings/dlcs/<dlc>/item_master_list_<dlc>.lua` to see which `ItemMasterList` keys carry the `required_dlc` field.
 
-**Audit history:** 2026-05-18 fan-out audit (`crafting_in_modded` v0.7.9-dev, `cosmetics_tweaker` v0.8.65-dev, `career_tweaker` v0.2.20-dev, `event_tweaker` v0.4.1-dev) caught and fixed four bypasses. Verified clean at the same date: `weapon_tweaker`, `chaos_wastes_tweaker`, `modded_progression` (scaffolding only - re-audit when loot hooks land), `enemy_tweaker`, `dynamic_cosmetic_portraits`, `general_tweaker`, `la_prefix_patch`. When adding any new unlock surface to any mod, walk the three-places checklist above before merge.
+**Audit history:** 2026-05-18 fan-out audit (`crafting_in_modded` v0.7.9-dev, `cosmetics_tweaker` v0.8.65-dev, `career_tweaker` v0.2.20-dev, `event_tweaker` v0.4.1-dev) caught and fixed four bypasses. Verified clean at the same date: `weapon_tweaker`, `chaos_wastes_tweaker`, `modded_progression` (scaffolding only - re-audit when loot hooks land), `enemy_tweaker`, `dynamic_cosmetic_portraits`, `general_tweaker`, and the `la_prefix` bridge (since folded into `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_prefix_embedded.lua`; no longer a standalone mod directory). When adding any new unlock surface to any mod, walk the three-places checklist above before merge.
 
 ## Important Constraints
 

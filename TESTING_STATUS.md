@@ -2,17 +2,17 @@
 
 Tracks which **dev-mod** features are verified working in-game, so we know what's
 safe to promote to the stable/public mods. The in-menu `[untested]` /
-`[confirmed working]` labels are the live source of truth; this doc adds the
+`[working]` labels are the live source of truth; this doc adds the
 non-menu features, known issues, and the process.
 
 ## The labeling system
 
-Every menu entry in the four `*_dev` mods carries a status label, prefixed onto
+Every menu entry in the five `*_dev` mods carries a status label, prefixed onto
 its VMF menu display name:
 
 - **`[untested]`** — added or changed in dev, not yet verified in-game. The
   default for every new dev feature.
-- **`[confirmed working]`** — verified in-game by the user. A promotion candidate
+- **`[working]`** — verified in-game by the user. A promotion candidate
   for the matching stable mod.
 
 Stable / public mods (`ct`, `gt`, `cim`, `verminious_dreams_lighting`, and every
@@ -34,12 +34,16 @@ feature). The CW map labels are applied in the dynamic loop at the bottom of
 `chaos_wastes_tweaker_dev_localization.lua` (the per-map labels are generated
 from `_adventure_pool.lua`, so they aren't static loc entries).
 
+`gui_tweaker_dev` (gut_dev), the fifth split-mod dev clone, is not in the
+2026-06-19 snapshot above; it currently carries 58 `[working]` + 14 `[untested]`
+menu labels.
+
 ### weapon_tweaker (single-stream) — ANIMATION test-status (2026-06-19)
 
 wt is single-stream (no stable counterpart), but its release gate is 3P
 animations, so the weapon availability menu is labeled by **animation** status:
 - **Cross-character entries** (receiver char ≠ weapon owner — the 3P-remap
-  testing surface): **633 `[untested]`**, **15 `[confirmed working]`**.
+  testing surface): **633 `[untested]`**, **15 `[working]`**.
 - **Same-character entries** (native skeleton — animations work by default):
   left unlabeled (299 entries).
 - Labeler: `tools/label-untested/` companion `%TEMP%\label_wt_anim.ps1` (keyed on
@@ -52,8 +56,8 @@ animations, so the weapon availability menu is labeled by **animation** status:
 - Every **new dev feature without a menu entry** gets a row in *Non-menu
   features* below, marked `[untested]`.
 - When the user confirms a feature works in-game, flip its label to
-  `[confirmed working]` (menu) or update its row here (non-menu).
-- `[confirmed working]` features are the promotion candidates for the stable
+  `[working]` (menu) or update its row here (non-menu).
+- `[working]` features are the promotion candidates for the stable
   mods.
 
 ## Confirmed working
@@ -68,7 +72,7 @@ animations, so the weapon availability menu is labeled by **animation** status:
 
 All four `[untested]` (menu labels are the live source of truth). Host-authoritative
 except where noted. Verify in a real session, then flip the menu prefix to
-`[confirmed working]`.
+`[working]`.
 
 - **crt** — `armor_gromril_ignore_chip` — Gromril (Ironbreaker) + Cursed Armor
   (Necromancer, per-peer) not consumed by chip/DoT/AOE. `[untested]`
@@ -89,4 +93,4 @@ except where noted. Verify in a real session, then flip the menu prefix to
 
 _None yet — every current dev feature has a menu toggle and is tracked by its
 in-menu label. New code-only features (always-on fixes, internal behaviors) go
-here as `[untested]` and flip to `[confirmed working]` on verification._
+here as `[untested]` and flip to `[working]` on verification._

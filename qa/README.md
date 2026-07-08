@@ -32,7 +32,7 @@ bug-class-to-detection map.
 | `check_versions.ps1`    | Missing `MOD_VERSION`, cfg title doesn't match version, no CHANGELOG entry | <2s | ✓ |
 | `check_localization.ps1`| Unescaped `%`, referenced-but-undefined keys, missing `mod_description` | <3s | ✓ |
 | `check_file_sizes.ps1`  | Files over 1500-line target / 2500-line hard limit | <1s | ✓ |
-| `check_stale_docs.ps1`  | Audit/review markdowns >30 days old without SUPERSEDED banner | <1s | ✓ |
+| `check_stale_docs.ps1`  | Audit/review markdowns >14 days old without SUPERSEDED banner | <1s | ✓ |
 | `check_published_ids.ps1`| Duplicate / mismatched Workshop `published_id` (the hijack class) | <1s | ✓ |
 | `luacheck`              | Forward-references, unused vars, undefined globals, Lua 5.1 syntax issues | <10s | ✓ |
 
