@@ -1,5 +1,23 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.6-dev (2026-07-07) — issue 278/422: Blightreaper CTDs non-WOC peers on equip [verify-fix] [crash] [0-critical]
+
+Found by the issue-371 cross-mod wire-safety audit. WOC cloned CWV's item registration
+but not its net-safe loadout hook.
+
+- SYMPTOM: equipping the Blightreaper crashes every lobby peer without WOC.
+- ROOT CAUSE: WOC injects ITEM_KEY (woc_blightreaper) into NetworkLookup.item_names
+  (weapons_of_chaos.lua:191). Equipping fires LoadoutUtils.sync_loadout_slot -> the RPC
+  encodes item_id = item_names[item.key] onto rpc_sync_loadout_slot (both directions +
+  hot_join_sync); a non-WOC peer lacks the appended index and cold-decodes it at
+  loadout_utils.lua:72 -> strict __index fatal (network_lookup.lua:2362). Exact issue-278
+  pattern.
+- FIX: hook LoadoutUtils.sync_loadout_slot and substitute a shadow item keyed to the
+  vanilla BASE_WEAPON (es_1h_sword, a boot-stable index every peer has) for any "woc_"
+  key before the RPC encodes; local state untouched. Byte-identical to CWV's issue-278
+  fix. No skin/rarity axis to fix (WOC applies no skin, rarity = "default").
+- Needs a 2-player (WOC host + vanilla client) verify.
+
 ## 0.1.5-dev (2026-07-04) — Localization: applied dev status-tag doctrine (#301). Tagged the 1 option-title loc entry (Enable Blightreaper) with a dev status prefix: 1 [untested] (brand-new mod, placeholder base-sword mesh, unverified in-game). No open issues map to WOC. Tooltips, item name/description, and mod description left untagged per doctrine.
 
 ## 0.1.4-dev (2026-07-01) — Localization fixes: the Enable Blightreaper checkbox tooltip was double-localized (rendered wrapped in angle brackets); converted its widget field from an eager mod:localize() call to the raw loc key so VMF localizes it once. Rewrote every option description and tooltip (mod description, Blightreaper item description, Enable Blightreaper tooltip) into plain player-facing English, ASCII-only (dropped the non-ASCII spelling of Bogenhafen).

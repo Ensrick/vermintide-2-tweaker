@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.5-dev"
+local MOD_VERSION = "0.1.6-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -203,5 +203,48 @@ end
 mod:hook_safe("StateInGameRunning", "on_enter", function()
 	_register_blightreaper()
 end)
+
+-- ============================================================
+-- Wire-safety: never crash a non-WOC peer (issue 278 / issue 371)
+-- ============================================================
+-- WOC injects ITEM_KEY into NetworkLookup.item_names (a per-peer index-append, :191).
+-- Equipping the Blightreaper fires LoadoutUtils.sync_loadout_slot -> the RPC encodes
+-- item_id = NetworkLookup.item_names[item.key] onto rpc_sync_loadout_slot (both
+-- directions + hot_join_sync). A peer WITHOUT WOC lacks that appended index and
+-- cold-decodes it at loadout_utils.lua:72 -> the strict __index metamethod fatals
+-- (network_lookup.lua:2362) -> every non-WOC peer CTDs. WOC cloned CWV's item
+-- registration but not its net-safe hook (issue 422).
+--
+-- Fix: substitute a shadow item keyed to the vanilla BASE_WEAPON (a boot-stable index
+-- every peer has) before the RPC encodes. Local state is untouched (the shadow lives
+-- only for this call); remote loadout panels show the base weapon, consistent with what
+-- the husk already renders (the clone keeps entry.name = BASE_WEAPON). Byte-identical to
+-- CWV's issue-278 fix (character_weapon_variants.lua:10166). No skin/rarity axis to fix:
+-- WOC applies no skin (weapon_skin_id "n/a") and rarity = "default" (a vanilla index).
+--
+-- Prefix-match "woc_" so EVERY present/future WOC item is crash-safe. All current items
+-- clone BASE_WEAPON; if a future item clones a different base, resolve the base per-key
+-- (mirror CWV's _find_def) so the wire shows the right weapon -- but crash-safety holds
+-- regardless, since BASE_WEAPON is a universal vanilla index. LoadoutUtils is a plain
+-- table -> table-form hook with a nil guard. Sole WOC hook on (LoadoutUtils,
+-- sync_loadout_slot); other mods hook it from their own registrations (VMF chains fine).
+if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
+	mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
+		local key = item and item.key
+		if type(key) == "string" and key:sub(1, 4) == "woc_"
+				and rawget(ItemMasterList, BASE_WEAPON)
+				and NetworkLookup and NetworkLookup.item_names
+				and rawget(NetworkLookup.item_names, BASE_WEAPON) then
+			local shadow = {}
+			for k, v in pairs(item) do shadow[k] = v end
+			shadow.key = BASE_WEAPON
+			shadow.ItemId = BASE_WEAPON
+			printf("[WOC:278] sync_loadout_slot net-safe: %s -> %s (slot=%s)",
+				tostring(key), BASE_WEAPON, tostring(slot_name))
+			return func(player, slot_name, shadow, sync_to_specific_peer_id)
+		end
+		return func(player, slot_name, item, sync_to_specific_peer_id)
+	end)
+end
 
 mod:info("[WOC] enabled v%s (Blightreaper)", MOD_VERSION)
