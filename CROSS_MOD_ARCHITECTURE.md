@@ -337,10 +337,14 @@ end
 
 ## Big Rebalance integration (wt / ct / et + buff_tweaker)
 
+> **[SUPERSEDED 2026-07-07 — bt retired]** `buff_tweaker` (`bt`, Workshop 3730358590) was retired and archived to `_archive/buff_tweaker_v0.1.12-alpha/` (2026-06); `get_mod("bt")` is now always nil. Because every BR sub-feature in wt / ct / et guards on `if not (bt and bt.is_br_active) then return false end`, those sub-features are now permanently INERT (no crash) — they were guarded, NOT stripped. Reconcile to the `bt` row in `MOD_DEPENDENCIES.md`. Content below is preserved for historical/mechanics reference; the present-tense claims about bt "owning"/"hosting" the shared registration describe the pre-retirement state.
+
 Integration of Core's **Cores Big Rebalance** mod (Steam Workshop ID
 `2705276978`, internal mod ID `Weapon Balance`) into the user's tweaker mods
 as opt-in toggles. Landed 2026-05-21. Refactored 2026-05-21+ to centralize
-shared template registration in `buff_tweaker` (mod ID `bt`).
+shared template registration in `buff_tweaker` (mod ID `bt`) — which was
+subsequently retired (2026-06), leaving the wt / ct / et sub-features inert
+behind their `is_br_active` guards.
 
 Decompiled source archived at
 `C:\Users\danjo\source\repos\_big_rebalance_extract\source\` (12 files,
@@ -353,7 +357,7 @@ Decompiled source archived at
 | `wt` (Tweaker: Weapons) | 114 + master | 0.12.61-dev | `Weapons.*`, `DamageProfileTemplates.*`, weapon function hooks (Flamethrower / Beam / TrueFlight) |
 | `ct` (Tweaker: Careers) | 299 + master (`cbr_master_enable_registrations`) | 0.3.0-dev | `TalentBuffTemplates.*`, `BuffTemplates.<career>_*`, passives / ults, `PassiveAbilitySettings.*` |
 | `enemy` (Tweaker: Enemies) | 14 + master | 0.5.0-dev | `DamageUtils.stagger_ai` / `calculate_damage` / `ActionShieldSlam._hit` hook rewrites, `BreedTweaks.*`, THP-from-kills buffs |
-| `bt` (buff_tweaker) | 1 master | scaffolded 2026-05-21 | **Single shared registration mod.** Pre-registers Big Rebalance buffs / damage profiles / explosion templates on every peer in deterministic sorted order. wt/ct/et's BR sub-toggles all check `(get_mod('bt') or {}):is_br_active()` before applying. |
+| `bt` (buff_tweaker) *(RETIRED 2026-06)* | 1 master | scaffolded 2026-05-21; retired 2026-06 | **Was the single shared registration mod.** Pre-registered Big Rebalance buffs / damage profiles / explosion templates on every peer in deterministic sorted order. wt/ct/et's BR sub-toggles all check `(get_mod('bt') or {}):is_br_active()` before applying — with bt retired, `get_mod("bt")` is nil so these checks fail and the sub-features stay inert (guarded, not stripped). |
 
 **SpicyEnemies module dropped entirely** — its 6 forced package preloads
 couldn't be safely gated per-user.
@@ -366,8 +370,11 @@ mod patches data tables that reference the BR registrations. Individual
 toggles then patch fields within those tables. **All defaults are
 `false` — opt-in.**
 
-The shared registration of the canonical 328-entry list now lives in
-`buff_tweaker`. wt / ct / et toggle sub-features off the `bt` master.
+The shared registration of the canonical 328-entry list lived in
+`buff_tweaker` (bt); wt / ct / et toggled sub-features off the `bt` master.
+Since bt's retirement (2026-06) that shared registry is gone with the mod, so
+the `is_br_active` guard fails on every peer and the BR sub-features stay
+inert (guarded, not stripped).
 
 ### Known stubs (41 follow-ups)
 
@@ -377,25 +384,32 @@ Toggles work but no-op until verbatim source is copied.
 
 ### How to apply Big Rebalance changes
 
-User enables `bt` master + each of the wt / ct / et masters (any combination
-they want), then individual toggles to taste.
+*(Historical — describes the pre-retirement flow.)* User enabled the `bt`
+master + each of the wt / ct / et masters (any combination they wanted), then
+individual toggles to taste. With bt retired (2026-06) the `bt` master no
+longer exists, so the wt / ct / et BR sub-toggles no-op behind their
+`is_br_active` guard regardless of the masters' state.
 
 ---
 
-## Cross-mod registration sync (historical / now centralized in `bt`)
+## Cross-mod registration sync (historical / was centralized in `bt`, now retired)
 
-> **Current state (2026-05-21+):** `buff_tweaker` (`bt`) owns the canonical
-> sorted registration list. wt / ct / et no longer ship per-mod registration
-> files. The pattern below is preserved for context and for anyone authoring
-> a new BR-aware mod outside the existing four.
+> **State (2026-05-21+, superseded 2026-06):** `buff_tweaker` (`bt`) owned the
+> canonical sorted registration list; wt / ct / et no longer shipped per-mod
+> registration files. bt was retired 2026-06 (archived to
+> `_archive/buff_tweaker_v0.1.12-alpha/`), so that shared registry no longer
+> loads and the BR sub-features stay inert behind their `is_br_active` guard.
+> The pattern below is preserved for context and for anyone authoring a new
+> BR-aware mod that re-hosts the shared registry.
 
 When two or more mods need to inject the **same set** of new
 `BuffTemplates` / `TalentBuffTemplates` / `NewDamageProfileTemplates` /
 `ExplosionTemplates` (Big Rebalance buffs, custom mutator effects, anything
 that lands in `NetworkLookup.buff_templates`), each mod must either:
 
-- **Delegate to a shared registry mod** (preferred — `bt` is the canonical
-  one for Big Rebalance), OR
+- **Delegate to a shared registry mod** (preferred — `bt` WAS the canonical
+  one for Big Rebalance, now retired; a future BR-aware mod would need to
+  re-host this role), OR
 - Ship a **byte-identical canonical sorted name list** — NOT just the
   entries that mod cares about.
 

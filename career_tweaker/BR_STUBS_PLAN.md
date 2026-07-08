@@ -1,5 +1,7 @@
 # BR_STUBS_PLAN.md
 
+> **[SUPERSEDED 2026-07-07 — bt retired]** buff_tweaker (`bt`, Workshop 3730358590) was retired 2026-06 and archived to `_archive/buff_tweaker_v0.1.12-alpha/`; `get_mod("bt")` is always nil now. The shared Big Rebalance registry never became a permanent cross-mod dependency, so the stub-completion roadmap below is MOOT — career_tweaker's (`crt`) BR sub-features guard on `if not (bt and bt.is_br_active) then return false end` and are permanently INERT (no crash, and NOT stripped). Every plan item gated on bt shipping proc-registration APIs is DEAD; those futures will not happen. The stub inventory and mechanics notes are preserved below for historical reference.
+
 27 stub pply = function() end entries in BR_TOGGLES (career_tweaker_big_rebalance.lua) 
 to fill from Big Rebalance sources. Planning document + execution roadmap.
 
@@ -105,7 +107,7 @@ These are in career_tweaker_big_rebalance.lua (lines 499-2655):
 
 - cbr_buff_infinite_burn_dot_clones: Runtime BuffTemplate + NetworkLookup cloning loop (COMPLEX, 80-120 LOC)
 
-**Session time:** 2-4 hours | **Risk:** HIGH | **Parallelizable:** NO | **Blocker:** Requires bt's proc-function infra
+**Session time:** 2-4 hours | **Risk:** HIGH | **Parallelizable:** NO | **Blocker:** Requires bt's proc-function infra **[DEAD 2026-07-07: bt retired 2026-06; this infra will not ship.]**
 
 ---
 
@@ -149,6 +151,8 @@ After Phase 1-2 to understand ct's hook patterns.
 
 ### Phase 4: Buff Cloning (1 session, 2-4 hours, BLOCKED)
 
+> **[SUPERSEDED 2026-07-07 — bt retired]** bt was retired 2026-06; the proc-function infrastructure this phase waited on will never ship. This phase is DEAD, not merely blocked. Preserved below for historical reference.
+
 **Blocker:** Requires bt to expose proc-function registration APIs. Defer until bt infrastructure lands.
 
 ---
@@ -184,6 +188,8 @@ But the \_big_rebalance_extract/\ directory **does not exist** on disk. Also ref
 ---
 
 ### BLOCKER 2: Proc/Buff Function Registration (MEDIUM PRIORITY)
+
+> **[SUPERSEDED 2026-07-07 — bt retired]** bt was retired 2026-06 and will never expose the `add_proc_function` / `add_buff_function` APIs discussed here. The ~6 stubs that depend on them are permanently DEAD, not deferred. Preserved below for historical reference.
 
 Several stubs depend on infrastructure in bt (Tweaker: Buffs):
 - cbr_slayer_ult_double_leap_overhaul: needs custom \gs_slayer_leap_double\ proc
@@ -227,7 +233,7 @@ Per CLAUDE.md: "Spawn unit templates are intentionally out-of-scope for ct alone
 | **Ranged boost global state** | CareerExtension.has_ranged_boost override affects all ranged abilities across all heroes. | Add career gate: \if not is_ranger() then return vanilla()\. Test cross-career weapon swap + ammo regen. |
 | **Dodge count default** | Dodge count may be hardcoded in C++ or set at multiple hook points. Setting only ActionMeleeStart may not stick. | Search decompile for all dodge-count references. Test by melee->range->melee swap cycles. |
 | **Ping system data corruption** | PingSystem hooks at low-level networking layer. Incorrect data structure manipulation could corrupt UI state. | Preserve vanilla data structure layout. Test 4-player ping lifecycle (create/update/remove). |
-| **Proc registration timing** | If bt doesn't pre-register proc functions unconditionally, toggle divergence risk re-appears. | Coordinate with bt: either pre-register all procs at module load (like buff templates), OR defer proc-dependent stubs. |
+| **Proc registration timing** | If bt doesn't pre-register proc functions unconditionally, toggle divergence risk re-appears. | Coordinate with bt: either pre-register all procs at module load (like buff templates), OR defer proc-dependent stubs. **(Moot 2026-07-07: bt retired 2026-06.)** |
 | **NetworkLookup divergence** | Gated per-toggle writes to NetworkLookup can diverge host vs client (see v0.3.3 incident). | All NetworkLookup writes must happen unconditionally at module load (pre-register stubs). Per-toggle apply/restore must work on pre-registered entries only. |
 
 ---

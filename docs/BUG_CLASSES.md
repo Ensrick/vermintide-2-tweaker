@@ -241,15 +241,15 @@ em:register(mod, "on_player_joined_party", "my_mod_on_player_joined_party")
 
 State-event lifecycle: `Managers.state.event` is REBUILT on every state transition (StateInGame, StateLoading, StateTitleScreen). Re-register on every fresh handle via a per-tick update callback that compares the live `Managers.state.event` against a cached upvalue. Canonical wiring: `general_tweaker/scripts/mods/general_tweaker/_gt_lobby_motd.lua:222-243`.
 
-Full mechanic + naming convention: `VMF_RECIPES.md § 12`. Optional bt runtime safety net: `bt:safe_event_register(em, target, event_name, name_or_fn)` (auto-adapts function values + logs `[ALERT]` with caller stack frame). Adapter is the safety net, NOT the primary fix.
+Full mechanic + naming convention: `VMF_RECIPES.md § 12`. The live mitigation is the static check `qa/check_event_register_signature.ps1` (hard-fail, no suppression). The former `bt:safe_event_register` runtime safety net is RETIRED (bt archived 2026-06; `get_mod("bt")` always nil) — it was only ever an optional adapter, never the primary fix.
 
 ### Related Issues / commits
 - gt v0.2.61 (`_gt_lobby_motd.lua` — first fix; on_player_joined_party MOTD)
 - gt v0.2.62 (`_gt_lobby_session_ignore.lua` — second fix; session-ignore join filter)
 - gt v0.2.63 (`_gt_lobby_slot_reservations.lua` — third fix; slot reservation enforcement)
 - gt v0.2.64 (additional sites missed in .61-.63 — final pass)
-- bt v0.1.10-alpha — `mod.safe_event_register` runtime adapter landed
-- New static check: `qa/check_event_register_signature.ps1` (Quick mode)
+- bt v0.1.10-alpha — `mod.safe_event_register` runtime adapter landed (RETIRED 2026-06 with bt; no longer available)
+- New static check: `qa/check_event_register_signature.ps1` (Quick mode) — the live, canonical gate
 
 ---
 

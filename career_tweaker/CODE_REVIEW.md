@@ -1,5 +1,7 @@
 # Career Tweaker Code Review (2026-05-23, v0.3.7-dev)
 
+> **[SUPERSEDED 2026-07-07 — bt retired]** buff_tweaker (`bt`, Workshop 3730358590) was retired 2026-06 and archived to `_archive/buff_tweaker_v0.1.12-alpha/`; `get_mod("bt")` is always nil now. Every review point below that treats bt as a live sister mod / Big Rebalance master / future proc-registration provider is historical. career_tweaker's (`crt`) BR sub-toggles guard on `if not (bt and bt.is_br_active) then return false end`, so with bt gone they are permanently INERT (no crash, and NOT stripped). The bt-blocked stub work will never be unblocked. Preserved below for historical reference.
+
 **Scope:** all Lua source in career_tweaker/ (excluding undleV2/, build artifacts, and archived files).
 
 **Reviewed:** v0.3.7-dev (current branch). Previous superseded review: 2026-05-01 (v0.2.4-dev era, **archived**).
@@ -39,6 +41,8 @@ Career Tweaker is a **two-core system** providing (1) cross-career talent/abilit
 **Large-file risk:** 3066 lines exceeds practical single-file review. Recommend splitting at a natural boundary (e.g., framework + general talents vs. career-specific bundles) when next major feature lands.
 
 ### 3. Big Rebalance Integration (career_tweaker_big_rebalance.lua, 2692 lines)
+
+> **[SUPERSEDED 2026-07-07 — bt retired]** The master toggle moving to `bt` and the `bt.is_br_active()` gate described in this section are historical: bt was retired 2026-06, so `crt`'s BR toggles are permanently inert and the status-table rows below marked "blocked on bt proc-function APIs" are DEAD, not deferred. Preserved for historical reference.
 
 **Design:** ~160 opt-in toggles for Core's Big Rebalance (Workshop ID 2705276978). All toggles default alse. Master toggle cbr_master_enable_registrations moved to sister mod t (Tweaker: Buffs) in v0.3.1; ct now calls t.is_br_active() to check if BR infrastructure is available (see _br_master_active() at lines 45–49).
 
@@ -103,6 +107,8 @@ Output: PASS/FAIL per check + summary to chat + log. Designed to catch regressio
 **Once unblocked:** Phase 1 (framework hooks, ~2–3 hours) can begin immediately; Phases 2–3 (career ults, WP fury) can run in parallel. See BR_STUBS_PLAN.md (v0.3.2 added) for full execution roadmap + complexity estimates + gotchas.
 
 ### Proc/Buff Function Registration
+
+> **[SUPERSEDED 2026-07-07 — bt retired]** bt was retired 2026-06 and will never expose the proc-registration / buff-function APIs described here. These stubs are permanently DEAD, not "MEDIUM PRIORITY / defer". Preserved for historical reference.
 
 **Issue:** Several stubs depend on infrastructure in t (Tweaker: Buffs) that is not yet publicly exposed:
 - cbr_slayer_ult_double_leap_overhaul needs custom gs_slayer_leap_double proc

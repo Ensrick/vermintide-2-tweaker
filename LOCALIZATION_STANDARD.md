@@ -32,7 +32,7 @@ trait_ranged_replenish_ammo_on_crit_description = {
 
 ### Historical context — `general_tweaker` 0.2.35
 
-`gt` 0.2.35's CHANGELOG was the first place this rule was documented in the repo, after the same class of bug appeared in a percentage string. That note was per-mod and got missed when `wt` and `lobby_tweaker` later authored the same shape of string — hence this central doc.
+`gt` 0.2.35's CHANGELOG was the first place this rule was documented in the repo, after the same class of bug appeared in a percentage string. That note was per-mod and got missed when `wt` and the lobby failed-join strings (originally in the now-retired `lobby_tweaker`, since absorbed into `general_tweaker`) later authored the same shape of string — hence this central doc.
 
 ### Recurring offender — environment variable references (`%APPDATA%`, `%USERNAME%`, etc.)
 
@@ -72,7 +72,7 @@ local msg = string.format(mod:localize("missing_mods_count"), n)
 
 If the localization string contains a format directive like `%d` or `%s`, VMF consumes it during `mod:localize` — by the time the value returns, the directive is GONE. Wrapping in an outer `string.format` then does the wrong thing.
 
-This is exactly the bug `lobby_tweaker` shipped pre-Fix 1: `"You are missing %d mods required by the host:"` was being passed through both VMF and an outer `string.format`. Fixed by escaping to `%%d` in the localization so VMF renders the literal `%d`, then the caller's `string.format` interpolates it.
+This is exactly the bug the lobby failed-join reveal shipped pre-Fix 1 (originally in `lobby_tweaker`, now in `general_tweaker`'s `_gt_lobby_failed_join_reveal.lua`): `"You are missing %d mods required by the host:"` was being passed through both VMF and an outer `string.format`. Fixed by escaping to `%%d` in the localization so VMF renders the literal `%d`, then the caller's `string.format` interpolates it.
 
 ### Two valid patterns
 
@@ -80,14 +80,14 @@ This is exactly the bug `lobby_tweaker` shipped pre-Fix 1: `"You are missing %d 
 
 ```lua
 -- localization
-failnotify_required_header = { en = "You are missing %%d mods required by the host:" },
+gt_lobby_failnotify_required_header = { en = "You are missing %%d mods required by the host:" },
 
 -- call site
 local n = #missing
-local header = string.format(mod:localize("failnotify_required_header"), n)
+local header = string.format(mod:localize("gt_lobby_failnotify_required_header"), n)
 ```
 
-This is what `lobby_tweaker` uses post-Fix 1 (`lobby_tweaker_localization.lua:36-38`).
+This is what `general_tweaker`'s lobby failed-join reveal uses post-Fix 1 (`general_tweaker_localization.lua:398`, consumed at `_gt_lobby_failed_join_reveal.lua:188-189`). It was absorbed from the now-retired `lobby_tweaker`.
 
 VMF reads `%%d`, renders it as `%d`, returns `"You are missing %d mods required by the host:"`. The caller's `string.format` then interpolates `n`.
 
@@ -156,7 +156,7 @@ gameplay_group  = { en = "Gameplay" },
 ### Required keys for every mod
 
 - `mod_description` — top-level mod blurb shown by VMF in the mod-options panel header. Every mod MUST define this.
-- `mod_name` — optional but recommended; some mods use it for the panel header. (`buff_tweaker`, `career_tweaker`, `chaos_wastes_tweaker` define it; `general_tweaker`, `modded_progression`, `verminious_dreams_lighting`, `enemy_tweaker`, `lobby_tweaker` rely on the mod-id alone.)
+- `mod_name` — optional but recommended; some mods use it for the panel header. (`career_tweaker`, `chaos_wastes_tweaker` define it; `general_tweaker`, `modded_progression`, `verminious_dreams_lighting`, `enemy_tweaker` rely on the mod-id alone. The retired `buff_tweaker` / `lobby_tweaker` — now under `_archive/` — were previously cited here.)
 
 ---
 
@@ -199,7 +199,7 @@ return {
 Both are fine. Pick one per file and stick with it:
 
 - `modded_progression`, `verminious_dreams_lighting` use the `local function en(s)` helper.
-- `general_tweaker`, `buff_tweaker`, `weapon_tweaker`, `enemy_tweaker` use the `{ en = "..." }` longhand.
+- `general_tweaker`, `weapon_tweaker`, `enemy_tweaker` use the `{ en = "..." }` longhand.
 
 The helper saves keystrokes for tooltip-heavy mods. The longhand is fine for short files.
 
@@ -225,7 +225,7 @@ local function _lz(key, fallback)
 end
 ```
 
-(`lobby_tweaker/scripts/mods/lobby_tweaker/_failed_join_reveal.lua:29-35` — the only confirmed in-repo use.)
+(`general_tweaker/scripts/mods/general_tweaker/_gt_lobby_failed_join_reveal.lua:44` — the only confirmed in-repo use; this lobby failed-join reveal was absorbed from the now-retired `lobby_tweaker`, whose `_failed_join_reveal.lua` originally held it.)
 
 It is **OPTIONAL**. The bare `mod:localize("key")` form is fine and is what most mods use. The fallback variant is useful when missing localization would render bracket-noise (e.g. `<failnotify_title>`) inside a popup label.
 
@@ -280,12 +280,14 @@ PS 7+ defaults to UTF-8 and is fine. The repo's `_tools/` scripts should use the
 
 ### Mods currently conforming (post-Fix 1, 2026-05-21)
 
+> **[SUPERSEDED 2026-07-07]** `buff_tweaker` and `lobby_tweaker` are RETIRED (now under `_archive/buff_tweaker_v0.1.12-alpha/` and `_archive/lobby_tweaker_v0.1.7-dev/`). `lobby_tweaker`'s failed-join reveal (the only `_lz()` user) was absorbed into `general_tweaker`, so the `_lz()` = yes marker moved to that row. Rows kept below for history and annotated inline.
+
 | Mod | mod_description present | `%` escaping clean | `_tooltip` convention | Uses `_lz()` wrapper |
 |-----|:-:|:-:|:-:|:-:|
-| `buff_tweaker` | YES | YES | YES | no |
-| `general_tweaker` | YES | YES | YES | no |
+| `buff_tweaker` (RETIRED — archived) | YES | YES | YES | no |
+| `general_tweaker` | YES | YES | YES | yes (in `_gt_lobby_failed_join_reveal.lua`) |
 | `weapon_tweaker` (post 0.12.63-dev) | YES | YES (Fix 1) | mixed `_tooltip`/`_description` | no |
-| `lobby_tweaker` (post 0.1.1-dev) | YES | YES (Fix 1) | YES | yes (in `_failed_join_reveal.lua`) |
+| `lobby_tweaker` (RETIRED — absorbed into `general_tweaker`) | YES | YES (Fix 1) | YES | yes (was `_failed_join_reveal.lua`; now gt's `_gt_lobby_failed_join_reveal.lua`) |
 | `verminious_dreams_lighting` | YES | YES | YES | no |
 | `enemy_tweaker` | YES | YES | YES | no |
 | `chaos_wastes_tweaker` | YES | YES | YES | no |
@@ -315,7 +317,7 @@ Most of these are likely false positives from `_data.lua` implicit-resolution pa
 
 1. **Phase 1 — P1 missing keys** (cheap, no risk). Add `mod_description` and any other audited missing keys to the offending mods.
 2. **Phase 2 — `_description` → `_tooltip` rename** (mechanical, larger scope). Rename every `<setting_id>_description` to `<setting_id>_tooltip` in `weapon_tweaker`, `crafting_in_modded`, etc. so VMF's auto-resolution works without the data file having to pass `description = "..."` explicitly. Coordinate with the corresponding `_data.lua` edits.
-3. **Phase 3 — `_lz()` wrapper retirement** (optional, low value). Convert `lobby_tweaker/_failed_join_reveal.lua` to direct `mod:localize` calls so the orphan-key audit becomes reliable for that mod.
+3. **Phase 3 — `_lz()` wrapper retirement** (optional, low value). Convert `general_tweaker`'s `_gt_lobby_failed_join_reveal.lua` (the `_lz()` user, absorbed from the retired `lobby_tweaker`) to direct `mod:localize` calls so the orphan-key audit becomes reliable for that mod.
 4. **Phase 4 — orphan-key sweep** (post-Phase 2 only). Once `_description`→`_tooltip` is settled, re-run the audit. Delete confirmed orphans per-mod. Expect 50-80% of current "orphans" to evaporate after Phase 2.
 
 **Do NOT migrate as part of this doc's commit.** This file establishes the standard. Migration is follow-up work to be tracked in `AUDIT_2026_05_21.md`'s P1 list.
@@ -782,8 +784,8 @@ carry no tag:
 - Memory: `reference_vmf_localize_before_registration.md` — the §12.2 load-order trap (mod:localize fails during loc registration).
 - Memory: `feedback_use_documented_localized_names.md` — the §12.1 single-source-of-truth rule (no parallel hardcoded name maps).
 - `weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua` — canonical reference for trait-description `%%` escaping (post Fix 1).
-- `lobby_tweaker/scripts/mods/lobby_tweaker/lobby_tweaker_localization.lua` — canonical reference for Pattern A pre-format directives (`%%d` in localization, `string.format` at call site).
+- `general_tweaker/scripts/mods/general_tweaker/general_tweaker_localization.lua` (see `gt_lobby_failnotify_required_header`, line ~398) + `_gt_lobby_failed_join_reveal.lua` (call site ~188-189) — canonical reference for Pattern A pre-format directives (`%%d` in localization, `string.format` at call site). Absorbed from the now-retired `lobby_tweaker`.
 - `general_tweaker/scripts/mods/general_tweaker/general_tweaker_localization.lua` — canonical reference for clean conventional formatting (`_tooltip` suffix, group/setting layout, mod_description).
-- `buff_tweaker/scripts/mods/buff_tweaker/buff_tweaker_localization.lua` — minimal example for new mods.
+- `general_tweaker/scripts/mods/general_tweaker/general_tweaker_localization.lua` — clean, conventional reference for new mods. (The former `buff_tweaker` minimal example is retired/archived to `_archive/buff_tweaker_v0.1.12-alpha/`.)
 - `qa/check_loc_tags.ps1` — the § 13 dev-status-tag QA scan (stable leaks, unknown vocab, mutex combos). Documented in `qa/CHECKS.md` row 19e. GitHub issue #301.
 - `general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev_localization.lua` — canonical reference for the § 13 dev status-tag convention (`[working]` / `[untested]` / `[Issue N]` prefixes).

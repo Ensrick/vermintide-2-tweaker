@@ -44,6 +44,7 @@ authoritative; this table is the human-readable mirror. Cross-checked against th
 | `chaos_wastes_tweaker_dev` | 3733366926 | Tweaker: Chaos Wastes (dev) |
 | `general_tweaker_dev` | **3733367409** | Tweaker: General (dev) |
 | `weapon_tweaker_dev` | 3748824853 | Tweaker: Weapons (dev) |
+| `gui_tweaker_dev` | 3751024698 | Tweaker: GUI (dev) |
 
 ## The test
 

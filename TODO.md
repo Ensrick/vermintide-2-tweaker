@@ -5,8 +5,9 @@ REVIEW (2026-05-01):
   Recommend renaming to "Tweaker Project — Master Feature To-Do" or splitting per-mod sections
   more explicitly (most per-mod TODOs already live in <mod>/TODO.md anyway).
 - "Implemented" section lists `t unstuck`, `t god`, `t win`, `t dump_boons` with the LEGACY
-  prefix `t`. These commands are now in chaos_wastes_tweaker under the `ct` prefix
-  (or general_tweaker / weapon_tweaker as applicable). Update prefixes to match current bindings.
+  prefix `t`. [Corrected 2026-07-07: there is NO mod-id chat prefix — commands are invoked bare
+  as `/unstuck`, `/god`, `/win`, `/dump_boons`; the owning mods are gt (unstuck/god/win) and
+  ct (dump_boons). The body list has been updated to the bare `/` form.]
 - "Investigate CW ghost scythe 3P spawn crash" entry references `_archive/audits/2026-04-25/CROSS_CAREER_PACKAGE_FIX.md`
   as "partially obsolete — original cross-career theory was wrong". The doc has been archived
   (banner directive followed); the cross-career theory remains historical context only.
@@ -30,15 +31,15 @@ REVIEW (2026-05-01):
 - [x] Any Trait on Any Weapon toggle
 - [x] Banned weapon traits (27 trait checkboxes)
 - [x] Boon/curse display names resolved from game localization at runtime (updates after first CW run in session)
-- [x] `t unstuck` command — teleport to nearest living teammate
-- [x] `t god` command — toggle invincibility
-- [x] `t win` command — complete the current map
-- [x] `t dump_boons` command — log boon IDs from next shrine/chest roll
+- [x] `/unstuck` command — teleport to nearest living teammate
+- [x] `/god` command — toggle invincibility
+- [x] `/win` command — complete the current map
+- [x] `/dump_boons` command — log boon IDs from next shrine/chest roll
 - [x] Allow duplicate careers (host-only setting — multiple players can share the same hero/career)
 
 - [ ] **Investigate CW ghost scythe 3P spawn crash** — `spawn_unit` assertion on unit hash `877616b4d5c71f36` = `wpn_bw_ghost_scythe_01_3p` (base/Necromancer 3P model). Crash occurs during CW level transitions with an Unchained bot wielding the Ensorcelled Reaper (crashify://77917479-d053-4d34-b6b9-629878a7e6ec, crashify://e4062589-...). Unchained should resolve to `_fire_3p` via `right_hand_unit_override`, so the base variant being requested implies `career_name` was nil at spawn time. Reproduces WITHOUT cross-career weapons enabled. All vanilla code paths pass career_name correctly; suspected timing issue where bot `SimpleInventoryExtension._career_name` is nil during CW unit recreation. **Mitigated** in v0.10.14 with pcall guard + diagnostic logging in `create_equipment` hook — next crash will log weapon key, career_name, and override state to identify the exact failure. Vanilla bug also found: `deus_chest_preload_extension.lua:106-107` calls `get_weapon_packages` without `career_name` for upgrade altar preloads (benign — preload path only). See `_archive/audits/2026-04-25/CROSS_CAREER_PACKAGE_FIX.md` for earlier analysis (partially obsolete — original cross-career theory was wrong).
 - [ ] **Verify Settings Sync** — Ensure `weapon_tweaker` settings are correctly applied on the client for non-host players.
-- [ ] **Complete weapon_tweaker_data.lua** — Add the missing career weapon checkboxes to the new modular project.
+- [x] **Complete weapon_tweaker_data.lua** — Add the missing career weapon checkboxes to the new modular project. — SHIPPED 2026-07-07 (wt ships the full per-weapon enable/disable checkbox tree in `weapon_tweaker_data.lua`; wt is the availability control surface per Issue #368)
 
 ---
 
@@ -90,6 +91,8 @@ REVIEW (2026-05-01):
 
 ## Modded Progression (New Mod)
 
+> — SHIPPED 2026-07-07 (modded_progression is a live mod, Workshop 3730422873 (private); full roadmap now tracked in `modded_progression/PLAN.md`. Some build-order bullets below may still be genuinely pending — treat PLAN.md as the source of truth.)
+
 Full plan in `modded_progression/PLAN.md`. Single VMF mod that re-enables 100% of vanilla VT2 progression systems while running in modded realm. All state persisted locally; player's real PlayFab account untouched.
 
 **Pre-code research (resolved 2026-05-14, full findings in `modded_progression/PLAN.md`):**
@@ -125,6 +128,9 @@ Full plan in `modded_progression/PLAN.md`. Single VMF mod that re-enables 100% o
 - No Versus-mode XP/win-track work in v0.1.x
 
 ## Enemy Tweaker (New Mod)
+
+> — SHIPPED 2026-07-07 (enemy_tweaker is a live standalone mod, Workshop 3716780252; this roadmap is now tracked in `enemy_tweaker/EXPANSION_PLAN.md`. Some bullets below may still be genuinely pending — see that file.)
+
 - [ ] **Horde composition overrides** — replace the breed mix in hordes via `HordeCompositionsPacing` table patching. Settings UI lets the player pick which enemy types appear in hordes (e.g. all Chaos Warriors, mixed Skaven+Chaos, Beastmen-only on Helmgart maps). Hook `compose_horde_spawn_list()` or patch composition tables at mod load.
 - [ ] **Breed substitution** — global breed-swap map (e.g. every `skaven_slave` → `skaven_storm_vermin`). Hook `HordeSpawner.spawn_unit()` where `Breeds[breed_name]` is resolved, or intercept `ConflictDirector.spawn_queued_unit()` to replace the breed before queuing.
 - [ ] **Custom horde presets** — predefined "fun" compositions players can toggle: "All Elites", "Beastmen Invasion" (Beastmen on non-Beastmen maps), "Chaos Patrol Hordes", "Mixed Faction Hordes" (Skaven + Chaos + Beastmen together). Each preset patches `HordeCompositionsPacing` entries with custom breed lists and weights.

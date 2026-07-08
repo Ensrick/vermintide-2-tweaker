@@ -4,6 +4,8 @@
 
 A modular set of Vermintide 2 VMF mods split from the original monolithic **"Tweaker"**.
 
+> **[SUPERSEDED 2026-07-07]** This 7-mod snapshot predates the dev/stable split (the repo now has 15+ mods across dev/stable streams). The canonical, current mod list is the repo-root `CLAUDE.md` "Mod Directory" table.
+
 | Mod | Internal ID | VMF Console Prefix | Workshop ID | Visibility | Build Pipeline |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | Chaos Wastes Tweaker | `ct` | `ct <command>` | **3712929235** | public | VMB |
@@ -42,7 +44,7 @@ vermintide-2-tweaker/
 ├── character_weapon_variants/      <- same VMB layout
 ├── tweaker/                        <- LEGACY -- original monolithic mod, kept as reference (still SDK)
 ├── old-backup/                     <- pre-VMB SDK build/upload scripts and artifacts
-├── tools/vmb-launcher/             <- VMBLauncher.exe — canonical build/deploy/upload entry point (the `deploy_*.ps1` shims that used to live here were archived 2026-05-21 to `_archive/legacy_deploy_scripts/`)
+├── tools/vmb-launcher/             <- VMBLauncher.exe — canonical build/deploy/upload entry point (the `deploy_*.ps1` shims that used to live here were removed 2026-05-21 — use `VMBLauncher.exe deploy <mod>` or `tools\ship\ship.ps1` directly)
 └── upload_ct.ps1, upload_wt.ps1    <- per-mod upload wrappers retained for the visibility-regression guard (delegate to `VMBLauncher.exe upload`)
 ```
 
@@ -83,7 +85,7 @@ Output goes to `<mod>\bundleV2\`. The launcher wraps `node vmb.js build <mod> --
 & $exe all    weapon_tweaker                          # build + deploy + upload in one shot
 ```
 
-The launcher detects the VMB layout (`bundleV2/` exists) and copies the bundle to the Workshop content folder, runs `Clean-StaleBundles` against the destination first — important because the Lua bundle hash changes between builds, and leaving an old bundle alongside the new one would cause duplicate `new_mod()` registration crashes — and pushes to every enabled `RemoteDeployTargets` entry (PC-B) automatically. The legacy `deploy_all.ps1` / `deploy_ct.ps1` / `deploy_gt.ps1` / `deploy_wt.ps1` shims that used to wrap this flow were archived 2026-05-21 to `_archive/legacy_deploy_scripts/`; use the launcher directly. See `tools/vmb-launcher/CLAUDE.md` for the full verb/flag matrix.
+The launcher detects the VMB layout (`bundleV2/` exists) and copies the bundle to the Workshop content folder, runs `Clean-StaleBundles` against the destination first — important because the Lua bundle hash changes between builds, and leaving an old bundle alongside the new one would cause duplicate `new_mod()` registration crashes — and pushes to every enabled `RemoteDeployTargets` entry (PC-B) automatically. The legacy `deploy_all.ps1` / `deploy_ct.ps1` / `deploy_gt.ps1` / `deploy_wt.ps1` shims that used to wrap this flow were removed 2026-05-21 — use `VMBLauncher.exe deploy <mod>` (or `tools\ship\ship.ps1`) directly. See `tools/vmb-launcher/CLAUDE.md` for the full verb/flag matrix.
 
 ### Verifying the right build is running
 
@@ -1354,7 +1356,7 @@ $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\
 & $exe deploy cosmetics_tweaker
 ```
 
-Output goes to `cosmetics_tweaker/bundleV2/`. `VMBLauncher.exe` detects the VMB layout and handles the deploy. (The legacy `deploy_all.ps1` shim that used to cover this flow was archived 2026-05-21 to `_archive/legacy_deploy_scripts/`.)
+Output goes to `cosmetics_tweaker/bundleV2/`. `VMBLauncher.exe` detects the VMB layout and handles the deploy. (The legacy `deploy_all.ps1` shim that used to cover this flow was removed 2026-05-21 — use `VMBLauncher.exe deploy <mod>` or `tools\ship\ship.ps1` directly.)
 
 **Hot-reload crashes (Ctrl+Shift+R):** weapon_tweaker and cosmetics_tweaker are NOT safe to hot-reload. Both hook unit creation paths (`GearUtils.create_equipment`, `BackendUtils.get_item_units`), and cosmetics_tweaker bundles non-Lua resources (materials/textures). The Stingray engine holds C++-level locks on spawned unit and material resources that cannot be released from Lua — `Mod.release_resource_package` triggers `ensure_unlocked` and crashes. Attempted workarounds (hooking `ModManager.unload_mod`, clearing `loaded_packages` in `on_reload`) either failed to fire (VMF's mod object is not `mod.object` in ModManager) or caused worse cascading failures (wiping third-party atlas handles, increasing lock counts). **Always do a full game restart** after deploying weapon_tweaker or cosmetics_tweaker changes. chaos_wastes_tweaker, general_tweaker, and career_tweaker are Lua-only and may survive hot-reload, but a restart is safest.
 

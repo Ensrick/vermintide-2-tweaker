@@ -2,6 +2,8 @@
 
 ## Import items from "SaveWeapon" mod
 
+> — SHIPPED 2026-07-07 (implemented as the `/cim_import_saved_weapons` chat command + VMF "Import" button; see `saveweapon_import.lua`. The design notes below are retained as historical reference.)
+
 Add a chat command + VMF settings-menu button that imports every weapon the
 player previously saved with the **SaveWeapon** mod (workshop ID `1687843693`,
 internal mod-id `SaveWeapon`, source at `<workshop>\1687843693\source\scripts\mods\SaveWeapon\SaveWeapon.lua`)

@@ -105,5 +105,5 @@ Each entry below uses the `cwv_es_musket` recipe (`reference_cwv_stance_toggle_r
 - [ ] **Custom inventory icons** — each variant needs a unique icon to distinguish from similar vanilla weapons. Investigate icon format, resolution, atlas injection.
 
 ## Integration
-- [ ] **weapon_tweaker coordination** — when both mods are active, weapon_tweaker should defer to character_weapon_variants for combos that have a purpose-built variant instead of raw cross-career unlock.
+- [ ] **weapon_tweaker coordination** — when both mods are active, weapon_tweaker should defer to character_weapon_variants for combos that have a purpose-built variant instead of raw cross-career unlock. — OBSOLETE 2026-07-07 (wt and CWV are INDEPENDENT per Issue #368; overlap is allowed and wt does NOT defer to CWV. wt is the availability control surface that, when co-installed, also covers CWV's items.)
 - [ ] **cosmetics_tweaker offhand options** — when both mods are active, cosmetics_tweaker should register per-character offhand illusion options for variant weapons (e.g. Kruber's shield roster for `cwv_es_axe_shield`).

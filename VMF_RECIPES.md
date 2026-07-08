@@ -1196,11 +1196,13 @@ peers were on the same wire shape.
 
 ## 11. Per-hook perf timing via bt.perf_record (experimental — Wave 2)
 
-**Status: experimental.** Framework installed in `buff_tweaker` (bt) v0.1.6-alpha (2026-05-25). Adoption by other mods is opt-in per-mod (no migration yet). Don't propagate eagerly — add the `bt.perf_record` call to a mod's `mod:safe_hook` bodies only when you have a specific perf question for that mod.
+> **[SUPERSEDED 2026-07-07 — bt retired]** `buff_tweaker` (bt) was retired and archived to `_archive/buff_tweaker_v0.1.12-alpha/` (2026-06); `get_mod("bt")` is now always nil, so the `perf_record` accumulator + `/perf_dump` framework described here is GONE (no live replacement). Content below is preserved for historical/mechanics reference — the accumulator pattern is reusable if a future shared-infra mod re-hosts it.
+
+**Status: retired.** Framework WAS installed in `buff_tweaker` (bt) v0.1.6-alpha (2026-05-25); it went away when bt was retired (2026-06). Adoption by other mods was opt-in per-mod (no migration ever completed). It was never meant to be propagated eagerly — the `bt.perf_record` call was added to a mod's `mod:safe_hook` bodies only when there was a specific perf question for that mod.
 
 ### Why bt
 
-Per `CLAUDE.md`'s "Mod Directory" table, `buff_tweaker` is the shared infra mod (originally just the BR registry, now also `net_replay` per VMF_RECIPES § 10, the `perf_record` accumulator per this section, and any future shared-instrumentation surface). Consumer mods reach it via the standard `get_mod("bt")` pattern; if bt isn't installed the calls return nil and the timing helpers silently no-op.
+`buff_tweaker` WAS the shared infra mod (originally just the BR registry, later also `net_replay` per VMF_RECIPES § 10, the `perf_record` accumulator per this section, and any future shared-instrumentation surface). Consumer mods reached it via the standard `get_mod("bt")` pattern; if bt wasn't installed the calls returned nil and the timing helpers silently no-op'd. Since bt's retirement (2026-06) `get_mod("bt")` is always nil, so every `perf_record` call site is a permanent no-op.
 
 ### API
 
@@ -1276,8 +1278,8 @@ Preventive. No recorded burn yet — landed alongside the universal applied-mark
 
 ### See also
 
-- `buff_tweaker/scripts/mods/buff_tweaker/buff_tweaker.lua` — the canonical `_perf_state` + `mod.perf_record` + `/perf_dump` implementation. Search for `_perf_state` for the table layout and `mod:command("perf_dump", ...)` for the dump format.
-- `buff_tweaker/CHANGELOG.md` v0.1.6-alpha — the install entry.
+- `_archive/buff_tweaker_v0.1.12-alpha/scripts/mods/buff_tweaker/buff_tweaker.lua` — the (archived) `_perf_state` + `mod.perf_record` + `/perf_dump` implementation. Search for `_perf_state` for the table layout and `mod:command("perf_dump", ...)` for the dump format. RETIRED 2026-06 — archived only, no longer loads.
+- `_archive/buff_tweaker_v0.1.12-alpha/CHANGELOG.md` v0.1.6-alpha — the install entry.
 - `PROJECT_STANDARDS.md` § 3.6 — "Applied marker line (universal)" — sibling hardening pattern landed same day.
 
 ---
@@ -1334,9 +1336,11 @@ Prefix the method name with the mod's short id (`gt_lobby_motd_on_player_joined_
 
 `Managers.state.event` is REBUILT on every state transition (StateInGame, StateLoading, StateTitleScreen). Re-register on every fresh handle — gt's pattern is to compare the live `Managers.state.event` against a cached `_last_state_event` upvalue in a per-tick update callback and re-register when they differ. See `general_tweaker/scripts/mods/general_tweaker/_gt_lobby_motd.lua:222-235` for the canonical wiring (and the immediate-call branch at line 239-243 for hot-reload mid-mission).
 
-### bt runtime adapter (optional safety net)
+### bt runtime adapter (historical — retired 2026-06)
 
-`buff_tweaker` (bt) v0.1.10-alpha+ ships `mod:safe_event_register(em, target_object, event_name, method_name_or_fn)` as an optional adapter. It accepts either the canonical string or a function value (auto-adapts the function by assigning it to `target_object` under a generated `_bt_evreg_<event>_<counter>` name), logs an `[ALERT]` line with the caller's source-file/line via `debug.getinfo(3, "Sl")` so the next session can grep the log even when the bug self-heals.
+> **[SUPERSEDED 2026-07-07 — bt retired]** The `bt:safe_event_register` runtime adapter is GONE (bt retired + archived 2026-06; `get_mod("bt")` is always nil). It was only ever an OPTIONAL runtime safety net. The CANONICAL fix is the string-method pattern above, enforced by the static gate `qa/check_event_register_signature.ps1`. Content below is preserved for historical/mechanics reference.
+
+`buff_tweaker` (bt) v0.1.10-alpha+ SHIPPED `mod:safe_event_register(em, target_object, event_name, method_name_or_fn)` as an optional adapter. It accepted either the canonical string or a function value (auto-adapted the function by assigning it to `target_object` under a generated `_bt_evreg_<event>_<counter>` name), and logged an `[ALERT]` line with the caller's source-file/line via `debug.getinfo(3, "Sl")` so the next session could grep the log even when the bug self-healed.
 
 ```lua
 local bt = get_mod("bt")
@@ -1346,7 +1350,7 @@ if em and bt and bt.safe_event_register then
 end
 ```
 
-The adapter is the safety net, NOT the primary fix. Consumer mods must still wire the correct string-method pattern themselves so the code is correct even when bt isn't installed.
+The adapter was always the safety net, NOT the primary fix — and with bt retired it is gone entirely. Consumer mods MUST wire the correct string-method pattern themselves; the static gate `qa/check_event_register_signature.ps1` is the live enforcement.
 
 ### Burn history
 
@@ -1357,8 +1361,8 @@ Static gate landed same-day: `qa/check_event_register_signature.ps1`. Full-tree 
 ### See also
 
 - `general_tweaker/scripts/mods/general_tweaker/_gt_lobby_motd.lua:222-243` — the canonical state-event re-registration pattern.
-- `qa/check_event_register_signature.ps1` — the static check; `qa/_test_fixtures/event_register_{bad,good}.lua` — fixtures.
-- `buff_tweaker/scripts/mods/buff_tweaker/buff_tweaker.lua` — `mod.safe_event_register` runtime adapter (search for `safe_event_register`).
+- `qa/check_event_register_signature.ps1` — the static check (the CANONICAL live gate); `qa/_test_fixtures/event_register_{bad,good}.lua` — fixtures.
+- `_archive/buff_tweaker_v0.1.12-alpha/scripts/mods/buff_tweaker/buff_tweaker.lua` — `mod.safe_event_register` runtime adapter (search for `safe_event_register`); RETIRED 2026-06, archived only, no longer loads.
 - `docs/BUG_CLASSES.md` — entry for this bug class.
 
 ## 13. Custom buttons / panels in a hero-view menu — use an own-scenegraph overlay

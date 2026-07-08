@@ -132,6 +132,10 @@ Where the in-game iteration stands, so the user knows what to test on relaunch.
 
 ## 🎯 Current focus
 
+**Menu consolidation SHIPPED and the 2026-06-22 uncommitted WIP is long committed — every mod below shipped many patches ahead.** The live "what now" surface is now the dated SESSION blocks at the top of this file; the Current-focus / WIP / Coordination sections below are retained as 2026-06-22 historical context. Menu consolidation §1-4 landed (gut_dev 0.2.164-dev, gt_dev 0.2.170-dev, ct_dev 0.7.202-dev, crt 0.3.49-dev — see `MENU_CONSOLIDATION_PLAN.md`); the umbrella master-toggles are the only deferred piece.
+
+> **[SUPERSEDED 2026-07-07]** The block below is the 2026-06-22 focus (land WIP first, then *start* menu consolidation). Both are done. Preserved for history.
+
 **Land the uncommitted WIP in coherent per-mod commits, then start menu consolidation on a clean tree.**
 ⚠️ **CORRECTION (2026-06-22):** the tree is far more loaded than first reported — uncommitted work spans **~13 mods + QA/tooling + a new `weapon_tweaker_dev/` dir**, accumulated from the now-retired parallel agent sessions (nothing committed since 2026-06-17). The initial "5 mods" read came from a `head -30`-truncated `git status`. A full-repo triage is underway to land it in correct per-mod commits. **`gut` and `gt_dev` are mid-flight (gut's gear feature; gt_dev's modularization) — those are continue-not-commit.**
 
@@ -152,19 +156,21 @@ Where the in-game iteration stands, so the user knows what to test on relaunch.
 
 ## 📥 Uncommitted WIP — full-repo commit plan (2026-06-22, full triage)
 
+> **[SUPERSEDED 2026-07-07]** This entire commit plan is done. All the 2026-06-22 uncommitted WIP was committed long ago, and every mod has since shipped many patches ahead of the versions in the table below (verified against each mod's CHANGELOG top entry on 2026-07-07): **wt 0.12.207-dev** (was 0.12.137), **gt_dev 0.2.195-dev** (was 0.2.135), **chaos_wastes_tweaker_dev / ct_dev 0.7.237-dev** (was 0.7.161), **cim_dev 0.8.54-dev** (was 0.8.15). The `weapon_tweaker_dev` split "decision" in the HELD list is resolved: **wt stayed single-stream; `weapon_tweaker_dev/` is the ABANDONED stale clone** — never edit it (`weapon_tweaker/` is the active wt dir). The table + HELD list are kept only as a snapshot of that day's tree.
+
 **Clean & verified — land these (pending the go):** each its own path-scoped commit.
 
 | Area | Version | Stage (untracked) | Note |
 |---|---|---|---|
 | career_tweaker (crt) | 0.3.44-dev | `_armor_overcharge.lua`, `_oe_cooldown.lua`, `TALENT_TEXT_RENDERING.md`, `TODO.md` | OE Leading Shots + Armor/Overcharge + Sienna Unchained |
-| chaos_wastes_tweaker_dev | 0.7.161-dev | `_ct_dup_vote_chips.lua` | dup-career vote chips + altar/curse fixes |
+| chaos_wastes_tweaker_dev | 0.7.161-dev | `_ct_dup_vote_chips.lua` | dup-career vote chips + altar/curse fixes — **SHIPPED; now 0.7.237-dev.** |
 | cosmetics_tweaker | 0.9.39-dev | — | `is_bot` bot-loadout fix; glow-menu trim |
-| crafting_in_modded_dev (cim_dev) | 0.8.15-dev | — | loadout persistence default-OFF; **add `_craftable_trait_pool` CHANGELOG line first** |
+| crafting_in_modded_dev (cim_dev) | 0.8.15-dev | — | loadout persistence default-OFF; **add `_craftable_trait_pool` CHANGELOG line first** — **SHIPPED; now 0.8.54-dev.** |
 | enemy_tweaker (et) | 0.7.16-dev | `_et_boss_tweaks.lua` | Warlord monster-pool + horde scaling + BR on ice |
 | event_tweaker | 0.4.15-dev | `event_tweaker_curses.lua` | Cursed Adventure + Other Mutators |
-| general_tweaker_dev (gt_dev) | 0.2.135-dev | **19 `_gt_*.lua` modules** (+ 2 tracked deletions) | **Modularization FINISHED** ("Phase 4, final") — atomic commit. Menu consolidation NOT blocked. |
+| general_tweaker_dev (gt_dev) | 0.2.135-dev | **19 `_gt_*.lua` modules** (+ 2 tracked deletions) | **Modularization FINISHED** ("Phase 4, final") — atomic commit. Menu consolidation NOT blocked. — **SHIPPED; now 0.2.195-dev.** |
 | verminious_dreams_lighting_dev (vdl_dev) | 1.0.10-dev | — | CW curse-tint lighting layer |
-| weapon_tweaker (wt) | 0.12.137-dev | `_wt_passive_charge.lua` | passive vent restore; `skip_sync` MP fix; incl. `RELEASE_SPLIT_PLAN.md` draft |
+| weapon_tweaker (wt) | 0.12.137-dev | `_wt_passive_charge.lua` | passive vent restore; `skip_sync` MP fix; incl. `RELEASE_SPLIT_PLAN.md` draft — **SHIPPED; now 0.12.207-dev.** (`RELEASE_SPLIT_PLAN.md` is now SUPERSEDED — split never executed.) |
 | repo: QA trio | — | `qa/check_published_ids.ps1`, `qa/PUBLISHED_IDS.md` | **group with** `qa/run_all.ps1` (it invokes the script) |
 | repo: docs/tooling | — | `TESTING_STATUS.md`, `tools/label-untested/`, `STATUS.md`, `MENU_CONSOLIDATION_PLAN.md` | + `docs/BUG_CLASSES.md` (Class 19) |
 
@@ -176,7 +182,7 @@ Where the in-game iteration stands, so the user knows what to test on relaunch.
 |---|---|---|
 | gui_tweaker (gut) | **keep-working** (0.2.55-dev) | Genuinely mid-flight: `_ba_*` Bestiary/Armory is a Phase-0 stub, Mod-Tweaker rework phases 1-5 not started, leftover `[mt:*]` debug lines, orphaned `hb/mod_events.lua`. Leave uncommitted; I continue it. |
 | crafting_in_modded (cim, **PUBLIC**) | reconcile + ship | Version 0.8.7 > CHANGELOG 0.8.6; `_craftable_trait_pool` undocumented. Hold until you're ready to reconcile + ship public. |
-| weapon_tweaker_dev (NEW dir) | intentional wt_dev split | Complete dev-sibling (friends-only, `published_id 3748824853`). 4 non-fatal stale `weapon_tweaker_data`→`_dev_data` refs to fix; needs PUBLISHED_IDS entry; `RELEASE_SPLIT_PLAN` DECISIONS 1-4 open. **Fix refs + commit, or hold the whole split?** |
+| weapon_tweaker_dev (NEW dir) | **ABANDONED (2026-07-07)** | Decision resolved: the split was NEVER executed. wt stayed single-stream; `weapon_tweaker_dev/` is a STALE clone — never edit it (`weapon_tweaker/` is the active wt dir). `RELEASE_SPLIT_PLAN.md` in both dirs is marked SUPERSEDED. |
 
 ---
 

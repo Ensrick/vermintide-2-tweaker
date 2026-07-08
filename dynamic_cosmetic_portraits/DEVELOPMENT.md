@@ -317,7 +317,7 @@ $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\
 `VMBLauncher.exe deploy` verifies bundle-hash parity against the Workshop folder.
 If a hash mismatch is reported, do **not** consider the deploy complete.
 (The legacy `deploy_all.ps1` shim that previously covered this flow was
-archived 2026-05-21 to `_archive/legacy_deploy_scripts/`.)
+removed 2026-05-21 — use `VMBLauncher.exe deploy <mod>` or `tools\ship\ship.ps1` directly.)
 
 ### 9 — Test in-game
 

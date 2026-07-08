@@ -12,6 +12,8 @@ chain detail and remap-table identity; this file is a high-level compatibility s
 -->
 # Weapon & Animation Compatibility Reference
 
+> **[SUPERSEDED 2026-07-07]** For per-weapon cross-character animation status, `WEAPON_CATALOG.md` (repo root) is authoritative; the "Known Working Cross-Character Combinations" matrix below was reduced to a cross-reference because it had diverged from the catalog. The reference tables that remain here (Character Models, Native Weapon Ownership, Phantom Events, Career Internal IDs) are unique to this file and still current. This doc is not in the `CLAUDE.md` Documentation Map.
+
 ## Character Models
 
 Each character has one shared model across all careers, except Warrior Priest:
@@ -90,23 +92,7 @@ These events are genuinely missing from non-native skeletons, so `Unit.has_anima
 
 ### Known Working Cross-Character Combinations
 
-| Weapon                  | Works On          | Animation Used        | Status     |
-|-------------------------|-------------------|-----------------------|------------|
-| Flaming Flail (Sienna)  | Saltzpyre careers | Native (partial)      | Tested — heavy attack wind-up animation missing, all else works |
-| Flaming Flail (Sienna)  | Kruber careers    | Native                | Tested     |
-| Flail (Saltzpyre)       | Sienna careers    | Native (partial)      | Tested — heavy attack wind-up animation missing, all else works |
-| Crowbill (Sienna)       | All non-Sienna    | 1H sword              | Tested     |
-| Crowbill (Sienna)       | Warrior Priest    | Skullsplitter         | Tested     |
-| Axes (any)              | Sienna            | 1H sword              | Tested     |
-| Axes (any)              | Warrior Priest    | Skullsplitter         | Tested     |
-| 1H Swords (any)         | Warrior Priest    | Skullsplitter         | Tested     |
-| Kerillian Volley Xbow   | Saltzpyre careers | His volley xbow anim  | Tested     |
-| Saltzpyre Volley Xbow   | Kerillian careers | Her volley xbow anim  | Tested     |
-| Kerillian Longbow       | Kruber careers    | His longbow anim      | Tested     |
-| Kruber Longbow          | Kerillian careers | Her longbow anim      | Tested     |
-| Skullsplitter           | Kruber/Bardin     | Hammer & shield       | Tested     |
-| Mace & Shield (Kruber)  | Warrior Priest    | Native? (untested)    | Untested   |
-| Hammer & Shield (Bardin)| Warrior Priest    | Native? (untested)    | Untested   |
+> **[SUPERSEDED 2026-07-07]** This high-level matrix diverged from the canonical per-weapon status and was removed. **See [`WEAPON_CATALOG.md`](WEAPON_CATALOG.md) (repo root) for the authoritative, version-tracked cross-character status** (per-weapon "Native / OK / Redirect / Remap / Untested" columns keyed by receiver character), plus the "Character Weapon Variants (CWV) — Variant Status" table for CWV items. `weapon_tweaker/ANIMATION_COVERAGE.md` is the release walk list for what remains before wt ships.
 
 ### Known Crashes / Incompatibilities
 

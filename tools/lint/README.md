@@ -1,11 +1,18 @@
 # regression-lint
 
-Static lint for the vermintide-2-tweaker monorepo. Scans every mod's `scripts/`
-for patterns that have shipped as recurring crashes (each check is sourced
-from a memory note or CHANGELOG incident; see citations per check below) and
-refuses to deploy when any error fires.
+> **[SUPERSEDED 2026-07-07]** This is an ad-hoc EXPLORER / scanner, **not** the
+> enforced gate. The WIRED pre-commit / pre-deploy lint gate is
+> **`tools/mod-lint/lint-mod.ps1`** (installed by `tools/install-hooks.ps1`, see
+> that directory's `README.md`). `regression-lint.ps1` here is run by hand for
+> exploratory sweeps; it does not block any commit or deploy on its own. Wording
+> below that implies it "refuses to deploy" describes the pattern, not a live hook.
 
-Read-only — never writes into mod source.
+Ad-hoc static scanner for the vermintide-2-tweaker monorepo. Sweeps every mod's
+`scripts/` for patterns that have shipped as recurring crashes (each check is
+sourced from a memory note or CHANGELOG incident; see citations per check below)
+and reports an error for any hit.
+
+Read-only — never writes into mod source. Run it by hand; it is not the wired gate.
 
 ## Run
 
@@ -32,16 +39,27 @@ pwsh -File .\tools\lint\regression-lint.ps1 -SelfTest
 Exit code: `0` clean (errors=0, or warnings=0 when `-WarningsAsErrors` set);
 `1` errors found or self-test failed.
 
-## Mods scanned (15)
+## Mods scanned
 
-Anything in the repo root that has an `itemV2.cfg`:
-`weapon_tweaker`, `chaos_wastes_tweaker`, `general_tweaker`, `cosmetics_tweaker`,
-`dynamic_cosmetic_portraits`, `career_tweaker`, `enemy_tweaker`,
-`character_weapon_variants`, `crafting_in_modded`,
-`event_tweaker`, `modded_progression`, `lobby_tweaker`, `buff_tweaker`,
-`material_hijack_patched`, `verminious_dreams_lighting`.
+The set is **dynamic**: anything in the repo root that has an `itemV2.cfg`. As of
+2026-07-07 that resolves to the live single/stable mods —
+`weapon_tweaker`, `chaos_wastes_tweaker`, `general_tweaker`, `gui_tweaker`,
+`cosmetics_tweaker`, `dynamic_cosmetic_portraits`, `career_tweaker`,
+`enemy_tweaker`, `weapons_of_chaos`, `character_weapon_variants`,
+`crafting_in_modded`, `event_tweaker`, `modded_progression`,
+`verminious_dreams_lighting` — plus the `_dev` clones that carry their own cfg
+(`chaos_wastes_tweaker_dev`, `crafting_in_modded_dev`, `general_tweaker_dev`,
+`gui_tweaker_dev`, `verminious_dreams_lighting_dev`, and the stale
+`weapon_tweaker_dev`). The canonical mod list is the repo-root `CLAUDE.md`
+"Mod Directory".
 
-The deprecated `tweaker/` SDK mod is excluded.
+> **[SUPERSEDED 2026-07-07]** The old list here named `lobby_tweaker` and
+> `buff_tweaker` (both RETIRED — now under `_archive/lobby_tweaker_v0.1.7-dev/`
+> and `_archive/buff_tweaker_v0.1.12-alpha/`, so no cfg in the repo root and
+> not scanned) and `material_hijack_patched` (never existed in this repo).
+> Those are dropped above.
+
+The deprecated `tweaker/` SDK mod is excluded (no `itemV2.cfg` in the VMB sense).
 
 ## Checks
 
@@ -136,11 +154,20 @@ takes more than a second per file.
 
 ## CI integration
 
-Hook into `VMBLauncher.exe` pre-build / pre-upload:
+**The wired pre-commit gate is `tools/mod-lint/lint-mod.ps1`, not this script.**
+`tools/install-hooks.ps1` installs the pre-commit hook that runs
+`qa/run_all.ps1 -Quick -SkipLua` and `tools/mod-lint/lint-mod.ps1` against staged
+files (blocks on errors only). This `regression-lint.ps1` is an exploratory
+scanner and is **not** part of that hook.
+
+If you want to run this explorer as an extra manual/optional check, invoke it
+directly:
 
 ```powershell
 & "$repoRoot\tools\lint\regression-lint.ps1" -Quiet
-if ($LASTEXITCODE -ne 0) { throw "regression-lint failed — refusing to upload" }
+if ($LASTEXITCODE -ne 0) { throw "regression-lint reported errors" }
 ```
 
-Or add to a Git pre-push hook in `.git/hooks/pre-push`.
+Don't wire it as a second blocking gate without deduplicating against
+`tools/mod-lint/lint-mod.ps1` — the two overlap (both cover the duplicate-hook /
+forward-ref classes).

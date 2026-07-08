@@ -70,8 +70,8 @@ $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\
 `VMBLauncher.exe deploy` copies the bundle to the local Steam Workshop folder
 (`steamapps/workshop/content/552500/3721036701/`), verifies bundle hashes,
 and auto-pushes to PC-B. Workshop ID **3721036701**, visibility `private`.
-(The legacy `deploy_all.ps1` shim that used to cover this was archived
-2026-05-21 to `_archive/legacy_deploy_scripts/`.)
+(The legacy `deploy_all.ps1` shim that used to cover this was removed
+2026-05-21 — use `VMBLauncher.exe deploy <mod>` or `tools\ship\ship.ps1` directly.)
 
 ## Hot-reload is unsafe
 

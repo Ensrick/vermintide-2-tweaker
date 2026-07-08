@@ -1,5 +1,7 @@
 # weapon_tweaker — Dev/Stable Split + Public Release Plan (DRAFT)
 
+> **[SUPERSEDED 2026-07-07]** This plan was **NEVER executed**. wt stayed **single-stream**: `weapon_tweaker/` (unsuffixed) is the ACTIVE mod and remains the sole Workshop item — there is no public/dev split. This `weapon_tweaker_dev/` directory is itself the **ABANDONED stale clone**, which is the *opposite* of what this plan proposed (the plan wanted `weapon_tweaker_dev` to be the living full-content dev stream). **Never edit this directory** — all wt work goes in `weapon_tweaker/`. This file is a duplicate of `weapon_tweaker/RELEASE_SPLIT_PLAN.md`; body preserved below as historical record only.
+
 Status: **DRAFT for review — nothing executed yet.** Drafted 2026-06-20 from a 3-track
 research pass (content inventory, split mechanics, strip approach).
 

@@ -19,14 +19,27 @@ bug-class-to-detection map.
 
 ## What runs
 
-| Check | Catches | Speed | CI |
+> **[SUPERSEDED 2026-07-07]** This table is a partial, out-of-date snapshot — it
+> lists ~6 checks, but `qa/` now ships **18 `check_*.ps1` scripts** plus luacheck.
+> **[CHECKS.md](CHECKS.md) is the canonical, complete check list** (bug-class →
+> detection map with row numbers); `run_all.ps1` is what actually wires them. The
+> rows below are kept only as a representative sampler — do not treat them as the
+> full set.
+
+| Check (sampler) | Catches | Speed | CI |
 |---|---|---|---|
 | `check_cfg.ps1`         | `tags=[]`, missing preview, wrong visibility, missing BMC/bug-report blocks | <1s | ✓ |
 | `check_versions.ps1`    | Missing `MOD_VERSION`, cfg title doesn't match version, no CHANGELOG entry | <2s | ✓ |
 | `check_localization.ps1`| Unescaped `%`, referenced-but-undefined keys, missing `mod_description` | <3s | ✓ |
 | `check_file_sizes.ps1`  | Files over 1500-line target / 2500-line hard limit | <1s | ✓ |
 | `check_stale_docs.ps1`  | Audit/review markdowns >30 days old without SUPERSEDED banner | <1s | ✓ |
+| `check_published_ids.ps1`| Duplicate / mismatched Workshop `published_id` (the hijack class) | <1s | ✓ |
 | `luacheck`              | Forward-references, unused vars, undefined globals, Lua 5.1 syntax issues | <10s | ✓ |
+
+For the full roster (published-id integrity, command collisions, cross-mod deps,
+decisions-wired, event-register signature, in-progress sentinels, issue status
+labels + tag sync, loc tags, mechanics citations, name integrity, unpack safety,
+VMF widget types, …) see **[CHECKS.md](CHECKS.md)** and `run_all.ps1`.
 
 Total runtime locally: ~20 seconds.
 

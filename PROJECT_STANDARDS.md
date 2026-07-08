@@ -430,7 +430,7 @@ mod:info("[<mod_id>] enabled v%s settings_fp=%s", MOD_VERSION, _settings_fingerp
 - Don't include the master toggle in a per-mod addendum if it's already in the hashed key set — the fingerprint already changes when the master flips. Addenda are for fields that AREN'T in the widget tree (et's `host_required=true` is a static design-intent token).
 - Don't print this line more than once per mod load.
 
-**Cross-ref:** `VMF_RECIPES.md` § 11 (Per-hook perf timing via bt.perf_record — sibling experimental hardening that landed in the same pass).
+**Cross-ref:** `VMF_RECIPES.md` § 11 (Per-hook perf timing via bt.perf_record — sibling experimental hardening that landed in the same pass). **[SUPERSEDED 2026-07-07 — bt retired 2026-06: the `bt.perf_record` framework is gone with `bt`; this cross-ref is historical.]**
 
 #### Chat-echo policy (when is `mod:echo` allowed?)
 
@@ -652,13 +652,13 @@ future-me can find it via grep.
 
 ### 6.5 Dev vs stable stream (public-Workshop mods only)
 
-Established 2026-05-26. The four public-Workshop mods — `chaos_wastes_tweaker`
+Established 2026-05-26. The five public-Workshop mods — `chaos_wastes_tweaker`
 (`ct`), `crafting_in_modded` (`cim`), `general_tweaker` (`gt`),
-`verminious_dreams_lighting` — are split into two parallel directories each:
+`gui_tweaker` (`gut`), `verminious_dreams_lighting` — are split into two parallel directories each:
 `<mod>/` (stable, public Workshop) and `<mod>-dev/` (friends-only Workshop).
 All other mods are single-stream and this section does not apply to them.
 See `CLAUDE.md` § "Dev/stable split workflow" for the full rationale and the
-Workshop ID / mod_id mapping.
+Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was added to the split after this section's 2026-05-26 authoring and had been undercounted here as four.]**
 
 **The binding rules:**
 

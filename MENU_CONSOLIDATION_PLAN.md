@@ -1,5 +1,9 @@
 # Menu Consolidation Plan
 
+> **[SHIPPED 2026-07-07]** This plan has largely shipped. **§1** (gut reorg) landed in **gut_dev 0.2.164-dev** (2026-07-01). **§2** (gt_dev) / **§3** (ct_dev) / **§4** (crt) landed in the same 2026-07-01 repo-wide menu reorg: **gt_dev 0.2.170-dev / ct_dev 0.7.202-dev / crt 0.3.49-dev**. One naming decision was reversed after the fact: the §1.2 **"On-Screen Overlays"** category name (introduced by 0.2.164) was **superseded** — deleted and folded into a single **"HUD"** category in **gut_dev 0.2.177-dev** (2026-07-02).
+>
+> **Only OPEN scope remaining:** the umbrella **MASTER toggles** that gate whole subsystems (the "Master / pattern" columns in §2-4 and the §1 umbrellas). They were deliberately DEFERRED — a master that gates children needs code gating, not just menu sorting, so the 2026-07-01 pass did pure sort / organize / polish and left the new master toggles for a later phase. Everything else in the plan body below is DONE and is preserved as the historical spec + per-mod catalog.
+
 > Shared spec for the **gut menu reorg** + **dev-mod settings consolidation** (2026-06-22).
 > Built from a source-verified VMF capability survey + a menu inventory of gut / gt_dev / ct_dev / crt.
 >

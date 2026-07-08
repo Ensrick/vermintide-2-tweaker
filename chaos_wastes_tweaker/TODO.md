@@ -25,6 +25,8 @@ This is distinct from the `general_tweaker` "inventory in missions" feature — 
 
 ### TODO: Fix inventory access in adventure missions (cross-ref)
 
+> — OBSOLETE 2026-07-07 (the in-mission inventory feature MOVED from general_tweaker to gui_tweaker (gut) and now works — invoked as `/gut_inv`, adventure-only. The gt `mission_inventory_enabled` toggle described below is superseded. Retained as plumbing reference for the CW-storage feature.)
+
 The `general_tweaker` `mission_inventory_enabled` toggle was added (v0.2.1-dev) but doesn't actually work yet. Patching `InventorySettings.inventory_loadout_access_supported_game_modes` alone is insufficient — there's likely a `game_mode:menu_access_allowed_in_state()` check in `ingame_ui.lua` (line ~617) that also blocks it. Needs further investigation. Listed here because the CW-storage feature builds on the same plumbing.
 
 ## Per-boon scaling boons (new boon family)

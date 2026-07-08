@@ -137,11 +137,14 @@ event_probe, event_active, event_clear, event_apply
 ```
 
 ### `bt` (buff_tweaker)
+
+**(RETIRED 2026-06 — bt archived to `_archive/buff_tweaker_v0.1.12-alpha/`; these commands no longer register. `get_mod("bt")` is always nil. Block kept for historical reference.)**
+
 ```
 bt_net_replay, perf_dump, bug_report, bt_regression_test
 ```
 
-`bug_report` is a zero-arg paste-ready context dump (loaded mods + version + non-default settings + career/level + log-path pointer) intended for handoff to a Claude agent on a bug report. Mirrors output to both chat and `console_logs/`.
+`bug_report` was a zero-arg paste-ready context dump (loaded mods + version + non-default settings + career/level + log-path pointer) intended for handoff to a Claude agent on a bug report. Mirrored output to both chat and `console_logs/`.
 
 ---
 

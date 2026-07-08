@@ -1,5 +1,7 @@
 # Weapon Tweaker Code Review (2026-05-23, v0.12.68-dev)
 
+> **[SUPERSEDED 2026-07-07 — bt retired]** buff_tweaker (`bt`, Workshop 3730358590) was retired 2026-06 and archived to `_archive/buff_tweaker_v0.1.12-alpha/`; `get_mod("bt")` is always nil now. Every reference below to bt as a live sister mod / Big Rebalance master registry is historical. wt's ~113 BR sub-toggles guard on `(get_mod("bt") or {}):is_br_active()`, so with bt gone they are permanently INERT (no crash, and NOT stripped). The correct `(get_mod('bt') or {})` nil-guard stays as-is. Preserved below for historical reference.
+
 ## Summary
 
 Weapon Tweaker (mod id `wt`, Workshop 3712896117) is a mature, heavily-used mod that enables cross-career weapon unlocks, animation remapping across character skeletons, and per-weapon visual tweaks (scale, grip offset, skin swaps). The codebase spans 4056 lines in `weapon_tweaker.lua`, 2552 in `weapon_tweaker_big_rebalance.lua` (BR integration via sister mod `bt`), 242 in `weapon_tweaker_backend.lua`, plus localization and settings data files.
@@ -44,7 +46,7 @@ Weapon Tweaker (mod id `wt`, Workshop 3712896117) is a mature, heavily-used mod 
 
 - **Per-unit state tracking via weak keys.** `_unit_state[unit]` isolates per-unit career + weapon context using weak-keyed table, avoiding global player reference assumptions. Correctly handles husks (remote players' 3P bodies) by reading `career_system` extension first, then falling back.
 
-- **Big Rebalance opt-in pattern.** ~113 BR sub-toggles all gate on `(get_mod("bt") or {}):is_br_active()`, with master registration outsourced to `buff_tweaker` (v0.12.62). Per-toggle apply functions run once at load and on setting change; function hooks installed unconditionally when master is on.
+- **Big Rebalance opt-in pattern.** ~113 BR sub-toggles all gate on `(get_mod("bt") or {}):is_br_active()`, with master registration outsourced to `buff_tweaker` (v0.12.62). Per-toggle apply functions run once at load and on setting change; function hooks installed unconditionally when master is on. **[bt retired 2026-06: the master registry is gone; with `get_mod("bt")` nil these toggles are now permanently inert.]**
 
 - **Force-fire scoping.** Billhook stab_02 force-fire guarded with `_3p_weapon_remap == _3p_remap_spear_to_billhook` to avoid hijacking other weapons. Bypass mechanism via `_original_animation_event` capture prevents infinite hook recursion on `/force3p` commands.
 
@@ -231,7 +233,7 @@ Remaining core: ~2000 lines. **No production impact; structural only.**
 
 2. **Derived-class hook on MenuWorldPreviewer, not HeroPreviewer.** The `equip_item` hook MUST target the derived class (keep inventory), not the base class (team preview). VT2's `class()` copies parent methods at definition time — no `__index` chain. v0.12.16 shipped the bug; v0.12.17 fixed it. Never regress.
 
-3. **Big Rebalance master is in `buff_tweaker` mod.** Do NOT re-ship registration list in wt. wt sub-toggles gate on `bt:is_br_active()`. Out-of-order load (bt after wt) = silent no-op for that session but doesn't crash.
+3. **Big Rebalance master is in `buff_tweaker` mod.** Do NOT re-ship registration list in wt. wt sub-toggles gate on `bt:is_br_active()`. Out-of-order load (bt after wt) = silent no-op for that session but doesn't crash. **[SUPERSEDED 2026-07-07 — bt retired 2026-06: bt no longer exists, so wt's BR sub-toggles are permanently inert (the guard returns false). Do not attempt to re-home the registry.]**
 
 4. **MOD_VERSION bump on every build.** Required to visually verify hot-reload or restart loaded the new code. Appended to Workshop title automatically by launcher.
 

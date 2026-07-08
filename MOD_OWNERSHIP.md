@@ -44,7 +44,7 @@ mod — and check `.in_progress/` for sentinel files claiming a live session.
 | verminious_dreams_lighting_dev | Ensrick | in-flight | dev clone (split 2026-05-26) | 2026-05-26 |
 | tweaker (legacy) | Ensrick | frozen | — | 2026-05-25 |
 
-> **NOTE:** The four `-dev` rows above are the dev-stream clones of public Workshop mods (see `CLAUDE.md` § "Dev/stable split workflow"). Stable-row Workshop IDs stay public; dev rows ship to separate friends-only Workshop items. In-flight work happens in the `-dev` directory only; the stable directory receives merged-down releases.
+> **NOTE:** The five `_dev` rows above (ct/gt/gut/cim/vdl) are the dev-stream clones of public Workshop mods (see `CLAUDE.md` § "Dev/stable split workflow"). Stable-row Workshop IDs stay public; dev rows ship to separate friends-only Workshop items. In-flight work happens in the `_dev` directory only; the stable directory receives merged-down releases.
 
 > **NOTE:** `la_prefix_patch` (retired 2026-05-25; absorbed into cosmetics_tweaker; archived to `_archive/la_prefix_patch_v0.3.6-dev/`).
 >

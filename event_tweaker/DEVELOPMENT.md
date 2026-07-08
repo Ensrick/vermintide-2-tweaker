@@ -222,7 +222,7 @@ $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\
 & $exe all    event_tweaker
 ```
 
-The legacy `deploy_all.ps1` shim that used to cover this flow was archived 2026-05-21 to `_archive/legacy_deploy_scripts/`. `upload_event_tweaker.ps1` mirrors `upload_wt.ps1`'s pattern — it aborts if `itemV2.cfg` has `visibility = "public"` to prevent a repeat of the prior automated-public-flip incident that got two mods removed-from-community (irreversible).
+The legacy `deploy_all.ps1` shim that used to cover this flow was removed 2026-05-21 — use `VMBLauncher.exe deploy <mod>` (or `tools\ship\ship.ps1`) directly. `upload_event_tweaker.ps1` mirrors `upload_wt.ps1`'s pattern — it aborts if `itemV2.cfg` has `visibility = "public"` to prevent a repeat of the prior automated-public-flip incident that got two mods removed-from-community (irreversible).
 
 ## Known limitations
 
