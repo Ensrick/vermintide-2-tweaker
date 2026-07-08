@@ -1,5 +1,33 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.373-dev — 2026-07-07 — issue 278 weapon_skin_id axis: crafted/skinned variant CTDs non-cwv peers on equip [verify-fix] [crash] [0-critical]
+
+Cross-mod audit (issue 371 mandate) found the issue-278 fix was HALF-DONE. The loadout
+hook substitutes the item KEY on `rpc_sync_loadout_slot`, but the co-resident SKIN id
+rides a SEPARATE vanilla RPC that was never guarded.
+
+- SYMPTOM: equipping a cwv variant that carries a modded skin (e.g. the Tuskgor Javelin,
+  `slot_data.skin = "cwv_es_javelin_skin"`) crashes every peer in the lobby who does not
+  have cwv, on equip.
+- ROOT CAUSE: cwv appends its skin keys to `NetworkLookup.weapon_skins`
+  (character_weapon_variants.lua:7291). Vanilla `SimpleInventoryExtension.game_object_initialized`
+  encodes `weapon_skin_id = NetworkLookup.weapon_skins[slot_data.skin or "n/a"]` and
+  broadcasts `rpc_add_equipment` to every peer (simple_inventory_extension.lua:258-264);
+  a non-cwv peer cold-decodes the appended index at inventory_system.lua:300 and the strict
+  `__index` metamethod fatals (network_lookup.lua:2362). The issue-278 `LoadoutUtils.sync_loadout_slot`
+  hook only covered the item KEY on the loadout RPC — the skin id on the equipment RPC was
+  the missing half.
+- FIX: hook `SimpleInventoryExtension.game_object_initialized` and null any cwv-registered
+  skin key on the WIRE (encodes as the universal vanilla "n/a" index), restoring the slot's
+  real skin immediately after the send so the LOCAL owner still spawns the custom illusion.
+  Tracked-key set `_om._skin_keys` populated at skin registration. `item_id` needs no fix -
+  cwv keeps `item_data.name = base_weapon` (a vanilla index).
+- SCOPE: remote peers (cwv or not) render the base skin; the crash is replaced by today's
+  husk base-render behavior. Full husk custom-skin parity for cwv-having peers still needs
+  the per-wearer marker (issue 392 Phase 3).
+- REGRESSION: `/cwv_regression_test` -> `cwv_wire_safe_skin_installed`. Needs a 2-player
+  (cwv host + vanilla client) verify.
+
 ## 0.1.372-dev — 2026-07-07 — Phase C: husk mesh + transform parity via the base+career signal (#392 umbrella: #394/#396/#397/#401) [verify-fix]
 
 **Third phase of the weapon-appearance program. The husk (remote-player) render path could not resolve a skinless / cim-crafted cross-character variant: the equipment RPC carries only the BASE weapon key (a cwv clone keeps `entry.name = base_weapon`), so OTHER players' screens showed the base mesh at the base transform. This re-keys the husk off a husk-reliable POSITIVE signal instead of the cwv identity the wire never carries.**

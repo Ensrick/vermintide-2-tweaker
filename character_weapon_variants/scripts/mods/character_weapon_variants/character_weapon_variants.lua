@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.372-dev"
+local MOD_VERSION = "0.1.373-dev"
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -7305,6 +7305,10 @@ local function _register_variant_skins()
 			rawset(NetworkLookup.item_names, idx, skin_key)
 			rawset(NetworkLookup.item_names, skin_key, idx)
 		end
+		-- Track every cwv skin key so the wire-safety hook (issue 278 weapon_skin_id
+		-- axis / issue 371) can null it on rpc_add_equipment for non-cwv peers.
+		_om._skin_keys = _om._skin_keys or {}
+		_om._skin_keys[skin_key] = true
 		::skip_skin::
 	end
 end
@@ -10188,6 +10192,45 @@ if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 	_cwv_net_safe_loadout_hook_installed = true
 end
 
+-- WIRE-SAFETY: weapon_skin_id axis of issue 278 (the sibling the loadout hook above
+-- did NOT cover) / issue 371. A cwv-registered NetworkLookup.weapon_skins key is
+-- undefined on a peer without cwv. Vanilla SimpleInventoryExtension.game_object_initialized
+-- encodes weapon_skin_id = NetworkLookup.weapon_skins[slot_data.skin or "n/a"] and
+-- broadcasts rpc_add_equipment to every peer (simple_inventory_extension.lua:258-264);
+-- a non-cwv peer cold-decodes the appended index at inventory_system.lua:300 -> the
+-- strict __index metamethod fatals (network_lookup.lua:2362). Null any cwv skin key on
+-- the WIRE (encodes as the universal vanilla "n/a" index), then restore the slot's real
+-- skin so the LOCAL owner still spawns the custom illusion (this function only SENDS the
+-- RPC; the owner's unit spawn reads the restored value elsewhere). Remote peers render
+-- the base skin either way — the crash is replaced by today's husk base-render behavior.
+-- Full husk custom-skin parity for cwv-having peers still needs the per-wearer marker
+-- (issue 392 Phase 3). Sole cwv hook on this method (grep-verified). No item_id concern:
+-- cwv keeps item_data.name = base_weapon, a universal vanilla item_names index.
+mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
+	local skin_keys = _om._skin_keys
+	local slots = self and self._equipment and self._equipment.slots
+	if not (skin_keys and slots) then
+		return func(self, unit, unit_go_id)
+	end
+	local saved
+	for _, slot_data in pairs(slots) do
+		local skin = slot_data and slot_data.skin
+		if skin and skin_keys[skin] then
+			saved = saved or {}
+			saved[slot_data] = skin
+			slot_data.skin = nil
+		end
+	end
+	local r1, r2, r3, r4 = func(self, unit, unit_go_id)
+	if saved then
+		for slot_data, skin in pairs(saved) do
+			slot_data.skin = skin
+		end
+	end
+	return r1, r2, r3, r4
+end)
+_om._skin_wire_hook_installed = true
+
 -- NOTE: the per-perspective 1P/3P unit swap mechanism (previously used
 -- for cwv_es_brace_repeater) was moved to weapon_tweaker in v0.1.187 —
 -- it now hooks `GearUtils.spawn_inventory_unit` for vanilla
@@ -11620,6 +11663,31 @@ _rt_register("cwv_husk_base_career_rekey", function()
                             tostring(base), tostring(career))
                     end
                 end
+            end
+        end
+    end
+end)
+
+_rt_register("cwv_wire_safe_skin_installed", function()
+    -- (issue 278 weapon_skin_id axis / issue 371) Every cwv-registered
+    -- NetworkLookup.weapon_skins key must be nulled on the wire so a non-cwv peer
+    -- never cold-decodes it from rpc_add_equipment (strict __index CTD). Asserts the
+    -- SimpleInventoryExtension.game_object_initialized wire-safety hook is installed and
+    -- that the tracked-key set is populated (skins registered at load).
+    if _om._skin_wire_hook_installed ~= true then
+        return "weapon_skin_id wire-safety hook not installed (issue 278 non-cwv-peer CTD regression)"
+    end
+    if type(_om._skin_keys) ~= "table" or next(_om._skin_keys) == nil then
+        return "no cwv skin keys tracked -- wire-safety hook would null nothing (registration/tracking broke)"
+    end
+    -- Every tracked key must actually be a registered weapon_skins entry, else the
+    -- null-on-wire substitution is guarding a phantom.
+    local NL = rawget(_G, "NetworkLookup")
+    local ws = NL and NL.weapon_skins
+    if type(ws) == "table" then
+        for skin_key in pairs(_om._skin_keys) do
+            if rawget(ws, skin_key) == nil then
+                return string.format("tracked cwv skin key %s absent from NetworkLookup.weapon_skins", tostring(skin_key))
             end
         end
     end
