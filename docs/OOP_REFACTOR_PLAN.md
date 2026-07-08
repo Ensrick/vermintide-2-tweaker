@@ -73,6 +73,8 @@ sender-side substitution on it (BUG_CLASSES 31).
 
 ### WS3 - Standards docs: contradictions, staleness, consolidation
 
+> **STATUS: COMPLETE 2026-07-08** - all rows landed via #432 phases 1-3 (commits bf993e8, 9c6f79c, 5792f61). Contradictions/stale claims fixed; status quartet retired to STATUS.md + Issues; overlap clusters merged to owner docs (VMF_RECIPES = hooking, WEAPON_CATALOG absorbed WEAPONS.md, WEAPON_APPEARANCE_STANDARD = render paths, LOCALIZATION_STANDARD = loc, CLAUDE.md = build doctrine); root topic docs moved to docs/ with pointer stubs; PROJECT_STANDARDS gained §7.10 deprecation lifecycle + §9a cross-mod API compat. Module-header standard already existed (§2.2); its QA gate is #429 scope. Issue #432 left open for user review.
+
 | Item | Issue | Effort |
 |---|---|---|
 | Fix 6 verified contradictions (e.g. `[confirmed working]` canonical in TESTING_STATUS but rejected by LOCALIZATION_STANDARD/loc-tags gate; CHECKS.md says name_integrity "NOT wired" while run_all wires it; mechanics_citations documented advisory but runs blocking) | #432 | S |
