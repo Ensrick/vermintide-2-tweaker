@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.73-dev"
+local MOD_VERSION = "0.9.74-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -6043,6 +6043,43 @@ if LoadoutUtils then
         return func(player, slot_name, item, sync_to_specific_peer_id)
     end)
 end
+
+-- v0.9.74-dev: FOURTH sync surface — the weapon SKIN axis (issue 421 / issue 371).
+-- The surfaces above cover the item/attachment NAME. Custom weapon illusions
+-- (_custom_skin_keys — the ct_* illusions plus any LA weapon-skin key) instead write a
+-- modded key into slot_data.skin; vanilla SimpleInventoryExtension.game_object_initialized
+-- encodes weapon_skin_id = NetworkLookup.weapon_skins[slot_data.skin or "n/a"] and
+-- broadcasts rpc_add_equipment to EVERY peer (simple_inventory_extension.lua:258-264). A
+-- peer WITHOUT cosmetics_tweaker cold-decodes the appended index at inventory_system.lua:300
+-- -> the strict __index metamethod fatals (network_lookup.lua:2362). Same crash mode as the
+-- shipped fa479a72 GUID. Null any custom skin key on the WIRE (encodes as the universal
+-- vanilla "n/a" index), then restore the slot's real skin immediately after the send so the
+-- LOCAL owner still spawns the custom illusion (this function only SENDS the RPC; the owner's
+-- unit spawn reads the restored value elsewhere). Remote peers render the base skin either
+-- way. Sole cosmetics hook on this method (grep-verified; the LA name path hooks
+-- PlayerUnitAttachmentExtension.game_object_initialized, a different extension class).
+mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
+    local slots = self and self._equipment and self._equipment.slots
+    if not slots then
+        return func(self, unit, unit_go_id)
+    end
+    local saved
+    for _, slot_data in pairs(slots) do
+        local skin = slot_data and slot_data.skin
+        if skin and _custom_skin_keys[skin] then
+            saved = saved or {}
+            saved[slot_data] = skin
+            slot_data.skin = nil
+        end
+    end
+    local r1, r2, r3, r4 = func(self, unit, unit_go_id)
+    if saved then
+        for slot_data, skin in pairs(saved) do
+            slot_data.skin = skin
+        end
+    end
+    return r1, r2, r3, r4
+end)
 
 -- v0.8.61-dev: THIRD sync surface — attachment-RPC paths that read
 -- `NetworkLookup.item_names[slot_data.item_data.name]` (or `slot_data.name`)

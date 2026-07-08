@@ -1,5 +1,27 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.74-dev — 2026-07-07 — issue 421: ct_* custom weapon illusions CTD non-mod peers on equip [verify-fix] [crash] [0-critical]
+
+Found by the issue-371 cross-mod wire-safety audit. The three existing net-safe surfaces
+cover the item/attachment NAME axis (all LA-keyed); the custom weapon-illusion SKIN axis
+was uncovered.
+
+- SYMPTOM: applying one of the 4 custom ct_* weapon illusions (ct_es_mace_gk_shield_01 on
+  es_mace_shield; ct_es_heavy_spear_deus_01/02/03 on es_2h_heavy_spear) crashes every lobby
+  peer without cosmetics_tweaker, on mission spawn.
+- ROOT CAUSE: the ct_* key is written into slot_data.skin. Vanilla
+  SimpleInventoryExtension.game_object_initialized encodes
+  weapon_skin_id = NetworkLookup.weapon_skins[slot_data.skin] and broadcasts rpc_add_equipment
+  to every peer (simple_inventory_extension.lua:258-264); a non-mod peer cold-decodes the
+  appended index at inventory_system.lua:300 -> strict __index fatal (network_lookup.lua:2362).
+  Same class as the shipped fa479a72 crash. The LA-bridge substitution doesn't cover ct_*
+  (keys live in _custom_skin_keys, never in LA_BRIDGE.backend_to_armoury).
+- FIX (FOURTH sync surface): hook SimpleInventoryExtension.game_object_initialized; null any
+  _custom_skin_keys key on the WIRE (encodes as the universal vanilla "n/a" index), restore
+  the slot's real skin after the send so the local owner still spawns the custom illusion.
+  Remote peers render the base skin. Mirrors cwv v0.1.373-dev.
+- Needs a 2-player (cosmetics host + vanilla client) verify.
+
 ## 0.9.73-dev — 2026-07-06 — Regression battery for the LA sync fixes (issues closed on user sign-off)
 
 Five new `/regression_test` checks locking the 0.9.69-0.9.72 fixes: `cos_la_reconcile_and_pull_wired` (extended: purge tick, offhand restore, persistence API), `cos_la_reconcile_no_entry_terminal` (#264 revert-safety), `cos_la_peer_purge_defer_and_execute` (BUG_CLASSES 24, functional), `cos_la_revert_recv_deletes_entry` (#265, functional), `cos_la_offhand_persistence_roundtrip` (save/read/clear round-trip, functional). All use fake peers/backend_ids and leave no residue. Issues #264 #265 #267 #268 #270 #373 closed on user in-game sign-off 2026-07-06; #266 stays open for the slice-6 data-parity deliverable.
