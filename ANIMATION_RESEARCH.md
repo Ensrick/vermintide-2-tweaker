@@ -3,13 +3,13 @@
 > For the current animation system, read in this order:
 > 1. `DEVELOPMENT.md` → "Animation System Architecture" — the two-systems decision rule and System A (runtime hook) details.
 > 2. `character_weapon_variants/DEVELOPMENT.md` → "Animation: System B" — template-clone path for new variants we own.
-> 3. `WEAPON_CATALOG.md` — per-weapon cross-career status and remap tables.
-> 4. `WORK_ITEMS.md` — current "what works" for animations.
+> 3. `docs/WEAPON_CATALOG.md` — per-weapon cross-career status and remap tables.
+> 4. `weapon_tweaker/ANIMATION_COVERAGE.md` — the current per-(receiver, weapon) animation status matrix. (`WORK_ITEMS.md` was retired to a stub 2026-07-08, issue #432.)
 >
 > Caveats when reading the content below:
 > - Command examples use the legacy `t` prefix (monolithic `tweaker` mod). Current equivalents live in `weapon_tweaker` and are typed as bare slash-commands: `/animlog`, `/dump_actions`, `/force3p`, etc. (No mod-id prefix in chat — the registered command name IS the slash-command name.)
-> - Status claims and fallback tables predate the mod split; trust `WORK_ITEMS.md` and `WEAPON_CATALOG.md` over anything here.
-> - The Chest of Trials UI item at the bottom has moved to `TODO.md` / `WORK_ITEMS.md`.
+> - Status claims and fallback tables predate the mod split; trust `docs/WEAPON_CATALOG.md` and `weapon_tweaker/ANIMATION_COVERAGE.md` over anything here.
+> - The Chest of Trials UI item at the bottom moved to the (now-retired) `TODO.md` / `WORK_ITEMS.md`; pending work lives in GitHub Issues.
 >
 > Kept on disk because the dead-end records (what was tried and *why it failed*) still save investigation time. Treat as a graveyard, not a guide.
 

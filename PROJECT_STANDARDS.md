@@ -192,7 +192,7 @@ properties:
 | Widget type | `checkbox` |
 | `default_value` | `false` |
 | Localization (en) | `"Debug Logging"` |
-| Tooltip (en) | `"Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable."` (note `%%APPDATA%%` — every literal `%` MUST be doubled because VMF runs the value through `string.format`; see `LOCALIZATION_STANDARD.md` § 1) |
+| Tooltip (en) | `"Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable."` (note `%%APPDATA%%` — every literal `%` MUST be doubled because VMF runs the value through `string.format`; see `docs/LOCALIZATION_STANDARD.md` § 1) |
 | Position | At the **BOTTOM of the widget tree**, as a **direct child of the top-level `mod.options_widgets`**. NOT nested inside any `group` / `Advanced` / `Misc` / `Developer` heading. |
 
 **Anti-patterns:**
@@ -258,7 +258,7 @@ old key (`wt_debug_mode`, etc.) was renamed and users may need to re-toggle the
 new `Debug Logging` checkbox after first load. Don't try to silently auto-
 migrate the saved value — the friction is one re-tick.
 
-Cross-ref: `VMF_RECIPES.md` § 9. For Layer 3 `mod:traced_hook` (shipped in `weapon_tweaker` v0.12.84-dev), which emits structured `[<mod>:trace] event=enter|exit class=<C> method=<m> n_args=N` / `n_returned=M` log lines gated on this same `enable_debug_logging` toggle, see `VMF_RECIPES.md` § 2b "Layer 3: traced_hook" — including the per-frame rate-limit caveat.
+Cross-ref: `docs/VMF_RECIPES.md` § 9. For Layer 3 `mod:traced_hook` (shipped in `weapon_tweaker` v0.12.84-dev), which emits structured `[<mod>:trace] event=enter|exit class=<C> method=<m> n_args=N` / `n_returned=M` log lines gated on this same `enable_debug_logging` toggle, see `docs/VMF_RECIPES.md` § 2b "Layer 3: traced_hook" — including the per-frame rate-limit caveat.
 
 #### Two-channel discipline (`_dbg` vs `_dbg_alert`)
 
@@ -358,7 +358,7 @@ format string + context:
 - Don't introduce a third helper. Two channels (log-only, log+chat) cover
   every case in the policy matrix above.
 
-**Cross-ref:** `VMF_RECIPES.md` § 9 (universal debug toggle).
+**Cross-ref:** `docs/VMF_RECIPES.md` § 9 (universal debug toggle).
 
 #### Applied marker line (universal)
 
@@ -435,7 +435,7 @@ mod:info("[<mod_id>] enabled v%s settings_fp=%s", MOD_VERSION, _settings_fingerp
 - Don't include the master toggle in a per-mod addendum if it's already in the hashed key set — the fingerprint already changes when the master flips. Addenda are for fields that AREN'T in the widget tree (et's `host_required=true` is a static design-intent token).
 - Don't print this line more than once per mod load.
 
-**Cross-ref:** `VMF_RECIPES.md` § 11 (Per-hook perf timing via bt.perf_record — sibling experimental hardening that landed in the same pass). **[SUPERSEDED 2026-07-07 — bt retired 2026-06: the `bt.perf_record` framework is gone with `bt`; this cross-ref is historical.]**
+**Cross-ref:** `docs/VMF_RECIPES.md` § 11 (Per-hook perf timing via bt.perf_record — sibling experimental hardening that landed in the same pass). **[SUPERSEDED 2026-07-07 — bt retired 2026-06: the `bt.perf_record` framework is gone with `bt`; this cross-ref is historical.]**
 
 #### Chat-echo policy (when is `mod:echo` allowed?)
 
@@ -801,19 +801,19 @@ The rules below codify what goes where and how each type is maintained.
 
 The complete list of canonical docs and where each lives.
 
-**Repo-root canonical (every doc below is binding on Claude when working anywhere in the repo):**
+**Repo-wide canonical (every doc below is binding on Claude when working anywhere in the repo; topic references live under `docs/` since 2026-07-08, issue #432 - old root paths are pointer stubs):**
 
 | Doc | Tracked? | Purpose | Update trigger |
 |---|---|---|---|
 | `CLAUDE.md` | Yes | Technical entry point — how the code works | Architecture changes; new mods; new cross-mod patterns |
 | `PROJECT_STANDARDS.md` (this file) | Yes | Operational rules — how WE work | New recurring pain → new rule; old rule disproven → revise |
-| `LOCALIZATION_STANDARD.md` | Yes | VMF localization convention | Convention change; new pattern proven across ≥2 mods |
-| `CROSS_MOD_ARCHITECTURE.md` | Yes | How mods interact at runtime (LA bridge, co-install detection) | New cross-mod surface; new bridge pattern |
+| `docs/LOCALIZATION_STANDARD.md` | Yes | VMF localization convention | Convention change; new pattern proven across ≥2 mods |
+| `docs/CROSS_MOD_ARCHITECTURE.md` | Yes | How mods interact at runtime (LA bridge, co-install detection) | New cross-mod surface; new bridge pattern |
 | `CHANGELOG.md` (repo root) | Yes | Repo-aggregate release notes | Per-mod CHANGELOG entries that affect multiple mods or the toolchain |
-| `REGRESSION_CHECKLIST.md` (repo root) | Yes | Master list of repo-wide regression signatures | New crash class survives more than one fix attempt |
-| `WORK_ITEMS.md` | Yes | Current status snapshot across mods | Treat as ephemeral pointer; GitHub Issues §11 is source of truth |
-| `WEAPON_CATALOG.md` / `ITEM_LIST.md` / `ANIMATION_RESEARCH.md` | Yes | Reference catalogs | When the underlying data changes (new weapon, new skeleton probe) |
-| `VMF_RECIPES.md` / `COMMANDS.md` | Yes | Cross-mod reference (VMF gotchas, command inventory) | New VMF burn class; new chat command in any mod |
+| `docs/REGRESSION_CHECKLIST.md` (repo-wide) | Yes | Master list of repo-wide regression signatures | New crash class survives more than one fix attempt |
+| `STATUS.md` | Yes | The single what-now board (replaced `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md`, retired to stubs 2026-07-08, issue #432) | Session bookends; GitHub Issues §11 is source of truth for pending work |
+| `docs/WEAPON_CATALOG.md` / `ITEM_LIST.md` / `ANIMATION_RESEARCH.md` | Yes | Reference catalogs | When the underlying data changes (new weapon, new skeleton probe) |
+| `docs/VMF_RECIPES.md` / `docs/COMMANDS.md` | Yes | Cross-mod reference (VMF gotchas, command inventory) | New VMF burn class; new chat command in any mod |
 | `DEVELOPMENT.md` (repo root) | Yes | Historical architecture reference | Pre-dates CLAUDE.md; still authoritative for topics it covers |
 
 **Per-mod canonical:**
@@ -996,7 +996,7 @@ against creating new files.
 Each canonical doc lists its update trigger in §7.1. In practice:
 
 - **At ship time:** CHANGELOG entry, POSTMORTEMS.md entry if a bug got fixed.
-- **At architecture change:** CLAUDE.md, CROSS_MOD_ARCHITECTURE.md as relevant.
+- **At architecture change:** CLAUDE.md, docs/CROSS_MOD_ARCHITECTURE.md as relevant.
 - **At new-pattern recognition:** PROJECT_STANDARDS.md (this doc) — propose
   the rule update in the same PR as the work that revealed the new pattern.
 - **At reference-knowledge drift:** Bucket A reference docs. If a recipe in
@@ -1041,6 +1041,39 @@ per §7.4) and NOT raw line counts in long docs that will drift.
   subdir is gitignored and conventions there don't matter.
 - **No spaces, no dashes in canonical filenames.** `CODE_REVIEW.md`, not
   `code-review.md` or `Code Review.md`.
+
+### 7.10 Deprecation lifecycle (docs, toggles, APIs)
+
+Retirement is a three-stage pipeline, never a silent delete (added 2026-07-08,
+issue #432 - previously ad hoc: bt, lobby_tweaker, la_prefix_patch each retired
+differently).
+
+**Stage 1 - Superseded.** The replacement exists and is named. Add the §7.5
+SUPERSEDED banner (the word SUPERSEDED must appear in the first 10 lines -
+`qa/check_stale_docs.ps1` keys on it) pointing at the new owner. Content stays
+readable in place. For a settings toggle, the analogue is the dev status tag /
+CHANGELOG entry naming what replaces it; for a cross-mod API, the provider keeps
+the old entry point returning inert values so consumers that guard (the
+`(get_mod('bt') or {}):is_br_active()` pattern) degrade without crashing.
+
+**Stage 2 - Stubbed.** Once nothing SHOULD read the old surface, reduce the doc
+to a ~5-line pointer stub (banner + new home + where the full text lives).
+Before stubbing, copy the full text to `_archive/<area>/<date>_<topic>/`
+(gitignored - snapshots are not source of truth) AND to the durable external
+archive `C:\Users\danjo\source\repos\_vt2-tweaker-archive\<date>\`; git history
+keeps the tracked record. A stubbed toggle is removed from `_data.lua` but its
+`setting_id` is never reused; a stubbed API keeps the guarded no-op shim.
+
+**Stage 3 - Archived / removed.** When grep shows no inbound references left
+(or the referencing docs are themselves archived), delete the stub in a commit
+whose message names the new home (§7.5 rule). Mods retire the same way: mark
+RETIRED in the Mod Directory + `MOD_OWNERSHIP.md`, archive the tree to
+`_archive/` + the external archive, and verify every consumer guards before the
+Workshop item is pulled.
+
+Never skip a stage to "clean up faster" - stage 2 exists because commit
+messages, memory files, and Workshop descriptions keep linking the old path
+long after the content moved.
 
 ---
 
@@ -1185,7 +1218,7 @@ degradation in both cross-version directions. Bump only when the payload
 shape changes; one constant per mod across all the mod's RPCs.
 
 Pilot: chaos_wastes_tweaker v0.7.114-dev (3 RPCs gated). Pattern + when-to-
-bump + adding-new-RPCs + anti-patterns in `VMF_RECIPES.md § 10`. Follow-up
+bump + adding-new-RPCs + anti-patterns in `docs/VMF_RECIPES.md § 10`. Follow-up
 Issues propagate to cosmetics_tweaker, lobby_tweaker, enemy_tweaker,
 crafting_in_modded, general_tweaker — track via GitHub Issues, not eager
 churn.
@@ -1217,16 +1250,16 @@ local n, results = _capture(xpcall(handler, _err_handler, func, ...))
 return unpack(results, 2, n)   -- explicit j preserves nil holes
 ```
 
-Pattern + extended example in `VMF_RECIPES.md § 2a`. Burned twice on the
+Pattern + extended example in `docs/VMF_RECIPES.md § 2a`. Burned twice on the
 same fix in 2 hours (weapon_tweaker v0.12.77 → .78 → .79 cycle on
 2026-05-25). The new `mod:safe_hook` helper introduced in v0.12.77 was
 itself an instance of the bug class warned about in the repo's own
-`VMF_RECIPES.md § 2` — the helper failed to apply its own repo's recipe.
+`docs/VMF_RECIPES.md § 2` — the helper failed to apply its own repo's recipe.
 
 Cross-refs:
 - `CLAUDE.md` § "High-frequency engine quirks" — short-form bullet on the
   underlying `#table` quirk.
-- `VMF_RECIPES.md § 2a` — full recipe, burn history, canonical 4-return
+- `docs/VMF_RECIPES.md § 2a` — full recipe, burn history, canonical 4-return
   example.
 - `weapon_tweaker/scripts/mods/weapon_tweaker/_safe_hook.lua` — the helper
   whose v0.12.79 fix carries the canonical pattern in code.
@@ -1359,7 +1392,7 @@ labels, both directions — see `qa/CHECKS.md` rows 19f/19g).
 that touches a dev-build feature means updating that feature's option-title status tag in
 the SAME pass — e.g. add `[Issue N]` when you open, drop it (→ `[working]`/`[untested]`) when
 you close, add `[verify-fix]`/`[diag]` when you ship a candidate fix or arm diagnostics. Full
-tag vocabulary and rules: `LOCALIZATION_STANDARD.md` § 13 "Dev status tags"; the QA scan is
+tag vocabulary and rules: `docs/LOCALIZATION_STANDARD.md` § 13 "Dev status tags"; the QA scan is
 `qa/check_loc_tags.ps1`.
 
 ### What used to live here

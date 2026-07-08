@@ -312,9 +312,9 @@ end
 
 ## Cross-Career Weapon Animation Status
 
-**Moved to [WEAPON_CATALOG.md](WEAPON_CATALOG.md)** — comprehensive per-weapon reference with attack chains, animation events, cross-career status tables, and data collection gaps.
+**Moved to [docs/WEAPON_CATALOG.md](docs/WEAPON_CATALOG.md)** — comprehensive per-weapon reference with attack chains, animation events, cross-career status tables, and data collection gaps.
 
-The tables below are kept for historical reference but **WEAPON_CATALOG.md is the authoritative source**.
+The tables below are kept for historical reference but **docs/WEAPON_CATALOG.md is the authoritative source**.
 
 Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Remap** = 3P remap table built | **Untested** = needs in-game verification
 
@@ -441,6 +441,10 @@ Legend: **OK** = tested working | **Redirect** = stance redirect in place | **Re
 6. Note: `we_1h_spears_shield` crashes the hero previewer on non-elf careers — this is a known issue but gameplay may still work
 
 ## VMF Hook Timing
+
+> Owner doc for VMF hooking rules (hook_safe no-chain, multi-return collapse,
+> nil-hole unpack, safe_hook/traced_hook wrappers): `docs/VMF_RECIPES.md` sections 1-2b.
+> This section only covers WHEN to install a hook; don't restate the rules here.
 
 - **Globals** (`ItemGridUI`, etc.) -- hook at the top level of `M.install()`, during mod init
 - **Backend instances** (`items_interface:set_loadout_item`, etc.) -- defer inside `mod.update` behind `Managers.backend` check
@@ -581,7 +585,7 @@ repo at least once. Most of these are silent failure modes — code "looks
 right", hook compiles, ships broken. The burn history justifies the depth.
 
 For the VMF-side gotchas (hook_safe doesn't chain, multi-return collapse,
-dropdown options mutation, etc.), see `VMF_RECIPES.md`. This section is for
+dropdown options mutation, etc.), see `docs/VMF_RECIPES.md`. This section is for
 engine-level quirks (Stingray Lua API behavior, vanilla data-table timing,
 husk/self-owned class pairs, etc.).
 
@@ -1191,7 +1195,7 @@ registration from the pool/offering side.
 
 For the cross-mod variant of this (multiple tweaker mods registering the
 same set of templates each shipping a byte-identical canonical list),
-see `CROSS_MOD_ARCHITECTURE.md` § Big Rebalance.
+see `docs/CROSS_MOD_ARCHITECTURE.md` § Big Rebalance.
 
 ### LootItemUnitPreviewer.spawn_units — use `mod:hook`, NOT `hook_safe`
 

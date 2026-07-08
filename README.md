@@ -46,7 +46,7 @@ Before starting development or troubleshooting, please refer to the extensive do
 - **[`PROJECT_STANDARDS.md`](./PROJECT_STANDARDS.md)**: The operational rulebook. Guides coding styles, file constraints (keep files under 2500 lines), logging conventions, and pre-ship checklists.
 - **[`CLAUDE.md`](./CLAUDE.md)**: Technical reference explaining hook consolidation, build pipelines, directory purposes, and bug-triaging procedures.
 - **[`MOD_OWNERSHIP.md`](./MOD_OWNERSHIP.md)**: Coordination registry mapping active developers/agents to mods, preventing code collisions.
-- **[`CROSS_MOD_ARCHITECTURE.md`](./CROSS_MOD_ARCHITECTURE.md)**: Outlines how the different mods interface at runtime (e.g. `cosmetics_tweaker` identifying `weapon_tweaker` or `character_weapon_variants` to apply visual overrides).
+- **[`docs/CROSS_MOD_ARCHITECTURE.md`](./docs/CROSS_MOD_ARCHITECTURE.md)**: Outlines how the different mods interface at runtime (e.g. `cosmetics_tweaker` identifying `weapon_tweaker` or `character_weapon_variants` to apply visual overrides).
 
 ---
 

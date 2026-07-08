@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 8 | Before ANY `mod:hook`/`mod:hook_safe`: grep for existing hooks on that `(Class, method)`. VMF silently drops the 2nd - merge into the existing body. |
 | 9 | Diagnostics use engine `printf`, NOT `mod:info`/`mod:echo` (user runs with mod-logging OFF, so those are invisible). |
 | 10 | Never claim "fixed" / "feature-complete" until the USER confirms in-game. Compile success and structural review are not verification. |
-| 11 | Loc: raw setting keys in widget fields, never pre-localize before registration; escape a literal `%` as `%%`. No em dashes in menu-facing strings. Dev builds carry option-title status tags per `LOCALIZATION_STANDARD.md` § 13 "Dev status tags"; stable (clean-versioned) never does. |
+| 11 | Loc: raw setting keys in widget fields, never pre-localize before registration; escape a literal `%` as `%%`. No em dashes in menu-facing strings. Dev builds carry option-title status tags per `docs/LOCALIZATION_STANDARD.md` § 13 "Dev status tags"; stable (clean-versioned) never does. |
 | 12 | Mechanics claims: grep `C:\Users\danjo\source\repos\Vermintide-2-Source-Code` and cite `file:line`, else write `[unverified]`. Never invent internals. |
 | 13 | Deferred/blocked work goes to GitHub Issues (search first), not floating TODO comments. Label with the FIXED taxonomy — status (`verify-fix`/`diagnostics-armed` ONLY, added when work ships) + type (`bug`/`enhancement`/`feature`, with `crash` a flag on `bug`) + mod tag. Never invent a new status label. Issue format: title 8 words max; body = empirical data only (~150 words: Symptom/Evidence/Fix/Refs). Full scheme: `PROJECT_STANDARDS.md` §11 "Labels" + "Issue format". |
 | 14 | On any bug report: read `docs/BUG_TRIAGE_RUNBOOK.md` FIRST, then match `docs/BUG_CLASSES.md`, before diving into mod source. |
@@ -47,7 +47,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > 2. If ANY match exists for `(ClassName, method)`, **DO NOT add a new hook line**. Instead, merge your new logic INTO the body of the existing hook. Add a banner comment naming the consolidation site (e.g. `_ct_consolidated_open_chest_hook` marker) so the next session can grep for it.
 > 3. Add or extend a `/ct_regression_test` `_rt_register` source-pattern marker for the consolidation, so the singleton invariant is checked on every release.
 >
-> When in doubt: search for `"<method>"` (with quotes) in the file. A grep that returns more than one hit on `mod:hook` or `mod:hook_safe` is a bug, full stop. Reference: `VMF_RECIPES.md` section 1 + `memory/feedback_vmf_no_duplicate_hooks.md`.
+> When in doubt: search for `"<method>"` (with quotes) in the file. A grep that returns more than one hit on `mod:hook` or `mod:hook_safe` is a bug, full stop. Reference: `docs/VMF_RECIPES.md` section 1 + `memory/feedback_vmf_no_duplicate_hooks.md`.
 
 ## Project Overview
 
@@ -70,19 +70,18 @@ technical entry point; from here, follow the tree to the topic-specific referenc
 - `docs/BUG_TRIAGE_RUNBOOK.md` - workflow for using the bug-class catalog: intake, match, fix, verify, document.
 - `docs/MECHANICS.md` - provenance-enforced index of how VT2 / Stingray mechanics actually work. Every factual bullet carries a provenance tag (`[src: file:line]` / `[dump:]` / `[memory:]` / `[bugclass:]` / `[user:]` / `[unverified]`). **Before stating any mechanic, grep the decompiled source and cite it, or write `[unverified]` - never confabulate** (PROJECT_STANDARDS section 12a capture doctrine). `qa/check_mechanics_citations.ps1` fails on any untagged claim. This is an INDEX that points at source/memory/BUG_CLASSES, not a fourth prose surface.
 - `DEVELOPMENT.md` - historical/detailed technical reference (hooking rules, animation system, shield swap architecture, known errors). Pre-dates this CLAUDE.md but still authoritative for the topics it covers.
-- `CROSS_MOD_ARCHITECTURE.md` - how `weapon_tweaker`, `cosmetics_tweaker`, `character_weapon_variants`, and `modded_progression` interact at runtime; LA bridge pattern; co-installed-mod detection.
+- `docs/CROSS_MOD_ARCHITECTURE.md` - how `weapon_tweaker`, `cosmetics_tweaker`, `character_weapon_variants`, and `modded_progression` interact at runtime; LA bridge pattern; co-installed-mod detection.
 
 **Tier 2 - repo-wide topical:**
-- `WORK_ITEMS.md` - current status of working features and animation remap tables.
-- `TODO.md` - feature roadmap across all mods.
+- `STATUS.md` - the single what-now board; with GitHub Issues it replaced `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md` (retired to pointer stubs 2026-07-08, issue #432).
 - `ITEM_LIST.md` - full weapon key catalog from `ItemMasterList`.
-- `WEAPON_CATALOG.md` - repo-level weapon catalog (model paths, ownership, cross-character status).
+- `docs/WEAPON_CATALOG.md` - repo-level weapon catalog (model paths, ownership, cross-character status).
 - `ANIMATION_RESEARCH.md` - skeleton event probe results across the six character bodies.
-- `LOCALIZATION_STANDARD.md` - string-table and naming conventions for `*_localization.lua`.
-- `REGRESSION_CHECKLIST.md` - repo-wide regression gates (per-mod ones live under each mod folder).
+- `docs/LOCALIZATION_STANDARD.md` - string-table and naming conventions for `*_localization.lua`.
+- `docs/REGRESSION_CHECKLIST.md` - repo-wide regression gates (per-mod ones live under each mod folder).
 - `CHANGELOG.md` - repo-aggregate release notes.
-- `VMF_RECIPES.md` - Vermintide Mod Framework gotchas (hook_safe chaining, multi-return collapse, network_send recipients, RPC string cap, dropdown options mutation, widget setting_id uniqueness, mod localization scope, custom_gui_textures format).
-- `COMMANDS.md` - per-mod chat command inventory (every `mod:command(...)` across the repo).
+- `docs/VMF_RECIPES.md` - Vermintide Mod Framework gotchas (hook_safe chaining, multi-return collapse, network_send recipients, RPC string cap, dropdown options mutation, widget setting_id uniqueness, mod localization scope, custom_gui_textures format).
+- `docs/COMMANDS.md` - per-mod chat command inventory (every `mod:command(...)` across the repo).
 
 **Tier 3 - per-sub-mod docs worth reading from outside the mod (each mod also has its own CHANGELOG.md + REGRESSION_CHECKLIST.md):**
 
@@ -132,7 +131,7 @@ All active mods build via **VMB** (the launcher). Only frozen legacy `tweaker` u
 
 | Mod | Internal ID | Workshop ID | Stream | Purpose |
 |-----|-------------|-------------|--------|---------|
-| weapon_tweaker | `wt` | 3712896117 | single | Full-freedom cross-character weapon access: any character wields any weapon (1P universal, untouched), 3P anim events remapped into a receiver-native weapon's vocab so the bystander view stays plausible. Identical-functional ports are migrating out to `cosmetics_tweaker`; wt keeps genuine functional cross-character ports. Operates **independently** of `character_weapon_variants` (overlap allowed); wt is the availability control surface — it owns the per-weapon enable/disable toggles and, when co-installed with CWV, also covers CWV's weapons. See `CROSS_MOD_ARCHITECTURE.md` / Issue #368. |
+| weapon_tweaker | `wt` | 3712896117 | single | Full-freedom cross-character weapon access: any character wields any weapon (1P universal, untouched), 3P anim events remapped into a receiver-native weapon's vocab so the bystander view stays plausible. Identical-functional ports are migrating out to `cosmetics_tweaker`; wt keeps genuine functional cross-character ports. Operates **independently** of `character_weapon_variants` (overlap allowed); wt is the availability control surface — it owns the per-weapon enable/disable toggles and, when co-installed with CWV, also covers CWV's weapons. See `docs/CROSS_MOD_ARCHITECTURE.md` / Issue #368. |
 | **weapon_tweaker_dev** | `wt_dev` | (none) | **STALE - DO NOT EDIT** | Abandoned experiment clone on disk. `weapon_tweaker/` (unsuffixed) is the ACTIVE dir for all wt work. Never edit this directory. |
 | chaos_wastes_tweaker | `ct` | 3712929235 | stable | CW economy, curses, boons, altars, traits. In-flight work in `chaos_wastes_tweaker_dev`. |
 | chaos_wastes_tweaker_dev | `ct_dev` | 3733366926 | dev | In-flight `ct` work; friends-only clone. Distinct VMF registration so it coexists with stable `ct`. See "Dev/stable split workflow". |
@@ -144,7 +143,7 @@ All active mods build via **VMB** (the launcher). Only frozen legacy `tweaker` u
 | dynamic_cosmetic_portraits | `dynamic_cosmetic_portraits` | 3721036701 | single | Hat/outfit-aware HUD and hero-select character portraits (split from cosmetics_tweaker). |
 | career_tweaker | `crt` | 3716286199 | single | Talent/ability swapping. |
 | enemy_tweaker | `enemy_tweaker` | 3716780252 | single | Enemy spawns, horde compositions, breed substitution. |
-| character_weapon_variants | `character_weapon_variants` | 3716869446 | single | Semi-lore-friendly new variant items (MoreItemsLibrary) that clone cross-character base templates to bring other characters' movesets onto receivers. 1P wield/stance differentiates feel; 3P uses `anim_event_3p` remap into a good-enough native vocab. Designed to play distinctly, unlike wt's full-freedom access. **Independent** of `wt` (overlap allowed); default-on with no per-weapon toggles — `wt`, when co-installed, supplies those toggles and covers CWV's `cwv_variant` items. See `CROSS_MOD_ARCHITECTURE.md` / Issue #368. |
+| character_weapon_variants | `character_weapon_variants` | 3716869446 | single | Semi-lore-friendly new variant items (MoreItemsLibrary) that clone cross-character base templates to bring other characters' movesets onto receivers. 1P wield/stance differentiates feel; 3P uses `anim_event_3p` remap into a good-enough native vocab. Designed to play distinctly, unlike wt's full-freedom access. **Independent** of `wt` (overlap allowed); default-on with no per-weapon toggles — `wt`, when co-installed, supplies those toggles and covers CWV's `cwv_variant` items. See `docs/CROSS_MOD_ARCHITECTURE.md` / Issue #368. |
 | weapons_of_chaos | `WOC` | 3753880932 | single | Player characters wield ENEMY weapons + named keep-trophy artifacts via the duplicate-item approach (clone a player base template, swap held mesh to an enemy/prop `.unit`). First item: Blightreaper (Kruber 1H sword, all careers). Full research + crash post-mortem in `weapons_of_chaos/DEVELOPMENT.md`. |
 | crafting_in_modded | `cim` | 3721038774 | stable | Modded crafting menus - Athanor forge UI for crafting any career-eligible weapon. In-flight work in `crafting_in_modded_dev`. |
 | crafting_in_modded_dev | `cim_dev` | 3733366851 | dev | In-flight `cim` work; friends-only clone. See "Dev/stable split workflow". |
@@ -326,24 +325,15 @@ VMF provides `mod:hook(class, method, func)` and `mod:hook_safe(class, method, f
 
 **Do NOT hook `BackendUtils.can_wield_item`** - it is not hookable from Workshop mods. Modify `ItemMasterList[key].can_wield` directly instead.
 
-**`mod:hook_safe` does NOT chain on the same `Class.method`.** Two `mod:hook_safe(C, m, ...)` registrations on the same pair silently overwrite - only one body runs, with no error or warning. The diagnostic install log prints `Hooking '<m>' from [<C>]` twice with identical Origin pointers, but at runtime the shadowed handler never fires. Consolidate concerns (diagnostic + behavior) into a single callback per `(Class, method)` per mod. Full mechanic + burn history in `VMF_RECIPES.md` section 1.
+**`mod:hook_safe` does NOT chain on the same `Class.method`.** Two `mod:hook_safe(C, m, ...)` registrations on the same pair silently overwrite - only one body runs, with no error or warning. The diagnostic install log prints `Hooking '<m>' from [<C>]` twice with identical Origin pointers, but at runtime the shadowed handler never fires. Consolidate concerns (diagnostic + behavior) into a single callback per `(Class, method)` per mod. Full mechanic + burn history in `docs/VMF_RECIPES.md` section 1.
 
-**Hook wrappers collapse multi-returns to one value.** Writing `return wrapper(func(self, ...))` drops every return after the first into the wrapper's argument list, where they are silently discarded. VT2 spawn / composition / `get_loadout` / `get_item_units` functions love returning 2-3 values - always capture them all into locals before transforming:
-```lua
--- WRONG -- num_to_spawn collapses to nil at the caller
-return _apply_swap(func(self, ...))
-
--- RIGHT -- capture every return, transform the one you need
-local list, num_to_spawn = func(self, ...)
-return _apply_swap(list), num_to_spawn
-```
-Burn history + full mechanic in `VMF_RECIPES.md` section 2.
+**Hook wrappers collapse multi-returns to one value.** Writing `return wrapper(func(self, ...))` drops every return after the first into the wrapper's argument list, where they are silently discarded. VT2 spawn / composition / `get_loadout` / `get_item_units` functions love returning 2-3 values - always capture them all into locals before transforming. Canonical WRONG/RIGHT block, burn history + full mechanic: `docs/VMF_RECIPES.md` section 2 (the owner doc for hooking rules; diagnosis pattern in `docs/BUG_CLASSES.md` section 2).
 
 **`LootItemUnitPreviewer.spawn_units` MUST use `mod:hook`, not `hook_safe`.** Vanilla `_spawn_items` writes `self._spawned_units = units` AFTER `spawn_units` returns, so a `hook_safe` post-callback reads `nil`. Use the full wrapper and read units from the wrapped call's return. Hit twice (cosmetics_tweaker bret-thinning scale, character_weapon_variants v0.1.127). Full detail in `DEVELOPMENT.md` section "LootItemUnitPreviewer.spawn_units".
 
 **`HeroPreviewer` / `MenuWorldPreviewer` slot keying is split.** `_item_info_by_slot` is **string-keyed** (`"melee"` / `"ranged"`); `_equipment_units` is **numeric-keyed** (`slot_index`). Bridge via `info.spawn_data[1].slot_index`. Iterating `_item_info_by_slot` and using the iterator key on `_equipment_units` returns nil silently. Hit twice (cosmetics_tweaker v0.7.88, character_weapon_variants v0.1.84). Full detail in `DEVELOPMENT.md` section "HeroPreviewer / MenuWorldPreviewer slot keying".
 
-**`BackendUtils` dispatch caveat (LA bridge).** `BackendUtils` is a plain-table dispatcher; its functions are often reassigned at runtime by Loremaster's Armoury's "clone backend" pattern. Hooking `BackendUtils.get_item_from_id`, `.get_loadout_item_id`, etc. by string-form will silently miss calls routed through the LA clone path. See `CROSS_MOD_ARCHITECTURE.md` "LA bridge" section for the dispatch model, the clone-backend_id pattern, and which methods need an explicit LA-aware hook. When in doubt, hook the table form against the post-LA `BackendUtils` reference, not the cold `_G.BackendUtils`.
+**`BackendUtils` dispatch caveat (LA bridge).** `BackendUtils` is a plain-table dispatcher; its functions are often reassigned at runtime by Loremaster's Armoury's "clone backend" pattern. Hooking `BackendUtils.get_item_from_id`, `.get_loadout_item_id`, etc. by string-form will silently miss calls routed through the LA clone path. See `docs/CROSS_MOD_ARCHITECTURE.md` "LA bridge" section for the dispatch model, the clone-backend_id pattern, and which methods need an explicit LA-aware hook. When in doubt, hook the table form against the post-LA `BackendUtils` reference, not the cold `_G.BackendUtils`.
 
 **`rawget` for fragile globals.** Cold reads of `ItemMasterList[key]` and `NetworkLookup.weapon_skins[key]` will throw if a peer hasn't fully populated the table yet (CW peer-late-join, host-only DLC ownership, gated registration mismatch). Use `rawget(ItemMasterList, key)` / `rawget(NetworkLookup.weapon_skins, key)` and nil-check before dereferencing - full failure-mode table and the gated-registration crash class are in `DEVELOPMENT.md` "Known Errors" section.
 
@@ -395,13 +385,13 @@ Then hook `BackendInterfaceCraftingPlayfab.get_unlocked_weapon_skins` to mark cu
 
 - **Lua 5.1** - use `unpack()`, NOT `table.unpack()`. `goto` is available in every active mod (all VMB-built); the SDK preprocessor's restriction only ever applied to the frozen legacy `tweaker`.
 - Game globals: `ItemMasterList`, `WeaponSkins`, `Weapons`, `BackendUtils`, `GearUtils`, `Managers`, `Unit`, `World`, `Vector3`, `Quaternion`, `Material`, `Color`
-- Console commands registered via `mod:command("name", "description", function(...) end)` - invoked in-game as `/<name>` directly (e.g. `/dump`, `/probe_hat`). There is NO mod-id prefix in chat: the mod-id you see in code (`wt`, `cos`, `ct`, etc.) is the mod's internal identifier, not a chat prefix. Documentation showing `/<mod> <command>` is wrong. Full per-mod command inventory in `COMMANDS.md`.
+- Console commands registered via `mod:command("name", "description", function(...) end)` - invoked in-game as `/<name>` directly (e.g. `/dump`, `/probe_hat`). There is NO mod-id prefix in chat: the mod-id you see in code (`wt`, `cos`, `ct`, etc.) is the mod's internal identifier, not a chat prefix. Documentation showing `/<mod> <command>` is wrong. Full per-mod command inventory in `docs/COMMANDS.md`.
 
 **High-frequency engine quirks** (full mechanics in `DEVELOPMENT.md` section "Stingray / Lua engine quirks"):
 - **`Unit.node(unit, name)` errors bypass `pcall`** - it's an engine-level fatal, not a Lua error. Use `Unit.has_node(unit, name)` (returns boolean) for existence checks. Same pattern applies to other Stingray `*.node` / `*.actor` APIs - prefer the `has_*` companion when it exists.
 - **`Quaternion` / `Vector3` are stack temporaries** - valid only within the current frame. Storing the raw value in a global/table/upvalue silently corrupts on the next frame. Use `QuaternionBox` / `Vector3Box` / `Matrix4x4Box` for any storage that outlives a single statement; call `:unbox()` at apply time for a fresh raw value.
 - **Lua 5.1 hard limit: 200 locals per function**, including the top-level chunk. Wrap helper groups in `do ... end` so their locals release back to the main chunk. Symptom is a Stingray compile error `main function has more than 200 local variables` - the cited line is the 201st local, not the problem source.
-- **`#table` is undefined for arrays with nil holes.** Lua 5.1 `#t` does a binary boundary search over the array part - for `{1, nil, 2, nil, 3}`, the result could be 1, 3, or 5. Never use bare `unpack(t)` / `unpack(t, i)` if `t` may contain nils after position `i`. Capture the real count via `select("#", ...)` from the source variadic and pass `j` explicitly: `unpack(t, i, n)`. Burned in weapon_tweaker v0.12.77/.78 (2026-05-25 fix cycle through v0.12.79) - see `VMF_RECIPES.md section 2a`.
+- **`#table` is undefined for arrays with nil holes.** Lua 5.1 `#t` does a binary boundary search over the array part - for `{1, nil, 2, nil, 3}`, the result could be 1, 3, or 5. Never use bare `unpack(t)` / `unpack(t, i)` if `t` may contain nils after position `i`. Capture the real count via `select("#", ...)` from the source variadic and pass `j` explicitly: `unpack(t, i, n)`. Burned in weapon_tweaker v0.12.77/.78 (2026-05-25 fix cycle through v0.12.79) - see `docs/VMF_RECIPES.md section 2a`.
 - **`Unit.actor(unit, idx)` is 1-indexed** (vanilla pattern is `for i = 1, Unit.num_actors(unit)`). Iterating from 0 returns nil at index 0 and skips the final actor - silent no-op.
 - **`pl.player_unit` is a FIELD, not a method.** `Managers.player:local_player().player_unit` (chained field access). `pl:player_unit()` crashes immediately.
 - **`REAL_PLAYER_LOCAL_ID` is a file-scope local in vanilla, not a global.** Add `local REAL_PLAYER_LOCAL_ID = 1` near the top of any mod file that copy-pastes vanilla CW SharedState code, or the affected lookups silently return 0.
@@ -470,14 +460,13 @@ For weapon DLCs (Bogenhafen / Karak Azgaraz / Lake), grep `scripts/settings/dlcs
 
 - `PROJECT_STANDARDS.md` - operational rulebook for the monorepo: workflow conventions, error-handling rules, logging conventions, anti-patterns to avoid, pre-ship checklists. Binding on Claude; cite section numbers when applying. Complements this CLAUDE.md (HOW the code works) with HOW WE WORK on it.
 - `DEVELOPMENT.md` - detailed technical reference (hooking rules, animation system, shield swap architecture, known errors, Stingray / Lua engine quirks, dead ends).
-- `VMF_RECIPES.md` - repo-wide Vermintide Mod Framework gotchas: `hook_safe` no-chain, multi-return collapse, `network_send` recipients (`"server"` silently dropped), 500-char RPC string cap, dropdown options table mutation, widget setting_id uniqueness, mod `_localization.lua` not registered into global `Localize`, `custom_gui_textures` format. Every entry includes burn history.
-- `COMMANDS.md` - snapshot of every `mod:command(...)` across the monorepo (chat commands invoked as `/<name>`).
-- `WORK_ITEMS.md` - current status of all working features and animation remap tables
-- `TODO.md` - feature roadmap across all mods
+- `docs/VMF_RECIPES.md` - repo-wide Vermintide Mod Framework gotchas: `hook_safe` no-chain, multi-return collapse, `network_send` recipients (`"server"` silently dropped), 500-char RPC string cap, dropdown options table mutation, widget setting_id uniqueness, mod `_localization.lua` not registered into global `Localize`, `custom_gui_textures` format. Every entry includes burn history.
+- `docs/COMMANDS.md` - snapshot of every `mod:command(...)` across the monorepo (chat commands invoked as `/<name>`).
+- `STATUS.md` - the single what-now board (replaced `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md`, retired 2026-07-08, issue #432; pending work lives in GitHub Issues)
 - `ITEM_LIST.md` - full weapon key catalog from ItemMasterList
-- `WEAPON_CATALOG.md` - repo-root weapon catalog: model paths, owning character, cross-character port status, illusion family membership. Use alongside `ITEM_LIST.md` when wiring a new weapon-side feature.
+- `docs/WEAPON_CATALOG.md` - repo-root weapon catalog: model paths, owning character, cross-character port status, illusion family membership. Use alongside `ITEM_LIST.md` when wiring a new weapon-side feature.
 - `ANIMATION_RESEARCH.md` - skeleton event probe results across the six character bodies
-- `CROSS_MOD_ARCHITECTURE.md` - weapon sharing & cosmetics architecture across weapon_tweaker, cosmetics_tweaker, character_weapon_variants, and modded_progression. Contains the LA bridge dispatch model referenced from the Hooking section above.
+- `docs/CROSS_MOD_ARCHITECTURE.md` - weapon sharing & cosmetics architecture across weapon_tweaker, cosmetics_tweaker, character_weapon_variants, and modded_progression. Contains the LA bridge dispatch model referenced from the Hooking section above.
 - `weapon_tweaker/CROSS_CHARACTER_PORT_RECIPE.md` - seven-step procedure for adding a full cross-character weapon port (template patcher + force-load + in-mission unit swap + preview unit swap). Failure-mode table, line citations into `weapon_tweaker.lua`, verification matrix.
 - `character_weapon_variants/DEFINITION_OF_DONE.md` - **MANDATORY GATE BEFORE DECLARING ANY CWV VARIANT COMPLETE.** Universal checklist (IML verified, build-from-ground-up integrity, scale/grip, icons, loc, forward-ref audit, build hygiene, live verification matrix) plus trait-gated checklists (G-DUAL, G-RANGED, G-THROWN, G-CROSS-CHAR, G-BLACKSMITH, G-MESH-FAMILY, G-3P-ANIM, G-STANCE, G-CUSTOM-ILLUSION). Variant CHANGELOG entries must end with the `**DoD:**` footer naming which gates were walked and any explicit deferrals. The repeated bug class of "looks right, breaks on equip / fire / forge / preview / dual-wield" is exactly what this file catches.
 - `character_weapon_variants/RECIPES.md` - **READ THIS BEFORE ADDING A NEW VARIANT.** Decision tree (single-melee / 2H / shield / identical-mesh dual / mixed-mesh dual / ranged-ammo / skin-only / cross-access / custom illusion) plus per-archetype copy-paste recipes referencing shipped variants as canon, plus pre-deploy checklist and verification matrix. Each archetype has its own gotchas (dual-wield needs `_force_display_unit`, ranged ammo needs full skin-mirror + custom Pickups + projectile init hook, fire-DoT removal is a 3-step swap, etc.) - the recipes spell them out so you don't rediscover them. The DoD gate (above) supersedes the pre-deploy checklist and verification matrix in this file.

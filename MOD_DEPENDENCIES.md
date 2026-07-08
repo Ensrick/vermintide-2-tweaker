@@ -41,7 +41,7 @@ trailing `-- cross-mod-ok` comment.
 | cosmetics_tweaker | Loremasters-Armoury + MIL | LA cosmetic bridge (mirror LA hats/illusions, husk swap) | Bridge dormant + echoes a notice |
 | cosmetics_tweaker | Material-Hijack / material_hijack_patched / la_prefix_patch | **Conflict guard** (embed goes dormant if the standalone is *enabled*) | Embed stays active (inverse of a dependency) |
 
-Per-edge file:line citations live in the 2026-06-22 audit + `CROSS_MOD_ARCHITECTURE.md`.
+Per-edge file:line citations live in the 2026-06-22 audit + `docs/CROSS_MOD_ARCHITECTURE.md`.
 
 ## Exposed APIs (provider → consumers)
 

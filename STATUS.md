@@ -1,8 +1,10 @@
 # STATUS — Vermintide 2 Tweaker monorepo
 
 > **The single "what now" board.** Claude reads this at the start of every session
-> (the standup) and updates it at the end. It supersedes the *dashboard* role of
-> `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md` — those stay as detail/archive.
+> (the standup) and updates it at the end. Together with GitHub Issues it is the
+> ONLY status surface: `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md` were
+> retired to pointer stubs 2026-07-08 (issue #432; full copies in git history +
+> `_archive/docs/2026-07-08_432_consolidation/`).
 > **Last updated: 2026-07-01.**
 
 ## 📌 2026-07-01 SESSION — repo-wide settings-menu reorg (7 parallel agents, 8 mods shipped)
