@@ -1,5 +1,22 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.376-dev — 2026-07-08 — fix: bundle _lib_peer_parity.lua (beacon failed to load in 0.1.375) [untested]
+
+### Why
+User's 2026-07-08 19:49 log showed `[cwv:371] peer-parity lib failed to load: nil`.
+Root cause: the `.package` file listed the three lua files EXPLICITLY, so the new
+`_lib_peer_parity.lua` was never compiled into the bundle and `mod:dofile` returned
+nil. The fail-safe held (beacon inert, no crash), but the issue 371 gate never armed.
+
+### What
+- `resource_packages/.../character_weapon_variants.package`: lua list switched to the
+  wildcard `scripts/mods/character_weapon_variants/*` (the pattern the split mods use),
+  so per-feature `_*.lua` modules bundle automatically from now on.
+
+### Verify
+`[cwv:371] peer-parity beacon installed` in the log instead of the WARNING, then the
+2-player javelin + bomb test for issue 371 / issue 424 as queued.
+
 ## 0.1.375-dev — 2026-07-08 — #371 / #424 peer-parity foundation: auto-disable the Tuskgor Javelin bomb pool when a lobby peer lacks cwv [untested]
 
 ### Why

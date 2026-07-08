@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.375-dev"
+local MOD_VERSION = "0.1.376-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
