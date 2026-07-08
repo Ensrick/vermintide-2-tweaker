@@ -1,5 +1,29 @@
 # Crafting in Modded Changelog
 
+## 0.8.34 (2026-07-07) — HOTFIX: default cim host CTDs non-cim clients on any crafted-item equip (issue 278)
+
+Targeted crash hotfix promoted from cim_dev v0.8.54-dev — ONLY the wire-safety fix
+below; no other in-flight dev work is included.
+
+- SYMPTOM (issue 278): a cim host crashes every player in the lobby who does NOT have
+  cim, the moment the host equips a crafted item. Reproduces with DEFAULT settings, so
+  it hit users broadly.
+- ROOT CAUSE: the sender-side wire-safety rewrite (swap a crafted item's "modded"
+  rarity to a vanilla "unique" before `LoadoutUtils.sync_loadout_slot` encodes the
+  loadout RPC) was bundled behind `persist_modded_loadouts` (DEFAULT OFF) by the
+  v0.8.15 master gate. With the toggle off the hook is a pure pass-through, so
+  `rarity_id = NetworkLookup.rarities["modded"]` goes on the wire. Every crafted item
+  carries "modded" rarity (modded_rarities.lua:212); that id is undefined on a non-cim
+  client, which reverse-looks-up nil and fatals at `RaritySettings[nil].order`
+  (loadout_utils.lua:73). Wire crash-safety was wrongly coupled to a persistence feature.
+- FIX: hoist the "modded"->"unique" wire rewrite OUT of the persist gate — it now runs
+  UNCONDITIONALLY whenever a "modded" item is synced (single-sourced in the pure helper
+  `_cim_wire_safe_rarity`). Only the cim<->cim `cim_modded_slot` side-channel (which
+  restores modded chrome on cim clients; vanilla drops it) stays gated. Wire safety is
+  now independent of every toggle, per the issue-371 mandate (no mod may ever crash a
+  peer that lacks it).
+- REGRESSION: `/cim_regression_test` -> `wire_rarity_rewrite_ungated`.
+
 ## 0.8.33 (2026-06-29) — PUBLIC RELEASE: the complete Athanor property/slot fix (#86) + full dev rollup
 
 Promotes the entire `crafting_in_modded_dev` line (through 0.8.33-dev) to the public build. The headline is the **finally-correct #86 fix** — the 0.8.9 public build only had a partial stamina-key fix; the real blocker turned out to be a hard 2-distinct-property ceiling.
