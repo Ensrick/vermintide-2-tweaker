@@ -1,5 +1,21 @@
 # Tweaker: Events — Changelog
 
+## 0.4.24-dev (2026-07-08) -- Fix Adventure-client CTD from injected weave-only mutators (#413): gate cat_winds at the injection chokepoint
+
+### Why
+Activating the "shadow" Winds-of-Magic mutator on an Adventure mission crashed CLIENTS with an engine fatal in `Unit.light` (crash locals: `is_server=false`, `wind_settings=nil`, shipped `mutator_shadow.lua:175`). Mechanism: the mutator's `client_update_function` spawns `units/weapons/player/wpn_shadow_gargoyle_head` and calls `Unit.light(unit, "light")` (decompiled `mutator_shadow.lua:186-187`); that unit is resident only in the Weave context, so on an Adventure peer the spawn is invalid and `Unit.light` raises an engine-level fatal that bypasses pcall. The client update runs on every peer with a local client (`mutator_handler.lua:210` keys on `_has_local_client`, host included), and vanilla clients cannot be preloaded by a host-only mod, so exclusion at injection is the only safe fix. Verification of the whole `cat_winds` group against the decompiled source found six siblings that are also unsafe outside a weave (`Managers.weave:get_active_wind_settings()` returns nil unless a weave template is active, `weave_manager.lua:423-432`): `heavens` / `light` / `death` / `beasts` nil-index `wind_settings` in `server_start_function` (`mutator_heavens.lua:38`, `mutator_light.lua:182`, `mutator_death.lua:210`, `mutator_beasts.lua:122`); `fire` nil-indexes it in `client_start_function` on every peer (`mutator_fire.lua:39`); `life` network-spawns the weave-package unit `units/weave/life/life_thorn_bushes_mutator` (`mutator_life.lua:19-24`), the same non-resident-resource fatal class as shadow. `metal` is safe (`get_wind_strength()` falls back to 1, `weave_manager.lua:679-683`; no `wind_settings` index, no unit spawns) and stays injectable. Sibling of the known "mutator packages are Deus-only" class from issue 386's mod-family (see `docs/BUG_CLASSES.md` / memory `reference_vt2_mutator_packages_deus_only`), but package-FREE, so the existing `packages` filter could not catch it.
+
+### Fixed -- `event_tweaker.lua`
+- New `WEAVE_ONLY_MUTATORS` blocklist (7 of the 8 `cat_winds` entries; `metal` excluded on purpose) plus `_weave_wind_active()` (pcall-guarded read of `Managers.weave:get_active_wind_settings()`; any error fails closed as "no weave context").
+- `gather_mutators()`'s `add()` -- the single chokepoint every injection route funnels through (preset, checkbox, discovered, curse) -- now drops blocklisted names whenever no weave wind is active, BEFORE they reach `append_live_event_mutators` and broadcast to peers via `rpc_activate_mutator_client`. Each drop prints one guarded `[et:413] dropped weave-only mutator [...]` line via engine `printf`.
+- New regression check `issue413_weave_only_mutators_gated`: the 7 crashers must be blocklisted, `metal` must not be, and outside a weave the gate must read "no wind active".
+
+### Not changed
+- Real Weave missions get their wind mutators from the weave template via `Managers.weave:mutators()` (`game_mode_weave.lua:134-138`), not from the live-event injection path, so Weave / Deus / vanilla behavior is untouched. Checkboxes stay visible; the drop is injection-time only. Presets, DLC gate, the three live-event hooks, and the issue 386 sanitizer untouched. `MOD_VERSION` `0.4.23-dev` -> `0.4.24-dev`.
+
+### In-game verify
+Host an Adventure mission with the Shadow (Winds of Magic) checkbox on and a client connected: the mission must load with NO client CTD, the host log must show the `[et:413] dropped weave-only mutator [shadow]` line, and `initialized_mutator_map` must NOT contain `shadow`. Other checked non-wind mutators must still activate normally.
+
 ## 0.4.23-dev (2026-07-06) -- Post-init conflict-settings snapshot (issue 393 diagnostics-armed; no behavior change)
 
 ### Why

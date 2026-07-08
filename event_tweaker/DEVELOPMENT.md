@@ -187,6 +187,18 @@ Individual mutator checkboxes do NOT auto-reload (5 toggles would = 5 keep reloa
 
 E.g. `geheimnisnacht_2021` (NOT `mutator_geheimnisnacht_2021`). The `mutator_` prefix is the filename convention, but the registered name (the one in `NetworkLookup.mutator_templates`) is just the suffix.
 
+### Weave (cat_winds) mutators are unsafe outside a real Weave (issue 413, v0.4.24-dev)
+
+The eight Winds-of-Magic mutators assume the Weave context. Outside one, `Managers.weave:get_active_wind_settings()` returns nil (`weave_manager.lua:423-432`) and the weave resource packages are not resident, so activating them in Adventure (or Deus) crashes:
+
+- `shadow` — `client_update_function` spawns `units/weapons/player/wpn_shadow_gargoyle_head` and calls `Unit.light` on it (`mutator_shadow.lua:186-187`); non-resident unit = engine fatal (bypasses pcall) on every peer with a local client (`mutator_handler.lua:210` keys on `_has_local_client`, host included). The issue 413 client CTD.
+- `heavens` / `light` / `death` / `beasts` — `server_start_function` nil-indexes `wind_settings` (`mutator_heavens.lua:38`, `mutator_light.lua:182`, `mutator_death.lua:210`, `mutator_beasts.lua:122`). Host crash.
+- `fire` — `client_start_function` nil-indexes `wind_settings` (`mutator_fire.lua:39`). Every-peer crash.
+- `life` — nil-safe reads, but `spawn_bush` network-spawns the weave-package unit `units/weave/life/life_thorn_bushes_mutator` (`mutator_life.lua:19-24`); same non-resident-resource class, replicated to every peer.
+- `metal` — the one SAFE wind: `get_wind_strength()` falls back to 1 (`weave_manager.lua:679-683`), no `wind_settings` index, no spawns.
+
+**Fix (do not remove):** `WEAVE_ONLY_MUTATORS` + `_weave_wind_active()` in `event_tweaker.lua`; `gather_mutators()`'s `add()` drops the 7 unsafe names whenever no weave wind is active, before `append_live_event_mutators` broadcasts via `rpc_activate_mutator_client`. Vanilla clients cannot be preloaded by a host-only mod, so exclusion at injection is the only safe fix (contrast Cursed Adventure, where every peer runs the mod and preloads). Real Weave missions are untouched — `GameModeWeave` pulls winds from `Managers.weave:mutators()` (`game_mode_weave.lua:134-138`), not from live events. Regression check: `issue413_weave_only_mutators_gated`; checklist slug `et-weave-only-mutator-gate`.
+
 ### Injected mutators that write scalar pacing values crash `ConflictDirector.init` (issue 386, v0.4.22-dev)
 
 Some mutators' `update_conflict_settings` write PLAIN NUMBERS into `CurrentPacing`. The canonical case is `mutator_high_intensity.lua:12-14`:
