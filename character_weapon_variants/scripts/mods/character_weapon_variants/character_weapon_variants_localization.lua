@@ -22,6 +22,10 @@ return {
 	cwv_grenade_tuskgor_javelin_description = { en = "A full-size boar spear: stab with it in melee, or throw it once to punch through shields, plate, and the men behind them. One throw and it is gone." },
 	-- Pickup interaction prompt + HUD description (Pickups.grenades entry hud_description / item_description).
 	cwv_tuskgor_javelin_bomb = { en = "Tuskgor Javelin" },
+	-- Peer-parity gated-feature label (issue 371). Shown in the beacon's chat
+	-- notice when the bomb pool injection is auto-disabled because a lobby peer
+	-- lacks cwv, and again when it re-enables. No em dashes (menu-facing string).
+	cwv_gated_javelin_bomb_pool = { en = "Tuskgor Javelin bomb world spawns" },
 
 	-- ============================================================
 	-- cwv_es_crossbow variant (v0.1.347-dev)

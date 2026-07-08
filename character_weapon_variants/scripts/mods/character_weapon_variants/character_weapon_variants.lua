@@ -1,7 +1,14 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.374-dev"
+local MOD_VERSION = "0.1.375-dev"
+
+-- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
+-- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
+-- cwv network_send payload shape changes. Kept on `mod` (a table field, not a
+-- file-scope local) because this chunk sits at the Lua 5.1 200-local ceiling
+-- (see the `_om` note below) -- a new top-level local could overflow it.
+mod.CWV_RPC_SCHEMA = 1
 
 -- v0.1.332: source-pattern marker constant for the /cwv_regression_test
 -- `cwv_networklookup_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
@@ -45,6 +52,41 @@ local _om = {}
 -- literal at the two sites silently degraded every preview swap to the base mesh
 -- on any rename (no crash, no log) -- keep both ends on this constant.
 _om.HUSK_OVERRIDE_REF = "cwv_husk_override_units"
+
+-- ============================================================================
+-- Peer-parity beacon (issue 371 / issue 424 / BUG_CLASSES 31)
+-- ============================================================================
+-- Shared, COPIED single-source lib (master: tools/shared_lib/_lib_peer_parity.lua;
+-- MOD_DEPENDENCIES.md standalone invariant forbids a get_mod() runtime dep). It
+-- proves "does every lobby peer have cwv?" over VMF's own mod-to-mod channel
+-- (wire-safe by construction -- no vanilla NetworkLookup key, no vanilla RPC),
+-- and auto-disables GAMEPLAY features whose modded indices would crash a non-cwv
+-- peer, re-enabling once everyone has the mod. mod:dofile returns a fresh module
+-- per call (not a singleton) so the lib is a FACTORY; build ONE instance here.
+-- Fail-safe: features stay inert until all peers are positively confirmed; any
+-- beacon error forces them OFF.
+do
+    local ok, factory = pcall(function()
+        return mod:dofile("scripts/mods/character_weapon_variants/_lib_peer_parity")
+    end)
+    if ok and type(factory) == "function" then
+        local ok2, inst = pcall(factory, mod, {
+            channel        = "cwv_peer_parity_present",
+            schema         = mod.CWV_RPC_SCHEMA,
+            mod_label      = "Character Weapon Variants",
+            echo_prefix    = "[cwv]",
+        })
+        if ok2 and type(inst) == "table" then
+            mod._cwv_peer_parity = inst
+            pcall(function() inst:install() end)
+            mod:info("[cwv:371] peer-parity beacon installed (channel=cwv_peer_parity_present)")
+        else
+            mod:warning("[cwv:371] peer-parity factory failed: %s", tostring(inst))
+        end
+    else
+        mod:warning("[cwv:371] peer-parity lib failed to load: %s", tostring(factory))
+    end
+end
 
 mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 -- v0.1.344: removed the in-game chat banner echo per PROJECT_STANDARDS.md
@@ -6625,6 +6667,24 @@ do
 	local _TJB_HEADSHOT_BOOST   = 3.0
 	local _TJB_THROW_SPEED      = 5000
 
+	-- Feature master switch (declared HERE, above every register/inject function,
+	-- so all of them capture it as an upvalue -- a local declared below them would
+	-- be invisible to the closures and silently resolve to a nil global).
+	--
+	-- ⚠ TEMPORARILY DISABLED (v0.1.354-dev) — REGRESSION TRIAGE.
+	-- After this bomb-slot block was added (v0.1.352/.353), the user reported
+	-- that ALL CWV variant weapons stopped appearing (musket, dual axes,
+	-- axe+shield, etc.). The 23.56 log shows the mod loading fully with NO
+	-- registration error, so the cause is a global side-effect of running this
+	-- block at file load (suspects: NetworkLookup.item_names injection, the
+	-- Pickups.grenades renormalise, or the javelin_template clone). Guarded OFF
+	-- to restore content immediately; if content returns with this off, the
+	-- cause is confirmed here and the feature is re-introduced surgically. This
+	-- is SEPARATE from the peer-parity gate below (issue 371): the gate governs
+	-- WHEN the pool injects in a mixed lobby; this switch governs WHETHER the
+	-- feature exists at all while the load-time regression is unresolved.
+	local _TJB_FEATURE_ON = false
+
 	-- 1. Damage profile — buffed thrown_javelin (armour pierce, multi-pierce,
 	--    monster + headshot damage; keeps shield_break). Deep-cloned so the
 	--    vanilla thrown_javelin (used by the ranged javelin + Kerillian) is
@@ -6828,6 +6888,12 @@ do
 	--    to 1.0. Gated on the local toggle (the host's pool decides what spawns in
 	--    their game; clients still resolve via step 5). Runs once (existence guard).
 	local function _inject_pool()
+		-- Master switch first: with the feature OFF the register functions never
+		-- ran, so there is no backing template/ItemMasterList/NetworkLookup entry
+		-- and injecting a pool member would spawn an unregistered pickup. The
+		-- peer-parity gate calls this as its on_enable, so this guard also keeps
+		-- the gate inert while the load-time regression triage is unresolved.
+		if not _TJB_FEATURE_ON then return end
 		if not Pickups or not Pickups.grenades then return end
 		if Pickups.grenades[_TJB_PICKUP_KEY] then return end
 		local enabled = true
@@ -6851,23 +6917,61 @@ do
 		mod:info("Injected '%s' into the grenade pickup pool (share ~%.0f%%)", _TJB_PICKUP_KEY, _TJB_SPAWN_SHARE * 100)
 	end
 
-	-- ⚠ TEMPORARILY DISABLED (v0.1.354-dev) — REGRESSION TRIAGE.
-	-- After this bomb-slot block was added (v0.1.352/.353), the user reported
-	-- that ALL CWV variant weapons stopped appearing (musket, dual axes,
-	-- axe+shield, etc.). The 23.56 log shows the mod loading fully with NO
-	-- registration error, so the cause is a global side-effect of running this
-	-- block at file load (suspects: NetworkLookup.item_names injection, the
-	-- Pickups.grenades renormalise, or the javelin_template clone). Guarded OFF
-	-- to restore content immediately; if content returns with this off, the
-	-- cause is confirmed here and the feature is re-introduced surgically.
-	local _TJB_FEATURE_ON = false
+	-- Peer-parity on_disable: pull the bomb back OUT of the grenade pool and
+	-- renormalise the remaining entries to sum ~1.0, so a lobby with a non-cwv
+	-- peer never has the modded pickup rolled into the world (issue 371/424:
+	-- the WORLD/pool pickup is the GAMEPLAY axis that cannot be wire-substituted).
+	-- Idempotent: no-op when the bomb was never injected. Inject/eject cycles are
+	-- stable -- eject restores the other entries to a ~1.0 sum and inject always
+	-- resets the bomb's raw weight to the same pre-norm value.
+	local function _eject_pool()
+		if not Pickups or not Pickups.grenades then return end
+		if not Pickups.grenades[_TJB_PICKUP_KEY] then return end
+		Pickups.grenades[_TJB_PICKUP_KEY] = nil
+		local total = 0
+		for _, s in pairs(Pickups.grenades) do total = total + (s.spawn_weighting or 0) end
+		if total > 0 then
+			for _, s in pairs(Pickups.grenades) do
+				s.spawn_weighting = (s.spawn_weighting or 0) / total
+			end
+		end
+		mod:info("Ejected '%s' from the grenade pickup pool (peer-parity: a peer lacks cwv)", _TJB_PICKUP_KEY)
+	end
+
+	-- Registration (UNCONDITIONAL when the feature is on -- class-31: registration
+	-- parity is NEVER peer-gated; every peer that has cwv registers the same
+	-- damage-profile / projectile / template / ItemMasterList / NetworkLookup /
+	-- AllPickups indices). Only the pool INJECTION (what actually spawns in the
+	-- world) is the gameplay axis, and that is gated by the peer-parity beacon
+	-- below -- NOT called directly here. (_TJB_FEATURE_ON is the separate
+	-- load-time-regression master switch declared at the top of this block.)
 	if _TJB_FEATURE_ON then
 		_register_profile()
 		_register_projectile()
 		_register_template()
 		_register_item()
 		_register_pickup_lookups()
-		_inject_pool()
+	end
+
+	-- Peer-parity gate for the WORLD/pool pickup injection (issue 371 / issue 424
+	-- / BUG_CLASSES 31). Registered UNCONDITIONALLY (independent of
+	-- _TJB_FEATURE_ON) so the gated-feature registry is populated for the
+	-- regression suite; _inject_pool self-guards on _TJB_FEATURE_ON + the setting,
+	-- so registering here is fully inert while the master switch is off. When the
+	-- feature is on, the beacon calls _inject_pool once all peers are confirmed to
+	-- have cwv and _eject_pool the moment one does not -- so a non-cwv client never
+	-- has the modded grenade rolled into their world (which would CTD them on the
+	-- server-authoritative rpc_spawn_pickup). The NetworkLookup/AllPickups/
+	-- ItemMasterList registration above stays unconditional (registration parity
+	-- is never gated); only this spawn/pool FEATURE gates.
+	_om._TJB_REGISTRATION_UNGATED_MARKER = "cwv-tjb-networklookup-registration-never-peer-gated"
+	if mod._cwv_peer_parity and type(mod._cwv_peer_parity.register_gated_feature) == "function" then
+		mod._cwv_peer_parity:register_gated_feature("cwv_tuskgor_javelin_bomb_pool", {
+			label      = "cwv_gated_javelin_bomb_pool",
+			on_enable  = function() _inject_pool() end,
+			on_disable = function() _eject_pool() end,
+		})
+		mod:info("[cwv:371] gated 'cwv_tuskgor_javelin_bomb_pool' behind peer-parity beacon")
 	end
 
 	-- Test/grant command: drop the one-shot Tuskgor Javelin straight into the
@@ -11859,6 +11963,77 @@ _rt_register("cwv_wire_safe_thrown_variant_installed", function()
         if _om._wire_safe_projectile_units(vanilla_in) ~= vanilla_in then
             return "in-flight projectile helper mutated a vanilla projectile (should pass through)"
         end
+    end
+end)
+
+-- ----------------------------------------------------------------------------
+-- Peer-parity beacon regression checks (issue 371 / issue 424 / BUG_CLASSES 31)
+-- ----------------------------------------------------------------------------
+_rt_register("cwv_peer_parity_lib_loaded", function()
+    -- The COPIED shared lib (master tools/shared_lib/_lib_peer_parity.lua) built
+    -- an instance and exposed the contract API.
+    local pp = mod._cwv_peer_parity
+    if type(pp) ~= "table" then return "mod._cwv_peer_parity not built (lib load or factory failed)" end
+    for _, m in ipairs({ "install", "register_gated_feature", "all_peers_have",
+                         "tick", "feature_count", "applied_state", "is_installed" }) do
+        if type(pp[m]) ~= "function" then return "beacon missing method: " .. m end
+    end
+end)
+
+_rt_register("cwv_peer_parity_beacon_registered", function()
+    -- The beacon's VMF mod-to-mod channel is registered (presence handshake).
+    -- If VMF's network API is present (it is in-game), is_installed must be true.
+    local pp = mod._cwv_peer_parity
+    if type(pp) ~= "table" then return "beacon absent" end
+    if type(mod.network_register) == "function" and not pp:is_installed() then
+        return "beacon channel not registered despite VMF network_register present"
+    end
+end)
+
+_rt_register("cwv_peer_parity_gated_feature_registered", function()
+    -- At least one gated feature is registered (the Tuskgor Javelin bomb pool).
+    local pp = mod._cwv_peer_parity
+    if type(pp) ~= "table" then return "beacon absent" end
+    if pp:feature_count() < 1 then
+        return "gated-feature registry empty -- bomb pool injection was not registered behind the beacon"
+    end
+end)
+
+_rt_register("cwv_peer_parity_failsafe_posture", function()
+    -- Chosen posture: features are INERT until all peers are POSITIVELY confirmed.
+    local pp = mod._cwv_peer_parity
+    if type(pp) ~= "table" then return "beacon absent" end
+    -- Immutable record of the init state (fail-safe = disabled at t0).
+    if pp._initial_applied ~= "disabled" then
+        return "beacon did not initialise to the fail-safe (disabled) state"
+    end
+    if pp.FAILSAFE_POSTURE ~= "feature_inert_until_confirmed" then
+        return "beacon failsafe posture marker changed unexpectedly"
+    end
+    -- Pure classifier: solo (no peers) is trivially all-present; a present but
+    -- un-acked peer must fail-safe to NOT-all-present; an acked peer counts.
+    local c = pp.__classify
+    if type(c) ~= "function" then return "beacon classifier (__classify) missing" end
+    if c({}, {}) ~= true then return "solo (no other peers) must classify all-present" end
+    if c({ p1 = true }, {}) ~= false then
+        return "a present-but-unacked peer must fail-safe to NOT-all-present"
+    end
+    if c({ p1 = true }, { p1 = true }) ~= true then return "an acked peer must count as present" end
+    if c({ p1 = true, p2 = true }, { p1 = true }) ~= false then
+        return "a partially-acked lobby must classify NOT-all-present"
+    end
+    -- all_peers_have must never throw (pcall-wrapped internally -> false on error).
+    local ok = pcall(function() return pp:all_peers_have() end)
+    if not ok then return "all_peers_have threw (must fail-safe to false, never error)" end
+end)
+
+_rt_register("cwv_peer_parity_registration_unconditional", function()
+    -- Class-31 invariant: the NetworkLookup / AllPickups / ItemMasterList
+    -- REGISTRATION for the bomb pickup is never peer-gated; only the pool
+    -- INJECTION (spawn/world axis) gates. The source marker records that split,
+    -- and the gated feature's id is the POOL, not the registration.
+    if _om._TJB_REGISTRATION_UNGATED_MARKER ~= "cwv-tjb-networklookup-registration-never-peer-gated" then
+        return "registration-parity marker missing/altered -- registration must stay ungated (class 31)"
     end
 end)
 

@@ -1,6 +1,84 @@
 # Character Weapon Variants — Changelog
 
-## 0.1.374-dev — 2026-07-08 — issue 424: Tuskgor Javelin throw CTDs non-cwv peers (projectile/pickup wire-safety) [verify-fix] [crash] [0-critical]
+## 0.1.375-dev — 2026-07-08 — #371 / #424 peer-parity foundation: auto-disable the Tuskgor Javelin bomb pool when a lobby peer lacks cwv [untested]
+
+### Why
+Issue 424 shipped the cosmetic wire-safety (thrown-impact pickup + in-flight husk
+substitution) but left the bomb-slot javelin's WORLD/pool pickup open on purpose:
+it is a GAMEPLAY axis (coercing it to a vanilla grenade changes what a cwv player
+picks up), so it cannot be silently substituted. Per the issue 371 mandate
+(BUG_CLASSES 31), gameplay axes must go INERT while any lobby peer lacks the mod,
+notify the user, and NEVER crash. This build lands the reusable peer-parity
+framework and proves it on that first consumer.
+
+### Changed
+- NEW `tools/shared_lib/_lib_peer_parity.lua` (master) + copied verbatim to
+  `character_weapon_variants/scripts/mods/character_weapon_variants/_lib_peer_parity.lua`
+  — a COPIED single-source lib (standalone invariant: no get_mod runtime dep). It
+  is a factory (mod:dofile is not a singleton) returning a beacon instance. Proves
+  "does every lobby peer have cwv?" over VMF's own mod-to-mod channel (delivered
+  only to peers running the same mod id, so absence of a reply == absence of the
+  mod). Wire-safe by construction: no vanilla NetworkLookup key, no vanilla RPC.
+  API: `register_gated_feature(id, {on_enable, on_disable, label})`,
+  `all_peers_have()`, `install()`, `tick(dt)`.
+- character_weapon_variants.lua:~54 — load the lib, build ONE beacon instance
+  (`mod._cwv_peer_parity`), and install it (channel `cwv_peer_parity_present`,
+  schema `CWV_RPC_SCHEMA`).
+- character_weapon_variants.lua:~4 — new `CWV_RPC_SCHEMA = 1` constant near
+  MOD_VERSION (VMF_RECIPES section 10).
+- character_weapon_variants.lua:~6668 — moved `_TJB_FEATURE_ON` above the
+  register/inject closures so they capture it as an upvalue (a local declared
+  below them would resolve to a nil global — a forward-reference trap).
+- character_weapon_variants.lua:~6888 — `_inject_pool` now self-guards on
+  `_TJB_FEATURE_ON` first (no pool member without its backing registration); new
+  `_eject_pool` pulls the bomb back out of `Pickups.grenades` and renormalises the
+  group to sum ~1.0 (inject/eject cycles are stable and idempotent).
+- character_weapon_variants.lua:~6946 — split the bomb block: the
+  damage-profile / projectile / template / ItemMasterList / NetworkLookup /
+  AllPickups REGISTRATION stays UNCONDITIONAL (class 31: registration parity is
+  never peer-gated), and only the pool INJECTION is registered as the gated
+  feature `cwv_tuskgor_javelin_bomb_pool` (on_enable=`_inject_pool`,
+  on_disable=`_eject_pool`). Source marker
+  `_om._TJB_REGISTRATION_UNGATED_MARKER` records the split.
+- character_weapon_variants_localization.lua — new `cwv_gated_javelin_bomb_pool`
+  label ("Tuskgor Javelin bomb world spawns") shown in the beacon's chat notice.
+- character_weapon_variants.lua:~11967 — five new `/cwv_regression_test` checks:
+  `cwv_peer_parity_lib_loaded`, `cwv_peer_parity_beacon_registered`,
+  `cwv_peer_parity_gated_feature_registered`, `cwv_peer_parity_failsafe_posture`
+  (pure classifier: solo=all-present, a present-but-unacked peer fails safe to
+  NOT-all-present, an acked peer counts), and
+  `cwv_peer_parity_registration_unconditional` (class-31 marker present).
+
+### Fail-safe posture (chosen)
+"Feature inert until positively confirmed." The applied state starts DISABLED; a
+feature enables only after a positive all-peers-present evaluation and disables
+immediately the moment an un-acked peer is seen. Disable is instant (crash-safe
+direction); enable waits a short settle to absorb ack races. `all_peers_have()`
+returns true only on positive evidence (solo, or every other human peer acked);
+zero information returns false. Any error inside the tick force-disables every
+feature. Solo and all-cwv lobbies behave exactly as an ungated build (feature ON).
+
+### Notes
+- Peer join/leave is detected by POLLING `Managers.player:human_players()` in the
+  update tick and diffing the peer-id set, NOT by hooking
+  `PlayerManager.add_remote_player` / `remove_player`. The lib is copied into the
+  host mod, so its hooks would register under the host's id; if that mod already
+  hooks either method, VMF drops the second registration on the same
+  (Class, method) with no error (CLAUDE.md non-negotiable 8). Polling has zero
+  collision surface — the same approach gt's `_gt_lobby_modded_manifest.lua` uses.
+- The bomb feature's own master switch (`_TJB_FEATURE_ON`) is STILL `false` from
+  the separate v0.1.354-dev load-time-regression triage (all variants vanished
+  when the block ran at load). That is untouched and independent: the peer-parity
+  gate is wired and inert while the switch is off, so re-enabling the feature
+  later (after that regression is resolved) makes it peer-gated automatically.
+- [untested] — needs an in-game 2-player verify (see the verification section
+  below). Compile + luacheck (0 errors) + mod-lint (0 findings) only.
+- Wave-2 foundation for the remaining gameplay axes (issue 423 damage_profile,
+  issue 425 crt buffs, issue 426 ct boons, issue 430 et curses, issue 431 wt
+  damage profiles) per docs/OOP_REFACTOR_PLAN.md WS1.5. Tracked in memory
+  `project_vt2_cross_peer_wire_safety`.
+
+
 
 ### Why
 Cross-mod wire-safety sweep (issue 371 mandate, BUG_CLASSES 31). Throwing a cwv
