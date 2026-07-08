@@ -1303,3 +1303,40 @@ if not recipe_override then return _silent_drop(...) end       -- only NOW is a 
 - #407 fix cim_dev v0.8.53-dev (`standard_forge.lua` craft() hook + `mod._cim407_craft_item_recipe_for_slot`). STABLE cim carries it until promotion.
 - Regression: `/cim_regression_test` -> `console_craft_item_nil_recipe_resolves`.
 - Related: class 27 (#390 crafted-CWV base-render) — same feature (cim crafting a CWV variant), different failure stage (this one blocks the craft entirely; 27 is the post-craft render).
+
+## 31. Cross-peer wire crash-safety coupled to a feature toggle (a fix that got un-gated re-exposes the crash by default)
+
+**First seen:** 2026-07-07 (cim issue 278 recurrence; fixed cim v0.8.34 / cim_dev v0.8.54-dev)
+**Canonical Issue:** [#278](https://github.com/Ensrick/vermintide-2-tweaker/issues/278) (the crash); [#371](https://github.com/Ensrick/vermintide-2-tweaker/issues/371) (the all-mods never-crash mandate + auto-gate framework)
+**Lives in:** any mod that appends a modded entry to a networked lookup table and relies on a SENDER-side substitution to keep that entry off a vanilla RPC — cim (rarities), cwv (item_names), cosmetics (weapon_skins), and anything future that clones/registers networked content.
+
+### Symptoms
+- A peer who does NOT have the mod hard-CTDs when a peer who DOES have it performs a routine action (equip a crafted item, wield a cross-char weapon). Peer-relative: the mod-haver is fine; the non-mod peer dies. Single-player / all-peers-have-the-mod testing never reproduces it.
+- Reproduces with DEFAULT settings — because the safety was gated behind a toggle that defaults OFF.
+
+### Diagnosis pattern
+1. The mod appends a modded key to a networked table (`NetworkLookup.rarities["modded"]`, `item_names[cwv_key]`, `weapon_skins[skin_key]`) and that index rides a VANILLA RPC (`rpc_sync_loadout_slot`, equipment/skin sync). A non-mod peer's table lacks the append, so the reverse-lookup returns nil and a downstream deref fatals (`RaritySettings[nil].order`, `loadout_utils.lua:73`) or the strict `__index` throws (`network_lookup.lua:2521`).
+2. The mod already HAD the sender-side fix (swap the modded key for a vanilla one before encode). The regression is that a later refactor **bundled the safety rewrite behind an unrelated feature toggle** (cim's `persist_modded_loadouts`, default OFF) on the false premise that "toggle off == behave exactly like vanilla." That premise never holds for wire safety: the live loadout still carries the modded value regardless of the toggle, so toggle-off ships the raw modded key onto the wire.
+3. A RECEIVER-side guard on the same RPC does NOT help: it runs on a peer that HAS the mod, but the crashing peer is the one WITHOUT it. Only a sender-side (host) substitution protects a non-mod peer.
+
+### Fix template
+Single-source the coercion in a PURE helper that takes NO toggle argument (so it is structurally ungateable), call it unconditionally on the send path, and let the toggle gate only the cosmetic/persistence half:
+```lua
+local function _cim_wire_safe_rarity(rarity)   -- no persistence arg by construction
+    if rarity == "modded" then return "unique" end
+    return rarity
+end
+-- in the LoadoutUtils.sync_loadout_slot hook:
+if is_modded then
+    local original = item.rarity
+    item.rarity = _cim_wire_safe_rarity(original)   -- ALWAYS, regardless of any toggle
+    pcall(func, ...)
+    item.rarity = original
+end
+```
+Assert it in the regression suite with a check that the coercion is correct AND takes no toggle argument (`wire_rarity_rewrite_ungated`).
+
+### Related Issues / commits
+- cim v0.8.34 (public hotfix) + cim_dev v0.8.54-dev; commits `cd64fa8` / `02e9d69`.
+- Memory: `reference_vt2_wire_safety_never_toggle_gated`.
+- Related: class 27 (husk resolves BASE item_data — the render-side twin of the same "clone keeps base identity on the wire" root); the general gated-registration cold-read crash (`rawget` section near the top of this file).
