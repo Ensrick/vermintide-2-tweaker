@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.53-dev"
+local MOD_VERSION = "0.8.54-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -750,36 +750,55 @@ end
 -- Exposed read-only for the regression test / debug probes.
 mod._cim_persist_loadouts_enabled = _persist_loadouts_enabled
 
+-- Pure wire-safety decision (issue 278 / issue 371): the rarity a crafted "modded"
+-- item MUST be encoded as on the loadout RPC so a non-cim peer can decode it. Takes
+-- NO persistence argument by construction, so this crash-safety coercion can never be
+-- gated by a toggle. Single-sourced here and asserted by /cim_regression_test
+-- (wire_rarity_rewrite_ungated).
+local function _cim_wire_safe_rarity(rarity)
+    if rarity == "modded" then return "unique" end
+    return rarity
+end
+mod._cim_wire_safe_rarity = _cim_wire_safe_rarity
+
 if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
     mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
-        -- v0.8.15-dev master gate: when loadout persistence is OFF (default),
-        -- cim takes the wire EXACTLY as vanilla would — no rarity rewrite, no
-        -- `cim_modded_slot` side-channel send. Pure pass-through.
-        if not _persist_loadouts_enabled() then
-            return func(player, slot_name, item, sync_to_specific_peer_id)
-        end
+        -- WIRE-SAFETY INVARIANT (issue 278 / issue 371 — NEVER crash a non-mod peer).
+        -- A "modded" rarity_id is undefined on clients that don't run cim, so putting
+        -- it on the loadout RPC CTDs them cold (RaritySettings[nil].order via
+        -- NetworkLookup.rarities reverse-lookup). Coercing "modded" -> "unique" on the
+        -- WIRE is a crash-safety invariant, NOT a persistence feature — it must run
+        -- REGARDLESS of persist_modded_loadouts. The v0.8.15 master gate wrongly bundled
+        -- this rewrite behind the (default-OFF) persistence toggle, so a default cim host
+        -- crashed every vanilla client the instant a crafted (always-"modded") item was
+        -- equipped. Wire safety is hoisted OUT of the gate below; only the persistence
+        -- side-channel stays gated.
         local is_modded = item and item.rarity == "modded" or false
-        local peer_id = player:network_id()
-        local local_player_id = player:local_player_id()
 
-        -- Side-channel BEFORE the loadout RPC. Cim clients latch the flag and
-        -- the rpc_sync_loadout_slot hook below restores rarity on receive.
-        -- We always send (even is_modded=false) so equipping a non-modded item
-        -- clears any stale modded flag on that slot.
-        local target = sync_to_specific_peer_id or "others"
-        -- audit 2026-06-07 (v0.7.72-dev): CIM_RPC_SCHEMA is the FIRST positional
-        -- arg after the target (VMF_RECIPES § 10). The receiver gate below drops
-        -- any packet whose leading schema value doesn't match.
-        local ok_send, err_send = pcall(mod.network_send, mod, "cim_modded_slot",
-            target, CIM_RPC_SCHEMA, peer_id, local_player_id, slot_name, is_modded)
-        if not ok_send then mod:info("[cim] side-channel send failed: %s", tostring(err_send)) end
+        -- Persistence-only concern: the cim<->cim `cim_modded_slot` side-channel that
+        -- restores "modded" chrome on cim CLIENTS. Vanilla clients have no handler and
+        -- drop it; it contributes nothing to wire safety. Keep it gated so persist-OFF is
+        -- a clean vanilla pass-through APART FROM the mandatory rarity coercion.
+        if _persist_loadouts_enabled() then
+            local peer_id = player:network_id()
+            local local_player_id = player:local_player_id()
+            -- Send even is_modded=false so equipping a non-modded item clears any stale
+            -- modded flag on that slot. CIM_RPC_SCHEMA is the FIRST positional arg after
+            -- the target (VMF_RECIPES § 10); the receiver gate drops shape mismatches.
+            local target = sync_to_specific_peer_id or "others"
+            local ok_send, err_send = pcall(mod.network_send, mod, "cim_modded_slot",
+                target, CIM_RPC_SCHEMA, peer_id, local_player_id, slot_name, is_modded)
+            if not ok_send then mod:info("[cim] side-channel send failed: %s", tostring(err_send)) end
+        end
 
         if not is_modded then
             return func(player, slot_name, item, sync_to_specific_peer_id)
         end
 
+        -- Unconditional wire rewrite: swap to a vanilla rarity for the RPC encode, then
+        -- restore the host-local value immediately so the host's own UI is untouched.
         local original = item.rarity
-        item.rarity = "unique"
+        item.rarity = _cim_wire_safe_rarity(original)
         local ok, err = pcall(func, player, slot_name, item, sync_to_specific_peer_id)
         item.rarity = original
         if not ok then mod:info("[cim] sync_loadout_slot rewrite error: %s", tostring(err)) end
@@ -6474,6 +6493,27 @@ _rt_register("rpc_sync_loadout_unknown_id_guard", function()
     end
     if rawget(names, 900000001) ~= nil then
         return "sentinel id 900000001 unexpectedly present in item_names"
+    end
+end)
+
+_rt_register("wire_rarity_rewrite_ungated", function()
+    -- (issue 278 regression / issue 371 mandate) The "modded"->vanilla rarity coercion
+    -- on the loadout wire is a CRASH-SAFETY invariant and must NOT be gated by
+    -- persist_modded_loadouts. The v0.8.15 master gate wrongly bundled them, so a
+    -- default-OFF host CTD'd every non-cim client the instant a crafted (always-"modded")
+    -- item equipped. The coercion is single-sourced in _cim_wire_safe_rarity, which takes
+    -- NO persistence argument — so by construction it cannot be toggle-gated.
+    if type(mod._cim_wire_safe_rarity) ~= "function" then
+        return "wire-safe rarity coercion helper missing (issue 278 crash regression)"
+    end
+    if mod._cim_wire_safe_rarity("modded") ~= "unique" then
+        return "modded rarity not coerced to a vanilla rarity on the wire — non-cim clients will CTD"
+    end
+    if mod._cim_wire_safe_rarity("unique") ~= "unique" then
+        return "a vanilla rarity must pass through the wire coercion unchanged"
+    end
+    if type(mod._cim_persist_loadouts_enabled) ~= "function" then
+        return "persist gate helper missing — cannot confirm wire safety is separated from persistence"
     end
 end)
 

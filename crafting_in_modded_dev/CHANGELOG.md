@@ -1,5 +1,36 @@
 # Crafting in Modded Changelog
 
+## 0.8.54-dev (2026-07-07) - issue 278 REGRESSION: default cim host CTDs non-cim clients on any crafted-item equip [verify-fix] [crash] [0-critical]
+
+- SYMPTOM (issue 278 recurrence): a cim host crashes every player in the lobby who
+  does NOT have cim, the moment the host equips a crafted item. Reproduces with
+  DEFAULT settings (no toggles changed) - which is why it hit users broadly. Present
+  in BOTH public cim (v0.8.33) and cim_dev; the reported crashes are on public cim.
+- ROOT CAUSE: cim's sender-side wire-safety rewrite - swap the crafted item's
+  "modded" rarity to a vanilla "unique" before `LoadoutUtils.sync_loadout_slot`
+  encodes the loadout RPC - was, in the v0.8.15-dev "master gate", bundled behind the
+  `persist_modded_loadouts` toggle (DEFAULT OFF). With the toggle off, the hook is a
+  pure pass-through, so `rarity_id = NetworkLookup.rarities["modded"]` goes on the wire.
+  Every crafted item carries "modded" rarity (modded_rarities.lua:212), and that id is
+  undefined on a non-cim client, so it reverse-looks-up nil and fatals at
+  `RaritySettings[nil].order` (loadout_utils.lua:73 -> deus_chest_extension.lua:232 /
+  reward_popup_ui.lua:451). Wire crash-safety was wrongly coupled to a persistence
+  feature. The v0.8.51-dev receiver-side unknown-id guard does NOT help here: it runs
+  on a peer that HAS cim, but the crashing peer is the one WITHOUT it.
+- FIX (crafting_in_modded_dev.lua sync_loadout_slot hook): hoist the "modded"->"unique"
+  wire rewrite OUT of the persistence gate - it now runs UNCONDITIONALLY whenever a
+  "modded" item is synced. Only the cim<->cim `cim_modded_slot` side-channel (which
+  merely restores modded chrome on cim clients; vanilla drops it) stays gated by
+  `persist_modded_loadouts`. Wire safety is now independent of every toggle, per the
+  issue-371 mandate (no mod may ever crash a peer that lacks it).
+- SCOPE: this is the sender-side (host) protection for the RARITY axis. The item_names
+  axis for crafted CWV variants is separately covered by CWV's own unconditional
+  `LoadoutUtils.sync_loadout_slot` base-key substitution (cwv v0.1.365+). Needs the
+  same fix promoted to PUBLIC cim (v0.8.34) to reach the crashing users.
+- REGRESSION: `/cim_regression_test` -> `wire_rarity_rewrite_ungated` asserts the
+  rarity coercion is not behind the persist gate. Needs a 2-player (cim host + vanilla
+  client) verify.
+
 ## 0.8.53-dev (2026-07-07) - issue 407: CWV (and all) items fail to craft on the console/gamepad UI [verify-fix]
 
 - SYMPTOM (issue 407): every craft attempt on the gamepad/console crafting UI is
