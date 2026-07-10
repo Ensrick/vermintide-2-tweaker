@@ -45,6 +45,24 @@ Last updated: 2026-06-19.
 
 ---
 
+### et-boss-event-mutator-guard — boss-event mutators must no-op on levels without boss_events
+
+**[INTEGRATION]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Host fatal `mutator_multiple_bosses.lua:8: attempt to index field 'boss_events' (a nil value)` when hosting a fixed-end-boss level (evidence: `warcamp`) with Multiple Bosses checked. |
+| Root cause | `CurrentBossSettings` is rebuilt per level from the conflict director's `boss` block (`conflict_director.lua:879`); fixed-end-boss levels carry no `boss_events` table, and `multiple_bosses` / `blessing_of_grimnir` / `deus_pacing_tweak` index it unguarded in their server dispatch functions. |
+| Mod(s) | event_tweaker |
+| Fix version(s) | event_tweaker v0.4.25-dev (issue 455) |
+| Category | INTEGRATION |
+| Repro | 1. Host The War Camp in Adventure with Multiple Bosses checked. 2. Mission must load with no crash. 3. Host log shows `[et:455] skipped multiple_bosses.server.initialize_function ...`. 4. Host a roaming-boss level with it checked: no skip line, dual boss events fire. |
+| Expected post-fix | Guarded templates no-op (with printf) on boss_events-less levels and work normally everywhere else; wrap installs once (`__et455_guarded`). |
+| Detection | Runtime: `/event_tweaker_regression_test` check `issue455_boss_event_mutators_guarded`. Source: `BOSS_EVENT_GUARDS` + `mod._et455_guard_boss_event_mutator` called from `add()`. |
+
+
+---
+
 ## Localization / UI
 
 ### vmf-dropdown-options-mutated — Multi-angle-bracket cascades from shared options table
@@ -360,6 +378,7 @@ Last updated: 2026-06-19.
 ## Slugs
 
 - et-weave-only-mutator-gate
+- et-boss-event-mutator-guard
 - feedback-deploy-vs-upload-distinction
 - feedback-mod-version-format
 - feedback-pre-deploy-checklist

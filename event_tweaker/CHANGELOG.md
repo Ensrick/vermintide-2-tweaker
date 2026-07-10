@@ -1,5 +1,18 @@
 # Tweaker: Events — Changelog
 
+## 0.4.25-dev (2026-07-10) -- Fix host fatal from Multiple Bosses on fixed-boss levels (#455): guard CurrentBossSettings.boss_events
+
+### Why
+Hosting fixed-end-boss levels (crash evidence: level key `warcamp` = The War Camp, user log `console-2026-07-09-04.06.24`) with the "Multiple Bosses" mutator checked crashed the HOST with `mutator_multiple_bosses.lua:8: attempt to index field 'boss_events' (a nil value)`. Mechanism: `CurrentBossSettings` is rebuilt per level from the conflict director's `boss` block (`conflict_director.lua:879`), and some levels' boss blocks carry NO `boss_events` table; the vanilla mutator indexes `CurrentBossSettings.boss_events.event_lookup.event_boss` unguarded in both `server_initialize_function` and `update_conflict_settings` (`mutator_multiple_bosses.lua:8/:13`), dispatched at `mutator_handler.lua:644-645` / `:578-579`. Source sweep of `scripts/settings/mutators/` found two siblings with the same unguarded index in `server_start_function`: `blessing_of_grimnir` (`mutator_blessing_of_grimnir.lua:60`) and `deus_pacing_tweak` (`mutator_deus_pacing_tweak.lua:482/:498`) -- not currently in our catalog, but guarded too in case discovery ever surfaces them. Distinct crash class from the weave-only gate (issue 413): these mutators are Adventure-legal, they just cannot run on levels without roaming boss events.
+
+### Fixed -- `event_tweaker.lua`
+- New `BOSS_EVENT_GUARDS` map + `mod._et455_guard_boss_event_mutator(name)`: on injection, wraps the template's live dispatch fields (`template.server.initialize_function` / `template.server.start_function` / `template.update_conflict_settings`) with a check that no-ops -- with one guarded `[et:455] skipped ...` printf -- when the current level's `CurrentBossSettings.boss_events` is absent. Dispatch-time check, so the mutator still works on every level that has boss events; wrap is idempotent (`__et455_guarded` marker) and host-side only.
+- `gather_mutators()`'s `add()` chokepoint installs the guard for every injected name, covering preset, checkbox, discovered, and curse routes.
+- New regression check `issue455_boss_event_mutators_guarded`: predicate fails closed on a boss block without `boss_events` (the warcamp shape), passes with it, and the installed guard marks the template.
+
+### Verify
+Host The War Camp in Adventure with "Multiple Bosses" checked: mission must load with no crash and the host log must show `[et:455] skipped multiple_bosses.server.initialize_function ...`. Then host a roaming-boss level (e.g. Screaming Bell) with it checked: no `[et:455]` skip line, dual boss events still fire.
+
 ## 0.4.24-dev (2026-07-08) -- Fix Adventure-client CTD from injected weave-only mutators (#413): gate cat_winds at the injection chokepoint
 
 ### Why
