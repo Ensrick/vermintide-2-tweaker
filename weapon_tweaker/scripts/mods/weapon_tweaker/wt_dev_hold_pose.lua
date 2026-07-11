@@ -210,6 +210,28 @@ end
 -- Pose application
 -- ---------------------------------------------------------------------------
 
+-- Read one hand's six slider values (p = "rh" | "lh"). The keys are written
+-- out LITERALLY per hand: the mod-lint save-restore check pairs each
+-- /wt_dev_hp_reset `mod:set("KEY", ...)` with a literal `mod:get("KEY")` in
+-- this file, and a concatenated `"wt_dev_hp_"..p..` key is invisible to it
+-- (it reads as the truncated literal `"wt_dev_hp_"`).
+local function _read_sliders(p)
+    if p == "rh" then
+        return mod:get("wt_dev_hp_rh_offset_x") or 0,
+               mod:get("wt_dev_hp_rh_offset_y") or 0,
+               mod:get("wt_dev_hp_rh_offset_z") or 0,
+               mod:get("wt_dev_hp_rh_rot_pitch") or 0,
+               mod:get("wt_dev_hp_rh_rot_yaw")   or 0,
+               mod:get("wt_dev_hp_rh_rot_roll")  or 0
+    end
+    return mod:get("wt_dev_hp_lh_offset_x") or 0,
+           mod:get("wt_dev_hp_lh_offset_y") or 0,
+           mod:get("wt_dev_hp_lh_offset_z") or 0,
+           mod:get("wt_dev_hp_lh_rot_pitch") or 0,
+           mod:get("wt_dev_hp_lh_rot_yaw")   or 0,
+           mod:get("wt_dev_hp_lh_rot_roll")  or 0
+end
+
 -- True when every Hold-Pose slider is at its default (0). An all-zero pose is
 -- the IDENTITY matrix at local origin, and writing it with set_local_pose is
 -- ABSOLUTE — so applying it would CLOBBER any baked grip offset on node 0
@@ -219,23 +241,15 @@ end
 -- untouched/zeroed tool a true no-op even if live-apply is on. Only an
 -- explicitly non-zero slider value wins and overrides the bake.
 local function _pose_is_default(p)
-    return (mod:get("wt_dev_hp_"..p.."_offset_x") or 0) == 0
-       and (mod:get("wt_dev_hp_"..p.."_offset_y") or 0) == 0
-       and (mod:get("wt_dev_hp_"..p.."_offset_z") or 0) == 0
-       and (mod:get("wt_dev_hp_"..p.."_rot_pitch") or 0) == 0
-       and (mod:get("wt_dev_hp_"..p.."_rot_yaw")   or 0) == 0
-       and (mod:get("wt_dev_hp_"..p.."_rot_roll")  or 0) == 0
+    local ox, oy, oz, pitch_deg, yaw_deg, roll_deg = _read_sliders(p)
+    return ox == 0 and oy == 0 and oz == 0
+       and pitch_deg == 0 and yaw_deg == 0 and roll_deg == 0
 end
 
 -- Build a FRESH local pose matrix from scalar slider values. Returns the raw
 -- Matrix4x4 (stack temporary — must be consumed before the next frame).
 local function _build_pose(p)
-    local ox = mod:get("wt_dev_hp_"..p.."_offset_x") or 0
-    local oy = mod:get("wt_dev_hp_"..p.."_offset_y") or 0
-    local oz = mod:get("wt_dev_hp_"..p.."_offset_z") or 0
-    local pitch_deg = mod:get("wt_dev_hp_"..p.."_rot_pitch") or 0
-    local yaw_deg   = mod:get("wt_dev_hp_"..p.."_rot_yaw")   or 0
-    local roll_deg  = mod:get("wt_dev_hp_"..p.."_rot_roll")  or 0
+    local ox, oy, oz, pitch_deg, yaw_deg, roll_deg = _read_sliders(p)
     local pos = Vector3(ox, oy, oz)
     -- Stingray Quaternion.from_euler_angles_xyz takes DEGREES, not radians
     -- (vanilla crawl_space_extension.lua:14 passes 90 for a 90° turn). The old
@@ -302,12 +316,7 @@ local function _dump_snippet()
 
     for _, h in ipairs(HANDS) do
         local p = h.p
-        local ox = mod:get("wt_dev_hp_"..p.."_offset_x") or 0
-        local oy = mod:get("wt_dev_hp_"..p.."_offset_y") or 0
-        local oz = mod:get("wt_dev_hp_"..p.."_offset_z") or 0
-        local pitch_deg = mod:get("wt_dev_hp_"..p.."_rot_pitch") or 0
-        local yaw_deg   = mod:get("wt_dev_hp_"..p.."_rot_yaw")   or 0
-        local roll_deg  = mod:get("wt_dev_hp_"..p.."_rot_roll")  or 0
+        local ox, oy, oz, pitch_deg, yaw_deg, roll_deg = _read_sliders(p)
 
         local resolved_unit, hand, slot_name, item_key = _resolve_wielded(target_slot, h.hand)
         local non_default = not _pose_is_default(p)

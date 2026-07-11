@@ -2441,8 +2441,19 @@ local function _install_function_hooks()
                                 and self:_check_within_cone(start_point, player_direction, hit_unit, is_enemy) then
                             targets[#targets + 1] = hit_unit
                             targets[hit_unit] = false
-                            if is_enemy and ScriptUnit.extension(hit_unit, "health_system"):is_alive() then
+                            -- Broadphase-listed units can be mid-unregister or lack a
+                            -- health extension; ScriptUnit.extension silently returns
+                            -- nil (script_unit.lua:61-66) and the :is_alive() deref
+                            -- would crash. has_extension + nil-test (sibling pattern
+                            -- enemy_tweaker_big_rebalance.lua:473-474). The unit still
+                            -- lands in targets exactly as before; it just cannot count
+                            -- toward the MAX_TARGETS num_hit cap.
+                            local health_extension = is_enemy
+                                and ScriptUnit.has_extension(hit_unit, "health_system")
+                            if health_extension and health_extension:is_alive() then
                                 num_hit = num_hit + 1
+                            elseif is_enemy and not health_extension then
+                                pcall(printf, "[wt:br_hooks] flamethrower cone: enemy target without health_system skipped (mid-unregister window)")
                             end
                         end
                         if MAX_TARGETS <= num_hit then break end
