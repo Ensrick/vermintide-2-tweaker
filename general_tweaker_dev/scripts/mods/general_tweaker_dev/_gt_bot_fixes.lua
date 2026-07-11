@@ -14,8 +14,8 @@ local mod = get_mod("gt_dev")
 -- pre-bundle setting ids retired in v0.2.128-dev, all default ON). Sub-toggles
 -- and the two delay sliders are read live inside the tick/hook bodies -- no
 -- on_setting_changed wiring. Everything else here (fast reactions, drink
--- potions, follow mode, guard-break message, rescue-awaiting, FIX 0/7/9)
--- keeps its own independent toggle.
+-- potions, follow mode, guard-break message, rescue-awaiting, FIX 0/7/9/11)
+-- keeps its own independent toggle (FIX 11 default ON -- soft-lock fix).
 --
 -- Source citations below are into the decompiled vanilla source at
 -- C:\Users\danjo\source\repos\Vermintide-2-Source-Code (verified 2026-06-16).
@@ -2001,6 +2001,116 @@ mod:hook("GenericStatusExtension", "set_block_broken", function (func, self, blo
 
     return func(self, block_broken, t, attacker_unit)
 end)
+
+-- ----------------------------------------------------------------------------
+-- FIX 11 (issue 448, SOFT-LOCK): downed bots must not grant Morr's Protection
+-- ----------------------------------------------------------------------------
+-- WHAT
+--   The Chaos Wastes boon "Morr's Protection" (deus_knockdown_damage_immunity_aura,
+--   deus_power_up_settings.lua:2371-2392; display name per the ct boon loc dump)
+--   is a server-authority aura: every buff-update tick the CARRIER grants
+--   deus_knockdown_damage_immunity_buff -- perk `invulnerable`, NO duration
+--   (deus_power_up_settings.lua:175-190) -- to every KNOCKED-DOWN ally within
+--   10m, and removes it again when the target leaves range / stands up / the
+--   carrier is dead awaiting rescue (deus_knockdown_damage_immunity_aura_func,
+--   morris_buff_settings.lua:872-921). The carrier's OWN knocked-down state is
+--   never checked: :887 gates only on is_ready_for_assisted_respawn(), so a
+--   DOWNED carrier keeps projecting the aura. Two boon-carrying bots downed
+--   within 10m of each other therefore make each other PERMANENTLY invulnerable
+--   (the perk also blocks the knockdown_bleed DoT, so they never bleed out,
+--   enemies can never finish them, and the run soft-locks -- issue 448).
+--
+-- FIX
+--   Wrap BuffFunctionTemplates.functions.deus_knockdown_damage_immunity_aura_func.
+--   The buff extension resolves update_func from that table DYNAMICALLY on every
+--   tick (buff_extension.lua:794), so the table-form hook intercepts every aura
+--   tick -- same shipped pattern as this mod's apply_huntsman_activated_ability
+--   hook (_gt_solo_qol.lua:497) and ct's three BuffFunctionTemplates hooks.
+--   While the aura OWNER is a BOT and knocked down: skip the vanilla grant tick
+--   entirely and strip any immunity buff THIS owner granted. The strip mirrors
+--   vanilla's own removal path (get_non_stacking_buff + buff.server_id +
+--   remove_server_controlled_buff, morris_buff_settings.lua:900-908) but is
+--   additionally gated on buff.attacker_unit == owner (the grant source, stored
+--   via buff_system.lua:244 -> buff_extension.lua:615), so a STANDING carrier's
+--   aura on the same downed target is left alone.
+--
+--   SCOPE: humans (downed or not) keep exact vanilla behavior -- the wrapper
+--   passes straight through unless the owner is a bot AND knocked down. Standing
+--   bot carriers also pass through. Server-side only by construction: the
+--   vanilla func early-outs on non-server (morris_buff_settings.lua:873) and
+--   bots exist host-side only; the strip uses a vanilla API on a vanilla buff,
+--   so nothing modded touches the wire. Grants resume the moment the bot is
+--   revived (next aura tick passes through).
+--
+--   TOGGLE: gt_bot_no_downed_morrs_grant, independent + default ON. Independent
+--   (not nested under the default-OFF Bot Options master) because a 0-critical
+--   soft-lock fix must be live by default; a toggle at all (rather than FIX 0's
+--   unconditional pattern) because this changes a boon's gameplay behavior, not
+--   crash safety. Default ON because the reported behavior IS the bug (same
+--   rationale as gt_bot_ignore_backward_gate).
+GT_BOT_DOWNED_MORRS_MARKER_v0_2_197 = "gt-448-downed-bot-no-morrs-grant"
+
+-- [owner_unit] = true while that bot's aura is being suppressed. Latches the
+-- [gt:448] printf to once per downed episode (the aura ticks every frame);
+-- cleared on any pass-through tick (bot revived / toggle off).
+local _gt448_suppressed = {}
+
+if BuffFunctionTemplates and BuffFunctionTemplates.functions
+   and BuffFunctionTemplates.functions.deus_knockdown_damage_immunity_aura_func then
+    -- Singleton: the only other BuffFunctionTemplates hook in gt_dev targets
+    -- apply_huntsman_activated_ability (_gt_solo_qol.lua:497) -- different key.
+    mod:hook(BuffFunctionTemplates.functions, "deus_knockdown_damage_immunity_aura_func", function (func, owner_unit, buff, params, world)
+        local suppress = false
+        if mod:get("gt_bot_no_downed_morrs_grant")
+           and Managers.state and Managers.state.network and Managers.state.network.is_server
+           and ALIVE[owner_unit] then
+            local player = Managers.player and Managers.player:owner(owner_unit)
+            if player and player.bot_player and ScriptUnit.has_extension(owner_unit, "status_system") then
+                local status_ext = ScriptUnit.extension(owner_unit, "status_system")
+                suppress = status_ext.is_knocked_down and status_ext:is_knocked_down() or false
+            end
+        end
+
+        if not suppress then
+            if _gt448_suppressed[owner_unit] then
+                _gt448_suppressed[owner_unit] = nil
+            end
+            return func(owner_unit, buff, params, world)
+        end
+
+        -- Downed BOT carrier: grant nothing this tick; strip what THIS carrier
+        -- already granted (e.g. it protected a downed ally while still standing,
+        -- then went down itself). Idempotent, at most 3 other units per side.
+        local stripped = 0
+        local side = Managers.state.side and Managers.state.side.side_by_unit[owner_unit]
+        local units = side and side.PLAYER_AND_BOT_UNITS
+        local buff_system = Managers.state.entity and Managers.state.entity:system("buff_system")
+        local buff_to_add = (buff.template and buff.template.buff_to_add) or "deus_knockdown_damage_immunity_buff"
+        if units and buff_system then
+            for i = 1, #units do
+                local unit = units[i]
+                if unit ~= owner_unit and ALIVE[unit] and ScriptUnit.has_extension(unit, "buff_system") then
+                    local target_buff_ext = ScriptUnit.extension(unit, "buff_system")
+                    local granted = target_buff_ext:get_non_stacking_buff(buff_to_add)
+                    if granted and granted.attacker_unit == owner_unit and granted.server_id then
+                        buff_system:remove_server_controlled_buff(unit, granted.server_id)
+                        stripped = stripped + 1
+                    end
+                end
+            end
+        end
+
+        if not _gt448_suppressed[owner_unit] then
+            _gt448_suppressed[owner_unit] = true
+            pcall(printf, "[gt:448] downed bot carrier: Morr's Protection aura grant suppressed (stripped %d self-granted buff(s))", stripped)
+        end
+        -- Deliberately NOT calling func: the vanilla tick would re-grant the
+        -- invulnerable perk to every knocked-down ally within 10m (:911-918).
+    end)
+else
+    -- Load-order surprise (merged morris settings absent): fix is NOT armed.
+    pcall(printf, "[gt:448] deus_knockdown_damage_immunity_aura_func not in BuffFunctionTemplates.functions at mod load - downed-bot Morr's grant fix NOT armed")
+end
 
 -- Boot-time apply: on_setting_changed doesn't fire at load, so if the user
 -- already had Faster bot reactions ON, apply it now (BotConstants is a settings

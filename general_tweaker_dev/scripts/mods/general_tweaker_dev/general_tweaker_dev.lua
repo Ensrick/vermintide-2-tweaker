@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.196-dev"
+local MOD_VERSION = "0.2.197-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -2219,6 +2219,45 @@ _rt_register("gt_459_lineobject_cleanup_liveness_gated", function()
                 return t.label .. " lost the issue-459 world-liveness identity gate (live == w) on LineObject cleanup"
             end
         end
+    end
+end)
+
+_rt_register("gt_bot448_downed_morrs_grant_suppressed", function()
+    -- issue 448 (v0.2.197-dev): a downed BOT carrying the CW boon Morr's
+    -- Protection (deus_knockdown_damage_immunity_aura) must stop granting the
+    -- invulnerable-perk buff, or two adjacent downed bot carriers are mutually
+    -- unkillable and the run soft-locks. Vanilla never checks the carrier's own
+    -- knocked-down state (morris_buff_settings.lua:887 gates only on
+    -- is_ready_for_assisted_respawn). Asserts: FIX 11 marker present (file
+    -- loaded, fix not reverted); exactly ONE hook on the aura update func (VMF
+    -- drops a silent duplicate); the strip is SOURCE-GATED on
+    -- attacker_unit == owner (a standing carrier's aura must be left alone);
+    -- and both the bot_player and is_knocked_down gates are present (humans and
+    -- standing bots keep vanilla behavior). Source read is best-effort.
+    if GT_BOT_DOWNED_MORRS_MARKER_v0_2_197 ~= "gt-448-downed-bot-no-morrs-grant" then
+        return "FIX 11 marker absent -- was the issue-448 downed-bot Morr's grant fix reverted?"
+    end
+    local anchor = mod._gt_backward_teleport_wants or mod._gt_resolve_follow_mode
+    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(srcp, "r")
+    if not f then return end
+    local txt = f:read("*a"); f:close()
+    if not txt then return end
+    local hook_pat = "mod:hook(BuffFunctionTemplates.functions, \"deus_knockdown_damage_immunity_aura_func\""
+    local first = txt:find(hook_pat, 1, true)
+    if not first then
+        return "the deus_knockdown_damage_immunity_aura_func hook is gone from _gt_bot_fixes.lua (issue-448 fix unwired)"
+    end
+    if txt:find(hook_pat, first + 1, true) then
+        return "TWO hooks on deus_knockdown_damage_immunity_aura_func in _gt_bot_fixes.lua -- VMF silently drops the second"
+    end
+    if not txt:find("granted.attacker_unit == owner_unit", 1, true) then
+        return "issue-448 strip lost its attacker_unit == owner source gate -- it would strip a STANDING carrier's aura too"
+    end
+    if not (txt:find("player.bot_player", 1, true) and txt:find("is_knocked_down", 1, true)) then
+        return "issue-448 suppression lost its bot/knocked-down gates -- human or standing-bot carriers would be affected"
     end
 end)
 

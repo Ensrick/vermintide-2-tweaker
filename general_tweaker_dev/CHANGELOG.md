@@ -1,5 +1,20 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.197-dev (2026-07-11) -- #448: downed bots stop granting Morr's Protection (mutual-invulnerability soft-lock) [untested]
+
+### Why (root cause)
+User report (issue 448, 0-critical): two bots downed close together become permanently invulnerable, can't be finished, can't act, and the run soft-locks. "Morr's Protection" is the Chaos Wastes boon `deus_knockdown_damage_immunity_aura` ("Downed friends near you are invulnerable", per the ct boon loc dump). It is a server-authority aura (deus_power_up_settings.lua:2371-2392): every buff tick the CARRIER grants `deus_knockdown_damage_immunity_buff` -- perk `invulnerable`, NO duration (deus_power_up_settings.lua:175-190) -- to every knocked-down ally within 10m, removing it when the target leaves range / stands up / the carrier is dead awaiting rescue (`deus_knockdown_damage_immunity_aura_func`, morris_buff_settings.lua:872-921). The carrier's OWN knocked-down state is never checked (:887 gates only on `is_ready_for_assisted_respawn`), so a downed carrier keeps projecting the aura. Two boon-carrying bots downed within 10m grant each other the invulnerable perk forever: it also blocks the knockdown bleed-out, enemies can't finish them, nobody revives them, soft-lock. The user's requested behavior ("downed bots should not grant Morr's Protection buff") matches the verified mechanism exactly -- the grant source IS the downed carrier; no divergence.
+
+### Changed
+- **FIX 11 (`_gt_bot_fixes.lua`):** wraps `BuffFunctionTemplates.functions.deus_knockdown_damage_immunity_aura_func` (dispatch is a dynamic table lookup every tick, buff_extension.lua:794; same shipped pattern as the huntsman hook in `_gt_solo_qol.lua:497`). While the aura owner is a BOT and knocked down: the vanilla grant tick is skipped and any immunity buff THIS owner granted is stripped via vanilla's own removal path (`get_non_stacking_buff` + `buff.server_id` + `remove_server_controlled_buff`, morris_buff_settings.lua:900-908), source-gated on `buff.attacker_unit == owner` (buff_system.lua:244 -> buff_extension.lua:615) so a standing carrier's aura on the same target is untouched. Humans (downed or not) and standing bot carriers pass straight through -- byte-for-byte vanilla behavior. Grants resume the moment the bot is revived.
+- **New toggle `gt_bot_no_downed_morrs_grant`** -- independent, default ON. Independent of the default-OFF Bot Options master because a 0-critical soft-lock fix must be live by default; still a toggle (unlike the unconditional FIX 0 crash guard) because it changes a boon's gameplay behavior. Default ON per the issue-142 precedent: the reported behavior is the bug.
+- **Diagnostics:** `[gt:448]` printf when a suppression episode starts (latched once per downed episode, cleared on revive -- the aura ticks per-frame, so unlatched logging would spam) plus a not-armed printf if the aura func is missing from `BuffFunctionTemplates.functions` at load.
+- **New `/gt_regression_test` check `gt_bot448_downed_morrs_grant_suppressed`:** FIX 11 marker present; exactly ONE hook on the aura func; strip keeps its `attacker_unit == owner` source gate; bot/knocked-down gates present.
+
+### Notes
+- Host-side only (vanilla func early-outs on non-server, morris_buff_settings.lua:873; bots exist host-only). No new wire traffic: the strip uses a vanilla API on a vanilla buff, no modded NetworkLookup keys. No new (Class, method) hooks -- the only other `BuffFunctionTemplates` hook in gt_dev targets a different key.
+- `[untested]` until the user confirms in-game (solo-verifiable: hosted CW run with the boon on bots, get two bots downed near each other; enemies must be able to finish them).
+
 ## v0.2.196-dev (2026-07-11) -- #459: world-liveness identity gate on cached LineObject cleanup (host Leave Game AV) [verify-fix]
 
 ### Why (root cause)

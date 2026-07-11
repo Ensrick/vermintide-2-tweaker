@@ -79,6 +79,10 @@ return {
     gt_bot_ironbreaker_revive_in_ult = { en = "[working] Ironbreaker bots revive during their ult" },
     gt_bot_ironbreaker_revive_in_ult_tooltip = { en = "The career skill no longer parks the bot in a blocking stance for its whole duration; the bot breaks off to revive or rescue an ally while the damage-reduction buff keeps running." },
 
+    -- issue 448 (FIX 11): downed bot must not project the Morr's Protection aura.
+    gt_bot_no_downed_morrs_grant = { en = "[untested] [Issue 448] Downed bots don't grant Morr's Protection" },
+    gt_bot_no_downed_morrs_grant_tooltip = { en = "The Chaos Wastes boon Morr's Protection makes downed allies near the carrier invulnerable, and the game keeps that aura running even while the carrier is downed itself. Two bots carrying it that go down near each other protect each other forever: they can't be finished, can't get up, and the run soft-locks. With this on, a bot stops granting the aura while it is knocked down and resumes the moment it is back up. Human carriers and standing bots are untouched. Host-side only." },
+
     -- Bot follow mode dropdown (v0.2.152-dev) -- consolidates the previous
     -- gt_bot_split_among_players + gt_bot_follow_host checkboxes into one
     -- tri-state setting.

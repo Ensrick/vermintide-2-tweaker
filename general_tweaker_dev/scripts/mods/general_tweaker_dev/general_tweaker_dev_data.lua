@@ -295,6 +295,17 @@ local _data = {
                         default_value = false,
                         tooltip       = "gt_no_bots_tooltip",
                     },
+                    -- issue 448 (FIX 11): a downed bot carrying the CW boon
+                    -- Morr's Protection stops projecting its invulnerability
+                    -- aura while knocked down. Independent of the Bot Options
+                    -- master + default ON (the reported soft-lock is the bug).
+                    -- A-Z slot: "Downed..." between "Disable Bots" and "Faster...".
+                    {
+                        setting_id    = "gt_bot_no_downed_morrs_grant",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = "gt_bot_no_downed_morrs_grant_tooltip",
+                    },
                     {
                         setting_id    = "gt_bot_fast_reactions",
                         type          = "checkbox",
