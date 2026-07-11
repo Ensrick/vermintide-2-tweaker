@@ -128,6 +128,16 @@ If `pack_spawning_settings.difficulty_overrides == nil`, `pairs(nil)` crashes:
 
 **How to extend:** when a new mutator or pacing rule crashes on adventure-injected levels with a similar nil-field signature, add its name to `ADVENTURE_INCOMPATIBLE_PACK_MUTATORS` near the `MutatorHandler` hook.
 
+## Curse-mutator MAX_HEALTH rank hole at cataclysm_3 (vanilla bug ct patches)
+
+**Vanilla Fatshark bug:** `mutator_curse_skulking_sorcerer.lua` declares broken rank constants (`CATACLYSM = 6`, `CATACLYSM_2 = 6` duplicate, `CATACLYSM_3 = 7` at :9-11). The `MAX_HEALTH` table its `server_initialize_function` reassigns onto `Breeds.curse_mutator_sorcerer` (:36) therefore spans ranks 2..7 and has **no entry at rank 8** (cataclysm_3). The base breed's own `max_health` is a full 8-entry array (`breed_chaos_mutator_sorcerer.lua:58-67`), so the hole only exists while the curse is initialized. Fatshark guarded the sibling `RESPAWN_TIME` lookup with `or RESPAWN_TIME[NORMAL]` (:43) but not `MAX_HEALTH`.
+
+Vanilla CW never reaches rank 8, but ct's progressive difficulty can ramp a run to cataclysm_3 = rank 8 (`difficulty_settings.lua:287`). A curse-sorcerer spawn then resolves `max_health[8] = nil` (`conflict_director.lua:1948`), `GenericHealthExtension.init` throws in `math.clamp` mid extension-add, `extensions_ready` never runs (`entity_manager2.lua` add loop :116-146 precedes ready loop :150-171), and the half-initialized hit_reaction extension (registered one slot earlier, `unit_extension_templates.lua:403-419`) nil-derefs on the next HitReactionSystem update = host CTD. Issue 470.
+
+**Fix shape (ct v0.7.239-dev):** UNCONDITIONAL backfill (issue 371 never-crash doctrine) via `mod:hook_safe(MutatorHandler, "initialize_mutators", ...)` - server-only call path (`mutator_handler.lua:48`) firing after every `template.server.initialize_function` (:644-645), i.e. after the sparse table lands on the breed. Sets `max_health[8] = 150` iff `[7]` exists and `[8]` is nil (150 = Fatshark's evident cataclysm_3 value; the duplicate-key bug shifted the band down one rank). Entries 6/7 deliberately untouched - re-keying would change live gameplay values. Predicate exported as `mod._ct_backfill_rank8_max_health`; regression test `curse_sorcerer_rank8_backfill`.
+
+**Sweep note:** 2026-07-11 sweep of every `scripts/settings/mutators/mutator_*.lua` found no sibling instance - only skulking sorcerer assigns a rank-keyed table onto a Breed with an unguarded read (`egg_of_tzeentch` / `bolt_of_change` sparse tables all carry `or X[NORMAL]` / `or 1` fallbacks). If a future mutator lands a sparse rank table on a Breed field, extend the same `initialize_mutators` hook body with its own predicate + printf line rather than adding a second hook (VMF drops duplicate hooks silently).
+
 ## NetworkedFlowStateManager state-count leak (vanilla bug ct patches)
 
 **Vanilla Fatshark bug:** `NetworkedFlowStateManager.clear_object_state` (`scripts/managers/networked_flow_state/networked_flow_state_manager.lua:493-495`) nils `_object_states[unit]` when EntityManager destroys a unit (`entity_manager2.lua:390`) **but never decrements `_num_states`**:

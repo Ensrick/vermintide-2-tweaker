@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.238-dev"
+local MOD_VERSION = "0.7.239-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -3222,6 +3222,75 @@ mod:hook("MutatorHandler", "_activate_mutator", function(func, self, name, ...)
         return
     end
     return func(self, name, ...)
+end)
+
+-- #470: vanilla data hole in mutator_curse_skulking_sorcerer.lua. Its local rank
+-- constants are broken (CATACLYSM = 6, CATACLYSM_2 = 6 duplicate, CATACLYSM_3 = 7
+-- at :9-11), so the MAX_HEALTH table its server_initialize_function assigns onto
+-- Breeds.curse_mutator_sorcerer (:36) spans ranks 2..7 with NOTHING at rank 8
+-- (cataclysm_3). The base breed's own max_health is a full 8-entry array
+-- (breed_chaos_mutator_sorcerer.lua:58-67) - the hole exists only while the curse
+-- is initialized. Vanilla CW never reaches rank 8, but ct's progressive difficulty
+-- can step a run to cataclysm_3 (difficulty_settings.lua:287); a curse-sorcerer
+-- spawn then resolves max_health[8] = nil (conflict_director.lua:1948),
+-- GenericHealthExtension.init throws in math.clamp mid extension-add, and the
+-- half-initialized hit_reaction extension (registered one slot earlier,
+-- unit_extension_templates.lua:403-419, extensions_ready never runs) nil-derefs on
+-- the next HitReactionSystem update = host CTD. Fatshark guarded the sibling
+-- RESPAWN_TIME lookup with `or RESPAWN_TIME[NORMAL]` (:43) but not MAX_HEALTH.
+-- Backfill [8] = 150, Fatshark's evident cataclysm_3 intent (the duplicate-key bug
+-- shifted the whole band down one rank). Entries 6/7 stay as-is: re-keying them
+-- would change live gameplay values. Swept every other
+-- scripts/settings/mutators/mutator_*.lua 2026-07-11: this is the only rank-keyed
+-- table landing on a Breed with an unguarded read; egg_of_tzeentch/bolt_of_change
+-- sparse tables all carry `or X[NORMAL]` / `or 1` fallbacks.
+-- UNCONDITIONAL per issue 371 never-crash doctrine: NOT gated on the progressive
+-- difficulty toggle - any other rank-8 source hits the same hole. Predicate
+-- exported on mod for /ct_regression_test.
+mod._ct_backfill_rank8_max_health = function(mh)
+    if type(mh) == "table" and mh[8] == nil and mh[7] ~= nil then
+        mh[8] = 150
+        return true
+    end
+    return false
+end
+
+-- hook_safe AFTER initialize_mutators: server-only call path (mutator_handler.lua:48),
+-- and every template.server.initialize_function has run by then
+-- (mutator_handler.lua:644-645), i.e. the sparse table has already landed on the
+-- breed. Grep-verified 2026-07-11: sole (MutatorHandler, initialize_mutators) hook
+-- in this mod (other MutatorHandler hooks: _activate_mutator above,
+-- tweak_pack_spawning_settings in the adventure-inject block).
+mod:hook_safe("MutatorHandler", "initialize_mutators", function(self, mutators)
+    local breed = Breeds and Breeds.curse_mutator_sorcerer
+    local mh = breed and breed.max_health
+    if mod._ct_backfill_rank8_max_health(mh) then
+        pcall(printf, "[ct:470] backfilled curse_mutator_sorcerer.max_health[8]=150 (vanilla rank hole)")
+    end
+end)
+
+_rt_register("curse_sorcerer_rank8_backfill", function()
+    local fn = mod._ct_backfill_rank8_max_health
+    if type(fn) ~= "function" then
+        return "mod._ct_backfill_rank8_max_health export missing"
+    end
+    -- sparse table shaped like the curse MAX_HEALTH band (ranks 6/7 present, 8 missing)
+    local sparse = { [6] = 120, [7] = 150 }
+    if not fn(sparse) or sparse[8] ~= 150 then
+        return "sparse table not backfilled to [8]=150"
+    end
+    if sparse[6] ~= 120 or sparse[7] ~= 150 then
+        return "backfill mutated existing entries"
+    end
+    -- full 8-entry array (the base breed shape) must pass through untouched
+    local full = { 30, 30, 40, 60, 90, 90, 90, 90 }
+    if fn(full) or full[8] ~= 90 then
+        return "full 8-entry table was modified"
+    end
+    if fn(nil) or fn({}) then
+        return "predicate fired on nil/empty input"
+    end
+    return nil
 end)
 
 mod:hook("DeusMechanism", "get_current_node_curse", function(func, self, ...)
