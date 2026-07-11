@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.195-dev"
+local MOD_VERSION = "0.2.196-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -2189,6 +2189,36 @@ _rt_register("btlab_gui_material_guarded", function()
     end
     if not txt:find("can_get(\"material\", GUI_MTRL)", 1, true) then
         return "create_screen_gui(GUI_MTRL) in _gt_bot_teleport_lab.lua is not pre-filtered by can_get(\"material\", GUI_MTRL) -- #293/#295 CTD guard removed"
+    end
+end)
+
+_rt_register("gt_459_lineobject_cleanup_liveness_gated", function()
+    -- issue 459 (v0.2.196-dev): _clear_and_null (_gt_bot_teleport_lab.lua) and
+    -- _clear (_gt_debug_highlights.lua) dispatch a CACHED LineObject into a CACHED
+    -- world. On Leave Game, StateIngame.on_exit destroys the level world while VMF
+    -- mods_update keeps ticking, so an unguarded reset/dispatch is a C-level access
+    -- violation that pcall CANNOT catch. Both cleanup sites must gate the engine
+    -- calls on an IDENTITY check against the currently-live level_world
+    -- (live == w) -- has_world alone passes when a NEW same-named world exists
+    -- while the cached handle points at the freed old one. Source read is
+    -- best-effort (soft-skip when source is not on disk).
+    local ok, info = pcall(debug.getinfo, mod._gt_btlab_report_tether or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local targets = {
+        { path = srcp, label = "_gt_bot_teleport_lab.lua" },
+        { path = srcp:gsub("_gt_bot_teleport_lab%.lua$", "_gt_debug_highlights.lua"),
+          label = "_gt_debug_highlights.lua" },
+    }
+    for _, t in ipairs(targets) do
+        local f = io.open(t.path, "r")
+        if f then
+            local txt = f:read("*a"); f:close()
+            if txt and not (txt:find("wm:has_world(\"level_world\") and wm:world(\"level_world\")", 1, true)
+                            and txt:find("if live == w then", 1, true)) then
+                return t.label .. " lost the issue-459 world-liveness identity gate (live == w) on LineObject cleanup"
+            end
+        end
     end
 end)
 

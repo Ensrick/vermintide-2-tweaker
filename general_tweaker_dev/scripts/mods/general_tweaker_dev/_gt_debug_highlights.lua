@@ -211,8 +211,13 @@ end
 -- Draw core / lifecycle
 -- ----------------------------------------------------------------------------
 
+-- WorldManager.world() FASSERTS on a missing world (world_manager.lua:111-115);
+-- probe has_world first (#459) -- _draw runs from mods_update, which keeps
+-- ticking between game states where level_world does not exist.
 local function _world()
-    return Managers.world and Managers.world:world("level_world")
+    local wm = Managers.world
+    if not (wm and wm:has_world("level_world")) then return nil end
+    return wm:world("level_world")
 end
 
 local function _line_object(world)
@@ -227,15 +232,27 @@ local function _line_object(world)
 end
 
 -- Erase any lingering lines and drop the cached handle (idempotent: safe to call
--- every off-frame). Mirrors _gt_bot_teleport_lab.lua:_clear_and_null.
+-- every off-frame). Mirrors _gt_bot_teleport_lab.lua:_clear_and_null, including
+-- the #459 world-liveness IDENTITY gate: reset/dispatch into a destroyed world is
+-- a C-level access violation that pcall cannot catch (StateIngame.on_exit tears
+-- the level world down while mods_update keeps ticking), and a NEW same-named
+-- world passing has_world does not validate the OLD cached handle. Nulling the
+-- fields is always correct: a destroyed world already freed its line objects.
 local function _clear()
     local lo = mod._gt_dh_line_object
     local w  = mod._gt_dh_line_world
     if lo and w then
-        pcall(function()
-            LineObject.reset(lo)
-            LineObject.dispatch(w, lo)
-        end)
+        local wm   = Managers.world
+        local live = wm and wm:has_world("level_world") and wm:world("level_world")
+        if live == w then
+            pcall(function()
+                LineObject.reset(lo)
+                LineObject.dispatch(w, lo)
+            end)
+        else
+            -- Fires at most once per teardown: the fields are nulled below.
+            _pf("[gt:459:DH] skipped LineObject cleanup - cached world is dead")
+        end
     end
     mod._gt_dh_line_object = nil
     mod._gt_dh_line_world  = nil

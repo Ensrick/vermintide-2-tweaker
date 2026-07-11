@@ -992,14 +992,34 @@ local FONT_MTRL = "materials/fonts/arial"          -- Gui.text FONT-material arg
 local GUI_MTRL  = "materials/fonts/gw_fonts"
 
 -- release cached draw resources + clear any lingering lines.
+-- #459: LineObject.reset/dispatch may ONLY run when the cached world handle is
+-- IDENTICAL to the currently-live level_world. On Leave Game, StateIngame.on_exit
+-- nils Managers.player.is_server (player_manager.lua:180) five lines before
+-- _teardown_world destroys the level world (state_ingame.lua:719), and VMF keeps
+-- ticking mods_update between game states -- so the next _btlab_draw frame routed
+-- here and dispatched into the FREED world = C-level access violation (0xc0000005)
+-- that the pcall below CANNOT catch (it was on the crashing stack). has_world alone
+-- is not enough: after a world change a NEW same-named world passes has_world while
+-- the cached handle still points at the freed old one (the case _do_draw's
+-- world-change re-key already handles). Nulling the fields is ALWAYS correct on
+-- every path: a destroyed world already freed its line objects, so dropping the
+-- handles IS the teardown.
 local function _clear_and_null()
     local lo = mod._gt_btlab_line_object
     local w  = mod._gt_btlab_line_world
     if lo and w then
-        pcall(function()
-            LineObject.reset(lo)
-            LineObject.dispatch(w, lo)
-        end)
+        local wm   = Managers.world
+        local live = wm and wm:has_world("level_world") and wm:world("level_world")
+        if live == w then
+            pcall(function()
+                LineObject.reset(lo)
+                LineObject.dispatch(w, lo)
+            end)
+        else
+            -- Fires at most once per teardown: the fields are nulled below, so the
+            -- next frame's call sees lo/w nil and skips this whole branch.
+            _pf("[gt:459] skipped LineObject cleanup - cached world is dead")
+        end
     end
     mod._gt_btlab_line_object  = nil
     mod._gt_btlab_line_world   = nil
@@ -1025,7 +1045,11 @@ local function _live_pos(unit)
 end
 
 local function _do_draw(want_hud, want_lines)
-    local world = Managers.world and Managers.world:world("level_world")
+    -- WorldManager.world() FASSERTS on a missing world (world_manager.lua:111-115);
+    -- probe has_world first (#459) -- this runs from mods_update, which keeps
+    -- ticking between game states where level_world does not exist.
+    local wm    = Managers.world
+    local world = wm and wm:has_world("level_world") and wm:world("level_world")
     if not world then
         _clear_and_null()
         return

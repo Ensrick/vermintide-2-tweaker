@@ -1,5 +1,20 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.196-dev (2026-07-11) -- #459: world-liveness identity gate on cached LineObject cleanup (host Leave Game AV) [verify-fix]
+
+### Why (root cause)
+Deterministic C-level access violation (0xc0000005 @0x160) on EVERY host Leave Game with the Bot Teleport Lab overlay on. The overlay caches a LineObject and its owning World in mod fields. On Leave Game, `StateIngame.on_exit` calls `PlayerManager.exit_ingame` (nils `is_server`, player_manager.lua:180) five lines before `_teardown_world` destroys the level world (state_ingame.lua:719). VMF `mods_update` keeps ticking between game states, so the next `_btlab_draw` frame took the "not Managers.player.is_server" branch into `_clear_and_null`, which called `LineObject.reset` + `LineObject.dispatch` on the FREED handles. The pcall around the calls cannot catch a C-level AV -- it was on the crashing stack. Vanilla never dispatches into a destroyed world (navigation_group_manager.lua:843, debug.lua:419 clean up while the world is alive).
+
+### Changed
+- **`_gt_bot_teleport_lab.lua` `_clear_and_null`:** the reset/dispatch engine calls now run ONLY when the currently-live `level_world` is IDENTICAL to the cached world handle (`live == w`, via `has_world` + `world`). The identity check is load-bearing: `has_world` alone passes when a NEW same-named world exists while the cached handle points at the freed old one. The cached fields are ALWAYS nulled regardless -- a destroyed world already freed its line objects, so dropping the handles IS the teardown. Skip path printfs `[gt:459] skipped LineObject cleanup - cached world is dead` (at most once per teardown; the nulled fields stop repeats).
+- **`_gt_debug_highlights.lua` `_clear`:** byte-identical latent bug (it mirrors `_clear_and_null`); same identity gate, tag `[gt:459:DH]`.
+- **Bare `world("level_world")` fassert exposure** (`WorldManager.world` fasserts on a missing world, world_manager.lua:111-115): `_gt_bot_teleport_lab.lua` `_do_draw` and `_gt_debug_highlights.lua` `_world()` (both mods_update draw paths) now probe `has_world` first and bail cleanly; `_gt_solo_qol.lua` boss-sphere draw (EnemyRecycler.update hook) gets the same guard; `_gt_melee_warning.lua` `_play_warn_sound` had a nil check BELOW the fasserting call that could never fire -- now probes `has_world` first.
+- **New `/gt_regression_test` check `gt_459_lineobject_cleanup_liveness_gated`:** fails if either cleanup site loses the `live == w` identity gate.
+
+### Notes
+- No new hooks; no settings/loc changes; guards are unconditional (never toggle-gated). `_reset_mission_state` (btlab) already used the correct drop-handles-only pattern and is untouched. `_gt_creature_spawner.lua:342`'s bare `world()` is user-command-driven in-mission only (camera reads above it fail first outside a mission) -- left as is.
+- New repo-level `docs/BUG_CLASSES.md` class 32 (cleanup-on-teardown into a destroyed world is itself a use-after-free; identity-check the cached world).
+
 ## v0.2.195-dev (2026-07-06) -- debug highlights: live position reads (fix per-frame error spam, nothing rendering) [verify-fix]
 
 ### Why

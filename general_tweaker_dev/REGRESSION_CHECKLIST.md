@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-07-11.
 
 ---
 ## Multiplayer / Network Sync
@@ -321,6 +321,26 @@ Last updated: 2026-05-22.
 
 ---
 
+## Engine / Crash Safety
+
+### vt2-world-liveness-lineobject-cleanup — Cached LineObject cleanup dispatches into a destroyed world (Leave Game AV)
+
+**[CRASH]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Deterministic C-level access violation (0xc0000005) on host Leave Game with a debug-draw overlay on. No Lua crash block; pcall does not help. |
+| Root cause | `StateIngame.on_exit` nils `Managers.player.is_server` (player_manager.lua:180) before `_teardown_world` destroys the level world (state_ingame.lua:719); VMF mods_update keeps ticking between states, so the overlay's cleanup path called `LineObject.reset`/`dispatch` on freed handles. Companion: `WorldManager.world()` fasserts on a missing world (world_manager.lua:111-115), so bare `world("level_world")` reads on mod-update paths are also fatal. |
+| Mod(s) | general_tweaker (`_gt_bot_teleport_lab.lua` `_clear_and_null`, `_gt_debug_highlights.lua` `_clear`, plus `has_world` probes in `_do_draw`/`_world()`/`_gt_solo_qol.lua`/`_gt_melee_warning.lua`) |
+| Fix version(s) | gt_dev v0.2.196-dev (issue 459) |
+| Category | UNIT (`/gt_regression_test` check `gt_459_lineobject_cleanup_liveness_gated`) + MANUAL |
+| Repro | 1. Host a run (CW or adventure). 2. Enable Dev Tools bot HUD or leash lines (or debug highlights). 3. Leave Game from the pause menu. |
+| Expected post-fix | No crash; console log shows `[gt:459] skipped LineObject cleanup - cached world is dead` once per teardown. Engine cleanup calls run only when the live `level_world` is IDENTICAL to the cached handle (`live == w`); cached fields are always nulled. |
+| Detection | `/gt_regression_test` fails if either cleanup site loses the `live == w` identity gate. See repo `docs/BUG_CLASSES.md` class 32. |
+
+
+---
+
 ## Slugs
 
 - feedback-deploy-vs-upload-distinction
@@ -342,3 +362,4 @@ Last updated: 2026-05-22.
 - vt2-hash-reverse-lookup
 - vt2-localize-string-format-pipeline
 - vt2-mod-command-inventory
+- vt2-world-liveness-lineobject-cleanup

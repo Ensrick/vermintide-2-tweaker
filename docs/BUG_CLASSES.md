@@ -1340,3 +1340,48 @@ Assert it in the regression suite with a check that the coercion is correct AND 
 - cim v0.8.34 (public hotfix) + cim_dev v0.8.54-dev; commits `cd64fa8` / `02e9d69`.
 - Memory: `reference_vt2_wire_safety_never_toggle_gated`.
 - Related: class 27 (husk resolves BASE item_data — the render-side twin of the same "clone keeps base identity on the wire" root); the general gated-registration cold-read crash (`rawget` section near the top of this file).
+
+## 32. Cleanup-on-teardown dispatches into a destroyed World (LineObject/Gui use-after-free that pcall cannot catch)
+
+**First seen:** 2026-07-11 (gt_dev issue 459; fixed gt_dev v0.2.196-dev)
+**Canonical Issue:** [#459](https://github.com/Ensrick/vermintide-2-tweaker/issues/459)
+**Lives in:** any mod that caches a World handle plus a world-owned engine object (LineObject, screen Gui) in mod fields and "cleans up" from a per-frame path (mod.update consumer or class hook) — gt_dev bot teleport lab + debug highlights; the template for every future debug-draw overlay.
+
+### Symptoms
+- Deterministic hard CTD (C-level access violation, e.g. `0xc0000005` at a low offset like `@0x160`) on Leave Game / state transition while an overlay toggle is on. No Lua crash block — the fatal is native.
+- The crashing call is wrapped in `pcall` and crashes anyway: pcall catches Lua errors, not a C-level AV on its own stack.
+
+### Diagnosis pattern
+1. VMF `mods_update` keeps ticking OUTSIDE game states (boot.lua `game_update` -> mod_manager), so per-frame mod draw/cleanup code runs while `StateIngame.on_exit` is mid-teardown.
+2. `on_exit` ordering: `PlayerManager.exit_ingame` nils `is_server` (player_manager.lua:180) five lines BEFORE `_teardown_world` destroys the level world (state_ingame.lua:719) — so a "not `Managers.player.is_server`" branch that tears down cached draw resources runs exactly when the cached handles are freed.
+3. `LineObject.reset` / `LineObject.dispatch` / Gui calls on the freed handles are a native use-after-free. Vanilla never hits this: engine code only dispatches into live worlds (navigation_group_manager.lua:843, debug.lua:419 clean up while the world is alive).
+4. Grep the mod for cached handles: `mod._*_line_object`, `mod._*_line_world`, `mod._*_gui`, plus any bare `Managers.world:world("level_world")` on a per-frame path.
+
+### Fix template
+```lua
+local function _clear_and_null()
+    local lo = mod._line_object
+    local w  = mod._line_world
+    if lo and w then
+        local wm   = Managers.world
+        local live = wm and wm:has_world("level_world") and wm:world("level_world")
+        if live == w then          -- IDENTITY, not mere existence
+            pcall(function()
+                LineObject.reset(lo)
+                LineObject.dispatch(w, lo)
+            end)
+        else
+            _pf("[mod:NNN] skipped LineObject cleanup - cached world is dead")
+        end
+    end
+    mod._line_object = nil   -- ALWAYS drop the handles: a destroyed world
+    mod._line_world  = nil   -- already freed its line objects
+end
+```
+- The **identity comparison is load-bearing**: `has_world` alone passes when a NEW same-named world exists while the cached handle still points at the freed old one (mission -> mission transition).
+- **Cleanup-on-teardown is itself a use-after-free path.** "Release engine resources before dropping references" is the WRONG instinct once the owning world is gone; dropping the Lua references IS the correct teardown.
+- Companion fassert exposure: `WorldManager.world()` **fasserts** on a missing world (foundation/scripts/managers/world/world_manager.lua:111-115). Every `Managers.world:world("level_world")` on a mods_update-driven path must probe `has_world` first — and a nil check placed AFTER the bare call is dead code.
+
+### Related Issues / commits
+- gt_dev v0.2.196-dev (#459): `_gt_bot_teleport_lab.lua` `_clear_and_null` (the crash) + `_gt_debug_highlights.lua` `_clear` (byte-identical latent twin); regression check `gt_459_lineobject_cleanup_liveness_gated`.
+- Related: class 21 (POSITION_LOOKUP dead in mod.update — same "mod code ticks where vanilla state is stale/gone" root), class 23 (Gui material residency draw fatal — the create-side twin of this dispatch-side fatal), class 12 (Vector3/Quaternion stack-temporary lifetime).
