@@ -94,6 +94,14 @@ times in cwv alone) -> wire-substitution helper (cosmetics has 4 inline copies) 
 
 ### WS5 - God-file decomposition (#2, ratcheted)
 
+> **2026-07-11: event_tweaker decomposed** (v0.4.26-dev): 1,433-line monolith split
+> into 11 single-responsibility `_evt_*` modules + entry manifest; the Duplication=2
+> driver (hand-synced MUTATOR_CATALOG/CATEGORIES + DLC-map copies) consolidated into
+> a shared require'd `event_tweaker_catalog.lua`; `_MEM_PROBE_T0_EVT` bare global
+> retired (WS6 item). Pure structural, 3-agent adversarial review, zero behavior
+> findings. et was not on the worst-offender list below; done as the pilot for the
+> per-mod OOP pass.
+
 Worst offenders with the auditors' identified extraction seams (all staged,
 behavior-preserving, in-game-verifiable steps; hooks stay in the entry file per §2.2):
 ct_dev 14,328 lines; cwv 11,808 (do after WS1 lands to avoid churn); cosmetics 10,499

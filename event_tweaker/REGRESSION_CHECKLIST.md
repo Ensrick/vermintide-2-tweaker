@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-06-19.
+Last updated: 2026-07-11 (v0.4.26-dev module split: detection pointers updated to the `_evt_*` file names; see DEVELOPMENT.md "File map").
 
 ---
 ## Multiplayer / Network Sync
@@ -40,7 +40,7 @@ Last updated: 2026-06-19.
 | Category | INTEGRATION |
 | Repro | 1. Host an Adventure mission with `mut_shadow` checked and a modless client connected. 2. Mission must load with no CTD on either peer. 3. Host log shows `[et:413] dropped weave-only mutator [shadow]` and `initialized_mutator_map` has no `shadow`. |
 | Expected post-fix | All 7 weave-only names (`life`,`heavens`,`light`,`shadow`,`fire`,`death`,`beasts`) blocked outside a weave; `metal` still injectable; real Weave missions untouched (they pull winds from `Managers.weave:mutators()`, not live events). |
-| Detection | Runtime: `/event_tweaker_regression_test` check `issue413_weave_only_mutators_gated`. Source: `WEAVE_ONLY_MUTATORS` table + `_weave_wind_active()` gate inside `gather_mutators()`. |
+| Detection | Runtime: `/event_tweaker_regression_test` check `issue413_weave_only_mutators_gated`. Source: `WEAVE_ONLY_MUTATORS` table + `_weave_wind_active()` (`_evt_guard413_weave.lua`), applied inside `gather_mutators()`'s `add()` (`_evt_selection.lua`). |
 
 
 ---
@@ -58,7 +58,7 @@ Last updated: 2026-06-19.
 | Category | INTEGRATION |
 | Repro | 1. Host The War Camp in Adventure with Multiple Bosses checked. 2. Mission must load with no crash. 3. Host log shows `[et:455] skipped multiple_bosses.server.initialize_function ...`. 4. Host a roaming-boss level with it checked: no skip line, dual boss events fire. |
 | Expected post-fix | Guarded templates no-op (with printf) on boss_events-less levels and work normally everywhere else; wrap installs once (`__et455_guarded`). |
-| Detection | Runtime: `/event_tweaker_regression_test` check `issue455_boss_event_mutators_guarded`. Source: `BOSS_EVENT_GUARDS` + `mod._et455_guard_boss_event_mutator` called from `add()`. |
+| Detection | Runtime: `/event_tweaker_regression_test` check `issue455_boss_event_mutators_guarded`. Source: `BOSS_EVENT_GUARDS` + `mod._et455_guard_boss_event_mutator` (`_evt_guard455_boss_events.lua`) called from `add()` (`_evt_selection.lua`). |
 
 
 ---
@@ -126,7 +126,7 @@ Last updated: 2026-06-19.
 | Category | INTEGRATION |
 | Repro | 1. Host an adventure mission with a Cursed Adventure curse (e.g. `mut_curse_blood_storm`) checked; have a friend (also running the mod) join as client. 2. Play until the curse spawns. Both must NOT crash. 3. Toggle `mut_curse_belakor_totems`, `/event_apply`. 4. Confirm the sky tints to the curse's god color and reverts on mission exit. 5. Confirm `curse_bolt_of_change` / `curse_belakors_shadows` / `curse_empathy` appear in NO group. |
 | Expected post-fix | No "Resource not found" on host or client; broken curses absent from every group; tint applies in adventure only (not double-applied in a real CW run) and reverts. |
-| Detection | Source: `mod:hook("MutatorHandler", "_activate_mutator", ...)` present + sync load (4th arg `false`); `_CURSE_BROKEN_IN_ADVENTURE` contains the 3 names and they're absent from `MANAGED_CURSES`; all hooks gated on `current_mechanism_name() == "adventure"`. Boot log: no `Attempting to rehook active hook`. |
+| Detection | Source: `mod:hook("MutatorHandler", "_activate_mutator", ...)` present in `_evt_cursed_adventure.lua` + sync load (4th arg `false`); `BROKEN_IN_ADVENTURE` (`event_tweaker_curses.lua`) contains the 3 names and they're absent from `MANAGED_CURSES`; preload + lighting paths gated on `current_mechanism_name() == "adventure"`. Boot log: no `Attempting to rehook active hook`. |
 
 
 ---

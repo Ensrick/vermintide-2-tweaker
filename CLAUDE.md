@@ -429,7 +429,7 @@ The DLC id lives on the master entry (`required_dlc` field). For tables that don
 - `crafting_in_modded/illusion_swap.lua:51` - `_skin_requires_unowned_dlc(skin_key)` (same pattern, scoped to skins)
 - `crafting_in_modded/standard_forge.lua:~40` - `_item_requires_unowned_dlc(item_key)` (weapons), exposed as `mod._cim_item_requires_unowned_dlc`
 - `career_tweaker.lua:77` - `_career_requires_unowned_dlc(career_name)` (reads `CareerSettings`)
-- `event_tweaker.lua:23-64` - `DLC_BY_MUTATOR` / `DLC_BY_PRESET` tables + `owns_dlc(dlc_id)` helper (mutator templates don't carry `required_dlc` directly)
+- `event_tweaker/.../event_tweaker_catalog.lua` (`DLC_BY_MUTATOR` / `DLC_BY_PRESET` maps) + `_evt_dlc.lua` (`owns_dlc(dlc_id)` helper) - mutator templates don't carry `required_dlc` directly
 
 **Intentional exceptions.** `character_weapon_variants._build_entry()` (`character_weapon_variants.lua:~7895`) DELIBERATELY strips `required_dlc = nil` on its cloned variant entries because CWV variants are new mod-created items reusing base-package meshes - they are not the DLC content itself. Don't "fix" this. The blanket clearing is documented in CHANGELOG and CODE_REVIEW.md.
 

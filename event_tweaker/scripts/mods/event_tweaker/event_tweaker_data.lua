@@ -1,96 +1,27 @@
 local mod = get_mod("event_tweaker")
--- Shared curse catalog. require'd (NOT read off a mod._field) because VMF loads
--- this data file BEFORE the .lua script — a script-set mod._field would be nil
--- here. See event_tweaker_curses.lua's header.
-local Curses = require("scripts/mods/event_tweaker/event_tweaker_curses")
+-- Shared curse + mutator/preset/DLC catalogs. require'd (NOT read off a
+-- mod._field) because VMF loads this data file BEFORE the .lua script — a
+-- script-set mod._field would be nil here. See the headers of
+-- event_tweaker_curses.lua and event_tweaker_catalog.lua.
+local Curses  = require("scripts/mods/event_tweaker/event_tweaker_curses")
+local Catalog = require("scripts/mods/event_tweaker/event_tweaker_catalog")
 
--- ============================================================
--- Mutator catalog (kept in sync with event_tweaker.lua's copy)
--- ============================================================
--- Each entry's mutator name is the literal string registered in
--- NetworkLookup.mutator_templates (see scripts/settings/mutators/
--- mutator_<name>.lua in the unpacked source). All names listed
--- here are confirmed present year-round via DLCUtils.append("mutators")
--- in scripts/settings/mutator_settings.lua plus the various DLC
--- *_common_settings.lua files. Vanilla clients have these in their
--- lookup table too, so the mutator-activate RPC works without modded
--- clients. NB: keep this list in sync with event_tweaker.lua's
--- MUTATOR_CATALOG — both files iterate over it.
-local CATEGORIES = {
-    {
-        id = "cat_difficulty",
-        mutators = {
-            "no_ammo", "no_pickups", "player_dot", "instant_death",
-            "no_respawn", "elite_run", "shared_health_pool",
-            "whiterun", "realism",
-        },
-    },
-    {
-        id = "cat_specials",
-        mutators = {
-            "specials_frequency", "more_specials", "same_specials",
-            "big_specials", "elite_specials", "gutter_runner_mayhem",
-            "chaos_warriors_trickle", "mixed_horde", "multiple_bosses",
-            "hordes_galore", "powerful_elites", "skulking_sorcerer",
-        },
-    },
-    {
-        id = "cat_hordes",
-        mutators = {
-            "wave_of_plague_monks", "wave_of_berzerkers", "high_intensity",
-            "splitting_enemies", "explosive_loot_rats", "bloodlust",
-        },
-    },
-    {
-        id = "cat_atmosphere",
-        mutators = {
-            "night_mode", "darkness", "ticking_bomb",
-            "flames", "lightning_strike", "chasing_spirits",
-        },
-    },
-    {
-        id = "cat_objectives",
-        mutators = { "escort", "slayer_curse", "leash" },
-    },
-    {
-        id = "cat_winds",
-        mutators = {
-            "life", "metal", "heavens", "light",
-            "shadow", "fire", "death", "beasts",
-        },
-    },
-    {
-        id = "cat_events",
-        mutators = {
-            "geheimnisnacht_2021", "geheimnisnacht_2021_hard_mode",
-            "skulls_2023",
-        },
-    },
-}
+-- Curated mutator catalog — the single shared copy in event_tweaker_catalog.lua
+-- (v0.4.26-dev retired the hand-synced duplicate that used to live here).
+local CATEGORIES = Catalog.CATEGORIES
 
 -- ============================================================
 -- DLC ownership gate (UI polish)
 -- ============================================================
--- Mirrors DLC_BY_MUTATOR / DLC_BY_PRESET in event_tweaker.lua. The
--- load-bearing gate lives at the injection hooks; this is purely UI
--- cleanup so the host doesn't see checkbox / dropdown options for
+-- Same DLC-id maps as the injection-side gate (_evt_dlc.lua), shared via the
+-- catalog module. The load-bearing gate lives at the injection hooks; this is
+-- purely UI cleanup so the host doesn't see checkbox / dropdown options for
 -- content they don't own. Failing closed (un-owned -> hidden) matches
--- vanilla store-page behavior for missing DLC.
--- DLC IDs cited in event_tweaker.lua (DLCSettings entries:
--- dlc_settings.lua:274, :576, :287).
-local DLC_BY_MUTATOR_UI = {
-    geheimnisnacht_2021             = "geheimnisnacht_2021",
-    geheimnisnacht_2021_hard_mode   = "geheimnisnacht_2021",
-    skulls_2023                     = "skulls_2023",
-}
-
-local DLC_BY_PRESET_UI = {
-    geheimnisnacht_2021 = "geheimnisnacht_2021",
-    geheimnisnacht_2025 = "geheimnisnacht_2025",
-    geheimnisnacht_2026 = "geheimnisnacht_2026",
-    skulls_2023         = "skulls_2023",
-    skulls_2026         = "skulls_2026",
-}
+-- vanilla store-page behavior for missing DLC. NB: ui_owns_dlc below fails
+-- OPEN when Managers.unlock isn't up (data evaluates very early in VMF init),
+-- unlike _evt_dlc.lua's fail-closed owns_dlc — that divergence is deliberate.
+local DLC_BY_MUTATOR_UI = Catalog.DLC_BY_MUTATOR
+local DLC_BY_PRESET_UI  = Catalog.DLC_BY_PRESET
 
 local function ui_owns_dlc(dlc_id)
     if not dlc_id then
@@ -186,8 +117,8 @@ end
 -- the engine flags player-facing (display_name + description) that ISN'T in a
 -- curated category, ISN'T package-bearing (those go in Cursed Adventure), ISN'T
 -- a Fatshark-hidden internal (hide_from_player_ui), and ISN'T a known
--- adventure-crasher (mod._ET_CURSE_BROKEN — keep in lockstep with
--- _is_adventure_safe_mutator in event_tweaker.lua). Labels come from the game's
+-- adventure-crasher (Curses.BROKEN_IN_ADVENTURE — keep in lockstep with
+-- _is_adventure_safe_mutator in _evt_selection.lua). Labels come from the game's
 -- own localized strings, registered dynamically in event_tweaker_localization.
 do
     local curated = {}
@@ -227,8 +158,8 @@ end
 -- ============================================================
 -- "Cursed Adventure" group — Chaos Wastes / Be'lakor curses
 -- ============================================================
--- Hand-curated, package-bearing curses surfaced via mod._ET_MANAGED_CURSES
--- (set in event_tweaker.lua). Activating one preloads its resource package on
+-- Hand-curated, package-bearing curses from Curses.MANAGED_CURSES
+-- (event_tweaker_curses.lua). Activating one preloads its resource package on
 -- every peer + applies the cursed-sky tint. ⚠ Unlike the rest of the mod,
 -- these require EVERY player in the lobby to run event_tweaker (clients need
 -- the package for replicated curse units). The `cursed_lighting` toggle leads

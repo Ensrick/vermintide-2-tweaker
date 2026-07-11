@@ -38,9 +38,36 @@ Lets the host run package-bearing Chaos Wastes / Be'lakor **curses** (`MANAGED_C
 
 **Catalog lives in `event_tweaker_curses.lua`, a shared `require`'d module** (`MANAGED_CURSES` / `BROKEN_IN_ADVENTURE` / `CURSE_TO_GOD`), NOT a `mod._field` set in the script. VMF loads files `localization → data → script` (script LAST), so a script-set field is nil when `_data.lua` / `_localization.lua` evaluate. A `require`'d module is evaluated once (by the first requiring file) and cached — all three files see it. This mirrors `enemy_tweaker_breeds.lua`. **Burned once** (v0.4.14-dev first cut): the entire Cursed Adventure UI group silently never built. Rule: anything `_data.lua` / `_localization.lua` need from the script must go through a shared `require`'d module, never a script-assigned `mod._field`.
 
+## File map (v0.4.26-dev module split)
+
+`event_tweaker.lua` is a ~65-line entry point: MOD_VERSION, load banner/echo, the
+`mod._evt` shared namespace, and an ordered `mod:dofile` manifest. Every module is
+dofile'd exactly once from that manifest (VMF `mod:dofile` is NOT a singleton — never
+dofile a module from another module) and publishes its exports into `mod._evt`.
+Module prefix is `_evt_` because `_et_` already belongs to enemy_tweaker's modules.
+Manifest order is load-bearing (dependencies flow downward; regression checks print
+in registration order):
+
+| File | Owns |
+| :--- | :--- |
+| `event_tweaker.lua` | Entry point: MOD_VERSION, banner/LOAD/echo lines, `mod._evt`, dofile manifest, mem-probe bracket. |
+| `event_tweaker_catalog.lua` | Shared require'd DATA: `CATEGORIES` (curated mutator catalog), `EVENT_PRESETS`, `DLC_BY_MUTATOR`, `DLC_BY_PRESET`. Read by script modules AND `_data.lua`. |
+| `event_tweaker_curses.lua` | Shared require'd DATA: Cursed Adventure curse catalog (`MANAGED_CURSES` / `BROKEN_IN_ADVENTURE` / `CURSE_TO_GOD`). |
+| `_evt_log.lua` | `_dbg`/`_dbg_alert` two-channel helpers + settings fingerprint for the `[event_tweaker:LOAD]` line. |
+| `_evt_regression.lua` | `/event_tweaker_regression_test` harness (`rt_register`) + the generic checks. Issue-specific checks live with their subsystem. |
+| `_evt_dlc.lua` | Injection-side DLC ownership gate (`owns_dlc` fails CLOSED; the data file's `ui_owns_dlc` twin fails OPEN — deliberate). |
+| `_evt_guard413_weave.lua` | Issue 413 weave-only mutator blocklist + `_weave_wind_active()`. |
+| `_evt_guard455_boss_events.lua` | Issue 455 boss-event guard (`BOSS_EVENT_GUARDS`, `mod._et455_*`). |
+| `_evt_selection.lua` | Selection core: `active_preset`, dynamic discovery, curse/checkbox readers, `gather_mutators()` (the `add()` injection chokepoint), `suppress_live_event`, `merge_lists`. |
+| `_evt_backend_hooks.lua` | The three live-event backend hooks (see Architecture below). |
+| `_evt_guard386_pacing.lua` | Issue 386 scalar-pacing sanitizer (`mod._et386_sanitize_pacing_scalars`). |
+| `_evt_diagnostics.lua` | `/event_probe`, `/event_active`, `/event_clear` + the issue 393 ConflictDirector.init snapshot. |
+| `_evt_apply.lua` | Mid-game preset application (level reload) + `mod.on_setting_changed` (assigned ONLY here). |
+| `_evt_cursed_adventure.lua` | Curse package preload hooks + cursed-sky lighting (per-frame shading hook reads file-locals only). |
+
 ## Architecture
 
-Three hooks, all on backend classes. Single chokepoint per concern — every consumer of the hooked function sees the override consistently.
+Three hooks (in `_evt_backend_hooks.lua`), all on backend classes. Single chokepoint per concern — every consumer of the hooked function sees the override consistently.
 
 | Hook | Purpose | Why this entry point | suppress_live_event behavior |
 | :--- | :--- | :--- | :--- |
@@ -48,18 +75,17 @@ Three hooks, all on backend classes. Single chokepoint per concern — every con
 | `BackendInterfaceLiveEventsPlayfab:get_active_events` | Inject the preset's event-name string (e.g. `"geheimnisnacht_2021"`). | `mutator_geheimnisnacht_2021.lua:58-86` calls `live_events_interface:get_active_events()` and does `string.find(live_event, "geheimnisnacht_%d+")` on each entry to decide which 5 maps spawn ritual sites (year-specific lists in `geheimnisnacht_utils.lua:5-41`). Without this hook, the mutator activates but spawns nothing. Skulls does NOT inspect this list — its mutator's `server_start_function` is self-contained. | Drops Fatshark's strings → `string.find` finds no `"geheimnisnacht_%d+"` match → ritual-site engine stays dormant on missions. |
 | `BackendManagerPlayFab:get_level_variation_data` | Merge `hub_level = "inn_level_halloween"` / `"inn_level_skulls"` into the returned table. | `AdventureMechanism.get_starting_level` (`adventure_mechanism.lua:625`) reads `Managers.backend:get_level_variation_data().hub_level` and loads that level. Vanilla seasonal events ship pre-decorated keep level files — `inn_level_halloween`, `inn_level_skulls`, `inn_level_celebrate`, `inn_level_sonnstill` — defined in `scripts/settings/level_settings.lua:152-196`. Decorations are baked geometry, not runtime spawns. Mutators can't do this because `GameModeBase` skips hubs. | When suppress is on AND no preset hub_level, forces `merged.hub_level = "inn_level"` (matches `adventure_mechanism.lua:7 HUB_LEVEL_NAME`) so the keep reverts to plain inn. |
 
-Two file-local tables drive the selection logic. **They MUST stay in sync** — VMF's mod-script vs mod-data load order isn't documented, and no sibling tweaker mod shares state across files, so the catalog is duplicated:
+The curated catalog and presets live in the shared require'd module `event_tweaker_catalog.lua` (v0.4.26-dev; previously two hand-synced copies with a "keep in sync" warning):
 
-- `MUTATOR_CATALOG` in `event_tweaker.lua` — read by `selected_individual_mutators()` and the `event_clear` command.
-- `CATEGORIES` in `event_tweaker_data.lua` — read at widget-tree build time to generate the checkbox groups.
-
-`EVENT_PRESETS` lives only in `event_tweaker.lua`. The presets dropdown in `event_tweaker_data.lua` references the keys directly (no shared list needed because the dropdown's `value` strings are themselves the preset keys).
+- `Catalog.CATEGORIES` — read by `_evt_selection.lua` (`selected_individual_mutators()`), `_evt_diagnostics.lua` (`event_clear`), and `event_tweaker_data.lua` (widget-tree build).
+- `Catalog.EVENT_PRESETS` — read by `_evt_selection.lua` (`active_preset()`). The presets dropdown in `event_tweaker_data.lua` references the keys directly (the dropdown's `value` strings are themselves the preset keys).
+- `Catalog.DLC_BY_MUTATOR` / `Catalog.DLC_BY_PRESET` — read by `_evt_dlc.lua` (fail-closed injection gate) and `event_tweaker_data.lua` (fail-open UI gate).
 
 ## Adding a new mutator
 
 The mutator name must be a string that's already registered in `NetworkLookup.mutator_templates`. To verify before adding: check that `scripts/settings/mutators/mutator_<name>.lua` exists in the unpacked source (Vermintide-2-Source-Code). All vanilla + DLC batch_01/02/04 + Geheimnisnacht_2021 + Skulls_2023 mutators qualify; see `mutator_settings.lua:5-38` and the various DLC `_common_settings.lua` files for the full list.
 
-1. Add the name to the matching category's `mutators` array in **both** `event_tweaker.lua` (`MUTATOR_CATALOG`) and `event_tweaker_data.lua` (`CATEGORIES`).
+1. Add the name to the matching category's `mutators` array in `event_tweaker_catalog.lua` (`CATEGORIES`) — the single shared copy the script modules and the data file both read.
 2. Add `mut_<id>` and `mut_<id>_tooltip` keys to `event_tweaker_localization.lua`. Convention: tooltip leads with `[<mutator_id>]` so the literal name being injected is verifiable from the UI.
 3. Bump `MOD_VERSION` in `event_tweaker.lua` per the always-bump rule.
 4. Build (`& $exe build event_tweaker`), deploy (`& $exe deploy event_tweaker`) where `$exe` is `tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe`, restart, test.
@@ -68,7 +94,7 @@ The mutator name must be a string that's already registered in `NetworkLookup.mu
 
 When a mutator inspects `active_events` internally (Geheimnisnacht does, Skulls does NOT), it needs a preset entry to work — checking the box alone won't trigger its set pieces. Same applies to events that ship a baked keep variant.
 
-1. Add the preset to `EVENT_PRESETS` in `event_tweaker.lua`. Required fields:
+1. Add the preset to `EVENT_PRESETS` in `event_tweaker_catalog.lua`. Required fields:
    - `active_events` (table of strings) — what `get_active_events` will return
    - `mutators` (table of strings) — what `get_special_events` will return as the `mutators` field
    - `hub_level` (string, optional) — keep level variant to load. Use one of `inn_level_halloween` / `inn_level_skulls` / `inn_level_celebrate` / `inn_level_sonnstill`.
@@ -197,13 +223,13 @@ The eight Winds-of-Magic mutators assume the Weave context. Outside one, `Manage
 - `life` — nil-safe reads, but `spawn_bush` network-spawns the weave-package unit `units/weave/life/life_thorn_bushes_mutator` (`mutator_life.lua:19-24`); same non-resident-resource class, replicated to every peer.
 - `metal` — the one SAFE wind: `get_wind_strength()` falls back to 1 (`weave_manager.lua:679-683`), no `wind_settings` index, no spawns.
 
-**Fix (do not remove):** `WEAVE_ONLY_MUTATORS` + `_weave_wind_active()` in `event_tweaker.lua`; `gather_mutators()`'s `add()` drops the 7 unsafe names whenever no weave wind is active, before `append_live_event_mutators` broadcasts via `rpc_activate_mutator_client`. Vanilla clients cannot be preloaded by a host-only mod, so exclusion at injection is the only safe fix (contrast Cursed Adventure, where every peer runs the mod and preloads). Real Weave missions are untouched — `GameModeWeave` pulls winds from `Managers.weave:mutators()` (`game_mode_weave.lua:134-138`), not from live events. Regression check: `issue413_weave_only_mutators_gated`; checklist slug `et-weave-only-mutator-gate`.
+**Fix (do not remove):** `WEAVE_ONLY_MUTATORS` + `_weave_wind_active()` in `_evt_guard413_weave.lua`; `gather_mutators()`'s `add()` (`_evt_selection.lua`) drops the 7 unsafe names whenever no weave wind is active, before `append_live_event_mutators` broadcasts via `rpc_activate_mutator_client`. Vanilla clients cannot be preloaded by a host-only mod, so exclusion at injection is the only safe fix (contrast Cursed Adventure, where every peer runs the mod and preloads). Real Weave missions are untouched — `GameModeWeave` pulls winds from `Managers.weave:mutators()` (`game_mode_weave.lua:134-138`), not from live events. Regression check: `issue413_weave_only_mutators_gated`; checklist slug `et-weave-only-mutator-gate`.
 
 ### Boss-event mutators fatal on fixed-end-boss levels (issue 455, v0.4.25-dev)
 
 Three vanilla mutators index `CurrentBossSettings.boss_events` with no nil check: `multiple_bosses` (`server_initialize_function` + `update_conflict_settings`, `mutator_multiple_bosses.lua:8/:13`), `blessing_of_grimnir` (`server_start_function`, `mutator_blessing_of_grimnir.lua:60`), `deus_pacing_tweak` (`server_start_function`, `mutator_deus_pacing_tweak.lua:482/:498`). `CurrentBossSettings` is rebuilt per level from the conflict director's `boss` block (`conflict_director.lua:879`); fixed-end-boss levels (crash evidence: `warcamp` = The War Camp) ship a boss block with NO `boss_events` table, so injecting one of these is an instant host fatal at the dispatch sites (`mutator_handler.lua:644-645` / `:578-579`). Distinct class from issue 413: these are Adventure-legal, just level-dependent.
 
-**Fix (do not remove):** `BOSS_EVENT_GUARDS` + `mod._et455_guard_boss_event_mutator(name)` in `event_tweaker.lua`, installed from `add()` on injection: wraps the template's live dispatch fields (`template.server.initialize_function` / `.start_function` / `template.update_conflict_settings` — the engine folds `server_*_function` into `template.server.*` at boot, so wrapping the raw `server_*_function` field would be a dead write) with a dispatch-time check that no-ops with an `[et:455]` printf when `boss_events` is absent. Idempotent via `__et455_guarded` marker. Regression check: `issue455_boss_event_mutators_guarded`; checklist slug `et-boss-event-mutator-guard`.
+**Fix (do not remove):** `BOSS_EVENT_GUARDS` + `mod._et455_guard_boss_event_mutator(name)` in `_evt_guard455_boss_events.lua`, installed from `add()` (`_evt_selection.lua`) on injection: wraps the template's live dispatch fields (`template.server.initialize_function` / `.start_function` / `template.update_conflict_settings` — the engine folds `server_*_function` into `template.server.*` at boot, so wrapping the raw `server_*_function` field would be a dead write) with a dispatch-time check that no-ops with an `[et:455]` printf when `boss_events` is absent. Idempotent via `__et455_guarded` marker. Regression check: `issue455_boss_event_mutators_guarded`; checklist slug `et-boss-event-mutator-guard`.
 
 ### Injected mutators that write scalar pacing values crash `ConflictDirector.init` (issue 386, v0.4.22-dev)
 
@@ -217,7 +243,7 @@ CurrentPacing.delay_mini_patrol_threat_value = 200
 
 `MutatorHandler.conflict_director_updated_settings` (`mutator_handler.lua:567`) runs every INITIALIZED mutator's `update_conflict_settings` and is dispatched from `ConflictDirector.refresh_conflict_director_patches` (`conflict_director.lua:886`), which `ConflictDirector.init` calls at line 94 — **before** init reads those three fields at lines 219-221 and passes each to `DifficultyTweak.converters.tweaked_delay_threat_value`. That converter **always** indexes its argument as a per-difficulty table (`difficulty_tweak.lua` `get_value_for_difficulty`: `value_table[Difficulties[i]]`), so a scalar there is an uncatchable "attempt to index a number value" fatal that kills the director → zero AI for the whole mission. Vanilla Adventure never lists these mutators, so the fields keep their table-shaped base values (`conflict_settings.lua`, keys `normal`..`versus_base`); **our injection is what triggers it**.
 
-**Fix (do not remove):** a `hook_safe` on `MutatorHandler.conflict_director_updated_settings` runs after the vanilla dispatch writes the scalars (still inside `refresh_conflict_director_patches`, so before init's line 219 read) and converts any scalar left in those three fields into `{ normal = v, [current_difficulty] = v }`. `get_value_for_difficulty` walks DOWN to `Difficulties[1] == "normal"`, so the floor key covers every difficulty. Host-only in effect (`conflict_director_updated_settings` early-returns on clients) and a strict no-op when the fields are already tables. Regression check: `issue386_sanitize_pacing_scalar_to_table`.
+**Fix (do not remove):** a `hook_safe` on `MutatorHandler.conflict_director_updated_settings` (`_evt_guard386_pacing.lua`) runs after the vanilla dispatch writes the scalars (still inside `refresh_conflict_director_patches`, so before init's line 219 read) and converts any scalar left in those three fields into `{ normal = v, [current_difficulty] = v }`. `get_value_for_difficulty` walks DOWN to `Difficulties[1] == "normal"`, so the floor key covers every difficulty. Host-only in effect (`conflict_director_updated_settings` early-returns on clients) and a strict no-op when the fields are already tables. Regression check: `issue386_sanitize_pacing_scalar_to_table`.
 
 **If you add a mutator to the catalog:** if its source `update_conflict_settings` assigns a plain number to any field ConflictDirector reads as a per-difficulty table, this sanitizer already covers the three known pacing fields — extend `PACING_TABLE_FIELDS` if a new field surfaces.
 

@@ -1,5 +1,24 @@
 # Tweaker: Events — Changelog
 
+## 0.4.26-dev (2026-07-11) -- Structural refactor: split the monolith into single-responsibility modules; consolidate the hand-synced catalogs (no behavior change)
+
+### Why
+OOP-professionalization pass (docs/OOP_REFACTOR_PLAN.md; user directive: single-responsibility files, human-readable code). The 1,433-line `event_tweaker.lua` mixed twelve concerns in one chunk, and the 2026-07-07 audit scored the mod 2/5 on Duplication because the mutator catalog and the DLC-gate maps each lived as TWO hand-synced copies (script + data file) guarded only by "keep in sync" comments. Pure structural change: every function, hook, command, guard, and log/printf string is verbatim-identical; three independent adversarial review agents diffed the split against the monolith (semantic equivalence, orphaned-upvalue/load-order/duplicate-hook sweep, guard-integrity sweep) and returned zero behavior findings.
+
+### Changed -- file layout only
+- `event_tweaker.lua` is now a 65-line entry point: MOD_VERSION, the load banner/echo lines, the `mod._evt` shared namespace, and an ordered `mod:dofile` manifest. Module prefix is `_evt_` (`_et_` already belongs to enemy_tweaker's modules).
+- New single-responsibility modules, each with a PROJECT_STANDARDS § 2.2 docstring header: `_evt_log` (dbg helpers + settings fingerprint), `_evt_regression` (harness + generic checks), `_evt_dlc` (fail-closed ownership gate), `_evt_guard413_weave` (issue 413 gate), `_evt_guard455_boss_events` (issue 455 guard), `_evt_selection` (preset/discovery/gather chokepoint), `_evt_backend_hooks` (the three live-event hooks), `_evt_guard386_pacing` (issue 386 sanitizer), `_evt_diagnostics` (probe/active/clear commands + issue 393 snapshot), `_evt_apply` (mid-game reload + on_setting_changed), `_evt_cursed_adventure` (curse package preload + cursed-sky lighting).
+- New shared require'd module `event_tweaker_catalog.lua` (same pattern as `event_tweaker_curses.lua`): single copies of CATEGORIES, EVENT_PRESETS, DLC_BY_MUTATOR, DLC_BY_PRESET. `event_tweaker_data.lua` and `_evt_dlc.lua`/`_evt_selection.lua` now read the SAME tables -- the duplicated-catalog failure mode is retired, not just documented. The deliberate fail-open (UI) vs fail-closed (injection) split of the two ownership predicates survives and is now documented at both sites.
+- `_MEM_PROBE_T0_EVT` bare `_G` global became a local in the entry file (mem-probe semantics unchanged: still brackets the whole load).
+- All issue guards, their `[et:413]`/`[et:455]`/`[event-inject:386]`/`[event-inject:393]` printf tags, the seven `/event_tweaker_regression_test` check names AND their registration order, the five chat commands, and all 10 hooks (each (class, method) pair still registered exactly once) are unchanged.
+- Docs: DEVELOPMENT.md gained the module map and lost the "keep these two tables in sync" instructions; REGRESSION_CHECKLIST.md detection pointers updated to the new file names.
+
+### Not changed
+- Zero gameplay/injection/UI behavior. No settings added, removed, or re-defaulted; widget tree and localization byte-identical; log line order at load identical. `MOD_VERSION` `0.4.25-dev` -> `0.4.26-dev`.
+
+### In-game verify
+Full Steam restart, then: chat shows `[event_tweaker] v0.4.26-dev loaded` and the log shows `[event_tweaker:LOAD] v0.4.26-dev enabled fp=... OK`; `/event_tweaker_regression_test` prints all 7 checks PASS in the usual order; mod options menu opens with the same groups/checkboxes as 0.4.25-dev; `/event_probe` still dumps state.
+
 ## 0.4.25-dev (2026-07-10) -- Fix host fatal from Multiple Bosses on fixed-boss levels (#455): guard CurrentBossSettings.boss_events
 
 ### Why
