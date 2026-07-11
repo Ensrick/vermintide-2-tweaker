@@ -1,6 +1,6 @@
 # Tweaker: Events — Development Notes
 
-Internal id: `event_tweaker`. Workshop id: `3721290755`. Visibility: `private` (do NOT change without explicit user direction — see `feedback_workshop_metadata_user_dictates`).
+Internal id: `event_tweaker`. Workshop id: `3721290755`. Visibility: `public` per `itemV2.cfg`, so every upload/ship needs `-AllowPublic`. Visibility is user-dictated — do NOT change it without explicit user direction (`feedback_workshop_metadata_user_dictates`).
 
 ## What this mod does
 
@@ -17,7 +17,7 @@ Plus one orthogonal switch:
 
 ## "Other Mutators" — dynamic discovery (ported from Deed Mutators Selector)
 
-`v0.4.14-dev` absorbed the one worthwhile feature of **Deed Mutators Selector** (Workshop `3579882542`): iterate the live `MutatorTemplates` global and surface every mutator the engine flags player-facing (`display_name`+`description`), instead of a hand-curated list. The "Other Mutators" group auto-includes the package-free Chaos Wastes / Deus mutators not in a curated category. Three exclusions keep it adventure-safe (`_is_adventure_safe_mutator(name, tmpl)`): `hide_from_player_ui` (Fatshark-hidden Deus pacing knobs), a non-empty `packages` field (those go to Cursed Adventure), and `_CURSE_BROKEN_IN_ADVENTURE` (weave/deus-only crashers). Labels are pulled from the game's own `Localize` (no fabrication), registered dynamically in the loc file. Wired across all three files; `mod._ET_CURSE_BROKEN` is the shared blacklist.
+`v0.4.14-dev` absorbed the one worthwhile feature of **Deed Mutators Selector** (Workshop `3579882542`): iterate the live `MutatorTemplates` global and surface every mutator the engine flags player-facing (`display_name`+`description`), instead of a hand-curated list. The "Other Mutators" group auto-includes the package-free Chaos Wastes / Deus mutators not in a curated category. Three exclusions keep it adventure-safe (`_is_adventure_safe_mutator(name, tmpl)`): `hide_from_player_ui` (Fatshark-hidden Deus pacing knobs), a non-empty `packages` field (those go to Cursed Adventure), and `_CURSE_BROKEN_IN_ADVENTURE` (weave/deus-only crashers). Labels are pulled from the game's own `Localize` (no fabrication), registered dynamically in the loc file. Wired across all three files; `Curses.BROKEN_IN_ADVENTURE` (`event_tweaker_curses.lua`) is the shared blacklist.
 
 ## Cursed Adventure — CW/Be'lakor curses on standard maps (`v0.4.14-dev`)
 
@@ -45,25 +45,128 @@ Lets the host run package-bearing Chaos Wastes / Be'lakor **curses** (`MANAGED_C
 dofile'd exactly once from that manifest (VMF `mod:dofile` is NOT a singleton — never
 dofile a module from another module) and publishes its exports into `mod._evt`.
 Module prefix is `_evt_` because `_et_` already belongs to enemy_tweaker's modules.
-Manifest order is load-bearing (dependencies flow downward; regression checks print
-in registration order):
+Manifest order is load-bearing: dependencies flow strictly downward (each module
+localizes earlier modules' `mod._evt` exports at its top), and regression checks
+print in registration order, so reordering the manifest reorders
+`/event_tweaker_regression_test` output.
 
-| File | Owns |
-| :--- | :--- |
-| `event_tweaker.lua` | Entry point: MOD_VERSION, banner/LOAD/echo lines, `mod._evt`, dofile manifest, mem-probe bracket. |
-| `event_tweaker_catalog.lua` | Shared require'd DATA: `CATEGORIES` (curated mutator catalog), `EVENT_PRESETS`, `DLC_BY_MUTATOR`, `DLC_BY_PRESET`. Read by script modules AND `_data.lua`. |
-| `event_tweaker_curses.lua` | Shared require'd DATA: Cursed Adventure curse catalog (`MANAGED_CURSES` / `BROKEN_IN_ADVENTURE` / `CURSE_TO_GOD`). |
-| `_evt_log.lua` | `_dbg`/`_dbg_alert` two-channel helpers + settings fingerprint for the `[event_tweaker:LOAD]` line. |
-| `_evt_regression.lua` | `/event_tweaker_regression_test` harness (`rt_register`) + the generic checks. Issue-specific checks live with their subsystem. |
-| `_evt_dlc.lua` | Injection-side DLC ownership gate (`owns_dlc` fails CLOSED; the data file's `ui_owns_dlc` twin fails OPEN — deliberate). |
-| `_evt_guard413_weave.lua` | Issue 413 weave-only mutator blocklist + `_weave_wind_active()`. |
-| `_evt_guard455_boss_events.lua` | Issue 455 boss-event guard (`BOSS_EVENT_GUARDS`, `mod._et455_*`). |
-| `_evt_selection.lua` | Selection core: `active_preset`, dynamic discovery, curse/checkbox readers, `gather_mutators()` (the `add()` injection chokepoint), `suppress_live_event`, `merge_lists`. |
-| `_evt_backend_hooks.lua` | The three live-event backend hooks (see Architecture below). |
-| `_evt_guard386_pacing.lua` | Issue 386 scalar-pacing sanitizer (`mod._et386_sanitize_pacing_scalars`). |
-| `_evt_diagnostics.lua` | `/event_probe`, `/event_active`, `/event_clear` + the issue 393 ConflictDirector.init snapshot. |
-| `_evt_apply.lua` | Mid-game preset application (level reload) + `mod.on_setting_changed` (assigned ONLY here). |
-| `_evt_cursed_adventure.lua` | Curse package preload hooks + cursed-sky lighting (per-frame shading hook reads file-locals only). |
+### Module contracts
+
+One block per file: what it owns, its public surface (everything other files may
+touch), and its manifest position. Anything not listed as public surface is a
+file-local — do not reach into it from another file; export it via `mod._evt` in
+the owning module instead.
+
+**`event_tweaker.lua` — entry point (loads everything else).**
+Owns MOD_VERSION (the launcher parses it from THIS file — never move it), the
+banner/`[event_tweaker:LOAD]`/chat-echo lines, `mod._evt` creation, the dofile
+manifest, and the mem-probe bracket around the whole load.
+Public surface: `mod._evt.version`.
+
+**`event_tweaker_catalog.lua` — shared require'd DATA (no manifest position; cached by `require`).**
+Single source of truth for `CATEGORIES` (curated mutator catalog), `EVENT_PRESETS`,
+`DLC_BY_MUTATOR`, `DLC_BY_PRESET`. require'd by `_evt_dlc` / `_evt_selection` /
+`_evt_diagnostics` AND `event_tweaker_data.lua` — it must stay pure data (no `mod`
+access) because the data file evaluates before the script.
+
+**`event_tweaker_curses.lua` — shared require'd DATA (same rules as the catalog).**
+Cursed Adventure curse catalog: `MANAGED_CURSES`, `BROKEN_IN_ADVENTURE`,
+`CURSE_TO_GOD`. require'd by `_evt_selection` / `_evt_diagnostics` /
+`_evt_cursed_adventure` AND `_data.lua` / `_localization.lua`.
+
+**`_evt_log.lua` — manifest position 1.**
+Two-channel debug helpers (PROJECT_STANDARDS § 3.6) + the settings fingerprint the
+entry's LOAD line prints. Public surface: `mod._evt.dbg`, `mod._evt.dbg_alert`,
+`mod._evt.settings_fingerprint`.
+
+**`_evt_regression.lua` — manifest position 2.**
+The `/event_tweaker_regression_test` harness and the generic checks
+(`dbg_helpers_two_channel`, `localization_format_safe`,
+`suppress_live_event_default_off`). Issue-specific checks live with the code they
+check, in later modules. Public surface: `mod._evt.rt_register(name, fn)`.
+
+**`_evt_dlc.lua` — manifest position 3.**
+Injection-side DLC ownership gate; fails CLOSED when `Managers.unlock` isn't up.
+(The data file's `ui_owns_dlc` twin fails OPEN — deliberate divergence, documented
+at both sites.) Public surface: `mod._evt.owns_dlc`, `mod._evt.mutator_allowed`,
+`mod._evt.preset_allowed`.
+
+**`_evt_guard413_weave.lua` — manifest position 4.**
+Issue 413 guard data: the weave-only mutator blocklist + the fail-closed
+`_weave_wind_active()` probe. Registers check `issue413_weave_only_mutators_gated`.
+Public surface: `mod._evt.WEAVE_ONLY_MUTATORS`, `mod._evt.weave_wind_active`.
+
+**`_evt_guard455_boss_events.lua` — manifest position 5.**
+Issue 455 guard: wraps boss-event mutators' dispatch fields so boss_events-less
+levels no-op instead of a host fatal. Registers check
+`issue455_boss_event_mutators_guarded`. Public surface (mod fields, resolved at
+call time by `add()`): `mod._et455_guard_boss_event_mutator(name)`,
+`mod._et455_boss_events_present(cbs)`.
+
+**`_evt_selection.lua` — manifest position 6.**
+Selection core: `active_preset`, dynamic discovery (Deed Mutators Selector port),
+curse/checkbox readers, and `gather_mutators()` whose inner `add()` is the SINGLE
+injection chokepoint (issues 413 + 455 are enforced there; every new injection
+route must funnel through it). Registers check `dynamic_mutator_discovery`.
+Public surface: `mod._evt.active_preset`, `mod._evt.displayable_registered_mutators`,
+`mod._evt.gather_mutators`, `mod._evt.gather_active_events`,
+`mod._evt.suppress_live_event`, `mod._evt.merge_lists`.
+
+**`_evt_backend_hooks.lua` — manifest position 7.**
+The three live-event backend hooks (see Architecture below). No exports; consumes
+the selection surface.
+
+**`_evt_guard386_pacing.lua` — manifest position 8.**
+Issue 386 scalar-pacing sanitizer: `hook_safe` on
+`MutatorHandler.conflict_director_updated_settings`. Registers check
+`issue386_sanitize_pacing_scalar_to_table`. Public surface:
+`mod._et386_sanitize_pacing_scalars(pacing, difficulty)`.
+
+**`_evt_diagnostics.lua` — manifest position 9.**
+Read-only surfaces: `/event_probe`, `/event_active`, `/event_clear`, and the issue
+393 diagnostics-armed `ConflictDirector.init` post-init snapshot. No exports.
+
+**`_evt_apply.lua` — manifest position 10.**
+Mid-game preset application (level reload plumbing), `/event_apply`, and
+`mod.on_setting_changed` — VMF allows exactly ONE assignment mod-wide and it lives
+here; never assign it in another file. No `mod._evt` exports.
+
+**`_evt_cursed_adventure.lua` — manifest position 11 (last).**
+Curse package preload hooks (`MutatorHandler._activate_mutator`/`_deactivate_mutator`/
+`init`, `StateIngame.on_exit`) + the per-frame `CameraManager.shading_callback` sky
+tint. All runtime state is file-local; the per-frame hook must never read
+`mod._evt` or any cross-file indirection. No exports.
+
+### Where new code goes (read BEFORE adding anything)
+
+The monolith was split on purpose — new code goes in the owning module, not the
+entry file. Every path below ends with: bump MOD_VERSION in `event_tweaker.lua`,
+CHANGELOG entry in the same response, doc updates (this file + REGRESSION_CHECKLIST.md
+if applicable) in the same commit.
+
+- **New mutator or preset** → `event_tweaker_catalog.lua` + loc keys; see the two
+  "Adding a new ..." sections below. Never re-introduce a second copy of the
+  catalog in another file.
+- **New issue guard (crash class on injected mutators)** → its own
+  `_evt_guardNNN_<name>.lua` file, manifest-ordered BEFORE `_evt_selection` if the
+  guard is applied at injection time. Wire it from `add()` in `_evt_selection.lua`
+  (the chokepoint), register its `rt_register` check IN the guard file, and add a
+  REGRESSION_CHECKLIST.md entry + slug. Guards are load-bearing: never remove one,
+  never gate one behind a menu toggle.
+- **New diagnostic command or probe** → `_evt_diagnostics.lua`. Engine `printf`
+  (users run with mod logs OFF), `pcall(printf, ...)` inside engine dispatch paths.
+  Before hooking anything, grep ALL `_evt_*` files for an existing hook on that
+  `(Class, method)` — VMF silently drops the second (NON-NEGOTIABLE 8).
+- **New cross-module value** → export it onto `mod._evt` in the module that owns
+  it; consumers localize it at their top (`local x = ET.x`). That only works if the
+  owner is earlier in the manifest — if you must add a manifest entry, update the
+  order comment in `event_tweaker.lua` and remember regression-check print order
+  follows it. Modules never `mod:dofile` each other.
+- **Data needed by `_data.lua` / `_localization.lua`** → a require'd module
+  (catalog/curses pattern). Script-set `mod._fields` are nil when those files
+  evaluate (VMF loads localization → data → script) — this burned v0.4.14-dev.
+- **Per-frame work** → keep every read a file-local upvalue (see
+  `_evt_cursed_adventure.lua`); zero table allocations per frame.
 
 ## Architecture
 

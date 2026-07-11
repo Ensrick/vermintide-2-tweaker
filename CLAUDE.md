@@ -104,7 +104,8 @@ technical entry point; from here, follow the tree to the topic-specific referenc
   - `DEVELOPMENT.md` - breed-adding checklist (pairs(Breeds) at boot, threat_values upvalue), architecture overview.
   - `EXPANSION_PLAN.md` - spawn-parity roadmap.
 - `event_tweaker/`:
-  - `DEVELOPMENT.md` - three hooks (`get_special_events`, `get_active_events`, `get_level_variation_data`) plus mutator/preset registration and confirmed mutator catalog.
+  - `CLAUDE.md` - workflow guardrails: module map discipline (`_evt_*` split), load-bearing injection guards, single-source catalogs. Read before touching the mod.
+  - `DEVELOPMENT.md` - module contracts + "where new code goes", the three hooks (`get_special_events`, `get_active_events`, `get_level_variation_data`), mutator/preset registration, confirmed mutator catalog.
 - `modded_progression/`:
   - `PLAN.md` - full design for the modded-realm vanilla-progression re-enable.
 - `verminious_dreams_lighting/`:
@@ -487,5 +488,6 @@ For weapon DLCs (Bogenhafen / Karak Azgaraz / Lake), grep `scripts/settings/dlcs
 - `dynamic_cosmetic_portraits/DEVELOPMENT.md` - full portrait-authoring workflow + career_settings swap architecture + dead ends not to retry.
 - `dynamic_cosmetic_portraits/TODO.md` - portrait roadmap (which hats/careers/characters are next).
 - `dynamic_cosmetic_portraits/CHARACTER_COSMETIC_CATALOG.md` - every `slot_hat`/`slot_skin` item key -> in-game display name across all 5 characters (sourced from `cosmetics_tweaker/_cos_probe.txt`). **Consult this whenever wiring a new portrait - it's the only reliable mapping from a key to a player-facing name.**
+- `event_tweaker/CLAUDE.md` - workflow guardrails for the `_evt_*` module split: injection guards are load-bearing, catalogs are single-source, one hook per (Class, method). Read before touching the mod.
 - `event_tweaker/CHANGELOG.md` - version history for the Tweaker: Events mod.
-- `event_tweaker/DEVELOPMENT.md` - architecture (3 hooks: `get_special_events` / `get_active_events` / `get_level_variation_data`), how to add a new mutator or preset, sharp edges (special_events `name` field, hub-skip in `append_live_event_mutators`, keep-reload caveat).
+- `event_tweaker/DEVELOPMENT.md` - module contracts + "where new code goes" placement recipe, architecture (3 hooks: `get_special_events` / `get_active_events` / `get_level_variation_data`), how to add a new mutator or preset, sharp edges (special_events `name` field, hub-skip in `append_live_event_mutators`, keep-reload caveat).

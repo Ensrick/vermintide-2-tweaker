@@ -100,7 +100,8 @@ times in cwv alone) -> wire-substitution helper (cosmetics has 4 inline copies) 
 > a shared require'd `event_tweaker_catalog.lua`; `_MEM_PROBE_T0_EVT` bare global
 > retired (WS6 item). Pure structural, 3-agent adversarial review, zero behavior
 > findings. et was not on the worst-offender list below; done as the pilot for the
-> per-mod OOP pass.
+> per-mod OOP pass. The reusable conventions are codified in PROJECT_STANDARDS
+> §2.2a; the doc deliverables per decomposition are WS8.
 
 Worst offenders with the auditors' identified extraction seams (all staged,
 behavior-preserving, in-game-verifiable steps; hooks stay in the entry file per §2.2):
@@ -130,6 +131,21 @@ touches a god file extracts its seam as part of the change, never "later".
 - dcp: suite skips the load-bearing seam; career_settings mutation is career-scoped, not
   player-scoped (P1, behavior-affecting - confirm intended behavior first, #435).
 - gut: lifecycle-callback chaining has no regression guard.
+
+### WS8 - Documentation & guidance (maintainability directive, user 2026-07-11)
+
+Docs are first-class deliverables of every refactor; doc updates land in the SAME
+commit as the code they describe. The module-split conventions are codified in
+**PROJECT_STANDARDS §2.2a** (added 2026-07-11 from the event_tweaker template) -
+that section, not this plan, is where the standard lives across sessions.
+
+| Item | Effort | Notes |
+|---|---|---|
+| Per-mod doc standard: every decomposed mod's DEVELOPMENT.md carries a "Module contracts" section (per file: responsibility, public surface on `mod`, manifest position) + a "Where new code goes" placement recipe; REGRESSION_CHECKLIST.md detection pointers name the owning files | S per mod | event_tweaker done (pilot); apply as each WS5 decomposition lands |
+| Per-mod CLAUDE.md where guardrails exceed one screen (dcp + event_tweaker have one); hub `CLAUDE.md` Tier-3 routing line added in the same commit (per-mod CLAUDE.md files do NOT auto-load - the hub routes to them) | S per mod | Evaluate per mod; thin router + hard rules only, architecture stays in DEVELOPMENT.md (no duplication - WS3 lesson) |
+| Hub CLAUDE.md accuracy sweep: mod-directory rows, Tier-3 doc lists, and helper-pattern line citations (file:line refs rot on every split - prefer file + symbol over line numbers) | S | recurring; ride each decomposition |
+| Stale-claim purge per mod at decomposition time (event_tweaker had: visibility "private" vs actual public cfg, retired `mod._ET_*` fields, "keep in sync" instructions for retired duplicates) | S per mod | `qa/check_stale_docs.ps1` exists - extend its patterns as classes surface |
+| Engine reference material: a separate engine-research workflow produces `docs/engine/` from the decompiled source. Do NOT create that directory here; when it lands, link it from `docs/MECHANICS.md` (the provenance-enforced index owns engine-mechanic pointers) and from per-mod DEVELOPMENT.md sections that currently cite raw decompiled paths | - | coordination note only |
 
 ## Sequencing
 

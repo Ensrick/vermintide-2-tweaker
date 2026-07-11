@@ -74,6 +74,47 @@ Per-feature files **must** start with a docstring header:
 -- Owned by: <mod>.lua entry point. Consumed via: <require path / mod:dofile>
 ```
 
+### 2.2a Full module-split conventions (the event_tweaker template, 2026-07-11)
+
+When a mod is decomposed into single-responsibility modules (OOP_REFACTOR_PLAN
+WS5), follow the template proven on event_tweaker v0.4.26-dev:
+
+1. **Entry file = manifest only.** `<mod>.lua` keeps MOD_VERSION (the launcher
+   parses it from THIS file), the load banner/echo lines, a `mod._<ns>` shared
+   namespace table, and an ordered `mod:dofile` manifest with a comment stating
+   why the order is load-bearing. All logic lives in modules.
+2. **One dofile per module, from the manifest only.** `mod:dofile` is NOT a
+   singleton — every call re-executes the file — so modules never dofile each
+   other. Pick a unique module prefix (check other mods' prefixes first:
+   `_et_` = enemy_tweaker, `_evt_` = event_tweaker, `_gt_`, `_ct_`, ...).
+3. **Cross-module surface goes through `mod._<ns>`.** The owning module exports
+   (`ET.x = x`); consumers localize at their top (`local x = ET.x`), which only
+   works if the owner is EARLIER in the manifest. Established `mod._<field>`
+   names (regression checks / docs cite them) survive as-is.
+4. **Data shared with `_data.lua`/`_localization.lua` goes in require'd modules**
+   (pure data, no `mod` access) — script-set fields are nil when those files
+   evaluate (VMF loads localization → data → script).
+5. **Issue guards get their own `_<ns>_guardNNN_<name>.lua`**, manifest-ordered
+   before the module that applies them; each registers its own regression check;
+   the guard call sites stay at the single injection/dispatch chokepoint.
+6. **Regression checks register in the module that owns the guarded code**; the
+   harness module exports `rt_register`. Check names and their registration
+   order (= manifest order) are frozen surface — reordering the manifest
+   reorders the in-game output.
+7. **Per-frame hooks read file-locals only** — no namespace lookups, no require,
+   zero new per-frame allocations.
+8. **Split = pure structural.** Log/printf strings byte-identical, hook set
+   identical (one hook per (Class, method) mod-wide), command names identical.
+   Before shipping, run independent adversarial review over the diff hunting
+   orphaned upvalues, load-order breaks, dropped duplicate hooks, bundle
+   omissions, and guard drift; verify every new file landed in the bundle
+   (murmur64-hash the resource paths against the bundle listing — a raw byte
+   scan cannot see hashed entries).
+9. **Docs in the same commit:** the mod's DEVELOPMENT.md gets a "Module
+   contracts" section (per file: responsibility, public surface, manifest
+   position) + a "Where new code goes" placement recipe, so the monolith does
+   not regrow; REGRESSION_CHECKLIST.md detection pointers get the new file names.
+
 ### 2.3 When to split
 Trigger a split when ANY of:
 - File hits 2500 lines.
