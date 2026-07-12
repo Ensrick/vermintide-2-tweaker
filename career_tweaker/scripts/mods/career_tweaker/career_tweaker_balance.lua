@@ -173,15 +173,16 @@ end
 -- on purpose: apply/restore churn follows the settled state, while every
 -- individual send consults the instant live state.
 --
--- Reads mod._crt_parity_settled_enabled, a flag the beacon's gated-feature
--- callbacks set in career_tweaker.lua BEFORE re-running apply. Deliberately NOT
--- pp:applied_state(): the shared lib's _apply() runs feature callbacks BEFORE
--- writing _applied (_lib_peer_parity.lua:215-227), so an applied_state() read
--- from inside a callback returns the PREVIOUS state and every transition would
--- act one apply late (adversarial review 2026-07-11; latent in the master lib,
--- reported upstream for the cwv consumer).
+-- Reads the beacon's committed settled state via pp:applied_state(). Issue 506:
+-- the shared lib now writes _applied BEFORE firing the gated-feature callbacks
+-- (_lib_peer_parity.lua _apply), so this read is correct even when it runs from
+-- inside the beacon's on_enable/on_disable -- which is exactly when the apply
+-- engines call it. This replaced the old mod._crt_parity_settled_enabled mirror
+-- flag the callbacks set to work around a stale applied_state() read. Fail-safe:
+-- no beacon (factory failed) -> nil -> networked reworks stay vanilla/inert.
 local function _crt_parity_gate_ok()
-    return mod._crt_parity_settled_enabled == true
+    local pp = mod._crt_peer_parity
+    return pp ~= nil and pp:applied_state() == "enabled"
 end
 
 -- [crt:425] diagnostics: engine printf (user runs with mod-logging OFF), fired
@@ -3215,9 +3216,14 @@ end)
 -- supplies the trade-off (a smaller pool of random crits instead of none).
 --
 -- ActionUtils is a plain global table, so use table-form hooking per
--- CLAUDE.md hooking rules. Guard for load order — if the helper isn't
--- registered yet we skip the hook entirely (defensive; in practice the
--- helpers file loads at game boot, long before any VMF mod).
+-- CLAUDE.md hooking rules and docs/engine/10 ("plain-table target: hook at file
+-- load, not lazily"). Table-form can't hook a nil target, so the presence guard
+-- stays; in practice the helpers file loads at game boot, long before any VMF
+-- mod, so this installs every session. Issue 507: to catch a future load-order
+-- shift that would make ActionUtils absent at crt load (silent feature-loss --
+-- the hook would just be skipped), we record whether it installed. The
+-- /crt_regression_test check `crt_hellborgs_crit_hook_installed` fails loudly if
+-- this marker is ever false, and the else-branch logs the loss at runtime.
 if ActionUtils and ActionUtils.get_critical_strike_chance then
     mod:hook(ActionUtils, "get_critical_strike_chance", function(func, unit, action, overrides)
         local chance = func(unit, action, overrides)
@@ -3235,6 +3241,10 @@ if ActionUtils and ActionUtils.get_critical_strike_chance then
         if reduced < 0 then reduced = 0 end
         return reduced
     end)
+    mod._crt_hellborgs_crit_hook_installed = true
+else
+    mod._crt_hellborgs_crit_hook_installed = false
+    pcall(printf, "[crt] WARNING ActionUtils.get_critical_strike_chance unavailable at load; Hellborg's Tutelage crit-chance reduction is INACTIVE this session (load-order shift)")
 end
 
 -- ============================================================
@@ -3587,12 +3597,14 @@ end)
 -- Vanilla `victor_bounty_hunter_ammo_fraction_gain_out_of_ammo` (defined in
 -- buff_templates.lua under the global `ProcFunctions` table, line 3031) only
 -- restores ammo on melee elite kill when BOTH reserve and clip are empty
--- (`if current_ammo < 1 and clip_ammo < 1`, line 3052). Replace the function
--- table entry with a gate-less version when the rework toggle is on; vanilla
--- code path is preserved when off. Saves the original at module load so it
--- can be restored at game-state shutdown if needed (not currently wired —
--- restoring would require an apply/restore pair; the toggle is read every
--- call so disabling the toggle returns vanilla behavior immediately).
+-- (`if current_ammo < 1 and clip_ammo < 1`, line 3052). We replace the table
+-- entry with a wrapper: with the rework toggle OFF (the default) it delegates
+-- to the captured vanilla fn (`_orig_salvaged_ammo_fn`); with it ON it runs a
+-- gate-less version. `_orig_salvaged_ammo_fn` is the LIVE toggle-off delegate,
+-- read on every proc via the mod:get gate below, NOT a dormant restore handle.
+-- There is no apply/restore pair and none is needed: flipping the toggle off
+-- returns vanilla behavior on the next proc (issue 507; the earlier comment
+-- mischaracterized this save as a never-wired shutdown restore).
 if ProcFunctions and ProcFunctions.victor_bounty_hunter_ammo_fraction_gain_out_of_ammo then
     local _orig_salvaged_ammo_fn = ProcFunctions.victor_bounty_hunter_ammo_fraction_gain_out_of_ammo
     ProcFunctions.victor_bounty_hunter_ammo_fraction_gain_out_of_ammo = function(owner_unit, buff, params)

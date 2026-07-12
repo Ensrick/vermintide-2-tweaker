@@ -32,8 +32,11 @@ because the field is populated by the time the player triggers them.
 
 Established mod fields that predate the namespace stay as-is:
 `mod._crt_registered_buff_names`, `mod._crt_mod_registered_buff_names`,
-`mod._crt_peer_parity`, `mod._crt_parity_settled_enabled`,
+`mod._crt_peer_parity`, `mod._crt_hellborgs_crit_hook_installed`,
 `mod._crt_oe_cdr_tick`, `mod._crt_auto_dump_check`, etc.
+(The `mod._crt_parity_settled_enabled` mirror flag was removed in v0.3.58-dev,
+issue 506: the apply engines now read `mod._crt_peer_parity:applied_state()`
+directly since the shared lib commits `_applied` before firing gate callbacks.)
 
 ## Module map (v0.3.57-dev)
 
@@ -43,7 +46,7 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 
 | File | Responsibility | Public surface (via `mod._crt` unless noted) | Manifest position |
 |------|----------------|----------------------------------------------|-------------------|
-| `career_tweaker.lua` | Entry/manifest + lifecycle. MOD_VERSION, boot banner/fingerprint, the dofile manifest, the mutex cluster declare, the Character-XP-level override + Unlock-All-Careers hooks, the 2026-06-21 ability-swap / career-select bug-fix hooks, `mod.update`, `on_game_state_changed` / `on_setting_changed` / `on_disabled`, `ct_status`, and the issue-425 beacon install. | owns `mod._crt`, `mod._crt.MOD_VERSION`, `mod._crt.dbg` / `dbg_alert`, `mod._crt.balance`, `mod._crt_peer_parity`, `mod._crt_parity_settled_enabled` | — (the entry) |
+| `career_tweaker.lua` | Entry/manifest + lifecycle. MOD_VERSION, boot banner/fingerprint, the dofile manifest, the mutex cluster declare, the Character-XP-level override + Unlock-All-Careers hooks, the 2026-06-21 ability-swap / career-select bug-fix hooks, `mod.update`, `on_game_state_changed` / `on_setting_changed` / `on_disabled`, `ct_status`, and the issue-425 beacon install. | owns `mod._crt`, `mod._crt.MOD_VERSION`, `mod._crt.dbg` / `dbg_alert`, `mod._crt.balance`, `mod._crt_peer_parity` | — (the entry) |
 | `career_tweaker_data.lua` | VMF widget tree (the settings UI). | returns the widget table | before script (VMF) |
 | `career_tweaker_localization.lua` | Localized strings. | returns the loc table | before data (VMF) |
 | `career_tweaker_balance.lua` | The BALANCE_MODS rework catalog + apply/restore engine, the crt_* buff pre-registration, AND the issue-425 wire-safety subsystem (parity gate, wire-safe proc/driver wrappers, hot-join replay filter). | returns `{ apply, restore, active_count, parity_gate_ok, wire_parity_live, network_unsafe_ids, BALANCE_MODS }`; sets `mod._crt_registered_buff_names`, `mod._crt_mod_registered_buff_names` | 1st (entry captures `balance`) |

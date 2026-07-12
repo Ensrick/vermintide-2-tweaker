@@ -213,6 +213,15 @@ local function new_peer_parity(mod, opts)
 
     -- Apply / notify ---------------------------------------------------------
     local function _apply(state)
+        -- Commit the applied state BEFORE invoking callbacks (issue 506). A
+        -- callback that reads inst:applied_state() -- or the late-registration
+        -- coherence path in register_gated_feature, which also reads _applied --
+        -- must observe the transition it is part of, not the previous one.
+        -- Writing _applied first makes the accessor consistent inside a callback;
+        -- crt formerly carried a private mirror flag to dodge the old stale read.
+        -- Callbacks are pcall-wrapped, so _applied is committed regardless of a
+        -- callback error (identical to the prior unconditional trailing write).
+        _applied = state
         for _, fid in ipairs(_feature_order) do
             local f  = _features[fid]
             local cb = (state == "enabled") and f.on_enable or f.on_disable
@@ -223,7 +232,6 @@ local function new_peer_parity(mod, opts)
                 end
             end
         end
-        _applied = state
     end
 
     local function _force_disable()

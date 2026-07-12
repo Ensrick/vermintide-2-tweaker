@@ -1,5 +1,46 @@
 # Career Tweaker Changelog
 
+## 0.3.58-dev - 2026-07-12 - #506 shared parity-lib ordering fix + crt workaround removal; #507 crt hygiene
+
+### Why
+Both items surfaced during the issue 503 ENGINE_SURFACE pass; no user-visible symptom today.
+- #506: the shared peer-parity lib (`tools/shared_lib/_lib_peer_parity.lua`, master) fired its
+  gated-feature transition callbacks BEFORE writing `_applied`, so a callback that read
+  `applied_state()` saw the PREVIOUS state (one transition stale). crt worked around this with a
+  private `mod._crt_parity_settled_enabled` mirror flag; cwv and the ct_dev copy did not.
+- #507: two code-hygiene items in `career_tweaker_balance.lua`.
+
+### Fixed - #506 (shared lib ordering + crt workaround removal)
+- **Master lib `_apply` now commits `_applied` BEFORE invoking callbacks**, so a callback reading
+  `inst:applied_state()` (and the late-registration coherence path) observes the transition it is
+  part of. Callbacks stay pcall-wrapped, so `_applied` is committed regardless of a callback error
+  (identical to the prior trailing write). Re-copied verbatim into the crt-local copy. (The cwv copy
+  ships in its own v0.1.382-dev bump; the `chaos_wastes_tweaker_dev` copy is outside this pass's scope
+  and still needs the identical re-copy.)
+- **Removed crt's `mod._crt_parity_settled_enabled` workaround.** The gated-feature callbacks
+  (`career_tweaker.lua`) no longer set the mirror flag; `_crt_parity_gate_ok` (balance) and the tourney
+  apply engine now read `mod._crt_peer_parity:applied_state() == "enabled"` directly (nil beacon ->
+  vanilla/inert, same fail-safe as before). Behavior is identical; the read is now correct from inside
+  a transition callback because of the master fix.
+- **New regression check** `crt_parity_applied_state_committed_before_callbacks`: builds a throwaway
+  (never-installed) beacon instance, registers a probe feature, drives a solo enable, and asserts the
+  callback observed `applied_state() == "enabled"`. Locks the ordering the workaround removal depends on.
+
+### Fixed - #507 (crt hygiene)
+- **Salvaged Ammunition comment corrected (it was NOT a dead save).** `_orig_salvaged_ammo_fn` is the
+  LIVE toggle-off delegate the wrapper calls on every proc when the rework is off (the default). The
+  old comment mischaracterized it as a never-wired shutdown-restore handle; rewritten to describe the
+  real delegate use. No code change (deleting the variable would crash the default-config BH proc).
+- **Hellborg's Tutelage crit hook install tripwire.** The `ActionUtils.get_critical_strike_chance`
+  table-form hook is guarded by an at-load presence test (table-form cannot hook a nil target; the
+  engine-doc convention keeps table-form for plain-global targets). It now records the install
+  decision in `mod._crt_hellborgs_crit_hook_installed` and logs a printf warning on the skip branch,
+  and a new regression check `crt_hellborgs_crit_hook_installed` fails loudly if a future load-order
+  shift ever skips it (was silent feature-loss).
+
+### Refs
+issue 371, issue 425 (peer-parity framework), issue 503 (surface pass).
+
 ## 0.3.57-dev - 2026-07-12 - Phase 1 OOP decomposition of the entry file (structural, no behavior change)
 
 ### Why

@@ -778,10 +778,12 @@ local function apply_tourney_mods()
 
     -- issue 425 peer-parity gate, same contract as career_tweaker_balance.lua:
     -- entries tagged network_unsafe only apply while the beacon's settled state
-    -- is enabled (flag set by the gated-feature callbacks in career_tweaker.lua
-    -- BEFORE they re-run apply; solo counts as parity). Saved settings are
-    -- never overwritten.
-    local parity_ok = (mod._crt_parity_settled_enabled == true)
+    -- is enabled (solo counts as parity). Issue 506: read pp:applied_state()
+    -- directly now that the shared lib commits _applied before firing the gate
+    -- callbacks -- the old mod._crt_parity_settled_enabled mirror flag is gone.
+    -- Saved settings are never overwritten.
+    local pp = mod._crt_peer_parity
+    local parity_ok = (pp ~= nil and pp:applied_state() == "enabled")
 
     for setting_id, def in pairs(TOURNEY_MODS) do
         if mod:get(setting_id) and not _conflict_active(setting_id) then

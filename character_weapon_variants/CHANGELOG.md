@@ -1,5 +1,26 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.382-dev - 2026-07-12 - #506: adopt the shared parity-lib ordering fix (verbatim lib re-copy)
+
+### Why
+Issue #506: the shared peer-parity lib (`tools/shared_lib/_lib_peer_parity.lua`) fired its
+gated-feature transition callbacks BEFORE writing `_applied`, so a callback reading `applied_state()`
+saw the previous state. cwv's own gated callbacks (`_inject_pool` / `_eject_pool`) never read
+`applied_state()`, so cwv was never bitten at runtime, but cwv ships a copy of the lib and must carry
+the same fix.
+
+### Changed
+- **Re-copied the master lib** (its `_apply` now commits `_applied` before invoking callbacks) into
+  `scripts/mods/character_weapon_variants/_lib_peer_parity.lua`. Verbatim of master; no cwv-side
+  behavior change (the beacon's runtime posture is unchanged).
+- **New regression check** `cwv_parity_applied_state_committed_before_callbacks`: builds a throwaway
+  (never-installed) beacon, registers a probe feature, drives a solo enable, and asserts the callback
+  observed `applied_state() == "enabled"`, locking the master ordering for any future cwv gated
+  feature that relies on it.
+
+### Refs
+issue 371, issue 424 (peer-parity framework).
+
 ## 0.1.381-dev — 2026-07-12 — #279: [diag] probe the husk ammo-attach decision (crafted Outrider still renders merged) [0-critical]
 
 ### Why

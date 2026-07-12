@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.381-dev"
+local MOD_VERSION = "0.1.382-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -12885,6 +12885,39 @@ _rt_register("preview_meshswap_guards", function()
     if a.spawn_data[1].unit_name ~= "BASE_3p" then return "#237 guard: non-cwv backend_id must not rewrite" end
     local b = _mk(); apply("es_sword_shield", "cwv_we_sword_shield_001", "some_skin", b)
     if b.spawn_data[1].unit_name ~= "BASE_3p" then return "#237 guard: user-selected illusion (skin) must win, no rewrite" end
+end)
+
+_rt_register("cwv_parity_applied_state_committed_before_callbacks", function()
+    -- Issue 506: the shared peer-parity lib must commit _applied BEFORE it fires
+    -- the gated-feature callbacks, so a callback reading inst:applied_state()
+    -- observes the transition it is part of. cwv's own gated callbacks
+    -- (_inject_pool / _eject_pool) do not read applied_state today, so cwv was
+    -- never bitten -- but cwv ships a copy of the lib, so lock the master
+    -- ordering here too (a future cwv gated feature could rely on it). Build a
+    -- THROWAWAY instance (never install()d -> no VMF channel, no mod.update
+    -- wrap), register a probe whose on_enable records applied_state(), drive a
+    -- solo enable, and assert it saw "enabled". Skip (not fail) if the transition
+    -- cannot be driven here (a populated lobby holds the probe disabled).
+    local ok, factory = pcall(mod.dofile, mod, "scripts/mods/character_weapon_variants/_lib_peer_parity")
+    if not ok or type(factory) ~= "function" then return "peer-parity lib not loadable" end
+    local inst = factory(mod, {
+        channel           = "cwv_rt_probe_parity",
+        echo_prefix       = "[cwv-rt]",
+        poll_interval     = 0,
+        announce_interval = 1e12,   -- suppress the probe's network announce
+    })
+    if type(inst) ~= "table" then return "parity factory did not return an instance" end
+    local seen_state
+    inst:register_gated_feature("__cwv_rt_order_probe__", {
+        on_enable = function() seen_state = inst:applied_state() end,
+    })
+    pcall(function() inst:tick(10) end)   -- solo enables on the first tick (settle 0)
+    if seen_state == nil then return end  -- enable did not fire in this env; skip
+    if seen_state ~= "enabled" then
+        return string.format(
+            "applied_state() inside on_enable was %q, expected \"enabled\" -- shared lib fired callbacks before committing _applied (issue 506 regression)",
+            tostring(seen_state))
+    end
 end)
 
 mod:info("Character Weapon Variants v%s loaded", MOD_VERSION)

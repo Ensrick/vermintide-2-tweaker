@@ -1,5 +1,10 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.244-dev (2026-07-12) - #506 re-sync the peer-parity lib copy from master [untested]
+
+### Changed
+- **#506: `_lib_peer_parity.lua` re-copied verbatim from `tools/shared_lib/`** (copied-lib rule, PROJECT_STANDARDS 9a). The master fix commits `_applied = state` BEFORE the callback loop so a callback reading `applied_state()` observes the transition it is part of, not the previous one. ct_dev's own callbacks do not read `applied_state()` today, so this is drift-correction with no behavior change here - but any future gated feature would have inherited the stale read. career_tweaker and character_weapon_variants got the same re-copy in their own builds (0.3.58-dev / 0.1.382-dev).
+
 ## 0.7.243-dev (2026-07-12) - DIAGNOSTICS: re-arm the reverted #132 / #134 / #136 probes
 
 Re-arms the three CW diagnostics whose predecessors were reverted in v0.7.175 (bundled into a text-fix build and stripped "per user request" as a separate concern) and never re-armed. This is a dedicated diagnostics build - the correct home for them - so the revert reason no longer applies. Where the reverted probe was redundant or the current code already covers it, this re-arm ADDS the genuinely-missing seam rather than reintroducing the old line. All output is engine `printf` (visible with mod logging OFF, the user's setup); always-on in dev, no menu toggles (diagnostics doctrine). No behavior change - observation only. `MOD_VERSION` `0.7.242-dev` -> `0.7.243-dev`. Tag `[untested]`.

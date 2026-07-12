@@ -1,7 +1,7 @@
 -- career_tweaker / _crt_regression.lua
 --
 -- Responsibility: the /crt_regression_test smoke suite. Owns the harness
--- (_rt_register + the _RT_CHECKS registry + the command) and all 19 check
+-- (_rt_register + the _RT_CHECKS registry + the command) and all 21 check
 -- bodies, IN THEIR FROZEN REGISTRATION ORDER. The suite is load-bearing for the
 -- issue 425 cross-peer wire safety: every check here must still register and
 -- structurally pass. Check NAMES and their registration ORDER are frozen surface
@@ -568,5 +568,67 @@ _rt_register("crt_hot_join_filter_target_present", function()
     local BS = rawget(_G, "BuffSystem")
     if type(BS) ~= "table" or type(BS.hot_join_sync) ~= "function" then
         return "BuffSystem.hot_join_sync missing (engine changed? hot-join filter dead)"
+    end
+end)
+
+-- ------------------------------------------------------------
+-- Issue 506: shared peer-parity lib commits _applied before callbacks
+-- ------------------------------------------------------------
+_rt_register("crt_parity_applied_state_committed_before_callbacks", function()
+    -- The shared lib must commit _applied BEFORE firing the gated-feature
+    -- callbacks, so a callback that reads inst:applied_state() sees the
+    -- transition it is part of. crt formerly kept a private
+    -- mod._crt_parity_settled_enabled mirror to dodge the old stale read; that
+    -- flag was removed (v0.3.58-dev) once the master lib was fixed, so the apply
+    -- engines now read pp:applied_state() directly and THIS check is what locks
+    -- the ordering invariant they depend on.
+    --
+    -- Build a THROWAWAY instance (never install()d -> no VMF channel, no
+    -- mod.update wrap), register a probe feature whose on_enable records
+    -- applied_state(), then drive a solo enable and assert it observed
+    -- "enabled". If the transition cannot be driven here (a populated lobby
+    -- holds the probe disabled), skip rather than false-fail -- the same
+    -- run-in-keep posture the other beacon checks take.
+    local ok, factory = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/_lib_peer_parity")
+    if not ok or type(factory) ~= "function" then return "peer-parity lib not loadable" end
+    local inst = factory(mod, {
+        channel           = "crt_rt_probe_parity",
+        echo_prefix       = "[crt-rt]",
+        poll_interval     = 0,
+        announce_interval = 1e12,   -- suppress the probe's network announce
+    })
+    if type(inst) ~= "table" then return "parity factory did not return an instance" end
+    local seen_state
+    inst:register_gated_feature("__crt_rt_order_probe__", {
+        on_enable = function() seen_state = inst:applied_state() end,
+    })
+    pcall(function() inst:tick(10) end)   -- solo enables on the first tick (settle 0)
+    if seen_state == nil then return end  -- enable did not fire in this env; skip
+    if seen_state ~= "enabled" then
+        return string.format(
+            "applied_state() inside on_enable was %q, expected \"enabled\" -- shared lib fired callbacks before committing _applied (issue 506 regression)",
+            tostring(seen_state))
+    end
+end)
+
+-- ------------------------------------------------------------
+-- Issue 507: Hellborg's Tutelage crit hook install tripwire
+-- ------------------------------------------------------------
+_rt_register("crt_hellborgs_crit_hook_installed", function()
+    -- The Hellborg's Tutelage crit-chance reduction hooks the plain global
+    -- ActionUtils.get_critical_strike_chance via TABLE-form, guarded by an
+    -- at-load `if ActionUtils` presence test (table-form cannot hook a nil
+    -- target). Under the current load order ActionUtils is a boot-time helper
+    -- present long before crt, so the hook installs; if load order ever shifts
+    -- and it is absent at crt load, the hook is skipped and the reduction
+    -- silently vanishes. career_tweaker_balance.lua records the install decision
+    -- in mod._crt_hellborgs_crit_hook_installed; assert it is true so the latent
+    -- skip becomes a loud failure, and confirm the target still resolves now.
+    if mod._crt_hellborgs_crit_hook_installed ~= true then
+        return "ActionUtils.get_critical_strike_chance hook did NOT install at load (ActionUtils absent at crt load -> Hellborg's Tutelage crit reduction inactive; load-order regression)"
+    end
+    local AU = rawget(_G, "ActionUtils")
+    if type(AU) ~= "table" or type(AU.get_critical_strike_chance) ~= "function" then
+        return "ActionUtils.get_critical_strike_chance missing now (engine changed?)"
     end
 end)

@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.3.57-dev"
+local MOD_VERSION = "0.3.58-dev"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
@@ -524,24 +524,24 @@ do
             pcall(function() inst:install() end)
             pcall(printf, "[crt:425] peer-parity beacon installed (channel=crt_peer_parity_present)")
             -- ONE gated feature covering every networked_unsafe entry (seven
-            -- balance reworks + the trn_wh_priest tourney port). The callbacks
-            -- OWN the settled-state flag both apply engines gate on
-            -- (mod._crt_parity_settled_enabled), set BEFORE re-running the
-            -- engines. Deliberately not inst:applied_state(): the lib writes
-            -- _applied AFTER firing callbacks (_lib_peer_parity.lua:215-227),
-            -- so a state read from inside a callback is one transition stale.
+            -- balance reworks + the trn_wh_priest tourney port). On a parity
+            -- transition the beacon fires these callbacks; each just re-runs the
+            -- two apply engines, which read the beacon's settled state directly
+            -- via pp:applied_state(). Issue 506: the shared lib now commits
+            -- _applied BEFORE firing callbacks, so an applied_state() read from
+            -- inside apply reflects the transition being delivered -- crt no
+            -- longer needs the private mod._crt_parity_settled_enabled mirror
+            -- flag it formerly set here to dodge the stale read (removed).
             -- The lib chat-echoes the user-facing disable/re-enable notice; the
             -- printf lines are the log-side [crt:425] trail.
             inst:register_gated_feature("crt_networked_reworks", {
                 label = "networked talent reworks",
                 on_enable = function()
-                    mod._crt_parity_settled_enabled = true
                     pcall(printf, "[crt:425] parity established: re-applying networked talent reworks per settings")
                     if balance and balance.apply then pcall(balance.apply) end
                     if tourney and tourney.apply then pcall(tourney.apply) end
                 end,
                 on_disable = function()
-                    mod._crt_parity_settled_enabled = false
                     pcall(printf, "[crt:425] parity degraded (peer set changed or peer lacks crt): networked talent reworks fall back to vanilla")
                     if balance and balance.apply then pcall(balance.apply) end
                     if tourney and tourney.apply then pcall(tourney.apply) end
