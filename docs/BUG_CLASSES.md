@@ -1385,3 +1385,26 @@ end
 ### Related Issues / commits
 - gt_dev v0.2.196-dev (#459): `_gt_bot_teleport_lab.lua` `_clear_and_null` (the crash) + `_gt_debug_highlights.lua` `_clear` (byte-identical latent twin); regression check `gt_459_lineobject_cleanup_liveness_gated`.
 - Related: class 21 (POSITION_LOOKUP dead in mod.update — same "mod code ticks where vanilla state is stale/gone" root), class 23 (Gui material residency draw fatal — the create-side twin of this dispatch-side fatal), class 12 (Vector3/Quaternion stack-temporary lifetime).
+
+## 33. Update-loop consumer calls a network-gated PlayerManager API before the backend exists
+
+**First seen:** 2026-07-12 (gt_dev issue 508; fixed gt_dev v0.2.200-dev)
+**Canonical Issue:** [#508](https://github.com/Ensrick/vermintide-2-tweaker/issues/508)
+**Lives in:** any per-frame mod code (mod.update consumer, VMF update callback) that resolves the local player. VMF ticks mods in the boot/menu phase too (same root as class 32: mod code runs where vanilla state does not exist yet).
+
+### Symptoms
+- `[MOD][<mod>][ERROR] ... player_manager.lua:NNN: Network backend has not been set` once per frame (60/s) at boot or main menu, stopping only when a game session starts. No crash - error spam, chat-visible when routed through `mod:error`/`mod:warning`.
+- Trigger is a persisted-ON toggle whose per-frame path resolves the player before checking game state.
+
+### Diagnosis pattern
+1. `PlayerManager.local_player` has NO readiness guard - it goes straight to `Network.peer_id()` (player_manager.lua:580-586), which asserts before the network backend is initialized.
+2. Vanilla's own answer sits right below it: `local_player_safe` (player_manager.lua:588-596) returns nil unless `Managers.state.network` exists AND `network:game()` is live.
+3. Grep the mod for `:local_player()` on any update-consumer path.
+
+### Fix template
+- Replace `pm:local_player()` with `pm.local_player_safe and pm:local_player_safe()` on every per-frame path; treat nil as "not in a session yet" and bail. In-session behavior is identical - once a player unit exists both calls resolve the same player.
+- Harden the update dispatcher: log one line per DISTINCT consumer error per streak (re-arm on success or message change), never one per frame - a recoverable boot-phase failure must not flood chat/log (gt_dev `mod.update`, v0.2.200-dev).
+
+### Related Issues / commits
+- gt_dev v0.2.200-dev (#508): `_gt_debug_highlights.lua` `_local_player_unit` + dispatcher suppression; regression check `gt_dh_local_player_safe_508`.
+- Related: class 21 / class 32 (the "VMF ticks outside game states" family); `docs/engine/03` network readiness.
