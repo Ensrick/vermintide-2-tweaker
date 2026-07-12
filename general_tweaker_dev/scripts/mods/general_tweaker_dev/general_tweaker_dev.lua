@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.199-dev"
+local MOD_VERSION = "0.2.200-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -345,8 +345,18 @@ mod.update = function(dt)
     for i = 1, #_update_consumers do
         local c = _update_consumers[i]
         local ok, err = pcall(c.fn, dt)
-        if not ok then
-            mod:error("[gt:update] consumer '%s' raised: %s", c.name, tostring(err))
+        if ok then
+            c.last_err = nil
+        else
+            -- Log each DISTINCT error once per streak, not per frame: a consumer
+            -- failing through a boot/menu phase it later recovers from (issue 508:
+            -- 60/s chat-visible spam) must not flood mod:error. A different
+            -- message, or a success in between, re-arms the line.
+            local msg = tostring(err)
+            if c.last_err ~= msg then
+                c.last_err = msg
+                mod:error("[gt:update] consumer '%s' raised (repeats suppressed): %s", c.name, msg)
+            end
         end
     end
 end
@@ -1881,6 +1891,28 @@ _rt_register("gt_dh_no_position_lookup_reads", function()
     if not txt then return end
     if txt:find("POSITION_LOOKUP[", 1, true) or txt:find("= POSITION_LOOKUP", 1, true) then
         return "_gt_debug_highlights.lua reads POSITION_LOOKUP -- dead in mod.update (issue-337 class); use _unit_pos live reads"
+    end
+end)
+
+_rt_register("gt_dh_local_player_safe_508", function()
+    -- issue 508 (v0.2.200-dev): _gt_debug_highlights runs as a mod.update
+    -- consumer, which also ticks in the boot/menu phase where vanilla
+    -- PlayerManager.local_player() asserts "Network backend has not been set"
+    -- (player_manager.lua:580-586; the readiness-guarded local_player_safe is
+    -- :588-596). Fails if a bare local_player() call comes back into that file.
+    -- Sibling-file read; soft-skip when source is not on disk (packaged build).
+    local anchor = mod._gt_backward_teleport_wants or mod._gt_resolve_follow_mode
+    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dh_src = srcp:gsub("_gt_bot_fixes%.lua$", "_gt_debug_highlights.lua")
+    if dh_src == srcp then return end
+    local f = io.open(dh_src, "r")
+    if not f then return end
+    local txt = f:read("*a"); f:close()
+    if not txt then return end
+    if txt:find(":local_player()", 1, true) then
+        return "_gt_debug_highlights.lua calls bare local_player() -- asserts pre-game (issue 508); use local_player_safe"
     end
 end)
 

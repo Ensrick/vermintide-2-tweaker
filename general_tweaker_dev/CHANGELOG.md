@@ -1,5 +1,13 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.200-dev (2026-07-12) -- #508 FIX: debug_highlights error spam before the network backend exists [untested]
+
+### Fixed
+- **#508: `_gt_debug_highlights.lua` `_local_player_unit()` now uses `PlayerManager.local_player_safe`.** With the `gt_debug_highlights` master toggle persisted ON, the `_draw` consumer ticks in the boot/menu phase too, and bare `local_player()` routes straight to `Network.peer_id()` with no readiness guard (decompile `player_manager.lua:580-586`), asserting `Network backend has not been set` once per frame (60/s in console-2026-07-12-17.56.05, first at 17:56:30.518). `local_player_safe` (`player_manager.lua:588-596`) nil-checks `Managers.state.network` and `network:game()` first - the vanilla API for exactly this update-consumer timing. Draw behavior in-mission is unchanged: by the time a player unit exists, both calls resolve identically.
+- **Dispatcher hardening (`mod.update` consumer loop): repeat identical errors are suppressed.** A consumer error now logs once per distinct message per streak instead of every frame; a success (or a different error) re-arms the line. Boot-phase recoverable failures no longer flood chat/log while still leaving one actionable line with the consumer name. Applies to every `mod._gt_register_update` consumer, not just debug_highlights.
+- **New `/gt_regression_test` check `gt_dh_local_player_safe_508`:** fails if a bare `:local_player()` call is reintroduced into `_gt_debug_highlights.lua` (sibling-file source-pattern read, soft-skip on packaged builds - same shape as `gt_dh_no_position_lookup_reads`).
+- Loc: `gt_debug_highlights` master title tag `[untested]` -> `[verify-fix]` (LOCALIZATION_STANDARD section 13 co-move).
+
 ## v0.2.199-dev (2026-07-12) -- #500 remove the stale #198 training-dummy probe (closed issue) [untested]
 
 ### Changed

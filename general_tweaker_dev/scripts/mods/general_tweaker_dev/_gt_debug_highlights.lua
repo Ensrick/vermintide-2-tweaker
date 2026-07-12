@@ -107,8 +107,15 @@ local function _pf(fmt, ...)
 end
 
 local function _local_player_unit()
+    -- local_player() routes straight to Network.peer_id() with no readiness
+    -- guard (player_manager.lua:580-586) and asserts "Network backend has not
+    -- been set" in the boot/menu phase -- this file runs as a mod.update
+    -- consumer, which ticks there too (issue 508: 60/s error spam at load).
+    -- local_player_safe (player_manager.lua:588-596) nil-checks
+    -- Managers.state.network first; it is the vanilla API for this timing.
     local pm = Managers.player
-    local p = pm and pm:local_player()
+    if not (pm and pm.local_player_safe) then return nil end
+    local p = pm:local_player_safe()
     return p and p.player_unit
 end
 

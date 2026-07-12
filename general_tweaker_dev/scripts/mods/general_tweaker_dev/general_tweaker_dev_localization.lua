@@ -319,7 +319,7 @@ return {
     -- Debug Highlights (#302). Master + per-category wireframe overlays. Dev build
     -- only; all children default OFF. Titles carry [untested] per LOCALIZATION_STANDARD
     -- section 13; tooltips name the color and note the two known approximations.
-    gt_debug_highlights = { en = "[untested] Debug Highlights" },
+    gt_debug_highlights = { en = "[verify-fix] Debug Highlights" },
     gt_debug_highlights_tooltip = { en = "Master toggle for in-world debug wireframes. Turn on a category below. Wireframe only this build; dev build only, works on host and client." },
 
     gt_dh_interactables = { en = "[untested] Interactables" },
