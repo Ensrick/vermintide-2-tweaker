@@ -117,6 +117,7 @@ technical entry point; from here, follow the tree to the topic-specific referenc
   - `ANIMATION_COVERAGE.md` - **the release walk list**: per-(receiver, weapon) 3P animation status matrix (working / wired-unverified / decided-not-wired / undecided), the tune->export->bake workflow, and the model-substitute queue. Source of truth for "what's left before wt releases" (added 2026-06-11).
   - `CROSS_CHARACTER_PORT_RECIPE.md` - seven-step procedure for adding a new cross-character weapon port.
   - `DEVELOPMENT.md` - design direction + animation remap rules (per-unit state, closed-vocabulary, 3P fix process, character-skeleton constraints).
+  - `ENGINE_SURFACE.md` - the mod's engine contact surface: every vanilla (Class, method) wt hooks, mapped to what the engine does there, centered on the cross-character 3P animation firing layer (`Unit.animation_event` / `anim_event_3p` / `wield_anim_career_3p`) and the three redirect layers, with `docs/engine/` links and the paid-for dead ends. Read before adding a hook or auditing a crash class.
 
 **Tier 4 - tooling:**
 - `tools/vmb-launcher/CLAUDE.md` - VMBLauncher doctrine (verbs, flags, preflight gates, visibility-public safety, remote-deploy config).
