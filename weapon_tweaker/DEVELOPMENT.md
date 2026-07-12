@@ -7,6 +7,48 @@ for adding a new cross-character weapon port).
 
 ---
 
+## Module map (v0.12.209-dev Phase 1 OOP split)
+
+`weapon_tweaker.lua` is still the primary file (~7,226 lines) — this is an
+IN-PROGRESS decomposition (OOP_REFACTOR_PLAN WS5, PROJECT_STANDARDS §2.2a), not a
+finished one. Phase 1 carved out the four cleanest self-contained concerns; the
+3P anim-remap core, the `wield_anim_career_3p` template patchers + cross-character
+port pipeline, the per-frame grip offsets, the P0 crash guards, and the
+Big-Rebalance (on-ice) module all still live in / beside the entry file, pending
+later phases (run in fresh sessions).
+
+**Shared namespace `mod._wt`** (the event_tweaker `mod._evt` / cosmetics `mod._cos`
+pattern) carries cross-module state. It is created in the entry manifest and
+populated with the handles the `_wt_*` modules consume BEFORE they are
+`mod:dofile`'d: `MOD_VERSION` (regression banner), `weapon_unlock_map` +
+`cwv_managed` (availability). `mod:dofile` is NOT a singleton, so modules never
+dofile each other — each is dofile'd exactly once from the manifest. It is a
+SEPARATE key from the established flat `mod._wt_*` fields (`mod._wt_link_filter`,
+`mod._wt_tf_*`, `mod._wt_loc_raw`, ...), which are untouched.
+
+| Module | Owns / public surface (on `mod._wt` unless noted) |
+|---|---|
+| `weapon_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the pre-existing dofile manifest (`_safe_hook`, `wt_dev_anim_picker`, `wt_dev_hold_pose`, `_wt_brett_sword_shield_buff`, `wt_unlock_data`, `wt_wield_patches`, backend, BR-on-ice), the `mod._wt` namespace setup + `_wt_*` manifest, the mod-wide lifecycle callbacks (`on_game_state_changed`/`on_setting_changed`/`on_disabled`), and everything not yet extracted: the 3P anim-remap core (`Unit.animation_event` funnel + `_anim_redirect`/`_career_anim_redirect`/`_suffix_career_map`/`_unit_state`), the wield/spawn/link/previewer hooks, the port pipeline + template patchers, the per-frame grip offsets, the weapon-behavior features (Authentic Brace, WP punch, Moonfire), the P0 guards, and the ~30 inline `/wt_regression_test` check bodies. `feature_enabled` stays here (the anim funnel reads it on a hot path). |
+| `_wt_regression.lua` | `/wt_regression_test` harness: `_RT_CHECKS` + `rt_register` + the command. Loads FIRST. Reads `mod._wt.MOD_VERSION`; exports `mod._wt.rt_register`. The check bodies stay inline in the entry (they close over its file-locals) via `local _rt_register = mod._wt.rt_register`. |
+| `_wt_availability.lua` | Cross-character weapon availability: `apply_weapon_unlocks` (can_wield strip/add), `patch_career_actions_on_weapons` (career-ability action injection), `clear_weapon_unlocks` / `clear_career_action_injections` (on_disabled revert), `_kruber_removed_pairs` cleanup, `_career_action_injections`. Reads `mod._wt.weapon_unlock_map` / `.cwv_managed`; exports the four functions. Backend hooks stay in `weapon_tweaker_backend.lua` (unchanged). |
+| `_wt_trait_pools.lua` | CW weapon-trait pool filtering (`_trait_pool_sources`, snapshot, `apply_trait_filters` / `revert_trait_pools`). Currently a retired no-op stub (menu removed 2026-06-29) kept so nothing dangles. Reads `WeaponTraits`; exports `mod._wt.apply_trait_filters` / `.revert_trait_pools` + the legacy flat `mod._apply_trait_filters` / `mod._revert_trait_pools`. |
+| `_wt_diagnostics.lua` | Read-only diagnostic dump/probe commands (`/sm_probe`, `/dump`, `/dump_actions`, `/dump_weapons`, `/wt_dump_wielded`) + the wield-time weapon-data dump and its sole `SimpleInventoryExtension._wield_slot` hook_safe. Reads engine globals only; no exports; leaf. |
+
+Pre-existing `_*.lua` / `wt_*.lua` modules (`_safe_hook`, `_wt_brett_sword_shield_buff`,
+`_wt_passive_charge`, `wt_dev_anim_picker`, `wt_dev_hold_pose`, `wt_unlock_data`,
+`wt_wield_patches`, `wt_port_status`, `weapon_tweaker_backend`,
+`weapon_tweaker_big_rebalance[_defs]`) predate this split — leave their internals alone.
+
+### Where new code goes
+
+- **New diagnostic dump/probe command** → `_wt_diagnostics.lua` (globals only; route through `mod:info`/`mod:debug`).
+- **New (career, weapon) unlock or can_wield / career-ability behavior** → `_wt_availability.lua`; the (career, weapon) pair itself goes in `wt_unlock_data.lua`.
+- **New regression check** → `_rt_register("name", fn)` inline in the entry next to the code it probes (the alias is live); the harness itself is frozen.
+- **Anything touching the 3P anim-remap core, the port pipeline / template patchers, the grip offsets, the previewer hooks, or a P0 guard** → stays in `weapon_tweaker.lua` until a later phase; grep ALL files for an existing hook on the `(Class, method)` before adding one (VMF drops the second — NON-NEGOTIABLE 8).
+- **New cross-module value** → export onto `mod._wt` in the owning module (earlier in the manifest than its consumers) and localize it at the consumer's top.
+
+---
+
 ## Design direction (2026-05-23)
 
 weapon_tweaker's role is **full-freedom cross-character weapons**: a wielder

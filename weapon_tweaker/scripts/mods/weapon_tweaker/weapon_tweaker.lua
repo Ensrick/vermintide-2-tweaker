@@ -2,16 +2,20 @@
 weapon_tweaker — cross-career weapon unlocks, animation remapping, and visual tweaks.
 
 Major sections (search by name to jump):
-  * weapon_unlock_map / apply_weapon_unlocks       — which careers can wield which weapons
-  * patch_career_actions_on_weapons                — keep career abilities working on cross-career weapons
   * _anim_redirect / _career_anim_redirect / _unit_state
                                                    — three-layer animation system + per-unit remap state
                                                      (see DEVELOPMENT.md, feedback_animation_remap_rules)
   * _suffix_career_map / _try_suffix_redirect      — suffix-based event swaps (e.g. *_2h_billhook)
   * _weapon_scale_overrides / _weapon_grip_offsets — per-career scale & grip-position tweaks
-  * 3P state-machine probe / dump_actions / animlog — debug commands
+  * animlog / force3p / force1p / info             — anim-funnel debug commands (still here)
   * Lifecycle: on_game_state_changed (re-applies unlocks per state), on_setting_changed,
                 on_disabled (strip-only revert).
+
+  Phase 1 OOP split (v0.12.209-dev) — see DEVELOPMENT.md "Module map":
+  * weapon_unlock_map / apply_weapon_unlocks / patch_career_actions_on_weapons → _wt_availability.lua
+  * /wt_regression_test harness (rt_register) → _wt_regression.lua
+  * CW trait-pool filtering (apply_trait_filters) → _wt_trait_pools.lua
+  * /sm_probe /dump /dump_actions /dump_weapons /wt_dump_wielded → _wt_diagnostics.lua
 
 Key conventions (also in CLAUDE.md):
   * NEVER hook BackendUtils.can_wield_item — modify ItemMasterList[*].can_wield directly.
@@ -101,7 +105,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.208-dev"
+local MOD_VERSION = "0.12.209-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -252,36 +256,27 @@ local function _migrate_legacy_debug_setting()
 end
 _migrate_legacy_debug_setting()
 
--- /regression_test scaffold. Registrations live at end of file so they can
--- reference the file-local state tables (`_unit_state`, `weapon_unlock_map`,
--- etc.).
-local _RT_CHECKS = {}
-local function _rt_register(name, fn)
-    _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
-end
-mod:command("wt_regression_test", "Run regression smoke checks for past bugs", function()
-    local pass, fail, skip = 0, 0, 0
-    mod:echo("=== wt regression_test (v%s) ===", MOD_VERSION)
-    for _, c in ipairs(_RT_CHECKS) do
-        local ok, err = pcall(c.fn)
-        if ok and err == nil then
-            mod:echo("  PASS: %s", c.name); pass = pass + 1
-            mod:info("[regression] PASS %s", c.name)
-        elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
-            -- v0.12.117 (Issue #74): tests return "skip: <reason>" when their
-            -- preconditions (game tables, sibling mods) aren't loaded; that's
-            -- neither PASS nor FAIL and must not pollute the failure count.
-            mod:echo("  SKIP: %s -- %s", c.name, err); skip = skip + 1
-            mod:info("[regression] SKIP %s: %s", c.name, err)
-        else
-            local msg = (not ok and tostring(err)) or tostring(err)
-            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
-            mod:warning("[regression] FAIL %s: %s", c.name, msg)
-        end
-    end
-    mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)
-end)
-mod:info("[regression-test-command] registered as /wt_regression_test")
+-- ============================================================================
+-- Shared module namespace + Phase 1 OOP module manifest (v0.12.209-dev)
+-- ============================================================================
+-- mod._wt carries cross-module state for the extracted _wt_* modules (the
+-- event_tweaker mod._evt / cosmetics mod._cos pattern, PROJECT_STANDARDS §2.2a).
+-- Each module is dofile'd EXACTLY ONCE from a manifest (mod:dofile is NOT a
+-- singleton — reference_vmf_dofile_not_singleton — so modules never dofile each
+-- other); the handles a module consumes are put on mod._wt BEFORE its dofile,
+-- and the entry re-localizes each exported function so existing call sites stay
+-- byte-identical. The established flat `mod._wt_*` fields (mod._wt_link_filter,
+-- mod._wt_tf_*, ...) are a SEPARATE key namespace and are untouched.
+mod._wt = mod._wt or {}
+mod._wt.MOD_VERSION = MOD_VERSION
+
+-- /wt_regression_test harness (_RT_CHECKS + rt_register + the command). Loads
+-- FIRST so every inline `_rt_register(...)` check registration below the
+-- manifest binds against the module's table (the et _et_regression precedent).
+-- The check bodies stay inline near the file-local state tables (`_unit_state`,
+-- `weapon_unlock_map`, etc.) they probe.
+mod:dofile("scripts/mods/weapon_tweaker/_wt_regression")
+local _rt_register = mod._wt.rt_register
 
 -- v0.12.99-dev: weapon_unlock_map + _cwv_managed extracted to wt_unlock_data.lua
 -- so wt_dev_anim_picker.lua can dofile the same source without depending on
@@ -298,149 +293,42 @@ local weapon_unlock_map = _wt_unlock_data.weapon_unlock_map
 -- same can_wield slot.
 -- v0.12.99-dev: also from wt_unlock_data.lua (shared source of truth — see
 -- the unlock_data dofile above).
-local _cwv_managed = _wt_unlock_data.cwv_managed
+-- v0.12.209-dev: bridged onto mod._wt for the _wt_availability module (which
+-- owns the can_wield strip/add); the entry no longer reads _cwv_managed itself.
+mod._wt.weapon_unlock_map = weapon_unlock_map
+mod._wt.cwv_managed        = _wt_unlock_data.cwv_managed
 
--- v0.12.57-dev: pairs removed from `weapon_unlock_map`. Users who had the
--- corresponding `unlock_es_*_<weapon>` toggle = true before the removal will
--- have the career still in the weapon's `item.can_wield` list. The regular
--- strip-rebuild walk inside `apply_weapon_unlocks` only iterates pairs that
--- ARE in the map, so a removed pair would leak the can_wield entry forever.
--- This list keeps a one-shot cleanup invariant: every init pass strips the
--- removed Kruber careers from these weapons' can_wield, idempotently.
-local _kruber_removed_pairs = {
-    es_mercenary      = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
-    es_huntsman       = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
-    es_knight         = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
-    es_questingknight = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
-}
+-- Availability control surface (can_wield strip/add + career-ability action
+-- injection) and CW trait-pool filtering, extracted v0.12.209-dev. Both are
+-- consumed by the lifecycle callbacks far below (on_game_state_changed /
+-- on_setting_changed / on_disabled); dofile'd HERE, after wt_unlock_data
+-- publishes the maps onto mod._wt and before those callbacks are defined, so
+-- their file-local aliases are in scope at call time. Call sites unchanged.
+mod:dofile("scripts/mods/weapon_tweaker/_wt_availability")
+local apply_weapon_unlocks            = mod._wt.apply_weapon_unlocks
+local patch_career_actions_on_weapons = mod._wt.patch_career_actions_on_weapons
+local clear_weapon_unlocks            = mod._wt.clear_weapon_unlocks
+local clear_career_action_injections  = mod._wt.clear_career_action_injections
 
-local function _strip_removed_kruber_unlocks()
-    if not ItemMasterList then return end
-    for career, weapons in pairs(_kruber_removed_pairs) do
-        for _, weapon_key in ipairs(weapons) do
-            -- Issue #8 (2026-05-23): defensive `rawget` — `weapon_key` here is
-            -- from an internal literal table so a strict-metatable Crashify is
-            -- unreachable today, but the convention is to never index
-            -- ItemMasterList with a non-literal key. Cheap, future-proof.
-            local item = rawget(ItemMasterList, weapon_key)
-            if item and item.can_wield then
-                for i = #item.can_wield, 1, -1 do
-                    if item.can_wield[i] == career then
-                        table.remove(item.can_wield, i)
-                    end
-                end
-            end
-        end
-    end
-end
+mod:dofile("scripts/mods/weapon_tweaker/_wt_trait_pools")
+local apply_trait_filters = mod._wt.apply_trait_filters
+local revert_trait_pools  = mod._wt.revert_trait_pools
 
+-- Read-only diagnostic dump/probe chat commands + the wield-time weapon-data
+-- dump hook (leaf consumers of game globals only; no entry-state dependency).
+mod:dofile("scripts/mods/weapon_tweaker/_wt_diagnostics")
+
+-- Weapon-availability control surface (can_wield strip/add, kruber-removed-pair
+-- cleanup, career-ability action injection + on_disabled reverts) moved to
+-- _wt_availability.lua in the v0.12.209-dev OOP split. The entry's file-local
+-- aliases (apply_weapon_unlocks, patch_career_actions_on_weapons,
+-- clear_weapon_unlocks, clear_career_action_injections) are established in the
+-- manifest above. `feature_enabled` stays here — the anim funnel reads it on a
+-- hot path (`enable_weapon_animation_redirects`).
 local function feature_enabled(setting_id, default_value)
     local value = mod:get(setting_id)
     if value == nil then return default_value ~= false end
     return value == true
-end
-
--- CLARIFY: The strip-then-add pattern is required because this runs on
--- on_setting_changed too — toggling a checkbox off must REMOVE the career
--- from can_wield, not just leave it. Direct-modifying ItemMasterList is the
--- ONLY way (BackendUtils.can_wield_item is unhookable from split mods —
--- see DEVELOPMENT.md "Don't hook BackendUtils.can_wield_item").
-local function apply_weapon_unlocks()
-    if not ItemMasterList then return end
-
-    -- Drop stale can_wield entries for pairs removed from `weapon_unlock_map`
-    -- since the last release. Idempotent — runs every init + on_setting_changed.
-    _strip_removed_kruber_unlocks()
-
-    local has_cwv = get_mod("character_weapon_variants") ~= nil
-
-    -- Strip all mod-managed careers from can_wield
-    for career, weapons in pairs(weapon_unlock_map) do
-        local cwv_skip = has_cwv and _cwv_managed[career]
-        for _, weapon_key in ipairs(weapons) do
-            if not (cwv_skip and cwv_skip[weapon_key]) then
-                local item = rawget(ItemMasterList, weapon_key)
-                if item and item.can_wield then
-                    for i = #item.can_wield, 1, -1 do
-                        if item.can_wield[i] == career then
-                            table.remove(item.can_wield, i)
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- Add back only enabled ones
-    for career, weapons in pairs(weapon_unlock_map) do
-        local cwv_skip = has_cwv and _cwv_managed[career]
-        for _, weapon_key in ipairs(weapons) do
-            if not (cwv_skip and cwv_skip[weapon_key]) then
-                if mod:get("unlock_" .. career .. "_" .. weapon_key) then
-                    local item = rawget(ItemMasterList, weapon_key)
-                    if item then
-                        if not item.can_wield then item.can_wield = {} end
-                        local already = false
-                        for _, value in ipairs(item.can_wield) do
-                            if value == career then already = true; break end
-                        end
-                        if not already then
-                            item.can_wield[#item.can_wield + 1] = career
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
--- CLARIFY: tracks which (template, action_name) entries were injected by
--- patch_career_actions_on_weapons so subsequent calls (on setting change) can
--- back them out before re-applying. Without this, toggling settings would
--- accumulate stale ability-action entries on weapon templates.
-local _career_action_injections = {}
-
--- CLARIFY: when a cross-career weapon is unlocked, that weapon's template
--- needs the unlocking career's ABILITY action (e.g. Foot Knight's shoulder
--- charge) so the ability still works while wielding the unlocked weapon.
--- Without this patch, activating the career ability on a cross-career weapon
--- silently does nothing because the action isn't on that template.
-local function patch_career_actions_on_weapons()
-    if not Weapons or not CareerSettings or not ActionTemplates or not ItemMasterList then return end
-
-    for tmpl_key, actions in pairs(_career_action_injections) do
-        local tmpl = Weapons[tmpl_key]
-        if tmpl and tmpl.actions then
-            for action_name in pairs(actions) do
-                tmpl.actions[action_name] = nil
-            end
-        end
-    end
-    _career_action_injections = {}
-
-    for career, weapons in pairs(weapon_unlock_map) do
-        local cs = CareerSettings[career]
-        if cs then
-            local ability_list = cs.activated_ability
-            local ability = ability_list and ability_list[1]
-            local action_name = ability and ability.action_name
-            local action_template = action_name and ActionTemplates[action_name]
-            if action_template then
-                for _, weapon_key in ipairs(weapons) do
-                    if mod:get("unlock_" .. career .. "_" .. weapon_key) then
-                        local item = rawget(ItemMasterList, weapon_key)
-                        local tmpl_key = item and item.template
-                        local tmpl = tmpl_key and Weapons[tmpl_key]
-                        if tmpl and tmpl.actions and not tmpl.actions[action_name] then
-                            tmpl.actions[action_name] = action_template
-                            _career_action_injections[tmpl_key] = _career_action_injections[tmpl_key] or {}
-                            _career_action_injections[tmpl_key][action_name] = true
-                        end
-                    end
-                end
-            end
-        end
-    end
 end
 
 -- CLARIFY: caches the last-known career name across calls. Falls back to the
@@ -2722,78 +2610,6 @@ mod:command("force1p", "Force a 1P animation event on local player's first-perso
     end
 end)
 
--- Keys are profile/character names. Warrior Priest (wh_priest career) shares
--- the witch_hunter profile but uses a distinct 3P skeleton, so it's listed
--- separately under its own key for `wt sm_probe`. Note: "way_watcher" is the
--- path for `we_` careers — VT2's source uses this naming.
-local _3p_state_machine_paths = {
-    empire_soldier            = "units/beings/player/third_person_base/empire_soldier/chr_third_person_base",
-    witch_hunter              = "units/beings/player/third_person_base/witch_hunter/chr_third_person_base",
-    witch_hunter_warrior_priest = "units/beings/player/third_person_base/witch_hunter_warrior_priest/chr_third_person_base",
-    bright_wizard             = "units/beings/player/third_person_base/bright_wizard/chr_third_person_base",
-    dwarf_ranger              = "units/beings/player/third_person_base/dwarf_ranger/chr_third_person_base",
-    wood_elf                  = "units/beings/player/third_person_base/way_watcher/chr_third_person_base",
-}
-
-mod:command("sm_probe", "Probe what 3P state machine resources exist for all characters", function()
-    local pm = Managers.player
-    local player = pm and pm:local_player()
-    if not player or not player.player_unit then
-        mod:echo("No player unit")
-        return
-    end
-    local unit_3p = player.player_unit
-    local pkg = Managers.package
-
-    local function log(msg)
-        mod:echo(msg)
-        mod:info("[PROBE] %s", msg)
-    end
-
-    for name, path in pairs(_3p_state_machine_paths) do
-        local loaded = "?"
-        if pkg then
-            local ok_c, val = pcall(function() return pkg:has_loaded(path, "global") end)
-            if ok_c then loaded = tostring(val)
-            else loaded = "err" end
-        end
-        log(string.format("  %-16s loaded=%s", name, loaded))
-    end
-
-    local ok_sm, has_sm = pcall(Unit.has_animation_state_machine, unit_3p)
-    log("3P has_animation_state_machine: " .. (ok_sm and tostring(has_sm) or "err"))
-
-    local test_events = {
-        "to_2h_sword", "to_2h_sword_we", "to_bastard_sword", "to_spear", "to_polearm",
-        "to_1h_sword", "to_1h_hammer", "to_2h_billhook", "to_longbow", "to_es_longbow",
-        "to_1h_sword_shield", "to_1h_hammer_shield", "to_dual_wield", "to_2h_hammer",
-        "to_2h_axe", "to_1h_axe", "to_1h_falchion", "to_1h_flail", "to_crossbow",
-        "to_repeating_crossbow", "to_handgun", "to_blunderbuss",
-        "attack_swing_right", "attack_swing_left", "attack_swing_down",
-        "attack_swing_up_left", "attack_swing_down_left", "attack_swing_down_right",
-        "attack_swing_heavy", "attack_swing_heavy_right", "attack_swing_heavy_left",
-        "attack_swing_heavy_down", "attack_swing_heavy_left_diagonal",
-        "attack_swing_heavy_right_diagonal",
-        "attack_swing_charge", "attack_swing_charge_left", "attack_swing_charge_right",
-        "attack_swing_charge_left_diagonal", "attack_swing_charge_right_diagonal_pose",
-        "attack_swing_charge_down_pose", "attack_swing_charge_left_diagonal_pose",
-        "attack_swing_charge_stab", "attack_swing_charge_down",
-        "attack_swing_stab", "attack_swing_stab_02", "attack_swing_stab_lh",
-        "attack_swing_left_diagonal", "attack_swing_down_left_axe",
-        "attack_push", "push_stab", "parry_pose",
-    }
-    log("Events on 3P unit:")
-    for _, ev in ipairs(test_events) do
-        local ok_e, has = pcall(Unit.has_animation_event, unit_3p, ev)
-        if ok_e and has then
-            log(string.format("  %-40s TRUE", ev))
-        else
-            log(string.format("  %-40s false", ev))
-        end
-    end
-end)
-
-
 local function _is_local_player_unit(unit)
     local pm = Managers.player
     if not pm then return false end
@@ -3286,7 +3102,7 @@ mod:traced_hook("SimpleInventoryExtension", "wield", function(func, self, slot_n
             --
             -- Fields chosen are the ones that drive 3P presentation on
             -- the receiver: career_name (3P skeleton selector — see
-            -- _3p_state_machine_paths block above), item_key, template,
+            -- _3p_state_machine_paths in _wt_diagnostics.lua), item_key, template,
             -- and the template's `anim_event_3p` + `wield_anim_3p`
             -- (the per-template default 3P clip names). The actual 3P
             -- skeleton path is derived from career_name via the profile
@@ -6304,210 +6120,12 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
     return r1, r2, r3
 end)
 
---[[
-WEAPON-TRAIT POOL FILTERING
----------------------------
-Lets the user enable/disable individual weapon traits from the VMF settings.
-Adventure traits default ON (vanilla behaviour); Chaos Wastes traits default
-OFF and only show in the UI when the `crafting_in_modded` mod is installed.
-
-Mechanism: rewrite `WeaponTraits.combinations[pool]` (the table that
-`crafting_in_modded` reads when rolling a trait on a crafted/rerolled weapon).
-Every CW trait already lives in `WeaponTraits.traits` and `BuffTemplates`
-because `weapon_traits_morris.lua` merges them in at load — they only fail to
-appear in adventure because the vanilla `combinations.melee` / `.ranged_*`
-pools don't list them. Adding them to those pools is sufficient.
-
-`crafting_in_modded` does NOT hardcode any trait keys; it picks from
-`WeaponTraits.combinations[master.trait_table_name]` at runtime
-(see standard_forge.lua _reroll_traits + _make_craft_synth). So mutating
-those tables here propagates to cim's reroll/craft UI automatically.
-
-NOTE on file ordering: this block must come BEFORE the lifecycle callbacks
-(`on_game_state_changed`, `on_setting_changed`, `on_disabled`) below — Lua 5.1
-locals aren't hoisted, so a callback declared above us couldn't see these
-local functions and would resolve to a nil global lookup at call time.
-]]
-
--- Trait-key membership per pool. The toggle for a trait controls every pool
--- it can appear in. CW-cross-pool traits (headhunter, stagger_aoe_on_crit,
--- shield_splinters, deus_crit_chain_lightning) are listed once per pool they
--- belong to so the rebuilder can pick them up; the user-facing widget is a
--- single checkbox under whichever group is most natural.
-local _trait_pool_sources = {
-    melee = {
-        vanilla = {
-            "melee_attack_speed_on_crit",
-            "melee_timed_block_cost",
-            "melee_counter_push_power",
-            "melee_increase_damage_on_block",
-            "melee_reduce_cooldown_on_crit",
-            "melee_shield_on_assist",
-        },
-        cw = {
-            "stagger_aoe_on_crit",
-            "armor_breaker",
-            "shield_of_isha",
-            "bloodthirst",
-            "headhunter",
-            "home_run",
-            "shield_splinters",
-            "serrated_blade",
-            "crescendo_strike",
-            "follow_up",
-            "always_blocking",
-            "deus_big_swing_stagger",
-            "deus_crit_chain_lightning",
-            "deus_collateral_damage_on_melee_killing_blow",
-            "melee_heal_on_crit",
-        },
-    },
-    ranged_ammo = {
-        vanilla = {
-            "ranged_restore_stamina_headshot",
-            "ranged_replenish_ammo_headshot",
-            "ranged_reduce_cooldown_on_crit",
-            "ranged_replenish_ammo_on_crit",
-            "ranged_increase_power_level_vs_armour_crit",
-            "ranged_consecutive_hits_increase_power",
-        },
-        cw = {
-            "headhunter",
-            "stagger_aoe_on_crit",
-            "shield_splinters",
-            "refilling_shot",
-            "piercing_projectiles",
-            "deus_extra_shot",
-            "deus_crit_chain_lightning",
-            "deus_ranged_crit_explosion",
-            "deus_ammo_pickup_reload_speed",
-        },
-    },
-    ranged_heat = {
-        vanilla = {
-            "ranged_restore_stamina_headshot",
-            "ranged_reduced_overcharge",
-            "ranged_reduce_cooldown_on_crit",
-            "ranged_remove_overcharge_on_crit",
-            "ranged_increase_power_level_vs_armour_crit",
-            "ranged_consecutive_hits_increase_power",
-        },
-        cw = {
-            "headhunter",
-            "stagger_aoe_on_crit",
-            "shield_splinters",
-            "piercing_projectiles",
-            "deus_extra_shot",
-            "deus_crit_chain_lightning",
-            "deus_ranged_crit_explosion",
-        },
-    },
-    trollhammer_torpedo = {
-        vanilla = {
-            "ranged_restore_stamina_headshot",
-            "ranged_reduce_cooldown_on_crit",
-            "ranged_increase_power_level_vs_armour_crit",
-            "ranged_consecutive_hits_increase_power",
-            "melee_timed_block_cost",
-            "melee_increase_damage_on_block",
-        },
-        cw = {
-            "headhunter",
-            "stagger_aoe_on_crit",
-            "shield_splinters",
-            "refilling_shot",
-            "piercing_projectiles",
-            "deus_extra_shot",
-            "deus_crit_chain_lightning",
-            "deus_ranged_crit_explosion",
-            "deus_ammo_pickup_reload_speed",
-        },
-    },
-}
-
--- Snapshot of vanilla pools. Captured the first time apply_trait_filters runs
--- (so DLC/morris additions are already merged in). Used to revert on
--- on_disabled and to detect "no managed pool yet" cases.
-local _initial_trait_pools = nil
-
-local function _snapshot_trait_pools()
-    if _initial_trait_pools then return end
-    if not WeaponTraits or not WeaponTraits.combinations then return end
-    _initial_trait_pools = {}
-    for pool_key, _ in pairs(_trait_pool_sources) do
-        local existing = WeaponTraits.combinations[pool_key]
-        if existing then
-            local copy = {}
-            for i, entry in ipairs(existing) do
-                copy[i] = { entry[1] }
-            end
-            _initial_trait_pools[pool_key] = copy
-        end
-    end
-end
-
-local function _trait_enabled(trait_key, is_cw)
-    local prefix = is_cw and "cw_trait_" or "trait_"
-    return mod:get(prefix .. trait_key) == true
-end
-
-local function apply_trait_filters()
-    -- RETIRED 2026-06-29 (user request): the "Weapon Traits (Adventure)" menu was
-    -- removed, so there are no toggles to honor — leave the vanilla trait roll pools
-    -- untouched. Kept as a no-op stub (+ the mod._apply_trait_filters / _revert exports
-    -- and call sites) so nothing dangles; the dead _trait_pool_sources / snapshot
-    -- helpers below can be deleted in a later cleanup pass.
-    if true then return end
-    if not WeaponTraits or not WeaponTraits.combinations then return end
-    _snapshot_trait_pools()
-    if not _initial_trait_pools then return end
-
-    for pool_key, sources in pairs(_trait_pool_sources) do
-        local current = WeaponTraits.combinations[pool_key]
-        if current then
-            local seen = {}
-            local rebuilt = {}
-            local function _push(trait_key, is_cw)
-                if seen[trait_key] then return end
-                if not _trait_enabled(trait_key, is_cw) then return end
-                if not WeaponTraits.traits[trait_key] then return end
-                seen[trait_key] = true
-                rebuilt[#rebuilt + 1] = { trait_key }
-            end
-            for _, t in ipairs(sources.vanilla) do _push(t, false) end
-            for _, t in ipairs(sources.cw) do _push(t, true) end
-
-            -- Empty pool → fall back to vanilla snapshot to avoid "no traits
-            -- to roll" stalls in cim. Users who want zero traits can disable
-            -- the mod outright.
-            if #rebuilt == 0 and _initial_trait_pools[pool_key] then
-                for i, entry in ipairs(_initial_trait_pools[pool_key]) do
-                    rebuilt[i] = { entry[1] }
-                end
-            end
-
-            -- Mutate in place so any code holding a reference to the pool
-            -- table sees the new contents.
-            for i = #current, 1, -1 do current[i] = nil end
-            for i, entry in ipairs(rebuilt) do current[i] = entry end
-        end
-    end
-end
-
-local function revert_trait_pools()
-    if not _initial_trait_pools then return end
-    if not WeaponTraits or not WeaponTraits.combinations then return end
-    for pool_key, snapshot in pairs(_initial_trait_pools) do
-        local current = WeaponTraits.combinations[pool_key]
-        if current then
-            for i = #current, 1, -1 do current[i] = nil end
-            for i, entry in ipairs(snapshot) do current[i] = { entry[1] } end
-        end
-    end
-end
-
-mod._apply_trait_filters = apply_trait_filters
-mod._revert_trait_pools = revert_trait_pools
+-- CW weapon-trait pool filtering (_trait_pool_sources + apply_trait_filters /
+-- revert_trait_pools, currently a retired no-op stub) moved to _wt_trait_pools.lua
+-- in the v0.12.209-dev OOP split. The lifecycle callbacks below call it via the
+-- entry's file-local aliases (apply_trait_filters / revert_trait_pools) from the
+-- manifest; the legacy mod._apply_trait_filters / mod._revert_trait_pools flat
+-- exports are re-published by that module.
 
 -- CLARIFY: VMF lifecycle callback. Fires on every game state transition
 -- (StateLoading -> StateIngame, etc.) — re-applies the can_wield mutations
@@ -6602,41 +6220,10 @@ mod.on_game_state_changed = function(status, state_name)
     end
 end
 
--- Clean disable: strip every cross-career career name this mod added to ItemMasterList[*].can_wield
--- and every ability action it injected into Weapons[*].actions. Without this, disabling the mod
--- via VMF would leave cross-career unlocks active on every affected weapon until game restart.
--- The restore-and-mutate phases of apply_weapon_unlocks / patch_career_actions_on_weapons already
--- handle the strip step on every call, so we just clear the management state and re-call: every
--- mod:get("unlock_*") read returns nil/false post-disable, so the add-back phase contributes nothing.
-local function clear_weapon_unlocks()
-    if not ItemMasterList then return end
-    for career, weapons in pairs(weapon_unlock_map) do
-        for _, weapon_key in ipairs(weapons) do
-            local item = rawget(ItemMasterList, weapon_key)
-            if item and item.can_wield then
-                for i = #item.can_wield, 1, -1 do
-                    if item.can_wield[i] == career then
-                        table.remove(item.can_wield, i)
-                    end
-                end
-            end
-        end
-    end
-end
-
-local function clear_career_action_injections()
-    if not Weapons then return end
-    for tmpl_key, actions in pairs(_career_action_injections) do
-        local tmpl = Weapons[tmpl_key]
-        if tmpl and tmpl.actions then
-            for action_name in pairs(actions) do
-                tmpl.actions[action_name] = nil
-            end
-        end
-    end
-    _career_action_injections = {}
-end
-
+-- clear_weapon_unlocks / clear_career_action_injections (the on_disabled revert
+-- of the can_wield additions + injected ability actions) moved to
+-- _wt_availability.lua in the v0.12.209-dev OOP split; on_disabled below calls
+-- them via the entry's file-local aliases from the manifest.
 mod.on_disabled = function()
     clear_weapon_unlocks()
     clear_career_action_injections()
@@ -6669,139 +6256,6 @@ mod.on_setting_changed = function(setting_id)
     -- wt_dev_hp_* settings are read by the hold-pose tuner's per-frame hook
     -- via mod:get directly, no dispatcher branch needed.
 end
-
-mod:command("dump", "Dump equipped item data to log", function()
-    local player = Managers.player:local_player()
-    if not player then
-        mod:echo("No local player found")
-        return
-    end
-
-    local profile_index = player:profile_index()
-    local profile = SPProfiles[profile_index]
-    local career_index = player:career_index()
-    local career = profile.careers[career_index]
-    local career_name = career.name
-
-    mod:echo("Career: " .. tostring(career_name))
-    mod:info("=== EQUIPPED ITEM DUMP for %s ===", career_name)
-
-    local inventory_ext = ScriptUnit.extension(player.player_unit, "inventory_system")
-    local equipment = inventory_ext and inventory_ext:equipment()
-    if not equipment or not equipment.slots then
-        mod:echo("No equipment data available")
-        return
-    end
-
-    for slot_name, slot_data in pairs(equipment.slots) do
-        if slot_data.item_data then
-            local item = slot_data.item_data
-            local key = item.key or "?"
-            local item_type = item.item_type or item.data and item.data.item_type or "?"
-            local template = item.template or item.data and item.data.template or "?"
-            local rarity = item.rarity or "?"
-            local left = item.left_hand_unit or item.data and item.data.left_hand_unit or "none"
-            local right = item.right_hand_unit or item.data and item.data.right_hand_unit or "none"
-
-            mod:echo("%s: %s (%s)", slot_name, key, item_type)
-            mod:info("[%s] key=%s  item_type=%s  template=%s  rarity=%s", slot_name, key, item_type, template, rarity)
-            mod:info("[%s] left_hand_unit=%s", slot_name, left)
-            mod:info("[%s] right_hand_unit=%s", slot_name, right)
-
-            if item.can_wield then
-                mod:info("[%s] can_wield=%s", slot_name, table.concat(item.can_wield, ", "))
-            end
-
-            if item.data then
-                for data_key, data_val in pairs(item.data) do
-                    if type(data_val) ~= "table" then
-                        mod:info("[%s] data.%s=%s", slot_name, tostring(data_key), tostring(data_val))
-                    end
-                end
-            end
-        end
-    end
-
-    mod:info("=== END EQUIPPED ITEM DUMP ===")
-    mod:echo("Dump written to log")
-end)
-
-mod:command("dump_actions", "Dump weapon action anim events (usage: /dump_actions [pattern])", function(pattern)
-    pattern = pattern or ""
-    if not Weapons then mod:echo("Weapons not loaded yet.") return end
-    local tmpl_count = 0
-    local action_count = 0
-    local sorted_keys = {}
-    for tmpl_key, _ in pairs(Weapons) do
-        if tmpl_key:find(pattern, 1, true) then
-            sorted_keys[#sorted_keys + 1] = tmpl_key
-        end
-    end
-    table.sort(sorted_keys)
-    for _, tmpl_key in ipairs(sorted_keys) do
-        local tmpl = Weapons[tmpl_key]
-        local header = "=== " .. tmpl_key .. " (wield_anim=" .. tostring(tmpl.wield_anim) .. ") ==="
-        mod:echo(header)
-        mod:info(header)
-        tmpl_count = tmpl_count + 1
-        if tmpl.actions then
-            for action_name, action_data in pairs(tmpl.actions) do
-                for sub_name, sub in pairs(action_data) do
-                    if type(sub) == "table" and (sub.anim_event or sub.anim_event_3p) then
-                        local ae = tostring(sub.anim_event or "-")
-                        local ae3 = tostring(sub.anim_event_3p or "-")
-                        local line = "  " .. action_name .. "." .. sub_name .. "  1P=" .. ae .. "  3P=" .. ae3
-                        mod:echo(line)
-                        mod:info(line)
-                        action_count = action_count + 1
-                    end
-                end
-            end
-        end
-    end
-    local summary = "dump_actions: " .. tmpl_count .. " templates, " .. action_count .. " actions"
-    mod:echo(summary)
-    mod:info(summary)
-end)
-
-mod:command("dump_weapons", "Dump all weapons with native careers and localized names", function()
-    if not ItemMasterList then mod:echo("ItemMasterList not loaded.") return end
-    local Localize = Localize
-    local count = 0
-    local total = 0
-    local types_seen = {}
-    local sorted = {}
-    for key, item in pairs(ItemMasterList) do
-        total = total + 1
-        local t = item.item_type or item.slot_type or "nil"
-        types_seen[t] = (types_seen[t] or 0) + 1
-        if item.can_wield then
-            sorted[#sorted + 1] = key
-        end
-    end
-    table.sort(sorted)
-    mod:echo("ItemMasterList: " .. total .. " total, " .. #sorted .. " with can_wield")
-    local type_parts = {}
-    for t, c in pairs(types_seen) do type_parts[#type_parts + 1] = t .. "=" .. c end
-    mod:info("Types: " .. table.concat(type_parts, ", "))
-    mod:info("=== WEAPON DUMP: key | item_type | slot_type | display_name | can_wield ===")
-    for _, key in ipairs(sorted) do
-        local item = rawget(ItemMasterList, key)
-        local display = key
-        if item.display_name then
-            local ok, loc = pcall(Localize, item.display_name)
-            if ok and loc then display = loc end
-        end
-        local wield = table.concat(item.can_wield, ",")
-        local it = tostring(item.item_type or "nil")
-        local st = tostring(item.slot_type or "nil")
-        local line = key .. " | " .. it .. " | " .. st .. " | " .. display .. " | " .. wield
-        mod:info(line)
-        count = count + 1
-    end
-    mod:info("=== END WEAPON DUMP: %d weapons ===", count)
-    mod:echo("Dumped " .. count .. " weapons to log")
-end)
 
 -- Install basic backend hooks (UI filtering and can_wield override)
 weapon_backend.install(mod, weapon_unlock_map, apply_weapon_unlocks)
@@ -7349,93 +6803,6 @@ _rt_register("localization_format_safe", function()
         end
     end
 end)
-
--- ============================================================
--- Wield-time weapon-data dump  (v0.12.90-dev)
--- ============================================================
--- When `enable_debug_logging` is ON, every local-player wield emits a
--- structured dump of the wielded weapon's ItemMasterList entry: animations,
--- state machines, can_wield list, resolved unit paths. Lets the user (and
--- Claude) read the log to see exactly what wt sees the moment a weapon is
--- equipped -- useful for diagnosing "weapon X isn't available on career Y"
--- or "wrong 3P anim on cross-character port" without in-game repro.
---
--- Also exposed as `/wt_dump_wielded` for one-shot dumps of the currently
--- held weapon (forces a dump regardless of the toggle).
-local function _wt_dump_weapon_data(item_key, source)
-    if type(item_key) ~= "string" or item_key == "" then
-        mod:debug("[wt:wield_dump] no item_key (source=%s)", tostring(source))
-        return
-    end
-    local iml = rawget(_G, "ItemMasterList")
-    local entry = iml and rawget(iml, item_key)
-    if type(entry) ~= "table" then
-        mod:debug("[wt:wield_dump] %s (source=%s) -- no ItemMasterList entry",
-            item_key, tostring(source))
-        return
-    end
-    mod:debug("[wt:wield_dump] === %s (source=%s) ===", item_key, tostring(source))
-    mod:debug("[wt:wield_dump]   slot_type=%s item_type=%s template=%s",
-        tostring(entry.slot_type), tostring(entry.item_type), tostring(entry.template))
-    mod:debug("[wt:wield_dump]   display_name=%s inventory_icon=%s required_dlc=%s",
-        tostring(entry.display_name), tostring(entry.inventory_icon),
-        tostring(entry.required_dlc))
-    mod:debug("[wt:wield_dump]   anim_event=%s wield_anim=%s",
-        tostring(entry.anim_event), tostring(entry.wield_anim))
-    mod:debug("[wt:wield_dump]   anim_event_3p=%s wield_anim_3p=%s",
-        tostring(entry.anim_event_3p), tostring(entry.wield_anim_3p))
-    mod:debug("[wt:wield_dump]   state_machine=%s state_machine_3p=%s",
-        tostring(entry.state_machine), tostring(entry.state_machine_3p))
-    if type(entry.can_wield) == "table" then
-        mod:debug("[wt:wield_dump]   can_wield=[%s]",
-            table.concat(entry.can_wield, ","))
-    end
-    if entry.left_hand_unit or entry.right_hand_unit then
-        mod:debug("[wt:wield_dump]   1p left=%s right=%s",
-            tostring(entry.left_hand_unit), tostring(entry.right_hand_unit))
-    end
-    if entry.left_hand_unit_3p or entry.right_hand_unit_3p then
-        mod:debug("[wt:wield_dump]   3p left=%s right=%s",
-            tostring(entry.left_hand_unit_3p), tostring(entry.right_hand_unit_3p))
-    end
-end
-
--- Hook: SimpleInventoryExtension._wield_slot fires for every local-player
--- wield. slot_data.id carries the item key. hook_safe so we never perturb
--- the wield path. Husk extension intentionally NOT hooked -- we want our
--- own equips, not teammates'.
-mod:hook_safe("SimpleInventoryExtension", "_wield_slot",
-    function(self, equipment, slot_data, unit_1p, unit_3p, buff_extension)
-        local item_key = slot_data
-            and (slot_data.id
-                or (slot_data.item_data and slot_data.item_data.key))
-        _wt_dump_weapon_data(item_key, "wield_slot")
-    end)
-
-mod:command("wt_dump_wielded",
-    "Dump everything wt knows about the currently wielded weapon.",
-    function()
-        local pm = Managers.player
-        local lp = pm and pm:local_player()
-        local punit = lp and lp.player_unit
-        if not punit then
-            mod:echo("[wt_dump_wielded] no local player unit")
-            return
-        end
-        local inv = ScriptUnit.has_extension(punit, "inventory_system")
-        if not inv then
-            mod:echo("[wt_dump_wielded] no inventory extension")
-            return
-        end
-        local slot = inv.get_wielded_slot_name and inv:get_wielded_slot_name()
-        local slot_data = slot and inv.get_slot_data and inv:get_slot_data(slot)
-        local item_key = slot_data
-            and (slot_data.id
-                or (slot_data.item_data and slot_data.item_data.key))
-        _wt_dump_weapon_data(item_key, "command")
-        mod:echo("[wt_dump_wielded] dumped %s -- see console log",
-            tostring(item_key))
-    end)
 
 _rt_register("widget_unlock_map_consistency", function()
     -- Bug class: a (career, weapon) pair lives in `weapon_unlock_map` but

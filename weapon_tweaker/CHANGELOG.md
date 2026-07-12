@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.209-dev (2026-07-12) - Structural refactor (Phase 1 OOP split): 4 concerns extracted from the god file, no behavior change
+
+Pure structural decomposition of the 7,863-line `weapon_tweaker.lua` god file into single-responsibility `_wt_*` modules (OOP_REFACTOR_PLAN WS5, the event_tweaker/enemy_tweaker/cosmetics_tweaker PROJECT_STANDARDS §2.2a template). **Zero behavior change** - verbatim function-bag moves, log/command strings byte-identical, hook set identical (lint: 18 files, 19 hooks, 0 duplicate/forward-ref). The entry keeps byte-identical file-local aliases so every call site is unchanged. Cross-module state rides a new `mod._wt` namespace table (separate key from the established flat `mod._wt_*` fields, which are untouched).
+
+- **New modules + a manifest.** Entry `weapon_tweaker.lua` 7,863 -> 7,226 lines (-637). Extracted:
+  - `_wt_regression.lua` (52 lines) - the `/wt_regression_test` harness (`_RT_CHECKS` + `rt_register` + command). Loads FIRST (et `_et_regression` precedent) and exports `mod._wt.rt_register`; the ~30 check bodies stay inline in the entry next to the file-locals they probe, via `local _rt_register = mod._wt.rt_register`.
+  - `_wt_availability.lua` (203 lines) - cross-character weapon availability control surface: `apply_weapon_unlocks` (can_wield strip/add), `patch_career_actions_on_weapons` (career-ability action injection), `clear_weapon_unlocks` / `clear_career_action_injections` (on_disabled revert), the `_kruber_removed_pairs` one-shot cleanup, and the shared `_career_action_injections` bookkeeping. Reads `mod._wt.weapon_unlock_map` / `.cwv_managed`.
+  - `_wt_trait_pools.lua` (228 lines) - CW weapon-trait pool filtering (`_trait_pool_sources` + `apply_trait_filters` / `revert_trait_pools`, currently a retired no-op stub; exports + call sites kept so nothing dangles).
+  - `_wt_diagnostics.lua` (308 lines) - leaf dump/probe commands `/sm_probe`, `/dump`, `/dump_actions`, `/dump_weapons`, `/wt_dump_wielded` + the wield-time weapon-data dump and its sole `SimpleInventoryExtension._wield_slot` hook_safe. All read engine globals only.
+- **Deliberately NOT extracted this phase** (deferred to keep Phase 1 safe): the 3P anim-remap core (`Unit.animation_event` funnel + `_anim_redirect`/`_career_anim_redirect`/`_suffix_career_map` + `_unit_state`), the `wield_anim_career_3p` template patchers + cross-character port pipeline, the per-frame grip offsets, the P0 crash guards (`link_units` filter, `create_equipment` compensations), and the anim-funnel-coupled commands (`/info`, `/animlog`, `/force3p`, `/force1p`) + port-pipeline `/brace_to_repeater_*` - they read the entry's hot anim-remap file-locals. Big Rebalance stays its own on-ice module.
+- **Verify:** build OK (4 bundles); lint PASS; command inventory conserved (12 total, no dup/loss); `/wt_regression_test` runs unchanged. In-game: load line `[wt:LOAD] v0.12.209-dev`, run `/wt_regression_test` (all prior checks present), `/dump` / `/dump_weapons` / `/sm_probe` still print, cross-character unlock a weapon and confirm it equips + its career ability still fires.
+
 ## 0.12.208-dev (2026-07-11) - Engine backlog P0 pass: BR flamethrower health-ext guard, create_equipment hook audit (dropper identified, external), hold-pose lint cleanup
 
 Three items from `docs/engine/IMPROVEMENT_BACKLOG.md` (P0 rows owned by wt). None has its own GitHub issue; the backlog is the tracker.
