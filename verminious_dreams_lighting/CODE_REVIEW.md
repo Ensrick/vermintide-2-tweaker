@@ -1,3 +1,8 @@
+> [!WARNING]
+> ⚠ **SUPERSEDED** — this snapshot is from 2026-05-29 (43 days old).
+> Recent state may differ. Kept for historical context — verify against current
+> code before acting on findings. Remove this banner manually after a refresh
+> or move the doc to `_archive/audits/2026-05-29/`.
 # Code Review: verminious_dreams_lighting
 
 **Version reviewed:** `1.0.6` (per `MOD_VERSION` in `scripts/mods/verminious_dreams_lighting/verminious_dreams_lighting.lua`)

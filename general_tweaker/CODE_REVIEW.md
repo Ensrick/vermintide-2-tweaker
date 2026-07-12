@@ -1,3 +1,8 @@
+> [!WARNING]
+> ⚠ **SUPERSEDED** — this snapshot is from 2026-05-01 (71 days old).
+> Recent state may differ. Kept for historical context — verify against current
+> code before acting on findings. Remove this banner manually after a refresh
+> or move the doc to `_archive/audits/2026-05-01/`.
 # General Tweaker Code Review (2026-05-24)
 
 **Version reviewed:** `0.2.48-dev` (per `MOD_VERSION` at `general_tweaker.lua:3` and `itemV2.cfg:1`)

@@ -1,3 +1,8 @@
+> [!WARNING]
+> ⚠ **SUPERSEDED** — this snapshot is from 2026-05-19 (53 days old).
+> Recent state may differ. Kept for historical context — verify against current
+> code before acting on findings. Remove this banner manually after a refresh
+> or move the doc to `_archive/audits/2026-05-19/`.
 # Cosmetics Tweaker × Loremaster's Armoury — Host/Client Audit
 
 Snapshot: v0.8.67-dev, 2026-05-19. Research-only — no code changed.

@@ -1,3 +1,8 @@
+> [!WARNING]
+> ⚠ **SUPERSEDED** — this snapshot is from 2026-05-05 (67 days old).
+> Recent state may differ. Kept for historical context — verify against current
+> code before acting on findings. Remove this banner manually after a refresh
+> or move the doc to `_archive/audits/2026-05-05/`.
 # Weapon Tweaker Code Review (2026-05-23, v0.12.68-dev)
 
 ## Summary

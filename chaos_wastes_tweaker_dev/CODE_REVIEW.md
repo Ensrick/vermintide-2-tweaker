@@ -1,3 +1,8 @@
+> [!WARNING]
+> ⚠ **SUPERSEDED** — this snapshot is from 2026-05-23 (49 days old).
+> Recent state may differ. Kept for historical context — verify against current
+> code before acting on findings. Remove this banner manually after a refresh
+> or move the doc to `_archive/audits/2026-05-23/`.
 # Chaos Wastes Tweaker Code Review (2026-05-23, v0.7.90-dev)
 
 ## Summary

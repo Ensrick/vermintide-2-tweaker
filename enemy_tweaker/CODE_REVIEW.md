@@ -1,3 +1,8 @@
+> [!WARNING]
+> ⚠ **SUPERSEDED** — this snapshot is from 2026-05-24 (48 days old).
+> Recent state may differ. Kept for historical context — verify against current
+> code before acting on findings. Remove this banner manually after a refresh
+> or move the doc to `_archive/audits/2026-05-24/`.
 # Enemy Tweaker Code Review (2026-05-24)
 
 **Version reviewed:** `0.7.1-dev` (per `MOD_VERSION` in `scripts/mods/enemy_tweaker/enemy_tweaker.lua:3`).
