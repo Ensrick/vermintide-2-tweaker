@@ -1,5 +1,17 @@
 # Verminious Dreams Lighting — Changelog
 
+## v1.0.15-dev - 2026-07-12 - issue 510: mem-probe baseline is now file-local (no bare _G global)
+
+### Why
+Issue 510: `_MEM_PROBE_T0_VDL` was assigned as a bare `_G` global (no `local`), leaking a name into the global table for a value read only at the bottom of this same chunk. modded_progression fixed exactly this class in v0.2.14-dev (issue 434 / audit F7); the fix was never propagated to the vdl copy.
+
+### Changed
+- `verminious_dreams_lighting_dev.lua:4` - `_MEM_PROBE_T0_VDL` is now `local`, matching `modded_progression.lua:27`. Grep confirmed the only readers are the assignment (line 4) and the boot-footprint log line (line ~1252), both in this same chunk, so no cross-file reader needed updating.
+- `MOD_VERSION` `1.0.14-dev` -> `1.0.15-dev`.
+
+### Build
+Built via VMBLauncher (compile-only). Not deployed/uploaded per task scope.
+
 ## v1.0.14-dev — 2026-07-01 — Menu wording pass: rewrote the mod description and all four option tooltips in plain, player-facing English (no internal level ids or engine jargon), removed em dashes and stray markup.
 
 ### Why

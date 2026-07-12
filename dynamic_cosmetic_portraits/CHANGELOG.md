@@ -1,5 +1,24 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.17-dev (2026-07-12) -- issue 509 regression-harness backfill + issue 510 mem-probe file-local [untested]
+
+### Why
+Issue 509: dcp's `/dcp_regression_test` suite carried only the two generic checks (`dbg_helpers_two_channel`, `localization_format_safe`) and locked none of dcp's own bug-class invariants. Issue 510: `_MEM_PROBE_T0_DCP` leaked a bare `_G` global.
+
+### Changed
+- `dynamic_cosmetic_portraits.lua` - added three `_rt_register` checks, registered AFTER the portrait maps + sync/restore functions (not up with the generic checks) because Lua locals are not hoisted and this mod's predecessor crashed on that exact forward-reference:
+  - `portrait_maps_have_registered_materials` - every hud/medium/small texture in `_hat_portrait_map` + `_skin_portrait_map` must have a matching `materials/ui/<name>` entry in `_PORTRAIT_MATERIALS`. Locks the "map key without asset -> Material-not-found-in-Gui crash" class (CHANGELOG v0.1.0/.1/.2). Pure runtime, so it asserts on a deployed install.
+  - `skin_map_overrides_hat_map` - source-pattern: `_sync_portrait_settings` consults `_skin_portrait_map` before falling back to `_hat_portrait_map` (skins override hats).
+  - `career_settings_swap_saves_and_restores` - `_restore_portrait_settings` + `mod.on_unload` exist; source confirms originals are captured before the swap and restored back. Locks the career_settings swap scope (issue 509 row-of-concern).
+- `dynamic_cosmetic_portraits.lua:2` - `_MEM_PROBE_T0_DCP` is now `local` (issue 510), matching `modded_progression.lua:27`. Grep confirmed the only readers are the assignment and the boot-footprint log line, both in this same chunk.
+- `MOD_VERSION` `0.1.16-dev` -> `0.1.17-dev`.
+
+### Tests
+Built via VMBLauncher (compile-only); lint clean. Not deployed/uploaded per task scope.
+
+### To verify
+- In-game (keep): run `/dcp_regression_test`. Expect every line `PASS` and a `N passed, 0 failed` tail. `portrait_maps_have_registered_materials` is the load-bearing runtime check (source-pattern checks soft-skip on a deployed install where the .lua source is not on disk).
+
 ## 0.1.16-dev (2026-07-01) -- Localization audit (no bugs found; mod has no settings page)
 
 ### Why

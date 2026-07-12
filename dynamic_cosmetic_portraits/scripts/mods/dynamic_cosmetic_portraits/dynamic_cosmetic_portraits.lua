@@ -1,7 +1,11 @@
 local mod = get_mod("dynamic_cosmetic_portraits")
-_MEM_PROBE_T0_DCP = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
+-- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
+-- File-local (was a bare _G global pre-0.1.17-dev; issue 510 / issue 434 audit
+-- F7): read only at the bottom of this same chunk, so no _G or cross-file
+-- exposure is needed. Matches modded_progression.lua:27.
+local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.16-dev"
+local MOD_VERSION = "0.1.17-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -473,6 +477,105 @@ local function _sync_portrait_settings()
         _restore_portrait_settings()
     end
 end
+
+-- ============================================================
+-- Regression checks (issue 509). Registered HERE, after the portrait maps and
+-- the sync/restore functions are defined, NOT up with the generic checks near
+-- MOD_VERSION -- Lua locals are not hoisted and this mod's predecessor crashed
+-- three sessions on exactly that forward-reference (CLAUDE.md "Code-of-conduct").
+-- These lock dcp's own bug-class invariants; the two generic checks
+-- (dbg_helpers_two_channel / localization_format_safe) stay above.
+-- ============================================================
+
+_rt_register("portrait_maps_have_registered_materials", function()
+    -- CHANGELOG v0.1.0/.1/.2 + CLAUDE.md: adding a _hat_portrait_map /
+    -- _skin_portrait_map key whose texture set is NOT also registered in
+    -- _PORTRAIT_MATERIALS crashes "Material not found in Gui" the instant that
+    -- portrait is selected. Lock it: every hud/medium/small texture referenced by
+    -- either map must have a matching "materials/ui/<name>" entry. Pure runtime
+    -- (no source read) so it gives real signal on a deployed install.
+    local registered = {}
+    for _, mat in ipairs(_PORTRAIT_MATERIALS) do
+        local tex = mat:match("([^/]+)$")   -- strip the "materials/ui/" prefix
+        if tex then registered[tex] = true end
+    end
+    local function check_map(map, label)
+        for key, set in pairs(map) do
+            for _, size in ipairs({ "hud", "medium", "small" }) do
+                local tex = set[size]
+                if type(tex) ~= "string" then
+                    return string.format("%s[%s].%s is not a string", label, tostring(key), size)
+                end
+                if not registered[tex] then
+                    return string.format(
+                        "%s[%s].%s = '%s' has no matching _PORTRAIT_MATERIALS entry (Material-not-found crash on select)",
+                        label, tostring(key), size, tex)
+                end
+            end
+        end
+    end
+    local err = check_map(_hat_portrait_map, "_hat_portrait_map")
+    if err then return err end
+    err = check_map(_skin_portrait_map, "_skin_portrait_map")
+    if err then return err end
+end)
+
+_rt_register("skin_map_overrides_hat_map", function()
+    -- Documented priority: an outfit/skin replaces Kruber's head model regardless
+    -- of the equipped hat, so _sync_portrait_settings MUST consult
+    -- _skin_portrait_map BEFORE falling back to _hat_portrait_map. Source-pattern
+    -- guard on THIS file (path via debug.getinfo on the file-local _rt_register);
+    -- needles split so this check never self-matches; no-op when source unreadable.
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local skin_lookup = "_skin_portrait_map[" .. "skin_key]"
+    local hat_lookup  = "_hat_portrait_map[" .. "hat_key]"
+    local skin_at = txt:find(skin_lookup, 1, true)
+    local hat_at  = txt:find(hat_lookup, 1, true)
+    if not skin_at then return "skin-priority lookup (_skin_portrait_map[skin_key]) missing from _sync_portrait_settings" end
+    if not hat_at then return "hat-fallback lookup (_hat_portrait_map[hat_key]) missing from _sync_portrait_settings" end
+    if skin_at > hat_at then
+        return "priority inverted: the hat lookup precedes the skin lookup (skins must override hats)"
+    end
+end)
+
+_rt_register("career_settings_swap_saves_and_restores", function()
+    -- career_settings swap scope (issue 509 row-of-concern): dcp mutates ONLY
+    -- SPProfiles[5].careers[1] (Kruber mercenary) portrait_image/picking_image,
+    -- capturing the vanilla originals before the first swap and restoring them on
+    -- unload. If originals are not captured, or on_unload stops restoring, the
+    -- swapped portrait leaks into a non-dcp session. Runtime: the restore path +
+    -- unload hook exist. Source-pattern (split needles) confirms save-before-swap
+    -- and restore-writes-original; no-op when source is unreadable.
+    if type(_restore_portrait_settings) ~= "function" then
+        return "_restore_portrait_settings missing -- a swapped career_settings can never be reverted"
+    end
+    if type(mod.on_unload) ~= "function" then
+        return "mod.on_unload missing -- swapped career_settings will not restore on unload"
+    end
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src_path, "r")
+    if not f then return end
+    local txt = f:read("*a")
+    f:close()
+    if not txt then return end
+    local save_needle    = "_original_portrait_image = career." .. "portrait_image"
+    local restore_needle = "career.portrait_image = _original_" .. "portrait_image"
+    if not txt:find(save_needle, 1, true) then
+        return "save-before-swap missing: _sync_portrait_settings must capture the vanilla portrait_image before overwriting it"
+    end
+    if not txt:find(restore_needle, 1, true) then
+        return "restore missing: _restore_portrait_settings must write the saved original back to career.portrait_image"
+    end
+end)
 
 -- Diagnostic: check if VMF registered our custom portrait textures
 mod:command("portrait_diag", "Diagnose portrait texture registration + hat state", function()

@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.8-dev"
+local MOD_VERSION = "0.1.9-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -366,6 +366,79 @@ _rt_register("wire_woc_never_leaves_woc_key", function()
 	end
 	if fake.key ~= "woc_test" or fake.ItemId ~= "woc_test" then
 		return "live item was mutated -- shadow must be a copy"
+	end
+end)
+
+-- issue 509 backfill: two more locks on the wire-safety row-of-concern plus the
+-- keep-entry force-load dead end. Registered here beside `_wire_safe_item` (a
+-- file-local just above). See ENGINE_SURFACE.md "Wire safety" + "dead ends".
+_rt_register("issue422_wire_safety_unconditional_singleton", function()
+	-- The sender-side wire-safety hook on (LoadoutUtils, sync_loadout_slot) must
+	-- be UNCONDITIONAL (never toggle-gated) and SINGLE (VMF silently drops a 2nd
+	-- hook on the same Class.method). Source-pattern guard on THIS file (path via
+	-- debug.getinfo on the file-local _rt_register); needles split so this check
+	-- never self-matches; no-op when source is unreadable (deploy/bundle paths).
+	local ok, info = pcall(debug.getinfo, _rt_register, "S")
+	if not ok or type(info) ~= "table" or not info.source then return end
+	local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+	local f = io.open(src_path, "r")
+	if not f then return end
+	local txt = f:read("*a")
+	f:close()
+	if not txt then return end
+	local hook_needle = "mod:hook(LoadoutUtils, " .. '"sync_loadout_slot"'
+	local count, pos = 0, 1
+	while true do
+		local s = txt:find(hook_needle, pos, true)
+		if not s then break end
+		count = count + 1
+		pos = s + 1
+	end
+	if count == 0 then
+		return "issue 422 regression: the (LoadoutUtils, sync_loadout_slot) wire-safety hook is gone -- non-WOC peers CTD"
+	end
+	if count > 1 then
+		return "issue 422 regression: duplicate (LoadoutUtils, sync_loadout_slot) hook -- VMF drops the 2nd silently"
+	end
+	-- Unconditional coverage: substitution keys off a plain woc_ prefix match, not
+	-- a mod:get setting, so every present/future woc_ item is crash-safe.
+	local prefix_needle = "key:sub(1, 4) ~= " .. '"woc_"'
+	if not txt:find(prefix_needle, 1, true) then
+		return "issue 422 regression: the unconditional woc_ prefix wire guard is missing"
+	end
+end)
+
+_rt_register("wire_non_woc_item_passthrough_identity", function()
+	-- Wire safety must NEVER touch a vanilla (non-woc_) item: _wire_safe_item
+	-- returns the SAME table identity unchanged for a non-woc_ key. Complements
+	-- wire_woc_never_leaves_woc_key (which covers the woc_ substitution path).
+	local vanilla = { key = BASE_WEAPON, ItemId = BASE_WEAPON, power_level = 300 }
+	local out = _wire_safe_item(vanilla)
+	if out ~= vanilla then
+		return "a non-woc_ item was not passed through by identity -- wire guard is mutating vanilla loadout items"
+	end
+end)
+
+_rt_register("no_unit_path_package_force_load", function()
+	-- Keep-entry C-fatal dead end (DEVELOPMENT.md crash post-mortem + file header):
+	-- Managers.package:load on a UNIT path (not a real .package name) hard-crashes
+	-- on keep entry via the engine resource_package() C-fatal, bypassing pcall. WOC
+	-- force-loads NOTHING; the held mesh is an always-resident base unit. Lock it:
+	-- no raw package force-load call in this file. Needle split so this check never
+	-- self-matches; no-op when source unreadable. When a real loadable enemy
+	-- .package ships, update this to allow a verified package-NAME load while still
+	-- forbidding a unit-PATH load.
+	local ok, info = pcall(debug.getinfo, _rt_register, "S")
+	if not ok or type(info) ~= "table" or not info.source then return end
+	local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+	local f = io.open(src_path, "r")
+	if not f then return end
+	local txt = f:read("*a")
+	f:close()
+	if not txt then return end
+	local load_needle = "Managers.package" .. ":load("
+	if txt:find(load_needle, 1, true) then
+		return "a package force-load reappeared -- verify it targets a real .package NAME, not a unit path (keep-entry C-fatal, DEVELOPMENT.md)"
 	end
 end)
 

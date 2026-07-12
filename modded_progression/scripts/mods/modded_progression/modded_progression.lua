@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.16-dev"
+local MOD_VERSION = "0.2.17-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -422,6 +422,52 @@ _rt_register("eac_flag_restored_after_throw", function()
     if restored ~= sentinel then return "eac-untrusted flag NOT restored after throw" end
     if depth1 ~= depth0 then return "eac depth counter leaked after throw" end
     if mod.is_eac_window() then return "is_eac_window() still true after throw unwound" end
+end)
+
+-- issue 509 backfill: two more locks on the _with_eac_off contract plus the
+-- sibling-API surface that CWV / cosmetics_tweaker consume. Registered here beside
+-- _with_eac_off (a file-local just above); the sibling API (mod.*) is assigned
+-- earlier in this chunk and resolved at call time.
+_rt_register("eac_off_preserves_multi_return_nil_holes", function()
+    -- _with_eac_off wraps 9 vanilla fns whose returns include nil holes (see the
+    -- NIL-HOLE PRESERVATION note above). Exercise the select("#")/unpack machinery
+    -- end-to-end: a 1, nil, 3 return must survive unchanged. This is the wt
+    -- v0.12.77/.78 multi-return-collapse class in mp's chokepoint.
+    local a, b, c = _with_eac_off(function() return 1, nil, 3 end, nil)
+    if a ~= 1 then return "first return dropped by _with_eac_off" end
+    if b ~= nil then return "nil hole not preserved (2nd return should be nil)" end
+    if c ~= 3 then return "trailing return after a nil hole was truncated" end
+end)
+
+_rt_register("eac_window_closed_at_rest", function()
+    -- Baseline the cosmetics #174 chokepoint depends on: outside any _with_eac_off
+    -- call the eac window is CLOSED -- depth 0, is_eac_window() false. A leaked
+    -- window (unbalanced depth) would make cosmetics treat every frame as a
+    -- vanilla-progression call.
+    if type(mod.is_eac_window) ~= "function" then return "mod.is_eac_window sibling API missing" end
+    if (mod._mp_eac_depth or 0) ~= 0 then
+        return "eac depth counter is " .. tostring(mod._mp_eac_depth) .. " at rest (expected 0) -- a _with_eac_off window leaked"
+    end
+    if mod.is_eac_window() ~= false then
+        return "is_eac_window() is true at rest -- eac window leaked"
+    end
+end)
+
+_rt_register("sibling_api_surface_present", function()
+    -- Cross-mod contract: character_weapon_variants and cosmetics_tweaker call
+    -- these via get_mod("mp"). A rename/removal silently breaks the consumer. Assert
+    -- presence + a behavior smoke: spend must return false (not raise) when the
+    -- wallet cannot cover the amount.
+    for _, name in ipairs({ "is_unlocked", "mark_unlocked", "has_currency",
+                            "spend", "credit", "get_currency", "grant_item",
+                            "is_eac_window" }) do
+        if type(mod[name]) ~= "function" then
+            return "sibling API function mod." .. name .. " missing (CWV/cosmetics depend on it)"
+        end
+    end
+    local ok, res = pcall(mod.spend, "SM", 999999999999)
+    if not ok then return "mod.spend raised instead of returning false on insufficient funds" end
+    if res ~= false then return "mod.spend did not return false for an unaffordable amount" end
 end)
 
 -- Level-end reward popups (level-up, deed, deus, keep-decoration,

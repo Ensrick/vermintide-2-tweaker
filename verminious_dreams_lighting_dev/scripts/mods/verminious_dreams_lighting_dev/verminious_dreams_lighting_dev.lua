@@ -1,7 +1,11 @@
 local mod = get_mod("verminious_dreams_lighting_dev")
 
-local MOD_VERSION = "1.0.14-dev"
-_MEM_PROBE_T0_VDL = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
+local MOD_VERSION = "1.0.15-dev"
+-- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
+-- File-local (was a bare _G global pre-1.0.15-dev; issue 510 / issue 434 audit
+-- F7): read only at the bottom of this same chunk, so no _G or cross-file
+-- exposure is needed. Matches modded_progression.lua:27.
+local _MEM_PROBE_T0_VDL = collectgarbage("count")
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([vdl] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy" — never echo at module load,

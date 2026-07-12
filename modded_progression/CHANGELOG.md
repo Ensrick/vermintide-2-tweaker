@@ -1,5 +1,26 @@
 # Modded Progression — Changelog
 
+## 0.2.17-dev (2026-07-12) - issue 509: regression-harness backfill (_with_eac_off contract + sibling API) [untested]
+
+### Why
+Issue 509: `/mp_regression_test` already locked the issue-434 eac-restore-after-throw guard, but not the rest of the `_with_eac_off` contract (multi-return nil-hole preservation, at-rest window state) or the sibling-API surface CWV / cosmetics_tweaker consume.
+
+### Changed
+- `modded_progression.lua` - added three `_rt_register` checks beside `_with_eac_off`:
+  - `eac_off_preserves_multi_return_nil_holes` - runtime: a `1, nil, 3` return survives `_with_eac_off` unchanged. Locks the `select("#")`/`unpack` machinery against the wt v0.12.77/.78 multi-return-collapse class.
+  - `eac_window_closed_at_rest` - runtime: outside any wrapped call `mod._mp_eac_depth == 0` and `mod.is_eac_window() == false`. The baseline the cosmetics issue-174 chokepoint depends on.
+  - `sibling_api_surface_present` - runtime: `is_unlocked` / `mark_unlocked` / `has_currency` / `spend` / `credit` / `get_currency` / `grant_item` / `is_eac_window` are all functions, and `spend` returns false (not raise) on insufficient funds.
+- `MOD_VERSION` `0.2.16-dev` -> `0.2.17-dev`.
+
+### Tests
+Built via VMBLauncher (compile-only); lint clean. Not deployed/uploaded per task scope. All three checks are pure runtime (assert on a deployed install).
+
+### To verify
+- In-game (keep): run `/mp_regression_test`. Expect every line `PASS` and a `N passed, 0 failed` tail.
+
+### Refs
+Issue 509 (parent), issue 434 (eac-restore guard), issue 174 (cosmetics chokepoint).
+
 ## 0.2.16-dev (2026-07-12) - #500 remove the stale #174 loadout-attribution probe (closed issue) [untested]
 
 ### Changed
