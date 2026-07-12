@@ -38,7 +38,7 @@ exactly once from the manifest.
 
 | Module | Owns / public surface (on `mod._cos` unless noted) |
 |---|---|
-| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest (`_la_prefix_embedded`, `_material_hijack_embedded`, `_moreitemslibrary_embedded`, `_cosmetic_unlocks`=`U`, `_la_bridge`, `_tpe`, `_glow_picker`, `_la_persistence`, `_la_okri`, `_ui_dump`, `_diag_probe`), the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks (`on_game_state_changed`/`on_setting_changed`/`on_disabled`/`on_unload`), and everything not yet extracted: the render-path HOOKS (`create_equipment` / `_spawn_item_post` / `spawn_units`; their scale/grip apply helpers moved to `_cos_render` in Phase 2 and their glow apply/owner-peer helpers to `_cos_glow` in Phase 3), the per-peer glow broadcast RPC layer + `/glow_status`+`/glow_trace` commands (the glow APPLY pipeline moved to `_cos_glow`), LA-bridge integration + husk, offhand picker + customization UI, the #421 wire-safety senders, the #282 MH release lifecycle, and the `/cos_regression_test` suite. |
+| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest (`_la_prefix_embedded`, `_material_hijack_embedded`, `_moreitemslibrary_embedded`, `_cosmetic_unlocks`=`U`, `_la_bridge`, `_tpe`, `_glow_picker`, `_la_persistence`, `_la_okri`, `_ui_dump`, `_cos_diag_lasync`), the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks (`on_game_state_changed`/`on_setting_changed`/`on_disabled`/`on_unload`), and everything not yet extracted: the render-path HOOKS (`create_equipment` / `_spawn_item_post` / `spawn_units`; their scale/grip apply helpers moved to `_cos_render` in Phase 2 and their glow apply/owner-peer helpers to `_cos_glow` in Phase 3), the per-peer glow broadcast RPC layer + `/glow_status`+`/glow_trace` commands (the glow APPLY pipeline moved to `_cos_glow`), LA-bridge integration + husk, offhand picker + customization UI, the #421 wire-safety senders, the #282 MH release lifecycle, and the `/cos_regression_test` suite. |
 | `_cos_diagnostics.lua` | Read-only dump/probe chat commands (`/flush_log`, `/dump_glows`, `/dump_skin_rarities`, `/dump_all_names`, `/check_vmf`, `/probe_hat`, `/probe_cosmetics`). Reads `mod._cos.flush_log`; no exports. |
 | `_cos_illusions.lua` | Custom weapon-illusion + LA shield skin injection into `ItemMasterList`/`WeaponSkins`/`NetworkLookup` (`_custom_illusions`, `_la_shield_skin_specs`), the `get_unlocked_weapon_skins` unlock hook, the `_G.Localize` display-name hook. Populates `mod._cos.custom_skin_keys`; exports `mod._cos.custom_illusions`. |
 | `_cos_unlocks.lua` | Per-career cosmetic unlocks (`apply_cosmetic_unlocks` + `_CHARACTER_CAREERS`), Unlock-All portrait frames, vanilla-unobtainable cosmetic grants, the two `PlayFabMirrorAdventure` hooks, `/frames_status` + `/cosmetics_status`. Exports `mod._cos.apply_cosmetic_unlocks`. |
@@ -47,7 +47,7 @@ exactly once from the manifest.
 
 Pre-existing `_*.lua` modules (`_la_bridge`, `_material_hijack_embedded[_anim]`,
 `_moreitemslibrary_embedded`, `_cosmetic_unlocks`, `_tpe`, `_glow_picker`,
-`_la_persistence`, `_la_okri`, `_ui_dump`, `_diag_probe`, `_la_prefix_embedded`)
+`_la_persistence`, `_la_okri`, `_ui_dump`, `_cos_diag_lasync`, `_la_prefix_embedded`)
 predate this split and are captured as entry locals by the top manifest — leave
 their internals alone.
 

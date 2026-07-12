@@ -50,11 +50,12 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 
 -- Passive diagnostic emitter (printf, default-on, rate-limited). Drives the
 -- [cos:sync] grep channel in the user's post-playtest log (LA husk/shield sync
--- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
--- (The [174:loadout] channel was retired with issue #174's fix; #500.)
-local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
+-- divergence decisions, issues #149 #154 #200 #203 #204). See _cos_diag_lasync.lua.
+-- (The [174:loadout] channel was retired with issue #174's fix; #500. File renamed
+-- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
+local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.80-dev"
+local MOD_VERSION = "0.9.81-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the

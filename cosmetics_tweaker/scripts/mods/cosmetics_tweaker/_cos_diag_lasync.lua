@@ -1,12 +1,15 @@
 local mod = get_mod("cosmetics_tweaker")
 
--- _diag_probe.lua — passive, default-on diagnostic emitter.
+-- _cos_diag_lasync.lua — LA husk/shield sync-divergence diagnostic cluster.
 --
--- Purpose (team-lead brief 2026-07-01): attribution probes for the #174 bot /
--- player loadout replace-on-startup bug and the cosmetics LA shield/husk sync
--- family (#149 #154 #200 #203 #204). The user playtests and hands over the
--- console log afterward; they run with VMF mod logging OFF and never type a
--- chat command, so every probe here:
+-- Per-cluster diagnostics module (PROJECT_STANDARDS §2.2b, issue #499): the
+-- passive `printf` emitter that drives the single OPEN-issue [cos:sync] channel
+-- — Loremaster's Armoury husk/shield cosmetic sync divergence (#149 #154 #200
+-- #203 #204). Consumed by cosmetics_tweaker.lua's 16 `PROBE.emit("cos:sync", …)`
+-- call sites (renamed from _diag_probe.lua when the closed-#174 loadout channel
+-- was retired — #500 stripped those emits in 0.9.80-dev, #499 renamed here). The
+-- user playtests and hands over the console log; they run with VMF mod logging
+-- OFF and never type a chat command, so every probe here:
 --   * is armed at mod load (no toggle, no command),
 --   * writes via engine `printf` (VMF mod:info / mod:debug / mod:warning route
 --     through VMF's gated logging pipeline and can be invisible with logging
@@ -14,15 +17,17 @@ local mod = get_mod("cosmetics_tweaker")
 --   * is rate-limited so a per-frame / per-unit caller can never flood the log,
 --   * changes ZERO gameplay behaviour (pure observation).
 --
--- Channels emitted through here (grep the user's log by the bracket tag):
---   [174:loadout]  — who writes/restores a loadout item (task 1)
---   [cos:sync]     — LA husk/shield sync divergence decisions (task 2)
+-- Channel emitted through here (grep the user's log by the bracket tag):
+--   [cos:sync]     — LA husk/shield sync divergence decisions (#149/154/200/203/204)
 --
 -- Rate-limit model: each distinct dedup `key` logs on first sight and whenever
 -- its payload CHANGES. During a startup window (WINDOW_S seconds after load)
 -- unchanged repeats also log, so the startup burst is captured in full. A hard
 -- GLOBAL_CAP bounds total lines per session as a flood backstop. Pass key=nil
 -- to always emit (still subject to the global cap).
+--
+-- Owned by: cosmetics_tweaker.lua entry point. Consumed via:
+--   mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
 local M = {}
 

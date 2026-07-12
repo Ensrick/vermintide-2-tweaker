@@ -26,7 +26,7 @@ sync channel, and hat/attachment unit spawning.
 (`cosmetics_tweaker.lua`, `_la_bridge.lua`, `_material_hijack_embedded[_anim].lua`,
 `_la_prefix_embedded.lua`, `_la_okri.lua`, `_moreitemslibrary_embedded.lua`,
 `_la_persistence.lua`, `_tpe.lua`), plus diagnostic-only hooks in `_ui_dump.lua` /
-`_diag_probe.lua` (not covered here). Grouped below into 10 rows-of-concern.
+`_cos_diag_lasync.lua` (not covered here). Grouped below into 10 rows-of-concern.
 `[hook]` = full wrapper (`mod:hook`); `[safe]` = `mod:hook_safe` (post-callback,
 no override); `[tbl]` = table-form hook against a plain table (nil-guarded).
 

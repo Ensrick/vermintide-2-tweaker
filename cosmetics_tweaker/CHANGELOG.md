@@ -1,5 +1,11 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.81-dev — 2026-07-12 — #499 rename _diag_probe.lua -> _cos_diag_lasync.lua (per-cluster diagnostics convention) [untested]
+
+- **#499 probe consolidation (PROJECT_STANDARDS §2.2b):** the passive diagnostic emitter now serves ONLY the open-issue [cos:sync] LA husk/shield sync-divergence cluster (#149/154/200/203/204) after #500 stripped the closed-#174 loadout emits in 0.9.80-dev. Renamed the root-level `_diag_probe.lua` -> `_cos_diag_lasync.lua` (git mv, one path) so its name states its cluster, per the `_<ns>_diag_<topic>.lua` convention (canonical: ct_dev's `_ct_diag_freeze487.lua`).
+- **Content byte-identical except the file-header comment.** The `M.emit` / `M.caller_hint` code is unchanged; only the header docstring was rewritten (new name + LA-sync-only purpose + `Owned by:` line per §2.2). The 16 `PROBE.emit("cos:sync", …)` call sites in `cosmetics_tweaker.lua` are untouched, so the [cos:sync] printf prefixes are unchanged.
+- Updated references: `cosmetics_tweaker.lua` dofile + comment (line ~53-55), `DEVELOPMENT.md` module list, `ENGINE_SURFACE.md` diagnostic-hooks note. Package is glob-based (`scripts/mods/cosmetics_tweaker/*`), so no `.package`/manifest entry changed.
+
 ## 0.9.80-dev — 2026-07-12 — #500 strip the closed-#174 loadout-attribution probe, keep the open-issue [cos:sync] probes [untested]
 
 - **#500: removed the two `[174:loadout]` probe emit sites** (issue 174, CLOSED). The dedicated `#174 VANILLA CHOKEPOINT` `mod:hook_safe("BackendInterfaceItemPlayfab", "set_loadout_item", ...)` was pure post-observation (no return override, no behavior) and is deleted whole. The second emit lived INSIDE the load-bearing `mod:hook(BackendUtils, "set_loadout_item", ...)` LA-clone caching hook (`_install_skin_loadout_safety`); only the `if PROBE then PROBE.emit("174:loadout", ...) end` block was stripped -- the clone-cache write / early-return / cache-clear logic is kept byte-for-byte, so the skin-loadout-safety behavior is unchanged.
