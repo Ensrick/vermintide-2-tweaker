@@ -1,5 +1,45 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.77-dev — 2026-07-12 — Structural refactor: Phase 1 OOP decomposition (no behavior change) [untested]
+
+Pure structural split of the `cosmetics_tweaker.lua` god file (10,773 -> 9,712 lines):
+three self-contained concerns moved VERBATIM into single-responsibility `_cos_*`
+modules, following the event_tweaker template (PROJECT_STANDARDS § 2.2a). No logic
+edits, no hook changes, no localization/data changes. Adversarial 5-class diff review
+(orphaned upvalues / non-verbatim moves / dropped-or-duplicated hooks / load-order /
+guard drift) returned zero findings; build + `lint-mod.ps1` (93 hooks, 0 duplicate)
+pass; the three new modules were verified present in the compiled bundle by murmur64
+hash of their resource paths.
+
+- New modules (function-bag extractions; line counts):
+  - `_cos_diagnostics.lua` (513) — read-only dump/probe chat commands: `/flush_log`,
+    `/dump_glows`, `/dump_skin_rarities`, `/dump_all_names`, `/check_vmf`,
+    `/probe_hat`, `/probe_cosmetics`.
+  - `_cos_illusions.lua` (329) — custom weapon-illusion + LA shield skin injection
+    (`_custom_illusions`, `_la_shield_skin_specs`), the `get_unlocked_weapon_skins`
+    unlock hook and the `_G.Localize` display-name hook for those keys.
+  - `_cos_unlocks.lua` (330) — per-career cosmetic unlocks (`apply_cosmetic_unlocks`),
+    Unlock-All portrait frames, vanilla-unobtainable cosmetic grants, the two
+    `PlayFabMirrorAdventure` hooks (`_create_fake_inventory_items` /
+    `get_unlocked_cosmetics`) and the `/frames_status` + `/cosmetics_status` commands.
+- Cross-module state now lives on a `mod._cos` namespace table (the event_tweaker
+  `mod._evt` pattern): `U`, `LA_BRIDGE`, `flush_log`, `skin_requires_unowned_dlc`,
+  `custom_skin_keys`, `custom_illusions`, `apply_cosmetic_unlocks`. The entry keeps
+  byte-identical local aliases for the shared tables.
+- LOAD-BEARING blocks LEFT IN THE ENTRY, unchanged: the #421 null-and-restore wire
+  senders + `ct_*` substitution, the #282 MH package-release lifecycle
+  (`on_game_state_changed` / `on_unload`), and the render-path hooks
+  (`create_equipment` / `spawn_inventory_unit` / `get_item_units` / the previewers).
+  `custom_skin_keys` (read by the wire senders and the regression suite) became a
+  shared `mod._cos` table WITH an entry-local alias so every one of those references
+  stays byte-unchanged.
+- Regression suite (`/cos_regression_test`) unchanged and intact: all checks stay in
+  the entry, and none are source-pattern greps, so no needle updates were required.
+- Deferred to later phases (too coupled to the render path / wire safety for a
+  zero-behavior mechanical move): the glow subsystem, the LA-bridge + husk block, the
+  HeroWindowItemCustomization offhand-picker UI suite, and the weapon scale/grip
+  overrides (their apply helpers are called from render hooks that stay in the entry).
+
 ## 0.9.76-dev — 2026-07-11 — #282 #421: MH package refcount leak (exactly-once + lifecycle release) and the two remaining skin-axis wire senders [untested] [crash] [0-critical]
 
 ### #282 — package refcount leak (the cosmetics-owned slice)

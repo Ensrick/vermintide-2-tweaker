@@ -30,6 +30,17 @@ sync channel, and hat/attachment unit spawning.
 `[hook]` = full wrapper (`mod:hook`); `[safe]` = `mod:hook_safe` (post-callback,
 no override); `[tbl]` = table-form hook against a plain table (nil-guarded).
 
+> **v0.9.77-dev Phase 1 OOP split.** The three unlock/illusion hooks moved into new
+> modules now cite the OWNING FILE instead of a `cosmetics_tweaker.lua:NNNN` line:
+> `get_unlocked_weapon_skins` + `_G.Localize` -> `_cos_illusions.lua`;
+> `_create_fake_inventory_items` + `get_unlocked_cosmetics` -> `_cos_unlocks.lua`.
+> File-name-only (no line) was chosen deliberately because later decomposition
+> phases will churn line numbers again — match these by function name. The
+> `cosmetics_tweaker.lua:NNNN` line refs on the ROWS THAT DID NOT MOVE predate the
+> split (the entry lost ~1,060 lines above them), so those too are now approximate;
+> match by function name until a later phase reconciles them. See
+> `DEVELOPMENT.md` "Module map".
+
 ### Items / gear / inventory spawn - owner path (owner doc: `docs/engine/06`)
 
 Seams shared with `cwv`; vanilla behavior cited there. cosmetics uses them for
@@ -91,15 +102,15 @@ vanilla equivalent (or nulls to `"n/a"`) UNCONDITIONALLY, never behind a toggle
 
 | Class.method (kind) | Vanilla behavior | Why cosmetics hooks it | Trap / invariant |
 |---|---|---|---|
-| `BackendInterfaceCraftingPlayfab.get_unlocked_weapon_skins` [safe] `:1401` | Returns the unlocked-skin set the forge treats as available [src: `backend_interface_crafting_playfab.lua:138`] | Mark cosmetics' custom illusions unlocked so they appear in the picker (`:1401`) | Backing store is `PlayFabMirrorBase.get_unlocked_weapon_skins`; never commit to PlayFab (`docs/engine/11`); DLC gate before write (CLAUDE.md "DLC Ownership Gate", `:43`) |
-| `PlayFabMirrorAdventure._create_fake_inventory_items` [hook] `:1599` / `get_unlocked_cosmetics` [safe] `:1620` | Builds the local fake-inventory + unlocked-cosmetics tables the menus read [src: `playfab_mirror_adventure.lua`] | Inject cosmetics' hat/skin unlocks into the mirror so vanilla browsers render them (`:1599`) | Filter unowned-DLC entries before the `_unlocked_*` write (CLAUDE.md three-places checklist) |
+| `BackendInterfaceCraftingPlayfab.get_unlocked_weapon_skins` [safe] `_cos_illusions.lua` | Returns the unlocked-skin set the forge treats as available [src: `backend_interface_crafting_playfab.lua:138`] | Mark cosmetics' custom illusions unlocked so they appear in the picker (`_cos_illusions.lua`) | Backing store is `PlayFabMirrorBase.get_unlocked_weapon_skins`; never commit to PlayFab (`docs/engine/11`); DLC gate before write (CLAUDE.md "DLC Ownership Gate") |
+| `PlayFabMirrorAdventure._create_fake_inventory_items` [hook] `_cos_unlocks.lua` / `get_unlocked_cosmetics` [safe] `_cos_unlocks.lua` | Builds the local fake-inventory + unlocked-cosmetics tables the menus read [src: `playfab_mirror_adventure.lua`] | Inject cosmetics' hat/skin unlocks into the mirror so vanilla browsers render them (`_cos_unlocks.lua`) | Filter unowned-DLC entries before the `_unlocked_*` write (CLAUDE.md three-places checklist) |
 | `BackendInterfaceItemPlayfab.get_weapon_skin_from_skin_key` [hook] `:1743` | Maps a skin key to its backend id [src: `backend_interface_item_playfab.lua`] | Resolve cosmetics' custom `ct_*` skin keys (`:1743`) | - |
 | `BackendInterfaceCraftingPlayfab.craft` [hook] `:1895` / `update` [safe] `:1952` | Runs a craft recipe / polls craft completion [src: `backend_interface_crafting_playfab.lua`] | Intercept the apply-illusion "craft" so custom illusions equip without a real backend commit (`:1895`) | Modded-realm isolation - never write to PlayFab (`docs/engine/11`, issue #402) |
 | `BackendInterfaceItemPlayfab.set_loadout_item` [safe] `:5682` + `BackendUtils.set_loadout_item` [hook,tbl] `:5719` | Persists an equipped item to a career loadout [src: `backend_interface_item_playfab.lua`] | Capture equip events to drive LA persistence + cache (`:5682`); table-form for the LA-clone dispatch path | Hook the post-LA `BackendUtils` ref, not cold `_G` (memory `reference_cim_equip_capture_la_dispatch`) |
 | `items_iface.get_loadout` / `get_loadout_item_id` / `get_item_rarity` [hook,tbl] `:5744`/`:5774`/`:5802` | Backend item-interface reads the menus/husk use [src: `backend_interface_item_playfab.lua`] | Surface LA-clone + custom items with correct rarity/loadout membership (`:5744`+) | `items_iface` is the resolved interface instance, hooked table-form; LA reassigns these at runtime (CLAUDE.md "LA bridge") |
 | `backend_mirror.get_all_inventory_items` [hook,tbl] `_moreitemslibrary_embedded.lua:234` + `BackendInterfaceItemPlayfab.init` [hook,tbl] `:378` | MIL captures the backend_mirror instance at interface init and merges mod items into the inventory result [src: `backend_interface_item_playfab.lua` init] | Register LA-clone cosmetics as first-class inventory items via the embedded MoreItemsLibrary (`:234`,`:378`) | Cosmetic item_types must also be written into `backend_mirror._unlocked_cosmetics` or browsers hide them (`:247-248`) |
 | `SimpleInventoryExtension.extensions_ready` [safe] `_la_persistence.lua:256` | Fires once the owner inventory extension is committed [src: `simple_inventory_extension.lua`, extensions_ready] | Re-apply the player's saved LA illusion/hat choices once the loadout exists (`:256`) | Backend nil at mod init; this is the ready point |
-| `_G.Localize` [hook] `:1431` | Global loc-key -> string lookup | Supply display names for LA-clone + `ct_*` keys (`:1431`) | VMF `_localization.lua` is NOT auto-registered into global `Localize` (`docs/VMF_RECIPES.md`) |
+| `_G.Localize` [hook] `_cos_illusions.lua` | Global loc-key -> string lookup | Supply display names for LA-clone + `ct_*` keys (`_cos_illusions.lua`) | VMF `_localization.lua` is NOT auto-registered into global `Localize` (`docs/VMF_RECIPES.md`) |
 
 ### UI - previewers + illusion customization window (owner docs: `docs/engine/09`, `docs/engine/06`)
 
