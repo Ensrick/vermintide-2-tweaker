@@ -239,12 +239,16 @@ UPLOAD - a local deploy alone is silently clobbered.
   §11 requires it "in the same pass as the CHANGELOG entry":
   - `gh issue edit <N> --add-label verify-fix` when you shipped a **code fix**
     the user now confirms in-game (this is the common case).
+  - `gh issue edit <N> --remove-label verify-fix --add-label verify-fix-coop`
+    when the verification needs **2+ people** (cross-peer wire safety, host/client
+    desync, hot-join). ship.ps1 auto-applies plain `verify-fix`; the swap is your
+    manual follow-up in the same pass (user rule 2026-07-11).
   - `gh issue edit <N> --add-label diagnostics-armed` when you shipped
     **instrumentation only** (no behavior change) and need a repro to capture data.
-  - Never both, never invent a new status label. An issue with neither status
-    label reads as "not worked yet" - so a shipped-but-unlabeled fix is invisible
-    to the user's backlog view. Label every issue the ship addressed (here: the
-    primary Issue AND any it corroborates/fixes together).
+  - Never more than one status label at a time, never invent a new one. An issue
+    with no status label reads as "not worked yet" - so a shipped-but-unlabeled fix
+    is invisible to the user's backlog view. Label every issue the ship addressed
+    (here: the primary Issue AND any it corroborates/fixes together).
   - If the fix touched a dev-build menu option, also move its `_localization.lua`
     status tag (`[untested]`/`[Issue N]` -> `[verify-fix]`) in the same pass
     (issue #301; `LOCALIZATION_STANDARD.md` §13) - unless another session owns
@@ -266,6 +270,14 @@ UPLOAD - a local deploy alone is silently clobbered.
 - [ ] **If it is still broken, believe them.** Return to STEP 2 with the NEW
   log (they must be on the version you just shipped - re-verify the echoed
   version first). Do not re-defend the previous diagnosis.
+- [ ] **When the user confirms the fix in-game:** swap the verify-* label for
+  `Fixed` (`gh issue edit <N> --remove-label verify-fix --add-label Fixed`).
+  `Fixed` is NOT a close signal - it means the **post-fix pass is still owed**:
+  harden the code path (guard the CLASS, not just the instance), write/extend the
+  BUG_CLASSES.md entry and the owning mod doc, and add a regression test
+  (`_rt_register` / QA check) locking the invariant. Close only when that pass is
+  done or explicitly judged not applicable (say so in a comment). Taxonomy:
+  `PROJECT_STANDARDS.md` §11.
 
 ---
 

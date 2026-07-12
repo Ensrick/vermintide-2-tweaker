@@ -1427,10 +1427,23 @@ Every issue carries three dimensions: **status + type + mod**. Nothing else is a
 status. This was ad-hoc "wild west" through 2026-07-03 (four overlapping status
 labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix.
 
-**Status (0–2) — the ONLY "ready to test" signal, applied when work has shipped:**
-- `verify-fix` — a code fix shipped; the user tests it in-game.
+**Status (0–1 of these) — the shipped-work lifecycle signal:**
+- `verify-fix` — a code fix shipped; the user tests it in-game (solo-verifiable).
+- `verify-fix-coop` — a code fix shipped whose verification needs **2+ people**
+  (cross-peer wire safety, host/client desync, hot-join races). REPLACES
+  `verify-fix`, never coexists with it. ship.ps1's auto-labeler only applies plain
+  `verify-fix`; swap by hand after shipping a coop-verify issue (user rule 2026-07-11):
+  `gh issue edit N --remove-label verify-fix --add-label verify-fix-coop`.
 - `diagnostics-armed` — a diagnostic/probe shipped; repro in-game to capture data.
-- An issue with **neither** status label has **not been worked yet** (this is how the
+- `Fixed` — the fix is **verified** (in-game confirmation, usually by the user).
+  Replaces the verify-* label. NOT a close signal: `Fixed` means the **post-fix pass
+  is still owed** — harden the code path (guards, fail-safes on the class, not just
+  the instance), update the docs that would have prevented it (BUG_CLASSES.md entry,
+  owning DEVELOPMENT.md/recipe doc, CLAUDE.md gotcha if repo-wide), and add a
+  regression test (`_rt_register` / QA check) that locks the invariant. Close the
+  issue only when the post-fix pass is done (or explicitly judged not applicable —
+  say so in a comment).
+- An issue with **none** of these has **not been worked yet** (this is how the
   user sees the untouched backlog at a glance).
 - **Retired 2026-07-03:** `verify-in-game` → merged into `verify-fix`; `probe-live` →
   merged into `diagnostics-armed`. Do not recreate them.
