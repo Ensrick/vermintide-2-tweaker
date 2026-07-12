@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.380-dev"
+local MOD_VERSION = "0.1.381-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -4791,11 +4791,21 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 			-- wield / async C-assert. Vanilla only reached this hand because
 			-- item_units[hand.."_hand_unit"] is truthy (simple_husk_inventory_extension
 			-- .lua:665/669), so returning all-nil is exactly a hand vanilla never spawned.
+			if _om._probe_279_spawn then
+				_om._probe_279_spawn(hand, item_data, item_units, owner_unit_1p, owner_unit_3p, nil, "deferred_478")
+			end
 			return nil, nil, nil, nil
 		end
 	end
 	local v_w3p, v_a3p, v_w1p, v_a1p =
 		func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
+
+	-- issue 279 (2nd repro): capture the full ammo-attach decision at EVERY
+	-- spawn (owner + husk, both hands) for a no_ammo_unit variant's base. Self-gates
+	-- on base being a no_ammo base; pure diagnostic (see the helper for the trace).
+	if _om._probe_279_spawn then
+		_om._probe_279_spawn(hand, item_data, item_units, owner_unit_1p, owner_unit_3p, v_a3p, nil)
+	end
 
 	-- ============================================================
 	-- Husk (remote-player) CWV apply  (issues 397/394/399)
@@ -10434,6 +10444,49 @@ do
 		printf("[cwv husk-ammo-strip] stripped inherited ammo 3P unit (base=%s career=%s) -- issue 399",
 			tostring(base_name), tostring(career))
 		return true
+	end
+
+	-- issue 279 (2ND repro, 2026-07-12). The v0.1.365 entry-clear + the issue-399
+	-- career-gated husk strip did NOT end the merged Outrider render: the user still
+	-- sees the Trollhammer torpedo mesh "sometimes, host and client" on a CRAFTED
+	-- Outrider. Source trace this session (gear_utils.lua / backend_utils.lua /
+	-- simple_husk_inventory_extension.lua):
+	--   * The OWNER path is clean after v0.1.365: item_data.ammo_unit is cleared,
+	--     and vanilla gear_utils.lua:164 gates the attach on item_units.ammo_unit.
+	--   * The HUSK resolves the BASE dr_deus_01 item_data (backend_id is nil at
+	--     simple_husk_inventory_extension.lua:662, so cwv's get_item_units override
+	--     early-returns), and dr_deus_01.ammo_unit IS the torpedo -> vanilla attaches
+	--     it. A NATIVE item dodges this (the cwv skin rides the wire; skin.ammo_unit
+	--     = nil), a CRAFTED item does not (no skin) -- which is exactly why the bug
+	--     is CRAFTED-only. The lone defense is the career-gated post-spawn strip
+	--     above + the #478 per-hand defer, both of which need the husk career.
+	-- UNCONFIRMED: the exact per-hand rekey / #478-defer / strip branch that leaves
+	-- the torpedo, and whether "sometimes" == a husk career-lookup miss. This probe
+	-- logs the full decision at every spawn_inventory_unit call so the next 2-player
+	-- repro pins it. Pure diagnostic: pcall-wrapped, printf (visible with mod-logging
+	-- OFF), throttled once per distinct decision key.
+	_om._probe_279_spawn = function(hand, item_data, item_units, owner_unit_1p, owner_unit_3p, ammo_unit_3p, note)
+		pcall(function()
+			local base_name = item_data and item_data.name
+			if not (base_name and _no_ammo_careers_by_base[base_name]) then return end
+			local side = owner_unit_1p and "owner" or "husk"
+			local career = _husk_career_name(owner_unit_3p)
+			local careers = _no_ammo_careers_by_base[base_name]
+			local in_strip_set = (career and careers[career]) and true or false
+			local iu_ammo = item_units and item_units.ammo_unit
+			local iu_ammo3p = item_units and item_units.ammo_unit_3p
+			_husk_log_once(
+				"probe279:" .. side .. ":" .. tostring(base_name) .. ":" .. tostring(hand)
+					.. ":" .. tostring(career) .. ":" .. tostring(iu_ammo ~= nil) .. ":" .. tostring(note),
+				"[cwv:279] spawn side=%s hand=%s base=%s bid=%s note=%s skin=%s career=%s in_strip_set=%s "
+					.. "iu.right=%s iu.left=%s iu.ammo_unit=%s iu.ammo_unit_3p=%s vanilla_attached_ammo_3p=%s",
+				side, tostring(hand), tostring(base_name),
+				tostring(item_data and item_data.backend_id), tostring(note),
+				tostring(item_units and item_units.skin), tostring(career), tostring(in_strip_set),
+				tostring(item_units and item_units.right_hand_unit),
+				tostring(item_units and item_units.left_hand_unit),
+				tostring(iu_ammo), tostring(iu_ammo3p), tostring(ammo_unit_3p ~= nil))
+		end)
 	end
 
 	-- Apply the CWV scale/offset transform to the husk 3P weapon unit,

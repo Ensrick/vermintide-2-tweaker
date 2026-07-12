@@ -1,5 +1,53 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.381-dev — 2026-07-12 — #279: [diag] probe the husk ammo-attach decision (crafted Outrider still renders merged) [0-critical]
+
+### Why
+Issue #279, 2nd repro. The v0.1.365 fix (clear `ammo_unit`/`ammo_unit_3p` on the
+CWV entry) + the issue-399 career-gated husk ammo-strip did NOT end the merged
+render: the user still sees the Trollhammer torpedo mesh "sometimes, host and
+client" on a **crafted** Outrider Grenade Launcher.
+
+### Diagnosis (source-traced this session, still one unconfirmed link)
+- **OWNER path is clean** after v0.1.365. The crafted item resolves with
+  `item_data.ammo_unit = nil` (entry cleared), and vanilla `spawn_inventory_unit`
+  gates the torpedo attach on `item_units.ammo_unit` being truthy
+  (`gear_utils.lua:164/243`). Crafted-no-skin and native-skin both yield
+  `item_units.ammo_unit = nil` for the owner.
+- **HUSK (remote-view) path is the surviving vector.** The husk `_wield_slot`
+  calls `BackendUtils.get_item_units(item_data, nil, slot.skin, career)` with
+  `backend_id = nil` (`simple_husk_inventory_extension.lua:662`), so cwv's
+  `get_item_units` override early-returns (backend_id guard) and the husk resolves
+  the inherited **base `dr_deus_01`** item_data — whose `ammo_unit` IS the torpedo
+  (`item_master_list_morris.lua:7-8`). Vanilla then attaches it. A NATIVE item
+  dodges this because the cwv skin rides the wire (`skin.ammo_unit = nil`); a
+  CRAFTED item has no skin, so the base torpedo attaches — which is exactly why the
+  bug is **crafted-only**. The lone defenses are the career-gated post-spawn strip
+  (`_husk_strip_cwv_ammo`, #399) and the per-hand #478 defer, both of which need
+  the husk career to have synced.
+- **UNCONFIRMED:** the exact per-hand rekey / #478-defer / strip branch that leaves
+  the torpedo, and whether "sometimes" == a husk career-lookup miss at spawn time.
+  Per repo doctrine (diagnose-before-mitigate; a prior "source-confirmed" fix here
+  already failed), no speculative behavior change ships this build.
+
+### Changed
+- **[diag]** NEW `_om._probe_279_spawn`, called at every `GearUtils.spawn_inventory_unit`
+  (owner + husk, both hands, plus the #478 defer branch) for a `no_ammo_unit`
+  variant's base. Logs side (owner/husk), hand, base, backend_id, wire skin,
+  resolved husk career, in-strip-set, both resolved hand units, `item_units.ammo_unit`
+  /`ammo_unit_3p`, and whether vanilla attached an ammo 3P unit. `printf` (visible
+  with mod-logging OFF), `pcall`-wrapped, throttled once per distinct decision key.
+  No behavior change.
+
+### Verify (needs 2 players — the failure is on the REMOTE view)
+Host + client, both on cwv v0.1.381-dev (full Steam restart). One player equips a
+**crafted** Outrider Grenade Launcher and enters a mission; the OTHER player looks
+at them. If the torpedo shows, grab both console logs and read the `[cwv:279]`
+lines: the `side=husk` line for the wielder's `dr_deus_01` will show `career=`,
+`in_strip_set=`, `iu.ammo_unit=`, and `vanilla_attached_ammo_3p=` — that pins the
+branch. Also capture whether a `[cwv husk-ammo-strip] SKIP` (career miss) line
+appears.
+
 ## 0.1.380-dev — 2026-07-12 — #423: peer-parity gate stops cwv damage-profile CTD on a non-cwv host [untested] [crash] [0-critical]
 
 ### Why
