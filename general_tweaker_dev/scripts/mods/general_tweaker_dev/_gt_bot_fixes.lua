@@ -1547,6 +1547,105 @@ local function _gt_backward_teleport_wants(blackboard, dist_sq)
 end
 mod._gt_backward_teleport_wants = _gt_backward_teleport_wants
 
+-- ----------------------------------------------------------------------------
+-- issue 515: teleport past no-return thresholds (composes with #142 + #492)
+-- ----------------------------------------------------------------------------
+-- Closes the three gaps #515 named. Everything below is gated on the SAME
+-- gt_bot_ignore_backward_gate (+ Bot Behavior master) toggle as #142, so with the
+-- toggle OFF every path is byte-for-byte vanilla. Host-side only: bot AI is
+-- server-owned and these paths only read/write the host's own bot blackboards and
+-- call the vanilla teleport action (which already syncs has_teleported over the
+-- game object), so there is NO new RPC, NetworkLookup key, or wire field -- nothing
+-- a non-host peer can crash or desync on.
+
+-- GAP 1: re-arm the vanilla one-shot teleport latch. Vanilla sets
+-- blackboard.has_teleported = true in the teleport action
+-- (bt_bot_teleport_to_ally_action.lua:93) and clears it ONLY in
+-- BTBotFollowAction.enter (bt_bot_follow_action.lua:14) -- the follow branch. A bot
+-- that teleports and then goes straight into combat / an aid pursuit (never
+-- re-entering the follow node) holds the latch forever, so a later genuine need (a
+-- second shove past a no-return threshold) can never teleport. This PURE helper
+-- (testability seam, no engine reads) says when to clear the latch: the toggle is on,
+-- the latch is set, and it has been held >= GT515_REARM_COOLDOWN_S since the bot's
+-- last ACTUAL teleport (nil last => never teleported through our action, so re-arm is
+-- safe). The downstream distance / path-fail gates still decide whether a teleport
+-- actually fires, so a close, following bot never re-teleports; the cooldown is only
+-- the anti-spam backstop, sized inside the 3..12 s band vanilla itself uses to
+-- declare a follow target unreachable (bt_bot_conditions.lua:1203, player_bot_base
+-- .lua:1943-1946).
+local GT515_REARM_COOLDOWN_S = 3.0
+local function _gt515_should_rearm(has_teleported, toggle_on, now, last_tp)
+    if not (has_teleported and toggle_on and now) then
+        return false
+    end
+    return (not last_tp) or (now - last_tp) >= GT515_REARM_COOLDOWN_S
+end
+mod._gt515_should_rearm = _gt515_should_rearm
+-- #515 GAP 1 regression marker (read by gt_bot515_teleport_latch_rearm).
+GT_BOT515_LATCH_REARM_MARKER_v0_2_203 = "gt-bot515-teleport-latch-rearm"
+
+-- GAP 2: extend the #142 backward-segment bypass to the follow/aid teleport_no_path
+-- node (condition cant_reach_ally). PURE decision core (no engine reads). Vanilla
+-- cant_reach_ally (bt_bot_conditions.lua:1167-1203) early-returns false for a
+-- backward follow target (:1183-1187 is_backwards) BEFORE the fails/dwell test, so a
+-- bot shoved past a no-return threshold (team behind it, straight-line < 40 m so the
+-- should_teleport leash never fires) can never use this node. We drop only that early
+-- return: is_forwards is false for a backward target, so the fails threshold is the
+-- stricter non-forward 5 (never the forward 1) and the same t - last_success > 5
+-- dwell and moving_toward_follow_position gate still apply -- a sustained failing path
+-- IS the proof of unreachability, exactly as vanilla treats the same-segment case.
+local function _gt515_cant_reach_backward_decide(is_backwards, moving_toward, fails, t, last_success)
+    if not is_backwards then
+        return false
+    end
+    local is_forwards = false   -- backward target => vanilla's non-forward branch (fails > 5)
+    return (moving_toward and fails > (is_forwards and 1 or 5) and (t - last_success) > 5) and true or false
+end
+mod._gt515_cant_reach_backward_decide = _gt515_cant_reach_backward_decide
+
+-- Engine-facing wrapper for GAP 2: reads the SAME state vanilla cant_reach_ally reads
+-- (segments, navmesh whereabouts, successive_failed_paths, game time) and delegates
+-- the verdict to the pure core. Returns true only for a genuinely-backward,
+-- genuinely-unreachable follow target; the #139 / #492 aid composition is applied by
+-- the caller (the cant_reach_ally hook), never here, so this stays pure geometry.
+local function _gt_cant_reach_ally_backward_wants(blackboard)
+    if not blackboard then return false end
+    local group_ext = blackboard.ai_bot_group_extension
+    local follow_unit = group_ext and group_ext.data and group_ext.data.follow_unit
+    if not ALIVE[follow_unit] or blackboard.has_teleported then
+        return false
+    end
+    local self_unit = blackboard.unit
+    local conflict_director = Managers.state.conflict
+    local self_segment = conflict_director:get_player_unit_segment(self_unit)
+    local target_segment = conflict_director:get_player_unit_segment(follow_unit)
+    if not self_segment or not target_segment then
+        return false
+    end
+    local is_backwards = target_segment < self_segment
+    if not is_backwards then
+        -- Forward / same segment: vanilla cant_reach_ally already owns this decision
+        -- (func() ran first in the hook). Never second-guess the forward path.
+        return false
+    end
+    local self_wb = ScriptUnit.has_extension(self_unit, "whereabouts_system")
+    local follow_wb = ScriptUnit.has_extension(follow_unit, "whereabouts_system")
+    local self_position = self_wb and self_wb:last_position_on_navmesh()
+    local follow_position = follow_wb and follow_wb:last_position_on_navmesh()
+    if not self_position or not follow_position then
+        return false
+    end
+    local navigation_extension = blackboard.navigation_extension
+    if not navigation_extension then return false end
+    local fails, last_success = navigation_extension:successive_failed_paths()
+    if type(last_success) ~= "number" then
+        return false   -- engine hasn't recorded a success yet -> stay conservative (more so than vanilla)
+    end
+    local t = Managers.time:time("game")
+    return _gt515_cant_reach_backward_decide(is_backwards, blackboard.moving_toward_follow_position, fails, t, last_success)
+end
+mod._gt_cant_reach_ally_backward_wants = _gt_cant_reach_ally_backward_wants
+
 mod:hook("BTConditions", "should_teleport", function (func, blackboard)
     -- Bot Teleport Lab (diagnostics) dispatch: D1 decision-recorder + D4 segment
     -- probe + D5 aid probe. Merged here because VMF drops a 2nd hook on this
@@ -1554,6 +1653,28 @@ mod:hook("BTConditions", "should_teleport", function (func, blackboard)
     -- (pcall-guarded, gated on gt_btlab_enabled). See _gt_bot_teleport_lab.lua.
     if mod._gt_btlab_observe_should_teleport then
         mod._gt_btlab_observe_should_teleport(blackboard)
+    end
+
+    -- issue 515 GAP 1: re-arm the vanilla one-shot has_teleported latch so a bot that
+    -- already teleported once can teleport again later in the run (rationale +
+    -- cooldown in _gt515_should_rearm above). Runs BEFORE func() so a cleared latch
+    -- lets even vanilla's own 40 m rule re-fire. State is only touched under the
+    -- toggle; the distance / path-fail gates below still gate the ACTUAL teleport, so
+    -- this cannot spam (a close, following bot never re-teleports). The re-arm also
+    -- un-gates the shared latch for cant_reach_ally (GAP 2), which reads the same
+    -- blackboard.has_teleported.
+    if blackboard.has_teleported and _gt_ignore_backward_gate_on() then
+        local now = Managers.time and Managers.time.time and Managers.time:time("game")
+        if _gt515_should_rearm(true, true, now, blackboard._gt515_last_tp_t) then
+            -- One print per re-arm event: clearing the latch makes this branch false
+            -- next tick until the bot actually teleports again (has_teleported true) and
+            -- another cooldown elapses -- self-limiting, no per-frame spam.
+            if rawget(_G, "printf") then
+                printf("[gt:515] teleport latch re-armed for a stuck bot (held %.1fs since last teleport) -- it can teleport again",
+                    blackboard._gt515_last_tp_t and (now - blackboard._gt515_last_tp_t) or -1)
+            end
+            blackboard.has_teleported = false
+        end
     end
 
     -- CAPTURE the vanilla decision (do NOT early-return it) so the Bot Teleport
@@ -1640,6 +1761,57 @@ end)
 GT_BOT139_LEASH_VETO_AIDPRIORITY_MARKER_v0_2_185 = "gt-bot139-teleport-veto-while-teammate-needs-aid"
 GT_BOT_FOLLOW_MODE_DROPDOWN_MARKER_v0_2_152 = "gt-bot-follow-mode-dropdown-consolidation"
 
+-- issue 515 GAP 2 + GAP 3: backward bypass for the follow/aid teleport_no_path node
+-- (condition cant_reach_ally, bt_bot.lua:431-435). A SEPARATE (Class, method) from
+-- should_teleport, so no VMF duplicate-hook collision -- verified the only other
+-- BTConditions hooks in this mod are can_activate_ability and should_teleport.
+-- Vanilla's forward decision is returned untouched; ONLY the new backward path is
+-- governed by the #139 / #492 aid composition, mirroring the should_teleport hook
+-- exactly so a REACHABLE revive still wins, but a #492-bailed bot (unreachable down,
+-- team behind it) can teleport back to regroup (GAP 3). Unlike should_teleport this
+-- node has NO 40 m floor -- it fires purely on sustained path failure -- so it covers
+-- the close-range no-return case (a ledge into the next room 15 m away) the leash
+-- misses. Host-side (bot AI server-owned); no wire surface.
+mod:hook("BTConditions", "cant_reach_ally", function (func, blackboard)
+    local want = func(blackboard) and true or false
+    if want then
+        return true                                  -- vanilla forward teleport_no_path, untouched
+    end
+    if not blackboard or not _gt_ignore_backward_gate_on() then
+        if blackboard then blackboard._gt515_creach_latched = nil end
+        return false                                 -- toggle off => pure vanilla
+    end
+    if not _gt_cant_reach_ally_backward_wants(blackboard) then
+        blackboard._gt515_creach_latched = nil
+        return false
+    end
+    -- #139 / #492 composition (identical discipline to the should_teleport hook):
+    -- while aid-priority is ON and a teammate genuinely needs aid, do NOT let this new
+    -- backward teleport pull the bot off a REACHABLE revive -- UNLESS the #492
+    -- watchdog already bailed this bot out of an UNREACHABLE aid pursuit
+    -- (blackboard._gt492_bailout), in which case the backward teleport is exactly how
+    -- it regroups (item 3). Vanilla's forward path above is never subject to this veto.
+    if not blackboard._gt492_bailout and _gt_aid_priority_on()
+            and _gt_any_side_teammate_needs_aid(blackboard.unit) then
+        if rawget(_G, "printf") and blackboard._gt515_creach_latched ~= "veto" then
+            blackboard._gt515_creach_latched = "veto"
+            printf("[gt:515] cant_reach_ally backward teleport VETOED -- teammate needs aid, bot paths to revive")
+        end
+        return false
+    end
+    -- Allowed: stamp the reason so the existing BTBotTeleportToAllyAction.run probe
+    -- names this trigger ("backward_no_path") instead of reporting "other".
+    blackboard._gt139_tp_reason = "backward_no_path"
+    if rawget(_G, "printf") and blackboard._gt515_creach_latched ~= "allow" then
+        blackboard._gt515_creach_latched = "allow"
+        printf("[gt:515] cant_reach_ally backward bypass -> teleport_no_path (bot regroups across a no-return threshold)")
+    end
+    return true
+end)
+
+-- #515 GAP 2 regression marker (read by gt_bot515_cant_reach_backward_bypass).
+GT_BOT515_CANT_REACH_BACKWARD_MARKER_v0_2_203 = "gt-bot515-cant-reach-ally-backward-bypass"
+
 -- Debug confirmation that the teleport ACTION actually executed -- a SEPARATE
 -- (Class, method) pair from FIX 7's BTConditions.should_teleport, so not a
 -- duplicate hook. Fires for every bot teleport (vanilla 40 m, the tighter leash,
@@ -1676,6 +1848,13 @@ mod:hook("BTBotTeleportToAllyAction", "run", function (func, self, unit, blackbo
     local p139_reason = (blackboard and blackboard._gt139_tp_reason) or "other"
 
     local result = func(self, unit, blackboard, t, dt)
+
+    -- issue 515 GAP 1: record when this bot last teleported so the should_teleport
+    -- hook's latch re-arm measures its cooldown from the last ACTUAL teleport. Stamped
+    -- for every teleport (vanilla 40 m, tighter leash, backward, no-path).
+    if blackboard then
+        blackboard._gt515_last_tp_t = t
+    end
 
     -- ---- PRESERVED FIX 7 / #139 body (unchanged) ----
     mod:debug("[gt:bot-leash] TELEPORT executed (bot snapped to its follow target)")

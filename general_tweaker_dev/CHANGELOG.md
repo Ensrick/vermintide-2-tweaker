@@ -1,5 +1,31 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.203-dev (2026-07-12) -- #515 bots teleport past no-return thresholds (composes with #142 + #492) [verify-fix]
+
+All three changes are gated on the existing `gt_bot_ignore_backward_gate` (+ Bot Behavior master) toggle, so with the toggle OFF every path stays byte-for-byte vanilla. Host-side only: bot AI is server-owned, and these paths only read/write the host's own bot blackboards and call the vanilla teleport action (which already syncs `has_teleported` over the game object) -- no new RPC / NetworkLookup key / wire field, so nothing a non-host peer can crash or desync on.
+
+### Why (issue 492 rejection, item 3)
+There is NO dedicated "point of no return" teleport-disable in vanilla; the only gates that stop a bot regrouping are in `BTConditions.should_teleport` (backward-segment gate `target_segment < self_segment`, bt_bot_conditions.lua:1220-1222; 40 m distance; aid exception) and in `cant_reach_ally` (same backward gate :1183-1187). gt already bypassed the should_teleport segment gate (#142), but three gaps remained: the `has_teleported` one-shot latch could permanently block a re-teleport, the bypass never reached the aid/`teleport_no_path` node, and a #492-bailed bot still could not teleport back across a boundary.
+
+### GAP 1 -- re-arm the one-shot teleport latch (`_gt_bot_fixes.lua`)
+Vanilla sets `blackboard.has_teleported = true` in the teleport action (bt_bot_teleport_to_ally_action.lua:93) and clears it ONLY in `BTBotFollowAction.enter` (bt_bot_follow_action.lua:14) -- the follow branch. A bot that teleports and then goes straight into combat / an aid pursuit (never re-entering the follow node) holds the latch forever, so a second shove past a threshold can never teleport.
+- **New pure `mod._gt515_should_rearm(has_teleported, toggle_on, now, last_tp)`**: clears the latch when the toggle is on, the latch is set, and it has been held >= `GT515_REARM_COOLDOWN_S = 3` s since the bot's last ACTUAL teleport (the `BTBotTeleportToAllyAction.run` hook now stamps `blackboard._gt515_last_tp_t`). Re-arm runs at the TOP of the `should_teleport` hook (before `func()`), so a cleared latch re-arms vanilla's own 40 m rule too, AND the shared latch for GAP 2. The downstream distance / path-fail gates still gate the ACTUAL teleport, so a close, following bot never re-teleports; the cooldown is only the anti-spam backstop, sized inside the 3..12 s band vanilla itself uses to declare a follow target unreachable (bt_bot_conditions.lua:1203, player_bot_base.lua:1943-1946).
+
+### GAP 2 + GAP 3 -- backward bypass on the aid/`teleport_no_path` node (`_gt_bot_fixes.lua`)
+- **New hook on `BTConditions.cant_reach_ally`** (the condition for the follow-selector `teleport_no_path` node, bt_bot.lua:431-435) -- a SEPARATE (Class, method) from `should_teleport`, so no VMF duplicate-hook collision (only other BTConditions hooks in the mod are `can_activate_ability` + `should_teleport`). Vanilla's forward decision is returned untouched; only the NEW backward path is added.
+- **New pure `mod._gt515_cant_reach_backward_decide` + engine wrapper `mod._gt_cant_reach_ally_backward_wants`**: mirror vanilla `cant_reach_ally` (bt_bot_conditions.lua:1189-1203) MINUS the `is_backwards` early return (:1183-1187). `is_forwards` is false for a backward target, so the fails threshold is the stricter non-forward 5 and the same `t - last_success > 5` dwell + `moving_toward_follow_position` gate still apply -- a sustained failing path IS the proof of unreachability. Unlike `should_teleport` this node has NO 40 m floor, so it covers the close-range no-return case (a ledge into the next room ~15 m away) the leash misses.
+- **Composes with #139 / #492 exactly as `should_teleport` does**: while aid-priority is ON and a teammate needs aid, the new backward teleport is VETOED so the bot does not abandon a REACHABLE revive -- UNLESS the #492 watchdog already bailed this bot out of an UNREACHABLE aid pursuit (`blackboard._gt492_bailout`), in which case the backward teleport is exactly how it regroups (GAP 3). The #492 machine (`_gt492_step`, the `[gt:492]` printfs, the picker/veto actuator) is unchanged.
+
+### Observability (PROJECT_STANDARDS 2.2b tier c, always-on dev, no toggle)
+- **`[gt:515]` printf at each new decision point, per-event (never per-frame):** latch re-arm (per re-arm), `cant_reach_ally` backward VETO and backward ALLOW (latched via `blackboard._gt515_creach_latched`, one line per transition). The allow path also stamps `blackboard._gt139_tp_reason = "backward_no_path"` so the existing `BTBotTeleportToAllyAction.run` `[139:bot_tp]` probe names the trigger.
+
+### Regression
+- **`gt_bot515_teleport_latch_rearm`** (new): marker + drives `_gt515_should_rearm` across latch-unset / toggle-off / no-time / in-cooldown / cooldown-elapsed / nil-last.
+- **`gt_bot515_cant_reach_backward_bypass`** (new): marker + seam exposure + drives `_gt515_cant_reach_backward_decide` across forward-owned-by-vanilla / backward-fires / fails-threshold / dwell / not-moving. Both are runtime-only (no `io.open`, per #511).
+
+### In-game verify (issue 515)
+Host a run with 2 bots, Bot Behavior master + "Bots go back for stragglers and past no-return points" both ON. Get a bot shoved past a one-way threshold (over a ledge / through a drop into the next area) so the team is behind it and it cannot walk back. Expected WITH the toggle on: within a few seconds the bot teleports back to regroup, and the newest console log shows `[gt:515] cant_reach_ally backward bypass -> teleport_no_path` (close-range case) or a re-armed latch / backward `should_teleport` for the far case; if it happens twice in a run, the second teleport still fires. Turn the toggle OFF and repeat: the bot stays vanilla-stuck (no `[gt:515]` line, no teleport). Reachable-down control: a teammate down right next to a bot must still be revived normally and NOT trigger a backward teleport away. Requires `[gt:LOAD] v0.2.203-dev` after a full Steam restart.
+
 ## v0.2.202-dev (2026-07-12) -- #492 REWORK aid-pursuit recovery + #511 io-nil regression-check repair [verify-fix]
 
 ### #511: regression checks threw `io` nil in the VMF sandbox (false FAILs)

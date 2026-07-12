@@ -73,8 +73,8 @@ return {
     gt_bot_aid_priority = { en = "[verify-fix] [Issue 492] Bots prioritize reviving and rescuing" },
     gt_bot_aid_priority_tooltip = { en = "Downed, hooked, and ledge-hanging allies always outrank following and other chores, so a bot commits to the revive or rescue and walks the whole way there." },
 
-    gt_bot_ignore_backward_gate = { en = "[untested] Bots go back for teammates who fall behind" },
-    gt_bot_ignore_backward_gate_tooltip = { en = "The game normally refuses to teleport or path a bot backward along the level, so a player who drops behind it is left on their own until they catch up. With this on that block is lifted: a lagging follow target still pulls the bot back, and a teammate who goes down behind the bot is retried right away instead of waiting out the usual delay. Reviving and rescuing keep priority over merely catching up." },
+    gt_bot_ignore_backward_gate = { en = "[verify-fix] [Issue 515] Bots go back for stragglers and past no-return points" },
+    gt_bot_ignore_backward_gate_tooltip = { en = "The game normally refuses to teleport or path a bot backward along the level, so a player who drops behind it is left alone until they catch up, and a bot shoved past a point of no return (over a ledge into the next area) stays stuck for the rest of the run. With this on that block is lifted: a lagging follow target still pulls the bot back, a teammate who goes down behind the bot is retried right away, and a bot that cannot walk back to the team teleports to regroup once it is genuinely stuck, and can do so again later in the run. Reviving and rescuing keep priority over merely catching up." },
 
     gt_bot_ironbreaker_revive_in_ult = { en = "[working] Ironbreaker bots revive during their ult" },
     gt_bot_ironbreaker_revive_in_ult_tooltip = { en = "The career skill no longer parks the bot in a blocking stance for its whole duration; the bot breaks off to revive or rescue an ally while the damage-reduction buff keeps running." },

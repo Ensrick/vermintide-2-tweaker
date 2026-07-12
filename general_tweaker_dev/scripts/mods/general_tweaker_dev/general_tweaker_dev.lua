@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.202-dev"
+local MOD_VERSION = "0.2.203-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1676,6 +1676,73 @@ _rt_register("gt_bot492_aid_stall_recovery", function()
     -- QA gate (PROJECT_STANDARDS 2.2b tier a).
     if type(mod._gt492_should_suppress_pick) ~= "function" or type(mod._gt492_aid_stall_tick) ~= "function" then
         return "mod._gt492 actuator seams not exposed -- picker suppression / stall tick missing"
+    end
+end)
+
+_rt_register("gt_bot515_teleport_latch_rearm", function()
+    -- issue 515 GAP 1: the vanilla one-shot has_teleported latch (set in the teleport
+    -- action bt_bot_teleport_to_ally_action.lua:93, cleared only in
+    -- BTBotFollowAction.enter :14) is made re-armable under the backward-gate toggle,
+    -- so a bot that teleported once and then went straight into combat / an aid
+    -- pursuit (never re-entering the follow node) can still teleport again later.
+    -- Marker + the pure re-arm decision (no engine reads).
+    if GT_BOT515_LATCH_REARM_MARKER_v0_2_203 ~= "gt-bot515-teleport-latch-rearm" then
+        return "issue-515 latch re-arm marker absent -- was GAP 1 reverted?"
+    end
+    local ra = mod._gt515_should_rearm
+    if type(ra) ~= "function" then
+        return "mod._gt515_should_rearm not exposed -- the #515 re-arm seam is missing"
+    end
+    -- Latch not set: nothing to re-arm.
+    if ra(false, true, 100, 50) ~= false then return "re-arm must be false when has_teleported is not set" end
+    -- Toggle off: vanilla latch behavior preserved (never re-arm).
+    if ra(true, false, 100, 50) ~= false then return "re-arm must be false when the backward-gate toggle is off" end
+    -- No game time yet (boot / pre-mission): never re-arm.
+    if ra(true, true, nil, 50) ~= false then return "re-arm must be false when game time is unavailable" end
+    -- Within the cooldown window: hold the latch (anti-spam).
+    if ra(true, true, 100, 98) ~= false then return "re-arm must hold within the cooldown window" end
+    -- Cooldown elapsed: re-arm.
+    if ra(true, true, 100, 90) ~= true then return "re-arm must fire once the cooldown elapses" end
+    -- Latch set but no recorded last teleport: re-arm (safe; downstream gates still apply).
+    if ra(true, true, 100, nil) ~= true then return "re-arm must fire when there is no recorded last teleport" end
+end)
+
+_rt_register("gt_bot515_cant_reach_backward_bypass", function()
+    -- issue 515 GAP 2/3: the follow/aid teleport_no_path node (condition
+    -- cant_reach_ally) gains a backward-segment bypass so a bot pushed past a
+    -- no-return threshold but unable to PATH back can teleport to regroup. Marker +
+    -- seam exposure + the pure decision core (mirrors vanilla cant_reach_ally
+    -- bt_bot_conditions.lua:1189-1203 MINUS the is_backwards early return :1183-1187;
+    -- no engine reads, so it is unit-testable).
+    if GT_BOT515_CANT_REACH_BACKWARD_MARKER_v0_2_203 ~= "gt-bot515-cant-reach-ally-backward-bypass" then
+        return "issue-515 cant_reach_ally backward-bypass marker absent -- was GAP 2 reverted?"
+    end
+    local decide = mod._gt515_cant_reach_backward_decide
+    if type(decide) ~= "function" then
+        return "mod._gt515_cant_reach_backward_decide not exposed"
+    end
+    if type(mod._gt_cant_reach_ally_backward_wants) ~= "function" then
+        return "mod._gt_cant_reach_ally_backward_wants not exposed -- the GAP 2 engine wrapper is missing"
+    end
+    -- Forward / same segment: NEVER handled here (vanilla func owns the forward path).
+    if decide(false, true, 99, 100, 0) ~= false then
+        return "backward decide must be false for a forward/same-segment target (vanilla owns forward)"
+    end
+    -- Backward + moving + sustained fails (>5) + >5s since last success => teleport.
+    if decide(true, true, 6, 100, 90) ~= true then
+        return "backward decide must fire on a backward target with fails>5 and >5s since last path success"
+    end
+    -- Backward but only 5 fails (not > 5): vanilla's non-forward threshold not met.
+    if decide(true, true, 5, 100, 90) ~= false then
+        return "backward decide must require fails > 5 (vanilla non-forward branch)"
+    end
+    -- Backward + fails but last path success only 3s ago (<= 5s dwell): no teleport.
+    if decide(true, true, 9, 100, 97) ~= false then
+        return "backward decide must require t - last_success > 5"
+    end
+    -- Backward + failing but the bot is not moving toward the follow target: no teleport.
+    if decide(true, false, 9, 100, 90) ~= false then
+        return "backward decide must require moving_toward_follow_position"
     end
 end)
 
