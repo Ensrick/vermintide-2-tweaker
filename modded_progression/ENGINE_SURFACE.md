@@ -1,0 +1,144 @@
+# modded_progression - engine contact surface
+
+What vanilla VT2/Stingray does at every seam `modded_progression` (`mp`) touches,
+and why the mod is there. This is the per-mod companion to the subsystem set in
+`docs/engine/` (read `docs/engine/README.md` for house style). It does **not**
+re-explain a subsystem the engine docs own, and it does **not** duplicate the
+mod's `PLAN.md` (the full re-enable design, interception map, build order) - it
+names each engine seam, cites the vanilla behavior, and links out. Decompile
+paths are relative to `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`;
+`mp` line numbers are `modded_progression.lua` unless noted. `§N` =
+a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue. Grep-verified
+2026-07-12 against the decompile.
+
+`mp` re-enables vanilla progression (XP, loot, currency, Okri's Challenges,
+Lohner's, keep crafting) in the modded realm, storing all state in VMF settings
+and never writing to the real PlayFab account. Its core architectural insight
+(`PLAN.md` "Core architectural insight") is that `script_data["eac-untrusted"]`
+is NOT one master gate: the PlayFab commit-suppression sites keep the real
+account safe and must stay live, while a separate set of UI sites merely grey out
+buttons and skip reward popups. `mp` therefore flips the flag to nil only inside
+a bracketed window around each vanilla UI/progression call, restores it on every
+exit path, and leaves the commit-suppression gate untouched. As of v0.2.16-dev
+the interception layer is scaffolding: 10 hooks + the sibling API are live; the
+`BackendInterface*Playfab` mirror interceptions in `PLAN.md` are not yet wired.
+
+## Hook table
+
+10 registration sites, all `mod:hook` (full wrapper), all string-form. `[hook]` =
+full wrapper (can rewrite args/returns). Nine route through the shared
+`_with_eac_off` wrapper (`:390`), which brackets the vanilla call between a
+flag-clear and a flag-restore; one (`IngameUI.not_in_modded`) is a flat
+return-true override. There are no `hook_safe` sites and no table-form hooks. The
+`_with_eac_off` wrapper is a single load-bearing row-of-concern (issue 434) called
+out below and shared by all nine of its callers.
+
+### The EAC-window bracket - shared wrapper (row-of-concern: issue 434) (owner doc: `docs/engine/11`)
+
+| Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
+|---|---|---|---|
+| `_with_eac_off` (shared wrapper, not a hook) `:390` | - | Clears `script_data["eac-untrusted"]` to nil, runs the wrapped vanilla body under `pcall`, then restores the flag AND decrements `mod._mp_eac_depth` on EVERY exit path, re-raising any error transparently | ROW-OF-CONCERN. A throw inside the body must not leak `eac-untrusted = nil` globally: the commit-suppression sites `playfab_mirror_base.lua:2826`/`:2839`/`:2857` gate real-account statistics/weave/item writes on that exact flag [src verified], so a leaked nil re-enables the writes `mp` exists to prevent (issue 434; regression `eac_flag_restored_after_throw` `:412`). Multi-return preserved via `select("#")` + explicit `unpack` bounds - nil-hole collapse class that burned weapon_tweaker v0.12.77/.78 |
+
+### Reward popups + progression UI un-gate (owner doc: `docs/engine/09`, feeds `docs/engine/11`)
+
+| Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
+|---|---|---|---|
+| `LevelEndViewBase.init` [hook] `:430` | Builds the end-of-mission reward reel (level-up, deed, deus, keep-decoration, event, win-track, versus-level-up); each popup is skipped in init when `is_untrusted` is true [src: `scripts/ui/views/level_end/level_end_view_base.lua:59-71` per PLAN.md] | Run the body with the flag cleared so the reward popups the modded realm earned actually display (`:430`) | Wrapped in `_with_eac_off`; hot-ish (once per mission end) but not per-frame |
+| `HeroViewStateAchievements._create_entries` [hook] `:435` / `_handle_claim_all_challenges` [hook] `:436` | Okri's Challenges list: `_create_entries` sets the `completed`/claimable flag per entry (`:646`); `_handle_claim_all_challenges` gates the claim-all button (`:2992`) [src: `scripts/ui/views/hero_view/states/hero_view_state_achievements.lua`, lines per PLAN.md] | Un-gate the challenge list + claim-all so earned challenges are claimable (`:435`) | Two distinct methods on one class, no hook collision; both `_with_eac_off` |
+| `StoreWindowItemPreview._set_unlock_button_states` [hook] `:442` | Lohner's Emporium: enables/disables the buy button (`:1873`) [src: `scripts/ui/views/store/windows/store_window_item_preview.lua` per PLAN.md] | Enable the buy button for currency the modded realm holds (`:442`) | `_with_eac_off` |
+| `StoreItemPurchasePopup._create_ui_elements` [hook] `:443` | Emporium purchase-confirm popup buy-button disable flag (`:1149`) [src: `scripts/ui/views/store/store_item_purchase_popup.lua` per PLAN.md] | Enable the confirm-buy button (`:443`) | `_with_eac_off` |
+| `StoreLoginRewardsPopup._create_ui_elements` [hook] `:444` | Daily-login-rewards claim button (`:57`) [src: `scripts/ui/views/store/store_login_rewards_popup.lua` per PLAN.md] | Enable the login-rewards claim button (`:444`) | `_with_eac_off` |
+| `HeroWindowItemCustomization._enable_craft_button` [hook] `:449` / `_update_state_craft_button` [hook] `:450` | Vanilla keep crafting bench: `_enable_craft_button` flips the `enable` arg false in modded (`:1878`); `_update_state_craft_button` sets the button-hotspot disable flag (`:1928`) [src: `scripts/ui/views/hero_view/windows/hero_window_item_customization.lua` per PLAN.md] | Re-enable the keep bench craft button so vanilla-cost crafting works (`:449`) | `_with_eac_off`; cim owns the Athanor sandbox, mp owns the keep bench (`docs/CROSS_MOD_ARCHITECTURE.md` Mod 4) |
+| `IngameUI.not_in_modded` [hook] `:454` | Returns `not script_data["eac-untrusted"]` - a generic "is this a trusted UI surface" query [src: `scripts/ui/views/ingame_ui.lua:381-382` verified] | Force-return true so generic UI surfaces treat the session as trusted (`:454`) | The ONLY hook that is a flat override, not an `_with_eac_off` bracket - it does not touch the global flag, so no commit-suppression exposure |
+
+### Achievement progress tracking (row-of-concern) (owner doc: `docs/engine/11`)
+
+| Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
+|---|---|---|---|
+| `AchievementManager.trigger_event` [hook] `:460` | The entry point for EVERY achievement progress event (kill counts, mission completion, tome/grim, etc.); returns immediately when `DEDICATED_SERVER or script_data["eac-untrusted"]` is true [src: `scripts/managers/achievements/achievement_manager.lua:124-125` verified] | Run the body with the flag cleared so challenge progress counters actually tick - without this, un-gating the claim button gets nothing (PLAN.md research #3) (`:460`) | ROW-OF-CONCERN: highest throw-exposure `_with_eac_off` caller (hot per-mission path) - this is the fn issue 434's restore-on-throw exists to protect. The `DEDICATED_SERVER` half of the gate still holds (only the `eac-untrusted` half is flipped). `AchievementManager.update` (`:294`, the Steam platform-push loop) is deliberately LEFT gated - local tracking needs no Steam push [src: `achievement_manager.lua:294` verified] |
+
+## Subsystem notes (how the vanilla flow runs end-to-end, for mp's cases)
+
+Each note is the minimum needed to read the hooks above; the owning `docs/engine`
+doc and `PLAN.md` carry the full architecture.
+
+### Why the flag is bracketed, not globally cleared (owner: `docs/engine/11`)
+
+`script_data["eac-untrusted"]` gates two unrelated things (PLAN.md "Core
+architectural insight"): (1) UI button-greying / popup-skipping - the ~10 sites
+`mp` un-gates, harmless to flip; (2) PlayFab commit suppression at
+`playfab_mirror_base.lua:2826` (statistics), `:2839` (weaves), `:2857` (items)
+[src verified], the sites that keep the real account safe. `mp` must NEVER leave
+that flag nil outside a wrapped call, or a real-account write leaks out - the
+exact thing the mod exists to prevent. Hence `_with_eac_off` (`:390`) clears the
+flag, runs one vanilla body, and restores it, with a `pcall`+re-raise so a throw
+cannot skip the restore (issue 434). The `mod._mp_eac_depth` counter mirrors the
+bracket so `mod.is_eac_window()` (`:379`) can tell a sibling (cosmetics' #174
+chokepoint) whether the realm is currently un-gated. `IngameUI.not_in_modded` is
+the one exception: it reads the flag but `mp` overrides the RETURN, never the
+global, so it carries no suppression exposure.
+
+### Backend mirror as the single source of truth (owner: `docs/engine/11`)
+
+The design (not yet wired, PLAN.md "Interception map") is that the in-memory
+`backend_mirror` is what every UI screen, `can_wield` check, and currency display
+reads. The planned interceptions catch each `BackendInterface*Playfab.*` method
+before it queues a cloud-script call, roll the data locally, and call the same
+`backend_mirror:*` mutator the success callback would have - so the rest of the
+game cannot tell the difference. Persistence is a re-serialize of the modded
+mirror slice back to VMF settings on every mutation, re-applied over the fresh
+real-account mirror at boot (PLAN.md "Local persistence model"). Until those land,
+the currency/unlock/inventory stores (`:195`-`:349`) and the sibling API are
+backed directly by VMF settings.
+
+### Sibling API surface (owner: `docs/engine/11`; detail: `docs/CROSS_MOD_ARCHITECTURE.md` Mod 4)
+
+`mp` exposes `is_unlocked` / `mark_unlocked` / `has_currency` / `spend` /
+`credit` / `get_currency` / `grant_item` on the `mod` table (`:311`-`:349`) for
+`character_weapon_variants` and `cosmetics_tweaker` to consult via `get_mod("mp")`
+[src: `docs/CROSS_MOD_ARCHITECTURE.md:311-331`]. Pre-seed, `is_unlocked` returns
+true (don't gate anything before the realm is seeded), so siblings never break
+during scaffolding. Cross-mod refs resolve against the stable `mp` id (there is no
+`mp_dev` clone). The consuming gates (CWV `can_wield`, cosmetics illusion/portrait
+unlocks) live in those mods, not here.
+
+## What the engine will NOT let us do (dead ends, already paid for)
+
+Pulled from `PLAN.md` (research findings, risks) and the code comments - do not
+re-discover these.
+
+- **`eac-untrusted` is not a single switch you can leave off.** Clearing it
+  globally re-enables real-account PlayFab commits at
+  `playfab_mirror_base.lua:2826`/`:2839`/`:2857`. The flag must be flipped only
+  inside a bracket that restores it on every path including a throw (issue 434) -
+  a leaked nil silently defeats the mod's whole non-destructive premise.
+- **Un-gating the claim button alone does nothing.** Okri's Challenge progress is
+  separately halted at `AchievementManager.trigger_event` (`:124-125`), so the
+  claim popup shows zero progress until the tracking hook also runs the body. Both
+  the UI gate AND the tracking gate must be un-gated (PLAN.md research #3).
+- **Loot-rolling probabilities are server-side and not in the Lua tree.** The
+  chest-open / property-roll / trait-roll weight tables live in PlayFab
+  CloudScript, not `scripts/`. `mp` can only ship a hand-tuned local
+  approximation (VMF sliders) or dump PlayFab title-data at sign-in; it cannot
+  reproduce the official rolls exactly (PLAN.md research #6, "Risks").
+- **`crafting_recipes` / `CraftingData` are `dofile`-referenced but absent from
+  the extracted source.** They must be dumped from the running game
+  (`dofile + table.dump`) before the crafting-bench interception can be authored -
+  they are not in the decompile (PLAN.md research #1, "Items still gated on a
+  runtime dump").
+
+## Doc maintenance
+
+Follows `docs/engine/README.md` maintenance rules: if an mp hook moves, a guard is
+added, or a cited vanilla line drifts after a game patch, edit the affected row in
+the SAME commit. This doc complements, and must not duplicate, `PLAN.md` (the full
+re-enable design + interception map) - when the interception layer lands, `PLAN.md`
+is the primary and this doc gains the `BackendInterface*Playfab` rows. Per-view UI
+gate interior lines (`level_end_view_base.lua:59-71`, `hero_view_state_achievements`
+`:646`/`:2992`, the store/customization lines) are cited from `PLAN.md`'s decompile
+research; the load-bearing flag/commit sites (`not_in_modded`, `trigger_event`,
+`playfab_mirror_base.lua:2826/2839/2857`) were re-verified this pass. Line numbers
+are against the 2026-07-12 decompile - match crash logs by function name, not line.
+Section shape (hook table -> subsystem notes -> dead ends) matches
+`character_weapon_variants/ENGINE_SURFACE.md`. Reverse index:
+`docs/engine/README.md` "Per-mod surface docs".

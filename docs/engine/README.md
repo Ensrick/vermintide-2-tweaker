@@ -83,6 +83,10 @@ subsystem docs.
 | career_tweaker | `career_tweaker/ENGINE_SURFACE.md` | 24 | 01 03 09 10 11 |
 | event_tweaker | `event_tweaker/ENGINE_SURFACE.md` | 10 | 03 05 07 08 11 |
 | enemy_tweaker | `enemy_tweaker/ENGINE_SURFACE.md` | 25 (+3 dormant BR) | 01 03 04 07 10 |
+| modded_progression | `modded_progression/ENGINE_SURFACE.md` | 10 (+ sibling API) | 09 11 |
+| weapons_of_chaos | `weapons_of_chaos/ENGINE_SURFACE.md` | 3 (+ direct IML/NetworkLookup append) | 03 05 06 08 |
+| dynamic_cosmetic_portraits | `dynamic_cosmetic_portraits/ENGINE_SURFACE.md` | 1 (+ career_settings swap + VMF material inject) | 06 09 11 |
+| verminious_dreams_lighting_dev | `verminious_dreams_lighting_dev/ENGINE_SURFACE.md` | 2 (+ Light/ShadingEnvironment C-API) | 07 08 09 |
 
 Maintenance (extends rule 1): when a mod's ENGINE_SURFACE changes its docs/engine
 link set or its site count materially, update this table in the same commit. No
