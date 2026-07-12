@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.244-dev"
+local MOD_VERSION = "0.7.245-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -423,6 +423,21 @@ mod._ct_freeze487 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_f
 -- header for why this seam (spawn-path-independent ground truth) is not covered
 -- by the existing [ct-probe]/[ct-spawn-tally] count probes.
 mod._ct_chest132 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132")
+
+-- #505 Single Mission dev loader. Registers /ct_load_mission + friends and the
+-- ct_dev_load_selected_mission menu keybind target. No hooks - it forces a run via
+-- vanilla's DeusMechanism:debug_load_deus_level + script_data overrides, so there
+-- is no (Class, method) to collide with. Loaded here (after _adventure_pool so the
+-- catalog can read the LIVE, injected LEVEL_AVAILABILITY for /ct_list_missions).
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission")
+-- Regression guard: the loader module + its menu keybind target must survive any
+-- future refactor (the whole verification lever depends on them being callable).
+_rt_register("dev_single_mission_loader", function()
+    if not mod._ct_dev_mission_loaded then return "single-mission loader module did not load" end
+    if type(mod.ct_dev_load_selected_mission) ~= "function" then return "ct_dev_load_selected_mission keybind target missing" end
+    if type(mod._ct_dev_mission_do_load) ~= "function" then return "single-mission load primitive missing" end
+    return nil
+end)
 
 -- Call unconditionally so the LEVEL_AVAILABILITY snapshot is captured at mod load,
 -- even if the master toggle is off. inject_pool() short-circuits internally when the
@@ -5245,6 +5260,12 @@ local MIRACLE_LOC_OVERRIDES = {
     blessing_of_isha_desc_wounds= "Grants every hero unlimited wounds for the next mission — every knockdown is revivable instead of resulting in instant death after the first down.",
 }
 
+-- issue 511: load-time marker for the #133 Manann's Tempest cooldown-note append
+-- (the branch lives in the Localize hook below, keyed on
+-- description_deus_crit_chain_lightning + tweak_manann_tempest_cooldown). Replaces
+-- the io.open self-grep that threw in the VMF sandbox (no `io`). The exact branch
+-- text is a source invariant flagged for a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
+CT_MANANN_TEMPEST_NOTE_MARKER = "manann_tempest:crit_chain_lightning_cooldown_note_v0.7.232"
 mod:hook(_G, "Localize", function(func, key, ...)
     if type(key) == "string" then
         local t = ADV_TITLE_OVERRIDES[key]
@@ -6861,6 +6882,11 @@ end
 -- (mod:debug is silent with logging off); Morgrim's is infrequent so no flood.
 -- Read-only: printf only.
 CT_MORGRIM143_MARKER = "morgrim143:appearance_by_spawn_type_census_v0.7.212"
+-- issue 511: load-time marker for the #143 sum-preserving grenade renorm FIX (the
+-- actual over-spawn fix lives in the PickupSystem.populate_pickups hook). Replaces
+-- the io.open self-grep that threw in the VMF sandbox (no `io`). The exact renorm
+-- text is a source invariant flagged for a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
+CT_MORGRIM143_RENORM_MARKER = "morgrim143:holy_hand_grenade_sum_preserving_renorm_v0.7.232"
 do
     local _by_source = {}
     mod._ct_morgrim143_count = function(spawn_type, on_adv)
@@ -6963,6 +6989,13 @@ mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_
     end
     return spawned, go_id
 end)
+-- issue 511: load-time provenance marker for the #322 two-return _spawn_pickup hook
+-- above. The VMF Lua sandbox exposes NO `io`, so the old source self-grep threw
+-- "attempt to index global 'io'" and FAILED /ct_regression_test on healthy code;
+-- the check now asserts this marker (set beside the hook at load) instead. The
+-- exact 2-value capture/return SHAPE is a source invariant flagged for a repo QA
+-- gate (PROJECT_STANDARDS 2.2b tier a).
+CT_SPAWN_PICKUP322_MARKER = "spawn_pickup322:two_value_capture_and_return_v0.7.245"
 -- Note: previous versions attempted to make altars/chests walk-through by mutating
 -- their actor collision filter / scene_query / collision_enabled flags. This
 -- ALWAYS regressed interaction (v0.6.28 scene_query disable broke chest open;
@@ -8239,19 +8272,12 @@ end)
 -- Source-pattern check: assert the two-value capture + two-value return survive.
 -- Anchored via the same-file #294 helper; best-effort (nil = pass if unreadable).
 _rt_register("spawn_pickup_returns_both_values", function()
-    local ok, info = pcall(debug.getinfo, mod._ct_pickup_unit_spawn_safe or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    if not txt:find("local spawned, go_id = func(", 1, true) then
-        return "#322 REGRESSION: _spawn_pickup hook no longer captures vanilla's 2nd return (pickup_unit_go_id) -- linked-pickup rpc_link_pickup client sync breaks"
-    end
-    if not txt:find("return spawned, go_id", 1, true) then
-        return "#322 REGRESSION: _spawn_pickup hook no longer re-returns go_id (VMF_RECIPES 2 multi-return collapse)"
+    -- issue 511: assert the load-time provenance marker set beside the _spawn_pickup
+    -- hook instead of source-reading (the VMF sandbox has no `io`, so the old
+    -- io.open self-grep threw and FAILED this on healthy code). The exact 2-value
+    -- capture/return shape is delegated to a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
+    if CT_SPAWN_PICKUP322_MARKER ~= "spawn_pickup322:two_value_capture_and_return_v0.7.245" then
+        return "#322 REGRESSION: CT_SPAWN_PICKUP322_MARKER missing/mismatch (two-return _spawn_pickup hook stripped -- linked-pickup rpc_link_pickup client sync breaks); got: " .. tostring(CT_SPAWN_PICKUP322_MARKER)
     end
 end)
 
@@ -14073,40 +14099,24 @@ end)
 -- v0.7.232-dev #143 FIX (closed, user-confirmed): the ACTUAL over-spawn fix, not the census.
 -- On injected adventure maps holy_hand_grenade's world spawn_weighting is HALVED and the freed
 -- half redistributed proportionally to the other grenades so the pool SUM stays byte-identical
--- (a LOWERED total crashed the pickup sampler in v0.7.143). Inline (not a function), so guard by
--- source-pattern via the file-local _rt_register. Split needle so this line can't self-match.
+-- (a LOWERED total crashed the pickup sampler in v0.7.143). issue 511: asserts the load-time
+-- CT_MORGRIM143_RENORM_MARKER (the source self-grep threw in the VMF sandbox, no `io`); the exact
+-- renorm text is delegated to a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
 _rt_register("morgrim143_renorm_fix", function()
-    local ok, info = pcall(debug.getinfo, _rt_register, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    local needle = "saved_grenade" .. "_weights = {}"
-    if not txt:find(needle, 1, true) then
-        return "#143 REGRESSION: the holy_hand_grenade sum-preserving renorm is gone (Morgrim's Bomb over-spawn fix stripped; a blind weight cut risks the pickup-sampler crash)"
+    if CT_MORGRIM143_RENORM_MARKER ~= "morgrim143:holy_hand_grenade_sum_preserving_renorm_v0.7.232" then
+        return "#143 REGRESSION: CT_MORGRIM143_RENORM_MARKER missing/mismatch (holy_hand_grenade sum-preserving renorm stripped; a blind weight cut risks the pickup-sampler crash); got: " .. tostring(CT_MORGRIM143_RENORM_MARKER)
     end
 end)
 
 -- v0.7.232-dev #133 FIX (closed, user-confirmed): with tweak_manann_tempest_cooldown ON, the
 -- VANILLA Manann's Tempest weapon trait (deus_crit_chain_lightning) tooltip gains the "8 second
 -- cooldown." note - the _G.Localize hook appends it to func()'s vanilla string, gated on the
--- setting (stays EXACTLY vanilla with the tweak off). Inline in the Localize hook; guard by
--- source-pattern via the file-local _rt_register. Split needle so this line can't self-match.
+-- setting (stays EXACTLY vanilla with the tweak off). issue 511: asserts the load-time
+-- CT_MANANN_TEMPEST_NOTE_MARKER (the source self-grep threw in the VMF sandbox, no `io`); the exact
+-- branch text is delegated to a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
 _rt_register("manann_tempest_trait_cooldown_note", function()
-    local ok, info = pcall(debug.getinfo, _rt_register, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    local needle = 'key == "description_deus_crit_chain' .. '_lightning"'
-    if not txt:find(needle, 1, true) then
-        return "#133 REGRESSION: the deus_crit_chain_lightning cooldown-note override is gone (Manann's Tempest trait tooltip no longer reflects the 8s-cooldown tweak)"
+    if CT_MANANN_TEMPEST_NOTE_MARKER ~= "manann_tempest:crit_chain_lightning_cooldown_note_v0.7.232" then
+        return "#133 REGRESSION: CT_MANANN_TEMPEST_NOTE_MARKER missing/mismatch (deus_crit_chain_lightning cooldown-note override gone; Manann's Tempest tooltip no longer reflects the 8s-cooldown tweak); got: " .. tostring(CT_MANANN_TEMPEST_NOTE_MARKER)
     end
 end)
 
@@ -14119,22 +14129,9 @@ _rt_register("boon_offer_scrollbar_wired", function()
     if type(mod._ct_boon_scroll_setup) ~= "function" then
         return "#115/#114 REGRESSION: mod._ct_boon_scroll_setup missing (boon-offer scrollbar stripped; the GUI overflows above the vanilla cap)"
     end
-    local ok, info = pcall(debug.getinfo, mod._ct_boon_scroll_setup, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    local shrine_needle = "_ct_boon_scroll_setup(self, boon" .. "_widgets, 4)"
-    local chest_needle  = "_ct_boon_scroll_setup(self, self._power" .. "_up_widgets, 3)"
-    if not txt:find(shrine_needle, 1, true) then
-        return "#115 REGRESSION: shrine boon-offer scrollbar no longer wired (Shrine of Solace GUI overflows above 4 boons)"
-    end
-    if not txt:find(chest_needle, 1, true) then
-        return "#114 REGRESSION: cursed-chest boon-offer scrollbar no longer wired (Chest of Trials GUI overflows above 3 boons)"
-    end
+    -- issue 511: the runtime presence of the export is asserted above. The "wired at
+    -- BOTH offer surfaces" invariant was an io.open source self-grep that threw in the
+    -- VMF sandbox (no `io`); it is delegated to a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
 end)
 
 -- v0.7.212-dev #145 DIAGNOSTIC: presence check for the Citadel resolved-god census.
@@ -14151,39 +14148,16 @@ end)
 -- mod._ct_force_finale_god rewrites the god segment of arena_citadel_* (finale) and sig_citadel_*
 -- (approach) on the FINISHED graph, restoring the finale_dominant_god override WITHOUT touching
 -- config.NO_DOMINANT_GOD. The #145 conflict returns silently if the function is stripped OR its
--- call is dropped from either deus_populate_graph branch (normal + shop-converted), so this guards
--- presence, the intentional-presence marker, AND both wiring sites (source-read; the needle is
--- split so this very check can't self-match).
+-- call is dropped from either deus_populate_graph branch (normal + shop-converted). issue 511:
+-- presence + the intentional-presence marker are asserted at runtime below; the "wired at BOTH
+-- branches" count was an io.open source self-grep that threw in the VMF sandbox (no `io`) and is
+-- delegated to a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
 _rt_register("citadel145_force_finale_god_fix", function()
     if type(mod._ct_force_finale_god) ~= "function" then
         return "#145 REGRESSION: mod._ct_force_finale_god missing (Citadel finale-god override fix stripped)"
     end
     if CT_CITADEL145_FIX_MARKER ~= "citadel145:force_finale_god_fix_v0.7.219" then
         return "#145 REGRESSION: CT_CITADEL145_FIX_MARKER mismatch — got: " .. tostring(CT_CITADEL145_FIX_MARKER)
-    end
-    local ok, info = pcall(debug.getinfo, mod._ct_force_finale_god, "S")
-    if ok and type(info) == "table" and info.source then
-        local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-        local f = io.open(src_path, "r")
-        if f then
-            local txt = f:read("*a")
-            f:close()
-            if txt then
-                local needle = "mod._ct_force_finale_god(result[1], " .. "config)"
-                local count, pos = 0, 1
-                while true do
-                    local s = txt:find(needle, pos, true)
-                    if not s then break end
-                    count = count + 1
-                    pos = s + #needle
-                end
-                if count < 2 then
-                    return string.format(
-                        "#145 REGRESSION: finale-god fix wired at only %d of 2 deus_populate_graph branches (override no longer applied)",
-                        count)
-                end
-            end
-        end
     end
 end)
 

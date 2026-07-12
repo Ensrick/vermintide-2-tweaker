@@ -1,5 +1,6 @@
 local mod = get_mod("ct_dev")
 local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_adventure_pool")
+local DevMission = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission_catalog")
 
 -- ============================================================
 -- Boon categorization tree (single source of truth)
@@ -426,6 +427,13 @@ local data = {
         -- (mutex clusters, the god-grouped curse banlist, the paired altar-reuse rows)
         -- are flagged inline where they intentionally deviate from A->Z.
         widgets = {
+            -- ============================================================
+            -- #505 Single Mission dev loader (host-only). Widget tree built in
+            -- _ct_dev_mission_catalog.build_menu_group(); the keybind resolves
+            -- mod.ct_dev_load_selected_mission. recursive_sort() places it by its
+            -- localized "[untested] Dev: ..." title among the top-level groups.
+            -- ============================================================
+            DevMission.build_menu_group(),
             -- ============================================================
             -- Progressive Difficulty (deliberate top-of-list placement: a
             -- run-wide difficulty modifier, not one of the A-Z groups below)
