@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.247-dev"
+local MOD_VERSION = "0.7.248-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -14054,6 +14054,19 @@ _rt_register("cot_enemy_multiplier_cursed_chest_only", function()
     if CT_COT_ENEMY_MULT_MARKER ~= "cot_enemy_mult:cursed_chest_enemies_filter_v0.7.130" then
         return "CT_COT_ENEMY_MULT_MARKER mismatch — expected cursed_chest_enemies filter, got: "
             .. tostring(CT_COT_ENEMY_MULT_MARKER)
+    end
+end)
+
+-- v0.7.248-dev #471 DIAGNOSTIC: presence check for the Chest-of-Trials spawn-composition
+-- probe (raw printf: pre_req / built_req / placed per cursed-chest spawn element) armed in
+-- _ct_combat_hooks.lua. Guards against a silent strip while #471 is still being root-caused;
+-- the marker is a bare cross-file global set at that hook's install site.
+_rt_register("cot471_spawn_composition_probe", function()
+    if type(CT_COT_471_DIAG_MARKER) ~= "string" then
+        return "#471 REGRESSION: CT_COT_471_DIAG_MARKER not defined — CoT spawn-composition diagnostic stripped"
+    end
+    if CT_COT_471_DIAG_MARKER ~= "cot471:spawn_composition_pre_scaled_placed_probe_v0.7.248" then
+        return "#471 REGRESSION: CT_COT_471_DIAG_MARKER mismatch — got: " .. tostring(CT_COT_471_DIAG_MARKER)
     end
 end)
 

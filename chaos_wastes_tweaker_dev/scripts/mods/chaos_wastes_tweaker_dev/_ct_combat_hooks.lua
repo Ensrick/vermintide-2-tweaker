@@ -292,40 +292,103 @@ end
 --      element — vanilla rebuilds every call — so our scale stays applied just
 --      for this call without persisting across runs).
 --   5. Restore originals so we don't mutate the shared template.
+-- [ct:471] v0.7.248-dev — decisive Chest-of-Trials spawn-composition diagnostic.
+-- The #64 scaling below writes element.difficulty_amount / element.amount, which
+-- vanilla spawn_around_origin_unit (terror_event_mixer.lua:96) reads to build
+-- event.spawn_table (size = requested count) and event.spawn_positions (the nav
+-- positions ConflictUtils.find_positions_around_position, conflict_utils.lua:1600,
+-- ACTUALLY placed — the count that then spawns one breed each at run-time,
+-- terror_event_mixer.lua:1043). On a logging-OFF host the old _dbg line was
+-- invisible, so "increased spawns appears not to work" could not be pinned to (a)
+-- hook body never firing, (b) mult not reaching the scale, or (c) the position
+-- finder / spawn budget capping the scaled request back down. This raw printf
+-- (pcall-wrapped, bypasses the VMF mod-logging toggle exactly like the
+-- cot_activation probe above) emits ONE line per cursed-chest spawn element:
+--   pre_req  = count vanilla WOULD pick for this difficulty (before our scale)
+--   built_req= #event.spawn_table after vanilla ran (our scaled request)
+--   placed   = #event.spawn_positions = enemies that actually spawn this wave
+-- so a single Chest-of-Trials activation settles the root cause: built_req==pre_req
+-- => scale not applied; placed<built_req => finder/budget cap; placed==built_req>pre_req
+-- => scale works end to end. Covers BOTH spawn_counter_category values
+-- (cursed_chest_enemies AND cursed_chest_elites) so an elite-only trial is still
+-- visible even though only the enemies category is scaled today — the elites-category
+-- gap is a candidate fix held pending this log (elite waves like the boss/elite
+-- pulses carry spawn_counter_category="cursed_chest_elites", which the #64 filter
+-- never matched, so they are never multiplied).
+CT_COT_471_DIAG_MARKER = "cot471:spawn_composition_pre_scaled_placed_probe_v0.7.248"
+
 if rawget(_G, "TerrorEventMixer") and TerrorEventMixer.init_functions
         and TerrorEventMixer.init_functions.spawn_around_origin_unit then
     mod:hook(TerrorEventMixer.init_functions, "spawn_around_origin_unit",
         function(func, event, element, t)
-            if not (element and element.spawn_counter_category == "cursed_chest_enemies") then
+            local cat = element and element.spawn_counter_category
+            if not (cat == "cursed_chest_enemies" or cat == "cursed_chest_elites") then
                 return func(event, element, t)
             end
+
             local mult = effective_setting("cot_enemy_multiplier")
-            if type(mult) ~= "number" or mult <= 1 then
-                return func(event, element, t)
-            end
-            -- Save + scale. element is the SHARED template; we MUST restore before
-            -- returning so subsequent events see vanilla values.
-            local saved_amount = element.amount
-            if type(saved_amount) == "number" then
-                element.amount = math.max(1, math.floor(saved_amount * mult))
-            end
-            local saved_difficulty_amount = element.difficulty_amount
-            if type(saved_difficulty_amount) == "table" then
-                local scaled = {}
-                for k, v in pairs(saved_difficulty_amount) do
-                    scaled[k] = (type(v) == "number") and math.max(1, math.floor(v * mult)) or v
+            -- BEHAVIOUR unchanged from #64: only the enemies category, only mult>1.
+            local do_scale = cat == "cursed_chest_enemies" and type(mult) == "number" and mult > 1
+
+            -- Pre-scale count vanilla WOULD pick for the CURRENT difficulty (mirrors
+            -- terror_event_mixer.lua:108-117), captured before we mutate the element.
+            local pre_req
+            pcall(function()
+                local da = element.difficulty_amount
+                local dm = Managers and Managers.state and Managers.state.difficulty
+                if type(da) == "table" and dm then
+                    local chosen = dm:get_difficulty_value_from_table(da) or da.hardest
+                    pre_req = (type(chosen) == "table") and chosen[1] or chosen
                 end
-                element.difficulty_amount = scaled
+            end)
+            pre_req = pre_req or element.amount
+
+            local saved_amount, saved_difficulty_amount
+            if do_scale then
+                -- Save + scale. element is the SHARED template; we MUST restore before
+                -- returning so subsequent events see vanilla values.
+                saved_amount = element.amount
+                if type(saved_amount) == "number" then
+                    element.amount = math.max(1, math.floor(saved_amount * mult))
+                end
+                saved_difficulty_amount = element.difficulty_amount
+                if type(saved_difficulty_amount) == "table" then
+                    local scaled = {}
+                    for k, v in pairs(saved_difficulty_amount) do
+                        scaled[k] = (type(v) == "number") and math.max(1, math.floor(v * mult)) or v
+                    end
+                    element.difficulty_amount = scaled
+                end
             end
 
             local ok, err = pcall(func, event, element, t)
 
-            element.amount = saved_amount
-            element.difficulty_amount = saved_difficulty_amount
+            -- Read what vanilla built/placed BEFORE restoring the element (restore
+            -- touches only `element`, never `event`). spawn_table size = requested
+            -- count; spawn_positions = nav positions found = enemies that WILL spawn.
+            local built_req = event and event.spawn_table and #event.spawn_table
+            local placed = event and event.spawn_positions and #event.spawn_positions
+
+            if do_scale then
+                element.amount = saved_amount
+                element.difficulty_amount = saved_difficulty_amount
+            end
             if not ok then error(err) end
-            _dbg("[cot_enemy_mult] event=%s breed=%s scaled by %.1f (saved orig)",
+
+            pcall(function()
+                printf("[ct:471] cot_spawn cat=%s breed=%s diff=%s mult=%s pre_req=%s built_req=%s placed=%s scaled=%s",
+                    tostring(cat), tostring(element.breed_name),
+                    tostring((Managers and Managers.state and Managers.state.difficulty
+                        and Managers.state.difficulty:get_difficulty()) or "?"),
+                    tostring(mult), tostring(pre_req), tostring(built_req),
+                    tostring(placed), do_scale and "yes" or "no")
+            end)
+
+            _dbg("[cot_enemy_mult] event=%s breed=%s cat=%s scaled=%s (pre=%s built=%s placed=%s mult=%s)",
                 tostring(event and event.event_name or "?"),
-                tostring(element.breed_name), mult)
+                tostring(element.breed_name), tostring(cat),
+                do_scale and "yes" or "no",
+                tostring(pre_req), tostring(built_req), tostring(placed), tostring(mult))
         end)
 end
 
