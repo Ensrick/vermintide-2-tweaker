@@ -1,0 +1,150 @@
+local mod = get_mod("enemy_tweaker")
+
+-- _et_lifecycle.lua — VMF lifecycle callbacks + dormant-BR bootstrap
+--
+-- on_setting_changed / on_disabled / on_enabled: the re-apply / restore
+-- chains over every provider module. VMF allows exactly ONE assignment of
+-- each callback mod-wide and they live HERE — never assign them in another
+-- file. Also fires the (stubbed, dormant) BR bootstrap once at load.
+--
+-- Owned by: enemy_tweaker.lua entry point (dofile'd after every provider it
+-- consumes: presets, swaps, mimic, roaming, champion, banner). No mod._et
+-- exports.
+
+local ET = mod._et
+local _dbg_alert = ET.dbg_alert
+local _safe      = ET.safe
+
+local _restore_compositions  = ET.restore_compositions
+local _apply_horde_preset    = ET.apply_horde_preset
+local _apply_roaming_size_multiplier  = ET.apply_roaming_size_multiplier
+local _restore_size_of_interest_point = ET.restore_size_of_interest_point
+local _apply_banner_bearer_stagger_toggle = ET.apply_banner_bearer_stagger_toggle
+local _apply_banner_camera_jerk_toggle    = ET.apply_banner_camera_jerk_toggle
+local _build_swap_map         = ET.build_swap_map
+local _build_faction_swap_map = ET.build_faction_swap_map
+local _apply_faction_swap_to_current_horde_settings = ET.apply_faction_swap_to_chs
+local _apply_champion_breed_overrides = ET.apply_champion_breed_overrides
+local _apply_difficulty_mimic = ET.apply_difficulty_mimic
+local _original_compositions_pacing_ref = ET.original_compositions_pacing
+local BR = ET.BR
+
+local function _reapply_via_active_cd()
+    -- For settings whose effect lives on the Current* tables (faction-swap,
+    -- difficulty-mimic), we need an active ConflictDirector to re-patch
+    -- against. If we're in the keep / no mission active, the next mission's
+    -- init hook will pick up new settings automatically.
+    local active = Managers.state and Managers.state.conflict
+    if active then
+        _apply_difficulty_mimic(active)
+        _apply_faction_swap_to_current_horde_settings()
+    end
+end
+
+mod.on_setting_changed = function(setting_id)
+    -- v0.6.0-dev: wrapped in _safe so any single sub-step failure (corrupt
+    -- composition, missing global, etc.) is logged via mod:warning and
+    -- the rest of the chain still runs. Previously a crash in one apply
+    -- function could leave Current* settings half-applied with no log.
+    if not _original_compositions_pacing_ref() then
+        _dbg_alert("on_setting_changed: _original_compositions_pacing nil (mod loaded but compositions never backed up) — skipping reapply; BR.on_setting_changed still runs")
+    else
+        _safe("on_setting_changed:restore",       _restore_compositions)
+        _safe("on_setting_changed:apply_preset",  _apply_horde_preset)
+        _safe("on_setting_changed:apply_roaming", _apply_roaming_size_multiplier)
+        _safe("on_setting_changed:apply_banner",  _apply_banner_bearer_stagger_toggle)
+        _safe("on_setting_changed:apply_banner_camera", _apply_banner_camera_jerk_toggle)
+        _safe("on_setting_changed:build_swap",    _build_swap_map)
+        _safe("on_setting_changed:build_faction", _build_faction_swap_map)
+        _safe("on_setting_changed:reapply_active_cd", _reapply_via_active_cd)
+        -- Issue #18: mid-session setting edits previously left the
+        -- ConflictDirector's threat-value cache and CurrentHordeSettings
+        -- stale until the next zone boundary. on_enabled already reseeds;
+        -- mirror the same reseed here for any setting change. Permissive
+        -- trigger (any et setting) — every group (horde / mimic / specials /
+        -- breed-swap / faction-swap / BR) can plausibly influence the cache,
+        -- and a no-op refresh between zones is cheap.
+        _safe("on_setting_changed:refresh_cd", function()
+            local active = Managers.state and Managers.state.conflict
+            if active then
+                active:refresh_conflict_director_patches("on_setting_changed:" .. tostring(setting_id))
+            end
+        end)
+        mod:info("[et] settings updated (setting=%s)", tostring(setting_id))
+    end
+    -- Re-apply the boss fly-disable multiplier on any setting change (spawn
+    -- paths read the data fields live). Guarded: the boss-tweaks module is
+    -- dofile'd after this one in the manifest, so mod._et_apply_fly_disable
+    -- may be nil for the very first on_setting_changed if it somehow fires
+    -- pre-load.
+    if mod._et_apply_fly_disable then
+        _safe("on_setting_changed:fly_disable", mod._et_apply_fly_disable)
+    end
+    -- Champion elite-pool retune — outside the compositions guard (independent of
+    -- composition backup state; idempotent, only writes on a toggle-state change).
+    _safe("on_setting_changed:champion", _apply_champion_breed_overrides)
+    _safe("on_setting_changed:BR", BR.on_setting_changed, setting_id)
+end
+
+mod.on_disabled = function()
+    _safe("on_disabled:restore_compositions",      _restore_compositions)
+    _safe("on_disabled:restore_size_of_interest",  _restore_size_of_interest_point)
+    -- v0.7.2-dev: explicitly restore vanilla bearer stagger-immunity if we
+    -- had patched it. Setting read returns falsy when the toggle is off OR
+    -- when the mod is disabled, so calling _apply_ does the right thing.
+    _safe("on_disabled:restore_banner_bearer_stagger", _apply_banner_bearer_stagger_toggle)
+    _safe("on_disabled:restore_banner_camera", function() _apply_banner_camera_jerk_toggle(true) end)
+    ET.clear_swap_maps()
+    -- Note: we can't undo the in-place CurrentHordeSettings rewrite from here
+    -- without rebuilding it from director.horde. The next refresh_conflict_director_patches
+    -- (zone change, level transition) will rebuild it from scratch — and our
+    -- hook will be inactive, so no swap is re-applied. Within the same active
+    -- CD, the swap remains until the next refresh.
+    -- Restore the vanilla Champion breed (mod:get returns falsy when disabled,
+    -- so _apply_ takes the restore branch).
+    _safe("on_disabled:champion", _apply_champion_breed_overrides)
+    _safe("on_disabled:BR", BR.on_disabled)
+    mod:echo("Enemy Tweaker disabled — compositions restored")
+end
+
+mod.on_enabled = function()
+    if not _original_compositions_pacing_ref() then
+        _dbg_alert("on_enabled: _original_compositions_pacing nil — mod loaded but ConflictDirector.init hasn't fired yet; will apply on next mission load")
+    else
+        _safe("on_enabled:apply_preset",       _apply_horde_preset)
+        _safe("on_enabled:apply_roaming",      _apply_roaming_size_multiplier)
+        _safe("on_enabled:apply_banner",       _apply_banner_bearer_stagger_toggle)
+        _safe("on_enabled:apply_banner_camera", _apply_banner_camera_jerk_toggle)
+        _safe("on_enabled:build_swap",         _build_swap_map)
+        _safe("on_enabled:build_faction",      _build_faction_swap_map)
+        _safe("on_enabled:reapply_active_cd",  _reapply_via_active_cd)
+        -- Issue #9: reseed ConflictDirector's threat-value cache on re-enable.
+        -- When the mod is toggled OFF then back ON mid-mission, the director's
+        -- Current* settings were baked at init (when hooks were inactive). Call
+        -- refresh_conflict_director_patches to invalidate the threat-value cache
+        -- and performance-manager state — zone-boundary auto-fixes it, but we
+        -- harden the seeding here to feel less broken until then.
+        _safe("on_enabled:refresh_cd", function()
+            local active = Managers.state and Managers.state.conflict
+            if active then
+                active:refresh_conflict_director_patches("on_enabled")
+                mod:info("[et:on_enabled] reseeded threat-values via refresh_conflict_director_patches (%s)", os.date())
+            end
+        end)
+        mod:echo("Enemy Tweaker enabled")
+    end
+    -- Outside the guard: re-assert the Champion retune per its saved toggle.
+    _safe("on_enabled:champion", _apply_champion_breed_overrides)
+    _safe("on_enabled:BR", BR.on_enabled)
+end
+
+-- ============================================================
+-- Big Rebalance bootstrap
+-- ============================================================
+-- VMF calls `mod.on_enabled` when the mod is initially enabled in the
+-- launcher, but not on every game start if the mod stays enabled across
+-- sessions. Trigger BR.on_enabled at file-load time so registrations
+-- and hooks are in place from boot. Idempotent (guarded by internal
+-- _br_master_applied / _br_hooks_installed flags). BR is the DORMANT stub
+-- (see _et_fingerprint.lua) — this call is a no-op until #433 revives it.
+BR.on_enabled()

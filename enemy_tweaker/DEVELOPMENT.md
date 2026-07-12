@@ -35,6 +35,43 @@ Shipped features (as of v0.5.5-dev):
 - **Horde size multiplier** — scalar (25-300%) over all
   `HordeCompositionsPacing` entries' breed counts.
 
+## Module map (v0.7.31-dev OOP split)
+
+`enemy_tweaker.lua` is an 83-line entry: MOD_VERSION, ET_RPC_SCHEMA, the load
+banner, and the dofile manifest. Every `_et_*` module is dofile'd EXACTLY ONCE,
+in manifest order (VMF `mod:dofile` is NOT a singleton - each call re-executes
+the file - so modules never dofile each other; shared helpers publish into
+`mod._et`, the #479 protective factories additionally as `mod._et479_*`).
+
+| Module | Owns |
+|---|---|
+| `_et_regression` | `/et_regression_test` harness + generic checks (loads FIRST) |
+| `_et_log` | dbg/alert/chat/spawn log channels + printf probe |
+| `_et_protect` | `_safe`/`_hook_wrap`/`_make_tick_guard` (#479: skip tick on inner error, NEVER re-run vanilla) + `_call_with_override` + multiplier math |
+| `_et_fingerprint` | BR + settings fingerprints, `et_br_fingerprint` RPC, dormant-BR stub |
+| `_et_horde_presets` | horde preset catalog + composition backup/apply + CHS horde size |
+| `_et_swaps` | breed/faction substitution + HordeSpawner hooks |
+| `_et_mimic` | per-system difficulty mimic |
+| `_et_roaming` | roaming size (SIP + recycler guard + ambient density + clone shim) |
+| `_et_skaven_warlord_breed` | #324 mod-added breed (MUST precede `_et_champion_warlord`) |
+| `_et_champion_warlord` | champion/warlord pools + consolidated spawn hook + crash guards |
+| `_et_director_hooks` | ConflictDirector init/refresh re-apply chain |
+| `_et_event_size` | terror-event horde size scaling |
+| `_et_pacing` | spawn pacing (CD tick #479 guard, freq/caps), #213 freeze guard, #449 rush-intervention freeze gate |
+| `_et_banner` | beastman banner toggles |
+| `_et_patrol` | patrol formation size |
+| `_et_specials` | per-difficulty special spawns |
+| `_et_lifecycle` | on_setting_changed / on_enabled / on_disabled + BR bootstrap |
+| `_et_commands` | chat commands (`/et_status`, `/verify_*`, dumps, `/et_reset`) |
+| `_et_boss_tweaks`, `_et_nurgloth_probe` | pre-existing modules (fly-disable duration; issue 275 probe) |
+
+Where new code goes: the module whose "Owns" row it extends; a new subsystem gets a
+new `_et_<name>.lua` + one manifest line + a row here (same discipline as
+`event_tweaker/CLAUDE.md`). One hook per (Class, method) repo rule applies ACROSS
+modules - grep the whole mod dir before hooking.
+
+---
+
 ## Architecture (key files in source)
 
 - `scripts/settings/conflict_settings.lua` — `ConflictDirectors[name]`

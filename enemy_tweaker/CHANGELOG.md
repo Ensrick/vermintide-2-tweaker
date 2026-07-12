@@ -1,5 +1,47 @@
 # Enemy Tweaker Changelog
 
+## 0.7.31-dev (2026-07-11): OOP split into 17 _et_ modules + tick-guard hardening (#479) + rush-intervention freeze gate (#449) [untested]
+
+**Structural refactor (no behavior change outside the two fixes below):** the 3,600-line
+monolith is now an 83-line entry (`enemy_tweaker.lua`: MOD_VERSION, ET_RPC_SCHEMA, load
+banner, dofile manifest) plus 17 single-responsibility `_et_*` modules, dofile'd exactly
+once in manifest order (VMF `mod:dofile` is NOT a singleton - modules never dofile each
+other; shared helpers publish into `mod._et`). Module map in `DEVELOPMENT.md`.
+
+**Issue 479 [verify-fix] - hook fallback re-run hardening:**
+- The pre-split protective wrapper re-ran VANILLA after an inner hook error. For the
+  `ConflictDirector.update` tick that is a state-doubling hazard: spawn-queue bookkeeping
+  runs after `_spawn_unit` (`conflict_director.lua:1835-1891`), so a throwing spawn stays
+  queued and the vanilla re-run re-pops it, re-throws, and doubles partial state (i470.log
+  158014-158017 evidence).
+- NEW `_make_tick_guard` (`_et_protect.lua`): on inner error the tick is SKIPPED - one
+  `[et:479]` printf + mod:warning, vanilla NEVER re-run. NEW `_call_with_override`
+  restores engine-global overrides (e.g. `RecycleSettings.max_grunts`) on BOTH the success
+  and the error path (pre-479 a mid-tick throw leaked the override for the session).
+- Regression: tick-guard + override-restore checks in `_et_regression`/`_et_pacing`.
+
+**Issue 449 [verify-fix] - enemies attacking during The Enchanter''s Lair cutscene (vanilla bug):**
+- VANILLA HOLE: hordes (`conflict_director.lua:893`) and the speed-running intervention
+  (`:1103`, early return inside `handle_speed_runners`) both stand down while
+  `pacing:get_state() == "pacing_frozen"`, but `handle_alone_player` - the RUSH
+  intervention, retried every 1s from the CD tick (`:1506-1510`) - has no freeze gate
+  anywhere in its body (`:1250-1330`). With pacing frozen by a boss event it can still
+  request a rushing-intervention special AND an ambush horde: enemies mid-cutscene.
+  Exposure amplified by et density settings; exposed by a stranded bot cluster making one
+  player register as "alone" (the gt bot aid-lock follow-up is issue 492).
+- FIX (`_et_pacing.lua`): `handle_alone_player` stands down while pacing is frozen,
+  exactly like its two vanilla siblings - `[et:449]` printf once per freeze episode,
+  `rushing_intervention_data.disabled` reason written like every vanilla early return.
+  UNCONDITIONAL (vanilla-bug class, host-side spawn decision only, nothing on the wire).
+- NOTE: the speed-running half of the original fix spec turned out to be already gated by
+  vanilla (`:1103`) - verified against the decompile, no hook added for it.
+- Regression: `rush_intervention_freeze_gate` drives the wrapped function with a
+  frozen-pacing stub; a dead/reordered gate makes vanilla throw on the stub and fails.
+
+**Verify in-game (solo host is enough):** host The Enchanter''s Lair with elevated et
+density, trigger the finale cutscene; expect NO spawns during it and the
+`[et:449] rush intervention stood down: pacing_frozen` log line. `/et_regression_test`
+must pass 100% including the two new checks.
 ## 0.7.30-dev (2026-07-06): #275 - probe rewired to breed-field wrap + phase tracers
 
 - **Root cause of the silent no-op:** the v0.7.29 probe hooked the
