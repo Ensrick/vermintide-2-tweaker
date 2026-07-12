@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.204-dev"
+local MOD_VERSION = "0.2.205-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -2027,6 +2027,34 @@ _rt_register("bot_fix_delays_read_from_settings", function()
     end
     if type(tonumber(mod:get("gt_bot_ladder_unstick_delay"))) ~= "number" then
         return "gt_bot_ladder_unstick_delay does not resolve to a number via mod:get -- slider missing / renamed?"
+    end
+end)
+
+_rt_register("gt_bot468_smart_self_heal_wired", function()
+    -- #468 (v0.2.205-dev): the FIX 12 bot_should_heal reimplementation is gated on
+    -- gt_bot_smart_self_heal + three tuning settings, read live in the hook. Runtime
+    -- assertion (io is nil in the VMF sandbox, so no source grep): the LOAD marker
+    -- is set beside the hook, the gating helper is exposed, and all four settings
+    -- resolve via mod:get with the types the hook consumes. The "exactly one hook on
+    -- (BTConditions, bot_should_heal)" source invariant belongs in a repo QA gate
+    -- (PROJECT_STANDARDS 2.2b tier a), same as the sibling bot checks.
+    if GT_BOT_SMART_SELF_HEAL_MARKER_v0_2_205 == nil then
+        return "GT_BOT_SMART_SELF_HEAL_MARKER_v0_2_205 not set -- FIX 12 hook block did not load"
+    end
+    if type(mod._gt_smart_self_heal_on) ~= "function" then
+        return "mod._gt_smart_self_heal_on missing -- gating helper not exposed"
+    end
+    if type(mod:get("gt_bot_smart_self_heal")) ~= "boolean" then
+        return "gt_bot_smart_self_heal does not resolve to a boolean via mod:get -- checkbox missing / renamed?"
+    end
+    if type(tonumber(mod:get("gt_bot_self_heal_pct"))) ~= "number" then
+        return "gt_bot_self_heal_pct does not resolve to a number via mod:get -- slider missing / renamed?"
+    end
+    if type(mod:get("gt_bot_reserve_kits_for_players")) ~= "boolean" then
+        return "gt_bot_reserve_kits_for_players does not resolve to a boolean via mod:get -- checkbox missing / renamed?"
+    end
+    if type(mod:get("gt_bot_ignore_surplus_selfuse")) ~= "boolean" then
+        return "gt_bot_ignore_surplus_selfuse does not resolve to a boolean via mod:get -- checkbox missing / renamed?"
     end
 end)
 

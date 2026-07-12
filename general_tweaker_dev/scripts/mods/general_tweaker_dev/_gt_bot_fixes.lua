@@ -2169,6 +2169,157 @@ mod:hook_safe("AIBotGroupSystem", "_update_health_pickups", function (self, dt, 
 end)
 
 -- ----------------------------------------------------------------------------
+-- FIX 12 (#468, v0.2.205-dev): Smarter bot self-healing (when to spend a heal)
+-- ----------------------------------------------------------------------------
+-- WHY
+--   User report (#468, 1-major): "bots are wasting healing". The heal-decision
+--   logic the "Bot Improvements - Combat Returns" workshop mod exposed was
+--   DELIBERATELY EXCLUDED from gt (_gt_improved_bot_combat.lua:23-29 -- "no-ops
+--   at their defaults"), so the "when to use healing" behaviour is 100% vanilla:
+--     * A bot only ever SELF-heals -- there is NO vanilla bot "heal another
+--       player" action. BTBotHealAction just holds the use input on the bot's
+--       own kit (bt_bot_heal_action.lua:15 is_healing_self, :29 hold_attack).
+--       (Bots CARRYING/dropping items for humans is the mule/give system, not a
+--       heal-other. "Bot heals an ally" is a separate NEW feature, deferred.)
+--     * The self-heal gate is BTConditions.bot_should_heal (bt_bot_conditions.lua
+--       :893-921): a bot heals when current_health_percent <= template
+--       .bot_heal_threshold (first_aid_kits.lua:72 == 0.20; healing_draught.lua
+--       :79 == 0.40), OR the item-surplus force_use_health_pickup latch is set
+--       (ai_bot_group_system.lua:2357), gated by is_safe. So a bot drinks a
+--       full-heal Draught of Healing at 40% (wasting >half of it), and a bot
+--       self-burns Medical Supplies (which a hurt HUMAN could use) at 20%.
+--
+-- FIX (opt-in, gated on the Bot Behavior master + gt_bot_smart_self_heal, OFF)
+--   Reimplement bot_should_heal in gt's idiom, mirroring vanilla :904-921 EXACTLY
+--   except for three user-controlled substitutions:
+--     * gt_bot_self_heal_pct  -- the HP% threshold, replacing template
+--       .bot_heal_threshold for BOTH the current-health and perma-health checks.
+--     * gt_bot_reserve_kits_for_players -- for a heal-OTHER-capable kit (Medical
+--       Supplies; template.can_heal_other, first_aid_kits.lua:70), the bot holds
+--       it (does NOT self-use) unless genuinely in trouble (wounded, or the
+--       surplus force-use fired), so it stays carried/droppable for a human.
+--       A Draught (drink-only, no can_heal_other) is UNAFFECTED -- self-use is
+--       its only purpose.
+--     * gt_bot_ignore_surplus_selfuse -- ignore force_use_health_pickup (the
+--       "spare items on the floor, top yourself off" latch).
+--   Any missing blackboard field -> passthrough to the vanilla func (bot AI ticks
+--   every frame; a nil deref is a hard crash). With the toggle OFF the hook is a
+--   pure passthrough -- byte-for-byte vanilla. Host-side only (bots are server-
+--   side); no RPC / NetworkLookup, so no non-host peer can crash or desync.
+--   [gt:468] diagnostics (always-on dev) trace each edge where the decision flips
+--   and, crucially, each heal gt HELD BACK that vanilla would have taken.
+GT_BOT_SMART_SELF_HEAL_MARKER_v0_2_205 = "gt-bot-smart-self-heal-bot_should_heal-reimpl"
+
+local function _gt_smart_self_heal_on()
+    return mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_smart_self_heal")
+end
+mod._gt_smart_self_heal_on = _gt_smart_self_heal_on
+
+-- Duplicate-hook pre-flight (2026-07-12): whole-mod grep found NO other hook on
+-- (BTConditions, "bot_should_heal") -- the sibling BTConditions hooks are on
+-- distinct methods (should_teleport / cant_reach_ally / can_activate_ability
+-- here; the boss health-transition family in _gt_creature_spawner.lua). Fresh
+-- (Class, method) pair, so this is the sole owner.
+mod:hook("BTConditions", "bot_should_heal", function (func, blackboard)
+    if not _gt_smart_self_heal_on() then
+        return func(blackboard)
+    end
+
+    local inventory_extension = blackboard and blackboard.inventory_extension
+    local health_extension = blackboard and blackboard.health_extension
+    local status_extension = blackboard and blackboard.status_extension
+    local self_unit = blackboard and blackboard.unit
+    if not (inventory_extension and health_extension and status_extension and self_unit) then
+        return func(blackboard)
+    end
+
+    local health_slot_data = inventory_extension:get_slot_data("slot_healthkit")
+    local template = health_slot_data and inventory_extension:get_item_template(health_slot_data)
+    local can_heal_self = template and template.can_heal_self
+    if not can_heal_self then
+        return false   -- vanilla :900-902
+    end
+
+    -- Vanilla :904-919, faithfully mirrored. Any of these engine reads throwing
+    -- would also throw in vanilla, but keep the passthrough guard above cheap.
+    local buff_extension = ScriptUnit.has_extension(self_unit, "buff_system")
+    local has_no_permanent_health_from_item_buff = buff_extension
+        and buff_extension:has_buff_type("trait_necklace_no_healing_health_regen")
+    local wounded = status_extension:is_wounded()
+
+    -- gt substitution 3: optionally ignore the item-surplus forced self-use.
+    local raw_force_use = blackboard.force_use_health_pickup
+    local force_use_health_pickup = raw_force_use
+    if mod:get("gt_bot_ignore_surplus_selfuse") then
+        force_use_health_pickup = nil
+    end
+
+    local current_health_percent = health_extension:current_health_percent()
+    local perma_health_percent = health_extension:current_permanent_health_percent()
+    local heavy_curse = health_extension:get_max_health() <= 75
+
+    -- gt substitution 1: user HP% threshold replaces template.bot_heal_threshold.
+    local gt_pct = tonumber(mod:get("gt_bot_self_heal_pct"))
+    local gt_threshold = (gt_pct and gt_pct / 100) or template.bot_heal_threshold
+    local hurt = current_health_percent <= gt_threshold
+    local low_on_perma_health = perma_health_percent <= gt_threshold
+
+    local target_unit = blackboard.target_unit
+    local proximite_enemies = blackboard.proximite_enemies
+    local is_safe = not target_unit
+        or (template.fast_heal or blackboard.is_healing_self) and proximite_enemies and #proximite_enemies == 0
+        or target_unit ~= blackboard.priority_target_enemy and target_unit ~= blackboard.urgent_target_enemy
+            and target_unit ~= blackboard.proximity_target_enemy and target_unit ~= blackboard.slot_target_enemy
+
+    -- Vanilla inner "want" (the parenthesised body of vanilla :921), with gt's
+    -- threshold + surplus substitutions already applied.
+    local want = force_use_health_pickup
+        or (not has_no_permanent_health_from_item_buff and (hurt or wounded and (low_on_perma_health or heavy_curse)))
+        or (has_no_permanent_health_from_item_buff and hurt and wounded)
+
+    -- gt substitution 2: reserve a heal-OTHER kit for humans. Hold it unless the
+    -- bot is wounded (grey health -- it genuinely needs the perma-heal) or the
+    -- surplus force-use fired. Draughts (no can_heal_other) are never reserved.
+    local reserved = false
+    if mod:get("gt_bot_reserve_kits_for_players") and template.can_heal_other
+            and not (wounded or force_use_health_pickup) then
+        want = false
+        reserved = true
+    end
+
+    local decision = (is_safe and want) and true or false
+
+    -- [gt:468] edge-triggered trace (per bot, on decision change only, so no
+    -- per-frame spam). Also compute what VANILLA would have decided from the same
+    -- inputs (template threshold + un-suppressed force-use) so a "held back" edge
+    -- shows exactly the waste gt prevented.
+    local prev = blackboard._gt468_prev_decision
+    if decision ~= prev then
+        blackboard._gt468_prev_decision = decision
+        local v_thr = template.bot_heal_threshold or 0
+        local v_want = raw_force_use
+            or (not has_no_permanent_health_from_item_buff and (current_health_percent <= v_thr
+                or wounded and (perma_health_percent <= v_thr or heavy_curse)))
+            or (has_no_permanent_health_from_item_buff and current_health_percent <= v_thr and wounded)
+        local vanilla_decision = (is_safe and v_want) and true or false
+        local item_label = template.can_heal_other and "medical_supplies" or (template.fast_heal and "draught" or "healkit")
+        if decision then
+            printf("[gt:468] bot SELF-HEAL greenlit item=%s hp=%.0f%% perma=%.0f%% wounded=%s force_use=%s safe=%s (gt_thr=%.0f%% vanilla_thr=%.0f%%)",
+                item_label, current_health_percent * 100, perma_health_percent * 100,
+                tostring(wounded), tostring(raw_force_use and true or false), tostring(is_safe),
+                gt_threshold * 100, v_thr * 100)
+        elseif vanilla_decision then
+            printf("[gt:468] bot self-heal HELD BACK (vanilla would have healed) item=%s hp=%.0f%% perma=%.0f%% wounded=%s reserved=%s force_use=%s (gt_thr=%.0f%% vanilla_thr=%.0f%%)",
+                item_label, current_health_percent * 100, perma_health_percent * 100,
+                tostring(wounded), tostring(reserved), tostring(raw_force_use and true or false),
+                gt_threshold * 100, v_thr * 100)
+        end
+    end
+
+    return decision
+end)
+
+-- ----------------------------------------------------------------------------
 -- FIX 9: Split bots among human players (one bot per human, round-robin)
 -- ----------------------------------------------------------------------------
 -- WHAT

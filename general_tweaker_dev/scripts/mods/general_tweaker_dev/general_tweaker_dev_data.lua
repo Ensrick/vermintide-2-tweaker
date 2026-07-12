@@ -167,6 +167,40 @@ local _data = {
                                 default_value = true,
                                 tooltip       = "gt_bot_greedy_pickup_tooltip",
                             },
+                            -- #468: smarter bot SELF-heal decision. Enabler +
+                            -- three tuning children kept flat (same pattern as
+                            -- ledge_pullup + its delay slider), read live in the
+                            -- BTConditions.bot_should_heal hook (_gt_bot_fixes.lua
+                            -- FIX 12) -- no on_setting_changed wiring. Default OFF
+                            -- so with the master on it is still opt-in; the two
+                            -- anti-waste checkboxes default ON so flipping the
+                            -- enabler immediately stops the reported waste.
+                            {
+                                setting_id    = "gt_bot_smart_self_heal",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_bot_smart_self_heal_tooltip",
+                            },
+                            {
+                                setting_id      = "gt_bot_self_heal_pct",
+                                type            = "numeric",
+                                default_value   = 25,
+                                range           = { 5, 90 },
+                                decimals_number = 0,
+                                tooltip         = "gt_bot_self_heal_pct_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_reserve_kits_for_players",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_reserve_kits_for_players_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_ignore_surplus_selfuse",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_ignore_surplus_selfuse_tooltip",
+                            },
                             {
                                 setting_id    = "gt_bot_aid_priority",
                                 type          = "checkbox",

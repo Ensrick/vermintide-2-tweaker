@@ -1,5 +1,22 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.205-dev (2026-07-12) -- #468 smarter bot self-healing (configurable, anti-waste) [untested]
+
+Gated on the existing `gt_bot_behavior_improvements` master + a NEW default-OFF `gt_bot_smart_self_heal` sub-toggle, so with either OFF the `BTConditions.bot_should_heal` hook is a pure passthrough -- byte-for-byte vanilla. Host-side only (bot AI is server-owned; the hook only reads the host's own bot blackboards and engine extensions -- no RPC, no NetworkLookup key, no wire field), so nothing a non-host peer can crash or desync on.
+
+### Why (the gap behind "supposed to be fixed already")
+The heal-decision logic the "Bot Improvements - Combat Returns" workshop mod exposed was DELIBERATELY EXCLUDED from gt (`_gt_improved_bot_combat.lua:23-29`, "no-ops at their defaults"), so "when a bot uses healing" is 100% vanilla and gt had NEVER touched it -- the feature the user remembered does not exist. Two provable wastes in vanilla `BTConditions.bot_should_heal` (`bt_bot_conditions.lua:893-921`): a bot drinks a FULL-heal Draught of Healing at `bot_heal_threshold` 0.40 (`healing_draught.lua:79`), and self-burns Medical Supplies -- which a hurt HUMAN could use -- at 0.20 (`first_aid_kits.lua:72`); plus the item-surplus `force_use_health_pickup` latch (`ai_bot_group_system.lua:2357`) tops a bot off when spare items are on the floor. Note: bots have NO vanilla "heal another player" action (`BTBotHealAction` = self-heal only, `bt_bot_heal_action.lua:15,29`); "bot heals an ally" is a separate new feature, deferred to its own issue.
+
+### Added (`_gt_bot_fixes.lua` FIX 12 + data/loc)
+- **`gt_bot_smart_self_heal` (checkbox, default OFF)** under the Bot Behavior master. When on, gt reimplements `bot_should_heal` mirroring vanilla `:904-921` exactly, with three user substitutions:
+  - **`gt_bot_self_heal_pct` (slider, default 25, range 5-90):** the HP% threshold, replacing `template.bot_heal_threshold` for both the current- and perma-health checks. Default 25 makes bots hold a draught past vanilla's 40.
+  - **`gt_bot_reserve_kits_for_players` (checkbox, default ON):** a heal-OTHER kit (`template.can_heal_other`, Medical Supplies) is held (not self-used) unless the bot is wounded or the surplus latch fired -- so it stays carried/droppable for a human. Draughts (drink-only) unaffected.
+  - **`gt_bot_ignore_surplus_selfuse` (checkbox, default ON):** ignore `force_use_health_pickup`.
+  - Any missing blackboard field -> passthrough to the vanilla `func` (bot AI ticks every frame; nil deref = hard crash).
+- **`[gt:468]` diagnostics (always-on dev, edge-triggered per bot):** logs each decision flip -- `SELF-HEAL greenlit` and, crucially, `self-heal HELD BACK (vanilla would have healed)` with item/hp/perma/wounded/thresholds -- so the next field log shows exactly the waste gt prevented.
+- **New `/gt_regression_test` runtime check `gt_bot468_smart_self_heal_wired`:** LOAD marker present, gating helper exposed, all four settings resolve via `mod:get` with the consumed types. No `io.open` (issue 511).
+- Does NOT regress the shipped #492/#515 bot machines: FIX 12 is a fresh `(BTConditions, bot_should_heal)` hook (duplicate-hook grep clean) and touches none of their blackboard fields.
+
 ## v0.2.204-dev (2026-07-12) -- loc + hygiene: restart_level_hotkey title; mem-probe off _G [untested]
 
 ### Fixed

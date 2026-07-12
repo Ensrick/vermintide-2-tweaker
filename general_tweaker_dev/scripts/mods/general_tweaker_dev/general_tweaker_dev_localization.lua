@@ -43,8 +43,8 @@ return {
     -- data file), not A->Z. Tags: [working] where the CHANGELOG records an
     -- in-game confirmation of the wrapped fix, [untested] otherwise; the
     -- greedy-pickup item is brand-new (#297 item 8).
-    gt_bot_behavior_improvements = { en = "[Issue 297, 139 & 142] Bot Behavior Improvements" },
-    gt_bot_behavior_improvements_tooltip = { en = "Master switch for the bot fixes listed underneath; while it is on, each fix can be toggled individually below. Covers Necromancer potion handoff, keeping the mission alive while a bot still stands, ledge recovery, ladder unstick, instant and greedy item pickup, revive and rescue priority, and reviving during the Ironbreaker ult. Works only when you are the host." },
+    gt_bot_behavior_improvements = { en = "[Issue 297, 139, 142 & 468] Bot Behavior Improvements" },
+    gt_bot_behavior_improvements_tooltip = { en = "Master switch for the bot fixes listed underneath; while it is on, each fix can be toggled individually below. Covers Necromancer potion handoff, keeping the mission alive while a bot still stands, ledge recovery, ladder unstick, instant and greedy item pickup, smarter self-healing, revive and rescue priority, and reviving during the Ironbreaker ult. Works only when you are the host." },
 
     gt_bot_necro_potion_handoff = { en = "[working] Necromancer bots hand off potions" },
     gt_bot_necro_potion_handoff_tooltip = { en = "A Necromancer bot brings a real potion forward over its skull item, so it can drink it or pass it to a teammate, which the skull otherwise blocks." },
@@ -69,6 +69,20 @@ return {
 
     gt_bot_greedy_pickup = { en = "[untested] Bots collect items players leave behind" },
     gt_bot_greedy_pickup_tooltip = { en = "Normally bots refuse to take potions, bombs, and healing while a nearby player has a free slot for them; with this on they collect such items anyway, then carry them and hand them over when asked or needed." },
+
+    -- #468: control WHEN a bot spends a heal on itself (bots cannot heal another
+    -- player -- that is not a game feature -- so this is self-use timing only).
+    gt_bot_smart_self_heal = { en = "[untested] [diag] [Issue 468] Smarter bot self-healing" },
+    gt_bot_smart_self_heal_tooltip = { en = "Decide for yourself when a bot spends healing on itself instead of the game's fixed rules, which drink a full Draught of Healing at 40 percent health and burn Medical Supplies at 20 percent even when a player could use them better. With this on, the three settings below take over. Bots cannot heal other players (the game has no such action), so this only changes self-use timing; carrying and handing items to players is the greedy-pickup option above. Works only when you are the host." },
+
+    gt_bot_self_heal_pct = { en = "[untested] [Issue 468] Bot self-heal health threshold (%%)" },
+    gt_bot_self_heal_pct_tooltip = { en = "A bot only heals itself once its health drops to this percentage or lower. Lower values make bots hold their healing longer (less waste); higher values make them heal sooner. Applies to both draughts and medical supplies, replacing the game's fixed 40 and 20 percent triggers." },
+
+    gt_bot_reserve_kits_for_players = { en = "[untested] [Issue 468] Bots reserve medical supplies for players" },
+    gt_bot_reserve_kits_for_players_tooltip = { en = "Medical Supplies can heal a hurt teammate, so a bot holds onto them instead of using them on itself, unless it is wounded (grey health) or spare healing is lying around anyway. Draughts of Healing, which only heal the drinker, are not affected." },
+
+    gt_bot_ignore_surplus_selfuse = { en = "[untested] [Issue 468] Bots don't top themselves off on spare healing" },
+    gt_bot_ignore_surplus_selfuse_tooltip = { en = "The game tells a bot to drink its healing when more healing items are lying around than players to use them, even at high health. With this on a bot ignores that prompt and keeps its healing until it actually needs it." },
 
     gt_bot_aid_priority = { en = "[verify-fix] [Issue 492] Bots prioritize reviving and rescuing" },
     gt_bot_aid_priority_tooltip = { en = "Downed, hooked, and ledge-hanging allies always outrank following and other chores, so a bot commits to the revive or rescue and walks the whole way there." },
