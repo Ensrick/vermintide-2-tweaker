@@ -101,6 +101,8 @@ technical entry point; from here, follow the tree to the topic-specific referenc
   - `LA_SYNC_MODEL.md` - full LA bridge architecture + section 6 gotcha catalogue (kind=texture/unit hats and shields, husk RPC race, offhand preload, hook_safe shadow).
   - `GLOW_SYSTEM.md` - MaterialSettingsTemplates engine reference + override mechanism.
   - `ENGINE_SURFACE.md` - the mod's engine contact surface: every vanilla (Class, method) cosmetics_tweaker hooks, mapped to what the engine does there, with `docs/engine/` links and the paid-for dead ends (LA bridge, glow, Material-Hijack #282, CosmeticUtils sync, hat spawning). Read before adding a hook or auditing a crash class.
+- `crafting_in_modded_dev/`:
+  - `ENGINE_SURFACE.md` - the mod's engine contact surface (documents the ACTIVE dev stream `cim_dev`, not stable `crafting_in_modded/`): 106 hook sites + 1 VMF RPC channel across five surfaces - the material-clean standard crafting bench (EAC commit-block, local synth into the backend mirror, crafted-item record shape vs native #279/#390), the Athanor (the vanilla weave forge repurposed: faked Weaves economy, deus-weapon `on_enter` crash-guard cascade, two craft surfaces + freedom toggles, mid-mission shading-env AV §22), the LA-dispatch equip-capture (dormant), illusion swap, and custom-rarity registration + cross-peer wire safety (#278/#371 "modded"->"unique" coercion), with `docs/engine/` links and paid-for dead ends. Read before adding a hook or auditing a crash class.
 - `dynamic_cosmetic_portraits/`:
   - `CLAUDE.md` - workflow guardrails for the portrait pipeline (read before touching portraits).
   - `DEVELOPMENT.md` - career_settings swap, texture/alpha requirements, VMF renderer-creator keys.
