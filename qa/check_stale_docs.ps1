@@ -13,6 +13,11 @@
 # do not. Head-only match (first 12 lines) so format docs that quote the banner
 # are not false positives; CODE_REVIEW.md is exempt (mandatory canonical doc).
 #
+# Scan 3 (issue #432): pointer-stub link integrity. A doc HEAD carrying a
+# supersession/pointer banner (SUPERSEDED / moved to / merged into) must link an
+# owner doc that still exists; this flags a markdown .md link that resolves to no
+# file (a dangling stub from a later rename/move). Time-independent, advisory.
+#
 # Usage:
 #   .\check_stale_docs.ps1              # report only
 #   .\check_stale_docs.ps1 -Fix         # auto-prepend SUPERSEDED banner to stale docs
@@ -179,6 +184,50 @@ if ($misplaced.Count -gt 0) {
         Write-Host "  ! $m" -ForegroundColor Yellow
     }
     Write-Host "  git mv each to _archive/docs/<mirrored path>; leave a 2-line pointer stub only where inbound links exist." -ForegroundColor DarkYellow
+    if ($exitCode -lt 1) { $exitCode = 1 }
+}
+
+# --- Pointer-stub link-integrity scan (issue #432) -------------------------
+# The #432 consolidation left ~15 pointer stubs (TODO/WORK_ITEMS/TESTING_STATUS/
+# WEAPONS + the root topic docs moved under docs/) whose whole job is to keep an
+# old path resolvable via a "moved to / merged into / SUPERSEDED" banner linking
+# the new owner doc. If an owner doc is later renamed or moved without updating
+# the stub, the stub silently dangles - the exact rot the consolidation ended.
+# This flags any supersession/pointer banner in a doc HEAD whose markdown link
+# target (a .md path) resolves to no file, checked relative to BOTH the stub's
+# own directory and the repo root. Zero calendar dependence, so no staleness
+# noise; ADVISORY only (PROJECT_STANDARDS section 7.11).
+$dangling = @()
+Get-ChildItem -Path $repoRoot -Filter "*.md" -Recurse -File -ErrorAction SilentlyContinue `
+    | Where-Object {
+        $p = $_.FullName
+        $p -notlike "*\_archive\*" -and $p -notlike "*\bundleV2\*" -and $p -notlike "*\.build\*" `
+            -and $p -notlike "*\.git\*" -and $p -notlike "*\Vermintide-2-Source-Code\*"
+    } | ForEach-Object {
+        $doc = $_
+        $content = Read-FileUtf8 $doc.FullName
+        $head = (($content -split "`n") | Select-Object -First 10) -join "`n"
+        if ($head -notmatch '(?i)SUPERSEDED|moved to|merged into') { return }
+        foreach ($lm in [regex]::Matches($head, '\]\(([^)]+?\.md)(#[^)]*)?\)')) {
+            $target = $lm.Groups[1].Value
+            if ($target -match '^https?://') { continue }
+            $fromDir = Join-Path $doc.DirectoryName $target
+            $fromRoot = Join-Path $repoRoot $target
+            if (-not (Test-Path -LiteralPath $fromDir) -and -not (Test-Path -LiteralPath $fromRoot)) {
+                $dangling += [PSCustomObject]@{
+                    Path = $doc.FullName.Substring($repoRoot.Length + 1)
+                    Target = $target
+                }
+            }
+        }
+    }
+
+if ($dangling.Count -gt 0) {
+    Write-Host ""
+    Write-Host "[check_stale_docs] $($dangling.Count) pointer stub(s) linking a MISSING owner doc (issue #432 - fix the link or restore the target):" -ForegroundColor Yellow
+    foreach ($d in ($dangling | Sort-Object Path)) {
+        Write-Host "  ! $($d.Path) -> $($d.Target)" -ForegroundColor Yellow
+    }
     if ($exitCode -lt 1) { $exitCode = 1 }
 }
 

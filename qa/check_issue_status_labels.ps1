@@ -283,6 +283,12 @@ if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($openJson)) {
         foreach ($o in ($openJson | ConvertFrom-Json)) {
             $lbls = @()
             if ($o.labels) { $lbls = @($o.labels | ForEach-Object { $_.name }) }
+            # documentation/tooling issues never take verify-*/diagnostics-armed/Fixed
+            # (user rule 2026-07-12, s11 human-verification scope): Claude verifies and
+            # closes them directly, so between first work and closure they legitimately
+            # carry no worked-status label. An untouched one still gets not-started
+            # (which already satisfies this pass), so exempt the whole class here.
+            if ($lbls -contains 'documentation' -or $lbls -contains 'tooling') { continue }
             if (-not ($lbls | Where-Object { $LifecycleLabels -contains $_ })) {
                 $stateless += [pscustomobject]@{ Issue = $o.number; Labels = ($lbls -join ',') }
             }

@@ -250,6 +250,12 @@ UPLOAD - a local deploy alone is silently clobbered.
     status label on an issue without that comment is invalid and will be
     removed. No test method you can state = the issue is not ready for a
     verify/diagnostics label.
+  - **SCOPE (user rule 2026-07-12): verify-* labels are for HUMAN in-game
+    verification only** - log evidence of the fix, or eyes-on testing. A
+    documentation or script/tooling issue (docs, qa/ checks, tools/, pipeline)
+    never takes verify-*/diagnostics-armed/Fixed: Claude verifies it autonomously
+    and CLOSES it directly, posting the verification evidence in the closing
+    comment (`PROJECT_STANDARDS.md` §11 human-verification scope).
   - `gh issue edit <N> --add-label verify-fix` when you shipped a **code fix**
     the user now confirms in-game (this is the common case).
   - `gh issue edit <N> --remove-label verify-fix --add-label verify-fix-coop`

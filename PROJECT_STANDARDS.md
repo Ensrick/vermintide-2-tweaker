@@ -1215,6 +1215,51 @@ Never skip a stage to "clean up faster" - stage 2 exists because commit
 messages, memory files, and Workshop descriptions keep linking the old path
 long after the content moved.
 
+### 7.11 Doc process: keeping docs non-contradictory (issue #432)
+
+The #432 audit found 6 live contradictions, 8 stale claims, and the same fact
+restated (uncited) across up to 5 docs. Those all trace to one root cause: a
+fact written in two places drifts, and a claim with no date cannot be told from
+a current one. The rules below are the standing process that stops it recurring;
+they bind the same as the rest of section 7.
+
+1. **One owner doc per topic.** Every fact has a single home, listed in the
+   section 7.1 canonical map (repo-wide) or the mod's own doc set (per-mod). A
+   new doc names in its first lines the ONE topic it owns; if that topic already
+   has an owner, extend the owner instead of opening a second surface.
+2. **Facts live in the owner; everyone else cites.** Do not restate an owner
+   doc's content in another doc - link to it (`docs/X.md` section N). A copy is
+   a future contradiction: when the owner changes, the copy silently lies. If
+   you catch yourself pasting a rule, replace the paste with a pointer.
+3. **Dated and quantitative state claims carry their date.** Any claim true only
+   at a moment - counts ("13 files over the limit"), "all N cfgs pass", "as of
+   promotion", a per-mod status - is written with the date it was true
+   (`... (2026-07-08)`) so a later reader sees its age. An undated count reads as
+   eternal and is the staleness the audit kept finding. A current-state
+   reference doc SHOULD carry a `Status as of YYYY-MM-DD` masthead and bump it
+   whenever its body is touched.
+4. **Status lives only in STATUS.md and GitHub Issues.** Per section 11, pending
+   and what-now state has exactly two homes. No other doc restates issue status
+   or a task queue; it cites the issue number. The retired `TODO.md` /
+   `WORK_ITEMS.md` / `TESTING_STATUS.md` quartet is the worked example of what
+   status-fragmentation rots into - do not recreate that shape anywhere.
+5. **Retire by the section 7.10 lifecycle, never by silent delete or silent
+   edit.** Superseded -> stubbed -> archived. A moved doc leaves a pointer stub
+   whose link stays resolvable (`qa/check_stale_docs.ps1` scan 3 flags a stub
+   linking a missing owner).
+6. **On a contradiction, the owner wins.** Precedence is CLAUDE.md >
+   PROJECT_STANDARDS > topic docs (the global prefs restate this). When two docs
+   assert the same fact and differ, fix the non-owner to a citation of the owner
+   in the same pass - do not leave both readings live for a later reader to
+   arbitrate.
+
+Automated backstops (advisory - they surface rot but never block a commit):
+`qa/check_stale_docs.ps1` (time-based staleness on audit/review docs, snapshot-
+banner placement per issue #502, and pointer-stub link integrity per issue #432),
+`qa/check_mechanics_citations.ps1` (provenance on every MECHANICS fact,
+section 12a), and the section 7.1 owner map itself. The scanners catch mechanical
+drift; rules 1-6 are the human discipline they cannot enforce.
+
 ---
 
 ## 8. Workflow standards for Claude
@@ -1532,6 +1577,7 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   the #498 audit to every open issue with zero work evidence; REMOVE it in the
   same pass that ships the first work and adds a real status label.
 - `verify-fix` — a code fix shipped; the user tests it in-game (solo-verifiable).
+  Reserved for HUMAN in-game verification — see the scope rule below.
 - `verify-fix-coop` — a code fix shipped whose verification needs **2+ people**
   (cross-peer wire safety, host/client desync, hot-join races). REPLACES
   `verify-fix`, never coexists with it. ship.ps1's auto-labeler only applies plain
@@ -1555,6 +1601,17 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   of the crash). A status label without that comment is invalid and gets
   removed on sight - the user did exactly that on #479. Post the test comment
   in the same pass as the label.
+- **Human-verification scope (user rule 2026-07-12):** `verify-fix` / `verify-fix-coop`
+  / `Fixed` are RESERVED for issues whose verification needs a human in-game -
+  generating a log with evidence of the fix, or eyes-on testing/oversight. The user
+  filters by verify-* to find things HE can test, so each must carry an in-game
+  test method (the prerequisite above). Documentation and script/tooling issues
+  (docs, qa/ checks, tools/, build pipeline) NEVER take verify-* / diagnostics-armed
+  / Fixed: Claude verifies them autonomously (run the script, review the doc against
+  its claims) and walks them from open to CLOSED, posting the verification evidence
+  in the closing comment. While such an issue is open it carries `not-started` until
+  work ships; once work ships, verify and close in the same pass (or comment why it
+  must stay open, e.g. `blocked` on a promotion).
 - **Retired 2026-07-03:** `verify-in-game` → merged into `verify-fix`; `probe-live` →
   merged into `diagnostics-armed`. Do not recreate them.
 - `qa/check_issue_status_labels.ps1` pass 3 sweeps all open issues and warns on
@@ -1823,7 +1880,7 @@ Per the chest-of-trials root-cause analysis (`DORMANT_BOON_RARITY` indexed by cl
 
 ---
 
-*Last updated: 2026-07-01 — sec. 6.5/6.6 ship doctrine rewritten (dev builds
+*Last updated: 2026-07-12 - sec. 7.11 doc-process subsection added (issue #432 process durability: one owner per topic, cite don't restate, date state claims, status only in STATUS.md/Issues, retire per sec. 7.10). Prior update 2026-07-01 - sec. 6.5/6.6 ship doctrine rewritten (dev builds
 pre-authorized for the full pipeline + git commit/push; stable promotions need a
 fresh per-build signal), sec. 8.5a gate semantics (errors block, warnings
 report), sec. 14 card gained the approval axis + AFTER-shipping steps.

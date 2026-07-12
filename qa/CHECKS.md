@@ -178,7 +178,7 @@ the committed baseline always matches CI regardless of the local checkout.
 
 | # | Bug class | Memory reference | Detection | Status |
 |---|---|---|---|---|
-| 49 | Stale audit/review markdown > 14 days unbanner'd; also a snapshot-banner'd doc left OUTSIDE `_archive/` (issue #502) | PROJECT_STANDARDS §7.2 | `check_stale_docs.ps1` two scans: (1) date scan (`$StaleDays = 14` default, exit 2); (2) banner-placement scan (issue #502, exit 1) - a doc whose head carries the snapshot banner ("...this snapshot is from...") but sits outside `_archive/` should be `git mv`'d there. Scan 2 is head-only (no false positive on format docs), skips `CODE_REVIEW.md` (mandatory per-mod canonical doc, §7.1) and gitignored files (untracked, not `git mv`-able). Both pinned **Advisory** in `run_all` (issue #429) - staleness is TIME-based and must not hard-block a commit/CI. Fix staleness with `run_all.ps1 -FixStale`; fix placement by archiving. | AUTO (script, advisory) |
+| 49 | Stale audit/review markdown > 14 days unbanner'd; also a snapshot-banner'd doc left OUTSIDE `_archive/` (issue #502) | PROJECT_STANDARDS §7.2 | `check_stale_docs.ps1` two scans: (1) date scan (`$StaleDays = 14` default, exit 2); (2) banner-placement scan (issue #502, exit 1) - a doc whose head carries the snapshot banner ("...this snapshot is from...") but sits outside `_archive/` should be `git mv`'d there. Scan 2 is head-only (no false positive on format docs), skips `CODE_REVIEW.md` (mandatory per-mod canonical doc, §7.1) and gitignored files (untracked, not `git mv`-able). (3) pointer-stub link integrity (issue #432, exit 1) - a doc HEAD with a supersession/pointer banner (SUPERSEDED / moved to / merged into) whose markdown `.md` link resolves to no file (checked against the stub dir AND repo root) is a dangling stub from a later rename; time-independent, guards the #432 consolidation's ~15 stubs. All pinned **Advisory** in `run_all` (issue #429) - staleness is TIME-based and must not hard-block a commit/CI. Fix staleness with `run_all.ps1 -FixStale`; fix placement by archiving; fix a dangling stub by repointing its link. | AUTO (script, advisory) |
 | 50 | Memory cited claim no longer matches current code | PROJECT_STANDARDS §12.3 | PRE-SHIP review (verify before recommending) | PRE-SHIP |
 | 51 | CHANGELOG entry missing for current MOD_VERSION | PROJECT_STANDARDS §6.4 | `check_versions.ps1` cross-check | AUTO (script) |
 | 52 | File exceeds 2500-line hard limit | PROJECT_STANDARDS §2.1 | `check_file_sizes.ps1` line-count, **ratcheted** against `qa/baselines/file_sizes.json` (issue #429): the 13 known-oversized files are frozen; fails only on a NEW file over the limit or a baselined file growing past its frozen count. Target-tier (1500–2500) overages are plain warnings. | AUTO (script) |
@@ -248,7 +248,7 @@ clean.
 
 ## Current state of each check
 
-| Check | Last run (2026-05-23) | Notes |
+| Check | Last run | Notes |
 |---|---|---|
 | `check_cfg.ps1` | ✅ OK | all 20 cfgs pass |
 | `check_versions.ps1` | ⚠ warnings only | cfg title drift (waiting on launcher auto-rewrite) + missing-CHANGELOG warnings. Now also flags 4-segment MOD_VERSIONs as a warning (row 10a, issue #429). |
