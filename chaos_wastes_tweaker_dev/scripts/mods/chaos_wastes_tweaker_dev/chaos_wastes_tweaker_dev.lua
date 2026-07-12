@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.240-dev"
+local MOD_VERSION = "0.7.241-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -5297,7 +5297,20 @@ local ADVENTURE_INCOMPATIBLE_PACK_MUTATORS = {
 -- conflict directors are covered. Marker asserted by /ct_regression_test.
 CT_NO_ROAMERS_DEUS_FIX_MARKER = "no_roamers_strip_keys_on_missing_difficulty_overrides_v0.7.231"
 
-mod:hook("MutatorHandler", "tweak_pack_spawning_settings", function(func, self, zone_mutator_list, mutator_list, conflict_director_name, pack_spawning_settings)
+-- v0.7.241 (issue 356): ARITY FIX. Vanilla MutatorHandler.tweak_pack_spawning_settings is
+-- STATIC - defined dot-form (def mutator_handler.lua:748) and DOT-CALLED with exactly 4 args
+-- (zone_mutator_list, mutator_list, conflict_director_name, pack_spawning_settings) at
+-- main_path_spawning_generator.lua:327. The pre-fix hook declared a spurious leading `self`,
+-- so VMF's arg pass shifted every param by one: `pack_spawning_settings` always read nil (the
+-- missing_field strip fired on EVERY call) and, worse, the real `zone_mutator_list` - the list
+-- no_roamers actually rides on for CW SIGNATURE zones - rode in as the dropped-`self` positional
+-- and was NEVER filtered. So the pairs(nil) host CTD this guard exists to prevent (crash guid
+-- 4c84c68a: no_roamers reading pack_spawning_settings.difficulty_overrides on a Belakor node)
+-- could still fire on signature zones. Fix: drop `self`, bind the 4 real params in vanilla
+-- order, filter BOTH lists. Behavioral arity lock: /ct_regression_test `no_roamers_strip_arity_356`.
+CT_NO_ROAMERS_ARITY_FIX_MARKER = "no_roamers_hook_static_arity_no_self_v0.7.241"
+
+mod:hook("MutatorHandler", "tweak_pack_spawning_settings", function(func, zone_mutator_list, mutator_list, conflict_director_name, pack_spawning_settings)
     -- Strip the adventure-incompatible pack mutators (no_roamers) when EITHER:
     --   (a) pack_spawning_settings lacks `difficulty_overrides` -- the exact field
     --       no_roamers iterates with pairs() (mutator_no_roamers.lua:6), so letting it
@@ -5317,9 +5330,9 @@ mod:hook("MutatorHandler", "tweak_pack_spawning_settings", function(func, self, 
     -- a working mutator: with difficulty_overrides nil, no_roamers can only ever crash.
     local missing_field = type(pack_spawning_settings) ~= "table" or pack_spawning_settings.difficulty_overrides == nil
     if not (missing_field or on_injected_adventure_level()) then
-        return func(self, zone_mutator_list, mutator_list, conflict_director_name, pack_spawning_settings)
+        return func(zone_mutator_list, mutator_list, conflict_director_name, pack_spawning_settings)
     end
-    local function filter(list)
+    local function filter(list, list_label)
         if type(list) ~= "table" then return list end
         local kept, dropped = {}, nil
         for _, name in ipairs(list) do
@@ -5331,13 +5344,18 @@ mod:hook("MutatorHandler", "tweak_pack_spawning_settings", function(func, self, 
             end
         end
         if dropped then
-            pcall(printf, "[ct:no_roamers] stripped {%s} on conflict '%s' (difficulty_overrides present=%s) - prevented pairs(nil) crash in mutator_no_roamers",
-                table.concat(dropped, ","), tostring(conflict_director_name),
+            -- [ct:356] fires only when a mutator is actually filtered. Naming the list
+            -- (zone_mutator_list vs mutator_list) confirms in the field that the
+            -- SIGNATURE-zone path - the one the old arity bug missed - is now covered.
+            pcall(printf, "[ct:356] stripped {%s} from %s on conflict '%s' (difficulty_overrides present=%s) - prevented pairs(nil) crash in mutator_no_roamers",
+                table.concat(dropped, ","), tostring(list_label), tostring(conflict_director_name),
                 tostring(type(pack_spawning_settings) == "table" and pack_spawning_settings.difficulty_overrides ~= nil))
         end
         return kept
     end
-    return func(self, filter(zone_mutator_list), filter(mutator_list), conflict_director_name, pack_spawning_settings)
+    -- Filter BOTH lists in vanilla order. run_mutators processes mutator_list then
+    -- zone_mutator_list (mutator_handler.lua:765-766); no_roamers can ride on either.
+    return func(filter(zone_mutator_list, "zone_mutator_list"), filter(mutator_list, "mutator_list"), conflict_director_name, pack_spawning_settings)
 end)
 
 -- ============================================================
@@ -13579,6 +13597,30 @@ _rt_register("adventure_pack_compat_strip", function()
     end
     if CT_NO_ROAMERS_DEUS_FIX_MARKER ~= "no_roamers_strip_keys_on_missing_difficulty_overrides_v0.7.231" then
         return "v0.7.231 no_roamers deus-mission fix marker missing/changed - Belakor pairs(nil) crash may have regressed"
+    end
+end)
+
+_rt_register("no_roamers_strip_arity_356", function()
+    -- Behavioral arity lock (issue 356). Vanilla tweak_pack_spawning_settings is STATIC:
+    -- dot-called with 4 args (zone_mutator_list, mutator_list, conflict_director_name,
+    -- pack_spawning_settings) at main_path_spawning_generator.lua:327. Drive the REAL hooked
+    -- function through VMF exactly as vanilla does. difficulty_overrides is nil so the strip
+    -- path engages; both sentinel lists carry no_roamers only, so a correct (self-less) hook
+    -- filters both and vanilla run_mutators touches nothing -> ok. If the old spurious-`self`
+    -- arity regressed, no_roamers leaks into the unfiltered zone list, run_mutators invokes
+    -- mutator_no_roamers which does pairs(pack_spawning_settings.difficulty_overrides) = nil.
+    -- That is a Lua error (NOT an engine fatal), so pcall traps it and we report the failure.
+    if type(CT_NO_ROAMERS_ARITY_FIX_MARKER) ~= "string"
+            or CT_NO_ROAMERS_ARITY_FIX_MARKER ~= "no_roamers_hook_static_arity_no_self_v0.7.241" then
+        return "CT_NO_ROAMERS_ARITY_FIX_MARKER missing/changed - #356 static-hook arity fix may have reverted"
+    end
+    if not (MutatorHandler and MutatorHandler.tweak_pack_spawning_settings) then
+        return "MutatorHandler.tweak_pack_spawning_settings unavailable"
+    end
+    local ok, err = pcall(MutatorHandler.tweak_pack_spawning_settings,
+        { "no_roamers" }, { "no_roamers" }, "ct_regression_356", { difficulty_overrides = nil })
+    if not ok then
+        return "no_roamers reached vanilla run_mutators - pairs(nil) crash, #356 arity regressed (spurious self back?): " .. tostring(err)
     end
 end)
 

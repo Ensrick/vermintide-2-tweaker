@@ -223,19 +223,21 @@ never decrements on unit destroy) fatals at 512 - ct counts and subtracts in
 Distilled from `DEVELOPMENT.md`, `AUDIT_FINDINGS.md`, `CODE_REVIEW.md`, and
 `docs/BUG_CLASSES.md` - do not re-discover these.
 
-- **OPEN P0 - the `tweak_pack_spawning_settings` static-hook arity trap.** Vanilla
-  `MutatorHandler.tweak_pack_spawning_settings` takes NO `self` (called dot-form at
-  `main_path_spawning_generator.lua:327`, def `mutator_handler.lua:748`). ct's hook
-  `:5300` declares `function(func, self, zone_mutator_list, mutator_list,
-  conflict_director_name, pack_spawning_settings)`, so VMF's arg pass shifts every
-  parameter by one: `pack_spawning_settings` is ALWAYS nil (the strip's
-  `missing_field` guard fires on EVERY call, not just the crash predicate), and the
-  SIGNATURE-zone `zone_mutator_list` - the list `no_roamers` actually rides on CW
-  signature zones (DEVELOPMENT "adventure mutators") - is the one list the filter
-  never touches, because in the re-dispatch it lands as the leading (dropped-`self`)
-  positional. Net: the `pairs(nil)` crash-guard this hook exists for does not cover
-  the zone it most needs to. Fix = drop `self` from the signature and re-verify the
-  re-call arity. Tracked as an open backlog P0.
+- **RESOLVED v0.7.241-dev (#356) - the `tweak_pack_spawning_settings` static-hook
+  arity trap.** Vanilla `MutatorHandler.tweak_pack_spawning_settings` takes NO `self`
+  (called dot-form at `main_path_spawning_generator.lua:327`, def
+  `mutator_handler.lua:748`). Until v0.7.240-dev ct's hook `:5300` declared a spurious
+  leading `self`, so VMF's arg pass shifted every parameter by one: `pack_spawning_settings`
+  was ALWAYS nil (the strip's `missing_field` guard fired on EVERY call, not just the
+  crash predicate), and the SIGNATURE-zone `zone_mutator_list` - the list `no_roamers`
+  actually rides on CW signature zones (DEVELOPMENT "adventure mutators") - was the one
+  list the filter never touched, because in the re-dispatch it landed as the leading
+  (dropped-`self`) positional. Net: the `pairs(nil)` crash-guard (guid 4c84c68a) did not
+  cover the zone it most needed to. FIX (v0.7.241-dev): dropped `self`, bound the 4 real
+  params in vanilla order, filter BOTH lists. Behavioral arity lock in `/ct_regression_test`
+  `no_roamers_strip_arity_356` (drives the real hooked fn with 4 positional sentinels;
+  a self-shift regression leaks no_roamers -> `pairs(nil)` caught by pcall). Marker
+  `CT_NO_ROAMERS_ARITY_FIX_MARKER`.
 - **A modded index on a vanilla wire cannot be substituted, only gated.** A gameplay
   boon/buff/miracle whose effect depends on the modded template can't be swapped for
   a vanilla index without changing what happens - so under unconfirmed peer parity
