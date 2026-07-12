@@ -47,7 +47,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > 2. If ANY match exists for `(ClassName, method)`, **DO NOT add a new hook line**. Instead, merge your new logic INTO the body of the existing hook. Add a banner comment naming the consolidation site (e.g. `_ct_consolidated_open_chest_hook` marker) so the next session can grep for it.
 > 3. Add or extend a `/ct_regression_test` `_rt_register` source-pattern marker for the consolidation, so the singleton invariant is checked on every release.
 >
-> When in doubt: search for `"<method>"` (with quotes) in the file. A grep that returns more than one hit on `mod:hook` or `mod:hook_safe` is a bug, full stop. Reference: `docs/VMF_RECIPES.md` section 1 + `memory/feedback_vmf_no_duplicate_hooks.md`.
+> When in doubt: search for `"<method>"` (with quotes) in the file. A grep that returns more than one hit on `mod:hook` or `mod:hook_safe` is a bug, full stop. Reference: `docs/VMF_RECIPES.md` section 1 + `memory/feedback_vmf_no_duplicate_hooks_burned_again.md`.
 
 ## Project Overview
 
@@ -355,9 +355,9 @@ Any weapon visual override must cover all three:
 
 `MenuWorldPreviewer._spawn_item_unit` fires once per unit with **no hand indicator** - do not use it for per-hand operations.
 
-**HOOK THE DERIVED CLASS, NEVER THE BASE.** Hooks on `HeroPreviewer.equip_item` / `HeroPreviewer._spawn_item` silently never fire on the keep inventory previewer instance. VT2's `foundation/scripts/util/class.lua:51-57` copies parent methods into the child *at class-definition time* (no `__index` chain). `MenuWorldPreviewer = class(MenuWorldPreviewer, HeroPreviewer)` runs at game load, before any mod loads - so by the time VMF replaces `HeroPreviewer.method`, `MenuWorldPreviewer.method` is already an independent copy of the original. The runtime keep inventory is `MenuWorldPreviewer` (verified at every `:new(...)` call site in `scripts/ui/views/`); `HeroPreviewer` itself is only instantiated by `team_previewer.lua`. See `feedback_vt2_class_hook_derived.md` and `feedback_inventory_preview_hook_menuworldpreviewer.md`. Burned in weapon_tweaker v0.12.16 -> fixed in v0.12.17.
+**HOOK THE DERIVED CLASS, NEVER THE BASE.** Hooks on `HeroPreviewer.equip_item` / `HeroPreviewer._spawn_item` silently never fire on the keep inventory previewer instance. VT2's `foundation/scripts/util/class.lua:51-57` copies parent methods into the child *at class-definition time* (no `__index` chain). `MenuWorldPreviewer = class(MenuWorldPreviewer, HeroPreviewer)` runs at game load, before any mod loads - so by the time VMF replaces `HeroPreviewer.method`, `MenuWorldPreviewer.method` is already an independent copy of the original. The runtime keep inventory is `MenuWorldPreviewer` (verified at every `:new(...)` call site in `scripts/ui/views/`); `HeroPreviewer` itself is only instantiated by `team_previewer.lua`. Burned in weapon_tweaker v0.12.16 -> fixed in v0.12.17.
 
-**In-mission player career detection caveat (in-game path):** career-gated hooks on `GearUtils.spawn_inventory_unit` (or `create_equipment`) must NOT rely on `Managers.player:owner(unit):career_name()` - at mission-spawn timing the unit->player reverse association isn't yet established, so the lookup returns nil and the hook silently bails. Read career from `ScriptUnit.has_extension(unit, "inventory_system")._career_name` instead - that field is set in `SimpleInventoryExtension.init` (line 47) BEFORE `extensions_ready` fires our hook. See `feedback_vt2_mission_spawn_career_lookup.md`.
+**In-mission player career detection caveat (in-game path):** career-gated hooks on `GearUtils.spawn_inventory_unit` (or `create_equipment`) must NOT rely on `Managers.player:owner(unit):career_name()` - at mission-spawn timing the unit->player reverse association isn't yet established, so the lookup returns nil and the hook silently bails. Read career from `ScriptUnit.has_extension(unit, "inventory_system")._career_name` instead - that field is set in `SimpleInventoryExtension.init` (line 47) BEFORE `extensions_ready` fires our hook.
 
 ### Shield/Weapon Unit Architecture
 
@@ -365,7 +365,7 @@ Shield weapons use **two independent units**: right hand (weapon) and left hand 
 
 ### Animation Remapping (weapon_tweaker)
 
-**Load-bearing rule:** **1P animations are universal across all six characters and never need cross-character remapping.** The `first_person_base` unit is shared, so any weapon's 1P state machine and clips play correctly on any character's first-person view by default. Only the **3P body** is character-specific and needs remap work. Never override `anim_event` (1P), `wield_anim` (1P), or `state_machine` per character. See `feedback_1p_animations_universal.md` and `feedback_animation_remap_rules.md`.
+**Load-bearing rule:** **1P animations are universal across all six characters and never need cross-character remapping.** The `first_person_base` unit is shared, so any weapon's 1P state machine and clips play correctly on any character's first-person view by default. Only the **3P body** is character-specific and needs remap work. Never override `anim_event` (1P), `wield_anim` (1P), or `state_machine` per character. Owner doc: `weapon_tweaker/DEVELOPMENT.md` (animation remap rules).
 
 VT2 uses two separate units for the local player:
 - `player.player_unit` = **3P body** (receives `anim_event_3p`) - character-specific skeleton, this is where remap work lives
