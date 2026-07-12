@@ -111,6 +111,8 @@ technical entry point; from here, follow the tree to the topic-specific referenc
   - `DEVELOPMENT.md` - module contracts + "where new code goes", the three hooks (`get_special_events`, `get_active_events`, `get_level_variation_data`), mutator/preset registration, confirmed mutator catalog.
 - `general_tweaker_dev/`:
   - `ENGINE_SURFACE.md` - the mod's engine contact surface: every vanilla (Class, method) `gt` hooks across its ~30 `_gt_*` modules, grouped into the four surfaces it touches (bot behaviour tree, world/state lifecycle, host lobby/session seams, player damage/movement/camera), with `docs/engine/` links and the paid-for dead ends (dead-world AV §32/#459, POSITION_LOOKUP #337, merge-dispatch single-hook discipline, AI-takeover). Documents the ACTIVE dev stream (`general_tweaker_dev/`), not stable `general_tweaker/`. Read before adding a hook or auditing a crash class.
+- `gui_tweaker_dev/`:
+  - `ENGINE_SURFACE.md` - the mod's engine contact surface: ~135 registration sites across ~35 modules (incl. the `hb/` HideBuffs fork), grouped into the five surfaces it touches (camera/viewport/free-flight, the backend native-loadout mirror, HUD composition + drag-reposition, the HideBuffs fork boot chain, view/window injection), with `docs/engine/` links and the paid-for dead ends (dead-world AV §32, mirror NO-OP isolation + `get_item_from_id` recursion, HUD non-zero baseline, `setup_views` pre-context timing, backend-loc supply-not-hook). Documents the ACTIVE dev stream (`gui_tweaker_dev/`), not stable `gui_tweaker/`. Read before adding a hook or auditing a crash class.
 - `modded_progression/`:
   - `PLAN.md` - full design for the modded-realm vanilla-progression re-enable.
 - `verminious_dreams_lighting/`:
