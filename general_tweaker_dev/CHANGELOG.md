@@ -1,5 +1,11 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.204-dev (2026-07-12) -- loc + hygiene: restart_level_hotkey title; mem-probe off _G [untested]
+
+### Fixed
+- **`restart_level_hotkey` had a tooltip loc entry but no TITLE entry** - the only `check_name_integrity` failure in the repo (surfaced by the issue 516 full-gate run). Added `[untested] Restart Level` per LOCALIZATION_STANDARD section 13.
+- **Mem-probe baseline off the bare `_G` global** (issue 510 class, same fix as mp/dcp/vdl): now `mod._mem_probe_t0` - a mod field rather than a new top-level local because this chunk lives near the Lua 5.1 200-local ceiling. Both in-file readers updated; no cross-file reader exists (grep-verified).
+
 ## v0.2.203-dev (2026-07-12) -- #515 bots teleport past no-return thresholds (composes with #142 + #492) [verify-fix]
 
 All three changes are gated on the existing `gt_bot_ignore_backward_gate` (+ Bot Behavior master) toggle, so with the toggle OFF every path stays byte-for-byte vanilla. Host-side only: bot AI is server-owned, and these paths only read/write the host's own bot blackboards and call the vanilla teleport action (which already syncs `has_teleported` over the game object) -- no new RPC / NetworkLookup key / wire field, so nothing a non-host peer can crash or desync on.

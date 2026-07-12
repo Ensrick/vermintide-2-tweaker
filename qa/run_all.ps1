@@ -153,6 +153,14 @@ Run-Check "check_command_collisions" { & (Join-Path $here "check_command_collisi
 Run-Check "check_decisions_wired" { & (Join-Path $here "check_decisions_wired.ps1") -Quiet:$Quiet }
 Run-Check "check_name_integrity"  { & (Join-Path $here "check_name_integrity.ps1")  -Quiet:$Quiet }
 Run-Check "check_mechanics_citations" { & (Join-Path $here "check_mechanics_citations.ps1") -Quiet:$Quiet }
+# check_rt_textual_invariants is a Standard (blocking) source gate (issue #516):
+# the source-text invariants that issue #511 moved OUT of the in-game rt suites
+# (the retail Stingray VM has no `io`, so a source self-grep threw + false-failed).
+# It scans qa/rt_textual_invariants.psd1 - each entry is a literal/regex that must
+# be PRESENT (a fix's marker) or ABSENT (a forbidden pattern), plus a missing-file
+# FAIL. Exit 2 on any FAIL blocks the gate so a reworded/removed invariant surfaces.
+# See qa/CHECKS.md row 59.
+Run-Check "check_rt_textual_invariants" { & (Join-Path $here "check_rt_textual_invariants.ps1") -Quiet:$Quiet }
 # check_dev_only_edits guards the dev/stable split (issue #429): any staged/diffed
 # change to one of the five split-mod STABLE dirs is an ERROR (edit the *_dev twin;
 # stable is write-by-promotion-only). Standard policy (exit 2 blocks). Bypass a

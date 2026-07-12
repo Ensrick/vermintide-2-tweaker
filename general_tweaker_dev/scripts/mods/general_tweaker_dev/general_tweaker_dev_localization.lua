@@ -183,6 +183,7 @@ return {
     kill_bots_hotkey_tooltip = { en = "On the official realm this is only allowed before the round starts; the modded realm has no restriction. Every bot in your party goes down at once." },
     down_bots_hotkey = { en = "[verify-fix] Down Bots (Morr's test)" },
     down_bots_hotkey_tooltip = { en = "Host only. Forces every standing bot into the downed bleedout state at once, the same way lethal damage would, but without killing them. Use it to test the Morr's Protection soft-lock fix: give two bots the Morr's Protection boon, down them close together, and they should still bleed out instead of becoming permanently invulnerable. Does nothing in the keep." },
+    restart_level_hotkey = { en = "[untested] Restart Level" },
     restart_level_hotkey_tooltip = { en = "Reloads the current mission from the beginning with the same team and difficulty. Does nothing in the keep." },
     die_hotkey = { en = "[untested] Suicide" },
     die_hotkey_tooltip = { en = "Your own character drops dead on the spot. Does nothing in the keep." },

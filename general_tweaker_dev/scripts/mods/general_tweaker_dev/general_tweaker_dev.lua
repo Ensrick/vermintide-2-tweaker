@@ -1,7 +1,10 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.203-dev"
-_MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
+local MOD_VERSION = "0.2.204-dev"
+-- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
+-- On the mod table, not a bare _G global (issue 510 class) and not a new
+-- top-level local (this chunk lives near the 200-local ceiling).
+mod._mem_probe_t0 = collectgarbage("count")
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
 -- needing access to this file-local. Mirrors the same pattern lt used
@@ -2783,4 +2786,4 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_saved_positions")
 -- (zero per-frame work until enabled). Dev-only, client-safe. No new hooks.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_debug_highlights")
 
-mod:info("[mem-probe] gt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_GT) / 1024)
+mod:info("[mem-probe] gt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - mod._mem_probe_t0) / 1024)

@@ -209,6 +209,22 @@ nonzero by design (it gathers signal). Each has a false-positive-safe escape.
 | 58b | `mod:info`/`mod:warning` inside a per-frame callback (`function update`, `mod.update`, `X.update`/`X:update`, inline `mod:hook*(..., "update", …)`) — logs every frame, floods the console + costs a `string.format` per tick. | PROJECT_STANDARDS § 3.6 + `docs/VMF_RECIPES.md § 2b` (traced_hook per-frame caveat) | `check_logging.ps1` category **per-frame**. Escape an intentional throttled/one-shot site with `-- allow-perframe: <reason>`. | AUTO (script, advisory) |
 | 58c | `mod:warning` inside a dbg/alert HELPER (`_dbg_alert`, `_spawn_dbg_alert`, a `dbg`/`alert`-named helper — not a `chat`-named one). The **Issue #240** class: `mod:warning` is believed log-only but VMF `logging.lua` defaults `warning` to mode 3 (`send_to_chat = mode >= 2`), so a "log-only alert" helper spams chat. Sanctioned form is pcall-guarded raw `printf` (et v0.7.25-dev). Genuine failure-path `mod:warning` (ordinary guards, `_safe`) is NOT flagged. | `reference_vmf_warning_channel_posts_to_chat.md` + `docs/BUG_CLASSES.md § 17 Variant B` (#240) | `check_logging.ps1` category **warn-chat**. Escape an intentional in-helper chat warning with `-- allow-warn-chat: <reason>`. | AUTO (script, advisory) |
 
+### Regression-check source-text invariants (tier a, issue #511 / #516)
+
+`check_rt_textual_invariants.ps1` is the tier-(a) home (PROJECT_STANDARDS § 2.2b)
+for the SOURCE-TEXT invariants that issue #511 removed from the in-game
+`/<mod>_regression_test` suites. Those checks read the mod's own source via
+`io.open` and grepped for a marker; the retail Stingray VM registers no `io`
+library (mods are `loadstring`'d into the shared `_G`, `mod_manager.lua:375`), so
+each threw `attempt to index global 'io'` and FALSE-FAILED on healthy code. The
+runtime half of each check became a load-time marker; the genuinely textual half
+(a literal that must be PRESENT, or a forbidden pattern that must be ABSENT) moved
+here.
+
+| # | Bug class | Memory reference | Detection | Status |
+|---|---|---|---|---|
+| 59 | A `/<mod>_regression_test` source-pattern invariant (a fix's marker literal, or an absence guard like "no bare `:local_player()` in `_gt_debug_highlights.lua`") that in-game markers cannot capture, silently reworded or removed as the mod evolves. Issue #511 stripped these from the Lua suites (retail has no `io`); without a repo gate they had no home. | issue #511 (root cause) + PROJECT_STANDARDS § 2.2b tier (a) + the per-mod CHANGELOG #511 entries | `check_rt_textual_invariants.ps1` — scans a per-entry NEEDLE MANIFEST (`qa/rt_textual_invariants.psd1`): each row names the mod, the repo-relative file, a needle (literal or regex), polarity (`present`/`absent`), an `issueRef`, and a note; `present` supports `minCount`/`maxCount` (e.g. ct #145 wired at both graph branches = minCount 2; WOC #422 wire-safety hook is a singleton = min/max 1). Absence needles are first-class (the two gt dh guards use a comment-excluding regex `(?!\s*--)` because the file documents the invariant in a comment). A MISSING FILE is a FAIL (the invariant moved — update the manifest). Hard-fail (exit 2) on any FAIL; Standard policy in `run_all` (full pass). Runs in a few seconds (literal `String.IndexOf` / one `[regex]::Matches` per entry). Self-test: `-SelfTest` (synthetic fixtures — present pass, minCount, comment-excluding absence, naive-absence fail, missing-file fail). Seeded 2026-07-12 with 56 needles across gt_dev (34), ct_dev (7), gut_dev (5), cim_dev (3), WOC (3), dcp (4). | AUTO (script, in run_all) |
+
 ## Coverage summary
 
 | Category | AUTO | PRE-SHIP | MANUAL | DEFERRED | HANDED OFF | FIXED |
@@ -268,6 +284,7 @@ clean.
 | `check_logging.ps1` | ⚠ 56 findings (2026-07-08, first run) | Rows 58a/b/c (issue #429). echo=36 (§ 3.6 NEVER-context echoes — hook bodies, on_enabled/on_disabled, cim/gt/wt anim-log traces), per-frame=4 (cosmetics `mod.update` LA-sync `mod:info`), warn-chat=16 (every mod's `_dbg_alert` → `mod:warning`, the Issue #240 class — the migration-to-printf backlog). Advisory (never blocks). Self-test 5/5. |
 | `check_hook_test_coverage.ps1` | ✅ OK (2026-07-08, first run) | Row 24a (issue #429). Diff-scoped (default `HEAD~1..HEAD`, `-Staged`, or CI `origin/<base>...HEAD`). Over `HEAD~10..HEAD` all added hooks/NL-writes resolved covered (mods ship suites). Advisory in `run_all` + warn-only pre-commit step 4. Self-exits 0 on indeterminate diff. Self-test 7/7. |
 | `check_stale_docs.ps1` | ⚠ 19 stale (advisory) | Pinned Advisory in `run_all` (issue #429) — TIME-based, non-blocking. 19 docs currently >14 days (script `$StaleDays` default) without a SUPERSEDED banner; fix with `-FixStale`. |
+| `check_rt_textual_invariants.ps1` | ✅ OK (2026-07-12, first run) | Row 59 (issue #516). Tier-a gate for the source-text invariants issue #511 moved out of the in-game rt suites. 56 needles across gt_dev/ct_dev/gut_dev/cim_dev/WOC/dcp, all PASS against live source. Standard policy in `run_all` full pass (exit 2 blocks). Self-test 6/6. Both failure modes (absent-needle violation + missing file) proven via a synthetic manifest. |
 | `luacheck` | ⚠ ~415 warnings (advisory) | Pinned Advisory in `run_all` AND CI (issue #429; was CI `\|\| true`). Baseline; 141 = CWV finding, 274 net real signal. Drive down, then flip to Standard. |
 
 ## Generated name-map (key → display-name) + integrity validator
