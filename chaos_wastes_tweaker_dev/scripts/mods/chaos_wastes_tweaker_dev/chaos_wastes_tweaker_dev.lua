@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.242-dev"
+local MOD_VERSION = "0.7.243-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -416,6 +416,13 @@ local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_adventu
 -- so the pool-snapshot helper can read the LIVE LEVEL_AVAILABILITY the deus
 -- solver consumes. Instrumentation only; see _ct_diag_freeze487.lua header.
 mod._ct_freeze487 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_freeze487")
+
+-- #132 Chest-of-Trials over-spawn diagnostic. Stored on mod._ (not a new top-
+-- level local) to stay under Lua 5.1's 200-local chunk ceiling. Its only caller
+-- is the DeusCursedChestExtension.extensions_ready hook below; see the module
+-- header for why this seam (spawn-path-independent ground truth) is not covered
+-- by the existing [ct-probe]/[ct-spawn-tally] count probes.
+mod._ct_chest132 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132")
 
 -- Call unconditionally so the LEVEL_AVAILABILITY snapshot is captured at mod load,
 -- even if the master toggle is off. inject_pool() short-circuits internally when the
@@ -4556,11 +4563,40 @@ do
             _emit()
         end
     end
+    -- #132 cross-check accessor: the running count of deus_cursed_chest (Chest of
+    -- Trials) spawns the census has seen at PickupSystem._spawn_pickup so far this
+    -- mission. The [ct:132] extensions_ready probe compares its spawn-path-
+    -- independent ground truth against this: ground_truth > census means chests
+    -- exist that never routed through the pickup system (raw baked level units).
+    mod._ct_tally_cursed_count = function()
+        return _counts.deus_cursed_chest or 0
+    end
     -- Regression marker (PROJECT_STANDARDS.md hook-consolidation doctrine): census is
     -- wired through the SINGLE existing _spawn_pickup hook + the existing mod.update
     -- drainer; no new hook on PickupSystem._spawn_pickup / no second mod.update owner.
     mod._CT_SPAWN_TALLY_MARKER = "CT_SPAWN_TALLY_v1_unconditional_census"
 end
+
+-- #132 DIAGNOSTIC: spawn-path-independent Chest-of-Trials ground truth.
+-- DeusCursedChestExtension.extensions_ready (deus_cursed_chest_extension.lua:39)
+-- fires once per cursed chest that actually exists in the world, on every peer,
+-- regardless of HOW the chest spawned - so it catches chests that bypass the
+-- pickup system (and thus the cursed_chest_count cap) entirely. Distinct method
+-- from the existing _set_state hook, so this fresh hook is VMF-clean. Read-only;
+-- cap/census are resolved here and handed to the #132 module which owns the
+-- per-mission counter + emit. See _ct_diag_cursed_chest132.lua for the full why.
+mod:hook_safe("DeusCursedChestExtension", "extensions_ready", function(self, world, unit)
+    if not mod._ct_chest132 then return end
+    pcall(function()
+        local cur = LevelHelper and LevelHelper:current_level_settings()
+        local level_id = (cur and cur.level_id) or "?"
+        local cap = mod._ct_effective_setting and mod._ct_effective_setting("cursed_chest_count")
+        cap = (cap == -1 or cap == nil) and 1 or cap
+        local census = mod._ct_tally_cursed_count and mod._ct_tally_cursed_count() or -1
+        local is_server = (Managers and Managers.player and Managers.player.is_server) and true or false
+        mod._ct_chest132.chest_appeared(level_id, cap, census, is_server)
+    end)
+end)
 
 -- CLARIFY: Patches LevelSettings[level].pickup_settings to control the COUNT of altars/cursed
 -- chests/arena ammo crates spawned per mission. This works alongside `get_deus_weapon_chest_type`
@@ -5688,7 +5724,7 @@ mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player,
     pcall(function()
         local rc = self._deus_run_controller
         if not rc then
-            _dbg("[mission:start] no _deus_run_controller (unexpected)")
+            pcall(printf, "[ct:136] mission:start no _deus_run_controller (unexpected)")
             return
         end
         local rs = rc._run_state
@@ -5717,7 +5753,18 @@ mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player,
                 active_str = "{" .. table.concat(names, ",") .. "}"
             end
         end
-        _dbg("[mission:start] is_server=%s current_node=%s level=%s base_level=%s theme=%s curse=%s level_seed=%s god=%s node_type=%s node_mutators=%s active_mutators=%s",
+        -- v0.7.243-dev (#136): raw printf (was _dbg, invisible with mod-logging
+        -- OFF - the user's setup). This is the per-peer resolved-mission line: run
+        -- a CW expedition on host + client and diff the two [ct:136] mission:start
+        -- lines for the same round. A differing level/node/god is the wrong-mission
+        -- symptom the player sees; the [ct:136] graph lines (populate_graph) show
+        -- the roll that caused it. injected = whether this level is an injected
+        -- adventure map (the client IS_INJECTED gate that goes false in the #134/
+        -- #136 divergence class); level_seed exposes the possibly-unsynced seed the
+        -- client rolled its graph from.
+        local injected = "<nil>"
+        pcall(function() injected = tostring(on_injected_adventure_level() and true or false) end)
+        pcall(printf, "[ct:136] mission:start is_server=%s current_node=%s level=%s base_level=%s theme=%s curse=%s level_seed=%s god=%s node_type=%s injected=%s node_mutators=%s active_mutators=%s",
             tostring(is_server), tostring(cur_key),
             cur and tostring(cur.level) or "<nil>",
             cur and tostring(cur.base_level) or "<nil>",
@@ -5726,7 +5773,7 @@ mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player,
             cur and tostring(cur.level_seed) or "<nil>",
             cur and tostring(cur.god) or "<nil>",
             cur and tostring(cur.node_type) or "<nil>",
-            mutators_str, active_str)
+            injected, mutators_str, active_str)
     end)
 
     -- v0.7.125-dev — pickup-system state dump (Issue #58: Magnus pickups).
@@ -6437,6 +6484,35 @@ mod._ct_curse56_dump = function(graph, is_server, applied)
     end
 end
 
+-- #136 DIAGNOSTIC (read-only): host/client CW mission divergence, ALL nodes.
+-- Runs on BOTH peers AFTER the graph snapshot broadcast/apply - same seam as
+-- _ct_curse56_dump above, but covers EVERY ingame node instead of only Citadel.
+-- A client that populated its graph BEFORE the host's synced seed/snapshot landed
+-- resolves the same node ids to DIFFERENT levels than the host (proven 2026-07-03:
+-- client node_1=dlc_portals... vs host node_1=dlc_bastion...). Diff a host dump
+-- against a client dump for the same run: any node whose level/god differs is the
+-- divergence that makes the client play the wrong mission. The dump_graph output
+-- below carries the same fields but only via _dbg (invisible with logging OFF, the
+-- user's setup); this is the raw-printf, both-peers version. Bounded so a
+-- pathological graph cannot flood the log.
+mod._ct_mission136_dump = function(graph, is_server)
+    if type(graph) ~= "table" then return end
+    local peer = is_server and "HOST" or "CLIENT"
+    local emitted = 0
+    for k, n in pairs(graph) do
+        if emitted >= 24 then break end
+        if type(n) == "table" and n.node_type == "ingame" then
+            emitted = emitted + 1
+            pcall(printf, "[ct:136] graph peer=%s node=%s level=%s theme=%s curse=%s god=%s progress=%s",
+                peer, tostring(k), tostring(n.level), tostring(n.theme),
+                tostring(n.curse), tostring(n.god),
+                tostring(n.run_progress or n.progress or "?"))
+        end
+    end
+    pcall(printf, "[ct:136] graph peer=%s ingame_nodes=%d (diff host vs client; a same-node level/god mismatch = wrong-mission divergence)",
+        peer, emitted)
+end
+
 mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dominant_god, with_belakor)
     -- CW graph generation runs on BOTH host and client (deterministic from
     -- seed). Use effective_setting(name) — returns mod:get() on host, the
@@ -6581,6 +6657,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
             end
             mod._ct_curse56_dump(result[1], false, applied)  -- #56
         end
+        mod._ct_mission136_dump(result[1], is_server and true or false)  -- #136
         -- v0.7.107-dev nil-hole audit: global `deus_populate_graph` (deus_populate_graph.lua:965)
         -- returns a single `complete_graph` table. The mod code already reads result[1]
         -- explicitly, confirming single-value usage. Bare unpack is safe — no interior
@@ -6625,6 +6702,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
         end
         mod._ct_curse56_dump(result[1], false, applied)  -- #56
     end
+    mod._ct_mission136_dump(result[1], is_server and true or false)  -- #136
     -- v0.7.107-dev nil-hole audit: same as sibling branch above — global
     -- `deus_populate_graph` returns a single `complete_graph` table; mod code
     -- reads result[1] explicitly. Bare unpack is safe. Left as-is per audit.
@@ -6744,6 +6822,12 @@ do
         if _n >= 80 then return end
         _n = _n + 1
         local on_adv, deus, level_id, adv_base = false, false, "?", "?"
+        -- v0.7.243-dev (#134): is_server added. The first capture (2026-06-27) was
+        -- CLIENT-side and showed on_adv=false; the fix needs a HOST-side line to
+        -- prove whether the injected-adventure gate is false only on the client
+        -- (client IS_INJECTED divergence, #136 class) or on the host too (the gate
+        -- itself is missing this injected base). is_server disambiguates the two.
+        local is_server = false
         pcall(function()
             local cur = LevelHelper and LevelHelper:current_level_settings()
             level_id = (cur and cur.level_id) or "?"
@@ -6752,9 +6836,10 @@ do
                 and Managers.mechanism:game_mechanism()
             deus = (m and m.get_deus_run_controller and m:get_deus_run_controller()) ~= nil
             on_adv = on_injected_adventure_level()
+            is_server = (Managers and Managers.player and Managers.player.is_server) and true or false
         end)
-        printf("[ct-probe:collectible] name=%s spawn_type=%s on_adv=%s in_coin_set=%s deus=%s level=%s adv_base=%s",
-            tostring(name), tostring(spawn_type), tostring(on_adv),
+        printf("[ct-probe:collectible] name=%s spawn_type=%s is_server=%s on_adv=%s in_coin_set=%s deus=%s level=%s adv_base=%s",
+            tostring(name), tostring(spawn_type), tostring(is_server), tostring(on_adv),
             tostring(_CW_COLLECTIBLE_TO_COIN[name] and "yes" or "no"),
             tostring(deus), tostring(level_id), tostring(adv_base))
     end
@@ -13940,6 +14025,25 @@ _rt_register("altar_visual_probe_present", function()
     end
     if CT_ALTAR_VISUAL_PROBE_MARKER ~= "altar_visual_probe:readonly_update_hook_v0.7.157" then
         return "CT_ALTAR_VISUAL_PROBE_MARKER mismatch — got: " .. tostring(CT_ALTAR_VISUAL_PROBE_MARKER)
+    end
+end)
+
+-- v0.7.243-dev: presence check for the re-armed #132/#134/#136 diagnostics. Their
+-- predecessors were silently reverted in v0.7.175 and stayed stripped for weeks; this
+-- guard fails the regression suite if any of the three is removed again without also
+-- removing this check (a deliberate, visible action rather than a silent strip).
+_rt_register("diag_132_134_136_present", function()
+    if type(mod._ct_chest132) ~= "table" or type(mod._ct_chest132.chest_appeared) ~= "function" then
+        return "#132 chest-of-trials probe missing (mod._ct_chest132.chest_appeared) - extensions_ready ground-truth stripped"
+    end
+    if type(mod._ct_tally_cursed_count) ~= "function" then
+        return "#132 census cross-check missing (mod._ct_tally_cursed_count) - extensions_ready vs census diff can't be computed"
+    end
+    if type(mod._ct134_log) ~= "function" then
+        return "#134 collectible probe missing (mod._ct134_log) - [ct-probe:collectible] stripped"
+    end
+    if type(mod._ct_mission136_dump) ~= "function" then
+        return "#136 graph-divergence probe missing (mod._ct_mission136_dump) - host/client graph diff stripped"
     end
 end)
 
