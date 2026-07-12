@@ -64,6 +64,7 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_lifecycle` | on_setting_changed / on_enabled / on_disabled + BR bootstrap |
 | `_et_commands` | chat commands (`/et_status`, `/verify_*`, dumps, `/et_reset`) |
 | `_et_boss_tweaks`, `_et_nurgloth_probe` | pre-existing modules (fly-disable duration; issue 275 probe) |
+| `_et_boss_balance` | #450 per-boss balance toggles (health/armor/warp-lightning; pure data mutation, no hooks) |
 
 Where new code goes: the module whose "Owns" row it extends; a new subsystem gets a
 new `_et_<name>.lua` + one manifest line + a row here (same discipline as

@@ -209,6 +209,65 @@ return {
             },
 
             -- ============================================================
+            -- BOSS BALANCE (v0.7.34-dev — GitHub issue #450)
+            -- Per-boss curated balance toggles, all default false (vanilla).
+            -- ON applies the exact value the issue asks for, as a pure
+            -- load-time data mutation (Breeds max_health / armor_category,
+            -- grey-seer warp-lightning ExplosionTemplates power_level). No
+            -- hooks; revert-safe (recompute-from-vanilla-snapshot). See
+            -- _et_boss_balance.lua. Grouped by boss (deliberate order, NOT
+            -- A→Z — reads as the issue's boss list).
+            -- ============================================================
+            {
+                setting_id  = "boss_balance_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "boss_bal_halescourge_health",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_bal_halescourge_health_tooltip",
+                    },
+                    {
+                        setting_id    = "boss_bal_skarrik_health",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_bal_skarrik_health_tooltip",
+                    },
+                    {
+                        setting_id    = "boss_bal_bodvarr_health",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_bal_bodvarr_health_tooltip",
+                    },
+                    {
+                        setting_id    = "boss_bal_rasknitt_health",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_bal_rasknitt_health_tooltip",
+                    },
+                    {
+                        setting_id    = "boss_bal_rasknitt_lightning",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_bal_rasknitt_lightning_tooltip",
+                    },
+                    {
+                        setting_id    = "boss_bal_nurgloth_health",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_bal_nurgloth_health_tooltip",
+                    },
+                    {
+                        setting_id    = "boss_bal_nurgloth_armor",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_bal_nurgloth_armor_tooltip",
+                    },
+                },
+            },
+
+            -- ============================================================
             -- BOSS MECHANIC TWEAKS (received from general_tweaker_dev
             -- 2026-06-20 — was gt_fly_disable_mult; renamed et_fly_disable_mult)
             -- ============================================================

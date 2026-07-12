@@ -80,6 +80,13 @@ mod.on_setting_changed = function(setting_id)
     if mod._et_apply_fly_disable then
         _safe("on_setting_changed:fly_disable", mod._et_apply_fly_disable)
     end
+    -- #450 boss balance toggles — same nil-guard rationale as fly-disable
+    -- (the _et_boss_balance module is dofile'd after this one). Re-applies
+    -- health/armor/warp-lightning from the pristine vanilla snapshot per the
+    -- current toggle state (recompute-from-snapshot = revert-safe).
+    if mod._et_apply_boss_balance then
+        _safe("on_setting_changed:boss_balance", mod._et_apply_boss_balance)
+    end
     -- Champion elite-pool retune — outside the compositions guard (independent of
     -- composition backup state; idempotent, only writes on a toggle-state change).
     _safe("on_setting_changed:champion", _apply_champion_breed_overrides)
@@ -103,6 +110,11 @@ mod.on_disabled = function()
     -- Restore the vanilla Champion breed (mod:get returns falsy when disabled,
     -- so _apply_ takes the restore branch).
     _safe("on_disabled:champion", _apply_champion_breed_overrides)
+    -- #450: mod:get returns falsy while disabled, so _apply_ restores every
+    -- boss field to its vanilla snapshot.
+    if mod._et_apply_boss_balance then
+        _safe("on_disabled:boss_balance", mod._et_apply_boss_balance)
+    end
     _safe("on_disabled:BR", BR.on_disabled)
     mod:echo("Enemy Tweaker disabled — compositions restored")
 end
@@ -135,6 +147,10 @@ mod.on_enabled = function()
     end
     -- Outside the guard: re-assert the Champion retune per its saved toggle.
     _safe("on_enabled:champion", _apply_champion_breed_overrides)
+    -- #450: re-assert boss balance toggles per their saved state on re-enable.
+    if mod._et_apply_boss_balance then
+        _safe("on_enabled:boss_balance", mod._et_apply_boss_balance)
+    end
     _safe("on_enabled:BR", BR.on_enabled)
 end
 

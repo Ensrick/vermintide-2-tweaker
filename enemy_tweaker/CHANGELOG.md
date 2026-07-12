@@ -1,5 +1,60 @@
 # Enemy Tweaker Changelog
 
+## 0.7.34-dev (2026-07-12): #450 Boss Balance toggles (health/armor/warp-lightning) [untested]
+
+New `_et_boss_balance.lua` module + "Boss Balance" menu group: per-boss curated
+toggles, all default OFF (vanilla). Pure load-time / on-setting-change data
+mutation of boot-time globals; NO mod:hook registered (same discipline as
+`_et_boss_tweaks.lua`). Revert-safe: each field snapshots pristine vanilla once
+and every apply recomputes from that snapshot, so toggle-off (or disabling the
+mod) restores vanilla exactly. Wired into `_et_lifecycle` on_setting_changed /
+on_enabled / on_disabled via `mod._et_apply_boss_balance`.
+
+**Implemented (breed-stat knobs from the issue):**
+- **Halescourge** (`chaos_exalted_sorcerer`) health x0.70 (30% less). Scales all
+  9 `max_health` entries; each `BreedTweaks.max_health.<key>` maps 1:1 to one
+  breed (verified), and values are re-networkified to the 0.25 grid like
+  `breed_tweaks.lua` networkify_health.
+- **Skarrik** (`skaven_storm_vermin_warlord`) health x1.30 (30% more).
+- **Bodvarr** (`chaos_exalted_champion`) health x1.10 (10% more).
+- **Rasknitt** (`skaven_grey_seer`) health x0.80 (4/5).
+- **Rasknitt** warp lightning double damage:
+  `ExplosionTemplates.grey_seer_warp_lightning_impact.explosion.power_level`
+  500 -> 1000 (explosion_templates.lua:1298; grey-seer-specific template).
+- **Nurgloth** (`chaos_exalted_sorcerer_drachenfels`) health x0.75 (3/4).
+- **Nurgloth** armor Berserker -> Infantry: `armor_category` 5 -> 1
+  (breed_utils.lua:5-10: 1=Infantry, 5=Berserker; breed has no per-hitzone
+  armor override, so the single field suffices).
+
+**Deferred to follow-up (behavioral knobs; need hooks / the CW grudge-mark buff
+system, out of scope for a hook-free data module):**
+- Halescourge Cataclysm+ mid-fight monster spawn at 50% HP (Bile Troll / Chaos
+  Spawn) - needs a boss health-watch + spawn orchestration.
+- Skarrik 30% ranged damage-reduction - no per-breed ranged scalar exists; the
+  engine only has full `invulnerable_ranged` immunity (damage_utils.lua:464-467).
+  Would need a branch inside `DamageUtils.calculate_damage` (also collides with
+  the dormant BR hook if #433 revives it).
+- Skarrik Cataclysm+ Berserk modifier = CW grudge-mark `frenzy`
+  (grudge_mark_settings.lua:108-111); Bodvarr Cataclysm+ Crippling modifier = CW
+  grudge-mark `crippling` (grudge_mark_settings.lua:84-87). Both are Chaos Wastes
+  boss enhancements; applying them to Adventure bosses needs the grudge-mark buff
+  templates (buff_settings_grudge_marks.lua) wired onto the boss on spawn.
+- Deathrattler (`skaven_stormfiend_boss`) ratling-gun tracking - no single knob;
+  governed by attack_anims_data timing + the `AimTemplates.stormfiend` lerp
+  (aim_templates.lua:862-866), hard to isolate and verify.
+
+Diagnostics: `[et:450]` engine-printf summary at boot and on every setting change
+(rate-limited, survives mod-logging-OFF) listing which bosses are active and
+their effective values. Chosen over a per-spawn hook because all changes are
+always-on-when-toggled boot-time data and the module adds no hooks.
+
+Host authority: health + warp-lightning are host-authoritative (boss HP is
+`server_controlled_health_bar`; warp lightning is an AI attack). The Nurgloth
+armor change is attacker-side predicted, so non-modded clients see Berserker
+numbers for their own hits; documented in the tooltip.
+
+rt: +2 checks (`boss_balance_targets_present`, `boss_balance_revert_safe`).
+
 ## 0.7.33-dev (2026-07-12): #479 repair the tick-guard regression check (io-nil in sandbox) [untested]
 
 **The #479 BEHAVIOR fix was already correct and confirmed in-game** (0.7.31-dev):

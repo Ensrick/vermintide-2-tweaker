@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.33-dev"
+local MOD_VERSION = "0.7.34-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -85,5 +85,6 @@ mod:dofile("scripts/mods/enemy_tweaker/_et_specials")             -- per-difficu
 mod:dofile("scripts/mods/enemy_tweaker/_et_lifecycle")            -- on_setting_changed / on_enabled / on_disabled + BR bootstrap
 mod:dofile("scripts/mods/enemy_tweaker/_et_commands")             -- chat commands (/et_status, /verify_*, dumps, /et_reset)
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_tweaks")          -- boss mechanic tweaks (fly-disable duration; pre-existing module)
+mod:dofile("scripts/mods/enemy_tweaker/_et_boss_balance")         -- #450 per-boss balance toggles (health/armor/warp-lightning data mutations)
 
 mod:info("[mem-probe] et boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _mem_probe_t0) / 1024)

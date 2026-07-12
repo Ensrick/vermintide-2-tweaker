@@ -36,6 +36,46 @@ local loc = {
     },
 
     -- ============================================================
+    -- Boss Balance (#450)
+    -- ============================================================
+    boss_balance_group = { en = "[untested] Boss Balance" },
+
+    boss_bal_halescourge_health = { en = "[untested] Halescourge: reduce health 30%%" },
+    boss_bal_halescourge_health_tooltip = {
+        en = "Burblespue Halescourge (the Halescourge boss) spawns with 30%% less health on every difficulty. Host only; the health bar is server-controlled, so all players see the reduced pool. The issue's Cataclysm mid-fight monster spawn is not part of this build.",
+    },
+
+    boss_bal_skarrik_health = { en = "[untested] Skarrik: increase health 30%%" },
+    boss_bal_skarrik_health_tooltip = {
+        en = "Skarrik Spinemanglr (the first Skittergate boss) spawns with 30%% more health on every difficulty. Host only. The issue's ranged damage-reduction and Cataclysm Berserk modifier are not part of this build.",
+    },
+
+    boss_bal_bodvarr_health = { en = "[untested] Bodvarr: increase health 10%%" },
+    boss_bal_bodvarr_health_tooltip = {
+        en = "Bodvarr Ribspreader (the Chaos champion boss) spawns with 10%% more health on every difficulty. Host only. The issue's Cataclysm Crippling modifier is not part of this build.",
+    },
+
+    boss_bal_rasknitt_health = { en = "[untested] Rasknitt: reduce health to 4/5" },
+    boss_bal_rasknitt_health_tooltip = {
+        en = "Rasknitt (the Skittergate Grey Seer) spawns with 80%% of his normal health (4/5) on every difficulty. Host only.",
+    },
+
+    boss_bal_rasknitt_lightning = { en = "[untested] Rasknitt: warp lightning double damage" },
+    boss_bal_rasknitt_lightning_tooltip = {
+        en = "Doubles the damage of Rasknitt's warp lightning attack. It is an AI attack resolved by the host, so it is consistent for all players when the host runs the mod.",
+    },
+
+    boss_bal_nurgloth_health = { en = "[untested] Nurgloth: reduce health to 3/4" },
+    boss_bal_nurgloth_health_tooltip = {
+        en = "Nurgloth the Eternal (the Tower of Treachery boss) spawns with 75%% of his normal health (3/4) on every difficulty. Host only.",
+    },
+
+    boss_bal_nurgloth_armor = { en = "[untested] Nurgloth: armor Berserker to Infantry" },
+    boss_bal_nurgloth_armor_tooltip = {
+        en = "Changes Nurgloth's armor type from Berserker to Infantry, so hits land as unarmored damage. A player's damage-vs-armor is computed on that player's own machine, so for identical numbers every player should run the mod; the host always applies its own hits correctly.",
+    },
+
+    -- ============================================================
     -- Boss Mechanic Tweaks
     -- ============================================================
     boss_tweaks_group = { en = "[working] Boss Mechanic Tweaks" },
