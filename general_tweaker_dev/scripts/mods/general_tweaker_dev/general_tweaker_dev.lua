@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.197-dev"
+local MOD_VERSION = "0.2.198-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1640,6 +1640,56 @@ _rt_register("gt_bot139_aid_scan_is_side_scoped_not_follow", function()
     end
     if body:find("follow", 1, true) then
         return "aid scan references the bot's follow target -- re-scoped to follow (the #139 root cause)"
+    end
+end)
+
+_rt_register("gt_bot492_aid_stall_recovery", function()
+    -- #492 (v0.2.198-dev): the bounded recovery for the aid-priority pursuit lock.
+    -- Locks THREE things so a refactor can't silently drop the safety valve:
+    --   (1) the marker constant is present,
+    --   (2) the pure stall state machine (_gt492_step) bails after the no-progress
+    --       timeout and re-arms on progress / target change (functional check with
+    --       a synthetic sequence -- no engine reads), and
+    --   (3) both halves of the actuator are wired in _gt_bot_fixes.lua: the picker
+    --       drops the bailed aid pick, and the #139 veto steps aside on the flag.
+    if GT_BOT492_AID_STALL_RECOVERY_MARKER_v0_2_198 ~= "gt-bot492-aid-pursuit-stall-recovery" then
+        return "bot #492 aid-stall-recovery marker absent -- was the v0.2.198-dev recovery reverted?"
+    end
+
+    -- (2) Functional: drive the pure state machine. TIMEOUT is 35 s / EPSILON 2 m
+    -- in the source; use margins that don't depend on the exact constants.
+    local step = mod._gt492_step
+    if type(step) ~= "function" then
+        return "mod._gt492_step not exposed -- the #492 stall state machine seam is missing"
+    end
+    local U, V = "downA", "downB"
+    local s, bail = { aid_unit = nil }, false
+    s, bail = step(s, U, 100, 0)          ; if bail then return "#492: fresh target must not bail immediately" end
+    s, bail = step(s, U, 100, 10)         ; if bail then return "#492: 10 s stall (< timeout) must not bail" end
+    s, bail = step(s, U, 100, 100)        ; if not bail then return "#492: 100 s no-progress stall must bail" end
+    s, bail = step(s, U, 50, 101)         ; if bail then return "#492: net progress (100 m -> 50 m) must clear the bail" end
+    s, bail = step(s, U, 50, 200)         ; if not bail then return "#492: renewed 99 s stall at the closer distance must bail again" end
+    s, bail = step(s, V, 300, 201)        ; if bail then return "#492: a new (different) aid target must reset and not bail" end
+    s, bail = step(s, nil, nil, 400)      ; if bail then return "#492: no aid target must not bail" end
+
+    -- (3) Structural: the actuator wiring must be present in _gt_bot_fixes.lua.
+    -- Soft-skip if the source is not on disk (packaged build), as the #139 checks do.
+    local anchor = mod._gt492_should_suppress_pick or mod._gt492_aid_stall_tick
+    if type(anchor) ~= "function" then
+        return "mod._gt492 actuator seams not exposed -- picker suppression / stall tick missing"
+    end
+    local ok, info = pcall(debug.getinfo, anchor, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local f = io.open(src, "r"); if not f then return end
+    local txt = f:read("*a"); f:close(); if not txt then return end
+    -- picker drops the bailed aid pick
+    if not txt:find("mod._gt492_should_suppress_pick", 1, true) then
+        return "#492: the picker no longer calls mod._gt492_should_suppress_pick -- aid pick suppression dropped"
+    end
+    -- the #139 veto steps aside on the bailout flag
+    if not txt:find("not blackboard._gt492_bailout", 1, true) then
+        return "#492: the #139 should_teleport veto no longer checks blackboard._gt492_bailout -- bot can't regroup"
     end
 end)
 

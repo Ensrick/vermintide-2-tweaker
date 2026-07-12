@@ -710,6 +710,18 @@ mod:hook_safe("PlayerBotBase", "update", function (self, unit, input, dt, contex
     if mod._gt_btlab_observe_update then
         mod._gt_btlab_observe_update(self, unit, blackboard, t)
     end
+
+    -- #492 aid-pursuit stall watchdog. Runs EVERY frame (unlike the picker, which
+    -- vanilla skips on a priority-enemy frame, player_bot_base.lua:698) so the
+    -- stall clock is reliable. Watches the nearest downed teammate + straight-line
+    -- distance; if the bot goes a bounded time with no net progress it latches
+    -- blackboard._gt492_bailout, which the picker (drops the aid pick) and the
+    -- #139 veto (steps aside) both read. Defined after the aid helpers below
+    -- (forward-ref), dispatched here because VMF drops a 2nd PlayerBotBase.update
+    -- hook. Gated on aid-priority inside the fn.
+    if mod._gt492_aid_stall_tick then
+        mod._gt492_aid_stall_tick(self, unit, blackboard, t)
+    end
 end)
 
 -- ----------------------------------------------------------------------------
@@ -814,6 +826,12 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
 
     -- Never override an already-found higher/equal-priority aid.
     if need_type == "knocked_down" or need_type == "ledge" or need_type == "hook" then
+        -- #492: if the stall watchdog has armed a bailout for THIS aid target,
+        -- drop the pick so _update_target_ally clears target_ally_need_type
+        -- (player_bot_base.lua:721-723) and the bot re-evaluates teleport.
+        if mod._gt492_should_suppress_pick and mod._gt492_should_suppress_pick(blackboard, ally) then
+            return nil, nil, nil, nil
+        end
         return ally, real_dist, need_type, look_at
     end
 
@@ -978,7 +996,12 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
                 end
             end
         end
-        if _fr_unit then
+        -- #492: honour the stall bailout here too -- if this forced aid target is
+        -- the one the watchdog gave up on, skip the force-pick and fall through to
+        -- vanilla's (non-aid) result so target_ally_need_type clears and the bot
+        -- can regroup. Vanilla's own aid pick already returned at :816-825, so the
+        -- passthrough below is never an aid type.
+        if _fr_unit and not (mod._gt492_should_suppress_pick and mod._gt492_should_suppress_pick(blackboard, _fr_unit)) then
             local _real = Vector3.distance(self_pos, POSITION_LOOKUP[_fr_unit])
             mod:debug("[gt:bot-priority] FORCE %s ally dist=%.1f (prior_need=%s)", _fr_need, _real, tostring(need_type))
             return _fr_unit, _real, _fr_need, false
@@ -1097,6 +1120,148 @@ mod._gt_status_needs_aid            = _gt_status_needs_aid
 mod._gt_unit_needs_aid             = _gt_unit_needs_aid
 mod._gt_any_side_teammate_needs_aid = _gt_any_side_teammate_needs_aid
 mod._gt_aid_priority_on            = _gt_aid_priority_on
+
+-- ----------------------------------------------------------------------------
+-- #492 (v0.2.198-dev): bounded recovery for the aid-priority pursuit lock
+-- ----------------------------------------------------------------------------
+-- WHAT
+--   With aid-priority ON, the #139 decision is "all bots converge to revive": a
+--   downed teammate pins blackboard.target_ally_need_type = "knocked_down" and
+--   the bot drops the follow leash to path in. But nothing bounded that pursuit.
+--   When the downed teammate is effectively unreachable (a long detour, a nav
+--   gap, a threat the bots can't clear, or the humans having pushed 130-175 m
+--   ahead of the down), the bot commits FOREVER: it never teleports to regroup.
+--   Report #492 / #449: two gt bots stranded 130-175 m back for ~8 min, which
+--   inflated ConflictDirector loneliness (62.6 vs threshold 25) and armed the
+--   #449 cutscene-spawn class.
+--
+-- WHY the teleport never fires (BT structure, bt_bot.lua):
+--   The teleport node ("teleport_out_of_range", condition should_teleport) sits
+--   at bt_bot.lua:308-312, BELOW the revive selector (:14-32, can_revive) and the
+--   priority-combat node (:305, has_priority_or_opportunity_target) in the same
+--   top-level BTSelector. Two independent locks result:
+--     (a) While a higher node wins (the bot fighting the horde around the down, or
+--         looping the revive interaction), the selector returns before ever
+--         evaluating should_teleport -- exactly the "zero should_teleport probes
+--         for ~7.5 min" seen in the #449 log.
+--     (b) Even when should_teleport IS reached, vanilla returns false immediately
+--         while target_ally_need_type is set (bt_bot_conditions.lua:1226-1228),
+--         and gt's #139 veto (the should_teleport hook below) also returns false.
+--   can_revive itself keys on target_ally_need_type == "knocked_down"
+--   (bt_bot_conditions.lua:738), so clearing that field breaks BOTH the revive
+--   lock (a) and the teleport refusal (b) at once.
+--
+-- FIX (this block + the picker + the #139 veto)
+--   A per-bot stall watchdog (mod._gt492_aid_stall_tick, dispatched from the
+--   consolidated PlayerBotBase.update hook so it runs every frame). It tracks the
+--   nearest downed/hooked/ledge teammate -- SAME scope as the #139 veto's
+--   _gt_any_side_teammate_needs_aid -- and its straight-line distance as a
+--   progress metric. If the bot goes GT492_STALL_TIMEOUT_S with no net progress
+--   (distance never dropped more than GT492_PROGRESS_EPSILON_M below the running
+--   best), it latches blackboard._gt492_bailout. That flag makes:
+--     - the picker (_select_ally_by_utility above) DROP the aid pick, clearing
+--       target_ally_need_type -> breaks lock (a) via can_revive and lock (b), and
+--     - the #139 veto step aside -> the teleport is no longer re-blocked.
+--   The bot then re-evaluates teleport and rejoins the team. Self-clears the
+--   instant the bot makes progress toward the target, the target changes (a
+--   nearer/other ally goes down), or the aid need ends -- so the #139 "all bots
+--   converge to revive" decision is fully preserved for every REACHABLE case.
+--   UNCONDITIONAL within aid-priority (a safety valve, no menu toggle). Distance
+--   only -- no extra engine pathing calls. Host-side (bot AI is server-side).
+local GT492_STALL_TIMEOUT_S    = 35.0   -- no-progress window before bailing out
+local GT492_PROGRESS_EPSILON_M = 2.0    -- min distance improvement counted as progress
+
+-- "PlayerName" for readable logs; pcall-guarded (owner lookup can transiently
+-- fail on a despawning unit). Falls back to the raw handle.
+local function _gt492_label(u)
+    if not u then return "nil" end
+    local ok, name = pcall(function()
+        local pm = Managers.player
+        local owner = pm and pm.owner and pm:owner(u)
+        return owner and owner.name and owner:name()
+    end)
+    return (ok and name) or tostring(u)
+end
+
+-- #492 PURE stall state machine (testability seam -- NO engine reads). Given the
+-- prior per-bot pursuit `state` ({aid_unit, best_dist, progress_t}), the current
+-- aid target + straight-line distance, and the time, returns (new_state, bailout).
+-- Bails when the bot has gone GT492_STALL_TIMEOUT_S with no net progress. Re-arms
+-- on target change or fresh progress. The /gt_regression_test drives this with a
+-- synthetic sequence to lock the recovery invariant against silent regression.
+local function _gt492_step(state, aid_unit, aid_dist, t)
+    if not aid_unit then
+        return { aid_unit = nil }, false
+    end
+    if state.aid_unit ~= aid_unit then
+        -- New (or first) target: start a fresh pursuit clock.
+        return { aid_unit = aid_unit, best_dist = aid_dist, progress_t = t }, false
+    end
+    local best_dist, progress_t = state.best_dist, state.progress_t
+    if not best_dist or aid_dist < best_dist - GT492_PROGRESS_EPSILON_M then
+        -- Net progress toward the target: reset the stall clock.
+        best_dist, progress_t = aid_dist, t
+    end
+    local bailout = (t - (progress_t or t)) >= GT492_STALL_TIMEOUT_S
+    return { aid_unit = aid_unit, best_dist = best_dist, progress_t = progress_t }, bailout
+end
+mod._gt492_step = _gt492_step
+
+-- Picker actuator: the #492 watchdog arms blackboard._gt492_bailout for a specific
+-- unreachable aid target; the picker suppresses ONLY that target so a nearer/other
+-- aid pick is untouched. Field reads only (no forward-ref); called from
+-- _select_ally_by_utility above via mod._gt492_should_suppress_pick.
+local function _gt492_should_suppress_pick(blackboard, ally)
+    return blackboard._gt492_bailout and ally ~= nil and ally == blackboard._gt492_bailout_unit
+end
+mod._gt492_should_suppress_pick = _gt492_should_suppress_pick
+
+-- The every-frame watchdog. Engine reads live here; the decision is delegated to
+-- the pure _gt492_step. Dispatched from the consolidated PlayerBotBase.update
+-- hook (that hook is a post-callback, so the flag it sets is read by the NEXT
+-- frame's picker + should_teleport tick -- a 1-frame lag that converges).
+mod._gt492_aid_stall_tick = function(self, unit, blackboard, t)
+    -- Aid-priority only: this recovers the #139 "all bots converge to revive"
+    -- pin, which is the only thing that keeps the bot from teleporting.
+    if not _gt_aid_priority_on() then
+        blackboard._gt492_bailout = nil
+        blackboard._gt492_state = nil
+        return
+    end
+
+    -- Nearest downed/hooked/ledge teammate + straight-line distance. Read
+    -- independently of the bot's current pick so suppressing the pick cannot feed
+    -- back into this accumulator (which would oscillate the bailout every frame).
+    local aid_unit = _gt_any_side_teammate_needs_aid(unit)
+    local self_pos = aid_unit and POSITION_LOOKUP[unit]
+    local aid_pos  = aid_unit and POSITION_LOOKUP[aid_unit]
+    if aid_unit and not (self_pos and aid_pos) then
+        -- Position transiently missing (despawn/hot-join): hold state, don't reset
+        -- the clock or the latch this frame.
+        return
+    end
+    local aid_dist = aid_unit and Vector3.distance(self_pos, aid_pos) or nil
+
+    local state = blackboard._gt492_state or { aid_unit = nil }
+    local new_state, bailout = _gt492_step(state, aid_unit, aid_dist, t)
+    blackboard._gt492_state = new_state
+
+    if bailout then
+        if not blackboard._gt492_bailout and rawget(_G, "printf") then
+            printf("[gt_bot:492] %s aid pursuit STALLED %.0fs no-progress (down=%s dist=%.1fm best=%.1fm) -- suspending aid-priority+veto so the bot can regroup",
+                _gt492_label(unit), t - (new_state.progress_t or t),
+                _gt492_label(aid_unit), aid_dist or -1, new_state.best_dist or -1)
+        end
+        blackboard._gt492_bailout = true
+        blackboard._gt492_bailout_unit = aid_unit
+    else
+        blackboard._gt492_bailout = nil
+    end
+end
+
+-- #492 regression marker (read by aid_stall_recovery_present in the main file). A
+-- refactor that drops the stall recovery makes this disappear and the test fail.
+GT_BOT492_AID_STALL_RECOVERY_MARKER_v0_2_198 = "gt-bot492-aid-pursuit-stall-recovery"
 
 -- ----------------------------------------------------------------------------
 -- FIX 7: Tighter bot follow leash (configurable teleport distance)
@@ -1285,7 +1450,13 @@ mod:hook("BTConditions", "should_teleport", function (func, blackboard)
     -- follow while a teammate merely awaits rescue (the split+leash benefit).
     -- Independent of follow mode (split/host/default) -- that only changes WHO is
     -- followed, not the teleport rule. _gt139_veto_latched rate-limits the printf.
-    if want and _gt_aid_priority_on() and _gt_any_side_teammate_needs_aid(blackboard.unit) then
+    -- #492: the aid-pursuit stall watchdog (mod._gt492_aid_stall_tick) steps this
+    -- veto aside for a bot it has bailed out of an UNREACHABLE revive
+    -- (blackboard._gt492_bailout) so the bot can teleport back to the team; the
+    -- picker has already dropped that aid pick, so this is the matching half. The
+    -- gate stays contiguous (_gt_aid_priority_on() and _gt_any_side_teammate_needs_aid)
+    -- for the singleton/gated regression checks.
+    if want and not blackboard._gt492_bailout and _gt_aid_priority_on() and _gt_any_side_teammate_needs_aid(blackboard.unit) then
         if rawget(_G, "printf") and not blackboard._gt139_veto_latched then
             blackboard._gt139_veto_latched = true
             printf("[gt_bot:139] teleport VETOED (was %s) -- teammate needs aid, bot paths to revive", tostring(reason))
