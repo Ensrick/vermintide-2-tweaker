@@ -1447,6 +1447,13 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   regression test (`_rt_register` / QA check) that locks the invariant. Close the
   issue only when the post-fix pass is done (or explicitly judged not applicable —
   say so in a comment).
+- **Test-method prerequisite (user rule 2026-07-12, set on issue #479):**
+  `verify-fix`, `verify-fix-coop`, and `diagnostics-armed` may only be applied
+  once the issue carries a comment stating HOW to test (chat command / repro
+  steps) and the EXPECTED result (the printed line, the behavior, the absence
+  of the crash). A status label without that comment is invalid and gets
+  removed on sight - the user did exactly that on #479. Post the test comment
+  in the same pass as the label.
 - **Retired 2026-07-03:** `verify-in-game` → merged into `verify-fix`; `probe-live` →
   merged into `diagnostics-armed`. Do not recreate them.
 - `qa/check_issue_status_labels.ps1` pass 3 sweeps all open issues and warns on

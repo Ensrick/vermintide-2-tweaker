@@ -237,6 +237,11 @@ UPLOAD - a local deploy alone is silently clobbered.
   9).** Shipping a fix or diagnostic is what flips an issue into "ready to test",
   and that signal is a GitHub label, not just a comment. `PROJECT_STANDARDS.md`
   §11 requires it "in the same pass as the CHANGELOG entry":
+  - **PREREQ (user rule 2026-07-12, issue #479): post the test-method comment
+    FIRST** - how to test (command / repro steps) + the expected result. A
+    status label on an issue without that comment is invalid and will be
+    removed. No test method you can state = the issue is not ready for a
+    verify/diagnostics label.
   - `gh issue edit <N> --add-label verify-fix` when you shipped a **code fix**
     the user now confirms in-game (this is the common case).
   - `gh issue edit <N> --remove-label verify-fix --add-label verify-fix-coop`

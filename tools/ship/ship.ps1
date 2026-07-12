@@ -502,7 +502,8 @@ try {
                             & gh issue edit $n --repo $ghRepo --add-label $statusLabel @removeArgs 2>$null | Out-Null
                             if ($LASTEXITCODE -eq 0) {
                                 Write-Host ("  + #{0}: added '{1}'" -f $n, $statusLabel) -ForegroundColor Green
-                                $labelSummary += ("#{0} +{1}" -f $n, $statusLabel)
+                                Write-Host ("      REMINDER: #{0} needs a test-method comment (how to test + expected result) or the label is invalid (user rule 2026-07-12, PROJECT_STANDARDS s11)." -f $n) -ForegroundColor Yellow
+                                $labelSummary += ("#{0} +{1} (needs test comment)" -f $n, $statusLabel)
                             } else {
                                 Write-Host ("  ! #{0}: gh issue edit failed -- add '{1}' by hand" -f $n, $statusLabel) -ForegroundColor Yellow
                                 $labelSummary += ("#{0} FAILED -- add {1} by hand" -f $n, $statusLabel)
