@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.3.58-dev"
+local MOD_VERSION = "0.3.59-dev"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
@@ -156,6 +156,10 @@ if not ok_mutex then
     mod:error("Failed to load mutex module: %s", tostring(mutex))
     mutex = { declare = function() end, enforce = function() end, active = function() return nil end, snapshot = function() return {} end }
 end
+-- Expose the cluster registry for /crt_regression_test (issue 446 end-to-end
+-- verify) and future diagnostics. CLUSTERS is the single source of truth for
+-- every same-talent rival group crt declares.
+mod._crt.mutex = mutex
 
 -- Talent & ability swapping: HeroWindowTalents hooks + the DLC gate + the
 -- apply/restore engine. Loaded here so the lifecycle callbacks below can capture
@@ -192,6 +196,98 @@ mutex.declare("bh_passive_choice", {
     "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",
     "cbr_bh_passive_perks_rework",
 })
+
+-- ============================================================
+-- Mod Tweaker mutually-exclusive groups (issue 446, Part 2)
+-- ============================================================
+-- Bridge crt's same-talent rival mutex clusters into gut's Mod Tweaker
+-- "mutually-exclusive group" API (shipped gut_dev 0.2.222-dev). Inside the Mod
+-- Tweaker menu, clicking one cluster member ON makes gut stage the siblings OFF
+-- and repaint the rows -- a radio group over ordinary checkboxes (all-off = the
+-- "None" state). This sits on TOP of crt's own on_setting_changed enforcement
+-- (mutex.enforce), which also covers VMF's stock options menu; both layers agree
+-- on the same siblings, so both firing on one flip is idempotent.
+--
+-- Best-effort, NO hard dependency: if gut is absent, or its mod_tweaker API is
+-- missing, this is a silent no-op and crt behaves exactly as before. gut needs
+-- no per-group code -- the registry is data-driven.
+--
+-- Single source of truth is crt's own mutex.CLUSTERS, so every cluster declared
+-- via mutex.declare auto-registers here with no extra code. Today that is
+-- bh_passive_choice (Ensrick's BH "Job Well Done" passive rework vs Core BR's
+-- passive-perks rework -- the same passive). The issue's named "Zealot THP
+-- Conversions" group would auto-register the moment crt gains a SECOND Zealot
+-- THP-conversion rework and declares the cluster: crt currently ships only ONE
+-- such toggle (rework_wh_zealot_ability_green_to_thp), and gut -- like
+-- mutex.declare -- rejects a solo group, so there is nothing to wire for Zealot
+-- yet (the mock-up's other options are not implemented in crt).
+--
+-- Pre-existing both-ON state: neither layer reconciles a saved config where two
+-- siblings are already ON at boot (both are change-triggered, not boot-sweeping).
+-- We deliberately do NOT mod:set members at load -- the UI already prevents
+-- both-ON, and the gut contract does not prescribe a boot sweep; enforcement
+-- kicks in on the next member toggle.
+--
+-- dev/stable id resolution: external refs normally target the stable id, but the
+-- user runs gut_dev and the mod_tweaker table lives on whichever gut variant is
+-- installed. Resolve BOTH defensively and use whichever exposes the API.
+mod._crt_exclusive_groups_ran    = false
+mod._crt_exclusive_groups_status = "pending"
+mod._crt_exclusive_groups_count  = 0
+do
+    local function _resolve_mod_tweaker()
+        for _, gut_id in ipairs({ "gut_dev", "gut" }) do
+            local gut = get_mod(gut_id)
+            local mt  = gut and gut.mod_tweaker
+            if mt and type(mt.register_exclusive_group) == "function" then
+                return mt, gut_id
+            end
+        end
+        return nil
+    end
+
+    local function _register_exclusive_groups()
+        mod._crt_exclusive_groups_ran = true
+        local mt, gut_id = _resolve_mod_tweaker()
+        if not mt then
+            mod._crt_exclusive_groups_status = "gut-absent"
+            pcall(printf, "[crt:446] gut Mod Tweaker not present; exclusive-group registration skipped (crt unchanged)")
+            return
+        end
+        local ok_all, count = true, 0
+        for group_id, members in pairs(mutex.CLUSTERS or {}) do
+            if type(members) == "table" and #members >= 2 then
+                local payload = {}
+                for i = 1, #members do
+                    payload[i] = { mod = "crt", setting = members[i] }
+                end
+                local ok, err = mt:register_exclusive_group("crt_" .. group_id, payload)
+                if ok then
+                    count = count + 1
+                else
+                    ok_all = false
+                    mod:warning("[crt:446] register_exclusive_group(crt_%s) rejected: %s", group_id, tostring(err))
+                end
+            end
+        end
+        mod._crt_exclusive_groups_count  = count
+        mod._crt_exclusive_groups_status = ok_all and "ok" or "partial-fail"
+        pcall(printf, "[crt:446] Mod Tweaker exclusive groups registered=%d via %s status=%s",
+            count, gut_id, mod._crt_exclusive_groups_status)
+    end
+
+    -- on_all_mods_loaded fires once after every mod's main file has run, so gut's
+    -- mod.mod_tweaker (set at gut load) is guaranteed present by now. crt defines
+    -- no other on_all_mods_loaded, so a direct assignment is safe.
+    mod.on_all_mods_loaded = function()
+        local ok, err = pcall(_register_exclusive_groups)
+        if not ok then
+            mod._crt_exclusive_groups_status = "partial-fail"
+            mod:warning("[crt:446] exclusive-group registration errored: %s", tostring(err))
+        end
+    end
+end
+
 -- ============================================================
 -- Character Experience Level Override
 -- ============================================================

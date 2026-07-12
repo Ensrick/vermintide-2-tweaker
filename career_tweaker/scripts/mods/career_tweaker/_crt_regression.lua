@@ -632,3 +632,48 @@ _rt_register("crt_hellborgs_crit_hook_installed", function()
         return "ActionUtils.get_critical_strike_chance missing now (engine changed?)"
     end
 end)
+
+_rt_register("crt_mod_tweaker_exclusive_groups_registered", function()
+    -- issue 446 Part 2: crt bridges its same-talent rival mutex clusters into
+    -- gut's Mod Tweaker exclusive-group API at on_all_mods_loaded. Assert the
+    -- pass RAN and did not partially fail. gut-absent is a valid PASS -- the
+    -- registration is a best-effort enhancement with no hard dependency.
+    -- Runtime-only: reads the status fields the registration wrote + drives the
+    -- live gut reverse-lookup. No source read, no io (issue 511).
+    if mod._crt_exclusive_groups_ran ~= true then
+        return "on_all_mods_loaded exclusive-group registration never ran (VMF lifecycle regression?)"
+    end
+    local status = mod._crt_exclusive_groups_status
+    if status == "gut-absent" then return end          -- valid: gut not installed
+    if status ~= "ok" then
+        return "exclusive-group registration status: " .. tostring(status)
+    end
+    -- gut present + status ok: prove the wiring end-to-end by resolving each
+    -- declared 2+ member cluster's first member back to its crt_<group_id> via
+    -- gut's public reverse-lookup. Fully data-driven off mutex.CLUSTERS so it
+    -- tracks whatever clusters crt declares (no hardcoded member list).
+    local gut = get_mod("gut_dev") or get_mod("gut")
+    local mt  = gut and gut.mod_tweaker
+    if not (mt and type(mt.get_exclusive_group_id) == "function") then
+        return "status ok but gut mod_tweaker reverse-lookup API missing"
+    end
+    local mutex    = mod._crt and mod._crt.mutex
+    local clusters = mutex and mutex.CLUSTERS
+    if type(clusters) ~= "table" then
+        return "mutex.CLUSTERS not exposed on mod._crt.mutex (mutex load regression?)"
+    end
+    local checked = 0
+    for group_id, members in pairs(clusters) do
+        if type(members) == "table" and #members >= 2 then
+            local got = mt:get_exclusive_group_id("crt", members[1])
+            if got ~= "crt_" .. group_id then
+                return string.format("cluster %q member %q resolves to %s (expected crt_%s)",
+                    tostring(group_id), tostring(members[1]), tostring(got), tostring(group_id))
+            end
+            checked = checked + 1
+        end
+    end
+    if checked == 0 then
+        return "no 2+ member clusters found to verify (mutex load regression?)"
+    end
+end)

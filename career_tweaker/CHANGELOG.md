@@ -1,5 +1,36 @@
 # Career Tweaker Changelog
 
+## 0.3.59-dev - 2026-07-12 - #446 register same-talent rival groups into Mod Tweaker [untested]
+
+### Why
+Part 2 of #446. gut_dev 0.2.222-dev shipped the data-driven "mutually-exclusive group" API
+(`get_mod("gut_dev").mod_tweaker:register_exclusive_group`); crt is the first consumer, so clicking
+one member of a same-talent rival cluster ON in the Mod Tweaker menu flips the siblings OFF with a
+row repaint. Best-effort enhancement layered on crt's existing on_setting_changed mutex; no hard
+dependency on gut.
+
+### Added - #446 (Mod Tweaker exclusive-group registration)
+- **crt registers its `mutex.CLUSTERS` same-talent rival clusters into gut's Mod Tweaker exclusive-group
+  API** at `on_all_mods_loaded` (`career_tweaker.lua`). Data-driven: every cluster declared via
+  `mutex.declare` auto-registers as `crt_<group_id>` with members `{ mod = "crt", setting = <id> }`; no
+  per-group code. Today that is `bh_passive_choice` (Ensrick's BH "Job Well Done" passive rework vs Core
+  BR's passive-perks rework -- the same passive).
+- **The issue's named "Zealot THP Conversions" group is NOT wired: crt implements only ONE Zealot
+  THP-conversion rework** (`rework_wh_zealot_ability_green_to_thp`, Holy Fervour converts green HP to
+  THP). gut -- like `mutex.declare` -- rejects a solo group (2+ members required), so there is no group
+  to form until a second rival THP-conversion rework is added. When that lands and `mutex.declare`s the
+  cluster, it auto-registers with zero code change.
+- **dev/stable id resolution:** resolves `get_mod("gut_dev")` then `get_mod("gut")`, using whichever
+  exposes `.mod_tweaker.register_exclusive_group`. Silent no-op when neither is present.
+- **No boot-time reconcile of a pre-existing both-ON state.** Both enforcement layers are
+  change-triggered; the registration never `mod:set`s members at load (the UI already prevents both-ON,
+  and the gut contract does not prescribe a boot sweep). Enforcement kicks in on the next member toggle.
+- **New regression check `crt_mod_tweaker_exclusive_groups_registered`** (`_crt_regression.lua`, appended
+  last, frozen order preserved): asserts the registration pass ran and did not partial-fail; on `ok`,
+  drives gut's live reverse-lookup to confirm each declared 2+ cluster's first member resolves to its
+  `crt_<group_id>`. gut-absent is a valid pass. Runtime-only, no io (issue 511).
+- Exposed `mod._crt.mutex` so the rt check can iterate `CLUSTERS` at invocation time. No new `mod:hook`.
+
 ## 0.3.58-dev - 2026-07-12 - #506 shared parity-lib ordering fix + crt workaround removal; #507 crt hygiene
 
 ### Why
