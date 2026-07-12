@@ -1,5 +1,11 @@
 # Crafting in Modded Changelog
 
+## 0.8.56-dev (2026-07-12): #500 remove the stale #174 loadout-attribution probe (closed issue) [untested]
+
+- **#500: removed `_diag_probe.lua`** (issue 174, `[174:loadout]`, CLOSED). cim_dev's copy served ONLY the closed #174 channel (unlike the cosmetics_tweaker copy, which also carries the still-open `[cos:sync]` probes). Deleted the file (`git rm`), removed the `local PROBE = mod:dofile(".../_diag_probe")` import, and stripped the two embedded `if PROBE then PROBE.emit("174:loadout", ...) end` blocks (+ their `#174 probe` comments) from `_restore_modded_loadout` and `_capture_loadout_equip`.
+- **No load-bearing behavior removed.** Both emit sites were pure observation embedded in load-bearing functions; the master-gate / capture / restore logic around them is kept byte-for-byte. `PROBE` had no other references (grep verified). The import line WAS the dofile-manifest entry, so no separate manifest edit; `.package` uses a `scripts/mods/crafting_in_modded_dev/*` glob.
+- Untouched: `cim_debug.lua`'s `_LOADOUT_PROBE_SLOTS` and the `[mem-probe]` boot-footprint line are unrelated to #174 and stay.
+
 ## 0.8.55-dev (2026-07-12): OOP split - three self-contained concerns extracted into _cim_* modules [untested]
 
 **Structural refactor (no behavior change).** The 8,173-line entry
