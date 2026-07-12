@@ -1,5 +1,57 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.379-dev — 2026-07-12 — #478: residency-gated defer stops the non-resident dr_deus_01 husk spawn [untested] [crash] [1-major]
+
+### Why
+Issue #478 (from the #477 session, host log i477b 23:33:13): a client Kruber (es_knight)
+wielding the CWV Outrider Grenade Launcher (base `dr_deus_01`) rendered NO weapon on the
+host (r3p=nil l3p=nil), and it was the only genuine runtime error in that session. The
+Outrider is right-hand-mount on the empire blunderbuss with `no_left_hand = true`, but on
+a husk the item resolves to the BASE `dr_deus_01` item_data, whose `left_hand_unit` is the
+Deus-only Trollhammer (`units/weapons/player/wpn_dr_deus_01/wpn_dr_deus_01`). That mesh is
+NOT resident outside Chaos Wastes.
+
+The husk mesh re-key (`_om._husk_rekey_units`, issue 474/475) resolved the Outrider def
+correctly for both hands, but for the LEFT hand the def has no override (no_left_hand), so
+the old code returned early leaving the base Trollhammer left-mount in `item_units`. Vanilla
+`SimpleHuskInventoryExtension._wield_slot` spawns a hand whenever `item_units.<hand>_hand_unit`
+is truthy (`simple_husk_inventory_extension.lua:665/669`), so it called
+`GearUtils.spawn_inventory_unit(world, "left", ...)`, which tried to spawn the non-resident
+`wpn_dr_deus_01_3p` at `gear_utils.lua:189-190` -> `entity_manager2.lua:114: table index is
+nil` (caught by wt's safe_hook and cosmetics' pcall, hence the invisible wield). cosmetics
+already skipped its own hat spawn for the same non-resident unit; cwv did not gate the
+weapon spawn. Async C-assert risk on a harder-missing package (BUG_CLASSES 28, uncatchable).
+
+### Changed
+- NEW `_om._husk_unit_spawnable(base_unit)` crash-floor residency predicate: true when the
+  unit's `_3p` form is resident under ANY reference (`Managers.package:has_loaded(want)` with
+  no reference_name -> plain loaded flag, `package_manager.lua:286-293`) OR is a cwv
+  custom-bundle mesh. DISTINCT from `_om._resident_override_3p` (issue 418), which demands
+  cwv's OWN force-load reference and would false-negative a naturally game-loaded base mesh.
+- `_om._husk_rekey_units` now returns a SUPPRESS flag. After resolving a cwv def and doing
+  the (unchanged) override re-key, it checks the FINAL `item_units[field]` — the value vanilla
+  will spawn — through `_husk_unit_spawnable`. If that unit is non-resident, it returns true.
+  The `GearUtils.spawn_inventory_unit` husk hook then SKIPS the vanilla call for that hand
+  (`return nil,nil,nil,nil`) instead of letting it error. Not force-loaded, not nil'd in place
+  (nil'ing the field would crash vanilla's `weapon_unit_name .. "_3p"` concat) — the spawn is
+  simply not made, which for the Outrider is the correct display: blunderbuss right, nothing
+  left. Bounded to a resolved cwv def, so a native husk wield is never touched (#475 Inv. 1).
+- The override-non-resident branch (issue 418) now also falls through to the #478 crash-floor
+  rather than returning, so a non-resident base leftover behind a non-resident override is
+  suppressed too instead of showing (and crashing on) the base.
+- Diagnostics: `[cwv:478] husk DEFER ...` printf once per (base, hand, unit), pcall-wrapped.
+- Regression: NEW `cwv_husk_nonresident_spawn_deferred` — locks the predicate (non-existent
+  path -> not spawnable; mod-bundled mesh -> spawnable), the end-to-end suppress (Outrider
+  resolved by wire skin with a synthetic non-resident left-mount -> suppress=true), and the
+  native-scope guard (no resolved def -> never suppress).
+
+### Verify
+Needs a SECOND player (`verify-fix-coop`): host a non-Chaos-Wastes map, have a client Kruber
+equip the Outrider Grenade Launcher in the ranged slot, and confirm on the HOST the client
+renders the blunderbuss (right hand, no floating Trollhammer, no invisible weapon) with no
+`spawn_inventory_unit` error in the host log. Host log should show `[cwv:478] husk DEFER
+... base=dr_deus_01 ... hand=left`.
+
 ## 0.1.378-dev — 2026-07-12 — #495: skin wire leak closed on all senders, parity-gated so #474 keeps its signal [untested] [crash] [0-critical]
 
 ### Why

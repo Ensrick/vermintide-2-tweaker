@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.378-dev"
+local MOD_VERSION = "0.1.379-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -4750,7 +4750,16 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	-- (vanilla overrides via the resident-3p helper, mod-bundled custom meshes
 	-- via the custom-bundle predicate). No-op when nothing resolves.
 	if not owner_unit_1p and _om._husk_rekey_units then
-		_om._husk_rekey_units(hand, item_data, item_units, owner_unit_3p)
+		if _om._husk_rekey_units(hand, item_data, item_units, owner_unit_3p) then
+			-- #478 residency-gated defer: the resolved variant would hand vanilla a
+			-- NON-RESIDENT unit for this hand (a Deus-only base mesh outside Chaos
+			-- Wastes -- e.g. the Outrider keeping dr_deus_01's Trollhammer left-mount).
+			-- Skip the vanilla spawn entirely rather than error into an invisible
+			-- wield / async C-assert. Vanilla only reached this hand because
+			-- item_units[hand.."_hand_unit"] is truthy (simple_husk_inventory_extension
+			-- .lua:665/669), so returning all-nil is exactly a hand vanilla never spawned.
+			return nil, nil, nil, nil
+		end
 	end
 	local v_w3p, v_a3p, v_w1p, v_a1p =
 		func(world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
@@ -10239,6 +10248,24 @@ do
 		return name
 	end
 
+	-- #478 crash-floor residency predicate. Can vanilla spawn_inventory_unit spawn
+	-- this unit's "_3p" form on THIS peer without an async C-assert? DISTINCT from
+	-- _om._resident_override_3p (issue 418), which demands cwv's OWN force-load
+	-- reference: the crash-floor only asks whether the resource is resident under
+	-- ANY reference -- a naturally game-loaded base mesh counts (has_loaded with no
+	-- reference_name returns the plain loaded flag, package_manager.lua:286-293) --
+	-- OR is a cwv custom-bundle mesh (units/cwv_*, always resident while the mod is
+	-- loaded; the vanilla-prefix resident guard deliberately rejects it, issue 403).
+	-- Used by the husk re-key to suppress a spawn that would otherwise error at
+	-- gear_utils.lua:189 (weapon_unit_name .. "_3p" over a missing package).
+	_om._husk_unit_spawnable = function(base_unit)
+		if type(base_unit) ~= "string" or base_unit == "" then return false end
+		if _om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(base_unit) then return true end
+		if not (Managers and Managers.package) then return false end
+		local ok, res = pcall(Managers.package.has_loaded, Managers.package, base_unit .. "_3p")
+		return ok and res == true
+	end
+
 	-- Husk MESH re-key (issues 396/401, restructured for #474/#475). Runs BEFORE
 	-- the vanilla spawn (the caller mutates item_units in place). Resolution
 	-- order + invariants: the RESOLUTION ORDER block above; the actual decision
@@ -10300,21 +10327,46 @@ do
 			if type(skin_unit) == "string" and skin_unit ~= "" then override = skin_unit end
 		end
 		if override == nil then override = def[field] end
-		if type(override) ~= "string" or override == "" then return end   -- def keeps base mesh for this hand
-		if item_units[field] == override then return end   -- idempotent (skin data already flowed)
-		-- Residency: helper checks the "_3p" form; we write the BASE-form path,
-		-- vanilla spawn_inventory_unit appends "_3p".
-		if not ((_om._resident_override_3p and _om._resident_override_3p(override))
-				or (_om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(override))) then
-			_husk_log_once("474_residency:" .. tostring(override) .. ":" .. tostring(hand),
-				"[cwv:474] husk re-key DEFERRED (residency): hand=%s base=%s def=%s override=%s not resident -- showing base this wield (issue 403 crash-floor)",
-				tostring(hand), tostring(base_name), tostring(def.item_key), tostring(override))
-			return
+		if type(override) == "string" and override ~= "" and item_units[field] ~= override then
+			-- Residency: helper checks the "_3p" form; we write the BASE-form path,
+			-- vanilla spawn_inventory_unit appends "_3p". A vanilla override must be
+			-- cwv-force-loaded under HUSK_OVERRIDE_REF (issue 418); a mod-bundled
+			-- custom mesh is accepted via the custom-bundle predicate.
+			if (_om._resident_override_3p and _om._resident_override_3p(override))
+					or (_om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(override)) then
+				item_units[field] = override
+				_husk_log_once("474_rekey:" .. tostring(base_name) .. ":" .. tostring(career) .. ":" .. tostring(hand) .. ":" .. tostring(skin),
+					"[cwv:474] husk re-keyed hand=%s base=%s career=%s via %s (skin=%s) -> %s",
+					tostring(hand), tostring(base_name), tostring(career), tostring(reason), tostring(skin), tostring(override))
+			else
+				-- Override not cwv-resident: cannot re-key to it. Leave the base
+				-- leftover in item_units and fall through to the #478 crash-floor,
+				-- which suppresses the spawn if that leftover is itself non-resident.
+				_husk_log_once("474_residency:" .. tostring(override) .. ":" .. tostring(hand),
+					"[cwv:474] husk re-key DEFERRED (residency): hand=%s base=%s def=%s override=%s not resident -- showing base this wield (issue 403 crash-floor)",
+					tostring(hand), tostring(base_name), tostring(def.item_key), tostring(override))
+			end
 		end
-		item_units[field] = override
-		_husk_log_once("474_rekey:" .. tostring(base_name) .. ":" .. tostring(career) .. ":" .. tostring(hand) .. ":" .. tostring(skin),
-			"[cwv:474] husk re-keyed hand=%s base=%s career=%s via %s (skin=%s) -> %s",
-			tostring(hand), tostring(base_name), tostring(career), tostring(reason), tostring(skin), tostring(override))
+		-- #478 crash-floor (residency-gated defer): whatever now sits in
+		-- item_units[field] is what vanilla spawn_inventory_unit will spawn -- the
+		-- re-keyed override above, an idempotent pre-applied skin unit, or the base
+		-- leftover for a hand the variant does NOT override (e.g. the Outrider's
+		-- no_left_hand keeps dr_deus_01's Deus-only Trollhammer left-mount). If that
+		-- unit is NON-RESIDENT on this peer, vanilla errors at gear_utils.lua:189
+		-- (weapon_unit_name .. "_3p" over a missing package -> entity_manager2.lua:114
+		-- "table index is nil" -> invisible wield; async C-assert risk on a
+		-- harder-missing package, BUG_CLASSES 28). Return SUPPRESS=true so the spawn
+		-- hook skips the vanilla call for THIS hand -- fail-safe (no mesh this hand,
+		-- never force-load mid-mission). A non-resident mesh cannot render anyway, so
+		-- suppressing removes only a crash, never a visible unit. Bounded to a
+		-- resolved cwv def, so a genuine native wield is never touched (#475 Inv. 1).
+		local final_unit = item_units[field]
+		if type(final_unit) == "string" and final_unit ~= "" and not _om._husk_unit_spawnable(final_unit) then
+			pcall(_husk_log_once, "478_defer:" .. tostring(base_name) .. ":" .. tostring(hand) .. ":" .. tostring(final_unit),
+				"[cwv:478] husk DEFER: hand=%s base=%s career=%s def=%s -- NON-RESIDENT spawn unit %s suppressed (would crash vanilla spawn); no mesh this hand (fail-safe, no force-load)",
+				tostring(hand), tostring(base_name), tostring(career), tostring(def.item_key), tostring(final_unit))
+			return true
+		end
 	end
 
 	-- Returns true if it stripped a torpedo/ammo unit (caller then nils its
@@ -12216,6 +12268,53 @@ _rt_register("cwv_husk_native_never_rekeyed", function()
             or not _om._husk_custom_bundle_unit("units/cwv_es_musket_custom/cwv_es_musket_custom")
             or _om._husk_custom_bundle_unit("units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1") then
         return "_om._husk_custom_bundle_unit missing or mis-scoped -- Old Musket husk re-key residency arm broken (#474)"
+    end
+end)
+
+_rt_register("cwv_husk_nonresident_spawn_deferred", function()
+    -- Issue #478: a resolved CWV variant husk must NEVER let vanilla
+    -- spawn_inventory_unit spawn a NON-RESIDENT unit. A Deus-only base (e.g.
+    -- dr_deus_01's Trollhammer left-mount) is not resident outside Chaos Wastes,
+    -- so a hand the variant does not override (the Outrider's no_left_hand) left
+    -- that base mesh in item_units and vanilla errored (gear_utils.lua:189 nil
+    -- "_3p" concat once the husk guard skipped it -> entity_manager2.lua:114 "table
+    -- index is nil" -> invisible wield; async C-assert risk, BUG_CLASSES 28). The
+    -- fix: _husk_rekey_units returns a SUPPRESS flag the spawn hook uses to skip the
+    -- vanilla call (residency-gated defer). Lock the predicate, the suppress
+    -- contract, and the native-scope guard.
+    if type(_om._husk_unit_spawnable) ~= "function" then
+        return "_om._husk_unit_spawnable missing -- #478 crash-floor residency predicate lost"
+    end
+    if type(_om._husk_rekey_units) ~= "function" then
+        return "_om._husk_rekey_units missing -- husk re-key/suppress contract lost (#478)"
+    end
+    -- Predicate: a non-existent unit path is never resident under any reference.
+    if _om._husk_unit_spawnable("units/weapons/player/__cwv_rt_nonresident_478__/__cwv_rt_nonresident_478__") ~= false then
+        return "_husk_unit_spawnable returned true for a non-existent unit -- crash-floor would let a non-resident spawn through (#478)"
+    end
+    -- Predicate: a cwv mod-bundled custom mesh is always resident while loaded.
+    if _om._husk_unit_spawnable("units/cwv_es_musket_custom/cwv_es_musket_custom") ~= true then
+        return "_husk_unit_spawnable rejected the mod-bundled Old Musket mesh -- custom-bundle arm broken (#478)"
+    end
+    -- End-to-end SUPPRESS: the Outrider (base dr_deus_01) resolved by its wire
+    -- skin, carrying ONLY a guaranteed-non-resident left-mount leftover, must
+    -- return suppress=true so the spawn hook skips vanilla's left spawn. Synthetic
+    -- leftover path keeps this deterministic whether or not the tester is in Chaos
+    -- Wastes (the real Trollhammer mesh is resident there). Left hand: the Outrider
+    -- has no_left_hand, so no override is written and the leftover survives.
+    local iu_defer = {
+        skin = "cwv_es_outrider_grenade_launcher_skin",
+        left_hand_unit = "units/weapons/player/__cwv_rt_nonresident_478__/__cwv_rt_nonresident_478__",
+    }
+    if not _om._husk_rekey_units("left", { name = "dr_deus_01" }, iu_defer, nil) then
+        return "resolved Outrider husk did NOT suppress a non-resident left-mount spawn -- #478 crash-floor broken"
+    end
+    -- Scope: with NO cwv def resolved (unknown base, no skin, no career), the
+    -- re-key must NOT suppress -- a genuine native husk wield is never touched even
+    -- when its leftover is non-resident (#475 Invariant 1 scope, no #478 overreach).
+    if _om._husk_rekey_units("left", { name = "__cwv_rt_no_such_base__" },
+            { left_hand_unit = "units/weapons/player/__cwv_rt_nonresident_478__/__cwv_rt_nonresident_478__" }, nil) then
+        return "re-key suppressed a spawn with NO resolved cwv def -- #478 overreach into native wields (#475 Invariant 1)"
     end
 end)
 
