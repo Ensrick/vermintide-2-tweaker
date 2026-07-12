@@ -85,9 +85,17 @@ $repoRoot = (Resolve-Path $RepoRoot).Path
 $GhRepo   = 'Ensrick/vermintide-2-tweaker'
 
 # ---- tag <-> GitHub-label pairs under sync enforcement ----
+# Label       : display name for messages.
+# TagLabels   : labels that SATISFY the tag->label direction (c). A [verify-fix]
+#               loc tag is satisfied by verify-fix, verify-fix-coop (2+ testers,
+#               user rule 2026-07-11), or Fixed (user-verified; tag is
+#               transitional until the post-fix pass retags to [working]).
+# ExpectLabels: labels that DEMAND a loc tag in the label->tag direction (d).
+#               Fixed is deliberately absent - a Fixed issue's option title
+#               should already carry [working]/[untested], not [verify-fix].
 $SyncPairs = @(
-    @{ Tag = 'verify-fix'; Label = 'verify-fix';        FlagProp = 'HasVerifyFix' },
-    @{ Tag = 'diag';       Label = 'diagnostics-armed'; FlagProp = 'HasDiag' }
+    @{ Tag = 'verify-fix'; Label = 'verify-fix';        TagLabels = @('verify-fix', 'verify-fix-coop', 'Fixed'); ExpectLabels = @('verify-fix', 'verify-fix-coop'); FlagProp = 'HasVerifyFix' },
+    @{ Tag = 'diag';       Label = 'diagnostics-armed'; TagLabels = @('diagnostics-armed');                      ExpectLabels = @('diagnostics-armed');              FlagProp = 'HasDiag' }
 )
 # Issues with this label have no loc surface -> exempt from direction (d).
 $ViceVersaExemptLabels = @('tooling')
@@ -235,10 +243,10 @@ function Get-SyncFindings {
             }
             $openRefs = @($r.IssueNums | Where-Object { $IssueMeta.ContainsKey($_) -and $IssueMeta[$_].State -eq 'OPEN' })
             if ($openRefs.Count -eq 0) { continue }   # every ref already flagged stale above
-            $carrying = @($openRefs | Where-Object { $IssueMeta[$_].Labels -contains $p.Label })
+            $carrying = @($openRefs | Where-Object { $im = $IssueMeta[$_].Labels; @($p.TagLabels | Where-Object { $im -contains $_ }).Count -gt 0 })
             if ($carrying.Count -eq 0) {
                 $rows += [pscustomobject]@{ Kind = 'label-missing'; Issue = $openRefs[0]; Mod = $r.Mod; Rel = $r.Rel; Line = $r.Line; Key = $r.Key
-                    Detail = "[$($p.Tag)] paired with [Issue $($openRefs -join ' & ')] but none carries the '$($p.Label)' GitHub label" }
+                    Detail = "[$($p.Tag)] paired with [Issue $($openRefs -join ' & ')] but none carries a '$($p.TagLabels -join "' / '")' GitHub label" }
             }
         }
     }
@@ -250,11 +258,12 @@ function Get-SyncFindings {
         $exempt = @($meta.Labels | Where-Object { $ViceVersaExemptLabels -contains $_ }).Count -gt 0
         if ($exempt) { continue }
         foreach ($p in $SyncPairs) {
-            if ($meta.Labels -notcontains $p.Label) { continue }
+            $carried = @($p.ExpectLabels | Where-Object { $meta.Labels -contains $_ })
+            if ($carried.Count -eq 0) { continue }
             $tagged = @($LocRows | Where-Object { $_.($p.FlagProp) -and $_.IssueNums -contains $n })
             if ($tagged.Count -eq 0) {
                 $rows += [pscustomobject]@{ Kind = 'tag-missing'; Issue = $n; Mod = ''; Rel = ''; Line = 0; Key = ''; Label = $p.Label; Tag = $p.Tag
-                    Detail = "open issue #$n carries '$($p.Label)' but no dev option title pairs [$($p.Tag)] with [Issue $n] (fine if the fix has no menu surface - section 13.3)" }
+                    Detail = "open issue #$n carries '$($carried -join "' + '")' but no dev option title pairs [$($p.Tag)] with [Issue $n] (fine if the fix has no menu surface - section 13.3)" }
             }
         }
     }

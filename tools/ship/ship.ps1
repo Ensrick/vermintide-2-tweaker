@@ -485,6 +485,15 @@ try {
                                 $labelSummary += ("#{0} already {1}" -f $n, $statusLabel)
                                 continue
                             }
+                            # Never downgrade a stronger status: verify-fix-coop (2+ testers,
+                            # user rule 2026-07-11) supersedes verify-fix; Fixed (user-verified,
+                            # post-fix pass owed) supersedes both. PROJECT_STANDARDS section 11.
+                            $stronger = @('verify-fix-coop', 'Fixed') | Where-Object { $existing -contains $_ }
+                            if ($stronger) {
+                                Write-Host ("  - #{0}: carries '{1}' (supersedes '{2}') -- not downgrading" -f $n, ($stronger -join "', '"), $statusLabel) -ForegroundColor DarkGray
+                                $labelSummary += ("#{0} kept {1}" -f $n, ($stronger -join '+'))
+                                continue
+                            }
                             & gh issue edit $n --repo $ghRepo --add-label $statusLabel 2>$null | Out-Null
                             if ($LASTEXITCODE -eq 0) {
                                 Write-Host ("  + #{0}: added '{1}'" -f $n, $statusLabel) -ForegroundColor Green

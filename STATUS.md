@@ -5,8 +5,30 @@
 > ONLY status surface: `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md` were
 > retired to pointer stubs 2026-07-08 (issue #432; full copies in git history +
 > `_archive/docs/2026-07-08_432_consolidation/`).
-> **Last updated: 2026-07-08.**
+> **Last updated: 2026-07-12.**
 
+## 📌 2026-07-11/12 SESSIONS — critical-issue campaign (multi-agent) + one-at-a-time continuation
+
+**Directive:** fix ALL critical issues (multi-agent, ultracode) -> session cap hit -> wind-down to branch `handoff/fable-2026-07-11` + umbrella issue **#494** -> new-week continuation, ONE issue at a time, docs/process wrap-up prioritized.
+
+**✅ Shipped & Workshop-verified** (all -dev; **PC-B SKIPPED - unreachable both days, needs catch-up deploy**; every ship committed + pushed):
+- **et 0.4.25-dev** (#455 boss-event mutators) + **0.4.26-dev** (OOP split: 11 `_evt_` modules + shared catalog; PROJECT_STANDARDS §2.2a; et/CLAUDE.md).
+- **ct_dev 0.7.239-dev** (#470 curse-sorcerer rank-8 hole, vanilla bug) + **0.7.240-dev** (#426 peer-parity gate for modded boons/miracles - 5 gate surfaces; #406 ct_kill_heal re-enabled; 200-local ceiling build fix).
+- **gt_dev 0.2.196-dev** (#459 LineObject dead-world AV, BUG_CLASSES 32) + **0.2.197-dev** (#448 downed bots stop granting Morr's).
+- **wt 0.12.208-dev** (BR broadphase guard + create_equipment audit P0s).
+- **crt 0.3.55-dev** (#425 peer-parity gate for 8 networked talent reworks - wire-safe wrappers + hot-join filter).
+- **cwv 0.1.377-dev** (#474/#475 husk display: skin-key PRIMARY, native never re-keyed, lazy can_wield).
+- **docs/engine/** 11-subsystem reference set + IMPROVEMENT_BACKLOG (72 rows; 13 P0s routed) + campaign doc deltas reconciled (career_name drop root-caused to third-party standalone Material Hijack - wt compensations stay).
+
+**🏷 Label taxonomy (user rules 2026-07-11, codified §11/runbook/CLAUDE.md):** `verify-fix-coop` replaces `verify-fix` when 2+ testers needed (manual swap after ship.ps1 auto-label); `Fixed` = user-verified, post-fix pass (hardening/docs/regression tests) owed before close.
+
+**⚠ Open ends (the what-now list):**
+- **Remaining handoff-branch streams** (resume from #494; each CHANGELOG entry on the branch is the design doc): cosmetics 0.9.76-dev (#282/#421, built), enemy_tweaker 0.7.31-dev 17-module split (#479/#449 gate presence UNVERIFIED - check before ship), gut_dev partial (#480 + freecam/native-loadouts P0s, NOT built).
+- **User in-game verify queue** (full Steam restart FIRST; coop items need the 2nd machine): et 0.4.26 `/event_tweaker_regression_test`, ct_dev `[ct:470]` + #426/#406 coop checks, gt_dev #459/#448, wt 0.12.208, crt #425 coop, cwv #474/#475 coop + prior queue (see #494).
+- **#495** cwv skin wire leak (0-critical): fix MUST be parity-gated or #474 regresses.
+- **Not started:** #492, #478, #423/#424 damage/spawn axes, #427 warn-chat sites, OOP program order (enemy_tweaker -> wt -> cosmetics -> crt -> cim_dev -> ct_dev -> cwv).
+- **User decisions:** #433 (dead BR code), #435 (dcp portraits scope).
+- **PC-B catch-up deploy** when reachable.
 ## 📌 2026-07-08 SESSION — full OOP audit + plan + wave 1 + enforcement stack + WS3 docs (issue 429-436)
 
 **User directive:** audit all mods one at a time, plan, refactor toward OOP; verify the Opus-era docs/standards (suspicion confirmed: 0/9 binding rules were machine-enforced). Plan = `docs/OOP_REFACTOR_PLAN.md`; audits archived `_archive/audits/2026-07-07_oop_audit/` + external backup.

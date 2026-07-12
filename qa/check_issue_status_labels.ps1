@@ -70,8 +70,10 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path $RepoRoot).Path
 
-# ---- the two (and only two) status labels (§ 11) ----
-$StatusLabels = @('verify-fix', 'diagnostics-armed')
+# ---- the status-label lifecycle (§ 11; user rules 2026-07-11) ----
+# verify-fix (solo-verifiable fix) | verify-fix-coop (needs 2+ testers) |
+# diagnostics-armed (probe) | Fixed (user-verified; post-fix pass owed).
+$StatusLabels = @('verify-fix', 'verify-fix-coop', 'diagnostics-armed', 'Fixed')
 
 # ---- active mods whose CHANGELOG.md is authored newest-first ----
 # Mirrors the ship-doctrine "active mods" set: the single-stream mods + the five
