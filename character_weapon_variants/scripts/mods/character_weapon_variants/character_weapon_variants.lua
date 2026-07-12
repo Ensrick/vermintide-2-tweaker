@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.382-dev"
+local MOD_VERSION = "0.1.383-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -10768,17 +10768,66 @@ do
 	end
 	_om._wire_parity_live = _wire_parity_live
 
+	-- issue 476 diagnostic (printf, dev-always-on). Makes the husk-illusion wire
+	-- DECISION legible in the WIELDER's own log at equip time. A remote view (the
+	-- host + other clients) renders the wielder as a HUSK, which resolves the BASE
+	-- item_data (no cwv backend_id, memory reference_vt2_husk_resolves_base_item_data),
+	-- so an applied illusion reaches a husk ONLY if its cwv skin id rides THIS wire
+	-- -- and it rides only under confirmed peer parity (issue 474/495). Logged once
+	-- per (surface, skin, decision) so a "illusion doesn't change for other players"
+	-- repro (#476) pins the failing link without guessing:
+	--   * NULL + the beacon's "Missing this mod" chat notice = genuinely mixed
+	--     lobby, WORKING AS DESIGNED (a non-cwv peer would CTD on the modded id).
+	--   * NULL + other_human_peers>0 + NO missing-peer notice = all-cwv but parity
+	--     UNCONFIRMED at send time (ack race); the illusion syncs on next re-equip.
+	--   * RIDE + a husk still shows base = downstream on the OTHER peer: read its
+	--     [cwv:474] husk re-key / DEFERRED(residency) / [cwv:478] DEFER lines (a
+	--     PAIRING illusion whose per-hand mesh differs from the def default is NOT
+	--     covered by the def-field husk residency pass -- issue 396/401 class).
+	-- Hung on _om (not new locals): this chunk sits at the Lua 5.1 200-local ceiling.
+	_om._probe_476_logged = {}
+	_om._probe_476 = function(context, skin, rode, force)
+		local key = tostring(context) .. "|" .. tostring(skin) .. "|" .. tostring(rode)
+		if _om._probe_476_logged[key] then return end
+		_om._probe_476_logged[key] = true
+		local peers = -1
+		local pm = Managers and Managers.player
+		if pm and type(pm.human_players) == "function" then
+			local ok, humans = pcall(function() return pm:human_players() end)
+			if ok and type(humans) == "table" then
+				local me
+				pcall(function() me = Network.peer_id() end)
+				peers = 0
+				for _, p in pairs(humans) do
+					local pid = p and p.peer_id
+					if type(pid) == "string" and pid ~= me then peers = peers + 1 end
+				end
+			end
+		end
+		pcall(printf,
+			"[cwv:476] husk illusion wire (%s): skin=%s decision=%s other_human_peers=%s parity_all_have=%s%s",
+			tostring(context), tostring(skin), rode and "RIDE" or "NULL",
+			tostring(peers), tostring(_wire_parity_live()),
+			force and " (hot-join replay: ALWAYS nulled -- join-handshake race, syncs on next re-equip)" or "")
+	end
+
 	local _null_logged = {}
 	local function _wire_null_skins(slots, send_fn, context, force)
 		if not force and _wire_parity_live() then
 			-- Every lobby peer runs cwv: the skin is decodable everywhere and
-			-- carries the issue-474 husk display. Let it ride.
+			-- carries the issue-474 husk display. Let it ride. (#476: probe the
+			-- decision for any cwv skin present, WITHOUT altering the fast path.)
+			for _, slot_data in pairs(slots) do
+				local skin = slot_data and slot_data.skin
+				if skin and _wire_skin(skin) then _om._probe_476(context, skin, true, false) end
+			end
 			return send_fn()
 		end
 		local saved
 		for _, slot_data in pairs(slots) do
 			local skin = slot_data and slot_data.skin
 			if skin and _wire_skin(skin) then
+				_om._probe_476(context, skin, false, force)
 				saved = saved or {}
 				saved[slot_data] = skin
 				slot_data.skin = nil

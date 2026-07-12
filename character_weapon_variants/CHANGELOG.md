@@ -1,5 +1,70 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.383-dev — 2026-07-12 — #476: [diag] make the husk-illusion wire decision legible at equip time [1-major]
+
+### Why
+Issue #476 (1-major): the Imperial Longsword & Shield (`cwv_es_longsword_shield`, the user's
+"Imperial Sword and Shield") changes illusion only for the wielder — the host and other clients
+still see the base illusion. The user calls this "part of a larger issue with proper abstraction",
+and it is: a remote view renders the wielder as a HUSK, which resolves the BASE `item_data`
+(no cwv `backend_id`; memory `reference_vt2_husk_resolves_base_item_data`), so the applied
+illusion reaches a husk ONLY if its cwv skin id rides the `rpc_add_equipment` wire. Issue 495
+made that skin wire PARITY-GATED for cross-peer wire safety (a cwv `NetworkLookup.weapon_skins`
+index is undefined on a non-cwv peer and CTDs its strict `__index` decode — issue 278 / BUG_CLASSES
+31): the skin rides only when the peer-parity beacon confirms EVERY human peer runs cwv, else it is
+nulled to `"n/a"` and husks render the base. So the reported symptom is the expected output of at
+least three distinct upstream states, and the thin report (no logs, no repro) cannot tell them apart.
+Per repo doctrine (diagnose-before-mitigate; blindly removing the gate would reintroduce the 0-critical
+#278/#495 non-cwv-peer CTD), this build ships INSTRUMENTATION, not a behavior change.
+
+### Diagnosis (source-traced this session)
+- **Owner path is clean**: the wielder resolves the illusion via `backend_id`, so their own view is
+  correct — matching the report.
+- **Husk path, three failure states, all producing "base illusion on the remote view":**
+  1. **Parity NULL, mixed lobby** — a peer genuinely lacks cwv; nulling is correct (WAD). The beacon
+     already echoes a `Missing this mod` chat notice in this case.
+  2. **Parity NULL, all-cwv but unconfirmed at send time** — the ack handshake had not completed when
+     `rpc_add_equipment` encoded (join/load ack race); illusion syncs on the next re-equip.
+  3. **Parity RIDE, but the pairing-illusion mesh is non-resident on the husk** — the def-field husk
+     residency pass (`_force_load_husk_override_units`, issues 396/401) force-loads only each variant
+     DEF's `right_hand_unit`/`left_hand_unit`; a PAIRING illusion (e.g. the Imperial Longsword & Shield's
+     shield-swap pairings, or its Saltzpyre greatsword `wh_2h_sword` pairings from v0.1.254) uses per-hand
+     meshes that DIFFER from the def default and are NOT covered, so the husk re-key declines on residency
+     (`[cwv:474] husk re-key DEFERRED (residency)`) and shows base. This is the identified SECONDARY
+     hypothesis to fix once the repro confirms the vector — not changed blindly (adding illusion-mesh
+     force-loads risks the wt+cosmetics 1 GiB Lua-heap class and the issue-403 boot fatal).
+- **Receiver side was already fully instrumented** (`[cwv:474]` re-key / DEFERRED, `[cwv:478]` DEFER,
+  `[cwv:475]` DECLINED, `[cwv husk-transform]` no-def). The one blind spot was the SENDER: the RIDE path
+  logged nothing, and the NULL path (`[cwv:495]`) did not report the parity roster.
+
+### Changed
+- **[diag]** NEW `_om._probe_476`, called from the wire-skin gate (`_wire_null_skins`) on BOTH the RIDE
+  and NULL paths for any cwv skin present. Logs, once per (surface, skin, decision): the sender surface
+  (`game_object_initialized` / `spawn_resynced_loadout` / `hot_join_sync`), the skin key, the decision
+  (`RIDE`/`NULL`), the other-human-peer count, and the beacon's `all_peers_have` verdict — with the
+  hot-join-replay always-null case flagged. `printf` (visible with mod-logging OFF), `pcall`-wrapped,
+  hung on `_om` (no new file-scope locals — the chunk is at the Lua 5.1 200-local ceiling). No behavior
+  change: the fast-path early-return is preserved; the probe only observes.
+
+### Verify (needs a SECOND player — the failure is on the REMOTE view; `verify-fix-coop`)
+Host + client, both on cwv v0.1.383-dev (full Steam restart). One player equips the Imperial Longsword
+& Shield, applies a non-default illusion, and enters the keep/mission; the OTHER player looks at them.
+Read the WIELDER's log for the `[cwv:476]` line at equip:
+- `decision=NULL` + a beacon `Missing this mod` chat notice → mixed lobby, working as designed.
+- `decision=NULL` + `other_human_peers>0` + no missing-peer notice → all-cwv, parity not yet confirmed;
+  re-equip and confirm the next `[cwv:476]` reads `decision=RIDE`.
+- `decision=RIDE` but the husk still shows base → read the OTHER peer's log: a
+  `[cwv:474] husk re-key DEFERRED (residency)` line names the non-resident pairing-illusion mesh (the
+  secondary residency fix), while `[cwv:475]`/`[cwv husk-transform]` would indicate a resolver miss.
+Expected: the ladder pins exactly one state so the follow-up fix (residency add, ack-race handling, or
+"WAD in mixed lobbies") is targeted rather than guessed.
+
+**DoD:** Universal walked (build hygiene: version bump + CHANGELOG + forward-ref audit — the probe is
+defined above its call sites in the same `do`-block; no live-matrix walk, this build ships no variant
+change). Trait gates: N/A (diagnostics only; no variant added or altered). Deferrals: the root FIX
+(residency for pairing-illusion meshes and/or parity ack-race handling) pending the 2-player repro that
+this build's `[cwv:476]` ladder pins.
+
 ## 0.1.382-dev - 2026-07-12 - #506: adopt the shared parity-lib ordering fix (verbatim lib re-copy)
 
 ### Why
