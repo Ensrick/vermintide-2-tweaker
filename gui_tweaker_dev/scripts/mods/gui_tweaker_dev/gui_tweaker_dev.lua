@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.216-dev"
+local MOD_VERSION = "0.2.217-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2242,6 +2242,32 @@ _rt_register("freecam_invariants", function()
     -- removed the mod re-bricks: input locks with only the fragile F8 poll to escape.
     if not fc:find("device_unblock_all_services", 1, true) then
         return "freecam does not unblock input devices after entering free flight -- #307 hard input-lock regressed"
+    end
+    -- INVARIANT 6 (BUG_CLASSES 32, #459 family): every WorldManager lookup in the freecam
+    -- module must route through the has_world-gated _live_world helper. A bare lookup on the
+    -- mods_update path fasserts on Leave Game (WorldManager.world, world_manager.lua:111-115),
+    -- and a nil check placed after the bare call is dead code. Functional half: the gate
+    -- predicate must return nil, not raise, for a world that does not exist.
+    if type(mod._gut_fc_live_world) ~= "function" then
+        return "freecam _live_world gate helper not wired (mod._gut_fc_live_world) -- BUG_CLASSES 32"
+    end
+    local ok_lw, lw = pcall(mod._gut_fc_live_world, "__rt_no_such_world__")
+    if not ok_lw then
+        return "freecam _live_world RAISED on a missing world -- has_world gate broken (BUG_CLASSES 32): " .. tostring(lw)
+    end
+    if lw ~= nil then
+        return "freecam _live_world returned a value for a missing world (gate not gating)"
+    end
+    -- Pattern half: no bare gated-manager lookup outside the helper (needle split so this
+    -- check can't self-match its own source).
+    local bare_needle = "Managers.world:" .. "world("
+    if fc:find(bare_needle, 1, true) then
+        return "freecam has a bare " .. bare_needle .. " call -- must route through _live_world (BUG_CLASSES 32)"
+    end
+    -- The state-transition force-exit must keep its dead-world release path (the engine's
+    -- own _clear_free_flight), or the engine slot leaks active=true across teardown.
+    if not fc:find("_clear_free_flight", 1, true) then
+        return "freecam dropped the _clear_free_flight dead-world release (class-32 force-exit regressed)"
     end
 end)
 

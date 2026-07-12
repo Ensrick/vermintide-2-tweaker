@@ -260,16 +260,13 @@ work around (repo CLAUDE.md, Mod Directory).
 The mirror-hook architecture is engine-correct (sole choke points verified in 2.3/2.5; the rt
 check pins all five write hooks, :1209-1224). Remaining friction:
 
-1. **Official fallback passes a STORE-space index to an official read.** In MODE_STORE,
-   `get_character_data`'s weapon fallback returns `func(self, career, key,
-   optional_loadout_index)` (:506-519). The store may hold more rows than official
-   `_career_data` (rows are added store-side only, :646-671), and vanilla returns nil for a
-   missing row (playfab_mirror_base.lua:1909-1919) - so the "never serve an empty weapon"
-   guarantee can still yield nil exactly when idx > #official rows. Fix AUTHORED on branch
-   `handoff/fable-2026-07-11` (gut_dev 0.2.217-dev WIP, not built): `_official_gear_fallback`
-   routes both fallback sites through a nil index (vanilla resolves the official SELECTED
-   row, :1911) with a weapon-slot `get_default_loadouts` last resort (:1955-1966), rt check
-   `native_loadouts_fallback_index_translation` - flips to FIXED when it lands on master.
+1. **FIXED (gut_dev v0.2.217-dev, shipped 2026-07-12): official fallback no longer passes a
+   STORE-space index to the official read.** Both `get_character_data` fallback sites route
+   through `_official_gear_fallback` (`_gut_native_loadouts.lua`), which passes a `nil` index
+   (vanilla resolves the official SELECTED row, playfab_mirror_base.lua:1911) and, for weapon
+   slots only, last-resorts to `get_default_loadouts` row 1 (:1955-1966) before serving nil
+   with a loud printf. rt check `native_loadouts_fallback_index_translation` pins the
+   translation on a synthetic store row.
 2. **Career-nil `set_career_read_only_data` passes through in modded** (:711-714). That is
    the hero-attributes `career`/`bot_career` write (backend_interface_hero_attributes_playfab.lua:100-101),
    which lands in `_characters_data`, diffs dirty (playfab_mirror_base.lua:3435-3441) and

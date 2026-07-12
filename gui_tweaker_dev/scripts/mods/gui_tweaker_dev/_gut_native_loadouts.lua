@@ -390,23 +390,72 @@ end
 -- ------------------------------------------------------------------
 -- issue #387 diagnostic (weapons don't follow the selected loadout while jewelry/cosmetics
 -- do). get_character_data is HOT (called per slot per interface refresh), so a raw printf
--- would flood the log. This throttles to ONE line per (career, slot) whenever the resolved
--- (index, value, source) tuple CHANGES -- exactly a loadout switch or an equip -- so the log
--- reads as a clean per-switch trace: which id each GEAR slot served, from the modded STORE or
--- an OFFICIAL fallback. Comparing slot_melee/slot_ranged against slot_necklace across the same
--- switches shows whether the weapon slots are silently diverting to the (index-agnostic)
--- official read while jewelry is served from the store. Always-on in dev, never a menu toggle.
+-- would flood the log. Throttled to ONE line per (career, slot, ROW) whenever that row's
+-- served (value, source) CHANGES -- exactly a loadout switch or an equip -- so the log reads
+-- as a clean per-change trace: which id each GEAR slot served, from the modded STORE or an
+-- OFFICIAL fallback. Always-on in dev, never a menu toggle (throttle, don't remove).
+--
+-- issue 480 (the 20,120-line flood): the original cache was keyed (career, slot) ONLY, with
+-- the row index inside the signature -- but interface refreshes read the SAME slot across
+-- MULTIPLE loadout indices back to back (previews iterate rows), so consecutive reads always
+-- differed from the single cached signature and every read re-emitted an identical line every
+-- ~3 ms. Keying by (career, slot, idx) gives each row its own cache cell: the first
+-- occurrence still prints verbatim, an identical repeat never does, and a genuine per-row
+-- value/source change (the issue-474 mechanism-3 signal) still prints exactly once.
+-- Cache is bounded: careers x gear slots x loadout rows, well under a thousand entries.
 -- ------------------------------------------------------------------
 local _gear_read_trace = {}
-local function _trace_gear_read(career_name, key, idx, value, source)
-    local tk = tostring(career_name) .. "/" .. tostring(key)
-    local sig = tostring(idx) .. "|" .. tostring(value) .. "|" .. source
+local function _trace_should_emit(career_name, key, idx, value, source)
+    local tk = tostring(career_name) .. "/" .. tostring(key) .. "/" .. tostring(idx)
+    local sig = tostring(value) .. "|" .. tostring(source)
     if _gear_read_trace[tk] ~= sig then
         _gear_read_trace[tk] = sig
+        return true
+    end
+    return false
+end
+M.trace_should_emit = _trace_should_emit   -- exported for the /regression_test throttle check
+local function _trace_gear_read(career_name, key, idx, value, source)
+    if _trace_should_emit(career_name, key, idx, value, source) then
         printf("[gut_dev:NATIVE_LOADOUTS] #387 gear-read career=%s slot=%s idx=%s value=%s source=%s",
             tostring(career_name), tostring(key), tostring(idx), tostring(value), source)
     end
 end
+
+-- ------------------------------------------------------------------
+-- Official-space gear fallback (P0, residual of issues 387/372). `store_idx` is a
+-- STORE-space loadout index: in MODE_STORE, get_career_loadouts serves the STORE's rows, so
+-- every explicit index circulating through the interface/UI is an index into OUR store, not
+-- into official `_career_data`. The two spaces share no relationship (the store grows via
+-- add_loadout in modded; official rows grow only in the official realm), so forwarding a
+-- store index into the official read is wrong: vanilla indexes
+-- `_career_data[career][index]` directly and returns nil for a missing row
+-- (playfab_mirror_base.lua:1909-1919), and a nil weapon slot fatals at spawn wield
+-- ("Tried to wield default slot ... contained no weapon").
+-- Translation: pass nil, so vanilla resolves the official SELECTED row via
+-- `_career_loadouts[career]` (:1911) -- a row that exists whenever official data exists.
+-- Last resort for WEAPON slots only: the career's default loadout
+-- (get_default_loadouts :1955-1966; array of rows, backend_interface_item_playfab.lua
+-- :207-222). If even that is nil we printf loudly and serve nil rather than invent an id --
+-- never spawn from a guess. `read_official` is the wrapped vanilla get_character_data.
+-- ------------------------------------------------------------------
+local function _official_gear_fallback(read_official, mirror, career_name, key, store_idx)
+    local v = read_official(mirror, career_name, key, nil)   -- nil = official SELECTED row
+    if v ~= nil then return v end
+    if WEAPON_SLOT_SET[key] then
+        local ok_d, defaults = pcall(mirror.get_default_loadouts, mirror, career_name)
+        local row = ok_d and type(defaults) == "table" and defaults[1] or nil
+        local dv = row and row[key] or nil
+        if dv ~= nil then
+            _trace_gear_read(career_name, key, store_idx, dv, "official-fallback-default")  -- issue #387
+            return dv
+        end
+        pcall(printf, "[gut_dev:NATIVE_LOADOUTS] WEAPON SLOT UNRESOLVED career=%s slot=%s store_idx=%s: official selected row and default loadout both nil, serving nil",
+            tostring(career_name), tostring(key), tostring(store_idx))
+    end
+    return nil
+end
+M.official_gear_fallback = _official_gear_fallback   -- exported for the /regression_test translation check
 
 -- ------------------------------------------------------------------
 -- BackendUtils equip capture (v0.2.175). With Loremaster's Armoury installed, menu equips
@@ -502,10 +551,14 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
     -- applies only to weapon slots (empty jewelry is a legitimate state; empty melee/ranged
     -- fatals at spawn wield).
     if GEAR_SLOT_SET[key] then
+        -- BOTH fallback calls below go through _official_gear_fallback, which passes a NIL
+        -- index (official selected row). `idx` here is STORE-space; the pre-fix code forwarded
+        -- it into the official read, where a missing official row returned nil and an empty
+        -- weapon slot fataled at spawn (P0; residual of issues 387/372).
         if value == nil then
             if WEAPON_SLOT_SET[key] then
                 _trace_gear_read(career_name, key, idx, value, "official-fallback-nil-weapon")  -- issue #387
-                return func(self, career_name, key, optional_loadout_index)
+                return _official_gear_fallback(func, self, career_name, key, idx)
             end
             _trace_gear_read(career_name, key, idx, value, "store-nil-jewelry")  -- issue #387
             return nil
@@ -516,7 +569,7 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
         local rstate = _resolve_item_raw(value)
         if rstate == RESOLVE_NO then
             _trace_gear_read(career_name, key, idx, value, "official-fallback-resolve-no")  -- issue #387
-            return func(self, career_name, key, optional_loadout_index)
+            return _official_gear_fallback(func, self, career_name, key, idx)
         end
         -- issue #387: split YES vs UNKNOWN. Empirically (console-2026-07-06-21.28) a weapon
         -- served on UNKNOWN can still fail at PRESENTATION (get_item_from_id -> nil), leaving
@@ -1230,6 +1283,58 @@ M.rt_checks = {
             if seen[key] then return "duplicate hook target: " .. key end
             seen[key] = true
         end
+    end },
+    { name = "native_loadouts_fallback_index_translation", fn = function()
+        -- P0 (residual of issues 387/372): the MODE_STORE official gear fallback must NEVER
+        -- forward a store-space loadout index into the official read -- vanilla indexes
+        -- _career_data[career][index] directly and returns nil for a missing row
+        -- (playfab_mirror_base.lua:1909-1919); a nil weapon slot fatals at spawn wield.
+        -- Driven synthetically: a stub official read that only has a SELECTED row (nil index).
+        if type(M.official_gear_fallback) ~= "function" then return "official_gear_fallback missing" end
+        local seen_idx = "never-called"
+        local official = function(mirror, career, key, idx)
+            seen_idx = idx
+            if idx == nil then return "official_selected_" .. tostring(key) end
+            return nil   -- any explicit (store-space) index has no official row
+        end
+        local v = M.official_gear_fallback(official, {}, "__rt_career__", "slot_melee", 5)
+        if seen_idx ~= nil then
+            return "fallback forwarded index " .. tostring(seen_idx) .. " into the official read (must pass nil = selected row)"
+        end
+        if v ~= "official_selected_slot_melee" then
+            return "fallback did not serve the official selected row: " .. tostring(v)
+        end
+        -- Weapon-slot last resort: official selected row also nil -> career default loadout row 1.
+        local dead = function() return nil end
+        local mirror_with_defaults = { get_default_loadouts = function(self, career)
+            return { { slot_melee = "__rt_default_melee__" } }
+        end }
+        v = M.official_gear_fallback(dead, mirror_with_defaults, "__rt_career__", "slot_melee", 5)
+        if v ~= "__rt_default_melee__" then
+            return "weapon-slot last-resort default loadout not served: " .. tostring(v)
+        end
+        -- Non-weapon gear slot: nil is a legitimate final answer (no default forcing).
+        v = M.official_gear_fallback(dead, mirror_with_defaults, "__rt_career__", "slot_necklace", 5)
+        if v ~= nil then return "non-weapon gear slot must be allowed to resolve nil, got " .. tostring(v) end
+    end },
+    { name = "native_loadouts_trace_throttle_per_change", fn = function()
+        -- issue 480: the #387 gear-read trace flooded 20,120 lines in one session because the
+        -- cache was keyed (career, slot) only -- interleaved reads across loadout rows
+        -- re-emitted on every read. Contract: emit the first occurrence, suppress an identical
+        -- repeat, do NOT re-fire on interleaved rows, DO fire once on a genuine per-row
+        -- value/source change.
+        if type(M.trace_should_emit) ~= "function" then return "trace_should_emit missing" end
+        local c, s = "__rt480_career__", "__rt480_slot__"
+        -- Re-runnable: seed with a sentinel so a previous /regression_test pass can't leave
+        -- the exact first tuple cached.
+        M.trace_should_emit(c, s, 1, "__seed__", "__seed__")
+        M.trace_should_emit(c, s, 2, "__seed__", "__seed__")
+        if not M.trace_should_emit(c, s, 1, "idA", "store-yes") then return "first occurrence suppressed" end
+        if M.trace_should_emit(c, s, 1, "idA", "store-yes") then return "identical repeat not throttled (the #480 flood)" end
+        if not M.trace_should_emit(c, s, 2, "idB", "store-yes") then return "first read of a different row suppressed" end
+        if M.trace_should_emit(c, s, 1, "idA", "store-yes") then return "interleaved row re-read re-emitted (the exact #480 flood shape)" end
+        if not M.trace_should_emit(c, s, 1, "idC", "store-yes") then return "genuine value change suppressed" end
+        if not M.trace_should_emit(c, s, 1, "idC", "official-fallback-resolve-no") then return "genuine source change suppressed" end
     end },
     { name = "native_loadouts_seed_repair_predicate", fn = function()
         -- issue #375: the self-heal seed classifies a row as corrupt-partial iff it is

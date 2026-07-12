@@ -96,6 +96,19 @@ local function _local_player()
     return pm and pm:local_player()
 end
 
+-- has_world-gated world lookup (BUG_CLASSES class 32, issue 459 family). WorldManager.world()
+-- FASSERTS on a missing name (world_manager.lua:111-115), and _drive_free_cam runs from
+-- mods_update, which keeps ticking through StateIngame teardown -- so a nil check placed
+-- AFTER a bare world() call is dead code. Every world lookup in this module routes through
+-- here. No world HANDLE is ever cached in this module (resolved fresh per call from the
+-- engine's own data.viewport_world_name), so no identity comparison is needed on top.
+local function _live_world(name)
+    local wm = Managers.world
+    if not (wm and name and wm:has_world(name)) then return nil end
+    return wm:world(name)
+end
+mod._gut_fc_live_world = _live_world   -- exported for the /regression_test gate check
+
 -- True while any menu/view owns the screen: a vanilla view or menu state
 -- (IngameUI.menu_active, ingame_ui.lua:228) or any transitioned-in view including
 -- VMF/mod views (IngameUI.current_view; vanilla treats "in a view" as the OR of the
@@ -132,7 +145,7 @@ end
 -- free-flight viewport camera. Quaternion/Vector3/Matrix4x4 are frame-local temporaries.
 local _drive_err_logged = false
 local function _drive_free_cam(dt, player, data)
-    local world = Managers.world:world(data.viewport_world_name)
+    local world = _live_world(data.viewport_world_name)   -- gated: bare lookup fasserts on Leave Game
     if not world then return end
     if not ScriptWorld.has_viewport(world, data.viewport_name) then return end
     local viewport = ScriptWorld.free_flight_viewport(world, data.viewport_name)
@@ -189,7 +202,10 @@ end
 mod._gut_apply_freecam = function(enabled)
     local player, data = _player_and_data()
     if enabled then
-        if not (player and data and player.player_unit) then
+        if not (player and data and player.player_unit and _live_world(player.viewport_world_name)) then
+            -- The live-world probe also covers the enter path: _enter_free_flight does its
+            -- own ungated world lookup (free_flight_manager.lua:587), which would fassert
+            -- in a no-world window even under our pcall.
             mod:echo("Free camera: unavailable here (need to be in a level).")
             -- revert the setting so the checkbox reflects reality
             if mod:get("gut_freecam_enabled") then mod:set("gut_freecam_enabled", false) end
@@ -249,7 +265,7 @@ mod._gut_apply_freecam = function(enabled)
         -- viewport was created in the ON-SCREEN world/viewport. If base_viewport is
         -- false or the world is wrong, the detached cam renders off-screen.
         do
-            local dw = Managers.world:world(data.viewport_world_name)
+            local dw = _live_world(data.viewport_world_name)
             local base_ok = dw and ScriptWorld.has_viewport(dw, data.viewport_name) or false
             local ff_ok = false
             if dw then ff_ok = pcall(ScriptWorld.free_flight_viewport, dw, data.viewport_name) end
@@ -264,7 +280,17 @@ mod._gut_apply_freecam = function(enabled)
         local was_on = _freecam_active or _pending_menu_close
         _pending_menu_close = false
         if player and data and data.active then
-            pcall(Managers.free_flight._exit_free_flight, Managers.free_flight, player, data)
+            if _live_world(data.viewport_world_name) then
+                pcall(Managers.free_flight._exit_free_flight, Managers.free_flight, player, data)
+            else
+                -- Class 32: the owning world is already gone, so the free-flight viewport and
+                -- observers died with it -- dropping the references IS the teardown. The engine
+                -- exit would fassert inside its own ungated world lookup
+                -- (free_flight_manager.lua:620); its dead-world path is _clear_free_flight
+                -- (:531-535, exactly what vanilla's dispatcher runs at :516-517), so run that.
+                pcall(Managers.free_flight._clear_free_flight, Managers.free_flight, data)
+                printf("[gut_dev:FC] skipped engine exit - free-flight world already destroyed (cleared flags instead)")
+            end
         end
         _set_third_person(_prev_third_person)
         _prev_third_person = nil
@@ -370,13 +396,28 @@ do
     local prev = mod.on_game_state_changed
     mod.on_game_state_changed = function(status, state_name)
         if prev then prev(status, state_name) end
-        -- Transition safety net: the engine's world teardown routes to
-        -- _clear_free_flight (NOT _exit_free_flight), so our exit never runs. Force
-        -- the flag off here so is_input_blocked can't stay true into the next state.
+        -- Force-exit on state transition (BUG_CLASSES class 32). While freecam is active the
+        -- only event that can arrive is ("exit","StateIngame"), and it fires from
+        -- GameStateMachine._change_state BEFORE the old state's on_exit teardown runs
+        -- (game_state_machine.lua:17-21 -> state_ingame.lua:1939 _teardown_world) -- the last
+        -- point the free-flight viewport can be released into a LIVE world. The engine's own
+        -- dead-world cleanup (_update_player -> _clear_free_flight,
+        -- free_flight_manager.lua:516-517) never runs for us because we leave the
+        -- disable_free_flight gate up, so without this the engine slot keeps active=true with
+        -- a stale world name. apply(false) resolves the world through the _live_world gate,
+        -- so this is safe even if the world is somehow already gone.
         if _freecam_active then
+            local ok_exit = pcall(mod._gut_apply_freecam, false)
+            if not ok_exit then
+                -- apply failed mid-exit: still restore what we can by hand below
+                _set_third_person(_prev_third_person)
+            end
+            if mod:get("gut_freecam_enabled") then mod:set("gut_freecam_enabled", false) end
+            printf("[gut_dev:FC] force-exited on game state change (%s %s)", tostring(status), tostring(state_name))
+            -- Belt-and-suspenders: apply(false) already dropped these, but never let
+            -- is_input_blocked stay true into the next state.
             _freecam_active = false
             _exit_key_was_down = false
-            _set_third_person(_prev_third_person)
             _prev_third_person = nil
         end
         -- A deferred activation must not survive a level change either.
