@@ -1,6 +1,6 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.3.55-dev"
+local MOD_VERSION = "0.3.56-dev"
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
 -- issue 425 peer-parity beacon channel. Bump ONLY when a channel's payload
@@ -1021,6 +1021,38 @@ _rt_register("armor_overcharge_self_dot_toggle_wired", function()
         if type(loc.unchained_no_overcharge_from_self_dot_tooltip) ~= "table" then
             return "unchained_no_overcharge_from_self_dot_tooltip loc missing"
         end
+    end
+end)
+
+_rt_register("armor_cursed_armor_procfunc_wrapper", function()
+    -- v0.3.56-dev (IMPROVEMENT_BACKLOG P0): the Necromancer Cursed Armor path no
+    -- longer replaces be.trigger_procs (which swallowed EVERY buff's
+    -- on_damage_taken procs for the exempt tick). It re-points ONLY the Cursed
+    -- Armor counter-remover proc through a crt-owned ProcFunctions wrapper that
+    -- delegates to the vanilla remove_buff_stack unless the victim's tick is
+    -- flagged exempt. Lock the NEW shape: the wrapper exists AND the vanilla
+    -- template's proc entry is re-pointed to it (never left as raw
+    -- remove_buff_stack — that would mean the trigger_procs-swallow shape is
+    -- back). Both globals load well before any keep state.
+    local PF = rawget(_G, "ProcFunctions")
+    if type(PF) ~= "table" then return "ProcFunctions not loaded (run in-keep)" end
+    if type(PF.crt_cursed_armor_counter_remover) ~= "function" then
+        return "ProcFunctions.crt_cursed_armor_counter_remover wrapper missing — trigger_procs-swallow regression?"
+    end
+    if type(PF.remove_buff_stack) ~= "function" then
+        return "ProcFunctions.remove_buff_stack (delegate target) missing"
+    end
+    local BT = rawget(_G, "BuffTemplates")
+    if type(BT) ~= "table" then return "BuffTemplates not loaded (run in-keep)" end
+    local tmpl = rawget(BT, "sienna_necromancer_5_2_counter_remover")
+    local sub = tmpl and tmpl.buffs and tmpl.buffs[1]
+    if type(sub) ~= "table" then
+        return "sienna_necromancer_5_2_counter_remover template missing/malformed"
+    end
+    if sub.buff_func ~= "crt_cursed_armor_counter_remover" then
+        return string.format(
+            "counter-remover buff_func is %q, expected crt_cursed_armor_counter_remover (be.trigger_procs replacement must NOT be reintroduced)",
+            tostring(sub.buff_func))
     end
 end)
 

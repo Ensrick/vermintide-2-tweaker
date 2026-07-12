@@ -1,5 +1,42 @@
 # Career Tweaker Changelog
 
+## 0.3.56-dev - 2026-07-12 - Cursed Armor chip exemption no longer swallows other on_damage_taken procs (IMPROVEMENT_BACKLOG P0) [untested]
+
+### Why
+The Necromancer Cursed Armor chip/self-DoT exemption (toggle `armor_gromril_ignore_chip`) worked by
+temporarily REPLACING the victim's `be.trigger_procs` for the wrapped `add_damage` call and early-
+returning on event `"on_damage_taken"`. That killed the counter's own remover proc, but it also
+swallowed EVERY other buff's `on_damage_taken` proc for that tick (the file admitted this at the
+old `:294-296`). Any career/talent/boon proc keyed on `on_damage_taken` (e.g. stacking-DR removers,
+Numb to Pain, Exuberance) silently failed to fire whenever an exempt chip/self-DoT tick landed on a
+Necromancer carrying a Cursed Armor counter — a silent gameplay correctness defect.
+
+### Changed - per-proc ProcFunctions wrapper instead of a per-call trigger_procs replacement
+- The engine resolves a proc's function BY NAME from the writable global `ProcFunctions` at fire
+  time (`buff_extension.lua:1351`), and `buff.buff_func` is snapshotted from the template at add
+  time (`buff_extension.lua:421-423`). So at mod load we now re-point ONLY the Cursed Armor
+  counter-remover template's proc entry (`BuffTemplates.sienna_necromancer_5_2_counter_remover`
+  `.buffs[1].buff_func`, `talent_settings_shovel.lua:347-360`) from the generic `"remove_buff_stack"`
+  to a crt-owned `ProcFunctions.crt_cursed_armor_counter_remover` wrapper.
+- The wrapper delegates to the vanilla `ProcFunctions.remove_buff_stack` (`buff_templates.lua:3280`)
+  unless the victim's current tick is flagged exempt. `add_damage` now sets a per-victim exempt flag
+  (`mod._crt_cursed_armor_exempt_unit`, save/restore around the wrapped call) instead of monkey-
+  patching `be.trigger_procs`. Result: on an exempt tick ONLY the counter consume is skipped; every
+  other `on_damage_taken` proc fires normally.
+- Counter behavior preserved exactly: the counter is decremented on precisely the same set of ticks
+  as before (all non-exempt `on_damage_taken` ticks) and preserved on precisely the same exempt
+  ticks. Proc-function names are never networked (only buff-template names + ids ride `rpc_add_buff`),
+  so this is purely local — no NetworkLookup / wire-safety interaction.
+- The gromril + overcharge shims (`be.has_buff_type` / `be.apply_buffs_to_value`) are unchanged.
+- NEW `/crt_regression_test` check `armor_cursed_armor_procfunc_wrapper`: asserts the wrapper exists,
+  the vanilla `remove_buff_stack` delegate target exists, and the counter-remover template's
+  `buff_func` is re-pointed to the wrapper (never left as raw `remove_buff_stack` — that would mean
+  the `be.trigger_procs`-swallow shape is back).
+
+### Refs
+IMPROVEMENT_BACKLOG P0 (`docs/engine/IMPROVEMENT_BACKLOG.md`); `career_tweaker_armor_overcharge.lua`
+(old defect at `:299-302`, self-documented `:294-296`). No GitHub issue.
+
 ## 0.3.55-dev - 2026-07-11 - Peer-parity gate: networked talent reworks no longer CTD non-crt peers (#425) [untested]
 
 ### Why

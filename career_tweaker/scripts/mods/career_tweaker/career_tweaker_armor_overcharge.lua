@@ -68,14 +68,22 @@ local mod = get_mod("crt")
 --                 for stat "damage_taken_to_overcharge" → `new_damage ==
 --                 original_damage` → the `if new_damage < original_damage` branch
 --                 never fires → no overcharge, no RPC.  [damage_utils.lua:2203-05]
---   * Necromancer: shim `be.trigger_procs` to swallow the "on_damage_taken"
---                 event for that one tick → the counter-remover proc never runs.
---                 [player_unit_health_extension.lua:702-703 → counter_remover
---                  proc talent_settings_shovel.lua:347-360]
--- The shim is per-instance and lives only for the duration of one wrapped call;
--- VT2 is single-threaded so there's no intra-frame concurrency concern. The
--- restore is done in a pcall-protected finally so an error mid-call can't leave
--- a poisoned buff_extension.
+--   * Necromancer: re-point the Cursed Armor counter-remover proc (ONLY that
+--                 one proc) through a crt-owned ProcFunctions wrapper and flag
+--                 the victim's tick exempt, so only the counter's own consume is
+--                 skipped for that tick -- every OTHER on_damage_taken proc still
+--                 fires. Proc funcs resolve by name per-fire from the writable
+--                 global ProcFunctions (buff_extension.lua:1351), so re-pointing
+--                 the template once at load re-routes every counter-remover
+--                 instance. [player_unit_health_extension.lua:702-703 →
+--                  counter_remover proc talent_settings_shovel.lua:347-360]
+-- The gromril / overcharge shims are per-instance and live only for the duration
+-- of one wrapped call; VT2 is single-threaded so there's no intra-frame
+-- concurrency concern. The restore is done in a pcall-protected finally so an
+-- error mid-call can't leave a poisoned buff_extension. The Necromancer path no
+-- longer replaces be.trigger_procs -- that replacement swallowed EVERY buff's
+-- on_damage_taken procs for the tick (the pre-v0.3.56 defect); the per-proc
+-- wrapper below fixes it while preserving the counter's accounting exactly.
 
 -- ── Source-verified constant sets (transcribed; do NOT rely on game globals) ──
 -- Burning / fire DoTs hard-code damage_source = "dot_debuff" when there's no
@@ -108,6 +116,15 @@ local DISABLER_BREEDS = {
 
 local GROMRIL_MARKER = "bardin_ironbreaker_gromril_armour"
 local NECRO_COUNTER   = "sienna_necromancer_5_2_counter"
+
+-- The Cursed Armor counter is consumed by ONE proc buff
+-- (sienna_necromancer_5_2_counter_remover, talent_settings_shovel.lua:347-360)
+-- whose buff_func is the GENERIC "remove_buff_stack" (shared by many buffs). We
+-- re-point ONLY that template's proc entry through a crt-owned ProcFunctions
+-- wrapper (installed below) so an exempt tick can suppress the counter's own
+-- consume without swallowing any other on_damage_taken proc.
+local NECRO_COUNTER_REMOVER    = "sienna_necromancer_5_2_counter_remover"
+local CRT_COUNTER_REMOVER_FUNC = "crt_cursed_armor_counter_remover"
 
 -- ── Predicate helpers (all damage-context reads nil-guarded) ─────────────────
 
@@ -272,44 +289,90 @@ mod:hook(DamageUtils, "apply_buffs_to_damage", function(func, current_damage, at
     return a, b, c
 end)
 
--- ── Hook #2: PlayerUnitHealthExtension.add_damage (Necromancer Cursed Armor, #1)
--- The on_damage_taken proc that consumes a Cursed Armor counter fires from
--- player_unit_health_extension.lua:702-703. The proc only receives
--- (attacker_unit, damage_amount, damage_type) so we can't filter inside it —
--- intercept at add_damage where the full context is in scope (:530). Per-victim
--- own-peer. FULL 18-param signature (incl. self) verbatim so nothing is dropped.
-mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_unit, damage_amount, hit_zone_name,
-        damage_type, hit_position, damage_direction, damage_source_name, hit_ragdoll_actor, source_attacker_unit,
-        hit_react_type, is_critical_strike, added_dot, first_hit, total_hits, attack_type, backstab_multiplier, target_index)
+-- ── Cursed Armor counter-remover: crt-owned ProcFunctions wrapper ────────────
+-- Necromancer Cursed Armor stacks are consumed by ONE proc buff
+-- (sienna_necromancer_5_2_counter_remover) firing on on_damage_taken. The engine
+-- resolves a proc's function BY NAME from the writable global ProcFunctions at
+-- fire time (buff_extension.lua:1351), and buff.buff_func is snapshotted from the
+-- template at add time (buff_extension.lua:421-423). So a one-time rewrite of
+-- that template's proc entry at mod load re-routes every counter-remover instance
+-- (all of them — no Necromancer buff exists before mod init) through a crt-owned
+-- wrapper, WITHOUT touching be.trigger_procs. The wrapper delegates to the
+-- vanilla remove_buff_stack proc (ProcFunctions.remove_buff_stack,
+-- buff_templates.lua:3280) unless the victim's current tick is flagged exempt by
+-- the add_damage hook below — in which case it skips the stack consume for THAT
+-- tick only, leaving every other on_damage_taken proc untouched. Proc-function
+-- names are never networked (only buff-template names + ids are, buff_system.lua
+-- rpc_add_buff), so this is purely local: no NetworkLookup / wire-safety concern.
+local function _crt_install_cursed_armor_wrapper()
+    local PF = rawget(_G, "ProcFunctions")
+    local BT = rawget(_G, "BuffTemplates")
+    if type(PF) ~= "table" or type(BT) ~= "table" then return end
 
-    local restore_tp, be = nil, nil
-
-    if mod:get("armor_gromril_ignore_chip") then
-        local unit = self.unit
-        be = unit and ScriptUnit.has_extension(unit, "buff_system")
-        if be and be.has_buff_type and be:has_buff_type(NECRO_COUNTER)
-           and (_is_chip_or_aoe(damage_source_name, damage_type)
-                or _is_self_dot(attacker_unit, self.unit, damage_type)) then
-            -- Suppress the counter-stack consume for this one chip / self-DoT tick.
-            -- NOTE: this also skips any OTHER on_damage_taken procs the victim
-            -- has for this single tick — acceptable for a chip tick on a
-            -- Necromancer (the only on_damage_taken consumer we care about here).
-            local orig = be.trigger_procs
-            restore_tp = orig
-            be.trigger_procs = function(self2, event, ...)
-                if event == "on_damage_taken" then return end
-                return orig(self2, event, ...)
+    -- Register the crt wrapper (idempotent). Signature mirrors the vanilla proc
+    -- call convention (owner, buff, params, world, proc_event_params).
+    if PF[CRT_COUNTER_REMOVER_FUNC] == nil then
+        PF[CRT_COUNTER_REMOVER_FUNC] = function(owner, buff, params, world, proc_event_params)
+            -- Exempt tick for THIS victim: skip the counter's own consume —
+            -- exactly what the old be.trigger_procs swallow did, but scoped to
+            -- this one proc so no other on_damage_taken proc is affected.
+            if owner ~= nil and owner == mod._crt_cursed_armor_exempt_unit then
+                return
+            end
+            local vanilla = PF.remove_buff_stack
+            if vanilla then
+                return vanilla(owner, buff, params, world, proc_event_params)
             end
         end
     end
 
-    -- add_damage returns nothing meaningful, but wrap in pcall so the shim is
-    -- always restored even if vanilla raises mid-call.
+    -- Re-point ONLY the Cursed Armor counter-remover's proc entry (idempotent):
+    -- guarded on the vanilla value so a re-run (hot reload) is a no-op.
+    local tmpl = rawget(BT, NECRO_COUNTER_REMOVER)
+    local sub = tmpl and tmpl.buffs and tmpl.buffs[1]
+    if type(sub) == "table" and sub.buff_func == "remove_buff_stack" then
+        sub.buff_func = CRT_COUNTER_REMOVER_FUNC
+    end
+end
+_crt_install_cursed_armor_wrapper()
+
+-- ── Hook #2: PlayerUnitHealthExtension.add_damage (Necromancer Cursed Armor, #1)
+-- The on_damage_taken proc that consumes a Cursed Armor counter fires from
+-- player_unit_health_extension.lua:702-703. The proc only receives
+-- (attacker_unit, damage_amount, damage_type) so we can't filter inside it —
+-- intercept at add_damage where the full context is in scope (:530), flag the
+-- victim's tick exempt, and let the crt-owned counter-remover wrapper (above)
+-- skip ONLY the counter consume for that tick. Per-victim own-peer. FULL 18-param
+-- signature (incl. self) verbatim so nothing is dropped.
+mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_unit, damage_amount, hit_zone_name,
+        damage_type, hit_position, damage_direction, damage_source_name, hit_ragdoll_actor, source_attacker_unit,
+        hit_react_type, is_critical_strike, added_dot, first_hit, total_hits, attack_type, backstab_multiplier, target_index)
+
+    local set_exempt, prev_exempt = false, nil
+
+    if mod:get("armor_gromril_ignore_chip") then
+        local unit = self.unit
+        local be = unit and ScriptUnit.has_extension(unit, "buff_system")
+        if be and be.has_buff_type and be:has_buff_type(NECRO_COUNTER)
+           and (_is_chip_or_aoe(damage_source_name, damage_type)
+                or _is_self_dot(attacker_unit, self.unit, damage_type)) then
+            -- Flag THIS victim's tick exempt for the duration of the wrapped
+            -- call. Save/restore the prior value so a nested add_damage (should
+            -- it ever occur) can't leak the flag. VT2 is single-threaded, so the
+            -- flag lives only across this synchronous add_damage -> trigger_procs.
+            prev_exempt = mod._crt_cursed_armor_exempt_unit
+            mod._crt_cursed_armor_exempt_unit = unit
+            set_exempt = true
+        end
+    end
+
+    -- add_damage returns nothing meaningful, but wrap in pcall so the exempt flag
+    -- is always cleared even if vanilla raises mid-call.
     local ok, err = pcall(func, self, attacker_unit, damage_amount, hit_zone_name, damage_type, hit_position,
         damage_direction, damage_source_name, hit_ragdoll_actor, source_attacker_unit, hit_react_type,
         is_critical_strike, added_dot, first_hit, total_hits, attack_type, backstab_multiplier, target_index)
 
-    if restore_tp then be.trigger_procs = restore_tp end
+    if set_exempt then mod._crt_cursed_armor_exempt_unit = prev_exempt end
 
     if not ok then
         error(err, 0)
