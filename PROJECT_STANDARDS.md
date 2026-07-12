@@ -866,7 +866,7 @@ The complete list of canonical docs and where each lives.
 | `CODE_REVIEW.md` | **Mandatory for public-Workshop mods** (`ct`, `gt`, `cosmetics_tweaker`, `verminious_dreams_lighting`); optional for friends-only | Snapshot architectural review |
 | `CLAUDE.md` (per-mod) | Optional | Workflow guardrails specific to that mod (only when the mod has non-obvious gates — see `dynamic_cosmetic_portraits/CLAUDE.md`) |
 | `DEVELOPMENT.md` (per-mod) | Optional | Mod-specific architecture (use when the mod has system-level docs that don't fit in the main lua's header docstring) |
-| `RECIPES.md`, `<TOPIC>_PLAYBOOK.md`, `DEFINITION_OF_DONE.md`, `ENGINE_SURFACE.md` | Optional | Reference docs for recurring authoring tasks within the mod (`ENGINE_SURFACE.md` = the mod's per-hook map onto vanilla engine behavior, companion to `docs/engine/`; template lives in `character_weapon_variants/`) |
+| `RECIPES.md`, `<TOPIC>_PLAYBOOK.md`, `DEFINITION_OF_DONE.md`, `ENGINE_SURFACE.md` | Optional | Reference docs for recurring authoring tasks within the mod (`ENGINE_SURFACE.md` = the mod's per-hook map onto vanilla engine behavior, companion to `docs/engine/`; template lives in `character_weapon_variants/`. All 7 high-contact mods carry one as of 2026-07-12 - the series index is the "Per-mod surface docs" table at the bottom of `docs/engine/README.md`) |
 | `TODO.md` | **Discouraged** | Use GitHub Issues per §11 instead |
 | `POSTMORTEMS.md` | Created on first incident | Rolled-up post-incident records — see §7.3 |
 

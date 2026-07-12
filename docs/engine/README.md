@@ -62,3 +62,25 @@ Merged, prioritized cross-lane work list: **[IMPROVEMENT_BACKLOG.md](IMPROVEMENT
    then delete the row.
 4. **After a game patch, re-verify line numbers before trusting them** (doc 10 header
    rule). Spot-check the load-bearing citations of any doc you are about to act on.
+
+## Per-mod surface docs (the reverse index)
+
+Each high-contact mod carries an `ENGINE_SURFACE.md` - the per-mod companion to this
+set: every seam the mod touches, the vanilla behavior there (cited), and why the mod
+is there. The template is `character_weapon_variants/ENGINE_SURFACE.md`; all seven
+follow its structure. This table is the single view of which mods exercise which
+subsystem docs.
+
+| Mod | Doc | Sites | Links into docs/engine |
+|---|---|---|---|
+| character_weapon_variants | `character_weapon_variants/ENGINE_SURFACE.md` | 53 | 02 03 05 06 09 10 11 |
+| cosmetics_tweaker | `cosmetics_tweaker/ENGINE_SURFACE.md` | ~70 | 02 03 05 06 09 11 |
+| weapon_tweaker | `weapon_tweaker/ENGINE_SURFACE.md` | 30 (25 live + 5 dormant BR) | 01 02 03 05 06 09 11 |
+| general_tweaker_dev | `general_tweaker_dev/ENGINE_SURFACE.md` | ~110 | 01 02 03 04 07 08 09 10 11 |
+| gui_tweaker_dev | `gui_tweaker_dev/ENGINE_SURFACE.md` | ~135 | 06 08 09 11 |
+| chaos_wastes_tweaker_dev | `chaos_wastes_tweaker_dev/ENGINE_SURFACE.md` | 102 + 4 RPC channels | 03 07 08 09 10 11 |
+| crafting_in_modded_dev | `crafting_in_modded_dev/ENGINE_SURFACE.md` | 106 + 1 RPC channel | 03 06 09 11 |
+
+Maintenance (extends rule 1): when a mod's ENGINE_SURFACE changes its docs/engine
+link set or its site count materially, update this table in the same commit. No
+per-doc version stickers (they drift; PROJECT_STANDARDS section 7.1 doctrine).
