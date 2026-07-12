@@ -1,5 +1,54 @@
 # Career Tweaker Changelog
 
+## 0.3.57-dev - 2026-07-12 - Phase 1 OOP decomposition of the entry file (structural, no behavior change)
+
+### Why
+`career_tweaker.lua` had grown to 1332 lines, mixing the talent-swap engine, the read-only
+diagnostics harness, and the ~500-line /crt_regression_test suite into the entry alongside the
+lifecycle callbacks and the issue-425 beacon install. Per PROJECT_STANDARDS 2.2a (the event_tweaker
+module-split template) the entry should be a manifest + lifecycle surface, with each concern in a
+single-responsibility module.
+
+### Changed - three concerns extracted from the entry into `_crt_*` modules
+- **`_crt_talent_swap.lua`** (new) - the career talent-tree + ability/passive swap engine: the
+  `HeroWindowTalents` on_enter/on_exit hooks, the DLC ownership gate, `restore_talent_swaps` /
+  `apply_talent_swaps` / `refresh_talent_ui`, and the `_ALL_CAREERS` list. Exports through
+  `mod._crt` (`apply_talent_swaps`, `restore_talent_swaps`, `refresh_talent_ui`, `ALL_CAREERS`,
+  and get/set accessors for the pending-swap table the regression harness probes).
+- **`_crt_diagnostics.lua`** (new) - read-only talent/buff diagnostics: `/crt_dump_talents`, the
+  reusable `mod.crt_dump_career_talents` body, and the per-session auto-dump harness for reworked
+  careers. The per-frame retry pump is now `mod._crt_dump_retry_tick(dt)`, driven by the entry's
+  single `mod.update` (which still also drives the OE cooldown tick).
+- **`_crt_regression.lua`** (new) - the entire `/crt_regression_test` harness and all 19 check
+  bodies, in their frozen registration order (the in-game output order is unchanged). Loads LAST so
+  its checks can capture `mod._crt.balance`, the talent-swap restore path + accessors, the `_dbg`
+  helpers, and `MOD_VERSION`. Exports `mod._crt.rt_register` so a future phase can distribute checks
+  into their owning modules without moving the harness again.
+- The entry keeps MOD_VERSION, the boot banner/fingerprint, the module dofile manifest, the mutex
+  cluster, the Character XP-level override + Unlock-All-Careers hooks, the 2026-06-21 ability-swap /
+  career-select bug-fix hooks, the lifecycle callbacks (`on_game_state_changed` / `on_setting_changed`
+  / `on_disabled` / `update`), `ct_status`, and the issue-425 peer-parity beacon install. 1332 -> 568
+  lines.
+
+### Not changed - `career_tweaker_balance.lua` left intact this phase
+- The issue-425 wire-safety subsystem is NOT a cleanly separable block: the `network_unsafe` tags are
+  woven through the BALANCE_MODS rework data across the 4000-line file, and `_crt_parity_gate_ok` /
+  `_crt_wire_parity_live` are consumed by the core `apply_balance_mods` engine (which must stay with
+  that data) as well as exported. Extracting only the wrapper functions would split a tightly-coupled
+  parity subsystem across two files with bidirectional `mod._crt` plumbing, increasing coupling.
+  Balance decomposition is deferred to a later phase.
+
+### Verification
+- Pure structural move: log/printf strings byte-identical, hook set identical (one hook per
+  (Class, method) mod-wide - lint PASS, 24 hooks), command names identical.
+- `tools/mod-lint/lint-mod.ps1 -Mod career_tweaker`: PASS (13 files, 0 duplicate-hook / forward-ref /
+  late-local / save-restore / network-bound issues).
+- VMB build: OK (4 bundles). All three new lua resources confirmed present in the compiled lua
+  bundle by murmur64 name-hash (PROJECT_STANDARDS 2.2a rule 8).
+- `/crt_regression_test` suite: all 19 checks still register; the one rewired check
+  (`on_disabled_unwinds_talent_swaps`) reaches the moved restore path through the new
+  `mod._crt.get/set_talent_swap_originals` accessors - same assertion, structurally.
+
 ## 0.3.56-dev - 2026-07-12 - Cursed Armor chip exemption no longer swallows other on_damage_taken procs (IMPROVEMENT_BACKLOG P0) [untested]
 
 ### Why

@@ -4,7 +4,9 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-11.
+> **Suite location (v0.3.57-dev):** the `/crt_regression_test` harness and all 19 check bodies moved from `career_tweaker.lua` into `scripts/mods/career_tweaker/_crt_regression.lua` (Phase 1 OOP split). Check names + registration order are unchanged. The talent-swap and diagnostics concerns the checks reference now live in `_crt_talent_swap.lua` / `_crt_diagnostics.lua` (see `DEVELOPMENT.md` module map).
+
+Last updated: 2026-07-12.
 
 ---
 ## Multiplayer / Network Sync
