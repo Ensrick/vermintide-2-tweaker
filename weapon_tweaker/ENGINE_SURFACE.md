@@ -38,15 +38,15 @@ the wrapper named in the trap column (`_safe_hook.lua`, issue 26).
 
 | Class.method (kind) | Vanilla behavior at the seam | Why wt hooks it | Trap / invariant |
 |---|---|---|---|
-| `Unit.animation_event` [hook] `:2865` | Engine C-API: fires a state-machine event on a unit's anim graph. Per-action 3P resolution reads `anim_event_3p` (falling back to the 1P `event` when absent) and fires it on the OWNER (3P body) with no career branch [src: `scripts/unit_extensions/weapons/weapon_unit_extension.lua:512`, fired at `:652`] | THE remap funnel: for a cross-access career on a foreign weapon, rewrite the 3P event to one the receiver skeleton authors, via the three redirect layers + per-weapon remap tables (`:2865-3223`) | Hottest hook in wt - five early-exits before work (nil event, feature-off, 1P unit by captured ref, then per-unit state); 1P `first_person_unit` gets an unconditional early return (`:2892`) so 1P is never remapped (memory `feedback_1p_animations_universal`); no `pcall` (engine C, so downstream `func` calls are `pcall`-wrapped at `:3115`+) |
+| `Unit.animation_event` [hook] `_wt_anim_remap.lua` | Engine C-API: fires a state-machine event on a unit's anim graph. Per-action 3P resolution reads `anim_event_3p` (falling back to the 1P `event` when absent) and fires it on the OWNER (3P body) with no career branch [src: `scripts/unit_extensions/weapons/weapon_unit_extension.lua:512`, fired at `:652`] | THE remap funnel: for a cross-access career on a foreign weapon, rewrite the 3P event to one the receiver skeleton authors, via the three redirect layers + per-weapon remap tables (`_wt_anim_remap.lua`; moved from the entry in v0.12.210-dev Phase 2) | Hottest hook in wt - five early-exits before work (nil event, feature-off, 1P unit by captured ref, then per-unit state); 1P `first_person_unit` gets an unconditional early return so 1P is never remapped (memory `feedback_1p_animations_universal`); no `pcall` (engine C, so downstream `func` calls are `pcall`-wrapped); the module keeps its hot tables as file-local upvalues so the per-event path never indirects through `mod._wt` |
 | `AnimationSystem.anim_event_with_variable_float` [hook] `:4585` | Fires a 3P anim event AND sets an anim variable (e.g. attack-speed scale) in one call [src: `scripts/entity_system/systems/animation/animation_system.lua:139`] | Guard: bail cleanly when the cross-character 3P body lacks the named anim variable, so a foreign weapon's speed-scaled event does not fault on a receiver whose SM never declared the variable (`:4585`) | Must validate `Unit.animation_find_variable` returns a number BEFORE delegating; the variable set is what differs from the plain `Unit.animation_event` path |
 
 ### Wield + per-unit remap state (owner + husk; owner doc: `docs/engine/02`)
 
 | Class.method (kind) | Vanilla behavior | Why wt hooks it | Trap / invariant |
 |---|---|---|---|
-| `SimpleInventoryExtension.wield` [hook via `traced_hook`] `:3254` | Sets the wielded slot; the wield event ultimately fires the 3P body's wield stance [src: `scripts/unit_extensions/default_player_unit/inventory/simple_inventory_extension.lua:627`] | Populate this unit's `state.template`/`state.key` (drives the remap resolution in the `animation_event` hook) AND capture the local 1P hands unit ref for the funnel's 1P early-return (`:3254`) | `traced_hook` (safe_hook + trace) - wield is event-rate, not per-frame, so trace is flood-safe (`_safe_hook.lua` RATE-LIMIT CAVEAT); a raise here would otherwise kill later cosmetics/LA/cwv wield hooks silently (issue 26) |
-| `SimpleHuskInventoryExtension.wield` [hook via `safe_hook`] `:3325` | Husk-side wield: attaches units for a REMOTE player's view [src: `simple_husk_inventory_extension.lua:314`] | Populate the husk unit's remap state so a remote player's cross-character weapon renders its remapped 3P anims on the local viewer's screen (`:3325`, v0.12.35 per-unit career) | Husk is a separate root class from the owner - hooking one never covers the other (CLAUDE.md "Self-owned vs husk"); husk resolves the BASE `item_data` (memory `reference_vt2_husk_resolves_base_item_data`) |
+| `SimpleInventoryExtension.wield` [hook via `traced_hook`] `_wt_anim_remap.lua` | Sets the wielded slot; the wield event ultimately fires the 3P body's wield stance [src: `scripts/unit_extensions/default_player_unit/inventory/simple_inventory_extension.lua:627`] | Populate this unit's `state.template`/`state.key` (drives the remap resolution in the `animation_event` hook) AND capture the local 1P hands unit ref for the funnel's 1P early-return (`_wt_anim_remap.lua`; moved v0.12.210-dev Phase 2 with the funnel it feeds) | `traced_hook` (safe_hook + trace) - wield is event-rate, not per-frame, so trace is flood-safe (`_safe_hook.lua` RATE-LIMIT CAVEAT); a raise here would otherwise kill later cosmetics/LA/cwv wield hooks silently (issue 26) |
+| `SimpleHuskInventoryExtension.wield` [hook via `safe_hook`] `_wt_anim_remap.lua` | Husk-side wield: attaches units for a REMOTE player's view [src: `simple_husk_inventory_extension.lua:314`] | Populate the husk unit's remap state so a remote player's cross-character weapon renders its remapped 3P anims on the local viewer's screen (`_wt_anim_remap.lua`, v0.12.35 per-unit career) | Husk is a separate root class from the owner - hooking one never covers the other (CLAUDE.md "Self-owned vs husk"); husk resolves the BASE `item_data` (memory `reference_vt2_husk_resolves_base_item_data`) |
 | `SimpleInventoryExtension._wield_slot` [safe] `_wt_diagnostics.lua` | Shows/hides 1p/3p units for the wielded slot; `slot_data.id` carries the item key [src: `simple_inventory_extension.lua:1926`] | Diagnostic only: dump everything wt knows about the wielded weapon (`anim_event`/`wield_anim`/`anim_event_3p`/`wield_anim_career_3p`/units) for `/wt_dump_wielded` (`_wt_diagnostics.lua`, v0.12.209-dev OOP split) | Husk deliberately NOT hooked here - we want our own equips, not teammates'; `hook_safe` so it never perturbs wield |
 | `SimpleInventoryExtension.show_third_person_inventory` [safe] `:5919` / `SimpleHuskInventoryExtension.` `:5920` | Toggles visibility of the equipped 3P units on show/hide [src: `simple_inventory_extension.lua:1014`; `simple_husk_inventory_extension.lua:471`] | Re-hide the 3P units wt intentionally suppresses for a mesh swap (e.g. brace's left pistol that would clip the repeater body) whenever vanilla re-shows them (`_rehide_hidden_3p_units`) | Both owner + husk hooked (separate roots); shared handler function |
 
@@ -116,29 +116,30 @@ the native character's 3P skeleton but not the receiver's.
 wt cannot change per-career behavior in `anim_event_3p` on a shared template
 (that would break the native wielder too - the memory-class shared-template
 mutation trap). The one per-career lever the engine exposes is the FIRING call
-itself, so wt hooks `Unit.animation_event` (`:2865`) and rewrites the event
-string in flight. Resolution order in the funnel:
+itself, so wt hooks `Unit.animation_event` and rewrites the event string in
+flight. The funnel + all its tables live in `_wt_anim_remap.lua` (extracted from
+the entry in v0.12.210-dev Phase 2). Resolution order in the funnel:
 
-1. **Per-unit `state.remap` table** (`:3094`) - a weapon-specific substitution
+1. **Per-unit `state.remap` table** - a weapon-specific substitution
    map (`_3p_remap_spear_to_billhook`, etc.) selected at wield time via
    `_3p_remap_triggers` on `(career, template/key)`. SM-corrupting events that
    can't go in the table are force-fired through the captured original
-   (`_original_animation_event`, `:3136`).
-2. **`_career_anim_redirect`** (`:3149`) - career-prefix-aware renames for
+   (`_original_animation_event`).
+2. **`_career_anim_redirect`** - career-prefix-aware renames for
    phantom events that exist on all skeletons but only animate on the right
    character (`overrides[career]` -> `prefix`/`invert` -> `alt`), gated on a
-   resolved career so anonymous preview units fall through (`:3180`).
-3. **`_anim_redirect`** (`:3201`) - global renames, fired only if the original
+   resolved career so anonymous preview units fall through.
+3. **`_anim_redirect`** - global renames, fired only if the original
    event is missing from the skeleton.
-4. **`_suffix_career_map`** (`:3213`) - suffix swaps (`*_2h_billhook` ->
+4. **`_suffix_career_map`** - suffix swaps (`*_2h_billhook` ->
    `*_polearm`), longest-suffix-first, each verified `has_animation_event`
    before firing.
 
 Every layer targets the 3P body; the 1P `first_person_unit` gets an
-unconditional early return at the top of the hook (`:2892`) because 1P is
+unconditional early return at the top of the hook because 1P is
 universal (memory `feedback_1p_animations_universal`; DEVELOPMENT "1P animations
 are universal"). Career comes from the UNIT
-(`_unit_career_name`, `:2904`), not the local viewer, so a remote player's husk
+(`_unit_career_name`), not the local viewer, so a remote player's husk
 remaps on THEIR career. `_wt_dev_anim_picker.lua` writes `anim_event_3p` values
 directly onto the template's sub-actions to author new mappings; the funnel then
 fires those values. Owner docs: `weapon_tweaker/DEVELOPMENT.md` ("Three-layer
@@ -169,9 +170,11 @@ so the `Unit.animation_event` funnel's career-gated redirect is a no-op there
 and a port whose `wield_anim_career_3p` omits the previewed career falls back to
 the source template's base `wield_anim` (an event the receiver body doesn't
 author) - the "missing pose" symptom (no T-pose; memory
-`feedback_vt2_no_tpose_default_stance`). `_resolve_preview_wield_event` (`:640`)
-re-uses the SAME `_career_anim_redirect` data to compute and fire the
-receiver-native wield event on the preview body only (`:6209`).
+`feedback_vt2_no_tpose_default_stance`). `_resolve_preview_wield_event`
+(`_wt_anim_remap.lua`; moved with the funnel in v0.12.210-dev Phase 2, exported
+as `mod._wt.resolve_preview_wield_event`) re-uses the SAME `_career_anim_redirect`
+data to compute and fire the receiver-native wield event on the preview body
+only, called from the entry's `MenuWorldPreviewer._spawn_item_unit` hook.
 
 ### Packages / residency (owner: `docs/engine/05`)
 

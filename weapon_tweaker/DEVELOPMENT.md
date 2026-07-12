@@ -7,28 +7,38 @@ for adding a new cross-character weapon port).
 
 ---
 
-## Module map (v0.12.209-dev Phase 1 OOP split)
+## Module map (v0.12.210-dev Phase 2 OOP split)
 
-`weapon_tweaker.lua` is still the primary file (~7,226 lines) — this is an
+`weapon_tweaker.lua` is still the primary file (~4,470 lines) — this is an
 IN-PROGRESS decomposition (OOP_REFACTOR_PLAN WS5, PROJECT_STANDARDS §2.2a), not a
-finished one. Phase 1 carved out the four cleanest self-contained concerns; the
-3P anim-remap core, the `wield_anim_career_3p` template patchers + cross-character
-port pipeline, the per-frame grip offsets, the P0 crash guards, and the
-Big-Rebalance (on-ice) module all still live in / beside the entry file, pending
-later phases (run in fresh sessions).
+finished one. Phase 1 carved out the four cleanest self-contained concerns;
+Phase 2 (v0.12.210-dev) extracted the 3P anim-remap CORE (the funnel + redirect
+layers + remap tables + per-unit state + wield hooks) into `_wt_anim_remap.lua`.
+Still living in / beside the entry, pending later phases: the
+`wield_anim_career_3p` template patchers + cross-character port pipeline (the
+mesh-swap `spawn_inventory_unit` path, force-loads, previewer hooks — they READ
+the anim redirect data the core owns but are their own concern), the per-frame
+grip offsets, the P0 crash guards (`link_units` filter, `create_equipment`
+compensations), the `anim_event_with_variable_float` crash guard, the
+weapon-behavior features (Authentic Brace, WP punch, Moonfire), and the on-ice
+Big-Rebalance module.
 
 **Shared namespace `mod._wt`** (the event_tweaker `mod._evt` / cosmetics `mod._cos`
 pattern) carries cross-module state. It is created in the entry manifest and
 populated with the handles the `_wt_*` modules consume BEFORE they are
 `mod:dofile`'d: `MOD_VERSION` (regression banner), `weapon_unlock_map` +
-`cwv_managed` (availability). `mod:dofile` is NOT a singleton, so modules never
+`cwv_managed` (availability), and — for the anim core — `feature_enabled`,
+`local_career_name`, `dbg`, `dev_anim_picker` (the four hot-path handles the
+funnel reads, captured as module-local upvalues so the per-event path never
+indirects through `mod._wt`). `mod:dofile` is NOT a singleton, so modules never
 dofile each other — each is dofile'd exactly once from the manifest. It is a
 SEPARATE key from the established flat `mod._wt_*` fields (`mod._wt_link_filter`,
 `mod._wt_tf_*`, `mod._wt_loc_raw`, ...), which are untouched.
 
 | Module | Owns / public surface (on `mod._wt` unless noted) |
 |---|---|
-| `weapon_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the pre-existing dofile manifest (`_safe_hook`, `wt_dev_anim_picker`, `wt_dev_hold_pose`, `_wt_brett_sword_shield_buff`, `wt_unlock_data`, `wt_wield_patches`, backend, BR-on-ice), the `mod._wt` namespace setup + `_wt_*` manifest, the mod-wide lifecycle callbacks (`on_game_state_changed`/`on_setting_changed`/`on_disabled`), and everything not yet extracted: the 3P anim-remap core (`Unit.animation_event` funnel + `_anim_redirect`/`_career_anim_redirect`/`_suffix_career_map`/`_unit_state`), the wield/spawn/link/previewer hooks, the port pipeline + template patchers, the per-frame grip offsets, the weapon-behavior features (Authentic Brace, WP punch, Moonfire), the P0 guards, and the ~30 inline `/wt_regression_test` check bodies. `feature_enabled` stays here (the anim funnel reads it on a hot path). |
+| `weapon_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the pre-existing dofile manifest (`_safe_hook`, `wt_dev_anim_picker`, `wt_dev_hold_pose`, `_wt_brett_sword_shield_buff`, `wt_unlock_data`, `wt_wield_patches`, backend, BR-on-ice), the `mod._wt` namespace setup + `_wt_*` manifest, the mod-wide lifecycle callbacks (`on_game_state_changed`/`on_setting_changed`/`on_disabled`), and everything not yet extracted: the `wield_anim_career_3p` template patchers + cross-character port pipeline (spawn/link/previewer hooks), the per-frame grip offsets, the weapon-behavior features (Authentic Brace, WP punch, Moonfire), the P0 guards (`link_units`, `create_equipment`, `anim_event_with_variable_float`), and the ~30 inline `/wt_regression_test` check bodies. `feature_enabled` + `_local_career_name` stay here (generic player-state helpers the anim funnel reads on a hot path; published to `mod._wt` for the core to capture). |
+| `_wt_anim_remap.lua` | The 3P anim-remap CORE (v0.12.210-dev Phase 2). Owns the three redirect layers (`_anim_redirect`/`_career_anim_redirect`/`_suffix_career_map` + `_try_suffix_redirect`/`_safe_has_anim`), the per-weapon/template/key remap tables (`_3p_remap_*`/`_3p_template_remaps`/`_3p_key_remaps`) + resolvers, the weak-keyed per-unit remap state (`_unit_state`/`_state_for`), the `Unit.animation_event` funnel hook, the two wield hooks (`SimpleInventoryExtension`/`SimpleHuskInventoryExtension`) that populate the state, the anim-funnel commands (`/info`,`/animlog`,`/force3p`,`/force1p`), and the keep-previewer pose resolver `_resolve_preview_wield_event`. Hot tables are file-local upvalues (per-event-hot path). Reads `mod._wt.feature_enabled`/`.local_career_name`/`.dbg`/`.dev_anim_picker`/`.MOD_VERSION`/`.weapon_unlock_map`; exports `mod._wt.safe_has_anim`/`.resolve_preview_wield_event`/`.unit_career_name`/`.unit_state`/`.suffix_career_map`/`.three_p_template_remaps` (all non-hot-path reads by the entry's port pipeline, previewer, and rt-checks). The `wield_anim_career_3p` patchers, force-loads, and mesh swaps stay in the entry (port-pipeline-coupled, Phase 3). |
 | `_wt_regression.lua` | `/wt_regression_test` harness: `_RT_CHECKS` + `rt_register` + the command. Loads FIRST. Reads `mod._wt.MOD_VERSION`; exports `mod._wt.rt_register`. The check bodies stay inline in the entry (they close over its file-locals) via `local _rt_register = mod._wt.rt_register`. |
 | `_wt_availability.lua` | Cross-character weapon availability: `apply_weapon_unlocks` (can_wield strip/add), `patch_career_actions_on_weapons` (career-ability action injection), `clear_weapon_unlocks` / `clear_career_action_injections` (on_disabled revert), `_kruber_removed_pairs` cleanup, `_career_action_injections`. Reads `mod._wt.weapon_unlock_map` / `.cwv_managed`; exports the four functions. Backend hooks stay in `weapon_tweaker_backend.lua` (unchanged). |
 | `_wt_trait_pools.lua` | CW weapon-trait pool filtering (`_trait_pool_sources`, snapshot, `apply_trait_filters` / `revert_trait_pools`). Currently a retired no-op stub (menu removed 2026-06-29) kept so nothing dangles. Reads `WeaponTraits`; exports `mod._wt.apply_trait_filters` / `.revert_trait_pools` + the legacy flat `mod._apply_trait_filters` / `mod._revert_trait_pools`. |
@@ -44,7 +54,8 @@ Pre-existing `_*.lua` / `wt_*.lua` modules (`_safe_hook`, `_wt_brett_sword_shiel
 - **New diagnostic dump/probe command** → `_wt_diagnostics.lua` (globals only; route through `mod:info`/`mod:debug`).
 - **New (career, weapon) unlock or can_wield / career-ability behavior** → `_wt_availability.lua`; the (career, weapon) pair itself goes in `wt_unlock_data.lua`.
 - **New regression check** → `_rt_register("name", fn)` inline in the entry next to the code it probes (the alias is live); the harness itself is frozen.
-- **Anything touching the 3P anim-remap core, the port pipeline / template patchers, the grip offsets, the previewer hooks, or a P0 guard** → stays in `weapon_tweaker.lua` until a later phase; grep ALL files for an existing hook on the `(Class, method)` before adding one (VMF drops the second — NON-NEGOTIABLE 8).
+- **New 3P anim redirect / remap table / resolver, or a change to the `Unit.animation_event` funnel or the wield-state hooks** → `_wt_anim_remap.lua` (keep its hot tables file-local upvalues; export via `mod._wt` only for non-hot-path cross-module reads).
+- **Anything touching the port pipeline / `wield_anim_career_3p` template patchers, the grip offsets, the previewer hooks, or a P0 guard** → stays in `weapon_tweaker.lua` until a later phase; grep ALL files for an existing hook on the `(Class, method)` before adding one (VMF drops the second — NON-NEGOTIABLE 8).
 - **New cross-module value** → export onto `mod._wt` in the owning module (earlier in the manifest than its consumers) and localize it at the consumer's top.
 
 ---
