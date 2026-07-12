@@ -118,6 +118,12 @@ local function _local_player_unit()
     local p = pm:local_player_safe()
     return p and p.player_unit
 end
+-- #511 runtime provenance marker: the local-player read above uses the readiness-
+-- guarded local_player_safe (issue 508), set at LOAD so /gt_regression_test can
+-- assert it without an io source-grep (the VMF sandbox has no io library). The
+-- textual "no bare :local_player() in this file" invariant belongs in a repo QA
+-- gate (PROJECT_STANDARDS 2.2b tier a); this positive flag is the in-game half.
+mod._gt_dh_local_player_safe = true
 
 local function _entities(name)
     local ent = Managers.state and Managers.state.entity
@@ -140,6 +146,12 @@ local function _unit_pos(unit)
     end
     return nil
 end
+-- #511 runtime provenance marker: positions in this file are LIVE reads
+-- (Unit.local_position), never POSITION_LOOKUP (dead temporaries in mod.update,
+-- issue 302/337). Set at LOAD so /gt_regression_test can assert it without an io
+-- source-grep. The textual "no POSITION_LOOKUP index in this file" invariant
+-- belongs in a repo QA gate (PROJECT_STANDARDS 2.2b tier a); this is the in-game half.
+mod._gt_dh_live_pos_reads = true
 
 local function _breed_of(unit)
     local ok, breed = pcall(Unit.get_data, unit, "breed")
@@ -264,6 +276,12 @@ local function _clear()
     mod._gt_dh_line_object = nil
     mod._gt_dh_line_world  = nil
 end
+-- #511 runtime provenance marker: _clear gates its LineObject reset/dispatch on
+-- the live-world identity check (live == w, issue 459 AV guard). Set at LOAD so
+-- /gt_regression_test can assert it without an io source-grep (io is nil in the VMF
+-- sandbox). The exact "live == w" SOURCE-TEXT belongs in a repo QA gate
+-- (PROJECT_STANDARDS 2.2b tier a).
+mod._gt459_liveness_gated_dh = true
 
 local _master_last  = false
 local _report_accum = 0

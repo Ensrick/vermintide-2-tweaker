@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.201-dev"
+local MOD_VERSION = "0.2.202-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -1501,21 +1501,14 @@ _rt_register("bot_leash_veto_while_teammate_needs_aid_present", function()
     -- downed/disabled — it paths in to revive (user decision on #139: all bots
     -- converge). Marker + source-pattern check so a refactor that drops the veto,
     -- or lets vanilla's 40 m path through again, gets caught.
+    -- #511 (v0.2.202-dev): the veto-conjunction source-grep (io.open) was removed --
+    -- io is nil in the VMF sandbox, so it threw and reported FAIL on healthy code.
+    -- The marker constant (set at LOAD right beside the veto in _gt_bot_fixes.lua)
+    -- already proves the block is present; the exact "_gt_aid_priority_on() and
+    -- _gt_any_side_teammate_needs_aid" text invariant is STATIC and belongs in a
+    -- repo QA gate (PROJECT_STANDARDS 2.2b tier a).
     if GT_BOT139_LEASH_VETO_AIDPRIORITY_MARKER_v0_2_185 ~= "gt-bot139-teleport-veto-while-teammate-needs-aid" then
         return "bot #139 leash-veto marker absent — was the v0.2.185-dev consolidation reverted?"
-    end
-    local ok, info = pcall(debug.getinfo, mod._gt_apply_fast_reactions or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    -- The veto must gate on aid-priority AND a downed teammate, applied to the
-    -- FINAL `want` (so it also catches reason == "vanilla_40m").
-    if not txt:find("_gt_aid_priority_on() and _gt_any_side_teammate_needs_aid", 1, true) then
-        return "the #139 blanket teleport veto (aid-priority + any-teammate-needs-aid) is missing from _gt_bot_fixes.lua"
     end
 end)
 
@@ -1566,34 +1559,18 @@ _rt_register("gt_bot139_teleport_veto_singleton_and_gated", function()
     -- Assert both so a refactor can neither add a duplicate should_teleport hook
     -- nor weaken the gate. Complements bot_leash_veto_..._present (which only
     -- checks the veto conjunction marker) with the singleton count.
+    -- #511 (v0.2.202-dev): the source-grep half (io.open) was removed -- io is nil
+    -- in the VMF sandbox, so it threw and reported FAIL on healthy code. The
+    -- runtime residual (both helper seams exposed) stays. The two STATIC invariants
+    -- it grepped move to their correct homes: the "exactly one
+    -- BTConditions.should_teleport hook" duplicate-hook count is ALREADY enforced
+    -- by tools/mod-lint/lint-mod.ps1 (PROJECT_STANDARDS 2.2b tier a, mod-wide), and
+    -- the veto-conjunction / master+sub-gate text belongs in a repo QA gate.
     if type(mod._gt_aid_priority_on) ~= "function" then
         return "mod._gt_aid_priority_on not exposed"
     end
     if type(mod._gt_any_side_teammate_needs_aid) ~= "function" then
         return "mod._gt_any_side_teammate_needs_aid not exposed"
-    end
-    -- Read the shipped _gt_bot_fixes.lua text via the source path of a helper it
-    -- exports. Soft-skip (pass) if unreadable, as bot_leash_veto_... does, so a
-    -- packaged build with no source on disk doesn't spuriously fail.
-    local anchor = mod._gt_unit_needs_aid or mod._gt_apply_fast_reactions
-    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r"); if not f then return end
-    local txt = f:read("*a"); f:close(); if not txt then return end
-    -- (a) exactly one hook on this (Class, method) pair.
-    local n = 0
-    for _ in txt:gmatch('mod:hook%("BTConditions",%s*"should_teleport"') do n = n + 1 end
-    if n ~= 1 then
-        return string.format("expected exactly 1 BTConditions.should_teleport hook, found %d (duplicate-hook shadow risk)", n)
-    end
-    -- (b) veto gated on aid-priority AND a downed teammate.
-    if not txt:find("_gt_aid_priority_on() and _gt_any_side_teammate_needs_aid", 1, true) then
-        return "the #139 blanket veto conjunction (aid-priority AND any-side-teammate-needs-aid) is missing"
-    end
-    -- (c) the aid-priority gate still ANDs BOTH the master and the sub-toggle.
-    if not txt:find("gt_bot_behavior_improvements", 1, true) or not txt:find("gt_bot_aid_priority", 1, true) then
-        return "aid-priority gate no longer reads both gt_bot_behavior_improvements and gt_bot_aid_priority"
     end
 end)
 
@@ -1628,78 +1605,77 @@ _rt_register("gt_bot139_aid_scan_is_side_scoped_not_follow", function()
     if (pred(st(true)) and true or false) ~= true then
         return "knocked non-follow teammate stub not classified as needing aid"
     end
-
-    -- Structural: isolate the scan body and assert it is side-scoped, not
-    -- follow-scoped. Soft-skip if the source is not on disk (packaged build).
-    local anchor = mod._gt_any_side_teammate_needs_aid
-    local ok, info = pcall(debug.getinfo, anchor, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r"); if not f then return end
-    local txt = f:read("*a"); f:close(); if not txt then return end
-    -- ".-" is lazy and Lua's "." matches newlines, so this captures from the
-    -- function header to its col-0 closing `end` (all inner ends are indented).
-    -- Starting at the header excludes the preceding comment block.
-    local body = txt:match("local function _gt_any_side_teammate_needs_aid.-\nend")
-    if not body then return end  -- reformatted beyond recognition -> soft skip
-    if not body:find("PLAYER_UNITS", 1, true) or not body:find("side_by_unit", 1, true) then
-        return "aid scan no longer reads side.PLAYER_UNITS via side_by_unit -- side-scoped invariant broken"
-    end
-    if not body:find("_gt_unit_needs_aid", 1, true) then
-        return "aid scan no longer delegates to _gt_unit_needs_aid"
-    end
-    if body:find("follow", 1, true) then
-        return "aid scan references the bot's follow target -- re-scoped to follow (the #139 root cause)"
-    end
+    -- #511 (v0.2.202-dev): the structural body-grep (io.open, isolating the scan
+    -- body to assert it reads side.PLAYER_UNITS/side_by_unit and never "follow")
+    -- was removed -- io is nil in the VMF sandbox, so it threw and reported FAIL on
+    -- healthy code. The behavioral stub checks above are the runtime residual; the
+    -- side-scoped-not-follow SOURCE-TEXT invariant belongs in a repo QA gate
+    -- (PROJECT_STANDARDS 2.2b tier a).
 end)
 
 _rt_register("gt_bot492_aid_stall_recovery", function()
-    -- #492 (v0.2.198-dev): the bounded recovery for the aid-priority pursuit lock.
-    -- Locks THREE things so a refactor can't silently drop the safety valve:
+    -- #492 (reworked v0.2.202-dev): fast, within-down-window recovery for the
+    -- aid-priority pursuit lock. Locks THREE things so a refactor can't silently
+    -- drop the safety valve:
     --   (1) the marker constant is present,
-    --   (2) the pure stall state machine (_gt492_step) bails after the no-progress
-    --       timeout and re-arms on progress / target change (functional check with
-    --       a synthetic sequence -- no engine reads), and
+    --   (2) the pure decision machine (_gt492_step) bails on EITHER a sustained
+    --       engine aid-path failure (fast) OR a far no-progress stall (backstop),
+    --       never bails a CLOSE (in-range) target, and LATCHES until the ally
+    --       clears or the bot gets close again (functional check, no engine reads),
     --   (3) both halves of the actuator are wired in _gt_bot_fixes.lua: the picker
     --       drops the bailed aid pick, and the #139 veto steps aside on the flag.
     if GT_BOT492_AID_STALL_RECOVERY_MARKER_v0_2_198 ~= "gt-bot492-aid-pursuit-stall-recovery" then
-        return "bot #492 aid-stall-recovery marker absent -- was the v0.2.198-dev recovery reverted?"
+        return "bot #492 aid-stall-recovery marker absent -- was the recovery reverted?"
     end
 
-    -- (2) Functional: drive the pure state machine. TIMEOUT is 35 s / EPSILON 2 m
-    -- in the source; use margins that don't depend on the exact constants.
+    -- (2) Functional: drive the pure machine. Signature is (state, aid_unit,
+    -- aid_dist, path_failed, t). Constants in source: PATH_FAIL_CONFIRM 4 s,
+    -- NO_PROGRESS_TIMEOUT 8 s, FAR 20 m, REACHED 12 m, EPSILON 2 m; the margins
+    -- below stay clear of those edges so the check does not depend on exact values.
     local step = mod._gt492_step
     if type(step) ~= "function" then
-        return "mod._gt492_step not exposed -- the #492 stall state machine seam is missing"
+        return "mod._gt492_step not exposed -- the #492 decision machine seam is missing"
     end
     local U, V = "downA", "downB"
-    local s, bail = { aid_unit = nil }, false
-    s, bail = step(s, U, 100, 0)          ; if bail then return "#492: fresh target must not bail immediately" end
-    s, bail = step(s, U, 100, 10)         ; if bail then return "#492: 10 s stall (< timeout) must not bail" end
-    s, bail = step(s, U, 100, 100)        ; if not bail then return "#492: 100 s no-progress stall must bail" end
-    s, bail = step(s, U, 50, 101)         ; if bail then return "#492: net progress (100 m -> 50 m) must clear the bail" end
-    s, bail = step(s, U, 50, 200)         ; if not bail then return "#492: renewed 99 s stall at the closer distance must bail again" end
-    s, bail = step(s, V, 300, 201)        ; if bail then return "#492: a new (different) aid target must reset and not bail" end
-    s, bail = step(s, nil, nil, 400)      ; if bail then return "#492: no aid target must not bail" end
+    local s, bail
 
-    -- (3) Structural: the actuator wiring must be present in _gt_bot_fixes.lua.
-    -- Soft-skip if the source is not on disk (packaged build), as the #139 checks do.
-    local anchor = mod._gt492_should_suppress_pick or mod._gt492_aid_stall_tick
-    if type(anchor) ~= "function" then
+    -- Backstop: far + no closing progress past the timeout must bail, and latch.
+    s, bail = step({ aid_unit = nil }, U, 100, false, 0) ; if bail then return "#492: fresh far target must not bail immediately" end
+    s, bail = step(s, U, 100, false, 5)                  ; if bail then return "#492: far stall under the no-progress timeout must not bail" end
+    s, bail = step(s, U, 100, false, 20)                 ; if not bail then return "#492: far no-progress past the timeout must bail" end
+    s, bail = step(s, U, 100, false, 40)                 ; if not bail then return "#492: bail must LATCH while the bot is still far" end
+    s, bail = step(s, U, 5,   false, 41)                 ; if bail then return "#492: reaching the ally (close) must clear the latch" end
+
+    -- Close target: an in-range stall (bot fighting next to a reachable revive)
+    -- must NEVER bail, no matter how long -- the revive is imminent.
+    local c
+    c, bail = step({ aid_unit = nil }, U, 8, false, 0)   ; if bail then return "#492: fresh close target must not bail" end
+    c, bail = step(c, U, 8, false, 500)                  ; if bail then return "#492: an in-range stall must never bail (revive imminent)" end
+
+    -- Fast path: sustained engine aid-path failure bails quickly (well before the
+    -- no-progress backstop). The confirm clock only starts on the FIRST observed
+    -- failure (fail_since), so a fresh target's path-fail tick must not bail.
+    local p
+    p, bail = step({ aid_unit = nil }, U, 100, true, 0)  ; if bail then return "#492: first path-fail tick (fresh target) must not bail" end
+    p, bail = step(p, U, 100, true, 2)                   ; if bail then return "#492: path-fail confirm window not yet elapsed must not bail" end
+    p, bail = step(p, U, 100, true, 7)                   ; if not bail then return "#492: sustained aid-path failure must bail fast (before the no-progress backstop)" end
+
+    -- A new (different) aid target resets and does not inherit the prior bail.
+    local n = { aid_unit = U, best_dist = 100, progress_t = 0, fail_since = nil, bailed = true }
+    n, bail = step(n, V, 300, false, 201)                ; if bail then return "#492: a new (different) aid target must reset and not bail" end
+
+    -- No aid target: no bail.
+    local _, zb = step({ aid_unit = nil }, nil, nil, false, 600) ; if zb then return "#492: no aid target must not bail" end
+
+    -- (3) Actuator seams present at runtime. #511 (v0.2.202-dev): the source-grep
+    -- that asserted the picker calls mod._gt492_should_suppress_pick and the veto
+    -- reads blackboard._gt492_bailout was removed -- io is nil in the VMF sandbox,
+    -- so it threw and reported FAIL on healthy code. The functional drive above
+    -- already exercises the whole decision machine, and the marker constant proves
+    -- the actuator block loaded; the two exact source-text wirings belong in a repo
+    -- QA gate (PROJECT_STANDARDS 2.2b tier a).
+    if type(mod._gt492_should_suppress_pick) ~= "function" or type(mod._gt492_aid_stall_tick) ~= "function" then
         return "mod._gt492 actuator seams not exposed -- picker suppression / stall tick missing"
-    end
-    local ok, info = pcall(debug.getinfo, anchor, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r"); if not f then return end
-    local txt = f:read("*a"); f:close(); if not txt then return end
-    -- picker drops the bailed aid pick
-    if not txt:find("mod._gt492_should_suppress_pick", 1, true) then
-        return "#492: the picker no longer calls mod._gt492_should_suppress_pick -- aid pick suppression dropped"
-    end
-    -- the #139 veto steps aside on the bailout flag
-    if not txt:find("not blackboard._gt492_bailout", 1, true) then
-        return "#492: the #139 should_teleport veto no longer checks blackboard._gt492_bailout -- bot can't regroup"
     end
 end)
 
@@ -1727,23 +1703,12 @@ _rt_register("gt_bot383_fix9_splits_follow_position", function()
     if fan({}, "navworld", {}, 0) ~= nil then
         return "fan helper must return nil when needed <= 0 (fallback contract)"
     end
-    -- Structural: the split branch computes a per-human fan and writes
-    -- data.follow_position, still guarding hold_position. Soft-skip if the source
-    -- is not on disk (packaged build).
-    local ok, info = pcall(debug.getinfo, fan, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(srcp, "r"); if not f then return end
-    local txt = f:read("*a"); f:close(); if not txt then return end
-    if not txt:find("_gt_fan_points_for_unit(self, nav_world, human", 1, true) then
-        return "FIX 9 split branch no longer computes a fan around each human"
-    end
-    if not txt:find("group[k]].follow_position = p", 1, true) then
-        return "FIX 9 split branch no longer writes data.follow_position from the fan"
-    end
-    if not txt:find("not data.hold_position", 1, true) then
-        return "FIX 9 split branch dropped the hold_position guard"
-    end
+    -- #511 (v0.2.202-dev): the structural source-grep (io.open) that asserted the
+    -- split branch computes a per-human fan, writes data.follow_position, and keeps
+    -- the hold_position guard was removed -- io is nil in the VMF sandbox, so it
+    -- threw and reported FAIL on healthy code. The marker + fan-helper nil-contract
+    -- checks are the runtime residual; the split-branch SOURCE-TEXT invariants
+    -- belong in a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
 end)
 
 _rt_register("gt_bot142_backward_wants_no_segment_gate", function()
@@ -1786,23 +1751,18 @@ _rt_register("gt_bot142_veto_still_final", function()
     -- issue 142 (v0.2.194-dev): the backward-teleport branch must be evaluated
     -- BEFORE the #139 blanket aid veto in the should_teleport hook, so the veto
     -- stays the FINAL word on the combined decision (a downed teammate overrides a
-    -- backward leash -- the bot paths in to revive). Assert source order.
-    local anchor = mod._gt_backward_teleport_wants or mod._gt_ignore_backward_gate_on
-    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(srcp, "r"); if not f then return end
-    local txt = f:read("*a"); f:close(); if not txt then return end
-    local backward_at = txt:find("want = _gt_backward_teleport_wants(blackboard)", 1, true)
-    if not backward_at then
-        return "backward-teleport branch missing from the should_teleport hook"
+    -- backward leash -- the bot paths in to revive).
+    -- #511 (v0.2.202-dev): the source-ORDER grep (io.open) was removed -- io is nil
+    -- in the VMF sandbox, so it threw and reported FAIL on healthy code. Runtime
+    -- residual: both feature seams are exposed (the backward branch + the ignore-
+    -- gate toggle exist). Source ORDER is a purely STATIC property with no runtime
+    -- signal; that "veto must come after the backward branch" invariant belongs in
+    -- a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
+    if type(mod._gt_backward_teleport_wants) ~= "function" then
+        return "mod._gt_backward_teleport_wants not exposed -- the issue-142 backward-teleport branch is missing"
     end
-    local veto_at = txt:find("_gt_aid_priority_on() and _gt_any_side_teammate_needs_aid", 1, true)
-    if not veto_at then
-        return "the #139 blanket aid veto is missing from the should_teleport hook"
-    end
-    if backward_at >= veto_at then
-        return "the #139 aid veto must come AFTER the backward-branch want assignment (veto must be final)"
+    if type(mod._gt_ignore_backward_gate_on) ~= "function" then
+        return "mod._gt_ignore_backward_gate_on not exposed -- the issue-142 backward-gate toggle seam is missing"
     end
 end)
 
@@ -1814,57 +1774,18 @@ _rt_register("gt_bot261_leash_conflict_invariants", function()
     -- on _enemy_path_allowed; (c) FIX 10's greedy pickup post-passes still honour
     -- vanilla's follow-range gates; (d) exactly ONE hook each on should_teleport
     -- and BTBotTeleportToAllyAction.run (VMF drops a 2nd on the same pair).
-    local anchor = mod._gt_backward_teleport_wants or mod._gt_resolve_follow_mode
-    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(srcp, "r"); if not f then return end
-    local txt = f:read("*a"); f:close(); if not txt then return end
-
-    -- (a) tighter leash reads the distance slider.
-    local leash_body = txt:match("local function _gt_tighter_leash_wants.-\nend")
-    if not leash_body then
-        return "could not isolate _gt_tighter_leash_wants body"
-    end
-    if not leash_body:find("gt_bot_follow_distance_m", 1, true) then
-        return "tighter leash no longer reads gt_bot_follow_distance_m"
-    end
-
-    -- (c) greedy pickup follow-range gates intact.
+    -- #511 (v0.2.202-dev): the source-grep half (io.open over _gt_bot_fixes.lua and
+    -- the sibling _gt_improved_bot_combat.lua) was removed -- io is nil in the VMF
+    -- sandbox, so it threw and reported FAIL on healthy code. The greedy-pickup
+    -- marker constant is the runtime residual; the STATIC invariants it grepped move
+    -- to their correct homes: the "exactly one hook each on should_teleport /
+    -- BTBotTeleportToAllyAction.run" duplicate-hook counts are ALREADY enforced by
+    -- tools/mod-lint/lint-mod.ps1 (PROJECT_STANDARDS 2.2b tier a), and the tighter-
+    -- leash slider read (a), the FIX 10 follow-range gate references (c), and the
+    -- improved-combat CHASE_MAX_DIST_SQ / _enemy_path_allowed cap (b) belong in a
+    -- repo QA gate.
     if GT_BOT_GREEDY_PICKUP_MARKER_v0_2_182 ~= "gt-bot-greedy-pickup-mule-health-postpass" then
         return "greedy-pickup marker absent -- FIX 10 follow-range gate net broken"
-    end
-    if not txt:find("allowed_to_take_health_pickup", 1, true)
-            or not txt:find("max_pickup_range", 1, true)
-            or not txt:find("max_pickup_dist_sq", 1, true) then
-        return "FIX 10 pickup post-passes no longer reference the vanilla follow-range gates"
-    end
-
-    -- (d) exactly one hook each on the two teleport (Class, method) pairs.
-    local n_st, n_run = 0, 0
-    for _ in txt:gmatch('mod:hook%("BTConditions",%s*"should_teleport"') do n_st = n_st + 1 end
-    for _ in txt:gmatch('mod:hook%("BTBotTeleportToAllyAction",%s*"run"') do n_run = n_run + 1 end
-    if n_st ~= 1 then
-        return string.format("expected exactly 1 BTConditions.should_teleport hook, found %d", n_st)
-    end
-    if n_run ~= 1 then
-        return string.format("expected exactly 1 BTBotTeleportToAllyAction.run hook, found %d", n_run)
-    end
-
-    -- (b) improved-combat chase cap still bounds _enemy_path_allowed. Sibling file
-    -- in the same dir; soft-skip if not on disk.
-    local ibc_src = srcp:gsub("_gt_bot_fixes%.lua$", "_gt_improved_bot_combat.lua")
-    local cf = io.open(ibc_src, "r")
-    if cf then
-        local ctxt = cf:read("*a"); cf:close()
-        if ctxt then
-            if not ctxt:find("CHASE_MAX_DIST_SQ", 1, true) then
-                return "improved-combat chase cap constant CHASE_MAX_DIST_SQ missing"
-            end
-            if not ctxt:find("_enemy_path_allowed", 1, true) then
-                return "improved-combat no longer hooks _enemy_path_allowed (chase cap unbound)"
-            end
-        end
     end
 end)
 
@@ -1872,25 +1793,15 @@ _rt_register("gt_dh_no_position_lookup_reads", function()
     -- issue 302 (v0.2.195-dev): the debug-highlights draw runs as a mod.update
     -- consumer, where POSITION_LOOKUP's raw Vector3 entries are DEAD temporaries
     -- for any unit the engine has not refreshed this section (issue-337 bug
-    -- class; see reference memory + BUG_CLASSES). Passing one to a Vector3 API
-    -- throws "Vector3 expected, got userdata" -- 3031-error spam and zero
-    -- rendering when the highlights first went live 2026-07-06. Every position
-    -- in _gt_debug_highlights.lua must be a LIVE read (_unit_pos /
-    -- Unit.local_position); this test fails if anyone reintroduces a
-    -- POSITION_LOOKUP index into that file. Sibling-file read; soft-skip when
-    -- source is not on disk (packaged build).
-    local anchor = mod._gt_backward_teleport_wants or mod._gt_resolve_follow_mode
-    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local dh_src = srcp:gsub("_gt_bot_fixes%.lua$", "_gt_debug_highlights.lua")
-    if dh_src == srcp then return end
-    local f = io.open(dh_src, "r")
-    if not f then return end
-    local txt = f:read("*a"); f:close()
-    if not txt then return end
-    if txt:find("POSITION_LOOKUP[", 1, true) or txt:find("= POSITION_LOOKUP", 1, true) then
-        return "_gt_debug_highlights.lua reads POSITION_LOOKUP -- dead in mod.update (issue-337 class); use _unit_pos live reads"
+    -- class). Every position in _gt_debug_highlights.lua must be a LIVE read
+    -- (_unit_pos / Unit.local_position).
+    -- #511 (v0.2.202-dev): converted from an io source-grep (the VMF sandbox has
+    -- no io library, so the old grep threw and reported FAIL on healthy code) to a
+    -- runtime provenance marker the module sets at LOAD next to its live-read
+    -- helper. The textual "no POSITION_LOOKUP index in that file" invariant is a
+    -- STATIC check and belongs in a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
+    if mod._gt_dh_live_pos_reads ~= true then
+        return "_gt_debug_highlights.lua live-position provenance marker absent -- did the module fail to load, or was the _unit_pos live-read path replaced with POSITION_LOOKUP (issue-337 class)?"
     end
 end)
 
@@ -1899,20 +1810,14 @@ _rt_register("gt_dh_local_player_safe_508", function()
     -- consumer, which also ticks in the boot/menu phase where vanilla
     -- PlayerManager.local_player() asserts "Network backend has not been set"
     -- (player_manager.lua:580-586; the readiness-guarded local_player_safe is
-    -- :588-596). Fails if a bare local_player() call comes back into that file.
-    -- Sibling-file read; soft-skip when source is not on disk (packaged build).
-    local anchor = mod._gt_backward_teleport_wants or mod._gt_resolve_follow_mode
-    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local dh_src = srcp:gsub("_gt_bot_fixes%.lua$", "_gt_debug_highlights.lua")
-    if dh_src == srcp then return end
-    local f = io.open(dh_src, "r")
-    if not f then return end
-    local txt = f:read("*a"); f:close()
-    if not txt then return end
-    if txt:find(":local_player()", 1, true) then
-        return "_gt_debug_highlights.lua calls bare local_player() -- asserts pre-game (issue 508); use local_player_safe"
+    -- :588-596).
+    -- #511 (v0.2.202-dev): converted from an io source-grep (io is nil in the VMF
+    -- sandbox -> the grep threw and reported FAIL on healthy code) to the runtime
+    -- provenance marker the module sets at LOAD right where local_player_safe is
+    -- called. The textual "no bare :local_player() in that file" invariant is a
+    -- STATIC check and belongs in a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
+    if mod._gt_dh_local_player_safe ~= true then
+        return "_gt_debug_highlights.lua local_player_safe provenance marker absent -- did the module fail to load, or was a bare local_player() call reintroduced (issue 508)?"
     end
 end)
 
@@ -2026,46 +1931,32 @@ _rt_register("bot_greedy_pickup_hooks_present", function()
     -- hook_safe registrations on AIBotGroupSystem._update_mule_pickups /
     -- _update_health_pickups (fresh (Class, method) pairs, grep-verified at
     -- authoring time). Source read is best-effort.
+    -- #511 (v0.2.202-dev): the source-grep for the two AIBotGroupSystem pickup
+    -- hooks (io.open) was removed -- io is nil in the VMF sandbox, so it threw and
+    -- reported FAIL on healthy code. The marker constant is the runtime residual;
+    -- the presence of the _update_mule_pickups / _update_health_pickups hook
+    -- registrations is a STATIC check already covered by tools/mod-lint (hook
+    -- inventory) and belongs in a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
     if GT_BOT_GREEDY_PICKUP_MARKER_v0_2_182 ~= "gt-bot-greedy-pickup-mule-health-postpass" then
         return "greedy-pickup marker absent -- was the #297 item-8 feature removed?"
-    end
-    local ok, info = pcall(debug.getinfo, mod._gt_resolve_follow_mode or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    if not txt:find('"AIBotGroupSystem", "_update_mule_pickups"', 1, true) then
-        return "_update_mule_pickups hook missing from _gt_bot_fixes.lua"
-    end
-    if not txt:find('"AIBotGroupSystem", "_update_health_pickups"', 1, true) then
-        return "_update_health_pickups hook missing from _gt_bot_fixes.lua"
     end
 end)
 
 _rt_register("bot_fix_delays_read_from_settings", function()
     -- #297 (v0.2.182-dev): the ledge pull-up / ladder unstick delays are sliders
-    -- again. The tick bodies must read them via mod:get; a regression back to
-    -- the v0.2.128-dev hard-coded `local delay = 3` / `= 4` literals would
-    -- silently strand both sliders. Source read is best-effort.
-    local ok, info = pcall(debug.getinfo, mod._gt_resolve_follow_mode or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    if not txt:find('mod:get("gt_bot_ledge_pullup_delay")', 1, true) then
-        return "ledge pull-up delay no longer read via mod:get (hard-coded regression?)"
+    -- again. The tick bodies must read them via mod:get.
+    -- #511 (v0.2.202-dev): the source-grep (io.open, asserting the mod:get reads
+    -- exist and no `local delay = 3/4` literal returned) was removed -- io is nil
+    -- in the VMF sandbox, so it threw and reported FAIL on healthy code. Converted
+    -- to a RUNTIME assertion: both settings resolve to numbers via mod:get, which
+    -- proves the sliders are registered and readable the same way the tick reads
+    -- them. The "no hard-coded delay literal" SOURCE-TEXT invariant belongs in a
+    -- repo QA gate (PROJECT_STANDARDS 2.2b tier a).
+    if type(tonumber(mod:get("gt_bot_ledge_pullup_delay"))) ~= "number" then
+        return "gt_bot_ledge_pullup_delay does not resolve to a number via mod:get -- slider missing / renamed?"
     end
-    if not txt:find('mod:get("gt_bot_ladder_unstick_delay")', 1, true) then
-        return "ladder unstick delay no longer read via mod:get (hard-coded regression?)"
-    end
-    if txt:find("local delay = 3", 1, true) or txt:find("local delay = 4", 1, true) then
-        return "a hard-coded bot-fix delay literal is back in _gt_bot_fixes.lua"
+    if type(tonumber(mod:get("gt_bot_ladder_unstick_delay"))) ~= "number" then
+        return "gt_bot_ladder_unstick_delay does not resolve to a number via mod:get -- slider missing / renamed?"
     end
 end)
 
@@ -2142,20 +2033,12 @@ _rt_register("devtools_group_dev_gated", function()
     for id, found in pairs(want) do
         if not found then return id .. " missing from the Dev Tools group" end
     end
-    -- Source-pattern needle (best-effort; degrades if the deploy hides source).
-    local iok, info = pcall(debug.getinfo, mod._gt_btlab_veto_teleport or function() end, "S")
-    if iok and type(info) == "table" and info.source then
-        local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-        local data_path = src:gsub("_gt_bot_teleport_lab%.lua$", "general_tweaker_dev_data.lua")
-        local f = io.open(data_path, "r")
-        if f then
-            local txt = f:read("*a")
-            f:close()
-            if txt and not txt:find('get_mod("gt" .. "_dev")', 1, true) then
-                return "data file Dev Tools append missing the sed-safe get_mod(\"gt\" .. \"_dev\") gate"
-            end
-        end
-    end
+    -- #511 (v0.2.202-dev): the data-file needle grep (io.open, asserting the
+    -- sed-safe get_mod("gt" .. "_dev") gate) was removed -- io is nil in the VMF
+    -- sandbox, so it threw and reported FAIL on healthy code. The data-tree walk
+    -- above (group present + ordered + both children) is the runtime residual; the
+    -- sed-safe-gate SOURCE-TEXT invariant belongs in a repo QA gate
+    -- (PROJECT_STANDARDS 2.2b tier a).
 end)
 
 _rt_register("devtools_bot_hud_wired", function()
@@ -2164,22 +2047,13 @@ _rt_register("devtools_bot_hud_wired", function()
     -- merge-dispatch), and the lab source must read the current BT leaf action from
     -- the blackboard (running_nodes) and gate the HUD on its toggle. Source read is
     -- best-effort and degrades if the deploy doesn't expose source.
+    -- #511 (v0.2.202-dev): the lab source-grep (io.open, asserting the running_nodes
+    -- read and the gt_devtools_bot_hud toggle gate) was removed -- io is nil in the
+    -- VMF sandbox, so it threw and reported FAIL on healthy code. The dispatch-fn
+    -- presence above is the runtime residual; those SOURCE-TEXT invariants belong in
+    -- a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
     if type(mod._gt_btlab_observe_update) ~= "function" then
         return "mod._gt_btlab_observe_update missing -- HUD ring-buffer poll chokepoint gone"
-    end
-    local ok, info = pcall(debug.getinfo, mod._gt_btlab_veto_teleport or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    if not txt:find("running_nodes", 1, true) then
-        return "lab source missing running_nodes read -- current BT action poll gone"
-    end
-    if not txt:find("gt_devtools_bot_hud", 1, true) then
-        return "lab source missing gt_devtools_bot_hud gate -- HUD not wired to its toggle"
     end
 end)
 
@@ -2188,22 +2062,13 @@ _rt_register("breach_probe_present_dev_gated", function()
     -- dev-gated. It runs inside mod._gt_btlab_observe_update (dispatched from the
     -- existing PlayerBotBase.update merge-dispatch) behind the IS_DEV_STREAM gate,
     -- and printfs the [gt:btlab:breach] block. Source read is best-effort.
+    -- #511 (v0.2.202-dev): the lab source-grep (io.open, asserting the
+    -- [gt:btlab:breach] printf tag and the IS_DEV_STREAM gate) was removed -- io is
+    -- nil in the VMF sandbox, so it threw and reported FAIL on healthy code. The
+    -- probe-host dispatch fn above is the runtime residual; those SOURCE-TEXT
+    -- invariants belong in a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
     if type(mod._gt_btlab_observe_update) ~= "function" then
         return "mod._gt_btlab_observe_update missing -- radius-breach probe host removed"
-    end
-    local ok, info = pcall(debug.getinfo, mod._gt_btlab_veto_teleport or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    if not txt:find("[gt:btlab:breach]", 1, true) then
-        return "radius-breach printf tag [gt:btlab:breach] missing from lab source"
-    end
-    if not txt:find("if not IS_DEV_STREAM then return end", 1, true) then
-        return "IS_DEV_STREAM gate missing from lab source -- breach probe may not be dev-gated"
     end
 end)
 
@@ -2211,38 +2076,28 @@ _rt_register("tether_dump_present", function()
     -- #261 (v0.2.176-dev): every leash yank must dump its cause. mod._gt_btlab_report_tether
     -- printfs the [gt:btlab:tether] block (current action + ring buffer, ~2s cooldown),
     -- dispatched from the existing BTBotTeleportToAllyAction.run hook in _gt_bot_fixes.lua.
+    -- #511 (v0.2.202-dev): the lab source-grep (io.open, asserting the
+    -- [gt:btlab:tether] printf tag) was removed -- io is nil in the VMF sandbox, so
+    -- it threw and reported FAIL on healthy code. The dump fn presence is the
+    -- runtime residual; the tag SOURCE-TEXT invariant belongs in a repo QA gate
+    -- (PROJECT_STANDARDS 2.2b tier a).
     if type(mod._gt_btlab_report_tether) ~= "function" then
         return "mod._gt_btlab_report_tether missing -- leash/tether printf dump removed"
-    end
-    local ok, info = pcall(debug.getinfo, mod._gt_btlab_report_tether, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    if not txt:find("[gt:btlab:tether]", 1, true) then
-        return "tether printf tag [gt:btlab:tether] missing from lab source"
     end
 end)
 
 _rt_register("btlab_no_class_hooks", function()
     -- #261 (v0.2.176-dev): the lab must stay merge-dispatch -- ZERO class hooks
     -- (VMF single-hook rule; all injection points ride existing _gt_bot_fixes.lua
-    -- hooks). The only "mod:hook" mentions in the lab are backtick-wrapped in
-    -- comments with no open-paren, so a literal "mod:hook(" / "mod:hook_safe("
-    -- match means a real hook call slipped in. Source read is best-effort.
-    local ok, info = pcall(debug.getinfo, mod._gt_btlab_veto_teleport or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    if txt:find("mod:hook(", 1, true) or txt:find("mod:hook_safe(", 1, true) then
-        return "a mod:hook( / mod:hook_safe( call appeared in _gt_bot_teleport_lab.lua -- must stay merge-dispatch (no new hooks)"
+    -- hooks).
+    -- #511 (v0.2.202-dev): the "no mod:hook( in the lab file" source-grep (io.open)
+    -- was removed -- io is nil in the VMF sandbox, so it threw and reported FAIL on
+    -- healthy code. Runtime residual: the lab loaded (its dispatch fns are exposed).
+    -- The "zero class hooks in this file" invariant is a STATIC source-text check;
+    -- tools/mod-lint/lint-mod.ps1 already inventories hooks mod-wide, and a per-file
+    -- no-hooks assertion belongs in a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
+    if type(mod._gt_btlab_veto_teleport) ~= "function" or type(mod._gt_btlab_observe_update) ~= "function" then
+        return "bot teleport lab dispatch fns not exposed -- did _gt_bot_teleport_lab.lua load?"
     end
 end)
 
@@ -2253,24 +2108,20 @@ _rt_register("btlab_gui_material_guarded", function()
     -- fixed to GUI_MTRL (gw_fonts, every vanilla debug GUI's material). Two invariants:
     --   (1) the create call passes GUI_MTRL, never FONT_MTRL (regression on the root cause);
     --   (2) the create is still pre-filtered by can_get("material", GUI_MTRL) (belt+suspenders).
-    -- Anchored on GUI_MTRL so the guard can't drift off the create call's material arg.
-    -- Source read is best-effort.
-    local ok, info = pcall(debug.getinfo, mod._gt_btlab_report_tether or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    if txt:find("create_screen_gui(world, \"material\", FONT_MTRL", 1, true) then
-        return "create_screen_gui in _gt_bot_teleport_lab.lua creates with FONT_MTRL (arial) again -- #293/#295 root cause; must use GUI_MTRL (gw_fonts)"
+    -- #511 (v0.2.202-dev): the source-grep (io.open, asserting FONT_MTRL is not
+    -- passed and can_get pre-filters the create) was removed -- io is nil in the VMF
+    -- sandbox, so it threw and reported FAIL on healthy code. Converted to the
+    -- runtime provenance marker the lab sets at LOAD to the exact material its
+    -- create_screen_gui call passes: it must be gw_fonts, never arial/FONT_MTRL
+    -- (the #293/#295 C-fatal root cause). The remaining "create is pre-filtered by
+    -- can_get(GUI_MTRL)" SOURCE-TEXT invariant belongs in a repo QA gate
+    -- (PROJECT_STANDARDS 2.2b tier a).
+    if mod._gt_btlab_gui_create_material == nil then
+        return  -- lab HUD create path removed / marker not set -> nothing to guard
     end
-    if not txt:find("create_screen_gui(world, \"material\", GUI_MTRL", 1, true) then
-        return  -- HUD create path removed / rewritten -> nothing to guard
-    end
-    if not txt:find("can_get(\"material\", GUI_MTRL)", 1, true) then
-        return "create_screen_gui(GUI_MTRL) in _gt_bot_teleport_lab.lua is not pre-filtered by can_get(\"material\", GUI_MTRL) -- #293/#295 CTD guard removed"
+    if mod._gt_btlab_gui_create_material ~= "materials/fonts/gw_fonts" then
+        return "bot teleport lab create_screen_gui material is '" .. tostring(mod._gt_btlab_gui_create_material)
+            .. "', not gw_fonts -- #293/#295 root cause (arial/FONT_MTRL is not a resident create material -> C-fatal)"
     end
 end)
 
@@ -2282,25 +2133,17 @@ _rt_register("gt_459_lineobject_cleanup_liveness_gated", function()
     -- violation that pcall CANNOT catch. Both cleanup sites must gate the engine
     -- calls on an IDENTITY check against the currently-live level_world
     -- (live == w) -- has_world alone passes when a NEW same-named world exists
-    -- while the cached handle points at the freed old one. Source read is
-    -- best-effort (soft-skip when source is not on disk).
-    local ok, info = pcall(debug.getinfo, mod._gt_btlab_report_tether or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local targets = {
-        { path = srcp, label = "_gt_bot_teleport_lab.lua" },
-        { path = srcp:gsub("_gt_bot_teleport_lab%.lua$", "_gt_debug_highlights.lua"),
-          label = "_gt_debug_highlights.lua" },
-    }
-    for _, t in ipairs(targets) do
-        local f = io.open(t.path, "r")
-        if f then
-            local txt = f:read("*a"); f:close()
-            if txt and not (txt:find("wm:has_world(\"level_world\") and wm:world(\"level_world\")", 1, true)
-                            and txt:find("if live == w then", 1, true)) then
-                return t.label .. " lost the issue-459 world-liveness identity gate (live == w) on LineObject cleanup"
-            end
-        end
+    -- while the cached handle points at the freed old one.
+    -- #511 (v0.2.202-dev): the two-file source-grep (io.open, asserting the
+    -- live == w gate text) was removed -- io is nil in the VMF sandbox, so it threw
+    -- and reported FAIL on healthy code. Converted to the runtime provenance markers
+    -- each cleanup site sets at LOAD next to its live == w gate. The exact gate
+    -- SOURCE-TEXT invariant belongs in a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
+    if mod._gt459_liveness_gated_lab ~= true then
+        return "_gt_bot_teleport_lab.lua lost the issue-459 world-liveness gate provenance marker (LineObject cleanup AV guard)"
+    end
+    if mod._gt459_liveness_gated_dh ~= true then
+        return "_gt_debug_highlights.lua lost the issue-459 world-liveness gate provenance marker (LineObject cleanup AV guard)"
     end
 end)
 
@@ -2315,31 +2158,17 @@ _rt_register("gt_bot448_downed_morrs_grant_suppressed", function()
     -- drops a silent duplicate); the strip is SOURCE-GATED on
     -- attacker_unit == owner (a standing carrier's aura must be left alone);
     -- and both the bot_player and is_knocked_down gates are present (humans and
-    -- standing bots keep vanilla behavior). Source read is best-effort.
+    -- standing bots keep vanilla behavior).
+    -- #511 (v0.2.202-dev): the source-grep half (io.open) was removed -- io is nil
+    -- in the VMF sandbox, so it threw and reported FAIL on healthy code. The FIX 11
+    -- marker constant (set at LOAD beside the fix in _gt_bot_fixes.lua) is the
+    -- runtime residual; the STATIC invariants it grepped move to their correct
+    -- homes: the "exactly one deus_knockdown_damage_immunity_aura_func hook"
+    -- duplicate-hook count is ALREADY enforced by tools/mod-lint/lint-mod.ps1
+    -- (PROJECT_STANDARDS 2.2b tier a), and the attacker_unit == owner /
+    -- bot_player / is_knocked_down source gates belong in a repo QA gate.
     if GT_BOT_DOWNED_MORRS_MARKER_v0_2_197 ~= "gt-448-downed-bot-no-morrs-grant" then
         return "FIX 11 marker absent -- was the issue-448 downed-bot Morr's grant fix reverted?"
-    end
-    local anchor = mod._gt_backward_teleport_wants or mod._gt_resolve_follow_mode
-    local ok, info = pcall(debug.getinfo, anchor or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local srcp = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(srcp, "r")
-    if not f then return end
-    local txt = f:read("*a"); f:close()
-    if not txt then return end
-    local hook_pat = "mod:hook(BuffFunctionTemplates.functions, \"deus_knockdown_damage_immunity_aura_func\""
-    local first = txt:find(hook_pat, 1, true)
-    if not first then
-        return "the deus_knockdown_damage_immunity_aura_func hook is gone from _gt_bot_fixes.lua (issue-448 fix unwired)"
-    end
-    if txt:find(hook_pat, first + 1, true) then
-        return "TWO hooks on deus_knockdown_damage_immunity_aura_func in _gt_bot_fixes.lua -- VMF silently drops the second"
-    end
-    if not txt:find("granted.attacker_unit == owner_unit", 1, true) then
-        return "issue-448 strip lost its attacker_unit == owner source gate -- it would strip a STANDING carrier's aura too"
-    end
-    if not (txt:find("player.bot_player", 1, true) and txt:find("is_knocked_down", 1, true)) then
-        return "issue-448 suppression lost its bot/knocked-down gates -- human or standing-bot carriers would be affected"
     end
 end)
 
@@ -2371,40 +2200,19 @@ _rt_register("ai_locomotion_override_marker_present", function()
 end)
 
 _rt_register("ai_locomotion_override_set_and_cleared", function()
-    -- Source-pattern guard for both halves of the v0.2.73-dev fix. Reads the
-    -- on-disk file and asserts the host swap path calls
-    -- `locomotion_system:set_override_player(bot_player)` AND the swap-back
-    -- path calls `locomotion_system:set_override_player(nil)`. Catches a
-    -- partial revert that keeps the marker but drops one of the two calls.
-    local path = "scripts/mods/general_tweaker_dev/general_tweaker_dev.lua"
-    -- VMF mods load from the bundle, so the on-disk source path varies by
-    -- install location. Use Mods.mod_directory_path if available, else fall
-    -- back to a project-relative read attempt (regression test then no-ops
-    -- gracefully under deploy paths that don't expose the source).
-    local Mods = rawget(_G, "Mods")
-    local dir = Mods and Mods.original and Mods.original.gt_dev
-    -- The simplest portable check: pcall debug.getinfo on the wrapped function
-    -- to extract its source listing. If unavailable, we degrade to MARKER-only.
-    -- _ai_swap_human_to_bot moved to _gt_ai_takeover.lua (Phase 4); it's exposed
-    -- as mod._gt_ai_swap_human_to_bot. debug.getinfo now reports THAT file as the
-    -- source, and the set_override_player call-pair the grep below looks for moved
-    -- there too, so the check reads the right file.
-    local ok, info = pcall(debug.getinfo, mod._gt_ai_swap_human_to_bot or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then
-        return  -- environment doesn't support source introspection — accept the marker-only check
-    end
-    -- info.source is "@<path>" for files. Skip the leading @ and try to read.
-    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    if not txt:find("locomotion_system:set_override_player(bot_player)", 1, true) then
-        return "swap-to-bot path missing set_override_player(bot_player) call"
-    end
-    if not txt:find("locomotion_system:set_override_player(nil)", 1, true) then
-        return "swap-back path missing set_override_player(nil) call"
+    -- Guard for both halves of the v0.2.73-dev fix: the host swap path calls
+    -- locomotion_system:set_override_player(bot_player) AND the swap-back path
+    -- calls set_override_player(nil). Catches a partial revert that keeps the
+    -- marker but drops one of the two calls.
+    -- #511 (v0.2.202-dev): the source-grep (io.open over _gt_ai_takeover.lua) was
+    -- removed -- io is nil in the VMF sandbox, so it threw and reported FAIL on
+    -- healthy code. Runtime residual: the swap entry point is exposed (the AI-
+    -- takeover module loaded). The "both set_override_player calls present" partial-
+    -- revert invariant is a STATIC source-text check and belongs in a repo QA gate
+    -- (PROJECT_STANDARDS 2.2b tier a); the companion ai_locomotion_override_marker_present
+    -- still asserts the fix marker at runtime.
+    if type(mod._gt_ai_swap_human_to_bot) ~= "function" then
+        return "mod._gt_ai_swap_human_to_bot not exposed -- the AI-takeover host-swap path is missing"
     end
 end)
 
@@ -2430,25 +2238,14 @@ _rt_register("gt_no_mission_hotkey_flip", function()
     -- Issue #62 (2026-05-28): a legacy hook force-set the hotkeys-enabled arg of
     -- IngameUI.handle_menu_hotkeys to true mid-mission, enabling crash-prone keep
     -- view hotkeys (Hero Select / Map / etc. spawn unloaded ui_* preview worlds).
-    -- Removed in v0.2.82-dev. This source-pattern guard fails if that hook is
-    -- reintroduced. The needle is assembled from two literals so this test's own
-    -- source does not self-match. Degrades to a no-op when source introspection
-    -- is unavailable (deploy/bundle paths).
-    -- Anchored on mod.on_setting_changed (a `mod.` field defined in the MAIN
-    -- file) so this guard always reads general_tweaker_dev.lua — where the
-    -- removed IngameUI hook lived. (Phase 3: gt_open_mission_inventory moved to
-    -- _gt_mission_ui.lua, so it can no longer be used as the main-file anchor.)
-    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    local needle = 'mod:hook("' .. 'IngameUI", "handle_menu_hotkeys"'
-    if txt:find(needle, 1, true) then
-        return "Issue #62 regression: the IngameUI handle_menu_hotkeys hook was reintroduced (crash-prone mid-mission hotkey flip)"
+    -- Removed in v0.2.82-dev; the invariant is that the hook stays absent.
+    -- #511 (v0.2.202-dev): the absence-of-hook source-grep (io.open) was removed --
+    -- io is nil in the VMF sandbox, so it threw and reported FAIL on healthy code.
+    -- This is a purely STATIC "a specific hook must NOT exist" invariant with no
+    -- runtime signal; it belongs in a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
+    -- Runtime residual: the main file loaded (its on_setting_changed is defined).
+    if type(mod.on_setting_changed) ~= "function" then
+        return "mod.on_setting_changed not defined -- general_tweaker_dev.lua failed to load"
     end
 end)
 

@@ -711,12 +711,12 @@ mod:hook_safe("PlayerBotBase", "update", function (self, unit, input, dt, contex
         mod._gt_btlab_observe_update(self, unit, blackboard, t)
     end
 
-    -- #492 aid-pursuit stall watchdog. Runs EVERY frame (unlike the picker, which
+    -- #492 aid-pursuit watchdog. Runs EVERY frame (unlike the picker, which
     -- vanilla skips on a priority-enemy frame, player_bot_base.lua:698) so the
-    -- stall clock is reliable. Watches the nearest downed teammate + straight-line
-    -- distance; if the bot goes a bounded time with no net progress it latches
-    -- blackboard._gt492_bailout, which the picker (drops the aid pick) and the
-    -- #139 veto (steps aside) both read. Defined after the aid helpers below
+    -- clocks are reliable. Watches the nearest downed teammate; if the revive is
+    -- unreachable (the engine's aid path keeps failing, or the bot is far and not
+    -- closing) it latches blackboard._gt492_bailout, which the picker (drops the
+    -- aid pick) and the #139 veto (steps aside) both read. Defined after the helpers below
     -- (forward-ref), dispatched here because VMF drops a 2nd PlayerBotBase.update
     -- hook. Gated on aid-priority inside the fn.
     if mod._gt492_aid_stall_tick then
@@ -1151,25 +1151,66 @@ mod._gt_aid_priority_on            = _gt_aid_priority_on
 --   (bt_bot_conditions.lua:738), so clearing that field breaks BOTH the revive
 --   lock (a) and the teleport refusal (b) at once.
 --
--- FIX (this block + the picker + the #139 veto)
---   A per-bot stall watchdog (mod._gt492_aid_stall_tick, dispatched from the
---   consolidated PlayerBotBase.update hook so it runs every frame). It tracks the
---   nearest downed/hooked/ledge teammate -- SAME scope as the #139 veto's
---   _gt_any_side_teammate_needs_aid -- and its straight-line distance as a
---   progress metric. If the bot goes GT492_STALL_TIMEOUT_S with no net progress
---   (distance never dropped more than GT492_PROGRESS_EPSILON_M below the running
---   best), it latches blackboard._gt492_bailout. That flag makes:
+-- FIX (this block + the picker + the #139 veto) -- REWORKED v0.2.202-dev (#492)
+--   A per-bot watchdog (mod._gt492_aid_stall_tick, dispatched from the consolidated
+--   PlayerBotBase.update hook so it runs every frame). It tracks the nearest
+--   downed/hooked/ledge teammate -- SAME scope as the #139 veto's
+--   _gt_any_side_teammate_needs_aid -- and decides "this revive is hopeless, let the
+--   bot regroup" from TWO fast signals rather than one long timer:
+--     (1) NO-PATH (fast, primary): the engine's own aid pathing already records
+--         whether the last path attempt to that ally FAILED. cb_ally_path_result
+--         stores path_status.failed = not success into self._attempted_ally_paths
+--         [ally] (player_bot_base.lua:1911-1934), fed by the aid navigation goal at
+--         :1588/:1601. A sustained failure (GT492_PATH_FAIL_CONFIRM_S) IS the engine
+--         telling us it cannot route there -- the nav-gap / far-ahead / past-a-
+--         threshold case the report describes. Valid at any distance (a failing
+--         path is itself the proof of unreachability).
+--     (2) NO-PROGRESS (backstop): far from the ally (> GT492_FAR_DIST_M) with the
+--         straight-line distance never closing more than GT492_PROGRESS_EPSILON_M
+--         for GT492_NO_PROGRESS_TIMEOUT_S. Covers partial / repeatedly-recomputed
+--         paths the engine doesn't flag as outright failures. Distance-GATED so a
+--         bot merely fighting the horde right next to a reachable down (small,
+--         stable distance) is NEVER pulled off the revive it is about to finish --
+--         can_revive gates on threat (bt_bot_conditions.lua:748), so a close stall
+--         is combat, not unreachability.
+--   Either signal latches blackboard._gt492_bailout, which makes:
 --     - the picker (_select_ally_by_utility above) DROP the aid pick, clearing
 --       target_ally_need_type -> breaks lock (a) via can_revive and lock (b), and
 --     - the #139 veto step aside -> the teleport is no longer re-blocked.
---   The bot then re-evaluates teleport and rejoins the team. Self-clears the
---   instant the bot makes progress toward the target, the target changes (a
---   nearer/other ally goes down), or the aid need ends -- so the #139 "all bots
---   converge to revive" decision is fully preserved for every REACHABLE case.
---   UNCONDITIONAL within aid-priority (a safety valve, no menu toggle). Distance
---   only -- no extra engine pathing calls. Host-side (bot AI is server-side).
-local GT492_STALL_TIMEOUT_S    = 35.0   -- no-progress window before bailing out
-local GT492_PROGRESS_EPSILON_M = 2.0    -- min distance improvement counted as progress
+--   The bot then re-evaluates teleport and rejoins the team.
+--
+--   WHY the numbers (justified from the down window, not a guess): a knocked-down
+--   player bleeds 10 dmg / 3 s (buff_templates.lua:4521-4531 knockdown_bleed +
+--   buff_function_templates.lua:342-355), against a bleed pool equal to full max
+--   health (curse debuffs cleared while down, player_unit_health_extension.lua
+--   :193-196). That is a generous FLOOR of tens of seconds, but real combat down
+--   windows are far shorter -- a downed teammate surrounded by enemies is dead in a
+--   few seconds (field report: often < 5 s). The old 35 s bound was longer than the
+--   bleed floor for low-HP careers AND many times the realistic combat window, so it
+--   almost always fired AFTER the down had already resolved -- useless for its
+--   purpose. The reworked bound acts within the down window: ~4 s once the engine's
+--   own pathing gives up, ~8 s for the distance backstop. Vanilla itself declares a
+--   follow target unreachable on the same timescale -- cant_reach_ally uses
+--   t - last_success > 5 (bt_bot_conditions.lua:1203) and _ally_path_allowed a
+--   3..12 s distance-scaled wait (player_bot_base.lua:1943-1946) -- so 4 s sits at
+--   the fast end of the band the engine already treats as "give up".
+--
+--   ANTI-THRASH (the better fix for what the 35 s timer was protecting against):
+--   once bailed for a given down-ally the latch HOLDS -- it does NOT clear on a mere
+--   couple of metres of transient closing (the old code did, which let a bot that
+--   teleported back near the team re-commit and re-stall). It un-latches ONLY when
+--   the ally is no longer needing aid (target changes/clears -> #139 "all bots
+--   converge" fully preserved for every reachable case) or when the bot gets
+--   genuinely close again (<= GT492_REACHED_DIST_M -- it CAN reach it now, so the
+--   reason we bailed is gone and it should revive). GT492_FAR_DIST_M >
+--   GT492_REACHED_DIST_M gives the hysteresis that stops any oscillation.
+--   UNCONDITIONAL within aid-priority (a safety valve, no menu toggle). Host-side
+--   (bot AI is server-side).
+local GT492_PATH_FAIL_CONFIRM_S   = 4.0    -- sustained engine aid-path failure -> unreachable (fast)
+local GT492_NO_PROGRESS_TIMEOUT_S = 8.0    -- far + no net closing this long -> stuck (backstop)
+local GT492_FAR_DIST_M            = 20.0   -- only the no-progress backstop fires beyond this (else revive is imminent)
+local GT492_REACHED_DIST_M        = 12.0   -- once bailed, un-latch when the bot gets this close (reachable again)
+local GT492_PROGRESS_EPSILON_M    = 2.0    -- min distance improvement counted as progress
 
 -- "PlayerName" for readable logs; pcall-guarded (owner lookup can transiently
 -- fail on a despawning unit). Falls back to the raw handle.
@@ -1183,27 +1224,98 @@ local function _gt492_label(u)
     return (ok and name) or tostring(u)
 end
 
--- #492 PURE stall state machine (testability seam -- NO engine reads). Given the
--- prior per-bot pursuit `state` ({aid_unit, best_dist, progress_t}), the current
--- aid target + straight-line distance, and the time, returns (new_state, bailout).
--- Bails when the bot has gone GT492_STALL_TIMEOUT_S with no net progress. Re-arms
--- on target change or fresh progress. The /gt_regression_test drives this with a
--- synthetic sequence to lock the recovery invariant against silent regression.
-local function _gt492_step(state, aid_unit, aid_dist, t)
+-- True if the unit's player is an AI bot (player_bot.lua:23 bot_player = true), so
+-- the #492 census can say whether a down is a human or a bot. pcall-guarded.
+local function _gt492_is_bot(u)
+    if not u then return false end
+    local ok, is_bot = pcall(function()
+        local pm = Managers.player
+        local owner = pm and pm.owner and pm:owner(u)
+        return owner and owner.bot_player == true
+    end)
+    return (ok and is_bot) or false
+end
+
+-- item 2 observability census: at the decisive bail moment, tally the side so a
+-- single field-log line settles WHICH of the user's two suspected conditions held:
+--   * "the bots themselves were down (cannot aid)"      -> downed_bots high, helpers low
+--   * "players in a spot bots cannot path to"           -> reason=no-path + large dist
+-- Walks the full hero+bot roster (side.PLAYER_AND_BOT_UNITS): each teammate is
+-- either needing aid (knocked/hook/ledge, classed bot vs human) or an alive helper
+-- who could revive (alive, not awaiting assisted respawn). Cheap; called once per
+-- bail (latched), never per frame.
+local function _gt492_aid_census(self_unit)
+    local sm = Managers.state and Managers.state.side
+    local side = sm and sm.side_by_unit and sm.side_by_unit[self_unit]
+    local units = side and side.PLAYER_AND_BOT_UNITS
+    if not units then return 0, 0, 0 end
+    local alive_helpers, down_humans, down_bots = 0, 0, 0
+    for i = 1, #units do
+        local u = units[i]
+        if u ~= self_unit then
+            local st = ScriptUnit.has_extension(u, "status_system")
+            if st then
+                if _gt_status_needs_aid(st) then
+                    if _gt492_is_bot(u) then down_bots = down_bots + 1
+                    else down_humans = down_humans + 1 end
+                elseif HEALTH_ALIVE[u] and st.ready_for_assisted_respawn ~= true then
+                    alive_helpers = alive_helpers + 1
+                end
+            end
+        end
+    end
+    return alive_helpers, down_humans, down_bots
+end
+
+-- #492 PURE decision machine (testability seam -- NO engine reads; the tick reads
+-- engine state and passes the two derived scalars in). Given the prior per-bot
+-- pursuit `state` ({aid_unit, best_dist, progress_t, fail_since, bailed}), the
+-- current aid target, its straight-line distance, whether the engine's last aid
+-- path to it FAILED, and the time, returns (new_state, bailout). Bails on either a
+-- sustained aid-path failure (fast) or a far no-progress stall (backstop), and
+-- LATCHES until the target clears or the bot gets close again. The
+-- /gt_regression_test drives this with a synthetic sequence to lock the recovery
+-- invariant against silent regression.
+local function _gt492_step(state, aid_unit, aid_dist, path_failed, t)
     if not aid_unit then
         return { aid_unit = nil }, false
     end
     if state.aid_unit ~= aid_unit then
-        -- New (or first) target: start a fresh pursuit clock.
-        return { aid_unit = aid_unit, best_dist = aid_dist, progress_t = t }, false
+        -- New (or first) target: start a fresh pursuit clock, un-bailed.
+        return { aid_unit = aid_unit, best_dist = aid_dist, progress_t = t, fail_since = nil, bailed = false }, false
     end
+
+    -- Already bailed: HOLD the latch (anti-thrash). Un-latch only when the bot has
+    -- closed to within reach -- the ally is reachable now, so revive instead.
+    if state.bailed then
+        if aid_dist and aid_dist <= GT492_REACHED_DIST_M then
+            return { aid_unit = aid_unit, best_dist = aid_dist, progress_t = t, fail_since = nil, bailed = false }, false
+        end
+        return { aid_unit = aid_unit, best_dist = state.best_dist, progress_t = state.progress_t,
+                 fail_since = state.fail_since, bailed = true }, true
+    end
+
+    -- Not yet bailed: track closing progress (best distance achieved).
     local best_dist, progress_t = state.best_dist, state.progress_t
-    if not best_dist or aid_dist < best_dist - GT492_PROGRESS_EPSILON_M then
-        -- Net progress toward the target: reset the stall clock.
+    if not best_dist or (aid_dist and aid_dist < best_dist - GT492_PROGRESS_EPSILON_M) then
         best_dist, progress_t = aid_dist, t
     end
-    local bailout = (t - (progress_t or t)) >= GT492_STALL_TIMEOUT_S
-    return { aid_unit = aid_unit, best_dist = best_dist, progress_t = progress_t }, bailout
+
+    -- Fast signal: how long the engine has continuously failed to path to the ally.
+    local fail_since = state.fail_since
+    if path_failed then
+        fail_since = fail_since or t
+    else
+        fail_since = nil
+    end
+
+    local far        = aid_dist and aid_dist > GT492_FAR_DIST_M
+    local path_stuck  = fail_since ~= nil and (t - fail_since) >= GT492_PATH_FAIL_CONFIRM_S
+    local no_progress = far and (t - (progress_t or t)) >= GT492_NO_PROGRESS_TIMEOUT_S
+    local bailed = (path_stuck or no_progress) and true or false
+
+    return { aid_unit = aid_unit, best_dist = best_dist, progress_t = progress_t,
+             fail_since = fail_since, bailed = bailed }, bailed
 end
 mod._gt492_step = _gt492_step
 
@@ -1215,6 +1327,15 @@ local function _gt492_should_suppress_pick(blackboard, ally)
     return blackboard._gt492_bailout and ally ~= nil and ally == blackboard._gt492_bailout_unit
 end
 mod._gt492_should_suppress_pick = _gt492_should_suppress_pick
+
+-- True when this frame's nearest aid target differs from the one the prior state
+-- tracked (or there was no prior state) -- the "pursuit just started" edge the
+-- FAR-pursuit-start log fires on. Declared before the tick so the closure captures
+-- it as an upvalue (a later file-scope local would resolve to a nil global here).
+local function _gt492_target_changed(state, aid_unit)
+    if not aid_unit then return false end
+    return (not state) or state.aid_unit ~= aid_unit
+end
 
 -- The every-frame watchdog. Engine reads live here; the decision is delegated to
 -- the pure _gt492_step. Dispatched from the consolidated PlayerBotBase.update
@@ -1242,15 +1363,44 @@ mod._gt492_aid_stall_tick = function(self, unit, blackboard, t)
     end
     local aid_dist = aid_unit and Vector3.distance(self_pos, aid_pos) or nil
 
+    -- Engine's own aid-path reachability for THIS down-ally: cb_ally_path_result
+    -- stores .failed = true whenever the last aid path attempt failed
+    -- (player_bot_base.lua:1911-1934). Authoritative "can't route there" signal.
+    -- nil when the bot never attempted a path to it -> falls back to no-progress.
+    local path_failed = false
+    if aid_unit then
+        local paths = self._attempted_ally_paths
+        local ps = paths and paths[aid_unit]
+        path_failed = (ps and ps.failed) and true or false
+    end
+
+    -- item 2 observability: log a FAR aid pursuit at its START, so a field log
+    -- captures the unreachable-looking chase even if the down resolves before a
+    -- bail. Fires once per new target (aid_unit change), and only when far, so the
+    -- common close-down case never spams. Cheap census included.
+    local new_target = _gt492_target_changed(blackboard._gt492_state, aid_unit)
+    if new_target and aid_dist and aid_dist > GT492_FAR_DIST_M and rawget(_G, "printf") then
+        local helpers, dh, db = _gt492_aid_census(unit)
+        printf("[gt:492] %s begins FAR aid pursuit (down=%s is_bot=%s dist=%.0fm) -- roster: alive_helpers=%d downed_humans=%d downed_bots=%d",
+            _gt492_label(unit), _gt492_label(aid_unit), tostring(_gt492_is_bot(aid_unit)),
+            aid_dist, helpers, dh, db)
+    end
+
     local state = blackboard._gt492_state or { aid_unit = nil }
-    local new_state, bailout = _gt492_step(state, aid_unit, aid_dist, t)
+    local prev_bailed = state.bailed
+    local new_state, bailout = _gt492_step(state, aid_unit, aid_dist, path_failed, t)
     blackboard._gt492_state = new_state
 
     if bailout then
-        if not blackboard._gt492_bailout and rawget(_G, "printf") then
-            printf("[gt_bot:492] %s aid pursuit STALLED %.0fs no-progress (down=%s dist=%.1fm best=%.1fm) -- suspending aid-priority+veto so the bot can regroup",
-                _gt492_label(unit), t - (new_state.progress_t or t),
-                _gt492_label(aid_unit), aid_dist or -1, new_state.best_dist or -1)
+        if not prev_bailed and rawget(_G, "printf") then
+            -- Decisive branch point: name WHICH signal fired + the roster census,
+            -- so the next field log settles bots-down vs unreachable-path (item 2).
+            local reason = (new_state.fail_since ~= nil
+                and (t - new_state.fail_since) >= GT492_PATH_FAIL_CONFIRM_S) and "no-path" or "no-progress"
+            local helpers, dh, db = _gt492_aid_census(unit)
+            printf("[gt:492] %s BAILED aid pursuit (reason=%s down=%s is_bot=%s dist=%.0fm best=%.0fm) -- suspending aid pin+veto so it can regroup; roster: alive_helpers=%d downed_humans=%d downed_bots=%d",
+                _gt492_label(unit), reason, _gt492_label(aid_unit), tostring(_gt492_is_bot(aid_unit)),
+                aid_dist or -1, new_state.best_dist or -1, helpers, dh, db)
         end
         blackboard._gt492_bailout = true
         blackboard._gt492_bailout_unit = aid_unit
@@ -1259,7 +1409,7 @@ mod._gt492_aid_stall_tick = function(self, unit, blackboard, t)
     end
 end
 
--- #492 regression marker (read by aid_stall_recovery_present in the main file). A
+-- #492 regression marker (read by gt_bot492_aid_stall_recovery in the main file). A
 -- refactor that drops the stall recovery makes this disappear and the test fail.
 GT_BOT492_AID_STALL_RECOVERY_MARKER_v0_2_198 = "gt-bot492-aid-pursuit-stall-recovery"
 

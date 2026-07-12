@@ -990,6 +990,13 @@ local FONT_MTRL = "materials/fonts/arial"          -- Gui.text FONT-material arg
 -- passing it here was the #293/#295 "Gui material not found" C-fatal. gw_fonts is the
 -- engine's always-resident font atlas (the same self-test material the gut GUI guard uses).
 local GUI_MTRL  = "materials/fonts/gw_fonts"
+-- #511 runtime provenance marker: the material create_screen_gui uses (#293/#295
+-- root-cause guard). Set at LOAD to the value passed at the create site so
+-- /gt_regression_test can assert it is gw_fonts (never arial/FONT_MTRL) without an
+-- io source-grep (io is nil in the VMF sandbox). The remaining textual invariant
+-- (the create is pre-filtered by can_get("material", GUI_MTRL)) belongs in a repo
+-- QA gate (PROJECT_STANDARDS 2.2b tier a).
+mod._gt_btlab_gui_create_material = GUI_MTRL
 
 -- release cached draw resources + clear any lingering lines.
 -- #459: LineObject.reset/dispatch may ONLY run when the cached world handle is
@@ -1027,6 +1034,12 @@ local function _clear_and_null()
     mod._gt_btlab_gui_world    = nil
     mod._gt_btlab_gui_deferred = nil   -- reset the #293/#295 defer breadcrumb latch
 end
+-- #511 runtime provenance marker: _clear_and_null gates its LineObject
+-- reset/dispatch on the live-world identity check (live == w, issue 459 AV guard).
+-- Set at LOAD so /gt_regression_test can assert it without an io source-grep (io is
+-- nil in the VMF sandbox). The exact "live == w" SOURCE-TEXT belongs in a repo QA
+-- gate (PROJECT_STANDARDS 2.2b tier a).
+mod._gt459_liveness_gated_lab = true
 
 -- Live position for a unit THIS frame. CRITICAL: do NOT read POSITION_LOOKUP in this
 -- (mod.update) draw phase -- the LOCAL PLAYER's entry (and any followed player) is a

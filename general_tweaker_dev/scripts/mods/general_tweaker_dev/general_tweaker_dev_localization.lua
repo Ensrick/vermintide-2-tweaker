@@ -70,7 +70,7 @@ return {
     gt_bot_greedy_pickup = { en = "[untested] Bots collect items players leave behind" },
     gt_bot_greedy_pickup_tooltip = { en = "Normally bots refuse to take potions, bombs, and healing while a nearby player has a free slot for them; with this on they collect such items anyway, then carry them and hand them over when asked or needed." },
 
-    gt_bot_aid_priority = { en = "[untested] Bots prioritize reviving and rescuing" },
+    gt_bot_aid_priority = { en = "[verify-fix] [Issue 492] Bots prioritize reviving and rescuing" },
     gt_bot_aid_priority_tooltip = { en = "Downed, hooked, and ledge-hanging allies always outrank following and other chores, so a bot commits to the revive or rescue and walks the whole way there." },
 
     gt_bot_ignore_backward_gate = { en = "[untested] Bots go back for teammates who fall behind" },
