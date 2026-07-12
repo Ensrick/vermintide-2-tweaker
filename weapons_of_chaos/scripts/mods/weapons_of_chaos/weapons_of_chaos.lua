@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.9-dev"
+local MOD_VERSION = "0.1.10-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -100,6 +100,27 @@ end
 local _RT_CHECKS = {}
 local function _rt_register(name, fn)
 	_RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+
+-- (#511) io-safe source reader. The VMF retail Stingray VM registers no `io`
+-- library (mods are loadstring'd into the game's shared _G; the engine registers
+-- `os` but not `io`), so a bare `io.open` throws "attempt to index global 'io'
+-- (a nil value)" and the regression runner's pcall reports it as a FALSE FAIL on
+-- healthy code (issue 479/511). Source-pattern checks route through this helper,
+-- which returns nil (-> the check's "unreadable source => skip" branch, a PASS)
+-- instead of throwing. In retail the source-text half is skipped; the source-text
+-- needles still run under the modding-tools build / CI and are the QA-gate
+-- candidates (PROJECT_STANDARDS 2.2b tier a).
+local function _rt_src_read(path)
+	local io_lib = rawget(_G, "io")
+	if type(io_lib) ~= "table" or type(io_lib.open) ~= "function" then
+		return nil
+	end
+	local f = io_lib.open(path, "r")
+	if not f then return nil end
+	local t = f:read("*a")
+	f:close()
+	return t
 end
 mod:command("woc_regression_test", "Run WOC regression smoke checks for past bugs", function()
 	local pass, fail = 0, 0
@@ -381,10 +402,7 @@ _rt_register("issue422_wire_safety_unconditional_singleton", function()
 	local ok, info = pcall(debug.getinfo, _rt_register, "S")
 	if not ok or type(info) ~= "table" or not info.source then return end
 	local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-	local f = io.open(src_path, "r")
-	if not f then return end
-	local txt = f:read("*a")
-	f:close()
+	local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
 	if not txt then return end
 	local hook_needle = "mod:hook(LoadoutUtils, " .. '"sync_loadout_slot"'
 	local count, pos = 0, 1
@@ -431,10 +449,7 @@ _rt_register("no_unit_path_package_force_load", function()
 	local ok, info = pcall(debug.getinfo, _rt_register, "S")
 	if not ok or type(info) ~= "table" or not info.source then return end
 	local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-	local f = io.open(src_path, "r")
-	if not f then return end
-	local txt = f:read("*a")
-	f:close()
+	local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
 	if not txt then return end
 	local load_needle = "Managers.package" .. ":load("
 	if txt:find(load_needle, 1, true) then

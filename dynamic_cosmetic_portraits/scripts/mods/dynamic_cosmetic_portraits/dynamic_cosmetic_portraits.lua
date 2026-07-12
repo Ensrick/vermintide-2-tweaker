@@ -5,7 +5,7 @@ local mod = get_mod("dynamic_cosmetic_portraits")
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.17-dev"
+local MOD_VERSION = "0.1.18-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -82,6 +82,27 @@ end
 local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+
+-- (#511) io-safe source reader. The VMF retail Stingray VM registers no `io`
+-- library (mods are loadstring'd into the game's shared _G; the engine registers
+-- `os` but not `io`), so a bare `io.open` throws "attempt to index global 'io'
+-- (a nil value)" and the regression runner's pcall reports it as a FALSE FAIL on
+-- healthy code (issue 479/511). Source-pattern checks route through this helper,
+-- which returns nil (-> the check's "unreadable source => skip" branch, a PASS)
+-- instead of throwing. In retail the source-text half is skipped; the source-text
+-- needles still run under the modding-tools build / CI and are the QA-gate
+-- candidates (PROJECT_STANDARDS 2.2b tier a).
+local function _rt_src_read(path)
+    local io_lib = rawget(_G, "io")
+    if type(io_lib) ~= "table" or type(io_lib.open) ~= "function" then
+        return nil
+    end
+    local f = io_lib.open(path, "r")
+    if not f then return nil end
+    local t = f:read("*a")
+    f:close()
+    return t
 end
 mod:command("dcp_regression_test", "Run regression smoke checks for past bugs", function()
     local pass, fail = 0, 0
@@ -529,10 +550,7 @@ _rt_register("skin_map_overrides_hat_map", function()
     local ok, info = pcall(debug.getinfo, _rt_register, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     local skin_lookup = "_skin_portrait_map[" .. "skin_key]"
     local hat_lookup  = "_hat_portrait_map[" .. "hat_key]"
@@ -562,10 +580,7 @@ _rt_register("career_settings_swap_saves_and_restores", function()
     local ok, info = pcall(debug.getinfo, _rt_register, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     local save_needle    = "_original_portrait_image = career." .. "portrait_image"
     local restore_needle = "career.portrait_image = _original_" .. "portrait_image"

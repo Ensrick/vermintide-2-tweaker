@@ -1,5 +1,14 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.18-dev (2026-07-12) -- #511 io-safe regression checks: source-reads no longer throw in the retail sandbox [untested]
+
+### Why
+`/dcp_regression_test`'s source-pattern checks (`skin_map_overrides_hat_map`, and the save/restore portrait check) read dcp's own source via `io.open`. The VMF retail Stingray VM registers no `io` library (mods are `loadstring`'d into the game's shared `_G`; the engine registers `os` but not `io`), so `io.open` threw `attempt to index global 'io' (a nil value)` and the runner's pcall reported them as FALSE FAILs on healthy code.
+
+### What
+- NEW `_rt_src_read(path)` helper (next to `_rt_register`): guards `rawget(_G,"io")` and returns nil when `io` is absent, so each check's existing "unreadable source => skip (PASS)" branch runs instead of throwing. Both `io.open` reads route through it.
+- The save/restore check already asserts its invariant at runtime (`_restore_portrait_settings` + `mod.on_unload` must be wired) so retail keeps that protection; the source-text needles (skin-before-hat lookup order, save/restore literals) are skipped in retail, still run under the modding-tools build / CI, and are listed as repo QA-gate candidates (PROJECT_STANDARDS 2.2b tier a). No behavior change.
+
 ## 0.1.17-dev (2026-07-12) -- issue 509 regression-harness backfill + issue 510 mem-probe file-local [untested]
 
 ### Why

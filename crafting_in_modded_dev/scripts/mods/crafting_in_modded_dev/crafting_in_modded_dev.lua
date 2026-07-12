@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.56-dev"
+local MOD_VERSION = "0.8.57-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -194,6 +194,28 @@ end)
 local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+
+-- (#511) io-safe source reader. The VMF retail Stingray VM registers no `io`
+-- library (mods are loadstring'd into the game's shared _G; the engine registers
+-- `os` but not `io`), so a bare `io.open` throws "attempt to index global 'io'
+-- (a nil value)" and the regression runner's pcall reports it as a FALSE FAIL on
+-- healthy code (issue 479/511). Every source-pattern check routes its source read
+-- through this helper, which returns nil (-> the check's "unreadable source => skip"
+-- branch, a PASS) instead of throwing. In retail the source-text half is skipped and
+-- the runtime asserts each check makes (anchor function / vanilla class + method) are
+-- authoritative; the source-text needles still run under the modding-tools build / CI
+-- and are the QA-gate candidates (PROJECT_STANDARDS 2.2b tier a).
+local function _rt_src_read(path)
+    local io_lib = rawget(_G, "io")
+    if type(io_lib) ~= "table" or type(io_lib.open) ~= "function" then
+        return nil
+    end
+    local f = io_lib.open(path, "r")
+    if not f then return nil end
+    local t = f:read("*a")
+    f:close()
+    return t
 end
 -- A check function returns:
 --   nil                        -> PASS
@@ -5245,10 +5267,7 @@ _rt_register("weave_talent_forge_level_guard_present", function()
     local ok, info = pcall(debug.getinfo, _rt_register, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     local needle = 'BackendInterfaceWeavesPlayFab", ' .. '"get_talent_required_forge_level"'
     if not txt:find(needle, 1, true) then
@@ -5338,10 +5357,7 @@ _rt_register("weave_forge_hides_cost_readout", function()
     local ok, info = pcall(debug.getinfo, _rt_register, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     local hook_needle  = '"HeroWindowWeaveProperties", "_populate_menu_option' .. '_widget"'
     local blank_needle = 'widget.content.price' .. '_text = ""'
@@ -6432,10 +6448,7 @@ _rt_register("heroview_hdr_not_forcebuilt_in_mission", function()
     local ok, info = pcall(debug.getinfo, mod._cim_sweep_leaked_hdr_worlds or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     -- (a) Fix B skip marker present in the hook body.
     local skip_needle = "_setup_hdr_gui skipped in mission (Fix B" .. ": avoid LA armoury_atlas HDR-world crash)"
@@ -6775,13 +6788,14 @@ _rt_register("issue88_inventory_access_flip_is_scoped", function()
     -- hook. This source-pattern guard fails if the persistent flip is
     -- reintroduced or the scoped pieces are removed. Degrades to a no-op when
     -- source introspection is unavailable (bundle/deploy path).
+    -- (#511) Runtime marker: the anchor must be wired (proves the module loaded).
+    if type(mod.open_standard_crafting) ~= "function" then
+        return "#88 regression: mod.open_standard_crafting not wired (standard-crafting module failed to load)"
+    end
     local ok, info = pcall(debug.getinfo, mod.open_standard_crafting or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     -- The one-shot handshake flag must be set in open_standard_crafting.
     if not txt:find("_cim_open_standard_inv_pending", 1, true) then
@@ -6812,18 +6826,16 @@ _rt_register("issue96_allow_in_mission_widget_moved_to_gut", function()
     --      orphan gut's toggle).
     -- Source-pattern guard; degrades to a no-op when source introspection is
     -- unavailable (bundle/deploy path).
+    -- (#511) Runtime marker: the anchor must be wired (proves the module loaded).
+    if type(mod.open_standard_crafting) ~= "function" then
+        return "allow_in_mission regression: mod.open_standard_crafting not wired (standard-crafting module failed to load)"
+    end
     local ok, info = pcall(debug.getinfo, mod.open_standard_crafting or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local dir = src_path:match("^(.*[/\\])[^/\\]*$")
     if not dir then return end
-    local function read_all(path)
-        local f = io.open(path, "r")
-        if not f then return nil end
-        local t = f:read("*a")
-        f:close()
-        return t
-    end
+    local read_all = _rt_src_read  -- (#511) io-safe; nil in retail sandbox => skip
     local data_txt = read_all(dir .. "crafting_in_modded_dev_data.lua")
     if data_txt then
         -- needle split so this test's own source never self-matches
@@ -6899,13 +6911,14 @@ _rt_register("open_forge_gate_honors_allow_in_mission", function()
     -- hard gate can't silently come back. Needles split so this test's own
     -- source never self-matches. No-ops when source introspection is
     -- unavailable (bundle/deploy path).
+    -- (#511) Runtime marker: the anchor must be wired (proves the module loaded).
+    if type(mod.open_forge) ~= "function" then
+        return "#83 regression: mod.open_forge not wired (forge module failed to load)"
+    end
     local ok, info = pcall(debug.getinfo, mod.open_forge or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     -- (a) the opt-in gate shape must be present TWICE (open_forge AND
     --     open_standard_crafting), plain-text finds, no pattern escapes.

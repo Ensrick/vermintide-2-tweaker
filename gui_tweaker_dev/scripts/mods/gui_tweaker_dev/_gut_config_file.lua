@@ -6,11 +6,17 @@ local mod = get_mod("gut_dev")
 -- Goal (user, 2026-06-20): keep all my tweaker mods' settings in a .toml file I
 -- can edit directly; on game load those values OVERRIDE the in-game VMF options.
 --
--- SANDBOX REALITY (verified: general_tweaker_dev _gt_name_dump note, cim io.open):
--- VMF mods can READ files (`io.open(path, "r")`) but CANNOT WRITE arbitrary files
--- (`io.open(path, "w")` is sandboxed out; no get_temp_data_directory /
--- save_user_settings_to_file). So:
---   * LOAD/OVERRIDE  -> the mod reads the .toml and mod:set()s each value. (here)
+-- SANDBOX REALITY (CORRECTED per issue 511, 2026-07-12): the VMF RETAIL client
+-- exposes NO `io` library at all -- `io` is nil, so BOTH `io.open(path,"r")` and
+-- `io.open(path,"w")` throw "attempt to index global 'io'". (Earlier belief that
+-- reads work but writes are sandboxed was wrong; it came from testing under the
+-- Stingray modding-tools executable, which registers the full Lua stdlib.) The
+-- LOAD/OVERRIDE read path below therefore only functions under the modding-tools
+-- build; in the retail client it is a SAFE NO-OP -- the io.open is guarded (io_open
+-- helper) and apply() is additionally pcall-wrapped at its call site
+-- (gui_tweaker_dev.lua). So:
+--   * LOAD/OVERRIDE  -> reads the .toml + mod:set()s each value (modding-tools only;
+--                       no-op in retail). (here)
 --   * EDIT           -> you edit the .toml by hand. (here)
 --   * SAVE/EXPORT    -> the mod dumps TOML to the console log; the companion
 --                       tools/gut-settings.ps1 writes the .toml from that log.
@@ -36,6 +42,16 @@ local _MY_MODS = {
 }
 
 local CONFIG_NAME = "gut_mod_settings.toml"
+
+-- (#511) io-safe open: `io` is nil in the VMF retail client, so a bare io.open
+-- throws. Return nil (== "no file / feature inert") instead, so the config-read
+-- feature degrades to a clean no-op in retail and only does real work under the
+-- modding-tools build where io exists.
+local function io_open(path, mode)
+    local io_lib = rawget(_G, "io")
+    if type(io_lib) ~= "table" or type(io_lib.open) ~= "function" then return nil end
+    return io_lib.open(path, mode)
+end
 
 -- Resolve %APPDATA%\Fatshark\Vermintide 2\<file>. os.getenv may be sandboxed; guard.
 local function _config_path()
@@ -168,8 +184,8 @@ local function apply()
         mod:info("[gut:config] could not resolve APPDATA path (os.getenv sandboxed?)")
         return 0
     end
-    local f = io.open(path, "r")
-    if not f then return 0 end  -- no file yet = nothing to override
+    local f = io_open(path, "r")
+    if not f then return 0 end  -- no file yet (or io nil in retail) = nothing to override
     local text = f:read("*a")
     f:close()
     if not text or text == "" then return 0 end
@@ -220,8 +236,8 @@ end)
 mod:command("reload_config", "Re-read the .toml and override settings now (no restart needed)", function()
     local path = _config_path()
     if not path then mod:echo("Config path unavailable on this build."); return end
-    local f = io.open(path, "r")
-    if not f then mod:echo("No config file found at " .. path .. " - run /export_settings + the companion script first."); return end
+    local f = io_open(path, "r")
+    if not f then mod:echo("No config file found at " .. path .. " (or file reads are unavailable on this build) - run /export_settings + the companion script first."); return end
     f:close()
     local n = apply()
     mod:echo(string.format("Applied %d setting(s) from %s.", n, CONFIG_NAME))

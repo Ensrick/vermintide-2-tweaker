@@ -1,5 +1,11 @@
 # Crafting in Modded Changelog
 
+## 0.8.57-dev (2026-07-12): #511 io-safe regression checks: source-reads no longer throw in the retail sandbox [untested]
+
+- **#511: the `/cim_regression_test` source-pattern checks threw `attempt to index global 'io' (a nil value)` in the retail client and reported FALSE FAILs.** The VMF retail Stingray VM registers no `io` library (mods are `loadstring`'d into the game's shared `_G`; the engine registers `os` but not `io`), so every `io.open` self-read threw and the runner's `pcall` surfaced it as a check FAIL on healthy code.
+  - NEW `_rt_src_read(path)` helper (next to `_rt_register`): guards `rawget(_G,"io")` and returns nil when `io` is absent, so a check's existing "unreadable source => skip (PASS)" branch runs instead of throwing. All 6 `io.open` source-reads route through it (5 inline blocks + the `read_all` local).
+  - The three checks anchored on real public functions (`open_standard_crafting` x2, `open_forge`) gained an explicit runtime anchor assert so a module-load regression is caught in retail even with the source-text half skipped. The two hook-registration checks (`get_talent_required_forge_level` guard, `_populate_menu_option_widget` price-blank) anchor on the file-local `_rt_register`, so their source-text needles are skipped in retail and are listed as repo QA-gate candidates (PROJECT_STANDARDS 2.2b tier a); source IS readable under the modding-tools build / CI where they still run.
+
 ## 0.8.56-dev (2026-07-12): #500 remove the stale #174 loadout-attribution probe (closed issue) [untested]
 
 - **#500: removed `_diag_probe.lua`** (issue 174, `[174:loadout]`, CLOSED). cim_dev's copy served ONLY the closed #174 channel (unlike the cosmetics_tweaker copy, which also carries the still-open `[cos:sync]` probes). Deleted the file (`git rm`), removed the `local PROBE = mod:dofile(".../_diag_probe")` import, and stripped the two embedded `if PROBE then PROBE.emit("174:loadout", ...) end` blocks (+ their `#174 probe` comments) from `_restore_modded_loadout` and `_capture_loadout_equip`.

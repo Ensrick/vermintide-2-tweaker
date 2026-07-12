@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.219-dev"
+local MOD_VERSION = "0.2.220-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -78,6 +78,31 @@ end
 local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
+end
+
+-- (#511) io-safe source reader. The VMF retail sandbox exposes NO `io` library
+-- (mods are loadstring'd into the game's shared _G by mod_manager.lua:375-386, and
+-- the retail Stingray VM never registers `io` -- it registers `os` (mod_manager uses
+-- os.date unguarded at :313) but not `io`). A bare `io.open` therefore throws
+-- "attempt to index global 'io' (a nil value)", which the regression runner's pcall
+-- catches and reports as a FALSE FAIL on healthy code (issue 479 log). Every
+-- source-pattern check below routes its source read through this helper, which
+-- returns nil (-> the check's "unreadable source => skip" branch, a PASS) instead of
+-- throwing. In retail the source-text half is therefore skipped; the RUNTIME markers
+-- each check asserts (anchor function / vanilla class / gate behavior) are the
+-- authoritative in-game signal, and the source-text needles move to the repo QA
+-- gates (PROJECT_STANDARDS 2.2b tier a). Source IS readable under the modding-tools
+-- executable / CI, where these needles still run in full.
+local function _rt_src_read(path)
+    local io_lib = rawget(_G, "io")
+    if type(io_lib) ~= "table" or type(io_lib.open) ~= "function" then
+        return nil
+    end
+    local f = io_lib.open(path, "r")
+    if not f then return nil end
+    local t = f:read("*a")
+    f:close()
+    return t
 end
 mod:command("gut_regression_test", "GUI tweaker self-check", function()
     local pass, fail = 0, 0
@@ -168,13 +193,9 @@ _rt_register("mission_map_backdrop_swap", function()
     local ok, info = pcall(debug.getinfo, mod.gut_open_mission_map, "S")
     if ok and type(info) == "table" and info.source then
         local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-        local f = io.open(src_path, "r")
-        if f then
-            local txt = f:read("*a")
-            f:close()
-            if txt and not txt:find("_gut_mm_none" .. "_backdrop", 1, true) then
-                return "#336 regression: the none-tier marker _gut_mm_none_backdrop is gone (map fail-closes again when no backdrop level is resident)"
-            end
+        local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
+        if txt and not txt:find("_gut_mm_none" .. "_backdrop", 1, true) then
+            return "#336 regression: the none-tier marker _gut_mm_none_backdrop is gone (map fail-closes again when no backdrop level is resident)"
         end
     end
 end)
@@ -190,13 +211,7 @@ _rt_register("area_video_guard_two_layers", function()
     local ok, info = pcall(debug.getinfo, mod.gut_open_mission_map or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local map_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local function read_all(path)
-        local fh = io.open(path, "r")
-        if not fh then return nil end
-        local t = fh:read("*a")
-        fh:close()
-        return t
-    end
+    local read_all = _rt_src_read  -- (#511) io-safe; nil in retail sandbox => skip
     -- Layer 2: the skip guard in the map module (both windows + the drawable check).
     local map_txt = read_all(map_path)
     if map_txt then
@@ -242,13 +257,15 @@ end)
 -- backdrop mid-mission; losing any piece regresses to the v0.2.198 black plate +
 -- button-glow bleeding. Split needles so this check can't self-match. No-op if unreadable.
 _rt_register("mission_map_preview_backdrop", function()
-    local ok, info = pcall(debug.getinfo, mod.gut_open_mission_map or function() end, "S")
+    -- (#511) Runtime marker: the map module's public entry must be wired (proves the
+    -- module loaded and ran). The source-text needles below are dev/CI-only (io-safe).
+    if type(mod.gut_open_mission_map) ~= "function" then
+        return "#336 regression: gut_open_mission_map not wired (mission map module failed to load -- preview backdrop gone)"
+    end
+    local ok, info = pcall(debug.getinfo, mod.gut_open_mission_map, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local map_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(map_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(map_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     if not txt:find("resource_packages/levels/ui_inventory" .. "_preview", 1, true) then
         return "#336 regression: the preview-stage package path is gone from the map module (no backdrop package load)"
@@ -318,13 +335,14 @@ end)
 -- nil at the keep where this runs). Split needle so this line can't self-match. No-op
 -- if unreadable.
 _rt_register("cutscene_postskip_fade_swallow", function()
-    local ok, info = pcall(debug.getinfo, mod.gut_skip_cutscenes_toggle or function() end, "S")
+    -- (#511) Runtime marker: the cutscene module's public toggle must be wired.
+    if type(mod.gut_skip_cutscenes_toggle) ~= "function" then
+        return "#140 regression: gut_skip_cutscenes_toggle not wired (cutscene module failed to load)"
+    end
+    local ok, info = pcall(debug.getinfo, mod.gut_skip_cutscenes_toggle, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     local guard_needle = '_skipped_cutscene_system == self and name == "fx' .. '_fade"'
     if not txt:find(guard_needle, 1, true) then
@@ -362,10 +380,7 @@ _rt_register("gut_cutscene_no_global_latch", function()
     local ok, info = pcall(debug.getinfo, mod.gut_skip_cutscenes_toggle or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     local toggle_latch = "skippable_cutscenes = new" .. "_val"   -- split so this file can't self-match
     if txt:find(toggle_latch, 1, true) then
@@ -1679,10 +1694,7 @@ _rt_register("mod_tweaker_arrow_edge_latch_hold_repeat", function()
     local ok, info = pcall(debug.getinfo, View._resolve_step, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     local hold_needle = "row._arrow_hnext = row._arrow" .. "_hf + math.max(2,"
     if not txt:find(hold_needle, 1, true) then
@@ -1746,10 +1758,7 @@ _rt_register("mod_tweaker_keybind_render", function()
     local ok, info = pcall(debug.getinfo, View._handle_input, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     -- (a) the formatter helper must exist.
     local helper_needle = "_format_keybind" .. "_value"
@@ -1780,10 +1789,7 @@ _rt_register("mod_tweaker_scrollbar_grab_offset", function()
     local ok, info = pcall(debug.getinfo, View._handle_input, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     local cursor_anchor = "_sb_grab_cursor" .. "_y"
     local scroll_anchor = "_sb_grab_scroll" .. "_value"
@@ -1899,10 +1905,7 @@ _rt_register("mod_tweaker_compact_esc_implicit", function()
     local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     -- A reintroduced gate would read the setting via mod:get(...) on that toggle id.
     -- (The read-shape needle is assembled below from two literals so this very line
@@ -1921,13 +1924,7 @@ _rt_register("cim_bench_write_through_present", function()
     local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local function read_all(path)
-        local f = io.open(path, "r")
-        if not f then return nil end
-        local t = f:read("*a")
-        f:close()
-        return t
-    end
+    local read_all = _rt_src_read  -- (#511) io-safe; nil in retail sandbox => skip
     local main_txt = read_all(src_path)
     if main_txt then
         local wt_needle = 'cim:set("allow_in_' .. 'mission"'
@@ -1954,10 +1951,7 @@ _rt_register("crafting_tab_honors_bench_toggle", function()
     local ok, info = pcall(debug.getinfo, mod.gut_open_mission_inventory or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     local gate_needle = 'mod:get("gut_cim_bench' .. '_in_mission")'
     local tab_needle  = "tb[3].content.button_hotspot.disable" .. "_button = not bench_ok"
@@ -1989,10 +1983,7 @@ _rt_register("salvage_store_atlas_injected", function()
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local dir = src_path:match("^(.*[/\\])[^/\\]*$")
     if not dir then return end
-    local f = io.open(dir .. "_gut_gui_material_guard.lua", "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(dir .. "_gut_gui_material_guard.lua")  -- (#511) io-safe; nil in retail => skip
     if not txt then return end
     local decl_needle   = "STORE" .. '_MAT = "materials/ui/ui_1080p_store_menu"'
     local gate_needle   = "if append" .. "_store then"
@@ -2017,13 +2008,7 @@ _rt_register("compendium_mission_access_ungated", function()
     local ok, info = pcall(debug.getinfo, mod._gut_open_compendium or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local inject_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local function read_all(path)
-        local fh = io.open(path, "r")
-        if not fh then return nil end
-        local t = fh:read("*a")
-        fh:close()
-        return t
-    end
+    local read_all = _rt_src_read  -- (#511) io-safe; nil in retail sandbox => skip
     local inject_txt = read_all(inject_path)
     if inject_txt then
         -- The compendium-specific keep echo is gone (the Mod Tweaker path keeps its
@@ -2054,10 +2039,7 @@ _rt_register("cosmetics_split_tab_ungated_gear_gated", function()
     local ok, info = pcall(debug.getinfo, mod.gut_open_mission_inventory or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     -- (a) Cosmetics tab (tb[4]) enabled unconditionally mid-mission.
     local tab_needle = "tb[4].content.button_hotspot.disable" .. "_button = false"
@@ -2094,10 +2076,7 @@ _rt_register("hb_setting_names_guarded", function()
     -- hide_elements.lua and level_loading_screen.lua are siblings in hb/.
     local src_path = sibling:gsub("hide_elements%.lua$", "level_loading_screen.lua")
     if src_path == sibling then return end  -- couldn't derive the sibling path; skip
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     local guard_needle = "if not mod.SETTING" .. "_NAMES then"
     local read_needle = "mod.SETTING_NAMES.HIDE_LOADING_SCREEN" .. "_SUBTITLES"
@@ -2127,13 +2106,7 @@ if _gut_uitweaks_sync and _gut_uitweaks_sync.install then pcall(_gut_uitweaks_sy
 
 -- (#312) UI Tweaks integration regression tests. Split needles so the source-pattern
 -- checks can never self-match; unreadable source => silent skip (pass).
-local function _gut_read_all(path)
-    local f = io.open(path, "r")
-    if not f then return nil end
-    local t = f:read("*a")
-    f:close()
-    return t
-end
+local _gut_read_all = _rt_src_read  -- (#511) io-safe; nil in retail sandbox => skip
 
 _rt_register("uitweaks_not_separate_modtweaker_tab", function()
     -- #312 (reworked per user): HideBuffs must NOT be in the _MY_MODS whitelist.
@@ -2420,10 +2393,7 @@ _rt_register("respawn_timer_ingamehud_draw_path", function()
     local ok, info = pcall(debug.getinfo, fn, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
+    local txt = _rt_src_read(path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
     if not txt:find('hook_safe("IngameHud", "update"', 1, true) then
         return "respawn timer regressed: draw no longer rides hook_safe(IngameHud, update) -- #285"

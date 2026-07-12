@@ -1,5 +1,14 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.10-dev (2026-07-12) - #511 io-safe regression checks: source-reads no longer throw in the retail sandbox [untested]
+
+### Why
+`/woc_regression_test`'s two source-pattern checks (`issue422_wire_safety_unconditional_singleton`, `no_package_force_load`) read WOC's own source via `io.open` to verify a marker. The VMF retail Stingray VM registers no `io` library (mods are `loadstring`'d into the game's shared `_G`; the engine registers `os` but not `io`), so `io.open` threw `attempt to index global 'io' (a nil value)` and the runner's pcall reported both as FALSE FAILs on healthy code.
+
+### What
+- NEW `_rt_src_read(path)` helper (next to `_rt_register`): guards `rawget(_G,"io")` and returns nil when `io` is absent, so each check's existing "unreadable source => skip (PASS)" branch runs instead of throwing. Both `io.open` reads route through it.
+- Both invariants are genuinely textual (hook-count singleton; absence of a `Managers.package:load` force-load) anchored on the file-local `_rt_register`, so in retail their source-text half is skipped; they still run under the modding-tools build / CI and are listed as repo QA-gate candidates (PROJECT_STANDARDS 2.2b tier a). No behavior change.
+
 ## 0.1.9-dev (2026-07-12) - issue 509: regression-harness backfill (wire-safety + force-load dead end) [untested]
 
 ### Why
