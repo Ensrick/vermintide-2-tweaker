@@ -8,9 +8,16 @@ Two things happen here (gated on inject_adventure_maps master toggle):
      bundle but flag game_mode/mechanism = "deus".
 
   2. Vanilla CW scenarios that the user disables are removed from those same
-     pools. After filter+injection, if any pool drops below a safety threshold
-     we duplicate each remaining level under `_dupN` suffix keys so the graph
-     generator's same-level-twice constraints don't deadlock.
+     pools. After filter+injection, a POOL FLOOR (#457/#487) backfills any pool the
+     configuration would EMPTY, then if any pool is still below a safety threshold we
+     duplicate each remaining level under `_dupN` suffix keys so the graph generator's
+     same-level constraints don't deadlock into a load freeze.
+
+Availability UI (#457 "Revamp Mission Availability"): each DLC / the Helmgart
+campaign / the CW scenarios / the event missions is a MASTER toggle
+`enable_group_<id>`; multi-mission groups expand to an advanced per-mission list.
+A mission is enabled iff its group master is ON and (the group is single-mission, or
+its per-mission toggle is ON). See build_master_widget / enabled_missions.
 
 ARENA / SHOP / finale arenas / Belakor's Temple / Citadel of Eternity are NEVER
 touched — those node types are out of scope.
@@ -51,8 +58,8 @@ _M.CW_SETTING_PREFIX = "enable_cw_"
 -- Adventure missions grouped by DLC. Display names sourced from
 -- LevelSettings[<key>].display_name via /dump_adventure_names 2026-05-13.
 -- Order here drives toggle display order in VMF settings. Helmgart first (original 13),
--- then each DLC by release order. DLC group display names are best-guess — user can
--- correct them in chaos_wastes_tweaker_localization.lua's dlc_group_<id> entries.
+-- then each DLC by release order. Each group's `display_name` becomes its master-toggle
+-- label `enable_group_<id>` (built in build_loc_entries); #457.
 -- `icon` field maps each mission to one of the 11 vanilla CW node textures shown
 -- on Olesya's map. Pulled from deus_level_settings.lua texture_id values: mountain,
 -- volcano, tower, bay, crag, snare, mordrek, gorge, mines, forest, town, temple.
@@ -192,80 +199,133 @@ end
 _M.IS_INJECTED_ADVENTURE_LEVEL = {}
 
 -- =====================================================================
+-- Group-master metadata (#457 "Revamp Mission Availability")
+-- =====================================================================
+-- Each MISSION_GROUP (DLC / Helmgart campaign) plus the two special groups (the
+-- vanilla CW scenarios, and the event missions) gets a MASTER toggle
+-- `enable_group_<id>`. A mission counts as enabled iff its group master is ON AND
+-- (the group has exactly one mission, OR its per-mission toggle is ON). Groups with
+-- a single mission carry no advanced per-mission list (nothing to sub-select), so
+-- their master alone decides. Masters default ON, matching the pre-#457 behavior
+-- where every mission defaulted enabled under the inject master.
+_M.GROUP_MASTER_PREFIX = "enable_group_"
+_M.CW_GROUP_ID    = "cw_scenarios"
+_M.EVENT_GROUP_ID = "event_missions"
+
+_M.GROUP_ID_BY_KEY = {}   -- adventure/event mission key -> owning group id
+_M.GROUP_IS_SINGLE = {}   -- group id -> true when it holds exactly one mission
+for _, group in ipairs(_M.MISSION_GROUPS) do
+    _M.GROUP_IS_SINGLE[group.id] = (#group.missions == 1)
+    for _, m in ipairs(group.missions) do
+        _M.GROUP_ID_BY_KEY[m.key] = group.id
+    end
+end
+for _, m in ipairs(_M.EVENT_MISSIONS) do
+    _M.GROUP_ID_BY_KEY[m.key] = _M.EVENT_GROUP_ID
+end
+_M.GROUP_IS_SINGLE[_M.EVENT_GROUP_ID] = (#_M.EVENT_MISSIONS == 1)
+_M.GROUP_IS_SINGLE[_M.CW_GROUP_ID]    = (#_M.CW_SCENARIOS == 1)
+
+-- A master defaults ON: mod:get returns the widget default (true) when unset, and an
+-- unregistered id reads nil, so `~= false` treats both as enabled.
+function _M.group_enabled(group_id)
+    if not group_id then return true end
+    return mod:get(_M.GROUP_MASTER_PREFIX .. group_id) ~= false
+end
+
+-- =====================================================================
 -- VMF widget builders (called from _data.lua)
 -- =====================================================================
 
-function _M.build_cw_scenario_widgets()
-    local widgets = {}
-    for _, scen in ipairs(_M.CW_SCENARIOS) do
-        widgets[#widgets + 1] = {
-            setting_id    = _M.CW_SETTING_PREFIX .. scen.key,
-            type          = "checkbox",
-            default_value = true,
+-- One master-toggle widget for a mission group. `missions` is the ordered list;
+-- single-mission groups get a bare checkbox (no advanced sub-list). Multi-mission
+-- groups nest an "advanced_<id>_group" collapsible holding one checkbox per mission
+-- (setting_id `<prefix><key>`). `per_mission_tooltip` (optional) maps a mission entry
+-- to a tooltip loc key (used for the event missions' no_books note).
+local function build_master_widget(group_id, missions, prefix, per_mission_tooltip)
+    local single = (#missions == 1)
+    local master = {
+        setting_id    = _M.GROUP_MASTER_PREFIX .. group_id,
+        type          = "checkbox",
+        default_value = true,
+        tooltip       = single and "enable_group_single_tooltip" or "enable_group_master_tooltip",
+    }
+    if not single then
+        local sub = {}
+        for _, m in ipairs(missions) do
+            local w = { setting_id = prefix .. m.key, type = "checkbox", default_value = true }
+            if per_mission_tooltip then
+                local tt = per_mission_tooltip(m)
+                if tt then w.tooltip = tt end
+            end
+            sub[#sub + 1] = w
+        end
+        master.sub_widgets = {
+            { setting_id = "advanced_" .. group_id .. "_group", type = "group", sub_widgets = sub },
         }
     end
-    return widgets
+    return master
 end
 
--- Returns a list of group widgets, one per DLC. Each contains its missions.
+-- The vanilla CW scenarios as one master toggle ("Chaos Wastes Missions") with an
+-- advanced per-scenario list. #457.
+function _M.build_cw_scenarios_block()
+    return build_master_widget(_M.CW_GROUP_ID, _M.CW_SCENARIOS, _M.CW_SETTING_PREFIX, nil)
+end
+
+-- Returns a list of master-toggle widgets, one per DLC / campaign. Multi-mission
+-- groups expand to an advanced per-mission list; single-mission groups (Winds of
+-- Magic, Reikland Tales) are a bare toggle. #457.
 function _M.build_campaign_dlc_group_widgets()
     local groups = {}
     for _, group in ipairs(_M.MISSION_GROUPS) do
-        local sub = {}
-        for _, m in ipairs(group.missions) do
-            sub[#sub + 1] = {
-                setting_id    = _M.ADVENTURE_SETTING_PREFIX .. m.key,
-                type          = "checkbox",
-                default_value = true,
-            }
-        end
-        groups[#groups + 1] = {
-            setting_id   = "dlc_group_" .. group.id,
-            type         = "group",
-            sub_widgets  = sub,
-        }
+        groups[#groups + 1] = build_master_widget(group.id, group.missions, _M.ADVENTURE_SETTING_PREFIX, nil)
     end
     return groups
 end
 
--- Flat list of event-mission toggles for the "Event Missions" subgroup.
--- Tooltips: missions flagged `no_books = true` get a warning that no Chests of
--- Trials can spawn on them (the chest hook converts tome/grimoire spawners, and
--- event missions have neither).
-function _M.build_event_mission_widgets()
-    local widgets = {}
-    for _, m in ipairs(_M.EVENT_MISSIONS) do
-        local w = {
-            setting_id    = _M.ADVENTURE_SETTING_PREFIX .. m.key,
-            type          = "checkbox",
-            default_value = true,
-        }
-        if m.no_books then
-            w.tooltip = "no_book_locations_tooltip"
-        end
-        widgets[#widgets + 1] = w
-    end
-    return widgets
+-- The event missions as one master toggle ("Event Missions") with an advanced
+-- per-mission list. Missions flagged `no_books = true` keep the explanatory tooltip
+-- (no tome/grimoire spawners, so no Chests of Trials). #457.
+function _M.build_event_missions_block()
+    return build_master_widget(_M.EVENT_GROUP_ID, _M.EVENT_MISSIONS, _M.ADVENTURE_SETTING_PREFIX,
+        function(m) return m.no_books and "no_book_locations_tooltip" or nil end)
 end
 
 -- =====================================================================
 -- Localization helpers (called from _localization.lua)
 -- =====================================================================
 
+-- Loc entries for every generated widget in the mission-availability tree. Two
+-- classes, distinguished by setting_id prefix so the caller's per-map status-tagging
+-- loop (localization.lua) can skip the structural ones:
+--   * STRUCTURAL (skip per-map tag): `enable_group_<id>` master labels (carry a
+--     baked [untested] tag - the #457 revamp is new) and `advanced_<id>_group`
+--     collapsible labels ("Choose Missions").
+--   * PER-MAP (get the [untested]/[working] tag): `enable_adventure_<key>` /
+--     `enable_cw_<key>` individual mission labels.
 function _M.build_loc_entries()
     local entries = {}
-    -- CW scenarios
+    -- CW scenarios: master + advanced collapsible + per-scenario labels.
+    entries[_M.GROUP_MASTER_PREFIX .. _M.CW_GROUP_ID] = { en = "[untested] Chaos Wastes Missions" }
+    entries["advanced_" .. _M.CW_GROUP_ID .. "_group"] = { en = "Choose Missions" }
     for _, scen in ipairs(_M.CW_SCENARIOS) do
         entries[_M.CW_SETTING_PREFIX .. scen.key] = { en = scen.name }
     end
-    -- Campaign DLC missions
+    -- Campaign / DLC groups: one master each; multi-mission groups add an advanced
+    -- collapsible + per-mission labels.
     for _, group in ipairs(_M.MISSION_GROUPS) do
-        entries["dlc_group_" .. group.id] = { en = group.display_name }
+        entries[_M.GROUP_MASTER_PREFIX .. group.id] = { en = "[untested] " .. group.display_name }
+        if not _M.GROUP_IS_SINGLE[group.id] then
+            entries["advanced_" .. group.id .. "_group"] = { en = "Choose Missions" }
+        end
         for _, m in ipairs(group.missions) do
             entries[_M.ADVENTURE_SETTING_PREFIX .. m.key] = { en = m.name }
         end
     end
-    -- Event missions (flat list, separate group)
+    -- Event missions: master + advanced collapsible + per-mission labels.
+    entries[_M.GROUP_MASTER_PREFIX .. _M.EVENT_GROUP_ID] = { en = "[untested] Event Missions" }
+    entries["advanced_" .. _M.EVENT_GROUP_ID .. "_group"] = { en = "Choose Missions" }
     for _, m in ipairs(_M.EVENT_MISSIONS) do
         entries[_M.ADVENTURE_SETTING_PREFIX .. m.key] = { en = m.name }
     end
@@ -282,7 +342,12 @@ _M.build_mission_loc_entries = _M.build_loc_entries
 function _M.enabled_missions()
     local out = {}
     for _, m in ipairs(_M.ADVENTURE_MISSIONS) do
-        if mod:get(_M.ADVENTURE_SETTING_PREFIX .. m.key) then
+        local gid = _M.GROUP_ID_BY_KEY[m.key]
+        -- #457: gate on the group master, then (for multi-mission groups) the
+        -- per-mission toggle. Single-mission groups have no per-mission widget, so
+        -- the master alone decides.
+        if _M.group_enabled(gid)
+                and (_M.GROUP_IS_SINGLE[gid] or mod:get(_M.ADVENTURE_SETTING_PREFIX .. m.key)) then
             out[#out + 1] = m.key
         end
     end
@@ -291,8 +356,11 @@ end
 
 function _M.disabled_cw_scenarios()
     local out = {}
+    -- #457: the CW-scenarios master OFF disables every scenario at once (they are
+    -- all removed from the pool); otherwise honor the per-scenario toggles.
+    local master_on = _M.group_enabled(_M.CW_GROUP_ID)
     for _, scen in ipairs(_M.CW_SCENARIOS) do
-        if mod:get(_M.CW_SETTING_PREFIX .. scen.key) == false then
+        if not master_on or mod:get(_M.CW_SETTING_PREFIX .. scen.key) == false then
             out[#out + 1] = scen.key
         end
     end
@@ -470,9 +538,14 @@ end
 -- =====================================================================
 
 local POOL_SAFETY_THRESHOLD = 4  -- Minimum unique entries needed per (journey × pool_type)
-                                  -- before duplicate-injection kicks in. CW graphs can
-                                  -- reasonably need 3-4 distinct TRAVEL levels; threshold
-                                  -- of 4 gives the constraint validator headroom.
+                                  -- before duplicate-injection kicks in. The binding graph
+                                  -- constraint is prevent_same_level_choice (siblings of the
+                                  -- same type at a branch, deus_map_populate_settings.lua:222
+                                  -- lists only that validator for TRAVEL/SIGNATURE), whose
+                                  -- max width in the baked CW graphs is ~2-3, so 4 gives
+                                  -- headroom. Duplication needs >=1 real key to clone; the
+                                  -- pool floor (enforce_pool_floor) guarantees that, so a
+                                  -- zeroed pool can never reach the un-fillable state.
 
 -- Snapshot of the original (untouched) journey-level LEVEL_AVAILABILITY tables,
 -- captured exactly once on first inject. Subsequent calls reset to this snapshot
@@ -560,6 +633,66 @@ local function filter_cw_pool()
         end
     end
     return removed
+end
+
+-- Count the REAL (non-`_dupN`) keys in a pool. Alias keys can't seed the graph on
+-- their own (they clone a real key), so the floor is measured against real keys.
+local function count_real_keys(pool)
+    local n = 0
+    for k in pairs(pool) do
+        if not (type(k) == "string" and k:find("_dup%d+$")) then n = n + 1 end
+    end
+    return n
+end
+
+-- First (sorted, deterministic) real key for a journey+pool from the pristine
+-- snapshot. Always a level THIS journey originally shipped, so backfilling it can't
+-- introduce a DLC-ownership or cross-journey-validity problem.
+local function first_snapshot_key(journey_name, pool_type)
+    local jp = _snapshot and _snapshot[journey_name] and _snapshot[journey_name][pool_type]
+    if type(jp) ~= "table" then return nil end
+    local keys = {}
+    for k in pairs(jp) do
+        if type(k) == "string" and not k:find("_dup%d+$") then keys[#keys + 1] = k end
+    end
+    if #keys == 0 then return nil end
+    table.sort(keys)
+    return keys[1], jp[keys[1]]
+end
+
+-- Session guard so the pool-floor chat notice fires ONCE when a pool first
+-- underflows and re-arms when it recovers (keyed by pool type). Lives on the module
+-- table like the other cross-call state.
+_M._floor_notice_shown = _M._floor_notice_shown or {}
+
+-- POOL FLOOR (#457 / #487). A configuration that empties a TRAVEL or SIGNATURE pool
+-- starves the deus map-graph solver: with no assignable level for that node type it
+-- burns its 100000-iteration backtrack budget (deus_populate_graph.lua:1006-1020) =
+-- the multi-second load freeze reported in #487. inject_duplicate_aliases CANNOT
+-- rescue an EMPTY pool - it clones an existing key, and there is nothing to clone
+-- (the historical `if n > 0` gap). So when a pool has zero real keys we AUTO-BACKFILL
+-- one vanilla level for that journey+pool from the snapshot; the duplicate-alias pass
+-- then fills it to POOL_SAFETY_THRESHOLD. Runs AFTER filter+inject and BEFORE
+-- duplication. Returns a { pool_type -> backfilled_key } map for the caller's notice.
+local function enforce_pool_floor()
+    local backfilled = {}
+    if not DEUS_MAP_POPULATE_SETTINGS then return backfilled end
+    for journey_name, config in pairs(DEUS_MAP_POPULATE_SETTINGS) do
+        local la = config.LEVEL_AVAILABILITY
+        if la then
+            for _, pool_type in ipairs({ "TRAVEL", "SIGNATURE" }) do
+                local pool = la[pool_type]
+                if pool and count_real_keys(pool) == 0 then
+                    local fb_key, fb_entry = first_snapshot_key(journey_name, pool_type)
+                    if fb_key and fb_entry then
+                        pool[fb_key] = fb_entry
+                        backfilled[pool_type] = fb_key  -- last journey's key wins for the notice; fine (informational)
+                    end
+                end
+            end
+        end
+    end
+    return backfilled
 end
 
 -- Duplicate any underflow pools by registering `<key>_dupN` aliases that resolve to
@@ -830,6 +963,33 @@ function _M.inject_pool()
 
     -- 2. Filter out disabled vanilla CW scenarios.
     local removed_cw = filter_cw_pool()
+
+    -- 2b. Pool floor (#457/#487): a config that empties a TRAVEL/SIGNATURE pool would
+    -- starve the graph solver into a load freeze, and duplication can't fill an EMPTY
+    -- pool. Backfill one vanilla level per emptied journey+pool and warn, naming the
+    -- pool, so the map can always be built.
+    local backfilled = enforce_pool_floor()
+    for _, pool_type in ipairs({ "TRAVEL", "SIGNATURE" }) do
+        if backfilled[pool_type] then
+            if not _M._floor_notice_shown[pool_type] then
+                _M._floor_notice_shown[pool_type] = true
+                -- Chat notice (visible with mod logging OFF) + a printf under the #487
+                -- prefix so it lands next to the freeze diagnostic breadcrumbs.
+                pcall(function()
+                    mod:echo(string.format(
+                        "Chaos Wastes: the %s mission pool would be empty - kept '%s' so the map can still load. Enable at least one %s mission.",
+                        pool_type, tostring(backfilled[pool_type]), pool_type))
+                end)
+                if rawget(_G, "printf") then
+                    pcall(printf,
+                        "[ct:487] POOL-FLOOR backfilled %s with '%s' (config emptied the pool; auto-refilled to prevent solver starvation)",
+                        pool_type, tostring(backfilled[pool_type]))
+                end
+            end
+        else
+            _M._floor_notice_shown[pool_type] = nil  -- re-arm once the pool recovers
+        end
+    end
 
     -- 3. Inject duplicate aliases if any pool drops below safety threshold.
     local dups = inject_duplicate_aliases()

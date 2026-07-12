@@ -23,9 +23,13 @@ WHAT IT INSTRUMENTS
     iteration budget (a multi-second stall = perceived freeze) and returns nil.
     ct's own `_adventure_pool.inject_duplicate_aliases` is the safety net for
     this (mints `<key>_dupN` distinct keys up to POOL_SAFETY_THRESHOLD=4), but it
-    is guarded by `if n > 0` - a pool the user empties to ZERO gets NO duplicates
-    and stays empty. This module logs the ACTUAL pool sizes the solver sees plus
-    the solve outcome/timing, so the next repro is conclusive.
+    is guarded by `if n > 0` - a pool the user empties to ZERO could not be
+    duplicated (nothing to clone). #457 closes that gap: `_adventure_pool`'s pool
+    floor (enforce_pool_floor) backfills one vanilla level into any journey+pool a
+    config would empty, then duplication fills it to threshold, so an EMPTY line
+    below should no longer occur in normal use. This module still logs the ACTUAL
+    pool sizes the solver sees plus the solve outcome/timing - an EMPTY flag now
+    means the floor itself failed (snapshot missing), which is a real bug to chase.
 
 OUTPUT
     engine `printf` only (visible with mod logging OFF, and flushed to the console

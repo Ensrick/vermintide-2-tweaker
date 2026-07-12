@@ -461,12 +461,22 @@ local data = {
                         setting_id = "inject_adventure_maps", type = "checkbox", default_value = false, tooltip = "inject_adventure_maps_tooltip",
                         sub_widgets = {
                             {
+                                -- #457 "Revamp Mission Availability": each DLC / the
+                                -- Helmgart campaign / the CW scenarios / the event missions
+                                -- is a MASTER toggle. Campaign/DLC masters are grouped under
+                                -- the "Campaign Scenarios" collapsible; the CW and Event
+                                -- masters sit beside it (build_*_block returns a checkbox with
+                                -- an advanced per-mission sub-list). A mission is enabled iff
+                                -- its master is on AND (single-mission group, or its per-mission
+                                -- toggle is on). enable_group_* changes re-run inject_pool via
+                                -- is_pool_setting (chaos_wastes_tweaker_dev.lua). The pool floor
+                                -- in inject_pool makes any "disable everything" config safe.
                                 setting_id = "available_missions_group",
                                 type = "group",
                                 sub_widgets = {
                                     { setting_id = "campaign_scenarios_group", type = "group", sub_widgets = AdventurePool.build_campaign_dlc_group_widgets() },
-                                    { setting_id = "cw_scenarios_group",       type = "group", sub_widgets = AdventurePool.build_cw_scenario_widgets() },
-                                    { setting_id = "event_missions_group",     type = "group", sub_widgets = AdventurePool.build_event_mission_widgets() },
+                                    AdventurePool.build_cw_scenarios_block(),
+                                    AdventurePool.build_event_missions_block(),
                                 },
                             },
                         },

@@ -20,6 +20,10 @@ local loc = {
     no_book_locations_tooltip    = { en = "No tome/grimoire spawners on this mission, so no Chests of Trials. Other CW pickups still spawn." },
     inject_adventure_maps        = { en = "[verify-fix] [diag] [Issue 156, 52 & 251] Inject Adventure Missions into CW Map Pool" },
     inject_adventure_maps_tooltip = { en = "Experimental. Injected missions carry Chaos Wastes pickups and altars, and their tome and grimoire spots become Chests of Trials. Finale arenas, the Citadel of Eternity, and Belakor's Temple are never replaced.\n\nHost-only. Requires game restart." },
+    -- #457: shared tooltips for the mission-group master toggles. Master + advanced
+    -- per-mission list; the pool floor makes a "disable everything" config safe.
+    enable_group_master_tooltip = { en = "Turns this whole mission set on or off at once. Expand \"Choose Missions\" underneath to include only some of them.\n\nAt least one Travel-type and one Signature-type mission must stay enabled overall. If you disable everything, one mission is kept automatically and a chat message names the pool, so the Chaos Wastes map can always be built (prevents the issue-487 load freeze).\n\nHost-only. Applies to your next expedition." },
+    enable_group_single_tooltip = { en = "Turns this mission on or off.\n\nAt least one Travel-type and one Signature-type mission must stay enabled overall. If you disable everything, one mission is kept automatically and a chat message names the pool (prevents the issue-487 load freeze).\n\nHost-only. Applies to your next expedition." },
     replace_shrines_with_missions = { en = "[working] Replace Shrines with Missions" },
     progressive_difficulty = { en = "[diag] Progressive Difficulty" },
     progressive_difficulty_tooltip = { en = "The first two missions of a run use your starting difficulty. Every mission after that steps up one tier (for example Legend, then Cataclysm, then Cataclysm 2, then Cataclysm 3), capping at Cataclysm 3. Host-controlled: the whole lobby follows the host's setting." },
@@ -1204,8 +1208,15 @@ local loc = {
 local _CT_CONFIRMED_MAPS = {
     ["The Skittergate"] = true,
 }
+-- #457: only the individual-map labels (enable_adventure_* / enable_cw_*) get the
+-- per-map status tag. The structural entries - group masters (enable_group_*, which
+-- already carry a baked [untested]) and the "Choose Missions" collapsibles
+-- (advanced_*) - are skipped, like the legacy dlc_group_* titles were.
 for setting_id, entry in pairs(AdventurePool.build_loc_entries()) do
-    if entry and entry.en and not setting_id:find("^dlc_group_") then
+    if entry and entry.en
+            and not setting_id:find("^dlc_group_")
+            and not setting_id:find("^enable_group_")
+            and not setting_id:find("^advanced_") then
         if _CT_CONFIRMED_MAPS[entry.en] then
             entry.en = "[working] " .. entry.en
         else

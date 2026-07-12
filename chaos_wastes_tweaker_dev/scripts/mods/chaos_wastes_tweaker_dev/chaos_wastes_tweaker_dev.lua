@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.249-dev"
+local MOD_VERSION = "0.7.250-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -436,6 +436,49 @@ _rt_register("dev_single_mission_loader", function()
     if not mod._ct_dev_mission_loaded then return "single-mission loader module did not load" end
     if type(mod.ct_dev_load_selected_mission) ~= "function" then return "ct_dev_load_selected_mission keybind target missing" end
     if type(mod._ct_dev_mission_do_load) ~= "function" then return "single-mission load primitive missing" end
+    return nil
+end)
+
+-- #457 availability-model wiring guard (non-destructive; reads catalog + builders only,
+-- never mutates live pool state). Catches the silent regressions the group-master revamp
+-- can introduce: a mission with no owning group (would never enable), a master widget
+-- missing its enable_group_ setting_id, or a generated setting_id with no localization
+-- (renders a <key> marker in the menu).
+_rt_register("mission_availability_groups_457", function()
+    if type(AdventurePool.group_enabled) ~= "function" then return "group_enabled missing" end
+    -- Every adventure/event mission must map to a known group with a single-ness flag.
+    for _, m in ipairs(AdventurePool.ADVENTURE_MISSIONS) do
+        local gid = AdventurePool.GROUP_ID_BY_KEY[m.key]
+        if not gid then return "mission '" .. tostring(m.key) .. "' has no group id" end
+        if AdventurePool.GROUP_IS_SINGLE[gid] == nil then return "group '" .. tostring(gid) .. "' missing single-ness flag" end
+    end
+    -- Builders must yield master checkboxes named enable_group_*, and multi-mission
+    -- masters must nest an advanced_*_group. Loc must resolve for every generated id.
+    local loc = AdventurePool.build_loc_entries()
+    local function check_master(w, expect_advanced)
+        if type(w) ~= "table" or w.type ~= "checkbox" then return "master widget not a checkbox" end
+        if type(w.setting_id) ~= "string" or w.setting_id:find("^enable_group_") ~= 1 then
+            return "master setting_id not enable_group_*: " .. tostring(w.setting_id)
+        end
+        if not loc[w.setting_id] then return "no loc for master " .. w.setting_id end
+        local sub = w.sub_widgets and w.sub_widgets[1]
+        if expect_advanced then
+            if not (sub and sub.type == "group" and tostring(sub.setting_id):find("^advanced_") == 1) then
+                return "expected advanced_*_group under " .. w.setting_id
+            end
+            if not loc[sub.setting_id] then return "no loc for advanced group " .. tostring(sub.setting_id) end
+        end
+        return nil
+    end
+    local cw_err = check_master(AdventurePool.build_cw_scenarios_block(), #AdventurePool.CW_SCENARIOS > 1)
+    if cw_err then return "cw block: " .. cw_err end
+    local ev_err = check_master(AdventurePool.build_event_missions_block(), #AdventurePool.EVENT_MISSIONS > 1)
+    if ev_err then return "event block: " .. ev_err end
+    for _, w in ipairs(AdventurePool.build_campaign_dlc_group_widgets()) do
+        local gid = tostring(w.setting_id):gsub("^enable_group_", "")
+        local err = check_master(w, not AdventurePool.GROUP_IS_SINGLE[gid])
+        if err then return "campaign master '" .. tostring(w.setting_id) .. "': " .. err end
+    end
     return nil
 end)
 
@@ -13016,6 +13059,7 @@ local function is_pool_setting(setting_id)
     if type(setting_id) ~= "string" then return false end
     return setting_id:find("^enable_adventure_") ~= nil
         or setting_id:find("^enable_cw_") ~= nil
+        or setting_id:find("^enable_group_") ~= nil  -- #457 group master toggles
 end
 
 mod.on_setting_changed = function(setting_id)
