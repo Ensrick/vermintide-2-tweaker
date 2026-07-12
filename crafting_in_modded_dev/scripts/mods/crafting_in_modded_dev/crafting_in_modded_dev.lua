@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.58-dev"
+local MOD_VERSION = "0.8.59-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -2012,6 +2012,52 @@ mod:hook("LootItemUnitPreviewer", "_load_item_units", function(func, self, item)
 end)
 
 -- ============================================================
+-- (#404) DIAGNOSTIC: measure the far-left offset of the forge weapon preview
+-- ============================================================
+-- Ranged weapons render pushed far LEFT in the Athanor 3D preview. Root (issue
+-- #404, source-confirmed): HeroWindowWeaveProperties / HeroWindowWeaveForgeWeapons
+-- ._create_item_previewer place the spin pivot (the link unit) at a UNIFORM
+-- preview_position ({-0.85,3,0}; hero_window_weave_properties.lua:2954). Each hand
+-- unit then links at item_template.<hand>_hand_attachment_node_linking.third_person
+-- .display (loot_item_unit_previewer.lua:292/310) — a node authored for the 3P
+-- character hand. A long two-handed ranged mesh sits far from that node, so it
+-- orbits WIDE of the spin pivot and reads as far-left. The corrective preview shift
+-- is PER-WEAPON (each mesh's hand-node translation differs), so it can only be
+-- measured at runtime — per the no-VMF-UI-guessing rule we MEASURE here instead of
+-- shipping a guessed preview_position offset. Logs each spawned unit's world
+-- position + delta from the spin pivot, once per item key. No existing hook on
+-- spawn_units (singleton). Gated on _custom_forge_active so only the Athanor is
+-- instrumented; also surfaces n_units=0 if a ranged preview is being stripped.
+local _cim_404_preview_logged = {}
+mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data)
+    local units = func(self, spawn_data)
+    if not _custom_forge_active then return units end
+    pcall(function()
+        local item = self._item
+        local data = item and item.data
+        local key = (data and data.key) or (item and item.key) or "<?>"
+        if _cim_404_preview_logged[key] then return end
+        _cim_404_preview_logged[key] = true
+        local slot_type = data and data.slot_type
+        printf("[cim:404] forge preview key=%s slot_type=%s n_units=%s",
+            tostring(key), tostring(slot_type), tostring(units and #units or 0))
+        local link_unit = self._link_unit
+        if not (link_unit and Unit.alive(link_unit)) then return end
+        local lp = Unit.world_position(link_unit, 0)
+        printf("[cim:404]   pivot world=(%.3f, %.3f, %.3f)", Vector3.x(lp), Vector3.y(lp), Vector3.z(lp))
+        for i, u in ipairs(units or {}) do
+            if u and Unit.alive(u) then
+                local up = Unit.world_position(u, 0)
+                printf("[cim:404]   unit[%d] world=(%.3f, %.3f, %.3f) delta_x=%.3f delta_z=%.3f",
+                    i, Vector3.x(up), Vector3.y(up), Vector3.z(up),
+                    Vector3.x(up) - Vector3.x(lp), Vector3.z(up) - Vector3.z(lp))
+            end
+        end
+    end)
+    return units
+end)
+
+-- ============================================================
 -- Forge stat editor: guard the weave property/trait/talent pickers against
 -- weapons whose category isn't a weave category
 -- ============================================================
@@ -2063,9 +2109,17 @@ end
 mod._cim_ensure_weave_category_pools = _cim_ensure_weave_category_pools  -- exposed for /cim_regression_test
 
 -- ============================================================
--- Forge freedom: widen the Athanor trait/property picker (v0.8.44-dev)
+-- Forge picker population + freedom toggles (v0.8.44-dev; native-seed #404)
 -- ============================================================
--- Two VMF toggles let the picker offer traits/properties it normally would not:
+-- The Athanor picker enumerates WeaveTraits.categories[cat] / WeaveProperties.
+-- categories[cat]; for an adventure/CW weapon `cat` (the item's trait_table_name /
+-- property_table_name) is NOT a weave category, so _cim_ensure_weave_category_pools
+-- seeds an empty {} pool to dodge ipairs(nil). #404: an empty pool renders a picker
+-- with ZERO rows. Fix — ALWAYS seed the weapon's OWN native adventure pool into the
+-- category (see _cim_native_bares_for / _cim_widen_category), so the picker shows
+-- the weapon's real traits/properties even with both freedom toggles OFF.
+--
+-- Two VMF toggles then ADD options the picker would not otherwise offer:
 --   allow_cw_traits          — the Chaos Wastes / deus boon traits.
 --   allow_any_trait_property — every adventure trait AND property, any slot type.
 --
@@ -2175,10 +2229,56 @@ local function _cim_wanted_property_bares()
     return (mod._cim_all_property_keys and mod._cim_all_property_keys()) or {}
 end
 
--- Widen one category array (kind = "traits"|"properties") by appending the given
--- bare keys' weave twins. Saves the original once so on_exit can restore it. Always
--- rebuilds from the SAVED original (never the possibly-already-widened current),
--- so repeated calls across weapon selections don't compound.
+-- (#404) The weapon's OWN native adventure trait/property pool for `category`.
+-- `category` IS the item's trait_table_name / property_table_name (vanilla stamps
+-- slot_unlock.category = item_data.<trait|property>_table_name,
+-- hero_window_weave_properties.lua:178/186), so the native pool is
+-- WeaponTraits.combinations[category] (flat list of {trait_key,...} entries, same
+-- shape _cim_trait_pool_for reads at :845) / WeaponProperties.combinations
+-- [category].exotic (list of property-key combos, same tier _cim_property_pool_for
+-- reads at :675). Returns a flat list of bare keys. Empty for a deus/CW weapon
+-- whose table-name is not in combinations (accepted degraded outcome — the freedom
+-- toggles can still add options).
+local function _cim_native_bares_for(kind, category)
+    local out = {}
+    if not category then return out end
+    if kind == "traits" then
+        local WT = rawget(_G, "WeaponTraits")
+        local pool = WT and WT.combinations and WT.combinations[category]
+        if type(pool) == "table" then
+            for _, entry in ipairs(pool) do
+                local k = entry and entry[1]
+                if k then out[#out + 1] = k end
+            end
+        end
+    else
+        local WP = rawget(_G, "WeaponProperties")
+        local combos = WP and WP.combinations and WP.combinations[category]
+        local exotic = type(combos) == "table" and combos.exotic
+        if type(exotic) == "table" then
+            for _, combo in ipairs(exotic) do
+                if type(combo) == "table" then
+                    for _, k in ipairs(combo) do
+                        if k then out[#out + 1] = k end
+                    end
+                end
+            end
+        end
+    end
+    return out
+end
+
+-- Widen one category array (kind = "traits"|"properties"). The array always gets:
+--   (1) the SAVED original (a real weave category array, usually empty {} for an
+--       adventure weapon after _cim_ensure_weave_category_pools seeds it);
+--   (2) the weapon's OWN native adventure pool for this category (#404 — this is
+--       what fills the Athanor picker with the weapon's real traits/properties
+--       even when both freedom toggles are OFF);
+--   (3) the freedom-toggle EXTRAS (`wanted_bares`), added on top.
+-- Each key is surfaced as its "weave_" twin (ensure_twin). Saves the original once
+-- so on_exit can restore it; always rebuilds from the SAVED original (never the
+-- possibly-already-widened current), so repeated calls across weapon selections
+-- don't compound.
 local function _cim_widen_category(kind, categories_tbl, category, wanted_bares, ensure_twin)
     if not (categories_tbl and category) then return end
     local backup = _cim_forge_widen_backup[kind]
@@ -2191,6 +2291,12 @@ local function _cim_widen_category(kind, categories_tbl, category, wanted_bares,
     for _, k in ipairs(base) do
         if not seen[k] then seen[k] = true; widened[#widened + 1] = k end
     end
+    -- (2) always seed the weapon's own native pool (#404)
+    for _, bare in ipairs(_cim_native_bares_for(kind, category)) do
+        local wk = ensure_twin(bare)
+        if wk and not seen[wk] then seen[wk] = true; widened[#widened + 1] = wk end
+    end
+    -- (3) freedom-toggle extras on top
     for _, bare in ipairs(wanted_bares) do
         local wk = ensure_twin(bare)
         if wk and not seen[wk] then seen[wk] = true; widened[#widened + 1] = wk end
@@ -2202,10 +2308,13 @@ _cim_apply_forge_freedom = function(slots_progression)
     if not slots_progression then return end
     local WT = rawget(_G, "WeaveTraits")
     local WP = rawget(_G, "WeaveProperties")
+    -- freedom-toggle EXTRAS (empty when both toggles are OFF); _cim_widen_category
+    -- also seeds the weapon's own native pool, so the picker is filled even with
+    -- no extras (#404). Widen every category in play REGARDLESS of toggle state.
     local trait_bares = _cim_wanted_trait_bares()
     local prop_bares  = _cim_wanted_property_bares()
 
-    if #trait_bares > 0 and WT and WT.categories and slots_progression.traits then
+    if WT and WT.categories and slots_progression.traits then
         local done = {}
         for _, slot_unlock in ipairs(slots_progression.traits) do
             local cat = slot_unlock and slot_unlock.category
@@ -2215,7 +2324,7 @@ _cim_apply_forge_freedom = function(slots_progression)
             end
         end
     end
-    if #prop_bares > 0 and WP and WP.categories and slots_progression.properties then
+    if WP and WP.categories and slots_progression.properties then
         local done = {}
         for _, slot_unlock in ipairs(slots_progression.properties) do
             local cat = slot_unlock and slot_unlock.category
@@ -2281,7 +2390,15 @@ mod:hook("HeroWindowWeaveProperties", "_sync_backend_loadout", function(func, se
     if not _custom_forge_active then return func(self) end
     local ok, err = pcall(func, self)
     if not ok then
+        -- (#404) The vanilla body calls _populate_menu_widgets at its END
+        -- (hero_window_weave_properties.lua:1753) — a mid-way throw (the
+        -- unknown-category tooltip nil-concat, above) skips it, leaving the seeded
+        -- picker rows blank (no title/icon, which _populate_menu_option_widget sets
+        -- at :626-636). Complete that step so rows still render. printf (not the
+        -- logging-off mod:warning) so a repeat report shows this path fired.
+        printf("[cim:404] _sync_backend_loadout threw (weave tooltip nil for adventure/CW category) — completing _populate_menu_widgets: %s", tostring(err))
         mod:warning("[cim] _sync_backend_loadout guarded (deus/CW weave-tooltip nil): %s", tostring(err))
+        pcall(self._populate_menu_widgets, self)
     end
 end)
 
@@ -6321,6 +6438,34 @@ _rt_register("forge_freedom_settings_and_helpers_present", function()
         if type(mod[name]) ~= "function" then
             return "missing exposed helper: " .. name
         end
+    end
+end)
+
+_rt_register("native_pool_seeded_into_picker_with_toggles_off", function()
+    -- #404: the Athanor picker reads WeaveTraits/WeaveProperties.categories[cat],
+    -- where cat == the item's trait_table_name / property_table_name. With both
+    -- freedom toggles OFF the picker must STILL be filled with the weapon's own
+    -- native pool (empty picker => "menus don't appear"). Drive _cim_apply_forge_
+    -- freedom for a melee-category weapon and assert the category array is non-empty
+    -- afterwards, then restore so no residue leaks into real weave play.
+    if mod:get("allow_cw_traits") or mod:get("allow_any_trait_property") then
+        return "skip: a freedom toggle is ON (native-seed baseline test not applicable)"
+    end
+    local WT = rawget(_G, "WeaveTraits")
+    if not (WT and WT.categories and rawget(_G, "WeaponTraits")
+            and rawget(_G, "WeaponTraits").combinations and rawget(_G, "WeaponTraits").combinations.melee) then
+        return "skip: WeaponTraits melee combinations not loaded"
+    end
+    local cat = "melee"
+    local had_before = WT.categories[cat] ~= nil
+    mod._cim_apply_forge_freedom({ traits = { { category = cat } }, properties = {} })
+    local seeded = type(WT.categories[cat]) == "table" and #WT.categories[cat] > 0
+    mod._cim_restore_forge_freedom()
+    if not had_before and WT.categories[cat] ~= nil then
+        WT.categories[cat] = nil  -- belt-and-suspenders: don't leave residue if restore missed it
+    end
+    if not seeded then
+        return "native trait pool was NOT seeded into the picker category with toggles off (#404)"
     end
 end)
 
