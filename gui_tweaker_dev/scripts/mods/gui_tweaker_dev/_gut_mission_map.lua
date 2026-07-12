@@ -234,7 +234,7 @@ local function _can_get_level(level_name)
     if not ok then return nil end
     return avail and true or false
 end
-mod._gut_mm_can_get_level = _can_get_level   -- consumed by /regression_test
+mod._gut_mm_can_get_level = _can_get_level   -- consumed by /gut_regression_test
 
 -- Swap hook (three tiers, #336 v0.2.206). Tier 1: keep path (ui_keep_menu resident, or
 -- state unknown = keep-only flows) is byte-for-byte vanilla. Tier 2 (preview; the normal

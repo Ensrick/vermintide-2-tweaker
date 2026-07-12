@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.218-dev"
+local MOD_VERSION = "0.2.219-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -79,9 +79,9 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
-mod:command("regression_test", "GUI tweaker self-check", function()
+mod:command("gut_regression_test", "GUI tweaker self-check", function()
     local pass, fail = 0, 0
-    mod:echo("=== gut regression_test (v%s) ===", MOD_VERSION)
+    mod:echo("=== gut_regression_test (v%s) ===", MOD_VERSION)
     for _, c in ipairs(_RT_CHECKS) do
         local ok, err = pcall(c.fn)
         if ok and err == nil then
@@ -829,7 +829,7 @@ end)
 
 -- Lifecycle-chain integrity probe (v0.2.216-dev, issue 425 coverage). This root
 -- mod.on_setting_changed is the innermost handler in the capture-prev chain that ~7
--- feature files wrap. The /regression_test `lifecycle_chain_integrity` check drives the
+-- feature files wrap. The /gut_regression_test `lifecycle_chain_integrity` check drives the
 -- CURRENT (outermost) on_setting_changed with the synthetic id below; reaching this root
 -- flips the flag, proving every wrapper correctly chained its predecessor. A future file
 -- that forgets `local prev = mod.on_setting_changed` orphans this root and fails the check.
@@ -2554,9 +2554,9 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mission_map")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_career_swap")
 
 -- Dev probe: capture the live vanilla OptionsView so /dump_options can dump
--- its real scroll/mask/scrollbar layout — ground-truth for the Mod Tweaker
--- scrollbar. See _gut_options_probe.lua.
-pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_options_probe")
+-- its real scroll/mask/scrollbar layout - ground-truth for the Mod Tweaker
+-- scrollbar. See _gut_diag_optionsview.lua (renamed from _gut_options_probe; #499).
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_diag_optionsview")
 
 -- (#313) Crosshair Kill Confirmation options-menu bridge. When the CKC mod
 -- ("Crosshair Kill Confirmation") is installed + togglable, takes over the vanilla

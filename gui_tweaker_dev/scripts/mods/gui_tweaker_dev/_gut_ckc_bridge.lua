@@ -262,7 +262,7 @@ end
 -- OptionsView hooks (registered only when CKC is present + togglable)
 -- ---------------------------------------------------------------
 -- PRE-FLIGHT (no-duplicate-hook rule): the only other gut_dev OptionsView hooks are
--- draw_widgets (_gut_glow_probe), on_enter + update_apply_button (_gut_options_probe).
+-- draw_widgets (_gut_glow_probe), on_enter + update_apply_button (_gut_diag_optionsview).
 -- None of the (Class, method) pairs below is hooked anywhere else in the mod:
 --   OptionsView.cb_crosshair_kill_confirm_setup
 --   OptionsView.cb_crosshair_kill_confirm

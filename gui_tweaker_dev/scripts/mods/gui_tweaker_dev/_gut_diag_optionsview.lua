@@ -1,18 +1,28 @@
 local mod = get_mod("gut_dev")
 
--- ============================================================================
--- OptionsView layout probe (ground-truth for the Mod Tweaker scrollbar)
--- ============================================================================
--- Philosophy (user, 2026-06-19): "I don't want to type anything. I visit the
--- settings menu, you get the data automatically." So this AUTO-DUMPS the live
--- vanilla OptionsView the moment you open ESC -> Options — no command needed.
--- It dumps once per game session (so the log isn't spammed on every open); a
--- `/dump_options` command is kept only as a manual re-dump.
+-- _gut_diag_optionsview.lua - vanilla OptionsView layout diagnostic (Mod Tweaker
+-- scrollbar ground-truth).
 --
--- What we capture (confirmed field names from options_view.lua): self.scroll_value,
--- self.scrollbar (widget), self.selected_settings_list (.scrollbar/.visible_widgets_n/
--- .num_draws/.start_index/.max_offset_y/.widgets), the `list_mask` scenegraph node
--- (the visible window bounds), and how list widgets are position-culled against it.
+-- Per-cluster diagnostics module (PROJECT_STANDARDS section 2.2b; renamed from
+-- _gut_options_probe.lua under #499). Standing dev instrumentation, NOT keyed to a
+-- single tracked issue: it captures the live vanilla settings-menu scroll/mask/
+-- scrollbar machinery (field names confirmed against options_view.lua) so gut's
+-- Mod Tweaker view can replicate native scrolling, plus the live Apply-button
+-- READY-state colours (the decompiled source is older than the shipped build, so
+-- its colours are wrong). Owns mod._opt_ref / _opt_dumped / _opt_apply_dumped, all
+-- set and read within this file. Emits the [opt-probe] (layout) and [opt-apply]
+-- (button colours) channels: topic prefixes, not issue-keyed, because no single
+-- issue tracks it. Observe-only: two OptionsView hook_safe callbacks, zero
+-- behaviour change.
+--
+-- Philosophy (user, 2026-06-19): "I don't want to type anything. I visit the
+-- settings menu, you get the data automatically." So it AUTO-DUMPS the live
+-- vanilla OptionsView the moment you open ESC -> Options, no command needed, once
+-- per game session (so the log isn't spammed on every open); the `/dump_options`
+-- command is kept only as a manual re-dump.
+--
+-- Owned by: gui_tweaker_dev.lua entry point. Consumed via:
+--   mod:dofile("scripts/mods/gui_tweaker_dev/_gut_diag_optionsview")
 
 local UISceneGraph = UISceneGraph
 

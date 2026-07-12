@@ -2968,7 +2968,7 @@ function ModTweakerView:_draw(dt, input_service)
     end
 end
 
--- (#164) Exposed for /regression_test (mod_tweaker_step_resolution): the pure step-resolution
+-- (#164) Exposed for /gut_regression_test (mod_tweaker_step_resolution): the pure step-resolution
 -- + grid-snap helpers, unit-testable without building a live view. Statics, not methods.
 ModTweakerView._resolve_step = _resolve_step
 ModTweakerView._snap_and_clamp = _snap_and_clamp

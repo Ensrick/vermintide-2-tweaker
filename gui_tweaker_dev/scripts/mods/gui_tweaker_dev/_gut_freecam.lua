@@ -107,7 +107,7 @@ local function _live_world(name)
     if not (wm and name and wm:has_world(name)) then return nil end
     return wm:world(name)
 end
-mod._gut_fc_live_world = _live_world   -- exported for the /regression_test gate check
+mod._gut_fc_live_world = _live_world   -- exported for the /gut_regression_test gate check
 
 -- True while any menu/view owns the screen: a vanilla view or menu state
 -- (IngameUI.menu_active, ingame_ui.lua:228) or any transitioned-in view including

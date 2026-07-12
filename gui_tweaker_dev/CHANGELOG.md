@@ -5,6 +5,13 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.219-dev (2026-07-12) -- #499 rename _gut_options_probe.lua -> _gut_diag_optionsview.lua; rename /regression_test command to /gut_regression_test [untested]
+
+- **COMMAND RENAME (users must relearn):** the dev self-check command is now `/gut_regression_test` (was the bare `/regression_test`). Bare `/regression_test` no longer exists. This aligns gut_dev with stable `gut` (which already uses `gut_regression_test`) and removes the collision the `gt_` prefix rule in `docs/COMMANDS.md` was written to avoid (PROJECT_STANDARDS section 2.2b). Registration at `gui_tweaker_dev.lua:82`; the 7 in-source `/regression_test` doc comments across `gui_tweaker_dev.lua`, `_gut_freecam.lua`, `_gut_mission_map.lua`, `_gut_native_loadouts.lua`, `_mod_tweaker_view.lua` were updated to the new name.
+- **#499 probe consolidation (PROJECT_STANDARDS section 2.2b):** renamed the root-level `_gut_options_probe.lua` -> `_gut_diag_optionsview.lua` (git mv, one path) so the filename states its topic, per the `_<ns>_diag_<topic>.lua` convention (canonical: ct_dev's `_ct_diag_freeze487.lua`). This is the standing Mod Tweaker scrollbar ground-truth probe (auto-dumps the live vanilla OptionsView layout on ESC -> Options; `/dump_options` manual re-dump; owns `mod._opt_ref` / `_opt_dumped` / `_opt_apply_dumped`, all set+read within the file). NOT keyed to a single issue, so its `[opt-probe]` / `[opt-apply]` channel prefixes stay topic-based.
+- **Content byte-identical except the file-header comment** (rewritten to the new name + purpose + `Owned by:` line per section 2.2). The two `OptionsView` `hook_safe` callbacks (`on_enter`, `update_apply_button`) and the `/dump_options` registration are unchanged.
+- Updated references: `gui_tweaker_dev.lua` dofile + comment, `_gut_ckc_bridge.lua` hook-inventory comment, `ENGINE_SURFACE.md` (surface 4 pre-flight note + surface 5b probe row). Package is glob-based (`scripts/mods/gui_tweaker_dev/*`), so no `.package`/manifest entry changed. `docs/COMMANDS.md` already lists `gut_regression_test` for stable `gut` and does not track dev-only commands, so no COMMANDS.md row required.
+
 ## 0.2.218-dev (2026-07-12) -- #500 remove stale probes for closed issues (173/92/99/95/123/124/106) [untested]
 
 - **#500: removed four diagnostic probe files whose issues are all CLOSED.** Each was pure read-only telemetry (raw-printf / mod:info, returns `{}` or nothing, no state consumed by any non-probe module -- verified by whole-mod grep of every field they set). No behavior change to the mod.

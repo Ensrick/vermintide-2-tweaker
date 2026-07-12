@@ -414,7 +414,7 @@ local function _trace_should_emit(career_name, key, idx, value, source)
     end
     return false
 end
-M.trace_should_emit = _trace_should_emit   -- exported for the /regression_test throttle check
+M.trace_should_emit = _trace_should_emit   -- exported for the /gut_regression_test throttle check
 local function _trace_gear_read(career_name, key, idx, value, source)
     if _trace_should_emit(career_name, key, idx, value, source) then
         printf("[gut_dev:NATIVE_LOADOUTS] #387 gear-read career=%s slot=%s idx=%s value=%s source=%s",
@@ -455,7 +455,7 @@ local function _official_gear_fallback(read_official, mirror, career_name, key, 
     end
     return nil
 end
-M.official_gear_fallback = _official_gear_fallback   -- exported for the /regression_test translation check
+M.official_gear_fallback = _official_gear_fallback   -- exported for the /gut_regression_test translation check
 
 -- ------------------------------------------------------------------
 -- BackendUtils equip capture (v0.2.175). With Loremaster's Armoury installed, menu equips
@@ -1325,7 +1325,7 @@ M.rt_checks = {
         -- value/source change.
         if type(M.trace_should_emit) ~= "function" then return "trace_should_emit missing" end
         local c, s = "__rt480_career__", "__rt480_slot__"
-        -- Re-runnable: seed with a sentinel so a previous /regression_test pass can't leave
+        -- Re-runnable: seed with a sentinel so a previous /gut_regression_test pass can't leave
         -- the exact first tuple cached.
         M.trace_should_emit(c, s, 1, "__seed__", "__seed__")
         M.trace_should_emit(c, s, 2, "__seed__", "__seed__")
