@@ -80,6 +80,9 @@ subsystem docs.
 | gui_tweaker_dev | `gui_tweaker_dev/ENGINE_SURFACE.md` | ~135 | 06 08 09 11 |
 | chaos_wastes_tweaker_dev | `chaos_wastes_tweaker_dev/ENGINE_SURFACE.md` | 102 + 4 RPC channels | 03 07 08 09 10 11 |
 | crafting_in_modded_dev | `crafting_in_modded_dev/ENGINE_SURFACE.md` | 106 + 1 RPC channel | 03 06 09 11 |
+| career_tweaker | `career_tweaker/ENGINE_SURFACE.md` | 24 | 01 03 09 10 11 |
+| event_tweaker | `event_tweaker/ENGINE_SURFACE.md` | 10 | 03 05 07 08 11 |
+| enemy_tweaker | `enemy_tweaker/ENGINE_SURFACE.md` | 25 (+3 dormant BR) | 01 03 04 07 10 |
 
 Maintenance (extends rule 1): when a mod's ENGINE_SURFACE changes its docs/engine
 link set or its site count materially, update this table in the same commit. No
