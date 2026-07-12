@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.198-dev"
+local MOD_VERSION = "0.2.199-dev"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -2862,12 +2862,6 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_teleport_lab")
 -- shadows/mutator-explosions/intro-audio, boss path draw). Exposes
 -- mod._gt_solo_on_spawn_queued (called from the ConflictDirector hook above).
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_solo_qol")
-
--- #198 passive probe: aggregates repeated damage events on keep training dummies
--- (TrainingDummyHealthExtension.add_damage) so one melee swing prints one
--- [198:dummy] line with a hit count. Default-on, printf, no gameplay change, no
--- new hook collision (nothing else hooks TrainingDummyHealthExtension).
-mod:dofile("scripts/mods/general_tweaker_dev/_gt_probe_dummy_hits")
 
 -- Client-side latency cosmetics (Issue #308). Both self-contained, all toggles
 -- default OFF, no networking, no gameplay-outcome change:

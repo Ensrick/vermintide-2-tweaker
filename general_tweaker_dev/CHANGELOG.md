@@ -1,5 +1,12 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.199-dev (2026-07-12) -- #500 remove the stale #198 training-dummy probe (closed issue) [untested]
+
+### Changed
+- **#500: removed `_gt_probe_dummy_hits.lua`** (issue 198, `[198:dummy]`, CLOSED). Pure passive telemetry: hook_safe `TrainingDummyHealthExtension.add_damage`, bucketed per-swing hit counts flushed via `mod._gt_register_update("gt_probe_dummy_hits_flush", ...)`. No gameplay effect, no cross-file consumers (whole-mod grep: the only references were its own dofile line + comment; the flush registration key is looked up by nobody). Removed the file (`git rm`) + its `mod:dofile` line from `general_tweaker_dev.lua`. `.package` uses a `scripts/mods/general_tweaker_dev/*` glob, so no manifest edit was needed.
+- **KEPT `_gt_debug_probes.lua`** (not in #500, no closed-issue tag). It is the always-on-in-dev Debug Mode harness and exposes load-bearing cross-file symbols consumed elsewhere: `mod._dbg_log` / `mod._dbg_alert` (mission-UI + AI-takeover modules + the `dbg_helpers_two_channel` regression check), `mod._dbg_on` and `mod._gt_dump_ai_now` (AI-takeover module). Its remaining probes (AI-takeover redesign, bot-loadout resolution, patrol-crash, burning-fire VFX) track OPEN/active work, not closed issues. Left byte-identical.
+- **NOTE (do not ship without review):** the identical `_gt_probe_dummy_hits.lua` also exists in the STABLE `general_tweaker/` directory. It is promotion-gated and was NOT touched here.
+
 ## v0.2.198-dev (2026-07-12) -- #492: bounded recovery for the aid-priority bot pursuit lock (bots strand behind) [untested]
 
 ### Why (root cause)
