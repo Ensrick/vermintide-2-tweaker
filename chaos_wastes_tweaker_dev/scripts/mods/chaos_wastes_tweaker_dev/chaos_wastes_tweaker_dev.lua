@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.239-dev"
+local MOD_VERSION = "0.7.240-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -7685,7 +7685,18 @@ mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer
     for _, entry in ipairs(DeusPowerUpsArray) do
         local name = entry.name
         if name and mod:get("start_boon_" .. name) then
-            extra[#extra + 1] = DeusPowerUpUtils.generate_specific_power_up(name, entry.rarity)
+            -- v0.7.240-dev (#426) peer-parity gate: a ct-modded starting boon written into
+            -- this player's run-state list rides the shared-state sync as a modded
+            -- deus_power_up_templates index (deus_run_state_spec.lua:60 encode / :85
+            -- decode) and CTDs any non-ct peer. Vanilla starting boons are untouched.
+            -- Fail-safe direction: an unconfirmed peer (e.g. a just-joined client whose
+            -- beacon ack is still in flight) suppresses the MODDED grant for this event.
+            if mod._ct_is_modded_power_up and mod._ct_is_modded_power_up(name)
+                and not (mod._ct_wire_safe and mod._ct_wire_safe()) then
+                pcall(printf, "[ct:426] starting boon %s skipped: peer parity not confirmed (modded boon would CTD a non-ct peer)", tostring(name))
+            else
+                extra[#extra + 1] = DeusPowerUpUtils.generate_specific_power_up(name, entry.rarity)
+            end
         end
     end
 
@@ -7816,6 +7827,19 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
                 -- Raw printf so the block is visible on the logging-OFF host too (#211).
                 pcall(printf, "[boon-trace] BLOCKED disabled boon at grant: %s source=%s (issue #211)",
                     tostring(name), tostring(mod._ct_grant_source or "untagged"))
+            -- v0.7.240-dev (#426): peer-parity wire gate at the canonical grant choke
+            -- point (this hook covers chest, cursed chest, shop, set reward, end-of-level
+            -- and debug grants). A ct-modded power-up granted while any lobby peer lacks
+            -- ct rides the deus run-state sync (deus_run_state_spec.lua:60/:85) and the
+            -- rpc_add_buff broadcast (buff_system.lua:302-305) as a modded lookup index
+            -- and CTDs that peer. Belt-and-suspenders with the pool eject in the
+            -- wire-safety block below: this catches any grant path even if a modded
+            -- entry is still sitting in a rolled offer/pool snapshot.
+            elseif name and mod._ct_is_modded_power_up and mod._ct_is_modded_power_up(name)
+                and not (mod._ct_wire_safe and mod._ct_wire_safe()) then
+                table.remove(new_power_ups, i)
+                pcall(printf, "[ct:426] BLOCKED modded boon at grant: %s (peer parity not confirmed) source=%s",
+                    tostring(name), tostring(mod._ct_grant_source or "untagged"))
             end
         end
     end
@@ -7937,7 +7961,16 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
         for i = 1, #bucket do
             local entry = bucket[i]
             local nm = entry and entry.name
-            if nm and not mod._ct_boon_disabled(nm) then
+            -- v0.7.240-dev (#426): this picker samples DeusPowerUpsArrayByRarity, a
+            -- REGISTRATION table that is never pool-ejected (ejecting it would break
+            -- cross-peer id parity), and the resulting grant re-enters add_power_ups
+            -- with _ct_bot_mirror_active set, which skips the pre-grant parity filter.
+            -- Without this check the bot random roll was a straight bypass of every
+            -- parity gate (review finding, pre-ship). Reject modded names here too.
+            local parity_blocked = nm and mod._ct_is_modded_power_up
+                and mod._ct_is_modded_power_up(nm)
+                and not (mod._ct_wire_safe and mod._ct_wire_safe())
+            if nm and not mod._ct_boon_disabled(nm) and not parity_blocked then
                 eligible[#eligible + 1] = nm
             end
         end
@@ -7978,6 +8011,13 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
                 -- so this firing means a new bypass — printf it (host runs logging OFF).
                 if mod._ct_boon_disabled(bot_name) then
                     pcall(printf, "[bot-boon] SKIPPED disabled boon for bot: %s (disable_boon_<name>=true, issue #211)",
+                        tostring(bot_name))
+                -- v0.7.240-dev (#426): parity defense-in-depth for the bot grant, same
+                -- rationale as the picker filter above (this loop's add_power_ups
+                -- re-entry skips the pre-grant parity gate via _ct_bot_mirror_active).
+                elseif mod._ct_is_modded_power_up and mod._ct_is_modded_power_up(bot_name)
+                    and not (mod._ct_wire_safe and mod._ct_wire_safe()) then
+                    pcall(printf, "[ct:426] SKIPPED modded boon for bot: %s (peer parity not confirmed)",
                         tostring(bot_name))
                 else
                     cloned[#cloned + 1] = DeusPowerUpUtils.generate_specific_power_up(bot_name, host_pu.rarity)
@@ -10342,6 +10382,19 @@ end
 local _added_to_pool = {}
 local function _add_dormant_to_pool(power_up_name, rarity)
     if _added_to_pool[power_up_name] then return end
+    -- v0.7.240-dev (#426): pool membership is peer-parity gated at THIS single
+    -- choke point so no runtime caller can undo the wire gate's eject
+    -- (sync_host_dependent_state re-runs register_trait_boon on every host-settings
+    -- receipt, on_setting_changed re-runs it on enable_boon_* edits - both fired
+    -- while parity was unconfirmed and silently re-pooled the boons; review
+    -- finding, pre-ship). The nil-guard keeps LOAD-TIME inserts working: the
+    -- wire-safety block below assigns mod._ct_wire_safe and then ejects everything
+    -- once, so load-time inserts never leak. After load, inserts only proceed
+    -- under confirmed parity (the gate's own on_enable qualifies by definition).
+    if mod._ct_wire_safe and not mod._ct_wire_safe() then
+        pcall(printf, "[ct:426] pool insert of %s deferred: peer parity not confirmed", tostring(power_up_name))
+        return
+    end
     local record = _injected_dormants[power_up_name]
     if not record then
         _dbg("[dormant] _add_dormant_to_pool: " .. tostring(power_up_name) .. " not yet registered; skipping pool insert")
@@ -10774,6 +10827,17 @@ mod:hook("DeusRunController", "_try_buy_blessing", function(func, self, buyer, b
             tostring(already), tostring(coins), tostring(cost))
     end
     if blessing_name == "blessing_of_power" and effective_setting("tweak_miracle_of_ulric_persistent") then
+        -- v0.7.240-dev (#426) peer-parity gate: ct_miracle_of_ulric is a ct-registered
+        -- NetworkLookup.buff_templates entry. Applying it host-side broadcasts
+        -- rpc_add_buff with the modded index to every client (buff_system.lua:302-305),
+        -- and its is_persistent name re-applies on every later mission spawn
+        -- (deus_spawning.lua:277-278) - a non-ct peer fatals decoding the index
+        -- (network_lookup strict __index). Degrade: the vanilla blessing_of_power
+        -- purchase, wire-safe for everyone. Solo / all-ct lobbies are unaffected.
+        if not (mod._ct_wire_safe and mod._ct_wire_safe()) then
+            pcall(printf, "[ct:426] Ulric persistent miracle degraded to vanilla blessing_of_power: peer parity not confirmed")
+            return func(self, buyer, blessing_name)
+        end
         -- Replicate vanilla affordability / dedup guards from
         -- deus_run_controller.lua:1590-1599.
         if self:has_blessing(blessing_name) then
@@ -10807,6 +10871,14 @@ mod:hook("DeusRunController", "_try_buy_blessing", function(func, self, buyer, b
     elseif blessing_name == "blessing_of_isha" then
         local isha_mode = _get_isha_mode()
         if isha_mode == "vanilla" then
+            return func(self, buyer, blessing_name)
+        end
+
+        -- v0.7.240-dev (#426) peer-parity gate: the Isha alternatives apply ct-registered
+        -- buffs (ct_miracle_of_isha_aegis / _wounds) to every hero via rpc_add_buff -
+        -- same modded-index CTD class as Ulric above. Degrade: vanilla blessing_of_isha.
+        if not (mod._ct_wire_safe and mod._ct_wire_safe()) then
+            pcall(printf, "[ct:426] Isha alternative (%s) degraded to vanilla blessing_of_isha: peer parity not confirmed", tostring(isha_mode))
             return func(self, buyer, blessing_name)
         end
 
@@ -10889,11 +10961,20 @@ mod:hook_safe("DeusSpawning", "_apply_initial_buffs", function(self, player)
     -- The shop is a `map` node with no player units, so _apply_initial_buffs does
     -- not fire there — the first time it fires post-purchase is the next mission.
     if rc._ct_isha_pending and not rc._ct_isha_active then
-        rc._ct_isha_active = rc._ct_isha_pending
-        rc._ct_isha_pending = nil
-        rc._ct_isha_active_level = level_key
-        _dbg("[miracle] Isha one-mission buff %s armed for node=%s",
-            tostring(rc._ct_isha_active), tostring(level_key))
+        -- v0.7.240-dev (#426): arm the pending buff only under confirmed peer parity.
+        -- Not armed = stays pending; a later mission re-tries once parity is restored
+        -- (state preserved, execution gated - the buy already succeeded and the coins
+        -- were spent under parity, so the entitlement is kept, never destroyed).
+        if mod._ct_wire_safe and mod._ct_wire_safe() then
+            rc._ct_isha_active = rc._ct_isha_pending
+            rc._ct_isha_pending = nil
+            rc._ct_isha_active_level = level_key
+            _dbg("[miracle] Isha one-mission buff %s armed for node=%s",
+                tostring(rc._ct_isha_active), tostring(level_key))
+        else
+            pcall(printf, "[ct:426] Isha one-mission buff %s held pending: peer parity not confirmed (re-tries next mission)",
+                tostring(rc._ct_isha_pending))
+        end
     end
 
     if not rc._ct_isha_active then return end
@@ -10908,9 +10989,15 @@ mod:hook_safe("DeusSpawning", "_apply_initial_buffs", function(self, player)
         if not buff_system then return end
         local be = ScriptUnit.has_extension(player_unit, "buff_system")
         if be and not be:has_buff_type(rc._ct_isha_active) then
-            buff_system:add_buff(player_unit, rc._ct_isha_active, player_unit)
-            _dbg("[miracle] Isha one-mission buff %s applied to a hero on node=%s",
-                tostring(rc._ct_isha_active), tostring(level_key))
+            -- v0.7.240-dev (#426): re-apply (initial wave + respawns) is parity-gated too,
+            -- so a peer who joined mid-mission without ct is never sent the modded index.
+            if mod._ct_wire_safe and mod._ct_wire_safe() then
+                buff_system:add_buff(player_unit, rc._ct_isha_active, player_unit)
+                _dbg("[miracle] Isha one-mission buff %s applied to a hero on node=%s",
+                    tostring(rc._ct_isha_active), tostring(level_key))
+            else
+                pcall(printf, "[ct:426] Isha buff %s apply skipped: peer parity not confirmed", tostring(rc._ct_isha_active))
+            end
         end
     else
         -- Reached a DIFFERENT mission than the one the buff was granted for —
@@ -12068,15 +12155,17 @@ sync_host_dependent_state = function()
     end
 end
 
--- 2026-05-23 v0.7.98-dev DISABLED: ct_kill_heal mod boon removed per user request after
--- Chest-of-Trials crash. To re-enable, uncomment the entire `do ... end` block below AND
--- uncomment the matching VMF widget + localization entries. The block-comment intentionally
--- spans the full do/end so the NetworkLookup pre-registration (which is the actual
--- peer-sync-relevant line per feedback_vt2_gated_registration_diverges) is removed at the
--- same time as the rest of the boon. This is acceptable because everyone re-syncing to
--- v0.7.98-dev will have an identical mod load with no ct_kill_heal name in the lookup; no
--- subset of peers will be on a "has ct_kill_heal" version once this release ships.
---[[
+-- v0.7.240-dev (#406): ct_kill_heal RE-ENABLED. It was block-commented in v0.7.98-dev
+-- (user request after a Chest-of-Trials crash); the user's issue-406 verify comment now
+-- explicitly requires it selectable as a starting boon ("This boon is missing from
+-- selectable starting boons... Fix that first"), and the two hazards that motivated the
+-- removal are both addressed: the client heal fassert is gated (is_server gate below,
+-- issue 406) and modded-boon wire exposure is peer-parity gated (issue 426 wire-safety
+-- block below). Every peer on v0.7.240-dev re-registers the name identically, so the
+-- lookup-order invariant (feedback_vt2_gated_registration_diverges) holds the same way
+-- it did for the removal. The matching VMF widget line (_data.lua BOON_TREE
+-- defensive_boons > health) and the kill_heal regression check are restored in the same
+-- version.
 do
     -- v0.7.63-alpha: register NetworkLookup names FIRST, unconditionally, BEFORE
     -- the globals-ready gate. Two peers running the same ct version must always
@@ -12136,12 +12225,362 @@ do
 
         inject_dormant_boon("ct_kill_heal", "exotic")
         _add_dormant_to_pool("ct_kill_heal", "exotic")
-        _dbg("[mod-boon] registered ct_kill_heal at rarity exotic")
+        pcall(printf, "[ct:406] ct_kill_heal re-enabled at rarity exotic (is_server heal gate active; pool membership peer-parity gated per issue 426)")
     else
         _dbg("[mod-boon] DeusPowerUpTemplates / BuffFunctionTemplates not ready for ct_kill_heal — NetworkLookup name reserved, template construction deferred")
     end
 end
---]] -- end v0.7.98-dev DISABLED ct_kill_heal block
+
+-- ============================================================
+-- Peer-parity wire safety for modded boons and miracles (#426 / #406)
+-- v0.7.240-dev -- issue 371 doctrine, BUG_CLASSES 31, cwv beacon pattern
+-- ============================================================
+-- WHY: ct's modded boons (power_up_ct_boon_*, ct_meta_*, ct_kill_heal) and miracles
+-- (ct_miracle_*) register into NetworkLookup.buff_templates / deus_power_up_templates.
+-- Registration is UNCONDITIONAL and must stay so (index parity across ct peers,
+-- see inject_dormant_boon's v0.7.67 comment). But once such content is GRANTED or
+-- APPLIED, its modded lookup index goes on vanilla wire paths that reach EVERY peer,
+-- including peers without ct (ct's own create_network_hash shim deliberately lets
+-- them join):
+--   * host buff apply     -> rpc_add_buff broadcast, buff_system.lua:302-305; receiver
+--                            decode :430 fatals on the unknown index (network_lookup
+--                            strict __index)
+--   * granted power-ups   -> deus run-state sync, deus_run_state_spec.lua:60 encode /
+--                            :85 decode on every peer
+--   * persistent miracles -> saved names re-applied each mission spawn,
+--                            deus_spawning.lua:249 / :277-278
+--   * hot-join            -> live server-controlled buffs re-sent to a late joiner,
+--                            buff_system.lua:1087-1104
+-- These are GAMEPLAY axes: sender-substitution would change what happens, so per the
+-- issue 371 axis map they get a PEER-PARITY GATE, not substitution. UNCONDITIONAL
+-- (never toggle-gated) per the never-crash doctrine.
+--
+-- HOW: the shared peer-parity beacon (copied single-source lib, master:
+-- tools/shared_lib/_lib_peer_parity.lua; same instance pattern as cwv issue 424).
+-- Presence is proven over VMF's own mod-to-mod channel - wire-safe by construction.
+-- Fail-safe posture: modded content is INERT until every other human peer positively
+-- acks; solo enables immediately; any beacon error forces content off. The existing
+-- ct_peer_manifest_chunk machinery stays what it is - an on-demand DIAGNOSTIC dump -
+-- the beacon is the live gate.
+--
+-- Gate surfaces (all in this file):
+--   1. POOL membership     - eject/inject DeusPowerUpRarityPool entries (below)
+--   2. GRANT choke point   - parity filter in the consolidated add_power_ups hook
+--   3. STARTING boons      - parity filter in the _add_initial_power_ups hook
+--   4. MIRACLE buy/apply   - degrade-to-vanilla in _try_buy_blessing + Isha arm/apply
+--   5. PARITY-LOSS STRIP   - debounced host-side removal of already-granted modded
+--                            power-ups, persistent-buff names, and live modded buffs
+--                            (details on the debounce below)
+do
+    -- 200-LOCAL CEILING (Lua 5.1): the main chunk carries ~194 active locals by
+    -- this point, and this block's helpers pushed it past 200 (Stingray compile
+    -- error at first build). Everything below therefore lives inside ONE builder
+    -- function - its locals occupy function scope, costing the chunk a single
+    -- slot that releases at this do-block's end. Behavior is unchanged.
+    local function _ct_install_peer_parity()
+        local inst
+        local ok_lib, factory = pcall(function()
+            return mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_lib_peer_parity")
+        end)
+        if ok_lib and type(factory) == "function" then
+            local ok_inst, built = pcall(factory, mod, {
+                channel     = "ct_peer_parity_present",
+                schema      = CT_RPC_SCHEMA,
+                mod_label   = "Chaos Wastes Tweaker",
+                echo_prefix = "[ct]",
+            })
+            if ok_inst and type(built) == "table" then
+                inst = built
+            else
+                pcall(printf, "[ct:426] peer-parity factory failed: %s", tostring(built))
+            end
+        else
+            pcall(printf, "[ct:426] peer-parity lib failed to load: %s", tostring(factory))
+        end
+
+        -- Exports readable from hooks defined lexically ABOVE this block (they read the
+        -- mod table at call time, so file position does not matter).
+        mod._ct_peer_parity = inst
+
+        -- "Is this power-up name ct-injected?" - _injected_dormants is the single registry
+        -- every ct boon passes through (inject_dormant_boon writes it for trait boons,
+        -- meta boons and ct_kill_heal alike). Vanilla names are never in it.
+        mod._ct_is_modded_power_up = function(name)
+            return name ~= nil and _injected_dormants[name] ~= nil
+        end
+
+        -- "Is it wire-safe to grant/apply ct modded content right now?" Positive-evidence
+        -- check: true only when solo or every other human peer acked the beacon. Beacon
+        -- missing or any error = false (fail-safe: modded content stays inert; vanilla ct
+        -- features are untouched).
+        mod._ct_wire_safe = function()
+            local pp = mod._ct_peer_parity
+            if not pp then return false end
+            local ok, res = pcall(pp.all_peers_have, pp)
+            return ok and res == true
+        end
+
+        -- "Is this buff TEMPLATE name ct-owned?" Used by the parity-loss strip. Covers
+        -- ct_miracle_*, ct_meta_*_stack and power_up_ct_* (trait boons, kill_heal,
+        -- meta boons). No vanilla template name starts with either prefix
+        -- (grep-verified across scripts/settings 2026-07-11).
+        mod._ct_is_ct_buff_template = function(n)
+            return type(n) == "string" and (n:find("^ct_") ~= nil or n:find("^power_up_ct_") ~= nil)
+        end
+
+        -- Pool eject/inject ------------------------------------------------------
+        local TRAIT_BOON_BY_NAME = {}
+        for _, spec in ipairs(CT_TRAIT_BOONS) do TRAIT_BOON_BY_NAME[spec.name] = spec end
+
+        local function _ct_eject_modded_pools()
+            local n = 0
+            for name, rec in pairs(_injected_dormants) do
+                _remove_dormant_from_pool(name, rec.rarity)
+                n = n + 1
+            end
+            pcall(printf, "[ct:426] modded boon pools ejected (%d boon(s) unrollable until peer parity is confirmed)", n)
+        end
+
+        local function _ct_inject_modded_pools()
+            local n = 0
+            for name, rec in pairs(_injected_dormants) do
+                local spec = TRAIT_BOON_BY_NAME[name]
+                if spec then
+                    register_trait_boon(spec)   -- respects the user's enable_boon_* toggle
+                else
+                    _add_dormant_to_pool(name, rec.rarity)
+                end
+                n = n + 1
+            end
+            pcall(printf, "[ct:426] modded boon pools restored (%d boon(s) eligible, peer parity confirmed)", n)
+        end
+
+        -- Parity-loss strip (DEBOUNCED - see below) ------------------------------
+        -- Removes already-granted modded state so the run degrades to a vanilla-safe
+        -- lobby: granted modded power-ups out of every player's run-state list (stops
+        -- both the state sync to a joiner and next-mission reapply), ct names out of
+        -- the persistent-buffs lists (Ulric), and live ct server-controlled buffs off
+        -- all units. Buff removal uses remove_server_controlled_buff, whose RPC carries
+        -- only an integer server_buff_id (buff_system.lua:340) and no-ops on peers
+        -- without the buff (:437-454) - wire-safe by construction.
+        local function _ct_strip_modded_content()
+            local ok, err = pcall(function()
+                if not (Managers and Managers.player and Managers.player.is_server) then return end
+                local mechanism = Managers.mechanism and Managers.mechanism:game_mechanism()
+                local rc = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
+                local run_state = rc and rc._run_state
+                local pm = Managers.player
+                local stripped_pu, stripped_persist, stripped_buffs = 0, 0, 0
+
+                if rc and run_state and pm.human_and_bot_players then
+                    for _, p in pairs(pm:human_and_bot_players()) do
+                        local peer_id = p and p.peer_id
+                        local lpid = p and p.local_player_id and p:local_player_id()
+                        if peer_id and lpid then
+                            local profile_index, career_index = run_state:get_player_profile(peer_id, lpid)
+                            if profile_index and career_index then
+                                local pus = run_state:get_player_power_ups(peer_id, lpid, profile_index, career_index)
+                                if type(pus) == "table" and #pus > 0 then
+                                    local filtered, removed = {}, 0
+                                    for i = 1, #pus do
+                                        local pu = pus[i]
+                                        if pu and pu.name and _injected_dormants[pu.name] then
+                                            removed = removed + 1
+                                        else
+                                            filtered[#filtered + 1] = pu
+                                        end
+                                    end
+                                    if removed > 0 then
+                                        run_state:set_player_power_ups(peer_id, lpid, profile_index, career_index, filtered)
+                                        stripped_pu = stripped_pu + removed
+                                    end
+                                end
+                                if rc.get_player_persistent_buffs and rc.save_persistent_buffs then
+                                    local pers = rc:get_player_persistent_buffs(peer_id, lpid)
+                                    if type(pers) == "table" and #pers > 0 then
+                                        local fpers, premoved = {}, 0
+                                        for i = 1, #pers do
+                                            local bn = pers[i]
+                                            if mod._ct_is_ct_buff_template(bn) then
+                                                premoved = premoved + 1
+                                            else
+                                                fpers[#fpers + 1] = bn
+                                            end
+                                        end
+                                        if premoved > 0 then
+                                            rc:save_persistent_buffs(peer_id, lpid, profile_index, career_index, fpers)
+                                            stripped_persist = stripped_persist + premoved
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    -- A stripped Isha buff must not re-arm/re-apply from stale flags.
+                    if rc._ct_isha_active then
+                        rc._ct_isha_active = nil
+                        rc._ct_isha_active_level = nil
+                    end
+                end
+
+                local buff_system = Managers.state and Managers.state.entity and Managers.state.entity:system("buff_system")
+                local scb = buff_system and buff_system.server_controlled_buffs
+                if buff_system and scb then
+                    for unit, unit_buffs in pairs(scb) do
+                        if type(unit_buffs) == "table" then
+                            local ids = {}
+                            for sbid, entry in pairs(unit_buffs) do
+                                if entry and mod._ct_is_ct_buff_template(entry.template_name) then
+                                    ids[#ids + 1] = sbid
+                                end
+                            end
+                            for i = 1, #ids do
+                                buff_system:remove_server_controlled_buff(unit, ids[i])
+                                stripped_buffs = stripped_buffs + 1
+                            end
+                        end
+                    end
+                end
+
+                -- KNOWN LIMIT: run-state keys of DEPARTED players are not enumerable from
+                -- here (human_and_bot_players covers present players only), so a ct player
+                -- who left after being granted a modded boon leaves an unstripped key that
+                -- a future joiner's full-state sync still carries. Documented in
+                -- DEVELOPMENT.md; surfaced in this line so a paired log can attribute it.
+                pcall(printf, "[ct:426] parity-loss strip: removed %d granted modded power-up(s), %d persistent buff name(s), %d live modded buff(s) from PRESENT players - lobby degraded to vanilla-safe state (departed-player run-state keys not covered)",
+                    stripped_pu, stripped_persist, stripped_buffs)
+            end)
+            if not ok then
+                pcall(printf, "[ct:426] parity-loss strip errored: %s", tostring(err))
+            end
+        end
+
+        -- Debounce: the beacon disables INSTANTLY when an un-acked peer appears (correct,
+        -- crash-safe direction for the reversible gates above), but the strip is
+        -- DESTRUCTIVE (granted boons do not come back). A ct-running friend hot-joining
+        -- produces a transient disable until their ack lands; stripping on that transient
+        -- would nuke the lobby's boons for nothing. STRIP_GRACE must exceed the beacon's
+        -- WORST-CASE ack path, not the typical one: VMF's network_send silently skips
+        -- peers whose VMF handshake hasn't completed (vmf network.lua:236-239), so the
+        -- arrival-triggered announce can be lost and the retry only comes at the lib's
+        -- ANNOUNCE_EVERY = 10s cadence (review finding, pre-ship - 6s stripped a ct
+        -- friend on one lost announce). 15s > announce retry (10s) + settle (2s) + poll
+        -- slack, and still lands inside a joining player's map-load + first-fight window.
+        -- Honest residual: a non-ct peer's engine-level join sync can race ahead of
+        -- beacon detection - the gate PREVENTS the class for lobbies formed before the
+        -- run and shrinks the mid-run hot-join window; it cannot make an already-modded
+        -- run fully hot-join-proof.
+        local STRIP_GRACE = 15.0
+        local _clock = 0
+        local _strip_deadline = nil
+
+        if inst then
+            inst:register_gated_feature("ct_modded_boons_miracles", {
+                label = "ct_gated_modded_boons",
+                on_enable = function()
+                    _strip_deadline = nil
+                    _ct_inject_modded_pools()
+                end,
+                on_disable = function()
+                    _ct_eject_modded_pools()
+                    if Managers and Managers.player and Managers.player.is_server then
+                        _strip_deadline = _clock + STRIP_GRACE
+                    end
+                end,
+            })
+
+            -- install() wraps the existing mod.update (defined near the top of this file)
+            -- preserving it; grep-verified single assignment, nothing reassigns it later.
+            pcall(function() inst:install() end)
+
+            -- Fail-safe INITIAL posture. The lib starts _applied = "disabled" but never
+            -- invokes on_disable for the initial state (callbacks fire on transitions
+            -- only), while the load-time registration above already put modded boons in
+            -- the pools. Without this eject, a lobby containing a never-acking (non-ct)
+            -- peer would keep the load-time pools forever - the exact #426 hole. Eject
+            -- once now; the first tick re-enables within ~0.5s when solo, after acks +
+            -- settle in a lobby.
+            _ct_eject_modded_pools()
+
+            -- Strip-debounce ticker, chained onto mod.update after install()'s wrap:
+            -- chain is [this] -> [beacon wrapper] -> [ct's own update], then beacon tick,
+            -- then this tick. NOT a new (Class, method) hook - plain function chaining.
+            local prev_update = mod.update
+            mod.update = function(dt)
+                if prev_update then
+                    -- Surface (don't just swallow) errors from the wrapped chain - ct's
+                    -- own update carries the chunk drain + tickers and previously errored
+                    -- loudly through VMF's caller (review finding, pre-ship).
+                    local ok_u, err_u = pcall(prev_update, dt)
+                    if not ok_u then
+                        pcall(printf, "[ct:426] wrapped mod.update errored: %s", tostring(err_u))
+                    end
+                end
+                _clock = _clock + (dt or 0)
+                if _strip_deadline and _clock >= _strip_deadline then
+                    _strip_deadline = nil
+                    _ct_strip_modded_content()
+                end
+            end
+
+            pcall(printf, "[ct:426] peer-parity beacon installed (channel=ct_peer_parity_present, schema=%d); modded boons/miracles inert until parity confirmed", CT_RPC_SCHEMA)
+        else
+            -- Beacon unavailable: _ct_wire_safe() already returns false (fail-safe), so
+            -- every gate holds modded content inert. Eject pools to match.
+            _ct_eject_modded_pools()
+            pcall(printf, "[ct:426] peer-parity beacon UNAVAILABLE - modded boons/miracles remain inert this session (fail-safe)")
+        end
+    end
+    _ct_install_peer_parity()
+end
+
+_rt_register("peer_parity_beacon_installed", function()
+    local pp = mod._ct_peer_parity
+    if type(pp) ~= "table" then return "mod._ct_peer_parity missing (beacon not built)" end
+    if not pp:is_installed() then return "beacon not installed (network_register failed?)" end
+    if pp._initial_applied ~= "disabled" then return "fail-safe posture changed: initial applied state must be 'disabled'" end
+    if pp.FAILSAFE_POSTURE ~= "feature_inert_until_confirmed" then return "fail-safe posture constant changed" end
+    if pp:feature_count() < 1 then return "no gated feature registered" end
+    return nil
+end)
+
+_rt_register("peer_parity_gate_classify", function()
+    -- Simulated peer sets against the lib's pure classifier (issue 426 verify spec).
+    local pp = mod._ct_peer_parity
+    local classify = pp and pp.__classify
+    if type(classify) ~= "function" then return "__classify not exposed" end
+    if classify({}, {}) ~= true then return "solo (no other peers) must classify safe" end
+    if classify({ p1 = true }, {}) ~= false then return "un-acked peer must classify unsafe" end
+    if classify({ p1 = true }, { p1 = true }) ~= true then return "all-acked lobby must classify safe" end
+    if classify({ p1 = true, p2 = true }, { p1 = true }) ~= false then return "partially-acked lobby must classify unsafe" end
+    if classify({}, { p_stale = true }) ~= true then return "stale ack with empty roster must classify safe" end
+    return nil
+end)
+
+_rt_register("ct_wire_strip_name_predicate", function()
+    local fn = mod._ct_is_ct_buff_template
+    if type(fn) ~= "function" then return "mod._ct_is_ct_buff_template missing" end
+    if not fn("ct_miracle_of_ulric") then return "ct_miracle_of_ulric must match" end
+    if not fn("ct_miracle_of_isha_aegis") then return "ct_miracle_of_isha_aegis must match" end
+    if not fn("ct_meta_movespeed_stack") then return "ct_meta_movespeed_stack must match" end
+    if not fn("power_up_ct_boon_vauls_anvil_unique") then return "power_up_ct_boon_* must match" end
+    if not fn("power_up_ct_kill_heal_exotic") then return "power_up_ct_kill_heal_exotic must match" end
+    if fn("power_up_movespeed_exotic") then return "vanilla power_up_movespeed_exotic must NOT match" end
+    if fn("deus_larger_clip") then return "vanilla deus_larger_clip must NOT match" end
+    if fn(nil) then return "nil must NOT match" end
+    return nil
+end)
+
+_rt_register("modded_power_up_registry", function()
+    local f = mod._ct_is_modded_power_up
+    if type(f) ~= "function" then return "mod._ct_is_modded_power_up missing" end
+    if not f("ct_meta_movespeed") then return "ct_meta_movespeed must be in the modded registry" end
+    if not f("ct_boon_vauls_anvil") then return "ct_boon_vauls_anvil must be in the modded registry" end
+    if not f("ct_kill_heal") then return "ct_kill_heal must be in the modded registry (issue 406 re-enable)" end
+    if f("natural_bond") then return "vanilla natural_bond must NOT be in the modded registry" end
+    if f(nil) then return "nil must NOT be in the modded registry" end
+    return nil
+end)
 
 -- ============================================================
 -- Home Brewer +50% potency for reworked potions (v0.7.31-alpha)
@@ -13090,10 +13529,7 @@ _rt_register("deus_rarities_valid", function()
     if #bad > 0 then return "invalid rarity: " .. table.concat(bad, ", ") end
 end)
 
--- 2026-05-23 v0.7.98-dev DISABLED: kill_heal_uses_permanent_heal_type — ct_kill_heal boon is
--- disabled, the underlying buff_func is no longer registered. Restore alongside the
--- ct_kill_heal block.
---[[
+-- v0.7.240-dev (#406): restored alongside the re-enabled ct_kill_heal block above.
 _rt_register("kill_heal_uses_permanent_heal_type", function()
     -- ct_kill_heal must use "health_regen" heal_type (permanent-heal whitelist),
     -- not "heal_from_proc" — see comment above the buff_funcs assignment near
@@ -13115,7 +13551,6 @@ _rt_register("kill_heal_uses_permanent_heal_type", function()
     -- introspect the closure body, but the fact the function was registered
     -- means the registration ran without erroring during template build.
 end)
---]]
 
 _rt_register("game_round_ended_swallows_error", function()
     -- The DeusMechanism.game_round_ended hook (~L1498) must NOT re-throw the

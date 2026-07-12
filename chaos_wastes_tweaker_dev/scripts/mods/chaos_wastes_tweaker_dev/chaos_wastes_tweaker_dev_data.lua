@@ -77,10 +77,11 @@ local BOON_TREE = {
                     "deus_increased_healing_taken", "deus_max_health", "healers_touch",
                     "heal_on_dot_damage_dealt", "health", "invigorating_strike",
                     "natural_bond", "transfer_temp_health_at_full",
-                    -- 2026-05-23 v0.7.98-dev DISABLED: ct_kill_heal mod boon removed per user
-                    -- request after Chest-of-Trials crash. Re-add this line when re-enabling
-                    -- the ct_kill_heal block in chaos_wastes_tweaker.lua (~L5698).
-                    -- "ct_kill_heal",  -- v0.7.32 Mod Boon: 1 green HP per kill (exotic)
+                    -- v0.7.240-dev (#406): re-enabled (was disabled v0.7.98-dev after a
+                    -- Chest-of-Trials crash). The user needs it selectable as a starting
+                    -- boon to verify the issue-406 client heal fix, and modded boons are
+                    -- now peer-parity gated (issue 426) so pool exposure is wire-safe.
+                    "ct_kill_heal",  -- v0.7.32 Mod Boon: 0.25 green HP per kill (exotic)
                 },
             },
             {

@@ -373,18 +373,18 @@ local loc = {
     start_boon_ct_meta_ammo_tooltip   = { en = "(Mod Boon) Per active boon: +5%% total ammo, -5%% overheat per cast, +5%% Moonfire energy. Exotic." },
     display_name_ct_meta_ammo = { en = "Quiver Cascade" },
     description_ct_meta_ammo  = { en = "+5%% total ammo per active boon. Per-shot cost saturates at 75%% off; never free." },
-    -- v0.7.32: 1 green HP per kill mod boon
-    -- 2026-05-23 v0.7.98-dev DISABLED: ct_kill_heal mod boon removed per user request after
-    -- Chest-of-Trials crash. Restore alongside the ct_kill_heal block in
-    -- chaos_wastes_tweaker.lua (~L5698) and the BOON_TREE entry in chaos_wastes_tweaker_data.lua.
-    --[[
-    disable_boon_ct_kill_heal = { en = "Disable Boon: (Mod Boon) Khaine's Communion" },
-    start_boon_ct_kill_heal   = { en = "Starting Boon: (Mod Boon) Khaine's Communion" },
+    -- v0.7.32: green HP per kill mod boon. v0.7.240-dev (#406): re-enabled (was disabled
+    -- v0.7.98-dev) so the user can select it as a starting boon and verify the issue-406
+    -- client heal fix; [untested] until that in-game verify (LOCALIZATION_STANDARD s13).
+    disable_boon_ct_kill_heal = { en = "[untested] [Issue 406] Disable Boon: (Mod Boon) Khaine's Communion" },
+    start_boon_ct_kill_heal   = { en = "[untested] [Issue 406] Starting Boon: (Mod Boon) Khaine's Communion" },
     disable_boon_ct_kill_heal_tooltip = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Catalogued under Health by effect. Toggle this off to remove it from the boon pool." },
     start_boon_ct_kill_heal_tooltip   = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Enable to roll as your starting boon: the boon must be injected into the pool (which happens automatically when this mod is active)." },
     display_name_ct_kill_heal = { en = "Khaine's Communion" },
     description_ct_kill_heal  = { en = "Killing an enemy heals you for 0.25 permanent (green) health." },
-    --]]
+    -- v0.7.240-dev (#426): label for the peer-parity chat notice ("Peer-parity:
+    -- disabled <label>..."). Not a menu option title, so no status tag.
+    ct_gated_modded_boons = { en = "Modded Boons and Miracles" },
     disable_boon_ct_boon_vauls_anvil = { en = "[working] Disable Boon: (Mod Boon) Vaul's Anvil" },
     start_boon_ct_boon_vauls_anvil   = { en = "[working] Starting Boon: (Mod Boon) Vaul's Anvil" },
     disable_boon_ct_boon_vauls_anvil_tooltip = { en = "(Mod Boon) Boon variant with the same effect as the trait. Requires the matching Rework toggle." },
