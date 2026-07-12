@@ -109,6 +109,8 @@ technical entry point; from here, follow the tree to the topic-specific referenc
 - `event_tweaker/`:
   - `CLAUDE.md` - workflow guardrails: module map discipline (`_evt_*` split), load-bearing injection guards, single-source catalogs. Read before touching the mod.
   - `DEVELOPMENT.md` - module contracts + "where new code goes", the three hooks (`get_special_events`, `get_active_events`, `get_level_variation_data`), mutator/preset registration, confirmed mutator catalog.
+- `general_tweaker_dev/`:
+  - `ENGINE_SURFACE.md` - the mod's engine contact surface: every vanilla (Class, method) `gt` hooks across its ~30 `_gt_*` modules, grouped into the four surfaces it touches (bot behaviour tree, world/state lifecycle, host lobby/session seams, player damage/movement/camera), with `docs/engine/` links and the paid-for dead ends (dead-world AV §32/#459, POSITION_LOOKUP #337, merge-dispatch single-hook discipline, AI-takeover). Documents the ACTIVE dev stream (`general_tweaker_dev/`), not stable `general_tweaker/`. Read before adding a hook or auditing a crash class.
 - `modded_progression/`:
   - `PLAN.md` - full design for the modded-realm vanilla-progression re-enable.
 - `verminious_dreams_lighting/`:
