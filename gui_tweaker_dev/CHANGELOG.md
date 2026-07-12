@@ -5,6 +5,17 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.218-dev (2026-07-12) -- #500 remove stale probes for closed issues (173/92/99/95/123/124/106) [untested]
+
+- **#500: removed four diagnostic probe files whose issues are all CLOSED.** Each was pure read-only telemetry (raw-printf / mod:info, returns `{}` or nothing, no state consumed by any non-probe module -- verified by whole-mod grep of every field they set). No behavior change to the mod.
+  - `_gut_173_probes.lua` (issue 173, `[gut:173] B7`): hook_safe `GameModeAdventure.force_respawn` + a 60-frame post-respawn position read. Only hook on that method; only effect was the printf. Removed the file + its dofile line.
+  - `_gut_glow_probe.lua` (issues 92, 99, `[gut-glow-probe]`): hook_safe `OptionsView.draw_widgets` + `IngameUI.update` A/B glow capture. Its only mod-state write, `mod._opt_view_ref`, is read nowhere else. Removed the file + its dofile line.
+  - `_gut_keybind_probe.lua` (issues 95, 123, `[gut-keybind-probe]`): hook_safe on three `VMFOptionsView` rebind methods + a `mod.update`-chain scan (its `mod._gut_kb_last_rows` latch is file-local). Removed the file + its dofile line.
+  - `_gut_menu_transition_probe.lua` (issues 124, 106, 123, `[gut-menu-probe]`; also hosted the 173 Probe B3 `[gut:173] B3` residency line): hook_safe `IngameUI.transition_with_fade` + `IngameUI.handle_transition` + an instance-level wrap of the live ModTweakerView exit/on_enter. All observation-only. Removed the file + its dofile line.
+- **KEPT `_gut_options_probe.lua`** (Mod Tweaker scrollbar ground-truth): not listed in #500 and carries no closed-issue tag, so left byte-identical (still owns `mod._opt_ref` / `_opt_dumped` / `_opt_apply_dumped` and the `/dump_options` command).
+- **KEPT `_gut_cutscenes.lua`** (the `[gut:cutscene]` probe is inside the live cutscene feature, not a standalone probe file) untouched.
+- `.package` uses a `scripts/mods/gui_tweaker_dev/*` glob, so no package-manifest edit was needed; only the four `pcall(mod.dofile, ...)` lines in `gui_tweaker_dev.lua` were removed.
+
 ## 0.2.217-dev (2026-07-11) -- two P0 crash-window fixes (freecam world gate; loadout fallback index space) + #480 gear-read trace throttle [verify-fix]
 
 - **P0 FIX (freecam): Leave Game with Free Camera active could fassert in `WorldManager.world`** (BUG_CLASSES class 32, issue 459 family; IMPROVEMENT_BACKLOG gut_dev row). `_drive_free_cam` ran a bare `Managers.world` name lookup per frame from mods_update -- which keeps ticking through StateIngame teardown -- and `WorldManager.world()` fasserts on a missing name (world_manager.lua:111-115), making the `if not world` check after it dead code. The activation-time render-state diagnostic had the same bare lookup.

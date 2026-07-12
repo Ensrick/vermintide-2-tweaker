@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.217-dev"
+local MOD_VERSION = "0.2.218-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2558,15 +2558,6 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_career_swap")
 -- scrollbar. See _gut_options_probe.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_options_probe")
 
--- Dev probe (#92 corrected): hook the LIVE VANILLA GAME SETTINGS menu (OptionsView,
--- NOT VMFOptionsView — the prior probe captured the wrong menu) and emit
--- [gut-glow-probe] raw-printf lines (survive logging-off) capturing the exact
--- texture/material/pass/style the real Settings menu uses on hover for a stepper/slider
--- arrow, a collapsed dropdown arrow (incl. the open-state FLIP + glow-while-open), and an
--- EXTENDED (open) dropdown option — ground-truth to confirm/correct the Mod Tweaker glow
--- replication. Fires only on hover/open-state CHANGE (bounded). See _gut_glow_probe.lua.
-pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_glow_probe")
-
 -- (#313) Crosshair Kill Confirmation options-menu bridge. When the CKC mod
 -- ("Crosshair Kill Confirmation") is installed + togglable, takes over the vanilla
 -- crosshair_kill_confirm dropdown as an On/Off toggle for the mod, forces the vanilla
@@ -2576,36 +2567,6 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_glow_probe")
 -- Must dofile AFTER on_setting_changed (~632) + the on_all_mods_loaded chain (~2001), both
 -- well above here. See _gut_ckc_bridge.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_ckc_bridge")
-
--- Dev probe (#123): capture how VMF actually does keybind REBINDING so we can later
--- make the Mod Tweaker's read-only keybind rows settable. Hooks the three
--- VMFOptionsView rebind methods (callback_setting_keybind / set_new_keybind /
--- callback_change_setting_keybind_state) on the live Esc -> Mod Options menu, and logs
--- the Mod Tweaker's own keybind-row classification (wtype/readonly/value/draw-pass) via
--- the mod.update chain (NOT a 2nd IngameUI.update hook — the glow probe owns that).
--- Raw-printf '[gut-keybind-probe]'; diagnostic only, no settability. See
--- _gut_keybind_probe.lua. Must dofile AFTER _gut_cutscenes/_hide_ui so it chains their
--- mod.update tick.
-pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_keybind_probe")
-
--- Dev probe (#124): MEASURE the Mod Tweaker exit routing instead of trusting the
--- code-read. Hooks IngameUI.transition_with_fade + IngameUI.handle_transition
--- (hook_safe; DIFFERENT methods from the setup_views/update hooks gut already owns,
--- so no (Class,method) collision) and wraps the LIVE attached ModTweakerView instance's
--- exit/on_enter (the class is neither a _G global nor a dofile singleton, so a VMF hook
--- can't reliably reach it). Raw-printf '[gut-menu-probe]' (survives mod-logging-off),
--- bounded + pcall-guarded. On exit it logs the real fired transition + the view the
--- player lands on, so '#124 exit -> game' is confirmed empirically. See
--- _gut_menu_transition_probe.lua.
-pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_menu_transition_probe")
-
--- (#173 Probe B7): hook_safe GameModeAdventure.force_respawn + log the resulting spawn
--- position vs the pre-respawn position, to settle whether a career swap teleports the
--- player to level start. Read-only diagnostic. Must dofile AFTER the mod.update definers
--- (_gut_camera / _gut_cutscenes / _hide_ui / _gut_keybind_probe) since it chains mod.update.
--- (Probe B3 -- char-select bundle residency -- lives inside _gut_menu_transition_probe.lua,
--- extending the existing handle_transition hook per the VMF no-duplicate-hook rule.)
-pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_173_probes")
 
 -- Bestiary & Armory (absorbed): merged weapon (Armory) + enemy (Bestiary)
 -- compendium with a PURE-DYNAMIC data layer — weapons enumerated live from
