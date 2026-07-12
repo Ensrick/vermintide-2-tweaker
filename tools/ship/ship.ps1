@@ -480,7 +480,11 @@ try {
                             }
                             $existing = @()
                             if ($meta.labels) { $existing = @($meta.labels | ForEach-Object { $_.name }) }
+                            # First shipped work retires the not-started marker (issue #498).
+                            $removeArgs = @()
+                            if ($existing -contains 'not-started') { $removeArgs = @('--remove-label', 'not-started') }
                             if ($existing -contains $statusLabel) {
+                                if ($removeArgs.Count -gt 0) { & gh issue edit $n --repo $ghRepo @removeArgs 2>$null | Out-Null }
                                 Write-Host ("  - #{0}: already carries '{1}'" -f $n, $statusLabel) -ForegroundColor DarkGray
                                 $labelSummary += ("#{0} already {1}" -f $n, $statusLabel)
                                 continue
@@ -490,11 +494,12 @@ try {
                             # post-fix pass owed) supersedes both. PROJECT_STANDARDS section 11.
                             $stronger = @('verify-fix-coop', 'Fixed') | Where-Object { $existing -contains $_ }
                             if ($stronger) {
+                                if ($removeArgs.Count -gt 0) { & gh issue edit $n --repo $ghRepo @removeArgs 2>$null | Out-Null }
                                 Write-Host ("  - #{0}: carries '{1}' (supersedes '{2}') -- not downgrading" -f $n, ($stronger -join "', '"), $statusLabel) -ForegroundColor DarkGray
                                 $labelSummary += ("#{0} kept {1}" -f $n, ($stronger -join '+'))
                                 continue
                             }
-                            & gh issue edit $n --repo $ghRepo --add-label $statusLabel 2>$null | Out-Null
+                            & gh issue edit $n --repo $ghRepo --add-label $statusLabel @removeArgs 2>$null | Out-Null
                             if ($LASTEXITCODE -eq 0) {
                                 Write-Host ("  + #{0}: added '{1}'" -f $n, $statusLabel) -ForegroundColor Green
                                 $labelSummary += ("#{0} +{1}" -f $n, $statusLabel)

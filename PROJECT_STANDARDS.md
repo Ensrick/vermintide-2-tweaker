@@ -1427,7 +1427,11 @@ Every issue carries three dimensions: **status + type + mod**. Nothing else is a
 status. This was ad-hoc "wild west" through 2026-07-03 (four overlapping status
 labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix.
 
-**Status (0–1 of these) — the shipped-work lifecycle signal:**
+**Status (exactly 1 of these on every OPEN issue) — the lifecycle signal:**
+- `not-started` — no fix or diagnostic work attempted yet (added 2026-07-12,
+  issue #498; how the user sees the untouched backlog at a glance). Applied by
+  the #498 audit to every open issue with zero work evidence; REMOVE it in the
+  same pass that ships the first work and adds a real status label.
 - `verify-fix` — a code fix shipped; the user tests it in-game (solo-verifiable).
 - `verify-fix-coop` — a code fix shipped whose verification needs **2+ people**
   (cross-peer wire safety, host/client desync, hot-join races). REPLACES
@@ -1443,10 +1447,10 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   regression test (`_rt_register` / QA check) that locks the invariant. Close the
   issue only when the post-fix pass is done (or explicitly judged not applicable —
   say so in a comment).
-- An issue with **none** of these has **not been worked yet** (this is how the
-  user sees the untouched backlog at a glance).
 - **Retired 2026-07-03:** `verify-in-game` → merged into `verify-fix`; `probe-live` →
   merged into `diagnostics-armed`. Do not recreate them.
+- `qa/check_issue_status_labels.ps1` pass 3 sweeps all open issues and warns on
+  any carrying zero lifecycle labels (advisory, issue #498).
 
 **Type (exactly 1):**
 - `bug` — something is broken.
@@ -1466,9 +1470,10 @@ merge had repurposed it onto enemy_tweaker issues. Do NOT recreate `et`.)
 **Optional modifiers (informational, never a substitute for a type):** `regression`
 (a fix that broke a working feature), `audit`, `refactor`, `blocked`, `deferred`.
 
-When you ship a fix or a diagnostic for an issue, add the matching status label in the
-**same pass** as the CHANGELOG entry (rule #5 territory). Filing a new issue: give it a
-type + mod immediately; add a status label only once you have actually shipped work.
+When you ship a fix or a diagnostic for an issue, add the matching status label (and
+remove `not-started`) in the **same pass** as the CHANGELOG entry (rule #5 territory).
+Filing a new issue: give it a type + mod + `not-started` immediately; swap `not-started`
+for a real status label only once you have actually shipped work.
 
 **Mechanized (issue #326).** `tools/ship/ship.ps1` step 6 now applies the status label
 automatically on every dev-stream ship: it parses the `#N` refs out of the CHANGELOG entry

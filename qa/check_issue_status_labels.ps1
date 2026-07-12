@@ -1,13 +1,18 @@
 # check_issue_status_labels.ps1 - GitHub issue STATUS-LABEL drift scan.
 #
 # Doctrine: PROJECT_STANDARDS.md § 11 "Labels". Every issue carries status +
-# type + mod. The only two STATUS labels are:
-#   verify-fix         - a code fix shipped; the user tests it in-game.
+# type + mod. The lifecycle STATUS labels are:
+#   not-started        - no fix or diagnostic work attempted yet.
 #   diagnostics-armed  - a diagnostic/probe shipped; user repros to capture data.
-# An issue with NEITHER has not been worked yet. When work ships for an issue,
-# the matching status label must be added in the SAME pass as the CHANGELOG
-# entry (rule #5 / CLAUDE.md #13). This check catches the recurring miss where a
-# fix/probe ships in the latest CHANGELOG entry but the status label is forgotten.
+#   verify-fix         - a code fix shipped; the user tests it in-game solo.
+#   verify-fix-coop    - a code fix shipped; needs 2+ testers in-game.
+#   Fixed              - user-verified; post-fix pass (hardening/docs/tests) owed.
+# When work ships for an issue, the matching status label must be added (and
+# not-started removed) in the SAME pass as the CHANGELOG entry (rule #5 /
+# CLAUDE.md #13). This check catches the recurring miss where a fix/probe ships
+# in the latest CHANGELOG entry but the issue still says not-started / nothing.
+# A second pass (issue #498) sweeps ALL open issues for a missing lifecycle
+# state entirely - every open issue must carry exactly one of the five.
 #
 # This is a WARNING-ONLY, NON-BLOCKING advisory scan (wired into run_all.ps1
 # under -Policy 'Advisory', exactly like check_loc_tags.ps1). It NEVER fails the
@@ -70,10 +75,12 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path $RepoRoot).Path
 
-# ---- the status-label lifecycle (§ 11; user rules 2026-07-11) ----
+# ---- the status-label lifecycle (§ 11; user rules 2026-07-11/12) ----
 # verify-fix (solo-verifiable fix) | verify-fix-coop (needs 2+ testers) |
 # diagnostics-armed (probe) | Fixed (user-verified; post-fix pass owed).
+# not-started marks zero work; it does NOT count as a worked status here.
 $StatusLabels = @('verify-fix', 'verify-fix-coop', 'diagnostics-armed', 'Fixed')
+$LifecycleLabels = $StatusLabels + @('not-started')
 
 # ---- active mods whose CHANGELOG.md is authored newest-first ----
 # Mirrors the ship-doctrine "active mods" set: the single-stream mods + the five
@@ -267,16 +274,42 @@ foreach ($c in ($candidates | Sort-Object Issue, Mod)) {
     }
 }
 
+# Pass 3 (issue #498): EVERY open issue must carry a lifecycle state - one of
+# the four worked statuses or not-started. Zero lifecycle labels = drift.
+$stateless = @()
+$openJson = & gh issue list --state open --limit 400 --json number,labels 2>$null
+if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($openJson)) {
+    try {
+        foreach ($o in ($openJson | ConvertFrom-Json)) {
+            $lbls = @()
+            if ($o.labels) { $lbls = @($o.labels | ForEach-Object { $_.name }) }
+            if (-not ($lbls | Where-Object { $LifecycleLabels -contains $_ })) {
+                $stateless += [pscustomobject]@{ Issue = $o.number; Labels = ($lbls -join ',') }
+            }
+        }
+    } catch {}
+}
+
 Write-Host ""
 if ($hardError) {
     Write-Host "[check_issue_status_labels] ERROR -- a CHANGELOG failed to read." -ForegroundColor Red
     exit 2
 }
 
-if ($findings.Count -eq 0) {
-    Write-Host "[check_issue_status_labels] OK -- every open issue referenced in a latest CHANGELOG entry carries a status label." -ForegroundColor Green
+if ($findings.Count -eq 0 -and $stateless.Count -eq 0) {
+    Write-Host "[check_issue_status_labels] OK -- CHANGELOG-referenced issues carry status labels; every open issue carries a lifecycle state." -ForegroundColor Green
     exit 0
 }
+
+if ($stateless.Count -gt 0) {
+    Write-Host ("[check_issue_status_labels] {0} open issue(s) carry NO lifecycle state (not-started / diagnostics-armed / verify-fix / verify-fix-coop / Fixed):" -f $stateless.Count) -ForegroundColor Yellow
+    foreach ($s in ($stateless | Sort-Object Issue)) {
+        $lbl = if ($s.Labels) { $s.Labels } else { '(no labels)' }
+        Write-Host ("  ! #{0} [{1}]" -f $s.Issue, $lbl) -ForegroundColor Yellow
+    }
+}
+
+if ($findings.Count -eq 0) { exit 1 }
 
 Write-Host ("[check_issue_status_labels] WARNINGS: {0} -- advisory, non-blocking." -f $findings.Count) -ForegroundColor Yellow
 Write-Host "  -- shipped work referenced in latest CHANGELOG entry but issue has no status label (verify-fix / diagnostics-armed):" -ForegroundColor Yellow

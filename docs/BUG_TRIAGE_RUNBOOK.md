@@ -245,10 +245,13 @@ UPLOAD - a local deploy alone is silently clobbered.
     manual follow-up in the same pass (user rule 2026-07-11).
   - `gh issue edit <N> --add-label diagnostics-armed` when you shipped
     **instrumentation only** (no behavior change) and need a repro to capture data.
-  - Never more than one status label at a time, never invent a new one. An issue
-    with no status label reads as "not worked yet" - so a shipped-but-unlabeled fix
-    is invisible to the user's backlog view. Label every issue the ship addressed
-    (here: the primary Issue AND any it corroborates/fixes together).
+  - `--remove-label not-started` in the same command if the issue carried it -
+    the first shipped work retires that marker (issue #498, user rule 2026-07-12).
+  - Never more than one status label at a time, never invent a new one. Every open
+    issue carries exactly one lifecycle label (`not-started` until work ships) -
+    a shipped-but-unlabeled fix is invisible to the user's backlog view. Label every
+    issue the ship addressed (here: the primary Issue AND any it corroborates/fixes
+    together).
   - If the fix touched a dev-build menu option, also move its `_localization.lua`
     status tag (`[untested]`/`[Issue N]` -> `[verify-fix]`) in the same pass
     (issue #301; `LOCALIZATION_STANDARD.md` §13) - unless another session owns
