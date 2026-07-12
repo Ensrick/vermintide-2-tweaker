@@ -44,6 +44,8 @@ local _DORMANT_EXPORTS = {
     replace_textures      = function() end,
     add_particles         = function() end,
     attach_anim_extension = function() end,
+    release_packages      = function() end,   -- #282: no-op when dormant
+    loaded_packages       = {},               -- #282: empty registry when dormant
     dormant               = true,
 }
 if not mod then return _DORMANT_EXPORTS end
@@ -153,12 +155,74 @@ local function _has_texture(path)
     return Application.can_get("texture", path) and true or false
 end
 
+-- v0.9.76-dev (issue #282): exactly-once package loading with a symmetric
+-- lifecycle release. PackageManager.load() INCREMENTS a per-(package,
+-- reference_name) refcount on every call (package_manager.lua:26-27) and
+-- unload() decrements by one (package_manager.lua:196-238), so the old
+-- per-call `load(path, "global")` here - invoked from replace_textures /
+-- add_particles on EVERY hijacked wield/spawn - accumulated 90+ references
+-- per session with no unload anywhere in this file. Shutdown then walked the
+-- count down one-by-one ("Package still referenced, NOT unloaded" cascades)
+-- and ended in the crashify "not unloaded, this can potentially cause an
+-- deadlock" block on both peers (#282 / #477 logs).
+--
+-- "global" is not magic: it is an arbitrary reference-name string (vanilla
+-- uses it for boot-lifetime packages, boot.lua:1759-1764). A mod-owned name
+-- keeps our references attributable (dump_reference_counter) and immune to
+-- collisions with vanilla's / LA's "global" refs on the same packages.
+--
+-- Release point: release_packages() drops the single per-path reference. It
+-- is called from cosmetics_tweaker.lua's mod.on_game_state_changed on the
+-- ("exit","StateIngame") notification (which fires BEFORE StateIngame.on_exit
+-- destroys the units, state_ingame.lua:1924-1929, and the level world, :1939)
+-- and from mod.on_unload. Releasing while units may still use the material is
+-- engine-safe: unload() only releases the resource once NO reference under
+-- ANY name remains, and even then a still-in-use package is routed through
+-- the delayed-unload queue instead of freed live (package_manager.lua:213-224,
+-- `can_unload` gate, flushed in its update()) - the engine's own safe path.
+-- The wiring lives
+-- in cosmetics_tweaker.lua because this file is dofile'd at its line 22,
+-- BEFORE mod.on_game_state_changed / mod.on_unload are defined - wrapping
+-- them here would be silently overwritten by the later definitions.
+local MH_PKG_REF = "cosmetics_tweaker_mh"
+local _mh_loaded_packages = {}
+local _mh_skip_logged = {}
+
 local function _safe_load_package(path)
     if not _has_package(path) then
         mod:warning("[mh_embed] Skipping package load — not in resources: %s", tostring(path))
         return
     end
-    manager_package:load(path, "global")
+    if _mh_loaded_packages[path] then
+        -- Once per path per hold: the dedupe-skip line proves the registry fired
+        -- without spamming a line on every wield/visibility toggle for the rest
+        -- of the session.
+        if not _mh_skip_logged[path] then
+            _mh_skip_logged[path] = true
+            pcall(printf, "[cos:282] dedupe-skip (already referenced; further skips silent): %s", tostring(path))
+        end
+        return
+    end
+    local ok, err = pcall(manager_package.load, manager_package, path, MH_PKG_REF)
+    if ok then
+        _mh_loaded_packages[path] = true
+        pcall(printf, "[cos:282] first-load ref=%s: %s", MH_PKG_REF, tostring(path))
+    else
+        mod:warning("[mh_embed] package load FAILED for %s: %s", tostring(path), tostring(err))
+    end
+end
+
+local function release_packages(reason)
+    for path in pairs(_mh_loaded_packages) do
+        _mh_loaded_packages[path] = nil
+        local ok, err = pcall(manager_package.unload, manager_package, path, MH_PKG_REF)
+        if ok then
+            pcall(printf, "[cos:282] unload (%s): %s", tostring(reason), tostring(path))
+        else
+            pcall(printf, "[cos:282] unload FAILED (%s) for %s: %s",
+                tostring(reason), tostring(path), tostring(err))
+        end
+    end
 end
 
 -- ============================================================
@@ -411,8 +475,13 @@ end
 mod:info("[mh_embed] hooks installed (4) — embedded Material-Hijack (patched) active. create_equipment + _spawn_item_unit folded into cosmetics_tweaker's existing hooks (v0.9.5 de-dupe).")
 
 -- v0.9.5: module exports for cosmetics_tweaker.lua to call from its own hooks.
+-- v0.9.76-dev (#282): release_packages (called from mod.on_game_state_changed
+-- StateIngame exit + mod.on_unload) and the loaded_packages registry (read by
+-- the /cos_regression_test mh_package_single_reference check).
 return {
     replace_textures      = replace_textures,
     add_particles         = add_particles,
     attach_anim_extension = attach_anim_extension,
+    release_packages      = release_packages,
+    loaded_packages       = _mh_loaded_packages,
 }

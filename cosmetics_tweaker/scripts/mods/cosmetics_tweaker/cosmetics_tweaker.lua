@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.75-dev"
+local MOD_VERSION = "0.9.76-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -869,6 +869,16 @@ mod.on_game_state_changed = function(status, state_name)
     -- v0.9.43-dev TRANSITION trace: world/mission/keep load + game-state change.
     -- Anchors the area-load drop (#3) and the mission-load timeline in the trace.
     _trace("TRANSITION game_state %s/%s", tostring(state_name), tostring(status))
+    -- v0.9.76-dev (#282): release the MH embed's package references at level-world
+    -- teardown. StateIngame exit destroys the world and every unit using a hijacked
+    -- material, so the single per-path reference (exactly-once since 0.9.76) can
+    -- drop; if the engine still holds a resource, PackageManager routes the release
+    -- through its own delayed-unload queue (package_manager.lua:213-224). Next
+    -- level's first hijacked spawn re-loads fresh.
+    if status == "exit" and state_name == "StateIngame"
+        and MH_EMBED and MH_EMBED.release_packages then
+        MH_EMBED.release_packages("StateIngame exit")
+    end
     apply_cosmetic_unlocks()
     -- v0.9.0-dev: retry deferred _G.apply_material_settings hook (lazy-loaded
     -- by Stingray flow graph on first hub/level enter).
@@ -981,6 +991,13 @@ end
 -- into thinking hot-reload is safe.
 mod.on_unload = function()
     mod:info("[unload] cosmetics_tweaker unloading")
+    -- v0.9.76-dev (#282): drop the MH embed's remaining package references so
+    -- shutdown's PackageManager.destroy() walk finds them already released
+    -- (the leaked-refs shape produced the crashify "not unloaded, this can
+    -- potentially cause an deadlock" block at exit on both peers).
+    if MH_EMBED and MH_EMBED.release_packages then
+        MH_EMBED.release_packages("mod_unload")
+    end
 end
 
 -- ============================================================
@@ -5546,6 +5563,37 @@ mod:hook("LootItemUnitPreviewer", "load_package", function(func, self, package_n
     return func(self, package_name)
 end)
 
+-- v0.9.76-dev (#282 sweep): release the per-previewer parent-package references
+-- taken by the load_package hook above. Vanilla LootItemUnitPreviewer.destroy
+-- unloads only ITS OWN _loaded_packages/_packages_to_load entries
+-- (loot_item_unit_previewer.lua:64-66 + 423-451); our v0.8.39 parent refs use
+-- the same "LootItemUnitPreviewer<unique_id>" reference name but a package
+-- vanilla never tracked, so every illusion-browser open of an LA clone item
+-- accumulated one never-released reference per parent package - the same
+-- accumulate-per-event shape as the MH embed leak, at browser-open frequency.
+-- hook_safe AFTER vanilla destroy (units already despawned; a still-held
+-- resource goes through PackageManager's delayed-unload queue). Sole cosmetics
+-- hook on (LootItemUnitPreviewer, destroy) - grep-verified 2026-07-11.
+mod:hook_safe("LootItemUnitPreviewer", "destroy", function(self)
+    local refs = _la_parent_pkg_ref_by_previewer[self]
+    if not refs then return end
+    _la_parent_pkg_ref_by_previewer[self] = nil
+    local reference_name = "LootItemUnitPreviewer"
+    if self._unique_id then
+        reference_name = reference_name .. tostring(self._unique_id)
+    end
+    for parent_pkg in pairs(refs) do
+        local ok, err = pcall(Managers.package.unload, Managers.package, parent_pkg, reference_name)
+        if ok then
+            pcall(printf, "[cos:282] unload (previewer destroy): %s ref=%s",
+                tostring(parent_pkg), reference_name)
+        else
+            pcall(printf, "[cos:282] unload FAILED (previewer destroy) for %s: %s",
+                tostring(parent_pkg), tostring(err))
+        end
+    end
+end)
+
 -- Illusion/skin browser preview (LootItemUnitPreviewer)
 -- NOTE: must use mod:hook (not hook_safe) so we can capture the returned
 -- `units` array. The caller (`_on_packages_loaded`) only assigns
@@ -5893,6 +5941,26 @@ if CosmeticUtils then
             end
         end
 
+        -- v0.9.76-dev (#421): ct_* custom-illusion keys live in _custom_skin_keys,
+        -- NOT in LA_BRIDGE.backend_to_armoury, so the LA branch above never catches
+        -- them. Vanilla then encodes skin_id = NetworkLookup.weapon_skins[skin_name]
+        -- (cosmetic_utils.lua:205-209) and writes it into the player_sync_data game
+        -- object (cosmetic_utils.lua:230-251) - a GameSession field synced to EVERY
+        -- peer. A peer WITHOUT cosmetics_tweaker decodes it back through the strict
+        -- lookup on the playerlist/inspect read path (CosmeticUtils.get_cosmetic_slot
+        -- -> get_weapon_skin_name, cosmetic_utils.lua:168-178) and fatals: the same
+        -- crash class as the rpc_add_equipment axis, on a different channel.
+        -- Substitute the universal vanilla "n/a" key (peers see no illusion; the
+        -- local visual never reads sync data). UNCONDITIONAL - never toggle-gated
+        -- (issue 371 / BUG_CLASSES 31).
+        local ct_skin_subbed = false
+        if effective_skin_name and _custom_skin_keys[effective_skin_name] then
+            pcall(printf, "[cos:421] wire skin null (update_cosmetic_slot %s): %s -> n/a",
+                tostring(slot), tostring(effective_skin_name))
+            effective_skin_name = "n/a"
+            ct_skin_subbed = true
+        end
+
         -- v0.8.64-dev: peer-replay path for armor (slot_skin). slot_skin is
         -- "cosmetic" category, NOT "attachment", so it doesn't flow through
         -- PUAE or AttachmentUtils.hot_join_sync — those only emit cos_la_apply
@@ -6002,7 +6070,7 @@ if CosmeticUtils then
             end
         end
 
-        if la_item_subbed or la_skin_subbed then
+        if la_item_subbed or la_skin_subbed or ct_skin_subbed then
             return func(player, slot, effective_item_name, effective_skin_name)
         end
         return func(player, slot, item_name, skin_name)
@@ -6072,7 +6140,10 @@ end
 -- mod:get() -- the coercion is UNCONDITIONAL (class-31 never-crash mandate). Preserves up
 -- to four vanilla returns (game_object_initialized's arity, unchanged from the pre-
 -- extraction inline body).
-local function _wire_null_custom_skins(slots, send_fn)
+-- v0.9.76-dev (#421): optional `context` names the sender surface in the
+-- [cos:421] diagnostic line (solo-verifiable: equip a ct_* illusion, grep the
+-- console log for the null on the expected surface). Behavior unchanged.
+local function _wire_null_custom_skins(slots, send_fn, context)
     local saved
     for _, slot_data in pairs(slots) do
         local skin = slot_data and slot_data.skin
@@ -6080,6 +6151,8 @@ local function _wire_null_custom_skins(slots, send_fn)
             saved = saved or {}
             saved[slot_data] = skin
             slot_data.skin = nil
+            pcall(printf, "[cos:421] wire skin null (%s): %s -> n/a",
+                tostring(context or "?"), tostring(skin))
         end
     end
     local r1, r2, r3, r4 = send_fn()
@@ -6091,6 +6164,10 @@ local function _wire_null_custom_skins(slots, send_fn)
     return r1, r2, r3, r4
 end
 mod._cos_wire_null_custom_skins = _wire_null_custom_skins
+-- v0.9.76-dev (#421): every rpc_add_equipment sender that encodes weapon_skin_id
+-- from live slot data flags itself here at hook-registration time; the
+-- wire_skin_null_all_senders regression check asserts all three are present.
+mod._cos_skin_wire_surfaces = {}
 
 mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
     local slots = self and self._equipment and self._equipment.slots
@@ -6099,8 +6176,57 @@ mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, s
     end
     return _wire_null_custom_skins(slots, function()
         return func(self, unit, unit_go_id)
-    end)
+    end, "game_object_initialized")
 end)
+mod._cos_skin_wire_surfaces.game_object_initialized = true
+
+-- v0.9.76-dev (#421): the v0.9.74 null-and-restore covered ONLY the initial-spawn
+-- sender above. Vanilla has TWO more senders that encode
+-- weapon_skin_id = NetworkLookup.weapon_skins[<live slot skin> or "n/a"] and
+-- broadcast rpc_add_equipment:
+--
+--   1. SimpleInventoryExtension._spawn_resynced_loadout
+--      (simple_inventory_extension.lua:1443-1457, encode at :1451) - fires on
+--      EVERY mid-session (re)equip: applying an illusion in the hero view,
+--      weapon swap, career-skill-weapon respawn. This is the "on equip" leak
+--      the issue title describes: with a ct_* skin in equipment_to_spawn.skin
+--      the modded index went to every peer. Local visuals are unaffected by
+--      the null: vanilla re-derives the slot skin inside GearUtils.create_
+--      equipment via the backend (simple_inventory_extension.lua:874), not
+--      from the nulled wire field (which is discarded after the call).
+--
+--   2. GearUtils.hot_join_sync (gear_utils.lua:462-488, encode at :484) - the
+--      host replays every worn slot to each newly-joined peer; a non-mod
+--      joiner cold-decodes the modded index and fatals before finishing load.
+--
+-- Same never-crash rule as the goi hook (issue 371 / BUG_CLASSES 31): the null
+-- is UNCONDITIONAL, never behind a mod:get() toggle. Sole cosmetics hooks on
+-- both methods (grep-verified 2026-07-11: no prior mod:hook/hook_safe on
+-- SimpleInventoryExtension._spawn_resynced_loadout or GearUtils.hot_join_sync;
+-- the AttachmentUtils.hot_join_sync hook at ~line 8500 is a different table).
+mod:hook("SimpleInventoryExtension", "_spawn_resynced_loadout", function(func, self, equipment_to_spawn, skip_wield)
+    if not (equipment_to_spawn and equipment_to_spawn.skin) then
+        return func(self, equipment_to_spawn, skip_wield)
+    end
+    -- equipment_to_spawn is a single slot-shaped table ({slot_id, item_data,
+    -- skin, ammo_percent}); wrap it in a one-element array so the shared
+    -- helper's pairs() walk applies. Per-equip event, not per-frame.
+    return _wire_null_custom_skins({ equipment_to_spawn }, function()
+        return func(self, equipment_to_spawn, skip_wield)
+    end, "spawn_resynced_loadout")
+end)
+mod._cos_skin_wire_surfaces.spawn_resynced_loadout = true
+
+mod:hook("GearUtils", "hot_join_sync", function(func, peer_id, unit, equipment, additional_items)
+    local slots = equipment and equipment.slots
+    if not slots then
+        return func(peer_id, unit, equipment, additional_items)
+    end
+    return _wire_null_custom_skins(slots, function()
+        return func(peer_id, unit, equipment, additional_items)
+    end, "hot_join_sync")
+end)
+mod._cos_skin_wire_surfaces.hot_join_sync = true
 
 -- v0.8.61-dev: THIRD sync surface — attachment-RPC paths that read
 -- `NetworkLookup.item_names[slot_data.item_data.name]` (or `slot_data.name`)
@@ -10515,6 +10641,79 @@ _rt_register("wire_skin_null_ungated", function()
     end
     if r1 ~= "ret1" or r2 ~= "ret2" then
         return "vanilla return values not threaded through the wire-null wrapper"
+    end
+end)
+
+_rt_register("wire_skin_null_all_senders", function()
+    -- issue 421: v0.9.74 nulled the skin axis on game_object_initialized ONLY; vanilla
+    -- has two more rpc_add_equipment senders that encode weapon_skin_id from live slot
+    -- data - SimpleInventoryExtension._spawn_resynced_loadout (the mid-session equip
+    -- path, simple_inventory_extension.lua:1451) and GearUtils.hot_join_sync (the
+    -- joining-peer replay, gear_utils.lua:484). Every registration flags itself in
+    -- mod._cos_skin_wire_surfaces; a refactor that drops a sender fails here.
+    local surfaces = mod._cos_skin_wire_surfaces
+    if type(surfaces) ~= "table" then
+        return "mod._cos_skin_wire_surfaces flag table missing (issue 421 senders unhooked?)"
+    end
+    for _, key in ipairs({ "game_object_initialized", "spawn_resynced_loadout", "hot_join_sync" }) do
+        if not surfaces[key] then
+            return "skin-axis wire-null not registered on sender surface: " .. key
+        end
+    end
+    -- Drive the shared helper with the resync sender's single-slot shape
+    -- ({ equipment_to_spawn }) so that wrapper form stays covered too.
+    if type(mod._cos_wire_null_custom_skins) ~= "function" then
+        return "skin-axis wire-null helper missing"
+    end
+    if type(_custom_skin_keys) ~= "table" then
+        return "_custom_skin_keys table missing"
+    end
+    local FAKE_CUSTOM = "_rt_fake_custom_skin_key_resync"
+    local had = _custom_skin_keys[FAKE_CUSTOM]
+    _custom_skin_keys[FAKE_CUSTOM] = true
+    local equipment_to_spawn = { slot_id = "slot_melee", skin = FAKE_CUSTOM }
+    local skin_at_send
+    local ok, err = pcall(mod._cos_wire_null_custom_skins, { equipment_to_spawn }, function()
+        skin_at_send = equipment_to_spawn.skin
+    end, "regression")
+    if not had then _custom_skin_keys[FAKE_CUSTOM] = nil end
+    if not ok then
+        return "wire-null helper raised on single-slot shape: " .. tostring(err)
+    end
+    if skin_at_send ~= nil then
+        return "custom skin NOT nulled in the single-slot (resync) shape - mid-session equip would CTD non-mod peers"
+    end
+    if equipment_to_spawn.skin ~= FAKE_CUSTOM then
+        return "custom skin not restored after the send in the single-slot (resync) shape"
+    end
+end)
+
+_rt_register("mh_package_single_reference", function()
+    -- issue 282: the MH embed's package loads must be exactly-once per path under
+    -- the mod-owned reference name "cosmetics_tweaker_mh" (PackageManager.load
+    -- INCREMENTS a per-(package, reference) count on every call,
+    -- package_manager.lua:26-27; the pre-0.9.76 per-wield load(path, "global")
+    -- accumulated 90+ refs per session and produced the shutdown "not unloaded,
+    -- deadlock" crashify block). A count above 1 means the dedupe registry
+    -- regressed to per-event accumulation.
+    if not MH_EMBED or MH_EMBED.dormant then return nil end  -- embed dormant: vacuous pass
+    local reg = MH_EMBED.loaded_packages
+    if type(reg) ~= "table" then
+        return "loaded_packages registry missing from MH embed exports (issue 282 regression)"
+    end
+    if type(MH_EMBED.release_packages) ~= "function" then
+        return "release_packages missing from MH embed exports (issue 282 regression)"
+    end
+    if not (Managers and Managers.package and Managers.package.reference_count) then
+        return nil  -- package manager not up yet: vacuous pass
+    end
+    for path in pairs(reg) do
+        local n = Managers.package:reference_count(path, "cosmetics_tweaker_mh") or 0
+        if n > 1 then
+            return string.format(
+                "package %s holds %d refs under cosmetics_tweaker_mh (must be exactly 1 - issue 282 leak shape)",
+                tostring(path), n)
+        end
     end
 end)
 

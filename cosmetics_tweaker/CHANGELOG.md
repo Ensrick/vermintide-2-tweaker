@@ -1,5 +1,74 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.76-dev — 2026-07-11 — #282 #421: MH package refcount leak (exactly-once + lifecycle release) and the two remaining skin-axis wire senders [untested] [crash] [0-critical]
+
+### #282 — package refcount leak (the cosmetics-owned slice)
+
+- SYMPTOM (two-peer logs on the issue thread, 2026-07-11): every hijacked wield re-loaded the
+  same weapon `_3p` package (92 loads of `wpn_empire_handgun_t1_3p` in one host session);
+  shutdown on BOTH peers walked ~20 `Package still referenced, NOT unloaded` lines into the
+  crashify `not unloaded, this can potentially cause an deadlock` block, with in-mission
+  `Locking a resource that is about to be unloaded!` co-occurrence.
+- ROOT CAUSE: `_material_hijack_embedded.lua` `_safe_load_package` called
+  `Managers.package:load(path, "global")` per event with no unload anywhere in the file.
+  Engine semantics: `PackageManager.load` INCREMENTS a per-(package, reference_name) count on
+  every call (package_manager.lua:26-27); `unload` decrements by one (package_manager.lua:196-238).
+  "global" is an ordinary reference-name string (vanilla uses it for boot-lifetime packages,
+  boot.lua:1759-1764), not a required mode.
+- FIX: exactly-once loading per path (dedupe registry), a mod-owned reference name
+  `cosmetics_tweaker_mh` instead of "global", and a symmetric `release_packages()` called on
+  StateIngame EXIT (level world + every hijacked unit torn down; engine stragglers go through
+  PackageManager's own delayed-unload queue, package_manager.lua:213-224) and on mod unload.
+  Never called while a level world is live.
+- SWEEP (same accumulate-per-event shape elsewhere in the mod): `_preload_one` (offhand
+  packages) and the LootItemUnitPreviewer parent-package load were already registry-deduped;
+  the previewer refs however were NEVER released (one per browser open, unique
+  `LootItemUnitPreviewer<id>` reference each) - new `hook_safe` on
+  `LootItemUnitPreviewer.destroy` now releases them (vanilla destroy only unloads its own
+  tracked packages, loot_item_unit_previewer.lua:64-66/423-451). Offhand preloads stay
+  session-lifetime by design (exactly-once, count 1, released by PackageManager.destroy).
+- DIAGNOSTICS `[cos:282]` (pcall printf): first-load / dedupe-skip / unload. Solo verify:
+  repeated wields of a hijacked weapon must log ONE first-load line then dedupe-skips;
+  keep/mission exit logs the unload; the shutdown crashify block must be gone.
+- Regression: `/cos_regression_test` check `mh_package_single_reference` fails if any
+  registry path holds more than one `cosmetics_tweaker_mh` reference.
+- NOTE: this closes the cosmetics-owned slice only; issue 282 stays open for the wt/cwv
+  force-load audit.
+
+### #421 — ct_* illusions CTD non-mod peers on equip (remaining senders)
+
+- The 0.9.74 null-and-restore covered ONLY `SimpleInventoryExtension.game_object_initialized`
+  (initial spawn). Two more vanilla senders encode `weapon_skin_id =
+  NetworkLookup.weapon_skins[<live slot skin>]` and broadcast `rpc_add_equipment`:
+  `SimpleInventoryExtension._spawn_resynced_loadout` (simple_inventory_extension.lua:1443-1457,
+  encode at :1451 - fires on EVERY mid-session equip/illusion apply; this is the "on equip"
+  leak) and `GearUtils.hot_join_sync` (gear_utils.lua:462-488, encode at :484 - host replays
+  worn slots to each joining peer). Both now route through the shared null-and-restore helper.
+  Local visuals unaffected: vanilla re-derives the slot skin inside `GearUtils.create_equipment`
+  (simple_inventory_extension.lua:874), not from the nulled wire field.
+- THIRD axis (different channel, same crash class): `CosmeticUtils.update_cosmetic_slot`
+  encodes `NetworkLookup.weapon_skins[skin_name]` into the player_sync_data GameSession object
+  (cosmetic_utils.lua:205-209/230-251); a non-mod peer decodes it on the playerlist/inspect
+  read path (cosmetic_utils.lua:168-178) and fatals. The existing hook substituted LA keys
+  only; ct_* keys (in `_custom_skin_keys`, never in `LA_BRIDGE.backend_to_armoury`) now
+  substitute to the universal vanilla "n/a" key. Merged INTO the existing hook body (no
+  duplicate registration).
+- All substitutions UNCONDITIONAL - never toggle-gated (issue 371 / BUG_CLASSES 31).
+  Diagnostics `[cos:421]` (pcall printf) on every null, tagged with the sender surface.
+- Regression: `/cos_regression_test` check `wire_skin_null_all_senders` asserts all three
+  rpc_add_equipment senders are registered (flags in `mod._cos_skin_wire_surfaces`) and drives
+  the helper with the resync single-slot shape.
+- Needs the 2-player verify: non-mod peer in lobby while a ct_* illusion is equipped
+  (mission spawn, mid-session apply, hot-join) - peer must not crash; owner visual intact.
+
+### Files
+- `_material_hijack_embedded.lua` - dedupe registry + `cosmetics_tweaker_mh` ref +
+  `release_packages`/`loaded_packages` exports (dormant no-ops included).
+- `cosmetics_tweaker.lua` - MH release wiring (on_game_state_changed StateIngame exit +
+  on_unload), previewer-destroy release, `_spawn_resynced_loadout` + `GearUtils.hot_join_sync`
+  wire-null hooks, ct_* substitution in `update_cosmetic_slot`, helper context tag, two new
+  regression checks; `MOD_VERSION` -> `0.9.76-dev`.
+
 ## 0.9.75-dev — 2026-07-07 — regression coverage for the skin-axis wire-safety hook (issue 421 / issue 371)
 
 ### Why

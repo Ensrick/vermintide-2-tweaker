@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-25.
+Last updated: 2026-07-11.
 
 ---
 ## Multiplayer / Network Sync
@@ -132,6 +132,44 @@ Last updated: 2026-05-25.
 | Repro | 1. Host: any Kruber/Bret career, equip a GK-shield offhand variant via cosmetics_tweaker (e.g. `wpn_emp_gk_shield_03`). 2. Client joins keep. 3. Host wields the shield. |
 | Expected post-fix | All offhand-option / custom-illusion / LA-shield unit packages force-loaded at mod init on EVERY peer (idempotent, ~50 packages). No crash on first wield. |
 | Detection | Client console: no `Resource '#ID[...]' not found` / `spawn_unit` crash on wield. Add `/cos dump_force_loaded` to check the loaded set. |
+
+
+---
+
+### mh-package-refcount-leak — MH embed accumulated one package reference per hijacked wield, never released
+
+**[MULTIPLAYER]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Shutdown: ~20 `Package still referenced, NOT unloaded` lines then crashify `'#ID[...]' not unloaded, this can potentially cause an deadlock` on BOTH peers; in-mission `Locking a resource that is about to be unloaded!` at map transitions. 92 loads of one `_3p` package in a single host session. |
+| Root cause | `_safe_load_package` called `Managers.package:load(path, "global")` on every replace_textures/add_particles event. `PackageManager.load` increments a per-(package, reference_name) count on EVERY call (package_manager.lua:26-27); nothing ever called unload. Same shape (slower): LootItemUnitPreviewer parent-package refs taken per browser open, never released. |
+| Mod(s) | cosmetics_tweaker (issue 282 cosmetics-owned slice; wt/cwv audit still open) |
+| Fix version(s) | cosmetics_tweaker v0.9.76-dev (dedupe registry + mod-owned ref `cosmetics_tweaker_mh` + release on StateIngame exit / mod unload / previewer destroy) |
+| Category | UNIT + MANUAL |
+| Repro | 1. Equip a hijacked-material weapon (e.g. CWV custom musket). 2. Wield it repeatedly (10+ swaps). 3. Exit to keep, quit the game. 4. Without fix: repeated `[PackageManager] Load` refs and the shutdown crashify block. |
+| Expected post-fix | ONE `[cos:282] first-load` line per package per level, `[cos:282] dedupe-skip` on later wields, `[cos:282] unload` at keep/mission exit; no crashify `not unloaded` block at shutdown. |
+| Detection | (a) `/cos_regression_test` — `mh_package_single_reference` must pass. (b) Console log greps above. |
+| Tracking | GitHub issue #282 (stays open for wt/cwv). |
+
+
+---
+
+### ct-skin-wire-senders — ct_* illusion key must be nulled on EVERY vanilla skin sender, not just initial spawn
+
+**[MULTIPLAYER]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Peers WITHOUT cosmetics_tweaker CTD (strict `NetworkLookup.weapon_skins` `__index` fatal, network_lookup.lua:2362) when a cosmetics user applies/wears a ct_* illusion — on mission spawn, on mid-session equip, or when hot-joining the lobby. |
+| Root cause | Vanilla encodes `weapon_skin_id = NetworkLookup.weapon_skins[<live slot skin>]` on THREE senders: `SimpleInventoryExtension.game_object_initialized` (:259), `._spawn_resynced_loadout` (:1451, the mid-session equip path), `GearUtils.hot_join_sync` (gear_utils.lua:484). Plus the player_sync_data GameSession axis via `CosmeticUtils.update_cosmetic_slot` (cosmetic_utils.lua:205-251). v0.9.74 covered only the first. |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.74-dev (goi), v0.9.76-dev (resync + hot-join + sync-data axes) |
+| Category | UNIT + MULTIPLAYER MANUAL |
+| Repro | 1. Cosmetics user equips `ct_es_mace_gk_shield_01` (or a heavy-spear deus illusion). 2. A NON-mod peer is in the lobby (or hot-joins). 3. Spawn into mission, then ALSO re-apply the illusion mid-session. |
+| Expected post-fix | Non-mod peer never crashes on any of the three events; owner keeps the custom visual locally; `[cos:421] wire skin null (<surface>)` logs on each send. |
+| Detection | (a) `/cos_regression_test` — `wire_skin_null_ungated` + `wire_skin_null_all_senders` must pass. (b) 2-player manual per Repro. |
+| Tracking | GitHub issue #421 (refs issue 371 / BUG_CLASSES 31). |
 
 
 ---
@@ -646,6 +684,7 @@ Last updated: 2026-05-25.
 
 - ct-husk-hook-shadow-tpe
 - ct-offhand-force-preload
+- ct-skin-wire-senders
 - cwv-backend-id-lookup
 - feedback-deploy-vs-upload-distinction
 - feedback-mod-version-format
@@ -663,6 +702,7 @@ Last updated: 2026-05-25.
 - la-offhand-paint-pipeline
 - loot-previewer-hook-not-safe
 - lua-forward-reference
+- mh-package-refcount-leak
 - preview-slot-keying
 - ps5-getcontent-utf8
 - ugc-tool-forward-slashes
