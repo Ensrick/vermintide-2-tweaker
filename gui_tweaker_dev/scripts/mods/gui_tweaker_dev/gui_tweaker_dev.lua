@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.221-dev"
+local MOD_VERSION = "0.2.222-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1635,6 +1635,45 @@ _rt_register("mod_tweaker_api_present", function()
     if not MT:is_registered(probe_id) then return "is_registered() false after register" end
     MT:set(probe_id, "probe_flag", true)
     if MT:get(probe_id, "probe_flag") ~= true then return "get() did not reflect set()" end
+end)
+
+-- (#446) Mutually-exclusive group API + enforcement wiring. Runtime-only (no source
+-- read): registers a throwaway 2-member group, verifies the reverse membership lookup
+-- resolves both members (and rejects a non-member + malformed shapes), and asserts the
+-- view class exposes the _enforce_exclusive method the checkbox toggle handler calls to
+-- sweep siblings. A regression that drops the registry surface or unwires enforcement
+-- fails here.
+_rt_register("mod_tweaker_exclusive_group_api", function()
+    local MT = mod.mod_tweaker
+    if not MT then return "mod.mod_tweaker not set" end
+    for _, name in ipairs({ "register_exclusive_group", "get_exclusive_group_id", "get_exclusive_members" }) do
+        if type(MT[name]) ~= "function" then
+            return string.format("mod.mod_tweaker:%s is not a function (got %s)", name, type(MT[name]))
+        end
+    end
+    local gid = "__mt_rt_excl__"
+    local ok, err = MT:register_exclusive_group(gid, {
+        { mod = "__mt_rt_a__", setting = "flag_a" },
+        { mod = "__mt_rt_a__", setting = "flag_b" },
+    })
+    if not ok then return "register_exclusive_group returned false: " .. tostring(err) end
+    if MT:get_exclusive_group_id("__mt_rt_a__", "flag_a") ~= gid then return "member flag_a did not resolve to its group" end
+    if MT:get_exclusive_group_id("__mt_rt_a__", "flag_b") ~= gid then return "member flag_b did not resolve to its group" end
+    if MT:get_exclusive_group_id("__mt_rt_a__", "not_a_member") ~= nil then return "non-member resolved to a group" end
+    local members = MT:get_exclusive_members(gid)
+    if type(members) ~= "table" or #members ~= 2 then return "get_exclusive_members did not return the 2-member list" end
+    -- Reject shapes: empty id, single member.
+    if MT:register_exclusive_group("", { { mod = "x", setting = "y" }, { mod = "x", setting = "z" } }) then
+        return "empty group_id was not rejected"
+    end
+    if MT:register_exclusive_group("__mt_rt_solo__", { { mod = "x", setting = "y" } }) then
+        return "single-member group was not rejected"
+    end
+    -- Enforcement is wired: the standalone view class carries the sweep method.
+    local ok_v, V = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+    if not ok_v or type(V) ~= "table" or type(V._enforce_exclusive) ~= "function" then
+        return "ModTweakerView:_enforce_exclusive missing (enforcement not wired)"
+    end
 end)
 
 -- v0.2.59-dev — the gear "Advanced Settings" drill-down + the slider thumb-move fix.

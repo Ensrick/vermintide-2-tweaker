@@ -818,6 +818,50 @@ function ModTweakerView:_update_apply_button()
     if self._apply then self._apply.content.disabled = not self:_active_category_dirty() end
 end
 
+-- (#446) Mutually-exclusive group enforcement. `setting_id` (a checkbox in `category`)
+-- was just switched ON; stage every OTHER member of its registered exclusive group OFF,
+-- so at most one member is ever ON. Members are keyed by their REGISTERED (mod_id,
+-- setting_id) and staged DIRECTLY into the pending buffer under the member's OWN mod_id
+-- -- the same key stage_set resolves via _owner for a same-mod member, and the correct
+-- per-mod buffer for a cross-mod member, so a sibling living in another tab still commits
+-- when that tab is applied. Only a member whose EFFECTIVE value (staged, else the member
+-- mod's live get) is currently truthy is written, so we never manufacture a false-dirty
+-- edit. Returns true if any sibling changed -- the caller then rebuilds so the switched-
+-- off rows repaint (checkbox display is cached; only a row rebuild re-reads the staged
+-- flag).
+function ModTweakerView:_enforce_exclusive(category, setting_id)
+    local MT = _mt()
+    if not MT or type(MT.get_exclusive_group_id) ~= "function" then return false end
+    local _, owner_id = _owner(category, setting_id)
+    if not owner_id then return false end
+    local gid = MT:get_exclusive_group_id(owner_id, setting_id)
+    if not gid then return false end
+    local members = MT:get_exclusive_members(gid)
+    if type(members) ~= "table" then return false end
+    local changed = false
+    for i = 1, #members do
+        local m = members[i]
+        if not (m.mod_id == owner_id and m.setting_id == setting_id) then
+            local p = self._pending[m.mod_id]
+            local eff
+            if p and p[m.setting_id] ~= nil then
+                eff = p[m.setting_id]
+            else
+                local mo = get_mod(m.mod_id)
+                if mo then local ok, v = pcall(mo.get, mo, m.setting_id); if ok then eff = v end end
+                if eff == nil and MT.get then eff = MT:get(m.mod_id, m.setting_id) end
+            end
+            if eff then
+                self._pending[m.mod_id] = self._pending[m.mod_id] or {}
+                self._pending[m.mod_id][m.setting_id] = false
+                changed = true
+            end
+        end
+    end
+    if changed then self:_update_apply_button() end
+    return changed
+end
+
 -- APPLY: commit the whole pending buffer for `category` through the existing _cat_set
 -- path (the ONLY place _cat_set runs on edit — a stray slider drag never takes effect
 -- until clicked), clear the buffer, grey the button, and repaint the rows from the new
@@ -2654,6 +2698,20 @@ function ModTweakerView:_handle_input(input_service)
                     -- (v0.2.70-dev) STAGE the toggle (was a live _cat_set). Commits on APPLY.
                     self:stage_set(row._category, row._setting_id, c.flag)
                     mod:debug("[mt:dump] input: checkbox '%s' -> %s (staged)", tostring(row._setting_id), tostring(c.flag))
+                    -- (#446) Mutually-exclusive group: turning a member ON stages its
+                    -- siblings OFF, then rebuild so the switched-off rows repaint (checkbox
+                    -- display is cached -- only a row rebuild re-reads the staged flag). Same
+                    -- rebuild+return shape as the group-header toggle above. Turning a member
+                    -- OFF (c.flag=false) is the "select None" path and touches no sibling.
+                    -- Block row input until the next FRESH press so this release's still-
+                    -- latched on_left_release on the shared mt_list_start node can't re-toggle
+                    -- the rebuilt rows next frame (same latch class as the dropdown #158 /
+                    -- slider-modal guard).
+                    if c.flag and self:_enforce_exclusive(row._category, row._setting_id) then
+                        self._dd_block_until_press = true
+                        self:_build_rows(self._categories[self._selected])
+                        return
+                    end
                 elseif not clicked then
                     row._toggle_armed = false
                 end

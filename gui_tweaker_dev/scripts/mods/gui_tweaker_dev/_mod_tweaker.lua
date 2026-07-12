@@ -53,6 +53,38 @@ function ModTweaker:set(mod_id, setting_id, value)
     return Settings.set(mod_id, setting_id, value)
 end
 
+-- (#446) Mutually-exclusive group API. A sibling mod declares that a set of its own
+-- (or cross-mod) boolean settings are mutually exclusive: switching one ON in the Mod
+-- Tweaker turns the others OFF (a radio group over ordinary checkboxes; all-off is a
+-- valid "None" state). Wrap the members in a VMF `group` widget in your own _data.lua
+-- for the collapsible look the issue mock-up shows -- gut renders the group + enforces
+-- the exclusivity; no custom widget needed. Members reference REAL VMF setting ids, so
+-- the register/read the same way stock VMF options do.
+--
+--   get_mod("gut_dev").mod_tweaker:register_exclusive_group("crt_zealot_thp", {
+--       { mod = "crt", setting = "zealot_thp_none" },     -- None [Default]
+--       { mod = "crt", setting = "zealot_thp_on_ability" },
+--       { mod = "crt", setting = "zealot_thp_devotion" },
+--   })
+function ModTweaker:register_exclusive_group(group_id, members)
+    local ok, err = Settings.register_exclusive_group(group_id, members)
+    if not ok then
+        _dbg_alert("[mt] register_exclusive_group rejected: %s", tostring(err))
+    end
+    return ok, err
+end
+
+-- Reverse lookup: the group_id a (mod_id, setting_id) belongs to, or nil. The view's
+-- toggle handler calls this to decide whether a checkbox flip must sweep siblings.
+function ModTweaker:get_exclusive_group_id(mod_id, setting_id)
+    return Settings.get_exclusive_group_id(mod_id, setting_id)
+end
+
+-- The ordered member list for a group_id, or nil.
+function ModTweaker:get_exclusive_members(group_id)
+    return Settings.get_exclusive_members(group_id)
+end
+
 -- Install entry point: wires debug + propagates to sub-modules. Returns the
 -- handle table so the owner module can publish it onto `mod`.
 function ModTweaker.install(dbg, dbg_alert)

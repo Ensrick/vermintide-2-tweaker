@@ -35,6 +35,22 @@ local _ordered_ids = {}
 -- can find a widget's default value without re-walking the widget tree.
 local _widget_index = {}
 
+-- (#446) Mutually-exclusive groups. group_id -> ordered member list
+-- { { mod_id=, setting_id= }, ... }; plus a reverse "mod_id\0setting_id" -> group_id
+-- index for O(1) membership lookup from the view's toggle handler. Members are ordinary
+-- boolean/checkbox settings in ANY mod; the Mod Tweaker turns a member's siblings OFF
+-- when one is switched ON, giving a radio-group over plain checkboxes. Data-driven so
+-- any sibling mod can declare its own groups without a gut code change (register via the
+-- ModTweaker public API).
+local _exclusive_groups = {}
+local _exclusive_member_index = {}
+
+-- \0 separator: setting/mod ids are simple identifiers that never contain a NUL byte,
+-- so this can't collide the way a "::"-joined key could if an id held that substring.
+local function _member_key(mod_id, setting_id)
+    return tostring(mod_id) .. "\0" .. tostring(setting_id)
+end
+
 local function _walk_widgets(node, into)
     if type(node) ~= "table" then return end
     if type(node.setting_id) == "string" then
@@ -133,5 +149,69 @@ end
 -- Surfaces the kv key shape for diagnostics / tests; not part of the public
 -- API contract.
 function SettingsModule._kv_key(mod_id, setting_id) return _kv_key(mod_id, setting_id) end
+
+-- ---------------------------------------------------------------
+-- (#446) Mutually-exclusive group registry.
+-- ---------------------------------------------------------------
+
+-- register_exclusive_group(group_id, members) -- members: array of
+-- { mod = <mod_id>, setting = <setting_id> } (mod_id / setting_id keys also accepted).
+-- Declares that AT MOST ONE member may be ON at a time: the Mod Tweaker stages the other
+-- members OFF when one is switched ON. All-off is a valid state (the "None [Default]"
+-- option is just another member, or simply every member off). Re-registering the same
+-- group_id REPLACES it, so an author reload re-declares cleanly. Returns true, or
+-- (false, reason).
+function SettingsModule.register_exclusive_group(group_id, members)
+    if type(group_id) ~= "string" or group_id == "" then
+        return false, "exclusive group id must be a non-empty string"
+    end
+    if type(members) ~= "table" or #members < 2 then
+        return false, "exclusive group needs a members array of 2+ entries"
+    end
+    local normalized = {}
+    for i = 1, #members do
+        local m = members[i]
+        if type(m) ~= "table" then
+            return false, string.format("exclusive member %d is not a table", i)
+        end
+        local mid = m.mod_id or m.mod
+        local sid = m.setting_id or m.setting
+        if type(mid) ~= "string" or mid == "" or type(sid) ~= "string" or sid == "" then
+            return false, string.format("exclusive member %d needs string mod_id + setting_id", i)
+        end
+        normalized[i] = { mod_id = mid, setting_id = sid }
+    end
+    -- Replace path: scrub any prior index entries for this group_id first, so a member
+    -- dropped from the new list stops resolving to the group.
+    local prior = _exclusive_groups[group_id]
+    if prior then
+        for i = 1, #prior do
+            _exclusive_member_index[_member_key(prior[i].mod_id, prior[i].setting_id)] = nil
+        end
+    end
+    _exclusive_groups[group_id] = normalized
+    for i = 1, #normalized do
+        _exclusive_member_index[_member_key(normalized[i].mod_id, normalized[i].setting_id)] = group_id
+    end
+    _dbg("[mt] register_exclusive_group: %s members=%d", group_id, #normalized)
+    return true
+end
+
+-- Returns the group_id a (mod_id, setting_id) belongs to, or nil.
+function SettingsModule.get_exclusive_group_id(mod_id, setting_id)
+    return _exclusive_member_index[_member_key(mod_id, setting_id)]
+end
+
+-- Returns the ordered member array for a group_id, or nil.
+function SettingsModule.get_exclusive_members(group_id)
+    return _exclusive_groups[group_id]
+end
+
+-- Count of registered exclusive groups (diagnostics / rt check).
+function SettingsModule.exclusive_group_count()
+    local n = 0
+    for _ in pairs(_exclusive_groups) do n = n + 1 end
+    return n
+end
 
 return SettingsModule

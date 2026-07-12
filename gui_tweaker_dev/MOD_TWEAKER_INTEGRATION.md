@@ -70,7 +70,46 @@ Is this one of the author's own Tweaker-series mods (shipped by us, in the Tweak
          - any "open in Mod Tweaker" bridge focuses the CATEGORY, not a tab
 ```
 
+## Mutually-exclusive option groups (#446)
+
+Some settings can't be enabled together -- e.g. rival rework options for the same talent
+(the issue's example: "Zealot THP Conversions" = None / On Ability Use / Devotion). Declare
+them as a **mutually-exclusive group**: switching one member ON in the Mod Tweaker turns the
+others OFF (a radio group over ordinary checkboxes; all-off is a valid "None" state).
+
+- **Members are REAL VMF boolean/checkbox settings** in your own mod (or across mods). You do
+  NOT invent a new widget type -- you keep normal `checkbox` widgets and register the
+  exclusivity separately. For the collapsible look the issue mock-up shows, wrap the members
+  in a native VMF `group` widget in your `_data.lua`; gut renders the group and enforces the
+  exclusivity. No custom widget, no `_MY_MODS` change.
+- **Declare it from your own mod** via the gut public API (data-driven -- gut needs no code
+  change per group):
+
+  ```lua
+  local gut = get_mod("gut_dev")   -- or "gut" against the stable item
+  if gut and gut.mod_tweaker and gut.mod_tweaker.register_exclusive_group then
+      gut.mod_tweaker:register_exclusive_group("crt_zealot_thp", {
+          { mod = "crt", setting = "zealot_thp_none" },      -- None [Default]
+          { mod = "crt", setting = "zealot_thp_on_ability" },
+          { mod = "crt", setting = "zealot_thp_devotion" },
+      })
+  end
+  ```
+
+- **Enforcement** happens only inside the Mod Tweaker's own menu (the checkbox toggle handler
+  stages siblings OFF and rebuilds the rows). Editing the same setting in VMF's stock options
+  menu is NOT swept -- register the group above and, if you need hard exclusivity everywhere,
+  also guard it in your own `on_setting_changed`.
+- **Same-mod members commit together** on that tab's APPLY. Cross-mod members buffer under
+  each owner mod's tab, so a cross-mod sibling commits when ITS tab is applied.
+
+Resolve group ids from gut with `:get_exclusive_group_id(mod_id, setting_id)` /
+`:get_exclusive_members(group_id)`. Registry + API live in `_mod_tweaker_settings.lua` /
+`_mod_tweaker.lua`; the sweep is `ModTweakerView:_enforce_exclusive` in `_mod_tweaker_view.lua`.
+
 ## Regression guard
 
 `_mod_tweaker_view.lua` / the gut regression suite must assert: no third-party (non-author)
-mod id appears in `_MY_MODS`, and CKC's options resolve under the HUD category. See #339.
+mod id appears in `_MY_MODS`, and CKC's options resolve under the HUD category. See #339. The
+`mod_tweaker_exclusive_group_api` check (#446) asserts the exclusive-group registry + the
+view's `_enforce_exclusive` sweep stay wired.
