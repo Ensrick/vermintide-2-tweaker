@@ -1,5 +1,50 @@
 # Crafting in Modded Changelog
 
+## 0.8.55-dev (2026-07-12): OOP split - three self-contained concerns extracted into _cim_* modules [untested]
+
+**Structural refactor (no behavior change).** The 8,173-line entry
+`crafting_in_modded_dev.lua` is now 7,007 lines; three self-contained concerns were
+lifted VERBATIM (each moved block byte-compared against the previous commit) into new
+single-responsibility modules, dofile'd once each from the entry manifest (VMF
+`mod:dofile` is NOT a singleton, so modules never dofile each other). Cross-file surface
+stays the established flat `mod._cim_*` namespace. Module map + "where new code goes" in
+the new `DEVELOPMENT.md`. Follows PROJECT_STANDARDS 2.2a and the enemy_tweaker/
+cosmetics_tweaker/weapon_tweaker split precedents.
+
+- **`_cim_mission_forge_safety.lua` (901 lines)** - every mid-mission render-safety guard
+  for the Athanor + gear-icon customization preview: shading-env substitution
+  (issue 83/228/235, uncatchable-AV class), preview-level strip + blend-variation pin,
+  gamepad-GUI guard + `get_ui_renderer` fallback, `HeroView` HDR-gui skip +
+  `hdr_renderer`/`hdr_top_renderer` fallback (issue 73, LA armoury_atlas crash), and the
+  HDR-glow / skilltree-ring / bloom-pulse / upgrade-anim draw-site suppressors (Fix B..B5).
+  Every guard gates on `_is_in_keep()`; the KEEP path is byte-unchanged. Publishes the
+  mid-mission helpers on `mod._cim_*` (consumed by cim_debug.lua's on_enter re-suppression
+  + the inline HDR regression checks). The issue-88 `HeroView.on_enter` inventory-access
+  hook STAYS in the entry (it shares the entry-local `_cim_open_standard_inv_pending`
+  with `open_standard_crafting`).
+- **`_cim_inventory_filter.lua` (186 lines)** - the two BackendInterface filter hooks
+  (`get_filtered_items` versus-twin re-hide + modded-only filter + template injection;
+  `BackendInterfaceCommon.filter_items` salvage surfacing) + the `_cim_is_versus_key` /
+  `_cim_is_leaked_versus_twin` discriminators (published on `mod._cim_*`) + `_WEAPON_SLOT_TYPES`.
+- **`_cim_dump_commands.lua` (171 lines)** - the two read-only diagnostic chat commands
+  `/cim_dump_active_window` + `/craft_dump` (engine reads only; no cim state touched).
+
+- **Left byte-intact in the entry** (coupled to entry-mutable state or load-bearing crash
+  paths, deferred to a later phase): the craft-store + backend mirror (`_forged_weapons`,
+  reassigned on load), the cross-peer wire-safety region (issue 278/371), the LA
+  equip-capture, the whole Athanor UI + Weaves economy (gated on the entry-local
+  `_custom_forge_active`, 60 refs), and ALL regression check bodies (they close over entry
+  state / call the namespace helpers at runtime - the weapon_tweaker precedent).
+- **One regression check re-anchored:** `heroview_hdr_not_forcebuilt_in_mission` now
+  source-scans `_cim_mission_forge_safety.lua` (its `_setup_hdr_gui` "Fix B skip" needle
+  moved there) via `debug.getinfo(mod._cim_sweep_leaked_hdr_worlds or function() end, "S")`,
+  matching the existing robust anchor pattern (open_forge / open_standard_crafting checks).
+- **Verify:** lint PASS (13 files, 127 hooks, 0 duplicate-hook); `build` OK (4 bundles);
+  `.package` globs `scripts/mods/crafting_in_modded_dev/*` so the new files auto-bundle.
+  In-game: `/cim_regression_test` must still pass 100% (57 checks, unchanged); open the
+  Athanor + gear-icon customize both in the keep AND (with Allow in mission ON) mid-mission
+  to confirm the render-safety guards still fire; run `/craft_dump` + `/cim_dump_active_window`.
+
 ## 0.8.54-dev (2026-07-07) - issue 278 REGRESSION: default cim host CTDs non-cim clients on any crafted-item equip [verify-fix] [crash] [0-critical]
 
 - SYMPTOM (issue 278 recurrence): a cim host crashes every player in the lobby who
