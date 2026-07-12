@@ -261,7 +261,12 @@ UPLOAD - a local deploy alone is silently clobbered.
   - `gh issue edit <N> --remove-label verify-fix --add-label verify-fix-coop`
     when the verification needs **2+ people** (cross-peer wire safety, host/client
     desync, hot-join). ship.ps1 auto-applies plain `verify-fix`; the swap is your
-    manual follow-up in the same pass (user rule 2026-07-11).
+    manual follow-up in the same pass (user rule 2026-07-11). **The tester count
+    in the test-method comment decides the label** (user rule 2026-07-12, issues
+    280/278): if your test method says 2+ people, the label is coop, full stop —
+    and a peer-dependent crash class (send-queue overflow, husk resolution) can
+    never carry a solo test method. ship.ps1 prints a `COOP?` hint on cross-peer-
+    smelling entries.
   - `gh issue edit <N> --add-label diagnostics-armed` when you shipped
     **instrumentation only** (no behavior change) and need a repro to capture data.
   - `--remove-label not-started` in the same command if the issue carried it -

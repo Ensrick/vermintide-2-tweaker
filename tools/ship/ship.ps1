@@ -98,22 +98,28 @@ function Get-TopChangelogEntry {
 }
 
 # Decide what (if anything) to label from a shipped entry. Returns
-# @{ Skip = $null|'loc-sweep'|'no-refs'; Label = 'verify-fix'|'diagnostics-armed'; Refs = @(int...) }.
+# @{ Skip = $null|'loc-sweep'|'no-refs'; Label = 'verify-fix'|'diagnostics-armed'; Refs = @(int...); Coop = $bool }.
 #   * loc-sweep headers are skipped: their #N refs are tag CONTEXT, not
 #     shipped work (same heuristic as qa/check_issue_status_labels.ps1).
 #   * Label choice is ENTRY-level via header markers; a mixed fix+probe entry
 #     gets one label for all refs -- the caller prints it for hand-correction.
+#   * Coop: the entry text smells like a 2+-tester verification (host/client,
+#     non-mod peer, husk, hot-join). The TESTER COUNT IN THE TEST-METHOD
+#     COMMENT decides verify-fix vs verify-fix-coop (user rule 2026-07-12,
+#     issues 280/278) -- this flag only makes the caller print a loud
+#     swap reminder; it never auto-applies coop.
 function Get-ShipLabelPlan {
     param([string]$Header, [string]$Entry)
     if ($Header -match '(?i)(localization|loc sweep|status-tag doctrine|menu wording|localization audit|loc audit)') {
-        return @{ Skip = 'loc-sweep'; Label = $null; Refs = @() }
+        return @{ Skip = 'loc-sweep'; Label = $null; Refs = @(); Coop = $false }
     }
     $label = if ($Header -match '(?i)\[diag\]|diagnostic|probe|instrument') { 'diagnostics-armed' } else { 'verify-fix' }
+    $coop = [bool]($Entry -match '(?i)(host *[/+] *(1 *)?client|non-\w+ +peer|husk|hot.join|2\+? *(player|tester|people)|two player|both peers|client CTD|CTDs? +a +client|desync|wire.safe|send.queue)')
     $numSet = @{}
     foreach ($m in [regex]::Matches($Entry, '#(\d+)')) { $numSet[[int]$m.Groups[1].Value] = $true }
     $refs = @($numSet.Keys | Sort-Object)
-    if ($refs.Count -eq 0) { return @{ Skip = 'no-refs'; Label = $label; Refs = @() } }
-    return @{ Skip = $null; Label = $label; Refs = $refs }
+    if ($refs.Count -eq 0) { return @{ Skip = 'no-refs'; Label = $label; Refs = @(); Coop = $coop } }
+    return @{ Skip = $null; Label = $label; Refs = $refs; Coop = $coop }
 }
 
 # Offline self-test of the step-6 logic (qa-script convention: exit 0 = OK,
@@ -503,6 +509,11 @@ try {
                             if ($LASTEXITCODE -eq 0) {
                                 Write-Host ("  + #{0}: added '{1}'" -f $n, $statusLabel) -ForegroundColor Green
                                 Write-Host ("      REMINDER: #{0} needs a test-method comment (how to test + expected result) or the label is invalid (user rule 2026-07-12, PROJECT_STANDARDS s11)." -f $n) -ForegroundColor Yellow
+                                if ($statusLabel -eq 'verify-fix' -and $plan.Coop) {
+                                    Write-Host ("      COOP? entry smells like a 2+-tester verification (host/client, peer, husk, desync). If the test-method comment needs 2+ people, SWAP: gh issue edit {0} --remove-label verify-fix --add-label verify-fix-coop (user rule 2026-07-12, issues 280/278)." -f $n) -ForegroundColor Magenta
+                                    $labelSummary += ("#{0} +{1} (CHECK COOP + test comment)" -f $n, $statusLabel)
+                                    continue
+                                }
                                 $labelSummary += ("#{0} +{1} (needs test comment)" -f $n, $statusLabel)
                             } else {
                                 Write-Host ("  ! #{0}: gh issue edit failed -- add '{1}' by hand" -f $n, $statusLabel) -ForegroundColor Yellow

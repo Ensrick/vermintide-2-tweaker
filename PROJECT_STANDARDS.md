@@ -1583,6 +1583,14 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   `verify-fix`, never coexists with it. ship.ps1's auto-labeler only applies plain
   `verify-fix`; swap by hand after shipping a coop-verify issue (user rule 2026-07-11):
   `gh issue edit N --remove-label verify-fix --add-label verify-fix-coop`.
+  **The tester count in the test-method comment DECIDES the label** (user rule
+  2026-07-12, caught on issues 280/278): a comment that says "needs 2 players" /
+  "host + client" / "a non-mod peer" on an issue labeled plain `verify-fix` is a
+  doctrine violation — whoever posts or reads such a comment swaps the label in
+  the same pass. Also sanity-check the test itself: a crash class that only
+  exists with a remote peer (send-queue overflow, husk resolution) cannot have
+  a solo test method (issue 205 correction). ship.ps1 prints a `COOP?` warning
+  when a shipped entry smells cross-peer.
 - `diagnostics-armed` — a diagnostic/probe shipped; repro in-game to capture data.
 - `Fixed` — the fix is **verified** (in-game confirmation by the user OR the
   designated playtester, GitHub user RainReligion — his issue comments are
