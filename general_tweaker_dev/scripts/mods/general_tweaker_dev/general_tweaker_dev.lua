@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.205-dev"
+local MOD_VERSION = "0.2.206-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -796,15 +796,90 @@ mod:hook("GenericStatusExtension", "update_falling", function(func, self, t)
     return func(self, t)
 end)
 
+-- ============================================================
+-- Issue #469: bots immune to environment / mutator AOE damage
+-- ============================================================
+-- Bots cannot path around certain live-event / Chaos Wastes / hazard AOE fields
+-- and die to them repeatedly. This makes BOTS (never humans) ignore a CURATED
+-- set of such damage. It is HOST-AUTHORITATIVE and needs no wire work: bots are
+-- owned by the host's peer, so the host is the machine that applies their damage
+-- and its decision is final. We alter only the LOCAL damage event (return 0) --
+-- sending nothing networked, touching no NetworkLookup key and no _max_ health
+-- field (max-resource doctrine). A client never applies a host-bot's damage, so
+-- gating on `Managers.player.is_server` keeps this a pure host decision; unlike
+-- the client-godmode case there is no client-authoritative bot to broadcast for.
+--
+-- Two funnels carry these hits, BOTH already hooked for godmode below, so the
+-- checks are MERGED into those hook bodies (VMF drops a 2nd hook on a pair --
+-- repo CLAUDE.md NON-NEGOTIABLE 8):
+--   * add_damage_network_player -- explosion / profile AOE. Identify by the
+--     resolved `damage_profile.name` (a reliable key: every DamageProfileTemplates
+--     entry gets `.name` set = its table key [src: scripts/settings/equipment/
+--     damage_profile_templates.lua:5646-5650]). damage_source is NOT used here --
+--     timed_explosion sources pass the shared "undefined" [src: scripts/
+--     unit_extensions/weapons/area_damage/timed_explosion_extension.lua:125].
+--   * add_damage_network        -- liquid / DoT AOE. Identify by `damage_source`.
+--
+-- CURATION over blanket: each entry is individually justified + cited. Boss slams,
+-- warpfire, gas, and friendly-fire bombs are DELIBERATELY EXCLUDED so bots still
+-- take them. Gas is out on purpose -- issue #469 asks for REDUCED (not zero) gas
+-- damage, which needs a scalar multiplier and is a separate refinement.
+mod._gt_bot_aoe_immune_profiles = {
+    -- Weaves / Twitch "Lightning Strike" mutator -> timed_explosion using
+    -- ExplosionTemplates.lightning_strike_twitch, damage_profile below.
+    -- [src: scripts/settings/mutators/mutator_lightning_strike.lua:44,49;
+    --  scripts/settings/explosion_templates.lua:1406,1417]
+    heavens_lightning_strike       = "Lightning Strike mutator",
+    -- Chaos Wastes Khorne "Skulls of Fury" curse -> exploding skulls.
+    -- [src: scripts/settings/mutators/mutator_curse_skulls_of_fury.lua:44-48;
+    --  scripts/settings/dlcs/morris/morris_buff_settings.lua:5165-5174]
+    curse_skulls_of_fury_explosion = "Khorne Skulls of Fury curse",
+    -- Chaos Wastes Tzeentch "Bolt of Change" curse -> the blue-fire bolt AOE
+    -- (same bot-cannot-path-around class as the Khorne skull curse).
+    -- [src: scripts/settings/mutators/mutator_curse_bolt_of_change.lua:141-147;
+    --  scripts/settings/dlcs/morris/morris_buff_settings.lua:5040-5050]
+    bolt_of_change                 = "Bolt of Change curse",
+}
+mod._gt_bot_aoe_immune_sources = {
+    -- Oil / lamp-oil barrel ground fire pool (damage_type "burn").
+    -- [src: scripts/unit_extensions/weapons/area_damage/liquid/liquid_area_damage_templates.lua:768-770;
+    --  scripts/unit_extensions/weapons/area_damage/liquid/liquid_area_damage_extension.lua:29,793]
+    lamp_oil_fire = "oil-barrel ground fire",
+}
+
+-- True only for a BOT-owned player unit: bots have a Player owner whose
+-- is_player_controlled() is false (humans -> true, enemies -> no owner). Mirrors
+-- the bot/human split the godmode predicate uses at _gt_godmode_active.
+mod._gt_unit_is_bot = function(unit)
+    if not unit then return false end
+    local pm = Managers.player
+    if not pm or not pm.owner then return false end
+    local owner = pm:owner(unit)
+    if not owner or not owner.is_player_controlled then return false end
+    return not owner:is_player_controlled()
+end
+
 -- Godmode HP-damage block (host-self path). add_damage_network carries DoTs,
 -- explosions (bombs) and other already-final damage values. (The floating-damage-
 -- numbers feed that used to share this hook MIGRATED to gui_tweaker / gut
 -- 2026-06-29 — gut registers its own DamageUtils hooks, so this is pure godmode
 -- again.) damage_amount is the function's single return value; return it unchanged
 -- when godmode is off.
-mod:hook("DamageUtils", "add_damage_network", function(func, attacked_unit, attacker_unit, original_damage_amount, hit_zone_name, damage_type, ...)
+-- Signature expanded through arg 8 (damage_source) for the #469 check below;
+-- hit_position/damage_direction/damage_source are captured and forwarded verbatim.
+mod:hook("DamageUtils", "add_damage_network", function(func, attacked_unit, attacker_unit, original_damage_amount, hit_zone_name, damage_type, hit_position, damage_direction, damage_source, ...)
     if _gt_godmode_active(attacked_unit) then return 0 end
-    return func(attacked_unit, attacker_unit, original_damage_amount, hit_zone_name, damage_type, ...)
+    -- #469 bot AOE immunity (liquid / DoT funnel). Cheap table-miss on the hot
+    -- path; the host/bot/setting checks only run when the source is curated.
+    if attacked_unit then
+        local why = damage_source and mod._gt_bot_aoe_immune_sources[damage_source]
+        if why and (Managers.player and Managers.player.is_server) and mod._gt_unit_is_bot(attacked_unit)
+           and mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_aoe_immunity") then
+            printf("[gt:469] bot AOE-immune: negated %s (damage_source=%s type=%s)", why, tostring(damage_source), tostring(damage_type))
+            return 0
+        end
+    end
+    return func(attacked_unit, attacker_unit, original_damage_amount, hit_zone_name, damage_type, hit_position, damage_direction, damage_source, ...)
 end)
 
 -- Godmode HP-damage block (player-weapon / pvp-profile path). (Floating-damage-
@@ -812,6 +887,17 @@ end)
 -- damage unchanged when godmode is off.
 mod:hook("DamageUtils", "add_damage_network_player", function(func, damage_profile, target_index, power_level, attacked_unit, attacker_unit, hit_zone_name, hit_position, attack_direction, damage_source, hit_ragdoll_actor, boost_curve_multiplier, is_critical_strike, ...)
     if _gt_godmode_active(attacked_unit) then return 0 end
+    -- #469 bot AOE immunity (explosion / profile funnel). Identify by
+    -- damage_profile.name; damage_source is the shared "undefined" here.
+    if attacked_unit and damage_profile then
+        local pname = damage_profile.name
+        local why = pname and mod._gt_bot_aoe_immune_profiles[pname]
+        if why and (Managers.player and Managers.player.is_server) and mod._gt_unit_is_bot(attacked_unit)
+           and mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_aoe_immunity") then
+            printf("[gt:469] bot AOE-immune: negated %s (profile=%s damage_source=%s)", why, tostring(pname), tostring(damage_source))
+            return 0
+        end
+    end
     return func(damage_profile, target_index, power_level, attacked_unit, attacker_unit, hit_zone_name, hit_position, attack_direction, damage_source, hit_ragdoll_actor, boost_curve_multiplier, is_critical_strike, ...)
 end)
 
@@ -2055,6 +2141,41 @@ _rt_register("gt_bot468_smart_self_heal_wired", function()
     end
     if type(mod:get("gt_bot_ignore_surplus_selfuse")) ~= "boolean" then
         return "gt_bot_ignore_surplus_selfuse does not resolve to a boolean via mod:get -- checkbox missing / renamed?"
+    end
+end)
+
+_rt_register("gt_bot469_aoe_immunity_wired", function()
+    -- #469 (v0.2.206-dev): the bot-AOE-immunity checks are MERGED into the two
+    -- godmode DamageUtils hooks (add_damage_network / add_damage_network_player)
+    -- and gated on gt_bot_behavior_improvements + gt_bot_aoe_immunity, read live.
+    -- Runtime assertion (io is nil in the VMF sandbox, so no source grep, issue
+    -- 511): the curated tables loaded with their load-bearing keys, the bot
+    -- predicate is exposed + nil-safe, and both settings resolve via mod:get. The
+    -- "exactly one hook per DamageUtils pair" source invariant is covered by the
+    -- duplicate-hook lint (repo CLAUDE.md NON-NEGOTIABLE 8).
+    local p = mod._gt_bot_aoe_immune_profiles
+    if type(p) ~= "table" or not (p.heavens_lightning_strike and p.curse_skulls_of_fury_explosion and p.bolt_of_change) then
+        return "mod._gt_bot_aoe_immune_profiles missing or lost a curated key -- was #469 reverted?"
+    end
+    local s = mod._gt_bot_aoe_immune_sources
+    if type(s) ~= "table" or not s.lamp_oil_fire then
+        return "mod._gt_bot_aoe_immune_sources missing lamp_oil_fire -- was #469 reverted?"
+    end
+    if type(mod._gt_unit_is_bot) ~= "function" then
+        return "mod._gt_unit_is_bot missing -- bot predicate not exposed"
+    end
+    local ok, res = pcall(mod._gt_unit_is_bot, nil)
+    if not ok then
+        return "mod._gt_unit_is_bot(nil) RAISED -- predicate not nil-safe"
+    end
+    if res ~= false then
+        return "mod._gt_unit_is_bot(nil) did not return false for a nil unit"
+    end
+    if type(mod:get("gt_bot_aoe_immunity")) ~= "boolean" then
+        return "gt_bot_aoe_immunity does not resolve to a boolean via mod:get -- checkbox missing / renamed?"
+    end
+    if type(mod:get("gt_bot_behavior_improvements")) ~= "boolean" then
+        return "gt_bot_behavior_improvements does not resolve to a boolean via mod:get -- master missing / renamed?"
     end
 end)
 

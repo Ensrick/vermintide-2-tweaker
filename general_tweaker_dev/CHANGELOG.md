@@ -1,5 +1,28 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.206-dev (2026-07-12) -- #469 bots immune to curated mutator/hazard AOE [untested]
+
+New default-OFF `gt_bot_aoe_immunity` sub-toggle under the `gt_bot_behavior_improvements` master. When both are on, BOTS (never humans) take zero damage from a CURATED set of environment/mutator area hazards they cannot reliably path around and die to. With either OFF the two hooks are byte-for-byte the prior godmode behaviour.
+
+### Why
+Issue #469: bots can't path around oil-barrel fire, the Khorne exploding-skull curse, and Weaves/Twitch lightning strikes, so they bleed out in AOE fields a human would step out of. Fix negates the hit for bots at the damage seam rather than trying to teach the bot pathing to avoid it.
+
+### Wire safety (no wire work needed)
+Bots are owned by the HOST's peer, so the host is the authoritative machine that applies a bot's damage; its decision is final. The feature alters only the LOCAL damage event (`return 0`) -- it sends nothing networked, adds no `NetworkLookup` key, and never touches a `_max_` health field (max-resource doctrine). Gated on `Managers.player.is_server`, so a client never negates a host-bot's damage. Unlike client-godmode there is no client-authoritative bot to broadcast for.
+
+### How (MERGED into the two existing godmode `DamageUtils` hooks -- no new hook, VMF drops a 2nd on a pair)
+- `add_damage_network_player` (explosion/profile funnel): match on `damage_profile.name` (every `DamageProfileTemplates` entry carries `.name` = its key, `damage_profile_templates.lua:5646-5650`). `damage_source` is not discriminating here -- timed-explosion sources pass the shared `"undefined"` (`timed_explosion_extension.lua:125`). Signature already captured `damage_profile`.
+- `add_damage_network` (liquid/DoT funnel): match on `damage_source`. Signature EXPANDED through arg 8 to capture `damage_source`; all args forwarded verbatim.
+- Curated list, each cited (decompile file:line in-code):
+  - profile `heavens_lightning_strike` -- Lightning Strike mutator (Weaves/Twitch), `mutator_lightning_strike.lua:44,49` -> `explosion_templates.lua:1417`.
+  - profile `curse_skulls_of_fury_explosion` -- Chaos Wastes Khorne skull curse, `mutator_curse_skulls_of_fury.lua:44-48` -> `morris_buff_settings.lua:5174`.
+  - profile `bolt_of_change` -- Chaos Wastes Tzeentch bolt curse, `mutator_curse_bolt_of_change.lua:141-147` -> `morris_buff_settings.lua:5050`.
+  - source `lamp_oil_fire` (damage_type `burn`) -- oil-barrel ground fire, `liquid_area_damage_templates.lua:768-770`.
+- EXCLUDED on purpose (bots still take them): boss slams, warpfire, thrown/friendly bombs, and GAS -- #469 asks for REDUCED (not zero) gas damage, a separate scalar refinement, and death-spirit skulls resolve to the shared `"default"` profile which is not safely filterable.
+- **`[gt:469]` diagnostics (always-on dev, per negated event):** logs each negation with the source/profile so a field log proves what was blocked.
+- **New `/gt_regression_test` runtime check `gt_bot469_aoe_immunity_wired`:** curated tables loaded with their load-bearing keys, `mod._gt_unit_is_bot` exposed + nil-safe, both settings resolve via `mod:get`. No `io.open` (issue 511).
+- Does NOT regress the #492/#515/#468 bot machines in `_gt_bot_fixes.lua`: this is a merge into the main-file godmode hooks and touches none of their code paths.
+
 ## v0.2.205-dev (2026-07-12) -- #468 smarter bot self-healing (configurable, anti-waste) [untested]
 
 Gated on the existing `gt_bot_behavior_improvements` master + a NEW default-OFF `gt_bot_smart_self_heal` sub-toggle, so with either OFF the `BTConditions.bot_should_heal` hook is a pure passthrough -- byte-for-byte vanilla. Host-side only (bot AI is server-owned; the hook only reads the host's own bot blackboards and engine extensions -- no RPC, no NetworkLookup key, no wire field), so nothing a non-host peer can crash or desync on.

@@ -43,8 +43,8 @@ return {
     -- data file), not A->Z. Tags: [working] where the CHANGELOG records an
     -- in-game confirmation of the wrapped fix, [untested] otherwise; the
     -- greedy-pickup item is brand-new (#297 item 8).
-    gt_bot_behavior_improvements = { en = "[Issue 297, 139, 142 & 468] Bot Behavior Improvements" },
-    gt_bot_behavior_improvements_tooltip = { en = "Master switch for the bot fixes listed underneath; while it is on, each fix can be toggled individually below. Covers Necromancer potion handoff, keeping the mission alive while a bot still stands, ledge recovery, ladder unstick, instant and greedy item pickup, smarter self-healing, revive and rescue priority, and reviving during the Ironbreaker ult. Works only when you are the host." },
+    gt_bot_behavior_improvements = { en = "[Issue 297, 139, 142, 468 & 469] Bot Behavior Improvements" },
+    gt_bot_behavior_improvements_tooltip = { en = "Master switch for the bot fixes listed underneath; while it is on, each fix can be toggled individually below. Covers Necromancer potion handoff, keeping the mission alive while a bot still stands, ledge recovery, ladder unstick, instant and greedy item pickup, smarter self-healing, revive and rescue priority, reviving during the Ironbreaker ult, and ignoring mutator and hazard AOE damage. Works only when you are the host." },
 
     gt_bot_necro_potion_handoff = { en = "[working] Necromancer bots hand off potions" },
     gt_bot_necro_potion_handoff_tooltip = { en = "A Necromancer bot brings a real potion forward over its skull item, so it can drink it or pass it to a teammate, which the skull otherwise blocks." },
@@ -92,6 +92,11 @@ return {
 
     gt_bot_ironbreaker_revive_in_ult = { en = "[working] Ironbreaker bots revive during their ult" },
     gt_bot_ironbreaker_revive_in_ult_tooltip = { en = "The career skill no longer parks the bot in a blocking stance for its whole duration; the bot breaks off to revive or rescue an ally while the damage-reduction buff keeps running." },
+
+    -- #469: bots ignore a curated set of hazard / mutator AOE they cannot path
+    -- around. Host-side, bots only, humans never affected.
+    gt_bot_aoe_immunity = { en = "[untested] [Issue 469] Bots ignore mutator and hazard AOE damage" },
+    gt_bot_aoe_immunity_tooltip = { en = "Bots take no damage from a hand-picked set of area hazards they cannot reliably path around: Weaves and Twitch lightning strikes, the Chaos Wastes Khorne skull curse and Tzeentch bolt-of-change curse, and oil-barrel ground fire. Only bots are affected, never human players, and only while you are the host. Boss slams, warpfire, gas, and thrown bombs are left alone on purpose so bots still react to them." },
 
     -- issue 448 (FIX 11): downed bot must not project the Morr's Protection aura.
     gt_bot_no_downed_morrs_grant = { en = "[untested] [Issue 448] Downed bots don't grant Morr's Protection" },

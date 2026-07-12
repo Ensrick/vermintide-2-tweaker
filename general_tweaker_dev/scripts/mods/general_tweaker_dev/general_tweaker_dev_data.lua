@@ -223,6 +223,18 @@ local _data = {
                                 default_value = true,
                                 tooltip       = "gt_bot_ironbreaker_revive_in_ult_tooltip",
                             },
+                            -- #469: bots ignore a curated set of environment /
+                            -- mutator AOE (lightning strikes, Khorne skull +
+                            -- Tzeentch bolt curses, oil-barrel fire) they cannot
+                            -- path around. Default OFF; host-side; humans never
+                            -- affected. Read live in the two DamageUtils hooks
+                            -- (general_tweaker_dev.lua) -- no on_setting_changed.
+                            {
+                                setting_id    = "gt_bot_aoe_immunity",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_bot_aoe_immunity_tooltip",
+                            },
                         },
                     },
                     -- Bot follow mode (v0.2.152-dev) -- single dropdown
