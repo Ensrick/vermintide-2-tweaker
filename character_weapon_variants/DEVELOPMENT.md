@@ -1080,24 +1080,51 @@ Two things are intentionally KEPT alongside it:
    **durable crash net** protecting ANY husk weapon from the
    `equipment.slots[nil]` CTD, independent of residency.
 
-### Positive-signal rule (transform + ammo)
+### Positive-signal rule (mesh + transform + ammo) — v0.1.377-dev (#474/#475)
 
-The husk apply resolves the CWV def ONLY via `item_units.skin`
-(`get_item_units` sets `result.skin` when a skin took effect) — NEVER a bare
-`item_data.name` match, which collides with a genuine native wielder of the
-real base weapon. `backend_id` on the husk is always the base's, so it never
-resolves a cwv key. Therefore:
+Husk mesh re-key AND transform fallback route through ONE decision point,
+`_om._husk_resolve_display_def(base, career, skin)`, with this order:
 
-- **Transform** (scale/offset) resolves on the husk **iff the curated skin
-  syncs.** For override-differ variants the skin must sync for the override to
-  render at all, so the transform rides along. For override==base transform
-  variants (musket Y-stretch, rapier broaden) the base mesh always renders, but
-  the SCALE needs the skin; a skinless equip shows the native-scale base mesh.
-- **Ammo strip** (issue 399) uses a base+career POSITIVE inference: a base
-  weapon on a career that CANNOT natively wield it (dwarf-exclusive
+1. **Wire skin PRIMARY.** A skin in either def-keyed cwv namespace — base
+   `<item_key>_skin` or pairing `<item_key>_<tail>` (lazy longest-prefix,
+   cached) — positively identifies the variant: re-key mesh + apply the def's
+   transforms REGARDLESS of `can_wield` (#474: the old can_wield-excluded map
+   could never fire for the Old Musket because vanilla `es_handgun.can_wield`
+   already contains the Kruber careers). The skin template's own per-hand
+   units beat the def defaults, so pairing skins keep their exact shield/sword
+   combination. Residency still gates the write: vanilla overrides via the
+   shared resident-3p guard (#403/#418), the mod-bundled Old Musket mesh via
+   `_om._husk_custom_bundle_unit` (always resident; force-loading it is the
+   #403 boot fatal). Exceptions by design: the cross-source illusion families
+   named OUTSIDE any def's item_key (`cwv_il_es/wh_*`, `cwv_es_priest_es/wh_*`)
+   don't resolve here — their skin data already drives the display and they
+   carry no def transforms; the decline log wording marks them as cwv-family,
+   not native. NOTE (review finding): this arm is fed by today's skin wire
+   LEAK — the null-on-wire hook covers only base `_skin_keys` on
+   `game_object_initialized`, so pairing skins (and resync/hot-join base
+   skins) reach cwv clients un-nulled. A future all-sender null (the
+   cosmetics #421 treatment) MUST be peer-parity-gated or this arm goes dark.
+2. **A present NON-cwv skin NEVER re-keys** (#475 Invariant 1). A native item
+   virtually always carries a vanilla/LA skin on the wire; mis-applying a
+   variant to it (the falsified "can never mis-apply" claim of the boot-time
+   map) is strictly worse than a variant degrading to base display.
+3. **Skinless echoes only** fall back to the base+career positive inference,
+   with `can_wield` evaluated LAZILY at wield time (`_om._husk_pair_native_now`)
+   — the boot-time snapshot predated weapon_tweaker's can_wield patches (#475's
+   second hole). A currently-wieldable pair declines: the shape is ambiguous
+   between a wt-freedom native wield and a variant echo, and ambiguous shows
+   base. The skinned wield that follows still re-keys via arm 1.
+
+`backend_id` on the husk is always the base's, so it never resolves a cwv key.
+
+- **Ammo strip** (issue 399) still uses the boot-built base+career inference:
+  a base weapon on a career that CANNOT natively wield it (dwarf-exclusive
   `dr_deus_01` on a Kruber = only the CWV Outrider). Gated on `(item_data.name
   == base) AND (career in the variant's careers)` so a genuine dwarf wielding
-  the real Trollhammer is never touched.
+  the real Trollhammer is never touched. KNOWN residual (surfaced during the
+  #474/#475 fix, not changed): under wt freedom a non-dwarf CAN wield the
+  native Trollhammer, and the strip would wrongly hide its torpedo on
+  observers' screens — same false-positive class as #475, cosmetic-only.
 
 **Stays broken until #392:** anything that needs the husk to resolve the CWV
 INSTANCE when NO cwv skin is on the wire — every cim-CRAFTED copy (no skin),

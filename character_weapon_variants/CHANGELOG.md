@@ -1,5 +1,88 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.377-dev — 2026-07-11 — #474 #475 husk display resolution: skin-key PRIMARY, base+career demoted to lazy skinless-only fallback [untested]
+
+### Why (two-peer log session, host i477b / client i477a, both on 0.1.376-dev)
+- Issue 474: the Old Musket rendered as the base handgun on the client, no pose/
+  textures. The husk mesh re-key was base+career ONLY and can_wield-excluded --
+  vanilla `es_handgun.can_wield` includes `es_mercenary` (the host career), so the
+  positively-identifying wire skin `cwv_es_musket_old_skin` (client log 72998)
+  could never trigger a re-key, and the owner-side musket block is gated on
+  backend_id + musket template, both absent on the husk.
+- Issue 475: a NATIVE Bretonnian Longsword & Shield (wielded by a mercenary host
+  via weapon_tweaker's cross-career freedom, VANILLA skin on the wire, client log
+  72800) was re-keyed to the cwv Imperial LS&S mesh + transforms on the client
+  (client log 72788-72795). Two holes: the map's can_wield exclusion snapshotted
+  at boot BEFORE wt patched can_wield (client boot: cwv map 23:19:48.96, wt
+  patches 23:19:50.36), and vanilla `es_sword_shield_breton.can_wield` is
+  Grail-Knight-only (`item_master_list_lake.lua:411-430`) so the pair sat in the
+  map. The old "can never mis-apply to a native weapon" comment was falsified.
+
+### Changed (husk-side display resolution only; owner path and wire untouched)
+- NEW shared decision point `_om._husk_resolve_display_def(base, career, skin)`
+  -- the mesh re-key AND the transform fallback both route through it:
+  1. **Wire skin PRIMARY** (issue 474): a skin in either cwv namespace (base
+     `<item_key>_skin`, or pairing `<item_key>_<tail>` via cached lazy
+     longest-prefix match) positively identifies the variant -> re-key mesh +
+     transforms regardless of (base,career) wieldability. The skin template's
+     own per-hand unit wins over the def default so pairing skins keep their
+     exact combination.
+  2. **Non-cwv skin present -> NEVER re-key** (issue 475, Invariant 1: a false
+     positive on a native weapon is strictly worse than a variant degrading to
+     base display).
+  3. **Skinless echo only**: base+career fallback, with can_wield evaluated
+     LAZILY at wield time (`_om._husk_pair_native_now`) so weapon_tweaker's
+     runtime can_wield expansion is respected regardless of boot order. A
+     currently-wieldable pair declines (ambiguous shows base; the skinned
+     wield that follows still re-keys via arm 1).
+- Old Musket husk parity (issue 474): when the skin resolves the musket def AND
+  the custom mesh actually spawned, the husk 3P unit now gets the runtime-bound
+  textures + bespoke absolute ranged pose (previously backend_id/template-gated,
+  husk-unreachable). Guarded so the absolute pose can never touch a base handgun
+  spawned on a residency decline.
+- Residency discipline (issues 403/418 unchanged for vanilla overrides): NEW
+  `_om._husk_custom_bundle_unit` accepts the mod-bundled Old Musket mesh
+  (always resident; force-loading it is the issue 403 boot fatal) that the
+  vanilla-prefix resident guard deliberately rejects.
+- Diagnostics: `[cwv:474]`/`[cwv:475]`-tagged printf on every decision branch
+  (skin-resolved re-key, native-skin decline, skinless native-pair decline,
+  no-claim decline, residency defer, musket parity apply), once-per-shape.
+- Regression: `cwv_husk_base_career_rekey` rewritten for the lazy semantics
+  (walks every claimed pair through the REAL resolver); NEW
+  `cwv_husk_skin_primary_resolution` (both skin namespaces + end-to-end Old
+  Musket wire shape) and `cwv_husk_native_never_rekeyed` (issue 475 wire shape
+  must decline as skin_foreign; skinless currently-wieldable pair must decline;
+  custom-bundle residency arm scoped to the musket mesh).
+- NOT touched (wire-safety doctrine, issue 371): NetworkLookup aliasing, the
+  skin null-on-wire hook, any encode/RPC path. Known residuals:
+  1. The store-side base-item resolution on the HOST (issue 474 mechanism 3) is
+     out of scope here; this fix handles the resulting wire shape (base item +
+     cwv skin).
+  2. Adversarial review: arm 1's delivery path is today's skin wire LEAK -- the
+     null-on-wire hook covers only `_om._skin_keys` (base skins) on
+     game_object_initialized; pairing/illusion skins ride rpc_add_equipment
+     un-nulled from every sender, and even base skins leak via the resync /
+     hot-join senders cwv does not hook. That leak is ALSO a live issue-278-
+     class CTD for non-cwv peers. When cwv gets the cosmetics issue-421
+     treatment (null on all senders), it MUST be peer-parity-gated (issue 371
+     beacon) so cwv-to-cwv lobbies keep the skin, or issue 474 regresses to
+     base display. Tracked separately; not fixable inside a husk-display-only
+     change.
+  3. The cross-source illusion families named outside the `<item_key>_`
+     namespaces (cwv_il_es/wh_*, cwv_es_priest_es/wh_*) intentionally do NOT
+     resolve in the skin lookup: their skin data already drives the husk
+     display, no transforms are registered for them, and the anomalous
+     base-reverted shape degrades to base per Invariant 2. The decline log
+     wording distinguishes them from native declines.
+
+### Verify (full Steam restart on BOTH peers first)
+- 474: host mercenary equips the Old Musket; client sees the custom musket mesh
+  with pose/textures + `[cwv:474] husk re-keyed ... via skin` line.
+- 475: host mercenary wields the NATIVE Bret LS&S via wt freedom; client sees
+  the native weapon + `[cwv:475] husk re-key DECLINED` line.
+- Control: genuine cwv Imperial LS&S must still re-key on the husk (pairing
+  skin arm).
+
 ## 0.1.376-dev — 2026-07-08 — fix: bundle _lib_peer_parity.lua (beacon failed to load in 0.1.375) [untested]
 
 ### Why

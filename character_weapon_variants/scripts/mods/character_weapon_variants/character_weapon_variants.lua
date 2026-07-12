@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.376-dev"
+local MOD_VERSION = "0.1.377-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -4739,14 +4739,16 @@ local function _detach_musket_bayonet(world, rifle_unit)
 end
 
 mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
-	-- Husk MESH re-key (issues 396/401) -- WEAPON_APPEARANCE_STANDARD section 5.
-	-- MUST run BEFORE the vanilla spawn: the husk resolves the BASE item_data
-	-- (name = base weapon), so vanilla spawn_inventory_unit would select the BASE
-	-- mesh even for a cross-character variant (backend_id/skin absent on the wire,
-	-- #392). Point the hand's unit at the variant's override via the husk-reliable
-	-- base+career positive signal, guarded so it can only pick a RESIDENT vanilla
-	-- override for an unambiguous cross-char pair -- never a native weapon, never a
-	-- non-resident mesh. No-op when nothing resolves (today's behavior).
+	-- Husk MESH re-key (issues 396/401, #474/#475) -- WEAPON_APPEARANCE_STANDARD
+	-- section 3. MUST run BEFORE the vanilla spawn: the husk resolves the BASE
+	-- item_data (name = base weapon), so vanilla spawn_inventory_unit would select
+	-- the BASE mesh even for a cross-character variant (#392). Resolution is
+	-- SKIN-PRIMARY (#474: a wire skin in a cwv namespace positively identifies the
+	-- variant regardless of can_wield); a present non-cwv skin NEVER re-keys
+	-- (#475 Invariant 1); only a skinless echo falls back to the base+career
+	-- signal with can_wield evaluated lazily at wield time. Residency-guarded
+	-- (vanilla overrides via the resident-3p helper, mod-bundled custom meshes
+	-- via the custom-bundle predicate). No-op when nothing resolves.
 	if not owner_unit_1p and _om._husk_rekey_units then
 		_om._husk_rekey_units(hand, item_data, item_units, owner_unit_3p)
 	end
@@ -5191,6 +5193,21 @@ local _LA_PATTERN_CUSTOM_PACKAGES = {
 	["units/cwv_es_musket_custom/cwv_es_musket_custom"]    = true,
 	["units/cwv_es_musket_custom/cwv_es_musket_custom_3p"] = true,
 }
+
+-- (#474) Husk re-key residency arm for MOD-BUNDLED custom meshes. These units
+-- live in cwv's own master bundle (always resident while the mod is loaded);
+-- their load lifecycle is owned by the LA-pattern PackageManager hooks below,
+-- and they must NEVER be queued through the vanilla residency force-load pass
+-- (issue 403 boot fatal). `_om._resident_override_3p` deliberately rejects
+-- them (vanilla-prefix gate, issue 418), so the husk mesh re-key needs this
+-- second predicate to accept a skin-resolved custom mesh (the Old Musket).
+-- Requires BOTH the base and "_3p" forms whitelisted: the husk spawn appends
+-- "_3p" to whatever lands in item_units.
+_om._husk_custom_bundle_unit = function(base_unit)
+	if type(base_unit) ~= "string" or base_unit == "" then return false end
+	return _LA_PATTERN_CUSTOM_PACKAGES[base_unit] == true
+		and _LA_PATTERN_CUSTOM_PACKAGES[base_unit .. "_3p"] == true
+end
 
 mod:hook(PackageManager, "load", function(func, self, package_name, reference_name, callback, asynchronous, prioritize)
 	if _LA_PATTERN_CUSTOM_PACKAGES[package_name] then return end
@@ -10062,33 +10079,36 @@ do
 	-- asserts every no_ammo_unit def contributes its base + careers here.
 	_om._no_ammo_careers_by_base = _no_ammo_careers_by_base
 
-	-- issues 396/397/401 husk mesh+transform re-key: base_weapon -> career -> def,
-	-- for (base, career) pairs the career CANNOT natively wield (can_wield
-	-- exclusion -> a genuine native wielder is never matched) AND exactly one
-	-- variant claims (unambiguous). Husk-reliable POSITIVE signal (same family as
-	-- the ammo strip) that resolves a skinless / cim-crafted cross-char variant on
-	-- remote screens without the cwv identity the wire never carries (#392).
-	-- Native-wieldable or ambiguous pairs resolve to nil -> today's base behavior,
-	-- so this can never mis-apply a variant to a native weapon.
-	-- CAVEAT: reads the OBSERVER's ItemMasterList[base].can_wield; if weapon_tweaker
-	-- has expanded it to grant cross-char access, the receiving careers count as
-	-- native and this resolver conservatively declines (no regression) -- full
-	-- parity there still needs the Phase 3 sync marker.
+	-- issues 396/397/401 husk display resolution, restructured for #474/#475.
+	--
+	-- RESOLUTION ORDER (the husk display contract -- WEAPON_APPEARANCE_STANDARD §3):
+	--   1. WIRE SKIN, PRIMARY (positive identity): a skin in either cwv skin
+	--      namespace (base "<item_key>_skin" or pairing "<item_key>_<tail>")
+	--      positively identifies the variant -> re-key REGARDLESS of can_wield.
+	--      #474 root: vanilla es_handgun.can_wield includes es_mercenary, so the
+	--      can_wield-excluded (base,career) map could never fire for the Old
+	--      Musket even though the wire skin named it outright.
+	--   2. A present NON-cwv skin = native item (or foreign illusion): NEVER
+	--      re-key. #475 Invariant 1: mis-applying a variant to a native weapon
+	--      is strictly worse than a variant degrading to its base display.
+	--   3. SKINLESS echo only: (base,career) fallback, with can_wield evaluated
+	--      LAZILY at wield time. #475 root: the old boot-time snapshot ran
+	--      before weapon_tweaker expanded can_wield, so a wt-freedom native
+	--      wield (host mercenary + native Bretonnian LS&S) matched the map and
+	--      got re-keyed to the cwv variant. If the career can CURRENTLY wield
+	--      the base (vanilla or wt), the skinless shape is ambiguous -> show
+	--      base; a genuine variant's skinned wield still re-keys via arm 1.
+	--
+	-- The claims map is UNFILTERED (no build-time can_wield exclusion -- that is
+	-- now the lazy check), deduped so an ambiguous (base,career) resolves to nil.
 	local _husk_def_by_base_career = {}
 	do
 		local _seen = {}   -- "base|career" -> def, or false once ambiguous
-		local function _native(base_key, career)
-			local base = rawget(ItemMasterList, base_key)
-			local cw = type(base) == "table" and base.can_wield
-			if type(cw) ~= "table" then return true end   -- unknown -> exclude (conservative)
-			for _, c in ipairs(cw) do if c == career then return true end end
-			return false
-		end
 		for _, def in ipairs(_variant_definitions) do
 			local base = def.base_weapon
 			if type(base) == "string" then
 				for _, career in ipairs(def.careers or {}) do
-					if type(career) == "string" and not _native(base, career) then
+					if type(career) == "string" then
 						local k = base .. "|" .. career
 						local slot = _husk_def_by_base_career[base]
 						if not slot then slot = {}; _husk_def_by_base_career[base] = slot end
@@ -10106,10 +10126,85 @@ do
 	end
 	_om._husk_def_by_base_career = _husk_def_by_base_career   -- exposed for regression
 
-	local function _resolve_husk_def_by_base_career(base_name, career)
-		if not (base_name and career) then return nil end
+	-- Lazy native check (#475): reads the CURRENT ItemMasterList[base].can_wield
+	-- at husk-wield time, so weapon_tweaker's runtime expansion (wt is the last
+	-- writer of can_wield, re-applied on game-state transitions) is respected no
+	-- matter the boot order. Unknown/malformed -> native (decline re-key;
+	-- conservative toward Invariant 1). Assigned to _om (not a local): this
+	-- chunk sits at the Lua 5.1 200-local ceiling.
+	_om._husk_pair_native_now = function(base_key, career)
+		local base = rawget(ItemMasterList, base_key)
+		local cw = type(base) == "table" and base.can_wield
+		if type(cw) ~= "table" then return true end
+		for _, c in ipairs(cw) do if c == career then return true end end
+		return false
+	end
+
+	-- (#474) Skin -> variant-def identity lookup covering the two def-keyed cwv
+	-- skin namespaces:
+	--   * base variant skins  "<item_key>_skin"  -- seeded eagerly below;
+	--   * pairing/illusion skins "<item_key>_<tail>" (e.g. cwv_es_longsword_
+	--     shield_wpn_emp_shield_03_runed_01__nordland) -- resolved lazily by
+	--     longest-prefix match (they register in _register_*_illusions AFTER
+	--     this chunk runs) and cached, so the wield path stays allocation-free.
+	-- KNOWN NON-MEMBERS (correct declines, do not "fix"): the cross-source
+	-- illusion families named outside any def's item_key -- cwv_il_es_* /
+	-- cwv_il_wh_* (Imperial Longsword) and cwv_es_priest_es_* / cwv_es_priest_
+	-- wh_* (Sigmarite Greathammer). Their skin data carries the source mesh, so
+	-- vanilla already renders them; they need no re-key and no def transforms
+	-- (none registered), and on the anomalous base-reverted shape they degrade
+	-- to base display per Invariant 2.
+	-- Deliberately separate from _skin_transform_map: that map is gated on
+	-- transform registration and also holds synthetic custom-illusion defs
+	-- (transform-only, no base_weapon) that must never drive a mesh re-key.
+	-- Cache stores false as the negative for a cwv_-prefixed non-variant skin;
+	-- non-cwv skins return nil without touching the cache (no unbounded growth).
+	_om._husk_skin_def_cache = {}
+	for _, def in ipairs(_variant_definitions) do
+		if type(def.item_key) == "string" and not def.no_skin then
+			_om._husk_skin_def_cache[def.item_key .. "_skin"] = def
+		end
+	end
+	_om._husk_skin_def = function(skin)
+		if type(skin) ~= "string" then return nil end
+		local cache = _om._husk_skin_def_cache
+		local hit = cache[skin]
+		if hit ~= nil then return hit or nil end
+		if skin:sub(1, 4) ~= "cwv_" then return nil end
+		local best, best_len = false, 0
+		for _, def in ipairs(_variant_definitions) do
+			local ik = def.item_key
+			if type(ik) == "string" and #ik > best_len
+					and skin:sub(1, #ik + 1) == ik .. "_" then
+				best, best_len = def, #ik
+			end
+		end
+		cache[skin] = best
+		return best or nil
+	end
+
+	-- SINGLE husk display decision point (#474/#475): the mesh re-key AND the
+	-- transform fallback both route through this so they can never disagree.
+	-- Returns def, reason. Resolve reasons: "skin" | "base_career". Decline
+	-- reasons (nil def): "skin_foreign" (non-cwv skin = native, Invariant 1) |
+	-- "skin_base_mismatch" (defensive: skin and wire item disagree) |
+	-- "native_pair" (skinless + pair currently wieldable) | "no_pair".
+	_om._husk_resolve_display_def = function(base_name, career, skin)
+		if skin ~= nil then
+			local def = _om._husk_skin_def(skin)
+			if not def then return nil, "skin_foreign" end
+			if type(def.base_weapon) == "string" and base_name ~= nil
+					and def.base_weapon ~= base_name then
+				return nil, "skin_base_mismatch"
+			end
+			return def, "skin"
+		end
+		if not (base_name and career) then return nil, "no_pair" end
 		local slot = _husk_def_by_base_career[base_name]
-		return slot and slot[career] or nil
+		local def = slot and slot[career]
+		if not def then return nil, "no_pair" end
+		if _om._husk_pair_native_now(base_name, career) then return nil, "native_pair" end
+		return def, "base_career"
 	end
 
 	-- Set of every CWV base_weapon key — used only to scope the "no def
@@ -10144,31 +10239,82 @@ do
 		return name
 	end
 
-	-- Husk MESH re-key (issues 396/401). Runs BEFORE the vanilla spawn (the caller
-	-- mutates item_units in place). For an unambiguous cross-char (base, career) the
-	-- husk would otherwise spawn the BASE mesh; point the hand's unit at the
-	-- variant's override -- but ONLY if that override's "_3p" form is already
-	-- force-loaded resident (shared _om._resident_override_3p guard; issue 403
-	-- crash-floor) and differs from what's there. Idempotent and fail-safe: no
-	-- resident override, native/ambiguous pair, or nil career -> item_units untouched.
+	-- Husk MESH re-key (issues 396/401, restructured for #474/#475). Runs BEFORE
+	-- the vanilla spawn (the caller mutates item_units in place). Resolution
+	-- order + invariants: the RESOLUTION ORDER block above; the actual decision
+	-- is _om._husk_resolve_display_def, shared with the transform apply so mesh
+	-- and transform can never disagree.
+	--
+	-- Write guards, in order:
+	--   * For a skin-resolved def the skin template's OWN per-hand unit wins
+	--     over the def default -- pairing skins carry their exact combination
+	--     (e.g. a Nordland-shield pairing) and the def default would stomp it.
+	--   * Residency (issue 403 crash-floor): a vanilla override must be
+	--     force-loaded resident (shared _om._resident_override_3p, issue 418);
+	--     a mod-bundled custom mesh (the Old Musket) is accepted via
+	--     _om._husk_custom_bundle_unit instead (always resident in cwv's own
+	--     bundle, and deliberately REJECTED by the vanilla-prefix resident
+	--     guard -- force-loading it is the issue 403 boot fatal).
+	--   * Idempotent and fail-safe: decline/no-op leaves item_units untouched
+	--     (vanilla then spawns whatever the skin data already put there).
 	_om._husk_rekey_units = function(hand, item_data, item_units, owner_unit_3p)
 		if not (item_data and item_units) then return end
 		local base_name = item_data.name
 		if not base_name then return end
+		local skin = item_units.skin
 		local career = _husk_career_name(owner_unit_3p)
-		local def = _resolve_husk_def_by_base_career(base_name, career)
-		if not def then return end
+		local def, reason = _om._husk_resolve_display_def(base_name, career, skin)
+		if not def then
+			-- Decision diagnostics (#474/#475), scoped to bases a cwv variant
+			-- clones so common native wields don't spam; once per shape.
+			if _cwv_base_weapons[base_name] then
+				if reason == "skin_foreign" or reason == "skin_base_mismatch" then
+					-- Wording split: cwv_-prefixed skins that don't resolve are the
+					-- known cross-source illusion families outside the <item_key>_
+					-- namespaces (cwv_il_*, cwv_es_priest_es/wh_*) -- genuinely cwv,
+					-- display-complete via their skin data, correctly not re-keyed;
+					-- don't label them native (log-triage accuracy, review finding).
+					local skin_is_cwv = type(skin) == "string" and skin:sub(1, 4) == "cwv_"
+					_husk_log_once("475_skin_decline:" .. tostring(base_name) .. ":" .. tostring(career) .. ":" .. tostring(skin),
+						skin_is_cwv
+							and "[cwv:475] husk re-key declined (%s): base=%s career=%s skin=%s -- cwv skin outside the <item_key>_ namespaces (cross-source illusion family); skin data already drives its display, no re-key"
+							or  "[cwv:475] husk re-key DECLINED (%s): base=%s career=%s skin=%s -- non-cwv skin = native item, never re-key (Invariant 1)",
+						tostring(reason), tostring(base_name), tostring(career), tostring(skin))
+				elseif reason == "native_pair" then
+					_husk_log_once("475_native_pair:" .. tostring(base_name) .. ":" .. tostring(career) .. ":" .. tostring(hand),
+						"[cwv:475] husk re-key DECLINED (native_pair): base=%s career=%s -- skinless echo and the pair is currently wieldable (vanilla or wt); ambiguous shows base, a skinned wield still re-keys",
+						tostring(base_name), tostring(career))
+				else
+					_husk_log_once("474_no_pair:" .. tostring(base_name) .. ":" .. tostring(career) .. ":" .. tostring(hand),
+						"[cwv:474] husk re-key no def (%s): base=%s career=%s skin=nil -- skinless echo without an unambiguous (base,career) claim",
+						tostring(reason), tostring(base_name), tostring(career))
+				end
+			end
+			return
+		end
 		local field = (hand == "right") and "right_hand_unit" or "left_hand_unit"
-		local override = def[field]
-		if type(override) ~= "string" or override == "" then return end
-		-- Confirm the "_3p" override is resident (helper returns _3p path or nil); we
-		-- write the BASE-form path, vanilla spawn_inventory_unit appends "_3p".
-		if not (_om._resident_override_3p and _om._resident_override_3p(override)) then return end
-		if item_units[field] == override then return end   -- idempotent
+		local override
+		if reason == "skin" and WeaponSkins and WeaponSkins.skins then
+			local skin_tmpl = rawget(WeaponSkins.skins, skin)
+			local skin_unit = skin_tmpl and skin_tmpl[field]
+			if type(skin_unit) == "string" and skin_unit ~= "" then override = skin_unit end
+		end
+		if override == nil then override = def[field] end
+		if type(override) ~= "string" or override == "" then return end   -- def keeps base mesh for this hand
+		if item_units[field] == override then return end   -- idempotent (skin data already flowed)
+		-- Residency: helper checks the "_3p" form; we write the BASE-form path,
+		-- vanilla spawn_inventory_unit appends "_3p".
+		if not ((_om._resident_override_3p and _om._resident_override_3p(override))
+				or (_om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(override))) then
+			_husk_log_once("474_residency:" .. tostring(override) .. ":" .. tostring(hand),
+				"[cwv:474] husk re-key DEFERRED (residency): hand=%s base=%s def=%s override=%s not resident -- showing base this wield (issue 403 crash-floor)",
+				tostring(hand), tostring(base_name), tostring(def.item_key), tostring(override))
+			return
+		end
 		item_units[field] = override
-		_husk_log_once("mesh_rekey:" .. tostring(base_name) .. ":" .. tostring(career) .. ":" .. tostring(hand),
-			"[cwv husk-mesh] re-keyed hand=%s base=%s career=%s -> %s (issue 396/401 base+career)",
-			tostring(hand), tostring(base_name), tostring(career), tostring(override))
+		_husk_log_once("474_rekey:" .. tostring(base_name) .. ":" .. tostring(career) .. ":" .. tostring(hand) .. ":" .. tostring(skin),
+			"[cwv:474] husk re-keyed hand=%s base=%s career=%s via %s (skin=%s) -> %s",
+			tostring(hand), tostring(base_name), tostring(career), tostring(reason), tostring(skin), tostring(override))
 	end
 
 	-- Returns true if it stripped a torpedo/ammo unit (caller then nils its
@@ -10229,16 +10375,23 @@ do
 		end
 		local skin = item_units and item_units.skin
 		local def = _resolve_cwv_def(item_data, skin)
-		if not def then
-			-- #392/#397 fallback: cwv identity absent on the husk. Resolve via the
-			-- husk-reliable base+career positive signal (unambiguous cross-char only,
-			-- can_wield-excluded) so a skinless / cim-crafted variant still applies.
+		if not def and skin == nil then
+			-- #392/#397 fallback, #475-hardened: base+career positive signal for
+			-- SKINLESS echoes only, can_wield evaluated LAZILY at wield time. A
+			-- present non-cwv skin means a native item (Invariant 1): no fallback
+			-- -- exactly the mesh re-key's rule; both route through
+			-- _om._husk_resolve_display_def so mesh and transform cannot disagree.
 			local bc_career = _husk_career_name(owner_unit_3p)
-			def = _resolve_husk_def_by_base_career(item_data and item_data.name, bc_career)
+			local bc_def, bc_reason = _om._husk_resolve_display_def(item_data and item_data.name, bc_career, nil)
+			def = bc_def
 			if def then
 				_husk_log_once("bc_xform:" .. tostring(item_data and item_data.name) .. ":" .. tostring(bc_career) .. ":" .. tostring(hand),
-					"[cwv husk-transform] resolved via base+career: base=%s career=%s def=%s hand=%s (issue 397 re-key)",
+					"[cwv:474] husk transform resolved via base+career: base=%s career=%s def=%s hand=%s (skinless echo, pair not currently wieldable)",
 					tostring(item_data and item_data.name), tostring(bc_career), tostring(def.item_key), tostring(hand))
+			elseif bc_reason == "native_pair" and _cwv_base_weapons[item_data and item_data.name] then
+				_husk_log_once("475_xform_native:" .. tostring(item_data and item_data.name) .. ":" .. tostring(bc_career) .. ":" .. tostring(hand),
+					"[cwv:475] husk transform fallback DECLINED (native_pair): base=%s career=%s -- skinless echo, pair currently wieldable (vanilla or wt)",
+					tostring(item_data and item_data.name), tostring(bc_career))
 			end
 		end
 		if not def then
@@ -10273,6 +10426,26 @@ do
 			printf("[cwv husk-transform] applied hand=%s def=%s scale=%s offset=%s -- issues 397/394",
 				tostring(hand), tostring(def.item_key or def.item_type),
 				scale and "y" or "n", offset and "y" or "n")
+		end
+		-- (#474) Old Musket husk display parity. Its look is NOT generic def
+		-- fields: custom mesh + bespoke ABSOLUTE 3P pose + runtime-bound
+		-- textures, which the owner path gates on backend_id + musket template
+		-- -- both absent on the husk (wire item is the base es_handgun), so the
+		-- owner block at the spawn hook never fires here. Apply only when the
+		-- def positively identifies the Old Musket AND the custom mesh actually
+		-- spawned (item_units reflects the pre-spawn re-key decision): the
+		-- absolute pose is authored for the custom mesh and must never touch a
+		-- base handgun that spawned on a residency decline. Stance is
+		-- unknowable on the husk (the wire item is the base handgun in either
+		-- stance) -- use the ranged pose. Weak-keyed tracking keeps live-tune
+		-- commands consistent and cannot leak husk units.
+		if def.item_key == "cwv_es_musket_old" and hand == "right"
+				and item_units and item_units.right_hand_unit == def.right_hand_unit then
+			pcall(_om._apply_old_musket_textures, weapon_unit_3p)
+			pcall(_om._track_old_musket_unit, weapon_unit_3p, "3p", "ranged")
+			pcall(_om._apply_old_musket_transform, weapon_unit_3p, "3p", "ranged")
+			pcall(printf, "[cwv:474] husk old-musket parity: textures + 3p ranged pose applied (hand=%s skin=%s)",
+				tostring(hand), tostring(skin))
 		end
 	end
 end
@@ -11854,17 +12027,22 @@ _rt_register("cwv_husk_override_ref_shared", function()
 end)
 
 _rt_register("cwv_husk_base_career_rekey", function()
-    -- Phase C (#392/#394/#396/#397/#401): the husk base+career re-key resolves a
-    -- skinless / cim-crafted cross-char variant on remote screens. SAFETY INVARIANT:
-    -- the map must NEVER contain a (base, career) pair the career can NATIVELY wield
-    -- -- that would mis-apply a variant's mesh/transform to a genuine native weapon
-    -- on other players' screens. can_wield exclusion enforces this at build time;
-    -- this test re-derives it at runtime so a def/careers edit can't silently break it.
+    -- Phase C (#392/#394/#396/#397/#401), restructured by #474/#475: the husk
+    -- base+career fallback resolves a SKINLESS cross-char variant echo on remote
+    -- screens. SAFETY INVARIANT (Invariant 1): the RESOLVER must decline every
+    -- (base, career) pair the career can CURRENTLY wield -- the map itself now
+    -- holds unfiltered claims and the can_wield check runs lazily at wield time
+    -- (#475: the old boot-time exclusion snapshot predated weapon_tweaker's
+    -- can_wield expansion, so a wt-freedom native wield got re-keyed to a cwv
+    -- variant). This walks every claimed pair through the REAL resolver.
     if type(_om._husk_def_by_base_career) ~= "table" then
-        return "_om._husk_def_by_base_career not exposed -- husk base+career re-key missing (Phase C)"
+        return "_om._husk_def_by_base_career not exposed -- husk base+career fallback missing (Phase C)"
     end
     if type(_om._husk_rekey_units) ~= "function" then
         return "_om._husk_rekey_units missing -- husk mesh re-key lost (issues 396/401)"
+    end
+    if type(_om._husk_resolve_display_def) ~= "function" or type(_om._husk_pair_native_now) ~= "function" then
+        return "_om._husk_resolve_display_def/_husk_pair_native_now missing -- shared husk decision point lost (#474/#475)"
     end
     for base, slot in pairs(_om._husk_def_by_base_career) do
         local master = rawget(ItemMasterList, base)
@@ -11873,13 +12051,90 @@ _rt_register("cwv_husk_base_career_rekey", function()
             for career in pairs(slot) do
                 for _, native in ipairs(cw) do
                     if native == career then
-                        return string.format(
-                            "base+career re-key includes NATIVE pair base=%s career=%s -- would mis-apply a variant to a native weapon on husks (Phase C safety)",
-                            tostring(base), tostring(career))
+                        local def = _om._husk_resolve_display_def(base, career, nil)
+                        if def ~= nil then
+                            return string.format(
+                                "husk resolver re-keys CURRENTLY-NATIVE pair base=%s career=%s -- would mis-apply a variant to a native weapon on husks (#475 Invariant 1)",
+                                tostring(base), tostring(career))
+                        end
                     end
                 end
             end
         end
+    end
+end)
+
+_rt_register("cwv_husk_skin_primary_resolution", function()
+    -- (#474) Skin-key resolution is the PRIMARY husk display signal and must
+    -- cover BOTH cwv skin namespaces:
+    --   * base variant skins "<item_key>_skin" (e.g. cwv_es_musket_old_skin)
+    --   * pairing/illusion skins "<item_key>_<tail>" via lazy longest-prefix
+    -- A cwv wire skin must re-key even when the (base,career) pair is natively
+    -- wieldable -- that suppression was #474's mechanism 1.
+    if type(_om._husk_skin_def) ~= "function" then
+        return "_om._husk_skin_def missing -- skin-primary husk resolution lost (#474)"
+    end
+    local defs = _om._variant_defs
+    if type(defs) ~= "table" then
+        return "_om._variant_defs not exposed -- cannot enumerate skin namespaces (#474)"
+    end
+    -- Namespace 1: every non-no_skin def's base skin must resolve to ITS def.
+    for _, def in ipairs(defs) do
+        if type(def.item_key) == "string" and not def.no_skin then
+            local got = _om._husk_skin_def(def.item_key .. "_skin")
+            if got ~= def then
+                return string.format("base variant skin %s_skin resolves to %s, expected its own def (#474)",
+                    tostring(def.item_key), tostring(got and got.item_key))
+            end
+        end
+    end
+    -- Namespace 2: the pairing-skin longest-prefix arm (canonical #475-session
+    -- example key; lazy resolution must pick the LS&S def, not the plain
+    -- longsword def that shares the prefix).
+    local pairing = _om._husk_skin_def("cwv_es_longsword_shield_wpn_emp_shield_03_runed_01__nordland")
+    if not (pairing and pairing.item_key == "cwv_es_longsword_shield") then
+        return string.format("pairing skin longest-prefix resolution broken: got %s, expected cwv_es_longsword_shield (#474)",
+            tostring(pairing and pairing.item_key))
+    end
+    -- End-to-end: a cwv skin must resolve through the shared decision point
+    -- REGARDLESS of native wieldability (es_handgun+es_mercenary is native).
+    local def, reason = _om._husk_resolve_display_def("es_handgun", "es_mercenary", "cwv_es_musket_old_skin")
+    if not (def and def.item_key == "cwv_es_musket_old" and reason == "skin") then
+        return string.format("skin-primary end-to-end broken: def=%s reason=%s for the Old Musket wire shape (#474)",
+            tostring(def and def.item_key), tostring(reason))
+    end
+end)
+
+_rt_register("cwv_husk_native_never_rekeyed", function()
+    -- (#475 Invariant 1) A native item must NEVER be re-keyed:
+    --   * vanilla/LA skin present -> decline, whatever the (base,career) map says
+    --     (the #475 wire shape: native Bret LS&S + vanilla skin on a wt-freedom
+    --     mercenary host got re-keyed to the cwv Imperial LS&S on the client);
+    --   * skinless echo whose pair is CURRENTLY wieldable -> decline (ambiguous
+    --     between a wt-freedom native wield and a variant echo -> show base).
+    if type(_om._husk_resolve_display_def) ~= "function" then
+        return "_om._husk_resolve_display_def missing (#474/#475)"
+    end
+    local def, reason = _om._husk_resolve_display_def("es_sword_shield_breton", "es_mercenary", "es_sword_shield_breton_skin_01")
+    if def ~= nil or reason ~= "skin_foreign" then
+        return string.format("vanilla-skinned native item resolved to def=%s reason=%s -- #475 regression (must decline as skin_foreign)",
+            tostring(def and def.item_key), tostring(reason))
+    end
+    -- Skinless + currently-native pair: vanilla es_handgun.can_wield contains
+    -- es_mercenary, so the lazy native check must decline the Old Musket's
+    -- claim on that pair (only cwv_es_musket_old claims it; the first musket
+    -- variant is retired/commented out, so no ambiguity dedupe applies here).
+    local def2 = _om._husk_resolve_display_def("es_handgun", "es_mercenary", nil)
+    if def2 ~= nil then
+        return string.format("skinless echo of a currently-wieldable pair resolved to %s -- #475 lazy can_wield regression",
+            tostring(def2.item_key))
+    end
+    -- The custom-bundle residency arm must accept exactly the Old Musket custom
+    -- mesh (mod-bundled, always resident) and reject arbitrary paths.
+    if type(_om._husk_custom_bundle_unit) ~= "function"
+            or not _om._husk_custom_bundle_unit("units/cwv_es_musket_custom/cwv_es_musket_custom")
+            or _om._husk_custom_bundle_unit("units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1") then
+        return "_om._husk_custom_bundle_unit missing or mis-scoped -- Old Musket husk re-key residency arm broken (#474)"
     end
 end)
 
