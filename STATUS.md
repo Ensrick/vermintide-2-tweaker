@@ -23,7 +23,7 @@
 **🏷 Label taxonomy (user rules 2026-07-11, codified §11/runbook/CLAUDE.md):** `verify-fix-coop` replaces `verify-fix` when 2+ testers needed (manual swap after ship.ps1 auto-label); `Fixed` = user-verified, post-fix pass (hardening/docs/regression tests) owed before close.
 
 **⚠ Open ends (the what-now list):**
-- **Remaining handoff-branch stream**: gut_dev partial (#480 + freecam/native-loadouts P0s, NOT built). cosmetics 0.9.76-dev and enemy_tweaker 0.7.31-dev shipped 2026-07-12 (et: #479 verified present, #449 gate was missing - added this pass).
+- **Handoff branch FULLY ABSORBED 2026-07-12** (all streams shipped: crt/ct_dev/cwv/cosmetics/et/gut_dev). Next up: #495 (cwv skin wire leak, 0-critical, must be parity-gated or #474 regresses), then #492/#478/#423/#424/#427, OOP program (wt -> cosmetics -> crt -> cim_dev -> ct_dev -> cwv).
 - **User in-game verify queue** (full Steam restart FIRST; coop items need the 2nd machine): et 0.4.26 `/event_tweaker_regression_test`, ct_dev `[ct:470]` + #426/#406 coop checks, gt_dev #459/#448, wt 0.12.208, crt #425 coop, cwv #474/#475 coop + prior queue (see #494).
 - **#495** cwv skin wire leak (0-critical): fix MUST be parity-gated or #474 regresses.
 - **Not started:** #492, #478, #423/#424 damage/spawn axes, #427 warn-chat sites, OOP program order (enemy_tweaker -> wt -> cosmetics -> crt -> cim_dev -> ct_dev -> cwv).
