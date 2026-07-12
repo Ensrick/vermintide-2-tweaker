@@ -1,5 +1,22 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.82-dev — 2026-07-12 — #416 replicate per-hand VANILLA offhand meshes to peers (sync layer + husk apply) [untested]
+
+Closes the offhand half of #416: a per-hand VANILLA shield / held-weapon unit pick
+(Stirland / Bretonnian / GK shields — `opt.unit` / `opt.intended_unit`, no LA
+`armoury_key`) applied only on the wearer's own body and showed as the base offhand on
+every other peer. LA armoury shields already synced; vanilla mesh picks had no networked
+representation. This adds the missing sync layer + a generic husk mesh-swap, both hands,
+both directions, with hot-join. NEEDS `verify-fix-coop` (2+ players, both with the mod).
+
+- **Sync layer (reuses the existing `cos_la_apply` / `cos_la_apply_req` VMF mod channel — no new channel):** added one ADDITIVE optional payload field `offhand_unit` (a plain unit-path STRING, or `""` = clear/revert-to-base). Handled by a branch placed BEFORE the `armoury_key` gate in both receivers, mirroring the shipped `revert` branch. `COS_RPC_SCHEMA` is NOT bumped (additive-optional rule, same as v0.9.69's revert flag) — old peers ignore the field harmlessly.
+- **New parallel store `mod._offhand_mesh_by_peer[wearer][slot/template][hand_field] = unit_path`,** kept SEPARATE from `_la_equips_by_peer` so the armoury-key-centric reconcile / paint / revert machinery is byte-for-byte untouched (no LA-sync regression surface). Populated by the new `cos_la_apply` `offhand_unit` branch only.
+- **Emit:** new `mod._send_offhand_mesh` (host-short-circuit / client-request / deferred-queue routing cloned from `_send_la_revert`) + `mod._store_offhand_mesh_recv` (writes the parallel store, enforces per-(wearer,slot,hand) mutual exclusion vs the LA store both directions, and native-pulses the wearer's unit so the swap shows without a manual re-wield). A committed vanilla offhand press queues a deferred `offhand_unit` message on Apply/screen-exit (Apply gate respected).
+- **Husk apply:** `BackendUtils.get_item_units` husk branch now reads the parallel store after the LA branch and forces each recorded hand's mesh, package-gated via `_override_package_ready` (`<unit>` + `<unit>_3p`) — a non-resident unit degrades to the base mesh, never the `World.spawn_unit` C-assert (#270/#392 class).
+- **Hot-join:** `cos_la_state_req` reply now also replays the vanilla offhand meshes to a late joiner (reuses `cos_la_apply`). Disconnect purge drops the peer's parallel entries.
+- **Wire safety (the #421 floor is explicitly intact):** the whole path rides a VMF mod RPC that non-mod peers never receive, and `offhand_unit` is a plain string — never a `NetworkLookup` index, never a vanilla-RPC param. No modded key can ride a vanilla RPC into a non-mod peer's `NetworkLookup`. The `[cos:sync]` diagnostics emit the decision at the store (`offhand_mesh_store/…`) and husk apply (`husk_vanilla/… decision=APPLIED-vanilla-mesh|SKIP(package-not-resident)`).
+- **Remaining (not in this slice):** `opt.vanilla_skin`-only opts (a paired vanilla weapon_skin with no `opt.unit` mesh) are NOT networked (the parallel store carries a unit path only); the fix-direction-#3 data-driven picker registration (CWV shields absent from the picker) is untouched; cross-session auto re-emit of a vanilla offhand pick (peer applied it last session, then rejoined) relies on the wearer re-Applying — in-session apply + hot-join are covered.
+
 ## 0.9.81-dev — 2026-07-12 — #499 rename _diag_probe.lua -> _cos_diag_lasync.lua (per-cluster diagnostics convention) [untested]
 
 - **#499 probe consolidation (PROJECT_STANDARDS §2.2b):** the passive diagnostic emitter now serves ONLY the open-issue [cos:sync] LA husk/shield sync-divergence cluster (#149/154/200/203/204) after #500 stripped the closed-#174 loadout emits in 0.9.80-dev. Renamed the root-level `_diag_probe.lua` -> `_cos_diag_lasync.lua` (git mv, one path) so its name states its cluster, per the `_<ns>_diag_<topic>.lua` convention (canonical: ct_dev's `_ct_diag_freeze487.lua`).

@@ -55,16 +55,17 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.81-dev"
+local MOD_VERSION = "0.9.82-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
 -- message (no state mutation, no crash). Bump ONLY when the payload shape of any
 -- of this mod's 5 RPCs (cos_la_apply / cos_la_apply_req / cos_la_state_req /
 -- cos_glow_apply / cos_glow_apply_req) changes (add/remove/reorder/retype a
--- field). ADDITIVE optional fields (v0.9.69's revert flag) and ADDITIVE RPC
--- names (v0.9.70's cos_la_state_req) do NOT bump -- old peers drop/ignore
--- them harmlessly. Initial = 1.
+-- field). ADDITIVE optional fields (v0.9.69's revert flag; v0.9.82's #416
+-- offhand_unit vanilla-mesh field) and ADDITIVE RPC names (v0.9.70's
+-- cos_la_state_req) do NOT bump -- old peers drop/ignore them harmlessly.
+-- Initial = 1.
 local COS_RPC_SCHEMA = 1
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic). Namespaced
 -- under the mod table (v0.9.75-dev) so it no longer leaks into _G; read once at the
@@ -1749,7 +1750,29 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
         local n = 0
         for _, entry in pairs(mod._pending_la_emit_on_exit) do
             if entry and entry.player_unit and Unit.alive(entry.player_unit) then
-                if entry.revert then
+                if entry.offhand_unit ~= nil then
+                    -- v0.9.82-dev (#416): committed VANILLA offhand mesh pick. Emit
+                    -- under BOTH key namespaces (weapon_key + template) the husk
+                    -- get_item_units lookup can key on; "" is the CLEAR sentinel that
+                    -- reverts peers to the base offhand (and drops any stale LA entry).
+                    mod:info("[cos-la-sync] EMIT-OFFHAND-MESH-ON-EXIT weapon=%s template=%s hand=%s unit=%s",
+                        tostring(entry.weapon_key), tostring(entry.template_key),
+                        tostring(entry.hand_field), tostring(entry.offhand_unit))
+                    if mod._send_offhand_mesh then
+                        mod._send_offhand_mesh(entry.player_unit, entry.weapon_key,
+                            entry.hand_field, entry.offhand_unit)
+                        if entry.template_key and entry.template_key ~= entry.weapon_key then
+                            mod._send_offhand_mesh(entry.player_unit, entry.template_key,
+                                entry.hand_field, entry.offhand_unit)
+                        end
+                    end
+                    -- A committed vanilla offhand supersedes any persisted LA pick for
+                    -- this hand (matches the old #265 revert's on-disk clear).
+                    if entry.backend_id and LA_PERSIST and LA_PERSIST.clear_offhand then
+                        LA_PERSIST.clear_offhand(entry.backend_id, entry.hand_field)
+                    end
+                    n = n + 1
+                elseif entry.revert then
                     -- v0.9.69-dev (#265 Slice 1): committed vanilla pick over a
                     -- synced LA entry -> broadcast the revert for BOTH key
                     -- namespaces the apply flow writes (weapon_key + template).
@@ -2817,44 +2840,41 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
                 mod._pending_la_emit_on_exit[vkey] = nil
             end
         end
-        -- v0.9.69-dev (#265, LA_SYNC_CORE_AUDIT Slice 1 / I2): when the synced
-        -- store still holds an LA entry for this weapon (an APPLIED pick, this
-        -- session or restored from an earlier one), a committed vanilla pick
-        -- must broadcast a REVERT -- clearing the queued emit alone leaves
-        -- every remote peer rendering the stale LA cosmetic forever (the exact
-        -- 2026-07-03 21:15 repro). QUEUED, not sent: the on_exit Apply gate
-        -- still drops the whole queue on an un-Applied browse, mirroring the
-        -- LA-apply flow. Store read via mod._la_equips_by_peer (runtime alias;
-        -- the local's forward decl sits below this function).
+        -- v0.9.82-dev (#416): a committed vanilla offhand press REPLICATES to peers
+        -- via the parallel mesh store. Queue ONE deferred offhand_unit message under
+        -- the (bid, hand) key (same key namespace as the LA emit, so last-pick-wins
+        -- across LA and vanilla presses). offhand_unit = the picked mesh, or "" when
+        -- the pick has no mesh (base / default / pure-texture opt) -- an empty path is
+        -- the CLEAR sentinel. The recv side (mod._store_offhand_mesh_recv) both stores
+        -- the vanilla mesh AND clears any stale LA armoury entry for this (wearer,
+        -- slot, hand), so this single message supersedes a prior LA shield (the #265
+        -- "revert stale LA on a vanilla pick" case) AND applies the new vanilla mesh
+        -- in one shot. Drained on Apply / screen-exit like the LA emit; the on_exit
+        -- Apply gate still drops the whole queue on an un-Applied browse.
         do
             local pm_v = Managers and Managers.player
             local lp_ok_v, lp_v = pcall(function() return pm_v and pm_v:local_player() end)
             local player_unit_v = lp_ok_v and lp_v and lp_v.player_unit
-            local store_v = mod._la_equips_by_peer
-            local synced_v = store_v and lp_v and lp_v.peer_id and store_v[lp_v.peer_id]
-            if synced_v and player_unit_v and Unit.alive(player_unit_v) then
+            if player_unit_v and Unit.alive(player_unit_v) then
                 local template_key_v = nil
                 if self._item_backend_id and Managers and Managers.backend then
                     local bi_v = Managers.backend:get_interface("items")
                     local item_v = bi_v and bi_v.get_item_from_id and bi_v:get_item_from_id(self._item_backend_id)
                     template_key_v = item_v and item_v.data and item_v.data.template
                 end
-                local wk_v = weapon_key or "slot_unknown"
-                if (template_key_v and synced_v[template_key_v]) or synced_v[wk_v] then
-                    local vkey2 = (self._item_backend_id or "__no_backend__") .. "|" .. tostring(hand_field)
-                    mod._pending_la_emit_on_exit = mod._pending_la_emit_on_exit or {}
-                    mod._pending_la_emit_on_exit[vkey2] = {
-                        revert       = true,
-                        player_unit  = player_unit_v,
-                        weapon_key   = wk_v,
-                        template_key = template_key_v,
-                        hand_field   = hand_field,
-                        vanilla_key  = opt.vanilla_skin or opt.name,
-                        backend_id   = self._item_backend_id,  -- v0.9.71: persistence key
-                    }
-                    mod:info("[cos-la-sync] EXIT-QUEUE REVERT queued bid=%s hand=%s vanilla_pick=%s (synced LA entry pending revert)",
-                        tostring(self._item_backend_id), tostring(hand_field), tostring(opt.name))
-                end
+                local vkey2 = (self._item_backend_id or "__no_backend__") .. "|" .. tostring(hand_field)
+                mod._pending_la_emit_on_exit = mod._pending_la_emit_on_exit or {}
+                mod._pending_la_emit_on_exit[vkey2] = {
+                    offhand_unit = (opt.unit or opt.intended_unit) or "",
+                    player_unit  = player_unit_v,
+                    weapon_key   = weapon_key or "slot_unknown",
+                    template_key = template_key_v,
+                    hand_field   = hand_field,
+                    backend_id   = self._item_backend_id,
+                }
+                mod:info("[cos-la-sync] EXIT-QUEUE OFFHAND-MESH bid=%s hand=%s vanilla_pick=%s unit=%s",
+                    tostring(self._item_backend_id), tostring(hand_field), tostring(opt.name),
+                    tostring((opt.unit or opt.intended_unit) or "<clear>"))
             end
         end
     end
@@ -2986,6 +3006,17 @@ local _current_husk_wield = nil
 -- subsequent reference (probe + receiver + wraps) the same upvalue.
 local _la_equips_by_peer = {}
 
+-- v0.9.82-dev (#416): parallel synced store for VANILLA offhand meshes -- per-hand
+-- shield / held-weapon unit picks (opt.unit / opt.intended_unit) that carry NO LA
+-- armoury_key. Keyed [wearer_peer][slot_or_template][hand_field] = unit_path. Kept
+-- SEPARATE from _la_equips_by_peer so the LA reconcile / paint / hot-join machinery
+-- (all armoury-key-centric) stays byte-for-byte untouched; the husk get_item_units
+-- branch reads BOTH stores. Populated only by the cos_la_apply `offhand_unit` branch,
+-- a VMF mod RPC that non-mod peers never receive -- so this cannot ride a vanilla RPC
+-- into a non-mod peer's NetworkLookup (the #421 wire-safety floor is a separate axis,
+-- untouched here). Attached to `mod` (main chunk is near the Lua 200-local ceiling).
+mod._offhand_mesh_by_peer = mod._offhand_mesh_by_peer or {}
+
 if BackendUtils then
     mod:hook(BackendUtils, "get_item_units", function(func, item_data, backend_id, skin, career_name)
         local result = func(item_data, backend_id, skin, career_name)
@@ -3115,6 +3146,46 @@ if BackendUtils then
                         return result
                     end
                 end
+            end
+
+            -- v0.9.82-dev (#416): VANILLA offhand mesh swap on the husk. LA armoury
+            -- shields sync above via _la_equips_by_peer; a per-hand VANILLA shield /
+            -- held-weapon unit pick (opt.unit / opt.intended_unit, no armoury_key)
+            -- has no LA entry, so the husk previously spawned the wearer's BASE
+            -- offhand (the #416 gap: Stirland / Bretonnian / GK shields invisible to
+            -- peers). Read the parallel synced store and force each recorded hand's
+            -- mesh, package-gated via _override_package_ready so a non-resident unit
+            -- can NEVER reach the World.spawn_unit C-assert (#270/#392 class) -- a
+            -- missing package degrades to the base mesh, not a crash.
+            local vstore = mod._offhand_mesh_by_peer
+            local vwear  = vstore and vstore[_current_husk_wield.wearer_peer]
+            local vhands = vwear and template and vwear[template]
+            if type(vhands) == "table" then
+                local applied_any = false
+                for hand_field, unit_path in pairs(vhands) do
+                    if type(unit_path) == "string" and unit_path ~= "" then
+                        local ready = _override_package_ready(unit_path)
+                        if ready then
+                            local prev = result[hand_field]
+                            result[hand_field] = unit_path
+                            applied_any = true
+                            if printf then printf("[la-state] HUSK-VANILLA-SWAP wearer=%s template=%s hand=%s %s -> %s",
+                                tostring(_current_husk_wield.wearer_peer), tostring(template),
+                                tostring(hand_field), tostring(prev), tostring(unit_path)) end
+                        end
+                        -- [cos:sync] #416: husk vanilla offhand mesh decision. Shows
+                        -- APPLIED vs SKIP(package-not-resident) with mod logging OFF.
+                        if PROBE then
+                            PROBE.emit("cos:sync",
+                                "husk_vanilla/" .. tostring(_current_husk_wield.wearer_peer) .. "/" .. tostring(template) .. "/" .. tostring(hand_field),
+                                string.format("peer=husk wearer=%s template=%s hand=%s unit=%s decision=%s",
+                                    tostring(_current_husk_wield.wearer_peer), tostring(template),
+                                    tostring(hand_field), tostring(unit_path),
+                                    ready and "APPLIED-vanilla-mesh" or "SKIP(package-not-resident)"))
+                        end
+                    end
+                end
+                if applied_any then return result end
             end
         end
 
@@ -4837,7 +4908,27 @@ local function _drain_deferred_la_emits()
             -- we're now client with a known host, the request lands.
             -- v0.9.69-dev (#265 Slice 1): revert entries drain too -- delete
             -- instead of write, payload carries revert=true and no armoury_key.
-            if am_host then
+            if entry.offhand_unit ~= nil then
+                -- v0.9.82-dev (#416): vanilla offhand mesh entry (its own payload
+                -- field; no armoury_key). Host stores + broadcasts; client requests.
+                if am_host then
+                    mod._store_offhand_mesh_recv(entry.wearer_peer, entry.slot_name,
+                        entry.hand_field, entry.offhand_unit)
+                    mod:network_send("cos_la_apply", "all", COS_RPC_SCHEMA, {
+                        wearer_peer_id = entry.wearer_peer, slot = entry.slot_name,
+                        kind = "offhand", offhand_unit = entry.offhand_unit,
+                        hand_field = entry.hand_field,
+                    })
+                else
+                    mod:network_send("cos_la_apply_req", host, COS_RPC_SCHEMA, {
+                        slot = entry.slot_name, kind = "offhand",
+                        offhand_unit = entry.offhand_unit, hand_field = entry.hand_field,
+                    })
+                end
+                if printf then printf("[la-state] OFFHAND-MESH drain %s slot=%s hand=%s unit=%s (queued %.1fs)",
+                    am_host and "host->all" or "client->req", tostring(entry.slot_name),
+                    tostring(entry.hand_field), tostring(entry.offhand_unit), now - entry.queued_at) end
+            elseif am_host then
                 if entry.revert then
                     if _la_equips_by_peer[entry.wearer_peer] then
                         _la_equips_by_peer[entry.wearer_peer][entry.slot_name] = nil
@@ -4960,6 +5051,107 @@ mod._send_la_revert = function(unit, slot_name, kind, vanilla_key, hand_field)
         revert       = true,
         vanilla_key  = vanilla_key,
         hand_field   = hand_field,
+    })
+end
+
+-- v0.9.82-dev (#416): receiver-side store for a VANILLA offhand mesh sync. Writes
+-- the parallel _offhand_mesh_by_peer store, enforces mutual exclusion with the LA
+-- store for the SAME (wearer, slot, hand), and forces a re-render on the wearer's
+-- unit so the swap shows without the wearer manually re-wielding. `unit_path` = a
+-- concrete unit path (STORE) or "" (CLEAR = revert that hand to the base offhand).
+-- Called on every peer (host stores directly + via its own "all" loopback; clients
+-- via the broadcast). Idempotent. Attached to `mod` (200-local ceiling).
+mod._store_offhand_mesh_recv = function(wearer, slot_name, hand_field, unit_path)
+    if not (wearer and slot_name) then return end
+    hand_field = hand_field or "left_hand_unit"
+    mod._offhand_mesh_by_peer[wearer] = mod._offhand_mesh_by_peer[wearer] or {}
+    local by_slot = mod._offhand_mesh_by_peer[wearer]
+    local is_set = type(unit_path) == "string" and unit_path ~= ""
+    if is_set then
+        by_slot[slot_name] = by_slot[slot_name] or {}
+        by_slot[slot_name][hand_field] = unit_path
+        -- A vanilla mesh supersedes any LA armoury entry on the SAME hand so the
+        -- husk LA branch can't shadow it (per-(wearer,slot,hand) mutual exclusion).
+        local la_entry = _la_equips_by_peer[wearer] and _la_equips_by_peer[wearer][slot_name]
+        if la_entry and (la_entry.hand_field or "left_hand_unit") == hand_field then
+            _la_equips_by_peer[wearer][slot_name] = nil
+        end
+    else
+        -- CLEAR: drop this hand's vanilla mesh AND any LA entry on the same hand, so
+        -- the wearer's husk re-resolves to the native base offhand.
+        if by_slot[slot_name] then by_slot[slot_name][hand_field] = nil end
+        local la_entry = _la_equips_by_peer[wearer] and _la_equips_by_peer[wearer][slot_name]
+        if la_entry and (la_entry.hand_field or "left_hand_unit") == hand_field then
+            _la_equips_by_peer[wearer][slot_name] = nil
+        end
+    end
+    if printf then printf("[la-state] OFFHAND-MESH-STORE wearer=%s slot=%s hand=%s unit=%s decision=%s",
+        tostring(wearer), tostring(slot_name), tostring(hand_field),
+        tostring(unit_path), is_set and "STORE" or "CLEAR") end
+    if PROBE then
+        PROBE.emit("cos:sync",
+            "offhand_mesh_store/" .. tostring(wearer) .. "/" .. tostring(slot_name) .. "/" .. tostring(hand_field),
+            string.format("peer=recv wearer=%s slot=%s hand=%s unit=%s decision=%s",
+                tostring(wearer), tostring(slot_name), tostring(hand_field),
+                tostring(unit_path), is_set and "STORE" or "CLEAR"))
+    end
+    -- Re-render now if the wearer is spawned locally (no-op / cooldown-guarded
+    -- otherwise); the store is also read on the wearer's next natural husk wield.
+    local wu = _wearer_unit_for_peer(wearer)
+    if wu and mod._la_native_pulse then mod._la_native_pulse(wu, "offhand-mesh") end
+end
+
+-- v0.9.82-dev (#416): client-facing emit for a VANILLA offhand mesh pick. Same
+-- host-short-circuit / client-request / deferred-queue routing as _send_la_revert,
+-- but carries the additive `offhand_unit` payload field (STORE path or "" CLEAR).
+-- Rides the existing cos_la_apply / cos_la_apply_req VMF mod channel -- a non-mod
+-- peer never receives it, so no modded key can ride a vanilla RPC into its
+-- NetworkLookup (#421 floor intact). Attached to `mod` (200-local ceiling).
+mod._send_offhand_mesh = function(unit, slot_name, hand_field, unit_path)
+    if not (unit and Unit.alive(unit)) then return end
+    if not slot_name or unit_path == nil then return end
+    hand_field = hand_field or "left_hand_unit"
+    local wearer_peer = nil
+    local pm = Managers and Managers.player
+    if pm and pm.owner then
+        local owner = pm:owner(unit)
+        wearer_peer = owner and owner.peer_id or nil
+    end
+    wearer_peer = wearer_peer or _local_player_peer_id()
+    if not wearer_peer then return end
+    local dedup_key = wearer_peer .. "|" .. tostring(slot_name) .. "|OFFHANDMESH|"
+        .. tostring(hand_field) .. "|" .. tostring(unit_path)
+    local now = os.clock()
+    local prev = _last_emit_at[dedup_key]
+    if prev and (now - prev) < _EMIT_DEDUP_WINDOW then return end
+    _last_emit_at[dedup_key] = now
+
+    if _is_local_server() then
+        mod._store_offhand_mesh_recv(wearer_peer, slot_name, hand_field, unit_path)
+        if printf then printf("[la-state] OFFHAND-MESH host->all wearer=%s slot=%s hand=%s unit=%s",
+            tostring(wearer_peer), tostring(slot_name), tostring(hand_field), tostring(unit_path)) end
+        mod:network_send("cos_la_apply", "all", COS_RPC_SCHEMA, {
+            wearer_peer_id = wearer_peer, slot = slot_name, kind = "offhand",
+            offhand_unit = unit_path, hand_field = hand_field,
+        })
+        return
+    end
+
+    local host = _host_peer_id()
+    if not host then
+        mod._la_deferred_emits = mod._la_deferred_emits or {}
+        mod._la_deferred_emits[#mod._la_deferred_emits + 1] = {
+            wearer_peer = wearer_peer, slot_name = slot_name, kind = "offhand",
+            offhand_unit = unit_path, hand_field = hand_field, queued_at = os.clock(),
+        }
+        if printf then printf("[la-state] OFFHAND-MESH client DEFERRED (no host yet) slot=%s hand=%s unit=%s queue=%d",
+            tostring(slot_name), tostring(hand_field), tostring(unit_path), #mod._la_deferred_emits) end
+        return
+    end
+    if printf then printf("[la-state] OFFHAND-MESH client->req host=%s slot=%s hand=%s unit=%s",
+        tostring(host), tostring(slot_name), tostring(hand_field), tostring(unit_path)) end
+    mod:network_send("cos_la_apply_req", host, COS_RPC_SCHEMA, {
+        slot = slot_name, kind = "offhand", offhand_unit = unit_path, hand_field = hand_field,
     })
 end
 
@@ -5847,6 +6039,19 @@ mod:network_register("cos_la_apply_req", function(sender_peer_id, schema_version
         end
         return
     end
+    -- v0.9.82-dev (#416): client-originated VANILLA offhand mesh. No armoury_key to
+    -- validate; store on the host + rebroadcast authoritatively to all (sender
+    -- included, for lockstep). Placed before the armoury_key gate, like the revert.
+    if payload.offhand_unit ~= nil then
+        if slot_name and mod._store_offhand_mesh_recv then
+            mod._store_offhand_mesh_recv(sender_peer_id, slot_name, hand_field, payload.offhand_unit)
+            mod:network_send("cos_la_apply", "all", COS_RPC_SCHEMA, {
+                wearer_peer_id = sender_peer_id, slot = slot_name, kind = "offhand",
+                offhand_unit = payload.offhand_unit, hand_field = hand_field,
+            })
+        end
+        return
+    end
     if not (slot_name and kind and armoury_key) then return end
     -- v0.9.3.2-hotfix: accept armoury_keys present in EITHER our bridge index
     -- OR LA's own SKIN_LIST directly. The bridge's register_all only registers
@@ -5915,6 +6120,27 @@ mod:network_register("cos_la_state_req", function(sender_peer_id, schema_version
                         hand_field     = entry.hand_field,
                     })
                     n = n + 1
+                end
+            end
+        end
+    end
+    -- v0.9.82-dev (#416): also replay VANILLA offhand meshes so a late joiner sees
+    -- peers' shield / held-weapon picks. Reuses cos_la_apply with the offhand_unit
+    -- field (the joiner's recv path stores + pulses -- no new handler needed).
+    for wearer_peer, slots in pairs(mod._offhand_mesh_by_peer) do
+        if type(slots) == "table" then
+            for slot_name, hands in pairs(slots) do
+                if type(hands) == "table" then
+                    for hand_field, unit_path in pairs(hands) do
+                        if type(unit_path) == "string" and unit_path ~= "" then
+                            mod:network_send("cos_la_apply", sender_peer_id, COS_RPC_SCHEMA, {
+                                wearer_peer_id = wearer_peer, slot = slot_name,
+                                kind = "offhand", offhand_unit = unit_path,
+                                hand_field = hand_field,
+                            })
+                            n = n + 1
+                        end
+                    end
                 end
             end
         end
@@ -6008,6 +6234,10 @@ mod._la_tick_peer_purges = function()
             if mod._glow_by_peer and mod._glow_by_peer[peer_id] then
                 mod._glow_by_peer[peer_id] = nil
             end
+            -- v0.9.82-dev (#416): drop the disconnected peer's vanilla offhand meshes too.
+            if mod._offhand_mesh_by_peer and mod._offhand_mesh_by_peer[peer_id] then
+                mod._offhand_mesh_by_peer[peer_id] = nil
+            end
             if printf then printf("[la-state] PEER-PURGE executed peer=%s (no re-add within 30s - genuine leave)",
                 tostring(peer_id)) end
         end
@@ -6052,6 +6282,16 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
         end
         return
     end
+    -- v0.9.82-dev (#416): VANILLA offhand mesh sync (its own payload field; no
+    -- armoury_key). Placed BEFORE the armoury_key gate, mirroring the revert branch.
+    -- Non-mod peers never receive this VMF mod RPC, so the #421 vanilla-wire floor
+    -- is a separate axis, untouched. offhand_unit "" clears (revert to base offhand).
+    if payload.offhand_unit ~= nil then
+        if wearer and slot_name and mod._store_offhand_mesh_recv then
+            mod._store_offhand_mesh_recv(wearer, slot_name, hand_field, payload.offhand_unit)
+        end
+        return
+    end
     if not (wearer and slot_name and kind and armoury_key) then return end
 
     -- v0.9.0.7-hotfix: MIRROR THE CACHE WRITE ON CLIENTS.
@@ -6074,6 +6314,13 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
         kind = kind, armoury_key = armoury_key, vanilla_key = vanilla_key,
         hand_field = hand_field,
     }
+    -- v0.9.82-dev (#416): mutual exclusion -- an LA armoury pick supersedes any
+    -- parallel vanilla mesh on the SAME (wearer, slot, hand) so the husk vanilla
+    -- branch can't shadow the LA mesh (the switch vanilla->LA case).
+    do
+        local vslot = mod._offhand_mesh_by_peer[wearer] and mod._offhand_mesh_by_peer[wearer][slot_name]
+        if vslot then vslot[hand_field] = nil end
+    end
     -- v0.9.0.11-hotfix: diagnostic — count cache entries to confirm the write
     -- actually persisted (and to verify the upvalue scope fix from this version).
     local n = 0

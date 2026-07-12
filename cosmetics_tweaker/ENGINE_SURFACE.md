@@ -71,7 +71,7 @@ shield-mesh override, LA paint and glow, never for a cloned template.
 |---|---|---|---|
 | `GearUtils.create_equipment` [hook] `:5212` | Builds the equipment record and spawns 1p/3p units for a slot [src: `gear_utils.lua:7`] | In-game render path for offhand mesh override + LA texture paint + glow re-key (`:5212`); reads `result.skin` to gate has_skin (DEVELOPMENT "Render paths") | Multi-return collapse (`docs/VMF_RECIPES.md` §2); hot-reload unsafe (CLAUDE.md); single registration shared with the folded MH work (`_material_hijack_embedded.lua:405`) |
 | `GearUtils.spawn_inventory_unit` [hook] `_cos_glow.lua` | Spawns one hand's inventory unit from `item_template`+`item_units` [src: `gear_utils.lua:155`] | Inject the `_cosmetics_tweaker_glow` template for non-templated `_runed_01`/`_magic_01` meshes when global glow override is on (`_cos_glow.lua`; inert today — the global toggle was removed) | Read career from `inventory_system._career_name`, not `player:owner()`, at mission-spawn timing (CLAUDE.md in-mission caveat) |
-| `BackendUtils.get_item_units` [hook,tbl] `:4081` | Resolves per-hand unit paths: skin entry first, else `item_data.right_hand_unit`; `backend_id = item_data.backend_id or backend_id` [src: `backend_utils.lua:144`,`:156`] | Force the picked offhand/illusion mesh when a skin is equipped and the package is resident (`:4081`); the one mesh seam all four render paths ride | Fires for EVERY caller incl. all 4 previewers - cannot see its context (LA_SYNC §6.4, DEVELOPMENT "has_skin gate"); `_override_package_ready` must confirm both `<unit>`+`<unit>_3p` loaded first (LA_SYNC §6.5); VMF can't string-resolve the plain `BackendUtils` table, hook post-LA ref (`:4058` memo) |
+| `BackendUtils.get_item_units` [hook,tbl] `:4081` | Resolves per-hand unit paths: skin entry first, else `item_data.right_hand_unit`; `backend_id = item_data.backend_id or backend_id` [src: `backend_utils.lua:144`,`:156`] | Force the picked offhand/illusion mesh when a skin is equipped and the package is resident (`:4081`); the one mesh seam all four render paths ride. Husk branch swaps the REMOTE wearer's offhand mesh from the synced stores: LA armoury via `_la_equips_by_peer` (kind="unit"), and #416 VANILLA meshes via the parallel `mod._offhand_mesh_by_peer` (offhand_unit sync) | Fires for EVERY caller incl. all 4 previewers - cannot see its context (LA_SYNC §6.4, DEVELOPMENT "has_skin gate"); `_override_package_ready` must confirm both `<unit>`+`<unit>_3p` loaded first (LA_SYNC §6.5, #416 husk vanilla swap); VMF can't string-resolve the plain `BackendUtils` table, hook post-LA ref (`:4058` memo) |
 
 ### Owner + husk inventory extension - wield + husk identity (owner docs: `docs/engine/02`, `docs/engine/06`)
 
@@ -90,6 +90,16 @@ strict `__index` [src: `network_lookup.lua:2521`]. Every SENDER substitutes the
 vanilla equivalent (or nulls to `"n/a"`) UNCONDITIONALLY, never behind a toggle
 (memory `reference_vt2_wire_safety_never_toggle_gated`; project
 `project_vt2_cross_peer_wire_safety`).
+
+The mod's OWN cross-peer cosmetic state travels a separate, crash-immune path: the
+VMF mod RPC channel (`cos_la_apply` / `cos_la_apply_req` / `cos_la_state_req`,
+`COS_RPC_SCHEMA`-versioned). VMF delivers a mod's RPCs ONLY to peers running that mod,
+so a non-mod peer never decodes them - they cannot touch the #421 floor above. This is
+why per-hand cosmetic picks that vanilla can't encode (independent left/right illusions,
+#416 vanilla offhand meshes) ride the mod channel and carry plain STRINGS (unit paths),
+never `NetworkLookup` indices. #416 added the additive `offhand_unit` field (a unit path,
+or `""` = clear) + the parallel `mod._offhand_mesh_by_peer` store; a non-mod peer simply
+sees the base offhand (acceptable degrade, never a crash). See LA_SYNC §6.9.
 
 | Class.method (kind) | Vanilla behavior | Why cosmetics hooks it | Trap / invariant |
 |---|---|---|---|

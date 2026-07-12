@@ -424,6 +424,56 @@ Grep for this in boot logs after adding any new `hook_safe(SimpleHuskInventoryEx
 
 See `HUSK_HOOK_FIRING_DIAGNOSIS.md` for the full diagnosis walkthrough that produced this rule.
 
+### 6.9 Vanilla offhand mesh sync (#416) — the parallel store beside `_la_equips_by_peer`
+
+The `cos_la_apply` sync (§6.7 and the whole LA store) is **armoury-key-centric**: every
+store write, reconcile, paint and hot-join replay keys on `entry.armoury_key`. That
+covers LA shields, but a per-hand **vanilla** shield / held-weapon unit pick
+(`opt.unit` / `opt.intended_unit`, e.g. Stirland, Bretonnian, GK shields) carries no
+`armoury_key`, so it had NO networked representation: the wearer saw it locally (via the
+non-husk `BackendUtils.get_item_units` `_offhand_selection` override), but every peer's
+husk spawned the wearer's BASE offhand (#416).
+
+**Design (v0.9.82-dev): a parallel store, reusing the existing channel.**
+
+- **Store:** `mod._offhand_mesh_by_peer[wearer_peer][slot_or_template][hand_field] = unit_path`.
+  Deliberately SEPARATE from `_la_equips_by_peer` so the armoury-key machinery
+  (reconcile / `_apply_la_on_unit` / `_ensure_offhand_mesh` / state replay) stays
+  byte-for-byte untouched — a vanilla entry can never confuse an LA gate, and vice-versa.
+- **Channel:** the SAME `cos_la_apply` / `cos_la_apply_req` / `cos_la_state_req` VMF mod
+  RPCs. One ADDITIVE optional payload field `offhand_unit` (a unit-path STRING, or `""`
+  = clear/revert-to-base). Handled by a branch placed BEFORE the `armoury_key` gate in
+  each receiver, exactly like the `revert` branch. `COS_RPC_SCHEMA` is NOT bumped
+  (additive-optional rule); old peers ignore the field.
+- **Emit:** `mod._send_offhand_mesh` (routing cloned from `mod._send_la_revert`:
+  host-short-circuit / client-request / deferred-queue). A committed vanilla offhand press
+  queues a deferred `offhand_unit` message drained on Apply/screen-exit under the same
+  `bid|hand` key as the LA emit, so **last-pick-wins across LA and vanilla presses**.
+- **Recv:** `mod._store_offhand_mesh_recv` writes the parallel store and enforces
+  per-`(wearer, slot, hand)` **mutual exclusion** vs the LA store in BOTH directions
+  (a vanilla pick clears a same-hand LA entry; an LA pick clears a same-hand vanilla
+  entry — the LA recv armoury store also nils the parallel hand). Then `mod._la_native_pulse`
+  re-renders the wearer so the swap shows without a manual re-wield.
+- **Husk apply:** the `BackendUtils.get_item_units` husk branch reads the parallel store
+  AFTER the LA branch and forces each recorded hand's mesh, package-gated via
+  `_override_package_ready` (`<unit>` + `<unit>_3p`) — a non-resident unit degrades to the
+  base mesh, never the `World.spawn_unit` C-assert (§6.6 / #270 / #392 class).
+- **Hot-join:** the `cos_la_state_req` reply replays the vanilla meshes too (reuses
+  `cos_la_apply`); the disconnect purge drops the peer's parallel entries.
+
+**Why this cannot crash a non-mod peer (the #421 floor).** The whole path is a VMF mod
+RPC — VMF delivers it only to peers running cosmetics_tweaker, so a non-mod peer never
+receives `offhand_unit` and simply renders the base offhand. `offhand_unit` is a plain
+string; it is never a `NetworkLookup` index and never rides a vanilla RPC param, so no
+modded key can reach a non-mod peer's strict `__index`. The §5/§31 sender-side null/
+substitution on the vanilla RPCs is untouched.
+
+**Remaining (not in the v0.9.82 slice):** `opt.vanilla_skin`-only opts (a paired vanilla
+weapon_skin with no `opt.unit` mesh) are not networked (the store carries a unit path
+only); the data-driven picker registration (CWV shields missing from the picker,
+fix-direction #3) is separate; cross-session auto re-emit of a vanilla pick on rejoin
+relies on the wearer re-Applying (in-session apply + hot-join are covered).
+
 ---
 
 ## Key file paths
