@@ -99,6 +99,7 @@ technical entry point; from here, follow the tree to the topic-specific referenc
   - `DEVELOPMENT.md` - three weapon rendering paths + cosmetic-specific recipes.
   - `LA_SYNC_MODEL.md` - full LA bridge architecture + section 6 gotcha catalogue (kind=texture/unit hats and shields, husk RPC race, offhand preload, hook_safe shadow).
   - `GLOW_SYSTEM.md` - MaterialSettingsTemplates engine reference + override mechanism.
+  - `ENGINE_SURFACE.md` - the mod's engine contact surface: every vanilla (Class, method) cosmetics_tweaker hooks, mapped to what the engine does there, with `docs/engine/` links and the paid-for dead ends (LA bridge, glow, Material-Hijack #282, CosmeticUtils sync, hat spawning). Read before adding a hook or auditing a crash class.
 - `dynamic_cosmetic_portraits/`:
   - `CLAUDE.md` - workflow guardrails for the portrait pipeline (read before touching portraits).
   - `DEVELOPMENT.md` - career_settings swap, texture/alpha requirements, VMF renderer-creator keys.
