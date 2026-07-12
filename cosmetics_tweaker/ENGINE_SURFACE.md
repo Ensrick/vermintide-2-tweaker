@@ -52,6 +52,16 @@ no override); `[tbl]` = table-form hook against a plain table (nil-guarded).
 > "offhand mesh override + scale + LA paint + glow" work those rows describe now
 > reaches the scale/grip step via `mod._cos.{scale_units,offset_units,apply_unit_path_scale_hand}`.
 
+> **v0.9.79-dev Phase 3 OOP split.** Two hook SITES moved from the entry to
+> `_cos_glow.lua` (those rows now name that file, not an entry line — match by
+> method name): the `apply_material_settings` x3 template-mutation hook and the
+> `GearUtils.spawn_inventory_unit` glow-template-injection hook. The
+> `create_equipment` / `_spawn_item*` / `LootItemUnitPreviewer.spawn_units` render
+> hooks STAY in the entry; their glow apply step now calls
+> `mod._cos.apply_glow_override` / `mod._cos.glow_owner_peer_for_unit` (the glow
+> read/paint pipeline moved to `_cos_glow.lua`). The per-peer `cos_glow_apply`
+> broadcast RPC layer and the `/glow_status` + `/glow_trace` commands stay in the entry.
+
 ### Items / gear / inventory spawn - owner path (owner doc: `docs/engine/06`)
 
 Seams shared with `cwv`; vanilla behavior cited there. cosmetics uses them for
@@ -60,7 +70,7 @@ shield-mesh override, LA paint and glow, never for a cloned template.
 | Class.method (kind) | Vanilla behavior at the seam | Why cosmetics hooks it | Trap / invariant |
 |---|---|---|---|
 | `GearUtils.create_equipment` [hook] `:5212` | Builds the equipment record and spawns 1p/3p units for a slot [src: `gear_utils.lua:7`] | In-game render path for offhand mesh override + LA texture paint + glow re-key (`:5212`); reads `result.skin` to gate has_skin (DEVELOPMENT "Render paths") | Multi-return collapse (`docs/VMF_RECIPES.md` §2); hot-reload unsafe (CLAUDE.md); single registration shared with the folded MH work (`_material_hijack_embedded.lua:405`) |
-| `GearUtils.spawn_inventory_unit` [hook] `:4984` | Spawns one hand's inventory unit from `item_template`+`item_units` [src: `gear_utils.lua:155`] | Per-hand cosmetic mesh/material fixups at spawn (`:4984`) | Read career from `inventory_system._career_name`, not `player:owner()`, at mission-spawn timing (CLAUDE.md in-mission caveat) |
+| `GearUtils.spawn_inventory_unit` [hook] `_cos_glow.lua` | Spawns one hand's inventory unit from `item_template`+`item_units` [src: `gear_utils.lua:155`] | Inject the `_cosmetics_tweaker_glow` template for non-templated `_runed_01`/`_magic_01` meshes when global glow override is on (`_cos_glow.lua`; inert today — the global toggle was removed) | Read career from `inventory_system._career_name`, not `player:owner()`, at mission-spawn timing (CLAUDE.md in-mission caveat) |
 | `BackendUtils.get_item_units` [hook,tbl] `:4081` | Resolves per-hand unit paths: skin entry first, else `item_data.right_hand_unit`; `backend_id = item_data.backend_id or backend_id` [src: `backend_utils.lua:144`,`:156`] | Force the picked offhand/illusion mesh when a skin is equipped and the package is resident (`:4081`); the one mesh seam all four render paths ride | Fires for EVERY caller incl. all 4 previewers - cannot see its context (LA_SYNC §6.4, DEVELOPMENT "has_skin gate"); `_override_package_ready` must confirm both `<unit>`+`<unit>_3p` loaded first (LA_SYNC §6.5); VMF can't string-resolve the plain `BackendUtils` table, hook post-LA ref (`:4058` memo) |
 
 ### Owner + husk inventory extension - wield + husk identity (owner docs: `docs/engine/02`, `docs/engine/06`)
@@ -106,7 +116,7 @@ vanilla equivalent (or nulls to `"n/a"`) UNCONDITIONALLY, never behind a toggle
 
 | Class.method (kind) | Vanilla behavior | Why cosmetics hooks it | Trap / invariant |
 |---|---|---|---|
-| `apply_material_settings` [hook] x3: `GearUtils.` / `_G.` / `CosmeticUtils.` `:4857` | Reads `MaterialSettingsTemplates[name]` and pushes each var into `Unit.set_*_for_materials` [src: `gear_utils.lua:107`; `flow_callbacks_foundation.lua:896`; `cosmetic_utils.lua:29`] | TEMPLATE MUTATION: save the template's `x/y/z`, overwrite with the per-item/preset glow RGB, call vanilla (it is the only writer that paints 1p), restore (`:4857`, GLOW_SYSTEM §12) | Three independent copies exist - hook all three (`:4857` loop over class ids); post-call overlay never paints 1p (GLOW_SYSTEM §12); `Vector3` is frame-allocated, never cache (GLOW_SYSTEM §Stingray gotcha); never call `Material.num_parameters/parameter_name` - pcall-bypassing fault (`:435-438` memo) |
+| `apply_material_settings` [hook] x3: `GearUtils.` / `_G.` / `CosmeticUtils.` `_cos_glow.lua` | Reads `MaterialSettingsTemplates[name]` and pushes each var into `Unit.set_*_for_materials` [src: `gear_utils.lua:107`; `flow_callbacks_foundation.lua:896`; `cosmetic_utils.lua:29`] | TEMPLATE MUTATION: save the template's `x/y/z`, overwrite with the per-item/preset glow RGB, call vanilla (it is the only writer that paints 1p), restore (`_cos_glow.lua`, GLOW_SYSTEM §12) | Three independent copies exist - hook all three (`_cos_glow.lua` loop over class ids); post-call overlay never paints 1p (GLOW_SYSTEM §12); `Vector3` is frame-allocated, never cache (GLOW_SYSTEM §Stingray gotcha); never call `Material.num_parameters/parameter_name` - pcall-bypassing fault (`:435-438` memo) |
 | `Unit.set_unit_visibility` / `set_visibility` / `set_mesh_visibility` [hook,tbl] `_material_hijack_embedded.lua:366`/`:379`/`:392` | Engine C-API: toggles unit / group / mesh visibility | MH particle lifecycle: spawn linked particles when a `mat_to_use` unit becomes visible, destroy them when hidden (`:366`+) | Hot path on every visibility flip; guarded by `Unit.has_data` markers set at spawn |
 
 ### Backend / unlock / MoreItemsLibrary / loadouts (owner: `docs/engine/11`)

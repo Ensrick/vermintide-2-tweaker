@@ -1,5 +1,64 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.79-dev — 2026-07-12 — Structural refactor: Phase 3 OOP decomposition (no behavior change) [untested]
+
+Third structural slice of the `cosmetics_tweaker.lua` god file (9,568 -> 9,087 lines):
+the weapon glow APPLY subsystem moved VERBATIM into a new single-responsibility module,
+following the Phase 1/2 discipline (function-bag moves, zero logic edits, no
+hook/localization/data changes). The 505-line block was byte-compared identical against
+the previous commit; the adversarial 5-class diff review (orphaned upvalues /
+non-verbatim moves / dropped-or-duplicated hooks / load-order / guard drift) returned
+zero findings; `lint-mod.ps1` (20 files, 93 hooks, 0 duplicate) + build pass; the new
+module was verified present in the compiled bundle by the murmur64 hash of its resource
+path (`EBB21A99C09EA540`, in `6448e4de51a26af1.mod_bundle`).
+
+- New module (function-bag extraction; 572 lines): `_cos_glow.lua` — the `_COLOR_PRESETS`
+  table, the shader-variable brightness/group maps (`_GLOW_VAR_BRIGHTNESS` +
+  `_GLOW_GROUP_COLOR_SETTING`), the per-peer glow read helpers (`_glow_get` /
+  `_glow_master_mult` / `_glow_var_mult` / `_glow_override_enabled` / `_glow_main_rgb` /
+  `_glow_rgb_for_var` + `_resolve_preset_rgb` + the `_glow_local_peer_id` /
+  `_glow_is_local_peer` pair), the wearer-of-unit resolver `_glow_owner_peer_for_unit`,
+  the per-unit paint `_apply_glow_to_unit` and its batch wrapper `_apply_glow_override`,
+  the live-preview re-paint `mod._reapply_glow_on_wielded`, the template-mutation apply
+  hook `_hook_apply_with_template_mutation` (installed on `GearUtils` / `CosmeticUtils` /
+  the deferred `_G.apply_material_settings` flow global) + `mod._try_install_flow_glow_hook`,
+  and the custom `_cosmetics_tweaker_glow` `MaterialSettingsTemplate` + its
+  `GearUtils.spawn_inventory_unit` injection hook.
+- Two hook SITES moved with the block (still exactly one registration per
+  `(Class, method)` — lint confirms 0 duplicates): the `apply_material_settings` x3
+  template-mutation hook and the `GearUtils.spawn_inventory_unit` glow-template injection.
+  They now install at `_cos_glow` dofile time (earlier in the same synchronous mod-load
+  pass); game globals `CosmeticUtils` / `_G.apply_material_settings` / `MaterialSettingsTemplates`
+  have identical readiness at the new install point, and the Phase 1 modules already
+  install hooks at dofile time.
+- Exports on `mod._cos`: `apply_glow_override` and `glow_owner_peer_for_unit`. The three
+  render-hook glow call sites that stay in the entry (`create_equipment` owner-resolve +
+  paint, `_spawn_item_post` paint, `LootItemUnitPreviewer.spawn_units` paint) were rebound
+  to `mod._cos.*(...)`, mirroring the Phase 2 `mod._cos.scale_units` consumption pattern.
+- COUPLING POINT 1 (`_unit_to_backend_id` weak map): it is a pure `mod.` field with NO
+  local alias anywhere, so its owner is simply `_cos_glow` (home of its primary reader
+  `_apply_glow_to_unit`), which owns the `mod._unit_to_backend_id = ... or setmetatable`
+  init; every writer/reader (the `create_equipment` + `_spawn_item_unit` render hooks that
+  populate it, the glow-picker diagnostic commands) already goes through
+  `mod._unit_to_backend_id` unchanged — nothing to re-plumb.
+- COUPLING POINT 2 (peer-owner lookup): `_glow_owner_peer_for_unit` moved into `_cos_glow`
+  and is exported as `mod._cos.glow_owner_peer_for_unit`; the one entry call site (the
+  in-game `create_equipment` hook) was rebound.
+- LOAD-BEARING blocks LEFT IN THE ENTRY, unchanged: the per-peer glow broadcast RPC layer
+  (`cos_glow_apply` / `cos_glow_apply_req`, `mod._glow_sync_tick`,
+  `mod._on_glow_setting_changed`, hot-join rebroadcast) — it reads/writes the SAME
+  `mod._glow_by_peer` table (whose init `_cos_glow` now owns) through a byte-identical
+  entry-local `local _glow_by_peer = mod._glow_by_peer` alias set in the manifest; the
+  `/glow_status` + `/glow_trace` commands (they read the already-exposed
+  `mod._glow_hooks_installed` / `mod._glow_call_counts` fields + the entry-local
+  `GlowPicker`); and the LA-bridge + husk, offhand picker, #421 wire senders, #282 MH
+  lifecycle. `/dump_glows` is a read-only dump with no apply logic, so nothing moved from
+  it — it stays in `_cos_diagnostics.lua`.
+- `_cos_glow` is `mod:dofile`'d AFTER `_cos_render` because it captures the shared
+  `mod._cos.is_unit` primitive; its own exports are consumed only at runtime by the render
+  hooks below. Glow is client-side visual with no networked apply state, so no 2-player
+  re-verify is required for this move.
+
 ## 0.9.78-dev — 2026-07-12 — Structural refactor: Phase 2 OOP decomposition (no behavior change) [untested]
 
 Second structural slice of the `cosmetics_tweaker.lua` god file (9,712 -> 9,568
