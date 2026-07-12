@@ -91,6 +91,7 @@ technical entry point; from here, follow the tree to the topic-specific referenc
   - `RECIPES.md` - decision tree + per-archetype copy-paste recipes.
   - `DEVELOPMENT.md` - architectural reference for variant creation (template patterns, scale/grip, custom mesh, known errors).
   - `ANIMATION_FIX_PLAYBOOK.md` - closed-vocabulary procedure for fixing 3P animations on cross-character variants.
+  - `ENGINE_SURFACE.md` - the mod's engine contact surface: every vanilla (Class, method) cwv hooks, mapped to what the engine does there, with `docs/engine/` links and the paid-for dead ends. Read before adding a hook or auditing a crash class.
 - `chaos_wastes_tweaker/`:
   - `DEVELOPMENT.md` - engine gotchas: dormant buff registration, deus rarities, adventure mutator compat, NetworkedFlowStateManager leak, jewelry traits as boons, walk-through interactable, graph-snapshot RPC.
   - `TODO.md` - planned features (altar cost config, CW inventory).
