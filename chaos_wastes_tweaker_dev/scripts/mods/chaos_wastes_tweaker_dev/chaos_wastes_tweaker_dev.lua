@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.248-dev"
+local MOD_VERSION = "0.7.249-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -672,6 +672,10 @@ local _broadcast_local_manifest
 -- (BUG_CLASSES §6 forward-ref pattern; see feedback_lua_forward_reference.md).
 local _dump_pickup_system_state
 local _dump_pickup_spawners_verbose
+-- [ct:456] forward-declare the book-spawner census (defined near the other pickup
+-- dumps below, referenced from the populate_pickups hook above). Same forward-ref
+-- pattern as the two dumps: `local` here, dropped on the later definition.
+local _ct_book_spawner_census
 
 -- audit 2026-06-07 (v0.7.133-dev): marker proving the three variadic forwarding
 -- hooks (on_soft_currency_picked_up / DeusRunController.setup_run /
@@ -4740,6 +4744,17 @@ mod:hook("PickupSystem", "populate_pickups", function(func, self, ...)
         tostring(level_key), tostring(mechanism), tostring(difficulty), tostring(has_settings),
         tostring(diff_has_entry), tostring(_inj), tostring(_adv_base),
         table.concat(active_mutators, ","), sp_primary, sp_secondary, sp_guaranteed)
+    -- [ct:456] book-spawner census on any ct injected-catalog level (Adventure AND CW),
+    -- so an empty first-Grimoire spot on skaven_stronghold ("Into the Nest") is pinned to
+    -- (a) spawner never registered / (b) triggered-list / (c) guaranteed-but-fails. See the
+    -- _ct_book_spawner_census definition. Forward-ref safe via mod._ (call-time resolve);
+    -- `self` here is the live PickupSystem.
+    pcall(function()
+        if mod._ct_adventure_base_from_level_key and mod._ct_adventure_base_from_level_key(level_key)
+            and mod._ct_book_spawner_census then
+            mod._ct_book_spawner_census(self, level_key)
+        end
+    end)
     -- Arm the unconditional spawn census for THIS mission (emits ~8s later via mod.update).
     if mod._ct_tally_reset then mod._ct_tally_reset(level_key, _inj, _adv_base, difficulty) end
     if not LevelHelper then
@@ -5744,6 +5759,80 @@ function _dump_pickup_spawners_verbose(prefix)
     dump_one("specified",  ps_sys.specified_pickup_spawners)
     dump_one("guaranteed", ps_sys.guaranteed_pickup_spawners)
 end
+
+-- [ct:456] v0.7.249-dev — book-spawner census. Issue #456 ("Into the Nest",
+-- skaven_stronghold): in a CW run the location of the FIRST Grimoire is ALWAYS empty.
+-- ct's Chest-of-Trials placement converts book (tome/grimoire) pickup-spawner units to
+-- deus_cursed_chest inside PickupSystem._spawn_guaranteed_pickup, so an empty book spot
+-- means one of:
+--   (a) the grimoire spawner UNIT never registered with PickupSystem at all — its level
+--       object set is not enabled under the deus game mode (the #52 / #156 family; see the
+--       [ct:skull52] object-set census + the GameModeHelper.get_object_sets #156 fix). It
+--       would then be absent from EVERY spawner list here.
+--   (b) it registered into the TRIGGERED list (triggered_spawn_id), whose activation flow
+--       (PickupSystem.activate_triggered_pickup_spawners, pickup_system.lua:283) never fires
+--       under the deus mechanism, so _spawn_guaranteed_pickup is never called for it. It
+--       would then show list=triggered here but produce no conversion probe.
+--   (c) it IS a guaranteed spawner that converts, but the chest/casket fails at that
+--       position — the [ct:456] fallthrough probes in _spawn_guaranteed_pickup catch this.
+--
+-- Neither existing probe answers (a)/(b): _dump_pickup_spawners_verbose is _dbg-gated
+-- (invisible on a mod-logging-OFF host) and never enumerates the triggered list per unit,
+-- and the [populate_pickups] line reports only aggregate list counts. This census is
+-- UNCONDITIONAL printf (misc_util.lua:29, survives logging OFF) and enumerates EVERY
+-- tome/grim-tagged unit across guaranteed + primary + secondary + specified + triggered,
+-- with its list, guaranteed_spawn / triggered_id flags and world position. Fires for any
+-- ct injected-catalog base (MISSION_BY_KEY) in BOTH Adventure and CW, so a plain-Adventure
+-- load of skaven_stronghold gives a baseline to diff the CW load against (the diff method
+-- _dump_pickup_spawners_verbose was built for). Cheap: books are <=5 per level.
+-- audit: `local` dropped — assigns into the forward-declared slot near the top of file.
+function _ct_book_spawner_census(ps_sys, level_key)
+    if not (ps_sys and Unit and Unit.get_data) then return end
+    local g_tome, g_grim, t_tome, t_grim, o_tome, o_grim = 0, 0, 0, 0, 0, 0
+    local function posstr(unit)
+        local s = "?"
+        pcall(function()
+            local p = Unit.local_position(unit, 0)
+            s = string.format("(%.1f,%.1f,%.1f)", Vector3.x(p), Vector3.y(p), Vector3.z(p))
+        end)
+        return s
+    end
+    local function scan(list_name, list, trig_id)
+        if type(list) ~= "table" then return end
+        for _, unit in pairs(list) do
+            if Unit.alive and Unit.alive(unit) then
+                local is_tome = Unit.get_data(unit, "tome") and true or false
+                local is_grim = Unit.get_data(unit, "grimoire") and true or false
+                if is_tome or is_grim then
+                    local kind = is_grim and "grim" or "tome"
+                    local guaranteed = Unit.get_data(unit, "guaranteed_spawn") and true or false
+                    local tid = trig_id or Unit.get_data(unit, "triggered_spawn_id") or ""
+                    pcall(printf, "[ct:456] book_spawner level=%s list=%s kind=%s guaranteed_spawn=%s triggered_id=%s pos=%s",
+                        tostring(level_key), list_name, kind, tostring(guaranteed), tostring(tid), posstr(unit))
+                    if list_name == "guaranteed" then
+                        if is_grim then g_grim = g_grim + 1 else g_tome = g_tome + 1 end
+                    elseif list_name == "triggered" then
+                        if is_grim then t_grim = t_grim + 1 else t_tome = t_tome + 1 end
+                    else
+                        if is_grim then o_grim = o_grim + 1 else o_tome = o_tome + 1 end
+                    end
+                end
+            end
+        end
+    end
+    scan("guaranteed", ps_sys.guaranteed_pickup_spawners)
+    scan("primary",    ps_sys.primary_pickup_spawners)
+    scan("secondary",  ps_sys.secondary_pickup_spawners)
+    scan("specified",  ps_sys.specified_pickup_spawners)
+    if type(ps_sys.triggered_pickup_spawners) == "table" then
+        for trig_id, group in pairs(ps_sys.triggered_pickup_spawners) do
+            scan("triggered", group, trig_id)
+        end
+    end
+    pcall(printf, "[ct:456] census level=%s books guaranteed(tome=%d grim=%d) triggered(tome=%d grim=%d) other(tome=%d grim=%d)",
+        tostring(level_key), g_tome, g_grim, t_tome, t_grim, o_tome, o_grim)
+end
+mod._ct_book_spawner_census = _ct_book_spawner_census
 
 mod:hook_safe("GameModeDeus", "local_player_game_starts", function(self, player, loading_context)
     -- v0.7.124-dev — per-mission diagnostic dump (Issue: citadel curse mismatch).
@@ -7196,6 +7285,16 @@ mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawne
             local position = Unit.local_position(spawner_unit, 0)
             local rotation = Unit.local_rotation(spawner_unit, 0)
             local casket = self:_spawn_pickup(casket_settings, "deus_soft_currency", position, rotation, false, spawn_type)
+            -- [ct:456] leftover book spot (this pedestal was NOT the chest): report the
+            -- casket outcome + position unconditionally. A grimoire that lands here with
+            -- spawned=false is the "always empty" symptom on the guaranteed path (case c);
+            -- spawned=true means the spot got a casket, so the "empty" report is elsewhere.
+            pcall(function()
+                local p = Unit.local_position(spawner_unit, 0)
+                printf("[ct:456] leftover_book kind=%s casket_spawned=%s pos=(%.1f,%.1f,%.1f)",
+                    is_tome and "tome" or "grim", tostring(casket and Unit.alive(casket) and true or false),
+                    Vector3.x(p), Vector3.y(p), Vector3.z(p))
+            end)
             if casket and Unit.alive(casket) then
                 Unit.set_data(casket, "ct_big_casket", true)
                 Unit.set_local_scale(casket, 0, Vector3(1.75, 1.75, 1.75))
@@ -7208,6 +7307,13 @@ mod:hook("PickupSystem", "_spawn_guaranteed_pickup", function(func, self, spawne
     -- Could not build the casket (settings missing) — leave the spawner alone
     -- (empty pedestal stays hidden because adventure flow units only materialize
     -- after spawn).
+    -- [ct:456] unconditional: this book pedestal produced NOTHING (empty). Pinpoints the
+    -- "location of the first Grimoire is always empty" symptom on the guaranteed path.
+    pcall(function()
+        local p = Unit.local_position(spawner_unit, 0)
+        printf("[ct:456] empty_book kind=%s pos=(%.1f,%.1f,%.1f) (cap reached, altar n/a, casket settings missing)",
+            is_tome and "tome" or "grim", Vector3.x(p), Vector3.y(p), Vector3.z(p))
+    end)
     _dbg("[pedestal] -> empty (cap reached, altar n/a, casket settings missing)")
     return
 end)
