@@ -49,6 +49,7 @@ local mutator_allowed     = ET.mutator_allowed
 local preset_allowed      = ET.preset_allowed
 local WEAVE_ONLY_MUTATORS = ET.WEAVE_ONLY_MUTATORS
 local _weave_wind_active  = ET.weave_wind_active
+local notify_weave_drop   = ET.notify_weave_drop
 
 local function active_preset()
     local pick = mod:get("event_preset")
@@ -192,6 +193,12 @@ local function gather_mutators()
         if WEAVE_ONLY_MUTATORS[name] and not _weave_wind_active() then
             pcall(printf, "[et:413] dropped weave-only mutator [" .. tostring(name)
                 .. "] (no active wind settings - not a Weave mission)")
+            -- issue 413 follow-up: if the HOST explicitly ticked this Winds box,
+            -- surface a one-line reason (the printf above is console-only and
+            -- invisible with mod-logging off). Preset-injected drops stay silent.
+            if notify_weave_drop and mod:get("mut_" .. name) then
+                notify_weave_drop(name)
+            end
             return
         end
         -- issue 455: mutators that index CurrentBossSettings.boss_events

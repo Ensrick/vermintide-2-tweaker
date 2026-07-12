@@ -1,5 +1,23 @@
 # Tweaker: Events — Changelog
 
+## 0.4.28-dev (2026-07-12) - issue #413: host-visible notice for the deliberate Winds-mutator drop [untested]
+
+### Why
+Issue #413 reopened ("not fixed, no crash, but the mutator simply isn't active or working"). The v0.4.24-dev unconditional drop of the seven weave-only Winds-of-Magic mutators is the CORRECT wire-safe behavior: activating one CTDs vanilla Adventure clients (the stock `mutator_shadow.lua` client_update spawns the non-resident `wpn_shadow_gargoyle_head` then `Unit.light` engine-fatals, mutator_shadow.lua:186-187), it runs on every peer with a local client (mutator_handler.lua:210), and `hot_join_sync` re-broadcasts the activation to late joiners (mutator_handler.lua:148-159). But from the host's chair the drop read as "the checkbox does nothing" -- the `[et:413]` drop printf is console-only and invisible with mod-logging OFF.
+
+Recorded finding (in `_evt_guard413_weave.lua`): the units cannot simply be preloaded. Unlike the package-bearing Chaos Wastes curses (loadable `resource_packages/mutators/<name>`), the weave winds carry no packages field and no standalone package; `wpn_shadow_gargoyle_head` / `vfx_static_shadow_01` live only in the weave LEVEL bundles (`dlc_scorpion_*_shadow`), which Adventure never loads. Making shadow RUN in Adventure would need event_tweaker to ship those units in its own package (modded peers only) PLUS a server-side light_radius fallback (server_update does `radius*radius` with radius=nil outside a weave -- the same crash that already blacklists the identical `curse_belakors_shadows`, event_tweaker_curses.lua:38), and would still CTD any vanilla joiner. That is a product decision, not a silent fix -- see the issue #413 comment.
+
+### Changed
+- `_evt_selection.lua` - when the injection chokepoint (`gather_mutators`/`add()`) drops a weave-only mutator that the HOST explicitly enabled (`mod:get("mut_"..name)`), it echoes a one-line host-visible skip notice. Preset-injected drops stay silent; the unconditional drop and the `[et:413]` printf are unchanged.
+- `_evt_guard413_weave.lua` - added `notify_weave_drop` (session-deduped, host-only `mod:echo` -- never networked, zero vanilla-peer exposure; session-level dedup avoids a 2nd `StateIngame.on_exit` hook, owned by `_evt_cursed_adventure`). New regression check `issue413_weave_drop_notice_dedups`. Docstring now records the no-loadable-package finding so the "just preload it" dead end is not re-walked.
+- `MOD_VERSION` `0.4.27-dev` -> `0.4.28-dev`.
+
+### Notes
+This does NOT make the Winds mutators run in Adventure; it makes the deliberate wire-safe drop visible and explained. Full functionality needs a user go-ahead + in-game verify on one of: (a) ship the units in event_tweaker's package + server light_radius fallback, gated all-peers-modded like the Cursed Adventure group (same vanilla-joiner exposure), or (b) a host-side gameplay-only reimplementation of the shadow buff (wire-safe, but no light/fade visual). Tagged [untested] per dev status-tag doctrine.
+
+### Refs
+Issue #413 (primary). Related: issue 386 (scalar pacing sanitizer, sibling injection guard), issue 455. Sources: mutator_shadow.lua:80/87/186-187, mutator_handler.lua:148-159/210, item_master_list_local.lua:318, event_tweaker_curses.lua:38. Check: `issue413_weave_drop_notice_dedups`.
+
 ## 0.4.27-dev (2026-07-12) - issue 427: _dbg_alert routes to log-only printf
 
 ### Why
