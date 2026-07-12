@@ -1,5 +1,14 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.247-dev (2026-07-12) - #464 FIX: Anath Raema's Swiftness rework made reload SLOWER [untested]
+
+### #464 (bug) - "Anath Raema's Swiftness causes slower reload"
+- **Symptom.** With the `tweak_anath_raema_permanent` rework ("permanent reload speed") enabled, the trait made reload SLOWER, not faster. Vanilla (tweak off) is unaffected and correct.
+- **Root cause (verified from decompiled source).** The rework's replacement buff template hard-coded `stat_buff = "reload_speed", multiplier = 0.5` (positive). `reload_speed` is an INVERSE stat: it scales the reload HOLD TIME. `WeaponUnitExtension.get_scaled_min_hold_time` runs `min_hold_time = buff_extension:apply_buffs_to_value(min_hold_time, "reload_speed")` (`weapon_unit_extension.lua:966`), and `apply_buffs_to_value` composes a regular stat_buff as `value * (multiplier + 1)` (`buff_extension.lua:1431-1432`). So `+0.5` -> `hold_time * 1.5` = 50% LONGER reload. The vanilla on-pickup buff this rework replaces uses `multiplier = -0.5` (`buff_tweak_data.lua:225`), which halves the hold time = faster. Every vanilla faster-reload buff is negative (Bounty Hunter passive `-0.2` `talent_settings_victor.lua:87`, Huntsman ability `-0.4` `talent_settings_markus.lua:30`). The rework's inline comment even claimed `0.5` "matches the vanilla multiplier" - it misremembered the sign; vanilla is `-0.5`.
+- **Fix.** Changed the replacement template multiplier `0.5` -> `-0.5` (`chaos_wastes_tweaker_dev.lua:~10215`). The permanent passive now halves reload hold time = faster reload, matching the vanilla trait's on-pickup magnitude but always-on while the weapon is wielded. One-value sign fix; no new hook. Corrected the inline comment to cite the inverse-stat convention + source lines.
+- **Not a wire/parity concern.** Purely a local `WeaponTraits`/`BuffTemplates` data mutation gated by the existing `tweak_anath_raema_permanent` toggle; save/restore path unchanged. `MOD_VERSION` `0.7.246-dev` -> `0.7.247-dev`. Tag `[untested]`.
+- **Verify in-game (solo host):** enable "Rework: Anath Raema's Swiftness, permanent reload speed" in the ct menu, then `/ct_load_mission` any CW mission with a ranged weapon carrying the trait (or force it via the dev loader's Starting Blessing / a weapon that rolls it). Reload with the tweak ON should be visibly FASTER than a plain reload (roughly half the hold time), never slower. Cross-check: toggle the tweak OFF and reload without an ammo pickup = baseline speed; ON = clearly quicker.
+
 ## 0.7.246-dev (2026-07-12) - #463 FIX: Chest of Trials repeats the same SPECIFIC trial [untested]
 
 ### #463 (bug, regression) - "the same trial should not repeat" (gas rat twice on one mission)

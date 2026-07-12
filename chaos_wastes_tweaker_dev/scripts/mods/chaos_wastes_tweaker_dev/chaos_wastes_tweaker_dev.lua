@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.246-dev"
+local MOD_VERSION = "0.7.247-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -10205,14 +10205,19 @@ local function apply_anath_raema_permanent_tweak()
     end
     anath_raema_originals = { templates = saved }
 
-    -- Replacement template: single permanent stat_buff. multiplier = 0.5 matches the
-    -- vanilla on-pickup multiplier from MorrisBuffTweakData.deus_ammo_pickup_reload_speed_buff.
+    -- Replacement template: single permanent stat_buff. multiplier = -0.5 matches the
+    -- vanilla on-pickup multiplier MorrisBuffTweakData.deus_ammo_pickup_reload_speed_buff.multiplier
+    -- (buff_tweak_data.lua:225 = -0.5). The `reload_speed` stat_buff scales the reload HOLD TIME
+    -- (weapon_unit_extension.lua:966 -> apply_buffs_to_value -> value * (1 + multiplier),
+    -- buff_extension.lua:1431-1432), so it is an INVERSE stat: a NEGATIVE multiplier shortens the
+    -- hold time = FASTER reload. Every vanilla faster-reload buff is negative (Bounty Hunter passive
+    -- -0.2, Huntsman ability -0.4). A prior +0.5 here multiplied hold time by 1.5 = 50% SLOWER (#464).
     local replacement = {
         buffs = {
             {
                 name        = "deus_ammo_pickup_reload_speed_permanent",
                 stat_buff   = "reload_speed",
-                multiplier  = 0.5,
+                multiplier  = -0.5,
                 max_stacks  = 1,
             },
         },
