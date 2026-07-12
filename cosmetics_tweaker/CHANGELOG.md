@@ -1,5 +1,11 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.80-dev — 2026-07-12 — #500 strip the closed-#174 loadout-attribution probe, keep the open-issue [cos:sync] probes [untested]
+
+- **#500: removed the two `[174:loadout]` probe emit sites** (issue 174, CLOSED). The dedicated `#174 VANILLA CHOKEPOINT` `mod:hook_safe("BackendInterfaceItemPlayfab", "set_loadout_item", ...)` was pure post-observation (no return override, no behavior) and is deleted whole. The second emit lived INSIDE the load-bearing `mod:hook(BackendUtils, "set_loadout_item", ...)` LA-clone caching hook (`_install_skin_loadout_safety`); only the `if PROBE then PROBE.emit("174:loadout", ...) end` block was stripped -- the clone-cache write / early-return / cache-clear logic is kept byte-for-byte, so the skin-loadout-safety behavior is unchanged.
+- **KEPT `_diag_probe.lua` byte-identical** (git-verified no diff). It is the shared passive emitter (`M.emit` / `M.caller_hint`) still consumed by the OPEN-issue `[cos:sync]` probes (16 emit sites: issues 149, 154, 200, 203, 204 -- LA husk/shield sync divergence). The `PROBE` import stays. Only the file-header comment describing the two channels was updated to drop the now-retired `[174:loadout]` channel.
+- No `.package` edit (glob) and no dofile-manifest change: `_diag_probe.lua` is still dofile'd; only the probe call sites in `cosmetics_tweaker.lua` changed.
+
 ## 0.9.79-dev — 2026-07-12 — Structural refactor: Phase 3 OOP decomposition (no behavior change) [untested]
 
 Third structural slice of the `cosmetics_tweaker.lua` god file (9,568 -> 9,087 lines):

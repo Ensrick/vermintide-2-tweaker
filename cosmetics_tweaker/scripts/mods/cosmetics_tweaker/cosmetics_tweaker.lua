@@ -48,13 +48,13 @@ local LA_OKRI = mod:dofile("scripts/mods/cosmetics_tweaker/_la_okri")
 -- what gets dumped per window class.
 local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 
--- Passive diagnostic emitter (printf, default-on, rate-limited). Drives two
--- grep channels in the user's post-playtest log: [174:loadout] (loadout write /
--- restore attribution, issue #174) and [cos:sync] (LA husk/shield sync
+-- Passive diagnostic emitter (printf, default-on, rate-limited). Drives the
+-- [cos:sync] grep channel in the user's post-playtest log (LA husk/shield sync
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
+-- (The [174:loadout] channel was retired with issue #174's fix; #500.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.79-dev"
+local MOD_VERSION = "0.9.80-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -3976,39 +3976,6 @@ mod:hook("LootItemUnitPreviewer", "update", function(func, self, dt, t, input_se
 end)
 
 -- ============================================================
--- #174 VANILLA CHOKEPOINT (attribution host, passive)
--- ============================================================
--- `BackendInterfaceItemPlayfab:set_loadout_item(item_id, career, slot, index)`
--- is the concrete backend method every loadout write funnels through
--- (BackendUtils.set_loadout_item dispatches into it), and it carries the
--- `optional_loadout_index` that distinguishes a BOT's designated loadout from
--- the host's selected one -- exactly the discriminator issue #174 needs. This
--- is the SINGLE vanilla chokepoint the team-lead brief asked for, hosted here in
--- cosmetics_tweaker (grep confirmed no existing hook on this Class.method in this
--- mod; cim_dev hooks the same pair in a DIFFERENT mod, which is fine -- VMF
--- tracks hooks per-mod). hook_safe = pure post-observation, no return override.
--- The caller hint (2-4 stack frames, single line) names the code path that
--- reached the setter, so one keep visit after startup shows WHO restores the bot
--- slots (a vanilla bot-loadout replay, an inventory equip, or a mod). eac_window
--- reads mp's un-gate flag so a write that lands while mp has the realm un-gated
--- is attributable. Rate-limit: freely for the startup window, then on-change per
--- career/slot/item/index (see _diag_probe.lua).
-mod:hook_safe("BackendInterfaceItemPlayfab", "set_loadout_item", function(self, item_id, career_name, slot_name, optional_loadout_index)
-    if not PROBE then return end
-    local mp = get_mod("mp")
-    local eac = mp and mp.is_eac_window and mp.is_eac_window()
-    -- Depth 5 from level 2 walks past our callback + VMF's hook-dispatch frames
-    -- so the game-source caller (the last non-vmf/non-hooks.lua frame) is
-    -- captured; the reader picks the game frame out of the chain.
-    local caller = PROBE.caller_hint(2, 5)
-    PROBE.emit("174:loadout",
-        "vanilla/" .. tostring(career_name) .. "/" .. tostring(slot_name) .. "/" .. tostring(optional_loadout_index) .. "/" .. tostring(item_id),
-        string.format("cosmetics VANILLA BackendInterfaceItemPlayfab.set_loadout_item profile=%s slot=%s item=%s idx=%s mp_eac_window=%s caller=%s",
-            tostring(career_name), tostring(slot_name), tostring(item_id),
-            tostring(optional_loadout_index), tostring(eac), tostring(caller)))
-end)
-
--- ============================================================
 -- Loremaster's Armoury bridge (Phase 1)
 -- ============================================================
 -- Registers LA's recolored cosmetics as separate inventory items via MIL,
@@ -4031,16 +3998,6 @@ local function _install_skin_loadout_safety()
     local items_iface = Managers.backend:get_interface("items")
 
     mod:hook(BackendUtils, "set_loadout_item", function(func, backend_id, career_name, slot_name)
-        -- #174: cosmetics' OWN loadout write path (the menu-equip dispatcher).
-        -- Logs every write it sees plus whether the item is an LA clone we cache
-        -- into mod.loadout_cache (which cosmetics injects back on get_loadout).
-        if PROBE then
-            PROBE.emit("174:loadout",
-                "cos_bu/" .. tostring(career_name) .. "/" .. tostring(slot_name) .. "/" .. tostring(backend_id),
-                string.format("cosmetics BackendUtils.set_loadout_item profile=%s slot=%s item=%s la_clone=%s",
-                    tostring(career_name), tostring(slot_name), tostring(backend_id),
-                    tostring(LA_BRIDGE.backend_to_armoury[backend_id] ~= nil)))
-        end
         local is_clone = LA_BRIDGE.backend_to_armoury[backend_id]
         if is_clone and (slot_name == "slot_hat" or slot_name == "slot_skin") then
             mod.loadout_cache[career_name] = mod.loadout_cache[career_name] or {}
