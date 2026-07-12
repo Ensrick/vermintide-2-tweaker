@@ -1,5 +1,25 @@
 # Tweaker: Events — Changelog
 
+## 0.4.29-dev (2026-07-12) - issue #430: Cursed Adventure curse wire-safety floor (peer-parity) [untested]
+
+### Why
+Issue #430 (crash, 1-major): enabling a package-bearing Cursed Adventure curse with a non-event_tweaker peer in the lobby hard-CTDs that peer. The only prior safeguard was the checkbox label warning. Wire path: `selected_curse_mutators()` -> `gather_mutators()`/`add()` -> the injected special_event's `mutators` list -> `GameModeBase.append_live_event_mutators` (game_mode_base.lua:264) -> `MutatorHandler` activates each curse and broadcasts it to every peer via `rpc_activate_mutator_client`. The mutator NAME resolves on a vanilla client (`NetworkLookup.mutator_templates` is boot-built from the full template table, network_lookup.lua:266), so the RPC does not crash; the RESOURCE PACKAGE does. The curse spawns a network-replicated husk (`spawn_network_unit`) whose unit lives in `resource_packages/mutators/<name>`, and that package is preloaded ONLY by `_evt_cursed_adventure.lua`'s hooks — which exist only on a peer running event_tweaker. A non-ET peer activates the curse, the husk spawns from the unloaded package, and the engine hard-CTDs it ("Resource not found").
+
+This is a GAMEPLAY axis (the curse spawns real units), so substitution to a vanilla-safe value is not applicable (issue 371 / BUG_CLASSES 31). Per the issue 413 lesson, a host-only mod cannot make an injected package-bearing curse safe on a vanilla client — it can only REFUSE to inject it while any lobby peer lacks the mod.
+
+### Changed
+- New `_evt_guard430_curse_parity.lua` (manifest position between `_evt_guard455_boss_events` and `_evt_selection`). Builds + installs the shared peer-parity beacon (`_lib_peer_parity`, issue 371 framework; channel `et_peer_parity_present`, schema 1) and exports `mod._evt.curse_wire_safe`. Registers one gated feature (`et_cursed_adventure_curses`) so the beacon's debounced chat notice names which peer lacks the mod. Adds NO engine hooks; the beacon polls the player roster and drives itself off `mod.update` (event_tweaker had none of its own). Regression checks `issue430_peer_parity_beacon_installed`, `issue430_curse_floor_failsafe`, `issue430_curse_floor_classify`.
+- `_lib_peer_parity.lua` copied verbatim from `tools/shared_lib/_lib_peer_parity.lua` (COPIED single-source per the standalone invariant; auto-bundled by the `scripts/mods/event_tweaker/*` package glob).
+- `_evt_selection.lua` - `selected_curse_mutators()` now drops ALL curses whenever `curse_wire_safe()` is false. UNCONDITIONAL: the checkbox being on is necessary but the parity check is a hard AND the user cannot override (never toggle-gated). Positive-evidence + fail-safe (false when the beacon is missing/erroring or any peer is unacked); read live so a peer joining just before the mission still blocks. Log-only `[et:430]` drop printf mirrors the issue 413 trail.
+- `event_tweaker_localization.lua` - `peer_parity_curse_feature_label` = "Cursed Adventure curses" (used inside the peer-parity chat notice; not a settings-UI option title, so no dev status tag).
+- `MOD_VERSION` `0.4.28-dev` -> `0.4.29-dev`.
+
+### Notes
+The floor blocks injection at every level-load AND declines to re-inject on the next mission while a non-ET peer remains. The one irreducible residual — a non-ET peer HOT-JOINING mid-mission into an already-cursed run, where the curse units are already spawned and game-object sync replicates the husks — cannot be closed by a host-only mod (identical boundary to the issue 413 weave guard; `hot_join_sync` re-broadcasts to late joiners). The beacon's continuous poll + notice surfaces that case so the host can have the joiner install the mod. Checkboxes stay visible (visibility is user-dictated; VMF widgets build once); the effective auto-disable is the injection-time floor + the peer-naming notice, matching the issue 413 precedent. Needs 2+ people (one WITHOUT event_tweaker) to verify - tagged [untested], verify-fix-coop.
+
+### Refs
+Issue #430 (primary). Framework: issue 371 (peer-parity umbrella), issue 413 (sibling weave gate), issue 424/425/426 (beacon consumers crt/ct). Sources: game_mode_base.lua:264, network_lookup.lua:266, mutator_handler.lua (activate/hot_join_sync), deus_run_state.lua:438-453. Checks: `issue430_peer_parity_beacon_installed`, `issue430_curse_floor_failsafe`, `issue430_curse_floor_classify`.
+
 ## 0.4.28-dev (2026-07-12) - issue #413: host-visible notice for the deliberate Winds-mutator drop [untested]
 
 ### Why

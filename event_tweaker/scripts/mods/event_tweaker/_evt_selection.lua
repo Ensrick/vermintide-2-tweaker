@@ -9,7 +9,12 @@ local mod = get_mod("event_tweaker")
 -- is the single injection chokepoint every route funnels through (preset,
 -- checkbox, discovered, curse) — the issue 413 weave gate and issue 455
 -- boss-event guard are applied there and must not be bypassed by any new
--- injection route.
+-- injection route. The issue 430 curse wire-safety floor lives one step earlier
+-- in selected_curse_mutators() (it removes curses from the route rather than
+-- adding one, so no guard is bypassed): the package-bearing Cursed Adventure
+-- curses are dropped entirely whenever a lobby peer lacks event_tweaker, because
+-- a non-ET peer CTDs on the curse's replicated husk from an unloaded package
+-- (see _evt_guard430_curse_parity.lua).
 --
 -- Owned by: event_tweaker.lua entry point (dofile'd after _evt_dlc +
 -- _evt_guard413_weave + _evt_guard455_boss_events, before the hook/command
@@ -50,6 +55,9 @@ local preset_allowed      = ET.preset_allowed
 local WEAVE_ONLY_MUTATORS = ET.WEAVE_ONLY_MUTATORS
 local _weave_wind_active  = ET.weave_wind_active
 local notify_weave_drop   = ET.notify_weave_drop
+-- issue 430 curse wire-safety floor (manifest order: _evt_guard430_curse_parity
+-- is dofile'd before this module, so the export exists here).
+local curse_wire_safe     = ET.curse_wire_safe
 
 local function active_preset()
     local pick = mod:get("event_preset")
@@ -131,6 +139,23 @@ local function selected_curse_mutators()
            and (not MT or rawget(MT, c.id)) then
             out[#out + 1] = c.id
         end
+    end
+    -- issue 430: UNCONDITIONAL sender-side crash floor. These curses spawn
+    -- network-replicated husks from a resource package that ONLY peers running
+    -- event_tweaker preload (_evt_cursed_adventure.lua). A non-ET peer that
+    -- receives the curse activation via rpc_activate_mutator_client hard-CTDs on
+    -- the husk spawn from the unloaded package. Gameplay axis -> substitution is
+    -- not applicable (issue 371 / BUG_CLASSES 31); the only floor is to DECLINE
+    -- injection while any lobby peer is unconfirmed (issue 413 lesson). The
+    -- checkbox being on is necessary but this parity check is a hard AND the user
+    -- cannot override (never toggle-gated). curse_wire_safe() is positive-evidence
+    -- + fail-safe (false when the beacon is missing/erroring or any peer is
+    -- unacked), read live so a peer joining just before the mission still blocks.
+    -- The beacon (_evt_guard430_curse_parity) chat-notifies which peer lacks the
+    -- mod; this printf is the log-only trail, mirroring the issue 413 drop.
+    if #out > 0 and not (curse_wire_safe and curse_wire_safe()) then
+        pcall(printf, "[et:430] dropped %d Cursed Adventure curse(s): a lobby peer lacks event_tweaker (would CTD on the curse husk from an unloaded package)", #out)
+        return {}
     end
     return out
 end

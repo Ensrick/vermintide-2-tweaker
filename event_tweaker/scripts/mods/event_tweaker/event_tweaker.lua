@@ -1,7 +1,7 @@
 local mod = get_mod("event_tweaker")
 local _mem_probe_t0 = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.4.28-dev"
+local MOD_VERSION = "0.4.29-dev"
 
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([event_tweaker:LOAD] v<X> enabled fp=<hash> OK) is the canonical version
@@ -23,8 +23,9 @@ mod:info("Tweaker: Events v%s loaded", MOD_VERSION)
 -- only this manifest loads them. Load order is load-bearing:
 --   * _evt_log first (later modules localize dbg/dbg_alert at their top),
 --   * _evt_regression before any module that registers a check,
---   * _evt_dlc + the two injection guards before _evt_selection (selection
---     localizes their exports at its top),
+--   * _evt_dlc + the injection guards (413 weave / 455 boss-event / 430 curse
+--     peer-parity) before _evt_selection (selection localizes their exports,
+--     incl. curse_wire_safe, at its top),
 --   * _evt_selection before the hook / diagnostics / apply modules that call
 --     its gather/preset accessors.
 -- Regression checks print in registration order, so reordering this manifest
@@ -55,6 +56,7 @@ mod:dofile("scripts/mods/event_tweaker/_evt_regression")           -- /event_twe
 mod:dofile("scripts/mods/event_tweaker/_evt_dlc")                  -- DLC ownership gate (injection side, fail-closed)
 mod:dofile("scripts/mods/event_tweaker/_evt_guard413_weave")       -- issue 413: weave-only mutator injection gate
 mod:dofile("scripts/mods/event_tweaker/_evt_guard455_boss_events") -- issue 455: boss-event mutator guard
+mod:dofile("scripts/mods/event_tweaker/_evt_guard430_curse_parity") -- issue 430: Cursed Adventure curse wire-safety floor (peer-parity beacon)
 mod:dofile("scripts/mods/event_tweaker/_evt_selection")            -- preset/checkbox/discovery selection -> gather_mutators
 mod:dofile("scripts/mods/event_tweaker/_evt_backend_hooks")        -- the three live-event backend hooks
 mod:dofile("scripts/mods/event_tweaker/_evt_guard386_pacing")      -- issue 386: scalar pacing sanitizer

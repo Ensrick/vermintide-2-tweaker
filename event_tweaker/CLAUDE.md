@@ -34,6 +34,11 @@ rules specific to this mod; architecture and recipes live in `DEVELOPMENT.md`.
 - **One hook per (Class, method) mod-wide.** Currently 10 hooks across
   `_evt_backend_hooks` / `_evt_guard386_pacing` / `_evt_diagnostics` /
   `_evt_cursed_adventure` — grep all `_evt_*` files before adding any hook.
+  `_evt_guard430_curse_parity` adds NO engine hooks (its peer-parity beacon
+  polls the player roster) but OWNS `mod.update` via the shared lib's
+  `install()`, which wraps any pre-existing `mod.update`. event_tweaker defines
+  none of its own, so nothing else may set `mod.update` or it clobbers the beacon
+  tick — drive per-frame work through the beacon instead.
 - **Ship**: `-dev` version = full pipeline every build, no ask, and the item is
   public, so always `tools\ship\ship.ps1 -Mod event_tweaker -AllowPublic`; then
   git add (new files explicitly) + commit + push in the same pass.

@@ -32,7 +32,7 @@ Lets the host run package-bearing Chaos Wastes / Be'lakor **curses** (`MANAGED_C
 | **Lighting** | Hook `CameraManager.shading_callback`; multiply per-god ShadingEnvironment vars (`_CURSE_SKY_PROFILES`, copied from `chaos_wastes_tweaker.lua:3247`). `_active_curse_god` cached on activate/deactivate. Reverts for free (engine re-seeds the shading_env every frame). `cursed_lighting` toggle (default on). |
 | **Mechanism gate** | All four hooks no-op unless `Managers.mechanism:current_mechanism_name() == "adventure"`, so a real CW run (Deus loads the package, ct tints) is untouched. |
 
-**Multiplayer:** unlike the host-only rest of the mod, the curse group needs **every player** to run event_tweaker — clients load the package locally to instantiate replicated curse units (`spawn_network_unit` husks).
+**Multiplayer (issue 430 wire-safety floor, `v0.4.29-dev`):** unlike the host-only rest of the mod, the curse group needs **every player** to run event_tweaker — clients load the package locally to instantiate replicated curse units (`spawn_network_unit` husks). A non-ET peer that receives a curse activation CTDs on the husk spawn from its unloaded package. Because this is a GAMEPLAY axis (real units spawn), the name cannot be substituted with a vanilla-safe one (issue 371 / BUG_CLASSES 31); the only floor is to REFUSE injection while any peer lacks the mod (issue 413 lesson). `selected_curse_mutators()` (`_evt_selection.lua`) drops ALL curses whenever `curse_wire_safe()` is false — UNCONDITIONAL (never toggle-gated), positive-evidence + fail-safe, read live at every `get_special_events` so a peer joining just before the mission still blocks. Detection is the shared peer-parity beacon (`_evt_guard430_curse_parity.lua`, `_lib_peer_parity`, issue 371 framework, channel `et_peer_parity_present`), which also chat-notifies the host which peer lacks the mod. The one irreducible residual — a non-ET peer HOT-JOINING mid-mission into an already-cursed run (husks already spawned, replicated by game-object sync) — cannot be closed by a host-only mod (same boundary as the issue 413 weave guard); the floor blocks fresh injection and declines to re-inject on the next mission while that peer stays. Checks: `issue430_peer_parity_beacon_installed` / `issue430_curse_floor_failsafe` / `issue430_curse_floor_classify`.
 
 **Excluded crashers** (`_CURSE_BROKEN_IN_ADVENTURE`, never surfaced): `curse_bolt_of_change` (Deus-mechanism-only `get_deus_run_controller`), `curse_belakors_shadows` (weave mutator, nil-arithmetic crash — package-free so the package filter can't catch it), `curse_empathy` (server-side `data.hero_side` nil-index). **Experimental** (surfaced, won't crash, may be inert): `curse_egg_of_tzeentch`, `curse_greed_pinata`.
 
@@ -103,35 +103,50 @@ levels no-op instead of a host fatal. Registers check
 call time by `add()`): `mod._et455_guard_boss_event_mutator(name)`,
 `mod._et455_boss_events_present(cbs)`.
 
-**`_evt_selection.lua` — manifest position 6.**
+**`_evt_guard430_curse_parity.lua` — manifest position 6.**
+Issue 430 Cursed Adventure curse wire-safety floor. Builds + installs the shared
+peer-parity beacon (`_lib_peer_parity`, issue 371 framework; channel
+`et_peer_parity_present`, schema 1) and registers one gated feature
+(`et_cursed_adventure_curses`) whose label drives the beacon's peer-naming chat
+notice. Adds NO engine hooks (the beacon polls the roster) but OWNS `mod.update`
+via the lib's `install()` — nothing else in the mod may set `mod.update`.
+Registers checks `issue430_peer_parity_beacon_installed`,
+`issue430_curse_floor_failsafe`, `issue430_curse_floor_classify`. Public surface:
+`mod._evt.curse_wire_safe` (positive-evidence + fail-safe live parity read) and
+`mod._et_peer_parity` (the beacon instance, for the regression suite).
+
+**`_evt_selection.lua` — manifest position 7.**
 Selection core: `active_preset`, dynamic discovery (Deed Mutators Selector port),
 curse/checkbox readers, and `gather_mutators()` whose inner `add()` is the SINGLE
 injection chokepoint (issues 413 + 455 are enforced there; every new injection
-route must funnel through it). Registers check `dynamic_mutator_discovery`.
+route must funnel through it). `selected_curse_mutators()` applies the issue 430
+floor (drops all curses when `curse_wire_safe()` is false) before the curses reach
+`add()` — it removes from the route rather than adding one, so no guard is
+bypassed. Registers check `dynamic_mutator_discovery`.
 Public surface: `mod._evt.active_preset`, `mod._evt.displayable_registered_mutators`,
 `mod._evt.gather_mutators`, `mod._evt.gather_active_events`,
 `mod._evt.suppress_live_event`, `mod._evt.merge_lists`.
 
-**`_evt_backend_hooks.lua` — manifest position 7.**
+**`_evt_backend_hooks.lua` — manifest position 8.**
 The three live-event backend hooks (see Architecture below). No exports; consumes
 the selection surface.
 
-**`_evt_guard386_pacing.lua` — manifest position 8.**
+**`_evt_guard386_pacing.lua` — manifest position 9.**
 Issue 386 scalar-pacing sanitizer: `hook_safe` on
 `MutatorHandler.conflict_director_updated_settings`. Registers check
 `issue386_sanitize_pacing_scalar_to_table`. Public surface:
 `mod._et386_sanitize_pacing_scalars(pacing, difficulty)`.
 
-**`_evt_diagnostics.lua` — manifest position 9.**
+**`_evt_diagnostics.lua` — manifest position 10.**
 Read-only surfaces: `/event_probe`, `/event_active`, `/event_clear`, and the issue
 393 diagnostics-armed `ConflictDirector.init` post-init snapshot. No exports.
 
-**`_evt_apply.lua` — manifest position 10.**
+**`_evt_apply.lua` — manifest position 11.**
 Mid-game preset application (level reload plumbing), `/event_apply`, and
 `mod.on_setting_changed` — VMF allows exactly ONE assignment mod-wide and it lives
 here; never assign it in another file. No `mod._evt` exports.
 
-**`_evt_cursed_adventure.lua` — manifest position 11 (last).**
+**`_evt_cursed_adventure.lua` — manifest position 12 (last).**
 Curse package preload hooks (`MutatorHandler._activate_mutator`/`_deactivate_mutator`/
 `init`, `StateIngame.on_exit`) + the per-frame `CameraManager.shading_callback` sky
 tint. All runtime state is file-local; the per-frame hook must never read

@@ -36,6 +36,11 @@ local loc = {
     cat_cursed     = en("[untested] Cursed Adventure: CW / Be'lakor curses (ALL players need the mod)"),
     cursed_lighting         = en("[untested] Cursed-sky lighting"),
     cursed_lighting_tooltip = en("Tints the mission's sky, sun, and fog with the active curse's Chaos god color (Khorne red, Nurgle green, Tzeentch blue, Belakor purple, Slaanesh pink). This is purely visual, only affects your own screen, and clears on its own when no curse is active."),
+    -- issue 430: name used INSIDE the peer-parity chat notice (not a settings-UI
+    -- option title, so it carries no dev status tag). The beacon echoes e.g.
+    -- "[Events] Peer-parity: disabled Cursed Adventure curses. Missing Tweaker:
+    -- Events: <peer>. ...". Kept short so the one-line notice stays readable.
+    peer_parity_curse_feature_label = en("Cursed Adventure curses"),
 
     -- Difficulty modifiers
     mut_no_ammo                    = en("[working] No Ammo"),
