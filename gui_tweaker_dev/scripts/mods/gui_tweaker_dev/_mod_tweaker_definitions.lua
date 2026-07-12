@@ -121,6 +121,21 @@ scenegraph_definition.mt_scrollbar = {
     position = { -12, 0, 50 },
     size = { 10, _LIST_WINDOW_H },
 }
+-- (#497) SEARCH BAND. Reserve a fixed strip at the TOP of the list window for the per-tab
+-- search bar (mt_search + create_search_box below). The bar is fixed chrome (does NOT scroll)
+-- sitting OUTSIDE and ABOVE the settings list, flush with the row-content width. To open the
+-- strip we SHRINK the list window (list_mask) by SEARCH_BAND_H and nudge its centre DOWN by
+-- half that, so its TOP edge drops by SEARCH_BAND_H while its BOTTOM stays put; the scrollbar
+-- (also centre-anchored on background_frame, its track_h read at factory-call time) is shrunk
+-- + shifted identically so it still spans the list. list_mask stays CENTRE-aligned -- the row
+-- cull in _draw reads its live world-pos/size (alignment-correct either way), so we only
+-- resize + offset it, never re-anchor it. The mt_search NODE is added lower (after ROW_W).
+local SEARCH_BAND_H = 44
+local SEARCH_BOX_H  = 30
+scenegraph_definition.list_mask.size[2]        = scenegraph_definition.list_mask.size[2] - SEARCH_BAND_H
+scenegraph_definition.list_mask.position[2]    = (scenegraph_definition.list_mask.position[2] or 0) - SEARCH_BAND_H / 2
+scenegraph_definition.mt_scrollbar.size[2]     = scenegraph_definition.mt_scrollbar.size[2] - SEARCH_BAND_H
+scenegraph_definition.mt_scrollbar.position[2] = (scenegraph_definition.mt_scrollbar.position[2] or 0) - SEARCH_BAND_H / 2
 -- v0.2.65-dev: the "MOD TWEAKER" title is GONE entirely (node + factory + draws
 -- removed in both twins). Native Options has NO title text in the top band — the
 -- tab buttons span the whole band. The earlier band-split (a title in the upper
@@ -1832,6 +1847,58 @@ local function create_default_button()
     })
 end
 
+-- (#497) SEARCH box node + factory. The node sits in the band freed above list_mask
+-- (see SEARCH_BAND_H): parented to background_frame (the fixed centred panel, NOT the
+-- scrolling list) so it never moves, left-aligned at x=58 = list_mask inset (18) +
+-- mt_list_start inset (40) so its left edge lines up with the row content, and width =
+-- ROW_W so it spans the row-content column exactly ("flush with the length of the menu").
+-- _LIST_WINDOW_H is the ORIGINAL list height (captured before the shrink above), so
+-- _LIST_TOP is the original top margin; the box is vertically centred in the freed band.
+local _LIST_TOP = (WINDOW_HEIGHT - _LIST_WINDOW_H) / 2
+scenegraph_definition.mt_search = {
+    parent = "background_frame",
+    horizontal_alignment = "left",
+    vertical_alignment = "top",
+    position = { 58, -(_LIST_TOP + (SEARCH_BAND_H - SEARCH_BOX_H) / 2), 6 },
+    size = { ROW_W, SEARCH_BOX_H },
+}
+
+-- (#497) Per-tab SEARCH box widget. A fixed (non-scrolling) input field. The view focuses it
+-- on click, captures printable keystrokes into self._search_str (Keyboard.keystrokes -- the
+-- SAME raw path the numeric type-to-edit uses), and re-filters the current tab's rows live.
+-- The view drives content.text each frame (the query + a blink caret when focused, or the
+-- placeholder when empty+unfocused) and style.text.text_color / style.bg_inner.color for
+-- focus emphasis. Built from rect (bevel outer/inner) + hotspot + text -- NO material lookups,
+-- so it is safe on the borrowed in-game renderer (same constraint as every other gut row).
+local function create_search_box()
+    local W, H, PAD = ROW_W, SEARCH_BOX_H, 14
+    return UIWidget.init({
+        scenegraph_id = "mt_search",
+        element = {
+            passes = {
+                { pass_type = "rect", style_id = "bg_outer" },
+                { pass_type = "rect", style_id = "bg_inner" },
+                { pass_type = "hotspot", content_id = "hotspot", style_id = "hotspot" },
+                { pass_type = "text", style_id = "text", text_id = "text" },
+            },
+        },
+        content = { hotspot = {}, text = "" },
+        style = {
+            bg_outer = { offset = { 0, 0, 1 }, size = { W, H }, color = { 220, 0, 0, 0 } },
+            bg_inner = { offset = { 2, 2, 2 }, size = { W - 4, H - 4 }, color = { 255, 14, 14, 14 } },
+            hotspot  = { size = { W, H }, offset = { 0, 0, 0 } },
+            text = {
+                font_type = "hell_shark", font_size = 20,
+                horizontal_alignment = "left", vertical_alignment = "center",
+                localize = false, upper_case = false, word_wrap = false,
+                text_color = { 255, 255, 255, 255 },
+                offset = { PAD, 0, 4 }, size = { W - PAD * 2, H },
+            },
+        },
+        offset = { 0, 0, 0 },
+    })
+end
+
 return {
     scenegraph_definition = scenegraph_definition,
     list_sg = LIST_SG,
@@ -1848,6 +1915,9 @@ return {
     create_default_button = create_default_button,
     reset_sg = "mt_reset",
     create_tab = create_tab,
+    -- (#497) Per-tab search box (fixed input field above the list).
+    create_search_box = create_search_box,
+    search_sg = "mt_search",
     create_checkbox = create_checkbox,
     create_slider = create_slider,
     create_stepper = create_stepper,

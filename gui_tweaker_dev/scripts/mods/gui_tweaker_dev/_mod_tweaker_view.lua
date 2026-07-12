@@ -108,6 +108,16 @@ function ModTweakerView:init(ingame_ui_context)
     self._visible_h = 0       -- list_mask height (read at runtime)
     self._sb_dragging = false -- scrollbar thumb being dragged
     self._drill = nil         -- gear drill-down state: nil = normal list; { setting_id, label } = drilled in
+
+    -- (#497) Per-tab SEARCH filter. self._search is the fixed input box above the list;
+    -- self._search_str is the raw typed query (lowercased for matching in _search_active).
+    -- Focus is click-driven (self._search_focused); while focused printable keystrokes edit
+    -- the query and _build_rows re-renders the current tab as a flat filtered list. Cleared on
+    -- every open (on_enter) and on a tab switch, so search scope is always the current tab.
+    self._search = defs.create_search_box()
+    self._search_str = ""
+    self._search_focused = false
+    self._search_caret_t = 0
 end
 
 -- ---------------------------------------------------------------
@@ -1178,6 +1188,27 @@ function ModTweakerView:_append_row(row, err, wtype, category, setting_id, base_
     end
 end
 
+-- (#497) Localized display label for a node, mirroring the label logic in _build_node_row
+-- (flat/VMF categories localize via the owner mod; nested gut nodes use the raw field). The
+-- search filter matches against the SAME text the row renders. Caller lowercases for matching.
+local function _node_label(category, w)
+    local setting_id = _nf(w, "setting_id")
+    if category._flat then
+        return _vmf_label(w, (_owner(category, setting_id)))
+    end
+    return tostring(w.label or w.text or w.setting_id or "?")
+end
+
+-- (#497) The active search term (lowercased, trimmed) or nil when the box is empty/whitespace.
+-- _build_rows renders the filtered flat list only when this returns non-nil.
+function ModTweakerView:_search_active()
+    local s = self._search_str
+    if type(s) ~= "string" then return nil end
+    s = s:gsub("^%s+", ""):gsub("%s+$", "")
+    if s == "" then return nil end
+    return s:lower()
+end
+
 function ModTweakerView:_build_rows(category)
     self._rows = {}
     -- Any in-progress type-edit is abandoned on a rebuild (tab switch / drill / collapse):
@@ -1235,6 +1266,67 @@ function ModTweakerView:_build_rows(category)
     self._build_nodes, self._build_depths, self._build_category = nodes, depths, category
 
     local base_offset = { 0, -10, 0 }
+
+    -- (#497) SEARCH FILTER. When the per-tab search box has a term, render a FLAT filtered
+    -- list instead of the normal collapse/gear/drill list. A node is kept when its localized
+    -- label contains the term ("a setting OR collapsible that matches", case-insensitive),
+    -- PLUS every ANCESTOR of a match (so a nested match stays reachable and shows its section
+    -- context) and, for a matched GROUP (collapsible), its DESCENDANTS (so the matched
+    -- section's contents show). No gears, no collapse, no drill -- results are always fully
+    -- expanded and visible. Ancestors/descendants are found from the parallel depth array.
+    local term = self:_search_active()
+    if term then
+        self._drill = nil                       -- a search supersedes any drill-down
+        local keep = {}
+        for i = 1, #nodes do
+            if _nf(nodes[i], "type") ~= "header" then
+                local lbl = _node_label(category, nodes[i])
+                if type(lbl) == "string" and string.find(lbl:lower(), term, 1, true) then
+                    keep[i] = true
+                end
+            end
+        end
+        -- Freeze the direct-match set, then widen it to ancestors + matched-group descendants.
+        local matched = {}
+        for i = 1, #nodes do if keep[i] then matched[#matched + 1] = i end end
+        for _, i in ipairs(matched) do
+            local need = depths[i]
+            for j = i - 1, 1, -1 do
+                if depths[j] < need then
+                    keep[j] = true; need = depths[j]
+                    if need <= 0 then break end
+                end
+            end
+            if _nf(nodes[i], "type") == "group" then
+                for j = i + 1, #nodes do
+                    if depths[j] <= depths[i] then break end
+                    keep[j] = true
+                end
+            end
+        end
+        -- Render kept nodes flat at their natural depth (no gear/collapse). A kept group is
+        -- forced expanded (its children already show), so its [+]/[-] can't misread as closed.
+        local shown = 0
+        for i = 1, #nodes do
+            if keep[i] and _nf(nodes[i], "type") ~= "header" then
+                if _nf(nodes[i], "type") == "group" then
+                    self._expanded[self:_group_key(nodes[i], category)] = true
+                end
+                local row, err, wtype, setting_id = self:_build_node_row(nodes[i], category, base_offset, depths[i])
+                self:_append_row(row, err, wtype, category, setting_id, base_offset, false)
+                if row then shown = shown + 1 end
+            end
+        end
+        if shown == 0 then
+            local ok_n, nr = pcall(defs.create_section_title,
+                "No settings match \"" .. tostring(self._search_str) .. "\"", base_offset, 0)
+            if ok_n and nr then nr._readonly = true; self._rows[#self._rows + 1] = nr end
+        end
+        self._content_h = math.abs(base_offset[2]) + 20
+        self:_recompute_scroll_bounds()
+        self._scroll_y = math.clamp(self._scroll_y or 0, 0, self._max_scroll)
+        return
+    end
 
     -- DRILLED-IN advanced view: render only Back + parent + that parent's children.
     if self._drill then
@@ -1782,6 +1874,8 @@ function ModTweakerView:on_enter(params)
     self._active = true
     self._draw_frames = 0
     self._drill = nil   -- always open on the normal list, never a stale drill from a prior open
+    self._search_str = ""       -- (#497) every open starts unfiltered, on the current tab
+    self._search_focused = false
     -- DEFENSIVE re-pin LA's atlas + instrument on every open (site ii). The Mod
     -- Tweaker borrows the long-lived IngameUI renderer; the in-mission 3rd/4th-open
     -- crash on materials/Loremasters-Armoury/armoury_atlas happens because the atlas
@@ -1942,6 +2036,18 @@ function ModTweakerView:update(dt, t)
             self:_build_rows(self._categories[self._selected])
             return
         end
+        -- (#497) ESC priority: if the search box is focused OR a filter is active, the FIRST ESC
+        -- clears the search (restores the full tab) and stays in the menu; only a SUBSEQUENT ESC
+        -- (no filter, nothing else pending) closes the menu. Ordered after edit/keybind/drill so
+        -- ESC first cancels those, matching the "back out one level per ESC" model.
+        if self._search_focused or (self._search_str and self._search_str ~= "") then
+            self._search_focused = false
+            self._search_str = ""
+            self._scroll_y = 0
+            _play_click()
+            self:_build_rows(self._categories[self._selected])
+            return
+        end
         -- (#124) FINAL menu-close (no popup/edit/drill pending) -> return to the GAME via
         -- exit(true) -> "exit_menu", NOT the captured origin (equipment/HeroView). The
         -- origin capture (self._exit_transition) stays as exit()'s fallback, guarding the
@@ -1976,6 +2082,8 @@ end
 -- digits capped at num_decimals after the dot, "-" gated on min<0, "." once when
 -- decimals>0, Backspace, 16-char cap.
 local _EDIT_MAX_LEN = 16
+-- (#497) Max search query length (free text; the numeric editor's cap is _EDIT_MAX_LEN).
+local _SEARCH_MAX_LEN = 40
 
 local function _format_value(value, num_decimals)
     return string.format("%." .. (num_decimals or 0) .. "f", value or 0)
@@ -2032,6 +2140,28 @@ function ModTweakerView:_edit_apply_keystrokes(c)
         end
     end
     if changed then c.edit_str = s; c.caret_idx = idx end
+    return changed
+end
+
+-- (#497) Append/erase ONE batch of keystrokes into the search query. Mirrors the numeric
+-- editor's Keyboard.keystrokes() capture but for FREE TEXT: printable ASCII (32..126) appends
+-- at the end, Backspace erases the last char, capped at _SEARCH_MAX_LEN. The caret is always at
+-- the end (no mid-string editing -- keeps the appended blink caret jitter-free), so no LEFT/
+-- RIGHT/DELETE handling. Returns true if the query changed, so the caller re-filters only then.
+function ModTweakerView:_search_apply_keystrokes()
+    local keystrokes = Keyboard.keystrokes()
+    if not keystrokes or #keystrokes == 0 then return false end
+    local s = self._search_str or ""
+    local changed = false
+    for _, stroke in ipairs(keystrokes) do
+        if stroke == Keyboard.BACKSPACE then
+            if #s > 0 then s = s:sub(1, #s - 1); changed = true end
+        elseif type(stroke) == "string" and #stroke == 1 and #s < _SEARCH_MAX_LEN then
+            local b = string.byte(stroke)
+            if b and b >= 32 and b <= 126 then s = s .. stroke; changed = true end
+        end
+    end
+    if changed then self._search_str = s; self._search_caret_t = 0 end
     return changed
 end
 
@@ -2268,6 +2398,47 @@ function ModTweakerView:_handle_input(input_service)
     if Mouse.pressed(0) then self._dd_block_until_press = false end
     if self._dd_block_until_press then return end
 
+    -- (#497) SEARCH BOX focus + typing. A left-press ON the box focuses it (committing any
+    -- active numeric edit first); a left-press anywhere ELSE drops focus (the filter stays
+    -- applied). While focused, printable keystrokes edit the query and the list re-filters live;
+    -- chat input is blocked each frame so keys/Enter never leak to game chat (the numeric editor
+    -- needs the same lever, ChatManager.block_chat_input_for_one_frame -- the modal device block
+    -- does not cover the independent chat_input service), and Enter drops focus keeping the
+    -- filter. Placed before the scroll/button/row handling so a filtering keystroke is never
+    -- also read as a row interaction.
+    do
+        local sc = self._search and self._search.content
+        local shs = sc and sc.hotspot
+        if Mouse.pressed(0) then
+            if shs and shs.is_hover then
+                if not self._search_focused then
+                    if self._editing_row then self:_commit_edit(self._editing_row) end
+                    self._capturing_keybind = nil
+                    self._search_focused = true
+                    self._search_caret_t = 0
+                    _play_click()
+                end
+            else
+                self._search_focused = false
+            end
+        end
+        if self._search_focused then
+            if Managers.chat and Managers.chat.block_chat_input_for_one_frame then
+                pcall(function() Managers.chat:block_chat_input_for_one_frame() end)
+            end
+            if Keyboard.released(13) then   -- Enter: keep the filter, drop focus
+                self._search_focused = false
+                _play_click()
+                return
+            end
+            if self:_search_apply_keystrokes() then
+                self._scroll_y = 0
+                self:_build_rows(self._categories[self._selected])
+                return
+            end
+        end
+    end
+
     -- Scroll: mouse wheel (1 notch ~= 1 row) + scrollbar thumb drag. The wheel reads
     -- scroll_axis off the menu input service; the thumb drag tracks the cursor like
     -- the vanilla scrollbar held_function (inverse-scaled cursor vs the track top).
@@ -2360,6 +2531,7 @@ function ModTweakerView:_handle_input(input_service)
             mod:debug("[mt:dump] input: tab[%d] clicked (was %d, drill=%s)", i, self._selected or -1, tostring(self._drill ~= nil))
             if self._more_tab_index and i == self._more_tab_index then
                 self._drill = nil
+                self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
                 self._page = ((self._page or 0) + 1) % math.max(1, self._page_count or 1)
                 self._selected = 1
                 self._scroll_y = 0
@@ -2367,6 +2539,7 @@ function ModTweakerView:_handle_input(input_service)
                 return
             elseif (i ~= self._selected or self._drill) and self._categories[i] then
                 self._drill = nil
+                self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
                 self._selected = i
                 self._scroll_y = 0
                 self:_build_rows(self._categories[i])
@@ -2894,6 +3067,35 @@ function ModTweakerView:_draw(dt, input_service)
     if self._apply then UIRenderer.draw_widget(renderer, self._apply) end
     -- (v0.2.148-dev) RESTORE DEFAULTS button (to the LEFT of Apply). Same render path.
     if self._reset then UIRenderer.draw_widget(renderer, self._reset) end
+
+    -- (#497) SEARCH box: update its text (query + blink caret, or the placeholder) + focus
+    -- emphasis, then draw it as fixed chrome above the list. Drawn every frame so its hotspot
+    -- flags populate for _handle_input (which runs after _draw). It lives on mt_search (its own
+    -- fixed node above list_mask), so it never overlaps or culls with the scrolling rows.
+    if self._search then
+        local sc  = self._search.content
+        local sty = self._search.style
+        local q = self._search_str or ""
+        local focused = self._search_focused
+        self._search_caret_t = (self._search_caret_t or 0) + (dt or 0)
+        if q == "" and not focused then
+            sc.text = "Search this tab... (click, then type to filter)"
+            if sty.text and sty.text.text_color then
+                sty.text.text_color[1], sty.text.text_color[2], sty.text.text_color[3], sty.text.text_color[4] = 160, 120, 120, 120
+            end
+        else
+            local blink = focused and (self._search_caret_t % 1.0) < 0.5
+            sc.text = q .. (blink and "|" or "")
+            if sty.text and sty.text.text_color then
+                sty.text.text_color[1], sty.text.text_color[2], sty.text.text_color[3], sty.text.text_color[4] = 255, 255, 255, 255
+            end
+        end
+        if sty.bg_inner and sty.bg_inner.color then
+            local v = focused and 26 or 14
+            sty.bg_inner.color[2], sty.bg_inner.color[3], sty.bg_inner.color[4] = v, v, v
+        end
+        UIRenderer.draw_widget(renderer, self._search)
+    end
 
     -- Cull + draw rows against the list_mask box (CPU position-cull; no GPU mask).
     -- World positions are valid here because begin_pass re-evaluated the scenegraph
