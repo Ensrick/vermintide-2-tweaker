@@ -193,6 +193,14 @@ is missing after you solve it, you add it in STEP 9.
 - [ ] **Add an apply-site log line** for every mutation / hook install:
   `printf("[<feature>] applied: <numbers / names>")`. Concrete evidence, not
   "done".
+- [ ] **Put the probe and the regression check in their tier homes**
+  (`PROJECT_STANDARDS.md` §2.2b). A per-issue diagnostic probe goes in the mod's
+  `_<ns>_diagnostics.lua` or a per-cluster `_<ns>_diag_<topic>.lua` (engine
+  `printf`, prefix `[<ns>:<issue>]`, armed while the issue is open, retired on
+  close per #500) - NOT a standalone probe file at the mod's script root. The
+  STEP 9 `_rt_register` regression check registers into the mod's
+  `/<mod>_regression_test` suite (tier b). New STATIC detection goes in a
+  `qa/*.ps1` gate (tier a), never as a probe.
 
 ---
 

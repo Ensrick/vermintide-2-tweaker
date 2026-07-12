@@ -115,6 +115,105 @@ WS5), follow the template proven on event_tweaker v0.4.26-dev:
    position) + a "Where new code goes" placement recipe, so the monolith does
    not regrow; REGRESSION_CHECKLIST.md detection pointers get the new file names.
 
+### 2.2b Test and diagnostic tiers (issues #499 / #501, 2026-07-12)
+
+Three distinct layers answer "does this still work". Each has ONE home; do not
+mix them, and do not invent a fourth.
+
+**Tier (a) - Repo QA gates (`qa/*.ps1`).** Static PowerShell checks plus
+`luacheck`, run by the pre-commit hook (`qa/run_all.ps1 -Quick -SkipLua`) and CI
+(`.github/workflows/qa.yml`). They read SOURCE, never the running game, so they
+are the only tier that runs without VT2. Errors (exit >=2) block the commit;
+warnings (exit 1) report but never block (`qa/CHECKS.md` "Gate semantics"). New
+STATIC bug-class detection lands here: scaffold `qa/check_<name>.ps1`, wire it
+into `run_all.ps1`, add a row to `qa/CHECKS.md`.
+
+**Tier (b) - In-game regression harnesses.** A per-mod runtime self-check suite,
+invoked from chat as `/<mod>_regression_test`. Each check is a closure
+registered via `_rt_register("<name>", function() ... end)` that returns a
+failure STRING if the invariant broke and nil/false if it held. Checks assert on
+live engine state: hook installed, table shape intact, `NetworkLookup` entry
+present, or the singleton-hook invariant via a source-pattern marker (a check
+greps its own mod source for a required banner such as
+`_<mod>_consolidated_<method>_hook`). This tier is the belt-and-suspenders
+runtime counterpart to a tier-(a) gate: even a lint-covered fix earns a check
+here (`docs/BUG_TRIAGE_RUNBOOK.md` STEP 9).
+
+- TARGET home: a dedicated `_<ns>_regression.lua` module per mod that owns the
+  `_rt_register` definition and the `/<mod>_regression_test` command, exporting
+  `rt_register`; individual check registrations live in the module that owns the
+  guarded code (per §2.2a rule 6) and call the exported `rt_register`.
+- TARGET check name: `issueNNN_<slug>` when the check locks a specific fixed
+  issue, so `/<mod>_regression_test` output maps 1:1 onto the tracker.
+  Descriptive names (`dbg_helpers_two_channel`) are correct for structural
+  invariants with no single issue.
+
+**Tier (c) - Per-issue diagnostics / probes.** Instrumentation that captures
+runtime data the decompiled source cannot give us (resolved anim vocab, live
+table contents, attribution of a mis-behaving write). It is NOT tier (b): a
+probe OBSERVES to diagnose an issue that is still OPEN; a regression check
+ASSERTS that a CLOSED one stays fixed.
+
+- Home: a per-mod diagnostics module - `_<ns>_diagnostics.lua` for the mod's
+  standing dump/probe commands, or a per-cluster `_<ns>_diag_<topic>.lua` for one
+  focused investigation (canonical: ct_dev's `_ct_diag_freeze487.lua`, keyed to
+  issue #487).
+- Engine `printf` only. The user plays with VMF mod-logging OFF, so
+  `mod:info`/`mod:debug`/`mod:warning` can be invisible; `printf` always lands
+  in `console_logs\` (CLAUDE.md NON-NEG #9; §3.6 "critical always-on telemetry").
+- Armed while the issue is OPEN, RETIRED when it closes. Issue #500's probe
+  sweep is the enforcement precedent: a probe that outlives its issue is dead
+  log-noise, so closing the issue (`BUG_TRIAGE_RUNBOOK.md` STEP 9) includes
+  removing or disarming its probe.
+- The issue number appears in the probe's `printf` prefix as `[<ns>:<issue>]`
+  (`[174:loadout]`, `[198:dummy_hits]`), so a captured log greps straight back
+  to the tracker.
+
+**Rules (binding):**
+
+1. **No standalone one-issue probe file at a mod's script root going forward.**
+   A single-issue probe folds into the mod's `_<ns>_diagnostics.lua`, or, if it
+   is a self-contained cluster, lives as `_<ns>_diag_<topic>.lua`. Surviving
+   root-level `_*_probe.lua` / `_diag_probe.lua` files are the #499 migration
+   backlog, not the pattern to copy.
+2. **Probes are always-on in dev streams, inert-or-absent in stable.** A dev
+   build carries its open-issue probes armed by default with no toggle (the user
+   never types a command; §3.7 probe-first doctrine, memory
+   `feedback_diagnostics_never_toggles`). A clean-versioned stable/public build
+   carries none: the probe either retired with its issue before promotion, or is
+   stripped at promotion (§6.5). Never gate a probe on a menu toggle.
+3. **The probe's issue number is in its `printf` prefix** (`[<ns>:<issue>]`). No
+   prefix, no traceability.
+
+**Current reality (2026-07-12; TARGET convention above, honest exceptions here):**
+
+- Every active mod ships a `/<mod>_regression_test` command backed by an
+  `_rt_register` suite - full tier-(b) coverage.
+- Only 4 mods use a dedicated `_<ns>_regression.lua` module (wt, crt, et,
+  event_tweaker). The other 10 register checks inline in `<mod>.lua`. Extracting
+  the suite to a module is opportunistic, folded into the §2.2a decomposition,
+  not a standalone chore. (wt already splits the harness into
+  `_wt_regression.lua` while its 30 checks still register in `weapon_tweaker.lua`.)
+- `issueNNN_` check naming is currently used only by cim / cim_dev
+  (`issue88_*`, `issue96_*`); every other mod names checks descriptively. Adopt
+  `issueNNN_` for NEW issue-locking checks.
+- `gut_dev` registers the bare command `regression_test`; stable `gut` correctly
+  uses `gut_regression_test`. Align dev to `gut_regression_test` on the next
+  gut_dev touch (bare `regression_test` is the collision the gt prefix rule in
+  `docs/COMMANDS.md` was written to avoid).
+- Dedicated diagnostics modules exist for cosmetics (`_cos_diagnostics.lua`),
+  wt (`_wt_diagnostics.lua`), crt (`_crt_diagnostics.lua`), event
+  (`_evt_diagnostics.lua`), gt (`_gt_debug_probes.lua`), and ct_dev
+  (`_ct_diag_freeze487.lua`). Surviving root-level probes pending #499
+  consolidation: cosmetics `_diag_probe.lua`, gut `_gut_options_probe.lua`, and
+  the stable-only stray `general_tweaker/_gt_probe_dummy_hits.lua` (#198).
+
+Cross-ref: §3.5 (diagnostic dump commands), §3.6 (printf vs VMF logging), §3.7
+(probe-first data harness), §5.1a (verify before shipping), §5.3 (pre-ship
+review), `qa/CHECKS.md` (tier-a catalog + row 24a hook-test coverage),
+`docs/BUG_TRIAGE_RUNBOOK.md` STEP 6/STEP 9 (where a fix's probe + regression
+marker land).
+
 ### 2.3 When to split
 Trigger a split when ANY of:
 - File hits 2500 lines.
