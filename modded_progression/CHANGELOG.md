@@ -1,5 +1,11 @@
 # Modded Progression — Changelog
 
+## 0.2.16-dev (2026-07-12) - #500 remove the stale #174 loadout-attribution probe (closed issue) [untested]
+
+### Changed
+- **#500: removed `_diag_probe.lua`** (issue 174, `[174:loadout]`, CLOSED). mp's copy served ONLY the closed #174 channel. Deleted the file (`git rm`), removed the `local PROBE = mod:dofile(".../_diag_probe")` import (its comment block too), and removed the single standalone `if PROBE then PROBE.emit("174:loadout", ...) end` load-time attribution line.
+- **No load-bearing behavior removed.** The emit was pure observation ("mp no-loadout-writer scaffold stub"). `mod.is_eac_window()` (modded_progression.lua:399) is a SEPARATE load-bearing function (the `_with_eac_off` EAC-window accessor, still covered by its regression check at ~line 444) and was left untouched. `PROBE` had no other references. The import line was the dofile-manifest entry; `.package` uses a `scripts/mods/modded_progression/*` glob, so no manifest edit was needed.
+
 ## 0.2.15-dev (2026-07-12) - issue 427: _dbg_alert routes to log-only printf
 
 ### Why

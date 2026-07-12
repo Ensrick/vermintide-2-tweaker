@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.15-dev"
+local MOD_VERSION = "0.2.16-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -50,15 +50,6 @@ local function _dbg_alert(fmt, ...)
         pcall(printf, "[mp:dbg] (alert format error: %s)", tostring(fmt))
     end
 end
-
--- #174 attribution probe (passive, default-on, printf). mp owns NO loadout
--- write/restore path (it is a scaffolding stub re-enabling vanilla progression),
--- so its only #174 relevance is that its `_with_eac_off` wrappers un-gate the
--- realm around vanilla progression calls. The probe emits one load-time line
--- naming that fact, and mp exposes `mod.is_eac_window()` so the cosmetics
--- vanilla-chokepoint hook can attribute any loadout write that lands while mp
--- has un-gated the realm. See _diag_probe.lua.
-local PROBE = mod:dofile("scripts/mods/modded_progression/_diag_probe")
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
 -- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints
@@ -104,17 +95,6 @@ local function _settings_fingerprint()
 end
 
 mod:info("[mp:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
-
--- #174 attribution: one printf line naming mp's role. mp is a scaffolding stub
--- with NO loadout capture/restore/persist path (grep confirms: no set_loadout_item
--- hook, no bot-slot write), so it cannot be the writer that replaces bot loadouts
--- on startup. What it DOES do is un-gate vanilla progression via `_with_eac_off`;
--- `is_eac_window` is now armed for the cosmetics chokepoint to attribute writes
--- that occur while mp has the realm un-gated.
-if PROBE then
-    PROBE.emit("174:loadout", nil,
-        "mp no-loadout-writer (scaffold stub) eac_window_instrumented=1")
-end
 
 -- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
 -- version to chat on load so the user can see what's active. Stable
