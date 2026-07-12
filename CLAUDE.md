@@ -94,6 +94,7 @@ technical entry point; from here, follow the tree to the topic-specific referenc
   - `ENGINE_SURFACE.md` - the mod's engine contact surface: every vanilla (Class, method) cwv hooks, mapped to what the engine does there, with `docs/engine/` links and the paid-for dead ends. Read before adding a hook or auditing a crash class.
 - `chaos_wastes_tweaker/`:
   - `DEVELOPMENT.md` - engine gotchas: dormant buff registration, deus rarities, adventure mutator compat, NetworkedFlowStateManager leak, jewelry traits as boons, walk-through interactable, graph-snapshot RPC.
+  - `chaos_wastes_tweaker_dev/ENGINE_SURFACE.md` - the mod's engine contact surface (documents the ACTIVE dev stream `ct_dev`): 102 hook sites + 4 RPC channels across the Deus run layer, buff/boon registration + `NetworkLookup` wire safety (#426 five-gate beacon), mutators/curses (the `tweak_pack_spawning_settings` arity P0, #470 rank-8 hole), Adventure-maps-in-CW (lobby-hash, flow-state leak, graph snapshot), and economy/traits, with `docs/engine/` links and paid-for dead ends. Read before adding a hook or auditing a crash class.
   - `TODO.md` - planned features (altar cost config, CW inventory).
 - `cosmetics_tweaker/`:
   - `DEVELOPMENT.md` - three weapon rendering paths + cosmetic-specific recipes.
