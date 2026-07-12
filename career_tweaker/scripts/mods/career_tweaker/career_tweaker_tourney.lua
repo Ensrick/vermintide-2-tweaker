@@ -41,6 +41,16 @@ if BuffTemplates and NetworkLookup and NetworkLookup.buff_templates then
     end
 end
 
+-- Issue 425: add this module's registrations to the mod-wide registered-name
+-- registry (seeded by career_tweaker_balance.lua, which loads first; create-if-
+-- missing keeps this order-robust). The hot-join replay filter and the
+-- /crt_regression_test raw-networked-func sweep key off it -- these names have
+-- NO crt_ prefix, so a prefix check alone misses them.
+mod._crt_mod_registered_buff_names = mod._crt_mod_registered_buff_names or {}
+for _, name in ipairs(_TRN_BUFF_NAMES) do
+    mod._crt_mod_registered_buff_names[name] = true
+end
+
 -- Cross-toggle conflicts: a trn_ entry that patches the SAME buff field as an
 -- existing crt rework_ toggle. If the user's own rework is ON, the Tourney entry
 -- is SKIPPED entirely (the engine never snapshots/applies it) so the two can't
@@ -588,8 +598,18 @@ local TOURNEY_MODS = {
     trn_wh_priest = {
         character = "victor",
         career    = "wh_priest",
+        -- issue 425: the WP 5-2 aura driver (activate_buff_on_distance,
+        -- buff_function_templates.lua:2759) grants buff_to_add as a
+        -- SERVER-CONTROLLED buff (:2801) -- rpc_add_buff broadcast + hot-join
+        -- replay -- and this patch points it at a MOD-registered name that a
+        -- non-crt peer cannot decode. Gated on peer parity (engine below), and
+        -- the driver is swapped to the crt wire-safe wrapper (registered in
+        -- career_tweaker_balance.lua) so a live aura buff consults the live
+        -- parity check per tick and strips its own stacks on degrade.
+        network_unsafe = true,
         patches   = {
             { buff = "victor_priest_5_2", field = "buff_to_add", value = "victor_priest_5_2_speed_buff" },
+            { buff = "victor_priest_5_2", field = "update_func", value = "crt_wire_safe_distance_aura_driver" },
         },
         custom_apply = function(saved)
             -- Register the new +10% movement-speed aura buff if missing (stub or unregistered).
@@ -756,22 +776,33 @@ local function apply_tourney_mods()
     end
     _originals = {}
 
+    -- issue 425 peer-parity gate, same contract as career_tweaker_balance.lua:
+    -- entries tagged network_unsafe only apply while the beacon's settled state
+    -- is enabled (flag set by the gated-feature callbacks in career_tweaker.lua
+    -- BEFORE they re-run apply; solo counts as parity). Saved settings are
+    -- never overwritten.
+    local parity_ok = (mod._crt_parity_settled_enabled == true)
+
     for setting_id, def in pairs(TOURNEY_MODS) do
         if mod:get(setting_id) and not _conflict_active(setting_id) then
-            local saved = {}
-            for _, patch in ipairs(def.patches) do
-                local template = BuffTemplates[patch.buff]
-                if template and template.buffs and template.buffs[1] then
-                    saved[#saved + 1] = {
-                        buff      = patch.buff,
-                        field     = patch.field,
-                        old_value = template.buffs[1][patch.field],
-                    }
-                    template.buffs[1][patch.field] = patch.value
+            if def.network_unsafe and not parity_ok then
+                pcall(printf, "[crt:425] parity gate: tourney entry %s held at vanilla (a lobby peer lacks crt)", setting_id)
+            else
+                local saved = {}
+                for _, patch in ipairs(def.patches) do
+                    local template = BuffTemplates[patch.buff]
+                    if template and template.buffs and template.buffs[1] then
+                        saved[#saved + 1] = {
+                            buff      = patch.buff,
+                            field     = patch.field,
+                            old_value = template.buffs[1][patch.field],
+                        }
+                        template.buffs[1][patch.field] = patch.value
+                    end
                 end
+                if def.custom_apply then def.custom_apply(saved) end
+                _originals[setting_id] = saved
             end
-            if def.custom_apply then def.custom_apply(saved) end
-            _originals[setting_id] = saved
         end
     end
 end

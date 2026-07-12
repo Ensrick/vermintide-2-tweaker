@@ -1,5 +1,93 @@
 # Career Tweaker Changelog
 
+## 0.3.55-dev - 2026-07-11 - Peer-parity gate: networked talent reworks no longer CTD non-crt peers (#425) [untested]
+
+### Why
+Eight toggles push MODDED buff names onto vanilla NETWORKED buff paths. Every such path encodes
+`NetworkLookup.buff_templates[name]` and sends `rpc_add_buff`; a peer WITHOUT crt has no entry at
+that index, so `BuffSystem.rpc_add_buff` fatals on decode (buff_system.lua:430, strict `__index`).
+Both directions crash: a crt client's send reaches a non-crt host and is relayed to every other
+client (buff_system.lua:419-424); a crt host's send broadcasts to every non-crt client. The
+0.3.3-dev unconditional stub registration protects crt-to-crt lobbies only. The wire sweep for
+issue 425 found the exposure is SEVEN rework toggles (not the three in the issue body) plus ONE
+tourney port caught by adversarial review:
+- `rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr` (ProcFunctions.add_buff_on_special_kill, buff_templates.lua:2251-2259)
+- `rework_es_questingknight_virtue_of_impetuous_buffed` (ProcFunctions.add_buff, buff_templates.lua:1964-1972, two procs)
+- `rework_es_mercenary_enhanced_training_tiered` (own proc -> BuffSystem:add_buff, buff_system.lua:302-307)
+- `rework_es_mercenary_blade_barrier_60x_minus_10_on_hit` (ProcFunctions.add_buff)
+- `rework_bw_unchained_natural_talent_ranged`, `rework_bw_unchained_abandon_innate_flame_unending`,
+  `rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit` (all three: server-controlled
+  overcharge-chunk driver, buff_function_templates.lua:2569, which ALSO replays to hot-joiners
+  via BuffSystem.hot_join_sync, buff_system.lua:80-93)
+- `trn_wh_priest` (tourney port; the WP 5-2 aura driver activate_buff_on_distance,
+  buff_function_templates.lua:2759/2801, grants the mod-registered
+  `victor_priest_5_2_speed_buff` as a SERVER-CONTROLLED buff -- broadcast + hot-join replay --
+  and the name has NO crt_ prefix, so it also evaded the first-pass prefix-keyed filter)
+
+### Changed - issue 371 gameplay-axis doctrine: inert without peer parity, never a menu toggle
+- NEW `_lib_peer_parity.lua` - verbatim copy of the shared beacon (master
+  `tools/shared_lib/_lib_peer_parity.lua`, first consumer cwv 0.1.375-dev). VMF-channel presence
+  handshake (`crt_peer_parity_present`, schema 1); absence of a reply == peer lacks crt; fail-safe
+  inert-until-confirmed; chat notice names the disabled features and the missing peer.
+- career_tweaker.lua - beacon instance (`mod._crt_peer_parity`) installed AFTER the existing
+  `mod.update` so the lib's preserving wrap keeps the OE cooldown tick + dump retry. One gated
+  feature `crt_networked_reworks`; its on_enable/on_disable set the settled flag
+  `mod._crt_parity_settled_enabled` FIRST, then re-run the balance AND tourney apply engines.
+  The flag exists because the shared lib fires callbacks BEFORE writing its own `_applied`
+  state (_lib_peer_parity.lua:215-227), so `applied_state()` read from inside a callback is one
+  transition stale (adversarial review finding; latent in the master lib, reported upstream for
+  the cwv consumer -- master NOT edited here, another agent owns cwv's lane).
+- career_tweaker_balance.lua + career_tweaker_tourney.lua - the eight entries above tagged
+  `network_unsafe = true`; both apply engines hold tagged entries at vanilla unless the settled
+  flag is set (solo counts as parity; the user's saved setting is never overwritten).
+- career_tweaker_balance.lua - four WIRE-SAFE wrappers registered beside the existing crt
+  ProcFunctions: `crt_wire_safe_add_buff`, `crt_wire_safe_add_buff_on_special_kill`
+  (ProcFunctions), `crt_wire_safe_overcharge_chunks_driver` and
+  `crt_wire_safe_distance_aura_driver` (BuffFunctionTemplates.functions).
+  The unsafe templates reference the wrappers by name, and the engine resolves proc/update names
+  PER CALL (buff_extension.lua:1351 / :794), so even a LIVE buff instance that survived a
+  parity degrade consults the live check on every proc - closing the mid-mission hot-join hole.
+  Under parity the wrappers delegate to the vanilla functions unchanged; without parity the proc
+  wrappers no-op and the driver wrapper strips its own server-controlled stacks (integer-id RPC,
+  wire-safe on every receiver).
+- career_tweaker_balance.lua - `crt_enhanced_training_proc` degrades its Enhanced-Training branch
+  to the EXACT vanilla behavior (gain_markus_mercenary_passive_proc, buff_templates.lua:3537-3542)
+  while parity is missing.
+- career_tweaker_balance.lua - NEW hook `BuffSystem.hot_join_sync` (pre-flight: no other crt hook
+  on BuffSystem): hides mod-registered entries from the server-controlled-buff replay to a joining
+  peer, keyed off the new mod-wide registry `mod._crt_mod_registered_buff_names` (crt_* prefix kept
+  as belt-and-suspenders) so tourney's vanilla-prefixed names are covered too. The replay fires
+  during the join handshake, before any parity ack can exist, so no roster-reactive gate can win
+  that race - sender-side filtering is the only safe shape. The wrapped call is pcall'd with an
+  UNCONDITIONAL restore (a mid-replay throw must not orphan the stashed entries), then rethrown.
+  A crt-running joiner self-heals via the driver's strip/re-add cycle.
+- Diagnostics: `[crt:425]` pcall(printf) trail on gate transitions (parity established / degraded),
+  wire-guard blocks (once per state flip, no proc-storm spam), parity-skipped rework list, and
+  hot-join withholds.
+- `/crt_regression_test` - seven new checks: beacon lib/API loaded, fail-safe posture truth table,
+  wire-safe wrappers registered (all four + their vanilla delegates), network_unsafe catalog parity
+  (balance export vs RT expected seven), no-raw-networked-funcs sweep over the FULL registered-name
+  registry (locks future reworks/ports into the wrapper pattern), trn_wh_priest buff_to_add/driver
+  pairing lock, hot-join hook target resolvable.
+
+### Behavior notes
+- Solo and all-crt lobbies: zero change (wrappers delegate to vanilla functions; gate enabled).
+- Mixed lobby: the eight networked entries fall back to vanilla talent behavior for the session
+  state and auto-re-enable when everyone has crt (or the non-crt peer leaves). All other reworks
+  (local-only buff paths: counter punch, leading shots, waywatcher/zealot/priest passives, double
+  shotted, unchained ult burst, numb-to-pain stat stacks applied locally, all field patches on
+  vanilla buff names) stay available - vanilla-name field patches can produce cosmetic host/client
+  value divergence for non-crt observers but can never crash them.
+- Known limitation: non-server-controlled stacks granted BEFORE a mid-mission degrade (e.g. blade
+  barrier stacks) linger locally until the next talent re-apply/spawn; they stop growing and cannot
+  reach the wire.
+
+### Verify (issue 425, needs a second peer WITHOUT crt)
+Full Steam restart first. Non-crt peer joins your lobby; pick a reworked talent from the eight
+above; trigger it (kills / overcharge / WP aura). Expected: no crash on either side, `[crt:425]
+parity degraded` + chat notice on your side, vanilla talent behavior. Then both peers on crt:
+reworks work exactly as before (expect `[crt:425] parity established`).
+
 ## 0.3.54-dev - 2026-07-07 - Regression coverage: buff-name registration parity (issue 425)
 
 ### Why

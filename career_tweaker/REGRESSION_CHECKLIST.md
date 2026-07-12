@@ -4,10 +4,27 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-07-11.
 
 ---
 ## Multiplayer / Network Sync
+
+### crt-networked-rework-peer-parity — Modded buff names on vanilla rpc_add_buff CTD non-crt peers (issue 425)
+
+**[MULTIPLAYER]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | A peer WITHOUT crt fatals `Table buff_templates does not contain key: <N>` (buff_system.lua:430 decode) when a crt player triggers a networked talent rework, or instantly on hot-join (BuffSystem.hot_join_sync replay). |
+| Root cause | Seven reworks + the trn_wh_priest tourney port push mod-registered names through ProcFunctions.add_buff / add_buff_on_special_kill / BuffSystem:add_buff / the server-controlled overcharge-chunk and distance-aura drivers, all of which encode `NetworkLookup.buff_templates[name]` onto `rpc_add_buff`. Stub pre-registration only protects crt-to-crt lobbies. |
+| Mod(s) | career_tweaker |
+| Fix version(s) | crt v0.3.55-dev (peer-parity gate + wire-safe wrappers + hot-join filter) |
+| Category | INTEGRATION |
+| Repro | 1. You run crt with one of the seven `network_unsafe` reworks on (e.g. GK Virtue of the Impetuous Knight). 2. A friend WITHOUT crt joins. 3. Play the reworked career, trigger the proc (kills / overcharge). 4. Also test the friend hot-joining mid-mission while a Sienna overcharge-driver rework is active. |
+| Expected post-fix | No crash on any peer. Your side logs `[crt:425] parity degraded` + a chat notice, and the rework behaves VANILLA until everyone has crt (auto re-enables). With all peers on crt the rework is unchanged. |
+| Detection | Non-crt peer's console log clean of `network_lookup.lua` / `does not contain key`; your log carries the `[crt:425]` trail. `/crt_regression_test` locks the invariants (wrapper registration, unsafe-catalog parity, no-raw-networked-funcs sweep). |
+
+---
 
 ### gated-registration-divergence — Toggle-gated mod-load registration produces different network indices across peers
 

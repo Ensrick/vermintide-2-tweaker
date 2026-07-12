@@ -102,6 +102,209 @@ end
 
 _crt_pre_register_buffs()
 
+-- Mod-registered buff-name REGISTRY (issue 425): every buff-template name this
+-- mod (any module) registers into NetworkLookup.buff_templates, whatever its
+-- prefix. Consumed by the hot-join replay filter below -- a prefix check alone
+-- missed career_tweaker_tourney.lua's vanilla-prefixed registrations
+-- (victor_priest_5_2_speed_buff; adversarial review 2026-07-11) -- and by the
+-- /crt_regression_test no-raw-networked-funcs sweep. Modules ADD to it at load;
+-- never remove (registrations are permanent for index determinism).
+mod._crt_mod_registered_buff_names = mod._crt_mod_registered_buff_names or {}
+for _, name in ipairs(_CRT_BUFF_NAMES) do
+    mod._crt_mod_registered_buff_names[name] = true
+end
+
+-- ============================================================
+-- Issue 425 wire safety: peer-parity gate + wire-safe proc/driver wrappers
+-- ============================================================
+-- The stub pre-registration above protects crt<->crt peers only. A peer WITHOUT
+-- crt has NO entry at our NetworkLookup.buff_templates indices, so ANY networked
+-- add that encodes a crt_* name fatals them on decode (BuffSystem.rpc_add_buff,
+-- buff_system.lua:430, strict __index). Verified networked reach points in this
+-- mod (the rest of the crt_* catalog is applied via LOCAL buff_extension:add_buff
+-- / talent-apply paths and never rides an RPC):
+--   * ProcFunctions.add_buff              (buff_templates.lua:1964-1972) -> rpc_add_buff
+--   * ProcFunctions.add_buff_on_special_kill (buff_templates.lua:2251-2259) -> rpc_add_buff
+--   * BuffSystem.add_buff                 (buff_system.lua:302-307)      -> rpc_add_buff
+--   * BuffFunctionTemplates.functions.activate_server_buff_stacks_based_on_
+--     overcharge_chunks (buff_function_templates.lua:2569) -> server-controlled
+--     BuffSystem.add_buff -> rpc_add_buff broadcast + hot-join replay
+--     (BuffSystem.hot_join_sync, buff_system.lua:80-93).
+-- BOTH directions crash: a crt client's send reaches a non-crt host (and is
+-- relayed to every other client, buff_system.lua:419-424); a crt host's send
+-- reaches every non-crt client.
+--
+-- Fix shape (issue 371 gameplay-axis doctrine): the buff/boon axis cannot be
+-- sender-substituted without changing gameplay, so the networked reworks go
+-- INERT unless EVERY other human peer is positively confirmed to run crt
+-- (peer-parity beacon, _lib_peer_parity.lua). Two layers, both UNCONDITIONAL
+-- (never coupled to a menu toggle -- memory reference_vt2_wire_safety_never_
+-- toggle_gated):
+--   1. WIRE GUARDS (this block): the unsafe templates' buff_func/update_func
+--      point at crt_wire_safe_* wrappers registered below. Function names are
+--      resolved PER CALL (ProcFunctions[buff_func] buff_extension.lua:1351;
+--      BuffFunctionTemplates.functions[update_func] buff_extension.lua:794),
+--      so even a LIVE buff instance -- whose captured template subtable
+--      survives a restore -- consults the live parity check on every proc/tick.
+--      This closes the hot-join hole for procs already sitting on player units.
+--   2. FEATURE GATE (apply engine below): BALANCE_MODS entries tagged
+--      `network_unsafe = true` only apply while the beacon's settled state is
+--      "enabled"; the beacon's on_enable/on_disable callbacks re-run apply so
+--      the talent tables degrade to vanilla for the lobby state and re-apply
+--      when parity returns.
+-- Plus the hot-join replay filter (mod:hook BuffSystem.hot_join_sync at the end
+-- of this file): the server replays every server-controlled buff to a joining
+-- peer BEFORE any parity ack can exist, so crt_* entries are hidden from that
+-- one replay pass (wire-safe by construction; a crt joiner re-syncs via the
+-- driver's remove/re-add cycle when parity re-establishes).
+
+-- Live parity read for the wire guards. Fail-safe: beacon missing or erroring
+-- counts as "not safe" and blocks the modded send (solo still passes -- the
+-- classifier treats a lobby with no OTHER humans as all-present).
+local function _crt_wire_parity_live()
+    local pp = mod._crt_peer_parity
+    if not pp then return false end
+    local ok, res = pcall(pp.all_peers_have, pp)
+    return ok and res == true
+end
+
+-- Settled-state read for the feature gate (debounced by the beacon: disable is
+-- instant, enable waits the settle window). Distinct from the live read above
+-- on purpose: apply/restore churn follows the settled state, while every
+-- individual send consults the instant live state.
+--
+-- Reads mod._crt_parity_settled_enabled, a flag the beacon's gated-feature
+-- callbacks set in career_tweaker.lua BEFORE re-running apply. Deliberately NOT
+-- pp:applied_state(): the shared lib's _apply() runs feature callbacks BEFORE
+-- writing _applied (_lib_peer_parity.lua:215-227), so an applied_state() read
+-- from inside a callback returns the PREVIOUS state and every transition would
+-- act one apply late (adversarial review 2026-07-11; latent in the master lib,
+-- reported upstream for the cwv consumer).
+local function _crt_parity_gate_ok()
+    return mod._crt_parity_settled_enabled == true
+end
+
+-- [crt:425] diagnostics: engine printf (user runs with mod-logging OFF), fired
+-- on state TRANSITIONS only so an on_kill proc storm can't spam the log.
+local _crt_wire_block_logged = {}
+local function _crt_log_wire_block(site)
+    if _crt_wire_block_logged[site] then return end
+    _crt_wire_block_logged[site] = true
+    pcall(printf, "[crt:425] wire guard: blocked modded buff send at %s (a lobby peer lacks crt); vanilla behavior for this session state", tostring(site))
+end
+local function _crt_log_wire_clear()
+    if next(_crt_wire_block_logged) == nil then return end
+    _crt_wire_block_logged = {}
+    pcall(printf, "[crt:425] wire guard: parity restored, modded buff sends re-enabled")
+end
+
+-- Wire-safe wrapper registrations. Idempotent ensure so the unsafe reworks'
+-- custom_apply can re-run it (belt-and-suspenders against load-order surprises
+-- on the host tables); registered once at file load in the normal case.
+local function _crt_ensure_wire_safe_funcs()
+    local PF = rawget(_G, "ProcFunctions")
+    if PF then
+        if PF.crt_wire_safe_add_buff == nil then
+            -- Same contract as vanilla ProcFunctions.add_buff; consulted per
+            -- call by name so live buffs obey the gate too.
+            PF.crt_wire_safe_add_buff = function(unit, buff, params)
+                if not _crt_wire_parity_live() then
+                    _crt_log_wire_block("add_buff")
+                    return
+                end
+                _crt_log_wire_clear()
+                return PF.add_buff(unit, buff, params)
+            end
+        end
+        if PF.crt_wire_safe_add_buff_on_special_kill == nil then
+            PF.crt_wire_safe_add_buff_on_special_kill = function(owner_unit, buff, params)
+                -- Cheap pre-filter mirroring vanilla's special gate
+                -- (buff_templates.lua:2244) so a non-special kill neither logs a
+                -- block nor pays the parity check. The delegate re-checks it.
+                local killed_breed = params and params[2]
+                if not (killed_breed and killed_breed.special) then return end
+                if not _crt_wire_parity_live() then
+                    _crt_log_wire_block("add_buff_on_special_kill")
+                    return
+                end
+                _crt_log_wire_clear()
+                return PF.add_buff_on_special_kill(owner_unit, buff, params)
+            end
+        end
+    end
+    local BFT = rawget(_G, "BuffFunctionTemplates")
+    local fns = BFT and BFT.functions
+    if fns and fns.crt_wire_safe_overcharge_chunks_driver == nil then
+        -- Wraps activate_server_buff_stacks_based_on_overcharge_chunks
+        -- (buff_function_templates.lua:2544). Under parity: exact vanilla
+        -- behavior. Parity missing: degrade to zero chunks by stripping this
+        -- driver's own server-controlled stacks -- remove_server_controlled_buff
+        -- sends only integer ids (buff_system.lua:340), wire-safe for every
+        -- receiver (nil-guarded lookup at :442-444) -- so the stacks AND their
+        -- registry entries (the hot-join replay source) self-clean on degrade.
+        fns.crt_wire_safe_overcharge_chunks_driver = function(unit, buff, params, world)
+            if _crt_wire_parity_live() then
+                _crt_log_wire_clear()
+                return fns.activate_server_buff_stacks_based_on_overcharge_chunks(unit, buff, params, world)
+            end
+            if not (Managers.state.network and Managers.state.network.is_server) then return end
+            local ids = buff.stack_server_ids
+            if ids and #ids > 0 then
+                _crt_log_wire_block("overcharge_chunks_driver")
+                local buff_system = Managers.state.entity:system("buff_system")
+                for _ = 1, #ids do
+                    local sid = table.remove(ids)
+                    if sid then
+                        pcall(function() buff_system:remove_server_controlled_buff(unit, sid) end)
+                    end
+                end
+            end
+        end
+    end
+    if fns and fns.crt_wire_safe_distance_aura_driver == nil then
+        -- Wraps activate_buff_on_distance (buff_function_templates.lua:2759) --
+        -- the server-only aura driver that grants buff_to_add as a
+        -- SERVER-CONTROLLED buff (:2801) to every side unit in range. Used by
+        -- trn_wh_priest, whose patched buff_to_add is a mod-registered name
+        -- (career_tweaker_tourney.lua). Under parity: exact vanilla behavior.
+        -- Parity missing: strip the aura's existing server-controlled stacks
+        -- from every side unit (mirrors vanilla's own out-of-range removal
+        -- branch, :2789-2797 -- integer-id RPC, wire-safe on every receiver)
+        -- and add nothing, until the tourney gate's restore lands and the
+        -- vanilla driver takes back over.
+        fns.crt_wire_safe_distance_aura_driver = function(owner_unit, buff, params)
+            if _crt_wire_parity_live() then
+                _crt_log_wire_clear()
+                return fns.activate_buff_on_distance(owner_unit, buff, params)
+            end
+            if not (Managers.state.network and Managers.state.network.is_server) then return end
+            local template = buff.template
+            local buff_to_add = template and template.buff_to_add
+            if type(buff_to_add) ~= "string" then return end
+            local side = Managers.state.side and Managers.state.side.side_by_unit[owner_unit]
+            if not side then return end
+            local units = side.PLAYER_AND_BOT_UNITS
+            if not units then return end
+            local buff_system = Managers.state.entity:system("buff_system")
+            local removed = false
+            for i = 1, #units do
+                local unit = units[i]
+                if Unit.alive(unit) then
+                    local be = ScriptUnit.has_extension(unit, "buff_system")
+                    local b = be and be:get_non_stacking_buff(buff_to_add)
+                    local sid = b and b.server_id
+                    if sid then
+                        pcall(function() buff_system:remove_server_controlled_buff(unit, sid) end)
+                        removed = true
+                    end
+                end
+            end
+            if removed then _crt_log_wire_block("distance_aura_driver") end
+        end
+    end
+end
+_crt_ensure_wire_safe_funcs()
+
 -- ============================================================
 -- Talent Rework Framework
 -- ============================================================
@@ -757,15 +960,19 @@ local BALANCE_MODS = {
     rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr = {
         character = "victor",
         career    = "wh_bountyhunter",
+        -- issue 425: the DR-stack add rides rpc_add_buff (via the special-kill
+        -- proc); gated on peer parity + wire-safe proc wrapper.
+        network_unsafe = true,
         patches   = {},
         custom_apply = function(saved)
             if not BuffTemplates or not Talents or not TalentIDLookup then return end
+            _crt_ensure_wire_safe_funcs()
             -- Register the new special-kill DR stacking buff if missing.
             if BuffTemplates.crt_bh_jwd_special_kill_dr_proc == nil or BuffTemplates.crt_bh_jwd_special_kill_dr_proc._crt_pending then
                 BuffTemplates.crt_bh_jwd_special_kill_dr_proc = {
                     buffs = {
                         {
-                            buff_func     = "add_buff_on_special_kill",
+                            buff_func     = "crt_wire_safe_add_buff_on_special_kill",
                             buff_to_add   = "crt_bh_jwd_special_kill_dr_stack",
                             event         = "on_kill",
                             name          = "crt_bh_jwd_special_kill_dr_proc",
@@ -1979,12 +2186,17 @@ local BALANCE_MODS = {
     rework_es_questingknight_virtue_of_impetuous_buffed = {
         character = "markus",
         career    = "es_questingknight",
+        -- issue 425: the two on-kill procs push crt_* names onto rpc_add_buff;
+        -- gated on peer parity + wire-safe proc wrapper. (The movespeed field
+        -- patches ride a VANILLA buff name and stay wire-safe on their own.)
+        network_unsafe = true,
         patches   = {
             { buff = "markus_questing_knight_ability_buff_on_kill_movement_speed", field = "multiplier", value = 1.2 },
             { buff = "markus_questing_knight_ability_buff_on_kill_movement_speed", field = "duration",   value = 20 },
         },
         custom_apply = function(saved)
             if not BuffTemplates or not Talents or not TalentIDLookup then return end
+            _crt_ensure_wire_safe_funcs()
             -- AS buff
             if BuffTemplates.crt_questingknight_impetuous_as == nil or BuffTemplates.crt_questingknight_impetuous_as._crt_pending then
                 BuffTemplates.crt_questingknight_impetuous_as = {
@@ -2009,7 +2221,7 @@ local BALANCE_MODS = {
             if BuffTemplates.crt_questingknight_impetuous_as_proc == nil or BuffTemplates.crt_questingknight_impetuous_as_proc._crt_pending then
                 BuffTemplates.crt_questingknight_impetuous_as_proc = {
                     buffs = {
-                        { buff_func = "add_buff", buff_to_add = "crt_questingknight_impetuous_as",
+                        { buff_func = "crt_wire_safe_add_buff", buff_to_add = "crt_questingknight_impetuous_as",
                           event = "on_kill", name = "crt_questingknight_impetuous_as_proc" },
                     },
                 }
@@ -2019,7 +2231,7 @@ local BALANCE_MODS = {
             if BuffTemplates.crt_questingknight_impetuous_power_proc == nil or BuffTemplates.crt_questingknight_impetuous_power_proc._crt_pending then
                 BuffTemplates.crt_questingknight_impetuous_power_proc = {
                     buffs = {
-                        { buff_func = "add_buff", buff_to_add = "crt_questingknight_impetuous_power",
+                        { buff_func = "crt_wire_safe_add_buff", buff_to_add = "crt_questingknight_impetuous_power",
                           event = "on_kill", name = "crt_questingknight_impetuous_power_proc" },
                     },
                 }
@@ -2552,9 +2764,15 @@ local BALANCE_MODS = {
     rework_bw_unchained_natural_talent_ranged = {
         character = "sienna",
         career    = "bw_unchained",
+        -- issue 425: the overcharge-chunk driver adds SERVER-CONTROLLED crt_*
+        -- stacks (broadcast on rpc_add_buff + replayed to hot-joiners); gated
+        -- on peer parity + the wire-safe driver wrapper (which also strips its
+        -- own stacks when parity degrades).
+        network_unsafe = true,
         patches   = {},
         custom_apply = function(saved)
             if not BuffTemplates or not Talents or not TalentIDLookup then return end
+            _crt_ensure_wire_safe_funcs()
             local us_on = mod:get("rework_bw_unchained_unstable_strength_rescale")
             local chunk = us_on and 5 or 6
             local maxn  = us_on and 6 or 5
@@ -2563,7 +2781,7 @@ local BALANCE_MODS = {
                 buffs = { { stat_buff = "power_level_ranged", multiplier = rng, max_stacks = maxn, name = "crt_sienna_natural_talent_ranged_stack" } },
             }
             BuffTemplates.crt_sienna_natural_talent_ranged_driver = {
-                buffs = { { update_func = "activate_server_buff_stacks_based_on_overcharge_chunks", chunk_size = chunk, buff_to_add = "crt_sienna_natural_talent_ranged_stack", max_sub_buff_stacks = maxn, name = "crt_sienna_natural_talent_ranged_driver" } },
+                buffs = { { update_func = "crt_wire_safe_overcharge_chunks_driver", chunk_size = chunk, buff_to_add = "crt_sienna_natural_talent_ranged_stack", max_sub_buff_stacks = maxn, name = "crt_sienna_natural_talent_ranged_driver" } },
             }
             saved.nt_created = true
             local lookup = TalentIDLookup["sienna_unchained_reduced_overcharge"]
@@ -2612,9 +2830,15 @@ local BALANCE_MODS = {
     rework_bw_unchained_abandon_innate_flame_unending = {
         character = "sienna",
         career    = "bw_unchained",
+        -- issue 425: same server-controlled overcharge-chunk driver class as
+        -- rework_bw_unchained_natural_talent_ranged; gated on peer parity.
+        -- (The Abandon-innate PassiveAbilitySettings append is a vanilla buff
+        -- name and stays wire-safe on its own.)
+        network_unsafe = true,
         patches   = {},
         custom_apply = function(saved)
             if not BuffTemplates or not Talents or not TalentIDLookup then return end
+            _crt_ensure_wire_safe_funcs()
             local PAS = rawget(_G, "PassiveAbilitySettings")
             local pa = PAS and PAS.bw_3
             if pa and pa.buffs then
@@ -2646,7 +2870,7 @@ local BALANCE_MODS = {
                 buffs = { { stat_buff = "cooldown_regen", multiplier = cdr, max_stacks = maxn, name = "crt_sienna_flame_unending_stack" } },
             }
             BuffTemplates.crt_sienna_flame_unending_driver = {
-                buffs = { { update_func = "activate_server_buff_stacks_based_on_overcharge_chunks", chunk_size = chunk, buff_to_add = "crt_sienna_flame_unending_stack", max_sub_buff_stacks = maxn, name = "crt_sienna_flame_unending_driver" } },
+                buffs = { { update_func = "crt_wire_safe_overcharge_chunks_driver", chunk_size = chunk, buff_to_add = "crt_sienna_flame_unending_stack", max_sub_buff_stacks = maxn, name = "crt_sienna_flame_unending_driver" } },
             }
             saved.fu_created = true
             local lookup = TalentIDLookup["sienna_unchained_health_to_ult"]
@@ -2705,6 +2929,10 @@ local BALANCE_MODS = {
     rework_es_mercenary_enhanced_training_tiered = {
         character = "markus",
         career    = "es_mercenary",
+        -- issue 425: crt_enhanced_training_proc adds crt_merc_enhanced_training_as
+        -- via BuffSystem:add_buff (rpc_add_buff broadcast); gated on peer parity,
+        -- with the parity fallback inline in the proc (exact vanilla ET branch).
+        network_unsafe = true,
         patches   = { { buff = "markus_mercenary_passive", field = "buff_func", value = "crt_enhanced_training_proc" } },
         custom_apply = function(saved)
             if not BuffTemplates then return end
@@ -2741,9 +2969,13 @@ local BALANCE_MODS = {
     rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit = {
         character = "sienna",
         career    = "bw_unchained",
+        -- issue 425: same server-controlled overcharge-chunk driver class as
+        -- rework_bw_unchained_natural_talent_ranged; gated on peer parity.
+        network_unsafe = true,
         patches   = {},
         custom_apply = function(saved)
             if not BuffTemplates or not Talents or not TalentIDLookup then return end
+            _crt_ensure_wire_safe_funcs()
             local us_on   = mod:get("rework_bw_unchained_unstable_strength_rescale")
             local chunk   = us_on and 5 or 6
             local maxn    = us_on and 6 or 5
@@ -2759,7 +2991,7 @@ local BALANCE_MODS = {
             BuffTemplates.crt_sienna_numb_to_pain_proc = {
                 buffs = {
                     {
-                        update_func         = "activate_server_buff_stacks_based_on_overcharge_chunks",
+                        update_func         = "crt_wire_safe_overcharge_chunks_driver",
                         chunk_size          = chunk,
                         buff_to_add         = "crt_sienna_numb_to_pain_stack",
                         max_sub_buff_stacks = maxn,
@@ -2811,9 +3043,14 @@ local BALANCE_MODS = {
     rework_es_mercenary_blade_barrier_60x_minus_10_on_hit = {
         character = "markus",
         career    = "es_mercenary",
+        -- issue 425: the on-kill stack add rides rpc_add_buff; gated on peer
+        -- parity + wire-safe proc wrapper. (The remover is remove_buff_stack
+        -- with server_controlled=false -- local-only, wire-safe.)
+        network_unsafe = true,
         patches   = {},
         custom_apply = function(saved)
             if not BuffTemplates or not Talents or not TalentIDLookup then return end
+            _crt_ensure_wire_safe_funcs()
             if BuffTemplates.crt_merc_blade_barrier_stack == nil or BuffTemplates.crt_merc_blade_barrier_stack._crt_pending then
                 BuffTemplates.crt_merc_blade_barrier_stack = {
                     buffs = {
@@ -2831,7 +3068,7 @@ local BALANCE_MODS = {
                 BuffTemplates.crt_merc_blade_barrier_proc = {
                     buffs = {
                         {
-                            buff_func  = "add_buff",
+                            buff_func  = "crt_wire_safe_add_buff",
                             buff_to_add = "crt_merc_blade_barrier_stack",
                             event       = "on_kill",
                             name        = "crt_merc_blade_barrier_proc",
@@ -3669,7 +3906,20 @@ if ProcFunctions and ProcFunctions.crt_enhanced_training_proc == nil then
         local buff_to_add = buff_template.buff_to_add
         local buff_applied = true
         if talent_extension:has_talent("markus_mercenary_passive_improved", "empire_soldier", true) then
-            if target_number >= 2 then
+            if not _crt_wire_parity_live() then
+                -- issue 425: a lobby peer lacks crt, so the crt_* stack name may
+                -- not ride rpc_add_buff. Degrade this branch to the EXACT vanilla
+                -- Enhanced Training behavior (gain_markus_mercenary_passive_proc,
+                -- buff_templates.lua:3537-3542): >= 4 targets grants the flat
+                -- vanilla improved buff, else no proc.
+                _crt_log_wire_block("crt_enhanced_training_proc")
+                if target_number >= 4 then
+                    buff_system:add_buff(owner_unit, "markus_mercenary_passive_improved", owner_unit, false)
+                else
+                    buff_applied = false
+                end
+            elseif target_number >= 2 then
+                _crt_log_wire_clear()
                 local stacks = math.min(target_number, 4)
                 for _ = 1, stacks do
                     buff_system:add_buff(owner_unit, "crt_merc_enhanced_training_as", owner_unit, false)
@@ -3764,25 +4014,46 @@ local function apply_balance_mods()
     end
     _originals = {}
 
+    -- issue 425 peer-parity gate: entries tagged `network_unsafe = true` put
+    -- crt_* names onto vanilla networked buff paths, so they only apply while
+    -- the beacon's settled state is "enabled" (solo counts as parity). The gate
+    -- is SAFETY infrastructure, deliberately not a menu toggle; the user's
+    -- saved setting is never overwritten -- the entry just stays vanilla for
+    -- this apply pass and re-applies when the beacon flips back (its
+    -- on_enable/on_disable callbacks re-run this function).
+    local parity_ok = _crt_parity_gate_ok()
+    local parity_skipped = nil
+
     for setting_id, def in pairs(BALANCE_MODS) do
         if mod:get(setting_id) then
-            local saved = {}
-            for _, patch in ipairs(def.patches) do
-                local template = BuffTemplates[patch.buff]
-                if template and template.buffs and template.buffs[1] then
-                    saved[#saved + 1] = {
-                        buff      = patch.buff,
-                        field     = patch.field,
-                        old_value = template.buffs[1][patch.field],
-                    }
-                    template.buffs[1][patch.field] = patch.value
+            if def.network_unsafe and not parity_ok then
+                parity_skipped = parity_skipped or {}
+                parity_skipped[#parity_skipped + 1] = setting_id
+            else
+                local saved = {}
+                for _, patch in ipairs(def.patches) do
+                    local template = BuffTemplates[patch.buff]
+                    if template and template.buffs and template.buffs[1] then
+                        saved[#saved + 1] = {
+                            buff      = patch.buff,
+                            field     = patch.field,
+                            old_value = template.buffs[1][patch.field],
+                        }
+                        template.buffs[1][patch.field] = patch.value
+                    end
                 end
+                if def.custom_apply then
+                    def.custom_apply(saved)
+                end
+                _originals[setting_id] = saved
             end
-            if def.custom_apply then
-                def.custom_apply(saved)
-            end
-            _originals[setting_id] = saved
         end
+    end
+
+    if parity_skipped then
+        table.sort(parity_skipped)
+        pcall(printf, "[crt:425] parity gate: %d networked rework(s) held at vanilla (a lobby peer lacks crt): %s",
+            #parity_skipped, table.concat(parity_skipped, ", "))
     end
 end
 
@@ -3814,9 +4085,74 @@ local function get_active_count()
     return count
 end
 
+-- ============================================================
+-- Issue 425: hot-join replay filter (sender-side, UNCONDITIONAL)
+-- ============================================================
+-- BuffSystem.hot_join_sync (buff_system.lua:66-97) replays EVERY entry in
+-- server_controlled_buffs to a joining peer via rpc_add_buff, encoding
+-- NetworkLookup.buff_templates[template_name] at :87. That replay fires during
+-- the join handshake, BEFORE any parity ack can exist for the joiner, so a
+-- non-crt joiner would decode a crt_* index and fatal instantly -- no gate that
+-- reacts to the roster can win that race. Sender-side filter instead: hide
+-- crt_* entries from the one replay pass. A crt-running joiner merely misses
+-- the replayed crt stacks; the wire-safe driver strips + re-adds them when
+-- parity re-establishes (broadcast reaches the joiner), so state self-heals.
+-- Pre-flight (NON-NEGOTIABLE 8): grep confirms crt has no other hook on
+-- BuffSystem (career_tweaker mod-wide, 2026-07-11).
+mod:hook("BuffSystem", "hot_join_sync", function(func, self, peer_id)
+    if not self.is_server then
+        return func(self, peer_id)
+    end
+    -- Filter predicate: the mod-registered-name registry (covers tourney's
+    -- vanilla-prefixed registrations) plus the crt_ prefix as belt-and-
+    -- suspenders for any name registered after this module loaded.
+    local registry = mod._crt_mod_registered_buff_names
+    local stashed = {}
+    pcall(function()
+        for _, data in pairs(self.server_controlled_buffs) do
+            for sid, bdata in pairs(data) do
+                local n = bdata and bdata.template_name
+                if type(n) == "string" and ((registry and registry[n]) or n:sub(1, 4) == "crt_") then
+                    -- clearing an existing key mid-pairs is legal in Lua 5.1
+                    stashed[#stashed + 1] = { data = data, sid = sid, bdata = bdata }
+                    data[sid] = nil
+                end
+            end
+        end
+    end)
+    -- pcall the wrapped sync so the restore below is UNCONDITIONAL -- a throw
+    -- mid-replay must not leave the stashed entries permanently hidden (they
+    -- would orphan their stacks and dodge later removal). Rethrow afterwards to
+    -- preserve vanilla failure semantics.
+    local ok, err = pcall(func, self, peer_id)
+    for i = 1, #stashed do
+        local s = stashed[i]
+        s.data[s.sid] = s.bdata
+    end
+    if #stashed > 0 then
+        pcall(printf, "[crt:425] hot-join filter: withheld %d mod buff(s) from replay to joining peer %s (their client may not resolve modded indices)",
+            #stashed, tostring(peer_id))
+    end
+    if not ok then
+        error(err, 0)
+    end
+end)
+
 return {
     BALANCE_MODS = BALANCE_MODS,
     apply        = apply_balance_mods,
     restore      = restore_all_balance_mods,
     active_count = get_active_count,
+    -- issue 425 introspection (consumed by career_tweaker.lua: the beacon's
+    -- gated-feature callbacks + /crt_regression_test). Read-only.
+    parity_gate_ok   = _crt_parity_gate_ok,
+    wire_parity_live = _crt_wire_parity_live,
+    network_unsafe_ids = (function()
+        local ids = {}
+        for setting_id, def in pairs(BALANCE_MODS) do
+            if def.network_unsafe then ids[#ids + 1] = setting_id end
+        end
+        table.sort(ids)
+        return ids
+    end)(),
 }

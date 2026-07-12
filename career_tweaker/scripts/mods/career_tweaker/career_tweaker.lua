@@ -1,6 +1,11 @@
 local mod = get_mod("crt")
 
-local MOD_VERSION = "0.3.54-dev"
+local MOD_VERSION = "0.3.55-dev"
+
+-- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
+-- issue 425 peer-parity beacon channel. Bump ONLY when a channel's payload
+-- shape changes.
+local CRT_RPC_SCHEMA = 1
 _MEM_PROBE_T0_CRT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([crt] enabled v<X> settings_fp=<hash>) is the canonical version surface
@@ -766,6 +771,68 @@ mod._crt_start_dump_retry = function()
 end
 
 -- ============================================================
+-- Issue 425: peer-parity beacon (shared lib, issue 371 framework)
+-- ============================================================
+-- COPIED single-source lib (master: tools/shared_lib/_lib_peer_parity.lua; the
+-- standalone invariant forbids a get_mod() runtime dep). Proves "does every
+-- lobby peer have crt?" over VMF's own mod-to-mod channel -- wire-safe by
+-- construction, no vanilla NetworkLookup key, no vanilla RPC. Consumed by
+-- career_tweaker_balance.lua: the network_unsafe reworks (the seven whose crt_*
+-- buffs ride rpc_add_buff) apply only under settled parity, and the wire-safe
+-- proc/driver wrappers consult the live state per send. Fail-safe: features
+-- inert until every peer is positively confirmed; any beacon error forces OFF.
+--
+-- ORDER MATTERS: this block must sit AFTER the mod.update definition above --
+-- install() wraps the existing mod.update (preserving the OE cooldown tick +
+-- dump retry) and would capture nil if run earlier.
+do
+    local ok, factory = pcall(function()
+        return mod:dofile("scripts/mods/career_tweaker/_lib_peer_parity")
+    end)
+    if ok and type(factory) == "function" then
+        local ok2, inst = pcall(factory, mod, {
+            channel     = "crt_peer_parity_present",
+            schema      = CRT_RPC_SCHEMA,
+            mod_label   = "Career Tweaker",
+            echo_prefix = "[crt]",
+        })
+        if ok2 and type(inst) == "table" then
+            mod._crt_peer_parity = inst
+            pcall(function() inst:install() end)
+            pcall(printf, "[crt:425] peer-parity beacon installed (channel=crt_peer_parity_present)")
+            -- ONE gated feature covering every networked_unsafe entry (seven
+            -- balance reworks + the trn_wh_priest tourney port). The callbacks
+            -- OWN the settled-state flag both apply engines gate on
+            -- (mod._crt_parity_settled_enabled), set BEFORE re-running the
+            -- engines. Deliberately not inst:applied_state(): the lib writes
+            -- _applied AFTER firing callbacks (_lib_peer_parity.lua:215-227),
+            -- so a state read from inside a callback is one transition stale.
+            -- The lib chat-echoes the user-facing disable/re-enable notice; the
+            -- printf lines are the log-side [crt:425] trail.
+            inst:register_gated_feature("crt_networked_reworks", {
+                label = "networked talent reworks",
+                on_enable = function()
+                    mod._crt_parity_settled_enabled = true
+                    pcall(printf, "[crt:425] parity established: re-applying networked talent reworks per settings")
+                    if balance and balance.apply then pcall(balance.apply) end
+                    if tourney and tourney.apply then pcall(tourney.apply) end
+                end,
+                on_disable = function()
+                    mod._crt_parity_settled_enabled = false
+                    pcall(printf, "[crt:425] parity degraded (peer set changed or peer lacks crt): networked talent reworks fall back to vanilla")
+                    if balance and balance.apply then pcall(balance.apply) end
+                    if tourney and tourney.apply then pcall(tourney.apply) end
+                end,
+            })
+        else
+            pcall(printf, "[crt:425] WARNING peer-parity factory failed (%s); networked reworks stay vanilla (fail-safe)", tostring(inst))
+        end
+    else
+        pcall(printf, "[crt:425] WARNING peer-parity lib failed to load (%s); networked reworks stay vanilla (fail-safe)", tostring(factory))
+    end
+end
+
+-- ============================================================
 -- /regression_test checks (see scaffold near MOD_VERSION).
 -- ============================================================
 -- The crt_* buff name canonical list is duplicated here so the check stays
@@ -1033,6 +1100,200 @@ _rt_register("crt_buff_names_catalog_parity", function()
                 "catalog mismatch at index %d: registration=%q vs RT-expected=%q",
                 i, tostring(registered[i]), tostring(_CRT_BUFF_NAMES_EXPECTED[i]))
         end
+    end
+end)
+
+-- ------------------------------------------------------------
+-- Issue 425 regression checks: peer-parity beacon + wire safety
+-- ------------------------------------------------------------
+
+_rt_register("crt_peer_parity_lib_loaded", function()
+    -- The COPIED shared lib (master tools/shared_lib/_lib_peer_parity.lua)
+    -- built an instance and exposed the contract API.
+    local pp = mod._crt_peer_parity
+    if type(pp) ~= "table" then return "mod._crt_peer_parity not built (lib load or factory failed)" end
+    for _, m in ipairs({ "install", "register_gated_feature", "all_peers_have",
+                         "tick", "feature_count", "applied_state", "is_installed" }) do
+        if type(pp[m]) ~= "function" then return "beacon missing method: " .. m end
+    end
+    if type(mod.network_register) == "function" and not pp:is_installed() then
+        return "beacon channel not registered despite VMF network_register present"
+    end
+end)
+
+_rt_register("crt_peer_parity_failsafe_posture", function()
+    -- Chosen posture: networked reworks are INERT until all peers are
+    -- POSITIVELY confirmed (issue 371 mandate; same assertions as cwv's suite).
+    local pp = mod._crt_peer_parity
+    if type(pp) ~= "table" then return "beacon absent" end
+    if pp._initial_applied ~= "disabled" then
+        return "beacon did not initialise to the fail-safe (disabled) state"
+    end
+    if pp.FAILSAFE_POSTURE ~= "feature_inert_until_confirmed" then
+        return "beacon failsafe posture marker changed unexpectedly"
+    end
+    local c = pp.__classify
+    if type(c) ~= "function" then return "beacon classifier (__classify) missing" end
+    if c({}, {}) ~= true then return "solo (no other peers) must classify all-present" end
+    if c({ p1 = true }, {}) ~= false then
+        return "a present-but-unacked peer must fail-safe to NOT-all-present"
+    end
+    if c({ p1 = true }, { p1 = true }) ~= true then return "an acked peer must count as present" end
+    if c({ p1 = true, p2 = true }, { p1 = true }) ~= false then
+        return "a partially-acked lobby must classify NOT-all-present"
+    end
+    local ok = pcall(function() return pp:all_peers_have() end)
+    if not ok then return "all_peers_have threw (must fail-safe to false, never error)" end
+end)
+
+_rt_register("crt_wire_safe_wrappers_registered", function()
+    -- The three wire-safe wrappers exist in the tables the engine resolves
+    -- proc/update names from (ProcFunctions per buff_extension.lua:1351,
+    -- BuffFunctionTemplates.functions per buff_extension.lua:794), and the
+    -- vanilla functions they delegate to are still present.
+    local PF = rawget(_G, "ProcFunctions")
+    if type(PF) ~= "table" then return "ProcFunctions not loaded (run in-keep)" end
+    if type(PF.crt_wire_safe_add_buff) ~= "function" then
+        return "ProcFunctions.crt_wire_safe_add_buff missing"
+    end
+    if type(PF.crt_wire_safe_add_buff_on_special_kill) ~= "function" then
+        return "ProcFunctions.crt_wire_safe_add_buff_on_special_kill missing"
+    end
+    if type(PF.add_buff) ~= "function" or type(PF.add_buff_on_special_kill) ~= "function" then
+        return "vanilla ProcFunctions delegates missing (engine changed?)"
+    end
+    local BFT = rawget(_G, "BuffFunctionTemplates")
+    local fns = BFT and BFT.functions
+    if type(fns) ~= "table" then return "BuffFunctionTemplates.functions not loaded" end
+    if type(fns.crt_wire_safe_overcharge_chunks_driver) ~= "function" then
+        return "BuffFunctionTemplates.functions.crt_wire_safe_overcharge_chunks_driver missing"
+    end
+    if type(fns.activate_server_buff_stacks_based_on_overcharge_chunks) ~= "function" then
+        return "vanilla overcharge-chunk driver missing (engine changed?)"
+    end
+    if type(fns.crt_wire_safe_distance_aura_driver) ~= "function" then
+        return "BuffFunctionTemplates.functions.crt_wire_safe_distance_aura_driver missing"
+    end
+    if type(fns.activate_buff_on_distance) ~= "function" then
+        return "vanilla distance-aura driver missing (engine changed?)"
+    end
+end)
+
+-- Canonical list of the reworks whose crt_* buffs reach vanilla networked buff
+-- paths (issue 425). Deliberately duplicated from the network_unsafe tags in
+-- career_tweaker_balance.lua, same decoupling rationale as
+-- _CRT_BUFF_NAMES_EXPECTED above: a tag added/removed on one side but not the
+-- other must fail here, not silently change the gated surface.
+local _CRT_NETWORK_UNSAFE_EXPECTED = {
+    "rework_bw_unchained_abandon_innate_flame_unending",
+    "rework_bw_unchained_natural_talent_ranged",
+    "rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit",
+    "rework_es_mercenary_blade_barrier_60x_minus_10_on_hit",
+    "rework_es_mercenary_enhanced_training_tiered",
+    "rework_es_questingknight_virtue_of_impetuous_buffed",
+    "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",
+}
+
+_rt_register("crt_network_unsafe_catalog_parity", function()
+    local ids = balance and balance.network_unsafe_ids
+    if type(ids) ~= "table" then
+        return "balance.network_unsafe_ids not exported by career_tweaker_balance.lua"
+    end
+    if #ids ~= #_CRT_NETWORK_UNSAFE_EXPECTED then
+        return string.format("network_unsafe catalog size mismatch: balance has %d, RT expects %d",
+            #ids, #_CRT_NETWORK_UNSAFE_EXPECTED)
+    end
+    for i = 1, #ids do
+        if ids[i] ~= _CRT_NETWORK_UNSAFE_EXPECTED[i] then
+            return string.format("network_unsafe catalog mismatch at index %d: balance=%q vs RT=%q",
+                i, tostring(ids[i]), tostring(_CRT_NETWORK_UNSAFE_EXPECTED[i]))
+        end
+    end
+    local pp = mod._crt_peer_parity
+    if type(pp) == "table" and pp:feature_count() < 1 then
+        return "beacon gated-feature registry empty -- crt_networked_reworks was not registered"
+    end
+    if not (balance and type(balance.parity_gate_ok) == "function"
+            and type(balance.wire_parity_live) == "function") then
+        return "balance parity helpers (parity_gate_ok / wire_parity_live) not exported"
+    end
+end)
+
+_rt_register("crt_no_raw_networked_funcs_on_crt_templates", function()
+    -- Class-31 sweep invariant: no MOD-REGISTERED buff template may reference a
+    -- RAW networked proc/update function -- every networked add must route
+    -- through a crt_wire_safe_* wrapper. Walks the live registry
+    -- (mod._crt_mod_registered_buff_names: balance crt_* names + tourney's
+    -- vanilla-prefixed names), so it catches a regression on the known sites
+    -- AND any future rework/port that wires a raw networked func. Stubs
+    -- (toggle off / parity-gated) have empty buffs and pass vacuously.
+    local BT = rawget(_G, "BuffTemplates")
+    if not BT then return "BuffTemplates not loaded (run in-keep)" end
+    local registry = mod._crt_mod_registered_buff_names
+    if type(registry) ~= "table" or next(registry) == nil then
+        return "mod._crt_mod_registered_buff_names registry missing/empty"
+    end
+    -- The registry must cover at least the balance catalog (a module that
+    -- forgets to register its names would silently shrink the sweep).
+    for _, name in ipairs(_CRT_BUFF_NAMES_EXPECTED) do
+        if not registry[name] then
+            return string.format("registry missing balance-registered name %q", name)
+        end
+    end
+    local RAW_NETWORKED = {
+        add_buff = true,
+        add_buff_on_special_kill = true,
+        activate_server_buff_stacks_based_on_overcharge_chunks = true,
+        activate_buff_on_distance = true,
+    }
+    for name in pairs(registry) do
+        local t = rawget(BT, name)
+        local subs = t and t.buffs
+        if type(subs) == "table" then
+            for i = 1, #subs do
+                local sub = subs[i]
+                if type(sub) == "table" then
+                    if RAW_NETWORKED[sub.buff_func] then
+                        return string.format("%s.buffs[%d] uses raw networked buff_func %q (must be a crt_wire_safe_* wrapper)",
+                            name, i, tostring(sub.buff_func))
+                    end
+                    if RAW_NETWORKED[sub.update_func] then
+                        return string.format("%s.buffs[%d] uses raw networked update_func %q (must be a crt_wire_safe_* wrapper)",
+                            name, i, tostring(sub.update_func))
+                    end
+                end
+            end
+        end
+    end
+end)
+
+_rt_register("crt_trn_wh_priest_wire_safe_wiring", function()
+    -- issue 425: when the trn_wh_priest port is APPLIED, the vanilla
+    -- victor_priest_5_2 aura must carry BOTH patched fields together -- the
+    -- mod-registered buff_to_add AND the crt wire-safe driver. The generic
+    -- sweep above cannot see this template (vanilla name, not mod-registered),
+    -- so lock the pairing here. Unapplied (toggle off / parity-gated /
+    -- restored) states pass vacuously.
+    local BT = rawget(_G, "BuffTemplates")
+    local t = BT and rawget(BT, "victor_priest_5_2")
+    local sub = t and t.buffs and t.buffs[1]
+    if type(sub) ~= "table" then return end
+    if sub.buff_to_add == "victor_priest_5_2_speed_buff"
+            and sub.update_func ~= "crt_wire_safe_distance_aura_driver" then
+        return string.format(
+            "victor_priest_5_2 carries the mod buff_to_add but update_func is %q (raw driver would broadcast a mod index)",
+            tostring(sub.update_func))
+    end
+end)
+
+_rt_register("crt_hot_join_filter_target_present", function()
+    -- The issue 425 hot-join replay filter hooks BuffSystem.hot_join_sync
+    -- (buff_system.lua:66). Static single-hook guarantee is lint-mod's job;
+    -- this confirms the hook target is still resolvable so the filter had
+    -- something real to wrap.
+    local BS = rawget(_G, "BuffSystem")
+    if type(BS) ~= "table" or type(BS.hot_join_sync) ~= "function" then
+        return "BuffSystem.hot_join_sync missing (engine changed? hot-join filter dead)"
     end
 end)
 
