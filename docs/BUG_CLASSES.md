@@ -1408,3 +1408,27 @@ end
 ### Related Issues / commits
 - gt_dev v0.2.200-dev (#508): `_gt_debug_highlights.lua` `_local_player_unit` + dispatcher suppression; regression check `gt_dh_local_player_safe_508`.
 - Related: class 21 / class 32 (the "VMF ticks outside game states" family); `docs/engine/03` network readiness.
+
+## 34. Bot-BT recovery keyed to a timer or one-shot latch that outlives the failure window
+
+**First seen:** 2026-07-12 (gt_dev issues 492 + 515; fixed v0.2.202/.203-dev; both user-verified Fixed same day)
+**Canonical Issues:** [#492](https://github.com/Ensrick/vermintide-2-tweaker/issues/492), [#515](https://github.com/Ensrick/vermintide-2-tweaker/issues/515)
+**Lives in:** any bot behavior-tree intervention that (a) bounds a stuck state with a wall-clock timer, or (b) relies on a vanilla one-shot flag it never re-arms.
+
+### Symptoms
+- The intervention "works" in testing but is useless live: the recovery fires long after the situation resolved itself (a downed player is often dead in under 5s; a 35s no-progress bound acted on corpses — the #492 rejection).
+- A capability works exactly once per mission: vanilla `has_teleported` (bt_bot_teleport_to_ally_action.lua:93) is cleared ONLY in `BTBotFollowAction.enter` (bt_bot_follow_action.lua:14), so a bot that never re-enters the follow node holds the latch forever (#515 gap 1).
+
+### Diagnosis pattern
+1. Ask what the timer is actually protecting against (usually decision thrash) and whether the engine already computes the failure signal — vanilla records aid-path failure per ally in `cb_ally_path_result` (player_bot_base.lua:1911-1934) and treats 3-12s as "give up" (bt_bot_conditions.lua:1203, player_bot_base.lua:1943-1946). A mod timer far outside that band is wrong by inspection.
+2. For any vanilla one-shot flag your feature depends on, grep every site that CLEARS it; if clearing lives in one BT branch, your feature dies the first time the bot takes a different branch.
+
+### Fix template
+- Replace long timers with the engine's own failure verdicts (path-failed callbacks) plus a short distance-gated no-progress backstop; justify every constant against the vanilla band and the human-relevant window (bleedout timings).
+- Prevent thrash with HYSTERESIS (bail at >FAR, re-engage under <NEAR, FAR > NEAR), not with a long timer; latch the bail and un-latch only on a real state change (target no longer needs aid / genuinely close again).
+- Re-arm one-shot vanilla latches under your toggle on a short cooldown inside the vanilla give-up band, leaving the downstream gates to veto the actual action.
+- Make every branch observable: per-event printf with a roster census so a field log settles WHICH condition held (`[gt:492]` / `[gt:515]` lines).
+
+### Related Issues / commits
+- gt_dev v0.2.202-dev (#492 rework: 4s path-fail + 8s no-progress + hysteresis latch; census printfs), v0.2.203-dev (#515: latch re-arm, backward bypass on the aid node, 492-bailout composition). Regression checks `gt_bot492_aid_stall_recovery`, `gt_bot515_teleport_latch_rearm`, `gt_bot515_cant_reach_backward_bypass`.
+- Related: #139/#142 (bot follow/teleport family), class 21 (stale state in mod-update phases).
