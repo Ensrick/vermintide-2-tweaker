@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.379-dev"
+local MOD_VERSION = "0.1.380-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -52,6 +52,33 @@ local _om = {}
 -- literal at the two sites silently degraded every preview swap to the base mesh
 -- on any rename (no crash, no log) -- keep both ends on this constant.
 _om.HUSK_OVERRIDE_REF = "cwv_husk_override_units"
+
+-- ============================================================================
+-- issue 423 (BUG_CLASSES 31, GAMEPLAY axis): cwv damage-profile wire-safety map.
+-- ----------------------------------------------------------------------------
+-- Every cwv-cloned damage_profile is appended to NetworkLookup.damage_profiles
+-- with a modded (out-of-vanilla-range) index. rpc_attack_hit is client->server
+-- (weapon_system.lua:182); a cwv CLIENT's hit would ship that index to a non-cwv
+-- HOST whose strict decode (weapon_system.lua:243 -- no rawget) fatals -> lobby
+-- drop. The send-gate (search "[cwv:423]" below) substitutes the vanilla SOURCE
+-- profile id whenever peer parity is unconfirmed; this map records, at clone time,
+-- the vanilla source each cwv profile was derived from so the substitution is the
+-- base weapon's own behavior (a GAMEPLAY axis: we degrade damage, we don't crash).
+-- _om (not a top-level local) per the Lua 5.1 200-local ceiling.
+_om._cwv_damage_profile_wire_source = {}   -- cwv profile key -> vanilla source name
+_om._cwv_wire_fallback_profile_id  = nil   -- captured vanilla id; belt-and-suspenders
+function _om._record_cwv_dp_source(cwv_key, source_name)
+    -- Record only genuine vanilla sources (never chain onto another cwv profile).
+    if type(cwv_key) ~= "string" or type(source_name) ~= "string" then return end
+    if source_name:sub(1, 4) == "cwv_" then return end
+    _om._cwv_damage_profile_wire_source[cwv_key] = source_name
+    if not _om._cwv_wire_fallback_profile_id then
+        local dp = rawget(_G, "NetworkLookup")
+        dp = dp and dp.damage_profiles
+        local sid = dp and rawget(dp, source_name)
+        if type(sid) == "number" then _om._cwv_wire_fallback_profile_id = sid end
+    end
+end
 
 -- ============================================================================
 -- Peer-parity beacon (issue 371 / issue 424 / BUG_CLASSES 31)
@@ -1599,6 +1626,7 @@ local function _clone_damage_profile(source_name, prefix, mults)
 	if not source then return source_name end
 
 	local new_name = prefix .. source_name
+	_om._record_cwv_dp_source(new_name, source_name)   -- issue 423 wire-safe map
 	if DamageProfileTemplates[new_name] then return new_name end
 
 	local dmg_mult = mults.damage or 1
@@ -3003,6 +3031,7 @@ local function _create_cwv_musket_damage_profile()
 	local source = DamageProfileTemplates.shot_sniper
 	if not source then return "shot_sniper" end
 	local key = "cwv_musket_shot"
+	_om._record_cwv_dp_source(key, "shot_sniper")   -- issue 423 wire-safe map
 	if DamageProfileTemplates[key] then return key end
 
 	local clone = table.clone(source, true)
@@ -3069,6 +3098,7 @@ local function _create_cwv_musket_bayonet_damage_profile()
 	local source = DamageProfileTemplates.heavy_slashing_smiter_stab_polearm
 	if not source then return "heavy_slashing_smiter_stab_polearm" end
 	local key = "cwv_musket_bayonet_thrust"
+	_om._record_cwv_dp_source(key, "heavy_slashing_smiter_stab_polearm")   -- issue 423 wire-safe map
 	if DamageProfileTemplates[key] then return key end
 
 	local clone = table.clone(source, true)
@@ -3420,6 +3450,7 @@ local function _scale_melee_damage_profile(profile_name)
 	local source = DamageProfileTemplates[profile_name]
 	if not source then return profile_name end
 	local key = "cwv_musket_melee_" .. profile_name
+	_om._record_cwv_dp_source(key, profile_name)   -- issue 423 wire-safe map
 	if DamageProfileTemplates[key] then return key end
 
 	local clone = table.clone(source, true)
@@ -3553,6 +3584,7 @@ local function _create_cwv_old_musket_damage_profile()
 	local source = DamageProfileTemplates.shot_sniper
 	if not source then return "shot_sniper" end
 	local key = "cwv_old_musket_shot"
+	_om._record_cwv_dp_source(key, "shot_sniper")   -- issue 423 wire-safe map
 	if DamageProfileTemplates[key] then return key end
 
 	local clone = table.clone(source, true)
@@ -3731,6 +3763,7 @@ local function _scale_old_musket_melee_damage_profile(profile_name)
 	local source = DamageProfileTemplates[profile_name]
 	if not source then return profile_name end
 	local key = "cwv_old_musket_melee_" .. profile_name
+	_om._record_cwv_dp_source(key, profile_name)   -- issue 423 wire-safe map
 	if DamageProfileTemplates[key] then return key end
 
 	local clone = table.clone(source, true)
@@ -6370,6 +6403,7 @@ local function _clone_inline_throw_profile(source_name, prefix, damage_mult)
 	if not source then return source_name end
 
 	local new_name = prefix .. source_name
+	_om._record_cwv_dp_source(new_name, source_name)   -- issue 423 wire-safe map
 	if DamageProfileTemplates[new_name] then return new_name end
 
 	local clone = table.clone(source, true)
@@ -10752,6 +10786,86 @@ do
 end
 _om._skin_wire_hook_installed = true
 
+-- ============================================================================
+-- issue 423 (BUG_CLASSES 31, GAMEPLAY axis): cwv damage-profile SEND-gate.
+-- ----------------------------------------------------------------------------
+-- rpc_attack_hit is client->server (weapon_system.lua:182). A cwv CLIENT landing
+-- a hit with a profile-cloning variant would ship the cwv (out-of-vanilla-range)
+-- NetworkLookup.damage_profiles index to the HOST, whose strict decode
+-- (weapon_system.lua:243 -- NetworkLookup.damage_profiles[id], NO rawget) fatals
+-- when the host lacks cwv -> lobby drop (issue 278 / BUG_CLASSES 31 class).
+-- Unconditional registration only buys cwv<->cwv index parity.
+--
+-- This is a GAMEPLAY axis (issue 371 axis map): substituting the profile changes
+-- combat numbers, so it is peer-parity GATED, never substituted unconditionally.
+--   * parity CONFIRMED (every lobby peer runs cwv) -> the real cwv id rides; the
+--     host decodes it and the variant's tuned damage applies.
+--   * parity UNCONFIRMED (or beacon absent/erroring) -> degrade to the cwv
+--     profile's vanilla SOURCE id (base-weapon behavior) so a non-cwv host
+--     decodes a vanilla index instead of crashing. Fail-safe: any beacon error
+--     -> _wire_parity_live() false -> substitute.
+--   * is_server (we ARE the host) -> never substitute: rpc_attack_hit runs
+--     in-process (weapon_system.lua:179-180), no foreign peer decodes it.
+-- No hot-join force-null case is needed (unlike the skin gate): rpc_attack_hit is
+-- send_rpc_SERVER, so the ONLY decoder of our hit is the host; the host either has
+-- cwv from mission start (parity can confirm) or never acks (parity stays false and
+-- we always substitute). A mid-join non-cwv CLIENT never decodes our attack RPC.
+--
+-- send_rpc_attack_hit is the single choke for the profile id: every attack RPC in
+-- the decompile (weapon_system / damage_utils / projectiles / area_damage / the
+-- lunge + shield/push/BH actions) routes its damage_profile_id through
+-- WeaponSystem.send_rpc_attack_hit (grep-verified). Sole cwv hook on it.
+-- do-block: keep helpers off the 200-local top-level chunk (Lua 5.1 ceiling).
+do
+    local function _wire_safe_damage_profile_id(id)
+        local NL = rawget(_G, "NetworkLookup")
+        local dp = NL and NL.damage_profiles
+        if type(dp) ~= "table" then return nil end
+        local name = rawget(dp, id)
+        if type(name) ~= "string" or name:sub(1, 4) ~= "cwv_" then
+            return nil   -- vanilla / unknown-non-cwv id: leave untouched
+        end
+        local source_name = _om._cwv_damage_profile_wire_source[name]
+        if type(source_name) == "string" and source_name:sub(1, 4) ~= "cwv_" then
+            local sid = rawget(dp, source_name)
+            if type(sid) == "number" then return sid end
+        end
+        -- Unmapped cwv profile (feature-gated creator / future drift): coerce to a
+        -- captured vanilla fallback so a modded index can NEVER ride to a non-cwv
+        -- host (a P0 host CTD is worse than degraded damage). nil only if no cwv
+        -- profile was ever recorded (then there is nothing that could leak).
+        return _om._cwv_wire_fallback_profile_id
+    end
+    _om._wire_safe_damage_profile_id = _wire_safe_damage_profile_id
+
+    -- Pure gate decision (testable without a WeaponSystem instance): the
+    -- damage_profile_id that should actually be sent for this hit.
+    local function _wire_dp_for_send(is_server, id)
+        if is_server then return id end                -- host authoritative, in-process
+        if _om._wire_parity_live() then return id end  -- every peer has cwv
+        local safe = _wire_safe_damage_profile_id(id)
+        return safe or id
+    end
+    _om._wire_dp_for_send = _wire_dp_for_send
+
+    local _dp_sub_logged = {}   -- once per profile id; no per-hit spam
+    mod:hook("WeaponSystem", "send_rpc_attack_hit", function(func, self, damage_source_id, attacker_unit_id, hit_unit_id, hit_zone_id, hit_position, attack_direction, damage_profile_id, ...)
+        local send_id = _wire_dp_for_send(self.is_server, damage_profile_id)
+        if send_id ~= damage_profile_id then
+            if not _dp_sub_logged[damage_profile_id] then
+                _dp_sub_logged[damage_profile_id] = true
+                local dp = rawget(_G, "NetworkLookup")
+                dp = dp and dp.damage_profiles
+                pcall(printf, "[cwv:423] wire dmg-profile sub: %s(%s) -> %s (peer parity unconfirmed; base-weapon damage this hit)",
+                    tostring(dp and rawget(dp, damage_profile_id)), tostring(damage_profile_id), tostring(send_id))
+            end
+            damage_profile_id = send_id
+        end
+        return func(self, damage_source_id, attacker_unit_id, hit_unit_id, hit_zone_id, hit_position, attack_direction, damage_profile_id, ...)
+    end)
+    _om._dp_wire_hook_installed = true
+end
+
 -- NOTE: the per-perspective 1P/3P unit swap mechanism (previously used
 -- for cwv_es_brace_repeater) was moved to weapon_tweaker in v0.1.187 —
 -- it now hooks `GearUtils.spawn_inventory_unit` for vanilla
@@ -12459,6 +12573,82 @@ _rt_register("cwv_wire_safe_thrown_variant_installed", function()
         local vanilla_in = { projectile_unit_name = "units/weapons/player/wpn_we_javelin_01/prj_we_javelin_01_3ps" }
         if _om._wire_safe_projectile_units(vanilla_in) ~= vanilla_in then
             return "in-flight projectile helper mutated a vanilla projectile (should pass through)"
+        end
+    end
+end)
+
+_rt_register("cwv_wire_safe_damage_profile_gate", function()
+    -- (issue 423 / issue 371, BUG_CLASSES 31, GAMEPLAY axis) cwv clones append
+    -- damage_profile keys to NetworkLookup.damage_profiles as modded indices that
+    -- ride the client->server rpc_attack_hit (weapon_system.lua:182). A non-cwv
+    -- HOST strict-decodes (weapon_system.lua:243) -> CTD. The send-gate degrades a
+    -- modded index to its vanilla SOURCE id when peer parity is unconfirmed, and
+    -- lets it ride under confirmed parity. Assert the hook is installed, NO tracked
+    -- cwv profile can ever survive to the wire when parity is unconfirmed, and the
+    -- gate decision honors parity + is_server (stubbed beacon like the skin gate).
+    if _om._dp_wire_hook_installed ~= true then
+        return "send_rpc_attack_hit wire-safety gate not installed (issue 423 non-cwv host CTD regression)"
+    end
+    local resolve = _om._wire_safe_damage_profile_id
+    local decide  = _om._wire_dp_for_send
+    if type(resolve) ~= "function" or type(decide) ~= "function" then
+        return "wire-safe damage-profile helpers missing"
+    end
+    local NL = rawget(_G, "NetworkLookup")
+    local dp = NL and NL.damage_profiles
+    if type(dp) ~= "table" then return "NetworkLookup.damage_profiles absent" end
+
+    -- (1) Crash-safety over EVERY cwv-registered profile: the resolver must coerce
+    -- each modded index to a REAL vanilla index present on every peer.
+    local checked = 0
+    for k, v in pairs(dp) do
+        if type(k) == "string" and k:sub(1, 4) == "cwv_" and type(v) == "number" then
+            local safe = resolve(v)
+            if type(safe) ~= "number" then
+                return string.format("cwv profile %s did not resolve to a vanilla id (would ride to a non-cwv host)", k)
+            end
+            local safe_name = rawget(dp, safe)
+            if type(safe_name) ~= "string" or safe_name:sub(1, 4) == "cwv_" then
+                return string.format("cwv profile %s resolved to a non-vanilla id %s (%s)", k, tostring(safe), tostring(safe_name))
+            end
+            checked = checked + 1
+        end
+    end
+    if checked == 0 then
+        return "no cwv damage profiles registered -- wire-safety would coerce nothing (registration regressed?)"
+    end
+
+    -- (2) Negative control: a genuine vanilla profile id passes through untouched.
+    local van_id = _om._cwv_wire_fallback_profile_id
+    if type(van_id) == "number" and resolve(van_id) ~= nil then
+        return "wire-safe resolver coerced a vanilla profile id (should only touch cwv keys)"
+    end
+
+    -- (3) Behavioral gate with a stubbed beacon (mirrors cwv_wire_skin_parity_gate):
+    -- pick any tracked cwv profile whose source differs, then drive the decision.
+    local cwv_id, src_id
+    for k, v in pairs(dp) do
+        if type(k) == "string" and k:sub(1, 4) == "cwv_" and type(v) == "number" then
+            local s = resolve(v)
+            if type(s) == "number" and s ~= v then cwv_id, src_id = v, s; break end
+        end
+    end
+    if cwv_id then
+        local real_pp = mod._cwv_peer_parity
+        mod._cwv_peer_parity = { all_peers_have = function() return false end }
+        local unconfirmed_client = decide(false, cwv_id)
+        local host_authoritative = decide(true,  cwv_id)
+        mod._cwv_peer_parity = { all_peers_have = function() return true end }
+        local confirmed_client = decide(false, cwv_id)
+        mod._cwv_peer_parity = real_pp
+        if unconfirmed_client ~= src_id then
+            return "parity-unconfirmed client did not degrade the cwv profile to its vanilla source (issue 423 CTD shape live)"
+        end
+        if confirmed_client ~= cwv_id then
+            return "parity-confirmed client degraded the cwv profile (variant damage would regress under full cwv parity)"
+        end
+        if host_authoritative ~= cwv_id then
+            return "is_server path substituted (host is authoritative; rpc_attack_hit runs in-process, no foreign decode)"
         end
     end
 end)

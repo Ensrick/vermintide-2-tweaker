@@ -1,5 +1,56 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.380-dev — 2026-07-12 — #423: peer-parity gate stops cwv damage-profile CTD on a non-cwv host [untested] [crash] [0-critical]
+
+### Why
+Issue #423 (0-critical): a cwv CLIENT landing a hit with a profile-cloning variant
+crashed the non-cwv HOST and dropped the lobby. `_clone_damage_profile` (and the
+inline-throw / musket profile creators) append `cwv_*` names to
+`NetworkLookup.damage_profiles` at out-of-vanilla-range indices. On a hit the client
+encodes `damage_profiles[cwv_*]` and ships it over `rpc_attack_hit`, which is
+client->server only (`weapon_system.lua:182`). The host decodes
+`NetworkLookup.damage_profiles[damage_profile_id]` with NO rawget
+(`weapon_system.lua:243`); the strict `__index` fatals on the unknown modded index
+-> host CTD. Unconditional registration only buys cwv<->cwv index parity (issue 278 /
+BUG_CLASSES 31 class; issue 371 axis map — GAMEPLAY axis).
+
+### Changed
+- NEW send-gate: sole cwv hook on `WeaponSystem.send_rpc_attack_hit` (grep-verified
+  the single choke — every attack RPC in the decompile routes its `damage_profile_id`
+  through it). Peer-parity GATED because this is a gameplay axis (substituting the
+  profile changes combat numbers), reusing the issue-495 `_om._wire_parity_live`
+  beacon (`pcall(all_peers_have)`, fail-safe false):
+  - parity CONFIRMED (every peer runs cwv) -> the real cwv id rides; tuned variant
+    damage applies host-side.
+  - parity UNCONFIRMED / beacon absent/erroring -> substitute the cwv profile's
+    vanilla SOURCE id (base-weapon damage) so the host decodes a vanilla index.
+  - `is_server` (we ARE the host) -> never substitute: `rpc_attack_hit` runs
+    in-process (`weapon_system.lua:179-180`), no foreign peer decodes it.
+  No hot-join force-null case (unlike the skin gate): `rpc_attack_hit` is
+  send_rpc_SERVER, so the ONLY decoder of our hit is the host — it either has cwv
+  from mission start (parity can confirm) or never acks (we always substitute); a
+  mid-join non-cwv CLIENT never decodes our attack RPC.
+- NEW `_om._cwv_damage_profile_wire_source` map: each cwv profile records the vanilla
+  SOURCE it was cloned from, at creation, in `_clone_damage_profile`,
+  `_clone_inline_throw_profile`, and all five musket creators (`cwv_musket_shot` /
+  `_bayonet_thrust` / `_melee_*` / `cwv_old_musket_shot` / `_melee_*`). The gate
+  substitutes the recorded source id; belt-and-suspenders, any UNmapped cwv profile
+  (feature-gated creator / future drift) coerces to a captured vanilla fallback id so
+  a modded index can NEVER ride to a non-cwv host (a host CTD is worse than degraded
+  damage).
+- Diagnostics: `[cwv:423]` pcall(printf) once per profile id on a substitution.
+- Regression: NEW `cwv_wire_safe_damage_profile_gate` — resolver coerces EVERY
+  registered `cwv_*` profile to a real non-cwv vanilla index; vanilla ids pass through
+  untouched; and the stubbed-beacon gate degrades under unconfirmed parity, rides
+  under confirmed parity, and never substitutes on the `is_server` path.
+
+### Verify
+Needs a SECOND player (`verify-fix-coop`): a NON-cwv player HOSTS, a cwv player joins as
+CLIENT and lands melee/ranged hits with a profile-cloning variant (Imperial Longsword,
+Elven Sword+Shield, the musket). The host must NOT crash/drop; the client log should
+show `[cwv:423] wire dmg-profile sub: cwv_...( ) -> ...` and the variant does base-weapon
+damage. Then repeat with BOTH players on cwv: no substitution line, full variant damage.
+
 ## 0.1.379-dev — 2026-07-12 — #478: residency-gated defer stops the non-resident dr_deus_01 husk spawn [untested] [crash] [1-major]
 
 ### Why
