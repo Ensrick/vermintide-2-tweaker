@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.245-dev"
+local MOD_VERSION = "0.7.246-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -611,17 +611,23 @@ CT_ALTAR_VISUAL_PROBE_MARKER = "altar_visual_probe:readonly_update_hook_v0.7.157
 -- (Global, not a main-chunk local: see note on CT_ALTAR_VISUAL_PROBE_MARKER above.)
 CT_UPGRADE_ALTAR_RARITY_DECOUPLE_MARKER = "upgrade_altar_rarity_decouple:relaxed_gates_no_bump_v0.7.211"
 
--- Chest of Trials uniqueness (Task B, #117). ALWAYS-ON as of v0.7.177-dev (the
--- prior `cursed_chest_unique_trials` toggle was removed). Two host-authoritative
--- layers guarantee consecutive Chests of Trials in one mission roll different
--- trials: (1) a per-mission activation counter mixed into the seed passed to
--- ConflictDirector.start_terror_event (varies the sub-challenge walk), and (2) a
--- TerrorEventMixer.start_event wrapper that force-rotates each cursed_chest_prototype
--- inject_event block's event_name_list to a single pick that DIFFERS from that
--- block's previous pick (guarantees the top-level faction challenge changes).
+-- Chest of Trials uniqueness (Task B, #117 + #463). ALWAYS-ON as of v0.7.177-dev
+-- (the prior `cursed_chest_unique_trials` toggle was removed). Three host-
+-- authoritative layers make consecutive Chests of Trials in one mission roll
+-- different trials: (1) a per-mission activation counter mixed into the seed
+-- passed to ConflictDirector.start_terror_event (varies the sub-challenge walk),
+-- (2) a TerrorEventMixer.start_event wrapper that force-rotates each
+-- cursed_chest_prototype inject_event block's event_name_list to a single pick
+-- that DIFFERS from that block's previous pick (rotates the top-level FACTION
+-- challenge), and (3, #463) the same wrapper also force-rotates each faction
+-- challenge's `weighted_event_names` so the SPECIFIC trial the player sees
+-- (e.g. the gas-rat / poison_wind_globadier wave) differs from that block's last
+-- pick. Layer 2 alone can't stop a repeat because every CW conflict director has
+-- only two factions and a chest is faction-gated to exactly one that fires, so
+-- the same faction recurs every other chest and the seed-only sub-pick collides.
 -- Source-pattern verified by /ct_regression_test check `cursed_chest_unique_trials`.
 -- (Global, not a main-chunk local: see note on CT_ALTAR_VISUAL_PROBE_MARKER above.)
-CT_COT_UNIQUE_TRIALS_MARKER = "cot_unique_trials:force_rotate_event_name_list_v0.7.177"
+CT_COT_UNIQUE_TRIALS_MARKER = "cot_unique_trials:force_rotate_event_name_list_and_weighted_v0.7.246"
 local all_trait_combos_cache = nil
 -- CLARIFY: Forward-declared so the `generate_random_power_ups` hook (call site line 150) and
 -- `on_setting_changed` (line 740) can reference sync_reckless_swings before its assignment at line
@@ -2497,6 +2503,7 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- _transition_next_node).
     _ct_cursed_chest_seq = 0
     _ct_cot_block_last = {}   -- #117: reset per-block last-forced trial pick at run start
+    _ct_cot_trial_last = {}   -- #463: reset per-block last-forced SPECIFIC trial at run start
     -- Boon altars: run start = new run, so clear the per-run no-repeat
     -- taken-boon set (each altar can offer the full pool again).
     mod._ct_boon_altar_taken_boons = {}
@@ -3368,6 +3375,7 @@ mod:hook("DeusMechanism", "_transition_next_node", function(func, self, next_nod
     -- uniqueness hooks (ConflictDirector.start_terror_event + TerrorEventMixer.start_event).
     _ct_cursed_chest_seq = 0
     _ct_cot_block_last = {}   -- #117: reset per-block last-forced trial pick per mission
+    _ct_cot_trial_last = {}   -- #463: reset per-block last-forced SPECIFIC trial per mission
 
     -- (Boon-altar no-repeat taken-boon set deliberately PERSISTS across maps --
     -- only setup_run clears it at run start.)
@@ -14193,7 +14201,7 @@ _rt_register("cursed_chest_unique_trials", function()
     if type(CT_COT_UNIQUE_TRIALS_MARKER) ~= "string" then
         return "CT_COT_UNIQUE_TRIALS_MARKER not defined — Task B uniqueness feature may be missing"
     end
-    if CT_COT_UNIQUE_TRIALS_MARKER ~= "cot_unique_trials:force_rotate_event_name_list_v0.7.177" then
+    if CT_COT_UNIQUE_TRIALS_MARKER ~= "cot_unique_trials:force_rotate_event_name_list_and_weighted_v0.7.246" then
         return "CT_COT_UNIQUE_TRIALS_MARKER mismatch — got: " .. tostring(CT_COT_UNIQUE_TRIALS_MARKER)
     end
     -- per-mission state must exist (globals, reset in _transition_next_node + setup_run)
@@ -14203,11 +14211,35 @@ _rt_register("cursed_chest_unique_trials", function()
     if type(_ct_cot_block_last) ~= "table" then
         return "_ct_cot_block_last not a table — per-block last-pick tracker missing/clobbered"
     end
+    -- #463: the SPECIFIC-trial (weighted_event_names) rotation tracker must exist too
+    if type(_ct_cot_trial_last) ~= "table" then
+        return "_ct_cot_trial_last not a table — #463 specific-trial rotation tracker missing/clobbered"
+    end
     -- the force-rotation helper must guarantee a pick != last when ≥2 distinct options exist
     if mod._ct_cot_rotate_pick then
         local p = mod._ct_cot_rotate_pick({ "a", "b", "b" }, "a")
         if p == "a" then
             return "force-rotation returned the previous pick ('a') — uniqueness not guaranteed"
+        end
+    end
+    -- #463: the faction-challenge templates must carry the one_of/weighted_event_names
+    -- shape the specific-trial rotation depends on (guards a vanilla restructure).
+    local GTE = rawget(_G, "GenericTerrorEvents")
+    if type(GTE) == "table" then
+        local sk = GTE.cursed_chest_challenge_faction_skaven
+        local one_of = type(sk) == "table" and sk[1]
+        local blocks = type(one_of) == "table" and one_of[1] == "one_of" and one_of[2]
+        local has_weighted = false
+        if type(blocks) == "table" then
+            for _, blk in ipairs(blocks) do
+                if type(blk) == "table" and type(blk.weighted_event_names) == "table" then
+                    has_weighted = true
+                    break
+                end
+            end
+        end
+        if not has_weighted then
+            return "cursed_chest_challenge_faction_skaven lost its one_of/weighted_event_names shape — #463 specific-trial rotation is a no-op"
         end
     end
 end)

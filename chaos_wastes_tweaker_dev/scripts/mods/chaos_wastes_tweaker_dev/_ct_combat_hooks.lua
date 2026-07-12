@@ -369,6 +369,7 @@ end
 -- with the TerrorEventMixer.start_event force-rotation layer below.
 _ct_cursed_chest_seq = _ct_cursed_chest_seq or 0  -- per-mission cursed-chest activation counter (host)
 _ct_cot_block_last = _ct_cot_block_last or {}     -- per-mission: cursed_chest_prototype block_index -> last forced event_name (host)
+_ct_cot_trial_last = _ct_cot_trial_last or {}     -- #463: per-mission specific-trial rotation, keyed "<faction_tmpl>:<one_of_idx>:<block_idx>" -> last forced trial (host)
 
 if rawget(_G, "ConflictDirector") then
     mod:hook("ConflictDirector", "start_terror_event", function(func, self, event_name, optional_seed, origin_unit, origin_position)
@@ -487,10 +488,23 @@ mod._ct_cot_rotate_pick = function(list, last)
     return distinct[(last_idx % #distinct) + 1]
 end
 
+-- #463 (v0.7.246-dev): the three faction-challenge master events the prototype's
+-- event_name_list entries recurse into. Each is a `one_of` over tag-gated
+-- inject_event blocks that pick the SPECIFIC trial from a weighted_event_names
+-- list. The block-rotation loop above only varies the top-level faction; the
+-- SPECIFIC trial the player sees (e.g. the gas-rat / poison_wind_globadier wave)
+-- is picked here, and we force-rotate it too (see the second loop in the hook).
+local CT_COT_FACTION_CHALLENGE_TEMPLATES = {
+    "cursed_chest_challenge_faction_skaven",
+    "cursed_chest_challenge_faction_chaos",
+    "cursed_chest_challenge_faction_beastmen",
+}
+
 if rawget(_G, "TerrorEventMixer") then
     mod:hook("TerrorEventMixer", "start_event", function(func, event_name, data, id)
         local is_server = Managers and Managers.player and Managers.player.is_server
-        local proto = rawget(_G, "GenericTerrorEvents") and GenericTerrorEvents.cursed_chest_prototype
+        local GTE = rawget(_G, "GenericTerrorEvents")
+        local proto = GTE and GTE.cursed_chest_prototype
         if event_name ~= "cursed_chest_prototype" or not is_server or type(proto) ~= "table" then
             return func(event_name, data, id)
         end
@@ -508,17 +522,69 @@ if rawget(_G, "TerrorEventMixer") then
             end
         end
 
+        -- #463: SECOND rotation layer, at the SPECIFIC-trial level. The block
+        -- loop above only varies which FACTION challenge fires. On a Chaos Wastes
+        -- level every conflict director has just two factions, and a chest's
+        -- prototype block is faction-gated to exactly the one that fires
+        -- (is_element_available AND-matches faction_requirement_list,
+        -- terror_event_mixer.lua:1637-1645), so the same faction necessarily
+        -- recurs every other chest - and the specific trial, picked ONLY by
+        -- Math.next_random(data.seed, 0, total_weight) inside the faction
+        -- challenge (terror_event_mixer.lua:1671-1696), then collides across the
+        -- distinct-but-independent seeds (log #463: seq0 and seq2 both rolled
+        -- poison_wind_globadier on a skaven/beastmen level => "gas rat twice").
+        -- Force-rotate each faction challenge's weighted_event_names to a single
+        -- entry that differs from that block's last pick this mission, exactly as
+        -- the block loop does for event_name_list. Whichever one_of block vanilla
+        -- selects, its forced value is flavor-appropriate (rotated within that
+        -- block's own list). The single weight=1 entry costs vanilla the same one
+        -- next_random call the multi-entry weighted pick did, so the downstream
+        -- seed walk is unchanged. Save/restore each mutated list around func().
+        local saved_wt = {}
+        local trial_parts = {}
+        for _, tmpl_name in ipairs(CT_COT_FACTION_CHALLENGE_TEMPLATES) do
+            local tmpl = GTE[tmpl_name]
+            if type(tmpl) == "table" then
+                for ei, elem in ipairs(tmpl) do
+                    if type(elem) == "table" and elem[1] == "one_of" and type(elem[2]) == "table" then
+                        for bi, blk in ipairs(elem[2]) do
+                            if type(blk) == "table" and type(blk.weighted_event_names) == "table" then
+                                local names = {}
+                                for _, sub in ipairs(blk.weighted_event_names) do
+                                    if type(sub) == "table" and sub.event_name then
+                                        names[#names + 1] = sub.event_name
+                                    end
+                                end
+                                local key = tmpl_name .. ":" .. ei .. ":" .. bi
+                                local pick = mod._ct_cot_rotate_pick(names, _ct_cot_trial_last[key])
+                                if pick then
+                                    saved_wt[#saved_wt + 1] = { blk, blk.weighted_event_names }
+                                    blk.weighted_event_names = { { event_name = pick, weight = 1 } }
+                                    _ct_cot_trial_last[key] = pick
+                                    trial_parts[#trial_parts + 1] = key .. "=" .. pick
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
         pcall(function()
             local parts = {}
             for i, p in pairs(_ct_cot_block_last) do parts[#parts + 1] = tostring(i) .. ":" .. tostring(p) end
-            printf("[ct-cot-unique] forced cursed_chest_prototype trial picks -> %s", table.concat(parts, " "))
+            printf("[ct-cot-unique] forced cursed_chest_prototype faction picks -> %s", table.concat(parts, " "))
+            printf("[ct-cot-trial] forced specific-trial picks -> %s", table.concat(trial_parts, " "))
         end)
 
         local ok, err = pcall(func, event_name, data, id)
 
-        -- restore the shared template no matter what (selection already captured)
+        -- restore the shared templates no matter what (selection already captured)
         for i, orig in pairs(saved) do
             proto[i].event_name_list = orig
+        end
+        for _, pair in ipairs(saved_wt) do
+            pair[1].weighted_event_names = pair[2]
         end
         if not ok then error(err) end
     end)
