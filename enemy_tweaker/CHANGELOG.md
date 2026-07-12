@@ -1,5 +1,11 @@
 # Enemy Tweaker Changelog
 
+## 0.7.32-dev (2026-07-12): #500 remove the stale #275 Nurgloth phase-desync probe (closed issue) [untested]
+
+- **#500: removed `_et_nurgloth_probe.lua`** (issue 275, `[et:275]`, CLOSED). It was explicitly "no fix, capture only" (0.7.29-dev / 0.7.30-dev CHANGELOG): it wrapped `Breeds.chaos_exalted_sorcerer_drachenfels.run_on_spawn`/`run_on_game_update` and seven drachenfels BT enter/leave hooks, but every wrapper called the ORIGINAL raw first and then a pcall-guarded printf tracer, so vanilla behavior was byte-for-byte preserved. The actual #275 fix shipped elsewhere (gt_dev's `BTConditions.transitioned_one_third_health` collapsing-guard fix, commit b166251; gut_dev's wired-on_skip cutscene policy) with regression coverage `gt_cs_transitioned_one_third_not_forced` + `gut_cutscene_no_global_latch` -- NOT in this file. The #275 close-out had left this probe "armed in dev builds"; #500 is the sweep that retires such now-stale armed probes.
+- No load-bearing behavior to migrate: the probe published nothing onto `mod` (all state file-local), and its only external reference was its own `mod:dofile` line in `enemy_tweaker.lua` (removed). Its `AISystem.create_all_trees` hook was the sole et registration on that pair. `.package` uses a `scripts/mods/enemy_tweaker/*` glob, so no manifest edit was needed.
+- **KEPT `_et_boss_tweaks.lua`** (the `et_fly_disable_mult` Halescourge/Nurgloth fly-disable-duration feature): a separate load-time data-mutation feature module, not a probe.
+
 ## 0.7.31-dev (2026-07-11): OOP split into 17 _et_ modules + tick-guard hardening (#479) + rush-intervention freeze gate (#449) [untested]
 
 **Structural refactor (no behavior change outside the two fixes below):** the 3,600-line
