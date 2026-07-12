@@ -265,9 +265,11 @@ check pins all five write hooks, :1209-1224). Remaining friction:
    optional_loadout_index)` (:506-519). The store may hold more rows than official
    `_career_data` (rows are added store-side only, :646-671), and vanilla returns nil for a
    missing row (playfab_mirror_base.lua:1909-1919) - so the "never serve an empty weapon"
-   guarantee can still yield nil exactly when idx > #official rows. Engine-idiomatic: on
-   fallback pass `nil` index (vanilla resolves the official SELECTED row, :1911) or clamp to
-   `#mirror._career_data[career]`; a further fallback is `get_default_loadouts` (:1955-1966).
+   guarantee can still yield nil exactly when idx > #official rows. Fix AUTHORED on branch
+   `handoff/fable-2026-07-11` (gut_dev 0.2.217-dev WIP, not built): `_official_gear_fallback`
+   routes both fallback sites through a nil index (vanilla resolves the official SELECTED
+   row, :1911) with a weapon-slot `get_default_loadouts` last resort (:1955-1966), rt check
+   `native_loadouts_fallback_index_translation` - flips to FIXED when it lands on master.
 2. **Career-nil `set_career_read_only_data` passes through in modded** (:711-714). That is
    the hero-attributes `career`/`bot_career` write (backend_interface_hero_attributes_playfab.lua:100-101),
    which lands in `_characters_data`, diffs dirty (playfab_mirror_base.lua:3435-3441) and

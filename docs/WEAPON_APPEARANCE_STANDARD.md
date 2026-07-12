@@ -119,11 +119,28 @@ explicitly swap. `—` = not applicable.
 - Texture, all paths: bespoke `Material.set_texture` copies (BANNED primitive —
   §4.3 mandates `Unit.set_texture_for_materials`), no per-instance persistence,
   `WA` not shared cross-mod (#227, #416, issue #420). → §4.3.
-- Sync: husk resolves BASE `item_data` (#392). Phase C (v0.1.372-dev) now re-keys
-  the husk MESH + TRANSFORM off the husk-reliable base+career positive signal for
-  unambiguous cross-char variants (`can_wield`-excluded, safe-by-construction),
-  closing #394/#396/#397/#401 EXCEPT where weapon_tweaker has expanded `can_wield`;
-  full parity there still needs the per-wearer marker. → §5.
+- Sync: husk resolves BASE `item_data` (#392). Husk display resolution
+  (v0.1.377-dev, #474/#475, superseding the Phase C base+career-primary model)
+  runs through ONE decision point (`_om._husk_resolve_display_def`) in this
+  order:
+  1. **Wire skin PRIMARY**: a skin in either cwv namespace (base
+     `<item_key>_skin` or pairing `<item_key>_<tail>`, lazy longest-prefix)
+     positively identifies the variant → re-key mesh + transform REGARDLESS of
+     `can_wield` (#474: wieldability-exclusion had suppressed the re-key of a
+     positively-skinned variant). The skin template's own per-hand units win
+     over def defaults (pairing skins keep their exact combination).
+  2. **Non-cwv skin present → NEVER re-key** (#475 Invariant 1: never
+     mis-apply a variant to a native weapon; a variant degrading to base
+     display is the accepted lesser harm).
+  3. **Skinless echo only**: base+career positive signal, `can_wield`
+     evaluated LAZILY at wield time (respects weapon_tweaker's runtime
+     expansion whatever the boot order; #475's snapshot hole). A
+     currently-wieldable pair declines — ambiguous shows base; the following
+     skinned wield still re-keys via arm 1.
+  Residency: vanilla overrides via the shared resident-3p guard (#403/#418);
+  mod-bundled custom meshes (Old Musket) via `_om._husk_custom_bundle_unit`.
+  Closes #394/#396/#397/#401 for skin-carrying wields; skinless parity under
+  wt-expanded `can_wield` still needs the per-wearer marker. → §5.
 
 ---
 

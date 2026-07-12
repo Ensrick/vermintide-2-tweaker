@@ -280,14 +280,17 @@ Survey basis (2026-07-11): 49 `ScriptUnit.extension(` sites in 21 files vs 260
 Most `extension()` sites are guarded or vanilla-parity ports; the items below
 are where we fight the engine or leave a lifecycle edge open.
 
-1. **[P1] wt BR cone counter derefs health ext unguarded.**
+1. **[FIXED wt v0.12.208-dev] wt BR cone counter derefs health ext unguarded.**
    `weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance.lua:2444`
-   does `ScriptUnit.extension(hit_unit, "health_system"):is_alive()` on
-   broadphase-listed AI units. A unit whose extensions were just unregistered
-   (or a foreign side unit without health) returns nil -> crash inside a
-   BR toggle. Engine-idiomatic: fetch once via `has_extension` and test, as the
-   sibling code does at `enemy_tweaker_big_rebalance.lua:473-474`.
-   (Same line exists in the STALE `weapon_tweaker_dev` clone - do not edit that dir.)
+   did `ScriptUnit.extension(hit_unit, "health_system"):is_alive()` on
+   broadphase-listed AI units; a unit whose extensions were just unregistered
+   (or a foreign side unit without health) returned nil -> crash inside a
+   BR toggle. Fixed with the engine-idiomatic `has_extension` fetch + nil-test
+   (sibling pattern `enemy_tweaker_big_rebalance.lua:473-474`); missing-ext
+   enemies are skipped for the num_hit cap with a `[wt:br_hooks]` printf.
+   Note the BR module is ON ICE (`weapon_tweaker.lua:88-89`, issue 433), so
+   the guard is dormant until a BR revival.
+   (Same UNFIXED line remains in the STALE `weapon_tweaker_dev` clone - do not edit that dir.)
 
 2. **[P2] et BR stagger-heal proc derefs inventory ext unguarded.**
    `enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker_big_rebalance.lua:478-479`
