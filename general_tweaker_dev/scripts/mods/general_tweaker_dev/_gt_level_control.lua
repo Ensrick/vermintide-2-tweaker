@@ -228,6 +228,54 @@ mod.gt_kill_bots = function()
     mod:echo(string.format("Killed %d bot(s).", killed))
 end
 
+-- Force every bot into the knocked-down (bleedout) state -- the in-game repro
+-- harness for issue 448 (downed bots must not grant Morr's Protection). The user
+-- asked for a way to "down all bots" so the soft-lock fix (_gt_bot_fixes.lua
+-- FIX 11) can actually be verified: get two boon-carrying bots downed within 10m
+-- and watch whether they bleed out (fix ON) or stay permanently invulnerable
+-- (bug). knock_down is server-authoritative (player_unit_health_extension.lua:224
+-- asserts is_server) and bots are host-only, so this is host-only.
+--
+-- We set the health extension's `set_knocked_down` FIELD (a plain boolean, not a
+-- method -- the same field vanilla sets at spawn for health_state=="knocked_down",
+-- player_unit_health_extension.lua:126-127) rather than dealing raw 10000 damage.
+-- The extension's own server update consumes it next tick and calls
+-- self:knock_down(unit) (player_unit_health_extension.lua:291-295) -- the exact
+-- path lethal damage takes when it downs a live player (:298-301). Advantages over
+-- raw damage: wounds-independent (a 10000-damage hit would OUTRIGHT KILL a bot on
+-- its final wound, or vary by difficulty/wounds), yet still drives the full
+-- network-synced knockdown AND the knockdown_bleed DoT (buff_function_templates
+-- .lua:354) that Morr's invulnerable perk blocks -- so the 448 repro is faithful.
+-- Skips bots already down / awaiting rescue / dead (idempotent).
+mod.gt_down_bots = function()
+    local pm = Managers.player
+    if not (pm and pm.is_server) then
+        mod:echo("Down bots must run on the host (bots are host-side).")
+        return
+    end
+    if DamageUtils and DamageUtils.is_in_inn then
+        mod:echo("Can't down bots in the keep.")
+        return
+    end
+    local bots = pm:bots() or {}
+    local downed = 0
+    for _, bot in ipairs(bots) do
+        local unit = bot.player_unit
+        if unit and Unit.alive(unit) then
+            local status_ext = ScriptUnit.has_extension(unit, "status_system")
+            local health_ext = ScriptUnit.has_extension(unit, "health_system")
+            if status_ext and health_ext
+               and not status_ext:is_knocked_down()
+               and not status_ext:is_ready_for_assisted_respawn()
+               and not status_ext:is_dead() then
+                health_ext.set_knocked_down = true
+                downed = downed + 1
+            end
+        end
+    end
+    mod:echo(string.format("Downing %d bot(s) into bleedout.", downed))
+end
+
 mod.gt_die = function()
     if DamageUtils and DamageUtils.is_in_inn then
         mod:echo("Can't die in the keep.")
@@ -365,6 +413,7 @@ mod:command("win",       "Complete the current map",           function() mod.gt
 mod:command("fail",      "Fail the current map",               function() mod.gt_fail_level()    end)
 mod:command("restart",   "Restart the current map",            function() mod.gt_restart_level() end)
 mod:command("killbots",  "Kill all bots (pre-round on EAC-secure realm only)", function() mod.gt_kill_bots() end)
+mod:command("downbots",  "Force all bots into bleedout (issue 448 Morr's test)", function() mod.gt_down_bots() end)
 mod:command("die",       "Kill your character",                function() mod.gt_die()           end)
 mod:command("respawn",   "Force yourself back in when dead or awaiting rescue", function() mod.gt_respawn() end)
 mod:command("fix_sound",    "Stop the looping vortex SFX bug (post-restart in a storm)", function() mod.gt_fix_sound() end)

@@ -1,5 +1,15 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.201-dev (2026-07-12) -- issue 448 test harness: `/downbots` forces all bots into bleedout [verify-fix]
+
+### Added
+- **New host command `/downbots` (+ "Down Bots (Morr's test)" keybind under Level Control).** The in-game repro harness the user asked for so the shipped issue 448 fix (`_gt_bot_fixes.lua` FIX 11, downed bots must not grant Morr's Protection) can finally be verified: it forces every standing bot into the downed/bleedout state at once. Host-only (`knock_down` is server-authoritative, `player_unit_health_extension.lua:224`; bots are host-side); keep-guarded (`DamageUtils.is_in_inn`); skips bots already down / awaiting rescue / dead.
+- **Mechanism -- `set_knocked_down` field, not raw damage.** Sets each bot's health extension `set_knocked_down = true` (a plain boolean field, the SAME one vanilla sets at spawn for `health_state == "knocked_down"`, `player_unit_health_extension.lua:126-127`). The extension's own server update consumes it next tick and calls `self:knock_down(unit)` (`:291-295`) -- the exact path lethal damage takes to down a live player (`:298-301`). Chosen over the user-suggested "10000 damage" because raw lethal damage is wounds-dependent: it would OUTRIGHT KILL a bot on its final wound (or vary by difficulty) instead of downing it. The field path is wounds-independent yet still drives the full network-synced knockdown plus the `knockdown_bleed` DoT (`buff_function_templates.lua:354`) that Morr's `invulnerable` perk blocks -- so the soft-lock repro is faithful.
+- New callable lives on `mod.gt_down_bots` (VMF keybind `function_call` + chat command both resolve it), co-located with `gt_kill_bots` in `_gt_level_control.lua`. No new hooks, no RPC, no network wire -- host-local only.
+
+### In-game verify (issue 448)
+- Host a Chaos Wastes run with bots; get two bots each carrying the Morr's Protection boon. In a mission (not the keep), stand them within ~10m of each other and run `/downbots` (or the keybind). Expected with the fix ON (default): both bots bleed out normally and the console shows `[gt:448] downed bot carrier: Morr's Protection aura grant suppressed` once per downed bot -- no permanent invulnerability, no soft-lock. Toggle "Downed bots don't grant Morr's Protection" OFF and repeat to see the original bug (neither bleeds out). Requires `[gt:LOAD] v0.2.201-dev` in the newest console log after a full Steam restart.
+
 ## v0.2.200-dev (2026-07-12) -- #508 FIX: debug_highlights error spam before the network backend exists [untested]
 
 ### Fixed

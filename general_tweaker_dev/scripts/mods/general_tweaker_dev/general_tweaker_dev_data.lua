@@ -479,6 +479,15 @@ local _data = {
                                 tooltip         = "kill_bots_hotkey_tooltip",
                             },
                             {
+                                setting_id      = "down_bots_hotkey",
+                                type            = "keybind",
+                                keybind_trigger = "pressed",
+                                keybind_type    = "function_call",
+                                function_name   = "gt_down_bots",
+                                default_value   = {},
+                                tooltip         = "down_bots_hotkey_tooltip",
+                            },
+                            {
                                 setting_id      = "restart_level_hotkey",
                                 type            = "keybind",
                                 keybind_trigger = "pressed",
