@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.241-dev"
+local MOD_VERSION = "0.7.242-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -409,6 +409,14 @@ end
 _install_deus_loot_amount_fallback()
 
 local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_adventure_pool")
+
+-- #487 freeze diagnostics. Stored on mod._ (not a new top-level local) to stay
+-- under Lua 5.1's 200-local chunk ceiling. Loaded here (after _adventure_pool,
+-- before mod.update and the DeusRunController.setup_run hook - its only callers)
+-- so the pool-snapshot helper can read the LIVE LEVEL_AVAILABILITY the deus
+-- solver consumes. Instrumentation only; see _ct_diag_freeze487.lua header.
+mod._ct_freeze487 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_freeze487")
+
 -- Call unconditionally so the LEVEL_AVAILABILITY snapshot is captured at mod load,
 -- even if the master toggle is off. inject_pool() short-circuits internally when the
 -- master is off (only resets to snapshot). Snapshot-at-load means subsequent toggles
@@ -1484,6 +1492,10 @@ mod.update = function(dt)
     -- disarmed. Resolved via mod._ since the census `do` block is defined LATER in
     -- this file; the field is assigned at load, before any update tick fires.
     if mod._ct_tally_tick then mod._ct_tally_tick(dt) end
+    -- #487 freeze watchdog: reports any single frame whose dt exceeds the stall
+    -- threshold (a recoverable game-loop stall), naming the last-open diagnostic
+    -- region. Cheap field read + numeric compare; no-op on the common path.
+    if mod._ct_freeze487 then mod._ct_freeze487.tick(dt) end
     -- #299: deferred host-side pass that teleports a chest-revived player back to a
     -- teammate once they become controllable (they otherwise stand up alone at a
     -- distant respawn beacon). Cheap no-op when nothing is armed. Resolved via mod._
@@ -2504,7 +2516,22 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
             tostring(run_id), tostring(vanilla_initial), setting)
     end
 
+    -- #487 freeze diagnostics: bracket the vanilla setup_run call, which runs
+    -- deus_generate_graph -> deus_populate_graph (the backtracking map solver, the
+    -- prime freeze suspect). The BEGIN breadcrumb is flushed synchronously with the
+    -- live pool sizes, so if the solver hard-hangs this is the last console line and
+    -- it explains why; FINISH reports elapsed + whether the graph came back nil.
+    -- Runs on BOTH peers (client also solves locally from the synced seed).
+    if mod._ct_freeze487 then
+        local is_server_d = Managers and Managers.player and Managers.player.is_server
+        mod._ct_freeze487.begin_generate(args[3], is_server_d)
+    end
+
     local ret_a, ret_b = func(self, unpack(args, 1, n))
+
+    if mod._ct_freeze487 then
+        mod._ct_freeze487.finish_generate(args[3], self._path_graph)
+    end
 
     -- v0.7.121-dev Issue #53 diagnostic — dump post-populate graph state on
     -- BOTH peers (gated on VMF debug logging via _dbg). Proves whether the
