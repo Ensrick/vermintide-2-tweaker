@@ -365,21 +365,18 @@ rt_register("double_freeze_guard_wired", function()
     -- (#213) The engine "Tried to freeze unit twice in the same frame" ERROR under raised
     -- grunt caps is suppressed by a guard hook on BreedFreezer.try_mark_unit_for_freeze that
     -- replicates vanilla's own duplicate check and returns true when the unit is already
-    -- queued this batch (so the caller skips the redundant mark_for_deletion). BreedFreezer
-    -- loads in-mission (nil at the keep), so guard the fix by source-pattern against THIS
-    -- module file (v0.7.31-dev split: debug.getinfo(1) = this check's own chunk, which is
-    -- the file that also carries the hook). Split needle so this line can't self-match.
-    -- No-op if unreadable.
-    local ok, info = pcall(debug.getinfo, 1, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    local needle = '"BreedFreezer", "try_mark_unit_for_freeze", "double_freeze' .. '_guard"'
-    if not txt:find(needle, 1, true) then
+    -- queued this batch (so the caller skips the redundant mark_for_deletion). Verify via
+    -- _et_protect's runtime wrap_registry: BreedFreezer is a BOOT global
+    -- (breed_freezer.lua:77, `class(BreedFreezer)` at file scope -- confirmed by the boot
+    -- "Hooking 'try_mark_unit_for_freeze' from [BreedFreezer]" log line), so the hook
+    -- installs at mod load and the marker is set regardless of mission state. Sandbox-safe:
+    -- REPLACES the pre-0.7.33 io.open source self-grep, which threw "attempt to index global
+    -- 'io'" in the VMF sandbox and failed this check in-game (issue 479 log).
+    local reg = ET.wrap_registry
+    if type(reg) ~= "table" or type(reg.plain) ~= "table" then
+        return "wrap_registry missing (#213 provenance tracking gone)"
+    end
+    if rawget(_G, "BreedFreezer") and not reg.plain["BreedFreezer.try_mark_unit_for_freeze"] then
         return "#213 REGRESSION: the double_freeze_guard hook on BreedFreezer.try_mark_unit_for_freeze is gone (the 'freeze unit twice' engine error returns under raised grunt caps)"
     end
 end)
@@ -418,20 +415,23 @@ rt_register("issue479_cd_tick_no_rerun_and_restore", function()
     local ok3, seen = call_with_override(rs, "max_grunts", 200, function() return rs.max_grunts end)
     if not ok3 or seen ~= 200 then return "override not visible to vanilla during the call" end
     if rs.max_grunts ~= 90 then return "max_grunts NOT restored on the success path" end
-    -- Wiring: the CD.update hook in THIS file must be registered through the
-    -- tick guard, not plain _hook_wrap. Source-pattern via own-file grep
-    -- (split needle so this line can't self-match).
-    local ok4, info = pcall(debug.getinfo, 1, "S")
-    if ok4 and type(info) == "table" and info.source then
-        local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-        local f = io.open(src_path, "r")
-        if f then
-            local txt = f:read("*a")
-            f:close()
-            local needle = '_hook_wrap_tick("ConflictDirector", "update"' .. ','
-            if txt and not txt:find(needle, 1, true) then
-                return "#479 REGRESSION: ConflictDirector.update is no longer registered via _hook_wrap_tick"
-            end
+    -- (c) Wiring: the production CD.update hook must be registered through the
+    -- NO-RE-RUN tick guard, and NOT through the re-running _hook_wrap. Runtime
+    -- provenance from _et_protect's wrap_registry -- ConflictDirector is a boot
+    -- global (conflict_director.lua:70), so the marker is set at mod load and is
+    -- readable at the keep. REPLACES the pre-0.7.33 io.open source self-grep,
+    -- which threw "attempt to index global 'io'" in the VMF sandbox and failed
+    -- this check in-game (the "Failed." report on issue 479).
+    local reg = ET.wrap_registry
+    if type(reg) ~= "table" or type(reg.tick) ~= "table" or type(reg.plain) ~= "table" then
+        return "wrap_registry missing (issue 479 provenance tracking gone)"
+    end
+    if rawget(_G, "ConflictDirector") then
+        if not reg.tick["ConflictDirector.update"] then
+            return "#479 REGRESSION: ConflictDirector.update is not registered via the no-re-run tick guard (_hook_wrap_tick)"
+        end
+        if reg.plain["ConflictDirector.update"] then
+            return "#479 REGRESSION: ConflictDirector.update is also registered via _hook_wrap, which re-runs vanilla on inner error"
         end
     end
 end)

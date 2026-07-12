@@ -1,5 +1,43 @@
 # Enemy Tweaker Changelog
 
+## 0.7.33-dev (2026-07-12): #479 repair the tick-guard regression check (io-nil in sandbox) [untested]
+
+**The #479 BEHAVIOR fix was already correct and confirmed in-game** (0.7.31-dev):
+the `ConflictDirector.update` tick uses `_hook_wrap_tick` (no vanilla re-run on
+inner error) and `_call_with_override` (restore `RecycleSettings.max_grunts` on
+both paths). The failing-session log proves it: `[et:479] skipped rt479 tick
+after inner error (no vanilla re-run; overrides restored)`. What the user saw
+FAIL was the regression CHECK, not the fix.
+
+- **Root cause of the "Failed." report:** `issue479_cd_tick_no_rerun_and_restore`
+  (and `double_freeze_guard_wired`) verified hook wiring by reading their own
+  source via `io.open`. The VMF Lua sandbox exposes NO `io` library, so the call
+  threw `attempt to index global 'io' (a nil value)` at `_et_pacing.lua:427`
+  (and `:376`) and the checks reported FAIL despite the underlying fixes being
+  intact. (The memory note claiming `io.open` read works in the sandbox is
+  stale/wrong -- corrected.)
+- **Fix:** replaced the io source self-grep with a runtime provenance registry.
+  `_et_protect.lua` records every `(class, method)` pair installed through
+  `_hook_wrap` (`wrap_registry.plain`) vs `_hook_wrap_tick`
+  (`wrap_registry.tick`). ConflictDirector and BreedFreezer are boot globals
+  (`class(...)` at file scope), so the markers are set at mod load and are
+  readable when `/et_regression_test` runs at the keep -- no `io`, no
+  `debug.getinfo`, no mission state.
+- **Invariant now locked at runtime:** `issue479_cd_tick_no_rerun_and_restore`
+  asserts `ConflictDirector.update` is in `wrap_registry.tick` and NOT in
+  `wrap_registry.plain` -- i.e. it goes through the no-re-run tick guard and is
+  never re-registered on the re-running `_hook_wrap`. Flipping the CD.update
+  registration back to `_hook_wrap` now fails the check in-game. The behavioral
+  (a) no-re-run and (b) override-restore-on-both-paths assertions are unchanged.
+- **Corroborated:** `double_freeze_guard_wired` (#213) had the identical io-nil
+  throw in the same file; converted to the same registry marker
+  (`wrap_registry.plain["BreedFreezer.try_mark_unit_for_freeze"]`).
+- **Not addressed here (distinct issue):** `spawn_pacing_hook_targets_present`
+  reports `CurrentPacing.mini_patrol.only_spawn_below_intensity (path changed)`
+  at the KEEP because `CurrentPacing` is only cloned from a mission director in
+  `refresh_conflict_director_patches` (`conflict_director.lua:878`); the path is
+  correct in-mission. Keep-timing false negative -- separate follow-up.
+
 ## 0.7.32-dev (2026-07-12): #500 remove the stale #275 Nurgloth phase-desync probe (closed issue) [untested]
 
 - **#500: removed `_et_nurgloth_probe.lua`** (issue 275, `[et:275]`, CLOSED). It was explicitly "no fix, capture only" (0.7.29-dev / 0.7.30-dev CHANGELOG): it wrapped `Breeds.chaos_exalted_sorcerer_drachenfels.run_on_spawn`/`run_on_game_update` and seven drachenfels BT enter/leave hooks, but every wrapper called the ORIGINAL raw first and then a pcall-guarded printf tracer, so vanilla behavior was byte-for-byte preserved. The actual #275 fix shipped elsewhere (gt_dev's `BTConditions.transitioned_one_third_health` collapsing-guard fix, commit b166251; gut_dev's wired-on_skip cutscene policy) with regression coverage `gt_cs_transitioned_one_third_not_forced` + `gut_cutscene_no_global_latch` -- NOT in this file. The #275 close-out had left this probe "armed in dev builds"; #500 is the sweep that retires such now-stale armed probes.

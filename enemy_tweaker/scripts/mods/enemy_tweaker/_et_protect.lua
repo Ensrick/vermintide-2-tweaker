@@ -19,6 +19,21 @@ local ET = mod._et
 local rt_register = ET.rt_register
 local _dbg_alert  = ET.dbg_alert
 
+-- Registration provenance (issue 479, v0.7.33-dev). Records which (class,
+-- method) pairs were installed through each wrapper so the regression suite can
+-- assert the CD tick uses the NO-RE-RUN tick guard (not the re-running
+-- _hook_wrap) WITHOUT reading source. The VMF Lua sandbox exposes NO `io`
+-- library (verified: the v0.7.31-dev io.open self-grep threw "attempt to index
+-- global 'io' (a nil value)" and failed the whole check in-game), so source
+-- self-grep is not a viable regression technique here. ConflictDirector and
+-- BreedFreezer are boot globals (conflict_director.lua:70,
+-- breed_freezer.lua:77 -- `class(...)` at file scope), so these markers are set
+-- at mod load, before any mission, and are readable when /et_regression_test
+-- runs at the keep.
+ET.wrap_registry = ET.wrap_registry or { plain = {}, tick = {} }
+local _wrap_registry = ET.wrap_registry
+local function _reg_key(class, method) return tostring(class) .. "." .. tostring(method) end
+
 -- _safe(label, fn, ...) — call fn(...) under pcall. On failure log a
 -- mod:warning + a log-only _dbg_alert line (visible even with mod logging
 -- OFF) and return nil. Use for any mod-side helper that touches engine
@@ -59,6 +74,7 @@ local function _hook_wrap(class, method, label, body)
         _dbg_alert("hook %s vanilla fallback errored: %s", tostring(label), tostring(fr1))
         return nil
     end)
+    _wrap_registry.plain[_reg_key(class, method)] = true
 end
 
 -- _hook_wrap_table(class_table, method, label, body) — table-form variant
@@ -115,6 +131,7 @@ mod._et479_make_tick_guard = _make_tick_guard
 
 local function _hook_wrap_tick(class, method, label, body)
     mod:hook(class, method, _make_tick_guard(class, method, label, body))
+    _wrap_registry.tick[_reg_key(class, method)] = true
 end
 
 -- _call_with_override(rs, field, override, func, self, ...) — pure + testable
