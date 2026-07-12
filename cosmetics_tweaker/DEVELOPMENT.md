@@ -2,14 +2,18 @@
 
 Detailed technical reference for the `cosmetics_tweaker` mod. Read alongside `CHANGELOG.md` (version-by-version history) and `TODO.md` (open work).
 
-## Module map (v0.9.77-dev Phase 1 OOP split)
+## Module map (v0.9.78-dev Phase 2 OOP split)
 
-`cosmetics_tweaker.lua` is still the primary file (~9,700 lines) — this is an
+`cosmetics_tweaker.lua` is still the primary file (~9,570 lines) — this is an
 IN-PROGRESS decomposition (OOP_REFACTOR_PLAN WS5), not a finished one. Phase 1
-carved out the three cleanest self-contained concerns; the glow subsystem,
-LA-bridge + husk, the HeroWindowItemCustomization offhand-picker UI suite, the
-wire-safety senders, and the render-path hooks all still live in the entry file,
-pending later phases (run in fresh sessions).
+carved out the three cleanest self-contained concerns; Phase 2 carved out the
+render-path scale/grip apply layer. The glow subsystem, LA-bridge + husk, the
+HeroWindowItemCustomization offhand-picker UI suite, the wire-safety senders, and
+the render-path HOOKS themselves all still live in the entry file, pending later
+phases (run in fresh sessions). Note the split in Phase 2: the render HOOKS
+(`create_equipment` / `_spawn_item_post` / `LootItemUnitPreviewer.spawn_units`)
+stay in the entry, but the scale/grip apply helpers they call moved to
+`_cos_render.lua` and are invoked via `mod._cos.*`.
 
 **Shared namespace `mod._cos`** (the event_tweaker `mod._evt` pattern,
 PROJECT_STANDARDS § 2.2a) carries cross-module state. It is created in the entry
@@ -18,15 +22,19 @@ manifest (just after the `_flush_log` helper) and populated with the handles the
 map), `LA_BRIDGE`, `flush_log`, `skin_requires_unowned_dlc`, `custom_skin_keys`
 (shared with the wire-safety senders + regression suite), `custom_illusions` (shared
 with the offhand force-loader), and `apply_cosmetic_unlocks` (exported by the unlocks
-module for the entry's lifecycle callbacks). `mod:dofile` is NOT a singleton, so
+module for the entry's lifecycle callbacks). Phase 2 added `is_unit`, `scale_units`,
+`offset_units`, and `apply_unit_path_scale_hand` (exported by `_cos_render`): the render
+hooks in the entry call the three apply helpers via `mod._cos.*`, and the entry aliases
+`is_unit` locally for the glow code that stays behind. `mod:dofile` is NOT a singleton, so
 modules never dofile each other — each is dofile'd exactly once from the manifest.
 
 | Module | Owns / public surface (on `mod._cos` unless noted) |
 |---|---|
-| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest (`_la_prefix_embedded`, `_material_hijack_embedded`, `_moreitemslibrary_embedded`, `_cosmetic_unlocks`=`U`, `_la_bridge`, `_tpe`, `_glow_picker`, `_la_persistence`, `_la_okri`, `_ui_dump`, `_diag_probe`), the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks (`on_game_state_changed`/`on_setting_changed`/`on_disabled`/`on_unload`), and everything not yet extracted: render-path hooks, glow, LA-bridge integration + husk, offhand picker + customization UI, the #421 wire-safety senders, the #282 MH release lifecycle, and the `/cos_regression_test` suite. |
+| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest (`_la_prefix_embedded`, `_material_hijack_embedded`, `_moreitemslibrary_embedded`, `_cosmetic_unlocks`=`U`, `_la_bridge`, `_tpe`, `_glow_picker`, `_la_persistence`, `_la_okri`, `_ui_dump`, `_diag_probe`), the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks (`on_game_state_changed`/`on_setting_changed`/`on_disabled`/`on_unload`), and everything not yet extracted: the render-path HOOKS (`create_equipment` / `_spawn_item_post` / `spawn_units`; their scale/grip apply helpers moved to `_cos_render` in Phase 2), glow, LA-bridge integration + husk, offhand picker + customization UI, the #421 wire-safety senders, the #282 MH release lifecycle, and the `/cos_regression_test` suite. |
 | `_cos_diagnostics.lua` | Read-only dump/probe chat commands (`/flush_log`, `/dump_glows`, `/dump_skin_rarities`, `/dump_all_names`, `/check_vmf`, `/probe_hat`, `/probe_cosmetics`). Reads `mod._cos.flush_log`; no exports. |
 | `_cos_illusions.lua` | Custom weapon-illusion + LA shield skin injection into `ItemMasterList`/`WeaponSkins`/`NetworkLookup` (`_custom_illusions`, `_la_shield_skin_specs`), the `get_unlocked_weapon_skins` unlock hook, the `_G.Localize` display-name hook. Populates `mod._cos.custom_skin_keys`; exports `mod._cos.custom_illusions`. |
 | `_cos_unlocks.lua` | Per-career cosmetic unlocks (`apply_cosmetic_unlocks` + `_CHARACTER_CAREERS`), Unlock-All portrait frames, vanilla-unobtainable cosmetic grants, the two `PlayFabMirrorAdventure` hooks, `/frames_status` + `/cosmetics_status`. Exports `mod._cos.apply_cosmetic_unlocks`. |
+| `_cos_render.lua` | Render-path weapon scale/grip apply layer (v0.9.78-dev Phase 2): the two visual-override data tables (`_unit_path_scale_overrides` + `_breton_sword_thiccc`, empty `_weapon_grip_offsets`) and the resolve/apply helpers (`_resolve_for_career`, `_resolve_render_unit_path`, `_resolve_factor`, `_apply_unit_path_scale_hand`, `_scale_units`, `_offset_units`), plus the `_is_unit` liveness primitive. Exports `mod._cos.{is_unit, scale_units, offset_units, apply_unit_path_scale_hand}`; reads nothing off `mod._cos`. The render HOOKS that drive these stay in the entry. |
 
 Pre-existing `_*.lua` modules (`_la_bridge`, `_material_hijack_embedded[_anim]`,
 `_moreitemslibrary_embedded`, `_cosmetic_unlocks`, `_tpe`, `_glow_picker`,
@@ -44,9 +52,15 @@ their internals alone.
 - **New hat/skin/frame unlock or backend-mirror grant** → `_cos_unlocks.lua`; walk the
   DLC three-places checklist (`mod._cos.skin_requires_unowned_dlc`) before any
   `_unlocked_*` write.
+- **New weapon-model scale or grip-offset override** → `_cos_render.lua`. Add a
+  `_unit_path_scale_overrides` entry (keyed by unit-path substring) or a
+  `_weapon_grip_offsets` entry (keyed by item name + career prefix); the render hooks
+  in the entry already call `mod._cos.scale_units` / `.offset_units` per equip, so no
+  new call site is needed. Need a liveness check? use `mod._cos.is_unit`.
 - **Anything touching glow, the LA bridge/husk, the offhand picker, the wire-safety
-  senders, or the render paths** → still in `cosmetics_tweaker.lua` until a later
-  phase extracts them; grep ALL files for an existing hook on the `(Class, method)`
+  senders, or the render-path HOOKS** → still in `cosmetics_tweaker.lua` until a later
+  phase extracts them (the render hooks' scale/grip apply helpers already live in
+  `_cos_render.lua`); grep ALL files for an existing hook on the `(Class, method)`
   before adding one (VMF drops the second — NON-NEGOTIABLE 8).
 - **New cross-module value** → export onto `mod._cos` in the owning module (which must
   be earlier in the manifest than its consumers) and localize it at the consumer's top.

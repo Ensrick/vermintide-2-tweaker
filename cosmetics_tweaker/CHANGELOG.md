@@ -1,5 +1,44 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.78-dev — 2026-07-12 — Structural refactor: Phase 2 OOP decomposition (no behavior change) [untested]
+
+Second structural slice of the `cosmetics_tweaker.lua` god file (9,712 -> 9,568
+lines): the render-path weapon scale/grip apply layer moved VERBATIM into a new
+single-responsibility module, following the Phase 1 discipline (function-bag moves,
+zero logic edits, no hook/localization/data changes). Adversarial 5-class diff review
+(orphaned upvalues / non-verbatim moves / dropped-or-duplicated hooks / load-order /
+guard drift) returned zero findings — every moved function and data table was
+byte-compared against the previous commit; build + `lint-mod.ps1` (19 files, 93 hooks,
+0 duplicate) pass; the new module was verified present in the compiled bundle by the
+murmur64 hash of its resource path (`F4A3F10DA4EE5F48.lua`, 2.87 kB).
+
+- New module (function-bag extraction; 208 lines): `_cos_render.lua` — the two
+  visual-override data tables (`_unit_path_scale_overrides` + `_breton_sword_thiccc`,
+  the empty `_weapon_grip_offsets` extension point) and the resolve/apply helpers
+  (`_resolve_for_career`, `_resolve_render_unit_path`, `_resolve_factor`,
+  `_apply_unit_path_scale_hand`, `_scale_units`, `_offset_units`), plus the tiny
+  `_is_unit` liveness primitive.
+- `_is_unit` PROMOTED to `mod._cos.is_unit` because the glow subsystem (still in the
+  entry this phase) consumes it. The entry keeps a byte-identical local alias
+  (`local _is_unit = mod._cos.is_unit`) so all five glow / glow-dump `_is_unit(...)`
+  call sites in the entry stay unchanged.
+- The three apply helpers are exported on `mod._cos` (`scale_units`, `offset_units`,
+  `apply_unit_path_scale_hand`); the entry's four render-hook call sites that stay in
+  place (`create_equipment` scale + offset, `_spawn_item_post` scale x2,
+  `LootItemUnitPreviewer.spawn_units` scale x2) were rebound to `mod._cos.*(...)`,
+  mirroring the Phase 1 `mod._cos.apply_cosmetic_unlocks()` consumption pattern. This
+  pre-namespaces the render call sites so a later render/glow module extraction has no
+  re-plumbing to do.
+- LOAD-BEARING blocks LEFT IN THE ENTRY, unchanged (deferred to a later phase with a
+  2-player re-verify window): the glow subsystem, the #421 wire-safety senders, the
+  #282 MH release lifecycle, the LA-bridge + husk region, and the
+  HeroWindowItemCustomization offhand-picker UI suite. The render HOOKS themselves stay
+  in the entry — only their scale/grip apply helpers moved.
+- Manifest position of `_cos_render` is free: it has no load-time reads of other
+  modules' exports, and its own exports are consumed only at runtime inside the render
+  hooks; it is `mod:dofile`'d with the other `_cos_*` extractions, before the entry's
+  `_is_unit` alias.
+
 ## 0.9.77-dev — 2026-07-12 — Structural refactor: Phase 1 OOP decomposition (no behavior change) [untested]
 
 Pure structural split of the `cosmetics_tweaker.lua` god file (10,773 -> 9,712 lines):

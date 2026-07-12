@@ -54,7 +54,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _diag_probe.lua.
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_diag_probe")
 
-local MOD_VERSION = "0.9.77-dev"
+local MOD_VERSION = "0.9.78-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -327,6 +327,7 @@ end
 --   _cos_diagnostics : read-only dump/probe commands (was inline + probe_cosmetics)
 --   _cos_illusions   : custom illusion + LA shield skin injection + Localize/unlock hooks
 --   _cos_unlocks     : per-career unlocks + portrait frames + unobtainable-cosmetic grants
+--   _cos_render      : weapon scale/grip apply helpers + shared _is_unit (v0.9.78-dev Phase 2)
 mod._cos = mod._cos or {}
 mod._cos.U = U
 mod._cos.LA_BRIDGE = LA_BRIDGE
@@ -341,10 +342,20 @@ local _custom_skin_keys = mod._cos.custom_skin_keys
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diagnostics")
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_illusions")
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_unlocks")
+-- _cos_render has no load-time reads of other modules' exports and its own
+-- exports (scale_units/offset_units/apply_unit_path_scale_hand/is_unit) are
+-- consumed only at runtime inside the render hooks below, so its manifest
+-- position is free; it sits here with the other _cos_* extractions.
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_render")
 -- _custom_illusions is shared: the illusions module owns/populates it; the
 -- offhand force-loader (_force_load_all_offhand_packages) walks it to preload
 -- each illusion's hand-unit packages on every peer.
 local _custom_illusions = mod._cos.custom_illusions
+-- _is_unit moved to _cos_render.lua (Phase 2). Keep a byte-identical entry-local
+-- alias so the glow subsystem's _is_unit(...) call sites (still in this file this
+-- phase) stay unchanged; the render hooks call the moved apply helpers via
+-- mod._cos.* directly.
+local _is_unit = mod._cos.is_unit
 
 
 -- ============================================================
@@ -564,68 +575,12 @@ end
 
 -- (probe_cosmetics command moved to _cos_diagnostics.lua, v0.9.77-dev Phase 1)
 
--- ============================================================
--- Weapon Visual Overrides
--- ============================================================
--- ---------------------------------------------------------------------------
--- VISUAL OVERRIDES — TWO DIFFERENT SCHEMAS, INTENTIONALLY
--- ---------------------------------------------------------------------------
--- 1) Scale overrides:  keyed by UNIT PATH SUBSTRING. Match against the actual
---    model the engine loads (skin's right/left_hand_unit if a skin is equipped,
---    falling back to the item's own paths). This targets the MODEL, not the
---    item template, so:
---      - vanilla `es_bastard_sword` with any Bretonian skin       → matches
---      - `es_sword_shield_breton` (paired with shield)            → matches (right hand only)
---      - character_weapon_variants Imperial Longsword             → does NOT match
---        (uses bastard_sword_template but loads `wpn_2h_sword_*` model)
---      - any third-party item that swaps to a Bretonian model     → matches
---
--- 2) Grip-offset overrides: keyed by ITEM NAME and CAREER PREFIX. These adjust
---    `Unit.local_position` (Z axis is along the blade — see
---    `feedback_grip_offset_sign.md`: +Z lowers grip, -Z raises grip).
---
--- COVERAGE: scale runs on all three rendering paths (in-game / inventory
--- preview / illusion browser). Grip-offset runs ONLY on the in-game
--- GearUtils hook, intentionally — see `feedback_grip_offset_sign.md`
--- "preview shows un-offset weapon".
---
--- See "Three Rendering Paths" in DEVELOPMENT.md for the hook list and
--- `_spawn_item_post` / `LootItemUnitPreviewer.spawn_units` hooks below.
-
--- Toggle-gated factor function. Returns the {x,y,z} scale when the user has
--- enabled the Bretonian Longsword "thiccc" option in cosmetics_tweaker_data,
--- nil otherwise. Called fresh each apply so live setting changes take effect
--- without re-spawning.
-local function _breton_sword_thiccc(get)
-    if get("es_bastard_sword_thiccc") then
-        return { 0.65, 1.0, 1.0 }
-    end
-    return nil
-end
-
--- Unit-path scale entries. Schema:
---   pattern : literal substring matched via string.find(path, pattern, 1, true)
---   factor  : function(get) -> {x,y,z}|number|nil  OR  literal {x,y,z} OR number
---   hand    : "right" | "left" | nil (nil = both hands)
-local _unit_path_scale_overrides = {
-    {
-        -- Bretonian Longsword model family. Covers wpn_emp_gk_sword_01_t1,
-        -- _01_t2, _02_t1, _02_t2 plus their _runed_* and _magic_* variants.
-        -- Used by ItemMasterList entries `es_bastard_sword` (and skins) and
-        -- the right-hand sword of `es_sword_shield_breton` (paired with a
-        -- GK shield in the left hand — `hand = "right"` keeps the shield
-        -- at native scale).
-        pattern = "wpn_emp_gk_sword_",
-        factor  = _breton_sword_thiccc,
-        hand    = "right",
-    },
-}
-
--- Grip-offset table. Keyed by weapon item-key, values are
--- { <career_prefix> = {x, y, z}, _default = {x, y, z} } where Z is along the
--- blade. EMPTY today — kept as the extension point. See
--- `feedback_grip_offset_sign.md` for sign convention (+Z lowers grip).
-local _weapon_grip_offsets = {}
+-- Weapon Visual Overrides (scale + grip apply layer) moved to _cos_render.lua
+-- (v0.9.78-dev Phase 2 OOP split): the two-schema data tables
+-- (_unit_path_scale_overrides + _breton_sword_thiccc, _weapon_grip_offsets) and
+-- the resolve/apply helpers. The render HOOKS that drive them stay in this file
+-- and call mod._cos.scale_units / .offset_units / .apply_unit_path_scale_hand.
+-- See DEVELOPMENT.md "Module map" + "Render paths".
 
 -- Custom weapon illusions + LA shield skin injection (and the
 -- get_unlocked_weapon_skins + _G.Localize hooks for those keys) moved to
@@ -3341,98 +3296,11 @@ if BackendUtils then
     end)
 end
 
--- ============================================================
--- Helpers (parallel to weapon_tweaker; consolidate into a shared
--- module if a third mod ever needs them)
--- ============================================================
-
-local function _is_unit(v) return type(v) == "userdata" and pcall(Unit.alive, v) end
-
-local function _resolve_for_career(overrides, career_name)
-    if not overrides or not career_name then return nil end
-    local best, best_len = nil, -1
-    for prefix, value in pairs(overrides) do
-        if prefix ~= "_default" and #prefix > best_len and career_name:sub(1, #prefix) == prefix then
-            best, best_len = value, #prefix
-        end
-    end
-    if best ~= nil then
-        if best == false then return nil end
-        return best
-    end
-    return overrides._default
-end
-
--- Returns the unit path the engine would actually load for this hand: a
--- skin's path takes precedence over the base item's path (mirrors
--- BackendUtils.get_item_units' resolution at backend_utils.lua:171-189).
--- `skin` may be nil/"" → fall through to item_data[hand_field].
--- `hand_field` is "right_hand_unit" or "left_hand_unit".
--- Returns nil when neither source has a path for that hand (common for
--- single-hand weapons or for hat/portrait items).
--- Mirrors BackendUtils.get_item_units' skin-vs-base resolution: when a skin
--- is equipped, the skin's per-hand unit path takes precedence; otherwise fall
--- back to the base item_data's per-hand unit. Used ONLY by the in-game
--- `GearUtils.create_equipment` hook, which doesn't expose a pre-resolved
--- spawn_data array — it gets `result.skin` from the spawn result and we have
--- to look up the rendered path ourselves. The two menu hooks
--- (`HeroPreviewer._spawn_item`, `LootItemUnitPreviewer.spawn_units`) read
--- paths directly from `spawn_data[i].unit_name` instead, which is vanilla's
--- truth source after it called BackendUtils.get_item_units once. Don't add
--- new callers for menu paths — re-introducing this resolution chain risks
--- the cwv-clone `entry.name` drift bug fixed in v0.7.98.
-local function _resolve_render_unit_path(item_data, skin, hand_field)
-    if skin and skin ~= "" and WeaponSkins and WeaponSkins.skins then
-        local s = WeaponSkins.skins[skin]
-        if s and s[hand_field] then return s[hand_field] end
-    end
-    return item_data and item_data[hand_field] or nil
-end
-
--- Resolve a factor (function | {x,y,z} | number) into a Vector3 scale.
--- Functions receive a `get(id)` accessor for live mod settings, so toggling
--- a setting without re-spawning the unit is supported (next equip applies).
--- Returns nil if the factor function returned nil (toggle off).
-local function _resolve_factor(factor)
-    if type(factor) == "function" then
-        factor = factor(function(id) return mod:get(id) end)
-    end
-    if not factor then return nil end
-    if type(factor) == "table" then
-        return Vector3(factor[1], factor[2], factor[3])
-    end
-    return Vector3(factor, factor, factor)
-end
-
--- Apply any matching unit-path scale to one hand's units. Pass nil for any
--- slot you don't have (the menu paths only have one Unit per hand; in-game
--- has both 3p and 1p). `hand_label` is "right" or "left" — used to filter
--- entries with `hand = "right"` etc. set.
--- No-op if `path` is nil (e.g. single-hand weapon's left side).
-local function _apply_unit_path_scale_hand(unit_3p, unit_1p, path, hand_label)
-    if not path then return end
-    for _, ov in ipairs(_unit_path_scale_overrides) do
-        if (ov.hand == nil or ov.hand == hand_label)
-                and path:find(ov.pattern, 1, true) then
-            local scale = _resolve_factor(ov.factor)
-            if scale then
-                if unit_3p and _is_unit(unit_3p) then pcall(Unit.set_local_scale, unit_3p, 0, scale) end
-                if unit_1p and _is_unit(unit_1p) then pcall(Unit.set_local_scale, unit_1p, 0, scale) end
-            end
-        end
-    end
-end
-
--- Convenience wrapper for the GearUtils path: resolves both hand paths from
--- the spawn result + base item, then applies matching scale to all four hand
--- units. Used by the in-game create_equipment hook only — menu paths build
--- their own Unit list (one per hand, not 3p/1p split).
-local function _scale_units(result, item_data, skin)
-    local right_path = _resolve_render_unit_path(item_data, skin, "right_hand_unit")
-    local left_path  = _resolve_render_unit_path(item_data, skin, "left_hand_unit")
-    _apply_unit_path_scale_hand(result.right_unit_3p, result.right_unit_1p, right_path, "right")
-    _apply_unit_path_scale_hand(result.left_unit_3p,  result.left_unit_1p,  left_path,  "left")
-end
+-- Render-path scale helpers (_is_unit, _resolve_for_career,
+-- _resolve_render_unit_path, _resolve_factor, _apply_unit_path_scale_hand,
+-- _scale_units) moved to _cos_render.lua (v0.9.78-dev Phase 2 OOP split).
+-- _is_unit is aliased locally in the manifest block above (glow still uses it);
+-- the apply helpers are called from the render hooks below via mod._cos.*.
 
 -- Glow override (v0.8.23-dev: redesigned per-family routing).
 --
@@ -3982,20 +3850,8 @@ end)
 -- the override or preset takes effect on the NEXT weapon equip / spawn via
 -- the apply_material_settings hook above.
 
-local function _offset_units(slot_data, weapon_key, career_name)
-    local overrides = _weapon_grip_offsets[weapon_key]
-    if not overrides then return end
-    local offset = _resolve_for_career(overrides, career_name)
-    if not offset then return end
-    local pos = Vector3(offset[1], offset[2], offset[3])
-    for _, field in ipairs({ "left_unit_1p", "right_unit_1p", "left_unit_3p", "right_unit_3p" }) do
-        local unit = slot_data[field]
-        if unit then
-            local current = Unit.local_position(unit, 0)
-            pcall(Unit.set_local_position, unit, 0, current + pos)
-        end
-    end
-end
+-- _offset_units (grip-offset apply) moved to _cos_render.lua (v0.9.78-dev
+-- Phase 2 OOP split); the in-game render hook below calls mod._cos.offset_units.
 
 local function _local_career_name()
     local pm = Managers.player
@@ -4183,7 +4039,7 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
         -- a cwv variant equipped in this slot only gets scaled if its
         -- resolved model genuinely matches a pattern (e.g. someone applies
         -- a Bretonian skin to a cwv item, which intentionally would scale).
-        _scale_units(result, item_data, result.skin)
+        mod._cos.scale_units(result, item_data, result.skin)
     end
     if result and item_data and not item_data.cwv_variant then
         -- Offset / tint / LA-paint stay item-name-keyed and so DO need the
@@ -4193,7 +4049,7 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
         -- spuriously fire on every cwv variant. See
         -- `feedback_cwv_clone_name_clobber.md` for the full rationale.
         local weapon_key = item_data.name
-        _offset_units(result, weapon_key, career_name)
+        mod._cos.offset_units(result, weapon_key, career_name)
         local has_skin = result.skin ~= nil and result.skin ~= ""
         _apply_la_offhand_to_units(world, item_data, { result.left_unit_3p, result.left_unit_1p }, has_skin, nil, "ingame")
     end
@@ -4387,8 +4243,8 @@ local function _spawn_item_post(self, item_name, spawn_data)
                         tostring(info.name), tostring(info.skin_name),
                         tostring(right_path), tostring(left_path))
                 end
-                _apply_unit_path_scale_hand(slot.right, nil, right_path, "right")
-                _apply_unit_path_scale_hand(slot.left,  nil, left_path,  "left")
+                mod._cos.apply_unit_path_scale_hand(slot.right, nil, right_path, "right")
+                mod._cos.apply_unit_path_scale_hand(slot.left,  nil, left_path,  "left")
                 _apply_glow_override({ slot.right, slot.left })
             end
         end
@@ -4576,8 +4432,8 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
     -- the variant's own model, never the base weapon's path.
     local left_path  = spawn_data and spawn_data[1] and spawn_data[1].unit_name or nil
     local right_path = spawn_data and spawn_data[2] and spawn_data[2].unit_name or nil
-    _apply_unit_path_scale_hand(units[2], nil, right_path, "right")
-    _apply_unit_path_scale_hand(units[1], nil, left_path,  "left")
+    mod._cos.apply_unit_path_scale_hand(units[2], nil, right_path, "right")
+    mod._cos.apply_unit_path_scale_hand(units[1], nil, left_path,  "left")
     _apply_glow_override({ units[1], units[2] })
 
     return units

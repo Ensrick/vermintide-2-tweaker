@@ -40,6 +40,17 @@ no override); `[tbl]` = table-form hook against a plain table (nil-guarded).
 > split (the entry lost ~1,060 lines above them), so those too are now approximate;
 > match by function name until a later phase reconciles them. See
 > `DEVELOPMENT.md` "Module map".
+>
+> **v0.9.78-dev Phase 2 OOP split.** No HOOK moved this phase, so every row below
+> still names the same owning file/line as before (all `cosmetics_tweaker.lua`,
+> now ~144 lines shorter above these rows — approximate, match by function name).
+> What moved is the non-hook render-path scale/grip APPLY layer
+> (`_scale_units` / `_offset_units` / `_apply_unit_path_scale_hand` + the
+> `_unit_path_scale_overrides` / `_weapon_grip_offsets` tables + `_is_unit`) →
+> `_cos_render.lua`. The `create_equipment`, `_spawn_item*` and
+> `LootItemUnitPreviewer.spawn_units` rows keep their hooks in the entry; the
+> "offhand mesh override + scale + LA paint + glow" work those rows describe now
+> reaches the scale/grip step via `mod._cos.{scale_units,offset_units,apply_unit_path_scale_hand}`.
 
 ### Items / gear / inventory spawn - owner path (owner doc: `docs/engine/06`)
 
