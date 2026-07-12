@@ -1,5 +1,49 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.378-dev — 2026-07-12 — #495: skin wire leak closed on all senders, parity-gated so #474 keeps its signal [untested] [crash] [0-critical]
+
+### Why
+The 0.1.377 adversarial-review residual, promoted to issue 495: the skin null-on-wire
+hook covered ONLY base skins (`_om._skin_keys`) on ONE sender
+(`game_object_initialized`). Pairing/illusion skins rode `rpc_add_equipment` un-nulled
+from every sender, and even base skins leaked via the resync and hot-join senders —
+a live issue-278-class strict-`__index` CTD for any non-cwv peer
+(decode at `inventory_system.lua:300`, `network_lookup.lua:2362`).
+
+### Changed
+- ONE shared null-and-restore helper (`_om._wire_null_skins`) now guards the same three
+  live-slot senders cosmetics covers for issue 421: `game_object_initialized`
+  (`simple_inventory_extension.lua:258-264`), `_spawn_resynced_loadout` (`:1443-1457`,
+  the mid-session equip leak) and `GearUtils.hot_join_sync` (`gear_utils.lua:462-488`,
+  the joining-peer replay). Sender flags in `mod._cwv_skin_wire_surfaces`.
+- Key coverage widened from base skins to EVERY cwv skin namespace:
+  `_om._skin_keys` + `_custom_skin_keys` (pairing/illusion registrations) + the `cwv_`
+  prefix as belt-and-suspenders (`_om._wire_skin_predicate`; no vanilla key is
+  cwv_-prefixed).
+- PARITY GATE (the issue-495 load-bearing constraint): the wire skin is the PRIMARY husk
+  display signal on cwv peers (issue 474), so under CONFIRMED beacon parity (every other
+  human peer acked `cwv_peer_parity_present`) the skin rides and remote cwv clients keep
+  the variant display. Parity unconfirmed / beacon absent / beacon error -> null
+  (fail-safe toward the non-cwv peer). EXCEPTION: the hot-join replay is ALWAYS nulled —
+  it fires during the join handshake before any ack can exist, so no roster-reactive
+  gate can win that race (the issue 425 crt lesson). A cwv joiner sees base display on
+  others' husks until their next re-equip (existing documented issue 474 residual).
+- Diagnostics: `[cwv:495]` printf once per (sender surface, skin), naming whether the
+  null was parity-driven or the always-null join replay.
+- Regression: `cwv_wire_safe_skin_installed` extended (three sender flags + every
+  `cwv_` key in the live `NetworkLookup.weapon_skins` must satisfy the predicate);
+  NEW `cwv_wire_skin_parity_gate` drives the helper with a stubbed beacon through
+  parity-up/parity-down/forced-replay and asserts ride/null/restore per contract.
+- Known residuals: the interactions.lua:1244/1334 pickup senders stay with the
+  issue 424 thrown/pickup RPC axis (cwv skins do not reach ground-pickup skin data
+  today); the departed-then-rejoin display gap self-heals on re-equip.
+
+### Verify (issue 495, coop)
+Full Steam restart both machines. (a) NON-cwv peer in lobby: equip a variant with a
+pairing/illusion skin (e.g. Imperial LS&S Nordland), swap illusions mid-session, have
+the peer hot-join mid-run — no crash on the peer at any point, `[cwv:495]` null lines
+on your log. (b) BOTH on cwv: after the ~2s parity settle, remote client still sees the
+variant mesh/skin on your husk (the #474 display must NOT regress to base).
 ## 0.1.377-dev — 2026-07-11 — #474 #475 husk display resolution: skin-key PRIMARY, base+career demoted to lazy skinless-only fallback [untested]
 
 ### Why (two-peer log session, host i477b / client i477a, both on 0.1.376-dev)

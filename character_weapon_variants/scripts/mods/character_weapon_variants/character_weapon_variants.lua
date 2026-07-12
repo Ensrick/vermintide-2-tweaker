@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.377-dev"
+local MOD_VERSION = "0.1.378-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -10580,43 +10580,124 @@ if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 	_cwv_net_safe_loadout_hook_installed = true
 end
 
--- WIRE-SAFETY: weapon_skin_id axis of issue 278 (the sibling the loadout hook above
--- did NOT cover) / issue 371. A cwv-registered NetworkLookup.weapon_skins key is
--- undefined on a peer without cwv. Vanilla SimpleInventoryExtension.game_object_initialized
--- encodes weapon_skin_id = NetworkLookup.weapon_skins[slot_data.skin or "n/a"] and
--- broadcasts rpc_add_equipment to every peer (simple_inventory_extension.lua:258-264);
--- a non-cwv peer cold-decodes the appended index at inventory_system.lua:300 -> the
--- strict __index metamethod fatals (network_lookup.lua:2362). Null any cwv skin key on
--- the WIRE (encodes as the universal vanilla "n/a" index), then restore the slot's real
--- skin so the LOCAL owner still spawns the custom illusion (this function only SENDS the
--- RPC; the owner's unit spawn reads the restored value elsewhere). Remote peers render
--- the base skin either way — the crash is replaced by today's husk base-render behavior.
--- Full husk custom-skin parity for cwv-having peers still needs the per-wearer marker
--- (issue 392 Phase 3). Sole cwv hook on this method (grep-verified). No item_id concern:
--- cwv keeps item_data.name = base_weapon, a universal vanilla item_names index.
-mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
-	local skin_keys = _om._skin_keys
-	local slots = self and self._equipment and self._equipment.slots
-	if not (skin_keys and slots) then
-		return func(self, unit, unit_go_id)
+-- WIRE-SAFETY: weapon_skin_id axis of issue 278 / issue 371; sender coverage +
+-- parity gating reworked for issue 495. A cwv-registered NetworkLookup.weapon_skins
+-- key is undefined on a peer without cwv: any sender that encodes
+-- weapon_skin_id = NetworkLookup.weapon_skins[<live slot skin>] onto
+-- rpc_add_equipment fatals that peer on decode (inventory_system.lua:300 -> strict
+-- __index, network_lookup.lua:2362). THREE vanilla senders read live slot data
+-- (the same set cosmetics covers for issue 421):
+--   * SimpleInventoryExtension.game_object_initialized (initial spawn,
+--     simple_inventory_extension.lua:258-264)
+--   * SimpleInventoryExtension._spawn_resynced_loadout (every mid-session
+--     (re)equip, :1443-1457, encode :1451)
+--   * GearUtils.hot_join_sync (host replays worn slots to each joining peer,
+--     gear_utils.lua:462-488, encode :484)
+-- PARITY GATE (issue 495 load-bearing constraint): the wire skin is the PRIMARY
+-- husk display signal on cwv peers (issue 474 skin-key resolution), so when EVERY
+-- other human peer has positively acked the cwv beacon the skin RIDES and remote
+-- cwv clients render the variant. Parity unconfirmed (or beacon absent/erroring)
+-- -> null to the universal vanilla "n/a", restore the slot's real skin after the
+-- send (the owner's own spawn reads the restored value; a non-cwv peer renders
+-- the base weapon instead of crashing). EXCEPTION: the hot-join replay is ALWAYS
+-- nulled -- it fires during the join handshake, before the joiner's ack can
+-- exist, so no roster-reactive gate can win that race (the issue 425 crt
+-- hot-join lesson); a cwv joiner sees base display on others' husks until their
+-- next re-equip (documented issue 474 residual).
+-- Key set: _om._skin_keys (base variant skins) + _custom_skin_keys
+-- (pairing/illusion registrations) + the cwv_ name prefix as belt-and-suspenders
+-- (every cwv-injected weapon_skins key is cwv_-prefixed; no vanilla key is).
+-- Sole cwv hooks on all three methods (grep-verified 2026-07-12). No item_id
+-- concern: cwv keeps item_data.name = base_weapon, a universal vanilla index.
+-- do-block: cwv's main chunk sits at the Lua 5.1 200-local ceiling -- these
+-- helpers must not cost enduring top-level slots.
+do
+	local function _wire_skin(skin)
+		if type(skin) ~= "string" then return false end
+		local sk = _om._skin_keys
+		if sk and sk[skin] then return true end
+		if _custom_skin_keys[skin] then return true end
+		return skin:sub(1, 4) == "cwv_"
 	end
-	local saved
-	for _, slot_data in pairs(slots) do
-		local skin = slot_data and slot_data.skin
-		if skin and skin_keys[skin] then
-			saved = saved or {}
-			saved[slot_data] = skin
-			slot_data.skin = nil
+	_om._wire_skin_predicate = _wire_skin   -- exported for /cwv_regression_test
+
+	local function _wire_parity_live()
+		local pp = mod._cwv_peer_parity
+		if not pp then return false end   -- fail-safe: no beacon = assume mixed lobby
+		local ok, res = pcall(pp.all_peers_have, pp)
+		return ok and res == true
+	end
+	_om._wire_parity_live = _wire_parity_live
+
+	local _null_logged = {}
+	local function _wire_null_skins(slots, send_fn, context, force)
+		if not force and _wire_parity_live() then
+			-- Every lobby peer runs cwv: the skin is decodable everywhere and
+			-- carries the issue-474 husk display. Let it ride.
+			return send_fn()
 		end
-	end
-	local r1, r2, r3, r4 = func(self, unit, unit_go_id)
-	if saved then
-		for slot_data, skin in pairs(saved) do
-			slot_data.skin = skin
+		local saved
+		for _, slot_data in pairs(slots) do
+			local skin = slot_data and slot_data.skin
+			if skin and _wire_skin(skin) then
+				saved = saved or {}
+				saved[slot_data] = skin
+				slot_data.skin = nil
+				local lk = tostring(context) .. "|" .. tostring(skin)
+				if not _null_logged[lk] then   -- once per (surface, skin); no equip-spam
+					_null_logged[lk] = true
+					pcall(printf, "[cwv:495] wire skin null (%s): %s -> n/a (%s)",
+						tostring(context), tostring(skin),
+						force and "join replay: always nulled" or "peer parity not confirmed")
+				end
+			end
 		end
+		local r1, r2, r3, r4 = send_fn()
+		if saved then
+			for slot_data, skin in pairs(saved) do
+				slot_data.skin = skin
+			end
+		end
+		return r1, r2, r3, r4
 	end
-	return r1, r2, r3, r4
-end)
+	_om._wire_null_skins = _wire_null_skins   -- exported for /cwv_regression_test
+
+	mod._cwv_skin_wire_surfaces = {}
+
+	mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
+		local slots = self and self._equipment and self._equipment.slots
+		if not slots then
+			return func(self, unit, unit_go_id)
+		end
+		return _wire_null_skins(slots, function()
+			return func(self, unit, unit_go_id)
+		end, "game_object_initialized", false)
+	end)
+	mod._cwv_skin_wire_surfaces.game_object_initialized = true
+
+	mod:hook("SimpleInventoryExtension", "_spawn_resynced_loadout", function(func, self, equipment_to_spawn, skip_wield)
+		if not (equipment_to_spawn and equipment_to_spawn.skin) then
+			return func(self, equipment_to_spawn, skip_wield)
+		end
+		-- Single slot-shaped table; wrap in a one-element array for the helper.
+		return _wire_null_skins({ equipment_to_spawn }, function()
+			return func(self, equipment_to_spawn, skip_wield)
+		end, "spawn_resynced_loadout", false)
+	end)
+	mod._cwv_skin_wire_surfaces.spawn_resynced_loadout = true
+
+	mod:hook("GearUtils", "hot_join_sync", function(func, peer_id, unit, equipment, additional_items)
+		local slots = equipment and equipment.slots
+		if not slots then
+			return func(peer_id, unit, equipment, additional_items)
+		end
+		-- force=true: the joining peer's parity is unknowable here by construction.
+		return _wire_null_skins(slots, function()
+			return func(peer_id, unit, equipment, additional_items)
+		end, "hot_join_sync", true)
+	end)
+	mod._cwv_skin_wire_surfaces.hot_join_sync = true
+end
 _om._skin_wire_hook_installed = true
 
 -- NOTE: the per-perspective 1P/3P unit swap mechanism (previously used
@@ -12139,27 +12220,89 @@ _rt_register("cwv_husk_native_never_rekeyed", function()
 end)
 
 _rt_register("cwv_wire_safe_skin_installed", function()
-    -- (issue 278 weapon_skin_id axis / issue 371) Every cwv-registered
-    -- NetworkLookup.weapon_skins key must be nulled on the wire so a non-cwv peer
+    -- (issue 278 weapon_skin_id axis / issue 371 / issue 495) Every cwv-registered
+    -- NetworkLookup.weapon_skins key must be null-able on the wire so a non-cwv peer
     -- never cold-decodes it from rpc_add_equipment (strict __index CTD). Asserts the
-    -- SimpleInventoryExtension.game_object_initialized wire-safety hook is installed and
-    -- that the tracked-key set is populated (skins registered at load).
+    -- wire-safety machinery is installed on ALL THREE live-slot senders and that the
+    -- predicate covers every cwv key actually sitting in NetworkLookup.weapon_skins.
     if _om._skin_wire_hook_installed ~= true then
-        return "weapon_skin_id wire-safety hook not installed (issue 278 non-cwv-peer CTD regression)"
+        return "weapon_skin_id wire-safety hooks not installed (issue 278 non-cwv-peer CTD regression)"
+    end
+    local surfaces = mod._cwv_skin_wire_surfaces
+    if type(surfaces) ~= "table" then
+        return "mod._cwv_skin_wire_surfaces flag table missing (issue 495 senders unhooked?)"
+    end
+    for _, key in ipairs({ "game_object_initialized", "spawn_resynced_loadout", "hot_join_sync" }) do
+        if not surfaces[key] then
+            return "skin-axis wire-null not registered on sender surface: " .. key .. " (issue 495)"
+        end
     end
     if type(_om._skin_keys) ~= "table" or next(_om._skin_keys) == nil then
-        return "no cwv skin keys tracked -- wire-safety hook would null nothing (registration/tracking broke)"
+        return "no cwv skin keys tracked -- wire-safety would null nothing (registration/tracking broke)"
     end
     -- Every tracked key must actually be a registered weapon_skins entry, else the
-    -- null-on-wire substitution is guarding a phantom.
+    -- null-on-wire substitution is guarding a phantom -- and EVERY cwv_ key in the
+    -- live lookup must satisfy the wire predicate (a registration site that forgot
+    -- both registries is caught by the prefix arm; a non-cwv_-prefixed cwv key
+    -- would be a real leak and fails here).
     local NL = rawget(_G, "NetworkLookup")
     local ws = NL and NL.weapon_skins
+    local pred = _om._wire_skin_predicate
+    if type(pred) ~= "function" then
+        return "_om._wire_skin_predicate missing (issue 495)"
+    end
     if type(ws) == "table" then
         for skin_key in pairs(_om._skin_keys) do
             if rawget(ws, skin_key) == nil then
                 return string.format("tracked cwv skin key %s absent from NetworkLookup.weapon_skins", tostring(skin_key))
             end
         end
+        for k in pairs(ws) do
+            if type(k) == "string" and k:sub(1, 4) == "cwv_" and not pred(k) then
+                return string.format("cwv weapon_skins key %s not covered by the wire predicate (issue 495 leak)", tostring(k))
+            end
+        end
+    end
+end)
+
+_rt_register("cwv_wire_skin_parity_gate", function()
+    -- (issue 495) Behavioral contract of the shared null helper:
+    --   * parity CONFIRMED + broadcast sender -> skin RIDES (issue 474 husk display);
+    --   * parity confirmed + hot-join replay (force) -> nulled anyway (join-handshake
+    --     race, issue 425 lesson) and restored after the send;
+    --   * parity UNCONFIRMED -> nulled and restored.
+    local helper = _om._wire_null_skins
+    if type(helper) ~= "function" then return "_om._wire_null_skins helper missing" end
+    local real_pp = mod._cwv_peer_parity
+    local function drive(parity_up, force)
+        mod._cwv_peer_parity = { all_peers_have = function() return parity_up end }
+        local slot = { skin = "cwv___rt495_fake_skin" }
+        local at_send
+        local ok, err = pcall(helper, { slot }, function() at_send = slot.skin end, "rt495", force)
+        mod._cwv_peer_parity = real_pp
+        if not ok then return nil, nil, "helper raised: " .. tostring(err) end
+        return at_send, slot.skin, nil
+    end
+    local at_send, after, err = drive(true, false)
+    if err then return err end
+    if at_send ~= "cwv___rt495_fake_skin" then
+        return "parity-confirmed broadcast nulled the skin -- issue 474 husk display would regress to base"
+    end
+    at_send, after, err = drive(true, true)
+    if err then return err end
+    if at_send ~= nil then
+        return "hot-join replay (force) kept the skin under confirmed parity -- join-handshake race reopened (issue 425 lesson)"
+    end
+    if after ~= "cwv___rt495_fake_skin" then
+        return "skin not restored after the forced null (owner spawn would lose the illusion)"
+    end
+    at_send, after, err = drive(false, false)
+    if err then return err end
+    if at_send ~= nil then
+        return "parity-unconfirmed broadcast kept the skin -- issue 278/495 CTD shape live"
+    end
+    if after ~= "cwv___rt495_fake_skin" then
+        return "skin not restored after the parity-unconfirmed null"
     end
 end)
 
