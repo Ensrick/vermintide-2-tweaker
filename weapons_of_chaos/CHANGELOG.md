@@ -1,5 +1,17 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.8-dev (2026-07-12) - issue 427: _dbg_alert routes to log-only printf (no chat spam)
+
+### Why
+Issue 427/240: `_dbg_alert` routed through `mod:warning`, which VMF `logging.lua` posts to in-game CHAT under default settings (warning mode >= 2). A "log-only" alert is one repro from spamming chat. (No live callsite in this file today, but the helper is the copied #427 class - migrate it before one lands.)
+
+### Changed
+- `weapons_of_chaos.lua` - `_dbg_alert` now routes through pcall-guarded engine `printf` (log-only, survives mod-logging-OFF), matching the enemy_tweaker v0.7.25-dev template (BUG_CLASSES section 17 Variant B). `_dbg` (mod:debug) unchanged.
+- `MOD_VERSION` `0.1.7-dev` -> `0.1.8-dev`.
+
+### Refs
+Issue 427 (parent), 240 (originating fix). Check: `qa/check_logging.ps1` warn-chat.
+
 ## 0.1.7-dev (2026-07-07) — issue 422 hardening: fail-safe wire hook + regression + doctrine parity
 
 ### Why

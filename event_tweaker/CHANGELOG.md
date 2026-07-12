@@ -1,5 +1,20 @@
 # Tweaker: Events — Changelog
 
+## 0.4.27-dev (2026-07-12) - issue 427: _dbg_alert routes to log-only printf
+
+### Why
+Issue 427/240: `_evt_log.lua`'s `_dbg_alert` routed through `mod:warning`, which VMF `logging.lua` posts to in-game CHAT under default settings (warning mode >= 2). Callsites like the `_evt_cursed_adventure.lua` curse-preload-failure would surface in chat rather than the console log.
+
+### Changed
+- `_evt_log.lua` - `_dbg_alert` now routes through pcall-guarded engine `printf` (log-only, survives mod-logging-OFF), matching enemy_tweaker v0.7.25-dev (BUG_CLASSES section 17 Variant B). `_dbg` (mod:debug) and the exported `ET.dbg_alert` surface unchanged; callsites unaffected.
+- `MOD_VERSION` `0.4.26-dev` -> `0.4.27-dev`.
+
+### Notes
+The curse-preload-failure alert (`_evt_cursed_adventure.lua`) is a genuine anomaly a host may want visible; it now logs to console only. If chat visibility is wanted there, add an explicit `_chat_alert` (out of scope for #427).
+
+### Refs
+Issue 427 (parent), 240. Check: `qa/check_logging.ps1` warn-chat.
+
 ## 0.4.26-dev (2026-07-11) -- Structural refactor: split the monolith into single-responsibility modules; consolidate the hand-synced catalogs (no behavior change)
 
 ### Why

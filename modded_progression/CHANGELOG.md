@@ -1,5 +1,17 @@
 # Modded Progression — Changelog
 
+## 0.2.15-dev (2026-07-12) - issue 427: _dbg_alert routes to log-only printf
+
+### Why
+Issue 427/240: `_dbg_alert` routed through `mod:warning`, which VMF `logging.lua` posts to in-game CHAT under default settings (warning mode >= 2) - a "log-only" alert (e.g. the `_with_eac_off` throw path at ~line 413) would spam chat rather than just the console log.
+
+### Changed
+- `modded_progression.lua` - `_dbg_alert` now routes through pcall-guarded engine `printf` (log-only, survives mod-logging-OFF), matching enemy_tweaker v0.7.25-dev (BUG_CLASSES section 17 Variant B). `_dbg` (mod:debug) unchanged; the `_with_eac_off` re-raise semantics are untouched.
+- `MOD_VERSION` `0.2.14-dev` -> `0.2.15-dev`.
+
+### Refs
+Issue 427 (parent), 240. Check: `qa/check_logging.ps1` warn-chat.
+
 ## 0.2.14-dev (2026-07-07) - pcall-protect the EAC un-gate restore (issue 434)
 
 ### Why

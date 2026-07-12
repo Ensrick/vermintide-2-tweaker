@@ -5,8 +5,9 @@ local mod = get_mod("event_tweaker")
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6). Both helpers
 -- route through VMF's built-in logging system (gated by VMF output_mode_debug /
 -- output_mode_warning): `dbg` is for confirmation / expected behavior (the
--- mod:debug channel), `dbg_alert` for unexpected / wrong / mismatch (the
--- mod:warning channel). `settings_fingerprint` feeds the canonical
+-- mod:debug channel), `dbg_alert` for unexpected / wrong / mismatch, log-only
+-- via pcall-guarded engine printf (#427/#240 — mod:warning posts to chat under
+-- VMF defaults). `settings_fingerprint` feeds the canonical
 -- [event_tweaker:LOAD] applied marker line the entry file prints
 -- (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
 --
@@ -20,8 +21,15 @@ local function _dbg(fmt, ...)
     mod:debug("[event_tweaker:dbg] " .. fmt, ...)
 end
 
+-- Issue #427/#240: mod:warning posts to CHAT under VMF defaults (logging.lua
+-- warning mode >= 2), so a "log-only" alert spammed chat. Route through
+-- pcall-guarded engine printf (log-only, survives mod-logging-OFF; pcall so a
+-- format slip never faults the caller). Reserve chat for a deliberate
+-- _chat_alert (none defined here).
 local function _dbg_alert(fmt, ...)
-    mod:warning("[event_tweaker:dbg] " .. fmt, ...)
+    if not pcall(printf, "[event_tweaker:dbg] " .. fmt, ...) then
+        pcall(printf, "[event_tweaker:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs. Called

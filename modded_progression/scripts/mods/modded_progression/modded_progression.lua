@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.14-dev"
+local MOD_VERSION = "0.2.15-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -35,13 +35,20 @@ mod:info("Modded Progression v%s loaded", MOD_VERSION)
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Routed through VMF logging channels; visible via VMF output_mode_debug / output_mode_warning.
 -- `_dbg` is for confirmation / expected behavior — mod:debug channel.
--- `_dbg_alert` is for unexpected / wrong / mismatch — mod:warning channel.
+-- `_dbg_alert` is for unexpected / wrong / mismatch. Log-only via engine printf (#427).
 local function _dbg(fmt, ...)
     mod:debug("[mp:dbg] " .. fmt, ...)
 end
 
+-- Issue #427/#240: mod:warning posts to CHAT under VMF defaults (logging.lua
+-- warning mode >= 2), so a "log-only" alert spammed chat. Route through
+-- pcall-guarded engine printf (log-only, survives mod-logging-OFF; pcall so a
+-- format slip never faults the caller). Reserve chat for a deliberate
+-- _chat_alert (none defined here).
 local function _dbg_alert(fmt, ...)
-    mod:warning("[mp:dbg] " .. fmt, ...)
+    if not pcall(printf, "[mp:dbg] " .. fmt, ...) then
+        pcall(printf, "[mp:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- #174 attribution probe (passive, default-on, printf). mp owns NO loadout

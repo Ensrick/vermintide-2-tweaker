@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.7-dev"
+local MOD_VERSION = "0.1.8-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -34,13 +34,20 @@ mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Routed through VMF logging channels; visible via VMF output_mode_debug / output_mode_warning.
 -- `_dbg` = confirmation / expected behavior — mod:debug channel.
--- `_dbg_alert` = unexpected / wrong / mismatch — mod:warning channel.
+-- `_dbg_alert` = unexpected / wrong / mismatch. Log-only via engine printf (#427).
 local function _dbg(fmt, ...)
 	mod:debug("[WOC:dbg] " .. fmt, ...)
 end
 
+-- Issue #427/#240: mod:warning posts to CHAT under VMF defaults (logging.lua
+-- warning mode >= 2), so a "log-only" alert spammed chat. Route through
+-- pcall-guarded engine printf (log-only, survives mod-logging-OFF; pcall so a
+-- format slip never faults the caller). Reserve chat for a deliberate
+-- _chat_alert (none defined here).
 local function _dbg_alert(fmt, ...)
-	mod:warning("[WOC:dbg] " .. fmt, ...)
+	if not pcall(printf, "[WOC:dbg] " .. fmt, ...) then
+		pcall(printf, "[WOC:dbg] (alert format error: %s)", tostring(fmt))
+	end
 end
 
 -- Applied-marker fingerprint (PROJECT_STANDARDS.md § 3.6 "Applied marker line").
