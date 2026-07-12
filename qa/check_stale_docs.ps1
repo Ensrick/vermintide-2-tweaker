@@ -4,7 +4,14 @@
 # See qa/CHECKS.md row 49.
 # See PROJECT_STANDARDS.md §7.2 for the banner format.
 #
-# Exit codes: 0 = pass, 1 = stale-but-OK warning, 2 = stale without banner.
+# Exit codes: 0 = pass, 1 = warning (staleness -Fix applied, or a banner'd
+#             snapshot found outside _archive/ per issue #502), 2 = stale
+#             without banner. Advisory in run_all (issue #429) either way.
+#
+# Scan 2 (issue #502): a doc carrying the snapshot banner
+# ("...this snapshot is from...") belongs in _archive/docs/; this flags any that
+# do not. Head-only match (first 12 lines) so format docs that quote the banner
+# are not false positives; CODE_REVIEW.md is exempt (mandatory canonical doc).
 #
 # Usage:
 #   .\check_stale_docs.ps1              # report only
@@ -91,23 +98,22 @@ foreach ($doc in Find-AuditDocs) {
     }
 }
 
-# Report
+# Report (staleness scan)
 Write-Host ""
+$exitCode = 0
 if ($stale.Count -eq 0) {
     Write-Host "[check_stale_docs] OK — no audit/review markdowns are stale (>$StaleDays days without banner)." -ForegroundColor Green
-    exit 0
-}
-
-Write-Host "[check_stale_docs] $($stale.Count) stale doc(s) without SUPERSEDED banner:" -ForegroundColor Yellow
-foreach ($s in $stale) {
-    Write-Host "  ! $($s.Path) — $($s.AgeDays) days old (dated $($s.DocDate))" -ForegroundColor Yellow
-}
-
-if ($Fix) {
-    Write-Host ""
-    Write-Host "Applying SUPERSEDED banners (..-Fix mode)..." -ForegroundColor Cyan
+} else {
+    Write-Host "[check_stale_docs] $($stale.Count) stale doc(s) without SUPERSEDED banner:" -ForegroundColor Yellow
     foreach ($s in $stale) {
-        $banner = @"
+        Write-Host "  ! $($s.Path) — $($s.AgeDays) days old (dated $($s.DocDate))" -ForegroundColor Yellow
+    }
+
+    if ($Fix) {
+        Write-Host ""
+        Write-Host "Applying SUPERSEDED banners (..-Fix mode)..." -ForegroundColor Cyan
+        foreach ($s in $stale) {
+            $banner = @"
 > [!WARNING]
 > ⚠ **SUPERSEDED** — this snapshot is from $($s.DocDate) ($($s.AgeDays) days old).
 > Recent state may differ. Kept for historical context — verify against current
@@ -115,14 +121,65 @@ if ($Fix) {
 > or move the doc to ``_archive/audits/$($s.DocDate)/``.
 
 "@
-        $text = Read-FileUtf8 $s.FullPath
-        $new = $banner + $text
-        [System.IO.File]::WriteAllText($s.FullPath, $new, [System.Text.UTF8Encoding]::new($false))
-        Write-Host "  ✓ Banner added: $($s.Path)" -ForegroundColor Green
+            $text = Read-FileUtf8 $s.FullPath
+            $new = $banner + $text
+            [System.IO.File]::WriteAllText($s.FullPath, $new, [System.Text.UTF8Encoding]::new($false))
+            Write-Host "  ✓ Banner added: $($s.Path)" -ForegroundColor Green
+        }
+        $exitCode = 1
+    } else {
+        Write-Host ""
+        Write-Host "Run with -Fix to auto-prepend banners. Or manually update each doc per PROJECT_STANDARDS §7.2." -ForegroundColor DarkYellow
+        $exitCode = 2
     }
-    exit 1
 }
 
-Write-Host ""
-Write-Host "Run with -Fix to auto-prepend banners. Or manually update each doc per PROJECT_STANDARDS §7.2." -ForegroundColor DarkYellow
-exit 2
+# --- Banner-placement scan (issue #502) -----------------------------------
+# Inverse of the staleness scan above: that one flags UN-banner'd stale docs;
+# this one flags docs that DO carry the snapshot banner ("...this snapshot is
+# from...") but still sit OUTSIDE _archive/. Once a doc is banner'd as a
+# point-in-time snapshot it belongs in _archive/docs/ (a stub stays at the old
+# path only where inbound links exist). Match is restricted to the doc HEAD
+# (first 12 lines) so prose that merely QUOTES the banner format
+# (PROJECT_STANDARDS.md section 7.2) is not a false positive. CODE_REVIEW.md is
+# exempt: PROJECT_STANDARDS section 7.1 makes it a mandatory per-mod canonical
+# doc, so a staleness banner there means "refresh due", not "archive me".
+$misplaced = @()
+Get-ChildItem -Path $repoRoot -Filter "*.md" -Recurse -File -ErrorAction SilentlyContinue `
+    | Where-Object {
+        $p = $_.FullName
+        $p -notlike "*\_archive\*" -and $p -notlike "*\bundleV2\*" -and $p -notlike "*\.build\*" `
+            -and $p -notlike "*\.git\*" -and $p -notlike "*\Vermintide-2-Source-Code\*" `
+            -and $_.Name -ne "CODE_REVIEW.md"
+    } | ForEach-Object {
+        $mtext = Read-FileUtf8 $_.FullName
+        $mhead = ($mtext -split "`n" | Select-Object -First 12) -join "`n"
+        if ($mhead -match "this snapshot is from") {
+            $misplaced += $_.FullName.Substring($repoRoot.Length + 1)
+        }
+    }
+
+# Drop gitignored candidates: the repo treats **/AUDIT_*.md (and similar) as
+# ephemeral local docs (.gitignore), and an untracked file cannot be archived
+# via `git mv`, so flagging it is not actionable. Only surface TRACKED docs a
+# maintainer can actually move. Degrade gracefully if git is unavailable.
+if ($misplaced.Count -gt 0 -and (Get-Command git -ErrorAction SilentlyContinue)) {
+    $tracked = @()
+    foreach ($rel in $misplaced) {
+        & git -C $repoRoot check-ignore -q -- "$rel" 2>$null
+        if ($LASTEXITCODE -ne 0) { $tracked += $rel }   # exit != 0 => NOT ignored
+    }
+    $misplaced = @($tracked)
+}
+
+if ($misplaced.Count -gt 0) {
+    Write-Host ""
+    Write-Host "[check_stale_docs] $($misplaced.Count) doc(s) carry a SUPERSEDED snapshot banner OUTSIDE _archive/ (issue #502 - move to _archive/docs/):" -ForegroundColor Yellow
+    foreach ($m in ($misplaced | Sort-Object)) {
+        Write-Host "  ! $m" -ForegroundColor Yellow
+    }
+    Write-Host "  git mv each to _archive/docs/<mirrored path>; leave a 2-line pointer stub only where inbound links exist." -ForegroundColor DarkYellow
+    if ($exitCode -lt 1) { $exitCode = 1 }
+}
+
+exit $exitCode

@@ -1440,7 +1440,7 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   `gh issue edit N --remove-label verify-fix --add-label verify-fix-coop`.
 - `diagnostics-armed` — a diagnostic/probe shipped; repro in-game to capture data.
 - `Fixed` — the fix is **verified** (in-game confirmation by the user OR the
-  designated playtester, GitHub user RainRelligion — his issue comments are
+  designated playtester, GitHub user RainReligion — his issue comments are
   first-class verification input, user rule 2026-07-12).
   Replaces the verify-* label. NOT a close signal: `Fixed` means the **post-fix pass
   is still owed** — harden the code path (guards, fail-safes on the class, not just
