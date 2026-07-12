@@ -1,5 +1,13 @@
 # Crafting in Modded Changelog
 
+## 0.8.58-dev (2026-07-12): #481 Athanor shows the model preview for LA-skinned shields [untested]
+
+- **#481: opening the Athanor on a weapon whose shield uses a Loremaster's Armoury skin (via cosmetics_tweaker's offhand picker) showed NO model at all - weapon and shield both suppressed.** The forge preview guard `_forge_preview_unsafe` (the CTD shield for CW/deus weapons whose units aren't resident in the forge world) classified LA custom-mesh shields as "missing" and skipped the whole `LootItemUnitPreviewer` spawn. The same shield renders fine in the normal cosmetics customization preview, which uses the same spawn path without the forge gate.
+  - Root cause: `pkg_missing()` treated a held unit as unloadable when `Application.can_get("package", <unit>_3p)` was false. LA (`kind="unit"`) shields - e.g. the Kerillian elf shields, Empire basic shields - are bundled in LA's ONE globbed master package (`units/*`) with a compiled `<unit>_3p` unit but NO per-unit `<unit>_3p` `.package` file, so the package check false-failed. LA's `PackageManager.load` silencer no-ops `load_package` on those paths and the `_3p` unit is already resident, so `World.spawn_unit` succeeds - which is why the normal cosmetics previewer works (LA_SYNC_MODEL section 3).
+  - Fix: `pkg_missing` now also accepts a held unit when its `<unit>_3p` UNIT resource is resident (`Application.can_get("unit", ...)`), which is exactly what `World.spawn_unit` needs. A genuinely absent CW/deus unit (the Trollhammer `dr_deus_01` case that the guard was written for) is resident in neither form, so it still returns missing and stays skipped - the CTD protection is unchanged.
+  - Degrade path preserved: any resolution error in `_forge_preview_unsafe` still defaults to UNSAFE (skip preview), so a broken LA state loses the cosmetic preview rather than crashing.
+  - New `/cim_regression_test` check `forge_preview_accepts_resident_3p_unit` (io-safe per #511): asserts the `can_get("unit", ...)` residency fallback is present in `pkg_missing` and the `mod._cim_forge_preview_unsafe` runtime anchor is exposed.
+
 ## 0.8.57-dev (2026-07-12): #511 io-safe regression checks: source-reads no longer throw in the retail sandbox [untested]
 
 - **#511: the `/cim_regression_test` source-pattern checks threw `attempt to index global 'io' (a nil value)` in the retail client and reported FALSE FAILs.** The VMF retail Stingray VM registers no `io` library (mods are `loadstring`'d into the game's shared `_G`; the engine registers `os` but not `io`), so every `io.open` self-read threw and the runner's `pcall` surfaced it as a check FAIL on healthy code.

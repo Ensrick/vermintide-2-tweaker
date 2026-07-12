@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.57-dev"
+local MOD_VERSION = "0.8.58-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -1953,7 +1953,28 @@ local function _forge_preview_unsafe(item)
         if item_units then
             local function pkg_missing(u)
                 if not u or u == "" then return false end
-                return not Application.can_get("package", u .. "_3p")
+                local p = u .. "_3p"
+                -- A discrete streaming package exists (every vanilla weapon ships a
+                -- <unit>_3p .package): load_package resolves it and the later
+                -- World.spawn_unit succeeds once loaded.
+                if Application.can_get("package", p) then return false end
+                -- #481 forge-preview-la-unit-resident: no standalone _3p package,
+                -- but the 3p UNIT resource is already resident. This is the
+                -- Loremaster's Armoury case. LA bundles its custom shield/weapon
+                -- meshes in one globbed master package (units/*) with a compiled
+                -- <unit>_3p unit but NO per-unit <unit>_3p .package file, and LA's
+                -- PackageManager.load silencer no-ops load_package on those paths
+                -- (cosmetics_tweaker LA_SYNC_MODEL section 3). cosmetics_tweaker's
+                -- offhand shield picker routes these paths through
+                -- BackendUtils.get_item_units, so the old package-only check saw the
+                -- shield as "missing" and skipped the ENTIRE forge model (weapon
+                -- included) even though the normal cosmetics previewer spawns it
+                -- fine. can_get("unit", ...) is exactly what World.spawn_unit needs,
+                -- so a resident 3p unit is loadable. A genuinely absent CW/deus unit
+                -- (the Trollhammer case) is resident in neither form, so it still
+                -- returns missing and stays skipped.
+                if Application.can_get("unit", p) then return false end
+                return true
             end
             if item_units.is_ammo_weapon then
                 if pkg_missing(item_units.ammo_unit) then return true end
@@ -5282,6 +5303,33 @@ _rt_register("pool_excludes_scrubbed", function()
     if not cls then return "DeusRunController not loaded (run in-keep)" end
     if type(cls.get_weapon_pool) ~= "function" then
         return "get_weapon_pool missing on DeusRunController"
+    end
+end)
+
+_rt_register("forge_preview_accepts_resident_3p_unit", function()
+    -- (#481) The Athanor forge-preview guard `_forge_preview_unsafe` skips the 3D
+    -- model spawn for weapons whose preview units aren't loadable in the forge
+    -- world (the CW/deus Trollhammer CTD class). Its inner `pkg_missing` originally
+    -- flagged a held unit unloadable whenever no discrete <unit>_3p .package
+    -- existed. Loremaster's Armoury custom-mesh shields (kind="unit") bundle a
+    -- resident <unit>_3p unit in one globbed master package with NO standalone
+    -- .package, so that check false-failed and the WHOLE forge preview (weapon +
+    -- shield) was suppressed for any LA-skinned shield. Fix: also accept a resident
+    -- 3p UNIT (can_get("unit", ...)), which is what World.spawn_unit needs.
+    -- Runtime anchor: the decision helper must stay exposed for the guard hooks.
+    if type(mod._cim_forge_preview_unsafe) ~= "function" then
+        return "forge preview guard helper (_cim_forge_preview_unsafe) not exposed (#481 regression)"
+    end
+    -- Source-pattern (io-safe #511; nil in retail sandbox => skip): the residency
+    -- fallback must remain in pkg_missing. Split needle so this line can't self-match.
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
+    if not txt then return end
+    local needle = 'if Application.can_get("unit", p) then ' .. 'return false end'
+    if not txt:find(needle, 1, true) then
+        return "#481 regression: pkg_missing dropped the resident-3p-unit fallback (LA-skinned shields lose the forge preview)"
     end
 end)
 
