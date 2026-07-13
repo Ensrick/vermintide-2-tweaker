@@ -39,13 +39,10 @@
 #    probe never assumes the day's tag exists, and it must stay behind
 #    Invoke-NativeProbe (issue #489: native stderr + redirection kills PS 5.1).
 #
-#  * CRITICAL (the session-long trap): Steam re-downloads a SELF-AUTHORED Workshop
-#    item ONLY on a FULL STEAM RESTART -- NOT on a game relaunch, and NOT via
-#    `deploy` (Steam reconciles the deploy folder back to its cached manifest if the
-#    client cache is behind). So after a successful ship the AUTHOR MUST fully exit
-#    and restart Steam (tray icon -> Exit, reopen) before launching the game, or the
-#    running game keeps serving the old cached bundle. The boxed reminder at the end
-#    says exactly this.
+#  * TEST REFRESH (user ruling 2026-07-13): the author tests the hash-verified
+#    local deploy directly and does not need to restart Steam. Volunteer testers
+#    refresh through the dev collection by unsubscribing/resubscribing. In both
+#    cases the newest console log's [<id>:LOAD] version is the final authority.
 #
 # Every step fails loudly (red message + non-zero exit) on the first problem.
 #
@@ -631,22 +628,20 @@ Write-Host ("  Labels       : {0}" -f $labelsHuman)
 Write-Host "======================================================" -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
-# Step 8: LOUD reminder -- restart Steam or the author keeps running old code
+# Step 8: test refresh + loaded-version reminder
 # ---------------------------------------------------------------------------
 $bar = ('=' * 72)
 Write-Host ""
 Write-Host $bar -ForegroundColor Yellow
-Write-Host "  ACTION REQUIRED BEFORE YOU TEST IN-GAME" -ForegroundColor Yellow
+Write-Host "  TEST BUILD READY" -ForegroundColor Yellow
 Write-Host $bar -ForegroundColor Yellow
-Write-Host "  Steam re-downloads a SELF-AUTHORED Workshop item ONLY on a FULL" -ForegroundColor Yellow
-Write-Host "  STEAM RESTART. A game relaunch does NOT pull it, and the local" -ForegroundColor Yellow
-Write-Host "  deploy gets reconciled away if Steam's cache is behind." -ForegroundColor Yellow
+Write-Host "  Author/PC-A: test the hash-verified local deploy; no Steam restart" -ForegroundColor Yellow
+Write-Host "  is required. Volunteer testers: unsubscribe/resubscribe through" -ForegroundColor Yellow
+Write-Host "  the dev collection to refresh the Workshop build." -ForegroundColor Yellow
 Write-Host "" -ForegroundColor Yellow
-Write-Host "    1. Steam tray icon -> Exit (fully quit Steam, not just the game)" -ForegroundColor Yellow
-Write-Host "    2. Reopen Steam, then launch Vermintide 2" -ForegroundColor Yellow
-Write-Host "    3. Confirm the running build via the NEWEST log under" -ForegroundColor Yellow
+Write-Host "    Confirm the running build via the NEWEST log under" -ForegroundColor Yellow
 Write-Host "       %APPDATA%\Fatshark\Vermintide 2\console_logs\" -ForegroundColor Yellow
-Write-Host ("       look for:  [{0}:LOAD] v{1}" -f $loadTag, $modVersion) -ForegroundColor Yellow
+Write-Host ("    look for:  [{0}:LOAD] v{1}" -f $loadTag, $modVersion) -ForegroundColor Yellow
 Write-Host $bar -ForegroundColor Yellow
 
 exit 0

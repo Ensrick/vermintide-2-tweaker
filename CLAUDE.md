@@ -20,6 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 12 | Mechanics claims: grep `C:\Users\danjo\source\repos\Vermintide-2-Source-Code` and cite `file:line`, else write `[unverified]`. Never invent internals. |
 | 13 | Deferred/blocked work goes to GitHub Issues (search first), not floating TODO comments. Label with the FIXED taxonomy — status lifecycle (`not-started` until any work ships; `verify-fix`, or `verify-fix-coop` when 2+ people are needed to test; `diagnostics-armed` for probes; `Fixed` once the user confirms in-game = post-fix pass owed: hardening + docs + regression test before close) + type (`bug`/`enhancement`/`feature`, with `crash` a flag on `bug`) + mod tag. Every open issue carries exactly one lifecycle label; swap `not-started` out in the same pass that ships the first work. Never invent a new status label. Issue format: title 8 words max; body = empirical data only (~150 words: Symptom/Evidence/Fix/Refs). Full scheme: `PROJECT_STANDARDS.md` §11 "Labels" + "Issue format". |
 | 14 | On any bug report: read `docs/BUG_TRIAGE_RUNBOOK.md` FIRST, then match `docs/BUG_CLASSES.md`, before diving into mod source. |
+| 15 | Test refresh: author/PC-A uses the hash-verified local deploy without restarting Steam; volunteer testers unsubscribe/resubscribe through the dev collection. The newest console log's `[<id>:LOAD]` version is final authority. |
 
 > **READ FIRST**: `PROJECT_STANDARDS.md` (repo root) is the operational rulebook
 > for HOW we work in this repo - workflow conventions, error-handling rules,

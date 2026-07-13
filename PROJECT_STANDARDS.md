@@ -933,8 +933,10 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
   "Upload finished" even when nothing transferred.
 - A deploy-verify hash MISMATCH after a CONFIRMED upload is a Steam reconcile
   race, not a ship failure: do one local re-deploy, then continue.
-- A self-authored upload only re-downloads after a full Steam restart (tray
-  Exit, reopen); a game relaunch is not enough. Remind the user.
+- Test refresh (user ruling 2026-07-13): the author on PC-A uses the
+  hash-verified local deploy without restarting Steam. Volunteer testers
+  unsubscribe/resubscribe through the dev collection. Confirm every tester's
+  loaded version from the newest console log.
 
 ---
 
