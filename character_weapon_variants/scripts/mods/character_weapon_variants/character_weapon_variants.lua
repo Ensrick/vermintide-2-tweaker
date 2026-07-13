@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.386-dev"
+local MOD_VERSION = "0.1.387-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -9590,6 +9590,21 @@ local function _register_item(def, backend_id)
 	return true
 end
 
+-- issue #538: /cwv_give must REFUSE skin_only (illusion-only) variants. A
+-- skin_only def (e.g. cwv_es_longsword_nordland) is deliberately excluded from
+-- _auto_register_all (:9665) because it exists only to seed a custom skin/illusion
+-- entry, never a real ownable item. The give path below builds a backend_id and
+-- calls _register_item(def, backend_id), which mirrors the def into ItemMasterList
+-- -- resurrecting the "issue 390" crafts-as-wrong-item class for that key. Guard
+-- the command instead of the registration function so the auto_register exclusion
+-- and the give refusal share the single `def.skin_only` discriminator. Exposed on
+-- _om so the regression suite can assert the guard exists without driving the full
+-- give path (which has echo + registration side effects). io is nil in the retail
+-- sandbox, so a source self-grep check is impossible; this predicate is the seam.
+_om._give_refuses_skin_only = function(def)
+	return not not (def and def.skin_only)
+end
+
 local function _give_variant(item_key)
 	local def = _find_def(item_key)
 	if not def then
@@ -9598,6 +9613,12 @@ local function _give_variant(item_key)
 		for _, d in ipairs(_variant_definitions) do
 			mod:echo("  %s — %s", d.item_key, d.display_name)
 		end
+		return
+	end
+
+	-- issue #538: illusion-only variants are never handed out as real items.
+	if _om._give_refuses_skin_only(def) then
+		mod:echo("%s is an illusion-only variant - use the illusion browser", def.display_name)
 		return
 	end
 
@@ -13115,6 +13136,32 @@ _rt_register("browser_meshswap_guards", function()
     sd = { { unit_name = UNTOUCHED } }
     apply({ backend_id = "cwv_es_poleaxe_001", skin = "some_skin", data = nil }, sd)
     if sd[1].unit_name ~= UNTOUCHED then return "#419 guard: applied illusion (skin) must win, no rewrite" end
+end)
+
+_rt_register("give_refuses_skin_only", function()
+    -- Issue #538: /cwv_give must REFUSE skin_only (illusion-only) variants. Giving
+    -- one builds a backend_id and mirrors the def into ItemMasterList, resurrecting
+    -- the issue-390 crafts-as-wrong-item class for that key. Two locks:
+    --  (1) the guard predicate exists and discriminates on def.skin_only (io is nil
+    --      in the retail sandbox, so a source self-grep check is impossible -- this
+    --      predicate is the testable seam the give command shares), and
+    --  (2) the standing invariant it protects: no skin_only variant is ever present
+    --      in _registered_keys. _auto_register_all excludes them (:9665) and the
+    --      give guard is the only other registration entry point.
+    local pred = _om._give_refuses_skin_only
+    if type(pred) ~= "function" then return "_om._give_refuses_skin_only guard missing (#538)" end
+    if pred({ skin_only = true }) ~= true then return "#538 guard: skin_only def must be refused" end
+    if pred({ skin_only = nil }) ~= false then return "#538 guard: real (non-skin_only) def must be allowed" end
+    if pred(nil) ~= false then return "#538 guard: nil def must not raise" end
+    local leaked = {}
+    for _, d in ipairs(_variant_definitions) do
+        if d.skin_only and _registered_keys[d.item_key] then
+            leaked[#leaked + 1] = d.item_key
+        end
+    end
+    if #leaked > 0 then
+        return "#538: skin_only variant(s) leaked into the ownable registry: " .. table.concat(leaked, ", ")
+    end
 end)
 
 _rt_register("cwv_parity_applied_state_committed_before_callbacks", function()

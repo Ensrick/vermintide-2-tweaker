@@ -5,7 +5,33 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
-## 0.2.231-dev (2026-07-13) -- #312 UI Tweaks toggles in Mod Tweaker now sync with the stock mod [untested] [Issue 312]
+## 0.2.232-dev (2026-07-13) -- #537 on_setting_changed no longer re-latches the skippable_cutscenes global [untested] [Issue 537]
+
+Removes the last surviving global-latch of the shared engine skip gate, an issue-275 regression that escaped the
+0.2.209-dev no-latch cleanup because it lived in the main file rather than `_gut_cutscenes.lua`.
+
+- **Root cause (`gui_tweaker_dev.lua`, was line 907):** the `on_setting_changed` handler for
+  `gut_skip_cutscenes_enabled` persistently wrote `script_data.skippable_cutscenes = mod:get(...) or nil`, so
+  ticking the VMF "Skip Cutscenes" checkbox ON latched the global true. `script_data.skippable_cutscenes` has
+  exactly ONE runtime reader in the decompiled source -- `CutsceneSystem.skip_pressed` (cutscene_system.lua:98,
+  `if self.active_camera and script_data.skippable_cutscenes`) -- and while it is latched true, ANY skip press
+  on ANY active cutscene passes the gate and tears down its cameras + logic. For an author-locked boss cinematic
+  with `event_on_skip=nil` (Nurgloth on dlc_castle) that is the exact issue-275 mid-fight ~66%-health softlock.
+  The comment's claim that the latch "keeps the flag in sync for any engine path that reads it directly" was
+  unfounded: cutscene_system.lua:98 is the only reader, and the `_gut_cutscenes.lua` hooks already scope-unlock
+  it around that call. The rt guard `gut_cutscene_no_global_latch` scanned only `_gut_cutscenes.lua`, so this
+  main-file site was never caught.
+- **Fix (own-or-pin).** `on_setting_changed` no longer latches on enable; on DISABLE it restores the captured
+  pre-gut value via a new shared helper `mod._gut_restore_skippable_cutscenes` (defined in `_gut_cutscenes.lua`,
+  which captures `script_data.skippable_cutscenes` once at module load, before any gut hook installs). The
+  `/skipcutscenes` toggle command's old hardcoded `= nil`-on-disable was switched to the same helper, so a
+  co-installed cutscene mod / the vanilla debug menu is no longer clobbered. Enabling relies entirely on the
+  per-skip scope-unlock in the hooks (unchanged). Diagnostic `[gut:537]` printf on restore.
+- **Regression (`gui_tweaker_dev.lua`).** Widened the `gut_cutscene_no_global_latch` rt check with a step 4 that
+  also scans the main file (path derived from the sibling `_gut_cutscenes.lua`) for the escaped
+  `on_setting_changed` latch write, so this class can't slip through the main file again. `/gut_regression_test`.
+
+
 
 Fixes the user's active #312 report (2026-07-10 "UI Tweaks options that are on in VMF are showing up as off
 in Mod Tweaker's menu"; 2026-07-12 "toggles for hidden HUD elements are turned on in VMF per my setup ...

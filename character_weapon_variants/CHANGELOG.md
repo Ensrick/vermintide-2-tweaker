@@ -1,5 +1,13 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.387-dev - 2026-07-13 - #538 /cwv_give refuses skin_only variants [untested]
+
+- `/cwv_give` now REFUSES illusion-only (`skin_only`) variant keys instead of registering them as real ownable items. Giving one (e.g. `cwv_es_longsword_nordland`) built a backend_id and called `_register_item(def, backend_id)`, mirroring the def into `ItemMasterList` and resurrecting the issue 390 crafts-as-wrong-item class for that key. `_auto_register_all` already excludes `skin_only` defs (`:9665`); the debug command bypassed that exclusion. Fix guards the command body (shared `def.skin_only` discriminator), echoing one line and returning: `<display_name> is an illusion-only variant - use the illusion browser`.
+- New `_om._give_refuses_skin_only(def)` predicate is the testable seam shared by the command guard and the regression check (io is nil in the retail sandbox, so a source self-grep check is impossible).
+- Give-path audit: `_give_variant` -> `_register_item(def, backend_id)` was the ONLY unguarded variant-registration entry point reachable from a command. `/cwv_give_javelin` uses `inv:add_equipment` against a pre-registered hard-coded grenade item (no variant def, no `skin_only` concept) and never touches this path; `_auto_register_all` already excludes `skin_only`.
+- Persistence verdict: no cleanup needed - a `skin_only` key given in a past session self-heals on reload. All registration surfaces (MoreItemsLibrary local backend, `ItemMasterList` mirror, `NetworkLookup.item_names`, `_registered_keys`) are in-memory and rebuilt per session; `_auto_register_all` never re-registers a `skin_only` key. The give path never calls `modded_progression`'s `grant_item` (the only writer of its persisted `inventory` VMF store), so nothing was ever written to disk.
+- New regression check `give_refuses_skin_only` (`/cwv_regression_test`): asserts the guard predicate exists and discriminates on `def.skin_only`, and that no `skin_only` variant is present in `_registered_keys`.
+
 ## 0.1.386-dev - 2026-07-13 - #427 _dbg_alert log-only via engine printf [untested]
 
 - `_dbg_alert` rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). `character_weapon_variants.lua` only.

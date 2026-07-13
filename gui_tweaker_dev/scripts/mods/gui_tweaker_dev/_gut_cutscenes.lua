@@ -155,6 +155,36 @@ end
 -- sync. Setting id `gut_skip_cutscenes_enabled` to avoid colliding with the
 -- standalone Skip Cutscenes / Skip Cutscenes Please mod settings.
 
+-- issue 537 / issue 275: own-or-pin ownership of the shared engine skip gate
+-- `script_data.skippable_cutscenes`. It is a GLOBAL on the engine settings table, read at
+-- exactly one runtime site (CutsceneSystem.skip_pressed, cutscene_system.lua:98) and
+-- shared with vanilla (the debug menu preset sets it, debug_screen_config.lua:742) and any
+-- co-installed cutscene mod. gut must NEVER persistently latch it on -- the hooks below
+-- scope-unlock it only around a skip on a wired-event_on_skip cutscene and restore the
+-- at-rest value on every path. Capture the pre-gut value ONCE, before any gut hook
+-- installs, so that disabling the feature restores whatever a co-installed mod / the debug
+-- menu set instead of clobbering it to a hardcoded nil. Guarded by a boolean flag (a nil
+-- captured value is legitimate = retail default) so a re-dofile of this module can't
+-- re-capture. Caveat: captured at this module's load; a cutscene mod that sets the flag
+-- LATER in the boot order would not be seen, but the retail default is unset and nothing
+-- else in this repo touches the flag.
+if not mod._gut_pre_skippable_captured then
+    mod._gut_pre_skippable_captured = true
+    mod._gut_pre_skippable_cutscenes = script_data and script_data.skippable_cutscenes
+end
+
+-- Restore the shared skip gate to its captured pre-gut value. Called when the user turns
+-- Skip Cutscenes OFF (from the VMF checkbox via on_setting_changed, or the /skipcutscenes
+-- chat command / keybind). NEVER sets the gate on -- enabling relies entirely on the
+-- per-skip scope-unlock in the hooks below (issue 275). Idempotent; safe to call twice.
+mod._gut_restore_skippable_cutscenes = function()
+    if script_data then
+        script_data.skippable_cutscenes = mod._gut_pre_skippable_cutscenes
+        _printf("[gut:537] Skip Cutscenes disabled -> engine skip gate restored to pre-gut value=%s",
+            tostring(mod._gut_pre_skippable_cutscenes))
+    end
+end
+
 local _skip_next_fade = false
 -- Deferred auto-skip state. Bug 2026-05-22 (Devious Delvings intro):
 -- the previous auto-skip path fired `event_on_skip` (the level's own
@@ -523,11 +553,13 @@ end
 mod.gut_skip_cutscenes_toggle = function()
     local new_val = not mod:get("gut_skip_cutscenes_enabled")
     mod:set("gut_skip_cutscenes_enabled", new_val)
-    -- issue 275: do NOT latch script_data.skippable_cutscenes ON. At rest the engine
-    -- skip gate stays unset (retail default); the hooks scope-unlock it only around a
-    -- skip_pressed call on a cutscene that carries a wired event_on_skip. When
-    -- disabling, clear any stale set defensively.
-    if not new_val then script_data.skippable_cutscenes = nil end
+    -- issue 275 / issue 537: do NOT latch script_data.skippable_cutscenes ON. At rest the
+    -- engine skip gate stays at its pre-gut value; the hooks scope-unlock it only around a
+    -- skip_pressed call on a cutscene that carries a wired event_on_skip. When disabling,
+    -- restore the captured pre-gut value via the shared own-or-pin helper (same path the
+    -- VMF checkbox uses in on_setting_changed) rather than clobbering a co-installed mod's
+    -- set to a hardcoded nil.
+    if not new_val then mod._gut_restore_skippable_cutscenes() end
     mod:echo("Skip cutscenes: " .. (new_val and "ON" or "OFF"))
 end
 

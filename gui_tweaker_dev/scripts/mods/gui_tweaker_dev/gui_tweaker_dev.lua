@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.231-dev"
+local MOD_VERSION = "0.2.232-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -421,6 +421,19 @@ _rt_register("gut_cutscene_no_global_latch", function()
     end
     if not txt:find("_gut_cutscene_has_wired" .. "_skip", 1, true) then
         return "issue 275 regression: the _gut_cutscene_has_wired_skip gate is gone from _gut_cutscenes.lua"
+    end
+    -- 4. (issue 537) Source guard on the MAIN file too. Step 3 scans ONLY _gut_cutscenes.lua,
+    --    so the on_setting_changed re-latch (which lives in gui_tweaker_dev.lua) escaped it
+    --    and shipped for many versions. gui_tweaker_dev.lua is the sibling of the toggle's
+    --    _gut_cutscenes.lua in the same directory, so derive its path from src_path and
+    --    assert the persistent on_setting_changed skip-gate latch write stays removed. The
+    --    needle is split so this check text can never self-match.
+    local main_path = src_path:gsub("_gut_cutscenes%.lua$", "gui_tweaker_dev.lua")
+    local main_txt = _rt_src_read(main_path)  -- (#511) io-safe; nil in retail sandbox => skip
+    if not main_txt then return end
+    local osc_latch = ".skippable_cutscenes = mod:" .. "get("
+    if main_txt:find(osc_latch, 1, true) then
+        return "issue 537 regression: on_setting_changed re-latches the engine skip gate (must restore the pre-gut value on disable, never latch on)"
     end
 end)
 -- ============================================================
@@ -898,13 +911,21 @@ mod.on_setting_changed = function(setting_id)
         -- module dofile's later in this file).
         if mod._gut_apply_keep_menus then mod._gut_apply_keep_menus() end
     elseif setting_id == "gut_skip_cutscenes_enabled" then
-        -- Skip Cutscenes (migrated from gt, issue #106): persistently mirror the
-        -- VMF checkbox into the engine's skip gate, exactly as gt's on_setting_changed
-        -- did. The _gut_cutscenes.lua hooks also flip this transiently per-skip, so the
-        -- feature works either way; this keeps the persistent flag in sync for any
-        -- engine path that reads it directly.
-        script_data = script_data or {}
-        script_data.skippable_cutscenes = mod:get("gut_skip_cutscenes_enabled") or nil
+        -- Skip Cutscenes (issue #537 / issue 275). Do NOT latch the shared engine skip
+        -- gate on. `script_data.skippable_cutscenes` has exactly ONE runtime reader
+        -- (CutsceneSystem.skip_pressed, cutscene_system.lua:98) and the _gut_cutscenes.lua
+        -- hooks already scope-unlock it only around a skip on a cutscene that carries a
+        -- wired event_on_skip. Persistently latching it true force-unlocks author-locked
+        -- boss cinematics (event_on_skip=nil, e.g. Nurgloth on dlc_castle) into a mid-fight
+        -- ~66%-health softlock -- the exact issue-275 class the mod fixed everywhere else.
+        -- This site escaped the load-time / toggle no-latch cleanup because it lived in
+        -- this file, not _gut_cutscenes.lua. On DISABLE, restore the captured pre-gut value
+        -- (own-or-pin) so a co-installed cutscene mod / the vanilla debug menu is not
+        -- clobbered; the restore helper is defined by _gut_cutscenes.lua (resolved here at
+        -- call time). Enabling does nothing -- the per-skip hooks carry the whole feature.
+        if not mod:get("gut_skip_cutscenes_enabled") and mod._gut_restore_skippable_cutscenes then
+            mod._gut_restore_skippable_cutscenes()
+        end
     elseif setting_id == "gut_cim_bench_in_mission" then
         -- Write-through to cim's `allow_in_mission` setting (the widget moved out of
         -- cim into gut's In-Mission Menus, user direction 2026-07-02; cim's
