@@ -29,7 +29,9 @@ wt_dev_hp_apply, wt_dev_hp_reset, wt_dump_hold_pose  -- hold-pose tuner
 *(2026-07-01: the `gt_` prefix was stripped from ALL gt commands to simplify. The ONLY exception is `gt_regression_test`, kept prefixed because bare `regression_test` collides with gui_tweaker's. `lobby_*` names keep their `lobby_` prefix — only `gt_` was removed.)*
 ```
 -- Cheats / player-state:
-god, no_enemies, clear_enemies, unstuck, cloak, unkillable, inndmg, noclip, ai,
+god, no_enemies, clear_enemies, freezeai, unstuck, cloak, unkillable, inndmg, noclip, ai,
+--   (freezeai = dev-only, host-only: halt all enemy AI in place + pause new spawns, #303;
+--    also bound in the Dev Tools group keybind)
 infinite_ammo, stamina, gigapower, ultreset, pause, time_faster, time_slower,
 -- Level control / match flow:
 win, fail, restart, killbots, die, suicide, down, respawn, fix_sound, bottoggle, readyup, inn,

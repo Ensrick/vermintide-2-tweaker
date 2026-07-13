@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.214-dev"
+local MOD_VERSION = "0.2.215-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -996,7 +996,10 @@ mod:hook("ConflictDirector", "spawn_queued_unit", function(func, self, breed, ..
 end)
 
 mod:hook("ConflictDirector", "spawn_unit_immediate", function(func, self, ...)
-    if mod:get("disable_enemy_spawns") then return nil, nil end
+    -- Freeze AI (#303, dev-only) blocks new spawns too, via the same gate as the
+    -- /no_enemies toggle. mod._gt_freeze_ai_active is only ever set on the dev
+    -- stream host (nil elsewhere), so this OR is a no-op in stable.
+    if mod:get("disable_enemy_spawns") or mod._gt_freeze_ai_active then return nil, nil end
     return func(self, ...)
 end)
 
@@ -1019,11 +1022,23 @@ local _AI_SPAWN_FLAGS = {
     "ai_outside_navmesh_intervention_disabled",
 }
 
+-- Effective spawn-block = the /no_enemies toggle OR the dev-only Freeze AI state
+-- (#303). ORing both sources here means neither one toggling off clobbers the
+-- other's write, and Freeze AI reuses the identical vanilla-respected
+-- script_data.ai_*_disabled flag set that /no_enemies already drives.
 _apply_script_data_no_enemies = function(enabled)
     script_data = script_data or {}
+    local block = enabled or mod._gt_freeze_ai_active
     for _, name in ipairs(_AI_SPAWN_FLAGS) do
-        script_data[name] = enabled or nil
+        script_data[name] = block or nil
     end
+end
+
+-- Re-applies the combined block from current state. Freeze AI (_gt_freeze_ai.lua,
+-- dofiled below) calls this after flipping mod._gt_freeze_ai_active so the two
+-- sources stay composed. Resolved at call time; safe before the module loads.
+mod._gt_apply_spawn_block = function()
+    _apply_script_data_no_enemies(mod:get("disable_enemy_spawns"))
 end
 
 _apply_script_data_no_enemies(mod:get("disable_enemy_spawns"))
@@ -2440,6 +2455,42 @@ _rt_register("devtools_bot_hud_wired", function()
     end
 end)
 
+_rt_register("gt303_freeze_ai_wired", function()
+    -- #303 (v0.2.215-dev): Freeze AI must stay wired across all four seams.
+    -- (1) the toggle body (keybind function_call target + /freezeai command) is
+    -- exposed; it is defined only on the dev stream, which this test runs in.
+    -- (2) the composed spawn-block applicator exists in main (catches a revert of
+    -- the freeze-OR-no_enemies composition that would let one clobber the other).
+    -- (3) the Dev Tools keybind widget is present and points function_call at
+    -- gt_freeze_ai_toggle (catches a renamed/broken widget). (4) the vanilla brain
+    -- tick the merged gate rides still exists (catches an engine rename that would
+    -- silently no-op the freeze).
+    if type(mod.gt_freeze_ai_toggle) ~= "function" then
+        return "mod.gt_freeze_ai_toggle missing -- did _gt_freeze_ai.lua load on the dev stream?"
+    end
+    if type(mod._gt_apply_spawn_block) ~= "function" then
+        return "mod._gt_apply_spawn_block missing -- freeze/no_enemies spawn-block composition reverted"
+    end
+    if not (AISystem and type(AISystem.update_brains) == "function") then
+        return "AISystem.update_brains missing -- the merged Freeze AI brain gate has no target"
+    end
+    local ok, data = pcall(require, "scripts/mods/general_tweaker_dev/general_tweaker_dev_data")
+    if not ok or type(data) ~= "table" then return "could not require data file" end
+    local widgets = data.options and data.options.widgets
+    if type(widgets) ~= "table" then return "data.options.widgets missing" end
+    local found
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if node.setting_id == "gt_devtools_freeze_ai_hotkey" then found = node end
+        for _, child in pairs(node) do if type(child) == "table" then walk(child) end end
+    end
+    walk(widgets)
+    if not found then return "gt_devtools_freeze_ai_hotkey keybind missing from the Dev Tools group" end
+    if found.function_name ~= "gt_freeze_ai_toggle" then
+        return "gt_devtools_freeze_ai_hotkey function_name must be gt_freeze_ai_toggle (got " .. tostring(found.function_name) .. ")"
+    end
+end)
+
 _rt_register("breach_probe_present_dev_gated", function()
     -- #261 (v0.2.176-dev): the always-on radius-breach probe must be present and
     -- dev-gated. It runs inside mod._gt_btlab_observe_update (dispatched from the
@@ -3074,6 +3125,12 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_hacks")
 -- irrelevant. The consolidated ConflictDirector.spawn_queued_unit hook STAYS in
 -- main — CS only hooks the DISTINCT ConflictDirector.update method.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_creature_spawner")
+-- Freeze AI (#303, dev-only). Registers /freezeai + exposes mod.gt_freeze_ai_toggle
+-- (the Dev Tools keybind's function_call target) and drives mod._gt_freeze_ai_active,
+-- read by the merged AISystem.update_brains gate in _gt_creature_spawner.lua and by
+-- the spawn hook + _apply_script_data_no_enemies in main. Call-time cross refs, so
+-- load order is irrelevant; the module early-outs (registers nothing) off the dev stream.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_freeze_ai")
 -- AI Takeover (hand your character to a bot) + AFK->AI takeover. Assigns
 -- mod._gt_ai_handle_toggle_change (CALLED by the main on_setting_changed
 -- DISPATCHER) and reads/writes the promoted mod._gt_ai_* state seeded at the top

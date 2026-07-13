@@ -1263,6 +1263,18 @@ if mod == get_mod("gt" .. "_dev") then
         setting_id  = "gt_devtools_group",
         type        = "group",
         sub_widgets = {
+            -- Freeze AI (#303). Keybind toggles mod.gt_freeze_ai_toggle
+            -- (function_call). Host-only; halts every enemy in place and pauses
+            -- new spawns. Feature code in _gt_freeze_ai.lua; also as /freezeai.
+            {
+                setting_id      = "gt_devtools_freeze_ai_hotkey",
+                type            = "keybind",
+                keybind_trigger = "pressed",
+                keybind_type    = "function_call",
+                function_name   = "gt_freeze_ai_toggle",
+                default_value   = {},
+                tooltip         = "gt_devtools_freeze_ai_hotkey_tooltip",
+            },
             -- Bot behavior HUD (supersedes the former Bot Teleport Lab D6 head-text).
             -- Host-only; draws one on-screen column per bot.
             {

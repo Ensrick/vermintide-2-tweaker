@@ -694,8 +694,20 @@ end
 
 -- Two-toggle AI gate (mission vs. keep) — short-circuits the AI brain
 -- update when the relevant checkbox is off. Same pattern upstream uses.
+--
+-- Freeze AI (#303, dev-only) is MERGED here, not a second hook: VMF drops a
+-- second mod:hook on the same (Class, method). When mod._gt_freeze_ai_active is
+-- set (host-only, dev stream — see _gt_freeze_ai.lua), the whole brain tick is
+-- skipped for every alive AI unit, so no enemy evaluates its behaviour tree
+-- (ai_system.lua:882 `bt:root():evaluate`) — no new attack, target, or nav goal.
+-- Newly-spawned enemies inherit the same freeze the instant their brain would
+-- tick. Takes precedence over the creature-spawner mission/keep toggles; when
+-- freeze is off the original two-toggle behaviour is untouched.
 if AISystem then
     mod:hook(AISystem, "update_brains", function(func, ...)
+        if mod._gt_freeze_ai_active then
+            return
+        end
         if not _gt_cs_is_in_keep() then
             return (mod:get("gt_cs_mission_ai") ~= false) and func(...)
         else

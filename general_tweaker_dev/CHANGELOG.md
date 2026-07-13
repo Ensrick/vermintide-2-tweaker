@@ -1,5 +1,29 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.215-dev (2026-07-13) -- #303 Freeze AI dev tool (command + keybind) [untested]
+
+A dev-only testing tool that halts every enemy AI in place so you can inspect positioning, hitboxes, or set up a scenario, and pauses new spawns while it is held. Ships BOTH as the `/freezeai` chat command and as a keybind-able "Freeze AI" setting in the dev-only Dev Tools group (`keybind_type = function_call` -> `mod.gt_freeze_ai_toggle`). Host-only: AI brains run on the server, so the toggle refuses on a client with one echo. One confirmation echo per toggle ("AI frozen" / "AI unfrozen"); diagnostics are printf-only (`[gt:303]`).
+
+### Mechanism (two vanilla-respected switches -- cited)
+Freeze flips one in-memory flag, `mod._gt_freeze_ai_active` (never set on a client or in the stable stream), which two seams read:
+1. **Halt existing + future AI:** the brain gate is MERGED into gt's existing `mod:hook(AISystem, "update_brains")` in `_gt_creature_spawner.lua` (no second hook -- VMF drops it). While frozen it skips the whole brain tick, so `bt:root():evaluate` (`ai_system.lua:882`) never runs for any alive AI unit -- no enemy picks a new attack, target, move, or nav goal. An enemy already moving settles at its last nav step; one already mid-attack may finish that swing before going still (whether the hit lands is breed-dependent -- some fire damage off animation events, not the brain tick -- so this is not claimed either way pending in-game verification). Newly-spawned enemies are frozen the instant their brain would first tick.
+2. **Pause new spawns:** `mod._gt_apply_spawn_block()` (main) sets the same `script_data.ai_*_disabled` flag set the vanilla dedicated-server `disable_ai_and_bots` command (`dedicated_server_commands.lua:824-845`) and the Testify `disable_ai` snippet (`testify_snippets.lua:52-73`) flip. Those flags gate the conflict-director pipelines at their read sites: `ai_pacing_disabled` (`conflict_director.lua:930/1475/1536`), `ai_horde_spawning_disabled` (`753/1321/1550`), `ai_specials_spawning_disabled` (`1544`; `specials_pacing.lua:807/892`), `ai_roaming_spawning_disabled` (`1601`), `ai_mini_patrol_disabled` (`1558`), `ai_boss_spawning_disabled` (`enemy_recycler.lua:429`), `ai_critter_spawning_disabled` (`enemy_recycler.lua:387`). Composed (OR) with the `/no_enemies` toggle in `_apply_script_data_no_enemies` + the `ConflictDirector.spawn_unit_immediate` hook, so neither source clobbers the other on toggle-off.
+
+There is no engine `script_data.disable_ai` that gates the retail brain loop (`AISystem.update`/`update_brains` read no such flag), and the `ai_*_disabled` flags only gate spawning -- so freezing already-spawned enemies requires gating the brain tick, which is exactly what the creature-spawner "Mission AI" toggle already proves out.
+
+### Scope / dev-only
+Whole feature is dev-stream gated: the module (`_gt_freeze_ai.lua`) registers nothing off the dev stream, and the keybind lives in the Dev Tools group (appended only in the dev clone). State persists until toggled off or a mod reload; the echo makes each transition explicit.
+
+### Regression
+- New `/gt_regression_test` check `gt303_freeze_ai_wired`: asserts the toggle body + composed spawn-block applicator are exposed, the Dev Tools keybind is present and points `function_call` at `gt_freeze_ai_toggle`, and `AISystem.update_brains` still exists (catches an engine rename that would silently no-op the freeze).
+
+### Test method (solo host + bots suffices; client is refused by design)
+1. In a mission with a horde present, run `/freezeai` (or press the Dev Tools "Freeze AI" keybind): every enemy stops advancing/attacking within a step, and no new enemies spawn. Echo shows "AI frozen".
+2. Run it again: enemies resume and spawning returns to normal. Echo shows "AI unfrozen".
+3. As a CLIENT, `/freezeai` echoes "Only the host can freeze AI." and does nothing.
+4. Compose check: turn on `/no_enemies`, then `/freezeai` on, then `/freezeai` off -- spawns must stay blocked (no_enemies still holds); then `/no_enemies` off restores spawns.
+5. `/gt_regression_test` must pass `gt303_freeze_ai_wired`.
+
 ## v0.2.214-dev (2026-07-13) -- #355 /suicide and /down self-state dev commands [untested]
 
 Two testing commands for your OWN local player: `/suicide` kills you, `/down` knocks you into bleedout. Both refuse in the keep and echo one confirmation line.

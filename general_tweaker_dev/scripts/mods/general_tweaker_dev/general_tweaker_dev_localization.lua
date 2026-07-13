@@ -338,6 +338,9 @@ return {
     -- ============================================================
     gt_devtools_group = { en = "[untested] Dev Tools" },
 
+    gt_devtools_freeze_ai_hotkey = { en = "[untested] [Issue 303] Freeze AI" },
+    gt_devtools_freeze_ai_hotkey_tooltip = { en = "Halts every enemy in place so you can inspect positioning or set up a scenario: no enemy starts a new attack, move, target, or pathing decision, and new spawns stop while it is held. An enemy already moving settles at its last step; one already mid-attack may finish that swing before going still. Press again to resume. Works only when you are the host. Also available as the /freezeai chat command. Dev build only." },
+
     gt_devtools_bot_hud = { en = "[crash] [Issue 293 & 295] Bot behavior HUD" },
     gt_devtools_bot_hud_tooltip = { en = "Draws a column per bot showing its current behavior-tree action, the teammate it follows, distance to that teammate and to you, whether it just teleported, its teleport tally, and the last twenty actions it entered. On-screen, host-only, dev build only." },
 
