@@ -11,6 +11,15 @@ local GUT_HUD_MODE_OPTIONS = {
     { text = "gut_hud_mode_opt_camera",   value = "camera" },
 }
 
+-- Inventory character-preview backdrop (#522). Values are keys into the
+-- BACKDROPS catalog in _gut_inventory_backdrop.lua ("vanilla" = no swap);
+-- the rt check cross-verifies the pairing.
+local GUT_INV_BACKDROP_OPTIONS = {
+    { text = "gut_inv_backdrop_opt_vanilla", value = "vanilla" },
+    { text = "gut_inv_backdrop_opt_dark",    value = "dark_camp" },
+    { text = "gut_inv_backdrop_opt_victory", value = "victory_camp" },
+}
+
 -- UI-mod compatibility patches (UI Tweaks Temporal Fix + buff-bar end-time crash
 -- fix) and the .toml config-file override are now IMPLICIT/always-on with no
 -- widgets, so the former "UI Mod Compatibility" group (gut_compat_group), the
@@ -436,6 +445,28 @@ local options_data = {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "gut_cim_bench_in_mission_tooltip",
+                    },
+                },
+            },
+            -- ================================================================
+            -- Inventory (#522)
+            -- ================================================================
+            -- Character-preview backdrop dropdown: swaps the environment behind
+            -- the hero in the inventory preview pane. Vanilla default; the two
+            -- alternates are the game's own standalone-packaged menu scenes
+            -- (dark camp = the chest-opening backdrop, victory camp = the
+            -- mission-won scene), residency-gated by vanilla's own
+            -- load/has_loaded machinery. See _gut_inventory_backdrop.lua.
+            {
+                setting_id  = "gut_inventory_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "gut_inventory_backdrop",
+                        type          = "dropdown",
+                        default_value = "vanilla",
+                        options       = GUT_INV_BACKDROP_OPTIONS,
+                        tooltip       = "gut_inventory_backdrop_tooltip",
                     },
                 },
             },
