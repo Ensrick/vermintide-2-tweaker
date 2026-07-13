@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.59-dev"
+local MOD_VERSION = "0.8.60-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -5765,6 +5765,31 @@ _rt_register("inventory_property_count_within_cap", function()
     end
     if #offenders > 0 then
         return "items over 2-property cap: " .. table.concat(offenders, ", ")
+    end
+end)
+
+_rt_register("cwv_blacksmith_template_not_double_injected", function()
+    -- (issue 524) cim's Craft Item recipe injects a synthetic default-rarity
+    -- blacksmith template (at base_power, 300) for every craftable ItemMasterList
+    -- key. CWV variant keys ALREADY have a real CWV-registered blacksmith template
+    -- (cwv_<key>_001, power 5). The dedup keyed only on the item's .key/.data.key,
+    -- which for a CWV item is the INHERITED base key (es_bastard_sword), never the
+    -- cwv key - so the synth was injected on top, a duplicate 300-power base item.
+    -- The fix derives the cwv key from the cwv_<key>_NNN backend_id when building
+    -- seen_keys. Runtime anchor: the inject helper + the fix marker must both be
+    -- present (io-safe #511; full behavioral proof is in-game - the Craft Item grid
+    -- shows CWV's 5-power template only, no 300-power duplicate).
+    if type(mod._cim_inject_templates) ~= "function" then
+        return "standard-forge template injector (_cim_inject_templates) not exposed"
+    end
+    if mod._cim524_cwv_blacksmith_dedup ~= true then
+        return "#524 regression: cwv backend_id dedup dropped from _cim_inject_templates (duplicate 300-power blacksmith templates return)"
+    end
+    -- Behavioral sanity: the cwv key derivation the fix relies on must match a
+    -- real CWV blacksmith backend_id and NOT a plain guid craft bid.
+    local sample = "cwv_es_longsword_001"
+    if sample:match("^(cwv_.-)_%d%d%d$") ~= "cwv_es_longsword" then
+        return "#524 regression: cwv_<key>_NNN key derivation broken"
     end
 end)
 
