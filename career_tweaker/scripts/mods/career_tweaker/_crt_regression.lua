@@ -677,3 +677,14 @@ _rt_register("crt_mod_tweaker_exclusive_groups_registered", function()
         return "no 2+ member clusters found to verify (mutex load regression?)"
     end
 end)
+
+_rt_register("issue405_heal_network_is_server_gated", function()
+    -- Issue 405 (client CTD on Fires-from-Ash THP heal): the heal_from_proc
+    -- call must stay behind the Managers.player.is_server gate. The gate site
+    -- (career_tweaker_balance.lua, Fires-from-Ash wrapper) sets this marker at
+    -- load; a reverted/edited-out gate drops the marker and this check fails.
+    -- Runtime marker per the issue 511 doctrine (no source self-read).
+    if mod._crt405_heal_is_server_gated ~= true then
+        return "Fires-from-Ash THP heal missing its is_server gate marker (issue 405 client CTD class)"
+    end
+end)

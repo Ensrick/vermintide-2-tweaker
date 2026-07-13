@@ -3746,6 +3746,12 @@ if ProcFunctions and ProcFunctions.sienna_adept_reduce_activated_ability_cooldow
         end
     end
 end
+-- Issue 405 post-fix regression marker: the Fires-from-Ash proc heal above
+-- carries the is_server gate (without it, clients CTD on the heal_network
+-- fassert "Only server can heal", damage_utils.lua:2636). Set at LOAD beside
+-- the gate so /crt_regression_test can assert it without a source read
+-- (issue 511 pattern); asserted by issue405_heal_network_is_server_gated.
+mod._crt405_heal_is_server_gated = true
 
 -- ============================================================
 -- Hook: Vanhel's Danse Macabre per-skeleton stacks

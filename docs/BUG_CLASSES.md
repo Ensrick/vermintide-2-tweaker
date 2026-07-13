@@ -1432,3 +1432,80 @@ end
 ### Related Issues / commits
 - gt_dev v0.2.202-dev (#492 rework: 4s path-fail + 8s no-progress + hysteresis latch; census printfs), v0.2.203-dev (#515: latch re-arm, backward bypass on the aid node, 492-bailout composition). Regression checks `gt_bot492_aid_stall_recovery`, `gt_bot515_teleport_latch_rearm`, `gt_bot515_cant_reach_backward_bypass`.
 - Related: #139/#142 (bot follow/teleport family), class 21 (stale state in mod-update phases).
+
+## 35. Force-loaded weapon `_3p` package under a shared "global" ref, never released — shutdown "not unloaded" deadlock + in-mission "locking a resource about to be unloaded"
+
+**First seen:** 2026-07-03 (cross-mod CW session; cosmetics-owned slice fixed v0.9.76-dev)
+**Canonical Issue:** [#282](https://github.com/Ensrick/vermintide-2-tweaker/issues/282) (leak); [#477](https://github.com/Ensrick/vermintide-2-tweaker/issues/477) (owner-pin evidence); [#494](https://github.com/Ensrick/vermintide-2-tweaker/issues/494) (wt/cwv slice — OPEN)
+**Lives in:** any mod that force-loads a weapon/fx `_3p` package via `Managers.package:load(path, "global", ...)` on boot or cross-char wield without a paired release on level-exit/unwield/mod-unload — cosmetics Material-Hijack, wt/cwv cross-char force-loads.
+
+### Symptoms
+- Shutdown after a mission: thousands of `[PackageManager] Unload: <pkg>, global -> Package still referenced, NOT unloaded`, then crashify `'#ID[...]' not unloaded, this can potentially cause an deadlock!`, non-zero exit.
+- In-mission precursor at map transitions / weapon swaps: `[ResourceManager] Locking a resource that is about to be unloaded!`.
+- Refcount balloons (92 loads of one `_3p` package in a single host session) — each wield re-loads under the shared ref with no dedupe.
+
+### Diagnosis pattern
+1. Grep the mod for `:load(` / `force_load` of `_3p` packages; the reference-name arg is the tell — a shared literal `"global"` shares one refcount across every consumer AND every mod, so nobody can safely unload.
+2. Count loads vs unloads per package key over a session (a `[<mod>:282]` load/dedupe/unload ledger). Loads >> unloads = leak.
+3. Confirm the load path has NO release wired to StateIngame exit / `mod:on_unload` / previewer destroy.
+
+### Fix template
+- Load exactly-once per path (a dedupe registry), under a MOD-OWNED reference name (`"<mod>_mh"`, not `"global"`), tracked in a table.
+- Release symmetrically on `on_game_state_changed` StateIngame exit (fires before world/units teardown), mod unload, and previewer-destroy.
+```lua
+if _mh_loaded[path] then return end          -- exactly-once
+Managers.package:load(path, "cosmetics_tweaker_mh", nil, true)
+_mh_loaded[path] = true
+-- teardown:
+function release_packages(reason)
+    for p in pairs(_mh_loaded) do
+        Managers.package:unload(p, "cosmetics_tweaker_mh"); _mh_loaded[p] = nil
+    end
+end
+```
+- Regression: runtime check that the registry holds at most one reference per path (`mh_package_single_reference`).
+
+### Related Issues / commits
+- cosmetics_tweaker v0.9.76-dev (#282 cosmetics slice); **#494 (wt/cwv force-load slice UNADDRESSED — this class is only HALF closed).**
+- Related: class 27/28 (residency half of the same cross-char force-loading).
+
+## 36. Self-heal / seed-repair writes across the modded-official realm boundary (modded ids leak into the EAC-trusted store)
+
+**First seen:** 2026-07-06 (gut_dev #402; prevention proven + repair shipped v0.2.215-dev)
+**Canonical Issue:** [#402](https://github.com/Ensrick/vermintide-2-tweaker/issues/402); regression window #375/#379/#387
+**Lives in:** any mod that mirrors an official/EAC-trusted backend into a separate modded store and has a repair/seed/self-heal path that reads or refills from official (gut native-loadouts; any future modded-progression mirror).
+
+### Symptoms
+- After entering the OFFICIAL realm, saved loadouts are corrupted: a slot shows a fallback template (e.g. Blacksmith's Variant greatsword) — the signature of a MODDED item id written into official data that official can't wield -> template fallback. The equipped portrait FRAME leaks the same way (modded-injected frames invalid on official).
+- One path is spared (a separate index, e.g. gut's bot loadout), which misleads triage toward the wrong subsystem.
+
+### Diagnosis pattern
+1. Every runtime write that can diverge official data from its mirror must funnel through ONE chokepoint (gut: `PlayFabMirrorBase.set_character_data`, which writes `_career_data` before delegating to `set_career_read_only_data`). Audit that the mod no-ops that chokepoint in the official realm.
+2. `slot_frame` (and other cosmetic slots) are ORDINARY loadout slots via `set_loadout_item -> set_character_data`, NOT hero attributes — a weapon-only guard misses them. Cover frame + cosmetic slots.
+3. The introduction is usually a NEW seed/repair/self-heal feature that reads/writes across the boundary; the corruption is residual pre-isolation data plus any un-gated write, not necessarily a live new write.
+
+### Fix template
+- Gate EVERY persist/set-through on `_in_modded_realm()`; block the write at the chokepoint in official and route to the modded store.
+- Ship an OFFICIAL-realm repair command (report-only default; apply replaces only already-broken slots with an owned resolvable id; refuses in the modded realm) covering weapons AND frame/cosmetic slots.
+- Regression: assert all official-write chokepoint methods stay hooked (`native_loadouts_official_write_chokepoint`) so a dropped hook re-opens the leak -> gate fails.
+
+### Related Issues / commits
+- gut_dev v0.2.215-dev (#402). Related: class 31 (wire safety — same "modded value must not reach a context that can't handle it" root, persistence axis vs wire axis); #174 (the original isolation this regression breached).
+
+## 37. Injected/enabled vanilla mutator indexes a per-level-conditional CurrentBossSettings field unguarded (host fatal on fixed-end-boss levels)
+
+**First seen:** 2026-07-09 (event_tweaker #455; fixed v0.4.25-dev)
+**Canonical Issue:** [#455](https://github.com/Ensrick/vermintide-2-tweaker/issues/455)
+**Lives in:** any mod that injects/enables a vanilla mutator whose server dispatch function indexes a `CurrentBossSettings` sub-table only some levels build.
+
+### Symptoms
+- Host fatal `mutator_multiple_bosses.lua:8: attempt to index field 'boss_events' (a nil value)` at `mutator_handler.lua:644` on a fixed-end-boss level (e.g. The War Camp) with the mutator enabled; roaming-boss levels never reproduce.
+
+### Diagnosis pattern
+- `CurrentBossSettings` is rebuilt per level from the conflict director's `boss` block (`conflict_director.lua:879`); fixed-end-boss levels ship a boss block with no `boss_events` table. `multiple_bosses` / `blessing_of_grimnir` / `deus_pacing_tweak` all index it unguarded in their server dispatch functions.
+
+### Fix template
+- Wrap the boss-event mutators' dispatch fields at the injection chokepoint; no-op (with printf) when `boss_events` is absent, normal behavior otherwise. Guard ALL siblings, not just the reported one.
+
+### Related Issues / commits
+- event_tweaker v0.4.25-dev; regression `issue455_boss_event_mutators_guarded`. Related: #386 (scalar-pacing sanitizer — sibling injection-time guard).

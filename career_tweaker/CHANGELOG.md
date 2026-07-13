@@ -1,5 +1,10 @@
 # Career Tweaker Changelog
 
+## 0.3.60-dev - 2026-07-12 - #405 post-fix pass: regression marker for the Fires-from-Ash heal gate [untested]
+
+### Changed
+- **#405 (client CTD "Only server can heal"): the shipped is_server gate on the Fires-from-Ash THP proc heal now sets a load-time marker** (`mod._crt405_heal_is_server_gated`, career_tweaker_balance.lua beside the gate), asserted by the new `/crt_regression_test` check `issue405_heal_network_is_server_gated` - a reverted gate fails the suite. Runtime marker per the issue 511 doctrine (no source self-read). This was the last owed post-fix-pass pillar for issue 405 (hardening + BUG_CLASSES section 29 already in place).
+
 ## 0.3.59-dev - 2026-07-12 - #446 register same-talent rival groups into Mod Tweaker [untested]
 
 ### Why
