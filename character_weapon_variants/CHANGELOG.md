@@ -1,5 +1,13 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.392-dev - 2026-07-13 - #586 Dual Axes first-person residency [untested]
+
+- Fixed the client crash when a synchronized Kruber or Saltzpyre CWV Dual Axes loadout arrives after `ProfileSynchronizer` has already derived the previous weapon's first-person package list. Vanilla then resolves `dual_wield_axes_template_1` and immediately installs `.../melee/dual_axes`; an absent resource faults inside the engine before Lua can recover.
+- CWV now synchronously acquires one source-verified, mod-owned residency reference for the vanilla Dual Axes first-person state machine before any equip/resync can wield it. The lease is idempotent across loadout and character transitions, released on disable/unload, and reacquired on re-enable. Gameplay-state entry also retries a cold chunk-load acquisition, covering unusual load order without inflating the reference count.
+- Added `/cwv_regression_test` check `issue586_cross_character_dual_axes_fp_residency`. It proves the lease is resident and singular, repeated acquisition cannot inflate its refcount, and all eight Kruber/Saltzpyre receiver careers resolve both dedicated Dual Axes entries to the protected state machine.
+
+**DoD:** Universal walked. Trait gates: G-DUAL, G-CROSS-CHAR, package lifecycle. Deferrals: live equip/swap-away/swap-back, character/loadout resync, and host/client verification for both receiver families — issue #586 verification matrix.
+
 ## 0.1.391-dev - 2026-07-13 - #582 native-vs-CWV Dual Axes ownership contract [untested]
 
 - Added `/cwv_regression_test` check `issue582_dual_axes_native_variant_ownership_boundary`. It proves both dedicated entries still clone `dr_dual_wield_axes`, remain real `cwv_variant` ItemMasterList owners for all four intended receiver careers, and coexist with a native base that has no Kruber/Saltzpyre `can_wield` leak.

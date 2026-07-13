@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.391-dev"
+local MOD_VERSION = "0.1.392-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -4416,6 +4416,71 @@ local function _force_load_musket_melee_assets()
 end
 
 _force_load_musket_melee_assets()
+
+-- ============================================================
+-- Cross-character Dual Axes first-person residency (Issue #586)
+-- ============================================================
+-- Vanilla ProfileSynchronizer derives its first-person package list from the
+-- backend loadout it sees while build_inventory_lists() runs. A CWV resync can
+-- replace that loadout immediately afterwards: Rain's #586 client retained the
+-- old 2H-sword package list, then SimpleInventoryExtension:_wield_slot resolved
+-- the newly synchronized `dual_wield_axes_template_1` and called
+-- PlayerUnitFirstPerson:set_state_machine(".../melee/dual_axes"). The engine C
+-- call faults before Lua can recover when that resource is not resident.
+--
+-- Hold the one vanilla state-machine package for CWV's lifetime. This closes
+-- both the normal-equip and stale-resync windows for every Kruber/Saltzpyre Dual
+-- Axes receiver without rewriting ProfileSynchronizer's file-local package
+-- builder or broadly pinning weapon packages. The load is deliberately
+-- synchronous (`asynchronous=false` in PackageManager.load) because residency
+-- is a precondition of the next wield, not work that may finish afterwards.
+-- A unique reference plus idempotent acquire/release makes ownership balanced
+-- across loadout/character transitions, disable/re-enable, and mod unload.
+_om.DUAL_AXES_FP_STATE_MACHINE = "units/beings/player/first_person_base/state_machines/melee/dual_axes"
+_om.DUAL_AXES_FP_RESIDENCY_REF = "cwv_dual_axes_fp_state_machine"
+_om._dual_axes_fp_residency_held = false
+
+_om._acquire_dual_axes_fp_residency = function(reason)
+	local package_manager = Managers and Managers.package
+	if not package_manager then
+		mod:warning("[cwv:586] package manager unavailable; Dual Axes FP residency not acquired (%s)", tostring(reason))
+		return false
+	end
+
+	local path = _om.DUAL_AXES_FP_STATE_MACHINE
+	local ref = _om.DUAL_AXES_FP_RESIDENCY_REF
+	if package_manager:has_loaded(path, ref) then
+		_om._dual_axes_fp_residency_held = true
+		return true
+	end
+
+	-- This exact path is emitted by vanilla WeaponUtils/ProfileSynchronizer as
+	-- an inventory package for Bardin's native Dual Axes. Do not pcall this:
+	-- invalid resource-package failures occur in the engine and are not a safe
+	-- exception boundary. Keeping the source-derived allowlist to one path is
+	-- the validity guard.
+	package_manager:load(path, ref, nil, false, true)
+	_om._dual_axes_fp_residency_held = package_manager:has_loaded(path, ref) and true or false
+	if _om._dual_axes_fp_residency_held then
+		mod:info("[cwv:586] acquired Dual Axes FP residency (reason=%s, ref=%s)", tostring(reason), ref)
+	else
+		mod:warning("[cwv:586] Dual Axes FP package did not become resident after synchronous load")
+	end
+	return _om._dual_axes_fp_residency_held
+end
+
+_om._release_dual_axes_fp_residency = function(reason)
+	local package_manager = Managers and Managers.package
+	local path = _om.DUAL_AXES_FP_STATE_MACHINE
+	local ref = _om.DUAL_AXES_FP_RESIDENCY_REF
+	if package_manager and (package_manager:reference_count(path, ref) or 0) > 0 then
+		package_manager:unload(path, ref)
+		mod:info("[cwv:586] released Dual Axes FP residency (reason=%s, ref=%s)", tostring(reason), ref)
+	end
+	_om._dual_axes_fp_residency_held = false
+end
+
+_om._acquire_dual_axes_fp_residency("mod_load")
 
 -- ============================================================
 -- Cross-character husk weapon residency  (Issue #280)
@@ -12096,7 +12161,15 @@ end
 
 -- (1) Game state transitions. VMF surfaces engine state changes through the
 -- top-level `mod.on_game_state_changed = function(status, state_name)` slot.
+_om._dual_axes_fp_game_state_retry_installed = true
 mod.on_game_state_changed = function(status, state_name)
+    -- #586: chunk-load normally acquires the lease, but PackageManager can be
+    -- cold during unusual load ordering. Every gameplay-state enter is a safe
+    -- retry boundary and acquire is idempotent, so no reference inflation.
+    if status == "enter" and _om._dual_axes_fp_residency_held ~= true then
+        _om._acquire_dual_axes_fp_residency("game_state_enter:" .. tostring(state_name))
+    end
+
     local n = _dbg_count_registered_cwv_items()
     _dbg("on_game_state_changed: status=%s state=%s registered_cwv_items=%d",
         tostring(status), tostring(state_name), n)
@@ -12140,6 +12213,20 @@ mod.on_game_state_changed = function(status, state_name)
         end
     end
     _dbg("  loadout: %d cwv_* item(s) currently equipped", hits)
+end
+
+-- #586: these callbacks own the single FP state-machine lease above. Keep
+-- them idempotent because VMF may call on_disabled before on_unload.
+mod.on_enabled = function()
+    _om._acquire_dual_axes_fp_residency("mod_enabled")
+end
+
+mod.on_disabled = function()
+    _om._release_dual_axes_fp_residency("mod_disabled")
+end
+
+mod.on_unload = function()
+    _om._release_dual_axes_fp_residency("mod_unload")
 end
 
 -- (2) Variant equip event — MERGED into the canonical wield hook at line ~1317
@@ -12354,6 +12441,55 @@ _rt_register("issue582_dual_axes_native_variant_ownership_boundary", function()
     for _, career in ipairs(native.can_wield or {}) do
         if career:sub(1, 3) == "es_" or career:sub(1, 3) == "wh_" then
             return "native Bardin Dual Axes leaked to dedicated CWV receiver: " .. career
+        end
+    end
+end)
+
+_rt_register("issue586_cross_character_dual_axes_fp_residency", function()
+    local path = _om.DUAL_AXES_FP_STATE_MACHINE
+    local ref = _om.DUAL_AXES_FP_RESIDENCY_REF
+    if path ~= "units/beings/player/first_person_base/state_machines/melee/dual_axes" then
+        return "Dual Axes FP state-machine allowlist drifted: " .. tostring(path)
+    end
+    if type(_om._acquire_dual_axes_fp_residency) ~= "function"
+        or type(_om._release_dual_axes_fp_residency) ~= "function" then
+        return "Dual Axes FP residency lifecycle is not installed"
+    end
+    if _om._dual_axes_fp_game_state_retry_installed ~= true then
+        return "game-state retry is not wired for a cold chunk-load PackageManager"
+    end
+
+    local package_manager = Managers and Managers.package
+    if not package_manager then return "package manager unavailable" end
+    local before = package_manager:reference_count(path, ref) or 0
+    if not _om._acquire_dual_axes_fp_residency("regression_probe") then
+        return "Dual Axes FP residency acquire failed"
+    end
+    local after = package_manager:reference_count(path, ref) or 0
+    if before ~= 1 or after ~= 1 then
+        return string.format("residency lease is not singular/idempotent (before=%d after=%d)", before, after)
+    end
+    if not package_manager:has_loaded(path, ref) or _om._dual_axes_fp_residency_held ~= true then
+        return "Dual Axes FP state machine is not resident under the CWV lease"
+    end
+
+    local receivers = {
+        cwv_es_dual_axes = { "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" },
+        cwv_wh_dual_axes = { "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest" },
+    }
+    local iml = rawget(_G, "ItemMasterList")
+    if type(iml) ~= "table" then return "ItemMasterList not loaded yet (run in-keep)" end
+    for item_key, careers in pairs(receivers) do
+        local entry = rawget(iml, item_key)
+        if not entry then return item_key .. " missing from ItemMasterList" end
+        local item_template = BackendUtils.get_item_template(entry)
+        if not item_template then return item_key .. " template missing" end
+        for _, career_name in ipairs(careers) do
+            local resolved = WeaponUtils.get_item_state_machine(item_template, career_name)
+            if resolved ~= path then
+                return string.format("%s/%s resolves FP state machine %s, expected %s",
+                    item_key, career_name, tostring(resolved), path)
+            end
         end
     end
 end)

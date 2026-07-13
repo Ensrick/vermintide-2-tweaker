@@ -79,7 +79,7 @@ full wrapper (`mod:hook`, can rewrite args/returns); `[safe]` = `mod:hook_safe`
 
 | Class.method (kind) | Vanilla behavior | Why cwv hooks it | Trap / invariant |
 |---|---|---|---|
-| `PackageManager.load` / `unload` / `has_loaded` [hook,tbl] `:5212`/`:5217`/`:5222` | Refcounted package load/unload/state query [src: `foundation/scripts/managers/package/package_manager.lua:20`/`:196`/`:286`] | Force-load base-weapon packages so cross-character meshes are resident before spawn (`:5212`) | `package:load` needs a `.package` path, not a unit path (memory `reference_vt2_package_load_needs_package_not_unit_path`); residency/leak class (`docs/engine/05`, #282); `load()` only when not `has_loaded()` (memory `reference_vt2_la_package_force_load_crash`) |
+| `PackageManager.load` / `unload` / `has_loaded` [hook,tbl] `:5338`/`:5343`/`:5348`; direct lease `:4443` | Refcounted package load/unload/state query [src: `foundation/scripts/managers/package/package_manager.lua:20`/`:196`/`:286`] | Treat the bundled Old Musket units as resident; hold the source-derived vanilla Dual Axes FP state-machine package across CWV equip/resync (`:4443`, #586) | A wield-time state-machine miss C-fatals at `PlayerUnitFirstPerson.set_state_machine` [src: `scripts/unit_extensions/default_player_unit/player_unit_first_person.lua:165`]; the #586 lease is synchronous, unique-ref, idempotent, and symmetrically released. Do not queue arbitrary mod unit paths (issue #403). |
 | `Unit.node` / `has_node` / `flow_event` / `set_flow_variable` [hook] `:5459`/`:5466`/`:5481`/`:5490` | Engine C-API: node index lookup and flow-graph events on a unit; a missing node in `Unit.node` is an engine-level fatal, not a Lua error | Guard against missing bones / flow vars on cross-character rigs before the engine faults (`:5459`) | `Unit.node` errors bypass `pcall` - use `has_node` for existence (CLAUDE.md Lua quirks; J_LEFTWEAPONATTACH F2) |
 | `StateInGameRunning.on_enter` [safe] `:9632` | Fires on entering keep/mission gameplay state [src: `scripts/game_state/state_ingame_running.lua:28`] | Run `_auto_register_all()` - backend is nil at mod init, ready here (`:9632`); after deferred owner rows enter `ItemMasterList`, invalidate vanilla's lazy weapon-skin reverse-index so custom associations rebuild (#567) | One-shot `_auto_registered` flag; registration-timing class (DEVELOPMENT "Registration Timing"). `WeaponSkins.matching_weapon_skin_item_key` snapshots owners/pools only when its private cache is nil [src: `weapon_skins.lua:7824-7855`] |
 | `LoadoutUtils.sync_loadout_slot` [hook,tbl] `:10555` | Encodes an item as `rpc_sync_loadout_slot`, `item_id = NetworkLookup.item_names[item.key]` [src: `scripts/helpers/loadout_utils.lua:13`, id at `:25`] | Substitute a `base_weapon` shadow item so the cwv LOCAL-append id never desyncs a peer without the same append order (`:10555`, #278) | Plain table, table-form + nil guard; strict `__index` at [src: `network_lookup.lua:2521`] CTDs the decode; cross-peer wire-safety (`docs/engine/03`; project `project_vt2_cross_peer_wire_safety`) |
@@ -145,14 +145,23 @@ crash below was so hard to isolate).
 
 ### Packages / residency (owner: `docs/engine/05`)
 
-Cross-character variants render a mesh whose package the receiver never loads for
-its native loadout, so cwv force-loads the base-weapon package via
-`PackageManager.load` [src: `package_manager.lua:20`], guarded by `has_loaded`
-[src: `:286`] to respect refcounting and avoid the double-load crash class
-(memory `reference_vt2_la_package_force_load_crash`). The load target must be a
-`.package` reference name, not a unit path (memory
-`reference_vt2_package_load_needs_package_not_unit_path`). See `docs/engine/05`
-for the refcount + shutdown-leak model (#282).
+Cross-character variants can also resolve a first-person state machine absent
+from the receiver's native loadout. Vanilla adds that resource in
+`WeaponUtils.get_weapon_packages` [src: `scripts/helpers/weapon_utils.lua:48-111`],
+but `ProfileSynchronizer.profile_packages` derives its list from the backend
+loadout visible at that instant [src:
+`scripts/game_state/components/profile_synchronizer.lua:71-175`]. A later CWV
+resync may therefore wield a different template against the stale package list.
+Issue #586 holds the exact vanilla `.../melee/dual_axes` resource under one CWV
+reference before wield; acquisition is synchronous because
+`SimpleInventoryExtension._wield_slot` immediately calls
+`PlayerUnitFirstPerson.set_state_machine` [src:
+`simple_inventory_extension.lua:2096-2102`], whose engine blend-base-layer call
+cannot be protected by `pcall` [src: `player_unit_first_person.lua:165-173`].
+The lease remains stable across loadout/character changes and is released by
+`on_disabled` / `on_unload`, then reacquired by `on_enabled`; gameplay-state
+entry supplies an idempotent retry if PackageManager was cold at chunk load. See
+`docs/engine/05` for the refcount + shutdown-leak model (#282).
 
 ## What the engine will NOT let us do (dead ends, already paid for)
 

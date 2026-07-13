@@ -157,6 +157,13 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   unit is shared); only the 3P body is character-specific and needs cross-character
   remap work. Never override `anim_event` / `wield_anim` / `state_machine` per
   character. [memory: feedback_1p_animations_universal]
+- Universal does not mean automatically resident: `ProfileSynchronizer` derives
+  first-person state-machine packages from the backend loadout visible during its
+  inventory-list pass, so a later modded resync can wield a different template
+  against a stale package list. Any cross-character state machine used across that
+  boundary needs a source-verified, mod-owned synchronous residency lease before
+  `PlayerUnitFirstPerson.set_state_machine`; that engine call is not a recoverable
+  `pcall` seam. [src: scripts/game_state/components/profile_synchronizer.lua:71-175]
 - The local player uses two units: `player.player_unit` is the 3P body (receives
   `anim_event_3p`, character-specific skeleton — remap lives here); a separate
   non-player unit is the 1P hands (receives `anim_event`, universal). [memory: (CLAUDE.md § Animation Remapping)]
