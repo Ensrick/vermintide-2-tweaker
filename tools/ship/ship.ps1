@@ -32,6 +32,13 @@
 #
 #  * `published_id` lives in `<mod>\itemV2.cfg` as `published_id = <N>L;`.
 #
+#  * Step 3 releases ONLY the shipped mod to GitHub (issues #436/#493):
+#    `publish-release.ps1 -Mods <mod> -SkipBuild`. Sibling zips and manifest
+#    entries carry over from the existing release, so a sibling's mid-edit WIP
+#    can neither fail this ship nor publish a mislabeled asset. The release-tag
+#    probe never assumes the day's tag exists, and it must stay behind
+#    Invoke-NativeProbe (issue #489: native stderr + redirection kills PS 5.1).
+#
 #  * CRITICAL (the session-long trap): Steam re-downloads a SELF-AUTHORED Workshop
 #    item ONLY on a FULL STEAM RESTART -- NOT on a game relaunch, and NOT via
 #    `deploy` (Steam reconciles the deploy folder back to its cached manifest if the
@@ -68,9 +75,26 @@ function Fail {
 }
 
 # ---------------------------------------------------------------------------
-# Pure helpers for step 6 (issue status labeling, issue #326). Hoisted out of
-# the step so `-SelfTest` exercises the SAME code the live ship runs.
+# Pure helpers, hoisted so `-SelfTest` exercises the SAME code the live ship
+# runs: the native-probe guard (issue #489) + step 6 labeling (issue #326).
 # ---------------------------------------------------------------------------
+
+# Native-command probe whose FAILURE is an expected branch (issue #489).
+# Under stream redirection (agent-driven ships run `ship.ps1 ... 2>&1` / `*>`),
+# Windows PowerShell 5.1 wraps native stderr into ErrorRecords, and with the
+# script-global $ErrorActionPreference = 'Stop' the FIRST stderr line (e.g.
+# `gh release view` on a tag that does not exist yet -- "release not found")
+# becomes a TERMINATING error that kills the ship mid-run. pwsh 7.2+ does not
+# have the trap, but ships must survive both hosts. So: scope EAP to Continue
+# for the call, discard stderr, and let the EXIT CODE be the only signal.
+# Never assume a release tag exists -- probe with this and branch on the code.
+function Invoke-NativeProbe {
+    param([scriptblock]$Command)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & $Command 2>$null | Out-Null } finally { $ErrorActionPreference = $prev }
+    return $LASTEXITCODE
+}
 
 # Dev-stream = MOD_VERSION carries a release-track suffix. Only dev-stream
 # ships auto-label; a clean stable promotion re-ships already-labeled work.
@@ -122,10 +146,11 @@ function Get-ShipLabelPlan {
     return @{ Skip = $null; Label = $label; Refs = $refs; Coop = $coop }
 }
 
-# Offline self-test of the step-6 logic (qa-script convention: exit 0 = OK,
-# exit 2 = regression). Runnable standalone (`ship.ps1 -SelfTest`) and via
-# qa/run_selftests.ps1. Network/gh interaction is NOT covered here -- that
-# path prints every decision at live-ship time for hand-correction.
+# Offline self-test of the step-6 logic + the issue-#489 native-probe guard
+# (qa-script convention: exit 0 = OK, exit 2 = regression). Runnable standalone
+# (`ship.ps1 -SelfTest`) and via qa/run_selftests.ps1. Network/gh interaction
+# is NOT covered here -- that path prints every decision at live-ship time for
+# hand-correction.
 function Invoke-ShipSelfTest {
     $script:__stpass = $true
     function Assert($cond, $desc) {
@@ -170,6 +195,31 @@ function Invoke-ShipSelfTest {
 
     $planN = Get-ShipLabelPlan -Header '## 0.1.2-dev - housekeeping' -Entry 'no issue references here'
     Assert ($planN.Skip -eq 'no-refs') "entry without #N refs is a no-op"
+
+    # Issue #489: the native-probe guard. A native command that writes stderr
+    # and exits nonzero (the `gh release view <missing tag>` shape) must NOT
+    # throw under EAP=Stop -- on PS 5.1 with redirected streams the unguarded
+    # `2>&1 | Out-Null` pattern raised a terminating NativeCommandError and
+    # killed the ship mid-run. The exit code must come through faithfully.
+    $probeThrew = $false; $probeCode = $null
+    try { $probeCode = Invoke-NativeProbe { cmd /c "echo probe-stderr 1>&2 & exit 7" } }
+    catch { $probeThrew = $true }
+    Assert (-not $probeThrew) "native probe does not throw on stderr + nonzero exit (issue #489)"
+    Assert ($probeCode -eq 7) "native probe propagates the failure exit code (7)"
+    Assert ((Invoke-NativeProbe { cmd /c "exit 0" }) -eq 0) "native probe returns 0 on success"
+    Assert ($ErrorActionPreference -eq 'Stop') "native probe restores ErrorActionPreference to Stop"
+
+    # Issues #436/#493 interface contract + the 2026-07-13 param-stomp incident:
+    # step 3 passes `-Mods $Mod` to publish-release.ps1, so that script MUST
+    # declare the [string[]]$Mods parameter -- and must never assign to a
+    # case-insensitive twin: PowerShell variable names are CASE-INSENSITIVE, so
+    # an inventory assignment to $mods silently OVERWRITES the $Mods parameter
+    # (live failure 2026-07-13: the filter validator saw 19 inventory hashtables
+    # instead of the single shipped mod name and the release step aborted).
+    $pubPath = Join-Path $PSScriptRoot '..\publish-release\publish-release.ps1'
+    $pubTxt = if (Test-Path $pubPath) { [System.IO.File]::ReadAllText($pubPath, [System.Text.Encoding]::UTF8) } else { '' }
+    Assert ($pubTxt -match '(?m)^\s*\[string\[\]\]\$Mods\b') "publish-release.ps1 declares [string[]]`$Mods (issues #436/#493)"
+    Assert (-not ($pubTxt -cmatch '(?m)^\s*\$mods\s*=')) "publish-release.ps1 never assigns lowercase `$mods (param-stomp guard, 2026-07-13)"
 
     Write-Host ""
     if ($script:__stpass) {
@@ -286,18 +336,28 @@ if (-not $SkipGitHub) {
     if (-not (Test-Path $pubScript)) { Fail "publish-release.ps1 not found at $pubScript" }
 
     Write-Host ""
-    Write-Host "==> GitHub release (tag $tag)" -ForegroundColor Cyan
+    Write-Host "==> GitHub release (tag $tag) -- THIS mod only (issues #436/#493)" -ForegroundColor Cyan
 
+    # Per-mod release (issues #436/#493): pass -Mods $Mod so publish-release
+    # stages ONLY this mod's zip and carries every sibling's manifest entry over
+    # from the release's existing manifest. Rebuilding/restaging all 18+ mods
+    # here let any sibling's mid-edit WIP fail THIS ship (#493) and published
+    # sibling zips whose version label was never actually shipped (#436).
+    # -SkipBuild because step 2's `VMBLauncher all` built this bundle seconds
+    # ago -- re-building here would race mid-ship source edits; the GitHub asset
+    # must be byte-identical to the bundle that just went to the Workshop.
+    #
     # `gh release create` (inside publish-release.ps1) FAILS if the tag already
     # exists. Detect that up front: if the release exists, stage assets via -DryRun
-    # (which skips the create) and clobber-upload them instead.
-    & gh release view $tag --repo Ensrick/vermintide-2-tweaker 2>&1 | Out-Null
-    $releaseExists = ($LASTEXITCODE -eq 0)
+    # (which skips the create) and clobber-upload them instead. The probe goes
+    # through Invoke-NativeProbe (issue #489): a missing release writes to native
+    # stderr, which under redirection + EAP=Stop used to KILL the ship on PS 5.1.
+    $releaseExists = ((Invoke-NativeProbe { gh release view $tag --repo Ensrick/vermintide-2-tweaker --json name }) -eq 0)
 
     try {
         if ($releaseExists) {
-            Write-Host "    release $tag exists -- staging assets (-DryRun) then 'gh release upload --clobber'" -ForegroundColor Yellow
-            & $pubScript -Tag $tag -DryRun
+            Write-Host "    release $tag exists -- staging $Mod (-Mods -SkipBuild -DryRun) then 'gh release upload --clobber'" -ForegroundColor Yellow
+            & $pubScript -Tag $tag -Mods $Mod -SkipBuild -DryRun
             $stage  = Join-Path $repoRoot '.release-stage'
             $assets = @(Get-ChildItem (Join-Path $stage '*.zip') -ErrorAction Stop | ForEach-Object { $_.FullName })
             $manifest = Join-Path $stage 'manifest.json'
@@ -307,7 +367,10 @@ if (-not $SkipGitHub) {
             if ($LASTEXITCODE -ne 0) { Fail "gh release upload --clobber failed for tag $tag (exit $LASTEXITCODE)" }
         }
         else {
-            & $pubScript -Tag $tag
+            # First ship under this tag: publish-release creates the release,
+            # carrying sibling zips forward from the latest release untouched
+            # (the vt2-mod-updater resolves every asset against ONE release).
+            & $pubScript -Tag $tag -Mods $Mod -SkipBuild
         }
     }
     catch {
@@ -433,8 +496,10 @@ try {
     else {
         $ghReady = $false
         if (Get-Command gh -ErrorAction SilentlyContinue) {
-            & gh auth status 2>&1 | Out-Null
-            $ghReady = ($LASTEXITCODE -eq 0)
+            # Probe guard (issue #489): an unauthenticated gh writes to stderr,
+            # which under redirection + EAP=Stop threw on PS 5.1 and skipped
+            # labeling with a misleading "gh unavailable" warning.
+            $ghReady = ((Invoke-NativeProbe { gh auth status }) -eq 0)
         }
         $clPath = Join-Path $modDir 'CHANGELOG.md'
         if (-not $ghReady) {
