@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - WT/CWV native Dual Axes ownership boundary
+
+Repo-aggregate entry for issue #582: Weapon Tweaker v0.12.226-dev removes Bardin's native `dr_dual_wield_axes` from Kruber and Saltzpyre availability, while Character Weapon Variants v0.1.391-dev preserves and regression-checks `cwv_es_dual_axes` and `cwv_wh_dual_axes`. WT also strips stale `can_wield` mutations and rejects invalid cached loadouts before falling back to vanilla. No Workshop deployment.
+
 ## 2026-07-13 - `weapon_tweaker` Saltzpyre Moonfire presentation
 
 Repo-aggregate entry for Weapon Tweaker v0.12.225-dev / issue #580. Moonfire Bow on WHC, Bounty Hunter, and Zealot now reuses the established Saltzpyre crossbow third-person model, bolt, attachment, preview, husk, and event-remap pipeline. Kerillian and all first-person Moonfire behavior remain untouched. Added bounded diagnostics and runtime regression coverage; awaiting solo and coop verification. Workshop not uploaded.

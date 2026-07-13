@@ -1,5 +1,16 @@
 # Regression Checklist — weapon_tweaker
 
+## #582 - native Bardin Dual Axes vs dedicated CWV variants
+
+| Field | Check |
+|---|---|
+| Fix version | WT 0.12.226-dev; CWV 0.1.391-dev (unverified candidates) |
+| Automated | `/wt_regression_test`: `issue582_native_dual_axes_cwv_ownership_boundary`; `/cwv_regression_test`: `issue582_dual_axes_native_variant_ownership_boundary` and `dual_axes_cosmetic_family_parity`. |
+| Availability | Native `dr_dual_wield_axes` is absent from every Kruber and Saltzpyre WT category/control. Bardin remains unchanged. Kerillian remains unchanged. |
+| CWV owners | Kruber receives `cwv_es_dual_axes`; Saltzpyre receives `cwv_wh_dual_axes`. Both retain their full curated illusion pools and receiver-specific 3P mappings. |
+| Stale loadout | Start with native Dual Axes cached/equipped on WHC or Kruber from an older WT build, then load 0.12.226. The invalid cache is discarded and vanilla loadout fallback occurs without crash or native item leakage. |
+| Visual | Equip each CWV variant, swap/stow, complete light/heavy chains, and inspect/apply at least one illusion. The item key must remain the dedicated CWV key. |
+
 ## #580 - Saltzpyre Moonfire Bow uses crossbow 3P presentation
 
 | Field | Check |

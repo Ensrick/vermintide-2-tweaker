@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.226-dev (2026-07-13) - #582 native-vs-CWV Dual Axes ownership [untested]
+
+- Removed Bardin's native `dr_dual_wield_axes` from all four Kruber and all three standard Saltzpyre unlock maps, settings controls, localization rows, and dev-picker availability. Bardin remains native and Kerillian is outside this issue's scope.
+- Added explicit removed-pair tombstones in `_wt_availability.lua` so `can_wield` mutations left by an older/hot-reloaded WT build are stripped even though the pair is no longer in the active unlock map.
+- WT's backend now eagerly prunes invalid cached cross-career loadouts when its item interface becomes ready. Its existing read-side validation continues to reject a removed native Dual Axes id and falls through to the vanilla career loadout.
+- Preserved the `dual_wield_axes_template_1` ES/WH animation mappings because CWV's dedicated `cwv_es_dual_axes` and `cwv_wh_dual_axes` variants still consume that template.
+- Added `/wt_regression_test` check `issue582_native_dual_axes_cwv_ownership_boundary`. No Workshop deployment.
+
 ## 0.12.225-dev (2026-07-13) - #580: Saltzpyre Moonfire crossbow presentation [untested]
 
 - Saltzpyre's Witch Hunter Captain, Bounty Hunter, and Zealot now render the Moonfire Bow (`we_deus_01`) as Saltzpyre's native crossbow in third person. The existing longbow presentation pipeline is reused for local-body, remote-husk, inventory/hero-preview, crossbow attachment-linking, and bolt-prop paths.

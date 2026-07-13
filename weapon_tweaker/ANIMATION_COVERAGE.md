@@ -96,7 +96,7 @@ entries; longbow has zoom toggles).
 | es_1h_flail | Empire Flail | 🔁 | native |
 | bw_1h_crowbill | Sienna: Crowbill | 🧊 | Remap wired + scale, but **Kruber heavy-attack regression** — user to retest (DECISIONS:35) |
 | bw_1h_flail_flaming | Sienna: Flaming Flail | ✅ | Wield redirect `to_1h_flail_flaming→to_1h_flail` (DECISIONS:36 fix); capture-confirmed v0.12.139-dev → excluded from chooser |
-| dr_dual_wield_axes | Bardin: Dual Axes | ✅ | **[Working] — BAKED v0.12.149-dev** career-scoped `_3p_template_remaps.dual_wield_axes_template_1.es_` (Empire Mace & Sword); removed from picker |
+| dr_dual_wield_axes | Bardin: Dual Axes | ⛔ | **#582 v0.12.226-dev:** native Bardin item removed from Kruber availability; use CWV's dedicated `cwv_es_dual_axes`. The template remap remains for the CWV-owned variant. |
 | dr_2h_pick | Bardin: Pickaxe | ✅ | **[Working] — BAKED v0.12.149-dev** career-scoped `_3p_template_remaps.two_handed_picks_template_1.es_` (Empire Greathammer); removed from picker |
 | dr_2h_cog_hammer | Cog Hammer | ✅ | **[Working] — BAKED v0.12.151-dev** career-scoped `_3p_template_remaps.two_handed_cog_hammers_template_1.es_` (Empire Greathammer); all-identity picks (already animates correctly on Kruber); `dr_ = false` keeps Bardin native; removed from picker |
 | dr_shield_axe | Axe & Shield | ✅ | native fall-through; capture-confirmed v0.12.139-dev → excluded from chooser |
@@ -192,7 +192,7 @@ All `wh_*` natives 🔁 (~14 keys).
 | dr_2h_hammer | Bardin 2H Hammer | ⛔ | Removed from standard Saltzpyre availability in v0.12.223-dev. Kruber's `es_2h_hammer` is the intended offered Greathammer. |
 | we_2h_axe | Glaive | 📋 | decided wh_2h_hammer (user override) |
 | es_dual_wield_hammer_sword | Mace & Sword | 📋 | decided wh_dual_hammer |
-| dr_dual_wield_axes | Bardin Dual Axes | ✅ | BAKED wh_ v0.12.188/.203 (`dual_wield_axes_template_1.wh_` → Dual Axe & Falchion) |
+| dr_dual_wield_axes | Bardin Dual Axes | ⛔ | **#582 v0.12.226-dev:** native Bardin item removed from Saltzpyre availability; use CWV's dedicated `cwv_wh_dual_axes`. The template remap remains for the CWV-owned variant. |
 | dr_dual_wield_hammers | Bardin Dual Hammers | 📋 | batch-2 picker row live (→ WP Dual Hammers) but tester left ALL picks unset (#519) — not baked, still queued |
 | we_dual_wield_daggers / _swords / _sword_dagger | Elf duals ×3 | 📋 | decided wh_dual_wield_axe_falchion |
 | es_blunderbuss / es_handgun | Blunderbuss / Handgun | 🔧 | Saltz HAS `to_blunderbuss`/`to_handgun` per probe — may fall through natively despite decided wh_crossbow; verify before wiring |

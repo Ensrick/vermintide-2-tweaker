@@ -60,7 +60,6 @@ local _CONFIRMED = {
         -- moved out of _NEEDS_ANIMS into CONFIRMED so the Availability tag reads
         -- [Working]. Per-attack picks live in the bake, not the picker.
         dr_2h_pick = true,          -- -> Empire Greathammer
-        dr_dual_wield_axes = true,  -- -> Empire Mace & Sword
         bw_dagger = true,           -- -> Empire 1H Sword
         bw_flame_sword = true,      -- -> Empire 1H Sword
         -- v0.12.150-dev: 2 more ports BAKED career-scoped into _3p_template_remaps
@@ -145,7 +144,6 @@ local _CONFIRMED = {
         -- polearm regression) are among them, re-tuned and baked as Billhook.
         we_2h_axe = true,                  -- -> WP Greathammer
         es_dual_wield_hammer_sword = true, -- -> Dual Axe & Falchion
-        dr_dual_wield_axes = true,         -- -> Dual Axe & Falchion
         we_dual_wield_daggers = true,      -- -> Dual Axe & Falchion
         we_dual_wield_swords = true,       -- -> Dual Axe & Falchion
         we_dual_wield_sword_dagger = true, -- -> Dual Axe & Falchion

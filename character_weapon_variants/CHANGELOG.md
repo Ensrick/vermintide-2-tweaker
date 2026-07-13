@@ -1,5 +1,12 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.391-dev - 2026-07-13 - #582 native-vs-CWV Dual Axes ownership contract [untested]
+
+- Added `/cwv_regression_test` check `issue582_dual_axes_native_variant_ownership_boundary`. It proves both dedicated entries still clone `dr_dual_wield_axes`, remain real `cwv_variant` ItemMasterList owners for all four intended receiver careers, and coexist with a native base that has no Kruber/Saltzpyre `can_wield` leak.
+- No CWV registration, cosmetics, model, template, animation, or wire behavior changed. The #579 `dual_axes_cosmetic_family_parity` coverage remains the cosmetic-owner gate; WT 0.12.226-dev removes only the incorrectly exposed native item.
+
+**DoD:** Universal walked. Trait gates: G-DUAL, G-CROSS-CHAR, G-CUSTOM-ILLUSION. Deferrals: live WT/CWV combined availability, stale-loadout recovery, both receiver variants' 1P/3P chains, and illusion application — issue #582 verification matrix.
+
 ## 0.1.390-dev - 2026-07-13 - #579 dual-axes cosmetic-family parity [untested]
 
 - Replaced the load-order-sensitive `ItemMasterList` scan for Dual Axes illusions with derivation from vanilla's authoritative `WeaponSkins.skin_combinations.wh_1h_axe_skins` owner pool, plus the separately registered vanilla default skin. Both `cwv_es_dual_axes` and `cwv_wh_dual_axes` now own curated pools with every source tier membership, including DLC-added `magic`/`bogenhafen` tiers, so future compatible single-axe cosmetics join both variants without another hand-maintained list.

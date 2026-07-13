@@ -6,7 +6,7 @@
 --   * patch_career_actions_on_weapons  -- inject the unlocking career's ability action onto the weapon template
 --   * clear_weapon_unlocks             -- on_disabled revert of the can_wield additions
 --   * clear_career_action_injections   -- on_disabled revert of the injected ability actions
--- plus the one-shot `_strip_removed_kruber_unlocks` cleanup and the shared
+-- plus the one-shot `_strip_removed_unlocks` cleanup and the shared
 -- `_career_action_injections` bookkeeping table. No behavior change from the
 -- pre-split god file -- the entry aliases each exported function as a file-local
 -- (`local apply_weapon_unlocks = mod._wt.apply_weapon_unlocks`, ...) so every
@@ -25,23 +25,30 @@ local WT = mod._wt
 local weapon_unlock_map = WT.weapon_unlock_map
 local _cwv_managed       = WT.cwv_managed
 
--- v0.12.57-dev: pairs removed from `weapon_unlock_map`. Users who had the
+-- Pairs removed from `weapon_unlock_map`. Users who had the
 -- corresponding `unlock_es_*_<weapon>` toggle = true before the removal will
 -- have the career still in the weapon's `item.can_wield` list. The regular
 -- strip-rebuild walk inside `apply_weapon_unlocks` only iterates pairs that
 -- ARE in the map, so a removed pair would leak the can_wield entry forever.
 -- This list keeps a one-shot cleanup invariant: every init pass strips the
--- removed Kruber careers from these weapons' can_wield, idempotently.
-local _kruber_removed_pairs = {
-    es_mercenary      = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
-    es_huntsman       = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
-    es_knight         = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
-    es_questingknight = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer" },
+-- removed careers from these weapons' can_wield, idempotently. Originally
+-- Kruber-only in v0.12.57; generalized for #582 in v0.12.226-dev.
+local _removed_pairs = {
+    es_mercenary      = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
+    es_huntsman       = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
+    es_knight         = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
+    es_questingknight = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
+    -- #582: native Bardin Dual Axes are not a Saltzpyre item. These explicit
+    -- tombstones also clean a hot-reloaded/persisted can_wield mutation from
+    -- earlier WT versions even though the pair no longer exists in the map.
+    wh_captain        = { "dr_dual_wield_axes" },
+    wh_bountyhunter   = { "dr_dual_wield_axes" },
+    wh_zealot         = { "dr_dual_wield_axes" },
 }
 
-local function _strip_removed_kruber_unlocks()
+local function _strip_removed_unlocks()
     if not ItemMasterList then return end
-    for career, weapons in pairs(_kruber_removed_pairs) do
+    for career, weapons in pairs(_removed_pairs) do
         for _, weapon_key in ipairs(weapons) do
             -- Issue #8 (2026-05-23): defensive `rawget` — `weapon_key` here is
             -- from an internal literal table so a strict-metatable Crashify is
@@ -69,7 +76,7 @@ local function apply_weapon_unlocks()
 
     -- Drop stale can_wield entries for pairs removed from `weapon_unlock_map`
     -- since the last release. Idempotent — runs every init + on_setting_changed.
-    _strip_removed_kruber_unlocks()
+    _strip_removed_unlocks()
 
     local has_cwv = get_mod("character_weapon_variants") ~= nil
 

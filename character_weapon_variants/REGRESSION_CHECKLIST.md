@@ -10,6 +10,22 @@ Last updated: 2026-07-13.
 
 ## Weapon Skins
 
+### issue582-dual-axes-owner-boundary — Native base must not compete with CWV variants
+
+| Field | Value |
+|-------|-------|
+| Symptom | Kruber/Saltzpyre can equip native `dr_dual_wield_axes`; CWV correctly declines to re-key it, bypassing the dedicated variant's ownership/cosmetic identity. |
+| Root cause | WT independently exposed Bardin's native base alongside CWV's `cwv_es_dual_axes` and `cwv_wh_dual_axes`. |
+| Mod(s) | weapon_tweaker, character_weapon_variants |
+| Fix version(s) | WT v0.12.226-dev; CWV v0.1.391-dev (#582) |
+| Category | INTEGRATION |
+| Repro | Enable WT native Dual Axes on Kruber/Saltzpyre, equip a Bardin illusion, and observe the key remains `dr_dual_wield_axes` rather than a CWV owner. |
+| Expected post-fix | Native base has no ES/WH receiver; both dedicated CWV entries remain registered for their four receiver careers with #579 cosmetic parity. |
+| Detection | `/cwv_regression_test`: `issue582_dual_axes_native_variant_ownership_boundary` plus `dual_axes_cosmetic_family_parity`; `/wt_regression_test`: `issue582_native_dual_axes_cwv_ownership_boundary`. |
+
+
+---
+
 ### issue567-deferred-owner-cache - Custom skin reverse-index rebuilds
 
 | Field | Value |

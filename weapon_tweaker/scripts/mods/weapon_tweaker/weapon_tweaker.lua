@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.225-dev"
+local MOD_VERSION = "0.12.226-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -5120,6 +5120,63 @@ _rt_register("issue580_moonfire_saltzpyre_crossbow_3p_contract", function()
         and xbow.left_hand_attachment_node_linking.third_person
         and xbow.ammo_data and xbow.ammo_data.ammo_unit_attachment_node_linking) then
         return "target crossbow 3P linking contract missing"
+    end
+end)
+
+_rt_register("issue582_native_dual_axes_cwv_ownership_boundary", function()
+    local receivers = {
+        "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+        "wh_captain", "wh_bountyhunter", "wh_zealot",
+    }
+    for _, career in ipairs(receivers) do
+        for _, key in ipairs(weapon_unlock_map[career] or {}) do
+            if key == "dr_dual_wield_axes" then
+                return "native Bardin Dual Axes still offered by WT to " .. career
+            end
+        end
+        if weapon_backend.is_mod_unlocked_weapon
+            and weapon_backend.is_mod_unlocked_weapon(career, "dr_dual_wield_axes") then
+            return "backend still accepts stale native Dual Axes cache for " .. career
+        end
+    end
+
+    -- The removed control must not survive in the VMF widget tree.
+    local data = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_data")
+    local forbidden = {}
+    for _, career in ipairs(receivers) do
+        forbidden["unlock_" .. career .. "_dr_dual_wield_axes"] = true
+    end
+    local function walk(widgets)
+        for _, widget in ipairs(widgets or {}) do
+            if forbidden[widget.setting_id] then
+                return widget.setting_id
+            end
+            local found = walk(widget.sub_widgets)
+            if found then return found end
+        end
+    end
+    local found = data and data.options and walk(data.options.widgets)
+    if found then return "removed native Dual Axes widget remains: " .. found end
+
+    local loc = mod._wt_loc_raw
+    if type(loc) == "table" then
+        for setting_id in pairs(forbidden) do
+            if loc[setting_id] ~= nil then
+                return "removed native Dual Axes localization remains: " .. setting_id
+            end
+        end
+    end
+
+    -- Runtime ownership after availability application: no stale can_wield
+    -- mutation may remain, including from a hot-reloaded older WT build.
+    local iml = rawget(_G, "ItemMasterList")
+    local native = iml and rawget(iml, "dr_dual_wield_axes")
+    if native and type(native.can_wield) == "table" then
+        for _, career in ipairs(native.can_wield) do
+            if career:sub(1, 3) == "es_" or career:sub(1, 3) == "wh_" then
+                return "native Dual Axes can_wield ownership leak: " .. career
+            end
+        end
     end
 end)
 

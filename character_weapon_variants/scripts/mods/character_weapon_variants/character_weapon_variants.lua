@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.390-dev"
+local MOD_VERSION = "0.1.391-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -12304,6 +12304,56 @@ _rt_register("dual_axes_cosmetic_family_parity", function()
             table.sort(extra)
             return string.format("dual-axes cosmetic set drift for %s: missing=[%s] extra=[%s]",
                 target_key, table.concat(missing, ","), table.concat(extra, ","))
+        end
+    end
+end)
+
+_rt_register("issue582_dual_axes_native_variant_ownership_boundary", function()
+    local expected = {
+        cwv_es_dual_axes = { prefix = "es_", careers = {
+            "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+        } },
+        cwv_wh_dual_axes = { prefix = "wh_", careers = {
+            "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
+        } },
+    }
+    local defs = {}
+    for _, def in ipairs(_variant_definitions) do
+        if expected[def.item_key] then defs[def.item_key] = def end
+    end
+
+    local iml = rawget(_G, "ItemMasterList")
+    if type(iml) ~= "table" then return "ItemMasterList not loaded yet (run in-keep)" end
+    for item_key, contract in pairs(expected) do
+        local def = defs[item_key]
+        local entry = rawget(iml, item_key)
+        if not def or def.base_weapon ~= "dr_dual_wield_axes" then
+            return item_key .. " definition/base ownership missing"
+        end
+        if not entry or entry.cwv_variant ~= true then
+            return item_key .. " dedicated CWV ItemMasterList entry missing"
+        end
+        local careers = {}
+        for _, career in ipairs(entry.can_wield or {}) do
+            if career:sub(1, #contract.prefix) == contract.prefix then careers[career] = true end
+        end
+        for _, career in ipairs(contract.careers) do
+            if not careers[career] then
+                return string.format("%s missing receiver ownership %s", item_key, career)
+            end
+            careers[career] = nil
+        end
+        local extra = next(careers)
+        if extra then
+            return string.format("%s has unexpected receiver ownership %s", item_key, tostring(extra))
+        end
+    end
+
+    local native = rawget(iml, "dr_dual_wield_axes")
+    if not native then return "native dr_dual_wield_axes missing" end
+    for _, career in ipairs(native.can_wield or {}) do
+        if career:sub(1, 3) == "es_" or career:sub(1, 3) == "wh_" then
+            return "native Bardin Dual Axes leaked to dedicated CWV receiver: " .. career
         end
     end
 end)

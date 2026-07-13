@@ -51,6 +51,10 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
 
         return false
     end
+    -- Regression-visible pure ownership predicate. The read-side hooks below
+    -- use this same closure, so a removed pair is rejected before any stale
+    -- cached backend id can override vanilla's loadout.
+    M.is_mod_unlocked_weapon = is_mod_unlocked_weapon
 
     M._filter_dirty = false
 
@@ -137,6 +141,13 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
         if not mod.done_hooking_backend and Managers.backend and Managers.backend._interfaces["items"] then
             mod.done_hooking_backend = true
             local items_interface = Managers.backend:get_interface("items")
+
+            -- #582: eagerly prune cache entries whose ownership disappeared in
+            -- this version (notably native dr_dual_wield_axes on ES/WH). The
+            -- get_loadout/get_loadout_item_id hooks also revalidate on every
+            -- read, but doing this once here makes hot-reload/session-retained
+            -- state converge before the first inventory query.
+            M.refresh_on_setting_change(mod)
 
             -- CLARIFY: when the user equips a CROSS-CAREER (mod-unlocked)
             -- weapon, we INTERCEPT the call and store the backend_id in our
