@@ -1,5 +1,26 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.20-dev (2026-07-13) -- #526 hud portraits no longer bleed outside the octagonal frame on the mission-completion score screen [untested]
+
+### Why
+The end-of-round score screen builds one portrait tile per player via `UIWidgets.create_portrait_frame` (`end_view_state_score.lua:514`), which draws the career's `portrait_image` texture at 86x108 under the frame ring (`ui_widgets_honduras.lua:13837-13869`, portrait layer 1 / frame layer 10). The frame ring is a thin octagonal outline with a transparent EXTERIOR, so any opaque portrait pixel outside the ring's silhouette is visible bleed. The octagonal cutout is baked into each portrait texture's ALPHA channel -- and dcp's hud-size (86x108) alpha mask was content-derived rather than taken from the vanilla silhouette: measured against the vanilla mask (consensus of 19 extracted 84x108 vanilla hud portraits), it had 446 opaque pixels outside the window, including content touching the canvas top edge and a 2-5px excess along the bottom taper. Every portrait shared the same wrong mask (the pipeline borrows alpha from `portrait_kruber_mercenary_hat_0001.png`, whose mask WAS the wrong one), so every custom portrait overflowed the octagonal frame -- most visibly on the score screen where four tiles sit center-screen. The same texture is drawn on the HUD unit frames and Tab list (same 86x108 rect), so the bleed existed there too, just less noticeably. The small (60x70) masks already matched the vanilla small silhouette exactly and the mediums are full-bleed like vanilla mediums -- only the hud size was wrong.
+
+### Changed
+- `gui/1080p/single_textures/custom_portraits/portrait_kruber_*.png` (all 12 hud-size textures) -- alpha channel replaced with the vanilla hud silhouette (RGB untouched). Verified per file: 0 opaque pixels outside the vanilla mask, all four corners fully transparent, identical opaque footprint across the set.
+- NEW `tools/vanilla_hud_alpha_mask_86x108.png` -- the canonical vanilla hud silhouette (median alpha of 19 vanilla 84x108 hud portraits extracted from the game bundles, scaled to the 86x108 draw rect). Provenance for every future re-mask.
+- `tools/add_portrait.ps1` -- new hard gate: after generating a HUD variant, the script throws if any opaque pixel falls outside the canonical mask ("silhouette conformance"). The alpha-borrow workflow is unchanged (the reference portrait now carries the corrected mask).
+- NEW rt check `hud_alpha_mask_conformance_pipeline` -- texture alpha is not readable from Lua, so the runtime lock is on the pipeline: io-safe source check (skips in retail per issue 511) that `add_portrait.ps1` still references the canonical mask and still runs the conformance gate, and that the mask file exists.
+- `qa/rt_textual_invariants.psd1` -- two new `#526` needles locking the canonical-mask reference + conformance gate in `add_portrait.ps1`. The four pre-existing dcp needles (issue 509 / issue 511) are untouched.
+- `MOD_VERSION` `0.1.19-dev` -> `0.1.20-dev`.
+
+### Tests
+Built via VMBLauncher (compile-only); lint clean. Not deployed/uploaded per task scope.
+
+### To verify
+- Solo, any mission, playing Kruber Mercenary with a tracked cosmetic equipped (e.g. Estalian Conquistador): finish the mission and look at your tile on the score screen. The portrait must sit entirely inside the octagonal frame -- no square corners, no content poking past the top of the frame, no fringe along the lower taper (pre-fix: visible overflow). One tester is enough.
+- Same session, sanity-check the HUD portrait (bottom-left) and the Tab player list row: silhouette should now match vanilla portraits exactly.
+- Run `/dcp_regression_test`: expect `hud_alpha_mask_conformance_pipeline` PASS (skips its source half in retail) and the 6 pre-existing checks PASS.
+
 ## 0.1.19-dev (2026-07-13) -- #435 portrait override is now player-scoped: the local swap no longer leaks onto other players' frames [untested]
 
 ### Why

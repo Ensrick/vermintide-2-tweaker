@@ -5,7 +5,7 @@ local mod = get_mod("dynamic_cosmetic_portraits")
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.19-dev"
+local MOD_VERSION = "0.1.20-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -637,6 +637,42 @@ _rt_register("career_settings_swap_saves_and_restores", function()
     end
     if not txt:find(restore_needle, 1, true) then
         return "restore missing: _restore_portrait_settings must write the saved original back to career.portrait_image"
+    end
+end)
+
+_rt_register("hud_alpha_mask_conformance_pipeline", function()
+    -- (#526) HUD portraits bled outside the octagonal frame on the
+    -- mission-completion score screen: the hud-size (86x108) alpha mask was
+    -- content-derived and wider than the vanilla portrait silhouette (it even
+    -- touched the canvas top edge), so opaque pixels poked past the frame
+    -- ring drawn on top (end_view_state_score.lua:514 -> ui_widgets_honduras
+    -- create_portrait_frame, portrait at layer 1 / frame at layer 10). The
+    -- fix re-masked every hud png against the vanilla silhouette
+    -- (tools/vanilla_hud_alpha_mask_86x108.png) and gated add_portrait.ps1 on
+    -- silhouette conformance. Texture alpha is not readable from Lua, so the
+    -- runtime half of this bug class lives in the pipeline gate; this check
+    -- (io-safe, retail => skip; real signal under modding tools / CI) locks
+    -- the gate: the canonical mask must exist and add_portrait.ps1 must
+    -- enforce conformance against it.
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local tool_path, n = src_path:gsub(
+        "scripts[/\\]mods[/\\]dynamic_cosmetic_portraits[/\\]dynamic_cosmetic_portraits%.lua$",
+        "tools/add_portrait.ps1")
+    if n == 0 then return end  -- cannot derive the tool path; skip
+    local txt = _rt_src_read(tool_path)  -- (#511) io-safe; nil in retail sandbox => skip
+    if not txt then return end
+    local mask_needle = "vanilla_hud_alpha_mask" .. "_86x108.png"  -- split so this check never self-matches on OUR source
+    if not txt:find(mask_needle, 1, true) then
+        return "add_portrait.ps1 no longer references the canonical vanilla hud mask (frame-bleed regression risk)"
+    end
+    if not txt:find("silhouette conformance", 1, true) then
+        return "add_portrait.ps1 no longer runs the HUD silhouette conformance gate (frame-bleed regression risk)"
+    end
+    local mask_path = tool_path:gsub("add_portrait%.ps1$", "vanilla_hud_alpha_mask_86x108.png")
+    if not _rt_src_read(mask_path) then
+        return "tools/vanilla_hud_alpha_mask_86x108.png missing -- the conformance gate cannot run"
     end
 end)
 

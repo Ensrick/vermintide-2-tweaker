@@ -477,9 +477,24 @@ alpha mask:
 | Matchmaking | 60×70 | Shaped mask (corners A=0, hex/shield silhouette) |
 
 The alpha mask is the same shape for every portrait at a given size —
-it's defined by the in-game frame widget's hex cutout, not by per-portrait
-content. The `mercenary_hat_0001` (Estalia) HUD and small files are good
-reference sources to copy alpha from when authoring new portraits.
+it's defined by the in-game frame widget's octagonal cutout, not by
+per-portrait content. The `mercenary_hat_0001` (Estalia) HUD and small
+files are good reference sources to copy alpha from when authoring new
+portraits.
+
+**(#526) The HUD mask must conform to the VANILLA silhouette, not a
+content-derived cutout.** Pre-0.1.20-dev the hud-size mask was derived
+from portrait content: it was wider than the vanilla window (446 opaque
+pixels outside it, including canvas-top contact), so portraits visibly
+bled outside the octagonal frame on the mission-completion score screen
+(and, subtly, on the HUD/Tab list — same texture, same 86×108 draw rect).
+The canonical silhouette now ships as
+`tools/vanilla_hud_alpha_mask_86x108.png` (median alpha of 19 vanilla
+84×108 hud portraits extracted from the bundles, scaled to the 86×108
+draw rect), and `add_portrait.ps1` throws if a generated HUD png has any
+opaque pixel outside it. Note the frame ring drawn on top is a thin
+octagonal OUTLINE with a transparent exterior — it does not cover
+overflow the way the hero-select frame does at medium size.
 
 Hero selection renders the medium 110×130 file at native size, with the
 frame widget drawn on top. The frame artwork is opaque around its hex

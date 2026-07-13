@@ -18,10 +18,19 @@
       3. Small  (60x70)  : same as HUD, with the small reference.
 
     The alpha mask shape is identical for every portrait at a given size
-    because it is defined by the in-game frame widget's hex cutout, NOT
-    by per-portrait content. Borrowing alpha from any working portrait
+    because it is defined by the in-game frame widget's octagonal cutout,
+    NOT by per-portrait content. Borrowing alpha from any working portrait
     yields the correct mask. mercenary_hat_0001 (Estalia) is the canonical
     reference and is always present in the mod.
+
+    (#526) The HUD mask MUST conform to tools/vanilla_hud_alpha_mask_86x108.png
+    (the vanilla 84x108 hud-portrait silhouette, consensus of 19 extracted
+    vanilla portraits, scaled to 86x108 = the exact rect every hud surface
+    draws: unit frames, Tab list, end-of-round score). The pre-#526 mask was
+    content-derived (wider than the vanilla window + touched the canvas top),
+    so portraits bled outside the octagonal frame on the mission-completion
+    score screen. This script now FAILS if a generated HUD png has any
+    opaque pixel outside that canonical silhouette.
 
     Also writes the matching .texture and .material files. Verifies the
     output and prints next-steps for wiring up lua / _data.lua / .package.
@@ -185,6 +194,27 @@ $texName = {
 }
 
 # ---------------- Verify output ----------------
+# (#526) HUD silhouette conformance: no opaque pixel outside the canonical
+# vanilla hud mask, or the portrait bleeds outside the octagonal frame on
+# the mission-completion score screen (and every other 86x108 hud surface).
+$canonicalMask = Join-Path $PSScriptRoot "vanilla_hud_alpha_mask_86x108.png"
+if (-not (Test-Path $canonicalMask)) {
+    throw "Canonical mask missing (needed for silhouette conformance check): $canonicalMask"
+}
+$maskBmp = New-Object System.Drawing.Bitmap $canonicalMask
+$hudBmp  = New-Object System.Drawing.Bitmap (Join-Path $texDir "portrait_$HatKey.png")
+$bleed = 0
+for ($y = 0; $y -lt 108; $y++) {
+    for ($x = 0; $x -lt 86; $x++) {
+        if ($hudBmp.GetPixel($x, $y).A -ge 128 -and $maskBmp.GetPixel($x, $y).R -lt 128) { $bleed++ }
+    }
+}
+$maskBmp.Dispose(); $hudBmp.Dispose()
+if ($bleed -gt 0) {
+    throw "HUD portrait has $bleed opaque pixel(s) outside the canonical vanilla silhouette (frame bleed, #526). Fix the reference alpha (borrow from a conformant portrait) and re-run."
+}
+Write-Output "[ok] HUD silhouette conformance: 0 opaque pixels outside vanilla_hud_alpha_mask_86x108.png"
+
 Write-Output ""
 Write-Output "Verification (alpha at corners):"
 foreach ($prefix in @("", "medium_", "small_")) {

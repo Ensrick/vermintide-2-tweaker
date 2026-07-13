@@ -158,5 +158,13 @@
     @{ mod='dcp'; file='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua'; needle='_original_portrait_image = career.portrait_image'; literal=$true; polarity='present'; issueRef='#509'; note='save-before-swap: capture the vanilla portrait before overwriting (restore on unload).' }
     @{ mod='dcp'; file='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua'; needle='career.portrait_image = _original_portrait_image'; literal=$true; polarity='present'; issueRef='#509'; note='restore writes the saved original back (no swapped portrait leak into non-dcp sessions).' }
 
+    # -- #526: hud-size portrait alpha must conform to the vanilla octagonal
+    #    silhouette or portraits bleed outside the frame on the mission-
+    #    completion score screen. Texture alpha is not lint-able, so the lock
+    #    is on the pipeline gate in add_portrait.ps1 (canonical mask reference
+    #    + conformance check). Fixed dcp 0.1.20-dev.
+    @{ mod='dcp'; file='dynamic_cosmetic_portraits/tools/add_portrait.ps1'; needle='vanilla_hud_alpha_mask_86x108.png'; literal=$true; polarity='present'; issueRef='#526'; note='add_portrait.ps1 must reference the canonical vanilla hud silhouette mask.' }
+    @{ mod='dcp'; file='dynamic_cosmetic_portraits/tools/add_portrait.ps1'; needle='silhouette conformance'; literal=$true; polarity='present'; issueRef='#526'; note='the HUD silhouette conformance gate (opaque-outside-mask => throw) must stay in the pipeline.' }
+
   )
 }
