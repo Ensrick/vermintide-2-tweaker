@@ -1,4 +1,5 @@
 local mod = get_mod("gut_dev")
+local NumericEditor = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_numeric_editor")
 
 -- Mod Tweaker scenegraph + widgets (v0.3 — native settings-menu chrome).
 -- Rebuilt to look like the game's Options menu by REUSING the native pieces
@@ -688,11 +689,44 @@ local THUMB_W, THUMB_H = 14, 27
 -- masked=false because the borrowed renderer has no stencil and the sprite is fully
 -- contained in its UV rect.
 local THUMB_HOVER_W, THUMB_HOVER_H = 34, 25
--- Font material for the type-to-edit caret's text-width measurement. arial is proven to
--- resolve on the borrowed renderer with a nil font-name (HudCustomizer pattern, used by
--- _gut_respawn_timer.lua:28). UIRenderer.text_size's 3rd arg is a MATERIAL PATH, not a
--- font name, so we cannot pass "hell_shark" here.
-local CARET_FONT_MATERIAL = "materials/fonts/gw_body"  -- (#188) hell_shark's ACTUAL material (ui_fonts.lua:42). arial was narrower than the rendered value, putting the caret left of the digits.
+-- Measure a value with the exact path UIPasses.text uses: UIFontByResolution
+-- supplies the scaled size/material and the style's font_type is forwarded as
+-- font_name. UIRenderer.text_size returns design-space width plus the glyph
+-- origin used by the native centered-alignment formula (ui_passes.lua:1964-1990,
+-- 2177-2181; ui_renderer.lua:1254-1260).
+local function _measure_value(renderer, value_style, text)
+    if not renderer or not value_style then return nil end
+    local ok_font, font, scaled_size = pcall(UIFontByResolution, value_style)
+    if not ok_font or type(font) ~= "table" then return nil end
+    local ok, width, _, origin = pcall(UIRenderer.text_size, renderer,
+        tostring(text or ""), font[1], scaled_size, value_style.font_type)
+    if not ok or type(width) ~= "number" then return nil end
+    return width, origin and origin.x or 0
+end
+
+local function numeric_caret_x(renderer, value_style, text, box_w, caret_idx)
+    local full_width, origin_x = _measure_value(renderer, value_style, text)
+    if not full_width then return nil end
+    local idx = math.clamp(caret_idx or #text, 0, #text)
+    local prefix_width = _measure_value(renderer, value_style, string.sub(text, 1, idx))
+    if not prefix_width then return nil end
+    return NumericEditor.caret_x(value_style.offset[1], box_w, full_width, origin_x, prefix_width)
+end
+
+local function numeric_caret_index(renderer, value_style, text, box_w, click_x)
+    local full_width, origin_x = _measure_value(renderer, value_style, text)
+    if not full_width then return nil end
+    local text_left = NumericEditor.centered_text_left(
+        value_style.offset[1], box_w, full_width, origin_x)
+    local advances = {}
+    for idx = 0, #text do
+        local width = _measure_value(renderer, value_style, string.sub(text, 1, idx))
+        if not width then return nil end
+        advances[idx + 1] = width
+    end
+    return NumericEditor.nearest_index(click_x, text_left, advances)
+end
+
 local function create_slider(text, tooltip, base_offset, depth)
     local y  = base_offset[2] - ROW_H
     base_offset[2] = y
@@ -763,20 +797,13 @@ local function create_slider(text, tooltip, base_offset, depth)
                         if r then
                             local vs = ui_style.value
                             local s = tostring(ui_content.value_text or "")
-                            -- (#188) Measure with gw_body — hell_shark's ACTUAL material (ui_fonts.lua:42),
-                            -- the font the value renders with (arial was narrower -> caret sat left of the
-                            -- digits). Place the caret AT the cursor index (width of the chars BEFORE it),
-                            -- not just the end, so arrow keys visibly move it.
+                            -- #575: use the exact native font resolution + centered
+                            -- glyph-origin formula. This remains correct across UI
+                            -- scale, signs, decimal points, and proportional digits.
                             local idx = math.clamp(ui_content.caret_idx or #s, 0, #s)
-                            local before = string.sub(s, 1, idx)
-                            local ok_f, full_w   = pcall(UIRenderer.text_size, r, s,      CARET_FONT_MATERIAL, vs.font_size)
-                            local ok_b, before_w = pcall(UIRenderer.text_size, r, before, CARET_FONT_MATERIAL, vs.font_size)
-                            if ok_f and type(full_w) == "number" and ok_b and type(before_w) == "number" then
-                                local box_x = vs.offset[1]
-                                local box_w = ui_content._caret_box_w or 64
-                                local text_left = box_x + (box_w - full_w) / 2  -- centred full-text left edge
-                                ui_style.caret.offset[1] = text_left + before_w
-                            end
+                            local caret_x = numeric_caret_x(r, vs, s,
+                                ui_content._caret_box_w or 64, idx)
+                            if caret_x then ui_style.caret.offset[1] = caret_x end
                             -- Pulse alpha (math.sirp ping-pongs 0..1; *255 -> alpha). caret_t
                             -- is advanced by the view each frame it's editing.
                             local a = math.sirp(0, 0.85, (ui_content.caret_t or 0) * 1.5) * 255
@@ -2052,6 +2079,9 @@ return {
     -- (v0.2.75-dev) Shared drill subtree planner — both twins build a drilled view's
     -- child rows from this so a 3-deep dropdown (checkbox -> group -> dropdown) is reached.
     plan_drill_children = plan_drill_children,
+    -- #575 exact native-metric click/caret helpers shared by both presentations.
+    numeric_caret_x = numeric_caret_x,
+    numeric_caret_index = numeric_caret_index,
     -- Geometry the view needs to trim a gear-parent's whole-row hotspot so it doesn't
     -- overlap (and double-fire with) the gear in the 3rd column.
     row_w = ROW_W,

@@ -1779,7 +1779,7 @@ local function _format_value(value, num_decimals)
     return string.format("%." .. (num_decimals or 0) .. "f", value or 0)
 end
 
-function HeroViewStateModTweaker:_begin_edit(row)
+function HeroViewStateModTweaker:_begin_edit(row, click_x)
     if self._editing_row and self._editing_row ~= row then
         -- Committing the previously-focused row keeps a single active editor.
         self:_commit_edit(self._editing_row)
@@ -1788,6 +1788,13 @@ function HeroViewStateModTweaker:_begin_edit(row)
     self._editing_row = row
     c.editing = true
     c.edit_str = _format_value(c.value, c.num_decimals)
+    c.caret_idx = #c.edit_str
+    if click_x and defs.numeric_caret_index then
+        local renderer = self.ui_top_renderer or self.ui_renderer
+        local ok, idx = pcall(defs.numeric_caret_index, renderer,
+            row.style and row.style.value, c.edit_str, c._caret_box_w or 64, click_x)
+        if ok and type(idx) == "number" then c.caret_idx = idx end
+    end
     c.caret_t = 0
     c.value_text = c.edit_str
     _play_click()
@@ -1799,31 +1806,38 @@ function HeroViewStateModTweaker:_edit_apply_keystrokes(c)
     local keystrokes = Keyboard.keystrokes()
     if not keystrokes or #keystrokes == 0 then return false end
     local s = c.edit_str or ""
+    local idx = math.clamp(c.caret_idx or #s, 0, #s)
     local nd = c.num_decimals or 0
+    local allow_neg = (c.min or 0) < 0
     local changed = false
     for _, stroke in ipairs(keystrokes) do
-        if type(stroke) == "string" then
-            if #s < _EDIT_MAX_LEN then
-                if tonumber(stroke) then
-                    -- digit: allowed before the dot, or while < nd digits sit after it.
-                    local dot = string.find(s, "%.")
-                    if not dot or #s < dot + nd then s = s .. stroke; changed = true end
-                elseif stroke == "-" then
-                    -- minus toggle, only when the range actually allows negatives.
-                    if (c.min or 0) < 0 then
-                        if string.find(s, "%-") then s = string.gsub(s, "%-", "")
-                        else s = "-" .. s end
-                        changed = true
-                    end
-                elseif stroke == "." and nd > 0 and not string.find(s, "%.") then
-                    s = s .. "."; changed = true
-                end
+        if stroke == Keyboard.LEFT then
+            if idx > 0 then idx = idx - 1; changed = true end
+        elseif stroke == Keyboard.RIGHT then
+            if idx < #s then idx = idx + 1; changed = true end
+        elseif stroke == Keyboard.HOME then
+            if idx ~= 0 then idx = 0; changed = true end
+        elseif stroke == Keyboard.END then
+            if idx ~= #s then idx = #s; changed = true end
+        elseif stroke == Keyboard.BACKSPACE then
+            if idx > 0 then s = s:sub(1, idx - 1) .. s:sub(idx + 1); idx = idx - 1; changed = true end
+        elseif stroke == Keyboard.DELETE then
+            if idx < #s then s = s:sub(1, idx) .. s:sub(idx + 2); changed = true end
+        elseif type(stroke) == "string" and #s < _EDIT_MAX_LEN then
+            local cand = s:sub(1, idx) .. stroke .. s:sub(idx + 1)
+            local ok = false
+            if stroke == "-" then
+                ok = allow_neg and idx == 0 and not s:find("-", 1, true)
+            elseif stroke == "." then
+                ok = nd > 0 and not s:find(".", 1, true)
+            elseif tonumber(stroke) then
+                local dot = cand:find("%.")
+                ok = (not dot) or (#cand - dot <= nd)
             end
-        elseif stroke == Keyboard.BACKSPACE and #s > 0 then
-            s = string.sub(s, 1, -2); changed = true
+            if ok then s = cand; idx = idx + 1; changed = true end
         end
     end
-    if changed then c.edit_str = s end
+    if changed then c.edit_str = s; c.caret_idx = idx end
     return changed
 end
 
@@ -2228,6 +2242,18 @@ function HeroViewStateModTweaker:_handle_input(input_service)
                 local vhs_clicked = vhs and (vhs.on_release or vhs.on_left_release)
                 if c.editing then
                     -- ACTIVE EDITOR branch — suppress drag/arrows entirely (spec §6.6).
+                    if vhs_clicked and defs.numeric_caret_index then
+                        local cursor = input_service and input_service:get("cursor")
+                        if cursor then
+                            local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
+                            local click_x = UIInverseScaleVectorToResolution(cursor)[1] - anchor[1]
+                            local ok, idx = pcall(defs.numeric_caret_index,
+                                self.ui_top_renderer or self.ui_renderer,
+                                row.style and row.style.value, c.edit_str or "",
+                                c._caret_box_w or 64, click_x)
+                            if ok and type(idx) == "number" then c.caret_idx = idx end
+                        end
+                    end
                     self:_edit_apply_keystrokes(c)
                     -- CONSUME Enter / stray keys so they COMMIT and never open game chat
                     -- (v0.2.67-dev). Chat reads keyboard Enter on the INDEPENDENT chat_input
@@ -2253,7 +2279,13 @@ function HeroViewStateModTweaker:_handle_input(input_service)
                     end
                     -- Still editing: skip the drag/arrow handling for this row this frame.
                 elseif vhs_clicked then
-                    self:_begin_edit(row)
+                    local click_x
+                    local cursor = input_service and input_service:get("cursor")
+                    if cursor then
+                        local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
+                        click_x = UIInverseScaleVectorToResolution(cursor)[1] - anchor[1]
+                    end
+                    self:_begin_edit(row, click_x)
                     return
                 else
                 -- Draggable track. During the HOLD we only move the VISUAL; we COMMIT

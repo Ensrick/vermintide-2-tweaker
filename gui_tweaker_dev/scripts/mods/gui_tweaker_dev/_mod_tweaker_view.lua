@@ -2466,7 +2466,7 @@ local function _format_value(value, num_decimals)
     return string.format("%." .. (num_decimals or 0) .. "f", value or 0)
 end
 
-function ModTweakerView:_begin_edit(row)
+function ModTweakerView:_begin_edit(row, click_x)
     if self._editing_row and self._editing_row ~= row then
         -- Committing the previously-focused row keeps a single active editor.
         self:_commit_edit(self._editing_row)
@@ -2475,7 +2475,15 @@ function ModTweakerView:_begin_edit(row)
     self._editing_row = row
     c.editing = true
     c.edit_str = _format_value(c.value, c.num_decimals)
-    c.caret_idx = #c.edit_str   -- (#188) cursor starts at the END of the value
+    c.caret_idx = #c.edit_str
+    -- #575: choose the nearest measured insertion boundary when the editor was
+    -- entered by clicking the value; keyboard-only focus still starts at End.
+    if click_x and defs.numeric_caret_index then
+        local renderer = self.ui_top_renderer or self.ui_renderer
+        local ok, idx = pcall(defs.numeric_caret_index, renderer,
+            row.style and row.style.value, c.edit_str, c._caret_box_w or 64, click_x)
+        if ok and type(idx) == "number" then c.caret_idx = idx end
+    end
     c.caret_t = 0
     c.value_text = c.edit_str
     _play_click()
@@ -2496,6 +2504,10 @@ function ModTweakerView:_edit_apply_keystrokes(c)
             if idx > 0 then idx = idx - 1; changed = true end
         elseif stroke == Keyboard.RIGHT then
             if idx < #s then idx = idx + 1; changed = true end
+        elseif stroke == Keyboard.HOME then
+            if idx ~= 0 then idx = 0; changed = true end
+        elseif stroke == Keyboard.END then
+            if idx ~= #s then idx = #s; changed = true end
         elseif stroke == Keyboard.BACKSPACE then
             if idx > 0 then s = s:sub(1, idx - 1) .. s:sub(idx + 1); idx = idx - 1; changed = true end
         elseif stroke == Keyboard.DELETE then
@@ -2506,9 +2518,9 @@ function ModTweakerView:_edit_apply_keystrokes(c)
             local cand = s:sub(1, idx) .. stroke .. s:sub(idx + 1)
             local ok = false
             if stroke == "-" then
-                ok = allow_neg and idx == 0 and not s:find("%-", 1, true)
+                ok = allow_neg and idx == 0 and not s:find("-", 1, true)
             elseif stroke == "." then
-                ok = nd > 0 and not s:find("%.", 1, true)
+                ok = nd > 0 and not s:find(".", 1, true)
             elseif tonumber(stroke) then
                 local dot = cand:find("%.")
                 ok = (not dot) or (#cand - dot <= nd)
@@ -3268,6 +3280,18 @@ function ModTweakerView:_handle_input(input_service)
                 local vhs_clicked = vhs and (vhs.on_release or vhs.on_left_release)
                 if c.editing then
                     -- ACTIVE EDITOR branch — suppress drag/arrows entirely (spec §6.6).
+                    if vhs_clicked and defs.numeric_caret_index then
+                        local cursor = input_service and input_service:get("cursor")
+                        if cursor then
+                            local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
+                            local click_x = UIInverseScaleVectorToResolution(cursor)[1] - anchor[1]
+                            local ok, idx = pcall(defs.numeric_caret_index,
+                                self.ui_top_renderer or self.ui_renderer,
+                                row.style and row.style.value, c.edit_str or "",
+                                c._caret_box_w or 64, click_x)
+                            if ok and type(idx) == "number" then c.caret_idx = idx end
+                        end
+                    end
                     self:_edit_apply_keystrokes(c)
                     -- CONSUME Enter / stray keys so they COMMIT and never open game chat
                     -- (v0.2.67-dev). Chat reads keyboard Enter on the INDEPENDENT chat_input
@@ -3293,7 +3317,13 @@ function ModTweakerView:_handle_input(input_service)
                     end
                     -- Still editing: skip the drag/arrow handling for this row this frame.
                 elseif vhs_clicked then
-                    self:_begin_edit(row)
+                    local click_x
+                    local cursor = input_service and input_service:get("cursor")
+                    if cursor then
+                        local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
+                        click_x = UIInverseScaleVectorToResolution(cursor)[1] - anchor[1]
+                    end
+                    self:_begin_edit(row, click_x)
                     return
                 else
                 -- Draggable track. During the HOLD we only move the VISUAL; we COMMIT

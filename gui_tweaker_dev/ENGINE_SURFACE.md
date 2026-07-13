@@ -191,7 +191,12 @@ transactional: `_mod_tweaker_search.lua` snapshots the selected tab's persistent
 the first non-empty query, filtered group rows use a display-only expanded flag, and clear/Escape/
 neutral click/tab switch/menu exit restore the snapshot. A clicked result instead commits its ancestor
 group chain; auto-collapse ON replaces the tab's old branches, while OFF restores them before adding
-the required ancestors. No arbitrary top result is selected. Two ESC-menu surfaces sit here: the button LABEL is supplied as backend-localization DATA (not a `Localize` hook - the global is rawset-replaced on init and the button localizes through the sibling `simple_lookup`), and the modern keep menu's button column (`HeroWindowIngameView._update_presentation` [src: `hero_window_ingame_view.lua:490-515`]) is compacted because gut's own Mod Tweaker button pushes it to overflow. The keep also hosts the injected Bestiary/Armory compendium via HeroView sub-states and the in-mission keep-inventory console windows (`docs/engine/06` owns the inventory/preview seams).
+the required ancestors. No arbitrary top result is selected. Numeric-editor caret geometry follows the
+native text pass: `UIFontByResolution` resolves scaled material/size, `UIRenderer.text_size` receives
+`style.font_type`, and centered X subtracts the measured glyph origin before adding the measured prefix
+advance [src: `scripts/ui/ui_passes.lua:1964-1990,2177-2181`; `scripts/ui/ui_renderer.lua:1254-1260`].
+Clicks choose the nearest measured insertion boundary rather than estimating by character count, so signs,
+decimal points, proportional digits, and UI scale share one contract. Two ESC-menu surfaces sit here: the button LABEL is supplied as backend-localization DATA (not a `Localize` hook - the global is rawset-replaced on init and the button localizes through the sibling `simple_lookup`), and the modern keep menu's button column (`HeroWindowIngameView._update_presentation` [src: `hero_window_ingame_view.lua:490-515`]) is compacted because gut's own Mod Tweaker button pushes it to overflow. The keep also hosts the injected Bestiary/Armory compendium via HeroView sub-states and the in-mission keep-inventory console windows (`docs/engine/06` owns the inventory/preview seams).
 
 ## What the engine will NOT let us do (dead ends, already paid for)
 

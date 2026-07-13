@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.239-dev"
+local MOD_VERSION = "0.2.240-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1932,6 +1932,23 @@ _rt_register("mod_tweaker_gear_and_slider", function()
     end
     if not has_local_offset then
         return "slider has no local_offset pass with offset_function (thumb/fill would not move)"
+    end
+end)
+
+-- #575: caret placement is measured geometry, not character-count or fixed-pixel
+-- approximation. Engine-facing defs must expose the exact-metric helpers; the
+-- pure module locks centered glyph-origin and proportional-boundary behavior.
+_rt_register("mod_tweaker_numeric_caret_geometry", function()
+    local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
+    if type(defs.numeric_caret_x) ~= "function" then return "numeric_caret_x missing" end
+    if type(defs.numeric_caret_index) ~= "function" then return "numeric_caret_index missing" end
+    local N = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_numeric_editor")
+    if N.caret_x(100, 50, 20, 2, 7) ~= 120 then
+        return "centered origin/prefix caret contract drifted"
+    end
+    local advances = { 0, 5, 12, 19, 22, 29, 36 }
+    if N.nearest_index(60.6, 40, advances) ~= 4 then
+        return "proportional sign/decimal click boundary drifted"
     end
 end)
 

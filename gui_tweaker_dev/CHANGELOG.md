@@ -5,6 +5,13 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.240-dev (2026-07-13) -- #575 numeric-editor caret uses native text metrics [untested]
+
+- Replaced the slider editor's hand-measured `gw_body` width with the exact native text-pass contract: `UIFontByResolution` supplies the scaled material/size, the `hell_shark` font identity is forwarded to `UIRenderer.text_size`, and centered placement includes the measured glyph-origin correction. Caret geometry now derives from the full string plus the measured prefix at the insertion index, so signs, decimal points, proportional digits, UI scale, resolution, and ultrawide layout do not need a guessed pixel offset.
+- Clicking within an active or newly focused numeric field now chooses the nearest measured insertion boundary. Left/Right, Home/End, Backspace/Delete, and insertion retain that index visually; the dormant keep sub-state receives the same behavior as the active standalone view.
+- Corrected the partial-number validator's literal sign/decimal lookup (`plain=true` must search `"-"` / `"."`, not Lua-pattern spellings). Added three Lua 5.1 host tests plus `/gut_regression_test` coverage for centered glyph origin, non-uniform `-12.50` advances, click boundaries, and field translation.
+- **Verify:** open Mod Tweaker, click at every boundary in `1`, `1234`, `-12.50`, and a configured multi-decimal slider; then use Left/Right/Home/End and edit at the caret. The bar must remain between the intended glyphs at the current UI scale. No Workshop deployment in this change.
+
 ## 0.2.239-dev (2026-07-13) -- #570 startup dependency notice is console-only [untested]
 
 - Moved the dormant automatic Simple UI dependency notice from chat to a raw console marker. Interactive UI and command feedback are unchanged.
