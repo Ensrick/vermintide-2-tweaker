@@ -20,7 +20,7 @@ local mod = get_mod("gut_dev")
 mod:hook(StateLoading, "_trigger_sound_events", function(func, self, level_key)
 	-- The BOOT loading screen can fire before hb_data.lua has populated
 	-- mod.SETTING_NAMES; bail to vanilla until the table exists.
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, level_key)
 	end
 
@@ -33,7 +33,7 @@ end)
 
 --- Disable loading screen tips.
 mod:hook(LoadingView, "setup_tip_text", function(func, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(...)
 	end
 
@@ -50,7 +50,7 @@ mod:hook(LoadingView, "create_ui_elements", function(func, ...)
 	-- before hb_data.lua has populated mod.SETTING_NAMES, so reading
 	-- mod.SETTING_NAMES.HIDE_LOADING_SCREEN_SUBTITLES below indexed a nil value.
 	-- Bail to vanilla until the table exists. (Regression marker: hb_setting_names_guarded)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(...)
 	end
 

@@ -5,6 +5,42 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.234-dev (2026-07-13) -- Absorbed UI Tweaks fork: boot without Penlight + explicit stock-mod dormancy [untested] [Issue 281]
+
+The absorbed "UI Tweaks" (HideBuffs) fork under `hb/` aborted at load on a missing Penlight
+dependency, so a user WITHOUT the stock UI Tweaks mod got nothing from the absorbed hide /
+loading-screen feature set. (Users WITH the stock mod were unaffected -- the #312 bridge routes
+to it.) Root cause: `hb/hb_data.lua` did `require'pl.import_into'()`, and `pl.import_into` is not
+a lua resource in the retail VMF sandbox, so the whole data file threw at load -- `mod.SETTING_NAMES`
+and every fork data table went undefined, and every hb/ hook then bailed to vanilla (its guard read
+the now-nil `mod.SETTING_NAMES`). Non-fatal (the abort was `pcall`-wrapped) but the feature set was
+silently dead.
+
+- **Penlight removed (`hb/hb_data.lua`, `hb/mod_events.lua`).** The fork consumed ONLY the Penlight
+  `List` / `Map` constructors and `List:contains`, so those are replaced with a plain Lua 5.1 `_hb_list`
+  helper (array + `:contains`) and plain table literals -- NO Penlight vendored. `hb_data.lua` now runs
+  to completion, so `mod.SETTING_NAMES`, `mod.ubersreik_lvls` (consumed as `:contains` at
+  `hide_elements.lua:251`), and the other data tables all exist. `mod_events.lua` is an orphaned
+  Phase-2 backbone (not yet in the boot chain) but carried the same latent `require`, fixed
+  pre-emptively so wiring it later cannot reintroduce the abort. No second missing dependency lurks
+  behind Penlight -- `hide_elements.lua` / `level_loading_screen.lua` only `local_require` a vanilla
+  definitions module, which resolves in-sandbox.
+- **Explicit stock-mod dormancy gate (`hb/hb_data.lua`, `hb/hide_elements.lua`, `hb/level_loading_screen.lua`).**
+  Because the fork now actually BOOTS, it must defer to the stock UI Tweaks mod when that is installed
+  and enabled (the #312 model: stock OWNS the overlapping settings). Previously the fork "self-gated"
+  only by crashing. New `mod.hb_stock_owns()` (present + enabled, matching `_gut_uitweaks_sync.is_owned`
+  / `_bridge_uitweaks_to_stock`) and `mod.hb_fork_active()` (`SETTING_NAMES` populated AND stock not
+  owning); every hb/ hook now bails on `if not mod.hb_fork_active()` in place of the old
+  `if not mod.SETTING_NAMES`. `hb_fork_active()` returns false when `SETTING_NAMES` is nil, so the
+  2026-06-24 boot-loading-screen crash guard is preserved. With NO stock mod the absorbed features
+  run off gut's own settings; with the stock mod enabled the fork is inert (no double-apply).
+- **Regression (`gui_tweaker_dev.lua`).** `hb_setting_names_guarded` updated to the new gate needle
+  (still asserts the guard precedes the `HIDE_LOADING_SCREEN_SUBTITLES` read). Two new
+  `/gut_regression_test` checks: `hb_penlight_removed` (SETTING_NAMES + shim tables present and
+  behaving, `ubersreik_lvls:contains` correct, no Penlight reference / `hb_pl_shim` marker present in
+  `hb_data.lua`) and `hb_fork_dormancy_gate` (gate helpers exist + return booleans, hide-elements
+  gates on `hb_fork_active()`). `[gut:281]` diagnostics are printf-only.
+
 ## 0.2.233-dev (2026-07-13) -- HUD edit mode: suspend local input + confine drag to the HUD area [untested] [Issue 310]
 
 Two of the user's active #310 complaints (2026-07-12: "input to the game should be suspended", "the mouse

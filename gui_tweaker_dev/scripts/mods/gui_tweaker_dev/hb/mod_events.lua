@@ -17,7 +17,22 @@ local mod = get_mod("gut_dev")
 -- See agent report section C for the call-site mapping (which gut callback drives
 -- each hb_* function).
 
-local pl = require'pl.import_into'()
+-- (#281) Penlight removal -- see hb_data.lua. This Phase-2 lifecycle backbone is NOT
+-- YET wired into the boot chain (gui_tweaker_dev.lua dofiles only hb_data /
+-- hide_elements / level_loading_screen), so this require never ran and was NOT the
+-- live #281 abort. Fixed pre-emptively so wiring the file later does not reintroduce
+-- the load-abort. Only List:contains is used here (membership test in
+-- hb_on_setting_changed); a plain Lua 5.1 helper covers it.
+local function _hb_list(t)
+	t = t or {}
+	function t:contains(v)
+		for i = 1, #self do
+			if self[i] == v then return true end
+		end
+		return false
+	end
+	return t
+end
 
 mod.hb_on_enabled = function()
 	mod:hook_disable("UIAnimation", "init")
@@ -105,7 +120,7 @@ mod.hb_on_setting_changed = function(setting_name)
 		mod.reposition_weapon_slots = true
 	end
 
-	if pl.List({
+	if _hb_list({
 			mod.SETTING_NAMES.REPOSITION_WEAPON_SLOTS,
 			mod.SETTING_NAMES.PLAYER_ITEM_SLOTS_SPACING,
 			mod.SETTING_NAMES.PLAYER_ITEM_SLOTS_OFFSET_X,
@@ -115,7 +130,7 @@ mod.hb_on_setting_changed = function(setting_name)
 		mod.reposition_weapon_slots = true
 	end
 
-	if pl.List({
+	if _hb_list({
 			mod.SETTING_NAMES.TEAM_UI_OFFSET_X,
 			mod.SETTING_NAMES.TEAM_UI_OFFSET_Y,
 			mod.SETTING_NAMES.TEAM_UI_FLOWS_HORIZONTALLY,
@@ -126,7 +141,7 @@ mod.hb_on_setting_changed = function(setting_name)
 		mod.realign_team_member_frames = true
 	end
 
-	if pl.List({
+	if _hb_list({
 			mod.SETTING_NAMES.PLAYER_UI_CUSTOM_BUFFS_AMMO_DURATION,
 			mod.SETTING_NAMES.PLAYER_UI_CUSTOM_BUFFS_DMG_TAKEN_DURATION,
 			mod.SETTING_NAMES.PLAYER_UI_CUSTOM_BUFFS_TEMP_HP_DURATION,

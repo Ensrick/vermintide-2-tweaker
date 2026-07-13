@@ -50,7 +50,7 @@ local disable_outlines = false
 
 --- Grail Knight quests.
 mod:hook(ChallengeTrackerUI, "_draw", function(func, self, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, ...)
 	end
 	mod:pcall(function()
@@ -90,7 +90,7 @@ end)
 --- Hide or make less obtrusive the floating mission marker.
 --- Used for "Set Free" on respawned player.
 mod:hook(TutorialUI, "update_mission_tooltip", function(func, self, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, ...)
 	end
 	if mod:get(mod.SETTING_NAMES.NO_TUTORIAL_UI) then
@@ -117,7 +117,7 @@ mod:hook(TutorialUI, "update_mission_tooltip", function(func, self, ...)
 end)
 
 mod:hook(TutorialUI, "update", function(func, self, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, ...)
 	end
 	if mod:get(mod.SETTING_NAMES.NO_TUTORIAL_UI) then
@@ -133,7 +133,7 @@ end)
 
 --- Change size and transparency of floating objective icon.
 mod:hook(TutorialUI, "update_objective_tooltip_widget", function(func, self, widget_holder, player_unit, dt)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, widget_holder, player_unit, dt)
 	end
 
@@ -154,7 +154,7 @@ mod:hook(TutorialUI, "update_objective_tooltip_widget", function(func, self, wid
 end)
 
 mod:hook(MissionObjectiveUI, "draw", function(func, self, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, ...)
 	end
 	if mod:get(mod.SETTING_NAMES.NO_MISSION_OBJECTIVE) then
@@ -166,7 +166,7 @@ end)
 
 --- Hide or reposition boss hp bar.
 mod:hook(BossHealthUI, "_draw", function(func, self, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, ...)
 	end
 	if mod:get(mod.SETTING_NAMES.HIDE_BOSS_HP_BAR) then
@@ -189,7 +189,7 @@ end)
 
 --- Hide HUD when inspecting or when "Hide HUD" toggled with hotkey.
 mod:hook(GameModeManager, "has_activated_mutator", function(func, self, name, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, name, ...)
 	end
 	if name == "realism" then
@@ -240,7 +240,7 @@ end)
 
 --- Mute Olesya in the Ubersreik levels.
 mod:hook(DialogueSystem, "trigger_sound_event_with_subtitles", function(func, self, sound_event, subtitle_event, speaker_name, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, sound_event, subtitle_event, speaker_name, ...)
 	end
 
@@ -259,7 +259,7 @@ end)
 
 --- Hide name of new location text.
 mod:hook(PlayerHud, "set_current_location", function(func, self, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, ...)
 	end
 	if mod:get(mod.SETTING_NAMES.HIDE_NEW_AREA_TEXT) then
@@ -277,7 +277,7 @@ end)
 --- with captions even when the user hasn't changed any settings". Bail at defaults
 --- so vanilla positioning is untouched.
 mod:hook_safe(SubtitleGui, "update", function(self)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return
 	end
 	local ox = mod:get(mod.SETTING_NAMES.OTHER_ELEMENTS_SUBTITLES_OFFSET_X) or 0
@@ -298,7 +298,7 @@ end)
 
 --- Reposition the Twitch voting UI.
 mod:hook(TwitchVoteUI, "_draw", function(func, self, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, ...)
 	end
 
@@ -318,7 +318,7 @@ end)
 
 --- Hide the "Waiting for rescue" message.
 mod:hook(WaitForRescueUI, "update", function(func, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(...)
 	end
 	if mod:get(mod.SETTING_NAMES.HIDE_WAITING_FOR_RESCUE) then
@@ -330,7 +330,7 @@ end)
 
 --- Hide the Twitch mode icons in lower right.
 mod:hook(TwitchIconView, "_draw", function(func, self, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, ...)
 	end
 	if mod:get(mod.SETTING_NAMES.HIDE_TWITCH_MODE_ON_ICON) then
@@ -342,7 +342,7 @@ end)
 
 --- Disable White HP flashing.
 mod:hook(UnitFrameUI, "_update_bar_flash", function(func, self, ...)
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return func(self, ...)
 	end
 	if mod:get(mod.SETTING_NAMES.STOP_WHITE_HP_FLASHING) then
@@ -357,7 +357,7 @@ end)
 -- ----------------------------------------------------------------------------
 
 mod.reapply_pickup_ranges = function()
-	if not mod.SETTING_NAMES then
+	if not mod.hb_fork_active() then
 		return
 	end
 	OutlineSettings.ranges = table.clone(mod.persistent.outline_ranges_backup)

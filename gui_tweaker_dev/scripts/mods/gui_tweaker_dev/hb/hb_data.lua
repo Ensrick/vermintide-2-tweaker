@@ -41,7 +41,57 @@ local mod = get_mod("gut_dev")
 -- backfill them here at the bottom (identity key=value) to preserve that access
 -- pattern without dragging in the options tree.
 
-local pl = require'pl.import_into'()
+-- (#281) Penlight removal (marker: hb_pl_shim). The retail VMF sandbox provides no
+-- Penlight lua resource, so the old `require` of the pl-namespace import module here
+-- THREW at load ("module not found") and aborted this whole data file -- so
+-- mod.SETTING_NAMES and every table below went undefined, silently killing the
+-- absorbed "UI Tweaks" (HideBuffs) fork (hide_elements.lua / level_loading_screen.lua
+-- read those tables and then crashed / no-op'd). The fork consumed ONLY the Penlight
+-- List + Map constructors and List:contains, so a plain Lua 5.1 replacement covers
+-- it. Do NOT vendor Penlight.
+--
+-- A plain array carrying the one Penlight List method the fork actually calls
+-- (:contains). Used for mod.def_dynamic_widget_names and mod.ubersreik_lvls (the
+-- latter is consumed as ubersreik_lvls:contains(level_key) in hide_elements.lua).
+local function _hb_list(t)
+	t = t or {}
+	function t:contains(v)
+		for i = 1, #self do
+			if self[i] == v then return true end
+		end
+		return false
+	end
+	return t
+end
+
+-- (#281) Absorbed-fork dormancy gate. The hb/ fork is a renamespaced copy of the
+-- stock "UI Tweaks" (HideBuffs) Workshop mod. When that stock mod is installed AND
+-- enabled it OWNS the overlapping hide/reposition settings -- the #312 Mod Tweaker
+-- bridge (_bridge_uitweaks_to_stock / _gut_uitweaks_sync.M.is_owned) routes the
+-- user's toggles to it -- so gut's fork MUST stay dormant or the same hide fires
+-- twice (and NUM_SUBTITLE_ROWS / OutlineSettings.ranges fight frame-to-frame).
+-- Previously the fork "self-gated" only by CRASHING at load (the abort above); now
+-- that it boots, gate it explicitly. A present-but-uncheckable HB counts as enabled
+-- (defer rather than risk a double-apply), matching the #312 helpers.
+function mod.hb_stock_owns()
+	local HB = get_mod("HideBuffs")
+	if not HB then return false end
+	if type(HB.is_enabled) == "function" then
+		local ok, enabled = pcall(HB.is_enabled, HB)
+		if ok and enabled == false then return false end
+	end
+	return true
+end
+
+-- The fork's hooks/helpers are LIVE only when the data backbone loaded
+-- (mod.SETTING_NAMES populated -- also the old boot-timing guard: the BOOT loading
+-- screen can fire hb/ hooks before this file finishes) AND the stock mod isn't
+-- owning. Every hb/ hook gates on this in place of the old `if not mod.SETTING_NAMES`
+-- bail. Also the addressable source anchor for hb_data.lua in the #281 regression
+-- checks (this file otherwise defines only data, no addressable function).
+function mod.hb_fork_active()
+	return mod.SETTING_NAMES ~= nil and not mod.hb_stock_owns()
+end
 
 -- Belt-and-suspenders: ensure the table object exists at the very top before any
 -- other hb file (or an early-firing hook) reads it, even if population somehow
@@ -325,14 +375,14 @@ mod.health_bar_offset = {
 }
 
 --- Elements to reposition inside default_dynamic widget.
-mod.def_dynamic_widget_names = pl.List{
+mod.def_dynamic_widget_names = _hb_list{
 	"talk_indicator",
 	"talk_indicator_highlight",
 	"talk_indicator_highlight_glow",
 }
 
 --- Carrer name to hat icon texture lookup.
-mod.career_name_to_hat_icon = pl.Map{
+mod.career_name_to_hat_icon = {
 	bw_adept = "icon_adept_hat_0001",
 	bw_scholar = "icon_scholar_hat_0000",
 	bw_unchained = "icon_unchained_hat_0008",
@@ -385,7 +435,7 @@ mod.healshare_buff_names = {
 }
 
 --- Ubersreik level keys.
-mod.ubersreik_lvls = pl.List({
+mod.ubersreik_lvls = _hb_list({
 	"magnus",
 	"cemetery",
 	"forest_ambush",

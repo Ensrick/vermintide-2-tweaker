@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.233-dev"
+local MOD_VERSION = "0.2.234-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2282,8 +2282,10 @@ end)
 -- hb/level_loading_screen.lua LoadingView.create_ui_elements hook before
 -- hb_data.lua has populated mod.SETTING_NAMES, so reading
 -- mod.SETTING_NAMES.HIDE_LOADING_SCREEN_SUBTITLES indexed a nil value and crashed
--- ("attempt to index field 'SETTING_NAMES' (a nil value)"). The fix guards the
--- hook body with `if not mod.SETTING_NAMES then return func(...) end`. This check
+-- ("attempt to index field 'SETTING_NAMES' (a nil value)"). The hook now bails with
+-- `if not mod.hb_fork_active() then return func(...) end` (#281) -- hb_fork_active()
+-- returns false whenever mod.SETTING_NAMES is nil, so it STILL protects the boot
+-- crash while also making the fork dormant when stock UI Tweaks owns. This check
 -- FAILS if that guard is removed (the crash would return). Source path is derived
 -- from a sibling hb/ function (mod.reapply_pickup_ranges, defined in
 -- hide_elements.lua) by swapping the filename, since the level_loading_screen
@@ -2298,13 +2300,85 @@ _rt_register("hb_setting_names_guarded", function()
     if src_path == sibling then return end  -- couldn't derive the sibling path; skip
     local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
-    local guard_needle = "if not mod.SETTING" .. "_NAMES then"
+    local guard_needle = "if not mod.hb_fork" .. "_active() then"
     local read_needle = "mod.SETTING_NAMES.HIDE_LOADING_SCREEN" .. "_SUBTITLES"
     local guard_at = txt:find(guard_needle, 1, true)
     local read_at = txt:find(read_needle, 1, true)
     if not read_at then return end  -- hook restructured; the specific read is gone
     if not guard_at or guard_at >= read_at then
-        return "hb regression: the LoadingView.create_ui_elements hook in hb/level_loading_screen.lua no longer guards mod.SETTING_NAMES before reading HIDE_LOADING_SCREEN_SUBTITLES (boot loading screen would crash 'index field SETTING_NAMES (a nil value)')"
+        return "hb regression: the LoadingView.create_ui_elements hook in hb/level_loading_screen.lua no longer gates on mod.hb_fork_active() before reading HIDE_LOADING_SCREEN_SUBTITLES (boot loading screen would crash 'index field SETTING_NAMES (a nil value)')"
+    end
+end)
+
+-- (#281) Absorbed UI Tweaks (HideBuffs) fork boots WITHOUT Penlight. The fork's data
+-- file (hb/hb_data.lua) used to `require` a Penlight module that does not exist as a
+-- lua resource in the retail sandbox, so it aborted at load -- mod.SETTING_NAMES and
+-- the fork's data tables went undefined and every hide/loading-screen feature went
+-- silently dead. hb_data.lua now uses a plain-Lua shim (marker hb_pl_shim). RUNTIME
+-- proof (authoritative in retail): the data backbone loaded and the shim-built tables
+-- exist and behave. SOURCE proof (io-safe, skipped in retail; runs under CI/tools):
+-- no Penlight require/usage remains and the shim marker is present. Anchor
+-- mod.hb_fork_active resolves hb_data.lua's path (it defines no other function).
+-- Needles split so this check can't self-match.
+_rt_register("hb_penlight_removed", function()
+    if type(mod.SETTING_NAMES) ~= "table" then
+        return "hb regression: mod.SETTING_NAMES is not a table (hb_data.lua aborted at load -- Penlight require back?)"
+    end
+    if mod.SETTING_NAMES.HIDE_LOADING_SCREEN_SUBTITLES == nil or mod.SETTING_NAMES.HIDE_BOSS_HP_BAR == nil then
+        return "hb regression: SETTING_NAMES is missing fork keys (hb_data.lua did not run to completion)"
+    end
+    -- List replacement: ubersreik_lvls is consumed as a :contains list at hide_elements.lua:251.
+    local lvls = mod.ubersreik_lvls
+    if type(lvls) ~= "table" or type(lvls.contains) ~= "function" then
+        return "hb regression: mod.ubersreik_lvls lost its :contains method (List shim broken)"
+    end
+    if lvls:contains("magnus") ~= true or lvls:contains("__nope__") ~= false then
+        return "hb regression: ubersreik_lvls:contains returned wrong results (List shim broken)"
+    end
+    -- Map replacement: career_name_to_hat_icon is a plain key->value lookup table.
+    if type(mod.career_name_to_hat_icon) ~= "table" or mod.career_name_to_hat_icon.es_knight == nil then
+        return "hb regression: mod.career_name_to_hat_icon missing (Map shim broken)"
+    end
+    local ok, info = pcall(debug.getinfo, mod.hb_fork_active or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local txt = _rt_src_read(src)  -- (#511) io-safe; nil in retail sandbox => skip
+    if not txt then return end
+    if txt:find("import" .. "_into", 1, true)
+        or txt:find("pl." .. "List", 1, true)
+        or txt:find("pl." .. "Map", 1, true) then
+        return "hb regression: a Penlight reference is back in hb_data.lua (retail sandbox has no pl.* resource -> load abort)"
+    end
+    if not txt:find("hb_pl" .. "_shim", 1, true) then
+        return "hb regression: the hb_pl_shim marker is gone from hb_data.lua (Penlight replacement removed)"
+    end
+end)
+
+-- (#281) Absorbed-fork dormancy gate. With the Penlight abort fixed the fork now
+-- BOOTS, so it must defer to the stock "UI Tweaks" (HideBuffs) mod when that is
+-- installed + enabled (the #312 bridge owns the overlapping settings) -- otherwise
+-- the same hides fire twice (and NUM_SUBTITLE_ROWS / OutlineSettings.ranges fight).
+-- Previously the fork "self-gated" only by crashing; the explicit gate replaces that.
+-- RUNTIME proof: the gate helpers exist and return booleans. SOURCE proof (io-safe):
+-- the hide-elements hooks gate on mod.hb_fork_active() (anchor is the sibling
+-- mod.reapply_pickup_ranges). Needles split so this check can't self-match.
+_rt_register("hb_fork_dormancy_gate", function()
+    if type(mod.hb_fork_active) ~= "function" then
+        return "hb regression: mod.hb_fork_active dormancy gate missing (fork can't defer to stock UI Tweaks)"
+    end
+    if type(mod.hb_stock_owns) ~= "function" then
+        return "hb regression: mod.hb_stock_owns missing (dormancy gate can't detect stock UI Tweaks)"
+    end
+    if type(mod.hb_fork_active()) ~= "boolean" or type(mod.hb_stock_owns()) ~= "boolean" then
+        return "hb regression: dormancy gate did not return a boolean"
+    end
+    local ok, info = pcall(debug.getinfo, mod.reapply_pickup_ranges or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local txt = _rt_src_read(src)  -- (#511) io-safe; nil in retail sandbox => skip
+    if not txt then return end
+    if not txt:find("hb_fork" .. "_active()", 1, true) then
+        return "hb regression: hide_elements.lua no longer gates on mod.hb_fork_active() (fork double-applies when stock UI Tweaks is enabled)"
     end
 end)
 
@@ -2978,6 +3052,18 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_ba_compendium")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/hb_data")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/hide_elements")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/level_loading_screen")
+
+-- (#281) Confirm the absorbed UI Tweaks (HideBuffs) fork actually booted: it used to
+-- abort at load on a missing Penlight resource (hb_data.lua required a pl.* module
+-- that does not exist in the retail sandbox), leaving mod.SETTING_NAMES nil and the
+-- hide / loading-screen feature set silently dead. printf so it lands in the log with
+-- mod-logging OFF. stock_owns=true means the stock UI Tweaks mod is present+enabled
+-- and gut's fork is intentionally dormant (the #312 bridge owns the settings).
+printf("[gut:281] hb fork boot: SETTING_NAMES=%s ubersreik_lvls=%s stock_owns=%s fork_active=%s",
+    (type(mod.SETTING_NAMES) == "table") and "ok" or "NIL",
+    (type(mod.ubersreik_lvls) == "table" and type(mod.ubersreik_lvls.contains) == "function") and "ok" or "BAD",
+    tostring(mod.hb_stock_owns and mod.hb_stock_owns()),
+    tostring(mod.hb_fork_active and mod.hb_fork_active()))
 
 mod:info(string.format("gui_tweaker v%s ready (loadout save/restore + HUD edit mode + mod_tweaker api + bestiary/armory)", MOD_VERSION))
 
