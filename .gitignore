@@ -1,6 +1,10 @@
 # Build output
 **/.build/
 
+# Per-machine VMB project configuration. VMBLauncher requires this exact file
+# at ProjectRoot; copy .vmbrc.example to .vmbrc and customize the local copy.
+.vmbrc
+
 # VMB Launcher lives in its own repo at github.com/Ensrick/vmb-launcher.
 # Kept here on disk for convenience; not tracked in this repo.
 tools/vmb-launcher/
@@ -18,10 +22,8 @@ tools/vmb-launcher/
 *.lua.processed
 
 # NOTE: CLAUDE.md and ANTIGRAVITY.md are intentionally TRACKED so AI-assistant
-# context travels with the repo (maintainer request 2026-05-02). They contain
-# absolute Windows paths under C:\Users\danjo\... — clones on other machines
-# will need to adapt those paths. If you fork this repo, consider rewriting
-# the path-bearing sections to your own layout.
+# context travels with the repo (maintainer request 2026-05-02). Machine setup
+# belongs in ignored local configuration; see docs/PORTABLE_SETUP.md.
 
 # Steam SDK artifact
 upload/steam_appid.txt
@@ -67,8 +69,8 @@ __pycache__/
 # - bundleV2/ is INTENTIONALLY tracked (so other devs / git bisect can see the built bundle
 #   that was deployed at each commit). Confirm with maintainer; if accidentally tracked, add
 #   `**/bundleV2/` here.
-# - .vmbrc is tracked at repo root and contains absolute path to vmb tools — fine for solo
-#   dev but if this repo is ever shared, would need a per-user override pattern.
+# - .vmbrc is intentionally ignored. VMB has no base-plus-override merge; the
+#   tracked .vmbrc.example is copied to the exact filename VMBLauncher expects.
 # - bundleHistory.dat is tracked at repo root (binary, mtime old). Confirm intentional.
 # - The 16-hex glob pattern correctly catches loose extensionless bundle artifacts but ALSO
 #   catches any file with a 16-hex name in any directory (including bundleV2/ — but since

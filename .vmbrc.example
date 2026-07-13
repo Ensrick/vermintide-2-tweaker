@@ -16,7 +16,7 @@
 	"bundle_extension2": ".mod_bundle",
 	"use_new_format1": false,
 	"use_new_format2": true,
-	"template_dir": "C:/Users/danjo/source/repos/vmb/.template-vmf",
+	"template_dir": "../vmb/.template-vmf",
 	"template_preview_image": "item_preview.png",
 	"template_core_files": [
 		"core/**"

@@ -1,0 +1,40 @@
+* text=auto
+
+.editorconfig  text eol=lf
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+.luacheckrc    text eol=lf
+.vmbrc.example text eol=lf
+LICENSE        text eol=lf
+
+# Cross-platform source and documentation.
+*.lua       text eol=lf
+*.md        text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.cfg       text eol=lf
+*.mod       text eol=lf
+*.package   text eol=lf
+*.material  text eol=lf
+*.texture   text eol=lf
+*.unit      text eol=lf
+*.config    text eol=lf
+*.luacheckrc text eol=lf
+
+# Windows-maintainer tooling remains readable by Windows PowerShell 5.1.
+*.ps1       text eol=crlf
+*.psd1      text eol=crlf
+*.ini       text eol=crlf
+
+# Compiled bundles and source assets must never be line-ending normalized.
+*.mod_bundle binary
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.gif        binary
+*.fbx        binary
+*.exe        binary
+*.dll        binary
+*.zip        binary
+*.dat        binary
