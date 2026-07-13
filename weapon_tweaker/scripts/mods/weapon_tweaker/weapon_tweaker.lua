@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.215-dev"
+local MOD_VERSION = "0.12.216-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -1498,45 +1498,73 @@ _apply_wield_anim_career_3p_patches(_WIELD_ANIM_CAREER_3P_PATCHES_BULK)
 --   so the raw `_elf` names survive on the empty-wield reload-send path.
 --
 -- Fix (3P-ONLY): per-career not-loaded/no-ammo wield overrides pointing at the
--- network-REGISTERED Kruber repeating-handgun events, which Kruber's
--- empire_soldier 3P body authors AND which exist in NetworkLookup.anims:
---   to_repeating_handgun         (anims_lookup_table.lua:670 — handgun has no
---                                 distinct not-loaded wield; its loaded wield is
---                                 the correct fallback)
---   to_repeating_handgun_noammo  (anims_lookup_table.lua:671 — handgun's own
---                                 wield_anim_no_ammo, repeating_handguns.lua:312)
--- These are 3P wield-FALLBACK fields only — never anim_event/wield_anim (1P).
--- Saltzpyre's Volley Crossbow (wh_crossbow_repeater, repeating_crossbows.lua)
--- already uses to_repeating_crossbow / _noammo (both REGISTERED) so it never
--- crashed — no patch needed there. Do NOT instead register the `_elf` names into
--- _anim_redirect (lines ~484-485): those redirect ONTO the same unregistered
--- `_elf` events and carry this identical latent crash for any non-elf wielder;
--- they're only safe today because they ride the direct (non-networked)
--- Unit.animation_event path behind _safe_has_anim.
+-- RECEIVER-native, NetworkLookup-registered repeating wields that each receiver's
+-- own 3P body authors. The fallback differs by receiver group:
+--   * Kruber (empire_soldier body) -> to_repeating_handgun / _noammo
+--       to_repeating_handgun         (anims_lookup_table.lua:670 — handgun has no
+--                                     distinct not-loaded wield; its loaded wield is
+--                                     the correct fallback)
+--       to_repeating_handgun_noammo  (anims_lookup_table.lua:671 — handgun's own
+--                                     wield_anim_no_ammo, repeating_handguns.lua:312)
+--   * Saltzpyre (witch_hunter body)  -> to_repeating_crossbow / _noammo  (#536)
+--       to_repeating_crossbow        (anims_lookup_table.lua:645 — Saltzpyre's own
+--                                     Volley Crossbow wield_anim_not_loaded,
+--                                     repeating_crossbows.lua:247)
+--       to_repeating_crossbow_noammo (anims_lookup_table.lua:646 — same template's
+--                                     wield_anim_no_ammo, repeating_crossbows.lua:246)
+-- These are 3P wield-FALLBACK fields only — never anim_event/wield_anim (1P). They
+-- are the SAME receiver-native events the in-mission _career_anim_redirect funnel
+-- produces for the LOADED wield, so the empty-wield send now matches the loaded one.
+--
+-- #536: the wh (Saltzpyre) careers ALSO wield we_crossbow_repeater as a cross-
+-- character port (wt_unlock_data.lua:142-144 list it for wh_captain / wh_bountyhunter
+-- / wh_zealot; the loaded 3P wield is baked in wt_wield_patches.lua:199), but were
+-- omitted from this NOT-LOADED/NO-AMMO table when it was added (v0.12.139, Kruber-
+-- only). So an empty-clip wield on a wh career kept the elf template's raw base
+-- wield_anim_not_loaded = "to_repeating_crossbow_elf" (UNregistered) and hit the same
+-- packer fatal. wh_priest is DLC (bless) but is NOT in scope: it never receives this
+-- weapon (wt_unlock_data.lua:145 omits it; the /wt_regression_test `wh_priest_no_bows`
+-- check asserts wh_priest gets no bows/crossbows), so no DLC gate is required here —
+-- these are pure data writes that stay inert for any career that can't wield the item.
+-- NOTE: the DISTINCT native Saltzpyre Volley Crossbow (wh_crossbow_repeater,
+-- repeating_crossbow_template_1) already uses to_repeating_crossbow / _noammo natively
+-- and never crashed — this patch is for the ELF template (we_crossbow_repeater) ported
+-- ONTO wh careers, a different weapon. Do NOT instead register the `_elf` names into
+-- _anim_redirect (lines ~484-485): those redirect ONTO the same unregistered `_elf`
+-- events and carry this identical latent crash for any non-elf wielder; they're only
+-- safe today because they ride the direct (non-networked) Unit.animation_event path
+-- behind _safe_has_anim.
 local _KRUBER_REPEATER_CAREERS = {
     "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
 }
+local _WH_REPEATER_CAREERS = {
+    "wh_captain", "wh_bountyhunter", "wh_zealot",
+}
+-- Each template maps to a LIST of receiver groups so distinct receivers can point at
+-- their own registered fallback under a single template key (Lua tables can't hold two
+-- entries for the same template name). This extends the v0.12.139 single-group form.
 local _NOT_LOADED_NO_AMMO_CAREER_PATCHES = {
-    -- we_crossbow_repeater (Kerillian Repeater Crossbow) ported onto Kruber.
+    -- we_crossbow_repeater (Kerillian Repeater Crossbow) ported cross-character.
     repeating_crossbow_elf_template = {
-        not_loaded = "to_repeating_handgun",
-        no_ammo    = "to_repeating_handgun_noammo",
-        careers    = _KRUBER_REPEATER_CAREERS,
+        { not_loaded = "to_repeating_handgun",  no_ammo = "to_repeating_handgun_noammo",  careers = _KRUBER_REPEATER_CAREERS },
+        { not_loaded = "to_repeating_crossbow", no_ammo = "to_repeating_crossbow_noammo", careers = _WH_REPEATER_CAREERS },
     },
 }
 
 local function _apply_not_loaded_no_ammo_career_patches(patches)
     if not Weapons then return end
-    for template_name, spec in pairs(patches) do
+    for template_name, groups in pairs(patches) do
         local tpl = Weapons[template_name]
         if tpl then
             tpl.wield_anim_not_loaded_career = tpl.wield_anim_not_loaded_career or {}
             tpl.wield_anim_no_ammo_career   = tpl.wield_anim_no_ammo_career   or {}
             local n = 0
-            for _, career in ipairs(spec.careers) do
-                if spec.not_loaded then tpl.wield_anim_not_loaded_career[career] = spec.not_loaded end
-                if spec.no_ammo    then tpl.wield_anim_no_ammo_career[career]    = spec.no_ammo end
-                n = n + 1
+            for _, spec in ipairs(groups) do
+                for _, career in ipairs(spec.careers) do
+                    if spec.not_loaded then tpl.wield_anim_not_loaded_career[career] = spec.not_loaded end
+                    if spec.no_ammo    then tpl.wield_anim_no_ammo_career[career]    = spec.no_ammo end
+                    n = n + 1
+                end
             end
             _dbg("[wt:tpl_patch] event=applied template=%s not_loaded/no_ammo careers=%d", template_name, n)
         else
@@ -4625,6 +4653,42 @@ _rt_register("volley_crossbow_preview_wield_baked", function()
         if not live or live.wh_captain ~= "to_repeating_crossbow" then
             return "live repeating_crossbow_elf_template wield_anim_career_3p.wh_captain = " .. tostring(live and live.wh_captain)
         end
+    end
+end)
+
+_rt_register("repeater_empty_wield_network_patch_all_careers", function()
+    -- #536: the empty-wield network-crash patch (_NOT_LOADED_NO_AMMO_CAREER_PATCHES)
+    -- must route we_crossbow_repeater's not-loaded/no-ammo wield to a REGISTERED anim
+    -- for EVERY career that can wield it, else the empty-clip wield packs a nil
+    -- NetworkLookup.anims index into rpc_anim_event -> C-level fatal (bypasses pcall).
+    -- Kruber careers (v0.12.139) -> to_repeating_handgun; wh careers (#536, v0.12.216)
+    -- -> to_repeating_crossbow. Both fallbacks are NetworkLookup-registered
+    -- (anims_lookup_table.lua:645/670). Guards wh coverage AND that Kruber stays covered.
+    local tpl = Weapons and Weapons.repeating_crossbow_elf_template
+    if not tpl then return "skip: Weapons.repeating_crossbow_elf_template not loaded" end
+    local nl = tpl.wield_anim_not_loaded_career
+    local na = tpl.wield_anim_no_ammo_career
+    if not (nl and na) then return "not_loaded/no_ammo career tables missing on repeating_crossbow_elf_template" end
+    local expect = {
+        es_mercenary     = { "to_repeating_handgun",  "to_repeating_handgun_noammo" },
+        es_huntsman      = { "to_repeating_handgun",  "to_repeating_handgun_noammo" },
+        es_knight        = { "to_repeating_handgun",  "to_repeating_handgun_noammo" },
+        es_questingknight= { "to_repeating_handgun",  "to_repeating_handgun_noammo" },
+        wh_captain       = { "to_repeating_crossbow", "to_repeating_crossbow_noammo" },
+        wh_bountyhunter  = { "to_repeating_crossbow", "to_repeating_crossbow_noammo" },
+        wh_zealot        = { "to_repeating_crossbow", "to_repeating_crossbow_noammo" },
+    }
+    for career, want in pairs(expect) do
+        if nl[career] ~= want[1] then
+            return "not_loaded[" .. career .. "] = " .. tostring(nl[career]) .. " (expected " .. want[1] .. ")"
+        end
+        if na[career] ~= want[2] then
+            return "no_ammo[" .. career .. "] = " .. tostring(na[career]) .. " (expected " .. want[2] .. ")"
+        end
+    end
+    -- wh_priest must NOT be patched here (it can't wield the weapon; see wh_priest_no_bows).
+    if nl.wh_priest or na.wh_priest then
+        return "wh_priest wrongly patched (not_loaded=" .. tostring(nl.wh_priest) .. " no_ammo=" .. tostring(na.wh_priest) .. ")"
     end
 end)
 
