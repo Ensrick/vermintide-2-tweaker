@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.91-dev - 2026-07-13 - #513 score lineup resolves peers from end-view snapshot [untested]
+
+- The previous 0.9.86 fix hooked the correct `TeamPreviewer`/`HeroPreviewer` render path but resolved each lineup row through live `PlayerManager.human_players()`. Vanilla removes those player rows during the end transition before the team previewer starts loading: the failing log removes players at 21:08:34 and loads `ui_end_screen`/the lineup at 21:08:35. The resolver returned nil, so none of the `SCORE-HAT` paths ran.
+- `LevelEndViewBase.context.players_session_score` is the durable end-view snapshot and each entry retains exact `peer_id`, `local_player_id`, `profile_index`, and `career_index`; only `LevelEndView._get_hero_from_score` drops peer identity while building `hero_data`. The score resolver now matches profile+career in that snapshot first and keeps the live-player scan only for non-end-view TeamPreviewers.
+- Added bounded raw `[la-state] SCORE-ROW` diagnostics (maximum 16 distinct rows, never chat) that classify local/remote/unresolved rows and report resolver source plus synced LA hat/outfit store state. Existing `SCORE-HAT mesh-swap/equip/paint` and `SCORE-ARMOR` markers remain.
+- Expanded `cos_la_score_screen_apply_wired` with pure local/remote snapshot fixtures and a wrong-career rejection. No Workshop deployment in this change.
+
+- **Verify (coop):** load 0.9.91-dev on both peers, equip LA hats, finish a mission, and inspect each other's lineup model. Each client log must show one `SCORE-ROW` per human with `source=score_snapshot`, correct `role=local|remote`, and the expected store hat key, followed by `SCORE-HAT equip`, `mesh-swap`, and `paint`. Both models must visibly wear their LA hats.
+
 ## 0.9.90-dev - 2026-07-13 - #565/#570 bounded startup package loading [untested]
 
 - Replaced Cosmetics' 74 blocking offhand `sync-read` calls at startup with deduplicated asynchronous package loads. Vanilla `PackageManager.load(..., asynchronous=true)` queues packages without the call-site `ResourcePackage.flush`; the existing `_override_package_ready` gate requires both 1P and 3P units before any override is exposed, so an unfinished package safely falls back to the base mesh.

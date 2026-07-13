@@ -9,6 +9,20 @@ Last updated: 2026-07-13.
 ---
 ## Diagnostics / Regression Suite
 
+### score-lineup-snapshot-peer-resolution -- local and remote LA hats
+
+| Field | Value |
+|-------|-------|
+| Symptom | End-of-mission lineup shows each LA hat's original vanilla hat for both wearer and client. |
+| Root cause | TeamPreviewer hook ran after `PlayerManager:remove_player`; its live-player-only profile resolver returned nil even though `context.players_session_score` retained exact peer identity. |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.91-dev |
+| Category | INTEGRATION / MULTIPLAYER |
+| Repro | Two modded peers equip LA hats, finish a mission, and inspect local plus remote lineup rows. |
+| Expected post-fix | Both rows resolve from `score_snapshot`; the previewer's hat mesh swaps/paints before display and both viewers see LA hats. |
+| Detection | `/cos_regression_test` passes `cos_la_score_screen_apply_wired`. Log has bounded `SCORE-ROW role=local/remote ... source=score_snapshot` followed by `SCORE-HAT` markers; no human row is `unresolved`. |
+| Tracking | GitHub issue #513. |
+
 ### offhand-preload-async-bounded -- no blocking startup package storm
 
 | Field | Value |

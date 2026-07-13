@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.90-dev"
+local MOD_VERSION = "0.9.91-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -3983,8 +3983,37 @@ end)
 -- human-only. ctx = TeamPreviewer's ingame_ui_context (has
 -- profile_synchronizer, state_ingame_running.lua:287); falls back to the
 -- network manager's synchronizer, then to player:profile_index().
-mod._cos_score_peer_for_profile = function(profile_index, ctx)
+mod._cos_score_peer_for_profile = function(profile_index, career_index, ctx)
     if not profile_index then return nil end
+
+    -- #513 follow-up: use the end view's OWN immutable score snapshot first.
+    -- LevelEndViewBase stores it on context.players_session_score before the
+    -- level transition removes PlayerManager rows. Each player_data retains
+    -- exact peer_id/local_player_id/profile/career; _get_hero_from_score drops
+    -- peer_id when constructing TeamPreviewer's hero_data. The previous live-
+    -- PlayerManager-only resolver therefore returned nil for every lineup row
+    -- after PlayerManager:remove_player (latest repro: removals at 21:08:34,
+    -- TeamPreviewer package load at 21:08:35). Matching profile+career against
+    -- the snapshot restores the identity without touching network-safe item data.
+    local scores = ctx and ctx.players_session_score
+    if type(scores) == "table" then
+        for _, player_data in pairs(scores) do
+            if type(player_data) == "table"
+                and player_data.profile_index == profile_index
+                and (career_index == nil or player_data.career_index == career_index)
+                and player_data.peer_id
+            then
+                return player_data.peer_id, "score_snapshot"
+            end
+        end
+        -- A present end-view snapshot is authoritative. Never cross-match a
+        -- different live player after an exact profile+career miss.
+        return nil, "score_snapshot_miss"
+    end
+
+    -- Keep the old live-player path as a fallback for non-end-view users of
+    -- TeamPreviewer (Versus party/parading screens) where the score snapshot is
+    -- absent but PlayerManager rows are still resident.
     local pm = Managers and Managers.player
     if not (pm and pm.human_players) then return nil end
     local psync = ctx and ctx.profile_synchronizer
@@ -4006,7 +4035,7 @@ mod._cos_score_peer_for_profile = function(profile_index, ctx)
             if ok_pi then pi = r end
         end
         if pi == profile_index then
-            return p.peer_id
+            return p.peer_id, "live_player_fallback"
         end
     end
     return nil
@@ -4017,15 +4046,37 @@ end
 -- armor paint below key off it.
 mod:hook("TeamPreviewer", "_spawn_hero", function(func, self, hero_previewer, hero_data)
     if hero_previewer and hero_data then
-        local okp, peer = pcall(mod._cos_score_peer_for_profile, hero_data.profile_index, self._context)
+        local okp, peer, source = pcall(mod._cos_score_peer_for_profile,
+            hero_data.profile_index, hero_data.career_index, self._context)
         peer = okp and peer or nil
         hero_previewer._cos_wearer_peer = peer
-        if peer and printf then
-            local peer_slots = mod._la_equips_by_peer and mod._la_equips_by_peer[peer]
-            printf("[la-state] SCORE-PEER profile=%s career=%s -> peer=%s store(hat=%s,skin=%s)",
-                tostring(hero_data.profile_index), tostring(hero_data.career_index), tostring(peer),
-                tostring(peer_slots and peer_slots.slot_hat and peer_slots.slot_hat.armoury_key or "-"),
-                tostring(peer_slots and peer_slots.slot_skin and peer_slots.slot_skin.armoury_key or "-"))
+        if printf then
+            mod._cos513_score_diag_seen = mod._cos513_score_diag_seen or {}
+            mod._cos513_score_diag_count = mod._cos513_score_diag_count or 0
+            local peer_slots = peer and mod._la_equips_by_peer and mod._la_equips_by_peer[peer]
+            local local_peer
+            local pm = Managers and Managers.player
+            local lp = pm and pm.local_player and pm:local_player()
+            local_peer = lp and lp.peer_id
+            if not local_peer and Network and Network.peer_id then
+                local okn, value = pcall(Network.peer_id)
+                if okn then local_peer = value end
+            end
+            local role = not peer and "unresolved" or (peer == local_peer and "local" or "remote")
+            local token = table.concat({ tostring(hero_data.profile_index), tostring(hero_data.career_index),
+                tostring(peer), tostring(source), role,
+                tostring(peer_slots and peer_slots.slot_hat and peer_slots.slot_hat.armoury_key),
+                tostring(peer_slots and peer_slots.slot_skin and peer_slots.slot_skin.armoury_key) }, "|")
+            if not mod._cos513_score_diag_seen[token] and mod._cos513_score_diag_count < 16 then
+                mod._cos513_score_diag_seen[token] = true
+                mod._cos513_score_diag_count = mod._cos513_score_diag_count + 1
+                printf("[la-state] SCORE-ROW role=%s profile=%s career=%s peer=%s source=%s resolver_ok=%s store(hat=%s,skin=%s) evidence=%d/16 chat=false",
+                    role, tostring(hero_data.profile_index), tostring(hero_data.career_index),
+                    tostring(peer), tostring(source or "none"), tostring(okp),
+                    tostring(peer_slots and peer_slots.slot_hat and peer_slots.slot_hat.armoury_key or "-"),
+                    tostring(peer_slots and peer_slots.slot_skin and peer_slots.slot_skin.armoury_key or "-"),
+                    mod._cos513_score_diag_count)
+            end
         end
     end
     return func(self, hero_previewer, hero_data)
@@ -9031,12 +9082,29 @@ _rt_register("cos_la_score_screen_apply_wired", function()
     if type(mod._cos_score_peer_for_profile) ~= "function" then
         return "mod._cos_score_peer_for_profile missing (#513 score-screen peer resolver)"
     end
-    local ok, v = pcall(mod._cos_score_peer_for_profile, nil, nil)
+    local ok, v = pcall(mod._cos_score_peer_for_profile, nil, nil, nil)
     if not ok then return "score peer resolver errored on nil: " .. tostring(v) end
     if v ~= nil then return "score peer resolver must return nil for a nil profile" end
     if type(mod._la_equips_by_peer) ~= "table" then
         return "mod._la_equips_by_peer store missing (#513 score path reads it)"
     end
+    -- Reproduce the end transition after PlayerManager rows are gone: the
+    -- context score snapshot alone must resolve local and remote rows exactly.
+    local fixture = { players_session_score = {
+        ["peer-local:1"] = { peer_id = "peer-local", local_player_id = 1,
+            profile_index = 1, career_index = 4 },
+        ["peer-remote:1"] = { peer_id = "peer-remote", local_player_id = 1,
+            profile_index = 2, career_index = 3 },
+    } }
+    local p1, s1 = mod._cos_score_peer_for_profile(1, 4, fixture)
+    local p2, s2 = mod._cos_score_peer_for_profile(2, 3, fixture)
+    if p1 ~= "peer-local" or p2 ~= "peer-remote"
+        or s1 ~= "score_snapshot" or s2 ~= "score_snapshot" then
+        return string.format("score snapshot resolver wrong: local=%s/%s remote=%s/%s",
+            tostring(p1), tostring(s1), tostring(p2), tostring(s2))
+    end
+    local wrong = mod._cos_score_peer_for_profile(1, 3, fixture)
+    if wrong ~= nil then return "score resolver ignored career and cross-matched a row" end
 end)
 
 -- #264: reconcile must treat a missing store entry as TERMINAL ("no-entry"),
