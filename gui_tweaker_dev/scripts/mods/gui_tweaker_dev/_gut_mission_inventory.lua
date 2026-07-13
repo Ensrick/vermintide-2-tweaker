@@ -225,7 +225,8 @@ end)
 -- in-game test verifies. cim still owns modded CRAFTING (reroll/salvage) -- those paths are
 -- driven by cim's own window-lifecycle hooks and are simply absent without cim.
 --
--- Pre-flight: gut hooks HeroWindowItemCustomization NOWHERE else (grep-verified before add).
+-- Pre-flight: besides the #539 _get_item ItemId-normalize hook added below, gut hooks
+-- HeroWindowItemCustomization NOWHERE else (grep-verified).
 local _CUSTOMIZE_MISSION_SAFE_ENV = "environment/ui_hdr"  -- mission-safe shading env (matches cim's _FORGE_MISSION_SAFE_ENV)
 
 local function _gut_mount_fix_active()
@@ -287,6 +288,54 @@ mod:hook("HeroWindowItemCustomization", "_register_object_sets", function(func, 
         level_name  = nil,
     }
     self:_show_object_set(nil, true)
+end)
+
+-- ============================================================
+-- (#539) Mid-mission Customize crash: normalize a nil ItemId on the resolved item
+-- ============================================================
+-- Opening the gear-icon Customize screen (HeroWindowItemCustomization -- illusion swap +
+-- reroll) mid-mission on a modded-realm loadout weapon hard-crashed at vanilla
+-- _setup_illusions:
+--   hero_window_item_customization.lua: bad argument #1 to 'gsub' (string expected,
+--   got nil)   -- string.gsub(item.ItemId, "^vs_", "") (decompile :1527)
+-- The modded-realm mission loadout item resolved for this window carries no ItemId (the
+-- keep item does, which is why the keep Customize screen works fine -- owner report). In
+-- that whole window item.ItemId is read in EXACTLY ONE place (grep 2026-07-13: only
+-- :1527, inside _setup_illusions on the overview/illusion substate; the property-reroll,
+-- trait-reroll and upgrade substates never read it), and every substate resolves its
+-- item through the single choke point _get_item (:163/:304/:727/:1150/:1193 and
+-- _state_setup_overview :1660). So filling a nil ItemId at _get_item fixes the crash for
+-- every substate at once AND covers cosmetics_tweaker's _setup_illusions hook -- it
+-- delegates to vanilla FIRST (cosmetics_tweaker.lua:2293) with this same item table, so
+-- by the time it runs the item is already normalized.
+--
+-- ItemId is canonically the item's master-list key (the value the gsub strips a leading
+-- "vs_" off), so filling it from item.key is a faithful repair, not a fabrication. The
+-- fill is a no-op whenever ItemId is already present (every keep item), so the keep path
+-- stays byte-unchanged with no is_in_inn gate needed. gut owns the ONLY mid-mission entry
+-- into this window (the [gut:84] cog gate + the [gut:80] Crafting-tab bench path), so the
+-- fix belongs here; cosmetics_tweaker needs no change.
+-- Pre-flight: NO mod hooks HeroWindowItemCustomization._get_item (grep-verified
+-- 2026-07-13 across cim_dev / cosmetics_tweaker / gut_dev / gt_dev -- they hook other
+-- methods of this class only), so this is the sole hook on the pair.
+
+-- Parameterized + exposed so /gut_regression_test can drive it synthetically (io-safe).
+function mod._gut539_normalize_item_id(item)
+    if type(item) ~= "table" then return false end
+    if item.ItemId ~= nil then return false end
+    item.ItemId = item.key or (item.data and item.data.key) or ""
+    return true
+end
+
+mod:hook("HeroWindowItemCustomization", "_get_item", function(func, self, backend_id)
+    local item = func(self, backend_id)
+    if mod._gut539_normalize_item_id(item) and not self._gut539_warned then
+        self._gut539_warned = true
+        -- printf (NOT mod:debug) so the in-game test produces evidence with mod logging OFF.
+        printf("[gut:539] filled nil ItemId on mid-mission Customize item (key=%s bid=%s) -- averted _setup_illusions gsub crash",
+            tostring(item and (item.key or (item.data and item.data.key)) or "?"), tostring(backend_id))
+    end
+    return item
 end)
 
 -- ============================================================

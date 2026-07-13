@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.227-dev"
+local MOD_VERSION = "0.2.228-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2554,6 +2554,35 @@ _rt_register("respawn_timer_ingamehud_draw_path", function()
     end
     if not txt:find("font_size%s*=%s*72") then  -- Lua pattern: whitespace-robust
         return "respawn timer regressed: teammate font base is no longer 72 (renders tiny) -- #285"
+    end
+end)
+
+-- (#539) Mid-mission Customize crash guard: the _get_item ItemId-normalizer must stay
+-- wired and behavioral. Vanilla HeroWindowItemCustomization._setup_illusions does
+-- string.gsub(item.ItemId, "^vs_", "") -- the sole item.ItemId read in that window -- and
+-- a modded-realm mission loadout item carries no ItemId, so without the normalizer the
+-- gear-icon Customize screen hard-crashes mid-mission. io-safe: driven synthetically, no
+-- source read (the normalizer is a pure function the module publishes on mod.).
+_rt_register("customize_item_id_normalized_539", function()
+    if type(mod._gut539_normalize_item_id) ~= "function" then
+        return "_gut539_normalize_item_id missing (#539 fix stripped)"
+    end
+    -- A nil-ItemId item gets ItemId filled from its key.
+    local a = { key = "wh_1h_axe" }
+    local filled = mod._gut539_normalize_item_id(a)
+    if not (filled and a.ItemId == "wh_1h_axe") then
+        return "normalizer did not fill nil ItemId from key (got ItemId=" .. tostring(a.ItemId) .. ")"
+    end
+    -- An item that already carries an ItemId is left untouched (no clobber).
+    local b = { key = "x", ItemId = "vs_es_1h_sword" }
+    local touched = mod._gut539_normalize_item_id(b)
+    if touched or b.ItemId ~= "vs_es_1h_sword" then
+        return "normalizer mutated an item that already had an ItemId"
+    end
+    -- Rename guard: the vanilla choke point the hook wraps must still exist.
+    local w = rawget(_G, "HeroWindowItemCustomization")
+    if type(w) ~= "table" or type(w._get_item) ~= "function" then
+        return "HeroWindowItemCustomization._get_item vanished (hook orphaned)"
     end
 end)
 
