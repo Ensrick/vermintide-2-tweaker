@@ -32,6 +32,7 @@ there is no copied implementation.
 - `run.lua`: explicit suite manifest and process entry point.
 - `harness.lua`: dependency-free assertions and reporting.
 - `tests/test_attack_labeler.lua`: production-helper coverage.
+- `tests/test_mod_tweaker_search.lua`: #559 search expansion snapshot/restore/commit coverage.
 - `vendor/lua-5.1.5-win64/`: pinned Windows interpreter and provenance.
 
 Add a test file to the manifest in `run.lua`. The explicit list keeps ordering

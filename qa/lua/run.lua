@@ -42,6 +42,7 @@ local suites = {
     "test_attack_labeler",
     "test_mod_tweaker_transaction",
     "test_et_settings_queue",
+    "test_mod_tweaker_search",
 }
 
 for _, suite in ipairs(suites) do

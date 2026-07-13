@@ -12,6 +12,7 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 
 local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
 local transactions = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction")
+local Search = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_search")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -124,6 +125,8 @@ function ModTweakerView:init(ingame_ui_context)
     self._search_str = ""
     self._search_focused = false
     self._search_caret_t = 0
+    self._search_tx = nil
+    self._search_rebuild_pending = nil
 end
 
 -- ---------------------------------------------------------------
@@ -1141,7 +1144,7 @@ function ModTweakerView:_auto_collapse_apply(gid, now_expanded)
     end
 end
 
-function ModTweakerView:_build_node_row(w, category, base_offset, depth)
+function ModTweakerView:_build_node_row(w, category, base_offset, depth, display_expanded)
     depth = depth or 0
     local setting_id = _nf(w, "setting_id")
     local wtype = _nf(w, "type")
@@ -1162,9 +1165,13 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth)
     elseif wtype == "group" then
         -- Collapsible group header (default COLLAPSED). The caller handles expand state.
         local gid = self:_group_key(w, category)
-        local expanded = self._expanded[gid] and true or false
+        local expanded = display_expanded
+        if expanded == nil then expanded = self._expanded[gid] and true or false end
         local ok, r = pcall(defs.create_group_header, label, expanded, base_offset, depth)
-        if ok and r then row = r; row._is_group = true; row._group_key = gid else err = r end
+        if ok and r then
+            row = r; row._is_group = true; row._group_key = gid
+            row._display_expanded = display_expanded
+        else err = r end
     elseif wtype == "checkbox" or wtype == "boolean" then
         local ok, r = pcall(defs.create_checkbox, label, base_offset, depth)
         if ok and r then
@@ -1342,6 +1349,70 @@ function ModTweakerView:_search_active()
     return s:lower()
 end
 
+function ModTweakerView:_search_restore()
+    if not self._search_tx then return false end
+    Search.restore(self._expanded, self._search_tx)
+    self._search_tx = nil
+    self._search_rebuild_pending = nil
+    return true
+end
+
+function ModTweakerView:_search_clear_restore()
+    local changed = self:_search_restore()
+    self._search_str = ""
+    self._search_focused = false
+    return changed
+end
+
+function ModTweakerView:_search_commit_result(row)
+    if not self._search_tx then return false end
+    Search.commit(self._expanded, self._search_tx, row and row._search_ancestors,
+        self:_auto_collapse_on())
+    self._search_tx = nil
+    self._search_str = ""
+    self._search_focused = false
+    -- The result widget must survive long enough to finish its own release/drag/capture action.
+    -- update() rebuilds once no modal interaction owns that row, then swallows stale releases.
+    self._search_rebuild_pending = true
+    return true
+end
+
+local function _hot(h)
+    return h and (h.is_hover or h.is_held or h.on_release or h.on_left_release)
+end
+
+local function _activated(h)
+    return h and (h.is_held or h.on_release or h.on_left_release)
+end
+
+function ModTweakerView:_search_pointer_over_result()
+    for i = 1, #(self._rows or {}) do
+        local row = self._rows[i]
+        local c = row and row.content
+        if row and not row._readonly and row._middle_visible ~= false and c
+           and (_hot(c.hotspot) or _hot(c.row_hs) or _hot(c.dec) or _hot(c.inc)
+                or _hot(c.track_hs) or _hot(c.value_hs)) then
+            return true
+        end
+    end
+    return false
+end
+
+function ModTweakerView:_search_pointer_over_chrome()
+    local function widget_hot(widget, hotspot)
+        local c = widget and widget.content
+        return c and _hot(c[hotspot])
+    end
+    if widget_hot(self._exit, "button_hotspot") or widget_hot(self._apply, "button_hotspot")
+       or widget_hot(self._reset, "button_hotspot") or widget_hot(self._scrollbar, "hotspot") then
+        return true
+    end
+    for i = 1, #(self._tabs or {}) do
+        if widget_hot(self._tabs[i], "hotspot") then return true end
+    end
+    return false
+end
+
 function ModTweakerView:_build_rows(category)
     self._rows = {}
     -- Any in-progress type-edit is abandoned on a rebuild (tab switch / drill / collapse):
@@ -1409,6 +1480,13 @@ function ModTweakerView:_build_rows(category)
     -- expanded and visible. Ancestors/descendants are found from the parallel depth array.
     local term = self:_search_active()
     if term then
+        if not self._search_tx or self._search_tx.category ~= category then
+            if self._search_tx then Search.restore(self._expanded, self._search_tx) end
+            local group_keys = Search.group_keys(nodes,
+                function(node) return _nf(node, "type") end,
+                function(node) return self:_group_key(node, category) end)
+            self._search_tx = Search.begin(self._expanded, group_keys, category)
+        end
         self._drill = nil                       -- a search supersedes any drill-down
         local keep = {}
         for i = 1, #nodes do
@@ -1442,10 +1520,14 @@ function ModTweakerView:_build_rows(category)
         local shown = 0
         for i = 1, #nodes do
             if keep[i] and _nf(nodes[i], "type") ~= "header" then
-                if _nf(nodes[i], "type") == "group" then
-                    self._expanded[self:_group_key(nodes[i], category)] = true
+                local is_group = _nf(nodes[i], "type") == "group"
+                local row, err, wtype, setting_id = self:_build_node_row(
+                    nodes[i], category, base_offset, depths[i], is_group and true or nil)
+                if row then
+                    row._search_ancestors = Search.ancestors(nodes, depths, i,
+                        function(node) return _nf(node, "type") end,
+                        function(node) return self:_group_key(node, category) end)
                 end
-                local row, err, wtype, setting_id = self:_build_node_row(nodes[i], category, base_offset, depths[i])
                 self:_append_row(row, err, wtype, category, setting_id, base_offset, false)
                 if row then shown = shown + 1 end
             end
@@ -1459,6 +1541,13 @@ function ModTweakerView:_build_rows(category)
         self:_recompute_scroll_bounds()
         self._scroll_y = math.clamp(self._scroll_y or 0, 0, self._max_scroll)
         return
+    end
+
+    -- Backspace-to-empty and programmatic clears end the transaction exactly like Escape.
+    if self._search_tx then
+        Search.restore(self._expanded, self._search_tx)
+        self._search_tx = nil
+        self._search_rebuild_pending = nil
     end
 
     -- DRILLED-IN advanced view: render only Back + parent + that parent's children.
@@ -2007,6 +2096,7 @@ function ModTweakerView:on_enter(params)
     self._active = true
     self._draw_frames = 0
     self._drill = nil   -- always open on the normal list, never a stale drill from a prior open
+    self:_search_clear_restore() -- (#559) never carry a search transaction across menu opens
     self._search_str = ""       -- (#497) every open starts unfiltered, on the current tab
     self._search_focused = false
     -- DEFENSIVE re-pin LA's atlas + instrument on every open (site ii). The Mod
@@ -2034,6 +2124,7 @@ function ModTweakerView:on_enter(params)
 end
 
 function ModTweakerView:on_exit()
+    self:_search_clear_restore() -- (#559) menu exit cancels presentation-only expansion state
     self._active = false
     self.exiting = nil
     -- (Fix 3, v0.2.151-dev) Cancel a dangling reset-confirm popup so it can't outlive the menu.
@@ -2069,6 +2160,7 @@ function ModTweakerView:on_exit()
 end
 
 function ModTweakerView:exit(return_to_game)
+    self:_search_clear_restore() -- (#559) covers X, final Escape, and external exit routing
     self.exiting = true
     -- (v0.2.82-dev — ITEM 1) Native menu-close feedback. exit() is the single funnel
     -- for leaving (ESC, the X button, and return-to-game all route here), so one
@@ -2136,6 +2228,24 @@ function ModTweakerView:update(dt, t)
         return
     end
 
+
+    -- (#559) A clicked search result clears the query immediately, but its old row widget must
+    -- survive until a dropdown/keybind/edit/drag finishes. Rebuild only when no modal owner remains;
+    -- then block the old shared-node release latch until the user's next fresh press.
+    if self._search_rebuild_pending and not self._open_dropdown and not self._editing_row
+       and not self._capturing_keybind then
+        local dragging = false
+        for i = 1, #(self._rows or {}) do
+            if self._rows[i]._dragging then dragging = true; break end
+        end
+        if not dragging then
+            self._search_rebuild_pending = nil
+            self._dd_block_until_press = true
+            self:_build_rows(self._categories[self._selected])
+            return
+        end
+    end
+
     if input_service:get("toggle_menu", true) or input_service:get("back", true) then
         -- (v0.2.69-dev) ESC priority while a DROPDOWN POPUP is open: the FIRST ESC closes
         -- the popup (no commit) instead of closing the menu / leaving the drill.
@@ -2174,8 +2284,7 @@ function ModTweakerView:update(dt, t)
         -- (no filter, nothing else pending) closes the menu. Ordered after edit/keybind/drill so
         -- ESC first cancels those, matching the "back out one level per ESC" model.
         if self._search_focused or (self._search_str and self._search_str ~= "") then
-            self._search_focused = false
-            self._search_str = ""
+            self:_search_clear_restore()
             self._scroll_y = 0
             _play_click()
             self:_build_rows(self._categories[self._selected])
@@ -2687,9 +2796,10 @@ function ModTweakerView:_handle_input(input_service)
     if Mouse.pressed(0) then self._dd_block_until_press = false end
     if self._dd_block_until_press then return end
 
-    -- (#497) SEARCH BOX focus + typing. A left-press ON the box focuses it (committing any
-    -- active numeric edit first); a left-press anywhere ELSE drops focus (the filter stays
-    -- applied). While focused, printable keystrokes edit the query and the list re-filters live;
+    -- (#497/#559) SEARCH BOX focus + typing. A left-press ON the box focuses it (committing any
+    -- active numeric edit first). A press on a result leaves the transaction alive until that
+    -- result acts; a neutral blank-area press clears search and restores the snapshot. While
+    -- focused, printable keystrokes edit the query and the list re-filters live;
     -- chat input is blocked each frame so keys/Enter never leak to game chat (the numeric editor
     -- needs the same lever, ChatManager.block_chat_input_for_one_frame -- the modal device block
     -- does not cover the independent chat_input service), and Enter drops focus keeping the
@@ -2709,6 +2819,14 @@ function ModTweakerView:_handle_input(input_service)
                 end
             else
                 self._search_focused = false
+                if self._search_tx and not self:_search_pointer_over_result()
+                   and not self:_search_pointer_over_chrome() then
+                    self:_search_clear_restore()
+                    self._scroll_y = 0
+                    self._dd_block_until_press = true
+                    self:_build_rows(self._categories[self._selected])
+                    return
+                end
             end
         end
         if self._search_focused then
@@ -2793,6 +2911,7 @@ function ModTweakerView:_handle_input(input_service)
     do
         local ah = self._apply and self._apply.content.button_hotspot
         if ah and (ah.on_release or ah.on_left_release) and not self._apply.content.disabled then
+            self:_search_clear_restore()
             self:apply_pending(self._categories[self._selected])
             return
         end
@@ -2804,6 +2923,11 @@ function ModTweakerView:_handle_input(input_service)
     do
         local rh = self._reset and self._reset.content.button_hotspot
         if rh and (rh.on_release or rh.on_left_release) then
+            local search_cleared = self:_search_clear_restore()
+            if search_cleared then
+                self._scroll_y = 0
+                self:_build_rows(self._categories[self._selected])
+            end
             self:_queue_reset_popup()
             return
         end
@@ -2819,6 +2943,7 @@ function ModTweakerView:_handle_input(input_service)
             _play_click()
             mod:debug("[mt:dump] input: tab[%d] clicked (was %d, drill=%s)", i, self._selected or -1, tostring(self._drill ~= nil))
             if self._more_tab_index and i == self._more_tab_index then
+                self:_search_clear_restore()
                 self._drill = nil
                 self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
                 self._page = ((self._page or 0) + 1) % math.max(1, self._page_count or 1)
@@ -2827,6 +2952,7 @@ function ModTweakerView:_handle_input(input_service)
                 self:_rebuild()
                 return
             elseif (i ~= self._selected or self._drill) and self._categories[i] then
+                self:_search_clear_restore()
                 self._drill = nil
                 self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
                 self._selected = i
@@ -2881,6 +3007,21 @@ function ModTweakerView:_handle_input(input_service)
         if not row._readonly and row._middle_visible ~= false
            and not (self._slider_dragging and row ~= self._slider_dragging) then
             local c = row.content
+            -- (#559) Commit navigation only for a real result interaction. The old filtered row
+            -- stays alive to perform the control action; update() rebuilds once it is safe.
+            if self._search_tx and row._search_ancestors then
+                local activated = _activated(c.row_hs)
+                    or (row._is_group and _activated(c.hotspot))
+                    or ((row._wtype == "checkbox" or row._wtype == "boolean")
+                        and (_activated(c.hotspot) or _activated(c.dec) or _activated(c.inc)))
+                    or (row._wtype == "dropdown" and _activated(c.hotspot))
+                    or (row._wtype == "keybind" and (_activated(c.hotspot)
+                        or (c.hotspot and c.hotspot.is_hover and Mouse.released(1))))
+                    or ((row._wtype == "slider" or row._wtype == "numeric")
+                        and (_activated(c.value_hs) or _activated(c.track_hs)
+                            or _activated(c.dec) or _activated(c.inc)))
+                if activated then self:_search_commit_result(row) end
+            end
             if row._is_gear then
                 -- GEAR click: drill INTO this setting's advanced sub-options. Captures
                 -- the parent setting_id + label, resets scroll, and rebuilds the list as
@@ -2900,6 +3041,7 @@ function ModTweakerView:_handle_input(input_service)
                     self._drill = nil
                     self._scroll_y = 0
                     self:_build_rows(self._categories[self._selected])
+                    self._search_rebuild_pending = nil
                     return
                 end
             elseif row._is_group then
@@ -2915,6 +3057,7 @@ function ModTweakerView:_handle_input(input_service)
                         self:_auto_collapse_apply(gid, now_expanded)
                     end
                     self:_build_rows(self._categories[self._selected])
+                    self._search_rebuild_pending = nil
                     return
                 end
             elseif row._wtype == "checkbox" or row._wtype == "boolean" then
@@ -3171,7 +3314,8 @@ function ModTweakerView:_apply_row_hover(row)
     -- expanded state (self._expanded[row._group_key] — the same source the row toggle uses)
     -- into content.expanded so create_group_header's glow driver sees it each frame.
     if row._is_group then
-        local exp = self._expanded[row._group_key] and true or false
+        local exp = row._display_expanded
+        if exp == nil then exp = self._expanded[row._group_key] and true or false end
         c.expanded = exp
         if exp then hovered = true end
     end

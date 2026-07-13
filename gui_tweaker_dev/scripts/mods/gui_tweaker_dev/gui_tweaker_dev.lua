@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.236-dev"
+local MOD_VERSION = "0.2.237-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1754,6 +1754,37 @@ _rt_register("mod_tweaker_api_present", function()
     if not MT:is_registered(probe_id) then return "is_registered() false after register" end
     MT:set(probe_id, "probe_flag", true)
     if MT:get(probe_id, "probe_flag") ~= true then return "get() did not reflect set()" end
+end)
+
+-- (#559) Search expansion is a transaction, not a write-through rendering shortcut. Exercise the
+-- production pure helper in the live Lua 5.1 runtime and assert the view exposes every lifecycle
+-- seam that begins, restores, and commits the transaction.
+_rt_register("issue559_search_expansion_transaction", function()
+    local ok_s, Search = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_search")
+    if not ok_s or type(Search) ~= "table" then return "search transaction module unavailable" end
+    for _, name in ipairs({ "begin", "restore", "commit", "group_keys", "ancestors" }) do
+        if type(Search[name]) ~= "function" then return "Search." .. name .. " missing" end
+    end
+
+    local expanded = { old_outer = true, old_inner = true, foreign = true }
+    local tx = Search.begin(expanded, { "old_outer", "old_inner", "result_outer" }, "probe")
+    Search.commit(expanded, tx, { "result_outer" }, true)
+    if expanded.old_outer or expanded.old_inner or not expanded.result_outer or not expanded.foreign then
+        return "auto-collapse commit did not isolate the result ancestor chain"
+    end
+
+    expanded = { old_outer = true, old_inner = true, foreign = true }
+    tx = Search.begin(expanded, { "old_outer", "old_inner", "result_outer" }, "probe")
+    Search.commit(expanded, tx, { "result_outer" }, false)
+    if not expanded.old_outer or not expanded.old_inner or not expanded.result_outer or not expanded.foreign then
+        return "non-auto-collapse commit did not preserve snapshot plus result ancestors"
+    end
+
+    local ok_v, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+    if not ok_v or type(View) ~= "table" then return "ModTweakerView unavailable" end
+    for _, name in ipairs({ "_search_restore", "_search_clear_restore", "_search_commit_result" }) do
+        if type(View[name]) ~= "function" then return "ModTweakerView:" .. name .. " missing" end
+    end
 end)
 
 -- (#446) Mutually-exclusive group API + enforcement wiring. Runtime-only (no source

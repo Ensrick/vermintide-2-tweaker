@@ -189,6 +189,22 @@ The implementation lives in `_mod_tweaker_transaction.lua`; issue #560 is the
 Enemy Tweaker crash precedent. Future profiles/imports must reuse this transaction
 instead of inventing another bulk-write loop.
 
+## Per-tab search expansion transaction (#497 / #559)
+
+The fixed search bar filters only the current tab. Matching groups and the ancestors required to
+show a nested match are rendered open, but search presentation never writes persistent collapsible
+state. The first non-empty query snapshots that tab's open groups.
+
+- Clear, Escape, a neutral click outside the search/results, tab switch, and menu exit cancel the
+  transaction and restore the exact snapshot. They never choose the first/top result implicitly.
+- Clicking a result commits navigation and then performs the original control action. With
+  auto-collapse enabled, only the result's ancestor group chain remains open; a top-level result has
+  no ancestors. With auto-collapse disabled, the snapshot remains open and required ancestors are
+  added.
+- Dropdown, keybind capture, numeric editing, and slider drag keep their clicked row alive until the
+  modal interaction completes. The normal list rebuild then blocks the old shared-node release latch
+  until a fresh click.
+
 ## Regression guard
 
 `_mod_tweaker_view.lua` / the gut regression suite must assert: no third-party (non-author)

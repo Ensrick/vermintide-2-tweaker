@@ -5,6 +5,29 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.237-dev (2026-07-13) -- #559 search expansion transaction [untested]
+
+- Fixed search permanently leaving every matching collapsible open. The first non-empty query now
+  snapshots the selected tab's expansion state; filtered rows look expanded through a render-only
+  flag and never write `self._expanded`.
+- Clearing the query, pressing Escape, clicking neutral space, switching tabs, or leaving the menu
+  restores that snapshot exactly. There is deliberately no implicit "top result" selection.
+- Clicking a real result exits search while preserving the clicked checkbox/dropdown/slider/keybind
+  action. With auto-collapse ON, the tab commits only the result's ancestor group chain (a top-level
+  result commits no group). With auto-collapse OFF, the old snapshot is restored and required
+  ancestors are added without collapsing unrelated branches. Deferred rebuilds keep dropdown,
+  keybind, numeric-edit, and slider-drag row references alive until their interaction finishes, then
+  swallow the shared-node release latch before accepting another click.
+- Added pure Lua 5.1 tests for restore/ON/OFF/top-level/nested cases and runtime regression
+  `issue559_search_expansion_transaction` for the production transaction and view lifecycle seams.
+- Rebases on #560's bounded bulk-setting transaction and preserves both transaction modules in the
+  standalone Mod Tweaker view; #560's dormant keep-view twin remains unchanged.
+
+**Verify in game:** open two branches, search for a nested checkbox, then test Escape, blank-area
+click, result click, tab switch, and X/menu exit with auto-collapse ON and OFF. Confirm neutral exits
+restore the original branches, result clicks still change the control, ON leaves only its ancestor
+path, OFF retains the old branches plus that path, and a top-level result leaves no group selected.
+
 ## 0.2.236-dev (2026-07-13) -- #560 bound bulk settings commits [verify-fix]
 
 - Added an opt-in Mod Tweaker transaction contract. A setting owner that exposes
