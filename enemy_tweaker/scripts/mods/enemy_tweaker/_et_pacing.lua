@@ -339,7 +339,7 @@ rt_register("spawn_pacing_hook_targets_present", function()
     -- time so spawn-pacing sliders never silently no-op).
     local missing = {}
     local CD = rawget(_G, "ConflictDirector")
-    if not CD then return "ConflictDirector not loaded (run in keep)" end
+    if not CD then return "ConflictDirector boot global missing (engine changed)" end
     if type(CD.update) ~= "function" then missing[#missing+1] = "ConflictDirector.update" end
     if type(CD.update_horde_pacing) ~= "function" then missing[#missing+1] = "ConflictDirector.update_horde_pacing" end
     if type(CD.horde_killed) ~= "function" then missing[#missing+1] = "ConflictDirector.horde_killed" end
@@ -352,11 +352,46 @@ rt_register("spawn_pacing_hook_targets_present", function()
     -- These two field names are what max_grunts_override and horde_grunt_push_threshold mutate.
     if RS and type(RS.max_grunts) ~= "number" then missing[#missing+1] = "RecycleSettings.max_grunts (field type changed)" end
     if RS and type(RS.push_horde_if_num_alive_grunts_above) ~= "number" then missing[#missing+1] = "RecycleSettings.push_horde_if_num_alive_grunts_above (field type changed)" end
+    -- #512: the pacing FIELD paths are asserted against the STATIC
+    -- PacingSettings.default table (boot global, conflict_settings.lua:2955),
+    -- context-free and identical in keep and mission. The runtime CurrentPacing
+    -- is re-cloned from the CURRENT director's pacing on every level
+    -- (conflict_director.lua:878); at the keep that director's pacing is
+    -- PacingSettings.disabled (conflict_settings.lua:3603-3628), which
+    -- legitimately has NO mini_patrol block, so the pre-0.7.36 assert on
+    -- CurrentPacing.mini_patrol false-FAILed every keep run. Every mission
+    -- clone is table.clone'd FROM a static PacingSettings entry, so a rename /
+    -- removal of the path (the regression this check locks - our
+    -- update_mini_patrol hook mutates mini_patrol.only_spawn_below_intensity,
+    -- conflict_settings.lua:3028) still trips the static assert everywhere.
+    local PS = rawget(_G, "PacingSettings")
+    if type(PS) ~= "table" or type(PS.default) ~= "table" then
+        missing[#missing+1] = "PacingSettings.default table (renamed/removed)"
+    else
+        if type(PS.default.horde_frequency) ~= "table" then
+            missing[#missing+1] = "PacingSettings.default.horde_frequency (field type changed)"
+        end
+        if type(PS.default.mini_patrol) ~= "table" or type(PS.default.mini_patrol.only_spawn_below_intensity) ~= "number" then
+            missing[#missing+1] = "PacingSettings.default.mini_patrol.only_spawn_below_intensity (path changed)"
+        end
+    end
+    -- Runtime clone, asserted only where the CURRENT context guarantees it.
+    -- CurrentPacing always EXISTS: false at boot (conflict_settings.lua:5539),
+    -- a table after any director refresh (keep included) - rawget nil means
+    -- the global itself was renamed. horde_frequency is present in every
+    -- PacingSettings entry INCLUDING disabled (conflict_settings.lua:3615);
+    -- mini_patrol only exists when pacing is enabled, so that assert is gated
+    -- on CP.disabled being falsy (mission director) - vanilla itself couples
+    -- enabled pacing to mini_patrol via the unguarded read at
+    -- conflict_director.lua:1379, so a FAIL inside that gate is a true positive.
     local CP = rawget(_G, "CurrentPacing")
-    if type(CP) ~= "table" then missing[#missing+1] = "CurrentPacing table" end
-    if CP and type(CP.horde_frequency) ~= "table" then missing[#missing+1] = "CurrentPacing.horde_frequency (field type changed)" end
-    if CP and (type(CP.mini_patrol) ~= "table" or type(CP.mini_patrol.only_spawn_below_intensity) ~= "number") then
-        missing[#missing+1] = "CurrentPacing.mini_patrol.only_spawn_below_intensity (path changed)"
+    if CP == nil then
+        missing[#missing+1] = "CurrentPacing global (renamed/removed)"
+    elseif type(CP) == "table" then
+        if type(CP.horde_frequency) ~= "table" then missing[#missing+1] = "CurrentPacing.horde_frequency (field type changed)" end
+        if not CP.disabled and (type(CP.mini_patrol) ~= "table" or type(CP.mini_patrol.only_spawn_below_intensity) ~= "number") then
+            missing[#missing+1] = "CurrentPacing.mini_patrol.only_spawn_below_intensity (path changed)"
+        end
     end
     if #missing > 0 then return "spawn-pacing surface missing: " .. table.concat(missing, ", ") end
 end)

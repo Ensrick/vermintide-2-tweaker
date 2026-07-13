@@ -1,5 +1,34 @@
 # Enemy Tweaker Changelog
 
+## 0.7.36-dev (2026-07-13): #512 fix spawn_pacing_hook_targets_present keep false-FAIL [untested]
+
+`/et_regression_test` run at the KEEP reported FAIL:
+`spawn_pacing_hook_targets_present - CurrentPacing.mini_patrol.only_spawn_below_intensity
+(path changed)` even though the path never changed. Root cause: the check
+asserted the RUNTIME `CurrentPacing` clone, which is rebuilt from the CURRENT
+director's pacing on every level (conflict_director.lua:878); the keep's
+director pacing is `PacingSettings.disabled` (conflict_settings.lua:3603-3628),
+which legitimately has no `mini_patrol` block. Pre-existing; surfaced during
+issue 479 work. Sibling of the issue 511 suite-lies class.
+
+**Rework (no hooks touched, suite-only):** the pacing field paths are now
+asserted against the STATIC `PacingSettings.default` boot global
+(conflict_settings.lua:2955 / :3028), which is context-free - identical at
+keep, mission, and load time - and is the exact table every mission
+`CurrentPacing` is `table.clone`'d from, so the regression the check locks
+(engine rename/removal of `mini_patrol.only_spawn_below_intensity` or
+`horde_frequency`, which would make the spawn-pacing sliders silently no-op)
+still trips it everywhere. Runtime `CurrentPacing` asserts are kept but
+context-gated: rawget nil = global renamed (FAIL), `false` = boot placeholder
+(conflict_settings.lua:5539, fine), table = assert `horde_frequency` always
+(present in every pacing entry including disabled) and `mini_patrol` only when
+`CP.disabled` is falsy - vanilla couples enabled pacing to `mini_patrol` via
+the unguarded read at conflict_director.lua:1379, so a FAIL inside that gate
+is a true regression, never keep timing. Also reworded the misleading
+"ConflictDirector not loaded (run in keep)" early-return (it is a boot global).
+
+Fixes #512.
+
 ## 0.7.35-dev (2026-07-12): #531 grudge-mark behavioral knobs, tranche 1 (Skarrik Berserk / Bodvarr Crippling) [untested]
 
 First tranche of issue 531 (the 5 behavioral boss knobs deferred from #450): the
