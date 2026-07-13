@@ -106,10 +106,22 @@ resolved after main, most wrapped in `if <Class> then`.
 
 ### Surface 2c - Debug draw + auto-dump probes (owner: `docs/engine/08`, `/09`; `_gt_debug_highlights.lua`, `_gt_debug_probes.lua`)
 
-`_gt_debug_highlights.lua` and `_gt_saved_positions.lua` / `_gt_item_spawner.lua`
-register NO class hooks - they drive off gt's shared `mod._gt_register_update`
-tick or chat commands (see subsystem note 2). The probe hooks below are
-observation-only.
+`_gt_debug_highlights.lua` (#302) draws its overlay from a `hook_safe("IngameUI",
+"update")` (grep-verified singleton; the existing `IngameHud.update` hook is
+`_gt_melee_warning`'s). It does NOT use `LineObject`: a raw `LineObject.dispatch`
+into `level_world` renders NOTHING in retail (Fatshark's release drawers are the
+no-op `DebugDrawerRelease`, `debug_manager.lua:103` + `debug_drawer_release.lua`;
+`Debug.active = BUILD ~= "release"`, `debug.lua:9`) - proven by
+`console-2026-07-12-22.03.01` dispatching 48-60 boxes/frame with nothing on
+screen. Instead it renders the way the shipped HUD does: project each world point
+with `Camera.world_to_screen` (front-dot guarded, `world_marker_ui.lua:359`) and
+draw 2D lines on a `World.create_screen_gui` (gw_fonts, can_get-guarded #293/#295)
+with `ScriptGUI.hud_line` (`script_gui.lua:45`). Box = 8 projected `Unit.box`
+corners + 12 edges; aggro = projected ground circle; head = camera-facing square.
+Screen gui released under the §32 world-identity gate (`live == w`) via
+`World.destroy_gui`. `_gt_saved_positions.lua` / `_gt_item_spawner.lua` register
+NO class hooks - they drive off gt's shared `mod._gt_register_update` tick or chat
+commands (see subsystem note 2). The probe hooks below are observation-only.
 
 `_gt_bot_teleport_lab.lua` adds one mod-to-mod RPC channel for debug-draw
 sharing (issue 534): `gt_draw_leash` [rpc], schema-tagged `mod.GT_DRAW_RPC_SCHEMA`

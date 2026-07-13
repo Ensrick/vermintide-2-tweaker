@@ -354,7 +354,7 @@ return {
     -- only; all children default OFF. Titles carry [untested] per LOCALIZATION_STANDARD
     -- section 13; tooltips name the color and note the two known approximations.
     gt_debug_highlights = { en = "[verify-fix] Debug Highlights" },
-    gt_debug_highlights_tooltip = { en = "Master toggle for in-world debug wireframes. Turn on a category below. Wireframe only this build; dev build only, works on host and client." },
+    gt_debug_highlights_tooltip = { en = "Master toggle for in-world debug wireframes, drawn as screen-projected outlines over the 3D view. Turn on a category below. Dev build only; works in the keep and in a mission, on host and client." },
 
     gt_dh_interactables = { en = "[untested] Interactables" },
     gt_dh_interactables_tooltip = { en = "Yellow box around interactable objects: doors, chests, levers, anything used with the interact key." },

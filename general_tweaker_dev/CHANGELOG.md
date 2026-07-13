@@ -1,5 +1,40 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.216-dev (2026-07-13) -- #302 Debug Highlights: rewrite renderer to screen projection (the reason it never rendered) [verify-fix]
+
+The user reported (issue #302, 2026-07-12) that the Debug Highlights overlay "has never worked in any way whatsoever" despite four shipped phases. Empirical root cause, from the user's own logs: the draw loop was NOT the problem. `console-2026-07-12-22.03.01` shows `[gt_dev:DH] drawn ... interact=48..60 players=1` once per second in-game -- 48 to 60 wireframe boxes were built and `LineObject.dispatch`ed into `level_world` every frame -- yet nothing appeared. That is direct proof that **a raw `LineObject.dispatch` does not visibly render in retail Vermintide 2.**
+
+### Why LineObject renders nothing in retail (cited)
+- Fatshark stripped Lua debug drawing from release builds. The vanilla drawer wrappers resolve to `DebugDrawerRelease` in release (`debug_manager.lua:103`), whose every method -- line/box/sphere/circle AND `update` (which is what dispatches) -- is a bare `return` no-op (`debug_drawer_release.lua`). `Debug.active = BUILD ~= "release"` (`debug.lua:9`), so `Debug.update` never dispatches either. The debug-line render pass is dead for retail mods; calling the native `LineObject.*` directly (as we did) submits into nothing.
+- Every overlay that DOES render in retail (floating damage numbers, HUD world markers, objective/ping icons) is a **screen-space gui projected with `Camera.world_to_screen`**, never a LineObject (`damage_numbers_ui.lua:410`, `world_marker_ui.lua:618-624`, `floating_icon_ui.lua:117-131`).
+- Timing was not the cause: `Managers.mod:update` runs at the top of the frame, before the world render (`boot.lua:748-772`), so the dispatch was early enough -- it just had no render pass to land in.
+
+### Fix: render exactly the way the shipped HUD does
+`_gt_debug_highlights.lua` no longer touches `LineObject`. It now:
+- Gets the local player's level-world camera (`Managers.camera:has_viewport("player_1")` -> `ScriptWorld.viewport` -> `ScriptViewport.camera`, per `floating_icon_ui.lua:117-131`).
+- Projects each world point with `Camera.world_to_screen` (raw pixels, `.x`/`.y`; confirmed against `world_marker_ui.lua:623` and `ingame_hud.lua:515`), guarded by a forward-dot behind-camera test (`world_marker_ui.lua:359`) so points behind the view are skipped instead of wrapping to garbage.
+- Draws 2D lines on a `World.create_screen_gui` (gw_fonts, `immediate`, with the `Application.can_get` material-residency pre-filter that fixed the #293/#295 create CTD) using `ScriptGUI.hud_line` (`script_gui.lua:45`, a rotated `Gui.rect_3d`). A box is its 8 projected `Unit.box` OOBB corners joined by 12 edges (an edge is skipped if either endpoint is behind the camera). Headshot = a small camera-facing square at the head node. Aggro = a 20-segment world ground-circle at `breed.detection_radius`, projected and joined.
+- Draws from a `hook_safe("IngameUI", "update")` -- the phase the working retail info mods draw screen guis from (StreamingInfo), which ticks in BOTH the keep and a mission (the user tests in the keep / `inn_level`). NOT `mod.update`: screen-gui draws issued from the frame-top mod update do not reliably render. Rule #8 pre-flight: grep-verified no other gt_dev hook targets `(IngameUI, "update")` (the existing `IngameHud.update` hook is `_gt_melee_warning`'s -- a different pair); whole-mod lint clean (145 hooks, 0 duplicates).
+
+### Secondary fix: `local_player_safe` throw during load
+`console-2026-07-12-17.56` logged **929** `player_manager.lua: Network backend has not been set` errors, aborting the draw every frame pre-mission: `local_player_safe` still calls `Network.peer_id()` (`player_manager.lua:595`), which throws during the `StateLoading` window even when `:game()` is truthy. The local-player read is now `pcall`-wrapped -- a nil player is a clean skip. Drawing from `IngameUI.update` (in-game only) removes most of the window anyway.
+
+### Diagnostics (empirical, per the issue's ask to "discover the method")
+- One-shot `[gt:302]` breadcrumb on the first frame that emits any edge: logs the edge count, the resolution, and the player's projected `sx/sy`. If that logs positive counts while the user sees nothing, the screen gui itself is the failure point (not enumeration, not projection) -- a decisive single-test result.
+- Per-second `[gt_dev:DH] drawn ... edges=N` summary now counts screen edges actually emitted per category.
+
+### Category status (unchanged from prior analysis; render method is the only change this build)
+Reachable and rewired to the new renderer: interactables (yellow), item pickups (green), pickup spawn points (grey, visible when empty), enemy boxes (red), player boxes (dark green), headshot markers (orange), aggro rings (amber). Documented-unreachable / deferred, no toggle shipped: level geometry (no `Level.*` collision/mesh API from retail Lua), other trigger volumes (name-keyed only, no enumeration/bounds getter), monster/patrol spawn triggers (host-only conflict-director state), navmesh (host-only + segment-heavy), AI vision cones (regular breeds have no per-breed FOV field; drawing fabricated cones would mislead). These stay for a follow-up once the user confirms the new renderer draws.
+
+### Regression
+- Kept all three `_gt_debug_highlights.lua` provenance markers (`gt_dh_live_pos_reads`, `gt_dh_local_player_safe`, `gt459_liveness_gated_dh`); the #459 world-liveness identity gate now guards `World.destroy_gui` (a Gui on a dead world is the same uncatchable AV class as a LineObject was).
+
+### Test method (verify-fix; solo host in the keep suffices for the decisive check)
+1. Full Steam restart -> confirm `[gt:LOAD] v0.2.216-dev`.
+2. In the keep: Dev Tools -> Debug Highlights ON + Interactables ON. Expected: yellow wireframe boxes appear on the crafting station, chests, and other interactables. Grep the log for `[gt:302] method=world_to_screen: drew N edges` -- N should be > 0.
+3. Toggle Item Pickups / Player Hitboxes; start a mission and toggle Enemy Hitboxes / Headshot Zones / Aggro Ranges in a horde. Confirm boxes track units, orange squares on heads, amber rings on the ground.
+4. Client check (join as non-host): enemy boxes/heads/rings should still draw (enumeration is per-peer).
+
 ## v0.2.215-dev (2026-07-13) -- #303 Freeze AI dev tool (command + keybind) [untested]
 
 A dev-only testing tool that halts every enemy AI in place so you can inspect positioning, hitboxes, or set up a scenario, and pauses new spawns while it is held. Ships BOTH as the `/freezeai` chat command and as a keybind-able "Freeze AI" setting in the dev-only Dev Tools group (`keybind_type = function_call` -> `mod.gt_freeze_ai_toggle`). Host-only: AI brains run on the server, so the toggle refuses on a client with one echo. One confirmation echo per toggle ("AI frozen" / "AI unfrozen"); diagnostics are printf-only (`[gt:303]`).
