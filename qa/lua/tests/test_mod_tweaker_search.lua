@@ -80,4 +80,15 @@ return function(H, repo_root)
             function(node) return node.key end)
         H.deep_equal(top, {})
     end)
+
+    H.test("Mod Tweaker search binds the native inventory magnifier with text clearance", function()
+        local path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions.lua"
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.truthy(source:find('ICON_TEXTURE, ICON_SIZE, ICON_PAD, ICON_GAP = "search_filters_icon", 22, 8, 8', 1, true))
+        H.truthy(source:find('{ pass_type = "texture", style_id = "search_icon", texture_id = "search_icon" }', 1, true))
+        H.truthy(source:find('offset = { TEXT_X, 0, 4 }, size = { W - TEXT_X - PAD, H }', 1, true))
+    end)
 end

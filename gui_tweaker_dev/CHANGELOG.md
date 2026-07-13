@@ -5,6 +5,12 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.241-dev (2026-07-13) -- #572 native inventory magnifier in Mod Tweaker search [verify-fix]
+
+- Added the vanilla inventory search material `search_filters_icon` from `gui_menus_atlas` to Mod Tweaker's fixed per-tab search field. It is an atlas-backed passive texture pass, so no custom asset, package load, or additional input target is introduced.
+- The 22px design-space icon uses an 8px left inset and 8px text gap; query, caret, and placeholder text now begin at x=38. Icon and text remain in one scenegraph node, so UI scaling, resolution, and ultrawide positioning transform them together.
+- Preserved the existing full-field hotspot and all click/focus/type/Escape behavior. `/gut_regression_test` check `issue572_mod_tweaker_native_search_icon` locks the source texture, icon metrics, text clearance, and passive-hotspot contract.
+
 ## 0.2.240-dev (2026-07-13) -- #575 numeric-editor caret uses native text metrics [untested]
 
 - Replaced the slider editor's hand-measured `gw_body` width with the exact native text-pass contract: `UIFontByResolution` supplies the scaled material/size, the `hell_shark` font identity is forwarded to `UIRenderer.text_size`, and centered placement includes the measured glyph-origin correction. Caret geometry now derives from the full string plus the measured prefix at the insertion index, so signs, decimal points, proportional digits, UI scale, resolution, and ultrawide layout do not need a guessed pixel offset.

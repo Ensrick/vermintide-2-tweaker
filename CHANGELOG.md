@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - `gui_tweaker_dev` native Mod Tweaker search icon
+
+Repo-aggregate entry for Tweaker: GUI v0.2.241-dev / issue #572. Mod Tweaker now reuses the vanilla inventory search field's atlas-backed `search_filters_icon`, with fixed icon/text clearance in the same scale-aware scenegraph node and no new asset or input target. Runtime regression coverage locks the material, metrics, and unchanged field hotspot. No Workshop deployment.
+
 ## 2026-07-13 - `crafting_in_modded_dev` explicit illusion precedence
 
 Repo-aggregate entry for Crafting in Modded v0.8.66-dev / reopened issue #563. Successful Apply Skin completion now atomically records the newest illusion by exact backend ID even when Cosmetics Tweaker owns the local craft bypass, preventing a later mirror-ready rehydrate from restoring an older saved skin. CIM-owned crafts clear stale vanilla overrides and continue using their forge record. Added bounded diagnostics and old-A -> explicit-B -> rehydrate-B regression coverage. No Workshop deployment.

@@ -2009,31 +2009,43 @@ scenegraph_definition.mt_search = {
 -- SAME raw path the numeric type-to-edit uses), and re-filters the current tab's rows live.
 -- The view drives content.text each frame (the query + a blink caret when focused, or the
 -- placeholder when empty+unfocused) and style.text.text_color / style.bg_inner.color for
--- focus emphasis. Built from rect (bevel outer/inner) + hotspot + text -- NO material lookups,
--- so it is safe on the borrowed in-game renderer (same constraint as every other gut row).
+-- focus emphasis. #572 reuses the exact atlas-backed inventory search material from
+-- HeroWindowCraftingInventoryConsole (`search_filters_icon`, gui_menus_atlas), so no
+-- custom asset/package is introduced. The icon is a passive texture pass: the existing
+-- full-field hotspot remains the only focus/click target.
 local function create_search_box()
     local W, H, PAD = ROW_W, SEARCH_BOX_H, 14
+    local ICON_TEXTURE, ICON_SIZE, ICON_PAD, ICON_GAP = "search_filters_icon", 22, 8, 8
+    local TEXT_X = ICON_PAD + ICON_SIZE + ICON_GAP
     return UIWidget.init({
         scenegraph_id = "mt_search",
         element = {
             passes = {
                 { pass_type = "rect", style_id = "bg_outer" },
                 { pass_type = "rect", style_id = "bg_inner" },
+                { pass_type = "texture", style_id = "search_icon", texture_id = "search_icon" },
                 { pass_type = "hotspot", content_id = "hotspot", style_id = "hotspot" },
                 { pass_type = "text", style_id = "text", text_id = "text" },
             },
         },
-        content = { hotspot = {}, text = "" },
+        content = { hotspot = {}, text = "", search_icon = ICON_TEXTURE },
         style = {
             bg_outer = { offset = { 0, 0, 1 }, size = { W, H }, color = { 220, 0, 0, 0 } },
             bg_inner = { offset = { 2, 2, 2 }, size = { W - 4, H - 4 }, color = { 255, 14, 14, 14 } },
+            search_icon = {
+                horizontal_alignment = "left", vertical_alignment = "center",
+                texture_size = { ICON_SIZE, ICON_SIZE }, offset = { ICON_PAD, 0, 3 },
+                color = { 255, 255, 255, 255 },
+                base_color = { 255, 255, 255, 255 },
+                disabled_color = { 128, 128, 128, 128 },
+            },
             hotspot  = { size = { W, H }, offset = { 0, 0, 0 } },
             text = {
                 font_type = "hell_shark", font_size = 20,
                 horizontal_alignment = "left", vertical_alignment = "center",
                 localize = false, upper_case = false, word_wrap = false,
                 text_color = { 255, 255, 255, 255 },
-                offset = { PAD, 0, 4 }, size = { W - PAD * 2, H },
+                offset = { TEXT_X, 0, 4 }, size = { W - TEXT_X - PAD, H },
             },
         },
         offset = { 0, 0, 0 },
@@ -2060,6 +2072,10 @@ return {
     -- (#497) Per-tab search box (fixed input field above the list).
     create_search_box = create_search_box,
     search_sg = "mt_search",
+    search_icon_contract = {
+        texture = "search_filters_icon", size = 22, left_pad = 8,
+        text_x = 38, source = "HeroWindowCraftingInventoryConsole",
+    },
     create_checkbox = create_checkbox,
     create_slider = create_slider,
     create_stepper = create_stepper,

@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.240-dev"
+local MOD_VERSION = "0.2.241-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1792,6 +1792,37 @@ _rt_register("issue559_search_expansion_transaction", function()
     for _, name in ipairs({ "_search_restore", "_search_clear_restore", "_search_finish",
                             "_search_note_setting" }) do
         if type(View[name]) ~= "function" then return "ModTweakerView:" .. name .. " missing" end
+    end
+end)
+
+_rt_register("issue572_mod_tweaker_native_search_icon", function()
+    local ok, defs = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
+    if not ok or type(defs) ~= "table" or type(defs.create_search_box) ~= "function" then
+        return "Mod Tweaker search definitions unavailable"
+    end
+    local contract = defs.search_icon_contract
+    if type(contract) ~= "table" or contract.texture ~= "search_filters_icon"
+        or contract.source ~= "HeroWindowCraftingInventoryConsole" then
+        return "inventory magnifier material/source contract drifted"
+    end
+    local built, widget = pcall(defs.create_search_box)
+    if not built or type(widget) ~= "table" then
+        return "search widget build failed: " .. tostring(widget)
+    end
+    if not widget.content or widget.content.search_icon ~= contract.texture then
+        return "search widget does not bind the native inventory texture"
+    end
+    local icon = widget.style and widget.style.search_icon
+    local text = widget.style and widget.style.text
+    if not icon or not icon.texture_size or icon.texture_size[1] ~= contract.size
+        or icon.texture_size[2] ~= contract.size or icon.offset[1] ~= contract.left_pad then
+        return "search icon size/padding drifted"
+    end
+    if not text or not text.offset or text.offset[1] < contract.text_x then
+        return "search text can overlap the magnifier"
+    end
+    if not widget.content.hotspot or not widget.style.hotspot then
+        return "search focus hotspot changed while adding passive icon"
     end
 end)
 
