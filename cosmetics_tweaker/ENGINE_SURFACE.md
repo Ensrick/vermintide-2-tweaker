@@ -96,7 +96,7 @@ VMF mod RPC channel (`cos_la_apply` / `cos_la_apply_req` / `cos_la_state_req`,
 `COS_RPC_SCHEMA`-versioned). VMF delivers a mod's RPCs ONLY to peers running that mod,
 so a non-mod peer never decodes them - they cannot touch the #421 floor above. This is
 why per-hand cosmetic picks that vanilla can't encode (independent left/right illusions,
-#416 vanilla offhand meshes) ride the mod channel and carry plain STRINGS (unit paths),
+#416 vanilla offhand meshes and #483 individualized CWV dual-weapon mounts) ride the mod channel and carry plain STRINGS (unit paths),
 never `NetworkLookup` indices. #416 added the additive `offhand_unit` field (a unit path,
 or `""` = clear) + the parallel `mod._offhand_mesh_by_peer` store; a non-mod peer simply
 sees the base offhand (acceptable degrade, never a crash). See LA_SYNC §6.9.

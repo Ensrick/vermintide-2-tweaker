@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.94-dev"
+local MOD_VERSION = "0.9.95-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -1249,6 +1249,7 @@ local _MULTI_MOUNT_ITEM_TYPES = {
     dr_dual_axes               = true,  -- dwarf axe pair (matched)
     dr_dual_wield_hammers      = true,  -- dwarf hammer pair (matched)
     es_dual_wield_hammer_sword = true,  -- mace (R) + sword (L)
+    cwv_es_sword_and_mace      = true,  -- sword (R) + mace (L), CWV #483
     wh_dual_wield_axe_falchion = true,  -- axe (R) + falchion (L)
 }
 
@@ -1281,7 +1282,8 @@ local _MULTI_MOUNT_ITEM_TYPES = {
 --     `right_hand_unit`, so use that field. The borrowed table effectively
 --     becomes "every variant of this weapon kind".
 -- v0.9.9.4-dev: per-hand spec. Each item_type maps to up to two
--- `{hand_field = {skin_table=..., unit_field=...}}` entries, one per mount
+-- `{hand_field = {skin_table=...|matching_item_key=..., unit_field=...}}`
+-- entries, one per mount
 -- the picker should expose. `unit_field` is the SKIN-TABLE column to read
 -- (NOT the destination hand) — vanilla matched-pair skins ship both hand
 -- units in the SAME unit_field (left_hand_unit for native dual-wield
@@ -1344,6 +1346,15 @@ local _DUAL_WIELD_POOLS = {
     es_dual_wield_hammer_sword = {
         right_hand_unit = { skin_table = "es_1h_sword_skins", unit_field = "right_hand_unit" },
         left_hand_unit  = { skin_table = "es_1h_sword_skins", unit_field = "right_hand_unit" },
+    },
+    -- CWV's inverse Empire pair has no independent hand tables of its own.
+    -- Source each row from the exact vanilla family instead of zipping the
+    -- generated paired skins: sword cosmetics on the right, mace cosmetics
+    -- on the left. `matching_item_key` is deliberately data-driven so future
+    -- asymmetric modded pairs can reuse this registration shape.
+    cwv_es_sword_and_mace = {
+        right_hand_unit = { matching_item_key = "es_1h_sword", unit_field = "right_hand_unit" },
+        left_hand_unit  = { matching_item_key = "es_1h_mace", unit_field = "right_hand_unit" },
     },
     wh_dual_wield_axe_falchion = {
         right_hand_unit = { skin_table = "wh_1h_falchion_skins", unit_field = "right_hand_unit" },
@@ -1428,18 +1439,84 @@ local function _build_offhand_options_from_skin_table(skin_table_name, unit_fiel
     return out
 end
 
-for item_type, per_hand in pairs(_DUAL_WIELD_POOLS) do
-    _offhand_options[item_type] = _offhand_options[item_type] or {}
-    for hand_field, spec in pairs(per_hand) do
-        if not _offhand_options[item_type][hand_field] then
-            local pool = _build_offhand_options_from_skin_table(spec.skin_table, spec.unit_field)
-            if pool and #pool > 0 then
-                _offhand_options[item_type][hand_field] = pool
-                mod:info("[offhand] dual-wield pool %s/%s: %d options from %s (%s)",
-                    item_type, hand_field, #pool, spec.skin_table, spec.unit_field)
-            else
-                mod:info("[offhand] dual-wield pool %s/%s: NO options from %s (skin table missing or empty)",
-                    item_type, hand_field, spec.skin_table)
+do
+    -- Build a hand pool directly from ItemMasterList's canonical weapon-skin
+    -- ownership relation. This covers modded asymmetric pairs whose generated
+    -- pair table intentionally couples the hands and therefore cannot supply
+    -- independent picker rows. Stable rarity/key sorting keeps UI order fixed.
+    local function _build_offhand_options_from_matching_item(matching_item_key, unit_field)
+        if type(ItemMasterList) ~= "table" then return nil end
+        unit_field = unit_field or "right_hand_unit"
+
+        local rarity_rank = {
+            plentiful = 1, common = 2, rare = 3, exotic = 4,
+            unique = 5, bogenhafen = 6, promotion = 7, magic = 8,
+        }
+        local candidates = {}
+        for skin_key, entry in pairs(ItemMasterList) do
+            if type(entry) == "table"
+                    and entry.item_type == "weapon_skin"
+                    and entry.matching_item_key == matching_item_key
+                    and entry[unit_field]
+                    and not _skin_requires_unowned_dlc(skin_key) then
+                candidates[#candidates + 1] = {
+                    skin_key = skin_key,
+                    data = entry,
+                }
+            end
+        end
+        table.sort(candidates, function(a, b)
+            local ar = rarity_rank[a.data.rarity] or 99
+            local br = rarity_rank[b.data.rarity] or 99
+            if ar ~= br then return ar < br end
+            return a.skin_key < b.skin_key
+        end)
+
+        local L = rawget(_G, "Localize")
+        local seen = {}
+        local out = {}
+        for _, candidate in ipairs(candidates) do
+            local entry = candidate.data
+            local unit_path = entry[unit_field]
+            if not seen[unit_path] then
+                seen[unit_path] = true
+                local name = candidate.skin_key
+                if entry.display_name and L then
+                    local ok, localized = pcall(L, entry.display_name)
+                    if ok and localized and localized ~= "" and localized ~= entry.display_name then
+                        name = localized
+                    end
+                end
+                out[#out + 1] = {
+                    name = name,
+                    unit = unit_path,
+                    rarity = entry.rarity,
+                }
+            end
+        end
+        return out
+    end
+
+    for item_type, per_hand in pairs(_DUAL_WIELD_POOLS) do
+        _offhand_options[item_type] = _offhand_options[item_type] or {}
+        for hand_field, spec in pairs(per_hand) do
+            if not _offhand_options[item_type][hand_field] then
+                local source_name = spec.skin_table or spec.matching_item_key
+                local source_kind = spec.skin_table and "skin_table" or "matching_item"
+                local pool
+                if spec.matching_item_key then
+                    pool = _build_offhand_options_from_matching_item(spec.matching_item_key, spec.unit_field)
+                else
+                    pool = _build_offhand_options_from_skin_table(spec.skin_table, spec.unit_field)
+                end
+                if pool and #pool > 0 then
+                    _offhand_options[item_type][hand_field] = pool
+                    mod:info("[cosmetics:offhand] pool item=%s hand=%s options=%d source=%s:%s field=%s",
+                        item_type, hand_field, #pool, source_kind, source_name, spec.unit_field)
+                else
+                    mod:info("[cosmetics:offhand] pool item=%s hand=%s options=0 source=%s:%s field=%s",
+                        item_type, hand_field, source_kind, tostring(source_name), tostring(spec.unit_field))
+                end
             end
         end
     end
@@ -9919,6 +9996,39 @@ _rt_register("offhand_options_per_hand_shape", function()
             end
         end
     end
+end)
+
+_rt_register("issue483_cwv_sword_mace_individualized_cosmetics", function()
+    local item_type = "cwv_es_sword_and_mace"
+    if _MULTI_MOUNT_ITEM_TYPES[item_type] ~= true then
+        return "CWV sword+mace is not registered as multi-mount"
+    end
+    local hand_pools = _offhand_options[item_type]
+    local right = hand_pools and hand_pools.right_hand_unit
+    local left = hand_pools and hand_pools.left_hand_unit
+    if type(right) ~= "table" or #right == 0 then return "sword/right pool missing" end
+    if type(left) ~= "table" or #left == 0 then return "mace/left pool missing" end
+
+    local expected = { es_1h_sword = {}, es_1h_mace = {} }
+    for _, entry in pairs(ItemMasterList or {}) do
+        local family = type(entry) == "table" and entry.matching_item_key
+        if expected[family] and entry.item_type == "weapon_skin" and entry.right_hand_unit then
+            expected[family][entry.right_hand_unit] = true
+        end
+    end
+    for _, option in ipairs(right) do
+        if not expected.es_1h_sword[option.unit] then
+            return "non-sword mesh in right pool: " .. tostring(option.unit)
+        end
+    end
+    for _, option in ipairs(left) do
+        if not expected.es_1h_mace[option.unit] then
+            return "non-mace mesh in left pool: " .. tostring(option.unit)
+        end
+    end
+    if type(mod._send_offhand_mesh) ~= "function" then return "direct-unit sender missing" end
+    if type(mod._store_offhand_mesh_recv) ~= "function" then return "direct-unit receiver missing" end
+    if type(mod._offhand_mesh_by_peer) ~= "table" then return "hot-join mesh store missing" end
 end)
 
 _rt_register("dbg_helpers_two_channel", function()

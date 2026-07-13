@@ -434,6 +434,15 @@ covers LA shields, but a per-hand **vanilla** shield / held-weapon unit pick
 non-husk `BackendUtils.get_item_units` `_offhand_selection` override), but every peer's
 husk spawned the wearer's BASE offhand (#416).
 
+As of v0.9.95-dev (#483), this same direct-unit path also carries independent
+mount choices for asymmetric modded dual weapons. Pool specs may select either a
+`WeaponSkins.skin_combinations` table or a canonical `ItemMasterList`
+`matching_item_key` family. `cwv_es_sword_and_mace` uses `es_1h_sword` for the
+right row and `es_1h_mace` for the left row; both source families store their mesh
+in `right_hand_unit`, while the destination hand remains the picker row key. This
+is catalog registration only: transport, host store, state replay, package gate,
+and husk application remain the #416 pipeline below.
+
 **Design (v0.9.82-dev): a parallel store, reusing the existing channel.**
 
 - **Store:** `mod._offhand_mesh_by_peer[wearer_peer][slot_or_template][hand_field] = unit_path`.
@@ -468,11 +477,10 @@ string; it is never a `NetworkLookup` index and never rides a vanilla RPC param,
 modded key can reach a non-mod peer's strict `__index`. The §5/§31 sender-side null/
 substitution on the vanilla RPCs is untouched.
 
-**Remaining (not in the v0.9.82 slice):** `opt.vanilla_skin`-only opts (a paired vanilla
-weapon_skin with no `opt.unit` mesh) are not networked (the store carries a unit path
-only); the data-driven picker registration (CWV shields missing from the picker,
-fix-direction #3) is separate; cross-session auto re-emit of a vanilla pick on rejoin
-relies on the wearer re-Applying (in-session apply + hot-join are covered).
+**Remaining:** `opt.vanilla_skin`-only opts (a paired vanilla weapon_skin with no
+`opt.unit` mesh) are not networked (the store carries a unit path only); cross-session
+auto re-emit of a vanilla pick on rejoin relies on the wearer re-Applying (in-session
+apply + hot-join are covered).
 
 ### 6.10 Deus-yield: weapon-side LA overrides are suppressed in Chaos Wastes (#518)
 

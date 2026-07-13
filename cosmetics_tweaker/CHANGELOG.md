@@ -1,5 +1,12 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.95-dev - 2026-07-13 - #483 individualized CWV sword/mace cosmetics [verify-fix-coop]
+
+- Added independent right-hand sword and left-hand mace cosmetic rows for CWV's `cwv_es_sword_and_mace`. Each row is sourced from the exact vanilla `ItemMasterList` family (`es_1h_sword` or `es_1h_mace`), rather than the generated paired-skin table, so changing one hand no longer forces a pre-zipped partner onto the other.
+- Generalized dual-weapon pool registration with a deterministic, DLC-aware `matching_item_key` source selector. Existing skin-table registrations and all other weapon pools are unchanged.
+- The selections use Cosmetics' existing direct-unit `cos_la_apply` transport, host-authoritative per-peer/per-template/per-hand store, state replay, package readiness gate, and husk render path. No RPC name, schema, hook, or CWV source changed. Added `issue483_cwv_sword_mace_individualized_cosmetics` runtime coverage.
+- **Co-op verify:** with Cosmetics v0.9.95-dev and CWV enabled on both peers, equip Sword and Mace, open weapon customization, and choose visibly different right-sword and left-mace variants. Apply, wield, swap away/back, and re-open customization; both choices must remain independent locally. Join and hot-join a second peer; both viewers must see the same sword-right/mace-left pair without either player reopening the picker. Run `/cos_regression_test` and confirm `issue483_cwv_sword_mace_individualized_cosmetics` passes.
+
 ## 0.9.94-dev - 2026-07-13 - #574 initial/hot-join glow convergence [verify-fix-coop]
 
 - Fixed the remaining join race where the targeted `AttachmentUtils.hot_join_sync` glow push could arrive before the joining peer was an ingame recipient, or its cached glow could arrive before the remote husk had published wielded equipment. The joiner's existing acknowledged `cos_la_state_req` pull-on-ready now also receives the host's cached glow states through the existing `cos_glow_apply` channel; no RPC name, schema, or payload shape was added.

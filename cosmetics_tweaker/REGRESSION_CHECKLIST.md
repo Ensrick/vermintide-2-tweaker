@@ -9,6 +9,20 @@ Last updated: 2026-07-13.
 ---
 ## Diagnostics / Regression Suite
 
+### issue483-cwv-sword-mace-individualized-cosmetics -- independent hands and peer replay
+
+| Field | Value |
+|-------|-------|
+| Symptom | CWV Sword and Mace exposed only generated paired illusions, so a player could not choose the right-hand sword and left-hand mace cosmetics independently. |
+| Root cause | Cosmetics' two-row picker registry knew only vanilla dual item types and skin-combination-table sources; `cwv_es_sword_and_mace` and its distinct source families were absent. |
+| Mod(s) | cosmetics_tweaker + character_weapon_variants |
+| Fix version(s) | cosmetics_tweaker v0.9.95-dev |
+| Category | INTEGRATION / MULTIPLAYER |
+| Repro | Equip CWV Sword and Mace, open customization, and inspect or change each hand's cosmetic locally and from a second peer. |
+| Expected post-fix | Two rows appear; the right row contains only `es_1h_sword` meshes and the left row only `es_1h_mace` meshes. Applying one hand does not overwrite the other, and the chosen pair survives wield swaps plus initial/hot join on both viewers. |
+| Detection | `/cos_regression_test` passes `issue483_cwv_sword_mace_individualized_cosmetics`; it validates both exact source families and the existing direct-unit sender, receiver, and hot-join store. Coop verification covers visible per-hand independence and state replay. |
+| Tracking | GitHub issue #483. |
+
 ### glow-picker-explicit-apply -- persistence and peer rendering
 
 | Field | Value |
