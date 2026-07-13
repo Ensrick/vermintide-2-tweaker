@@ -1638,21 +1638,34 @@ local _hp_tree = _wt_dev_hold_pose_data.build_widget_tree()
 if _hp_tree then data.options.widgets[#data.options.widgets + 1] = _hp_tree end
 
 -- ---------------------------------------------------------------------------
--- Weapon Availability: normalize row order (#179).
+-- Weapon Availability: normalize row order (#179, #408).
 -- ---------------------------------------------------------------------------
 -- Reorder every per-career `melee_<career>` / `ranged_<career>` leaf group's
--- `unlock_<career>_<weapon>` checkboxes by SOURCE CHARACTER in the fixed roster
--- order Kruber, Bardin, Saltzpyre, Kerillian, Sienna (= weapon_key prefix es_,
--- dr_, wh_, we_, bw_), then alphabetically by weapon_key within a source
--- character. Done as one central pass so the order is correct regardless of the
--- hand-maintained insertion order above and stays correct as new ports are
--- appended. Crucially it sorts on the weapon_key ONLY, never the localized
--- label: the runtime status-tag prefix ([working] / [untested] /
--- [needs animations]) is applied downstream in the localization table and so
--- can never influence this order (the user-reported "tags messing up the sort"
--- bug). Scoped strictly to the `weapon_availability` subtree; setting_ids are
--- unchanged, so widget_unlock_map_consistency stays green.
-local _SRC_CHAR_RANK = { es = 1, dr = 2, wh = 3, we = 4, bw = 5 }  -- Kruber, Bardin, Saltzpyre, Kerillian, Sienna
+-- `unlock_<career>_<weapon>` checkboxes by their player-facing English label.
+-- Resolve that label from the raw localization DATA published before VMF menu
+-- registration (#197 / LOCALIZATION_STANDARD section 12), never via
+-- `mod:localize`, and strip every leading dev-status tag so `[working] Kruber:
+-- Halberd` sorts under K. The setting id is the deterministic tie-break/fallback.
+--
+-- Mixed leaf groups are handled too: only unlock rows are gathered/sorted and
+-- written back into their original unlock-row slots, so an unrelated child can
+-- no longer make the old `all_unlock` guard silently skip the entire group
+-- (#408). Scoped strictly to the `weapon_availability` subtree; setting_ids and
+-- default values are unchanged, so persisted settings are unaffected.
+local function _availability_display_sort_key(setting_id)
+    local raw = mod._wt_loc_raw
+    local entry = type(raw) == "table" and raw[setting_id]
+    local label = type(entry) == "table" and entry.en
+    if type(label) ~= "string" or label == "" then return setting_id end
+    while true do
+        local clean, n = label:gsub("^%s*%b[]%s*", "", 1)
+        label = clean
+        if n == 0 then break end
+    end
+    return string.lower(label) .. "\0" .. setting_id
+end
+
+local _availability_rows_sorted = 0
 
 local function _sort_availability_rows(node)
     if type(node) ~= "table" then return end
@@ -1661,25 +1674,24 @@ local function _sort_availability_rows(node)
         local career = sid:match("^melee_(.+)$") or sid:match("^ranged_(.+)$")
         if career then
             local prefix = "unlock_" .. career .. "_"
-            -- Only a pure leaf group of this career's unlock_ checkboxes is
-            -- reordered; anything else is left exactly as authored.
-            local all_unlock = true
-            for _, w in ipairs(node.sub_widgets) do
-                if type(w) ~= "table" or type(w.setting_id) ~= "string"
-                    or w.setting_id:sub(1, #prefix) ~= prefix then
-                    all_unlock = false
-                    break
+            local unlock_rows = {}
+            local unlock_slots = {}
+            for i, w in ipairs(node.sub_widgets) do
+                local wsid = type(w) == "table" and w.setting_id
+                if type(wsid) == "string" and wsid:sub(1, #prefix) == prefix then
+                    unlock_rows[#unlock_rows + 1] = w
+                    unlock_slots[#unlock_slots + 1] = i
                 end
             end
-            if all_unlock then
-                table.sort(node.sub_widgets, function(a, b)
-                    local wa = a.setting_id:sub(#prefix + 1)
-                    local wb = b.setting_id:sub(#prefix + 1)
-                    local ra = _SRC_CHAR_RANK[wa:sub(1, 2)] or 99
-                    local rb = _SRC_CHAR_RANK[wb:sub(1, 2)] or 99
-                    if ra ~= rb then return ra < rb end
-                    return wa < wb
+            if #unlock_rows > 1 then
+                table.sort(unlock_rows, function(a, b)
+                    return _availability_display_sort_key(a.setting_id)
+                        < _availability_display_sort_key(b.setting_id)
                 end)
+                for i, slot in ipairs(unlock_slots) do
+                    node.sub_widgets[slot] = unlock_rows[i]
+                end
+                _availability_rows_sorted = _availability_rows_sorted + #unlock_rows
             end
         end
     end
@@ -1694,6 +1706,12 @@ for _, top in ipairs(data.options.widgets) do
     if type(top) == "table" and top.setting_id == "weapon_availability" then
         _sort_availability_rows(top)
     end
+end
+
+if not mod._wt408_availability_sort_logged then
+    mod._wt408_availability_sort_logged = true
+    printf("[wt:408] applied: sorted %d Weapon Availability rows by tag-stripped display name",
+        _availability_rows_sorted)
 end
 
 return data

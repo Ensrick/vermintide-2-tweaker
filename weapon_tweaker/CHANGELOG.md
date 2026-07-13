@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.218-dev (2026-07-13) - #408: Weapon Availability sorts by visible name
+
+Weapon Availability rows now sort alphabetically by the tag-stripped player-facing English label instead of source-character rank and internal weapon key. This puts entries where their visible names say they belong (including Saltzpyre's Flail on Kruber) and keeps computed `[working]` / `[untested]` / `[needs animations]` tags out of the sort key.
+
+- **Root cause:** the v0.12.199-dev #179 central pass deliberately sorted by weapon-key prefix (`es`, `dr`, `wh`, `we`, `bw`) and then raw key. Its `all_unlock` guard also skipped a whole career leaf if any unrelated child appeared there.
+- **Fix:** `weapon_tweaker_data.lua` resolves each row from `mod._wt_loc_raw[setting_id].en` (the #197-safe pre-registration localization path), strips every leading bracket tag, and sorts only unlock rows back into their original unlock slots. The setting id is a deterministic fallback/tie-break; widget ids/defaults are unchanged.
+- **Evidence:** boot prints `[wt:408] applied: sorted N Weapon Availability rows by tag-stripped display name`. Run `/verify_wt_availability_sort` in the keep; it reports every checked career leaf and any adjacent out-of-order pair. `/wt_regression_test` includes the same `issue408_availability_rows_sorted_by_name` invariant.
+- **Verify (solo, keep):** open Mod Options -> Tweaker: Weapons -> Weapon Availability -> Kruber -> any melee career. Rows should increase alphabetically by their visible source/name text after ignoring the leading status tag; specifically, `Saltzpyre: Flail` must appear in the S section rather than at the top.
+
 ## 0.12.217-dev (2026-07-13) - #218: remove dead CIM widget-strip scaffolding
 
 The Chaos Wastes trait groups `cw_melee_traits` and `cw_ranged_traits` were deleted from the settings tree in commit `a7012f3`, but their `crafting_in_modded` detection and recursive strip pass remained at data-load time. Current active wt source contains no such widget or localization key, and the decompiled game source contains none of these mod-only setting IDs, so the walk could never remove anything.
