@@ -214,6 +214,8 @@ function Invoke-SelfTest {
     Assert ((Get-LifecycleStateCount @('bug', 'not-started', 'tooling')) -eq 1) "one lifecycle label is valid (issue #498)"
     Assert ((Get-LifecycleStateCount @('bug', 'tooling')) -eq 0) "zero lifecycle labels is detected"
     Assert ((Get-LifecycleStateCount @('bug', 'not-started', 'verify-fix')) -eq 2) "multiple lifecycle labels are detected"
+    Assert ((Get-LifecycleStateCount @('tooling')) -eq 0) "tooling issue without not-started is lifecycle drift"
+    Assert ((Get-LifecycleStateCount @('documentation')) -eq 0) "documentation issue without not-started is lifecycle drift"
 
     Write-Host ""
     if ($script:__stpass) {
@@ -292,12 +294,9 @@ if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($openJson)) {
         foreach ($o in ($openJson | ConvertFrom-Json)) {
             $lbls = @()
             if ($o.labels) { $lbls = @($o.labels | ForEach-Object { $_.name }) }
-            # documentation/tooling issues never take verify-*/diagnostics-armed/Fixed
-            # (user rule 2026-07-12, s11 human-verification scope): Claude verifies and
-            # closes them directly, so between first work and closure they legitimately
-            # carry no worked-status label. An untouched one still gets not-started
-            # (which already satisfies this pass), so exempt the whole class here.
-            if ($lbls -contains 'documentation' -or $lbls -contains 'tooling') { continue }
+            # Documentation/tooling issues are exempt from HUMAN verify-* states, not
+            # from lifecycle cardinality. While open they still carry not-started until
+            # Claude verifies and closes them in the same pass (PROJECT_STANDARDS s11).
             $lifecycleCount = Get-LifecycleStateCount $lbls
             if ($lifecycleCount -ne 1) {
                 $lifecycleDrift += [pscustomobject]@{
