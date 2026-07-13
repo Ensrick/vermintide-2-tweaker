@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.393-dev"
+local MOD_VERSION = "0.1.394-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -9607,7 +9607,17 @@ end
 -- are skipped (ranged variants carry their own handling). A user-selected
 -- illusion (non-empty `skin` arg) wins, mirroring the get_item_units guard.
 _om._cwv_preview_meshswap_apply = function(item_name, backend_id, skin, info)
-	if type(skin) == "string" and skin ~= "" then return end
+	-- #579: MenuWorldPreviewer's copied equip path does not reliably preserve the
+	-- callback's `skin` argument by the time this post-hook runs, but vanilla has
+	-- already committed the authoritative value to info.skin_name. The retest log
+	-- showed the selected runed axe package queued, then this fallback overwrote
+	-- both generated-skin hands with the def's default hatchets because `skin`
+	-- arrived nil. Trust either signal; a selected illusion owns the spawn recipe.
+	local effective_skin = skin
+	if (type(effective_skin) ~= "string" or effective_skin == "") and type(info) == "table" then
+		effective_skin = info.skin_name
+	end
+	if type(effective_skin) == "string" and effective_skin ~= "" then return end
 	-- #482: shared ladder instead of the bare bid pattern -- an Athanor-crafted
 	-- instance (UUID bid) resolves via the backend item's stamped cwv_key, so
 	-- the inventory preview swaps to the variant mesh for crafted copies too.
@@ -11240,6 +11250,73 @@ do
 	end
 	_om._wire_null_skins = _wire_null_skins   -- exported for /cwv_regression_test
 
+	-- #579 post-handshake replay. GearUtils.hot_join_sync must null a cwv skin
+	-- before the joining peer has acknowledged this mod; otherwise its strict
+	-- NetworkLookup.weapon_skins decode can CTD. Once peer parity transitions to
+	-- enabled, every decoder has proven the same CWV schema and the owner can
+	-- safely replay only its cwv-skinned slots through vanilla rpc_add_equipment.
+	-- If the corrected slot is currently wielded, follow it with the vanilla
+	-- wield RPC so the remote husk respawns immediately instead of waiting for a
+	-- manual weapon swap. This is bounded to the parity-enable edge (join/rejoin),
+	-- never a frame/update loop.
+	_om._cwv_skin_replay_payloads = function(equipment)
+		local payloads = {}
+		local slots = equipment and equipment.slots
+		if type(slots) ~= "table" then return payloads end
+		for slot_name, slot_data in pairs(slots) do
+			local item_data = slot_data and slot_data.item_data
+			local skin = slot_data and slot_data.skin
+			if type(item_data) == "table" and type(item_data.name) == "string" and _wire_skin(skin) then
+				payloads[#payloads + 1] = {
+					slot_name = slot_name,
+					item_name = item_data.name, -- clone-name clobber is wire-safe: vanilla base id
+					skin = skin,
+					wielded = equipment.wielded_slot == slot_name,
+				}
+			end
+		end
+		return payloads
+	end
+
+	_om._replay_cwv_skins_after_parity = function()
+		local pm = Managers and Managers.player
+		local network = Managers and Managers.state and Managers.state.network
+		local storage = Managers and Managers.state and Managers.state.unit_storage
+		if not (pm and network and network.network_transmit and storage) then return 0 end
+		local ok_player, player = pcall(pm.local_player, pm, 1)
+		if not ok_player or not player then return 0 end
+		local unit = player.player_unit
+		if not unit or not Unit.alive(unit) then return 0 end
+		local ok_inv, inventory = pcall(ScriptUnit.extension, unit, "inventory_system")
+		if not ok_inv or not inventory or type(inventory.equipment) ~= "function" then return 0 end
+		local equipment = inventory:equipment()
+		local payloads = _om._cwv_skin_replay_payloads(equipment)
+		if #payloads == 0 then return 0 end
+		local go_id = storage:go_id(unit)
+		if not go_id then return 0 end
+		local transmit = network.network_transmit
+		local network_lookup = rawget(_G, "NetworkLookup")
+		if not network_lookup then return 0 end
+		local sent = 0
+		for _, payload in ipairs(payloads) do
+			local slot_id = rawget(network_lookup.equipment_slots or {}, payload.slot_name)
+			local item_id = rawget(network_lookup.item_names or {}, payload.item_name)
+			local skin_id = rawget(network_lookup.weapon_skins or {}, payload.skin)
+			if slot_id and item_id and skin_id then
+				if network.is_server then
+					transmit:send_rpc_clients("rpc_add_equipment", go_id, slot_id, item_id, skin_id)
+					if payload.wielded then transmit:send_rpc_clients("rpc_wield_equipment", go_id, slot_id) end
+				else
+					transmit:send_rpc_server("rpc_add_equipment", go_id, slot_id, item_id, skin_id)
+					if payload.wielded then transmit:send_rpc_server("rpc_wield_equipment", go_id, slot_id) end
+				end
+				sent = sent + 1
+			end
+		end
+		pcall(printf, "[cwv:579] replayed %d cwv skin slot(s) after peer-parity confirmation", sent)
+		return sent
+	end
+
 	mod._cwv_skin_wire_surfaces = {}
 
 	mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
@@ -11275,6 +11352,15 @@ do
 		end, "hot_join_sync", true)
 	end)
 	mod._cwv_skin_wire_surfaces.hot_join_sync = true
+
+	local pp = mod._cwv_peer_parity
+	if pp and type(pp.register_gated_feature) == "function" then
+		pp:register_gated_feature("cwv_skin_hot_join_replay", {
+			label = "remote weapon cosmetics",
+			on_enable = _om._replay_cwv_skins_after_parity,
+		})
+		mod._cwv_skin_wire_surfaces.parity_replay = true
+	end
 end
 _om._skin_wire_hook_installed = true
 
@@ -12428,6 +12514,74 @@ _rt_register("dual_axes_cosmetic_family_parity", function()
             table.sort(extra)
             return string.format("dual-axes cosmetic set drift for %s: missing=[%s] extra=[%s]",
                 target_key, table.concat(missing, ","), table.concat(extra, ","))
+        end
+    end
+end)
+
+_rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
+    local source_by_target = _om._dual_axes_source_by_skin
+    local ws = rawget(_G, "WeaponSkins")
+    if type(source_by_target) ~= "table" or type(ws) ~= "table" or type(ws.skins) ~= "table" then
+        return "dual-axes generated skins not loaded yet (run in-keep)"
+    end
+    local apply_preview = mod._cwv_preview_meshswap_apply
+    local plan_replay = _om._cwv_skin_replay_payloads
+    if type(apply_preview) ~= "function" or type(plan_replay) ~= "function" then
+        return "#579 preview/replay helpers are not installed"
+    end
+    if not (mod._cwv_skin_wire_surfaces and mod._cwv_skin_wire_surfaces.parity_replay) then
+        return "#579 post-handshake parity replay is not registered"
+    end
+
+    for _, target_key in ipairs({ "cwv_es_dual_axes", "cwv_wh_dual_axes" }) do
+        local clones = source_by_target[target_key]
+        local generated_skin = clones and next(clones)
+        local skin = generated_skin and ws.skins[generated_skin]
+        if not skin then return target_key .. " has no generated skin for continuity test" end
+        if type(skin.right_hand_unit) ~= "string" or type(skin.left_hand_unit) ~= "string" then
+            return generated_skin .. " does not preserve both generated hands"
+        end
+
+        -- Vanilla has already built spawn_data from the selected skin. The
+        -- copied preview callback may pass skin=nil; info.skin_name is the
+        -- authoritative stored identity and must prevent the def-default swap.
+        local info = {
+            skin_name = generated_skin,
+            spawn_data = {
+                { right_hand = true, unit_name = skin.right_hand_unit .. "_3p" },
+                { left_hand = true, unit_name = skin.left_hand_unit .. "_3p" },
+            },
+        }
+        apply_preview("dr_dual_wield_axes", target_key .. "_001", nil, info)
+        if info.spawn_data[1].unit_name ~= skin.right_hand_unit .. "_3p"
+                or info.spawn_data[2].unit_name ~= skin.left_hand_unit .. "_3p" then
+            return generated_skin .. " was overwritten by the preview fallback"
+        end
+
+        -- Hot join initially sends the vanilla base item with a nulled cwv skin.
+        -- After parity, the replay planner must retain that clone-name-clobbered
+        -- base id while restoring the exact generated skin and current wield.
+        local payloads = plan_replay({
+            wielded_slot = "slot_melee",
+            slots = {
+                slot_melee = {
+                    item_data = { name = "dr_dual_wield_axes" },
+                    skin = generated_skin,
+                },
+                slot_ranged = {
+                    item_data = { name = "wh_crossbow" },
+                    skin = "wh_crossbow_skin_01",
+                },
+            },
+        })
+        if #payloads ~= 1 or payloads[1].item_name ~= "dr_dual_wield_axes"
+                or payloads[1].skin ~= generated_skin or payloads[1].wielded ~= true then
+            return generated_skin .. " parity replay payload lost base/skin/wield identity"
+        end
+        local def, reason = _om._husk_resolve_display_def("dr_dual_wield_axes",
+            target_key == "cwv_es_dual_axes" and "es_mercenary" or "wh_captain", generated_skin)
+        if not def or def.item_key ~= target_key or reason ~= "skin" then
+            return generated_skin .. " does not resolve to its target on the husk"
         end
     end
 end)
@@ -13611,6 +13765,11 @@ _rt_register("preview_meshswap_guards", function()
     if a.spawn_data[1].unit_name ~= "BASE_3p" then return "#237 guard: non-cwv backend_id must not rewrite" end
     local b = _mk(); apply("es_sword_shield", "cwv_we_sword_shield_001", "some_skin", b)
     if b.spawn_data[1].unit_name ~= "BASE_3p" then return "#237 guard: user-selected illusion (skin) must win, no rewrite" end
+    local c = _mk(); c.skin_name = "stored_preview_skin"
+    apply("es_sword_shield", "cwv_we_sword_shield_001", nil, c)
+    if c.spawn_data[1].unit_name ~= "BASE_3p" then
+        return "#579 guard: info.skin_name must win when copied preview callback drops skin arg"
+    end
 end)
 
 _rt_register("browser_meshswap_guards", function()

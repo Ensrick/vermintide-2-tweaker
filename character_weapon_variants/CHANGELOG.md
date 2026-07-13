@@ -1,5 +1,13 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.394-dev - 2026-07-13 - #579 Dual Axes preview and remote cosmetic continuity [untested]
+
+- Fixed the inventory character preview replacing a selected generated Dual Axes illusion with the variant's default axes. Vanilla stores the authoritative choice in `MenuWorldPreviewer._item_info_by_slot[slot].skin_name`; CWV now respects that value when the copied post-hook loses its `skin` argument, so vanilla's exact right- and left-hand skin units remain intact.
+- Preserved the crash-safe hot-join rule: a generated CWV skin is still nulled during the join handshake. Once peer parity confirms every decoder has the same CWV schema, the owner performs one bounded vanilla `rpc_add_equipment` replay for each CWV-skinned slot and re-wields the current slot so remote husks immediately respawn with the exact generated skin. The replay intentionally carries the clone-name-clobbered vanilla base item id plus the generated skin id.
+- Kept the v0.1.390 source-pool and DLC ownership contract unchanged. Added `/cwv_regression_test` check `issue579_dual_axes_preview_and_husk_skin_continuity` for both Kruber and Saltzpyre owners, both hands, stored preview identity, wire payload identity, and husk skin resolution.
+
+**DoD:** Universal walked. Trait gates: G-DUAL, G-CROSS-CHAR, G-CUSTOM-ILLUSION, G-NETWORK, G-APPEARANCE. Deferrals: inventory character preview plus two-player host/client equip, hot-join, role reversal, and individualized-hand verification — issue #579 live matrix.
+
 ## 0.1.393-dev - 2026-07-13 - #398 remote cross-access swing audio [untested]
 
 - Moved cross-access 3P event substitution from `Unit.animation_event` to `WeaponUnitExtension._play_3p_anim`, before vanilla resolves `NetworkLookup.anims` and broadcasts the animation RPC. The old ordering rewrote only the owner's local body after the donor event was already sent; observers could receive an event their receiver body did not play, losing both weapon swing foley and character exertion authored on that animation timeline.
