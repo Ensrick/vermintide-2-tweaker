@@ -128,49 +128,22 @@ local options_data = {
             -- like the parry indicator and respawn-over-portrait timer modify HUD
             -- elements, so one HUD category. setting_id kept: gut_hide_hud_ui_group.)
             -- ================================================================
-            -- Deliberate order (NOT A->Z): the HUD-mode dropdown + its cycle
-            -- hotkey sit at the top, then the "Hide UI Elements & Buffs" sub-tree
-            -- (absorbed HideBuffs/"UI Tweaks"), then the overlay master toggles.
-            -- Setting ids kept verbatim (HideBuffs fork hooks read
-            -- mod:get(SETTING_NAMES.<id>)); only labels changed.
+            -- Ordering (#527, user doctrine): collapsible sub-groups sit FIRST at
+            -- this level (A-Z among themselves), then the loose options in their
+            -- deliberate rig order (HUD-mode dropdown + hotkeys, then the overlay
+            -- master toggles). The Mod Tweaker splices the Crosshair Kill
+            -- Confirmation sub-group at the HEAD of this child block too
+            -- (_inject_ckc_into_gut in both twins), so the rendered order is
+            -- CKC group, UI Tweaks group, loose options. Setting ids kept
+            -- verbatim (HideBuffs fork hooks read mod:get(SETTING_NAMES.<id>));
+            -- only labels changed.
             {
                 setting_id  = "gut_hide_hud_ui_group",
                 type        = "group",
                 sub_widgets = {
-                    -- (a) Hide UI (3 modes) — migrated from general_tweaker.
-                    -- Cycle off -> partial -> complete -> camera via dropdown,
-                    -- /hud, or hotkey. (Container gut_hud_visibility_group was
-                    -- dissolved into this group; its members live here directly.)
-                    {
-                        setting_id    = "gut_hud_mode",
-                        type          = "dropdown",
-                        default_value = "off",
-                        options       = GUT_HUD_MODE_OPTIONS,
-                        tooltip       = "gut_hud_mode_tooltip",
-                    },
-                    {
-                        setting_id      = "gut_hud_cycle_hotkey",
-                        type            = "keybind",
-                        keybind_trigger = "pressed",
-                        keybind_type    = "function_call",
-                        function_name   = "gut_hud_cycle",
-                        default_value   = {},
-                        tooltip         = "gut_hud_cycle_hotkey_tooltip",
-                    },
-                    -- HUD edit-mode keybind (#310): enter/exit the click-drag HUD
-                    -- customizer without the /edit_hud chat command. function_name
-                    -- resolves to mod.gut_edit_hud_toggle (gui_tweaker_dev.lua).
-                    {
-                        setting_id      = "gut_edit_hud_hotkey",
-                        type            = "keybind",
-                        keybind_trigger = "pressed",
-                        keybind_type    = "function_call",
-                        function_name   = "gut_edit_hud_toggle",
-                        default_value   = {},
-                        tooltip         = "gut_edit_hud_hotkey_tooltip",
-                    },
-                    -- (b/c/d) UI Tweaks (HideBuffs) absorbed. Setting ids kept
-                    -- verbatim from HideBuffs so the forked hb/ hooks resolve.
+                    -- UI Tweaks (HideBuffs) absorbed. Collapsible, so it leads the
+                    -- level (#527). Setting ids kept verbatim from HideBuffs so the
+                    -- forked hb/ hooks resolve.
                     {
                         setting_id  = "hb_group",
                         type        = "group",
@@ -213,7 +186,7 @@ local options_data = {
                                     { setting_id = "HIDE_ZEALOT_HOLY_CRUSADER_BUFF",                   type = "checkbox", default_value = false, tooltip = "HIDE_ZEALOT_HOLY_CRUSADER_BUFF_tooltip" },
                                 },
                             },
-                            -- (d) Formerly-loose hb toggles, now grouped.
+                            -- Formerly-loose hb toggles, now grouped.
                             {
                                 setting_id  = "gut_hb_misc_group",
                                 type        = "group",
@@ -223,7 +196,7 @@ local options_data = {
                                     { setting_id = "UNOBTRUSIVE_MISSION_TOOLTIP",    type = "checkbox", default_value = false, tooltip = "UNOBTRUSIVE_MISSION_TOOLTIP_tooltip" },
                                 },
                             },
-                            -- (e) UI Tweaks Integration (#312), now nested INSIDE the
+                            -- UI Tweaks Integration (#312), nested INSIDE the
                             -- UI Tweaks group per user direction: all UI Tweaks options
                             -- live under one "UI Tweaks" heading (hb_group relabelled
                             -- "UI Tweaks" in localization). gut_uitweaks_sync: when the
@@ -259,6 +232,38 @@ local options_data = {
                                 },
                             },
                         },
+                    },
+                    -- (a) Hide UI (3 modes) — migrated from general_tweaker.
+                    -- Cycle off -> partial -> complete -> camera via dropdown,
+                    -- /hud, or hotkey. (Container gut_hud_visibility_group was
+                    -- dissolved into this group; its members live here directly.)
+                    {
+                        setting_id    = "gut_hud_mode",
+                        type          = "dropdown",
+                        default_value = "off",
+                        options       = GUT_HUD_MODE_OPTIONS,
+                        tooltip       = "gut_hud_mode_tooltip",
+                    },
+                    {
+                        setting_id      = "gut_hud_cycle_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gut_hud_cycle",
+                        default_value   = {},
+                        tooltip         = "gut_hud_cycle_hotkey_tooltip",
+                    },
+                    -- HUD edit-mode keybind (#310): enter/exit the click-drag HUD
+                    -- customizer without the /edit_hud chat command. function_name
+                    -- resolves to mod.gut_edit_hud_toggle (gui_tweaker_dev.lua).
+                    {
+                        setting_id      = "gut_edit_hud_hotkey",
+                        type            = "keybind",
+                        keybind_trigger = "pressed",
+                        keybind_type    = "function_call",
+                        function_name   = "gut_edit_hud_toggle",
+                        default_value   = {},
+                        tooltip         = "gut_edit_hud_hotkey_tooltip",
                     },
                     -- Overlays (former "On-Screen Overlays" category, deleted in the
                     -- 2026-07-02 reorg). Parry-block colour, respawn countdown over a
@@ -469,8 +474,8 @@ local options_data = {
                 setting_id  = "gut_mainmenu_group",
                 type        = "group",
                 sub_widgets = {
-                    { setting_id = "gut_skip_start_screen",    type = "checkbox", default_value = false, tooltip = "gut_skip_start_screen_tooltip" },
-                    { setting_id = "gut_return_to_menu_quits", type = "checkbox", default_value = false, tooltip = "gut_return_to_menu_quits_tooltip" },
+                    -- Cutscenes sub-group leads the level: collapsible sub-groups
+                    -- sit FIRST, then loose options (#527 doctrine).
                     {
                         setting_id  = "gut_cutscenes_group",
                         type        = "group",
@@ -507,6 +512,8 @@ local options_data = {
                             },
                         },
                     },
+                    { setting_id = "gut_skip_start_screen",    type = "checkbox", default_value = false, tooltip = "gut_skip_start_screen_tooltip" },
+                    { setting_id = "gut_return_to_menu_quits", type = "checkbox", default_value = false, tooltip = "gut_return_to_menu_quits_tooltip" },
                 },
             },
             -- ================================================================
@@ -536,13 +543,11 @@ local options_data = {
                         default_value = true,
                         tooltip       = "gut_mt_auto_collapse_tooltip",
                     },
-                    {
-                        -- (#313) CKC options-menu bridge master toggle. Default on.
-                        setting_id    = "gut_ckc_options_bridge",
-                        type          = "checkbox",
-                        default_value = true,
-                        tooltip       = "gut_ckc_options_bridge_tooltip",
-                    },
+                    -- (#528) The former gut_ckc_options_bridge availability toggle
+                    -- (issue 313) is GONE: the Crosshair Kill Confirmation bridge is
+                    -- an implicit feature, active whenever CKC is installed and
+                    -- togglable (_gut_ckc_bridge.lua). The old saved value is left
+                    -- orphaned in mods_settings (harmless).
                 },
             },
         },

@@ -376,7 +376,7 @@ local function _inject_ckc_into_gut(out)
     end
     if type(ckc_list) ~= "table" or #ckc_list < 2 then return end  -- no real options
 
-    -- Locate the HUD group node + the end of its child block in gut's flat list.
+    -- Locate the HUD group node in gut's flat list.
     local src = gut_cat.widgets
     local hud_idx, hud_depth
     for i = 1, #src do
@@ -385,10 +385,12 @@ local function _inject_ckc_into_gut(out)
         end
     end
     if not hud_idx then return end
-    local end_idx = #src + 1
-    for i = hud_idx + 1, #src do
-        if (_nf(src[i], "depth") or 0) <= hud_depth then end_idx = i; break end
-    end
+    -- (#527) [CKC-SPLICE-FIRST-527] The block splices at the START of the HUD child
+    -- block (immediately after the HUD group header), not the end: collapsible
+    -- sub-groups sort FIRST at their level (user doctrine, issue 527), and
+    -- "Crosshair Kill Confirmation" precedes "UI Tweaks" A-Z, so the head of the
+    -- block IS its alphabetical slot among the HUD sub-groups.
+    local ins_idx = hud_idx + 1
 
     -- Build the CKC sub-group block: a group header at HUD+1, CKC options rebased to HUD+2.
     -- Title is the mod's proper name as a literal (a non-key string): _vmf_label localizes
@@ -413,11 +415,12 @@ local function _inject_ckc_into_gut(out)
         if type(sid) == "string" then owners[sid] = { mod_id = _CKC_NAME, mod_obj = ckc } end
     end
 
-    -- Splice the block into a COPY of gut's widget list at the end of the HUD child block.
+    -- Splice the block into a COPY of gut's widget list at the START of the HUD child
+    -- block (#527; see [CKC-SPLICE-FIRST-527] above).
     local new_w = {}
-    for i = 1, end_idx - 1 do new_w[#new_w + 1] = src[i] end
+    for i = 1, ins_idx - 1 do new_w[#new_w + 1] = src[i] end
     for i = 1, #block do new_w[#new_w + 1] = block[i] end
-    for i = end_idx, #src do new_w[#new_w + 1] = src[i] end
+    for i = ins_idx, #src do new_w[#new_w + 1] = src[i] end
 
     gut_cat.widgets = new_w
     gut_cat._owners = owners

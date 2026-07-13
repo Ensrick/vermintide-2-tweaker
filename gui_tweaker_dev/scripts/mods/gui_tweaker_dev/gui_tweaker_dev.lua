@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.224-dev"
+local MOD_VERSION = "0.2.225-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2390,16 +2390,53 @@ _rt_register("ckc_bridge_module_wired", function()
     end
 end)
 
-_rt_register("ckc_bridge_loc_keys", function()
-    -- The gut bridge checkbox loc key must exist in the raw loc file.
+_rt_register("ckc_bridge_implicit_no_toggle", function()
+    -- (#528) The CKC bridge is IMPLICIT (active whenever CKC is installed + togglable).
+    -- The retired gut_ckc_options_bridge availability toggle must stay gone: no widget
+    -- in the data file, and the bridge module must not read the setting id. (Inverse of
+    -- the pre-#528 ckc_bridge_loc_keys check, which REQUIRED the key.) Split needles;
+    -- unreadable source => silent skip.
     local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local dir = src:match("^(.*[/\\])[^/\\]*$")
     if not dir then return end
-    local loc_txt = _gut_read_all(dir .. "gui_tweaker_dev_localization.lua")
-    if loc_txt and not loc_txt:find("gut_ckc_options" .. "_bridge", 1, true) then
-        return "gut_ckc_options_bridge missing from the loc table (#313)"
+    local retired = "gut_ckc_options" .. "_bridge"
+    local data_txt = _gut_read_all(dir .. "gui_tweaker_dev_data.lua")
+    if data_txt and data_txt:find('"' .. retired .. '"', 1, true) then
+        return "retired availability toggle " .. retired .. " re-added to the data file (#528: the bridge is implicit)"
+    end
+    local br_txt = _gut_read_all(dir .. "_gut_ckc_bridge.lua")
+    if br_txt and br_txt:find('"' .. retired .. '"', 1, true) then
+        return "_gut_ckc_bridge.lua reads " .. retired .. " again (#528: no availability gate; _is_active = CKC presence only)"
+    end
+end)
+
+_rt_register("hud_collapsibles_hold_first_position", function()
+    -- (#527) Collapsible sub-groups sit FIRST at their level (user doctrine): in the
+    -- HUD group the UI Tweaks collapsible (hb_group) must precede the first loose
+    -- option (gut_hud_mode), and BOTH Mod Tweaker twins must splice the CKC sub-group
+    -- at the START of the HUD child block (marker [CKC-SPLICE-FIRST" .. "-527]).
+    -- Source-pattern checks with split needles; unreadable source => silent skip.
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dir = src:match("^(.*[/\\])[^/\\]*$")
+    if not dir then return end
+    local data_txt = _gut_read_all(dir .. "gui_tweaker_dev_data.lua")
+    if data_txt then
+        local hb_at   = data_txt:find('"hb' .. '_group"', 1, true)
+        local mode_at = data_txt:find('"gut_hud' .. '_mode"', 1, true)
+        if hb_at and mode_at and hb_at > mode_at then
+            return "hb_group (UI Tweaks collapsible) no longer leads the HUD group -- collapsibles sort first (#527)"
+        end
+    end
+    local splice_needle = "CKC-SPLICE-FIRST" .. "-527"
+    for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
+        local txt = _gut_read_all(dir .. fn)
+        if txt and not txt:find(splice_needle, 1, true) then
+            return fn .. " lost the " .. splice_needle .. " head-of-HUD splice (#527: CKC group must lead the HUD child block)"
+        end
     end
 end)
 

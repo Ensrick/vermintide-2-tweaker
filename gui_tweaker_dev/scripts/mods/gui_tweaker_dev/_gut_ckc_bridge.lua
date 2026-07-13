@@ -10,9 +10,11 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 -- crosshair_kill_confirm setting (GAMEPLAY tab dropdown) consumed only by
 -- CrosshairUI. With CKC installed the native marker is redundant/competing.
 --
--- This bridge, ONLY when CKC is installed AND togglable AND the user's
--- gut_ckc_options_bridge checkbox is on (default on), TAKES OVER the native
--- crosshair_kill_confirm dropdown in the vanilla Options menu:
+-- This bridge, whenever CKC is installed AND togglable, TAKES OVER the native
+-- crosshair_kill_confirm dropdown in the vanilla Options menu. (#528: the bridge
+-- is IMPLICIT - the former gut_ckc_options_bridge availability checkbox is gone;
+-- CKC present = bridge active, no toggle. The old saved value is left orphaned
+-- in mods_settings, unread.) The takeover:
 --   * the dropdown becomes a 2-option On / Off toggle that LIVE-drives the CKC
 --     MOD via VMF's mod_state_changed (parity with the VMF-menu checkbox), NOT
 --     staged through the options Apply pipeline;
@@ -31,12 +33,12 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 -- MODULE-SIDE LIFECYCLE CHAINING (deliberate). #313 landed while the gut main
 -- file (gui_tweaker_dev.lua) was claimed by parallel #307 freecam work, so this
 -- module does NOT rely on the main file wiring its callbacks. Instead it
--- chain-wraps mod.on_all_mods_loaded (-> install) and mod.on_setting_changed
--- (-> M.on_setting_changed) at dofile time. The main file contributes ONLY a
--- single dofile line; adding that line later activates everything here. The
--- dofile must therefore run AFTER the main file defines/chains those two
--- callbacks (it is placed next to the other OptionsView modules, well below
--- both definitions).
+-- chain-wraps mod.on_all_mods_loaded (-> install) at dofile time. The main file
+-- contributes ONLY a single dofile line; adding that line later activates
+-- everything here. The dofile must therefore run AFTER the main file defines/
+-- chains that callback (it is placed next to the other OptionsView modules,
+-- well below the definition). (#528: the on_setting_changed chain is gone with
+-- the availability toggle it listened for.)
 --
 -- SOURCE PROVENANCE (verified 2026-07-05):
 --   * vanilla setup/change/saved-value callbacks are SYNTHESIZED named methods on
@@ -57,7 +59,7 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 
 local _CKC_NAME = "Crosshair Kill Confirmation"
 local _VANILLA  = "crosshair_kill_confirm"        -- native user_setting key
-local _S_BRIDGE = "gut_ckc_options_bridge"         -- gut checkbox (nil => treat as ON)
+-- (#528) _S_BRIDGE (the gut_ckc_options_bridge checkbox) retired: bridge is implicit.
 local _S_SAVED  = "gut_ckc_saved_vanilla_group"    -- remembered pre-takeover vanilla group
 local GEAR      = 26                               -- gear icon square (px, 1080p ref)
 
@@ -73,14 +75,6 @@ local function _loc(key)
     local ok, s = pcall(Localize, key)
     if ok and type(s) == "string" then return s end
     return key
-end
-
--- The gut bridge checkbox. The data.lua widget may land AFTER this module (the
--- shared files were claimed by #307), so a nil (unregistered) value means ON.
-local function _bridge_on()
-    local v = mod:get(_S_BRIDGE)
-    if v == nil then v = true end
-    return v and true or false
 end
 
 local function _ckc()
@@ -101,10 +95,10 @@ local function _ckc_enabled()
     return (ok and en) and true or false
 end
 
--- The takeover is live only when CKC is present+togglable (install marked _active)
--- AND the user has the bridge checkbox on. Hooks passthrough to vanilla otherwise.
+-- The takeover is live whenever CKC is present+togglable (install marked _active).
+-- (#528) No availability checkbox anymore - implicit. Hooks passthrough otherwise.
 local function _is_active()
-    return _active and _bridge_on()
+    return _active
 end
 
 -- ---------------------------------------------------------------
@@ -134,7 +128,9 @@ local function _enforce()
     end
 end
 
--- Restore the remembered pre-takeover group (opt-out path) and clear the memory.
+-- Restore the remembered pre-takeover group and clear the memory. (#528) With the
+-- availability toggle retired there is no menu opt-out path; this stays as a manual
+-- recovery API only (M.restore - e.g. console/regression use after uninstalling CKC).
 -- "off" is the cleared sentinel (enforce never saves "off"), so a restore is a no-op
 -- when nothing was taken over.
 local function _restore()
@@ -361,20 +357,7 @@ function M.install()
     _active = true
     _register_hooks()
     _enforce()
-    _printf("[gut_dev:ckc] bridge active (CKC installed + togglable, bridge_on=%s)", tostring(_bridge_on()))
-end
-
--- Chained from mod.on_setting_changed: react to the bridge checkbox flip.
-function M.on_setting_changed(setting_id)
-    if setting_id ~= _S_BRIDGE then return end
-    if not _active then return end  -- CKC absent: nothing to enforce/restore
-    if _bridge_on() then
-        _printf("[gut_dev:ckc] bridge toggled ON -> enforce native off")
-        pcall(_enforce)
-    else
-        _printf("[gut_dev:ckc] bridge toggled OFF -> restore native group")
-        pcall(_restore)
-    end
+    _printf("[gut_dev:ckc] bridge active (CKC installed + togglable; implicit, no toggle)")
 end
 
 -- Structural markers / API surface (published at load, regardless of CKC presence,
@@ -386,21 +369,15 @@ M._CKC_NAME   = _CKC_NAME
 mod._GUT_CKC_BRIDGE_MARKER = "gut-ckc-bridge-313"
 mod._gut_ckc_bridge = M
 
--- Module-side lifecycle chaining (see header). Wrap the PREVIOUS callbacks captured
--- at this dofile point; both must already exist (main file defines on_setting_changed
--- and chains on_all_mods_loaded well above this module's dofile site).
+-- Module-side lifecycle chaining (see header). Wrap the PREVIOUS callback captured
+-- at this dofile point (the main file chains on_all_mods_loaded well above this
+-- module's dofile site). (#528) The on_setting_changed chain was removed with the
+-- availability toggle it listened for.
 do
     local _prev_oaml = mod.on_all_mods_loaded
     mod.on_all_mods_loaded = function(...)
         if _prev_oaml then _prev_oaml(...) end
         pcall(M.install)
-    end
-end
-do
-    local _prev_osc = mod.on_setting_changed
-    mod.on_setting_changed = function(setting_id, ...)
-        if _prev_osc then _prev_osc(setting_id, ...) end
-        pcall(M.on_setting_changed, setting_id)
     end
 end
 
