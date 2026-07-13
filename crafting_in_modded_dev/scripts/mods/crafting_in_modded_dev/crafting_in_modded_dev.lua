@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.60-dev"
+local MOD_VERSION = "0.8.61-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -1990,7 +1990,10 @@ local function _forge_preview_unsafe(item)
         local key = (item and (item.key or (item.data and item.data.key))) or "<?>"
         if not _forge_preview_warned[key] then
             _forge_preview_warned[key] = true
-            mod:info("[cim] forge 3D preview skipped for '%s' — its preview units aren't loadable in the forge world (would CTD). Stat editing still works.", tostring(key))
+            -- (#481) printf, not mod:info — the user runs with mod logging OFF, so a
+            -- mod:info skip line is invisible in exactly the report where we need to
+            -- know whether the guard fired (repo doctrine: diagnostics use printf).
+            printf("[cim:481] forge 3D preview skipped for '%s' — its preview units aren't loadable in the forge world (would CTD). Stat editing still works.", tostring(key))
         end
     end
     return unsafe
@@ -2008,14 +2011,42 @@ end)
 
 mod:hook("LootItemUnitPreviewer", "_load_item_units", function(func, self, item)
     if _custom_forge_active and _forge_preview_unsafe(item) then return {} end
-    return func(self, item)
+    local units_to_spawn = func(self, item)
+    -- (#481) _cim481_forge_preview_probe: intake dump. The user's retest (issue
+    -- 481, 0.8.58 log) showed the LA-skinned shield ABSENT on the first Athanor
+    -- open but present after cycling items — with NO guard-skip line, so the miss
+    -- happened inside the vanilla/cosmetics spawn chain. This dumps exactly what
+    -- vanilla queued (unit paths resolved through BackendUtils.get_item_units,
+    -- i.e. post-LA-offhand-override) plus each path's package/unit residency, so
+    -- the next log distinguishes "LA path never entered spawn_data" from
+    -- "spawned but invisible/offset". Runs only under _custom_forge_active;
+    -- one line per item present (user-action-bounded, no spam risk).
+    if _custom_forge_active then
+        pcall(function()
+            local key = (item and (item.key or (item.data and item.data.key))) or "<?>"
+            local n = (type(units_to_spawn) == "table" and #units_to_spawn) or 0
+            printf("[cim:481] forge _load_item_units key=%s skin=%s bid=%s n_entries=%d",
+                tostring(key), tostring(item and item.skin),
+                tostring(item and item.backend_id), n)
+            if type(units_to_spawn) == "table" then
+                for i, d in ipairs(units_to_spawn) do
+                    local u = d and d.unit_name
+                    printf("[cim:481]   entry[%d] unit=%s pkg_res=%s unit_res=%s",
+                        i, tostring(u),
+                        tostring(u and Application.can_get("package", u)),
+                        tostring(u and Application.can_get("unit", u)))
+                end
+            end
+        end)
+    end
+    return units_to_spawn
 end)
 
 -- ============================================================
--- (#404) DIAGNOSTIC: measure the far-left offset of the forge weapon preview
+-- (#404 / #481) DIAGNOSTIC: measure the forge weapon-preview placement
 -- ============================================================
 -- Ranged weapons render pushed far LEFT in the Athanor 3D preview. Root (issue
--- #404, source-confirmed): HeroWindowWeaveProperties / HeroWindowWeaveForgeWeapons
+-- 404, source-confirmed): HeroWindowWeaveProperties / HeroWindowWeaveForgeWeapons
 -- ._create_item_previewer place the spin pivot (the link unit) at a UNIFORM
 -- preview_position ({-0.85,3,0}; hero_window_weave_properties.lua:2954). Each hand
 -- unit then links at item_template.<hand>_hand_attachment_node_linking.third_person
@@ -2024,11 +2055,19 @@ end)
 -- orbits WIDE of the spin pivot and reads as far-left. The corrective preview shift
 -- is PER-WEAPON (each mesh's hand-node translation differs), so it can only be
 -- measured at runtime — per the no-VMF-UI-guessing rule we MEASURE here instead of
--- shipping a guessed preview_position offset. Logs each spawned unit's world
--- position + delta from the spin pivot, once per item key. No existing hook on
--- spawn_units (singleton). Gated on _custom_forge_active so only the Athanor is
--- instrumented; also surfaces n_units=0 if a ranged preview is being stripped.
-local _cim_404_preview_logged = {}
+-- shipping a guessed preview_position offset.
+--
+-- (#481) _cim481_forge_preview_probe: LA-skinned shields show the SAME class of
+-- defect (mesh sits left of where the vanilla shield sits) plus a first-open miss,
+-- so this hook now logs EVERY forge spawn (the old once-per-item-key latch masked
+-- the first-open vs re-select difference the user reported) and includes each
+-- unit's spawn_data path (LA mesh vs vanilla). CAVEAT (cross-mod wrapper order):
+-- cosmetics_tweaker loads AFTER cim, so ITS spawn_units wrapper is OUTERMOST —
+-- its LA paint + kind="unit" 2x preview scale run AFTER this body. Spawn-time
+-- transforms logged here are PRE-cosmetics; the authoritative post-cosmetics
+-- snapshot is the LootItemUnitPreviewer.update hook_safe below.
+-- Gated on _custom_forge_active so only the Athanor is instrumented; also
+-- surfaces n_units=0 if a preview is being stripped.
 mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data)
     local units = func(self, spawn_data)
     if not _custom_forge_active then return units end
@@ -2036,11 +2075,11 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
         local item = self._item
         local data = item and item.data
         local key = (data and data.key) or (item and item.key) or "<?>"
-        if _cim_404_preview_logged[key] then return end
-        _cim_404_preview_logged[key] = true
         local slot_type = data and data.slot_type
-        printf("[cim:404] forge preview key=%s slot_type=%s n_units=%s",
-            tostring(key), tostring(slot_type), tostring(units and #units or 0))
+        printf("[cim:404] forge preview key=%s slot_type=%s skin=%s bid=%s n_data=%s n_units=%s",
+            tostring(key), tostring(slot_type), tostring(item and item.skin),
+            tostring(item and item.backend_id),
+            tostring(spawn_data and #spawn_data or 0), tostring(units and #units or 0))
         local link_unit = self._link_unit
         if not (link_unit and Unit.alive(link_unit)) then return end
         local lp = Unit.world_position(link_unit, 0)
@@ -2048,13 +2087,57 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
         for i, u in ipairs(units or {}) do
             if u and Unit.alive(u) then
                 local up = Unit.world_position(u, 0)
-                printf("[cim:404]   unit[%d] world=(%.3f, %.3f, %.3f) delta_x=%.3f delta_z=%.3f",
-                    i, Vector3.x(up), Vector3.y(up), Vector3.z(up),
+                local name = spawn_data and spawn_data[i] and spawn_data[i].unit_name
+                printf("[cim:404]   unit[%d]=%s world=(%.3f, %.3f, %.3f) delta_x=%.3f delta_z=%.3f",
+                    i, tostring(name), Vector3.x(up), Vector3.y(up), Vector3.z(up),
                     Vector3.x(up) - Vector3.x(lp), Vector3.z(up) - Vector3.z(lp))
             end
         end
     end)
     return units
+end)
+
+-- (#481) _cim481_forge_preview_probe: POST-cosmetics snapshot. cosmetics_tweaker's
+-- spawn_units wrapper (outermost, loads after cim) applies the LA offhand paint and
+-- the kind="unit" 2x preview scale AFTER cim's spawn_units body above, so only a
+-- later read shows the transforms the user actually sees. Vanilla spawns preview
+-- units from INSIDE LootItemUnitPreviewer.update (loot_item_unit_previewer.lua:95 →
+-- _spawn_items assigns self._spawned_units at :532), so the first hook_safe pass
+-- after spawn already sees the final state. One-shot per previewer instance
+-- (self._cim481_snapped), read-only, gated on _custom_forge_active. No existing cim
+-- hook on (LootItemUnitPreviewer, update) — grep-verified 2026-07-13 (cosmetics'
+-- own update hook is a different mod; VMF chains cross-mod).
+mod:hook_safe("LootItemUnitPreviewer", "update", function(self, dt, t, input_service)
+    if not _custom_forge_active then return end
+    if self._cim481_snapped then return end
+    local spawned = self._spawned_units
+    if not spawned or #spawned == 0 then return end
+    self._cim481_snapped = true
+    pcall(function()
+        local item = self._item
+        local data = item and item.data
+        local key = (data and data.key) or (item and item.key) or "<?>"
+        local link_unit = self._link_unit
+        local lp = link_unit and Unit.alive(link_unit) and Unit.world_position(link_unit, 0)
+        printf("[cim:481] forge post-cosmetics snapshot key=%s n_spawned=%d pivot=%s",
+            tostring(key), #spawned,
+            lp and string.format("(%.3f, %.3f, %.3f)", Vector3.x(lp), Vector3.y(lp), Vector3.z(lp)) or "<none>")
+        local units_to_spawn = self._units_to_spawn
+        for i, u in ipairs(spawned) do
+            if u and Unit.alive(u) then
+                local up = Unit.world_position(u, 0)
+                local sc = Unit.local_scale(u, 0)
+                local name = units_to_spawn and units_to_spawn[i] and units_to_spawn[i].unit_name
+                printf("[cim:481]   unit[%d]=%s world=(%.3f, %.3f, %.3f)%s scale=(%.2f, %.2f, %.2f)",
+                    i, tostring(name), Vector3.x(up), Vector3.y(up), Vector3.z(up),
+                    lp and string.format(" delta_x=%.3f delta_z=%.3f",
+                        Vector3.x(up) - Vector3.x(lp), Vector3.z(up) - Vector3.z(lp)) or "",
+                    Vector3.x(sc), Vector3.y(sc), Vector3.z(sc))
+            else
+                printf("[cim:481]   unit[%d] NOT ALIVE", i)
+            end
+        end
+    end)
 end)
 
 -- ============================================================
@@ -5447,6 +5530,40 @@ _rt_register("forge_preview_accepts_resident_3p_unit", function()
     local needle = 'if Application.can_get("unit", p) then ' .. 'return false end'
     if not txt:find(needle, 1, true) then
         return "#481 regression: pkg_missing dropped the resident-3p-unit fallback (LA-skinned shields lose the forge preview)"
+    end
+end)
+
+_rt_register("forge_preview_la_diagnostics_armed", function()
+    -- (#481, round 2) The user's 0.8.58 retest showed two residual defects on
+    -- LA-skinned shields in the Athanor: (1) shield ABSENT on the first forge
+    -- open until the item is re-selected, (2) shield offset left of where the
+    -- vanilla shield sits. The 0.8.58 log carried NO guard-skip line, so the miss
+    -- happens inside the vanilla/cosmetics spawn chain — per the diagnose-before-
+    -- mitigating doctrine this version arms three probes instead of guessing a
+    -- fix: the _load_item_units intake dump, the per-spawn spawn_units dump (the
+    -- old once-per-key latch masked first-open vs re-select), and the
+    -- post-cosmetics update snapshot (cosmetics' outermost wrapper applies LA
+    -- paint + 2x preview scale AFTER cim's spawn_units body). This check fails if
+    -- any probe is stripped before #481 is closed.
+    -- Runtime anchor: the guard helper must stay exposed (shared with the probes'
+    -- gate) — same anchor as forge_preview_accepts_resident_3p_unit.
+    if type(mod._cim_forge_preview_unsafe) ~= "function" then
+        return "forge preview guard helper (_cim_forge_preview_unsafe) not exposed (#481 probes lost their gate)"
+    end
+    -- Source-pattern (io-safe; nil in retail sandbox => skip). Split needles so
+    -- this check's own source does not self-match.
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
+    if not txt then return end
+    local intake = '[cim:481] forge _load_item_units' .. ' key=%s'
+    if not txt:find(intake, 1, true) then
+        return "#481 regression: forge _load_item_units intake probe removed while the LA first-open miss is undiagnosed"
+    end
+    local snapshot = '[cim:481] forge post-cosmetics snapshot' .. ' key=%s'
+    if not txt:find(snapshot, 1, true) then
+        return "#481 regression: post-cosmetics update snapshot removed while the LA shield offset is unmeasured"
     end
 end)
 
