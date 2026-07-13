@@ -8093,23 +8093,45 @@ _register_kruber_1h_sword_dual_illusions()
 local function _register_saltzpyre_1h_axe_dual_illusions()
 	if not ItemMasterList or not WeaponSkins then return end
 
-	local source_keys = {}
-	for skin_key, entry in pairs(ItemMasterList) do
-		if type(entry) == "table"
-				and entry.item_type == "weapon_skin"
-				and entry.matching_item_key == "wh_1h_axe" then
-			source_keys[#source_keys + 1] = skin_key
+	-- The combination table is the vanilla cosmetic owner's authoritative
+	-- family.  Scanning ItemMasterList here used to depend on DLC load order,
+	-- and the fixed destination tier list then silently dropped Scorpion's
+	-- `magic` skin.  Preserve every source tier membership and add the vanilla
+	-- default skin, which lives in WeaponSkins.default_skins rather than the
+	-- combination table.
+	local source_memberships = {}
+	local source_combos = WeaponSkins.skin_combinations.wh_1h_axe_skins or {}
+	for tier_name, tier in pairs(source_combos) do
+		for _, source_key in ipairs(tier) do
+			local memberships = source_memberships[source_key]
+			if not memberships then
+				memberships = {}
+				source_memberships[source_key] = memberships
+			end
+			memberships[#memberships + 1] = tier_name
 		end
 	end
+	local default_skin = WeaponSkins.default_skins and WeaponSkins.default_skins.wh_1h_axe
+	if default_skin and not source_memberships[default_skin] then
+		local default_data = WeaponSkins.skins[default_skin]
+		source_memberships[default_skin] = { default_data and default_data.rarity or "plentiful" }
+	end
+
+	local source_keys = {}
+	for source_key in pairs(source_memberships) do source_keys[#source_keys + 1] = source_key end
 	table.sort(source_keys)
+	local source_by_clone = {}
+	_om._dual_axes_source_by_skin = source_by_clone
 
 	local registered = 0
 	for _, source_key in ipairs(source_keys) do
 		local new_key = "cwv_es_dual_axes_" .. source_key
-		if _custom_skin_keys[new_key] then goto continue end
-
 		local source = WeaponSkins.skins[source_key]
-		if not source or not source.right_hand_unit then goto continue end
+		local source_item = rawget(ItemMasterList, source_key)
+		if not source or not source.right_hand_unit or not source_item
+				or source_item.matching_item_key ~= "wh_1h_axe" then goto continue end
+		source_by_clone[new_key] = source_key
+		if _custom_skin_keys[new_key] then goto continue end
 
 		-- Mirror right_hand_unit → left_hand_unit so the picker (and
 		-- in-game) renders two identical axes. Force display_unit to
@@ -8134,6 +8156,14 @@ local function _register_saltzpyre_1h_axe_dual_illusions()
 			template          = source.template,
 			can_wield         = _es_careers,
 		}
+		-- Ownership remains attached to the cosmetic, not the CWV weapon.  The
+		-- unlock hook below consults this copied field before exposing the clone.
+		if source_item.required_dlc then
+			iml_entry.required_dlc = source_item.required_dlc
+		end
+		if source_item.event_quest_requirement then
+			iml_entry.event_quest_requirement = source_item.event_quest_requirement
+		end
 		if source.material_settings_name then
 			iml_entry.material_settings_name = source.material_settings_name
 		end
@@ -8157,10 +8187,17 @@ local function _register_saltzpyre_1h_axe_dual_illusions()
 
 		local combos = WeaponSkins.skin_combinations.cwv_es_dual_axes_skins
 		if combos then
-			local rarity = source.rarity or "exotic"
-			local tier = combos[rarity]
-			if tier then
-				tier[#tier + 1] = new_key
+			for _, tier_name in ipairs(source_memberships[source_key]) do
+				local tier = combos[tier_name]
+				if not tier then
+					tier = {}
+					combos[tier_name] = tier
+				end
+				local found = false
+				for _, existing_key in ipairs(tier) do
+					if existing_key == new_key then found = true break end
+				end
+				if not found then tier[#tier + 1] = new_key end
 			end
 		end
 
@@ -9116,7 +9153,14 @@ mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins", fu
 	local mirror = self._backend_mirror
 	if not mirror or not mirror._unlocked_weapon_skins then return end
 	for skin_key, _ in pairs(_custom_skin_keys) do
-		mirror._unlocked_weapon_skins[skin_key] = true
+		local skin_item = rawget(ItemMasterList, skin_key)
+		local required_dlc = skin_item and skin_item.required_dlc
+		local owns_required_dlc = not required_dlc
+			or not Managers.unlock
+			or Managers.unlock:is_dlc_unlocked(required_dlc)
+		if owns_required_dlc then
+			mirror._unlocked_weapon_skins[skin_key] = true
+		end
 	end
 end)
 
@@ -12162,6 +12206,82 @@ _rt_register("cwv_variant_flag_present", function()
     end
     if #missing > 0 then
         return "cwv_variant flag missing on " .. #missing .. " entries: " .. table.concat(missing, ", ")
+    end
+end)
+
+_rt_register("dual_axes_cosmetic_family_parity", function()
+    local ws = rawget(_G, "WeaponSkins")
+    local iml = rawget(_G, "ItemMasterList")
+    if type(ws) ~= "table" or type(ws.skins) ~= "table"
+            or type(ws.skin_combinations) ~= "table" or type(iml) ~= "table" then
+        return "WeaponSkins/ItemMasterList not loaded yet (run in-keep)"
+    end
+    local source_combo = ws.skin_combinations.wh_1h_axe_skins
+    local clone_combo = ws.skin_combinations.cwv_es_dual_axes_skins
+    local source_by_clone = _om._dual_axes_source_by_skin
+    if type(source_combo) ~= "table" or type(clone_combo) ~= "table"
+            or type(source_by_clone) ~= "table" then
+        return "dual-axes source/destination cosmetic family was not registered"
+    end
+
+    local expected = {}
+    local memberships = {}
+    for tier_name, tier in pairs(source_combo) do
+        for _, source_key in ipairs(tier) do
+            expected[source_key] = true
+            memberships[source_key] = memberships[source_key] or {}
+            memberships[source_key][tier_name] = true
+        end
+    end
+    local default_skin = ws.default_skins and ws.default_skins.wh_1h_axe
+    if default_skin then expected[default_skin] = true end
+
+    local actual = {}
+    for clone_key, source_key in pairs(source_by_clone) do
+        actual[source_key] = true
+        local source = ws.skins[source_key]
+        local clone = ws.skins[clone_key]
+        local source_item = rawget(iml, source_key)
+        local clone_item = rawget(iml, clone_key)
+        if not source or not clone or not source_item or not clone_item then
+            return string.format("dual-axes clone incomplete: %s <- %s", clone_key, source_key)
+        end
+        if clone.right_hand_unit ~= source.right_hand_unit
+                or clone.left_hand_unit ~= source.right_hand_unit
+                or clone.display_unit ~= "units/weapons/weapon_display/display_dual_axes" then
+            return string.format("dual-axes hand/display mismatch: %s <- %s", clone_key, source_key)
+        end
+        if clone_item.matching_item_key ~= "cwv_es_dual_axes"
+                or clone_item.required_dlc ~= source_item.required_dlc then
+            return string.format("dual-axes owner/DLC mismatch: %s <- %s", clone_key, source_key)
+        end
+        if not rawget(NetworkLookup.weapon_skins, clone_key)
+                or not rawget(NetworkLookup.item_names, clone_key) then
+            return "dual-axes clone missing network lookup: " .. clone_key
+        end
+        for tier_name in pairs(memberships[source_key] or {}) do
+            local found = false
+            for _, key in ipairs(clone_combo[tier_name] or {}) do
+                if key == clone_key then found = true break end
+            end
+            if not found then
+                return string.format("dual-axes tier parity missing: %s in %s", clone_key, tier_name)
+            end
+        end
+    end
+
+    local missing, extra = {}, {}
+    for source_key in pairs(expected) do
+        if not actual[source_key] then missing[#missing + 1] = source_key end
+    end
+    for source_key in pairs(actual) do
+        if not expected[source_key] then extra[#extra + 1] = source_key end
+    end
+    if #missing > 0 or #extra > 0 then
+        table.sort(missing)
+        table.sort(extra)
+        return string.format("dual-axes cosmetic set drift: missing=[%s] extra=[%s]",
+            table.concat(missing, ","), table.concat(extra, ","))
     end
 end)
 
