@@ -41,7 +41,18 @@ local mod = get_mod("gut_dev")
 -- backfill them here at the bottom (identity key=value) to preserve that access
 -- pattern without dragging in the options tree.
 
-local pl = require'pl.import_into'()
+-- The retail VM has no `pl.import_into` resource (#281). This data fork only
+-- needs List's `:contains` convenience and plain map construction, so keep the
+-- dependency local and explicit instead of aborting the entire hb/ boot chain.
+local function _list(values)
+	values.contains = function(self, needle)
+		for _, value in ipairs(self) do
+			if value == needle then return true end
+		end
+		return false
+	end
+	return values
+end
 
 -- Belt-and-suspenders: ensure the table object exists at the very top before any
 -- other hb file (or an early-firing hook) reads it, even if population somehow
@@ -325,14 +336,14 @@ mod.health_bar_offset = {
 }
 
 --- Elements to reposition inside default_dynamic widget.
-mod.def_dynamic_widget_names = pl.List{
+mod.def_dynamic_widget_names = _list{
 	"talk_indicator",
 	"talk_indicator_highlight",
 	"talk_indicator_highlight_glow",
 }
 
 --- Carrer name to hat icon texture lookup.
-mod.career_name_to_hat_icon = pl.Map{
+mod.career_name_to_hat_icon = {
 	bw_adept = "icon_adept_hat_0001",
 	bw_scholar = "icon_scholar_hat_0000",
 	bw_unchained = "icon_unchained_hat_0008",
@@ -385,7 +396,7 @@ mod.healshare_buff_names = {
 }
 
 --- Ubersreik level keys.
-mod.ubersreik_lvls = pl.List({
+mod.ubersreik_lvls = _list({
 	"magnus",
 	"cemetery",
 	"forest_ambush",
@@ -420,5 +431,9 @@ local _backfill_setting_names = {
 for _, key in ipairs(_backfill_setting_names) do
 	mod.SETTING_NAMES[key] = mod.SETTING_NAMES[key] or key
 end
+
+-- Completion marker: the entry file's protected dofile cannot otherwise tell a
+-- fully populated data module from a swallowed mid-file abort.
+mod._gut_hb_data_loaded = true
 
 -- DATA-only file: nothing to return (gut's gui_tweaker_data.lua owns the VMF tree).

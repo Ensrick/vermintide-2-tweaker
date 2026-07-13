@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.233-dev"
+local MOD_VERSION = "0.2.234-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2975,7 +2975,21 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_ba_compendium")
 -- active buffs, loading-screen hides, Hide-HUD hotkey. `hb_data` defines the data
 -- backbone (SETTING_NAMES, alignments, etc.) and MUST load first. Disable the
 -- standalone "UI Tweaks" mod once gut covers it, to avoid double-hooking.
-pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/hb_data")
+local _hb_data_ok, _hb_data_err = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/hb_data")
+if not _hb_data_ok then
+    printf("[gut:281] hb_data load failed: %s", tostring(_hb_data_err))
+end
+_rt_register("issue281_hb_data_no_penlight", function()
+    if mod._gut_hb_data_loaded ~= true then
+        return "#281 regression: hb_data did not finish loading (see [gut:281] in console_logs)"
+    end
+    if type(mod.ubersreik_lvls) ~= "table" or type(mod.ubersreik_lvls.contains) ~= "function" then
+        return "#281 regression: hb_data's dependency-free list helper is missing"
+    end
+    if not mod.ubersreik_lvls:contains("magnus") or mod.ubersreik_lvls:contains("not_a_level") then
+        return "#281 regression: hb_data's dependency-free list helper returned the wrong result"
+    end
+end)
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/hide_elements")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/level_loading_screen")
 

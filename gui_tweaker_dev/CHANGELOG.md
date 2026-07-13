@@ -5,6 +5,12 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.234-dev (2026-07-13) -- #281 HideBuffs data boot without Penlight [untested]
+
+- Removed `hb/hb_data.lua`'s unavailable `pl.import_into` dependency, which aborted the protected data-module load before the absorbed UI Tweaks tables were populated. Its two list values now use a tiny local `:contains` helper and its map is a plain Lua table, preserving every consumer used by the fork.
+- The protected load now emits always-on `[gut:281]` evidence if it fails, and `/gut_regression_test` adds `issue281_hb_data_no_penlight` to assert that the module completed and its dependency-free list semantics work.
+- Updated `ENGINE_SURFACE.md` with the retail dependency constraint. In-game verification is still required.
+
 ## 0.2.233-dev (2026-07-13) -- HUD edit mode: suspend local input + confine drag to the HUD area [untested] [Issue 310]
 
 Two of the user's active #310 complaints (2026-07-12: "input to the game should be suspended", "the mouse
@@ -114,7 +120,6 @@ the cross-surface sync, plus regression coverage. No behavior change when CKC is
 - **issue 311 (sync precedence, documented in the bridge module header, marker `[CKC-SYNC-PRECEDENCE-311]`):** the three surfaces converge on ONE source of truth with no shadow copy. (a) MASTER ENABLE = CKC's VMF mod-enabled flag, owned by the vanilla Options row (this is why "vanilla crosshair kill confirmation OFF => feature off"). (b) FEATURE OPTIONS = CKC's own `mods_settings`, edited by both the gut Mod Tweaker HUD group (writes through via `_cat_set -> ckc:set(id, val, true)`, firing CKC's `on_setting_changed` live -- the own-or-pin `HB:set(id,v,true)` doctrine) and CKC's own VMF page. The two option surfaces are never on screen at once (hero-view state vs ESC mod-settings view) and each rebuilds from a live get on open, so last-write-wins with nothing to reconcile and the "mod:set does not repaint an open widget" caveat cannot bite. Nothing in issue 311 is left uncovered by this + the existing bridge.
 - **rt checks (`/gut_regression_test`, io-safe, load-time):** `ckc_gear_left_of_field_clears_scrollbar` (asserts `_append_gear` carries the left-gutter marker AND no longer uses the scrollbar-overlapping `row-right + 10` placement); `ckc_three_surface_sync_precedence` (asserts the header carries the precedence marker AND `_cat_set` still live-fires `on_setting_changed` via `mod_obj.set(id, value, true)` so HUD-group edits reach CKC).
 - **VERIFY IN-GAME (with CKC installed, Workshop 1593460250; solo -- client-side crosshair feedback):** ESC > Options > Gameplay: the "Crosshair Kill Confirmation" row shows On/Off with the cog now sitting to the LEFT of the On/Off box, in its own space, NOT touching or overlapping the scrollbar. Cog still opens the Mod Tweaker on Interface>HUD>Crosshair Kill Confirmation. Flip a CKC option in that HUD group, Apply, then open CKC's own mod-settings page -- the value matches (and vice-versa). Without CKC installed the row is stock vanilla and no cog appears.
-
 ## 0.2.229-dev (2026-07-13) -- #340 all-language display: detect-and-defer (case 2) [untested]
 
 - **#340 (feature): port "Support All Languages" (Workshop 3232229691) so player names + chat render CJK/Cyrillic without square blocks. Verdict: CANNOT port into gut -- it ships a CUSTOM font resource. Shipped a documented detect-and-defer stub instead; resolution is documentation + recommend the standalone mod.**
