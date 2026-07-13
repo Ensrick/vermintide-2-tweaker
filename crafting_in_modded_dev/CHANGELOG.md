@@ -1,5 +1,9 @@
 # Crafting in Modded Changelog
 
+## 0.8.63-dev (2026-07-13): #427 _dbg_alert log-only via engine printf [untested]
+
+- `_dbg_alert` rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). `crafting_in_modded_dev.lua` only; the v0.7.51 rehook-warning interceptor on `mod.warning` is untouched.
+
 ## 0.8.62-dev (2026-07-13): #521 Athanor weapon-slot hover shows exactly ONE popup [untested]
 
 - **#521 (FIX): hovering the equipped melee or ranged slot on the Athanor overview popped BOTH weapons' item popups at once.** The hover popup is cim's own widget (`UIWidgets.create_simple_item_tooltip`, added in 0.3.12-dev, driven from `_forge_apply_ui_polish`); the vanilla weave forge overview has no item tooltip on those viewports at all (`viewport_button_1/3` are bare `create_simple_hotspot`s, `hero_window_weave_forge_overview_definitions.lua:1978-1980`).

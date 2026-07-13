@@ -1,5 +1,9 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.21-dev (2026-07-13) -- #427 _dbg_alert log-only via engine printf [untested]
+
+- `_dbg_alert` rerouted mod:info + mod:echo -> pcall-guarded engine printf (the echo half posted to chat, the info half is invisible with mod logging OFF; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). `dynamic_cosmetic_portraits.lua` only; `_dbg` (mod:info) untouched.
+
 ## 0.1.20-dev (2026-07-13) -- #526 hud portraits no longer bleed outside the octagonal frame on the mission-completion score screen [untested]
 
 ### Why

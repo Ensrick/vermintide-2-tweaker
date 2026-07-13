@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.86-dev"
+local MOD_VERSION = "0.9.87-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -77,15 +77,21 @@ mod._cos_mem_t0 = collectgarbage("count")
 mod:info("Cosmetics Tweaker v%s loaded", MOD_VERSION)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode.
--- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+-- `_dbg` is for confirmation / expected behavior — mod:debug (file only,
+-- gated by VMF output_mode_debug).
+-- `_dbg_alert` is for unexpected / wrong / mismatch — LOG-ONLY via
+-- pcall-guarded engine printf (#427/issue 240: mod:warning posts to CHAT
+-- under VMF defaults; printf always lands in console-*.log, even with mod
+-- logging OFF, and never in chat; pcall so a format slip never faults the
+-- caller). _cos_glow.lua carries a byte-identical copy - keep in sync.
 local function _dbg(fmt, ...)
     mod:debug("[cosmetics:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    mod:warning("[cosmetics:dbg] " .. fmt, ...)
+    if not pcall(printf, "[cosmetics:dbg] " .. fmt, ...) then
+        pcall(printf, "[cosmetics:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- v0.9.43-dev: AGGRESSIVE LA-shield diagnostic trace channel. Distinct

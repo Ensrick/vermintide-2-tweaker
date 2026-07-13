@@ -1,6 +1,6 @@
 local mod = get_mod("verminious_dreams_lighting_dev")
 
-local MOD_VERSION = "1.0.15-dev"
+local MOD_VERSION = "1.0.16-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- File-local (was a bare _G global pre-1.0.15-dev; issue 510 / issue 434 audit
 -- F7): read only at the bottom of this same chunk, so no _G or cross-file
@@ -14,15 +14,21 @@ local _MEM_PROBE_T0_VDL = collectgarbage("count")
 mod:info("Verminious Dreams Lighting v%s loaded", MOD_VERSION)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Routed through VMF logging channels; visible via VMF output_mode_debug / output_mode_warning.
--- `_dbg` is for confirmation / expected behavior — mod:debug channel.
--- `_dbg_alert` is for unexpected / wrong / mismatch — mod:warning channel.
+-- `_dbg` is for confirmation / expected behavior — mod:debug channel (gated
+-- by VMF output_mode_debug).
+-- `_dbg_alert` is for unexpected / wrong / mismatch — LOG-ONLY via
+-- pcall-guarded engine printf (#427/issue 240: mod:warning posts to CHAT
+-- under VMF defaults; printf always lands in console-*.log, even with mod
+-- logging OFF, and never in chat; pcall so a format slip never faults the
+-- caller).
 local function _dbg(fmt, ...)
     mod:debug("[vdl:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    mod:warning("[vdl:dbg] " .. fmt, ...)
+    if not pcall(printf, "[vdl:dbg] " .. fmt, ...) then
+        pcall(printf, "[vdl:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").

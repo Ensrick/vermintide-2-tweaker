@@ -1,5 +1,9 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.211-dev (2026-07-13) -- #427 _dbg_alert log-only via engine printf [untested]
+
+- `_dbg_alert` rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). Definition in `general_tweaker_dev.lua`; the `mod._gt_dbg_alert` export consumed by `_gt_lobby_motd.lua` / `_gt_lobby_failed_join_reveal.lua` picks up the new routing automatically.
+
 ## v0.2.210-dev (2026-07-13) -- #454 Creature Spawner enumerates breeds live, hardcoded list demoted to category overlay [verify-fix]
 
 The Creature Spawner's unit lists (regular/dummy/misc/special/boss/all) are now built from the LIVE `Breeds` table every time a list is accessed (next/prev cycle, list dropdown change, game-state change), so DLC breeds and mod-added breeds (enemy_tweaker's et_* clones, any other mod's `Breeds[...] = ...` registrations) appear automatically. The old hardcoded 81-entry map no longer gates WHICH breeds are listed; it survives only as a category overlay preserving upstream CreatureSpawner's curated memberships. All lists stay A-Z sorted. Immediate wins vs the old list: `chaos_troll_chief` (boss) and `chaos_tether_sorcerer` (special) were absent from the hardcoded map and now list.

@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.3.61-dev"
+local MOD_VERSION = "0.3.62-dev"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
@@ -17,15 +17,21 @@ _MEM_PROBE_T0_CRT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint b
 mod:info("Career Tweaker v%s loaded", MOD_VERSION)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode.
--- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+-- `_dbg` is for confirmation / expected behavior — mod:debug (file only,
+-- gated by VMF output_mode_debug).
+-- `_dbg_alert` is for unexpected / wrong / mismatch — LOG-ONLY via
+-- pcall-guarded engine printf (#427/issue 240: mod:warning posts to CHAT
+-- under VMF defaults - logging.lua warning mode 3, send_to_chat = mode >= 2;
+-- printf always lands in console-*.log, even with mod logging OFF, and never
+-- in chat; pcall so a format slip never faults the caller).
 local function _dbg(fmt, ...)
     mod:debug("[crt:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    mod:warning("[crt:dbg] " .. fmt, ...)
+    if not pcall(printf, "[crt:dbg] " .. fmt, ...) then
+        pcall(printf, "[crt:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 -- Exported for _crt_regression.lua's dbg_helpers_two_channel check. The entry
 -- still calls the file-locals directly (on_setting_changed).

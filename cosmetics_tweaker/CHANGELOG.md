@@ -1,5 +1,9 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.87-dev - 2026-07-13 - #427 _dbg_alert log-only via engine printf [untested]
+
+- Both `_dbg_alert` copies (`cosmetics_tweaker.lua` + the byte-identical `_cos_glow.lua` copy) rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template).
+
 ## 0.9.86-dev — 2026-07-13 — #513 Score-screen hero lineup now wears LA hats/outfits [untested]
 
 Fixes #513: the end-of-round score screen rendered every hero with the vanilla hat -

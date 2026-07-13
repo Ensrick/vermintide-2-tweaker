@@ -5,7 +5,7 @@ local mod = get_mod("dynamic_cosmetic_portraits")
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.20-dev"
+local MOD_VERSION = "0.1.21-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -16,14 +16,19 @@ mod:info("Dynamic Cosmetic Portraits v%s loaded", MOD_VERSION)
 -- no settings page). Debug logging is now always on — this mod has few debug
 -- features, so the extra log volume is negligible.
 -- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+-- `_dbg_alert` is for unexpected / wrong / mismatch — LOG-ONLY via
+-- pcall-guarded engine printf (#427/issue 240: the old mod:echo half posted
+-- to CHAT, and the mod:info half is invisible with mod logging OFF; printf
+-- always lands in console-*.log and never in chat; pcall so a format slip
+-- never faults the caller).
 local function _dbg(fmt, ...)
     mod:info("[dcp:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    mod:info("[dcp:dbg] " .. fmt, ...)
-    mod:echo("[dcp] " .. fmt, ...)
+    if not pcall(printf, "[dcp:dbg] " .. fmt, ...) then
+        pcall(printf, "[dcp:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").

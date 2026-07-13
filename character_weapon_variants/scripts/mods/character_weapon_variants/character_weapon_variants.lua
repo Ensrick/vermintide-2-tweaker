@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.385-dev"
+local MOD_VERSION = "0.1.386-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -168,15 +168,20 @@ mod:info("[regression-test-command] registered as /cwv_regression_test")
 --   * Template-creation summary lines ("Created <foo>_template ...") --
 --     these fire once at boot and document the registered table contents.
 --
--- v0.1.351-dev: per-mod toggle removed; both route through VMF output_mode.
+-- v0.1.351-dev: per-mod toggle removed; _dbg routes through VMF output_mode.
 -- `_dbg` = confirmation / expected behavior — mod:debug (file only).
--- `_dbg_alert` = unexpected / wrong / mismatch — mod:warning.
+-- `_dbg_alert` = unexpected / wrong / mismatch — LOG-ONLY via pcall-guarded
+-- engine printf (#427/issue 240: mod:warning posts to CHAT under VMF defaults;
+-- printf always lands in console-*.log, even with mod logging OFF, and never
+-- in chat; pcall so a format slip never faults the caller).
 local function _dbg(fmt, ...)
     mod:debug("[cwv:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    mod:warning("[cwv:dbg] " .. fmt, ...)
+    if not pcall(printf, "[cwv:dbg] " .. fmt, ...) then
+        pcall(printf, "[cwv:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").

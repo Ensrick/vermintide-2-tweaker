@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.258-dev"
+local MOD_VERSION = "0.7.259-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -78,15 +78,21 @@ local CT_RPC_SCHEMA = 1
 pcall(printf, "[ct:rpc] schema_version=%d", CT_RPC_SCHEMA)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode.
--- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
+-- `_dbg` is for confirmation / expected behavior — mod:debug (file only,
+-- gated by VMF output_mode_debug).
+-- `_dbg_alert` is for unexpected / wrong / mismatch — LOG-ONLY via
+-- pcall-guarded engine printf (#427/issue 240: mod:warning posts to CHAT
+-- under VMF defaults - logging.lua warning mode 3, send_to_chat = mode >= 2;
+-- printf always lands in console-*.log, even with mod logging OFF, and never
+-- in chat; pcall so a format slip never faults the caller).
 local function _dbg(fmt, ...)
     mod:debug("[ct:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    mod:warning("[ct:dbg] " .. fmt, ...)
+    if not pcall(printf, "[ct:dbg] " .. fmt, ...) then
+        pcall(printf, "[ct:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").

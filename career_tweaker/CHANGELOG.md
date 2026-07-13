@@ -1,5 +1,9 @@
 # Career Tweaker Changelog
 
+## 0.3.62-dev - 2026-07-13 - #427 _dbg_alert log-only via engine printf [untested]
+
+- `_dbg_alert` rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). `career_tweaker.lua` only; `mod._crt.dbg_alert` export unchanged.
+
 ## 0.3.61-dev - 2026-07-13 - #443 talent rework descriptions rewritten to vanilla style; factual corrections [untested]
 
 ### Why

@@ -1,5 +1,9 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.259-dev (2026-07-13) - #427 _dbg_alert log-only via engine printf [untested]
+
+- `_dbg_alert` rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). `chaos_wastes_tweaker_dev.lua` only.
+
 ## 0.7.258-dev (2026-07-13) - #461 FOLLOW-UP: boon-preview rows actually render + only while a CW expedition is queued [untested]
 
 ### #461 (feature follow-up) - "I see 'Starting Boons (15)', no starting boons listed" + "showing up outside of the expedition queuing area"

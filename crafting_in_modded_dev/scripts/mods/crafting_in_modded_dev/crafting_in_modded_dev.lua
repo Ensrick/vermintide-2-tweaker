@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.62-dev"
+local MOD_VERSION = "0.8.63-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -62,15 +62,21 @@ mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 local CIM_RPC_SCHEMA = 1
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode.
--- `_dbg` is for confirmation / expected behavior — file only (mod:debug channel).
--- `_dbg_alert` is for unexpected / wrong / mismatch — mod:warning channel.
+-- `_dbg` is for confirmation / expected behavior — file only (mod:debug
+-- channel, gated by VMF output_mode_debug).
+-- `_dbg_alert` is for unexpected / wrong / mismatch — LOG-ONLY via
+-- pcall-guarded engine printf (#427/issue 240: mod:warning posts to CHAT
+-- under VMF defaults; printf always lands in console-*.log, even with mod
+-- logging OFF, and never in chat; pcall so a format slip never faults the
+-- caller).
 local function _dbg(fmt, ...)
     mod:debug("[cim:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    mod:warning("[cim:dbg] " .. fmt, ...)
+    if not pcall(printf, "[cim:dbg] " .. fmt, ...) then
+        pcall(printf, "[cim:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").

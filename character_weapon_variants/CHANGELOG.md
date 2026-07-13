@@ -1,5 +1,9 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.386-dev - 2026-07-13 - #427 _dbg_alert log-only via engine printf [untested]
+
+- `_dbg_alert` rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). `character_weapon_variants.lua` only.
+
 ## 0.1.385-dev — 2026-07-13 — #419: illusion browser previewed base mesh — spawn_units pre-pass swap [untested]
 
 ### Why

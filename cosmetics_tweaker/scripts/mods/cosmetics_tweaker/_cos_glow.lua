@@ -44,14 +44,17 @@ local _is_unit = mod._cos.is_unit
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md section 3.6). Byte-identical
 -- copies of the entry's _dbg / _dbg_alert so the moved glow functions keep calling
--- them unchanged. `_dbg` = confirmation (file only); `_dbg_alert` = unexpected
--- (file AND in-game chat).
+-- them unchanged. `_dbg` = confirmation (file only); `_dbg_alert` = unexpected,
+-- LOG-ONLY via pcall-guarded engine printf (#427/issue 240: mod:warning posts
+-- to CHAT under VMF defaults; printf survives mod-logging-OFF, never chat).
 local function _dbg(fmt, ...)
     mod:debug("[cosmetics:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    mod:warning("[cosmetics:dbg] " .. fmt, ...)
+    if not pcall(printf, "[cosmetics:dbg] " .. fmt, ...) then
+        pcall(printf, "[cosmetics:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- Glow override (v0.8.23-dev: redesigned per-family routing).
