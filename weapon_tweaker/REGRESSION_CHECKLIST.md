@@ -1,5 +1,16 @@
 # Regression Checklist — weapon_tweaker
 
+## #584 - Moonfire recharges while stowed
+
+| Field | Check |
+|---|---|
+| Fix version | WT 0.12.227-dev (unverified candidate) |
+| Automated | `/wt_regression_test`: `issue584_moonfire_stowed_native_regen_contract` covers melee-active Moonfire, bow-active single-rate behavior, native Kerillian exclusion, non-Moonfire replacement, and an empty ranged slot. |
+| Cross-career | On Kruber, Bardin, Saltzpyre, or Sienna with Moonfire equipped: drain energy, switch to melee, and verify the bar continues refilling at the native 1.5/s rate. |
+| Slot swaps | Repeatedly swap melee/ranged while below maximum. Recharge speed must remain constant, with no doubled increments or pause while melee is active. |
+| Negative controls | Equip a normal ammo ranged weapon; WT must not drive `energy_system`. On Kerillian, Moonfire retains vanilla recharge with no WT addition. |
+| Authority | Verify on the owning player. The helper must not update remote husks or add an RPC; vanilla energy replication remains authoritative. |
+
 ## #582 - native Bardin Dual Axes vs dedicated CWV variants
 
 | Field | Check |

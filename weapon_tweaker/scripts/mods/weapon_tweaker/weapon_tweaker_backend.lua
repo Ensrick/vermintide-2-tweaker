@@ -32,6 +32,7 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
     -- (the single per-frame surface VMF schedules). Loaded once here. See the
     -- module header for the full networking / consumption-side rationale.
     local passive_charge = mod:dofile("scripts/mods/weapon_tweaker/_wt_passive_charge")
+    M.passive_charge = passive_charge
 
     local function is_mod_unlocked_weapon(career_name, weapon_key)
         if not career_name or not weapon_key then

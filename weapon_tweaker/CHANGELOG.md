@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.227-dev (2026-07-13) - #584 Moonfire recharge while stowed [untested]
+
+- Changed the cross-character Moonfire eligibility check from the currently wielded item to the equipped `slot_ranged` item, matching vanilla Kerillian behavior while melee is active.
+- Kept the existing local-owner-only `energy_system:add_energy` path and native 1.5 energy/s rate. Careers with a nonzero native `_recharge_rate` remain untouched.
+- Wielded and stowed states share one recharge planner/call site, so switching slots cannot double-apply. Replacing Moonfire with an ammo bow or clearing the ranged slot removes eligibility immediately.
+- Added `/wt_regression_test` check `issue584_moonfire_stowed_native_regen_contract`. No Workshop deployment.
+
 ## 0.12.226-dev (2026-07-13) - #582 native-vs-CWV Dual Axes ownership [untested]
 
 - Removed Bardin's native `dr_dual_wield_axes` from all four Kruber and all three standard Saltzpyre unlock maps, settings controls, localization rows, and dev-picker availability. Bardin remains native and Kerillian is outside this issue's scope.

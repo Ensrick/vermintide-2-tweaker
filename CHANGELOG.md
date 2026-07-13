@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - `weapon_tweaker` Moonfire stowed recharge parity
+
+Repo-aggregate entry for Weapon Tweaker v0.12.227-dev / issue #584. Cross-character Moonfire now detects the energy weapon from the equipped ranged slot, matching native Kerillian recharge while melee is active. Recharge remains owner-authoritative, uses the native 1.5/s rate only for careers with no native rate, and has one shared wielded/stowed application path. No Workshop deployment.
+
 ## 2026-07-13 - WT/CWV native Dual Axes ownership boundary
 
 Repo-aggregate entry for issue #582: Weapon Tweaker v0.12.226-dev removes Bardin's native `dr_dual_wield_axes` from Kruber and Saltzpyre availability, while Character Weapon Variants v0.1.391-dev preserves and regression-checks `cwv_es_dual_axes` and `cwv_wh_dual_axes`. WT also strips stale `can_wield` mutations and rejects invalid cached loadouts before falling back to vanilla. No Workshop deployment.

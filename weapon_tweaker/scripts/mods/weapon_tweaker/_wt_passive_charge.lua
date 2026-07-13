@@ -26,9 +26,9 @@ WHY THIS EXISTS
      so it bricks after ~8 shots.
 
 WHAT THIS DOES
-  Each frame, for the LOCAL OWNED player ONLY, if it wields one of these
-  cross-character weapons on a career lacking the native rate, drive the
-  missing mechanic via the vanilla CONSUMPTION-SIDE APIs:
+  Each frame, for the LOCAL OWNED player ONLY, drive a cross-character staff
+  when wielded or Moonfire when equipped in slot_ranged, on careers lacking
+  the native rate, via the vanilla CONSUMPTION-SIDE APIs:
    * STAVES   -> overcharge_ext:remove_charge(STAFF_VENT_RATE * dt)   (vent)
    * MOONFIRE -> energy_ext:add_energy(MOONFIRE_REGEN_RATE * dt)      (regen)
 
@@ -84,21 +84,13 @@ local MOONFIRE_REGEN_RATE = 1.5
 -- per-frame mod:get, but bare global churn is still avoidable).
 local ScriptUnit = ScriptUnit
 
--- Resolve the wielded weapon's item_template for the given inventory extension.
--- Returns nil if nothing is wielded or the slot/template can't be resolved.
+-- Resolve one inventory slot's item_template. Returns nil if the slot/template
+-- can't be resolved. Keeping this slot-based is important for Moonfire: native
+-- energy recharge follows the equipped ranged item while melee is wielded.
 -- All accessors guarded because mid-swap / mid-spawn the slot data can be
 -- transiently absent.
-local function _wielded_item_template(inv)
-    if not inv or not inv.get_wielded_slot_name then
-        return nil
-    end
-
-    local slot_name = inv:get_wielded_slot_name()
-    if not slot_name then
-        return nil
-    end
-
-    if not inv.get_slot_data then
+local function _slot_item_template(inv, slot_name)
+    if not inv or not slot_name or not inv.get_slot_data then
         return nil
     end
     local slot_data = inv:get_slot_data(slot_name)
@@ -118,6 +110,14 @@ local function _wielded_item_template(inv)
     end
 
     return item_template
+end
+
+local function _wielded_item_template(inv)
+    if not inv or not inv.get_wielded_slot_name then
+        return nil
+    end
+
+    return _slot_item_template(inv, inv:get_wielded_slot_name())
 end
 
 -- "Is this an overcharge weapon?" The marker is the weapon template carrying an
@@ -157,8 +157,32 @@ local function _is_energy_weapon(item_template)
     return false
 end
 
--- Per-unit body. Resolves the wielded weapon + relevant extension and drives
--- the missing mechanic if (and only if) the career lacks the native rate.
+-- #584 regression seam and runtime predicate. This deliberately ignores the
+-- wielded slot: Moonfire's vanilla Kerillian energy system recharges while the
+-- bow is stowed, so cross-character parity must be keyed to slot_ranged too.
+-- A slot swap immediately changes the returned value and there is only one
+-- caller in _drive_local_player, preventing wielded+equipped double application.
+function M.energy_weapon_in_ranged_slot(inv)
+    return _is_energy_weapon(_slot_item_template(inv, "slot_ranged"))
+end
+
+-- Pure recharge planner used by the owner-authoritative driver and regression
+-- coverage. Returning one native-rate delta (rather than separate wielded and
+-- stowed paths) makes the no-double-application invariant explicit.
+function M.energy_regen_delta(inv, native_rate, dt)
+    if native_rate ~= nil and native_rate ~= 0 then
+        return nil
+    end
+    if not dt or dt <= 0 or not M.energy_weapon_in_ranged_slot(inv) then
+        return nil
+    end
+
+    return MOONFIRE_REGEN_RATE * dt
+end
+
+-- Per-unit body. Resolves the wielded weapon for staff venting and the equipped
+-- ranged weapon for Moonfire, then drives the missing mechanic if (and only if)
+-- the career lacks the native rate.
 -- Returns silently on any nil — this runs every frame, so it must be cheap and
 -- must never fatal.
 local function _drive_local_player(player_unit, dt)
@@ -172,12 +196,9 @@ local function _drive_local_player(player_unit, dt)
     end
 
     local item_template = _wielded_item_template(inv)
-    if not item_template then
-        return
-    end
 
     -- --- STAVES: passive vent (decrease overcharge) ---
-    if _is_overcharge_weapon(item_template) then
+    if item_template and _is_overcharge_weapon(item_template) then
         local oc = ScriptUnit.has_extension(player_unit, "overcharge_system")
         -- Gate (c): only when the career has NO native decay rate. A career
         -- that natively vents (any Sienna career, etc.) has a non-zero rate
@@ -197,18 +218,18 @@ local function _drive_local_player(player_unit, dt)
     end
 
     -- --- MOONFIRE BOW: passive energy regen ---
-    if _is_energy_weapon(item_template) then
-        local energy_ext = ScriptUnit.has_extension(player_unit, "energy_system")
+    local energy_ext = ScriptUnit.has_extension(player_unit, "energy_system")
+    local regen_delta = energy_ext
+        and M.energy_regen_delta(inv, energy_ext._recharge_rate, dt)
+    if regen_delta then
         -- Gate (c): only when the career has NO native regen rate. The four
         -- Kerillian careers carry _recharge_rate = 1.5 and are left untouched.
-        if energy_ext and (energy_ext._recharge_rate == nil or energy_ext._recharge_rate == 0) then
-            local energy = energy_ext._energy
-            local max_energy = energy_ext._max_energy
-            -- Only add when below max (add_energy clamps anyway, but this skips
-            -- the pointless call). Refill at the native rate.
-            if energy and max_energy and energy < max_energy and energy_ext.add_energy then
-                pcall(energy_ext.add_energy, energy_ext, MOONFIRE_REGEN_RATE * dt)
-            end
+        local energy = energy_ext._energy
+        local max_energy = energy_ext._max_energy
+        -- Only add when below max (add_energy clamps anyway, but this skips
+        -- the pointless call). Refill at the native rate.
+        if energy and max_energy and energy < max_energy and energy_ext.add_energy then
+            pcall(energy_ext.add_energy, energy_ext, regen_delta)
         end
     end
 end

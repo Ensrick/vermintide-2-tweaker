@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.226-dev"
+local MOD_VERSION = "0.12.227-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -5177,6 +5177,56 @@ _rt_register("issue582_native_dual_axes_cwv_ownership_boundary", function()
                 return "native Dual Axes can_wield ownership leak: " .. career
             end
         end
+    end
+end)
+
+_rt_register("issue584_moonfire_stowed_native_regen_contract", function()
+    local passive = weapon_backend.passive_charge
+    if not passive or not passive.energy_regen_delta then
+        return "passive-charge ranged-slot planner missing"
+    end
+
+    local moonfire = {
+        actions = { action_one = { default = { kind = "bow_energy" } } },
+    }
+    local normal_bow = {
+        actions = { action_one = { default = { kind = "bow" } } },
+    }
+    local inv = {
+        wielded = "slot_melee",
+        slots = { slot_melee = {}, slot_ranged = moonfire },
+    }
+    function inv:get_wielded_slot_name()
+        return self.wielded
+    end
+    function inv:get_slot_data(slot_name)
+        return self.slots[slot_name]
+    end
+    function inv:get_item_template(slot_data)
+        return slot_data
+    end
+
+    -- Melee active + Moonfire equipped: native 1.5/s, exactly once.
+    if passive.energy_regen_delta(inv, 0, 2) ~= 3 then
+        return "stowed Moonfire did not plan one native-rate recharge"
+    end
+    -- Wielding the same ranged item must not create a second recharge path.
+    inv.wielded = "slot_ranged"
+    if passive.energy_regen_delta(inv, 0, 2) ~= 3 then
+        return "wielded Moonfire recharge was missing or double-applied"
+    end
+    -- Native Kerillian owns her recharge regardless of active slot.
+    if passive.energy_regen_delta(inv, 1.5, 2) ~= nil then
+        return "native Kerillian Moonfire recharge was overridden"
+    end
+    -- A ranged-slot swap removes eligibility immediately; other bows untouched.
+    inv.slots.slot_ranged = normal_bow
+    if passive.energy_regen_delta(inv, 0, 2) ~= nil then
+        return "non-Moonfire ranged weapon received energy recharge"
+    end
+    inv.slots.slot_ranged = nil
+    if passive.energy_regen_delta(inv, 0, 2) ~= nil then
+        return "empty ranged slot retained stale Moonfire eligibility"
     end
 end)
 
