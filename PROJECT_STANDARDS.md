@@ -120,13 +120,16 @@ WS5), follow the template proven on event_tweaker v0.4.26-dev:
 Three distinct layers answer "does this still work". Each has ONE home; do not
 mix them, and do not invent a fourth.
 
-**Tier (a) - Repo QA gates (`qa/*.ps1`).** Static PowerShell checks plus
-`luacheck`, run by the pre-commit hook (`qa/run_all.ps1 -Quick -SkipLua`) and CI
+**Tier (a) - Repo QA gates (`qa/*`).** Static PowerShell checks, `luacheck`,
+and engine-free Lua 5.1 unit tests, run by the pre-commit hook
+(`qa/run_all.ps1 -Quick -SkipLua`) and CI
 (`.github/workflows/qa.yml`). They read SOURCE, never the running game, so they
 are the only tier that runs without VT2. Errors (exit >=2) block the commit;
 warnings (exit 1) report but never block (`qa/CHECKS.md` "Gate semantics"). New
 STATIC bug-class detection lands here: scaffold `qa/check_<name>.ps1`, wire it
-into `run_all.ps1`, add a row to `qa/CHECKS.md`.
+into `run_all.ps1`, add a row to `qa/CHECKS.md`. Deterministic transformations
+on ordinary Lua values may instead use `qa/lua/`; do not mock a general VMF or
+Stingray runtime to force engine behavior into this tier.
 
 **Tier (b) - In-game regression harnesses.** A per-mod runtime self-check suite,
 invoked from chat as `/<mod>_regression_test`. Each check is a closure
@@ -741,16 +744,21 @@ Subagent prompt template:
 > Identify any new "guard ≠ bail" violations. Report: ship-ready / fix these
 > first / open questions.
 
-### 5.4 Future: automated testing
-**Track item**: set up `luacheck` + GitHub Actions. Catches forward refs,
-unescaped `%`, undefined variables, dead vars. ~1 hour to scaffold.
+### 5.4 Automated host testing
 
-Recommended order of automation investment:
-1. **`luacheck` locally** + pre-commit hook (catches forward refs, % bugs).
-2. **GitHub Action** running luacheck on push (catches what slips locally).
-3. **Cfg validator script** (catches tags=[], missing preview, BOM).
-4. **MOD_VERSION presence check** (catches missing constants pre-publish).
-5. **CHANGELOG format validator** (optional, low ROI).
+The repository now has all three host-side layers: `luacheck`, PowerShell
+policy/static checks, and dependency-free Lua 5.1 unit tests. `qa/run_all.ps1`
+is the single policy engine locally and in GitHub Actions.
+
+Pure Lua tests are for deterministic transformations that accept and return
+ordinary Lua values. Load the production module; do not copy its implementation
+into a fixture. One narrow boundary function (for example `Localize`) may be
+supplied test-locally, but hooks, RPCs, engine objects, and multiplayer state
+remain in the in-game regression tier. See `qa/lua/README.md`.
+
+Next investment should follow demonstrated bug classes: extract pure logic when
+a touched feature already has a clean seam, then add the regression before or
+with the behavior change. CHANGELOG-format validation remains optional/low ROI.
 
 ---
 
@@ -1690,6 +1698,7 @@ see what was open on a given date.
 | `check_file_sizes.ps1` | `qa/` | files over 1500-line target / 2500-line hard limit | `.\qa\check_file_sizes.ps1` |
 | `check_stale_docs.ps1` | `qa/` | audit/review markdowns >14 days without SUPERSEDED banner | `.\qa\check_stale_docs.ps1 [-Fix]` |
 | `run_selftests.ps1` | `qa/` | regression in any QA check's own parsing/decision logic + ship.ps1 step-6 labeling logic (runs every script's `-SelfTest`; blocking) | `.\qa\run_selftests.ps1` |
+| `check_lua_unit_tests.ps1` | `qa/` + `qa/lua/` | deterministic pure-Lua transformations under a pinned offline Lua 5.1.5 runtime; harness self-test includes a planted failure | `.\qa\check_lua_unit_tests.ps1 [-SelfTest]` |
 | `run_all.ps1` | `qa/` | all of the above | `.\qa\run_all.ps1 [-Quick] [-SkipLua]` |
 | GitHub Action | `.github/workflows/qa.yml` | runs `run_all.ps1` (full policy engine) + an all-mods `lint-mod.ps1` step on push + PR | automatic |
 

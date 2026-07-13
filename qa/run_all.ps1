@@ -4,7 +4,7 @@
 # Usage:
 #   .\qa\run_all.ps1              # run everything
 #   .\qa\run_all.ps1 -SkipLua     # skip luacheck (e.g. if not installed locally)
-#   .\qa\run_all.ps1 -Quick       # cfg + version only (fast)
+#   .\qa\run_all.ps1 -Quick       # cheap static checks + Lua units (fast)
 #   .\qa\run_all.ps1 -FixStale    # auto-banner stale docs
 
 [CmdletBinding()]
@@ -115,9 +115,13 @@ Run-Check "check_vmf_widget_types"            { & (Join-Path $here "check_vmf_wi
 Run-Check "check_event_register_signature"    { & (Join-Path $here "check_event_register_signature.ps1")    -Quiet:$Quiet }
 Run-Check "check_cross_mod_deps"              { & (Join-Path $here "check_cross_mod_deps.ps1")              -Quiet:$Quiet }
 Run-Check "check_in_progress"                 { & (Join-Path $here "check_in_progress.ps1")                 -Quiet:$Quiet } -Policy 'Advisory'
+# Pure Lua transformations run under the pinned, offline Lua 5.1 host runtime.
+# Keep this before the Quick return: it is deliberately part of both fast local
+# feedback and the full CI gate (issue #544).
+Run-Check "lua_unit_tests"                    { & (Join-Path $here "check_lua_unit_tests.ps1")               -Quiet:$Quiet }
 
 if ($Quick) {
-    Write-Host "Quick mode - skipping localization, stale-docs, file-sizes, luacheck." -ForegroundColor DarkGray
+    Write-Host "Quick mode - Lua units passed; skipping localization, stale-docs, file-sizes, luacheck." -ForegroundColor DarkGray
     Write-Summary
     exit $script:blockingExit
 }
