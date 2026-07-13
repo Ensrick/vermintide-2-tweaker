@@ -85,6 +85,31 @@ function ModTweaker:get_exclusive_members(group_id)
     return Settings.get_exclusive_members(group_id)
 end
 
+-- (#505) Filtered/searchable dropdown API. A sibling mod declares CATEGORY chips for one of its
+-- dropdown settings; when the user opens that dropdown in the Mod Tweaker, the popup gains (a) a
+-- type-to-filter search line (works on ANY long dropdown with no registration) and (b) the declared
+-- category chips to narrow the list. Each category is { label = <string>, match = <fn OR key-list> }:
+-- a function match is called with (option_value, option_text) and returns whether the option belongs;
+-- a key-list match tests the option VALUE for membership. Mirrors the #446 registry/API shape.
+--
+--   get_mod("gut_dev").mod_tweaker:register_dropdown_categories("ct_dev", "ctdm_base", {
+--       { label = "Travel",    match = function(value) return travel_set[value] end },
+--       { label = "Signature", match = { "sig_gorge", "sig_volcano" } },   -- key-list form
+--   })
+function ModTweaker:register_dropdown_categories(mod_id, setting_id, categories)
+    local ok, err = Settings.register_dropdown_categories(mod_id, setting_id, categories)
+    if not ok then
+        _dbg_alert("[mt] register_dropdown_categories rejected: %s", tostring(err))
+    end
+    return ok, err
+end
+
+-- The normalized category list registered for a (mod_id, setting_id), or nil. The view calls this
+-- when a dropdown opens to decide whether to render category chips.
+function ModTweaker:get_dropdown_categories(mod_id, setting_id)
+    return Settings.get_dropdown_categories(mod_id, setting_id)
+end
+
 -- Install entry point: wires debug + propagates to sub-modules. Returns the
 -- handle table so the owner module can publish it onto `mod`.
 function ModTweaker.install(dbg, dbg_alert)

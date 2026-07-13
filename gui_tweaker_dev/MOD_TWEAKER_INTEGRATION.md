@@ -107,6 +107,53 @@ Resolve group ids from gut with `:get_exclusive_group_id(mod_id, setting_id)` /
 `:get_exclusive_members(group_id)`. Registry + API live in `_mod_tweaker_settings.lua` /
 `_mod_tweaker.lua`; the sweep is `ModTweakerView:_enforce_exclusive` in `_mod_tweaker_view.lua`.
 
+## Filtered / searchable dropdowns (#505)
+
+A `dropdown` with many options (ct's ~40+ CW mission list is the motivating case) is painful to
+scroll. When such a dropdown is opened in the Mod Tweaker, the popup now offers two filter axes:
+
+1. **Type-to-filter (automatic).** Any dropdown with **8 or more options** shows a search line at the
+   top of the open popup; typing narrows the list live (case-insensitive substring match on each
+   option's label). This needs **no registration** -- it is on for every long dropdown.
+2. **Category chips (opt-in).** Declare named categories for a specific dropdown and the popup adds a
+   chip row (plus an implicit **All** chip). Clicking a chip filters the options to that category. The
+   two axes compose (chip AND search term).
+
+Plain dropdowns (< 8 options and no categories) are unchanged -- no search line, no chips.
+
+- **Declare categories from your own mod** via the gut public API (data-driven -- gut needs no code
+  change per dropdown):
+
+  ```lua
+  local gut = get_mod("gut_dev")   -- or "gut" against the stable item
+  if gut and gut.mod_tweaker and gut.mod_tweaker.register_dropdown_categories then
+      gut.mod_tweaker:register_dropdown_categories("<your_mod_id>", "<dropdown_setting_id>", {
+          -- match = a FUNCTION called with (option_value, option_text) -> boolean:
+          { label = "Travel",    match = function(value, text) return is_travel(value) end },
+          -- match = a KEY-LIST tested against the option VALUE (membership):
+          { label = "Signature", match = { "sig_gorge", "sig_volcano", "sig_crag" } },
+      })
+  end
+  ```
+
+- **Members reference the REAL dropdown** by its `setting_id` in your own `_data.lua`; you do NOT
+  invent a widget type or change the dropdown. The `mod_id` is your **registered** VMF id (e.g. `ct`
+  vs `ct_dev`), the same id the Mod Tweaker tab resolves against -- register under whichever stream
+  you ship.
+- **`match` gets the option `value`, not its display label.** If your options carry index values
+  (`value = i`) rather than keys, resolve the key inside the function (`local key = MY_LIST[value]`).
+  The key-list form tests the option `value` directly, so use it only when the values ARE the keys.
+- **Re-registering the same (mod_id, setting_id) REPLACES** the category list, so an author reload
+  re-declares cleanly. Reverse lookup: `gut.mod_tweaker:get_dropdown_categories(mod_id, setting_id)`.
+- **Filtering is Mod-Tweaker-menu-only** and never changes the stored value -- it only narrows what
+  the open popup shows. Selecting an option commits exactly as before.
+
+Registry + API live in `_mod_tweaker_settings.lua` / `_mod_tweaker.lua`; the popup header + filter
+path are in `_mod_tweaker_definitions.lua` (`create_dropdown_list`'s optional `header`) and
+`_mod_tweaker_view.lua` (`_recompute_dd_visible` / `_dd_chips` / `_refresh_dropdown_list` /
+`_handle_dropdown_input`). The `mod_tweaker_dropdown_filter_api` check (#505) asserts the registry +
+API + view filter methods + the header-capable factory stay wired.
+
 ## Regression guard
 
 `_mod_tweaker_view.lua` / the gut regression suite must assert: no third-party (non-author)

@@ -43,6 +43,11 @@ local STEP_OVERRIDES = {
 
 local SERVICE = "gut_mod_tweaker"
 
+-- (#505) A dropdown gets the FILTER HEADER (type-to-filter search line, and category chips when
+-- registered) when it has at least this many options OR carries registered categories. Below the
+-- threshold with no categories, it stays the plain dropdown (unchanged) — small lists don't need it.
+local DD_FILTER_MIN = 8
+
 local ModTweakerView = class(ModTweakerView)
 ModTweakerView.NAME = "mod_tweaker_view"
 
@@ -2129,6 +2134,27 @@ local _EDIT_MAX_LEN = 16
 -- (#497) Max search query length (free text; the numeric editor's cap is _EDIT_MAX_LEN).
 local _SEARCH_MAX_LEN = 40
 
+-- (#497 / #505) Shared raw-keystroke reader. Applies this frame's Keyboard.keystrokes() to a
+-- query string: Backspace erases the last char, printable ASCII (32-126) appends up to max_len.
+-- Returns (new_str, changed). Reused by the per-tab search box (#497) and the open-dropdown
+-- type-to-filter (#505) — the SAME raw path the numeric type-to-edit uses; Enter (13) / ESC (27)
+-- are sub-32 so they are ignored here and handled by their own callers.
+local function _apply_keystrokes(str, max_len)
+    local keystrokes = Keyboard.keystrokes()
+    if not keystrokes or #keystrokes == 0 then return str, false end
+    local s = str or ""
+    local changed = false
+    for _, stroke in ipairs(keystrokes) do
+        if stroke == Keyboard.BACKSPACE then
+            if #s > 0 then s = s:sub(1, #s - 1); changed = true end
+        elseif type(stroke) == "string" and #stroke == 1 and #s < (max_len or _SEARCH_MAX_LEN) then
+            local b = string.byte(stroke)
+            if b and b >= 32 and b <= 126 then s = s .. stroke; changed = true end
+        end
+    end
+    return s, changed
+end
+
 local function _format_value(value, num_decimals)
     return string.format("%." .. (num_decimals or 0) .. "f", value or 0)
 end
@@ -2193,18 +2219,7 @@ end
 -- the end (no mid-string editing -- keeps the appended blink caret jitter-free), so no LEFT/
 -- RIGHT/DELETE handling. Returns true if the query changed, so the caller re-filters only then.
 function ModTweakerView:_search_apply_keystrokes()
-    local keystrokes = Keyboard.keystrokes()
-    if not keystrokes or #keystrokes == 0 then return false end
-    local s = self._search_str or ""
-    local changed = false
-    for _, stroke in ipairs(keystrokes) do
-        if stroke == Keyboard.BACKSPACE then
-            if #s > 0 then s = s:sub(1, #s - 1); changed = true end
-        elseif type(stroke) == "string" and #stroke == 1 and #s < _SEARCH_MAX_LEN then
-            local b = string.byte(stroke)
-            if b and b >= 32 and b <= 126 then s = s .. stroke; changed = true end
-        end
-    end
+    local s, changed = _apply_keystrokes(self._search_str or "", _SEARCH_MAX_LEN)
     if changed then self._search_str = s; self._search_caret_t = 0 end
     return changed
 end
@@ -2292,14 +2307,83 @@ end
 -- (start_index) changes, and drawn in _draw after the rows so it overlays everything.
 -- ---------------------------------------------------------------
 
--- (Re)build the popup overlay widget for the open dropdown at the current start_index.
+-- (#505) Recompute self._dd_visible = the array of ABSOLUTE option indices passing the current
+-- filter (type-to-filter query AND active category chip). When neither is active this is the full
+-- identity list, so the popup renders exactly like the unfiltered dropdown. Called on open and on
+-- every query/chip change. Also re-clamps _dd_start into the (possibly shorter) filtered window.
+function ModTweakerView:_recompute_dd_visible(row)
+    local vals  = row._options_values or {}
+    local texts = row._options_texts or {}
+    local n = #texts
+    local q = self._dd_query
+    if type(q) == "string" then
+        q = q:gsub("^%s+", ""):gsub("%s+$", "")
+        q = (q == "") and nil or q:lower()
+    else
+        q = nil
+    end
+    local cat = (self._dd_cats and self._dd_cat) and self._dd_cats[self._dd_cat] or nil
+    local vis = {}
+    for i = 1, n do
+        local keep = true
+        if q then
+            local t = texts[i]
+            keep = type(t) == "string" and string.find(t:lower(), q, 1, true) ~= nil
+        end
+        if keep and cat and type(cat.match) == "function" then
+            local ok, r = pcall(cat.match, vals[i], texts[i])
+            keep = ok and r and true or false
+        end
+        if keep then vis[#vis + 1] = i end
+    end
+    self._dd_visible = vis
+    local num_draws = math.min(#vis, 10)
+    self._dd_start = math.clamp(self._dd_start or 1, 1, math.max(1, #vis - num_draws + 1))
+    -- The option set changed, so drop the sticky hover index (#158b); it re-seeds to the selected
+    -- (or first) option on the next _position_dropdown_highlight and can't point past the new list.
+    self._dd_hl_k = nil
+end
+
+-- (#505) The chip descriptors for the open dropdown's header, or nil when it has no registered
+-- categories (a length-only filterable dropdown shows just the search line, no chips). Chip 1 is
+-- always the implicit "All" (clears the category), chips 2..n are the registered categories.
+function ModTweakerView:_dd_chips()
+    local cats = self._dd_cats
+    if not (cats and #cats > 0) then return nil end
+    local chips = { { label = "All", active = (self._dd_cat == nil) } }
+    for i = 1, #cats do
+        chips[#chips + 1] = { label = cats[i].label or ("Category " .. i), active = (self._dd_cat == i) }
+    end
+    return chips
+end
+
+-- (Re)build the popup overlay widget for the open dropdown at the current start_index. When the
+-- dropdown is filterable (#505) the visible options are the filtered subset and a header band
+-- (search line + chips) is attached; otherwise it is the full list with no header (unchanged path).
 function ModTweakerView:_refresh_dropdown_list()
     local row = self._open_dropdown
     if not row then self._dd_list = nil; return end
-    local texts = row._options_texts or {}
-    local cur   = row._option_idx or 1
     local start = self._dd_start or 1
-    local ok, w = pcall(defs.create_dropdown_list, texts, cur, row._list_y or 0, start)
+    if not row._dd_filterable then
+        -- Plain dropdown: full list, selected index in absolute space, no header.
+        local ok, w = pcall(defs.create_dropdown_list, row._options_texts or {}, row._option_idx or 1,
+                            row._list_y or 0, start)
+        self._dd_list = (ok and w) or nil
+        return
+    end
+    -- Filtered dropdown: map the visible subset to display texts + the selected option's FILTERED
+    -- index (or -1 when the selection is filtered out, so nothing renders gold).
+    local vis = self._dd_visible or {}
+    local all_texts = row._options_texts or {}
+    local texts, cur = {}, -1
+    for fi = 1, #vis do
+        texts[fi] = all_texts[vis[fi]] or ""
+        if vis[fi] == row._option_idx then cur = fi end
+    end
+    self._dd_no_match = (#texts == 0)
+    if self._dd_no_match then texts = { "(no matches)" }; cur = -1 end
+    local header = { query = self._dd_query or "", chips = self:_dd_chips() }
+    local ok, w = pcall(defs.create_dropdown_list, texts, cur, row._list_y or 0, start, header)
     self._dd_list = (ok and w) or nil
 end
 
@@ -2309,11 +2393,36 @@ function ModTweakerView:_open_dropdown_popup(row)
     self._open_dropdown = row
     self._dd_hl_k = nil   -- (#158b) reset the sticky highlight index for this open
     row.content.active = true
+    -- (#505) Fresh per-open filter state. Look up any registered category chips for this
+    -- (mod_id, setting_id); a dropdown is filterable when it is long OR has categories.
+    self._dd_query = ""
+    self._dd_cat = nil
+    self._dd_cats = nil
+    self._dd_no_match = false
+    self._dd_caret_t = 0
+    local mt = _mt()
+    if mt and mt.get_dropdown_categories then
+        local ok, cats = pcall(mt.get_dropdown_categories, mt, row._mod_id, row._setting_id)
+        if ok and type(cats) == "table" and #cats > 0 then self._dd_cats = cats end
+    end
     local n = #(row._options_texts or {})
-    local num_draws = math.min(n, 10)
-    -- Scroll the window so the selected option is visible (native start_index clamp).
-    self._dd_start = math.clamp((row._option_idx or 1) - num_draws + 1, 1, math.max(1, n - num_draws + 1))
-    if (row._option_idx or 1) <= num_draws then self._dd_start = 1 end
+    row._dd_filterable = (n >= DD_FILTER_MIN) or (self._dd_cats ~= nil)
+    self._dd_start = 1
+    if row._dd_filterable then
+        self:_recompute_dd_visible(row)
+        -- Scroll the FILTERED window so the selected option is visible (native start_index clamp).
+        local vis, sel_fi = self._dd_visible, nil
+        for fi = 1, #vis do if vis[fi] == row._option_idx then sel_fi = fi; break end end
+        local num_draws = math.min(#vis, 10)
+        if sel_fi then
+            self._dd_start = math.clamp(sel_fi - num_draws + 1, 1, math.max(1, #vis - num_draws + 1))
+            if sel_fi <= num_draws then self._dd_start = 1 end
+        end
+    else
+        local num_draws = math.min(n, 10)
+        self._dd_start = math.clamp((row._option_idx or 1) - num_draws + 1, 1, math.max(1, n - num_draws + 1))
+        if (row._option_idx or 1) <= num_draws then self._dd_start = 1 end
+    end
     self:_refresh_dropdown_list()
     _play_click()
 end
@@ -2323,6 +2432,12 @@ function ModTweakerView:_close_dropdown_popup()
     if row then row.content.active = false end
     self._open_dropdown = nil
     self._dd_list = nil
+    -- (#505) Drop the per-open filter state so a later plain dropdown can't read a stale query/cat.
+    self._dd_query = nil
+    self._dd_cat = nil
+    self._dd_cats = nil
+    self._dd_visible = nil
+    self._dd_no_match = false
     -- (#158) The closing click's on_release stays LATCHED on the shared mt_list_start node; block
     -- ALL row input until the next fresh left-press (read by _handle_input) so it can't bleed
     -- through to the row behind the just-closed popup, nor re-open the dropdown.
@@ -2367,7 +2482,10 @@ function ModTweakerView:_position_dropdown_highlight()
     if hovered_k then
         self._dd_hl_k = hovered_k
     elseif self._dd_hl_k == nil then
-        local oi = row._option_idx
+        -- (#505) Seed from the FILTERED-space selected index the popup was built with (w._dd_cur);
+        -- for a plain dropdown that equals row._option_idx in absolute space (unchanged). -1 = the
+        -- selection is filtered out, so no seed and the highlight stays hidden until a hover.
+        local oi = w._dd_cur
         if oi and oi >= 1 then
             local sel_k = oi - (w._dd_start or 1) + 1
             if sel_k >= 1 and sel_k <= num_draws then self._dd_hl_k = sel_k end
@@ -2395,7 +2513,40 @@ function ModTweakerView:_handle_dropdown_input(input_service)
     local n = w._dd_total or 0
     local num_draws = w._dd_num_draws or 0
 
-    -- Wheel scrolls the visible option window (only when the list overflows).
+    -- (#505) FILTER HEADER input (only for a filterable dropdown): category-chip clicks +
+    -- type-to-filter keystrokes. Handled before wheel/option/click-away so a filtering keystroke
+    -- or chip click is never also read as an option interaction. Chat input is blocked each frame
+    -- so keys/Enter don't leak to game chat (the modal device block doesn't cover chat_input).
+    if row._dd_filterable then
+        if Managers.chat and Managers.chat.block_chat_input_for_one_frame then
+            pcall(function() Managers.chat:block_chat_input_for_one_frame() end)
+        end
+        local chip_count = w._dd_chip_count or 0
+        for ci = 1, chip_count do
+            local hs = c["chip_" .. ci]
+            if hs and (hs.on_release or hs.on_left_release) then
+                -- Chip 1 = "All" (clear the category); chips 2..n = category (ci - 1).
+                self._dd_cat = (ci == 1) and nil or (ci - 1)
+                self._dd_start = 1
+                self:_recompute_dd_visible(row)
+                self:_refresh_dropdown_list()
+                _play_click()
+                return true
+            end
+        end
+        local newq, changed = _apply_keystrokes(self._dd_query or "", _SEARCH_MAX_LEN)
+        if changed then
+            self._dd_query = newq
+            self._dd_caret_t = 0
+            self._dd_start = 1
+            self:_recompute_dd_visible(row)
+            self:_refresh_dropdown_list()
+            return true
+        end
+    end
+
+    -- Wheel scrolls the visible option window (only when the list overflows). n is the FILTERED
+    -- option count (w._dd_total), so this clamps against what is actually shown.
     if n > num_draws then
         local wheel = input_service and input_service:get("scroll_axis")
         if wheel and wheel.y and wheel.y ~= 0 then
@@ -2409,11 +2560,21 @@ function ModTweakerView:_handle_dropdown_input(input_service)
         end
     end
 
-    -- Per-option click -> commit that absolute option index.
+    -- Per-option click -> commit. For a filtered dropdown, the visible row k maps through
+    -- self._dd_visible back to the ABSOLUTE option index; for a plain dropdown _dd_visible is nil
+    -- and the click is the absolute index directly (unchanged). A "(no matches)" placeholder row
+    -- maps to nil and is ignored.
     for k = 1, num_draws do
         local hs = c["opt_" .. k]
         if hs and (hs.on_release or hs.on_left_release) then
-            self:_commit_dropdown((w._dd_start or 1) + k - 1)
+            local fi = (w._dd_start or 1) + k - 1
+            local abs
+            if row._dd_filterable then
+                abs = self._dd_visible and self._dd_visible[fi]   -- nil for the "(no matches)" row
+            else
+                abs = fi
+            end
+            if abs then self:_commit_dropdown(abs) else self:_close_dropdown_popup() end
             return true
         end
     end
@@ -3213,6 +3374,20 @@ function ModTweakerView:_draw(dt, input_service)
     -- the row if the list scrolls under it. Position the hover/selected highlight before
     -- drawing: highlight the option row under the cursor, else the currently-selected one.
     if self._dd_list then
+        -- (#505) Live search-line text + blink caret for a filterable popup's header (same
+        -- per-frame update the fixed search box uses). content.search_text only exists when the
+        -- popup was built with a header, so guard on it — a plain dropdown has no header band.
+        local dc = self._dd_list.content
+        if dc and dc.search_text ~= nil then
+            self._dd_caret_t = (self._dd_caret_t or 0) + (dt or 0)
+            local q = self._dd_query or ""
+            if q == "" then
+                dc.search_text = "Type to filter..."
+            else
+                local blink = (self._dd_caret_t % 1.0) < 0.5
+                dc.search_text = q .. (blink and "|" or "")
+            end
+        end
         self:_position_dropdown_highlight()
         UIRenderer.draw_widget(renderer, self._dd_list)
     end

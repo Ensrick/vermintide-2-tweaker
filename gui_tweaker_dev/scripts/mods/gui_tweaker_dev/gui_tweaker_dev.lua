@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.223-dev"
+local MOD_VERSION = "0.2.224-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1673,6 +1673,68 @@ _rt_register("mod_tweaker_exclusive_group_api", function()
     local ok_v, V = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
     if not ok_v or type(V) ~= "table" or type(V._enforce_exclusive) ~= "function" then
         return "ModTweakerView:_enforce_exclusive missing (enforcement not wired)"
+    end
+end)
+
+-- (#505) Filtered/searchable dropdown API + view + defs wiring. Runtime-only (no source read):
+-- registers throwaway categories (function form + key-list form), verifies the reverse lookup +
+-- rejects malformed shapes, asserts the public API + the view's filter machinery + the defs popup
+-- factory's header support are all present. A regression that drops the registry, unwires the
+-- filter path, or reverts the header-capable create_dropdown_list fails here.
+_rt_register("mod_tweaker_dropdown_filter_api", function()
+    local MT = mod.mod_tweaker
+    if not MT then return "mod.mod_tweaker not set" end
+    for _, name in ipairs({ "register_dropdown_categories", "get_dropdown_categories" }) do
+        if type(MT[name]) ~= "function" then
+            return string.format("mod.mod_tweaker:%s is not a function (got %s)", name, type(MT[name]))
+        end
+    end
+    local ok, err = MT:register_dropdown_categories("__mt_rt_dd__", "pick", {
+        { label = "Even",  match = function(value) return (value % 2) == 0 end },
+        { label = "Named", match = { "alpha", "beta" } },   -- key-list form
+    })
+    if not ok then return "register_dropdown_categories returned false: " .. tostring(err) end
+    local cats = MT:get_dropdown_categories("__mt_rt_dd__", "pick")
+    if type(cats) ~= "table" or #cats ~= 2 then return "get_dropdown_categories did not return the 2 categories" end
+    if type(cats[1].match) ~= "function" or not cats[1].match(4) or cats[1].match(3) then
+        return "function-form category match did not normalize correctly"
+    end
+    if type(cats[2].match) ~= "function" or not cats[2].match("beta") or cats[2].match("gamma") then
+        return "key-list category match did not normalize to a membership predicate"
+    end
+    -- Reject shapes: missing setting_id, empty category list, label-less / matchless entry.
+    if MT:register_dropdown_categories("__mt_rt_dd__", "", { { label = "x", match = {} } }) then
+        return "empty setting_id was not rejected"
+    end
+    if MT:register_dropdown_categories("__mt_rt_dd__", "empty", {}) then
+        return "empty category list was not rejected"
+    end
+    if MT:register_dropdown_categories("__mt_rt_dd__", "bad", { { match = function() return true end } }) then
+        return "label-less category was not rejected"
+    end
+    -- View filter machinery is wired.
+    local ok_v, V = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+    if not ok_v or type(V) ~= "table" then return "could not load ModTweakerView" end
+    for _, m in ipairs({ "_recompute_dd_visible", "_dd_chips", "_refresh_dropdown_list", "_handle_dropdown_input" }) do
+        if type(V[m]) ~= "function" then return "ModTweakerView:" .. m .. " missing (filter path unwired)" end
+    end
+    -- The defs popup factory must accept a header spec and emit the search-line content id +
+    -- chip hotspots. Build a probe popup with 2 chips and assert its shape.
+    local ok_d, D = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
+    if not ok_d or type(D) ~= "table" or type(D.create_dropdown_list) ~= "function" then
+        return "defs.create_dropdown_list missing"
+    end
+    local header = { query = "ab", chips = { { label = "All", active = true }, { label = "X", active = false } } }
+    local ok_w, popup = pcall(D.create_dropdown_list, { "one", "two", "three" }, 1, -100, 1, header)
+    if not ok_w or type(popup) ~= "table" then return "create_dropdown_list(header) errored" end
+    if popup._dd_chip_count ~= 2 then return "header chips not built (chip_count ~= 2)" end
+    if not (popup.content and popup.content.search_text ~= nil) then return "header search_text content missing" end
+    if not (popup.content.chip_1 and popup.content.chip_2) then return "chip hotspots missing" end
+    -- A plain (no-header) call still works and grows no header band.
+    local ok_p, plain = pcall(D.create_dropdown_list, { "one", "two" }, 1, -100, 1)
+    if not ok_p or type(plain) ~= "table" then return "create_dropdown_list(no header) errored" end
+    if (plain._dd_header_h or 0) ~= 0 or (plain._dd_chip_count or 0) ~= 0 then
+        return "plain dropdown grew a header band (backward-compat broken)"
     end
 end)
 

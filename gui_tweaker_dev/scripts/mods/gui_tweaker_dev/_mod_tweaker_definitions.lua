@@ -944,6 +944,11 @@ local DD_ARROW_GLOW_ALPHA = 255
 local DD_ROW_W   = INPUT_FIELD_WIDTH - 56   -- 344
 local DD_ROW_H   = 24
 local DD_MAX_ROWS = 10
+-- (#505) Filter-header band heights, added ABOVE the option rows when the view passes a
+-- `header` spec to create_dropdown_list (a long / category-registered dropdown). The search
+-- line is always present in the header; the chip row only when the dropdown has categories.
+local DD_HEADER_SEARCH_H = 26
+local DD_HEADER_CHIP_H   = 28
 
 -- (#92 corrected — match the VANILLA GAME SETTINGS dropdown, not VMF.) The real Options
 -- dropdown does NOT recolor its value text on hover/open: both the collapsed
@@ -1139,7 +1144,7 @@ end
 -- The view reads content.opt_<i>.on_left_release to commit option i, and is_hover to
 -- position the highlight. Returns the widget + the visible count (so the view can map
 -- clicks to absolute option indices via start_index).
-local function create_dropdown_list(texts, current_idx, anchor_y, start_index)
+local function create_dropdown_list(texts, current_idx, anchor_y, start_index, header)
     start_index = math.max(1, start_index or 1)
     local n = #texts
     local num_draws = math.min(n, DD_MAX_ROWS)
@@ -1147,8 +1152,21 @@ local function create_dropdown_list(texts, current_idx, anchor_y, start_index)
     -- collapsed row's bottom-Y; its top is anchor_y + ROW_H, so the list top is at
     -- anchor_y — i.e. flush under the collapsed row). Rows descend by DD_ROW_H.
     local list_top = anchor_y
-    local panel_h = DD_ROW_H * num_draws
     local x0 = RA - INPUT_FIELD_WIDTH + 10   -- align the popup under the value band
+
+    -- (#505) Optional FILTER HEADER band above the option rows. `header` (nil = the plain
+    -- dropdown, unchanged) carries { query = <string>, chips = { { label=, active= }, ... } }.
+    -- The header occupies the TOP of the panel; option rows are pushed down by header_h so the
+    -- popup still drops downward from the collapsed row. The view updates content.search_text
+    -- each frame (query + blink caret) and reads content.chip_<i> hotspots for chip clicks.
+    local chips = header and header.chips
+    local n_chips = (type(chips) == "table") and #chips or 0
+    local header_h = 0
+    if header then
+        header_h = DD_HEADER_SEARCH_H + (n_chips > 0 and DD_HEADER_CHIP_H or 0)
+    end
+    local opt_top = list_top - header_h            -- top of the OPTION-row area
+    local panel_h = header_h + DD_ROW_H * num_draws
 
     local passes = {
         -- bg shade (border fake): 2px larger all around, one z behind the panel.
@@ -1162,6 +1180,49 @@ local function create_dropdown_list(texts, current_idx, anchor_y, start_index)
                   color = { 255, 10, 10, 10 } },
     }
     local content = {}
+
+    -- (#505) Header passes (search line + optional chip row). Built before the option rows so
+    -- their hotspots resolve and their bg strips sit at the panel top.
+    if header then
+        local sy = list_top - DD_HEADER_SEARCH_H
+        passes[#passes + 1] = { pass_type = "rect", style_id = "search_bg" }
+        passes[#passes + 1] = { pass_type = "text", style_id = "search_text", text_id = "search_text" }
+        style.search_bg = { offset = { x0, sy, 10 }, size = { DD_ROW_W, DD_HEADER_SEARCH_H }, color = { 255, 22, 22, 22 } }
+        style.search_text = {
+            font_type = "hell_shark", font_size = 15,
+            horizontal_alignment = "left", vertical_alignment = "center",
+            localize = false, upper_case = false,
+            text_color = { 255, 200, 200, 200 },
+            offset = { x0 + 8, sy, 12 }, size = { DD_ROW_W - 16, DD_HEADER_SEARCH_H },
+        }
+        content.search_text = tostring(header.query or "")
+        if n_chips > 0 then
+            local cy = list_top - DD_HEADER_SEARCH_H - DD_HEADER_CHIP_H
+            local chip_w = DD_ROW_W / n_chips
+            for ci = 1, n_chips do
+                local chip = chips[ci]
+                local cx = x0 + (ci - 1) * chip_w
+                local bg_id, txt_id, hs_id = "chip_bg_" .. ci, "chip_txt_" .. ci, "chip_" .. ci
+                local active = chip.active and true or false
+                passes[#passes + 1] = { pass_type = "rect", style_id = bg_id }
+                passes[#passes + 1] = { pass_type = "text", style_id = txt_id, text_id = txt_id }
+                passes[#passes + 1] = { pass_type = "hotspot", content_id = hs_id, style_id = hs_id }
+                style[bg_id]  = { offset = { cx + 2, cy + 3, 10 }, size = { chip_w - 4, DD_HEADER_CHIP_H - 6 },
+                                  color = active and { 255, 90, 70, 30 } or { 255, 30, 30, 30 } }
+                style[txt_id] = {
+                    font_type = "hell_shark", font_size = 14,
+                    horizontal_alignment = "center", vertical_alignment = "center",
+                    localize = false, upper_case = false,
+                    text_color = active and { 255, 255, 220, 150 } or { 255, 175, 175, 175 },
+                    offset = { cx + 2, cy, 12 }, size = { chip_w - 4, DD_HEADER_CHIP_H },
+                }
+                style[hs_id]  = { offset = { cx, cy, 11 }, size = { chip_w, DD_HEADER_CHIP_H } }
+                content[txt_id] = tostring(chip.label or "")
+                content[hs_id]  = {}
+            end
+        end
+    end
+
     -- Highlight sprite (drawn once, repositioned to the hovered/selected row by the view).
     passes[#passes + 1] = {
         pass_type = "texture", style_id = "hl", texture_id = "hl_tex",
@@ -1169,12 +1230,12 @@ local function create_dropdown_list(texts, current_idx, anchor_y, start_index)
     }
     content.hl_tex = "playerlist_hover"
     content.hl_visible = false
-    style.hl = { offset = { x0, list_top - DD_ROW_H, 10 }, size = { DD_ROW_W, DD_ROW_H },
+    style.hl = { offset = { x0, opt_top - DD_ROW_H, 10 }, size = { DD_ROW_W, DD_ROW_H },
                  color = { 255, 255, 255, 255 } }
 
     for k = 1, num_draws do
         local opt_i = start_index + k - 1
-        local row_top = list_top - (k - 1) * DD_ROW_H
+        local row_top = opt_top - (k - 1) * DD_ROW_H
         local text_id = "txt_" .. k
         local hs_id   = "opt_" .. k
         -- (#92 corrected — match the VANILLA GAME SETTINGS popup, not VMF.) The real Options
@@ -1227,9 +1288,13 @@ local function create_dropdown_list(texts, current_idx, anchor_y, start_index)
     w._dd_num_draws  = num_draws
     w._dd_start      = start_index
     w._dd_total      = n
-    w._dd_list_top   = list_top
+    w._dd_list_top   = opt_top        -- (#505) OPTION-row top (below any header band)
     w._dd_x0         = x0
     w._dd_row_h      = DD_ROW_H
+    -- (#505) filtered-space selected index (highlight seed) + header geometry the view reads.
+    w._dd_cur        = current_idx
+    w._dd_header_h   = header_h
+    w._dd_chip_count = n_chips
     return w
 end
 
