@@ -205,6 +205,23 @@ state. The first non-empty query snapshots that tab's open groups.
   modal interaction completes. The normal list rebuild then blocks the old shared-node release latch
   until a fresh click.
 
+## Per-tab settings profiles (#561)
+
+Both Mod Tweaker presentations expose ten numbered profiles in the lower-left.
+The active slot is scoped to the visible tab and persisted across restarts. Slot
+1 adopts the live pre-profile settings on first use; unused slots start from the
+tab's declared defaults. Applying an edit captures the resulting live values in
+the active slot. A profile-button click auto-applies pending edits to the old
+slot before restoring the new slot, so staged values cannot leak across profiles.
+
+Storage is partitioned as `mt_profile::<tab>::<slot>` maps and one
+`mt_profile_active::<tab>` scalar. Never replace this with a monolithic profile
+tree: VMF deep-clones the complete value passed to `mod:set`. Merged tabs store
+flat length-prefixed owner/setting keys so each stored value retains its owner.
+Restoration stages through the ordinary owner buffers and calls the #560 bounded
+transaction path. Keybinds are excluded because they are device-global and need
+VMF's separate binding-registration lifecycle.
+
 ## Regression guard
 
 `_mod_tweaker_view.lua` / the gut regression suite must assert: no third-party (non-author)

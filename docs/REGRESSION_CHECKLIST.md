@@ -1289,3 +1289,13 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 - vt2-unit-actor-one-indexed
 - vt2-unit-node-not-pcall-safe
 - vt2-workshop-folder-steam-managed
+# Mod Tweaker profiles (#561)
+
+- In the keep and in a mission, profile 1 starts from the user's current settings.
+- Profiles 2-10 start from declared defaults and restore independently per tab.
+- Switching profiles with pending edits applies those edits to the old profile first.
+- DEFAULT plus Apply updates only the active profile on the visible tab.
+- The active number and values survive a full restart, including merged tabs.
+- Keybinds remain unchanged when profiles switch.
+- With search active, switching profiles keeps the filter usable and does not alter
+  the saved collapsible expansion snapshot.

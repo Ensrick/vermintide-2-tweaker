@@ -440,6 +440,9 @@ return {
     gut_mt_reset = {
         en = "Default",
     },
+    gut_mt_profiles = {
+        en = "Profiles",
+    },
     -- (#208) Mod Tweaker "Equipment" merge: the unified tab + its collapsible section
     -- labels. Shown when 2+ of the inventory mods (cosmetics_tweaker / cim / wt / CWV) are
     -- active; the four individual tabs fold into one "Equipment" tab. gut-owned strings.

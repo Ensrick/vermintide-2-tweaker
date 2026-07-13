@@ -5,6 +5,21 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.238-dev (2026-07-13) -- #561 per-tab settings profiles [verify-fix]
+
+- Added a lower-left **PROFILES 1-10** selector to both Mod Tweaker presentations.
+  Each visible tab remembers its own active slot; slot 1 lazily adopts existing
+  live values, while a newly visited slot begins from declared defaults.
+- Applying edits updates only the active tab/profile. Switching profiles auto-applies
+  pending edits to the old profile before restoring the new profile through #560's
+  bounded transaction path. DEFAULT remains scoped to the current tab/profile.
+- Persistence is partitioned into one map per tab/slot plus one scalar active slot.
+  Owner-qualified keys support merged tabs without a monolithic deep-cloned blob.
+  Keybinds remain device-global and are intentionally excluded.
+- Added `[gut:561]` telemetry and Lua 5.1 tests for selection, isolation, keys, and copies.
+- Verify in both the keep and a mission: edit profiles 1 and 2 on two tabs, switch
+  among all four combinations, restart, and confirm values and active highlights.
+
 ## 0.2.237-dev (2026-07-13) -- #559 search expansion transaction [untested]
 
 - Fixed search permanently leaving every matching collapsible open. The first non-empty query now

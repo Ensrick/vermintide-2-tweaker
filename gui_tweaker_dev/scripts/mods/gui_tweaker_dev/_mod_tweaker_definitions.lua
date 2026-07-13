@@ -177,6 +177,19 @@ scenegraph_definition.mt_reset = {
     position = { -(APPLY_W + 50), 0, 0 },
     size = { RESET_W, 30 },
 }
+-- (#561) Per-tab Profiles selector. Ten compact numbered buttons occupy the
+-- bottom-left; Apply/Default remain on the right. The label and buttons are
+-- independent widgets so the active slot can use the native gold highlight.
+scenegraph_definition.mt_profiles_label = {
+    parent = "background_bottom_panel", horizontal_alignment = "left",
+    vertical_alignment = "top", position = { 30, -7, 5 }, size = { 90, 30 },
+}
+for i = 1, 10 do
+    scenegraph_definition["mt_profile_" .. i] = {
+        parent = "mt_profiles_label", horizontal_alignment = "right",
+        vertical_alignment = "top", position = { 8 + i * 31, 0, 0 }, size = { 28, 30 },
+    }
+end
 -- Horizontal tab strip spanning the FULL top panel (one node per registered mod),
 -- matching native Options where the settings_button_N tabs span the whole band off
 -- button_pivot (NO title sharing the band). Native metrics (options_view_definitions
@@ -1912,6 +1925,42 @@ local function create_default_button()
     })
 end
 
+local function _profile_text_widget(scenegraph_id, text, width)
+    return UIWidget.init({
+        scenegraph_id = scenegraph_id,
+        element = { passes = {
+            { pass_type = "hotspot", content_id = "hotspot", style_id = "hotspot" },
+            { pass_type = "rect", style_id = "bg" },
+            { pass_type = "text", style_id = "text", text_id = "text" },
+        } },
+        content = { hotspot = {}, text = text },
+        style = {
+            hotspot = { size = { width, 30 }, offset = { 0, 0, 0 } },
+            bg = { size = { width, 30 }, offset = { 0, 0, 0 }, color = { 0, 0, 0, 0 } },
+            text = { font_type = "hell_shark", font_size = 18,
+                horizontal_alignment = "center", vertical_alignment = "center",
+                localize = false, text_color = { 255, 160, 146, 101 },
+                offset = { 0, 0, 2 } },
+        },
+        offset = { 0, 0, 0 },
+    })
+end
+
+local function create_profile_controls()
+    local profile_label = "Profiles"
+    local ok, localized = pcall(mod.localize, mod, "gut_mt_profiles")
+    if ok and type(localized) == "string" and localized ~= ""
+            and not string.find(localized, "^<") then
+        profile_label = localized
+    end
+    local label = _profile_text_widget("mt_profiles_label", profile_label, 90)
+    local buttons = {}
+    for i = 1, 10 do
+        buttons[i] = _profile_text_widget("mt_profile_" .. i, tostring(i), 28)
+    end
+    return label, buttons
+end
+
 -- (#497) SEARCH box node + factory. The node sits in the band freed above list_mask
 -- (see SEARCH_BAND_H): parented to background_frame (the fixed centred panel, NOT the
 -- scrolling list) so it never moves, left-aligned at x=58 = list_mask inset (18) +
@@ -1979,6 +2028,7 @@ return {
     apply_sg = "mt_apply",
     create_default_button = create_default_button,
     reset_sg = "mt_reset",
+    create_profile_controls = create_profile_controls,
     create_tab = create_tab,
     -- (#497) Per-tab search box (fixed input field above the list).
     create_search_box = create_search_box,

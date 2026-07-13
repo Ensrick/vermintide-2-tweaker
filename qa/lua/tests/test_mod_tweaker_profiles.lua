@@ -1,0 +1,62 @@
+return function(H, repo_root)
+    local path = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_profiles.lua"
+    local Profiles = assert(loadfile(path))()
+    local function store()
+        local values = {}
+        return { values = values,
+            get = function(self, key) return self.values[key] end,
+            set = function(self, key, value) self.values[key] = value end }
+    end
+    H.test("Mod Tweaker profiles default every tab to slot one", function()
+        local s = store()
+        H.equal(Profiles.get_active(s, "enemy_tweaker"), 1)
+        H.equal(Profiles.set_active(s, "enemy_tweaker", 7), 7)
+        H.equal(Profiles.get_active(s, "enemy_tweaker"), 7)
+        H.equal(Profiles.set_active(s, "enemy_tweaker", 99), 10)
+    end)
+    H.test("Mod Tweaker stores one independent map per tab and slot", function()
+        local s = store()
+        Profiles.save(s, "enemy_tweaker", 1, { a = 1 })
+        Profiles.save(s, "enemy_tweaker", 2, { a = 2 })
+        Profiles.save(s, "gut_dev", 1, { a = 3 })
+        H.deep_equal(Profiles.load(s, "enemy_tweaker", 1), { a = 1 })
+        H.deep_equal(Profiles.load(s, "enemy_tweaker", 2), { a = 2 })
+        H.deep_equal(Profiles.load(s, "gut_dev", 1), { a = 3 })
+    end)
+    H.test("Mod Tweaker owner-qualified profile members round trip", function()
+        local key = Profiles.member_key("cosmetics:tweaker", "shared::setting")
+        local owner, setting = Profiles.split_member_key(key)
+        H.equal(owner, "cosmetics:tweaker")
+        H.equal(setting, "shared::setting")
+        H.equal(Profiles.split_member_key("broken"), nil)
+    end)
+    H.test("Mod Tweaker profile loads return owned maps", function()
+        local s = store()
+        Profiles.save(s, "enemy_tweaker", 1, { a = 1 })
+        local loaded = Profiles.load(s, "enemy_tweaker", 1)
+        loaded.a = 9
+        H.equal(Profiles.load(s, "enemy_tweaker", 1).a, 1)
+    end)
+    H.test("both Mod Tweaker presentations wire profile transactions", function()
+        for _, name in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
+            local file = assert(io.open(repo_root
+                .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/" .. name, "rb"))
+            local source = file:read("*a")
+            file:close()
+            H.truthy(string.find(source, "function ", 1, true))
+            H.truthy(string.find(source, ":_switch_profile(slot)", 1, true))
+            H.truthy(string.find(source, "self:apply_pending(category)", 1, true))
+            H.truthy(string.find(source, "profiles.member_key(owner_id, sid)", 1, true))
+        end
+    end)
+    H.test("standalone search and profile transactions coexist", function()
+        local file = assert(io.open(repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua", "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.truthy(string.find(source, "_mod_tweaker_search", 1, true))
+        H.truthy(string.find(source, "_mod_tweaker_profiles", 1, true))
+        H.truthy(string.find(source, "self:_switch_profile(i)", 1, true))
+        H.truthy(string.find(source, "self._search_tx", 1, true))
+    end)
+end

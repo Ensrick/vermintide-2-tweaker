@@ -1,4 +1,5 @@
 local mod = get_mod("gut_dev")
+local _printf = rawget(_G, "printf") or function() end
 
 -- ============================================================================
 -- Mod Tweaker — HeroView SUB-STATE (KEEP path)
@@ -24,6 +25,7 @@ local mod = get_mod("gut_dev")
 
 local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
 local transactions = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction")
+local profiles = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profiles")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -647,6 +649,83 @@ function HeroViewStateModTweaker:_update_apply_button()
     if self._apply then self._apply.content.disabled = not self:_active_category_dirty() end
 end
 
+function HeroViewStateModTweaker:_profile_snapshot(category, defaults)
+    local out = {}
+    for i = 1, #(self._build_nodes or {}) do
+        local node = self._build_nodes[i]
+        local sid = _nf(node, "setting_id")
+        local kind = _nf(node, "type")
+        if sid and kind ~= "group" and kind ~= "keybind" then
+            local _, owner_id = _owner(category, sid)
+            local value = defaults and _nf(node, "default_value") or _cat_get(category, sid)
+            if value == nil and defaults then value = _cat_get(category, sid) end
+            if owner_id and value ~= nil then
+                out[profiles.member_key(owner_id, sid)] = value
+            end
+        end
+    end
+    return out
+end
+
+
+function HeroViewStateModTweaker:_profile_ensure(category)
+    if not category then return end
+    local tab_id = _cat_key(category)
+    self._profile_slot = profiles.get_active(mod, tab_id)
+    local ready_key = tab_id .. ":" .. tostring(self._profile_slot)
+    if self._profile_ready[ready_key] then return end
+    if not profiles.load(mod, tab_id, self._profile_slot) then
+        local use_defaults = self._profile_slot ~= 1
+        profiles.save(mod, tab_id, self._profile_slot,
+            self:_profile_snapshot(category, use_defaults))
+        _printf("[gut:561] initialized tab=%s profile=%d source=%s",
+            tostring(tab_id), self._profile_slot, use_defaults and "defaults" or "live")
+    end
+    self._profile_ready[ready_key] = true
+end
+
+
+function HeroViewStateModTweaker:_profile_capture(category)
+    if not category then return end
+    local tab_id = _cat_key(category)
+    local slot = profiles.get_active(mod, tab_id)
+    profiles.save(mod, tab_id, slot, self:_profile_snapshot(category, false))
+    self._profile_ready[tab_id .. ":" .. tostring(slot)] = true
+    self._profile_slot = slot
+end
+
+
+function HeroViewStateModTweaker:_switch_profile(slot)
+    local category = self._categories and self._categories[self._selected]
+    if not category then return end
+    local tab_id = _cat_key(category)
+    local current = profiles.get_active(mod, tab_id)
+    if slot == current then return end
+    if self:_active_category_dirty() then self:apply_pending(category) end
+    self:_profile_capture(category)
+    local values = profiles.load(mod, tab_id, slot)
+    if not values then
+        values = self:_profile_snapshot(category, true)
+        profiles.save(mod, tab_id, slot, values)
+    end
+    profiles.set_active(mod, tab_id, slot)
+    self._profile_ready[tab_id .. ":" .. tostring(slot)] = true
+    self._profile_slot = slot
+    local staged = 0
+    for member, value in pairs(values) do
+        local owner_id, sid = profiles.split_member_key(member)
+        local _, actual_owner = _owner(category, sid)
+        if owner_id and sid and actual_owner == owner_id then
+            self:stage_set(category, sid, value)
+            staged = staged + 1
+        end
+    end
+    if staged > 0 then self:apply_pending(category) else self:_build_rows(category) end
+    _printf("[gut:561] switched tab=%s profile=%d settings=%d",
+        tostring(tab_id), slot, staged)
+    _play_click()
+end
+
 -- APPLY: commit the whole pending buffer for `category` through the existing _cat_set
 -- path (the ONLY place _cat_set runs on edit — a stray slider drag never takes effect
 -- until clicked), clear the buffer, grey the button, and repaint the rows from the new
@@ -674,6 +753,7 @@ function HeroViewStateModTweaker:apply_pending(category)
         self._dirty = true
         self:_update_apply_button()
         self:_build_rows(category)
+        self:_profile_capture(category)
         _play_click()
         mod:debug("[mt:apply] committed Equipment buffers {%s}", table.concat(ids, ", "))
         return
@@ -692,6 +772,7 @@ function HeroViewStateModTweaker:apply_pending(category)
     -- Rebuild the rows so each reads its new live value (the mod's on_setting_changed
     -- may have snapped/clamped further, e.g. ct's 25-coin rounding).
     self:_build_rows(category)
+    self:_profile_capture(category)
     _play_click()
     mod:debug("[mt:apply] committed pending buffer for '%s'", tostring(key))
 end
@@ -798,6 +879,9 @@ HeroViewStateModTweaker.on_enter = function (self, params)
     -- STAGES every current-tab setting back to its default_value (see reset_to_defaults) — the
     -- user then clicks Apply to commit, exactly like a normal staged edit.
     self._reset     = defs.create_default_button()
+    self._profiles_label, self._profile_buttons = defs.create_profile_controls()
+    self._profile_slot = 1
+    self._profile_ready = {}
     -- (#207) Reusable hover-info popup widget (rect bg + frame + title/desc text). The draw
     -- loop sets its content + geometry + fade alpha each frame via defs.layout_tooltip.
     self._tooltip   = defs.create_tooltip_popup()
@@ -960,6 +1044,9 @@ HeroViewStateModTweaker.on_exit = function (self)
     self._exit = nil
     self._apply = nil
     self._reset = nil   -- (v0.2.148-dev) RESTORE DEFAULTS button
+    self._profiles_label = nil
+    self._profile_buttons = nil
+    self._profile_ready = nil
     -- (Fix 3, v0.2.151-dev) Cancel a dangling reset-confirm popup so it can't outlive the menu.
     if self._reset_popup_id then
         pcall(function()
@@ -1205,6 +1292,7 @@ function HeroViewStateModTweaker:_build_rows(category)
     -- button (reset_to_defaults) can iterate the current tab's settings. Mirrors the view twin
     -- (_mod_tweaker_view.lua stores these for its auto-collapse handler + the reset button).
     self._build_nodes, self._build_depths, self._build_category = nodes, depths, category
+    self:_profile_ensure(category)
 
     local base_offset = { 0, -10, 0 }
 
@@ -1999,6 +2087,15 @@ function HeroViewStateModTweaker:_handle_input(input_service)
         end
     end
 
+
+    for i = 1, #(self._profile_buttons or {}) do
+        local ph = self._profile_buttons[i].content.hotspot
+        if ph and (ph.on_release or ph.on_left_release) then
+            self:_switch_profile(i)
+            return
+        end
+    end
+
     -- Tab clicks. The "More" tab advances the page; mod tabs switch selection.
     -- GUARDED while drilled: tab/page switching is disabled inside an advanced view so
     -- the player can't half-switch mods mid-drill (use Back / ESC to exit the drill first).
@@ -2386,6 +2483,18 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
         self._exit._was_hovered = x_hov
     end
 
+
+    for i = 1, #(self._profile_buttons or {}) do
+        local button = self._profile_buttons[i]
+        local hov = button.content.hotspot and button.content.hotspot.is_hover
+        if hov and not button._was_hovered then _play_hover() end
+        button._was_hovered = hov
+        local c = button.style.text.text_color
+        if hov then c[1], c[2], c[3], c[4] = 255, 255, 255, 255
+        elseif i == (self._profile_slot or 1) then c[1], c[2], c[3], c[4] = 255, 255, 168, 0
+        else c[1], c[2], c[3], c[4] = 255, 160, 146, 101 end
+    end
+
     -- Apply scroll: translate the list container node; all rows move with it.
     -- Positive Y shifts the stack up (reveals lower rows) — same sign convention as
     -- OptionsView.update_scrollbar. Set BEFORE begin_pass so world positions (used
@@ -2419,6 +2528,10 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
     if self._apply then UIRenderer.draw_widget(renderer, self._apply) end
     -- (v0.2.148-dev) RESTORE DEFAULTS button (to the LEFT of Apply). Same render path.
     if self._reset then UIRenderer.draw_widget(renderer, self._reset) end
+    if self._profiles_label then UIRenderer.draw_widget(renderer, self._profiles_label) end
+    for i = 1, #(self._profile_buttons or {}) do
+        UIRenderer.draw_widget(renderer, self._profile_buttons[i])
+    end
 
     -- Cull + draw rows against the list_mask box (CPU position-cull; no GPU mask).
     -- World positions are valid here because begin_pass re-evaluated the scenegraph
