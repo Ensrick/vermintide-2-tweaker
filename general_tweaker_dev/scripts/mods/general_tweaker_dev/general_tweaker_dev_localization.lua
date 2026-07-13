@@ -64,10 +64,10 @@ return {
     gt_bot_ladder_unstick_delay = { en = "[working] Ladder unstick delay (seconds)" },
     gt_bot_ladder_unstick_delay_tooltip = { en = "How many seconds a bot may sit on a ladder before it teleports to a teammate. Values below 3 would trigger during normal climbs, so 3 is the minimum." },
 
-    gt_bot_instant_pickup = { en = "[working] Bots instantly grab targeted items" },
+    gt_bot_instant_pickup = { en = "[verify-fix] [Issue 364] Bots instantly grab targeted items" },
     gt_bot_instant_pickup_tooltip = { en = "The pickup a bot is going for, including pinged items, is grabbed from where the bot stands instead of it walking all the way over." },
 
-    gt_bot_greedy_pickup = { en = "[untested] Bots collect items players leave behind" },
+    gt_bot_greedy_pickup = { en = "[verify-fix] [Issue 364] Bots collect items players leave behind" },
     gt_bot_greedy_pickup_tooltip = { en = "Normally bots refuse to take potions, bombs, and healing while a nearby player has a free slot for them; with this on they collect such items anyway, then carry them and hand them over when asked or needed." },
 
     -- #468: control WHEN a bot spends a heal on ITSELF (self-use timing only).

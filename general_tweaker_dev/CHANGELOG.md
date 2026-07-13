@@ -1,5 +1,19 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.217-dev (2026-07-13) -- #364 reserve Bardin's Survival Ale for human players [verify-fix]
+
+Bots no longer automatically target Bardin's Survival Ale through either the instant-pickup path or the greedy mule-pickup postpass. The host-owned `AIBotGroupSystem._update_mule_pickups` pass now releases an ale claim vanilla assigned earlier in the tick and excludes ale while selecting a replacement; ordinary potions and bombs retain their existing behavior. The reservation keys off the pickup extension's exact `pickup_name` (`bardin_survival_ale`), matching the career-drop definition in `scripts/settings/equipment/pickups.lua:741-759`, rather than broadly excluding the entire `slot_level_event` slot.
+
+The pickup and consumable helpers are now isolated in `_gt_bot_pickups.lua` and `_gt_bot_consumables.lua`; newer bot fixes remain intact and `_gt_bot_fixes.lua` stays below the repository's 2,500-line hard limit. The existing `PlayerBotBase.update` dispatch remains consolidated, and the pickup module is the sole owner of both `AIBotGroupSystem` pickup hooks.
+
+### Regression
+- New `/gt_regression_test` check `gt364_survival_ale_reserved_for_humans` proves the exact ale name is reserved while a normal potion, grenade, and nil remain unreserved.
+
+### Test method (solo host + one Bardin bot suffices)
+1. Enable Bot Behavior Improvements, instant pickup, and greedy pickup; trigger Bardin's Survival Ale drop near the bot and an ordinary potion or bomb nearby.
+2. Confirm the bot does not target or remotely grab the ale, but can still collect the ordinary mule pickup.
+3. Run `/gt_regression_test` and confirm `gt364_survival_ale_reserved_for_humans` passes.
+
 ## v0.2.216-dev (2026-07-13) -- #302 Debug Highlights: rewrite renderer to screen projection (the reason it never rendered) [verify-fix]
 
 The user reported (issue #302, 2026-07-12) that the Debug Highlights overlay "has never worked in any way whatsoever" despite four shipped phases. Empirical root cause, from the user's own logs: the draw loop was NOT the problem. `console-2026-07-12-22.03.01` shows `[gt_dev:DH] drawn ... interact=48..60 players=1` once per second in-game -- 48 to 60 wireframe boxes were built and `LineObject.dispatch`ed into `level_world` every frame -- yet nothing appeared. That is direct proof that **a raw `LineObject.dispatch` does not visibly render in retail Vermintide 2.**
@@ -34,7 +48,6 @@ Reachable and rewired to the new renderer: interactables (yellow), item pickups 
 2. In the keep: Dev Tools -> Debug Highlights ON + Interactables ON. Expected: yellow wireframe boxes appear on the crafting station, chests, and other interactables. Grep the log for `[gt:302] method=world_to_screen: drew N edges` -- N should be > 0.
 3. Toggle Item Pickups / Player Hitboxes; start a mission and toggle Enemy Hitboxes / Headshot Zones / Aggro Ranges in a horde. Confirm boxes track units, orange squares on heads, amber rings on the ground.
 4. Client check (join as non-host): enemy boxes/heads/rings should still draw (enumeration is per-peer).
-
 ## v0.2.215-dev (2026-07-13) -- #303 Freeze AI dev tool (command + keybind) [untested]
 
 A dev-only testing tool that halts every enemy AI in place so you can inspect positioning, hitboxes, or set up a scenario, and pauses new spawns while it is held. Ships BOTH as the `/freezeai` chat command and as a keybind-able "Freeze AI" setting in the dev-only Dev Tools group (`keybind_type = function_call` -> `mod.gt_freeze_ai_toggle`). Host-only: AI brains run on the server, so the toggle refuses on a client with one echo. One confirmation echo per toggle ("AI frozen" / "AI unfrozen"); diagnostics are printf-only (`[gt:303]`).

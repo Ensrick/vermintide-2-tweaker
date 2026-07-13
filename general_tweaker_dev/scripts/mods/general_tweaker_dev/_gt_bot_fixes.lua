@@ -489,180 +489,7 @@ local function _gt_ladder_unstick_tick(self, unit, blackboard, t)
     mod:debug("[gt:bot] teleported bot off a stuck ladder after %.1fs", delay)
 end
 
--- ----------------------------------------------------------------------------
--- FIX 6: Bots instantly grab their targeted/pinged pickup (no walking)
--- ----------------------------------------------------------------------------
--- WHAT
---   Bots normally walk to within 3.2m before looting (BTConditions.can_loot,
---   bt_bot_conditions.lua:877). Vanilla already has a failsafe: when an ordered
---   pickup has no navmesh path, player_bot_base.lua:1606-1633 sets
---   `forced_pickup_unit`, and can_loot then bypasses the distance gate because
---   `is_forced_pickup = forced_pickup_unit == interaction_unit` short-circuits
---   the `max_dist > dist` checks (bt_bot_conditions.lua:884-890).
--- FIX
---   Make that failsafe always-on for a bot's CURRENT pickup candidate: point
---   both `interaction_unit` and `forced_pickup_unit` at the live candidate
---   (mule/ordered first, then health, then ammo). is_forced_pickup then trips
---   and the bot loots from where it stands. We skip when the bot has an aid
---   target so we never stomp a revive interaction. EXPERIMENTAL -- verify
---   in-game. Host-side only.
-local function _gt_instant_pickup_tick(self, unit, blackboard, t)
-    if blackboard.target_ally_need_type then
-        return
-    end
-    local pickup = blackboard.mule_pickup or blackboard.health_pickup or blackboard.ammo_pickup
-    if not (pickup and Unit.alive(pickup)) then
-        return
-    end
-    blackboard.interaction_unit = pickup
-    blackboard.forced_pickup_unit = pickup
-end
-
--- ----------------------------------------------------------------------------
--- REPLICANT BOTS PORT 2: Bots drink potions when in danger (configurable, #320)
--- ----------------------------------------------------------------------------
--- WHAT
---   Vanilla bots never drink their OWN potion -- player_bot_base.lua only ever
---   hands a potion to an ally or picks one up; there's no self-use behavior. So
---   a bot can sit on a Strength/Speed/Conc potion through a whole boss fight.
--- FIX (gt idiom; NOT a copy of Replicant's bt_bot_drink_pot_action BT node)
---   Throttled per-bot tick (mirrors the other _gt_*_tick fns). When a bot holds
---   a giveable/usable potion in slot_potion AND a configured "danger" is within
---   range, drive the drink the way BTBotHealAction does: wield slot_potion and
---   hold the use input until the potion is consumed (slot empties). One drink
---   per held potion (_gt_drinking latch cleared when the slot empties).
---
---   ADVANCED CONDITIONS (#320): the master toggle gt_bot_drink_potions_in_danger
---   now nests sub-widgets that decide WHAT counts as danger, all read LIVE each
---   scan inside _gt_danger_near (no on_setting_changed wiring):
---     * gt_bot_drink_range_m      -- scan radius in metres (was hard-coded 18)
---     * gt_bot_drink_on_boss      -- any breed.boss monster/lord in range
---     * gt_bot_drink_on_special   -- any breed.special (disabler/ranged) in range
---     * gt_bot_drink_on_patrol    -- >= gt_bot_drink_patrol_count elites in range
---     * gt_bot_drink_on_horde     -- >= gt_bot_drink_horde_count trash in range
---   Breed class is read live off each AI unit's Breed table (breed.boss /
---   breed.special / breed.elite; trash = none of those -- verified against
---   Vermintide-2-Source-Code/scripts/settings/breeds/*.lua 2026-07-04), not a
---   static name roster. Host-side only (bots are host-only). Default OFF.
-local _GT_BOT_DANGER_RANGE = 18.0          -- meters; fallback danger scan radius
-local _GT_BOT_PATROL_ELITE_THRESHOLD = 3   -- fallback: >= this many elites == "patrol"
-local _GT_BOT_HORDE_TRASH_THRESHOLD = 8    -- fallback: >= this many trash == "horde"
-
--- True if any ENABLED danger condition is met within the configured range of
--- `self_pos`. Reads the live Breed table off each AI unit (breed.boss /
--- breed.special / breed.elite; trash = none of those) and the live menu
--- settings each call, so a condition change takes effect without a reload.
-local function _gt_danger_near(unit, self_pos)
-    if not self_pos then return false end
-    local side_manager = Managers.state.side
-    local side = side_manager and side_manager.side_by_unit[unit]
-    if not side then return false end
-
-    -- AI enemy units of this side (Side:enemy_units() -> the compact _enemy_units
-    -- roster, swap-remove maintained so 1..#enemy_units has no holes).
-    local enemy_units = side.enemy_units and side:enemy_units()
-    if not enemy_units then return false end
-
-    -- Advanced conditions (#320), live-read each scan.
-    local on_boss    = mod:get("gt_bot_drink_on_boss")
-    local on_special = mod:get("gt_bot_drink_on_special")
-    local on_patrol  = mod:get("gt_bot_drink_on_patrol")
-    local on_horde   = mod:get("gt_bot_drink_on_horde")
-
-    -- Every trigger off -> the feature can never fire; bail before the scan.
-    if not (on_boss or on_special or on_patrol or on_horde) then
-        return false
-    end
-
-    local range = tonumber(mod:get("gt_bot_drink_range_m")) or _GT_BOT_DANGER_RANGE
-    local range_sq = range * range
-    -- Disabled cluster conditions use an unreachable threshold so their tallies
-    -- never trip (math.huge is never <= a finite count).
-    local patrol_threshold = on_patrol and (tonumber(mod:get("gt_bot_drink_patrol_count")) or _GT_BOT_PATROL_ELITE_THRESHOLD) or math.huge
-    local horde_threshold  = on_horde  and (tonumber(mod:get("gt_bot_drink_horde_count"))  or _GT_BOT_HORDE_TRASH_THRESHOLD) or math.huge
-
-    local elite_count, trash_count = 0, 0
-    for i = 1, #enemy_units do
-        local enemy = enemy_units[i]
-        if ALIVE[enemy] then
-            local ep = POSITION_LOOKUP[enemy]
-            if ep and Vector3.distance_squared(self_pos, ep) <= range_sq then
-                local breed = Unit.get_data(enemy, "breed")
-                if breed then
-                    -- Class priority: boss > special > elite > trash. A boss with
-                    -- its trigger off simply does nothing (it is not "trash").
-                    if breed.boss then
-                        if on_boss then return true end       -- a monster/lord in range
-                    elseif breed.special then
-                        if on_special then return true end     -- a disabler/ranged special in range
-                    elseif breed.elite then
-                        elite_count = elite_count + 1
-                        if elite_count >= patrol_threshold then
-                            return true                        -- elite cluster -> patrol
-                        end
-                    else
-                        trash_count = trash_count + 1
-                        if trash_count >= horde_threshold then
-                            return true                        -- trash cluster -> horde
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return false
-end
-
-local function _gt_drink_potion_tick(self, unit, blackboard, t)
-    local inventory_extension = blackboard.inventory_extension
-    if not inventory_extension then
-        blackboard._gt_drinking = nil
-        return
-    end
-
-    -- If we latched a drink, keep holding the use input until the potion slot
-    -- empties (consumed), then release the latch. This survives the BT trying to
-    -- re-wield a combat weapon for the few frames the drink takes.
-    if blackboard._gt_drinking then
-        local still_have = inventory_extension:get_slot_data("slot_potion")
-        local input_ext = blackboard.input_extension
-        if still_have and input_ext then
-            input_ext:wield("slot_potion")
-            input_ext:hold_attack()
-            -- Safety timeout: never hold longer than ~1.5s.
-            if t < (blackboard._gt_drinking_until or 0) then
-                return
-            end
-        end
-        blackboard._gt_drinking = nil
-        blackboard._gt_drinking_until = nil
-        return
-    end
-
-    -- Throttle the danger scan (once a second is plenty).
-    local next_t = blackboard._gt_drink_scan_t or 0
-    if t < next_t then
-        return
-    end
-    blackboard._gt_drink_scan_t = t + 1.0
-
-    -- Must actually hold a usable potion in slot_potion. can_give_other gates out
-    -- the Necromancer skull and other non-potion slot_potion occupants.
-    local potion = inventory_extension:get_slot_data("slot_potion")
-    if not potion then return end
-    local template = inventory_extension:get_item_template(potion)
-    if not (template and template.can_give_other) then return end
-
-    local self_pos = POSITION_LOOKUP[unit]
-    if not _gt_danger_near(unit, self_pos) then return end
-
-    -- Latch the drink for up to ~1.5s of held use input.
-    blackboard._gt_drinking = true
-    blackboard._gt_drinking_until = t + 1.5
-
-    mod:debug("[gt:bot] bot drinking its potion (danger in range)")
-end
-
+-- FIX 6 + potion-danger helpers moved to _gt_bot_consumables.lua.
 -- ----------------------------------------------------------------------------
 -- CONSOLIDATION SITE: _gt_bot_update_consolidated
 -- ----------------------------------------------------------------------------
@@ -693,14 +520,14 @@ mod:hook_safe("PlayerBotBase", "update", function (self, unit, input, dt, contex
             _gt_ladder_unstick_tick(self, unit, blackboard, t)
         end
         if mod:get("gt_bot_instant_pickup") then
-            _gt_instant_pickup_tick(self, unit, blackboard, t)
+            mod._gt_instant_pickup_tick(self, unit, blackboard, t)
         end
     end
 
     -- Replicant Bots port: drink a held potion when a boss/lord or patrol is
     -- near (separate toggle from the bundle above).
     if mod:get("gt_bot_drink_potions_in_danger") then
-        _gt_drink_potion_tick(self, unit, blackboard, t)
+        mod._gt_drink_potion_tick(self, unit, blackboard, t)
     end
 
     -- Bot Teleport Lab (diagnostics) dispatch: registers the bot for the D6/D7
@@ -1166,16 +993,8 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
     return ally, real_dist, need_type, look_at
 end)
 
--- #139 pure predicate seam (v0.2.192-dev). The status-extension -> needs-aid
--- boolean split out of _gt_unit_needs_aid, testability-only and BEHAVIOR
--- IDENTICAL: the OR expression is byte-for-byte the former inline body. Exists
--- because the /gt_regression_test must exercise the exact knocked / hook /
--- ledge-not-pulled-up truth table with a STUB status extension -- and it cannot
--- stub the unit boundary, since _gt_unit_needs_aid's ALIVE[u] guard reads the
--- engine POSITION_LOOKUP map (global_utils.lua:15 `ALIVE = POSITION_LOOKUP`),
--- which rejects a fake unit key. This leaf takes the status ext directly.
--- Covered states (generic_status_extension.lua): is_knocked_down :2091,
--- is_hanging_from_hook :2322, get_is_ledge_hanging :2286, is_pulled_up :2262.
+-- Pure status-extension seam for the #139 regression truth table. The unit
+-- wrapper below retains the engine ALIVE/POSITION_LOOKUP boundary.
 local function _gt_status_needs_aid(st)
     return st:is_knocked_down()
         or st:is_hanging_from_hook()
@@ -1193,25 +1012,8 @@ local function _gt_unit_needs_aid(u)
     return _gt_status_needs_aid(st)
 end
 
--- #384 (v0.2.212-dev) BROADER pure status predicate seam: "needs aid OR awaits
--- rescue". Superset of _gt_status_needs_aid -- it ALSO covers the pact-sworn
--- disabler grabs a bot should not abandon a teammate for (pounce / pack master /
--- tentacle / chaos spawn / vortex / corruptor) AND fully-dead teammates awaiting
--- assisted respawn. These are exactly the states the OLD teleport-veto scan left
--- uncovered (knocked/hook/ledge only, on the human-only side.PLAYER_UNITS roster),
--- which let a bot leash away from a downed teammate mid-aid (#384). Mirrors
--- GenericStatusExtension.is_disabled (generic_status_extension.lua:2158) MINUS
--- is_dead()/is_overpowered() -- an unrescuable corpse or a brief overpower stagger
--- is not an aid errand. Covered states + citations (generic_status_extension.lua):
---   is_knocked_down            :2091      is_pounced_down            :2083
---   is_hanging_from_hook       :2322      is_grabbed_by_pack_master  :2318
---   get_is_ledge_hanging       :2286      is_grabbed_by_tentacle     :2194
---     / is_pulled_up           :2262      is_grabbed_by_chaos_spawn  :2202
---   is_in_vortex               :2294      is_grabbed_by_corruptor    :2198
---   is_ready_for_assisted_respawn :2110
--- Takes the status ext directly (same testability constraint as
--- _gt_status_needs_aid: the /gt_regression_test stubs the status boundary because
--- the unit-boundary ALIVE[u] guard reads the engine POSITION_LOOKUP map).
+-- #384 broader pure seam: aid plus pact-sworn grabs and assisted respawn.
+-- Deliberately excludes corpse/brief-overpower states that are not aid errands.
 local function _gt_status_needs_aid_or_rescue(st)
     return st:is_knocked_down()
         or st:is_hanging_from_hook()
@@ -1225,12 +1027,7 @@ local function _gt_status_needs_aid_or_rescue(st)
         or st:is_ready_for_assisted_respawn()
 end
 
--- #384 unit-boundary wrapper over _gt_status_needs_aid_or_rescue (same shape as
--- _gt_unit_needs_aid). Awaiting-rescue allies stay in side:player_units() and, as
--- real spawned units with a position, are in POSITION_LOOKUP (ALIVE) even at 0
--- health -- so the ALIVE[u] guard keeps them; only a fully despawned unit (no
--- status ext) drops out, which is correct. Used by the broadened teleport-veto
--- backstop below.
+-- Unit-boundary wrapper used by the broadened teleport-veto backstop.
 local function _gt_unit_needs_aid_or_rescue_full(u)
     if not (u and ALIVE[u]) then return false end
     local st = ScriptUnit.has_extension(u, "status_system")
@@ -1250,35 +1047,8 @@ local function _gt_aid_priority_on()
     return mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_aid_priority")
 end
 
--- v0.2.152-dev (#139 sibling); BROADENED for #384 (v0.2.212-dev): does ANY
--- teammate on the bot's side currently need aid OR await rescue? Returns the
--- first such ally found (or nil). Used by the teleport-veto backstop (the
--- should_teleport + cant_reach_ally hooks) so a bot never leashes AWAY from a
--- teammate who needs help, and by the #492 stall watchdog (SAME scan, so its
--- unreachable-aid bailout composes with the veto). Name kept (exposed +
--- regression-tested) though it now also covers rescue.
---
--- #384 fixed TWO gaps that let a bot abandon a downed teammate mid-aid because
--- the vanilla teleport suppression rides on blackboard.target_ally_need_type
--- (bt_bot_conditions.lua:1226), which _update_target_ally nils on any
--- _ally_path_allowed cooldown (player_bot_base.lua:1948-1983) -- so the veto had
--- to be the backstop, and the old backstop was blind to:
---   (1) ROSTER: side.PLAYER_UNITS is HUMAN-only and drops awaiting-rescue allies
---       (SideManager is_valid = alive and not is_ready_for_assisted_respawn,
---       side_manager.lua:337-339; humans-only add :396-400). A downed BOT or a
---       fully-dead-awaiting-rescue human was invisible. We now walk
---       side:player_units() (side.lua:222 -- the unfiltered _player_units roster
---       that keeps bots AND awaiting-rescue units), the SAME roster FIX 3's
---       rescue picker walks.
---   (2) PREDICATE: _gt_unit_needs_aid covered knocked/hook/ledge only, while a
---       teammate can also be pounced / pack-mastered / tentacled / vortexed /
---       corruptored, or awaiting assisted respawn. We now use the full
---       _gt_unit_needs_aid_or_rescue_full predicate.
--- Reading the ally's LIVE state here every frame is what "pins" the errand: the
--- veto no longer flickers with target_ally_need_type -- it holds while the ally
--- stays down. Trades away the old split+leash micro-benefit (a bot could leash
--- past a teammate merely awaiting rescue); the #492 watchdog reinstates recovery
--- by bailing an UNREACHABLE down/awaiting so the bot regroups.
+-- #139/#384 side-wide backstop. Use the unfiltered player_units() roster so bots
+-- and assisted-respawn players remain visible; #492 bounds unreachable pursuits.
 local function _gt_any_side_teammate_needs_aid(self_unit)
     local sm = Managers.state and Managers.state.side
     if not sm then return nil end
@@ -1299,16 +1069,7 @@ end
 -- or the knocked/hook/ledge-only predicate makes this disappear and the test fail.
 GT_BOT384_AWAITING_DISABLER_VETO_MARKER = "gt-bot384-veto-covers-disablers-and-awaiting-rescue"
 
--- #139 probe helper: nearest side teammate who needs aid or awaits rescue, with
--- the metric distance from self_unit. Returns (unit, dist_m) or (nil, nil).
--- POSITION_LOOKUP can momentarily lack an entry during despawn -- nil-guarded.
--- #384 (v0.2.212-dev): walks side:player_units() with the SAME full
--- _gt_unit_needs_aid_or_rescue_full predicate the veto backstop uses, so the
--- [139:bot_tp] diagnostic reports the downed/awaiting/disabled ally the veto
--- acted on. This also RETIRES the former narrow _gt_unit_needs_aid_or_rescue
--- helper, whose awaiting-rescue branch was dead code -- its only caller walked the
--- pre-filtered side.PLAYER_UNITS (SideManager is_valid drops awaiting-rescue,
--- side_manager.lua:337-339), so the awaiting unit was never in the scanned table.
+-- Probe helper using the same full roster/predicate as the veto backstop.
 local function _gt_nearest_needing_aid(self_unit)
     local self_pos = POSITION_LOOKUP[self_unit]
     if not self_pos then return nil, nil end
@@ -2160,283 +1921,13 @@ mod:hook("GameModeHelper", "side_is_dead", function (func, side_name, ignore_bot
     return func(side_name, ignore_bots)
 end)
 
--- ----------------------------------------------------------------------------
--- FIX 10 (#297 item 8, v0.2.182-dev): Greedy pickup -- bots grab potions/bombs/
--- health items even while a nearby human's matching slot is empty
--- ----------------------------------------------------------------------------
--- WHAT (all citations into the decompiled vanilla source, verified 2026-07-04)
---   Mule items (potions/bombs/etc.): AIBotGroupSystem._update_mule_pickups
---   (ai_bot_group_system.lua:1891-2048) counts `num_players` = alive humans
---   whose `slot_name` slot is EMPTY with an available pickup within 20 m of
---   them (max_pickup_dist_sq = 400, :1894; count loop :1983-2010) and only
---   auto-assigns `blackboard.mule_pickup` to bots when `num_players == 0`
---   (:2012). So while ANY nearby human could still take the item, every bot
---   leaves it on the ground -- even when the humans don't want it.
---
---   Health items: AIBotGroupSystem._update_health_pickups (:2050-2361) gathers
---   the side's health pickups (:2063-2073, split into can_heal_self items and
---   auxiliary slot items) and then RESERVES one item per alive human whose
---   slot_healthkit is empty: the human's nearest item is REMOVED from the
---   assignable pool (:2104-2141; heal items :2116-2127, aux :2128-2140 -- with
---   NO distance cap on the human). Only the leftovers are permutation-assigned
---   to bots (find_permutation :2216 / :2309), which writes bb.health_pickup
---   (:2227 / :2319) and sets bb.allowed_to_take_health_pickup = true only when
---   the item is within MAX_PICKUP_RANGE = 15 of the bot's follow position
---   (:1847; range check :2236 / :2328). Every bot's allowed flag is force-reset
---   to false at the top of the bot loop (:2164). Net effect: with 4 medkits on
---   the floor and 4 empty-slot humans, the bots claim nothing.
---
--- FIX
---   hook_safe post-passes on BOTH functions. Fresh (Class, method) pairs --
---   duplicate-hook pre-flight grep of the whole mod dir (2026-07-04) found the
---   only other AIBotGroupSystem hooks are _assign_destination_points (FIX 9,
---   this file) and _update_urgent_targets (_gt_improved_bot_combat.lua). When
---   the master + gt_bot_greedy_pickup are on, re-run the vanilla assignment
---   logic WITHOUT the human-slot gates, assigning only to bots vanilla left
---   empty-handed and honoring vanilla's own distance rules, so bots claim the
---   items and (via vanilla's give-to-ally utility scoring,
---   player_bot_base.lua:881-917, plus FIX 6's instant grab) carry and hand
---   them to players instead of leaving floor loot to despawn behind the team.
---
---   KEPT INTACT (deliberately):
---   * force_use_health_pickup (:2355-2358) is never written by us -- a bot
---     still only SELF-uses its medkit when every human is healthier than the
---     lowest-HP bot, and :2145-2146 zeroes lowest_human_hp_percent while any
---     human is knocked down / wounded, which blocks bot self-healing while a
---     human is dying nearby. Greedy changes who CARRIES the item, not who gets
---     healed with it.
---   * Vanilla's per-tick retention/cleanup still applies: our mule assignment
---     survives the alive+follow-distance retention check (:1948) and is
---     re-marked assigned (:1961); health assignments are wiped and re-derived
---     by vanilla every tick (:2164, :2256-2266), so flipping the toggle off
---     reverts within one tick (a residual mule claim just gets consumed or
---     dropped by the same vanilla rules as any ordered pickup).
---   * The allowed_to_take_health_pickup follow-range gate (:2236) is mirrored,
---     so greedy bots still only fetch items near the team's path -- no
---     cross-map detours.
---   Host-side only (bots + this system are server-side); no RPC; nil-guarded.
-GT_BOT_GREEDY_PICKUP_MARKER_v0_2_182 = "gt-bot-greedy-pickup-mule-health-postpass"
-
-local function _gt_greedy_pickup_on()
-    return mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_greedy_pickup")
-end
-
-mod:hook_safe("AIBotGroupSystem", "_update_mule_pickups", function (self, dt, t)
-    if not _gt_greedy_pickup_on() then
-        return
-    end
-    local bot_ai_data = self._bot_ai_data
-    local available_mule_pickups = self._available_mule_pickups
-    if not (bot_ai_data and available_mule_pickups) then
-        return
-    end
-    local max_pickup_dist_sq = 400   -- vanilla's own local (ai_bot_group_system.lua:1894)
-
-    for side_id = 1, #bot_ai_data do
-        local side_bot_data = bot_ai_data[side_id]
-        local side_available = available_mule_pickups[side_id]
-        if side_bot_data and side_available then
-            -- Rebuild the "already claimed" set (vanilla's ASSIGNED_MULE_PICKUPS_TEMP
-            -- :1889 is a file-local we cannot read): every pickup some bot's
-            -- blackboard already targets plus every explicit pickup order.
-            local claimed = {}
-            for _, data in pairs(side_bot_data) do
-                local bb = data.blackboard
-                if bb and bb.mule_pickup then
-                    claimed[bb.mule_pickup] = true
-                end
-                if data.pickup_orders then
-                    for _, order in pairs(data.pickup_orders) do
-                        if order and order.unit then
-                            claimed[order.unit] = true
-                        end
-                    end
-                end
-            end
-
-            -- Mimic the vanilla assignment loop (:2013-2043) minus the
-            -- num_players == 0 gate (:2012). available_pickups was already
-            -- pruned of dead/expired entries by the vanilla pass this tick
-            -- (:1975-1981); Unit.alive is re-checked anyway (cheap, safe).
-            for slot_name, available_pickups in pairs(side_available) do
-                for bot_unit, data in pairs(side_bot_data) do
-                    local blackboard = data.blackboard
-                    local inventory_extension = blackboard and blackboard.inventory_extension
-                    if inventory_extension then
-                        local order = data.pickup_orders and data.pickup_orders[slot_name]
-                        local has_item = inventory_extension:get_slot_data(slot_name)
-                        local can_hold_more = inventory_extension:can_store_additional_item(slot_name)
-
-                        -- Same per-bot eligibility as vanilla (:2020).
-                        if not blackboard.mule_pickup and (not has_item or can_hold_more) and not order then
-                            local best_pickup_dist_sq = math.huge
-                            local best_pickup
-
-                            for pickup_unit in pairs(available_pickups) do
-                                if not claimed[pickup_unit] and Unit.alive(pickup_unit) then
-                                    local pickup_pos = POSITION_LOOKUP[pickup_unit]
-                                    local bot_pos = POSITION_LOOKUP[bot_unit]
-                                    if pickup_pos and bot_pos then
-                                        -- Vanilla distance rules (:2028-2031): the pickup must
-                                        -- lie within 20 m of the bot's follow point (400 sq);
-                                        -- nearest-to-the-bot wins.
-                                        local bot_dist_sq = Vector3.distance_squared(bot_pos, pickup_pos)
-                                        local follow_dist_sq = Vector3.distance_squared(data.follow_position or bot_pos, pickup_pos)
-                                        if follow_dist_sq < max_pickup_dist_sq and bot_dist_sq < best_pickup_dist_sq then
-                                            best_pickup = pickup_unit
-                                            best_pickup_dist_sq = bot_dist_sq
-                                        end
-                                    end
-                                end
-                            end
-
-                            if best_pickup then
-                                -- Same blackboard writes as vanilla (:2038-2041).
-                                blackboard.mule_pickup = best_pickup
-                                blackboard.mule_pickup_dist_squared = best_pickup_dist_sq
-                                claimed[best_pickup] = true
-
-                                mod:debug("[gt:bot-greedy] bot claimed a %s mule pickup vanilla left for empty-slot humans", tostring(slot_name))
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-
-mod:hook_safe("AIBotGroupSystem", "_update_health_pickups", function (self, dt, t)
-    if not _gt_greedy_pickup_on() then
-        return
-    end
-    local bot_ai_data = self._bot_ai_data
-    local available_health_pickups = self._available_health_pickups
-    if not (bot_ai_data and available_health_pickups) then
-        return
-    end
-    local max_pickup_range = 15   -- vanilla's MAX_PICKUP_RANGE (ai_bot_group_system.lua:1847)
-
-    for side_id = 1, #bot_ai_data do
-        local side_bot_data = bot_ai_data[side_id]
-        local available_pickups = available_health_pickups[side_id]
-        if side_bot_data and available_pickups then
-            -- "Already claimed" = vanilla's own assignments this tick
-            -- (bb.health_pickup written at :2227 / :2252 / :2319) plus explicit
-            -- slot_healthkit pickup orders (:2080-2096).
-            local claimed = {}
-            for _, data in pairs(side_bot_data) do
-                local bb = data.blackboard
-                if bb and bb.health_pickup then
-                    claimed[bb.health_pickup] = true
-                end
-                local reservation = data.pickup_orders and data.pickup_orders.slot_healthkit
-                if reservation and reservation.unit then
-                    claimed[reservation.unit] = true
-                end
-            end
-
-            -- Assign the leftovers -- exactly the items the human-reservation
-            -- pass (:2104-2141) withheld from the bot permutation solver -- to
-            -- bots vanilla left empty-handed. available_pickups was pruned of
-            -- dead/expired entries by the vanilla pass this tick (:2063-2065).
-            for bot_unit, data in pairs(side_bot_data) do
-                local bb = data.blackboard
-                local inventory_extension = bb and bb.inventory_extension
-                local status_ext = data.status_extension
-                -- Same bot eligibility as vanilla's valid-bot filter (:2174):
-                -- alive, not parked at a respawn point, with room in
-                -- slot_healthkit (empty, or stackable per can_store_additional_item).
-                if inventory_extension and not bb.health_pickup
-                        and HEALTH_ALIVE[bot_unit]
-                        and not (status_ext and status_ext:is_ready_for_assisted_respawn()) then
-                    local has_item = inventory_extension:get_slot_data("slot_healthkit")
-                    local can_hold_more = inventory_extension:can_store_additional_item("slot_healthkit")
-                    if not has_item or can_hold_more then
-                        local bot_pos = POSITION_LOOKUP[bot_unit]
-                        local best_pickup, best_dist
-                        if bot_pos then
-                            for pickup_unit in pairs(available_pickups) do
-                                if not claimed[pickup_unit] and Unit.alive(pickup_unit) then
-                                    local pickup_pos = POSITION_LOOKUP[pickup_unit]
-                                    if pickup_pos then
-                                        local d = Vector3.distance(bot_pos, pickup_pos)
-                                        if not best_dist or d < best_dist then
-                                            best_dist = d
-                                            best_pickup = pickup_unit
-                                        end
-                                    end
-                                end
-                            end
-                        end
-
-                        if best_pickup then
-                            -- Same blackboard writes as vanilla (:2227-2242),
-                            -- INCLUDING the follow-range gate on
-                            -- allowed_to_take_health_pickup (:2236): greedy bots
-                            -- still only fetch items within 15 m of the team's
-                            -- path, never detouring across the map.
-                            bb.health_pickup = best_pickup
-                            bb.health_dist = best_dist
-                            bb.health_pickup_valid_until = math.huge
-                            claimed[best_pickup] = true
-
-                            local pickup_pos = POSITION_LOOKUP[best_pickup]
-                            local follow_pos = data.follow_position
-                            local ref_dist = (follow_pos and pickup_pos) and Vector3.distance(follow_pos, pickup_pos) or best_dist
-                            bb.allowed_to_take_health_pickup = ref_dist < max_pickup_range
-
-                            if bb.allowed_to_take_health_pickup then
-                                mod:debug("[gt:bot-greedy] bot claimed a health pickup vanilla reserved for empty-slot humans (%.1fm)", best_dist)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-end)
-
+-- FIX 10 greedy-pickup hooks moved to _gt_bot_pickups.lua (issue #364).
 -- ----------------------------------------------------------------------------
 -- FIX 12 (#468, v0.2.205-dev): Smarter bot self-healing (when to spend a heal)
 -- ----------------------------------------------------------------------------
--- WHY
---   User report (#468, 1-major): "bots are wasting healing". The heal-decision
---   logic the "Bot Improvements - Combat Returns" workshop mod exposed was
---   DELIBERATELY EXCLUDED from gt (_gt_improved_bot_combat.lua:23-29 -- "no-ops
---   at their defaults"), so the "when to use healing" behaviour is 100% vanilla:
---     * A bot only ever SELF-heals -- there is NO vanilla bot "heal another
---       player" action. BTBotHealAction just holds the use input on the bot's
---       own kit (bt_bot_heal_action.lua:15 is_healing_self, :29 hold_attack).
---       (Bots CARRYING/dropping items for humans is the mule/give system, not a
---       heal-other. "Bot heals an ally" is a separate NEW feature, deferred.)
---     * The self-heal gate is BTConditions.bot_should_heal (bt_bot_conditions.lua
---       :893-921): a bot heals when current_health_percent <= template
---       .bot_heal_threshold (first_aid_kits.lua:72 == 0.20; healing_draught.lua
---       :79 == 0.40), OR the item-surplus force_use_health_pickup latch is set
---       (ai_bot_group_system.lua:2357), gated by is_safe. So a bot drinks a
---       full-heal Draught of Healing at 40% (wasting >half of it), and a bot
---       self-burns Medical Supplies (which a hurt HUMAN could use) at 20%.
---
--- FIX (opt-in, gated on the Bot Behavior master + gt_bot_smart_self_heal, OFF)
---   Reimplement bot_should_heal in gt's idiom, mirroring vanilla :904-921 EXACTLY
---   except for three user-controlled substitutions:
---     * gt_bot_self_heal_pct  -- the HP% threshold, replacing template
---       .bot_heal_threshold for BOTH the current-health and perma-health checks.
---     * gt_bot_reserve_kits_for_players -- for a heal-OTHER-capable kit (Medical
---       Supplies; template.can_heal_other, first_aid_kits.lua:70), the bot holds
---       it (does NOT self-use) unless genuinely in trouble (wounded, or the
---       surplus force-use fired), so it stays carried/droppable for a human.
---       A Draught (drink-only, no can_heal_other) is UNAFFECTED -- self-use is
---       its only purpose.
---     * gt_bot_ignore_surplus_selfuse -- ignore force_use_health_pickup (the
---       "spare items on the floor, top yourself off" latch).
---   Any missing blackboard field -> passthrough to the vanilla func (bot AI ticks
---   every frame; a nil deref is a hard crash). With the toggle OFF the hook is a
---   pure passthrough -- byte-for-byte vanilla. Host-side only (bots are server-
---   side); no RPC / NetworkLookup, so no non-host peer can crash or desync.
---   [gt:468] diagnostics (always-on dev) trace each edge where the decision flips
---   and, crucially, each heal gt HELD BACK that vanilla would have taken.
+-- Opt-in #468 reimplementation of vanilla bot_should_heal (:893-921): configurable
+-- HP threshold, reserve heal-other kits for humans, and suppress surplus self-use.
+-- Missing state and toggle-off remain pure vanilla passthroughs; host-side only.
 GT_BOT_SMART_SELF_HEAL_MARKER_v0_2_205 = "gt-bot-smart-self-heal-bot_should_heal-reimpl"
 
 local function _gt_smart_self_heal_on()

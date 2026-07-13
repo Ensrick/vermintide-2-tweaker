@@ -47,11 +47,11 @@
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='gt_bot_behavior_improvements'; literal=$true; polarity='present'; issueRef='#139'; note='master toggle that gates the aid-priority behavior.' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='gt_bot_aid_priority'; literal=$true; polarity='present'; issueRef='#139'; note='sub toggle for the aid-priority behavior.' }
 
-    # -- item 3: the aid scan is SIDE-scoped (reads side.PLAYER_UNITS), not
+    # -- item 3: the aid scan is SIDE-scoped (reads side:player_units()), not
     #    follow-scoped (the #139 root cause). The "no follow" half was body-scoped
     #    in-game and cannot be expressed at file scope; adapted to the distinctive
     #    side-scoped read that proves the scoping.
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='local punits = side and side.PLAYER_UNITS'; literal=$true; polarity='present'; issueRef='#139'; note='aid scan iterates side.PLAYER_UNITS (side-scoped), not the bot follow target.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='local punits = side and side.player_units and side:player_units()'; literal=$true; polarity='present'; issueRef='#139'; note='aid scan iterates the unfiltered side player roster (side-scoped), not the bot follow target.' }
 
     # -- item 4: #492 picker/veto wiring - suppress-pick flag + bailout veto.
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='mod._gt492_should_suppress_pick'; literal=$true; polarity='present'; issueRef='#492'; note='aid-pursuit picker suppression hook must stay wired.' }
@@ -65,11 +65,15 @@
     # -- item 6: #261 tighter-leash slider read + FIX 10 follow-range gates +
     #    improved-combat chase cap / path gate.
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='gt_bot_follow_distance_m'; literal=$true; polarity='present'; issueRef='#261'; note='tighter-leash follow-distance slider read.' }
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='allowed_to_take_health_pickup'; literal=$true; polarity='present'; issueRef='#261'; note='FIX 10 greedy-pickup post-pass gate.' }
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='max_pickup_range'; literal=$true; polarity='present'; issueRef='#261'; note='FIX 10 pickup follow-range gate reference.' }
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='max_pickup_dist_sq'; literal=$true; polarity='present'; issueRef='#261'; note='FIX 10 pickup follow-range gate reference.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'; needle='allowed_to_take_health_pickup'; literal=$true; polarity='present'; issueRef='#261'; note='FIX 10 greedy-pickup post-pass gate.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'; needle='max_pickup_range'; literal=$true; polarity='present'; issueRef='#261'; note='FIX 10 pickup follow-range gate reference.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'; needle='max_pickup_dist_sq'; literal=$true; polarity='present'; issueRef='#261'; note='FIX 10 pickup follow-range gate reference.' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_improved_bot_combat.lua'; needle='CHASE_MAX_DIST_SQ'; literal=$true; polarity='present'; issueRef='#261'; note='improved-combat chase-distance cap.' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_improved_bot_combat.lua'; needle='_enemy_path_allowed'; literal=$true; polarity='present'; issueRef='#261'; note='improved-combat enemy-path gate.' }
+
+    # -- item 6b: #364 reserves only Bardin's exact Survival Ale pickup identity.
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'; needle='return pickup_name == "bardin_survival_ale"'; literal=$true; polarity='present'; issueRef='#364'; note='bot reservation must remain exact-name scoped, not exclude every level-event pickup.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_consumables.lua'; needle='mod._gt_bot_pickup_is_reserved(mule_pickup)'; literal=$true; polarity='present'; issueRef='#364'; note='instant-pickup path must honor the shared Survival Ale reservation.' }
 
     # -- item 7: #142 the backward-teleport want is computed (ordering vs the aid
     #    veto is body-scoped; presence of both patterns is asserted, the veto
