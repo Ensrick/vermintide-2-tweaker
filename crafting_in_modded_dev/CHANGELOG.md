@@ -1,5 +1,11 @@
 # Crafting in Modded Changelog
 
+## 0.8.65-dev (2026-07-13): #563 persist vanilla illusion overrides by exact backend ID [diagnostics-armed]
+
+- Server-owned weapons now save local illusion overrides by exact backend instance ID, so a PlayFab mirror rebuild cannot silently restore the server-side `CustomData.skin` over the user's modded-realm choice.
+- Overrides rehydrate only on the mirror-ready edge, prune missing backend IDs, and defer temporarily unavailable sibling-mod skins. They never key by weapon template, so two copies of the same weapon retain independent illusions.
+- Raw `[cim:563] saved`, `rehydrated`, `pruned_missing`, and `ready_rehydrate` diagnostics expose the lifecycle. `/cim_regression_test` adds `issue563_vanilla_skin_override_exact_backend_id`.
+
 ## 0.8.64-dev (2026-07-13): #562 auto-equip new weapons [verify-fix]
 
 - Added `Automatically equip newly crafted weapons`, default ON. A successful Athanor primary/secondary craft now writes the exact new backend ID to the selected loadout index and recreates the live weapon unit in that same slot. This keeps the loadout record and visible avatar synchronized instead of reviving issue #12's historical icon-only divergence.

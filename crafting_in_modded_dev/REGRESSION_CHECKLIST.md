@@ -8,6 +8,23 @@ Last updated: 2026-07-13.
 
 ---
 
+## Illusion Persistence
+
+### issue563-vanilla-illusion-exact-id - Vanilla skin override survives mirror rebuild
+
+| Field | Value |
+|-------|-------|
+| Symptom | A primary weapon illusion applies locally, then reverts when PlayFab rebuilds the inventory mirror or after restart. |
+| Root cause | Only CIM craft records persisted their skin; server-owned item mirror state was overwritten from server `CustomData.skin`. |
+| Mod(s) | crafting_in_modded_dev |
+| Fix version(s) | 0.8.65-dev |
+| Category | INTEGRATION |
+| Repro | Apply a different illusion to one of two vanilla copies of the same weapon, then restart/reload the keep. |
+| Expected post-fix | The exact edited item keeps its illusion; the same-template sibling does not change. Missing/salvaged backend IDs are pruned. |
+| Detection | Run `/cim_regression_test`; require `issue563_vanilla_skin_override_exact_backend_id` PASS. Confirm `[cim:563] ready_rehydrate` after mirror readiness. |
+
+---
+
 ## Craft Output
 
 ### issue562-crafted-weapon-auto-equip - Exact bid and slot stay synchronized
