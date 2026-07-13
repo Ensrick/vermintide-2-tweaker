@@ -5,10 +5,16 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.242-dev (2026-07-13) -- #572 native atlas geometry correction [verify-fix]
+
+- Corrected the magnifier after in-game verification showed the glyph at roughly one quarter of its intended size. `search_filters_icon` is a padded 128x128 atlas tile; scaling the tile to 22px also scaled down the artwork inside its transparent padding.
+- Now matches `HeroWindowCraftingInventoryConsole` exactly: 128x128 texture size, x=-80/y=-4 offset, and search text beginning at x=47. The transparent tile may extend outside the 30px field, while its visible magnifier remains inside it.
+- Updated offline and runtime regression contracts to lock the atlas-aware geometry rather than a guessed visible-glyph size.
+
 ## 0.2.241-dev (2026-07-13) -- #572 native inventory magnifier in Mod Tweaker search [verify-fix]
 
 - Added the vanilla inventory search material `search_filters_icon` from `gui_menus_atlas` to Mod Tweaker's fixed per-tab search field. It is an atlas-backed passive texture pass, so no custom asset, package load, or additional input target is introduced.
-- The 22px design-space icon uses an 8px left inset and 8px text gap; query, caret, and placeholder text now begin at x=38. Icon and text remain in one scenegraph node, so UI scaling, resolution, and ultrawide positioning transform them together.
+- The initial 22px tile sizing was too small because the atlas tile contains substantial transparent padding; corrected in 0.2.242-dev.
 - Preserved the existing full-field hotspot and all click/focus/type/Escape behavior. `/gut_regression_test` check `issue572_mod_tweaker_native_search_icon` locks the source texture, icon metrics, text clearance, and passive-hotspot contract.
 
 ## 0.2.240-dev (2026-07-13) -- #575 numeric-editor caret uses native text metrics [untested]

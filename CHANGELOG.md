@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - `gui_tweaker_dev` native magnifier geometry correction
+
+Follow-up Tweaker: GUI v0.2.242-dev / issue #572. In-game verification exposed that the native magnifier's 128x128 atlas tile had been incorrectly shrunk to a 22px tile, making the artwork inside its transparent padding roughly one quarter size. Mod Tweaker now uses vanilla's exact 128x128, x=-80/y=-4 geometry and x=47 text origin.
+
 ## 2026-07-13 - `gui_tweaker_dev` native Mod Tweaker search icon
 
 Repo-aggregate entry for Tweaker: GUI v0.2.241-dev / issue #572. Mod Tweaker now reuses the vanilla inventory search field's atlas-backed `search_filters_icon`, with fixed icon/text clearance in the same scale-aware scenegraph node and no new asset or input target. Runtime regression coverage locks the material, metrics, and unchanged field hotspot. No Workshop deployment.

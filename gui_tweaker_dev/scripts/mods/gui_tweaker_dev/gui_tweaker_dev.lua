@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.241-dev"
+local MOD_VERSION = "0.2.242-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1815,7 +1815,8 @@ _rt_register("issue572_mod_tweaker_native_search_icon", function()
     local icon = widget.style and widget.style.search_icon
     local text = widget.style and widget.style.text
     if not icon or not icon.texture_size or icon.texture_size[1] ~= contract.size
-        or icon.texture_size[2] ~= contract.size or icon.offset[1] ~= contract.left_pad then
+        or icon.texture_size[2] ~= contract.size or icon.offset[1] ~= contract.icon_x
+        or icon.offset[2] ~= contract.icon_y then
         return "search icon size/padding drifted"
     end
     if not text or not text.offset or text.offset[1] < contract.text_x then

@@ -2015,8 +2015,11 @@ scenegraph_definition.mt_search = {
 -- full-field hotspot remains the only focus/click target.
 local function create_search_box()
     local W, H, PAD = ROW_W, SEARCH_BOX_H, 14
-    local ICON_TEXTURE, ICON_SIZE, ICON_PAD, ICON_GAP = "search_filters_icon", 22, 8, 8
-    local TEXT_X = ICON_PAD + ICON_SIZE + ICON_GAP
+    -- The atlas entry is a padded 128x128 tile. Vanilla intentionally renders the
+    -- full tile at x=-80 so the visible magnifier ends at x=48; shrinking the tile
+    -- itself also shrinks the glyph hidden inside its transparent padding.
+    local ICON_TEXTURE, ICON_SIZE, ICON_X, ICON_Y = "search_filters_icon", 128, -80, -4
+    local TEXT_X = 47
     return UIWidget.init({
         scenegraph_id = "mt_search",
         element = {
@@ -2034,7 +2037,7 @@ local function create_search_box()
             bg_inner = { offset = { 2, 2, 2 }, size = { W - 4, H - 4 }, color = { 255, 14, 14, 14 } },
             search_icon = {
                 horizontal_alignment = "left", vertical_alignment = "center",
-                texture_size = { ICON_SIZE, ICON_SIZE }, offset = { ICON_PAD, 0, 3 },
+                texture_size = { ICON_SIZE, ICON_SIZE }, offset = { ICON_X, ICON_Y, 3 },
                 color = { 255, 255, 255, 255 },
                 base_color = { 255, 255, 255, 255 },
                 disabled_color = { 128, 128, 128, 128 },
@@ -2073,8 +2076,8 @@ return {
     create_search_box = create_search_box,
     search_sg = "mt_search",
     search_icon_contract = {
-        texture = "search_filters_icon", size = 22, left_pad = 8,
-        text_x = 38, source = "HeroWindowCraftingInventoryConsole",
+        texture = "search_filters_icon", size = 128, icon_x = -80, icon_y = -4,
+        text_x = 47, source = "HeroWindowCraftingInventoryConsole",
     },
     create_checkbox = create_checkbox,
     create_slider = create_slider,
