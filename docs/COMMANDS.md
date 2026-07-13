@@ -66,9 +66,10 @@ gut_hero_select,               -- open HeroView talents layout mid-mission (live
 reset_modded_loadouts,         -- wipe the modded loadout store (optional career arg) -> re-seed from official (native loadouts #175)
 gut_loadout_status,            -- dump the modded loadout store state to chat + console (native loadouts #375 diagnostic)
 scrub_official_loadouts,       -- repair modded/dangling weapon+frame ids in OFFICIAL loadouts (#402; 'apply' to write, default report-only)
-gut_regression_test, gut_lua_mem
+gut_regression_test, gut_lua_mem,
+export_settings,                -- dump a TOML settings snapshot to the log (#517; no retail read-back)
 ```
-*(partial gut audit added 2026-06-24 alongside the in-mission inventory migration; gut was previously un-audited in this file — other gut commands may exist.)*
+*(partial gut audit added 2026-06-24 alongside the in-mission inventory migration; refreshed 2026-07-13 for #517. The retired `/reload_config` command is intentionally absent because retail exposes no file-read channel.)*
 
 ### `ct` (chaos_wastes_tweaker)
 ```

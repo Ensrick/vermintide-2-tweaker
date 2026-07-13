@@ -3,18 +3,17 @@
   Background watcher: auto-write gut_mod_settings.toml whenever Tweaker: GUI exports.
 
 .DESCRIPTION
-  VMF mods can read files but not write them. This watcher is the "write" half:
+  Retail VMF mods cannot read or write arbitrary files. This watcher persists
+  exported settings snapshots:
   it polls the newest Vermintide 2 console log and, whenever it sees a fresh
   [gut:toml] BEGIN..END block (the mod emits one on /export_settings AND
   automatically when you close the Mod Tweaker after changing a setting), it
   writes that TOML to:
       %APPDATA%\Fatshark\Vermintide 2\gut_mod_settings.toml
 
-  So the round-trip becomes seamless:
+  Snapshot flow:
     in-game  : change settings in the Mod Tweaker, close it (or /export_settings)
-    watcher  : commits gut_mod_settings.toml automatically
-    you      : edit the .toml by hand any time
-    in-game  : restart or /reload_config to load the file back
+    watcher  : writes gut_mod_settings.toml automatically for backup/reference
 
   Leave this running in a terminal while you play. Ctrl+C to stop. It only writes
   when the exported content actually changes, and backs up the previous file to

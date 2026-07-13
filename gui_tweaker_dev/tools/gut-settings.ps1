@@ -3,18 +3,16 @@
   Write gut_mod_settings.toml from a Tweaker: GUI /export_settings log dump.
 
 .DESCRIPTION
-  VMF mods can READ files but cannot WRITE them, so "Tweaker: GUI" exports its
+  Retail VMF mods cannot read or write arbitrary files, so "Tweaker: GUI" exports its
   settings by printing TOML to the console log (prefix [gut:toml]). This script
   parses the newest (or a given) console log, extracts the most recent
   BEGIN..END block, and writes it to:
       %APPDATA%\Fatshark\Vermintide 2\gut_mod_settings.toml
-  Edit that file by hand; the game reads + applies it on load (or /reload_config).
+  This is a backup/reference snapshot; the retail game cannot read it back.
 
-  Round-trip:
+  Snapshot flow:
     in-game  ->  /export_settings        (dumps TOML to the log)
-    desktop  ->  .\gut-settings.ps1           (writes the .toml from the log)
-    you      ->  edit gut_mod_settings.toml
-    in-game  ->  restart, or /reload_config
+    desktop  ->  .\gut-settings.ps1      (writes the .toml snapshot from the log)
 
 .PARAMETER LogPath
   A specific console log to parse. Default: newest console-*.log under the V2 log dir.
@@ -71,4 +69,4 @@ if (Test-Path -LiteralPath $OutPath) {
 }
 Set-Content -LiteralPath $OutPath -Value $text -Encoding UTF8 -NoNewline
 Write-Host "Wrote       : $OutPath  ($(( $body | Measure-Object).Count) lines)"
-Write-Host "Edit it, then restart the game or run /reload_config."
+Write-Host "Snapshot only: retail Vermintide cannot read or apply this file."
