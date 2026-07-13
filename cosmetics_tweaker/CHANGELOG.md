@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.93-dev - 2026-07-13 - #574 glow rehydration and render fan-out [untested]
+
+- Fixed hero/inventory previews reverting after weapon swaps. Vanilla stores backend ID and skin per preview slot before asynchronous package loading; the old single mutable previewer backend ID could point at a later request by spawn time. The post-spawn path now binds from vanilla's durable per-slot record, reloads the saved item+illusion RGB, and repaints the spawned units.
+- Fixed remote peers retaining the original cosmetic glow. Husk `_wield_slot` bypasses `GearUtils.create_equipment`, so the existing owner-side map/apply hook never ran. The consolidated husk wrapper now binds the freshly spawned hand units to wearer + wielded slot + illusion and repaints from the authoritative peer cache.
+- Leaving a lobby, changing network role, weapon swapping, and equipment respawns now rehydrate the owner-authoritative durable store and repaint local 1P/3P units without opening the picker. Remote matching fails closed on a different illusion or slot; backend IDs remain local and never cross the wire.
+- Added a compact active-slot field to the existing glow payload, bounded log-only `[cos:574]` send/receive/rehydrate/husk evidence (48 lines per session), `glow_picker_render_fanout_574`, and updated glow/regression documentation. No new RPC or hook registration; no Workshop deployment in this change.
+
+- **Verify (coop):** Apply distinct colors on both peers. Confirm each player sees their own color in 1P, 3P, and the inventory hero preview, and sees the other player's color. Swap weapons and preview items repeatedly, leave the lobby back to the keep, then rejoin without opening the picker; every surface must restore automatically. Confirm the log contains bounded `sync send`, `sync recv`, `rehydrate path=create_equipment|hero_preview|local_wield`, and `repaint path=husk_wield ... active=true` evidence.
+
 ## 0.9.92-dev - 2026-07-13 - #574 explicit per-illusion glow Apply transaction [untested]
 
 - Added the missing Apply button and dirty state. Slider movement remains a local live preview; Apply is the only persistence/network commit, disables itself after success, and repeated clicks do not write or emit again.

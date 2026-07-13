@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.92-dev"
+local MOD_VERSION = "0.9.93-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -378,6 +378,20 @@ local _is_unit = mod._cos.is_unit
 -- further down (which stays in this file) reads/writes the SAME table. Phase 3 OOP
 -- split (v0.9.79-dev).
 local _glow_by_peer = mod._glow_by_peer
+
+-- #574 verification evidence is deliberately bounded and log-only.  A normal
+-- two-player verify run exercises send/receive plus several spawn paths; the
+-- cap prevents a preview rebuild loop from growing the console log forever.
+local function _cos574_log(fmt, ...)
+    mod._cos574_diag_count = mod._cos574_diag_count or 0
+    if mod._cos574_diag_count >= 48 then return end
+    mod._cos574_diag_count = mod._cos574_diag_count + 1
+    if rawget(_G, "printf") then
+        local ok, message = pcall(string.format, fmt, ...)
+        pcall(printf, "[cos:574] %s evidence=%d/48 chat=false",
+            ok and message or tostring(fmt), mod._cos574_diag_count)
+    end
+end
 
 
 -- ============================================================
@@ -3776,11 +3790,19 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
     -- per-item override lookup. Weak-keyed table auto-cleans when units
     -- get destroyed. Covers all 4 hand-unit fields the previewer and
     -- in-keep paths might query.
-    if result and item_data and item_data.backend_id and mod._unit_to_backend_id then
+    if result and item_data and mod._cos.bind_glow_unit then
         local bid = item_data.backend_id
+        local resolved_skin = result.skin or item_data.skin
+        if (not resolved_skin or resolved_skin == "") and bid and Managers and Managers.backend then
+            local items = Managers.backend:get_interface("items")
+            resolved_skin = items and items.get_skin and items:get_skin(bid) or resolved_skin
+        end
         for _, field in ipairs({ "left_unit_1p", "right_unit_1p", "left_unit_3p", "right_unit_3p" }) do
             local u = result[field]
-            if u then mod._unit_to_backend_id[u] = bid end
+            if u then
+                mod._cos.bind_glow_unit(u, bid, resolved_skin, slot_name,
+                    item_data.name, item_data.template)
+            end
         end
     end
     if result and item_data then
@@ -3809,9 +3831,19 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
         -- for both local + remote husk equips.
         local owner_peer_id = mod._cos.glow_owner_peer_for_unit(unit_3p)
         if item_data and item_data.backend_id then
-            GlowPicker.restore_runtime_for(item_data.backend_id, {
-                skin = result.skin or item_data.skin,
+            local restore_skin = result.skin or item_data.skin
+            if (not restore_skin or restore_skin == "") and Managers and Managers.backend then
+                local items = Managers.backend:get_interface("items")
+                restore_skin = items and items.get_skin
+                    and items:get_skin(item_data.backend_id) or restore_skin
+            end
+            local restored = GlowPicker.restore_runtime_for(item_data.backend_id, {
+                skin = restore_skin,
             })
+            if restored then
+                _cos574_log("rehydrate path=create_equipment bid=%s skin=%s slot=%s",
+                    tostring(item_data.backend_id), tostring(restore_skin), tostring(slot_name))
+            end
         end
         mod._cos.apply_glow_override({
             result.right_unit_3p, result.left_unit_3p,
@@ -4183,7 +4215,7 @@ local function _spawn_item_post(self, item_name, spawn_data)
     local equip_units = self._equipment_units
     local slot_info   = self._item_info_by_slot
     if not equip_units or not slot_info then return end
-    for _, info in pairs(slot_info) do
+    for slot_type, info in pairs(slot_info) do
         if info.spawn_data and info.spawn_data[1] then
             local slot_index = info.spawn_data[1].slot_index
             local slot = slot_index and equip_units[slot_index]
@@ -4200,7 +4232,25 @@ local function _spawn_item_post(self, item_name, spawn_data)
                 end
                 mod._cos.apply_unit_path_scale_hand(slot.right, nil, right_path, "right")
                 mod._cos.apply_unit_path_scale_hand(slot.left,  nil, left_path,  "left")
+                -- #574: equip_item and _spawn_item are separated by async
+                -- package loading.  `_cos_current_equip_backend_id` can point at
+                -- a later request by spawn time, so bind from vanilla's durable
+                -- per-slot info record and rehydrate before painting.
+                local bid = info.backend_id or _get_equip_backend_id(self, info.name)
+                local skin = info.skin_name or _get_equip_skin(self, info.name)
+                local item_data = ItemMasterList and rawget(ItemMasterList, info.name)
+                local restored = bid and GlowPicker.restore_runtime_for(bid, { skin = skin })
+                if mod._cos.bind_glow_unit then
+                    mod._cos.bind_glow_unit(slot.right, bid, skin, slot_type,
+                        info.name, item_data and item_data.template)
+                    mod._cos.bind_glow_unit(slot.left, bid, skin, slot_type,
+                        info.name, item_data and item_data.template)
+                end
                 mod._cos.apply_glow_override({ slot.right, slot.left })
+                if restored then
+                    _cos574_log("rehydrate path=hero_preview bid=%s skin=%s slot=%s",
+                        tostring(bid), tostring(skin), tostring(slot_type))
+                end
             end
         end
     end
@@ -6954,6 +7004,11 @@ end)
 -- coop-sync of per-item glow can repopulate this list.
 local _GLOW_SETTING_KEYS = {}
 
+local function _active_glow_skin(state)
+    local identity = type(state) == "table" and state.active_per_item_glow_identity
+    return type(identity) == "string" and identity:match("|skin:(.*)$") or nil
+end
+
 local function _collect_local_glow_state()
     local state = {}
     for _, key in ipairs(_GLOW_SETTING_KEYS) do
@@ -6961,6 +7016,10 @@ local function _collect_local_glow_state()
     end
     state.active_per_item_glow = mod._active_per_item_glow
     state.active_per_item_glow_identity = mod._active_per_item_glow_identity
+    -- The existing identity already carries the illusion skin. Keep the wire
+    -- payload compact (VMF mod channels have a tight serialized-string budget)
+    -- and add only the wielded slot needed to disambiguate live render units.
+    state.active_per_item_glow_slot = mod._active_per_item_glow_slot
     return state
 end
 
@@ -7001,6 +7060,11 @@ local function _send_local_glow_state()
         return
     end
     local state = _collect_local_glow_state()
+    _cos574_log("sync send role=%s peer=%s identity=%s skin=%s slot=%s",
+        _is_local_server() and "host" or "client", tostring(local_peer),
+        tostring(state.active_per_item_glow_identity),
+        tostring(_active_glow_skin(state)),
+        tostring(state.active_per_item_glow_slot))
     if _is_local_server() then
         -- Host: record + broadcast (own broadcast loops back via "all").
         _glow_by_peer[local_peer] = state
@@ -7051,6 +7115,10 @@ mod:network_register("cos_glow_apply_req", function(sender_peer_id, schema_versi
     if type(payload) ~= "table" or type(payload.state) ~= "table" then return end
     if not sender_peer_id then return end
     _glow_by_peer[sender_peer_id] = payload.state
+    _cos574_log("sync host-recv wearer=%s identity=%s skin=%s slot=%s",
+        tostring(sender_peer_id), tostring(payload.state.active_per_item_glow_identity),
+        tostring(_active_glow_skin(payload.state)),
+        tostring(payload.state.active_per_item_glow_slot))
     mod:network_send("cos_glow_apply", "all", COS_RPC_SCHEMA, {
         wearer_peer_id = sender_peer_id,
         state = payload.state,
@@ -7076,6 +7144,10 @@ mod:network_register("cos_glow_apply", function(sender_peer_id, schema_version, 
     local wearer = payload.wearer_peer_id
     if not wearer then return end
     _glow_by_peer[wearer] = payload.state
+    _cos574_log("sync recv wearer=%s identity=%s skin=%s slot=%s",
+        tostring(wearer), tostring(payload.state.active_per_item_glow_identity),
+        tostring(_active_glow_skin(payload.state)),
+        tostring(payload.state.active_per_item_glow_slot))
     if mod._reapply_glow_for_peer then pcall(mod._reapply_glow_for_peer, wearer) end
 end)
 
@@ -7277,6 +7349,34 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
         _dbg_alert("[husk-wield-wrap] vanilla _wield_slot ERRORED wearer=%s slot=%s err=%s — pcall caught it. Husk visual likely missing/stale but host stays alive.",
             tostring(wearer_peer), tostring(slot_name), tostring(r1))
         return nil
+    end
+
+    -- #574: husk _wield_slot bypasses GearUtils.create_equipment and creates
+    -- fresh hand units directly. Bind the receiver-visible identity and repaint
+    -- after vanilla has installed those units; backend_id is intentionally nil
+    -- because inventory instance ids are not shared between peers.
+    do
+        local glow_slot = equipment and equipment.slots and equipment.slots[slot_name]
+        local glow_item = glow_slot and glow_slot.item_data
+        local glow_units = {
+            equipment and equipment.right_hand_wielded_unit_3p,
+            equipment and equipment.left_hand_wielded_unit_3p,
+            equipment and equipment.right_hand_wielded_unit,
+            equipment and equipment.left_hand_wielded_unit,
+        }
+        if mod._cos.bind_glow_unit then
+            for _, glow_unit in pairs(glow_units) do
+                mod._cos.bind_glow_unit(glow_unit, nil, glow_slot and glow_slot.skin,
+                    slot_name, glow_item and glow_item.name, glow_item and glow_item.template)
+            end
+        end
+        mod._cos.apply_glow_override(glow_units, wearer_peer)
+        if wearer_peer then
+            local peer_state = _glow_by_peer[wearer_peer]
+            _cos574_log("repaint path=husk_wield wearer=%s skin=%s slot=%s active=%s",
+                tostring(wearer_peer), tostring(glow_slot and glow_slot.skin),
+                tostring(slot_name), tostring(peer_state and peer_state.active_per_item_glow ~= nil))
+        end
     end
 
     -- v0.9.0.10-hotfix: RE-PAINT MERGED IN. The v0.9.0.5 separate
@@ -8998,28 +9098,49 @@ mod:hook_safe("SimpleInventoryExtension", "_wield_slot", function(self, equipmen
     -- place to switch/clear the coop payload after restart or weapon swapping.
     do
         local bid
-        for _, unit in ipairs({ unit_1p, unit_3p }) do
-            if unit and mod._unit_to_backend_id then
-                bid = mod._unit_to_backend_id[unit] or bid
-            end
-        end
-        if not bid and slot_data and type(slot_data) == "table" then
+        local glow_units = {}
+        if slot_data and type(slot_data) == "table" then
             for _, field in ipairs({ "right_unit_1p", "left_unit_1p", "right_unit_3p", "left_unit_3p" }) do
                 local unit = slot_data[field]
-                if unit and mod._unit_to_backend_id and mod._unit_to_backend_id[unit] then
-                    bid = mod._unit_to_backend_id[unit]
-                    break
+                if unit then
+                    glow_units[#glow_units + 1] = unit
+                    if mod._unit_to_backend_id and mod._unit_to_backend_id[unit] then
+                        bid = mod._unit_to_backend_id[unit]
+                    end
                 end
+            end
+        end
+        local item_data = slot_data and slot_data.item_data
+        local skin = slot_data and slot_data.skin
+        if bid then
+            -- Lobby leave / role transitions rebuild equipment without opening
+            -- the picker. Re-read the durable owner store before selecting the
+            -- active payload, then repaint the newly-visible 1P and 3P units.
+            GlowPicker.restore_runtime_for(bid, { skin = skin })
+        end
+        if mod._cos.bind_glow_unit then
+            for _, unit in pairs(glow_units) do
+                mod._cos.bind_glow_unit(unit, bid, skin, wielded_slot,
+                    item_data and item_data.name, item_data and item_data.template)
             end
         end
         local next_state = bid and mod._per_item_glow_runtime and mod._per_item_glow_runtime[bid] or nil
         local next_identity = bid and mod._per_item_glow_identity_runtime
             and mod._per_item_glow_identity_runtime[bid] or nil
+        mod._active_per_item_glow_skin = next_state and (skin or "") or nil
+        mod._active_per_item_glow_slot = next_state and wielded_slot or nil
+        mod._active_per_item_glow_item_name = next_state and item_data and item_data.name or nil
+        mod._active_per_item_glow_item_template = next_state and item_data and item_data.template or nil
         if mod._active_per_item_glow ~= next_state
             or mod._active_per_item_glow_identity ~= next_identity then
             mod._active_per_item_glow = next_state
             mod._active_per_item_glow_identity = next_identity
             if mod._emit_per_item_glow then mod._emit_per_item_glow() end
+        end
+        mod._cos.apply_glow_override(glow_units, lp.peer_id)
+        if next_state then
+            _cos574_log("rehydrate path=local_wield bid=%s skin=%s slot=%s active=true units=%d",
+                tostring(bid), tostring(skin), tostring(wielded_slot), #glow_units)
         end
     end
 
@@ -9368,6 +9489,41 @@ _rt_register("glow_picker_apply_transaction_574", function()
     if rune_a == rune_b then return "different illusions share a persistence identity" end
     if rune_a == copy_a then return "different inventory items share a persistence identity" end
     if not GlowPicker.CHAT_DIAGNOSTICS_LOG_ONLY then return "Apply diagnostic may reach chat" end
+end)
+
+_rt_register("glow_picker_render_fanout_574", function()
+    if type(mod._cos.bind_glow_unit) ~= "function" then return "unit render-identity binder missing" end
+    if type(mod._cos.remote_glow_context_matches) ~= "function" then
+        return "remote exact-illusion matcher missing"
+    end
+    local state = {
+        active_per_item_glow_identity = "backend:owner-only|skin:skin_magic_02",
+        active_per_item_glow_slot = "slot_melee",
+    }
+    local matching = {
+        skin = "skin_magic_02", slot_name = "slot_melee",
+        item_name = "es_bastard_sword", item_template = "two_handed_swords_template_1",
+    }
+    if not mod._cos.remote_glow_context_matches(matching, state) then
+        return "matching remote wield identity was rejected"
+    end
+    local wrong_skin = {
+        skin = "skin_magic_01", slot_name = "slot_melee",
+        item_name = "es_bastard_sword", item_template = "two_handed_swords_template_1",
+    }
+    if mod._cos.remote_glow_context_matches(wrong_skin, state) then
+        return "payload escaped to a different illusion"
+    end
+    local wrong_slot = {
+        skin = "skin_magic_02", slot_name = "slot_ranged",
+        item_name = "es_bastard_sword", item_template = "two_handed_swords_template_1",
+    }
+    if mod._cos.remote_glow_context_matches(wrong_slot, state) then
+        return "payload escaped to a different equipped slot"
+    end
+    if mod._cos.remote_glow_context_matches(nil, state) then
+        return "unidentified remote unit must fail closed"
+    end
 end)
 
 _rt_register("la_chars_compatible_same_char_allowed", function()

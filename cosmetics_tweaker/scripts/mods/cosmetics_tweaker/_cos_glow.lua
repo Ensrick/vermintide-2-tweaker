@@ -206,6 +206,43 @@ end
 -- get destroyed auto-clean. Used by _apply_glow_to_unit to resolve which
 -- backend_id's per-item glow override to apply.
 mod._unit_to_backend_id = mod._unit_to_backend_id or setmetatable({}, { __mode = "k" })
+mod._unit_glow_context = mod._unit_glow_context or setmetatable({}, { __mode = "k" })
+
+-- #574: backend ids are owner-local and therefore cannot identify a weapon on
+-- another peer.  Keep a render identity beside every spawned hand unit so the
+-- receiver can constrain the wearer's active payload to the exact wielded
+-- slot/illusion instead of painting every glow-capable unit it encounters.
+local function _bind_glow_unit(unit, backend_id, skin, slot_name, item_name, item_template)
+    if not unit or not _is_unit(unit) then return end
+    if backend_id ~= nil then mod._unit_to_backend_id[unit] = backend_id end
+    mod._unit_glow_context[unit] = {
+        skin = skin or "",
+        slot_name = slot_name,
+        item_name = item_name,
+        item_template = item_template,
+    }
+end
+
+local function _remote_glow_context_matches(ctx, peer_state)
+    if type(ctx) ~= "table" then return false end
+    local expected_skin = peer_state.active_per_item_glow_skin
+    if expected_skin == nil then
+        local identity = peer_state.active_per_item_glow_identity
+        expected_skin = type(identity) == "string" and identity:match("|skin:(.*)$") or nil
+    end
+    if expected_skin ~= nil and tostring(ctx.skin or "") ~= tostring(expected_skin) then return false end
+    local expected_slot = peer_state.active_per_item_glow_slot
+    if expected_slot and ctx.slot_name and expected_slot ~= ctx.slot_name then return false end
+    local expected_name = peer_state.active_per_item_glow_item_name
+    if expected_name and ctx.item_name and expected_name ~= ctx.item_name then return false end
+    local expected_template = peer_state.active_per_item_glow_item_template
+    if expected_template and ctx.item_template and expected_template ~= ctx.item_template then return false end
+    return true
+end
+
+local function _remote_glow_matches(unit, peer_state)
+    return _remote_glow_context_matches(mod._unit_glow_context[unit], peer_state)
+end
 
 local function _glow_rgb_for_var(var_name, peer_id)
     -- v0.9.6 M2: per-item RUNE override is applied DIRECTLY in
@@ -280,7 +317,8 @@ local function _apply_glow_to_unit(unit, owner_peer_id)
         local pi
         if owner_peer_id and not _glow_is_local_peer(owner_peer_id) then
             local peer_state = _glow_by_peer[owner_peer_id]
-            pi = peer_state and peer_state.active_per_item_glow
+            pi = peer_state and _remote_glow_matches(unit, peer_state)
+                and peer_state.active_per_item_glow or nil
         elseif mod._per_item_glow_runtime and mod._unit_to_backend_id then
             local bid = mod._unit_to_backend_id[unit]
             pi = bid and mod._per_item_glow_runtime[bid] or nil
@@ -412,11 +450,27 @@ mod._reapply_glow_for_peer = function(peer_id)
             local ext = pu and ScriptUnit and ScriptUnit.has_extension
                 and ScriptUnit.has_extension(pu, "inventory_system")
             local slot_data = ext and ext.get_wielded_slot_data and ext:get_wielded_slot_data()
+            local equipment = ext and ext._equipment
+            local units = {}
             if slot_data then
                 for _, field in ipairs({ "right_unit_1p", "right_unit_3p", "left_unit_1p", "left_unit_3p" }) do
-                    local unit = slot_data[field]
-                    if unit and _is_unit(unit) then pcall(_apply_glow_to_unit, unit, peer_id) end
+                    if slot_data[field] then units[#units + 1] = slot_data[field] end
                 end
+            end
+            if equipment then
+                for _, field in ipairs({ "right_hand_wielded_unit_3p", "left_hand_wielded_unit_3p",
+                    "right_hand_wielded_unit", "left_hand_wielded_unit" }) do
+                    if equipment[field] then units[#units + 1] = equipment[field] end
+                end
+            end
+            local wielded_slot = equipment and equipment.wielded_slot
+            local wielded_data = (equipment and equipment.slots and wielded_slot)
+                and equipment.slots[wielded_slot] or slot_data
+            local item_data = wielded_data and wielded_data.item_data
+            for _, unit in pairs(units) do
+                _bind_glow_unit(unit, nil, wielded_data and wielded_data.skin,
+                    wielded_slot, item_data and item_data.name, item_data and item_data.template)
+                pcall(_apply_glow_to_unit, unit, peer_id)
             end
             return
         end
@@ -432,7 +486,7 @@ local function _glow_preset_rgb() return _glow_main_rgb() end
 -- happens at the create_equipment hook where we know the player_unit being
 -- equipped.
 local function _apply_glow_override(units, owner_peer_id)
-    for _, u in ipairs(units) do _apply_glow_to_unit(u, owner_peer_id) end
+    for _, u in pairs(units) do _apply_glow_to_unit(u, owner_peer_id) end
 end
 
 -- Glow override (v0.8.16-dev): TEMPLATE MUTATION approach.
@@ -612,3 +666,6 @@ end)
 -- pattern as the Phase 2 scale/grip exports (mod._cos.scale_units etc.).
 mod._cos.apply_glow_override = _apply_glow_override
 mod._cos.glow_owner_peer_for_unit = _glow_owner_peer_for_unit
+mod._cos.bind_glow_unit = _bind_glow_unit
+mod._cos.remote_glow_matches = _remote_glow_matches
+mod._cos.remote_glow_context_matches = _remote_glow_context_matches

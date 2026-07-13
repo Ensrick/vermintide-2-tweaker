@@ -1,13 +1,13 @@
 # Glow System — cosmetics_tweaker
 
-State as of v0.9.92-dev (2026-07-13).
+State as of v0.9.93-dev (2026-07-13).
 
 This is the canonical reference for how the glow customization system is
 wired today: which shader variables drive what visually, how the popup UI
 talks to them, how persistence works, what the current limitations are,
 and where to extend.
 
-## 1. What's working today (v0.9.92-dev)
+## 1. What's working today (v0.9.93-dev)
 
 | Surface | Status |
 | --- | --- |
@@ -18,6 +18,8 @@ and where to extend.
 | Explicit dirty-state Apply button | ✅ |
 | Per-backend-item + illusion persistence to VMF setting `glow_per_item` | ✅ |
 | Restores saved RGB+intensity on popup re-open and equipment spawn | ✅ |
+| Rehydrates and repaints after lobby/role transitions | ✅ |
+| Repaints inventory/hero preview rebuilds | ✅ |
 | Per-item RGB takes precedence over global override toggle | ✅ |
 | Magic-family multi-component sliders (lower / upper / dots) | ✅ |
 | Contextual popup on glow-capable illusion selection | ✅ |
@@ -245,9 +247,13 @@ visual scan.
 
 Apply sends the wearer's active committed glow through the existing
 host-authoritative glow RPC and hot-join cache. Backend ids are deliberately
-not sent as remote clients do not share backend identity; the active state is
-painted on that wearer's currently wielded weapon units. Switching to another
-saved weapon refreshes active state from the equipment-spawn path.
+not used as remote identity because they are owner-local. The existing active
+identity carries the illusion skin and the payload adds the wielded slot. Each
+receiver binds the same render identity to freshly spawned husk
+units and fails closed unless it matches before painting. Switching weapons,
+leaving a lobby, changing network role, and rebuilding a hero preview all
+rehydrate the owner-authoritative per-instance store and repaint the new units;
+opening the picker is not required.
 
 ## 8. Remaining extensions
 

@@ -1064,6 +1064,14 @@ function GlowPicker.apply()
     mod._per_item_glow_identity_runtime[backend_id] = identity
     mod._active_per_item_glow = _clone(committed)
     mod._active_per_item_glow_identity = identity
+    local slot_data = GlowPicker._current_slot_data
+    local item_data = type(slot_data) == "table" and slot_data.item_data or nil
+    mod._active_per_item_glow_skin = type(slot_data) == "table" and (slot_data.skin or "")
+        or (identity:match("|skin:(.*)$") or "")
+    mod._active_per_item_glow_slot = type(slot_data) == "table"
+        and (slot_data.id or slot_data.slot_name) or nil
+    mod._active_per_item_glow_item_name = item_data and item_data.name or nil
+    mod._active_per_item_glow_item_template = item_data and item_data.template or nil
     if mod._reapply_glow_on_wielded then pcall(mod._reapply_glow_on_wielded) end
     if mod._emit_per_item_glow then pcall(mod._emit_per_item_glow) end
     _update_apply_widget()
