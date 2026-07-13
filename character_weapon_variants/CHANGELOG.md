@@ -1,5 +1,65 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.384-dev — 2026-07-13 — #482: crafted (UUID-bid) variants lost scale/grip — cwv_key stamp + shared resolver ladder [untested]
+
+### Why
+Issue #482: the Poleaxe "appears to have lost its scaling and/or offsets" — consistently wrong for
+client, host, and inventory preview. Root cause from the issue-486 session logs (2026-07-11): the
+user was wielding an **Athanor-crafted** Poleaxe (`[cim-debug] [craft_synth_result/athanor_equip]
+... bid=a9f48814-591b-48f0-b475-cf955ceee34b`, equipped 17:10:05, issue filed 17:11:48). The Athanor
+mints `Application.guid()` backend_ids (crafting_in_modded_dev.lua:4644) — a UUID — while EVERY cwv
+def resolver keyed on the `cwv_<key>_NNN` backend_id pattern (only CWV's own `_001`/`_002` instances
+and cim STANDARD-forge crafts, issue 390, carry that shape). With a UUID bid and no skin (crafted
+items ship skinless), `_resolve_cwv_def` fell through to `item_data.key` = the BASE weapon key
+(`dr_2h_axe`) and resolved NO def: the halberd mesh renders (it lives on the IML clone's
+`right_hand_unit`) but the type-level scale `{0.9, 0.9, 0.65}` and grip offset `{0, 0, 0.5}` were
+never applied on the owner in-world path (`GearUtils.create_equipment` — zero `Applying transforms`
+lines in either log) nor the inventory preview (`_resolve_preview_def`). The transform VALUES never
+changed — this is a resolution coverage gap, not a tuning regression, and it affects EVERY variant's
+crafted copies, not just the Poleaxe (the Poleaxe's 35% Z-shrink just makes it the most visible).
+The husk path is unaffected (it already resolves skinless echoes via base+career, issues 474/475;
+the PC-B log shows `[cwv husk-transform] applied ... def=cwv_es_poleaxe scale=y offset=y`).
+
+### Changed
+- `_build_entry` now stamps `entry.cwv_key = def.item_key` on every IML clone (next to the
+  existing `cwv_variant` marker). The clone's `name`/`key` must stay the BASE keys (clobber
+  crashes equip), so this is the bid-shape-independent identity field. It survives vanilla's
+  `table.clone` in `BackendUtils.get_item_from_masterlist` (backend_utils.lua:68), so the
+  item_data reaching `create_equipment` carries it.
+- NEW shared resolver `_om._cwv_key_for_item(backend_id, item_data)` — single resolution ladder:
+  (1) `cwv_<key>_NNN` bid pattern (unchanged fast path), (2) `item_data.cwv_key` stamp,
+  (3) pcall-guarded backend `get_item_from_id(bid).data.cwv_key` hop for callers that only carry
+  the bid. Hung on `_om` (chunk is at the Lua 5.1 200-local ceiling, issue 284).
+- Five bid-pattern call sites now resolve through the ladder instead of a bare regex:
+  `_resolve_cwv_def` (owner in-world transforms), `_resolve_preview_def` (inventory preview
+  transforms), `_om._cwv_preview_meshswap_apply` (inventory preview mesh, issue 237),
+  `BackendUtils.get_item_units` override (skinless mesh override), and the
+  `LootItemUnitPreviewer.spawn_units` hook (illusion-browser scale). No new hooks; all edits are
+  inside existing bodies (duplicate-hook doctrine untouched).
+- NEW regression check `cwv_key_resolution_uuid_safe`: asserts the stamp on every registered
+  entry, plus ladder rungs 1/2 resolve and a non-cwv UUID stays nil (no false positives).
+- Docs: DEVELOPMENT.md "Item identification" recipe rewritten to mandate the ladder over bare
+  `backend_id:match` regexes.
+
+### Verify in-game (solo is enough for the owner paths)
+1. Craft a Poleaxe at the Athanor (cim_dev), equip it from inventory.
+2. Inventory screen: the preview character must show the SHORTENED halberd (not full-length,
+   not a greataxe), hand at the grip point. Compare against the non-crafted Poleaxe instance.
+3. In the keep with a 3P camera (gt): shaft shortened, hand not riding high on the haft; 1P
+   held view matches the non-crafted instance.
+4. Log check: a `[cwv:dbg] Applying transforms ... item_key=cwv_es_poleaxe` line at equip (with
+   debug logging on), and `/cwv_regression_test` passes `cwv_key_resolution_uuid_safe`.
+5. Coop (2nd tester, optional here): remote view of the crafted Poleaxe — any remaining husk
+   mismatch belongs to issues 394/397 (open, transform-stomp on wield-link), not this fix.
+
+**DoD:** Universal U-4 walked (scale/grip values untouched at `_type_transforms.cwv_es_poleaxe`,
++Z grip sign preserved); G-APPEARANCE walked for the resolution layer (owner, preview, illusion
+browser now resolve crafted instances; husk path unchanged by design — its base+career resolution
+already covers skinless crafted echoes, issues 474/475). Build hygiene: version bump + CHANGELOG +
+forward-ref audit (`_om._cwv_key_for_item` defined above all call sites; no new file-scope locals).
+Trait gates: N/A (no variant added or altered; resolver-layer fix). Deferrals: in-game verification
+matrix pending user test (tagged [untested]); husk wield-link stomp stays with issues 394/397.
+
 ## 0.1.383-dev — 2026-07-12 — #476: [diag] make the husk-illusion wire decision legible at equip time [1-major]
 
 ### Why

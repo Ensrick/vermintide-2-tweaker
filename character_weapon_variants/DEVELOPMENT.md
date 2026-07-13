@@ -1196,18 +1196,25 @@ For items registered via MoreItemsLibrary (every `cwv_*` item),
 `es_bastard_sword`), NOT the custom CWV item_key (e.g.
 `cwv_es_longsword_veteran`). Same for `item_data.name`. The custom
 identity lives in `item_data.backend_id`, formatted as
-`<item_key>_<3-digit-instance>` (e.g. `cwv_es_longsword_veteran_001`).
+`<item_key>_<3-digit-instance>` (e.g. `cwv_es_longsword_veteran_001`)
+— **but only for CWV's own instances and cim standard-forge crafts.**
+A cim **Athanor** craft mints `Application.guid()` (a UUID) as the
+backend_id, which no pattern match can decode (issue 482: crafted
+Poleaxe lost its scale/grip on every owner-side path).
 
-**Always resolve like this:**
+**Always resolve through the shared ladder, never a bare regex:**
 ```lua
-local bid = item_data.backend_id
-if bid then
-    local cwv_key = bid:match("^(cwv_.-)_%d%d%d$")    -- ANY 3-digit instance
-    if cwv_key and _my_lookup_table[cwv_key] then
-        -- found, use cwv_key
-    end
+local cwv_key = _om._cwv_key_for_item(item_data.backend_id, item_data)
+if cwv_key and _my_lookup_table[cwv_key] then
+    -- found, use cwv_key
 end
 ```
+The ladder tries: (1) the `cwv_<key>_NNN` bid pattern, (2) the
+`item_data.cwv_key` field `_build_entry` stamps on every IML clone
+(survives vanilla's `table.clone` in `get_item_from_masterlist`),
+(3) a backend `get_item_from_id(bid)` hop for callers that only carry
+the bid (previewer `_item_info_by_slot`). Guarded by the
+`cwv_key_resolution_uuid_safe` regression check.
 
 **Why:** this bug has bitten at least four code paths (animation
 weapon-tracking via ActionWield, model scale/offset transforms via

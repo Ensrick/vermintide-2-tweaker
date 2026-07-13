@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.383-dev"
+local MOD_VERSION = "0.1.384-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -9120,6 +9120,43 @@ end)
 
 local _registered_keys = {}
 
+-- #482: resolve the variant item_key for ANY backend instance of a cwv item.
+-- Single resolution ladder shared by every bid-keyed resolver so they cannot
+-- drift on what counts as "a cwv instance":
+--   1. backend_id pattern `cwv_<key>_NNN` -- CWV's own _001/_002 instances and
+--      cim standard-forge crafts (issue 390). Cheap, no backend round-trip.
+--   2. item_data.cwv_key -- the field _build_entry stamps on the IML clone.
+--      Covers instances whose backend_id is NOT cwv-shaped: cim's Athanor
+--      mints Application.guid() UUIDs (crafting_in_modded_dev.lua:4644), which
+--      rung 1 can never match (the #482 crafted-Poleaxe transform loss).
+--   3. backend items lookup by bid -> item.data.cwv_key -- for callers that
+--      only carry the bid (the previewer's _item_info_by_slot holds just
+--      {name, backend_id, skin_name, ...}, world_hero_previewer.lua:776).
+--      pcall-guarded: interface readiness varies by menu state. The husk path
+--      is unaffected (bid nil there, memory reference_vt2_husk_resolves_base_item_data).
+-- Hung on _om: the top-level chunk sits at the Lua 5.1 200-local ceiling (#284).
+_om._cwv_key_for_item = function(backend_id, item_data)
+	if type(backend_id) == "string" then
+		local key = backend_id:match("^(cwv_.-)_%d%d%d$")
+		if key then return key end
+	end
+	if item_data and type(item_data.cwv_key) == "string" then
+		return item_data.cwv_key
+	end
+	if type(backend_id) == "string" and backend_id ~= "" then
+		local ok, data = pcall(function()
+			local backend = Managers and Managers.backend
+			local iface = backend and backend:get_interface("items")
+			local item = iface and iface:get_item_from_id(backend_id)
+			return item and item.data
+		end)
+		if ok and data and type(data.cwv_key) == "string" then
+			return data.cwv_key
+		end
+	end
+	return nil
+end
+
 local function _build_entry(def, backend_id)
 	-- v0.1.345-dev: per-call _dbg trace. _build_entry is sparse (boot-time only,
 	-- ~30 variants/session), so always-on.
@@ -9153,6 +9190,18 @@ local function _build_entry(def, backend_id)
 	-- crashed in BackendUtils.get_item_units. See
 	-- `feedback_cwv_clone_name_clobber.md` for the full incident log.
 	entry.cwv_variant = true
+
+	-- #482: self-identifying clone. entry.name/.key MUST stay the BASE keys
+	-- (clobber crashes equip, see above), and the backend_id pattern is NOT
+	-- guaranteed on every instance -- cim's Athanor mints Application.guid()
+	-- backend_ids (crafting_in_modded_dev.lua:4644), a UUID that carries no
+	-- key. Every pattern-keyed resolver silently skipped such crafted
+	-- instances, so a crafted Poleaxe rendered without its type-level
+	-- scale/grip on the owner + preview paths. The clone carrying its own
+	-- variant key gives resolvers a bid-shape-independent positive signal;
+	-- it survives the table.clone in BackendUtils.get_item_from_masterlist
+	-- (backend_utils.lua:68) that produces the item_data create_equipment sees.
+	entry.cwv_key = def.item_key
 
 	entry.display_name = def.item_key .. "_name"
 	entry.description = def.item_key .. "_description"
@@ -9393,7 +9442,10 @@ end
 -- illusion (non-empty `skin` arg) wins, mirroring the get_item_units guard.
 _om._cwv_preview_meshswap_apply = function(item_name, backend_id, skin, info)
 	if type(skin) == "string" and skin ~= "" then return end
-	local cwv_key = type(backend_id) == "string" and backend_id:match("^(cwv_.-)_%d%d%d$")
+	-- #482: shared ladder instead of the bare bid pattern -- an Athanor-crafted
+	-- instance (UUID bid) resolves via the backend item's stamped cwv_key, so
+	-- the inventory preview swaps to the variant mesh for crafted copies too.
+	local cwv_key = _om._cwv_key_for_item(backend_id, nil)
 	if not cwv_key then return end
 	local def = _find_def(cwv_key)
 	if not def then return end
@@ -10074,13 +10126,12 @@ local function _resolve_cwv_def(item_data, skin)
 	-- CLARIFY: backend_id resolution is the canonical path for cwv items per
 	-- memory note feedback_cwv_backend_id_lookup.md — item_data.key/.name return
 	-- the BASE weapon key, never the cwv_* key.
-	local bid = item_data.backend_id
-	if bid then
-		-- `_%d%d%d$` (not `_001$`): matches CWV's own instances (_001/_002) AND
-		-- cim-crafted copies (`cwv_<key>_NNN`, NNN 100-999, cim_dev issue 390).
-		local cwv_key = bid:match("^(cwv_.-)_%d%d%d$")
-		if cwv_key and _transform_map[cwv_key] then return _transform_map[cwv_key] end
-	end
+	-- #482 ladder: bid pattern (`cwv_<key>_NNN`, CWV's own instances + cim
+	-- standard-forge crafts, issue 390) -> item_data.cwv_key stamp -> backend
+	-- lookup. The stamp rung is what restores scale/grip for Athanor-crafted
+	-- instances, whose UUID backend_id the pattern can never match.
+	local cwv_key = _om._cwv_key_for_item(item_data.backend_id, item_data)
+	if cwv_key and _transform_map[cwv_key] then return _transform_map[cwv_key] end
 	-- Vanilla item key fallback (used by the mace_sword_tweak path below; cwv
 	-- items don't reach here because backend_id resolution above takes over).
 	local key = item_data.key or item_data.name
@@ -10639,9 +10690,10 @@ if BackendUtils then
 
 		-- Backend_id pattern `cwv_<key>_NNN` (NNN = any 3 digits: CWV's own
 		-- _001/_002 instances, plus cim-crafted copies 100-999, cim_dev issue
-		-- 390). Extract the cwv item_key and look up the def; anything else
-		-- passes through.
-		local cwv_key = type(backend_id) == "string" and backend_id:match("^(cwv_.-)_%d%d%d$")
+		-- 390), then the #482 ladder fallbacks (item_data.cwv_key stamp /
+		-- backend lookup) for crafted instances with UUID backend_ids.
+		-- Anything that resolves no cwv key passes through.
+		local cwv_key = _om._cwv_key_for_item(backend_id, item_data)
 		if not cwv_key then return result end
 		local def = _find_def(cwv_key)
 		if not def then return result end
@@ -11043,7 +11095,10 @@ local function _resolve_preview_def(self, item_name)
 		-- instance never resolved — `_cwv_spawn_item_post` returned early
 		-- and the previewer-side texture binding never fired. Result: rifle
 		-- appeared in the keep inventory previewer without textures.
-		local matched = info.backend_id:match("^(cwv_.-)_%d%d%d$")
+		-- #482: shared ladder. The previewer's info table carries only the
+		-- bid (no item_data), so a crafted instance's UUID bid resolves via
+		-- the ladder's backend-lookup rung to the stamped cwv_key.
+		local matched = _om._cwv_key_for_item(info.backend_id, nil)
 		if matched and _transform_map[matched] then return _transform_map[matched], info end
 	end
 	if _transform_map[item_name] then return _transform_map[item_name], info end
@@ -11281,15 +11336,13 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	-- The cwv-keyed transform map then takes precedence over the base-key map so
 	-- variant-specific scales/offsets apply correctly.
 	local def = _skin_transform_map[weapon_key] or _transform_map[weapon_key]
-	local bid = item.backend_id
-	if bid then
-		-- `_%d%d%d$` (not `_001$`): CWV's own _001/_002 instances AND cim-crafted
-		-- copies (`cwv_<key>_NNN`, NNN 100-999, cim_dev issue 390) so the
-		-- cosmetic-preview scale applies to a crafted variant too.
-		local cwv_key = bid:match("^(cwv_.-)_%d%d%d$")
-		if cwv_key then
-			def = _transform_map[cwv_key] or _skin_transform_map[cwv_key] or def
-		end
+	-- #482 ladder: bid pattern (CWV's own _001/_002 instances AND cim
+	-- standard-forge copies, issue 390) -> item.data.cwv_key stamp (Athanor
+	-- crafts with UUID bids) so the cosmetic-preview scale applies to every
+	-- crafted variant instance too.
+	local cwv_key = _om._cwv_key_for_item(item.backend_id, item_data)
+	if cwv_key then
+		def = _transform_map[cwv_key] or _skin_transform_map[cwv_key] or def
 	end
 	if not def then return units end
 
@@ -11923,6 +11976,40 @@ _rt_register("cwv_variant_flag_present", function()
     end
     if #missing > 0 then
         return "cwv_variant flag missing on " .. #missing .. " entries: " .. table.concat(missing, ", ")
+    end
+end)
+
+_rt_register("cwv_key_resolution_uuid_safe", function()
+    -- Issue #482: an Athanor-crafted cwv instance carries a UUID backend_id
+    -- (Application.guid(), crafting_in_modded_dev.lua:4644) that the
+    -- `cwv_<key>_NNN` pattern can never match -- transforms/mesh resolution
+    -- must instead ride the `cwv_key` field _build_entry stamps on the IML
+    -- clone, through the shared `_om._cwv_key_for_item` ladder.
+    -- (1) Stamp present on every registered entry.
+    local entries, bail = _rt_iter_cwv_entries()
+    if bail then return bail end
+    local missing = {}
+    for _, e in ipairs(entries) do
+        if e.entry.cwv_key ~= e.key then
+            missing[#missing + 1] = e.key
+        end
+    end
+    if #missing > 0 then
+        return "cwv_key stamp missing/wrong on " .. #missing .. " entries: " .. table.concat(missing, ", ")
+    end
+    -- (2) Ladder rungs behave: pattern, stamp, and no-signal cases.
+    local ladder = _om._cwv_key_for_item
+    if type(ladder) ~= "function" then
+        return "_om._cwv_key_for_item missing (#482 resolver ladder gone)"
+    end
+    if ladder("cwv_es_poleaxe_001", nil) ~= "cwv_es_poleaxe" then
+        return "#482 ladder rung 1 broken: cwv_<key>_NNN bid no longer resolves"
+    end
+    if ladder("a9f48814-0000-4000-8000-000000000000", { cwv_key = "cwv_es_poleaxe" }) ~= "cwv_es_poleaxe" then
+        return "#482 ladder rung 2 broken: item_data.cwv_key stamp not consulted for UUID bid"
+    end
+    if ladder("not-a-registered-bid-482", { name = "dr_2h_axe" }) ~= nil then
+        return "#482 ladder false-positive: non-cwv item resolved a cwv key"
     end
 end)
 
