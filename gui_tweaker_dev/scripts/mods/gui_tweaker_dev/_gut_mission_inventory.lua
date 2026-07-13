@@ -326,6 +326,28 @@ mod:hook_safe("HeroWindowPanelConsole", "on_enter", function(self)
     if not mod:get("gut_mission_menu_tabs") then return end
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
     if in_keep then return end          -- keep already shows the strip correctly
+    -- (#530) CW/deus SUSPEND: the in-mission tab strip is Adventure-only, the SAME
+    -- adventure-exclusive rule as gut_open_mission_inventory (:82) and the ESC "Open
+    -- Inventory" entry (_patch_inventory_access :536). During a CW COMBAT mission the
+    -- hero_view never opens (every gut inventory entry point deus-blocks + CW combat
+    -- has no native mid-mission hero_view), so on_enter never fires and the strip is
+    -- already suspended -- matching the user report. But Holseher's Map (dlc_morris_map,
+    -- game_mode map_deus) opens the hero_view NATIVELY, so without this gate on_enter
+    -- fired there and un-gated the whole strip: the Inventory/Talents/Cosmetics tabs
+    -- went live and the (greyed) Crafting tab still showed on the pause menu -- and
+    -- changing a loadout-locked CW build risks the crash this issue is filed under.
+    -- current_mechanism_name() is "deus" across the ENTIRE deus run -- hub, map AND
+    -- ingame (deus_mechanism.lua get_next_level_data hard-sets mechanism="deus" for
+    -- every node, :150; log-confirmed mech=deus on dlc_morris_map) -- so gating on it
+    -- suspends the strip for all of Chaos Wastes while leaving Adventure untouched.
+    -- Keep is already handled by the in_keep early-return above; this never reaches it.
+    local mech = Managers.mechanism and Managers.mechanism.current_mechanism_name
+        and Managers.mechanism:current_mechanism_name()
+    if mech == "deus" then
+        -- printf (NOT mod:debug) so the in-game test produces evidence with mod logging OFF.
+        printf("[gut:530] in-mission tab strip suspended (Chaos Wastes run, mech=deus) -- Adventure only")
+        return
+    end
     self.is_in_inn = true               -- un-gate the tab-strip setup/draw/input branches
     self.force_ingame_menu = false
     self._sync_delay = 999999           -- park _sync_news so it never runs its keep-leaning news work
