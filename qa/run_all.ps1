@@ -153,6 +153,11 @@ Run-Check "check_command_collisions" { & (Join-Path $here "check_command_collisi
 Run-Check "check_decisions_wired" { & (Join-Path $here "check_decisions_wired.ps1") -Quiet:$Quiet }
 Run-Check "check_name_integrity"  { & (Join-Path $here "check_name_integrity.ps1")  -Quiet:$Quiet }
 Run-Check "check_mechanics_citations" { & (Join-Path $here "check_mechanics_citations.ps1") -Quiet:$Quiet }
+# check_source_provenance always validates the committed manifest. When the
+# optional sibling decompile exists it also pins HEAD/game version and verifies
+# one stable symbol anchor per docs/engine subsystem. CI has no proprietary/local
+# source checkout, so absence is an explicit clean SKIP rather than a false fail.
+Run-Check "check_source_provenance" { & (Join-Path $here "check_source_provenance.ps1") -Quiet:$Quiet }
 # check_rt_textual_invariants is a Standard (blocking) source gate (issue #516):
 # the source-text invariants that issue #511 moved OUT of the in-game rt suites
 # (the retail Stingray VM has no `io`, so a source self-grep threw + false-failed).

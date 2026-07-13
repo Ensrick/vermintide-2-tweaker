@@ -1,8 +1,10 @@
 # Engine reference set - index
 
 Eleven subsystem references for the VT2/Stingray engine as our mods actually use it,
-grep-verified 2026-07-11 against the decompiled source at
-`C:\Users\danjo\source\repos\Vermintide-2-Source-Code`. Each doc follows the same shape:
+verified against the decompiled snapshot pinned in
+[`SOURCE_PROVENANCE.json`](SOURCE_PROVENANCE.json). The manifest records the source
+commit, game/runtime revisions, extraction provenance, verification time, and a seed
+set of stable symbol anchors. Each doc follows the same shape:
 architecture map, lifecycle/data flow, hookable seams, traps and crash classes, and
 "implications for our mods" (the per-lane improvement candidates, now merged and
 prioritized in `IMPROVEMENT_BACKLOG.md`).
@@ -33,10 +35,13 @@ Merged, prioritized cross-lane work list: **[IMPROVEMENT_BACKLOG.md](IMPROVEMENT
 ## Conventions used across this set
 
 - **Citations:** vanilla paths are relative to
-  `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`; our paths are relative to the
-  monorepo root. Line numbers are against the decompile as of 2026-07-11; decompiled lines
-  can drift from shipped runtime lines (doc 09 header) - match crash logs by function
-  name, not line.
+  the optional sibling `Vermintide-2-Source-Code` checkout; our paths are relative to
+  the monorepo root. Line numbers are secondary locators against the pinned decompile;
+  identify a seam by `Class.function` or another stable symbol first. Decompiled lines
+  can drift after a source update (doc 09 header) - match crash logs by function name,
+  not line. `qa/check_source_provenance.ps1` validates the manifest and, when the sibling
+  checkout is present, its commit, game version, files, and seed symbols. CI reports a
+  clean skip for the proprietary/local checkout while still validating the manifest.
 - **`§N`** = a `docs/BUG_CLASSES.md` class; **`#N` / "issue #N"** = a GitHub issue. Do not
   mix the two notations.
 - **Mod abbreviations:** `et` = enemy_tweaker, `evt` = event_tweaker (doc 07 defines
@@ -61,13 +66,16 @@ Merged, prioritized cross-lane work list: **[IMPROVEMENT_BACKLOG.md](IMPROVEMENT
    "implications" section; when an item is rejected, note why in the owning GitHub issue,
    then delete the row.
 4. **After a game patch, re-verify line numbers before trusting them** (doc 10 header
-   rule). Spot-check the load-bearing citations of any doc you are about to act on.
+   rule). Update `SOURCE_PROVENANCE.json`, then run
+   `qa/check_source_provenance.ps1 -RequireSource`. Spot-check the load-bearing citations
+   of any doc you are about to act on; the manifest's anchors are a seed set, not an
+   exhaustive replacement for each document's citations.
 
 ## Per-mod surface docs (the reverse index)
 
 Each high-contact mod carries an `ENGINE_SURFACE.md` - the per-mod companion to this
 set: every seam the mod touches, the vanilla behavior there (cited), and why the mod
-is there. The template is `character_weapon_variants/ENGINE_SURFACE.md`; all seven
+is there. The template is `character_weapon_variants/ENGINE_SURFACE.md`; all fourteen
 follow its structure. This table is the single view of which mods exercise which
 subsystem docs.
 

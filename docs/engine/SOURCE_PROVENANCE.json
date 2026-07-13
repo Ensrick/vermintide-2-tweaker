@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "verifiedAtUtc": "2026-07-13T16:59:35Z",
+  "source": {
+    "repositoryUrl": "https://github.com/Aussiemon/Vermintide-2-Source-Code",
+    "commit": "abe82ab4ba3e00c22d912093b37234c59f8a00d9",
+    "gameVersion": "6.11.0",
+    "extractionMethod": "Third-party decompiled-script repository snapshot; the upstream repository does not publish an extractor name or version."
+  },
+  "runtime": {
+    "contentRevision": 51032,
+    "engineRevision": "50987039cbc11edde2d522b5f22742ee7e94714d",
+    "capturedAtUtc": "2026-07-13T06:44:54Z",
+    "evidence": "Local console log fields script_data.build_identifier and crashify-property content_revision."
+  },
+  "anchors": [
+    {
+      "doc": "01_foundation_and_oop.md",
+      "path": "foundation/scripts/util/class.lua",
+      "symbol": "class",
+      "kind": "lua-function",
+      "line": 16
+    },
+    {
+      "doc": "02_entity_extension_system.md",
+      "path": "scripts/managers/entity/entity_manager2.lua",
+      "symbol": "EntityManager2.add_unit_extensions",
+      "kind": "lua-function",
+      "line": 72
+    },
+    {
+      "doc": "03_network_and_rpc.md",
+      "path": "scripts/network_lookup/network_lookup.lua",
+      "symbol": "NetworkLookup",
+      "kind": "assignment",
+      "line": 36
+    },
+    {
+      "doc": "04_unit_lifecycle_and_pooling.md",
+      "path": "scripts/network/unit_spawner.lua",
+      "symbol": "UnitSpawner.spawn_network_unit",
+      "kind": "lua-function",
+      "line": 336
+    },
+    {
+      "doc": "05_packages_and_residency.md",
+      "path": "foundation/scripts/managers/package/package_manager.lua",
+      "symbol": "PackageManager.load",
+      "kind": "lua-function",
+      "line": 20
+    },
+    {
+      "doc": "06_items_gear_and_husk_inventory.md",
+      "path": "scripts/managers/backend/backend_utils.lua",
+      "symbol": "BackendUtils.get_item_units",
+      "kind": "lua-function",
+      "line": 144
+    },
+    {
+      "doc": "07_conflict_director_and_mutators.md",
+      "path": "scripts/managers/conflict_director/conflict_director.lua",
+      "symbol": "ConflictDirector.spawn_queued_unit",
+      "kind": "lua-function",
+      "line": 1732
+    },
+    {
+      "doc": "08_game_states_and_world_lifecycle.md",
+      "path": "scripts/game_state/state_ingame.lua",
+      "symbol": "StateIngame.on_exit",
+      "kind": "lua-function",
+      "line": 1847
+    },
+    {
+      "doc": "09_ui_views_and_widgets.md",
+      "path": "scripts/ui/views/ingame_ui.lua",
+      "symbol": "IngameUI.setup_views",
+      "kind": "lua-function",
+      "line": 145
+    },
+    {
+      "doc": "10_damage_buffs_and_talents.md",
+      "path": "scripts/unit_extensions/default_player_unit/buffs/buff_extension.lua",
+      "symbol": "BuffExtension.add_buff",
+      "kind": "lua-function",
+      "line": 165
+    },
+    {
+      "doc": "11_backend_and_loadouts.md",
+      "path": "scripts/managers/backend_playfab/playfab_mirror_base.lua",
+      "symbol": "PlayFabMirrorBase.commit",
+      "kind": "lua-function",
+      "line": 2714
+    }
+  ]
+}
