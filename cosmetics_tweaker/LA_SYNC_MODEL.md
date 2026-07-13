@@ -474,6 +474,33 @@ only); the data-driven picker registration (CWV shields missing from the picker,
 fix-direction #3) is separate; cross-session auto re-emit of a vanilla pick on rejoin
 relies on the wearer re-Applying (in-session apply + hot-join are covered).
 
+### 6.10 Deus-yield: weapon-side LA overrides are suppressed in Chaos Wastes (#518)
+
+Deus (Chaos Wastes) weapons are GENERATED instances: `deus_weapon_generation.lua`
+rolls `item.skin` per rarity at creation (`:246-249`) and re-rolls it on every
+shrine upgrade (`:318-321`) — the skin change is the upgrade's visual feedback.
+Because `create_item` clones the base item (`key = base_item`, same weapon
+template, `:185-202`), the TEMPLATE-key namespace that committed offhand picks
+are stored under (§6.9 / the EMIT-ON-EXIT dual-namespace write) matches every
+CW-generated weapon, and the template-keyed re-apply paths repainted the keep's
+LA pick over the rolled deus skin on every wield (issue #518).
+
+**Rule (v0.9.84-dev):** `mod._la_deus_weapon_yield()` returns true while
+`Managers.mechanism:current_mechanism_name() == "deus"`. Weapon-side applies
+(kind `offhand`/`illusion`, plus the §6.9 vanilla-mesh store and the live-body
+`_offhand_selection` mesh/paint) consult it and YIELD; hats/armor stay live.
+Gates sit at: the `get_item_units` husk LA + vanilla branches, the live-body
+`_offhand_selection` branch (create_equipment only; preview surfaces keep the
+pick — they render the keep instance), `_apply_la_offhand_to_units` "ingame",
+`_apply_la_on_unit` (terminal backstop, dedup'd `[la-state] DEUS-YIELD
+suppressed` printf), the local `_wield_slot` re-apply, and `_la_reconcile`
+(terminal reason `"deus-yield"`, treated like `"no-entry"` by the pending
+drain). Stores/emits are NOT gated — state stays warm so LA re-asserts the
+moment the mechanism returns to `adventure`. rt-check:
+`cos_la_deus_yield_gate_wired`. Follow-up (not shipped): inject LA variants
+into the deus skin pools (`WeaponSkins.skin_combinations`) per the issue's
+desired end state.
+
 ---
 
 ## Key file paths

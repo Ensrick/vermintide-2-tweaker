@@ -1,5 +1,41 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.84-dev — 2026-07-13 — #518 LA weapon cosmetics yield to Chaos Wastes upgrade skins (deus-yield gate) [untested]
+
+Fixes #518: in Chaos Wastes, starting and shrine-upgraded weapons had their deus-rolled
+rarity skins overridden by the player's Loremaster offhand/illusion picks. Log evidence
+(console 2026-07-12 20:19): `LOCAL wield-reapply stored_key=one_handed_sword_shield_template_2
+kind=offhand armoury=Kruber_bret_shield_basic2_Luidhard01` repeating throughout
+`SPAWN mechanism=deus` maps.
+
+- **Root cause.** Deus weapon generation rolls `item.skin` per rarity
+  (`deus_weapon_generation.lua:246-249`) and RE-rolls it on every shrine upgrade
+  (`:318-321`) - the skin change IS the upgrade's visual feedback. But committed LA
+  offhand picks are stored under a weapon-TEMPLATE key namespace besides the per-instance
+  backend_id (emit sites write both), and deus items clone the base item
+  (`create_item` sets `key = base_item`, same template - `deus_weapon_generation.lua:185-202`).
+  So the keep instance's pick matched every CW-generated weapon sharing the template, and
+  the template-keyed re-apply paths (local wield re-apply, husk wield re-paint, husk
+  `get_item_units` mesh swap, reconcile/pending retries) stomped the rolled skin on every
+  wield. The live-body `_offhand_selection[backend_id]` mesh/paint path also fired on the
+  first CW map, where the deus loadout still resolves the REAL backend items.
+- **Precedence decision.** Inside a deus run, CW upgrade cosmetics WIN; LA re-asserts
+  outside (the gate reads `Managers.mechanism:current_mechanism_name()` live and the
+  synced stores stay warm, so no state is lost). The issue names pooling LA variants into
+  the deus skin tables as the desired end state - that is a separate feature, tracked as a
+  follow-up, not shipped here. WEAPON-side only: LA hats/outfits (kind hat/armor) are real
+  backend cosmetics that persist through CW and stay un-gated. No new menu toggle.
+- **Fix.** New `mod._la_deus_weapon_yield()` gate consulted at every weapon-side apply
+  choke point: the `BackendUtils.get_item_units` husk LA mesh-swap + husk vanilla-mesh
+  (issue 416 store) branches, the live-body `_offhand_selection` mesh branch
+  (create_equipment only - preview surfaces render the keep instance and keep the pick),
+  the `_apply_la_offhand_to_units` "ingame" paint, `_apply_la_on_unit` (terminal backstop
+  for offhand/illusion kinds, dedup'd `[la-state] DEUS-YIELD suppressed` printf), the
+  local `_wield_slot` re-apply, and `_la_reconcile` (terminal reason `"deus-yield"`; the
+  pending drain treats it like `"no-entry"` so retries do not spin to deadline).
+- **rt-check.** `cos_la_deus_yield_gate_wired` verifies the gate exists and returns a
+  boolean (false outside deus).
+
 ## 0.9.83-dev — 2026-07-13 — #520 LA hats/outfits now actually persist across restarts (save moved to the loadout chokepoint + cache rehydration) [untested]
 
 Fixes #520: the last-equipped Loremaster hat/outfit was lost on every game restart and

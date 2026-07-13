@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.83-dev"
+local MOD_VERSION = "0.9.84-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -3017,10 +3017,39 @@ local _la_equips_by_peer = {}
 -- untouched here). Attached to `mod` (main chunk is near the Lua 200-local ceiling).
 mod._offhand_mesh_by_peer = mod._offhand_mesh_by_peer or {}
 
+-- #518: DEUS-YIELD gate. In a Chaos Wastes (deus) run every weapon slot holds a
+-- deus-GENERATED instance: generation rolls item.skin per rarity
+-- (deus_weapon_generation.lua:246-249) and every shrine upgrade RE-rolls it at the
+-- target rarity (:318-321) from WeaponSkins.skin_combinations - the skin change IS
+-- the upgrade's visual feedback. Our LA/vanilla offhand overrides are stored per
+-- KEEP weapon instance (backend_id) PLUS a template-key namespace, and deus items
+-- clone the base item (create_item sets key = deus_item_data.base_item, same
+-- weapon template - deus_weapon_generation.lua:185-202), so a keep pick leaked
+-- onto every CW starting/upgraded weapon and stomped the rolled skin on every
+-- wield (issue #518 log: "LOCAL wield-reapply stored_key=
+-- one_handed_sword_shield_template_2" repeating during SPAWN mechanism=deus).
+-- PRECEDENCE: CW upgrade cosmetics WIN inside a deus run; LA re-asserts outside.
+-- The gate reads the LIVE mechanism on every call and the synced stores stay
+-- warm, so returning to the keep (mechanism=adventure) restores LA rendering
+-- with no extra work. WEAPON-side only: hats/armor (kind="hat"/"armor") are the
+-- player's real backend cosmetics, persist through CW, and are never gated.
+-- Attached to `mod` (main chunk is near the Lua 200-local ceiling).
+mod._la_deus_weapon_yield = function()
+    local mm = Managers and Managers.mechanism
+    if not (mm and mm.current_mechanism_name) then return false end
+    local ok, name = pcall(mm.current_mechanism_name, mm)
+    return (ok and name == "deus") or false
+end
+
 if BackendUtils then
     mod:hook(BackendUtils, "get_item_units", function(func, item_data, backend_id, skin, career_name)
         local result = func(item_data, backend_id, skin, career_name)
         if not result then return result end
+
+        -- #518: deus-yield resolved ONCE per call. Gates the weapon-side mesh
+        -- overrides below (husk LA swap, husk vanilla swap, live-body
+        -- _offhand_selection) so CW upgrade skins render un-stomped.
+        local _deus_yield = mod._la_deus_weapon_yield()
 
         -- v0.9.0.6-hotfix: kind="unit" LA mesh swap for remote husks.
         -- v0.9.0.8-hotfix: instrumented at every gate so we can see WHY a
@@ -3070,6 +3099,9 @@ if BackendUtils then
             end
             if entry and (entry.kind == "offhand" or entry.kind == "illusion")
                 and entry.armoury_key
+                -- #518: in a deus run the husk's weapon is a deus-generated
+                -- instance; its rolled rarity skin wins over the LA mesh swap.
+                and not _deus_yield
             then
                 local la = get_mod("Loremasters-Armoury")
                 local variant = la and la.SKIN_LIST and la.SKIN_LIST[entry.armoury_key]
@@ -3160,7 +3192,9 @@ if BackendUtils then
             local vstore = mod._offhand_mesh_by_peer
             local vwear  = vstore and vstore[_current_husk_wield.wearer_peer]
             local vhands = vwear and template and vwear[template]
-            if type(vhands) == "table" then
+            -- #518: vanilla offhand mesh picks yield in a deus run too (same
+            -- template-key leak as the LA branch above).
+            if type(vhands) == "table" and not _deus_yield then
                 local applied_any = false
                 for hand_field, unit_path in pairs(vhands) do
                     if type(unit_path) == "string" and unit_path ~= "" then
@@ -3288,7 +3322,14 @@ if BackendUtils then
             _trace("RESOLVE suppress-browse bid=%s (in_create_equipment + active_cust match) → live body mesh override SUPPRESSED",
                 tostring(effective_backend_id))
         end
-        local sel = (not _suppress_browse_override) and effective_backend_id
+        -- #518: on the LIVE body in a deus run (create_equipment; the first CW
+        -- map resolves the player's REAL backend items, so the backend_id-keyed
+        -- selection genuinely matches) the deus-rolled skin owns the mesh.
+        -- Preview surfaces (_in_create_equipment=false) still show the pick,
+        -- since they render the keep instance.
+        local sel = (not _suppress_browse_override)
+            and not (_deus_yield and _in_create_equipment)
+            and effective_backend_id
             and _offhand_selection[effective_backend_id]
         if type(sel) == "table" then
             for hand_field, opt in pairs(sel) do
@@ -3507,6 +3548,13 @@ local function _apply_la_offhand_to_units(world, item_data, units, has_skin, bac
     if context == "ingame" and _active_customization_backend_id ~= nil
         and bid == _active_customization_backend_id then
         _dbg("[LA paint] suppress ingame browse-paint for bid=%s (customization screen open)", tostring(bid))
+        return
+    end
+    -- #518: deus run - the rolled rarity/upgrade skin owns the live body's
+    -- weapon visuals; skip the in-game LA offhand paint. Preview contexts
+    -- (loot_previewer / hero_previewer render the KEEP instance) stay live.
+    if context == "ingame" and mod._la_deus_weapon_yield() then
+        _dbg("[LA paint] skip: deus run - CW upgrade cosmetics win (#518) bid=%s", tostring(bid))
         return
     end
     _migrate_legacy_offhand_selection(bid)
@@ -5462,6 +5510,24 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
     if not (owner_unit and Unit.alive(owner_unit)) then return false end
     if not (LA_BRIDGE and LA_BRIDGE.registered) then return false end
 
+    -- #518: TERMINAL deus-yield for weapon-side kinds. Every apply trigger
+    -- (cos_la_apply recv, _la_reconcile, transition walk, pending drain, husk
+    -- wield re-paint, local wield re-apply) funnels through this function, so
+    -- one gate here guarantees no LA offhand/illusion render can stomp a
+    -- deus-rolled upgrade skin. Hats/armor pass through untouched. Dedup'd
+    -- printf so the suppression is visible with mod logging OFF.
+    if (kind == "offhand" or kind == "illusion") and mod._la_deus_weapon_yield() then
+        local seen = mod._la_deus_yield_logged
+        if not seen then seen = {}; mod._la_deus_yield_logged = seen end
+        local sk = tostring(slot_name) .. "|" .. tostring(armoury_key)
+        if not seen[sk] and printf then
+            seen[sk] = true
+            printf("[la-state] DEUS-YIELD suppressed slot=%s kind=%s key=%s (CW upgrade cosmetics win, #518)",
+                tostring(slot_name), tostring(kind), tostring(armoury_key))
+        end
+        return false
+    end
+
     local variant, la = _resolve_la_variant(armoury_key)
     if not variant then
         _dbg("[cos_la_apply] %s armoury_key %s missing from local SKIN_LIST — bail",
@@ -6030,6 +6096,13 @@ mod._la_reconcile = function(wearer_peer, slot_name, tag, allow_pulse)
     local equips = _la_equips_by_peer[wearer_peer]
     local eq = equips and equips[slot_name]
     if not (eq and eq.kind and eq.armoury_key) then return false, "no-entry" end
+    -- #518: TERMINAL deus-yield for weapon-side entries, so pending-drain
+    -- retries drop immediately instead of spinning to their 5s deadline.
+    -- (_apply_la_on_unit carries the same gate as the belt-and-suspenders
+    -- backstop for callers that bypass reconcile.)
+    if (eq.kind == "offhand" or eq.kind == "illusion") and mod._la_deus_weapon_yield() then
+        return false, "deus-yield"
+    end
     local wu = _wearer_unit_for_peer(wearer_peer)
     if not wu then return false, "wearer-not-spawned" end
     local applied = _apply_la_on_unit(wu, slot_name, eq.kind, eq.armoury_key, eq.vanilla_key)
@@ -7704,7 +7777,9 @@ mod.update = function(dt)
             -- deleted the store entry, so retrying would re-impose a cosmetic
             -- the wearer already dropped.
             local applied_now, reason = mod._la_reconcile(wp, slot, "retry", true)
-            if not applied_now and reason ~= "no-entry" and now < deadline then
+            -- #518: "deus-yield" is terminal like "no-entry" - retrying inside a
+            -- deus run can never succeed and would just spin to the deadline.
+            if not applied_now and reason ~= "no-entry" and reason ~= "deus-yield" and now < deadline then
                 kept[#kept + 1] = entry
             end
         end
@@ -8507,8 +8582,15 @@ mod:hook_safe("SimpleInventoryExtension", "_wield_slot", function(self, equipmen
                     -- local wield would amplify that mutation. (The husk path
                     -- already handles illusions remotely; a local illusion drop,
                     -- if reported, is a separate fix.)
+                    -- #518: skip inside a deus run - the CW weapon shares the
+                    -- keep weapon's TEMPLATE (deus items clone the base item),
+                    -- so this template-keyed re-apply was the observed stomper
+                    -- of deus upgrade skins. The reconcile/_apply_la_on_unit
+                    -- gates also cover this; skipping here keeps the REAPPLY
+                    -- probe/trace lines truthful.
                     if entry and entry.armoury_key and entry.kind == "offhand"
-                        and stored_key == wielded_template then
+                        and stored_key == wielded_template
+                        and not mod._la_deus_weapon_yield() then
                         _trace("LOCAL wield-reapply stored_key=%s kind=%s armoury=%s slot=%s",
                             tostring(stored_key), tostring(entry.kind),
                             tostring(entry.armoury_key), tostring(wielded_slot))
@@ -8561,6 +8643,21 @@ _rt_register("cos_la_reconcile_and_pull_wired", function()
         and type(LA_PERSIST.clear_offhand) == "function"
         and type(LA_PERSIST.get_saved_offhands) == "function") then
         return "LA_PERSIST offhand API incomplete"
+    end
+end)
+
+-- #518: the deus-yield gate must exist and report false OUTSIDE a deus run
+-- (keep/adventure = mechanism "adventure"); every weapon-side LA apply path
+-- consults it before rendering, so losing it regresses to LA stomping Chaos
+-- Wastes upgrade skins. Functional: call it in the current (non-deus) context.
+_rt_register("cos_la_deus_yield_gate_wired", function()
+    if type(mod._la_deus_weapon_yield) ~= "function" then
+        return "mod._la_deus_weapon_yield missing (#518 deus-yield gate)"
+    end
+    local ok, v = pcall(mod._la_deus_weapon_yield)
+    if not ok then return "deus-yield gate errored: " .. tostring(v) end
+    if type(v) ~= "boolean" then
+        return "deus-yield gate must return boolean, got " .. type(v)
     end
 end)
 
