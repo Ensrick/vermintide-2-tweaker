@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.251-dev"
+local MOD_VERSION = "0.7.252-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -8250,6 +8250,196 @@ _rt_register("issue461_boon_preview_wired", function()
     end
     if type(mod:get("preview_starting_boons")) ~= "boolean" then
         return "#461 REGRESSION: preview_starting_boons checkbox not registered (mod:get non-boolean)"
+    end
+end)
+
+-- ============================================================
+-- Buy Starting Boons -- start-node shrine shop (#458)
+-- ============================================================
+-- The run's START node runs inside GameModeMapDeus, whose shared-state machine can
+-- be in MAP_DECISION (the map screen) or SHOP (a shrine overlay). Vanilla starts a
+-- run in MAP_DECISION; a shrine is only reached later by CHOOSING a shop node
+-- (game_mode_map_deus.lua:332 new_node.node_type=="shop" -> handle_shrine_entered ->
+-- states.SHOP). Both states run on the SAME persistent dlc_morris_map world (the
+-- ferry-lady hub), so a shrine is an overlay + spawned idol props, NOT a separate
+-- level load. That lets us open the shrine at run start with no graph or node change.
+--
+-- DESIGN (#458): when the HOST enables ct_buy_starting_boons, we force GameModeMapDeus
+-- into its SHOP state at run start (current node still "start"). Vanilla's own SHOP ->
+-- WAITING_FOR_PLAYERS_AFTER_SHOP -> MAP_DECISION path (game_mode_map_deus.lua:341-349)
+-- then returns every peer to the normal first map choice after buying. We never call
+-- handle_shrine_entered (that would mark the start node traversed / could alter its map
+-- token) and never touch node_type -- so the start node's map APPEARANCE is unchanged,
+-- exactly as the issue requires: "simply puts the player in the shop menu."
+--
+-- CONFIG: DeusShopView.start resolves its offer from DeusShopSettings.shop_types
+-- [current_node.level] (deus_shop_view_v2.lua:181-184). The start node's level is
+-- "dlc_morris_map", which is never a shop in vanilla, so shop_types["dlc_morris_map"]
+-- is ours alone. We register it (power_up_count + blessings) from host-effective
+-- settings so the count/miracle pool follow the host across the lobby (the ct_ keys are
+-- auto-added to SYNCED_SETTING_NAMES because they are not per-peer). Boon OFFERS are
+-- per-peer-seeded exactly like a vanilla shrine (each hero sees their own), so no coop
+-- offer-sync is needed; the blessing SUBSET is seeded by the start node's blessings seed
+-- so every peer selects the same miracles.
+--
+-- WIRE SAFETY: the shrine reuses vanilla's shop buy path (shop_buy_power_up /
+-- shop_buy_blessing) with vanilla RPC indices. Boons offered come from
+-- generate_random_power_ups -> DeusPowerUpRarityPool, which ct already parity-ejects for
+-- modded boons under unconfirmed peer parity (#426), so a non-ct peer can never be
+-- offered (hence never buy) a modded index. Miracles are all vanilla blessing keys
+-- (deus_blessing_settings.lua). So this feature adds NO new peer-sync exposure.
+--
+-- INTERACTION with the free Starting Boons list (DeusRunController._add_initial_power_ups
+-- hook above): they STACK and are orthogonal. The free grant runs at run setup (before
+-- the shrine opens), so generate_random_power_ups sees those boons as existing and will
+-- not re-offer them (vanilla dedupe, deus_run_controller.lua:1110). A pure buy-your-own
+-- start = leave the free list off. Documented in the toggle tooltip.
+--
+-- SCOPE (v0.7.252-dev, load-bearing core): boon count + miracle count/pool are wired.
+-- Per-shrine COST multiplier and a PICK LIMIT are deferred (they need gated
+-- interception of the shared DeusCostSettings.shop cost reads and per-shrine purchase
+-- counting) -- see CHANGELOG "#458 remaining scope".
+do
+    -- The 8 vanilla CW blessings/miracles (deus_blessing_settings.lua:18-99). Only these
+    -- vanilla keys ever reach the shop, so the shrine adds no modded wire exposure.
+    local MIRACLE_KEYS = {
+        "blessing_of_power", "blessing_of_shallya", "blessing_of_grimnir",
+        "blessing_of_isha", "blessing_of_ranald", "blessing_of_abundance",
+        "blessing_holy_hand_grenade", "blessing_rally_flag",
+    }
+    mod._ct_start_shrine_miracle_keys = MIRACLE_KEYS
+
+    -- Deterministic, peer-stable shuffle (local Park-Miller LCG; does NOT disturb the
+    -- global math.random state). Same seed -> same order on every peer.
+    local function seeded_shuffle(list, seed)
+        local s = (tonumber(seed) or 0) % 2147483647
+        if s <= 0 then s = s + 2147483646 end
+        for i = #list, 2, -1 do
+            s = s * 16807 % 2147483647
+            local j = s % i + 1
+            list[i], list[j] = list[j], list[i]
+        end
+        return list
+    end
+
+    -- Build the miracle (blessing) subset the start shrine offers. Reads host-effective
+    -- settings so the whole lobby agrees; the seed (start node's blessings seed) makes the
+    -- random pick identical on every peer. Returns {} when count is 0 or the pool is empty.
+    function mod._ct_build_start_shrine_blessings(seed)
+        local eff = mod._ct_effective_setting or function(n) return mod:get(n) end
+        local count = math.floor(tonumber(eff("ct_start_shrine_miracle_count")) or 0)
+        if count <= 0 then return {} end
+        local eligible = {}
+        for _, key in ipairs(MIRACLE_KEYS) do
+            if eff("ct_start_shrine_miracle_" .. key) then
+                eligible[#eligible + 1] = key
+            end
+        end
+        if #eligible == 0 then return {} end
+        table.sort(eligible) -- stable base order before the seeded shuffle
+        seeded_shuffle(eligible, seed)
+        local out = {}
+        for i = 1, math.min(count, #eligible) do out[i] = eligible[i] end
+        return out
+    end
+
+    -- Register/refresh DeusShopSettings.shop_types["dlc_morris_map"] (the start node's
+    -- level, never a shop in vanilla, so this entry is ours alone). Vanilla's shop view
+    -- resolves its config by current_node.level, so this is all the shrine needs to open
+    -- at the start node with our tuned counts. Returns the config (nil if DeusShopSettings
+    -- is not loaded yet -- only ever called in-run, so it is).
+    function mod._ct_build_start_shrine_config(blessings_seed)
+        local settings = rawget(_G, "DeusShopSettings")
+        if type(settings) ~= "table" or type(settings.shop_types) ~= "table" then return nil end
+        local eff = mod._ct_effective_setting or function(n) return mod:get(n) end
+        local boon_count = math.floor(tonumber(eff("ct_start_shrine_boon_count")) or 4)
+        if boon_count < 0 then boon_count = 0 end
+        local cfg = settings.shop_types["dlc_morris_map"]
+        if type(cfg) ~= "table" then
+            cfg = {}
+            settings.shop_types["dlc_morris_map"] = cfg
+        end
+        cfg.max_discounts = 0
+        cfg.power_up_discount = 0.5
+        cfg.twitch_icon = "twitch_icon_shrine"
+        cfg.power_up_count = boon_count
+        cfg.blessings = mod._ct_build_start_shrine_blessings(blessings_seed)
+        return cfg
+    end
+end
+
+-- Trigger + config registration at run start. VMF singleton-hook rule: this is ct_dev's
+-- ONLY (GameModeMapDeus, local_player_game_starts) hook (ct's other start hook is on
+-- GameModeDeus, a different class). Full mod:hook so we can override the shared state
+-- vanilla just set. Marker: _ct_start_shrine_trigger_hook.
+mod:hook("GameModeMapDeus", "local_player_game_starts", function(func, self, player, loading_context)
+    func(self, player, loading_context)
+    local ok, err = pcall(function()
+        local drc = self._deus_run_controller
+        if not drc or not drc.get_current_node_key then return end
+        if drc:get_current_node_key() ~= "start" then return end -- run start only (not later map returns)
+        -- Register the shrine config on EVERY peer (host + clients) so the shop view
+        -- resolves it if the host forces SHOP; harmless when the shrine never opens.
+        local node = drc.get_current_node and drc:get_current_node()
+        local bseed = node and node.system_seeds and node.system_seeds.blessings or 0
+        local cfg = mod._ct_build_start_shrine_config(bseed)
+        -- Host-authoritative trigger: only the host writes shared server state; clients
+        -- follow via the existing GameModeMapDeus shared-state sync.
+        if not self._is_server then return end
+        if not mod:get("ct_buy_starting_boons") then return end
+        local run_id = drc.get_run_id and drc:get_run_id()
+        if run_id ~= nil and mod._ct_start_shrine_fired == run_id then return end -- once per run
+        local ss = self._shared_state
+        if not ss or not ss.set_server or not ss.get_key then return end
+        -- states.SHOP = 3 (game_mode_map_deus.lua:47).
+        ss:set_server(ss:get_key("state"), 3)
+        mod._ct_start_shrine_fired = run_id
+        pcall(printf, "[ct:458] Buy Starting Boons applied: forced SHOP at run start (run_id=%s boons=%d miracles=%d)",
+            tostring(run_id), cfg and cfg.power_up_count or -1, cfg and cfg.blessings and #cfg.blessings or 0)
+    end)
+    if not ok then
+        pcall(printf, "[ct:458] start-shrine trigger errored (%s); vanilla map decision unaffected", tostring(err))
+    end
+end)
+
+-- /verify_<feature> per PROJECT_STANDARDS s5.1a: live state vs the toggles that gate it.
+mod:command("ct_verify_start_shrine", "Report the #458 Buy Starting Boons config (toggle, counts, miracle pool, registered shop config)", function()
+    local eff = mod._ct_effective_setting or function(n) return mod:get(n) end
+    mod:echo("[ct] Buy Starting Boons (#458) -- host controls whether the shrine appears:")
+    mod:echo("%s", string.format("  toggle=%s  boons=%s (eff %s)  miracles=%s (eff %s)",
+        tostring(mod:get("ct_buy_starting_boons")),
+        tostring(mod:get("ct_start_shrine_boon_count")), tostring(eff("ct_start_shrine_boon_count")),
+        tostring(mod:get("ct_start_shrine_miracle_count")), tostring(eff("ct_start_shrine_miracle_count"))))
+    local enabled = {}
+    for _, key in ipairs(mod._ct_start_shrine_miracle_keys or {}) do
+        if eff("ct_start_shrine_miracle_" .. key) then enabled[#enabled + 1] = key end
+    end
+    mod:echo("%s", string.format("  miracle pool enabled (%d): %s", #enabled, table.concat(enabled, ", ")))
+    local settings = rawget(_G, "DeusShopSettings")
+    local cfg = settings and settings.shop_types and settings.shop_types["dlc_morris_map"]
+    if type(cfg) == "table" then
+        mod:echo("%s", string.format("  registered start-shrine config: power_up_count=%s blessings=[%s]  PASS",
+            tostring(cfg.power_up_count), table.concat(cfg.blessings or {}, ",")))
+    else
+        mod:echo("  registered start-shrine config: none yet (built at run start) -- expected outside a run")
+    end
+end)
+
+_rt_register("issue458_start_shrine_config", function()
+    if type(mod._ct_build_start_shrine_config) ~= "function" then
+        return "#458 REGRESSION: mod._ct_build_start_shrine_config missing"
+    end
+    if type(mod._ct_build_start_shrine_blessings) ~= "function" then
+        return "#458 REGRESSION: mod._ct_build_start_shrine_blessings missing"
+    end
+    if type(mod._ct_start_shrine_miracle_keys) ~= "table" or #mod._ct_start_shrine_miracle_keys ~= 8 then
+        return "#458 REGRESSION: miracle key list missing or not 8 entries"
+    end
+    if type(mod:get("ct_buy_starting_boons")) ~= "boolean" then
+        return "#458 REGRESSION: ct_buy_starting_boons checkbox not registered (mod:get non-boolean)"
+    end
+    if type(mod._ct_build_start_shrine_blessings(12345)) ~= "table" then
+        return "#458 REGRESSION: _ct_build_start_shrine_blessings must return a table"
     end
 end)
 

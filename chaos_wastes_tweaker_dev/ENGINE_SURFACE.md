@@ -36,7 +36,7 @@ contact clusters into the five surfaces below, each with its own subsystem note.
 
 ## Hook table
 
-**102 hook sites** (`mod:hook`/`mod:hook_safe`) + **4 VMF RPC channels**
+**103 hook sites** (`mod:hook`/`mod:hook_safe`) + **4 VMF RPC channels**
 (`mod:network_register`) + a set of engine-**table** contacts (registration/pool
 injection, not hooks - see Surface 2/5 notes). Grouped below into rows-of-concern.
 `[hook]` = full wrapper (`mod:hook`); `[safe]` = `mod:hook_safe` (post-callback,
@@ -70,6 +70,7 @@ pair (repo `CLAUDE.md` NON-NEGOTIABLE 8), flagged in the trap column.
 | `DeusShopView` / `DeusCursedChestView` `.update` + `._create_ui_elements` / `create_ui_elements` / `_on_button_pressed` [hook/safe] `:2857-8204` / `DeusUpgradeWeaponInteractionUI._populate_widget` [safe] `:1229` | Shrine-shop / cursed-chest / upgrade-altar view build + tick + button | Inject ct boon widgets, NaN arc-offset fix, reroll button | NaN widget-offset fix only needed for the 1-widget case (AUDIT_FINDINGS #6); VMF numeric widget has no `step` (memory `reference_vmf_numeric_widget_no_step`) |
 | `DeusMapDecisionView._update_player_state` [safe] `_ct_dup_vote_chips.lua:255` / `DeusMapScene._clear` [safe] `:421` | CW map-vote screen: places one "token" chip per hero keyed by `profile_index` [src: `deus_map_scene.lua:238-251`, `place_token` `:833-841`] | With gt's `allow_duplicate_careers`, two peers share a `profile_index` and the second `place_token` OVERWRITES the first - spawn a SECOND chip for the extra voter | Post-hook (vanilla runs first, non-duplicate case byte-for-byte vanilla); distinguish by offset+scale, NOT material recolor - token `.unit` tint vars are unverified per-asset and `Material.set_*` silently no-ops on an absent shader var |
 | `DeusMapDecisionView._enable_hover` [hook] `:3400` / `DeusMapScene.on_enter` [hook] `:6150` | Node-hover enable / map-scene enter (applies the resolved graph) | Curse-preview on hover; late-arrival graph-snapshot re-apply | `on_enter` is the graph-snapshot late-apply site (see Surface 4 note) |
+| `GameModeMapDeus.local_player_game_starts` [hook] `:8375` | Sets the map game mode's initial shared state to MAP_DECISION at run start (host, `game_mode_map_deus.lua:150`); the map+shop are overlays on ONE persistent `dlc_morris_map` world (`:245-269`) | #458 Buy Starting Boons: at run start only (`get_current_node_key()=="start"`) register `DeusShopSettings.shop_types["dlc_morris_map"]` on every peer and, host-only, force server state to SHOP so players buy starting boons before the first map choice | ct's ONLY `(GameModeMapDeus, local_player_game_starts)` hook (ct's other start hook is on `GameModeDeus`, a different class); `states.SHOP=3` is a file-local engine constant (`:47`); never call `handle_shrine_entered` (marks node traversed / could alter the map token); vanilla SHOP->WAITING->MAP_DECISION (`:341-349`) returns to the map; wire-safe by construction (pool-parity boons + vanilla blessing keys, no new indices) |
 
 ### Surface 1c - Deus mechanism / node graph / lobby join (owner: `docs/engine/03`, `/08`; `chaos_wastes_tweaker_dev.lua`)
 

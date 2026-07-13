@@ -445,6 +445,37 @@ local data = {
                 tooltip = "progressive_difficulty_tooltip",
             },
             -- ============================================================
+            -- Buy Starting Boons (#458): top-level like Progressive Difficulty
+            -- (a run-start modifier, not one of the A-Z groups). The advanced
+            -- sub-options tune this shrine independently of normal ones. Cost
+            -- multiplier + pick limit are deferred (see chaos_wastes_tweaker_dev.lua
+            -- "#458 remaining scope") so only the wired knobs appear here.
+            -- ============================================================
+            {
+                setting_id = "ct_buy_starting_boons",
+                type = "checkbox",
+                default_value = false,
+                tooltip = "ct_buy_starting_boons_tooltip",
+                sub_widgets = {
+                    { setting_id = "ct_start_shrine_boon_count",    type = "numeric", default_value = 4, range = { 0, 8 }, decimals_number = 0, tooltip = "ct_start_shrine_boon_count_tooltip" },
+                    { setting_id = "ct_start_shrine_miracle_count", type = "numeric", default_value = 0, range = { 0, 3 }, decimals_number = 0, tooltip = "ct_start_shrine_miracle_count_tooltip" },
+                    {
+                        setting_id = "ct_start_shrine_miracle_pool_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_power",          type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_power_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_shallya",        type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_shallya_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_grimnir",        type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_grimnir_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_isha",           type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_isha_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_ranald",         type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_ranald_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_abundance",      type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_abundance_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_holy_hand_grenade", type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_holy_hand_grenade_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_rally_flag",        type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_rally_flag_tooltip" },
+                        },
+                    },
+                },
+            },
+            -- ============================================================
             -- Adventure Maps
             -- ============================================================
             {

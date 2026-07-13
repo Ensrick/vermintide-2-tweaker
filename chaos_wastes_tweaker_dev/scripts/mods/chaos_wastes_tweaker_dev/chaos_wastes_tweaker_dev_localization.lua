@@ -27,6 +27,32 @@ local loc = {
     replace_shrines_with_missions = { en = "[working] Replace Shrines with Missions" },
     progressive_difficulty = { en = "[diag] Progressive Difficulty" },
     progressive_difficulty_tooltip = { en = "The first two missions of a run use your starting difficulty. Every mission after that steps up one tier (for example Legend, then Cataclysm, then Cataclysm 2, then Cataclysm 3), capping at Cataclysm 3. Host-controlled: the whole lobby follows the host's setting." },
+
+    -- #458 Buy Starting Boons (start-node shrine shop). Titles carry dev status tags
+    -- (LOCALIZATION_STANDARD s13); tooltips are bodies (untagged). No literal % to escape.
+    ct_buy_starting_boons = { en = "[untested] [Issue 458] Buy Starting Boons" },
+    ct_buy_starting_boons_tooltip = { en = "Host-controlled. When ON, a Chaos Wastes run begins at a shrine shop so each hero buys their starting boons (and miracles) with pilgrim coins before the first map choice. The start node keeps its normal map appearance. This STACKS with the free Starting Boons list below, so turn those off if you want a pure buy-your-own start. In co-op only the host's toggle decides whether the shrine appears, and the boon and miracle counts follow the host." },
+    ct_start_shrine_boon_count = { en = "[untested] Start Shrine: Boons Offered" },
+    ct_start_shrine_boon_count_tooltip = { en = "How many boons the starting shrine offers for purchase. Each hero sees their own personalized offer, exactly like a normal shrine. Set to 0 for no boons. Default 4 matches a vanilla shrine." },
+    ct_start_shrine_miracle_count = { en = "[untested] Start Shrine: Miracles Offered" },
+    ct_start_shrine_miracle_count_tooltip = { en = "How many miracles (blessings) the starting shrine offers, from 0 to 3. If more miracles are enabled in the pool below than this number, the shrine picks that many at random, and the whole lobby gets the same picks. Set to 0 for no miracles." },
+    ct_start_shrine_miracle_pool_group = { en = "[untested] Start Shrine: Miracle Pool" },
+    ct_start_shrine_miracle_blessing_of_power = { en = "[untested] Blessing of Power" },
+    ct_start_shrine_miracle_blessing_of_power_tooltip = { en = "Allow the Blessing of Power miracle in the starting shrine's pool." },
+    ct_start_shrine_miracle_blessing_of_shallya = { en = "[untested] Blessing of Shallya" },
+    ct_start_shrine_miracle_blessing_of_shallya_tooltip = { en = "Allow the Blessing of Shallya miracle in the starting shrine's pool." },
+    ct_start_shrine_miracle_blessing_of_grimnir = { en = "[untested] Blessing of Grimnir" },
+    ct_start_shrine_miracle_blessing_of_grimnir_tooltip = { en = "Allow the Blessing of Grimnir miracle in the starting shrine's pool." },
+    ct_start_shrine_miracle_blessing_of_isha = { en = "[untested] Blessing of Isha" },
+    ct_start_shrine_miracle_blessing_of_isha_tooltip = { en = "Allow the Blessing of Isha miracle (a permanent blessing) in the starting shrine's pool." },
+    ct_start_shrine_miracle_blessing_of_ranald = { en = "[untested] Blessing of Ranald" },
+    ct_start_shrine_miracle_blessing_of_ranald_tooltip = { en = "Allow the Blessing of Ranald miracle in the starting shrine's pool." },
+    ct_start_shrine_miracle_blessing_of_abundance = { en = "[untested] Blessing of Abundance" },
+    ct_start_shrine_miracle_blessing_of_abundance_tooltip = { en = "Allow the Blessing of Abundance miracle in the starting shrine's pool." },
+    ct_start_shrine_miracle_blessing_holy_hand_grenade = { en = "[untested] Holy Hand Grenade" },
+    ct_start_shrine_miracle_blessing_holy_hand_grenade_tooltip = { en = "Allow the Holy Hand Grenade miracle (grants a holy hand grenade) in the starting shrine's pool." },
+    ct_start_shrine_miracle_blessing_rally_flag = { en = "[untested] Rally Flag" },
+    ct_start_shrine_miracle_blessing_rally_flag_tooltip = { en = "Allow the Rally Flag miracle (grants a rally flag) in the starting shrine's pool." },
     replace_shrines_with_missions_tooltip = { en = "Longer expeditions with fewer free boons, since each shrine becomes an extra mission instead. Host-only. Applies to your next expedition." },
 
     -- ============================================================
