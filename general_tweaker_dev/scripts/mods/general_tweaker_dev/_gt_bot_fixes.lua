@@ -1193,65 +1193,133 @@ local function _gt_unit_needs_aid(u)
     return _gt_status_needs_aid(st)
 end
 
+-- #384 (v0.2.212-dev) BROADER pure status predicate seam: "needs aid OR awaits
+-- rescue". Superset of _gt_status_needs_aid -- it ALSO covers the pact-sworn
+-- disabler grabs a bot should not abandon a teammate for (pounce / pack master /
+-- tentacle / chaos spawn / vortex / corruptor) AND fully-dead teammates awaiting
+-- assisted respawn. These are exactly the states the OLD teleport-veto scan left
+-- uncovered (knocked/hook/ledge only, on the human-only side.PLAYER_UNITS roster),
+-- which let a bot leash away from a downed teammate mid-aid (#384). Mirrors
+-- GenericStatusExtension.is_disabled (generic_status_extension.lua:2158) MINUS
+-- is_dead()/is_overpowered() -- an unrescuable corpse or a brief overpower stagger
+-- is not an aid errand. Covered states + citations (generic_status_extension.lua):
+--   is_knocked_down            :2091      is_pounced_down            :2083
+--   is_hanging_from_hook       :2322      is_grabbed_by_pack_master  :2318
+--   get_is_ledge_hanging       :2286      is_grabbed_by_tentacle     :2194
+--     / is_pulled_up           :2262      is_grabbed_by_chaos_spawn  :2202
+--   is_in_vortex               :2294      is_grabbed_by_corruptor    :2198
+--   is_ready_for_assisted_respawn :2110
+-- Takes the status ext directly (same testability constraint as
+-- _gt_status_needs_aid: the /gt_regression_test stubs the status boundary because
+-- the unit-boundary ALIVE[u] guard reads the engine POSITION_LOOKUP map).
+local function _gt_status_needs_aid_or_rescue(st)
+    return st:is_knocked_down()
+        or st:is_hanging_from_hook()
+        or (st:get_is_ledge_hanging() and not st:is_pulled_up())
+        or st:is_pounced_down()
+        or st:is_grabbed_by_pack_master()
+        or st:is_grabbed_by_tentacle()
+        or st:is_grabbed_by_chaos_spawn()
+        or st:is_in_vortex()
+        or st:is_grabbed_by_corruptor()
+        or st:is_ready_for_assisted_respawn()
+end
+
+-- #384 unit-boundary wrapper over _gt_status_needs_aid_or_rescue (same shape as
+-- _gt_unit_needs_aid). Awaiting-rescue allies stay in side:player_units() and, as
+-- real spawned units with a position, are in POSITION_LOOKUP (ALIVE) even at 0
+-- health -- so the ALIVE[u] guard keeps them; only a fully despawned unit (no
+-- status ext) drops out, which is correct. Used by the broadened teleport-veto
+-- backstop below.
+local function _gt_unit_needs_aid_or_rescue_full(u)
+    if not (u and ALIVE[u]) then return false end
+    local st = ScriptUnit.has_extension(u, "status_system")
+    if not st then return false end
+    return _gt_status_needs_aid_or_rescue(st)
+end
+
 -- #139 (v0.2.185-dev): the aid-priority master+sub gate, shared by FIX 3b's
 -- force-revive pick and the should_teleport leash veto. When ON, a downed/
 -- disabled teammate makes EVERY reachable bot drop what it is doing and path to
 -- the revive, ignoring the follow leash entirely (user decision on #139: all
--- bots converge to revive). Awaiting-rescue is deliberately NOT part of "needs
--- aid" here -- that stays owned by gt_bot_rescue_awaiting.
+-- bots converge to revive). #384 (v0.2.212-dev): the veto's "teammate needs aid"
+-- scan now ALSO covers awaiting-rescue + every disabler grab (see
+-- _gt_any_side_teammate_needs_aid below); the #492 watchdog is the recovery valve
+-- so an unreachable down/awaiting can never strand a bot.
 local function _gt_aid_priority_on()
     return mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_aid_priority")
 end
 
--- v0.2.152-dev (#139 sibling): does ANY teammate on the bot's side currently
--- need aid? Returns the first downed/hooked/ledge ally found (or nil). Used by
--- FIX 7 to suppress the tighter leash when there's a reviveable teammate the
--- bot could path to -- prevents teleporting AWAY from where help is needed
--- (the user-reported case: bot leashed to LIVING far player, separate teammate
--- goes down, leash fires, bot teleports away from the downed teammate). FIX 3b
--- will assign `target_ally_need_type` within a tick or two and the bot will
--- walk in; we just need to keep the bot from teleporting away in the meantime.
+-- v0.2.152-dev (#139 sibling); BROADENED for #384 (v0.2.212-dev): does ANY
+-- teammate on the bot's side currently need aid OR await rescue? Returns the
+-- first such ally found (or nil). Used by the teleport-veto backstop (the
+-- should_teleport + cant_reach_ally hooks) so a bot never leashes AWAY from a
+-- teammate who needs help, and by the #492 stall watchdog (SAME scan, so its
+-- unreachable-aid bailout composes with the veto). Name kept (exposed +
+-- regression-tested) though it now also covers rescue.
+--
+-- #384 fixed TWO gaps that let a bot abandon a downed teammate mid-aid because
+-- the vanilla teleport suppression rides on blackboard.target_ally_need_type
+-- (bt_bot_conditions.lua:1226), which _update_target_ally nils on any
+-- _ally_path_allowed cooldown (player_bot_base.lua:1948-1983) -- so the veto had
+-- to be the backstop, and the old backstop was blind to:
+--   (1) ROSTER: side.PLAYER_UNITS is HUMAN-only and drops awaiting-rescue allies
+--       (SideManager is_valid = alive and not is_ready_for_assisted_respawn,
+--       side_manager.lua:337-339; humans-only add :396-400). A downed BOT or a
+--       fully-dead-awaiting-rescue human was invisible. We now walk
+--       side:player_units() (side.lua:222 -- the unfiltered _player_units roster
+--       that keeps bots AND awaiting-rescue units), the SAME roster FIX 3's
+--       rescue picker walks.
+--   (2) PREDICATE: _gt_unit_needs_aid covered knocked/hook/ledge only, while a
+--       teammate can also be pounced / pack-mastered / tentacled / vortexed /
+--       corruptored, or awaiting assisted respawn. We now use the full
+--       _gt_unit_needs_aid_or_rescue_full predicate.
+-- Reading the ally's LIVE state here every frame is what "pins" the errand: the
+-- veto no longer flickers with target_ally_need_type -- it holds while the ally
+-- stays down. Trades away the old split+leash micro-benefit (a bot could leash
+-- past a teammate merely awaiting rescue); the #492 watchdog reinstates recovery
+-- by bailing an UNREACHABLE down/awaiting so the bot regroups.
 local function _gt_any_side_teammate_needs_aid(self_unit)
     local sm = Managers.state and Managers.state.side
     if not sm then return nil end
     local side = sm.side_by_unit and sm.side_by_unit[self_unit]
-    local punits = side and side.PLAYER_UNITS
+    local punits = side and side.player_units and side:player_units()
     if not punits then return nil end
     for i = 1, #punits do
         local u = punits[i]
-        if u ~= self_unit and _gt_unit_needs_aid(u) then
+        if u ~= self_unit and _gt_unit_needs_aid_or_rescue_full(u) then
             return u
         end
     end
     return nil
 end
 
--- #139 probe helper: like _gt_unit_needs_aid but also counts a teammate who is
--- fully dead and waiting to be freed at a rescue point. ready_for_assisted_respawn
--- is a plain field on GenericStatusExtension, set via set_ready_for_assisted_respawn
--- (generic_status_extension.lua:1329) when the respawn unit is available -- read it
--- directly (field access can't error).
-local function _gt_unit_needs_aid_or_rescue(u)
-    if _gt_unit_needs_aid(u) then return true end
-    if not (u and ALIVE[u]) then return false end
-    local st = ScriptUnit.has_extension(u, "status_system")
-    return st ~= nil and st.ready_for_assisted_respawn == true
-end
+-- #384 regression marker (read by gt_bot384_needs_aid_or_rescue_predicate in the
+-- main file). A refactor that narrows the veto scan back to the human-only roster
+-- or the knocked/hook/ledge-only predicate makes this disappear and the test fail.
+GT_BOT384_AWAITING_DISABLER_VETO_MARKER = "gt-bot384-veto-covers-disablers-and-awaiting-rescue"
 
--- #139 probe helper: nearest side teammate who is downed or awaiting rescue,
--- with the metric distance from self_unit. Returns (unit, dist_m) or (nil, nil).
+-- #139 probe helper: nearest side teammate who needs aid or awaits rescue, with
+-- the metric distance from self_unit. Returns (unit, dist_m) or (nil, nil).
 -- POSITION_LOOKUP can momentarily lack an entry during despawn -- nil-guarded.
+-- #384 (v0.2.212-dev): walks side:player_units() with the SAME full
+-- _gt_unit_needs_aid_or_rescue_full predicate the veto backstop uses, so the
+-- [139:bot_tp] diagnostic reports the downed/awaiting/disabled ally the veto
+-- acted on. This also RETIRES the former narrow _gt_unit_needs_aid_or_rescue
+-- helper, whose awaiting-rescue branch was dead code -- its only caller walked the
+-- pre-filtered side.PLAYER_UNITS (SideManager is_valid drops awaiting-rescue,
+-- side_manager.lua:337-339), so the awaiting unit was never in the scanned table.
 local function _gt_nearest_needing_aid(self_unit)
     local self_pos = POSITION_LOOKUP[self_unit]
     if not self_pos then return nil, nil end
     local sm = Managers.state and Managers.state.side
     local side = sm and sm.side_by_unit and sm.side_by_unit[self_unit]
-    local punits = side and side.PLAYER_UNITS
+    local punits = side and side.player_units and side:player_units()
     if not punits then return nil, nil end
     local best, best_d
     for i = 1, #punits do
         local u = punits[i]
-        if u ~= self_unit and _gt_unit_needs_aid_or_rescue(u) then
+        if u ~= self_unit and _gt_unit_needs_aid_or_rescue_full(u) then
             local p = POSITION_LOOKUP[u]
             if p then
                 local d = Vector3.distance(self_pos, p)
@@ -1268,10 +1336,12 @@ end
 -- change (same pattern as mod._gt_apply_fast_reactions above). The
 -- /gt_regression_test checks in general_tweaker_dev.lua drive these to guard the
 -- #139 leash veto against silent regression: the status truth table
--- (_gt_status_needs_aid) and the side-scoped-not-follow scan
+-- (_gt_status_needs_aid), the #384 broadened aid-or-rescue truth table
+-- (_gt_status_needs_aid_or_rescue), and the side-scoped-not-follow scan
 -- (_gt_any_side_teammate_needs_aid). Publishing a reference does not alter the
 -- veto decision logic in the should_teleport hook.
 mod._gt_status_needs_aid            = _gt_status_needs_aid
+mod._gt_status_needs_aid_or_rescue  = _gt_status_needs_aid_or_rescue
 mod._gt_unit_needs_aid             = _gt_unit_needs_aid
 mod._gt_any_side_teammate_needs_aid = _gt_any_side_teammate_needs_aid
 mod._gt_aid_priority_on            = _gt_aid_priority_on
@@ -1870,10 +1940,14 @@ mod:hook("BTConditions", "should_teleport", function (func, blackboard)
     -- AIBotGroupSystem._update_move_targets drops disabled players from the
     -- follow-candidate set unless EVERY player is down (ai_bot_group_system.lua
     -- :695-719), so on a split-team down follow_unit flips to a living far player
-    -- and the leash yanks the bot AWAY from the downed one. Awaiting-rescue is
-    -- EXCLUDED (_gt_any_side_teammate_needs_aid = knocked/hook/ledge only), so it
-    -- stays owned by gt_bot_rescue_awaiting and a bot can still leash to a living
-    -- follow while a teammate merely awaits rescue (the split+leash benefit).
+    -- and the leash yanks the bot AWAY from the downed one. #384 (v0.2.212-dev):
+    -- _gt_any_side_teammate_needs_aid now scans side:player_units() (bots +
+    -- awaiting-rescue) with the FULL disabler predicate, so the veto also holds
+    -- for a downed BOT, a pounced/pack-mastered/tentacled/vortexed/corruptored
+    -- teammate, and a fully-dead ally awaiting assisted respawn -- the exact gaps
+    -- that let the bot in the #384 log leash to the standing human ~2 s after the
+    -- downed ally's aid flag cleared (VETOED=0). Reading the ally's LIVE state
+    -- here is what pins the errand across the target_ally_need_type flicker.
     -- Independent of follow mode (split/host/default) -- that only changes WHO is
     -- followed, not the teleport rule. _gt139_veto_latched rate-limits the printf.
     -- #492: the aid-pursuit stall watchdog (mod._gt492_aid_stall_tick) steps this

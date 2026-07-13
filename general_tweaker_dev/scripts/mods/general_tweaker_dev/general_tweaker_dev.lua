@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.211-dev"
+local MOD_VERSION = "0.2.212-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1748,6 +1748,66 @@ _rt_register("gt_bot139_aid_scan_is_side_scoped_not_follow", function()
     -- healthy code. The behavioral stub checks above are the runtime residual; the
     -- side-scoped-not-follow SOURCE-TEXT invariant belongs in a repo QA gate
     -- (PROJECT_STANDARDS 2.2b tier a).
+end)
+
+_rt_register("gt_bot384_needs_aid_or_rescue_predicate", function()
+    -- #384 (v0.2.212-dev): the teleport-veto backstop was leashing a bot away from
+    -- a downed teammate mid-aid because its scan missed two things -- the
+    -- HUMAN-only side.PLAYER_UNITS roster (no bots, no awaiting-rescue) and the
+    -- knocked/hook/ledge-only predicate (no pounce / pack-master / tentacle /
+    -- chaos-spawn / vortex / corruptor, no awaiting assisted respawn). The backstop
+    -- now walks side:player_units() with the BROADER _gt_status_needs_aid_or_rescue
+    -- predicate. Exercise the full truth table with a STUB status extension (the
+    -- unit boundary can't be stubbed -- _gt_unit_needs_aid_or_rescue_full's ALIVE[u]
+    -- guard reads the engine POSITION_LOOKUP map and rejects a fake key), so a
+    -- refactor that narrows the covered states is caught at load. The marker guards
+    -- the roster+predicate broadening against a silent revert.
+    if GT_BOT384_AWAITING_DISABLER_VETO_MARKER ~= "gt-bot384-veto-covers-disablers-and-awaiting-rescue" then
+        return "bot #384 broadened-veto marker absent -- was the scan narrowed back?"
+    end
+    local pred = mod._gt_status_needs_aid_or_rescue
+    if type(pred) ~= "function" then
+        return "mod._gt_status_needs_aid_or_rescue not exposed -- was the #384 predicate seam reverted?"
+    end
+    -- All-false stub; flip one branch true per case.
+    local function st(o)
+        o = o or {}
+        local function g(k) return function() return o[k] or false end end
+        return {
+            is_knocked_down               = g("knocked"),
+            is_hanging_from_hook          = g("hook"),
+            get_is_ledge_hanging          = g("ledge"),
+            is_pulled_up                  = g("pulled"),
+            is_pounced_down               = g("pounced"),
+            is_grabbed_by_pack_master     = g("packmaster"),
+            is_grabbed_by_tentacle        = g("tentacle"),
+            is_grabbed_by_chaos_spawn     = g("chaos_spawn"),
+            is_in_vortex                  = g("vortex"),
+            is_grabbed_by_corruptor       = g("corruptor"),
+            is_ready_for_assisted_respawn = g("awaiting"),
+        }
+    end
+    local function b(v) return v and true or false end
+    local cases = {
+        { s = st{ knocked = true },              want = true,  why = "knocked down" },
+        { s = st{ hook = true },                 want = true,  why = "hanging from hook" },
+        { s = st{ ledge = true },                want = true,  why = "ledge-hanging, not pulled up" },
+        { s = st{ ledge = true, pulled = true }, want = false, why = "ledge-hanging but already pulled up" },
+        { s = st{ pounced = true },              want = true,  why = "pounced by gutter runner" },
+        { s = st{ packmaster = true },           want = true,  why = "grabbed by pack master" },
+        { s = st{ tentacle = true },             want = true,  why = "grabbed by tentacle" },
+        { s = st{ chaos_spawn = true },          want = true,  why = "grabbed by chaos spawn" },
+        { s = st{ vortex = true },               want = true,  why = "in vortex" },
+        { s = st{ corruptor = true },            want = true,  why = "grabbed by corruptor" },
+        { s = st{ awaiting = true },             want = true,  why = "awaiting assisted respawn" },
+        { s = st{},                              want = false, why = "healthy (no disabler/awaiting state)" },
+    }
+    for _, c in ipairs(cases) do
+        if b(pred(c.s)) ~= c.want then
+            return string.format("_gt_status_needs_aid_or_rescue(%s): want=%s got=%s",
+                c.why, tostring(c.want), tostring(b(pred(c.s))))
+        end
+    end
 end)
 
 _rt_register("gt_bot492_aid_stall_recovery", function()

@@ -1,5 +1,24 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.212-dev (2026-07-13) -- #384 bots stop leashing away from a downed teammate mid-aid [untested]
+
+With aid-priority ON, a bot pathing to a downed/disabled/awaiting-rescue teammate no longer gets snap-teleported back to a standing human mid-errand. The bot stays committed until the teammate is up (or the #492 watchdog bails an unreachable one so the bot can regroup). Aid-priority OFF is byte-identical vanilla behavior.
+
+### Root cause (cited)
+Vanilla suppresses the bot follow-leash teleport only while `blackboard.target_ally_need_type` is set (`bt_bot_conditions.lua:1226`), but `_update_target_ally` NILS that field on any `_ally_path_allowed` cooldown -- 1 s ahead / 5-10 s behind-segment (`player_bot_base.lua:1948-1983`, the picker drops `in_need_type` at the `not allowed_aid_path` branch). gt's #139 blanket veto is the backstop, but it was blind to the down: it scanned `side.PLAYER_UNITS` (HUMAN-only, and `SideManager.is_valid` drops awaiting-rescue, `side_manager.lua:337-339`,`:396-400`) with a knocked/hook/ledge-only predicate, while `GenericStatusExtension.is_disabled` (`generic_status_extension.lua:2158`) also covers pounce/pack-master/tentacle/chaos-spawn/vortex/corruptor. So a downed BOT, an awaiting-rescue human, or a disabler-grabbed ally produced `VETOED=0` and the bot leashed away (`console-2026-07-06-20.23.14` 10254-10322: bot teleported to the standing human 3x ~2 s after the downed ally's aid flag cleared).
+
+### Fix (host-side; bot AI is server-owned, no RPC/NetworkLookup -- inert on clients)
+- `_gt_any_side_teammate_needs_aid` (`_gt_bot_fixes.lua`) now walks `side:player_units()` (`side.lua:222` -- the unfiltered `_player_units` roster that keeps bots AND awaiting-rescue units, the same roster FIX 3's rescue picker uses) with a new broader predicate `_gt_status_needs_aid_or_rescue` (`is_disabled` minus `is_dead()`/`is_overpowered()`, plus awaiting-rescue). Reading the ally's LIVE state every frame is what "pins" the errand across the `target_ally_need_type` flicker. The should_teleport veto and the #515 `cant_reach_ally` veto both consume this helper, so they broaden together; the #492 stall watchdog reads the same scan, so its unreachable-aid bailout composes (an unreachable down/awaiting still bails so the bot regroups -- no stranding).
+- Trade-off: a bot no longer leashes past a teammate who merely awaits rescue (the old split+leash micro-benefit). #492 reinstates recovery within its no-progress window.
+
+### Regression
+- New `/gt_regression_test` check `gt_bot384_needs_aid_or_rescue_predicate`: drives `_gt_status_needs_aid_or_rescue` through the full 12-case truth table with a stub status extension (knocked/hook/ledge/pounce/pack-master/tentacle/chaos-spawn/vortex/corruptor/awaiting all true; healthy + ledge-pulled-up false) and asserts marker `GT_BOT384_AWAITING_DISABLER_VETO_MARKER`, so narrowing the roster or predicate back is caught at load.
+
+### Test method (coop, 2+ testers -- needs a real downed teammate + a standing human for the leash target)
+1. Host with 2 humans + bots (Ensrick + RainReligion pattern), aid-priority ON (Bot Options master + `gt_bot_aid_priority`). One human pushes ~40 m ahead; the other goes down (knocked, then let them bleed to awaiting-rescue) near the bots.
+2. Watch a bot assigned to the downed ally: it must path in and stay (revive / rescue), never snap-teleport to the standing human while the ally is knocked, awaiting-rescue, or disabler-grabbed. In the log, `[gt_bot:139] teleport VETOED` should now appear for these states (previously VETOED=0); if the down is genuinely unreachable, `[gt:492] ... BAILED` should fire and only then may the bot regroup.
+3. `/gt_regression_test` must pass `gt_bot384_needs_aid_or_rescue_predicate`.
+
 ## v0.2.211-dev (2026-07-13) -- #427 _dbg_alert log-only via engine printf [untested]
 
 - `_dbg_alert` rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). Definition in `general_tweaker_dev.lua`; the `mod._gt_dbg_alert` export consumed by `_gt_lobby_motd.lua` / `_gt_lobby_failed_join_reveal.lua` picks up the new routing automatically.
