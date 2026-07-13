@@ -47,6 +47,130 @@ local mod = get_mod("cim_dev")
 local _fake_skin_backend_ids = {}
 local _pending_local_craft = nil
 
+-- Issue #563: local illusion overrides for server-owned (vanilla) item
+-- instances. PlayFabMirrorBase.inventory_request_cb clears and repopulates
+-- `_inventory_items`, and `_update_data` derives item.skin from the server's
+-- CustomData.skin (playfab_mirror_base.lua:1420-1461, 1723-1779). Persisting
+-- only the skin on the live mirror therefore cannot survive the next mirror
+-- population. Store the user's local choice by the exact ItemInstanceId and
+-- reapply only after BackendManagerPlayFab:is_mirror_ready() says the mirror is
+-- complete (backend_manager_playfab.lua:1166-1171). Never key this by template:
+-- two copies of the same weapon must be able to carry different illusions.
+local _CIM563_OVERRIDE_SETTING = "vanilla_skin_overrides_by_backend_id"
+local _cim563_ready_seen = false
+local _cim563_last_mirror = nil
+
+local function _cim563_skin_exists(skin_key)
+    return type(skin_key) == "string"
+        and WeaponSkins
+        and WeaponSkins.skins
+        and rawget(WeaponSkins.skins, skin_key) ~= nil
+end
+
+-- Pure planner exposed for the runtime regression check. It deliberately
+-- accepts two items with the same ItemId and selects by inventory[backend_id]
+-- only; that is the invariant issue #563 must preserve.
+mod._cim563_plan_vanilla_skin_rehydrate = function(saved, inventory, skin_exists)
+    local apply, prune, invalid_skin = {}, {}, {}
+    if type(saved) ~= "table" or type(inventory) ~= "table" then
+        return apply, prune, invalid_skin
+    end
+    skin_exists = skin_exists or _cim563_skin_exists
+    for backend_id, skin_key in pairs(saved) do
+        if type(backend_id) ~= "string" or type(skin_key) ~= "string" then
+            prune[#prune + 1] = backend_id
+        else
+            local item = rawget(inventory, backend_id)
+            if not item then
+                prune[#prune + 1] = backend_id
+            else
+                local slot_type = item.data and item.data.slot_type
+                if slot_type ~= "melee" and slot_type ~= "ranged" then
+                    prune[#prune + 1] = backend_id
+                elseif skin_exists(skin_key) then
+                    apply[backend_id] = { item = item, skin = skin_key }
+                else
+                    -- Keep the record: the skin may belong to a temporarily
+                    -- disabled sibling mod. Only a missing ITEM id is stale.
+                    invalid_skin[#invalid_skin + 1] = backend_id
+                end
+            end
+        end
+    end
+    return apply, prune, invalid_skin
+end
+
+local function _cim563_rehydrate_ready_mirror(mirror)
+    local inventory = mirror and mirror._inventory_items
+    if type(inventory) ~= "table" then return false end
+
+    local saved = mod:get(_CIM563_OVERRIDE_SETTING)
+    if type(saved) ~= "table" then saved = {} end
+    local apply, prune, invalid_skin = mod._cim563_plan_vanilla_skin_rehydrate(saved, inventory)
+    local applied = 0
+    for backend_id, row in pairs(apply) do
+        local item = row.item
+        item.skin = row.skin
+        item.bypass_skin_ownership_check = true
+        if item.CustomData then item.CustomData.skin = row.skin end
+        applied = applied + 1
+        pcall(printf, "[cim:563] rehydrated bid=%s item=%s skin=%s",
+            tostring(backend_id), tostring(item.ItemId or item.key), tostring(row.skin))
+    end
+
+    for _, backend_id in ipairs(prune) do
+        saved[backend_id] = nil
+        pcall(printf, "[cim:563] pruned_missing bid=%s", tostring(backend_id))
+    end
+    if #prune > 0 then mod:set(_CIM563_OVERRIDE_SETTING, saved) end
+
+    if applied > 0 and Managers.backend and Managers.backend.dirtify_interfaces then
+        pcall(Managers.backend.dirtify_interfaces, Managers.backend)
+    end
+    pcall(printf, "[cim:563] ready_rehydrate applied=%d pruned=%d deferred_skin=%d saved=%d",
+        applied, #prune, #invalid_skin, (function()
+            local n = 0
+            for _ in pairs(saved) do n = n + 1 end
+            return n
+        end)())
+    mod._cim563_last_rehydrate = {
+        applied = applied,
+        pruned = #prune,
+        deferred_skin = #invalid_skin,
+    }
+    return true
+end
+
+mod._cim563_reset_vanilla_skin_rehydrate = function()
+    _cim563_ready_seen = false
+end
+
+mod._cim563_update_vanilla_skin_overrides = function()
+    local backend = Managers and Managers.backend
+    local mirror = backend and backend.get_backend_mirror and backend:get_backend_mirror()
+    if mirror ~= _cim563_last_mirror then
+        _cim563_last_mirror = mirror
+        _cim563_ready_seen = false
+    end
+
+    local ready = false
+    if backend and type(backend.is_mirror_ready) == "function" then
+        local ok, value = pcall(backend.is_mirror_ready, backend)
+        ready = ok and value == true
+    end
+    if not ready then
+        -- A PlayFab inventory refresh drives readiness false while requests are
+        -- pending. Arm the next true edge so server data cannot overwrite the
+        -- local selection permanently.
+        _cim563_ready_seen = false
+        return
+    end
+    if _cim563_ready_seen then return end
+    if _cim563_rehydrate_ready_mirror(mirror) then
+        _cim563_ready_seen = true
+    end
+end
+
 -- DLC ownership gate.
 local function _skin_requires_unowned_dlc(skin_key)
     -- ItemMasterList.__index calls Crashify on unknown keys
@@ -175,9 +299,10 @@ mod._cim_try_illusion_apply = function(self, career_name, item_backend_ids, reci
         weapon_item.CustomData.skin = skin_key
     end
 
-    -- Persist skin choice for modded crafts so it survives a game restart.
-    -- Vanilla items can't be persisted (PlayFab resyncs on launch), but
-    -- modded items live in cim's forge save and we're authoritative for them.
+    -- Persist skin choice for modded crafts in their forge record. For a
+    -- vanilla/server-owned item, persist a separate LOCAL override by exact
+    -- backend instance id; issue #563 must never affect another copy sharing
+    -- the same weapon template.
     if mod._cim_is_modded_backend_id and mod._cim_is_modded_backend_id(weapon_backend_id) then
         local craft = mod._cim_get_craft and mod._cim_get_craft(weapon_backend_id)
         if craft then
@@ -186,6 +311,13 @@ mod._cim_try_illusion_apply = function(self, career_name, item_backend_ids, reci
             mod:info("[illusion_swap] persisted skin '%s' to modded craft %s",
                 skin_key, weapon_backend_id)
         end
+    else
+        local saved = mod:get(_CIM563_OVERRIDE_SETTING)
+        if type(saved) ~= "table" then saved = {} end
+        saved[weapon_backend_id] = skin_key
+        mod:set(_CIM563_OVERRIDE_SETTING, saved)
+        pcall(printf, "[cim:563] saved bid=%s item=%s skin=%s",
+            tostring(weapon_backend_id), tostring(weapon_item.ItemId or weapon_item.key), tostring(skin_key))
     end
 
     local id = self:_new_id()
@@ -241,7 +373,7 @@ mod:command("cim_skins", "How to change a weapon skin in modded realm", function
     mod:echo("  3) Pick the Apply Skin tab — ALL illusions are unlocked here in")
     mod:echo("     modded realm, including DLC skins you own.")
     mod:echo("  4) Pick an illusion in the grid, then click Apply.")
-    mod:echo("  Note: skin choice is persisted on cim crafts across restarts.")
+    mod:echo("  Note: skin choices are persisted per exact item across restarts.")
 end)
 
 -- ============================================================

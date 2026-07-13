@@ -4686,6 +4686,9 @@ local _cim_loadout_restore_timer = nil
 
 mod.on_game_state_changed = function()
     _athanor_retry_pending()
+    if mod._cim563_reset_vanilla_skin_rehydrate then
+        mod._cim563_reset_vanilla_skin_rehydrate()
+    end
     -- Schedule a deferred loadout restore. 1.0s is empirically enough for
     -- PlayFab's signin → request_characters → _set_inital_career_data →
     -- _fix_career_data round-trip to complete and the mirror to settle.
@@ -4697,6 +4700,13 @@ mod.update = function(dt)
     -- Install the BackendUtils.set_loadout_item capture once the backend (and LA
     -- bridge) are up. Cheap once-guarded no-op after install. Issue #22 root fix.
     _install_backendutils_capture()
+
+    -- #563: server inventory refreshes restore CustomData.skin into the live
+    -- mirror. Reapply exact-instance local overrides only on a confirmed
+    -- PlayFab mirror-ready edge; the helper is a cheap no-op otherwise.
+    if mod._cim563_update_vanilla_skin_overrides then
+        mod._cim563_update_vanilla_skin_overrides()
+    end
 
     if _cim_loadout_restore_timer then
         _cim_loadout_restore_timer = _cim_loadout_restore_timer - (dt or 0)
@@ -5990,6 +6000,33 @@ _rt_register("restore_after_playfab_inventory_populated", function()
     for _ in pairs(inv) do count = count + 1; if count > 0 then break end end
     if count == 0 then
         return "PlayFab inventory empty at restore time -- _restore_modded_loadout would silently no-op"
+    end
+end)
+
+_rt_register("issue563_vanilla_skin_override_exact_backend_id", function()
+    local plan = mod._cim563_plan_vanilla_skin_rehydrate
+    if type(plan) ~= "function" then
+        return "#563 exact-backend-id rehydrate planner missing"
+    end
+    local shared_template = { slot_type = "melee", key = "es_sword_shield_breton" }
+    local inventory = {
+        VANILLA_INSTANCE_A = { ItemId = "es_sword_shield_breton", data = shared_template },
+        VANILLA_INSTANCE_B = { ItemId = "es_sword_shield_breton", data = shared_template },
+    }
+    local saved = {
+        VANILLA_INSTANCE_A = "es_sword_shield_breton_skin_03",
+        MISSING_INSTANCE = "es_sword_shield_breton_skin_04_magic_01_magic_01",
+    }
+    local apply, prune = plan(saved, inventory, function() return true end)
+    if not apply.VANILLA_INSTANCE_A then return "target exact backend id was not planned" end
+    if apply.VANILLA_INSTANCE_B then
+        return "same-template sibling was modified -- override regressed to template-wide semantics"
+    end
+    if #prune ~= 1 or prune[1] ~= "MISSING_INSTANCE" then
+        return "missing backend id was not the sole stale record selected for pruning"
+    end
+    if apply.VANILLA_INSTANCE_A.item ~= inventory.VANILLA_INSTANCE_A then
+        return "planner did not retain the exact mirror item instance"
     end
 end)
 
