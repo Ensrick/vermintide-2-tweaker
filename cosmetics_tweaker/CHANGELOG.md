@@ -1,5 +1,46 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.86-dev — 2026-07-13 — #513 Score-screen hero lineup now wears LA hats/outfits [untested]
+
+Fixes #513: the end-of-round score screen rendered every hero with the vanilla hat -
+the reporter's Grail Knight Loremaster helm (purified) showed as the base helm.
+
+- **Root cause.** The score lineup is a FOURTH rendering surface none of the LA apply
+  paths covered. `LevelEndView._setup_team_previewer` (`level_end_view_v2.lua:403`)
+  spawns `TeamPreviewer`, which instantiates the BASE `HeroPreviewer`
+  (`team_previewer.lua:20`) and equips each hero from `players_session_scores` -
+  data `ScoreboardHelper.get_grouped_topic_statistics` read from player SYNC data
+  (`scoreboard_helper.lua:371` via `CosmeticUtils.get_cosmetic_slot`). That sync data
+  carries only the NET-SAFE VANILLA key our `update_cosmetic_slot` hook substitutes
+  for wire safety (issue 421 class), and `equip_item` runs with `backend_id = nil`
+  (`team_previewer.lua:126`), so every LA identity is stripped before the previewer
+  spawns. No attachment extension, no husk wield - none of the existing hooks fire.
+- **Fix.** Recover the LA identity from the synced per-peer store
+  (`_la_equips_by_peer`, present on every mod peer including the wearer): new
+  `TeamPreviewer._spawn_hero` hook resolves the hero's peer from
+  `hero_data.profile_index` (new nil-safe `mod._cos_score_peer_for_profile`, using the
+  context's profile_synchronizer with player fallbacks) and stamps it on the previewer;
+  the existing `HeroPreviewer.equip_item` hook grew a `slot_hat` branch that swaps the
+  hat mesh to `variant.new_units[1]` via a bracketed `get_item_units` override
+  (residency-gated with `Application.can_get`, issue 270 class - degrades to the
+  vanilla hat, never a spawn assert) so the previewer itself preloads the LA unit;
+  the existing `_spawn_item_unit_combined` hook paints kind="texture" hats on the
+  just-spawned hat unit (`apply_new_skin_from_texture`, LA_SYNC_MODEL 6.2); new
+  `TeamPreviewer.cb_hero_unit_spawned_skin_preview` hook_safe paints kind="armor"
+  outfits onto the spawned body (mesh_unit + character_unit). Covers the local
+  player AND every peer whose LA state is in the store (bots excluded - store is
+  human-only). Hooks live on the previewer classes, not the end views: the deus/
+  weave views are class-copies (`LevelEndViewDeus = class(_, LevelEndView)`), so
+  view-level hooks would miss them. `[la-state] SCORE-*` printf markers at every
+  decision point. Weapon-side (offhand/illusion) score rendering is NOT in this
+  slice - the lineup weapon resolves through a separate verified-weapon path.
+- **Passing fix.** `_spawn_item_unit_combined` now forwards the 8th vanilla arg
+  `skip_wield_anim` (`world_hero_previewer.lua:917`) that the 7-param wrapper
+  silently dropped (multi-arg truncation, VMF_RECIPES 2).
+- **rt-check.** `cos_la_score_screen_apply_wired` (resolver present + nil-safe,
+  store present).
+- `cosmetics_tweaker.lua` - `MOD_VERSION` -> `0.9.86-dev`.
+
 ## 0.9.85-dev — 2026-07-13 — #514 LA shield pick no longer paints onto a different wielded weapon (Sword and Mace mace wrap) [untested]
 
 Fixes #514: with an LA shield pick committed on Grail Knight's secondary Bretonnian

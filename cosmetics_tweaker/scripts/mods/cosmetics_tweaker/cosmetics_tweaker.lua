@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.85-dev"
+local MOD_VERSION = "0.9.86-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -3046,6 +3046,21 @@ if BackendUtils then
         local result = func(item_data, backend_id, skin, career_name)
         if not result then return result end
 
+        -- v0.9.86-dev (#513): score-screen previewer LA hat MESH swap. The bracket
+        -- (mod._cos_score_hat_swap) is set by the HeroPreviewer.equip_item hook ONLY
+        -- around its single synchronous vanilla call, while the end-of-round
+        -- TeamPreviewer lineup equips a wearer's synced LA hat. Vanilla equip_item
+        -- reads result.unit for BOTH the spawn path and the package preload list
+        -- (world_hero_previewer.lua:740/759), so swapping here makes the previewer
+        -- itself load + spawn the LA mesh. Residency was pre-gated at the bracket
+        -- set site (Application.can_get), mirroring the #270 attachment gate.
+        if mod._cos_score_hat_swap and item_data and item_data.slot_type == "hat" and result.unit then
+            local prev_unit = result.unit
+            result.unit = mod._cos_score_hat_swap
+            if printf then printf("[la-state] SCORE-HAT mesh-swap %s -> %s",
+                tostring(prev_unit), tostring(result.unit)) end
+        end
+
         -- #518: deus-yield resolved ONCE per call. Gates the weapon-side mesh
         -- overrides below (husk LA swap, husk vanilla swap, live-body
         -- _offhand_selection) so CW upgrade skins render un-stomped.
@@ -3800,7 +3815,157 @@ mod:hook("HeroPreviewer", "equip_item", function(func, self, item_name, slot, ba
     if type(item_name) == "string" then
         _store_equip_skin(self, item_name, skin, backend_id)
     end
+    -- v0.9.86-dev (#513): end-of-round score screen LA hat. The score lineup
+    -- (TeamPreviewer:_spawn_hero -> HeroPreviewer, the BASE class - the derived
+    -- MenuWorldPreviewer copy never runs here) equips the hat from
+    -- players_session_scores, which carries only the NET-SAFE VANILLA key
+    -- (CosmeticUtils.get_cosmetic_slot reads player sync data our
+    -- update_cosmetic_slot hook substituted for wire safety), with backend_id
+    -- nil - so every LA identity is gone by the time this previewer spawns.
+    -- Recover it from the synced per-peer store: _cos_wearer_peer is stamped
+    -- by our TeamPreviewer._spawn_hero hook (score screen only; the keep
+    -- inventory previewer never has it). Mesh swaps via the bracketed
+    -- get_item_units branch; paint happens post-spawn in
+    -- _spawn_item_unit_combined (kind="texture" hats render vanilla colours
+    -- without it, LA_SYNC_MODEL 6.2).
+    local swap_unit = nil
+    if self._cos_wearer_peer and type(slot) == "table" and slot.name == "slot_hat" then
+        self._cos_score_hat = nil
+        local peer_slots = mod._la_equips_by_peer and mod._la_equips_by_peer[self._cos_wearer_peer]
+        local entry = peer_slots and peer_slots.slot_hat
+        if entry and entry.kind == "hat" and entry.armoury_key then
+            local la = get_mod("Loremasters-Armoury")
+            local variant = la and la.SKIN_LIST and la.SKIN_LIST[entry.armoury_key]
+            if variant then
+                local la_unit = variant.new_units and variant.new_units[1]
+                if la_unit then
+                    -- Residency gate (mirrors the #270 create_attachment gate):
+                    -- a non-loadable mesh degrades to the synced vanilla hat,
+                    -- never a World.spawn_unit C-assert.
+                    local cg = Application and Application.can_get
+                    if cg then
+                        local okr, resident = pcall(cg, "unit", la_unit)
+                        if not (okr and resident) then la_unit = nil end
+                    end
+                end
+                swap_unit = la_unit
+                self._cos_score_hat = {
+                    armoury_key = entry.armoury_key,
+                    vanilla_key = entry.vanilla_key or item_name,
+                }
+                if printf then printf("[la-state] SCORE-HAT equip peer=%s key=%s mesh=%s",
+                    tostring(self._cos_wearer_peer), tostring(entry.armoury_key),
+                    tostring(swap_unit or "(paint-only)")) end
+            end
+        end
+    end
+    if swap_unit then
+        mod._cos_score_hat_swap = swap_unit
+        local r1, r2 = func(self, item_name, slot, backend_id, skin, skip_wield_anim)
+        mod._cos_score_hat_swap = nil
+        return r1, r2
+    end
     return func(self, item_name, slot, backend_id, skin, skip_wield_anim)
+end)
+
+-- ============================================================
+-- #513: end-of-round score screen (TeamPreviewer hero lineup) LA apply
+-- ============================================================
+-- The adventure/deus/weave end views build their hero lineup from
+-- players_session_scores (ScoreboardHelper reads player SYNC data =
+-- net-safe vanilla keys) and spawn it through TeamPreviewer ->
+-- HeroPreviewer (team_previewer.lua:20/126). None of the live-body /
+-- husk apply paths run there (no attachment extension, no husk wield),
+-- so LA hats/outfits rendered vanilla (#513). NOTE: the end views
+-- themselves are class-COPIES (LevelEndViewDeus = class(_, LevelEndView)
+-- copies methods at boot), so we hook the previewer classes that are
+-- instantiated directly, never the views.
+
+-- Resolve which peer a score-screen hero belongs to. hero_data carries
+-- profile_index but NOT peer_id (LevelEndView._get_hero_from_score drops
+-- it), and in adventure each profile is held by at most one human player,
+-- so profile identity is sufficient. Bots are irrelevant: the LA store is
+-- human-only. ctx = TeamPreviewer's ingame_ui_context (has
+-- profile_synchronizer, state_ingame_running.lua:287); falls back to the
+-- network manager's synchronizer, then to player:profile_index().
+mod._cos_score_peer_for_profile = function(profile_index, ctx)
+    if not profile_index then return nil end
+    local pm = Managers and Managers.player
+    if not (pm and pm.human_players) then return nil end
+    local psync = ctx and ctx.profile_synchronizer
+    if not psync then
+        local ns = Managers.state and Managers.state.network
+        psync = ns and ns.profile_synchronizer
+    end
+    local ok_players, players = pcall(pm.human_players, pm)
+    if not ok_players or type(players) ~= "table" then return nil end
+    for _, p in pairs(players) do
+        local pi
+        if psync and psync.profile_by_peer and p.peer_id then
+            local ok_lpid, lpid = pcall(p.local_player_id, p)
+            local ok_pi, r = pcall(psync.profile_by_peer, psync, p.peer_id, ok_lpid and lpid or 1)
+            if ok_pi then pi = r end
+        end
+        if pi == nil and type(p.profile_index) == "function" then
+            local ok_pi, r = pcall(p.profile_index, p)
+            if ok_pi then pi = r end
+        end
+        if pi == profile_index then
+            return p.peer_id
+        end
+    end
+    return nil
+end
+
+-- Stamp the wearer peer onto each score-screen previewer BEFORE its spawn
+-- request goes out; the HeroPreviewer.equip_item hat branch above and the
+-- armor paint below key off it.
+mod:hook("TeamPreviewer", "_spawn_hero", function(func, self, hero_previewer, hero_data)
+    if hero_previewer and hero_data then
+        local okp, peer = pcall(mod._cos_score_peer_for_profile, hero_data.profile_index, self._context)
+        peer = okp and peer or nil
+        hero_previewer._cos_wearer_peer = peer
+        if peer and printf then
+            local peer_slots = mod._la_equips_by_peer and mod._la_equips_by_peer[peer]
+            printf("[la-state] SCORE-PEER profile=%s career=%s -> peer=%s store(hat=%s,skin=%s)",
+                tostring(hero_data.profile_index), tostring(hero_data.career_index), tostring(peer),
+                tostring(peer_slots and peer_slots.slot_hat and peer_slots.slot_hat.armoury_key or "-"),
+                tostring(peer_slots and peer_slots.slot_skin and peer_slots.slot_skin.armoury_key or "-"))
+        end
+    end
+    return func(self, hero_previewer, hero_data)
+end)
+
+-- LA ARMOR (slot_skin, kind="armor") on the score-screen body. The hero
+-- spawns with the net-safe vanilla base skin (player_data.hero_skin);
+-- the LA outfit is a texture paint over it. cb_hero_unit_spawned_skin_preview
+-- fires right after _spawn_hero_unit (world_hero_previewer.lua:531-536), so
+-- character_unit/mesh_unit exist. mesh_unit is the visible skin mesh - LA's
+-- own preview repaint targets it (LA utils/hooks.lua:239); character_unit
+-- painted too for parity with the live-body path (blanket set_texture over
+-- meshes without the armor slots is a no-op, same as LA's own body paint).
+mod:hook_safe("TeamPreviewer", "cb_hero_unit_spawned_skin_preview", function(self, hero_previewer, hero_data)
+    local peer = hero_previewer and hero_previewer._cos_wearer_peer
+    local peer_slots = peer and mod._la_equips_by_peer and mod._la_equips_by_peer[peer]
+    local entry = peer_slots and peer_slots.slot_skin
+    if not (entry and entry.kind == "armor" and entry.armoury_key) then return end
+    local la = get_mod("Loremasters-Armoury")
+    local variant = la and la.SKIN_LIST and la.SKIN_LIST[entry.armoury_key]
+    if not (variant and type(la.apply_new_skin_from_texture) == "function") then return end
+    local world = hero_previewer.world
+    local targets = {}
+    local mesh_unit = hero_previewer.mesh_unit
+    local character_unit = hero_previewer.character_unit
+    if type(mesh_unit) == "userdata" and Unit.alive(mesh_unit) then targets[#targets + 1] = mesh_unit end
+    if type(character_unit) == "userdata" and Unit.alive(character_unit) then targets[#targets + 1] = character_unit end
+    for i = 1, #targets do
+        LA_BRIDGE._bridge_active = true
+        local ok, err = pcall(la.apply_new_skin_from_texture, entry.armoury_key, world, entry.vanilla_key, targets[i])
+        LA_BRIDGE._bridge_active = false
+        if printf then printf("[la-state] SCORE-ARMOR paint key=%s target=%d/%d ok=%s%s",
+            tostring(entry.armoury_key), i, #targets, tostring(ok),
+            ok and "" or (" err=" .. tostring(err))) end
+    end
 end)
 
 local function _spawn_item_post(self, item_name, spawn_data)
@@ -8223,7 +8388,10 @@ end
 -- registering its own. Eliminates the boot rehook warning. MH calls
 -- happen BEFORE vanilla; LA bridge queue happens AFTER vanilla (matching
 -- the prior hook_safe ordering).
-local function _spawn_item_unit_combined(func, self, unit, item_slot_type, item_template, attachment_node_linking, scene_graph_links, material_settings)
+-- v0.9.86-dev (#513): signature extended with skip_wield_anim - vanilla
+-- _spawn_item passes it as the 8th arg (world_hero_previewer.lua:917) and the
+-- previous 7-param wrapper silently dropped it (multi-arg truncation, VMF_RECIPES 2).
+local function _spawn_item_unit_combined(func, self, unit, item_slot_type, item_template, attachment_node_linking, scene_graph_links, material_settings, skip_wield_anim)
     -- MH work before vanilla (only when embed is active, not dormant).
     if MH_EMBED and not MH_EMBED.dormant and unit then
         MH_EMBED.replace_textures(unit)
@@ -8231,7 +8399,7 @@ local function _spawn_item_unit_combined(func, self, unit, item_slot_type, item_
         MH_EMBED.attach_anim_extension(unit)
     end
     -- Vanilla.
-    local r1, r2 = func(self, unit, item_slot_type, item_template, attachment_node_linking, scene_graph_links, material_settings)
+    local r1, r2 = func(self, unit, item_slot_type, item_template, attachment_node_linking, scene_graph_links, material_settings, skip_wield_anim)
     -- v0.9.7: stash unit→backend_id for previewer-spawned weapon units so
     -- the glow picker's live preview can resolve the right item. The
     -- backend_id was captured on `self` by the equip_item hook below.
@@ -8240,6 +8408,24 @@ local function _spawn_item_unit_combined(func, self, unit, item_slot_type, item_
     end
     -- LA bridge queue after vanilla returns.
     _spawn_item_unit_la_hook(self, unit)
+    -- v0.9.86-dev (#513): score-screen LA hat PAINT. _cos_score_hat is stamped by
+    -- the HeroPreviewer.equip_item hook only on TeamPreviewer-owned previewers whose
+    -- wearer has a synced LA hat. kind="texture" hats need apply_new_skin_from_texture
+    -- on the JUST-SPAWNED hat unit or the mesh renders in vanilla colours
+    -- (LA_SYNC_MODEL 6.2); kind="unit" meshes carry their own baked material and the
+    -- call no-ops (variant.textures nil). Mirrors the husk hat paint call shape.
+    if self._cos_score_hat and item_slot_type == "hat" and type(unit) == "userdata" and Unit.alive(unit) then
+        local la = get_mod("Loremasters-Armoury")
+        if la and type(la.apply_new_skin_from_texture) == "function" then
+            local info = self._cos_score_hat
+            LA_BRIDGE._bridge_active = true
+            local ok, err = pcall(la.apply_new_skin_from_texture, info.armoury_key, self.world, info.vanilla_key, unit)
+            LA_BRIDGE._bridge_active = false
+            if printf then printf("[la-state] SCORE-HAT paint key=%s ok=%s%s",
+                tostring(info.armoury_key), tostring(ok),
+                ok and "" or (" err=" .. tostring(err))) end
+        end
+    end
     return r1, r2
 end
 mod:hook("HeroPreviewer", "_spawn_item_unit", _spawn_item_unit_combined)
@@ -8729,6 +8915,22 @@ _rt_register("cos_la_weapon_identity_gate_local_wearer", function()
     if not m then return "slot-key entry must match for kind=illusion (allow_slot_key=true)" end
     local m2, w2 = mod._la_wielded_item_matches(inv, {}, "sword_and_mace_template", false)
     if m2 or w2 ~= nil then return "unresolvable wielded item must be restrictive (false, nil)" end
+end)
+
+-- #513: the end-of-round score-screen LA apply must stay wired: the peer
+-- resolver the TeamPreviewer._spawn_hero hook uses exists and is nil-safe
+-- (a nil profile must resolve to nil, never error), and the synced per-peer
+-- store the hat/armor branches read is present. Functional; no engine calls.
+_rt_register("cos_la_score_screen_apply_wired", function()
+    if type(mod._cos_score_peer_for_profile) ~= "function" then
+        return "mod._cos_score_peer_for_profile missing (#513 score-screen peer resolver)"
+    end
+    local ok, v = pcall(mod._cos_score_peer_for_profile, nil, nil)
+    if not ok then return "score peer resolver errored on nil: " .. tostring(v) end
+    if v ~= nil then return "score peer resolver must return nil for a nil profile" end
+    if type(mod._la_equips_by_peer) ~= "table" then
+        return "mod._la_equips_by_peer store missing (#513 score path reads it)"
+    end
 end)
 
 -- #264: reconcile must treat a missing store entry as TERMINAL ("no-entry"),
