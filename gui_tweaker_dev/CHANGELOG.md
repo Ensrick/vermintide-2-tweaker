@@ -5,6 +5,39 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.233-dev (2026-07-13) -- HUD edit mode: suspend local input + confine drag to the HUD area [untested] [Issue 310]
+
+Two of the user's active #310 complaints (2026-07-12: "input to the game should be suspended", "the mouse
+[shouldn't] move the camera around", "confined to a box that is the edges of the displayable HUD area").
+No visual RESIZE in this build -- see "Deferred" below.
+
+- **Input suspension (`_gut_freecam.lua`, `_hud_customizer.lua`).** While HUD edit mode is active, local
+  gameplay input is now suspended so the mouse drives the drag editor instead of aiming/turning the character
+  and camera. Implemented by returning `true` from `PlayerInputExtension.is_input_blocked` for the LOCAL player
+  while editing -- the same reliable freeze freecam uses (`player_input_extension.lua:149` nullifies the read).
+  CONSOLIDATED into freecam's existing `is_input_blocked` hook (VMF drops a 2nd hook on the same `(Class,
+  method)`, repo NON-NEGOTIABLE 8); the gate is `Customizer.should_suspend_input()` = edit mode active AND no
+  cutscene owns input (cutscene skip runs on a separate service, so it is excluded). ESC/chat/keybinds ride
+  other services and keep working, so the exit keybind and ESC still close the mode. `[gut:310]` printf on the
+  ON/OFF transition; the existing one-line echo is unchanged.
+- **Drag confinement (`_hud_customizer.lua`).** Dragging a gut-owned HUD element now clamps its box
+  `[world, world+size]` inside the displayable HUD area `[0 .. res_w*inv_scale] x [0 .. res_h*inv_scale]`
+  (`ui_scenegraph.lua:210-246`, the same reference space as the cursor + `world_position`), so an element can
+  no longer be dragged off-screen. Pure `Customizer.confine_delta` clamps in world-space and back-solves the
+  confined delta using the delta applied last frame; an element larger than the area on an axis is left
+  unclamped so it is never trapped. UI-Tweaks-owned elements (buff/boss/overcharge/energy when HideBuffs owns
+  them, #312) delegate to HB's own layout and are NOT clamped here.
+- **Regression (`gui_tweaker_dev.lua`).** Two new `/gut_regression_test` checks: `hud_confine_delta_clamps`
+  (far/near/in-bounds/applied-delta/oversize cases) and `hud_edit_mode_input_suspend_api` (seam present,
+  edit-mode-gated, freecam still consults it).
+- **Deferred (still open on #310, needs in-game iteration a build-only pass cannot verify):** corner-drag
+  RESIZE (per the owner's own research the visual scale is per-widget style-field walking with real distortion
+  risk on text/atlas passes -- not shippable "solid" without live testing), the box/element MISALIGNMENT (gut
+  collapses vanilla's separate drag-node and move-node into one pivot node, so pivot-anchored boxes draw off
+  the rendered element -- fix needs a per-element drag-node re-map verified in-game), native-Windows resize
+  cursor, hidden-element previews, per-number sub-elements, and snap guides. These should become #310
+  sub-issues.
+
 ## 0.2.232-dev (2026-07-13) -- #537 on_setting_changed no longer re-latches the skippable_cutscenes global [untested] [Issue 537]
 
 Removes the last surviving global-latch of the shared engine skip gate, an issue-275 regression that escaped the

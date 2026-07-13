@@ -43,6 +43,40 @@ end
 
 CustomizerModule.REGISTRY = REGISTRY
 
+-- (#310) Displayable HUD area, expressed in the SAME reference space as the cursor
+-- (UIInverseScaleVectorToResolution) and node.world_position. ui_scenegraph.lua:210-213
+-- + the root/`fit` branches (:236-246) put that space at [0 .. res_w*inv_scale] x
+-- [0 .. res_h*inv_scale] -- i.e. 1920x1080 at 1080p, scaled proportionally at other
+-- resolutions. nil-safe -> 1080p default so a missing RESOLUTION_LOOKUP never traps a drag.
+function CustomizerModule.hud_bounds()
+    local r = rawget(_G, "RESOLUTION_LOOKUP")
+    local inv = (r and r.inv_scale) or 1
+    local w = (r and r.res_w) or 1920
+    local h = (r and r.res_h) or 1080
+    return { min_x = 0, min_y = 0, max_x = w * inv, max_y = h * inv }
+end
+
+-- (#310) Confine a proposed drag delta so the element's box [world, world+size] stays
+-- inside `bounds` (the displayable HUD area). world_x/y + size describe the element's
+-- LIVE box this frame; applied_dx/dy is the delta already applied (last frame), which
+-- lets us map delta-space onto world-space 1:1 (a delta change shifts world_position by
+-- the same amount, since the parent chain is fixed). Returns the clamped delta. Pure +
+-- unit-tested (`hud_confine_delta_clamps`). If the element is WIDER/TALLER than the area
+-- on an axis, that axis is left unclamped so an oversize element is never trapped.
+function CustomizerModule.confine_delta(world_x, world_y, size_x, size_y, applied_dx, applied_dy, dx, dy, bounds)
+    local wx = world_x + (dx - applied_dx)
+    local wy = world_y + (dy - applied_dy)
+    local max_x = bounds.max_x - (size_x or 0)
+    local max_y = bounds.max_y - (size_y or 0)
+    if max_x >= bounds.min_x then
+        if wx < bounds.min_x then wx = bounds.min_x elseif wx > max_x then wx = max_x end
+    end
+    if max_y >= bounds.min_y then
+        if wy < bounds.min_y then wy = bounds.min_y elseif wy > max_y then wy = max_y end
+    end
+    return wx - world_x + applied_dx, wy - world_y + applied_dy
+end
+
 -- O(1) lookup by widget id (used by drag/apply/reset/list).
 local REGISTRY_BY_ID = {}
 for i = 1, #REGISTRY do REGISTRY_BY_ID[REGISTRY[i].id] = REGISTRY[i] end
@@ -168,6 +202,30 @@ function CustomizerModule.is_edit_mode()
     return _edit_mode_sticky or _edit_mode_alt
 end
 
+-- (#310) Cutscene-owns-input probe (mirror of _gut_camera's _gut_cutscene_owns_camera):
+-- cutscene skip runs on a SEPARATE input service, so suspending PlayerInputExtension
+-- during a cutscene is both pointless and explicitly excluded by the mode's safety
+-- contract. pcall-guarded end to end (a nil entity manager in a menu returns false).
+local function _cutscene_active()
+    local mgr_state = Managers and Managers.state
+    local entity_mgr = mgr_state and mgr_state.entity
+    if not entity_mgr then return false end
+    local ok, cs = pcall(entity_mgr.system, entity_mgr, "cutscene_system")
+    if not ok or not cs then return false end
+    local ok2, active = pcall(cs.is_active, cs)
+    return ok2 and active or false
+end
+
+-- (#310) Whether HUD edit mode should suspend LOCAL gameplay input right now. The
+-- freecam PlayerInputExtension.is_input_blocked hook consults this (VMF drops a 2nd hook
+-- on that pair, so the edit-mode block is CONSOLIDATED into freecam's sole hook) to
+-- freeze the character + camera while edit mode is active, so the mouse drives the HUD
+-- editor rather than aiming/turning. Excludes cutscenes; edit-mode-gated (short-circuits
+-- before the cutscene probe when not editing, so it is cheap and menu-safe).
+function CustomizerModule.should_suspend_input()
+    return CustomizerModule.is_edit_mode() and not _cutscene_active()
+end
+
 -- Flip the sticky toggle and (de)assert the cursor visibility stack reason.
 function CustomizerModule.set_sticky(enabled)
     local prev = _edit_mode_sticky
@@ -232,10 +290,16 @@ function CustomizerModule.tick_activation()
             pcall(ShowCursorStack.show, "gut_edit_hud")
             -- _dbg: cursor_stack push
             pcall(_dbg, "[gui_tweaker] cursor_stack: push reason=gut_edit_hud")
+            -- (#310) User-visible diagnostic (printf, since mod logging is off): edit
+            -- mode is on, so local gameplay input is now suspended (freecam's
+            -- is_input_blocked hook reads should_suspend_input()).
+            printf("[gut:310] HUD edit mode ON -- local input suspended (resolution %s)",
+                tostring(_resolution_key or _resolution_key_now()))
         else
             pcall(ShowCursorStack.hide, "gut_edit_hud")
             -- _dbg: cursor_stack pop
             pcall(_dbg, "[gui_tweaker] cursor_stack: pop reason=gut_edit_hud")
+            printf("[gut:310] HUD edit mode OFF -- local input restored")
             _clear_drag_state()
         end
         _was_edit_mode = now
@@ -272,6 +336,23 @@ function CustomizerModule.tick_drag()
         if owned then
             pcall(sync.preview, _drag_active, dx, dy)  -- in-memory HB write; HB redraws next frame
         else
+            -- (#310) Confine the drag so the element's box stays within the displayable
+            -- HUD area. Uses the element's LIVE world box + the delta applied last frame
+            -- (_get_widget_offset still holds it, we overwrite below) to clamp in
+            -- world-space, then back-solves the confined delta. Owned elements delegate to
+            -- UI Tweaks and are left to HB's own layout, so this path is gut-native only.
+            local entry = REGISTRY_BY_ID[_drag_active]
+            local view  = entry and _live_views[entry.class_name]
+            local node  = view and view.ui_scenegraph and view.ui_scenegraph[entry.scenegraph_node_id]
+            if node and node.world_position then
+                local size = (node.size and node.size[1] and node.size[1] > 0 and node.size)
+                    or (entry and entry.nominal_size) or { 0, 0 }
+                local adx, ady = _get_widget_offset(_drag_active)
+                local ok_c, cdx, cdy = pcall(CustomizerModule.confine_delta,
+                    node.world_position[1], node.world_position[2], size[1], size[2],
+                    adx, ady, dx, dy, CustomizerModule.hud_bounds())
+                if ok_c then dx, dy = cdx, cdy end
+            end
             _set_widget_offset(_drag_active, dx, dy)
         end
         if released then

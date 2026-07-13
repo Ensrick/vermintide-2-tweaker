@@ -360,10 +360,25 @@ end
 -- reads. is_input_blocked is checked in PlayerInputExtension.get
 -- (player_input_extension.lua:149) which then nullifies the value -- this is the
 -- reliable stop the old gt attempt was missing. Local-player-only so remote peers
--- (husk extensions) are untouched. Pre-flight: no other gut hook on this class.
+-- (husk extensions) are untouched.
+--
+-- (#310) CONSOLIDATED: HUD edit mode ALSO suspends local gameplay input here so the
+-- mouse drives the HUD drag/reposition editor instead of aiming/turning the character.
+-- This is the SAME (PlayerInputExtension, is_input_blocked) pair -- VMF drops a 2nd hook
+-- on it (repo NON-NEGOTIABLE 8), so the edit-mode block lives in this one body rather
+-- than a second hook in _hud_customizer.lua. The customizer's should_suspend_input()
+-- carries the gate (edit mode active AND no cutscene owns input); resolved at call time
+-- via mod._gut_hud_customizer so module load order does not matter. Pre-flight: this is
+-- gut's only hook on PlayerInputExtension.
 mod:hook("PlayerInputExtension", "is_input_blocked", function(func, self)
-    if _freecam_active and self.player and self.player == _local_player() then
-        return true
+    if self.player and self.player == _local_player() then
+        if _freecam_active then
+            return true
+        end
+        local cust = mod._gut_hud_customizer
+        if cust and cust.should_suspend_input and cust.should_suspend_input() then
+            return true
+        end
     end
     return func(self)
 end)

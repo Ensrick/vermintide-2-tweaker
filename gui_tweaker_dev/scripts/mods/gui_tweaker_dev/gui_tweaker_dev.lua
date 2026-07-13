@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.232-dev"
+local MOD_VERSION = "0.2.233-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1058,6 +1058,71 @@ _rt_register("hud_offset_preserves_vanilla_baseline", function()
     local ux, uy = Customizer.local_position_for("nonexistent_widget", 7, 9)
     if ux ~= 7 or uy ~= 9 then
         return string.format("unknown id: expected {7,9}, got {%s,%s}", tostring(ux), tostring(uy))
+    end
+end)
+
+-- (#310) Drag confinement: a HUD element must not be draggable off the displayable
+-- HUD area. Customizer.confine_delta clamps the element's box [world, world+size] into
+-- the bounds and back-solves the confined delta; this asserts the four cases the drag
+-- machine relies on (far-edge clamp, near-edge clamp, in-bounds passthrough, applied-
+-- delta accounting) plus the oversize-axis escape hatch (never trap a too-big element).
+_rt_register("hud_confine_delta_clamps", function()
+    if type(Customizer.confine_delta) ~= "function" then
+        return "Customizer.confine_delta missing (#310 confinement regressed)"
+    end
+    local b = { min_x = 0, min_y = 0, max_x = 1920, max_y = 1080 }
+    -- Box at world {100,100} size {200,50}, no prior delta. A huge +2000 drag clamps the
+    -- FAR edge to the bounds: x -> 1920-200 = 1720 (delta 1620); y -> 1080-50 = 1030 (delta 930).
+    local cdx, cdy = Customizer.confine_delta(100, 100, 200, 50, 0, 0, 2000, 2000, b)
+    if cdx ~= 1620 then return string.format("far-x clamp: expected 1620, got %s", tostring(cdx)) end
+    if cdy ~= 930  then return string.format("far-y clamp: expected 930, got %s", tostring(cdy)) end
+    -- A huge negative drag clamps the NEAR edge to 0: world 100 -> 0 (delta -100).
+    local ndx, ndy = Customizer.confine_delta(100, 100, 200, 50, 0, 0, -2000, -2000, b)
+    if ndx ~= -100 or ndy ~= -100 then
+        return string.format("near clamp: expected {-100,-100}, got {%s,%s}", tostring(ndx), tostring(ndy))
+    end
+    -- An in-bounds drag passes through unchanged.
+    local px, py = Customizer.confine_delta(100, 100, 200, 50, 0, 0, 300, 200, b)
+    if px ~= 300 or py ~= 200 then
+        return string.format("in-bounds passthrough: expected {300,200}, got {%s,%s}", tostring(px), tostring(py))
+    end
+    -- Applied-delta accounting: element already shifted +50 (its live world reflects it).
+    -- A further request to delta 5000 clamps the same far edge; delta must still resolve to 1620.
+    local axx = Customizer.confine_delta(150, 100, 200, 50, 50, 0, 5000, 0, b)
+    if axx ~= 1620 then return string.format("applied-delta clamp: expected 1620, got %s", tostring(axx)) end
+    -- Element wider than the area on x: that axis is left unclamped (never trap it off-screen).
+    local wide = Customizer.confine_delta(0, 100, 3000, 50, 0, 0, 500, 0, b)
+    if wide ~= 500 then return string.format("oversize-axis passthrough: expected 500, got %s", tostring(wide)) end
+end)
+
+-- (#310) HUD edit mode suspends local gameplay input (mouse drives the editor, not the
+-- character/camera). The freecam PlayerInputExtension.is_input_blocked hook consults
+-- Customizer.should_suspend_input(); assert that seam exists, is edit-mode-gated (false
+-- when not editing), and that the freecam hook still reads it (the #310 consolidation).
+_rt_register("hud_edit_mode_input_suspend_api", function()
+    if type(Customizer.should_suspend_input) ~= "function" then
+        return "Customizer.should_suspend_input missing (#310 input-suspend seam regressed)"
+    end
+    if Customizer.is_edit_mode() then
+        return "edit mode unexpectedly active during self-test (cannot assert input gating)"
+    end
+    -- With edit mode off, input must NOT be suspended (short-circuits before the cutscene probe).
+    if Customizer.should_suspend_input() ~= false then
+        return "should_suspend_input must be false when edit mode is off"
+    end
+    -- The freecam module's is_input_blocked hook must still consult the seam (source
+    -- needle; io-safe -> skipped in the retail sandbox, where the runtime asserts above
+    -- are authoritative and the needle moves to repo QA). Path derived from a freecam
+    -- function so it tracks the module even if the file is renamed.
+    if type(mod.gut_freecam_toggle) == "function" then
+        local ok, info = pcall(debug.getinfo, mod.gut_freecam_toggle, "S")
+        if ok and type(info) == "table" and info.source then
+            local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+            local txt = _rt_src_read(src_path)
+            if txt and not txt:find("should_suspend_input", 1, true) then
+                return "freecam is_input_blocked hook no longer consults should_suspend_input (#310 merge lost)"
+            end
+        end
     end
 end)
 
