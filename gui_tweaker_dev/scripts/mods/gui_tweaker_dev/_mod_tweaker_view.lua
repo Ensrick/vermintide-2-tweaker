@@ -675,6 +675,73 @@ local function _inject_ckc_into_gut(out)
     -- gut_cat.mod_obj stays = gut (its own settings fall back via _owner)
 end
 
+-- (#312) Bridge gut's surfaced "UI Tweaks" toggles to the STOCK UI Tweaks (HideBuffs)
+-- mod so the Mod Tweaker reads/writes ITS live settings, not gut's own private copies.
+-- gut kept HideBuffs' setting_ids VERBATIM in its data tree (hide_frames, HIDE_BOSS_HP_BAR,
+-- ...), but the two mods persist them in SEPARATE VMF namespaces (gut_dev vs HideBuffs) --
+-- so a toggle the user set ON in UI Tweaks' own VMF menu showed OFF in the Mod Tweaker
+-- (issue #312, user reports 2026-07-10 / 2026-07-12). When HideBuffs is installed + enabled
+-- we route every OVERLAPPING checkbox setting_id's get/set to it via the same per-node
+-- _owners mechanism the Equipment merge (#208) and CKC injection (#339) use: reads now show
+-- HideBuffs' live value, edits stage under a "HideBuffs" buffer and commit as HB:set(id, v,
+-- true) (fires its on_setting_changed live + VMF-persists) -- the own-or-pin doctrine that
+-- matches the drag-offset sync module (_gut_uitweaks_sync.lua) and the CKC bridge (#313).
+-- HideBuffs becomes the single owner of the shared toggles. No-op when HideBuffs is absent
+-- or disabled: gut's own copies drive its absorbed hb/ fork exactly as before. Runs AFTER
+-- _inject_ckc_into_gut so it MERGES into any CKC-set _owner_mod_ids. Marker
+-- [UITWEAKS-BRIDGE-312]. Byte-parallel twin with the one in _mod_tweaker_state.lua.
+local function _bridge_uitweaks_to_stock(out)
+    local HB = get_mod("HideBuffs")
+    if not HB then return end                          -- stock UI Tweaks absent: gut owns its copies
+    if type(HB.is_enabled) == "function" then
+        local ok_en, en = pcall(HB.is_enabled, HB)
+        if ok_en and en == false then return end       -- disabled: don't route to a dormant mod
+    end
+    local names = HB.SETTING_NAMES
+    if type(names) ~= "table" then return end
+    -- Real HideBuffs setting_ids are the VALUES of SETTING_NAMES (key may differ from id).
+    local valid = {}
+    for _, sid in pairs(names) do
+        if type(sid) == "string" then valid[sid] = true end
+    end
+    local gut_cat
+    for _, c in ipairs(out) do
+        if c.mod_id == "gut" or c.mod_id == "gut_dev" then gut_cat = c; break end
+    end
+    if not gut_cat or type(gut_cat.widgets) ~= "table" then return end
+
+    local owners  = gut_cat._owners or {}
+    local bridged = 0
+    for i = 1, #gut_cat.widgets do
+        local node  = gut_cat.widgets[i]
+        local sid   = _nf(node, "setting_id")
+        local wtype = _nf(node, "type")
+        -- Bridge only OVERLAPPING value toggles: a checkbox whose id is a real HideBuffs
+        -- setting. Skips groups, the HIDE_HUD hotkey (keybind, read-only here), and gut's
+        -- OWN control settings (gut_uitweaks_sync / the vanilla mirrors are NOT in
+        -- SETTING_NAMES). Never override a node already owned (e.g. a CKC-injected one).
+        if type(sid) == "string" and valid[sid]
+                and (wtype == "checkbox" or wtype == "boolean")
+                and owners[sid] == nil then
+            owners[sid] = { mod_id = "HideBuffs", mod_obj = HB }
+            bridged = bridged + 1
+        end
+    end
+    if bridged == 0 then return end
+    gut_cat._owners = owners
+    -- Merge "HideBuffs" into _owner_mod_ids so apply/dirty flush ITS staged buffer too.
+    -- _inject_ckc_into_gut may have already set this to { gut_id, CKC }; preserve those and
+    -- add gut's own id (its non-bridged settings buffer under it) + HideBuffs.
+    local ids  = gut_cat._owner_mod_ids or {}
+    local seen = {}
+    for _, id in ipairs(ids) do seen[id] = true end
+    if not seen[gut_cat.mod_id] then ids[#ids + 1] = gut_cat.mod_id end
+    seen[gut_cat.mod_id] = true
+    if not seen["HideBuffs"] then ids[#ids + 1] = "HideBuffs" end
+    gut_cat._owner_mod_ids = ids
+    -- gut_cat.mod_obj stays = gut (its own non-bridged settings fall back via _owner).
+end
+
 local function _vmf_categories()
     local out = {}
     local vmf = get_mod("VMF")
@@ -742,6 +809,10 @@ local function _vmf_categories()
     -- (#339) Fold Crosshair Kill Confirmation into gut's Interface tab under HUD (NOT a
     -- tab). No-op when CKC is absent. Before the sort (it mutates the existing gut cat).
     _inject_ckc_into_gut(out)
+    -- (#312) Bridge gut's UI Tweaks toggles to the stock HideBuffs mod's live settings
+    -- (own-or-pin) so the Mod Tweaker stays consistent with UI Tweaks' own VMF options.
+    -- After CKC injection (it merges into any CKC-set _owner_mod_ids), before the sort.
+    _bridge_uitweaks_to_stock(out)
     -- (#208) Fold the four inventory mods into one "Equipment" tab when 2+ are active
     -- (or relabel the N=1-only-CWV tab). Done BEFORE the sort so Equipment participates.
     out = _synthesize_equipment(out)

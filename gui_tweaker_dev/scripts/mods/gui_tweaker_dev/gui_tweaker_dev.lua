@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.230-dev"
+local MOD_VERSION = "0.2.231-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2281,6 +2281,33 @@ _rt_register("uitweaks_sync_map_resolves", function()
         end
         if names[m.y] == nil then
             return string.format("ELEMENT_MAP[%s].y=%s not in HB.SETTING_NAMES", tostring(widget_id), tostring(m.y))
+        end
+    end
+end)
+
+_rt_register("uitweaks_bridged_to_stock_settings", function()
+    -- (#312) The surfaced UI Tweaks toggles in gut's Mod Tweaker MUST route their get/set to
+    -- the stock UI Tweaks (HideBuffs) mod so they stay consistent with UI Tweaks' own VMF
+    -- options (user reports 2026-07-10 / 2026-07-12: toggles ON in UI Tweaks showed OFF here).
+    -- Assert BOTH Mod Tweaker twins carry the bridge helper (marker) AND call it in the
+    -- category-build path. Split needles so this check can never self-match; unreadable
+    -- source => silent skip (pass).
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dir = src:match("^(.*[/\\])[^/\\]*$")
+    if not dir then return end
+    local marker    = "[UITWEAKS-BRIDGE" .. "-312]"
+    local call_form = "_bridge_uitweaks_to" .. "_stock(out)"
+    for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
+        local txt = _gut_read_all(dir .. fn)
+        if txt then
+            if not txt:find(marker, 1, true) then
+                return fn .. " dropped the UI Tweaks->stock HideBuffs bridge helper (#312)"
+            end
+            if not txt:find(call_form, 1, true) then
+                return fn .. " no longer calls the UI Tweaks->stock HideBuffs bridge in the category build (#312)"
+            end
         end
     end
 end)

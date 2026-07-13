@@ -35,12 +35,25 @@ etc. Integrated third-party options belong inside one of these.
 
 ## The correct precedent: UI Tweaks / HideBuffs (#312)
 
-HideBuffs ("UI Tweaks") is deliberately **NOT** in `_MY_MODS`
-(`_mod_tweaker_view.lua:162-164`). Its features were absorbed into gut's own data tree under
-the HUD group (`gut_hide_hud_ui_group`) — the settings render as ordinary gut options within
-that collapsible and drive the behavior directly. **This is the model every third-party
-integration follows.** Re-adding HideBuffs to `_MY_MODS` would resurrect the duplicate tab —
-don't.
+HideBuffs ("UI Tweaks") is deliberately **NOT** in `_MY_MODS`. Its options render as ordinary
+gut checkboxes inside the HUD group (`gut_hide_hud_ui_group` > "UI Tweaks"), keeping HideBuffs'
+setting_ids verbatim. **This is the model every third-party integration follows.** Re-adding
+HideBuffs to `_MY_MODS` would resurrect the duplicate tab — don't.
+
+**Sync to the stock mod (#312, `_bridge_uitweaks_to_stock`, marker `[UITWEAKS-BRIDGE-312]`).**
+gut and the stock UI Tweaks (HideBuffs) mod persist those verbatim ids in **separate** VMF
+namespaces (`gut_dev` vs `HideBuffs`), so the surfaced toggles must NOT read gut's own private
+copies or they diverge from UI Tweaks' own VMF page (the exact bug the user reported). When
+HideBuffs is installed **and enabled**, both Mod Tweaker twins route every overlapping checkbox
+setting_id's get/set to `get_mod("HideBuffs")` through the per-node `_owners` mechanism (the
+same own-or-pin path Equipment/#208 and CKC/#339 use, and the drag-offset sync module already
+uses for the four repositioned bars). Reads show HideBuffs' live value; edits commit as
+`HB:set(id, v, true)`. `"HideBuffs"` is merged into the gut category's `_owner_mod_ids` so
+Apply/dirty flush its buffer alongside gut's own and any CKC edits. When HideBuffs is absent
+the bridge is a no-op and gut's own copies drive its absorbed `hb/` fork as before (that fork
+also aborts at load on a missing Penlight dep, #281, so the stock mod is the real provider on
+most setups). **When integrating another mod whose options gut mirrors 1:1, bridge to that
+mod's live settings — never display a private copy.**
 
 ## Crosshair Kill Confirmation (#313) — the required shape
 

@@ -5,6 +5,42 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.231-dev (2026-07-13) -- #312 UI Tweaks toggles in Mod Tweaker now sync with the stock mod [untested] [Issue 312]
+
+Fixes the user's active #312 report (2026-07-10 "UI Tweaks options that are on in VMF are showing up as off
+in Mod Tweaker's menu"; 2026-07-12 "toggles for hidden HUD elements are turned on in VMF per my setup ...
+they MUST be consistent with the VMF options"). The Mod Tweaker's UI Tweaks toggles now read and write the
+stock UI Tweaks (HideBuffs) mod's live settings instead of gut's own private copies, so the two menus agree.
+
+- **Root cause:** gut surfaces the UI Tweaks options as its OWN data-tree checkboxes under the HUD > "UI
+  Tweaks" group, keeping HideBuffs' setting_ids VERBATIM (`hide_frames`, `HIDE_BOSS_HP_BAR`, the buff-hide
+  ids, ...). But gut (`gut_dev`) and the stock mod (`HideBuffs`) persist those ids in SEPARATE VMF
+  namespaces, so a toggle the user set ON in UI Tweaks' own VMF page read back OFF from gut_dev's default in
+  the Mod Tweaker. gut's absorbed `hb/` fork that would consume gut_dev's copies also aborts at load on a
+  missing Penlight dep (#281), so on the user's setup the stock mod is the only thing actually hiding HUD
+  elements -- making the private copies doubly wrong to display.
+- **Fix (`_mod_tweaker_state.lua` + `_mod_tweaker_view.lua`, `_bridge_uitweaks_to_stock`, marker
+  `[UITWEAKS-BRIDGE-312]`):** when the stock UI Tweaks (HideBuffs) mod is installed AND enabled, every
+  OVERLAPPING checkbox setting_id (present in gut's category AND a real `HideBuffs.SETTING_NAMES` value) is
+  routed to `get_mod("HideBuffs")` through the existing per-node `_owners` mechanism -- the same own-or-pin
+  path the Equipment merge (#208), the CKC bridge (#313), and the drag-offset sync module
+  (`_gut_uitweaks_sync.lua`) already use. Reads (`_cat_get` -> `HB:get(id)`) now show HideBuffs' live value;
+  edits stage under a `"HideBuffs"` buffer and commit on Apply as `HB:set(id, v, true)`, firing its
+  `on_setting_changed` live and VMF-persisting. HideBuffs is the single owner of the shared toggles -- no
+  double namespace, no stacking. The bridge runs AFTER `_inject_ckc_into_gut` and MERGES `"HideBuffs"` into
+  the category's `_owner_mod_ids` so Apply/dirty still flush gut's own edits AND any CKC edits AND the
+  HideBuffs edits. gut's own control settings (`gut_uitweaks_sync`, the two vanilla numeric mirrors) are NOT
+  in `SETTING_NAMES`, so they stay gut-owned. Groups and the `HIDE_HUD` keybind are skipped.
+- **No-op when UI Tweaks is absent or disabled:** gut's own gut_dev copies drive its absorbed `hb/` fork
+  exactly as before, so a user without the stock mod is unaffected.
+- **rt check (`/gut_regression_test`, io-safe, load-time):** `uitweaks_bridged_to_stock_settings` asserts
+  BOTH Mod Tweaker twins carry the bridge helper and call it in the category-build path.
+- **VERIFY IN-GAME (UI Tweaks / HideBuffs installed + enabled; solo -- both mods client-side):** set some UI
+  Tweaks hide toggles ON in UI Tweaks' own VMF options page, then open gut's Mod Tweaker > Interface > HUD >
+  UI Tweaks -- those toggles now read the SAME state (ON). Flip one in gut's Mod Tweaker, Apply, reopen UI
+  Tweaks' own page -- the value matches (and vice-versa). Without UI Tweaks installed the group behaves as
+  before (gut's own copies).
+
 ## 0.2.230-dev (2026-07-13) -- #313 CKC vanilla-Options gear placement + issue 311 sync precedence doc [untested] [Issue 313]
 
 Closes the last open gaps in the Crosshair Kill Confirmation integration (#313, and issue 311, its
