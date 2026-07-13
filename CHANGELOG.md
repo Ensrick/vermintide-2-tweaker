@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-13 - `crafting_in_modded_dev` auto-equips new weapons
+
+Repo-aggregate entry for `cim_dev` v0.8.64-dev / issue #562. Added a default-on
+option that equips the exact backend ID produced by a successful weapon craft in
+the primary or secondary slot selected for crafting. The loadout write targets
+the live selected loadout index and is paired with live-avatar equipment
+recreation; disabling the option keeps the previous inventory-only behavior.
+Accessories are unaffected. Full details and regression coverage are in
+`crafting_in_modded_dev/CHANGELOG.md`.
+
 ## 2026-05-23 — `weapon_tweaker` per-career weapon toggle reorder
 
 Repo-aggregate entry for `weapon_tweaker` v0.12.71-dev (full details in

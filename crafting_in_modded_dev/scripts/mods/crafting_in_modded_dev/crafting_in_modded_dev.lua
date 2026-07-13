@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.63-dev"
+local MOD_VERSION = "0.8.64-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -1305,6 +1305,101 @@ local function _reequip_live_avatar()
         end
     end
 end
+
+-- Issue #562: equip the exact freshly-created backend id, not another item with
+-- the same ItemMasterList key. The items interface accepts an explicit loadout
+-- index and writes it through to set_character_data
+-- (backend_interface_item_playfab.lua:635-667). The live keep avatar is a
+-- separate surface: vanilla's inventory equip path writes the loadout and then
+-- queues/recreates the equipment unit (hero_view_state_overview.lua:1070-1139).
+-- Keep those two surfaces together here so craft-time auto-equip cannot regress
+-- into issue #12's historical "new icon, old weapon unit" divergence.
+local _AUTO_EQUIP_WEAPON_SLOTS = {
+    slot_melee = "melee",
+    slot_ranged = "ranged",
+}
+
+local function _auto_equip_slot_type(slot_name)
+    return _AUTO_EQUIP_WEAPON_SLOTS[slot_name]
+end
+
+local function _auto_equip_crafted_weapon(career_name, slot_name, backend_id)
+    if not mod:get("auto_equip_new_weapons") then return false, "disabled" end
+
+    local expected_slot_type = _auto_equip_slot_type(slot_name)
+    if not expected_slot_type then return false, "not a weapon slot" end
+    if not career_name or not backend_id then return false, "missing craft identity" end
+
+    local items = Managers.backend and Managers.backend:get_interface("items")
+    if not items then return false, "items backend not ready" end
+
+    local item = items:get_item_from_id(backend_id)
+    local slot_type = item and item.data and item.data.slot_type
+    if slot_type ~= expected_slot_type then
+        return false, string.format("crafted slot mismatch (%s for %s)", tostring(slot_type), tostring(slot_name))
+    end
+
+    local loadout_index = _resolve_selected_index(career_name, 1)
+    local ok_write, write_result = pcall(
+        items.set_loadout_item,
+        items,
+        backend_id,
+        career_name,
+        slot_name,
+        loadout_index
+    )
+    if not ok_write or write_result == false then
+        return false, "loadout write failed: " .. tostring(write_result)
+    end
+
+    -- Recreate the current local career's weapon unit immediately. If the
+    -- player unit is unavailable during a state transition, the indexed data
+    -- write above remains authoritative and the next spawn reads the new bid.
+    local live_equipped = false
+    local pl = Managers.player and Managers.player:local_player()
+    local unit = pl and pl.player_unit
+    local profile_index = pl and pl:profile_index()
+    local career_index = pl and pl:career_index()
+    local profile = SPProfiles and profile_index and SPProfiles[profile_index]
+    local current_career = profile and profile.careers and career_index
+        and profile.careers[career_index] and profile.careers[career_index].name
+    if current_career == career_name and unit and Unit.alive(unit) then
+        local inv_ext = ScriptUnit.has_extension(unit, "inventory_system")
+        if inv_ext and inv_ext.create_equipment_in_slot then
+            local ok_live, live_err = pcall(
+                inv_ext.create_equipment_in_slot,
+                inv_ext,
+                slot_name,
+                backend_id
+            )
+            if ok_live then
+                live_equipped = true
+                _reequipped[career_name .. "/" .. slot_name] = backend_id
+            else
+                mod._cim_auto_equip_last_err = tostring(live_err)
+                pcall(printf, "[cim:562] live auto-equip failed career=%s slot=%s bid=%s err=%s",
+                    tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(live_err))
+            end
+        end
+    end
+
+    local event = Managers.state and Managers.state.event
+    if event and event.trigger then
+        pcall(event.trigger, event, "event_set_loadout_items")
+    end
+
+    mod._cim_auto_equip_last = {
+        backend_id = backend_id,
+        career_name = career_name,
+        slot_name = slot_name,
+        loadout_index = loadout_index,
+        live_equipped = live_equipped,
+    }
+    return true, live_equipped and "live" or "loadout"
+end
+
+mod._cim_auto_equip_crafted_weapon = _auto_equip_crafted_weapon
+mod._cim_auto_equip_slot_type = _auto_equip_slot_type
 
 _restore_modded_loadout = function()
     -- v0.8.15-dev MASTER gate: when loadout persistence is OFF (default), cim
@@ -4676,14 +4771,30 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
     _forge_save()
     if mod._cim_note_craft_bid then mod._cim_note_craft_bid(new_backend_id) end
 
-    -- Craft only: the item lands in the inventory mirror + cim save layer.
-    -- Equipping is the player's choice from their inventory. Previous versions
-    -- called set_loadout_item here, which updated the loadout-icon entry but
-    -- diverged from the actual equipped weapon unit, leaving the slot showing
-    -- one item and playing another. See issue #12.
+    -- Issue #562: default-on auto-equip targets the forge button's exact slot
+    -- (`slot_melee` / `slot_ranged`) and the exact newly-created backend id.
+    -- `_auto_equip_crafted_weapon` performs BOTH the indexed loadout write and
+    -- live-unit recreation, avoiding issue #12's historical icon-only update.
+    -- With the setting OFF (or if the guarded equip degrades), the successful
+    -- craft remains in the inventory exactly as before.
+    local auto_equipped, auto_result = false, "helper unavailable"
+    if mod._cim_auto_equip_crafted_weapon then
+        auto_equipped, auto_result = mod._cim_auto_equip_crafted_weapon(
+            career_name,
+            self._selected_slot_name,
+            new_backend_id
+        )
+    end
+    if mod:get("auto_equip_new_weapons") and not auto_equipped then
+        pcall(printf, "[cim:562] crafted but auto-equip skipped career=%s slot=%s bid=%s reason=%s",
+            tostring(career_name), tostring(self._selected_slot_name), tostring(new_backend_id), tostring(auto_result))
+    end
+
     local _master = rawget(ItemMasterList, item_key)
     local _name = (_master and _master.display_name) or item_key
-    mod:echo("Crafted & saved: " .. tostring(Localize(_name)) .. " [" .. tostring(weapon_data.rarity) .. "] — equip from inventory")
+    local _result_text = auto_equipped and " - equipped in " .. tostring(self._selected_slot_name)
+        or " - available in inventory"
+    mod:echo("Crafted & saved: " .. tostring(Localize(_name)) .. " [" .. tostring(weapon_data.rarity) .. "]" .. _result_text)
     -- v0.8.7-dev: audio feedback. Vanilla _equip_item plays an equip sound on its
     -- success path, but our custom-forge branch returns before reaching it, so the
     -- Athanor weapon-select CRAFT button was SILENT (the echo + _equip_pulse_duration
@@ -7377,6 +7488,52 @@ _rt_register("console_craft_item_nil_recipe_resolves", function()
                 return string.format("resolved recipe %s (slot %s) has no synth registered", tostring(rn), slot)
             end
         end
+    end
+end)
+
+_rt_register("issue562_auto_equip_contract", function()
+    -- The feature is deliberately weapon-only: exact primary/secondary slot
+    -- mapping, never jewelry/accessory paths. Pin the pure dispatch contract so
+    -- future craft-surface edits cannot silently equip a different slot.
+    local slot_type = mod._cim_auto_equip_slot_type
+    if type(slot_type) ~= "function" then
+        return "#562 auto-equip slot resolver missing"
+    end
+    if slot_type("slot_melee") ~= "melee" then return "slot_melee no longer maps to melee" end
+    if slot_type("slot_ranged") ~= "ranged" then return "slot_ranged no longer maps to ranged" end
+    if slot_type("slot_necklace") ~= nil or slot_type("slot_ring") ~= nil
+       or slot_type("slot_trinket_1") ~= nil then
+        return "#562 auto-equip leaked onto an accessory slot"
+    end
+    if type(mod._cim_auto_equip_crafted_weapon) ~= "function" then
+        return "#562 exact-bid auto-equip helper missing"
+    end
+
+    -- Verify the realized VMF widget, including the user-requested default ON.
+    local ok, data = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev_data")
+    if not ok or type(data) ~= "table" then
+        return "#562 settings data did not load"
+    end
+    local found
+    local function walk(node)
+        if type(node) ~= "table" or found then return end
+        if node.setting_id == "auto_equip_new_weapons" then found = node return end
+        for _, child in ipairs(node.widgets or {}) do walk(child) end
+        for _, child in ipairs(node.sub_widgets or {}) do walk(child) end
+        if node.options then walk(node.options) end
+    end
+    walk(data)
+    if not found then return "#562 auto_equip_new_weapons widget missing" end
+    if found.type ~= "checkbox" then return "#562 auto-equip setting is not a checkbox" end
+    if found.default_value ~= true then return "#562 auto-equip setting no longer defaults ON" end
+
+    -- If the feature fired this session, its state witness must preserve the
+    -- exact crafted bid and one of the two legal target slots.
+    local last = mod._cim_auto_equip_last
+    if last then
+        if not last.backend_id then return "#562 state witness lost the exact crafted backend id" end
+        if slot_type(last.slot_name) == nil then return "#562 state witness recorded an invalid target slot" end
+        if type(last.loadout_index) ~= "number" then return "#562 state witness lost the selected loadout index" end
     end
 end)
 

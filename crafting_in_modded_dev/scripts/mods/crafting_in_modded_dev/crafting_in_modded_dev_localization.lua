@@ -20,6 +20,12 @@ return {
     standard_crafting_hotkey_description = {
         en = "Opens the standard Keep Smithy bench: salvage, craft, re-roll properties and traits, upgrade rarity, apply illusions, convert dust (not the Athanor). Works in the Keep and the Chaos Wastes; inside missions it follows the 'Allow crafting bench in mission' option in Tweaker: GUI's In-Mission Menus. You can also run /cim_craft_standard.",
     },
+    auto_equip_new_weapons = {
+        en = "[verify-fix] [Issue 562] Automatically equip newly crafted weapons",
+    },
+    auto_equip_new_weapons_description = {
+        en = "ON (default): after a weapon is crafted successfully, equip that exact new item in the primary or secondary slot used to craft it. OFF: leave new weapons in the inventory without changing your equipped loadout. Accessories are unaffected.",
+    },
     -- (allow_in_mission / allow_in_mission_description removed 2026-07-02: the
     -- widget moved to gut's In-Mission Menus group; gut writes through to cim's
     -- setting, so the main-lua readers are unchanged.)

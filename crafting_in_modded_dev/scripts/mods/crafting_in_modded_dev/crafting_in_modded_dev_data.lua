@@ -102,6 +102,14 @@ local options_data = {
                     -- lived here until 2026-07-02; the option now lives in gut's
                     -- In-Mission Menus group, which writes through to cim's
                     -- `allow_in_mission` setting - see the #96 epilogue above.)
+                    -- Default-on quality-of-life: equip the exact weapon a
+                    -- successful craft just created into the primary/secondary
+                    -- slot selected by that craft surface. Jewelry is excluded.
+                    {
+                        setting_id = "auto_equip_new_weapons",
+                        type = "checkbox",
+                        default_value = true,
+                    },
                     -- Base power level applied to every freshly-crafted item.
                     -- Vanilla weapons cap at 300; CW boosts apply on top. 0-950
                     -- in steps of 50 covers the range the user might want.

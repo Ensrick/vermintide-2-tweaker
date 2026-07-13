@@ -4,7 +4,24 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-07-13.
+
+---
+
+## Craft Output
+
+### issue562-crafted-weapon-auto-equip - Exact bid and slot stay synchronized
+
+| Field | Value |
+|-------|-------|
+| Symptom | A newly crafted weapon only appears in inventory, or its loadout icon changes while the live avatar still holds the previous weapon. |
+| Root cause | Craft output and live equipment are separate engine surfaces. A bare loadout write does not recreate the spawned weapon unit (historical issue #12). |
+| Mod(s) | crafting_in_modded_dev |
+| Fix version(s) | 0.8.64-dev |
+| Category | INTEGRATION |
+| Repro | 1. Keep `Automatically equip newly crafted weapons` ON. 2. Open the Athanor. 3. Craft once from Primary, then once from Secondary. 4. Repeat with the setting OFF. |
+| Expected post-fix | ON: the exact newly created Athanor item is equipped in the chosen slot, and the visible weapon matches its loadout icon. OFF: the new item stays inventory-only and the equipped slot is unchanged. Standard-forge, jewelry, and accessory crafts remain unchanged. |
+| Detection | Run `/cim_regression_test` and require `issue562_auto_equip_contract` PASS. In game, verify both weapon slots plus the OFF and accessory cases. |
 
 ---
 ## Multiplayer / Network Sync

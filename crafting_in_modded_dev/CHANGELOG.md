@@ -1,5 +1,12 @@
 # Crafting in Modded Changelog
 
+## 0.8.64-dev (2026-07-13): #562 auto-equip new weapons [verify-fix]
+
+- Added `Automatically equip newly crafted weapons`, default ON. A successful Athanor primary/secondary craft now writes the exact new backend ID to the selected loadout index and recreates the live weapon unit in that same slot. This keeps the loadout record and visible avatar synchronized instead of reviving issue #12's historical icon-only divergence.
+- Standard-forge, jewelry, and accessory craft paths are unchanged. Turning the option OFF preserves the Athanor's prior inventory-only behavior.
+- Added `/cim_regression_test` check `issue562_auto_equip_contract`: pins the default-ON widget, exact weapon-slot mapping, accessory exclusion, helper availability, and post-use state witness (`backend_id`, target slot, selected loadout index).
+- Source basis: `BackendInterfaceItemPlayfab.set_loadout_item` forwards its optional index to the mirror (`backend_interface_item_playfab.lua:635-667`); vanilla's inventory equip path couples the loadout write with a live equipment request and refresh event (`hero_view_state_overview.lua:1070-1139`).
+
 ## 0.8.63-dev (2026-07-13): #427 _dbg_alert log-only via engine printf [untested]
 
 - `_dbg_alert` rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). `crafting_in_modded_dev.lua` only; the v0.7.51 rehook-warning interceptor on `mod.warning` is untouched.
