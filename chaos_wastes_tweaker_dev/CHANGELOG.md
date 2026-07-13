@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.260-dev (2026-07-13) - #564 mission-depth localization format safety [untested]
+
+- Fixed five startup Crashify exceptions from the Single Mission Loader's depth dropdown. `ctdm_p_1` through `ctdm_p_5` now keep literal percent signs escaped as `%%` for VMF's `string.format` localization path; the generated fallback label is escaped too.
+- Audited CT's generated mission-catalog localization and found no other raw-percent entries. Static localization strings already use the required escaping.
+- Added `/ct_regression_test` check `mission_catalog_localization_format_safe_564`, which formats every generated catalog localization entry so future builder-added raw percents fail before release.
+- Verify after the canonical ship: confirm `[ct:LOAD] v0.7.260-dev`, open Mod Options, and check Mission Depth shows `Start (0%)`, `Early (25%)`, `Mid (50%)`, `Late (75%)`, and `Deepest (100%)` with no `string.format` Crashify exceptions. Run `/ct_regression_test` and confirm both localization checks pass.
+
 ## 0.7.259-dev (2026-07-13) - #427 _dbg_alert log-only via engine printf [untested]
 
 - `_dbg_alert` rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). `chaos_wastes_tweaker_dev.lua` only.

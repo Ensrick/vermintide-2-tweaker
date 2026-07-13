@@ -161,7 +161,9 @@ local LEVEL_LABEL = {
     sig_crag = "The Lost City of Marakza", sig_citadel = "Citadel of Eternity (approach)",
 }
 
-local PROGRESS_LABEL = { "Start (0%)", "Early (25%)", "Mid (50%)", "Late (75%)", "Deepest (100%)" }
+-- VMF localizes dropdown options through string.format, so literal percent signs
+-- must remain escaped in the localization table. They render as a single "%".
+local PROGRESS_LABEL = { "Start (0%%)", "Early (25%%)", "Mid (50%%)", "Late (75%%)", "Deepest (100%%)" }
 
 -- ===========================================================================
 -- Loc-key helpers (systematic prefixes keep menu and loc in lockstep)
@@ -242,7 +244,7 @@ function _M.build_loc_entries()
         e[_M.base_key(l)] = { en = (LEVEL_LABEL[l] or l) .. " [" .. pool .. "]" }
     end
     for i = 1, #_M.PROGRESS do
-        e[_M.progress_key(i)] = { en = PROGRESS_LABEL[i] or (tostring(math.floor(_M.PROGRESS[i] * 100)) .. "%") }
+        e[_M.progress_key(i)] = { en = PROGRESS_LABEL[i] or (tostring(math.floor(_M.PROGRESS[i] * 100)) .. "%%") }
     end
 
     return e

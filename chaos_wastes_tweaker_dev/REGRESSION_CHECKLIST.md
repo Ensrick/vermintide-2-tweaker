@@ -4,7 +4,26 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-07-13.
+
+---
+## Localization
+
+### generated-localization-percent-format - Builder emits an unescaped literal percent
+
+**[UNIT]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Startup emits one Crashify `string.format` exception per affected generated dropdown label. |
+| Root cause | A localization builder returns a raw `%`; VMF formats localized option text and rejects it as an invalid format directive. Static checks limited to `*_localization.lua` do not see strings generated in another module. |
+| Mod(s) | chaos_wastes_tweaker_dev |
+| Fix version(s) | ct_dev v0.7.260-dev (#564) |
+| Category | UNIT |
+| Repro | Open Mod Options with CT dev enabled and inspect the Single Mission Loader's Mission Depth dropdown. |
+| Expected post-fix | All five labels render with one literal `%`; startup contains no `Invalid string format` exception for `ctdm_p_1` through `ctdm_p_5`. |
+| Detection | `/ct_regression_test`: `localization_format_safe` and `mission_catalog_localization_format_safe_564` both pass. |
+
 
 ---
 ## Multiplayer / Network Sync

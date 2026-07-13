@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.259-dev"
+local MOD_VERSION = "0.7.260-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -15894,6 +15894,26 @@ _rt_register("localization_format_safe", function()
                 return string.format(
                     "loc key %q has invalid format string (escape literal %% as %%%%): %s",
                     k, tostring(fmt_err))
+            end
+        end
+    end
+end)
+
+_rt_register("mission_catalog_localization_format_safe_564", function()
+    -- #564: generated localization bypasses the static source-table scan. VMF
+    -- string.formats every dropdown label, so validate the catalog's complete
+    -- generated surface directly (including future labels and fallback paths).
+    local ok, catalog = pcall(mod.dofile, mod, "scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission_catalog")
+    if not ok or type(catalog) ~= "table" or type(catalog.build_loc_entries) ~= "function" then
+        return "mission catalog localization builder unavailable"
+    end
+
+    local entries = catalog.build_loc_entries()
+    for key, entry in pairs(entries) do
+        if type(entry) == "table" and type(entry.en) == "string" then
+            local fmt_ok, fmt_err = pcall(string.format, entry.en)
+            if not fmt_ok then
+                return string.format("generated loc key %q has invalid format string: %s", key, tostring(fmt_err))
             end
         end
     end
