@@ -367,6 +367,12 @@ end
 
 -- Grep-verified: no other gt_dev hook targets (IngameHud, update), so singleton.
 mod:hook_safe("IngameHud", "update", function(self, dt, t)
+    -- Consolidated draw dispatch for #302. VMF silently drops a second hook by
+    -- the same mod on (IngameHud, update), so Debug Highlights exposes a dynamic
+    -- consumer instead of registering another hook.
+    local draw_debug_highlights = mod._gt_debug_highlights_draw
+    if draw_debug_highlights then draw_debug_highlights(dt, t) end
+
     if not _flash_until then return end
     if not (mod:get("gt_melee_warning") and mod:get("gt_melee_warning_visual")) then
         _flash_until = nil

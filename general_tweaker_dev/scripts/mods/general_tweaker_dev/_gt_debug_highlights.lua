@@ -458,6 +458,13 @@ end
 local _master_last   = false
 local _report_accum  = 0
 local _logged_first  = false   -- one-shot projection breadcrumb per session
+local _blocked_once  = {}
+
+local function _blocked(reason)
+    if _blocked_once[reason] then return end
+    _blocked_once[reason] = true
+    _pf("[gt:302] draw blocked: %s", reason)
+end
 
 local function _draw(dt)
     if not IS_DEV_STREAM then return end
@@ -483,10 +490,10 @@ local function _draw(dt)
     if not want_any then _destroy_gui(); return end
 
     local world = _world()
-    if not world then _destroy_gui(); return end
+    if not world then _blocked("no_live_level_world"); _destroy_gui(); return end
 
     local cam = _camera(world)
-    if not cam then return end
+    if not cam then _blocked("player_1_camera_unavailable"); return end
 
     -- Live camera basis (fresh temporaries -- never cached).
     local ok_cp, cam_pos = pcall(Camera.world_position, cam)
@@ -508,7 +515,7 @@ local function _draw(dt)
     player_pos = player_pos or cam_pos
 
     local gui = _screen_gui(world)
-    if not gui then return end   -- material not resident yet; retry next frame
+    if not gui then _blocked("screen_gui_unavailable"); return end   -- material not resident yet; retry next frame
 
     local range = mod:get("gt_dh_range") or 30
     if type(range) ~= "number" then range = 30 end
@@ -623,15 +630,19 @@ local function _draw(dt)
 end
 
 -- ----------------------------------------------------------------------------
--- Invocation: draw from the UI update phase (retail-proven for screen guis).
--- StreamingInfo draws from IngameUI.update; it ticks in BOTH the keep and a
--- mission, which mod.update-phase screen draws do not reliably render from.
--- Rule #8 pre-flight: grep-verified no other gt_dev hook targets
--- (IngameUI, "update") -> singleton. (The existing gt IngameHud.update hook is
--- _gt_melee_warning's; IngameUI.update is a different pair.)
+-- Invocation: merge-dispatched from the EXISTING singleton IngameHud.update
+-- hook in _gt_melee_warning.lua. The v0.2.216 IngameUI.update hook installed
+-- successfully but never invoked in the user's retail session despite the
+-- persisted master/category settings being true. IngameHud.update is the
+-- already-proven HUD-composite draw seam used by the melee-warning overlay.
 -- ----------------------------------------------------------------------------
 local _err_logged = false
-mod:hook_safe("IngameUI", "update", function(self, dt, t)
+local _invocation_logged = false
+mod._gt_debug_highlights_draw = function(dt, t)
+    if not _invocation_logged then
+        _invocation_logged = true
+        _pf("[gt:302] invocation=IngameHud.update active")
+    end
     -- pcall the whole draw: a stray throw must not spam or disturb IngameUI.update
     -- (the old mod.update-consumer registry pcall'd each consumer; a raw hook body
     -- does not). Log the first error only, then stay quiet.
@@ -640,7 +651,8 @@ mod:hook_safe("IngameUI", "update", function(self, dt, t)
         _err_logged = true
         _pf("[gt:302:DH] draw raised (logged once): %s", tostring(err))
     end
-end)
+end
+mod._gt_dh_hud_update_wired = true
 
 -- Drop the screen gui on mission (re)enter so a stale world handle is never
 -- reused (chain-wrap; never redefine the central handler). Same pattern as

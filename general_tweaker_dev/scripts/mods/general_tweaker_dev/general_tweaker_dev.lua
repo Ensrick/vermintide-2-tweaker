@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.218-dev"
+local MOD_VERSION = "0.2.219-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -2126,6 +2126,15 @@ _rt_register("gt_dh_no_position_lookup_reads", function()
     -- STATIC check and belongs in a repo QA gate (PROJECT_STANDARDS 2.2b tier a).
     if mod._gt_dh_live_pos_reads ~= true then
         return "_gt_debug_highlights.lua live-position provenance marker absent -- did the module fail to load, or was the _unit_pos live-read path replaced with POSITION_LOOKUP (issue-337 class)?"
+    end
+end)
+
+_rt_register("gt_dh_hud_update_invocation_302", function()
+    if mod._gt_dh_hud_update_wired ~= true then
+        return "Debug Highlights is not wired to the consolidated IngameHud.update draw seam"
+    end
+    if type(mod._gt_debug_highlights_draw) ~= "function" then
+        return "Debug Highlights HUD draw consumer is missing"
     end
 end)
 

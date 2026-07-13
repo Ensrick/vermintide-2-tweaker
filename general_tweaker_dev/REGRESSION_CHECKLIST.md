@@ -4,7 +4,13 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-11.
+Last updated: 2026-07-13.
+
+## Debug Highlights local renderer (#302)
+
+- [ ] With Debug Highlights + Interactables enabled in the keep, `[gt:302] invocation=IngameHud.update active` appears and yellow projected wireframes render locally.
+- [ ] No wireframe data is sent to peers; #534 networking remains limited to host-exclusive bot-leash positions.
+- [ ] `/gt_regression_test` passes `gt_dh_hud_update_invocation_302`.
 
 ---
 ## Multiplayer / Network Sync

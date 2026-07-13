@@ -1,5 +1,16 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.219-dev (2026-07-13) -- #302 invoke local wireframes from active HUD seam [verify-fix]
+
+- The `0.2.216-dev` verification log proved every Debug Highlights toggle was persisted `true` and the `IngameUI.update` hook installed, but the callback never emitted its master-state or draw breadcrumb. The screen projection code therefore never ran.
+- Removed the silent `IngameUI.update` hook. Debug Highlights now exposes a draw consumer that is merge-dispatched from GT's existing singleton `IngameHud.update` hook, the same proven HUD-composite seam used by the visible melee-warning overlay.
+- Added bounded console-only diagnostics for HUD invocation and distinct world, camera, or screen-GUI blockers. Wireframes remain entirely client-local; no geometry or draw state is networked.
+- Added `/gt_regression_test` check `gt_dh_hud_update_invocation_302` for the consumer/export contract.
+
+### Test method
+1. In the keep, enable Dev Tools > Debug Highlights and Interactables.
+2. Expected: local yellow projected wireframes appear on nearby crafting stations/chests. The log contains `[gt:302] invocation=IngameHud.update active`, `master ON`, and a positive edge count (or one explicit blocker reason).
+
 ## v0.2.218-dev (2026-07-13) -- #428 canonical copied debug helper [untested]
 
 - Replaced gt_dev's top-level `_dbg` / `_dbg_alert` implementation with the first consumer of canonical `tools/shared_lib/_lib_debug.lua`. The bundled copy preserves standalone loading; there is no runtime dependency on another mod.
