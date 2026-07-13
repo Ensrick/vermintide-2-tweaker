@@ -278,6 +278,24 @@ if (Test-Path $luaPath) {
     if ($luaTxt -match '\[(\w+):LOAD\]')              { $loadTag = $matches[1] }
 }
 
+# ---------------------------------------------------------------------------
+# Promotion red gate (issue #327): shipping one of the five STABLE split dirs
+# must pass qa/check_promotion.ps1 BLOCKING (no dev status tags in the stable
+# localization, no unsanctioned pre-release suffix, version monotonic vs the
+# stable CHANGELOG). Advisory scans warned for weeks while two promotions each
+# leaked a checklist step to public subscribers - hence a hard gate. A
+# user-NAMED suffixed public version (issue #328 ruling) ships with
+# $env:VT2_SUFFIX_OK = '1'.
+# ---------------------------------------------------------------------------
+$promoGate = Join-Path $repoRoot 'qa\check_promotion.ps1'
+$stableSplitDirs = @('chaos_wastes_tweaker', 'crafting_in_modded', 'general_tweaker', 'gui_tweaker', 'verminious_dreams_lighting')
+if (($stableSplitDirs -contains $Mod) -and (Test-Path $promoGate)) {
+    & $promoGate -Mod $Mod
+    if ($LASTEXITCODE -ne 0) {
+        Fail "check_promotion FAILED -- this stable/public target did not clear the promotion gate (issue #327). Fix the findings above (or VT2_SUFFIX_OK=1 for a user-named suffixed public version) and re-ship."
+    }
+}
+
 $launcher = Join-Path $repoRoot 'tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe'
 if (-not (Test-Path $launcher)) {
     Fail "VMBLauncher not found at $launcher. Build it first: tools\vmb-launcher\publish.ps1 -SkipOpen"

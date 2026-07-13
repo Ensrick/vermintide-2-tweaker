@@ -101,5 +101,12 @@ content). Reference: memory `reference_cim_dev_to_stable_promotion`.
 - **Cross-mod `get_mod(...)` refs target STABLE ids** (`cim`, `gt`, ...), never `*_dev`.
 - **Strip dev-only artifacts on promotion**: dev status tags (`[untested]` etc.), always-on
   diagnostics (inert in stable), dev-only files (e.g. `_diag_probe.lua`).
+- **The promotion RED GATE enforces the checklist** (issue #327): `ship.ps1` runs
+  `qa/check_promotion.ps1` BLOCKING for the five stable split dirs — hard fail on
+  (a) any sanctioned status tag in the stable localization, (b) a pre-release
+  suffix on the stable MOD_VERSION (override with `VT2_SUFFIX_OK=1` when the USER
+  named a suffixed public version, issue #328 ruling), (c) MOD_VERSION not equal
+  to the top stable CHANGELOG entry, or that entry not increasing over the previous
+  one. Self-test: `qa/check_promotion.ps1 -SelfTest` (9 cases, pwsh 7 + PS 5.1).
 - **Verify the ship**: `workshop_log.txt` must show `Uploaded new content`; `ship.ps1`
   hash-verifies the deploy. `ugc_tool` prints success even on failure.
