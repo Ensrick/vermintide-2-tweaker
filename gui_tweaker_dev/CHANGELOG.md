@@ -5,6 +5,12 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.235-dev (2026-07-13) -- #517 retire impossible retail TOML read-back [untested]
+
+- Retired the load-time TOML apply path and `/reload_config`: retail Stingray exposes no arbitrary file-read primitive, so both had always been inert while implying settings could round-trip. The parser, `io_open` guard, and boot-time apply call are removed.
+- Kept `/export_settings`, Mod Tweaker close auto-export, and both desktop companion scripts as a one-way TOML snapshot/backup path. Their help text and the generated TOML header now state that retail cannot read or apply the file.
+- Added runtime regression `issue517_config_read_retired`, static absence gates for the read/reload paths, and refreshed `docs/COMMANDS.md`. In-game verification should confirm `/export_settings` still emits a complete block and `/reload_config` is no longer registered.
+
 ## 0.2.234-dev (2026-07-13) -- #281 HideBuffs data boot without Penlight [untested]
 
 - Removed `hb/hb_data.lua`'s unavailable `pl.import_into` dependency, which aborted the protected data-module load before the absorbed UI Tweaks tables were populated. Its two list values now use a tiny local `:contains` helper and its map is a plain Lua table, preserving every consumer used by the fork.

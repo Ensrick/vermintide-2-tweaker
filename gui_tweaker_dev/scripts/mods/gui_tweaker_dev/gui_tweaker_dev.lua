@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.234-dev"
+local MOD_VERSION = "0.2.235-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2649,10 +2649,20 @@ end)
 -- spamming "attempt to compare nil with number" every frame. No-op if UI Tweaks
 -- isn't installed. See _gut_buffbar_endtime_fix.lua for the diagnosed mechanic.
 local _gut_buffbar_fix = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_buffbar_endtime_fix")
--- External config file (.toml): on load, override the author's mods' VMF settings
--- with the values in gut_mod_settings.toml. Read-only (the sandbox blocks writes);
--- /export_settings dumps TOML to the log + tools/gut-settings.ps1 writes it.
+-- Settings snapshot export: retail exposes no file-read channel (#517), so
+-- /export_settings dumps TOML to the log and the desktop companion persists it.
 local _gut_config = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_config_file")
+_rt_register("issue517_config_read_retired", function()
+    if type(_gut_config) ~= "table" or _gut_config.read_supported ~= false then
+        return "#517 regression: config module no longer declares retail read-back unsupported"
+    end
+    if _gut_config.apply ~= nil then
+        return "#517 regression: impossible retail config apply path was reintroduced"
+    end
+    if type(_gut_config.export_to_log) ~= "function" then
+        return "#517 regression: settings snapshot export was lost while retiring read-back"
+    end
+end)
 -- Hide UI (3 modes: off/partial/complete/camera) — migrated from general_tweaker.
 -- Owns mod.update (chains any prior) for per-frame complete/camera enforcement;
 -- registers the gut_hud_cycle keybind function + /hud command.
@@ -2691,8 +2701,6 @@ mod.on_all_mods_loaded = function(...)
         mod:set("gut_vanilla_numeric_ui", Application.user_setting("numeric_ui") and true or false)
         mod:set("gut_vanilla_persistent_ammo", Application.user_setting("persistent_ammo_counter") and true or false)
     end)
-    -- Apply the config override LAST so it wins over whatever the mods restored.
-    if _gut_config and _gut_config.apply then pcall(_gut_config.apply) end
     -- Bench-in-mission option (moved from cim 2026-07-02): one-time ADOPTION of the
     -- user's pre-existing cim `allow_in_mission` value into gut's toggle (marker-based,
     -- NOT nil-based - VMF may materialize widget defaults, so a nil check can't tell

@@ -131,6 +131,11 @@
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_map.lua'; needle='level_name = PREVIEW_LEVEL'; literal=$true; polarity='present'; issueRef='#336'; note='tier-2 def mounts the preview level (backdrop present).' }
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'; needle='_skipped_cutscene_system == self and name == "fx_fade"'; literal=$true; polarity='present'; issueRef='#140'; note='post-skip fx_fade swallow guard (stray black fade on A Parting of the Waves).' }
 
+    # -- #517: retail exposes no arbitrary file-read channel. Keep the useful
+    #    settings export, but never resurrect the nonfunctional read/apply half.
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_config_file.lua'; needle='mod:command("reload_config"'; literal=$true; polarity='absent'; issueRef='#517'; note='retail cannot read the TOML; do not advertise a reload command that always no-ops.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_config_file.lua'; needle='io_open('; literal=$true; polarity='absent'; issueRef='#517'; note='the impossible retail file-read/apply half remains retired; export is log-only.' }
+
     # -- #530: the in-mission tab strip is Adventure-only. Holseher's Map
     #    (dlc_morris_map) opens hero_view NATIVELY, so the HeroWindowPanelConsole
     #    on_enter hook must suspend on mechanism "deus" or the strip (incl. the
