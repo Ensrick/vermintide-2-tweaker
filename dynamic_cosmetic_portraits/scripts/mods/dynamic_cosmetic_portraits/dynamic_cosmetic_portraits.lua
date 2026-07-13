@@ -5,7 +5,7 @@ local mod = get_mod("dynamic_cosmetic_portraits")
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.18-dev"
+local MOD_VERSION = "0.1.19-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -384,21 +384,36 @@ local function _check_portrait_materials_ready()
     return false
 end
 
+-- (#435) Career of a Player object. Works for all three player classes:
+-- career_name is a method on BulldozerPlayer (bulldozer_player.lua:106) and
+-- RemotePlayer (remote_player.lua:115); PlayerBot inherits BulldozerPlayer
+-- (player_bot.lua:5). pcall'd because profile data may not be synced yet
+-- while a peer is still loading.
+local function _player_career_name(player)
+    if not player then return nil end
+    local career_name = nil
+    pcall(function() career_name = player:career_name() end)
+    if not career_name then pcall(function() career_name = player.career_name end) end
+    if type(career_name) ~= "string" then return nil end
+    return career_name
+end
+
 local function _get_kruber_merc_hat_key()
     local pm = Managers.player
     if not pm then return _last_known_hat_key end
 
     if CosmeticUtils and CosmeticUtils.get_cosmetic_slot then
-        for _, player in pairs(pm:players()) do
-            local career_name = nil
-            pcall(function() career_name = player:career_name() end)
-            if not career_name then pcall(function() career_name = player.career_name end) end
-            if career_name == "es_mercenary" then
-                local ok, hat_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_hat")
-                if ok and hat_data and hat_data.item_name then
-                    _last_known_hat_key = hat_data.item_name
-                    return hat_data.item_name
-                end
+        -- (#435) LOCAL player ONLY. This feeds the GLOBAL career_settings swap,
+        -- which must reflect the local player's cosmetics exclusively. The old
+        -- pm:players() scan took the FIRST es_mercenary it found, so a remote
+        -- player (or bot) on the same career could key the local override off
+        -- THEIR hat instead of ours.
+        local player = pm:local_player()
+        if player and _player_career_name(player) == "es_mercenary" then
+            local ok, hat_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_hat")
+            if ok and hat_data and hat_data.item_name then
+                _last_known_hat_key = hat_data.item_name
+                return hat_data.item_name
             end
         end
     end
@@ -422,16 +437,13 @@ local function _get_kruber_merc_skin_key()
     if not pm then return _last_known_skin_key end
 
     if CosmeticUtils and CosmeticUtils.get_cosmetic_slot then
-        for _, player in pairs(pm:players()) do
-            local career_name = nil
-            pcall(function() career_name = player:career_name() end)
-            if not career_name then pcall(function() career_name = player.career_name end) end
-            if career_name == "es_mercenary" then
-                local ok, skin_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_skin")
-                if ok and skin_data and skin_data.item_name then
-                    _last_known_skin_key = skin_data.item_name
-                    return skin_data.item_name
-                end
+        -- (#435) LOCAL player ONLY -- see _get_kruber_merc_hat_key above.
+        local player = pm:local_player()
+        if player and _player_career_name(player) == "es_mercenary" then
+            local ok, skin_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_skin")
+            if ok and skin_data and skin_data.item_name then
+                _last_known_skin_key = skin_data.item_name
+                return skin_data.item_name
             end
         end
     end
@@ -448,6 +460,42 @@ local function _get_kruber_merc_skin_key()
     end
 
     return _last_known_skin_key
+end
+
+-- (#435) Per-PLAYER portrait resolution. The career_settings swap below is
+-- GLOBAL: SPProfiles[5].careers[1] is one shared table, and every UI surface
+-- resolves portraits by (profile_index, career_index) with no player key --
+-- HUD unit frames (unit_frames_handler.lua:167-173, read at :747), Tab player
+-- list (ingame_player_list_ui_v2.lua:887), end-of-round score
+-- (end_view_state_score.lua:504-514). So with the swap active, EVERY
+-- es_mercenary in the lobby (other humans, bots, a spectated player) would
+-- show the LOCAL player's cosmetic-derived portrait. This helper resolves a
+-- portrait set from ONE specific player's own cosmetics:
+-- CosmeticUtils.get_cosmetic_slot reads network-synced player data
+-- (cosmetic_utils.lua:254) and works for remote humans and bots wherever
+-- sync data is active (same API vanilla's scoreboard uses for other players'
+-- skins, scoreboard_helper.lua:369-373). Returns the {hud, medium, small}
+-- set, or nil when the player is not an es_mercenary, wears no tracked
+-- cosmetic, sync data is unavailable, or our portrait materials are not
+-- loaded yet (a custom texture before readiness is a "Material not found in
+-- Gui" crash). Callers must fall back to _original_portrait_image (vanilla),
+-- NEVER to the possibly-swapped global value.
+local function _resolve_portrait_set_for_player(player)
+    if not player then return nil end
+    if _player_career_name(player) ~= "es_mercenary" then return nil end
+    if not _check_portrait_materials_ready() then return nil end
+    if not (CosmeticUtils and CosmeticUtils.get_cosmetic_slot) then return nil end
+    -- Skin overrides hat -- same priority as _sync_portrait_settings.
+    local ok_skin, skin_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_skin")
+    if ok_skin and skin_data and skin_data.item_name then
+        local set = _skin_portrait_map[skin_data.item_name]
+        if set then return set end
+    end
+    local ok_hat, hat_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_hat")
+    if ok_hat and hat_data and hat_data.item_name then
+        return _hat_portrait_map[hat_data.item_name]
+    end
+    return nil
 end
 
 local function _restore_portrait_settings()
@@ -851,6 +899,147 @@ end)
 -- _portrait_settings_active is true, this is a cheap no-op.
 mod:hook_safe("UnitFrameUI", "draw", function(self, dt)
     _sync_portrait_settings()
+end)
+
+-- ============================================================
+-- (#435) Per-player seam hooks. The career_settings swap is career-scoped
+-- (one global table entry), so surfaces that draw OTHER players must be
+-- diverted to a per-player resolution. Three seams below: HUD unit frames,
+-- Tab player list, end-of-round score. Known surfaces NOT yet covered (all
+-- read the same global; transient/secondary): deus overworld map + shop
+-- (deus_map_ui_v2.lua:719, deus_shop_view_v2.lua:897), matchmaking status
+-- (matchmaking_ui.lua:21), kill-feed popups (positive_reinforcement_ui.lua:292),
+-- social wheel (social_wheel_ui.lua:296), twitch vote (twitch_vote_ui.lua:487),
+-- versus tab (versus_tab_ui.lua:760).
+-- ============================================================
+
+-- (#435) HUD unit frames. The vanilla resolver get_portrait_name_by_profile_index
+-- (unit_frames_handler.lua:167-173, read at :747) is file-local and keys off the
+-- global career_settings entry. _sync_player_stats handles exactly ONE unit
+-- frame per call (only call site: unit_frames_handler.lua:1224, round-robin),
+-- so for a NON-local es_mercenary frame we temporarily point the global field
+-- at that player's own resolution (their tracked cosmetic, else the vanilla
+-- original -- NEVER the local override) around the wrapped call, then restore.
+-- The read happens synchronously inside func (Lua is single-threaded), and
+-- vanilla's data.portrait_texture dirty-check (unit_frames_handler.lua:819-822)
+-- caches the per-player value, so there is no per-frame widget churn. The
+-- wrapped function's returns are not consumed at its only call site.
+-- Hook pre-flight (CLAUDE.md rule 8): dcp's only other hook is
+-- ("UnitFrameUI", "draw") above; no existing hook on this pair.
+mod:hook("UnitFramesHandler", "_sync_player_stats", function(func, self, unit_frame, ...)
+    local career = SPProfiles and SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
+    local player_data = unit_frame and unit_frame.player_data
+    local player = player_data and player_data.player
+    -- Local player's own frame: the global swap already reflects the local
+    -- cosmetics; pass through untouched. (In spectator mode frame 1 holds the
+    -- SPECTATED player -- player.local_player is false there, so the spectated
+    -- player correctly takes the per-player path.)
+    if not career or not player or player.local_player then
+        return func(self, unit_frame, ...)
+    end
+    if _player_career_name(player) ~= "es_mercenary" then
+        return func(self, unit_frame, ...)
+    end
+    local set = _resolve_portrait_set_for_player(player)
+    local resolved = (set and set.hud) or _original_portrait_image or career.portrait_image
+    local saved = career.portrait_image
+    career.portrait_image = resolved
+    func(self, unit_frame, ...)
+    career.portrait_image = saved
+end)
+
+-- (#435) Tab player list. Reads the global career_settings.portrait_image per
+-- row (ingame_player_list_ui_v2.lua:887) and bakes it into the row's portrait
+-- widget (content key "portrait", ui_widgets_honduras.lua:13857-13864) only
+-- when the row is (re)built, so a post-hook content correction sticks --
+-- vanilla does not re-write it every update. The local player's row is left
+-- alone (the global value IS their resolution). Bot rows resolve from the
+-- bot's own synced cosmetics where available, else vanilla.
+mod:hook_safe("IngamePlayerListUI", "_update_player_information", function(self, dt, t)
+    local players = self._players
+    local num_players = self._num_players
+    if not players or not num_players then return end
+    for i = 1, num_players do
+        local pd = players[i]
+        local player = pd and pd.player
+        local widget = pd and pd.portrait_widget
+        if player and widget and widget.content and not pd.is_local_player
+                and _player_career_name(player) == "es_mercenary" then
+            local set = _resolve_portrait_set_for_player(player)
+            local resolved = (set and set.hud) or _original_portrait_image
+            if resolved and widget.content.portrait ~= resolved then
+                widget.content.portrait = resolved
+            end
+        end
+    end
+end)
+
+-- (#435) End-of-round score screen. _setup_player_scores resolves each row's
+-- portrait from the global career_settings entry at widget-build time
+-- (end_view_state_score.lua:504-514). Post-correct every non-local
+-- es_mercenary row: resolve the Player object back from the score record's
+-- peer_id (player_from_peer_id, player_manager.lua:463) and use THEIR
+-- cosmetics. Bots and departed players fall back to the vanilla original --
+-- a bot cannot be disambiguated from its score record (bots share the host's
+-- peer_id). Runs once per score-screen build. self.peer_id is the LOCAL peer
+-- (context.peer_id <- Network.peer_id(), state_ingame.lua:181/260).
+mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, players_session_scores)
+    if not _original_portrait_image then return end  -- swap never activated; nothing can have leaked
+    local records = self._players_by_widget_index
+    local widgets = self._hero_widgets
+    if not records or not widgets then return end
+    local my_peer_id = self.peer_id or (Network and Network.peer_id and Network.peer_id())
+    for widget_index, rec in pairs(records) do
+        local widget = widgets[widget_index]
+        local content = widget and widget.content
+        -- Only the overridden career entry can leak: dcp swaps
+        -- SPProfiles[5].careers[1] (Kruber es_mercenary) exclusively.
+        if content and rec and rec.profile_index == 5 and rec.career_index == 1 then
+            local is_local_human = rec.is_player_controlled and rec.peer_id == my_peer_id
+            if not is_local_human then
+                local that_player = nil
+                if rec.is_player_controlled and rec.peer_id and Managers.player then
+                    that_player = Managers.player:player_from_peer_id(rec.peer_id, 1)
+                end
+                local set = that_player and _resolve_portrait_set_for_player(that_player)
+                local resolved = (set and set.hud) or _original_portrait_image
+                if content.portrait ~= resolved then
+                    content.portrait = resolved
+                end
+            end
+        end
+    end
+end)
+
+_rt_register("portrait_override_player_scoped", function()
+    -- (#435) The career_settings swap is career-scoped (global table entry);
+    -- the per-player seam hooks above keep the local override from leaking
+    -- onto other players' frames. Runtime half: the per-player resolver must
+    -- exist. Source half (io-safe via _rt_src_read; skipped in the retail
+    -- sandbox, runs under modding tools / CI): the three seam hooks are
+    -- registered and the local override detection keys off the LOCAL player,
+    -- not a players() scan. Needles split so this check never self-matches.
+    if type(_resolve_portrait_set_for_player) ~= "function" then
+        return "_resolve_portrait_set_for_player missing -- other players' frames fall back to the career-scoped global (leak)"
+    end
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local txt = _rt_src_read(src_path)
+    if not txt then return end
+    local needles = {
+        { 'mod:hook("UnitFramesHandler", ' .. '"_sync_player_stats"',
+          "HUD unit-frame per-player seam hook missing (leak on team frames)" },
+        { 'mod:hook_safe("IngamePlayerListUI", ' .. '"_update_player_information"',
+          "Tab player-list per-player seam hook missing (leak on player list)" },
+        { 'mod:hook_safe("EndViewStateScore", ' .. '"_setup_player_scores"',
+          "end-of-round score per-player seam hook missing (leak on score screen)" },
+        { 'pm:local_' .. 'player()',
+          "local override detection must key off the LOCAL player, not a players() scan" },
+    }
+    for _, n in ipairs(needles) do
+        if not txt:find(n[1], 1, true) then return n[2] end
+    end
 end)
 
 mod.on_game_state_changed = function()

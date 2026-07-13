@@ -1,5 +1,31 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.19-dev (2026-07-13) -- #435 portrait override is now player-scoped: the local swap no longer leaks onto other players' frames [untested]
+
+### Why
+The portrait override mutates `SPProfiles[5].careers[1].portrait_image` -- one GLOBAL table entry shared by every player on Kruber Mercenary. Every UI surface resolves portraits by `(profile_index, career_index)` with no player key (HUD unit frames `unit_frames_handler.lua:167-173`/`:747`, Tab player list `ingame_player_list_ui_v2.lua:887`, end-of-round score `end_view_state_score.lua:504-514`), so with the swap active, every es_mercenary in the lobby (other humans, bots, a spectated player) showed the LOCAL player's cosmetic-derived portrait. Worse, the hat/skin detection scanned `pm:players()` and took the FIRST es_mercenary found, so the local override itself could be keyed off a REMOTE player's (or bot's) cosmetics.
+
+### Changed
+- `dynamic_cosmetic_portraits.lua` -- `_get_kruber_merc_hat_key` / `_get_kruber_merc_skin_key` now read `pm:local_player()` only (shared `_player_career_name` helper); the global swap is derived exclusively from the local player's cosmetics. The `BackendUtils.get_loadout_item` fallback stays (local backend = local loadout by definition; it also serves the hero-select picking preview when the local player is not currently on merc).
+- NEW `_resolve_portrait_set_for_player(player)` -- resolves a portrait set from ONE player's own synced cosmetics via `CosmeticUtils.get_cosmetic_slot` (`cosmetic_utils.lua:254`; network-synced, works for remote humans and bots -- the same API vanilla's scoreboard uses for other players' skins, `scoreboard_helper.lua:369-373`). Skin-over-hat priority preserved; gated on material readiness; returns nil for untracked/unsynced -> callers fall back to the vanilla original, never the local override.
+- NEW seam hooks (three), each resolving per-player at draw time:
+  - `UnitFramesHandler._sync_player_stats` (wrapper): for a non-local es_mercenary frame, the global field is temporarily pointed at that player's own resolution around the wrapped call (single-frame-per-call site `unit_frames_handler.lua:1224`; vanilla's dirty-check then caches the per-player value, no widget churn).
+  - `IngamePlayerListUI._update_player_information` (hook_safe): post-corrects each non-local merc row's portrait widget content (key `portrait`).
+  - `EndViewStateScore._setup_player_scores` (hook_safe): post-corrects non-local merc rows; the Player object is resolved back from the score record's `peer_id`. Bots and departed players fall back to vanilla there (bots share the host's peer_id, so a score record cannot be mapped back to a specific bot).
+- Bot behavior: in-mission HUD/Tab-list bot frames resolve from the bot's own synced cosmetics (bots wear the host's saved merc loadout, so a tracked hat on a bot legitimately shows its portrait); on the end-of-round score screen bots always show vanilla.
+- Surfaces NOT yet covered (transient/secondary, same global read; listed in the seam-hook banner): deus overworld map + shop, matchmaking status, kill-feed popups, social wheel, twitch vote, versus tab.
+- NEW rt check `portrait_override_player_scoped` -- runtime: per-player resolver exists; source (io-safe, CI): the three seam hooks are registered and local detection keys off `pm:local_player()`. The four locked needles from issue 509 / issue 511 (`_skin_portrait_map[skin_key]`, `_hat_portrait_map[hat_key]`, save-before-swap, restore-original) are untouched.
+- `MOD_VERSION` `0.1.18-dev` -> `0.1.19-dev`.
+
+### Tests
+Built via VMBLauncher (compile-only); lint clean. Not deployed/uploaded per task scope.
+
+### To verify
+Note: vanilla adventure allows one player per HERO, so two humans can never both be Kruber Mercenary there -- the true two-merc leak pair only forms in Versus or duplicate-hero modded lobbies. The adventure-reachable defects are the wrong-source override (root cause 2) and the bot leak, and those are what the protocols below exercise.
+- Solo (1 human + bots, host, deterministic): play a NON-merc career with a tracked hat (e.g. Estalian Conquistador) saved on your Kruber Mercenary loadout, with a Kruber bot in the party. In-mission the bot's HUD frame showing the custom portrait is CORRECT post-fix (the bot genuinely wears your saved hat; it resolves from the bot's own synced cosmetics). The discriminator is the END-OF-ROUND score screen: the bot's tile must show the VANILLA merc portrait (pre-fix: the custom one).
+- 2 humans (both on this build): B plays Kruber Mercenary, A plays another hero but has a tracked hat saved on A's own merc loadout. On A's screen, B's HUD team frame + Tab-list row + end-of-round tile must reflect B's OWN hat: custom portrait if B wears a tracked hat, vanilla if untracked -- never A's loadout-derived portrait (pre-fix, A's global swap could key off A's saved loadout via the backend fallback, or off B's hat via the players() scan, and paint B's frames with it).
+- Both testers: run `/dcp_regression_test` -- expect `portrait_override_player_scoped` PASS (and the 5 pre-existing checks PASS).
+
 ## 0.1.18-dev (2026-07-12) -- #511 io-safe regression checks: source-reads no longer throw in the retail sandbox [untested]
 
 ### Why
