@@ -621,6 +621,22 @@ Last updated: 2026-05-22.
 
 ---
 
+### wt-cim-widget-strip-removed - Dead CIM widget filtering stays removed
+
+| Field | Value |
+|-------|-------|
+| Symptom | `weapon_tweaker_data.lua` scans loaded mods and recursively walks every settings widget, but can never match a target. |
+| Root cause | Commit `a7012f3` removed the `cw_melee_traits` and `cw_ranged_traits` groups without removing their CIM detection/strip scaffold. |
+| Mod(s) | weapon_tweaker |
+| Fix version(s) | wt v0.12.217-dev (#218) |
+| Category | STATIC |
+| Repro | Load settings with or without Crafting in Modded; the old walk produced the identical widget tree. |
+| Expected post-fix | No CIM detection/strip symbols or deleted group IDs remain in active wt data. Hidden default-true backend/UI/animation feature-flag labels remain documented and present. |
+| Detection | `qa/check_rt_textual_invariants.ps1` enforces the four `#218` absence/presence invariants. |
+
+
+---
+
 ## Slugs
 
 - 1p-animations-universal
@@ -640,6 +656,7 @@ Last updated: 2026-05-22.
 - feedback-workshop-upload-without-deploy
 - gated-registration-divergence
 - inventory-preview-hook-menuworldpreviewer
+- wt-cim-widget-strip-removed
 - lua-forward-reference
 - ps5-getcontent-utf8
 - ugc-tool-forward-slashes

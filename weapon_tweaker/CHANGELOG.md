@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.217-dev (2026-07-13) - #218: remove dead CIM widget-strip scaffolding
+
+The Chaos Wastes trait groups `cw_melee_traits` and `cw_ranged_traits` were deleted from the settings tree in commit `a7012f3`, but their `crafting_in_modded` detection and recursive strip pass remained at data-load time. Current active wt source contains no such widget or localization key, and the decompiled game source contains none of these mod-only setting IDs, so the walk could never remove anything.
+
+- Removed only the stale CIM presence scan, gated-ID table, recursive strip helper, call site, and comments that described that deleted path from `weapon_tweaker_data.lua`. Dynamic dev widget trees still append in the same order.
+- Marked `enable_weapon_backend_hooks`, `enable_weapon_ui_hooks`, and `enable_weapon_animation_redirects` as intentional hidden default-true feature-flag labels in `weapon_tweaker_localization.lua`; their runtime reads remain unchanged.
+- **Static regression:** four `#218` entries in `qa/rt_textual_invariants.psd1` require the removed CIM symbols/groups to remain absent from active wt data and the three runtime-backed hidden labels to remain present.
+- **Verify (static/no gameplay change):** `qa/check_rt_textual_invariants.ps1`, strict `tools/mod-lint/lint-mod.ps1 -Mod weapon_tweaker`, and relevant repository QA pass. No in-game behavior changes; live confirmation is not applicable to this no-op removal.
+
 ## 0.12.216-dev (2026-07-13) - #536: extend the empty-wield network-crash patch to Saltzpyre (wh) careers
 
 Closes the wire-safety-audit finding in issue #536: the not-loaded/no-ammo wield patch (`_NOT_LOADED_NO_AMMO_CAREER_PATCHES`, `weapon_tweaker.lua`, added v0.12.139) covered only Kruber careers, so a Saltzpyre career wielding Kerillian's Repeater Crossbow (`we_crossbow_repeater`, `repeating_crossbow_elf_template`) on an empty/unloaded clip still hit the same latent RPC-packer fatal.

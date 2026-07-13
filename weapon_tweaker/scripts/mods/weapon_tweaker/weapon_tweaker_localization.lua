@@ -1052,7 +1052,9 @@ local loc = {
     unlock_bw_necromancer_bw_skullstaff_geiser = { en = "Sienna: Conflagration Staff" },
     unlock_bw_necromancer_bw_skullstaff_spear = { en = "Sienna: Bolt Staff" },
     unlock_bw_necromancer_bw_deus_01 = { en = "Sienna: Coruscation Staff" },
-    -- Feature toggles
+    -- Hidden default-true feature flags: these have no widgets by design, but
+    -- weapon_tweaker_backend.lua and _wt_anim_remap.lua read their saved values.
+    -- Keep the labels so diagnostics/config tooling can still name the flags.
     enable_weapon_backend_hooks = { en = "Enable Backend Loadout Hooks" },
     enable_weapon_ui_hooks = { en = "Enable UI Inventory Hooks" },
     enable_weapon_animation_redirects = { en = "Enable Animation Redirects" },

@@ -1,51 +1,5 @@
 local mod = get_mod("wt")
 
--- CLARIFY: detects whether crafting_in_modded is installed at the moment
--- _data.lua is required by VMF. Used to conditionally surface the CW-trait
--- widget groups; the runtime in weapon_tweaker.lua still respects whatever
--- values are stored but the toggles only do anything visible to the player
--- when cim is around to surface them in its forge.
--- (CWV-detection was removed in v0.12.57-dev along with `_strip_cwv_widgets`
--- once wh_1h_axe stopped being offered to Kruber from wt.)
-local _has_cim = false
-if Managers and Managers.mod and Managers.mod._mods then
-    for i = 1, #Managers.mod._mods do
-        local m = Managers.mod._mods[i]
-        if m and m.name == "crafting_in_modded" then
-            _has_cim = true
-        end
-    end
-end
-
--- Setting IDs of the top-level CW trait groups; stripped from the widget tree
--- when crafting_in_modded isn't installed (the runtime in weapon_tweaker.lua
--- still respects whatever values are stored, but the toggles only do anything
--- visible to the player when cim is around to surface them in its forge).
-local _cim_gated_groups = {
-    cw_melee_traits = true,
-    cw_ranged_traits = true,
-}
-
-local function _strip_cim_widgets(widgets)
-    if not widgets then return end
-    for i = #widgets, 1, -1 do
-        local w = widgets[i]
-        if _cim_gated_groups[w.setting_id] then
-            table.remove(widgets, i)
-        elseif w.sub_widgets then
-            _strip_cim_widgets(w.sub_widgets)
-        end
-    end
-end
-
--- v0.12.57-dev: `_cwv_managed_settings` removed. It stripped the four
--- `unlock_es_*_wh_1h_axe` widgets when CWV was installed (so CWV's variant
--- mod could own the cross-character path). Since wh_1h_axe is no longer
--- offered to Kruber from wt at all (per user direction — no Saltzpyre
--- Skullsplitter on Kruber), there's nothing left for CWV to compete with
--- and the strip is dead. `_strip_cwv_widgets` and its call site are gone
--- with it.
-
 local data = {
     name = mod:localize("mod_name"),
     description = mod:localize("mod_description"),
@@ -1643,20 +1597,15 @@ local data = {
             },
 ]==]
             -- v0.12.140-dev: enable_dev_anim_picker is now a MASTER TOGGLE — its
-            -- picker rows are appended as its `sub_widgets` AFTER the CIM strip
-            -- (below), so VMF reveals the whole picker menu LIVE on toggle (no
-            -- restart). See the append block after _strip_cim_widgets.
+            -- picker rows are appended as its `sub_widgets` after the static
+            -- tree (below), so VMF reveals the whole picker menu LIVE on toggle (no
+            -- restart). See the append block below.
             -- (enable_debug_logging removed v0.12.176-dev — #169)
         },
     },
 }
 
-if not _has_cim then
-    _strip_cim_widgets(data.options.widgets)
-end
-
--- Dev tooling widget trees (appended AFTER the CIM strip so they're never
--- accidentally stripped — they're not CIM-gated).
+-- Dev tooling widget trees (appended after the static widget tree).
 --
 -- v0.12.140-dev: the 3P Anim-Set Chooser is now a MASTER-TOGGLE → sub_widgets
 -- surface (reference_vmf_native_master_toggle_submenu). build_widget_tree() returns

@@ -111,6 +111,15 @@
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_ai_takeover.lua'; needle='locomotion_system:set_override_player(bot_player)'; literal=$true; polarity='present'; issueRef='#73'; note='swap-to-bot path sets the locomotion override player.' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_ai_takeover.lua'; needle='locomotion_system:set_override_player(nil)'; literal=$true; polarity='present'; issueRef='#73'; note='swap-back path clears the locomotion override player.' }
 
+    # ============================ wt ============================
+    # #218: the CW trait widget groups were removed in a7012f3. Keep the stale
+    # CIM strip/detection scaffold absent, while preserving three hidden,
+    # default-true feature-flag labels that runtime code still reads.
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_data.lua'; needle='_has_cim|_cim_gated_groups|_strip_cim_widgets|cw_(?:melee|ranged)_traits'; literal=$false; polarity='absent'; issueRef='#218'; note='removed CW-trait widget groups must not regain their dead CIM detection/strip scaffold.' }
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua'; needle='enable_weapon_backend_hooks ='; literal=$true; polarity='present'; issueRef='#218'; note='hidden default-true backend hook flag still has a label; it is runtime-read despite having no widget.' }
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua'; needle='enable_weapon_ui_hooks ='; literal=$true; polarity='present'; issueRef='#218'; note='hidden default-true UI hook flag still has a label; it is runtime-read despite having no widget.' }
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua'; needle='enable_weapon_animation_redirects ='; literal=$true; polarity='present'; issueRef='#218'; note='hidden default-true animation redirect flag still has a label; it is runtime-read despite having no widget.' }
+
     # ============================ ct_dev ============================
     # Source: chaos_wastes_tweaker_dev/CHANGELOG.md 0.7.245-dev (issue 511 item).
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='local spawned, go_id = func('; literal=$true; polarity='present'; issueRef='#322'; note='_spawn_pickup hook captures BOTH vanilla returns (linked-pickup client sync).' }
