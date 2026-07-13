@@ -7,6 +7,24 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-13.
 
 ---
+## UI layout
+
+### cw-tab-collectible-safe-reflow - Injected DEUS counters cross the Tab overlay edge
+
+**[INTEGRATION]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Chests-of-Trials / Pilgrim's-Coin rows injected into the Chaos Wastes hold-Tab pane extend beyond the screen or safe rectangle. |
+| Root cause | The #533 copy of vanilla's widget forced 0.6 icon scale at pre-scenegraph build time while retaining unscaled text and offsets; it did not measure localized labels or consume resolution, UI scale, banner bounds, or the safe rectangle. |
+| Mod(s) | chaos_wastes_tweaker_dev |
+| Fix version(s) | ct_dev v0.7.262-dev (#571) |
+| Category | INTEGRATION |
+| Repro | Enter an injected Adventure mission in a CW run; hold Tab at 16:9 and ultrawide, then repeat with non-default HUD/UI scale and safe rectangle. Collect enough coins/chests to change both counts. |
+| Expected post-fix | The native right-banner bound is preserved. Two measured cells share a row when they fit and wrap to one column otherwise; lower safe inset and Collectibles divider are respected. Counts remain live. Vanilla CW content and stock Adventure collectible widgets are unchanged. |
+| Detection | `[ct:571] collectible layout` reports the active contract. `/ct_regression_test`: `issue533_cw_tab_collectibles_wired` and `issue571_cw_tab_collectibles_safe_reflow` pass. |
+
+---
 ## Localization
 
 ### generated-localization-percent-format - Builder emits an unescaped literal percent

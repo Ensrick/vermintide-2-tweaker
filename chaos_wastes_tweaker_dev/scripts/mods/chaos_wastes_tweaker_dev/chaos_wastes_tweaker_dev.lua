@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.261-dev"
+local MOD_VERSION = "0.7.262-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -8371,6 +8371,7 @@ mod:hook_safe("IngamePlayerListUI", "_draw", function(self, dt)
             -- active frame, write-on-change; ingame_player_list_ui_v2.lua:1128/:516-545),
             -- then draw vanilla's own Collectibles header + divider (vanilla skips them
             -- itself while _mission_count == 0 -- :1663-1665) and our two counter rows.
+            pcall(mod._ct_layout_deus_collectibles, self)
             pcall(mod._ct_refresh_deus_collectibles, self)
             if self._collectibles_name then pcall(UIRenderer.draw_widget, r, self._collectibles_name) end
             if self._collectibles_divider then pcall(UIRenderer.draw_widget, r, self._collectibles_divider) end
@@ -8499,9 +8500,8 @@ do
         { key = "chests", icon = "deus_icons_boon", label_key = "ct_tab_chests_of_trials" },
         { key = "coins",  icon = "deus_icons_coin", label_key = "ct_tab_pilgrims_coins" },
     }
-    -- Both icons are 80x80 atlas entries; 0.6 scales them to the ~48px footprint the
-    -- vanilla adventure counters occupy on this node.
-    local ICON_SCALE = 0.6
+    -- Native-sized; #571 resolves any downscale from the live scenegraph.
+    local ICON_SIZE = 80
 
     -- Verbatim copy of vanilla create_loot_widget (definitions:843-1041) MINUS the
     -- glow_icon pass/style: `texture .. "_glow"` does not exist for the deus icons and
@@ -8603,20 +8603,15 @@ do
         }
     end
 
-    -- Build the two rows. Row placement is vanilla's own formula
-    -- (offset[2] = -(row - 1) * size_h, one entry per row): first row sits +size_h
-    -- above the loot_objective anchor, second row on it -- exactly where the vanilla
-    -- adventure counters sat.
+    -- Build once; live placement happens after the scenegraph resolves below.
     function mod._ct_build_deus_collectibles()
         local rows = {}
-        local size_h = ICON_SCALE * 80
         for i, spec in ipairs(ROWS) do
-            local widget = UIWidget.init(create_deus_loot_widget(spec.icon, mod:localize(spec.label_key), ICON_SCALE))
-            widget.offset[1] = 0
-            widget.offset[2] = -(i - 2) * size_h
-            rows[#rows + 1] = { key = spec.key, widget = widget, last = nil }
+            local title = mod:localize(spec.label_key)
+            local widget = UIWidget.init(create_deus_loot_widget(spec.icon, title, 1))
+            rows[#rows + 1] = { key = spec.key, title = title, widget = widget, last = nil }
         end
-        return { rows = rows }
+        return { rows = rows, layout_signature = nil }
     end
 
     -- Per-frame value refresh while the panel draws (called from the shared _draw hook
@@ -8662,6 +8657,8 @@ do
     end)
 end
 
+local _ct_tab_layout_571 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_tab_collectibles_layout")
+
 -- #533 regression: marker + all three helpers stay wired, and the value reader honors
 -- its outside-a-deus-run nil contract (in the keep it MUST be nil; mid-run a table).
 _rt_register("issue533_cw_tab_collectibles_wired", function()
@@ -8682,6 +8679,8 @@ _rt_register("issue533_cw_tab_collectibles_wired", function()
         return "#533 REGRESSION: value reader contract broken (expected nil outside a deus run or {chests=n, coins=n} inside one)"
     end
 end)
+
+_rt_register("issue571_cw_tab_collectibles_safe_reflow", _ct_tab_layout_571.regression)
 
 -- ============================================================
 -- Buy Starting Boons -- start-node shrine shop (#458)
