@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.220-dev"
+local MOD_VERSION = "0.12.221-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -750,6 +750,117 @@ function mod._reapply_durable_grip_offsets()
     end
 end
 
+-- ===========================================================================
+-- #569: non-WP Saltzpyre + Warrior Priest greathammer remap orientation
+-- ===========================================================================
+-- Vanilla's two_handed_melee_weapon linking attaches weapon node 0 directly to
+-- body `j_rightweaponattach` with no rotation layer
+-- (attachment_node_linking.lua:2836-2864); GearUtils.spawn_inventory_unit then
+-- performs that link for the 3P unit before create_equipment returns
+-- (gear_utils.lua:150-185). The correction therefore belongs on the linked 3P
+-- weapon root, not in a shared template and not on the 1P unit.
+--
+-- Axis: WT's empirically tuned grip coordinate system uses local Z along the
+-- weapon haft (`_weapon_grip_offsets`: +Z moves the grip lower). Rotating 180
+-- degrees about LOCAL Z reverses the transverse weapon facing while preserving
+-- the head-to-grip/haft direction. X or Y would reverse that longitudinal axis.
+-- Use axis-angle explicitly so the boundary is unambiguous.
+local _WT569_STANDARD_SALTZ_CAREERS = {
+    wh_captain = true,
+    wh_bountyhunter = true,
+    wh_zealot = true,
+}
+local _WT569_NATIVE_WP_HAMMER_KEY = "wh_2h_hammer"
+local _WT569_REMAP_EVENT = "to_2h_hammer_priest"
+local _WT569_LOCAL_AXIS = { 0, 0, 1 }
+local _WT569_DEGREES = 180
+local _wt569_tracked_3p_units = setmetatable({}, { __mode = "k" })
+
+mod._wt569_should_rotate_3p = function(weapon_key, career_name, item_template)
+    if not _WT569_STANDARD_SALTZ_CAREERS[career_name] then return false end
+    if weapon_key == _WT569_NATIVE_WP_HAMMER_KEY then return false end
+    local by_career = item_template and item_template.wield_anim_career_3p
+    return type(by_career) == "table"
+        and by_career[career_name] == _WT569_REMAP_EVENT
+end
+
+mod._wt569_orientation_contract = {
+    axis = _WT569_LOCAL_AXIS,
+    degrees = _WT569_DEGREES,
+    remap_event = _WT569_REMAP_EVENT,
+    native_exempt_key = _WT569_NATIVE_WP_HAMMER_KEY,
+}
+
+local function _wt569_track_3p_units(slot_data, weapon_key, career_name, item_template, owner_3p, slot_name, preview_wielded)
+    if not mod._wt569_should_rotate_3p(weapon_key, career_name, item_template) then return end
+    for _, field in ipairs({ "right_unit_3p", "left_unit_3p" }) do
+        local unit = slot_data and slot_data[field]
+        if unit and not _wt569_tracked_3p_units[unit] then
+            local ok_alive, alive = pcall(Unit.alive, unit)
+            local ok_rot, base_rotation = pcall(Unit.local_rotation, unit, 0)
+            if ok_alive and alive and ok_rot and base_rotation then
+                _wt569_tracked_3p_units[unit] = {
+                    base = QuaternionBox(base_rotation),
+                    owner = owner_3p,
+                    slot_name = slot_name,
+                    preview_wielded = preview_wielded == true,
+                    weapon_key = weapon_key,
+                    career_name = career_name,
+                    hand = field == "right_unit_3p" and "right" or "left",
+                }
+                pcall(printf,
+                    "[wt:569] tracked career=%s weapon=%s hand=%s remap=%s axis=local_z degrees=180 first_person=untouched",
+                    tostring(career_name), tostring(weapon_key),
+                    field == "right_unit_3p" and "right" or "left", _WT569_REMAP_EVENT)
+            end
+        end
+    end
+end
+
+local function _wt569_is_wielded(row)
+    if row.preview_wielded then return true end
+    local owner = row.owner
+    if not owner then return false end
+    local ok_alive, alive = pcall(Unit.alive, owner)
+    if not ok_alive or not alive then return false end
+    local inv = ScriptUnit and ScriptUnit.has_extension
+        and ScriptUnit.has_extension(owner, "inventory_system")
+    if not inv or type(inv.get_wielded_slot_name) ~= "function" then return false end
+    local ok_slot, wielded_slot = pcall(inv.get_wielded_slot_name, inv)
+    return ok_slot and wielded_slot == row.slot_name
+end
+
+-- Per-frame absolute-from-captured-canonical application. Animation ticks reset
+-- weapon node 0, so one-shot rotation is insufficient (same paid-for boundary
+-- as durable grip offsets). We never multiply the current rotation: the boxed
+-- canonical is composed with exactly one local-Z half-turn every frame, which
+-- prevents double rotation even if create_equipment is revisited for a unit.
+-- Tracking all spawned 3P units covers local player, bots, remote husks, and the
+-- inventory preview; dead units fall out of the weak-key table.
+function mod._wt569_reapply_3p_orientation()
+    for unit, row in pairs(_wt569_tracked_3p_units) do
+        local ok_alive, alive = pcall(Unit.alive, unit)
+        if not ok_alive or not alive then
+            _wt569_tracked_3p_units[unit] = nil
+        else
+            local base = row.base:unbox()
+            local desired = base
+            local corrected = _wt569_is_wielded(row)
+            if corrected then
+                local half_turn = Quaternion.axis_angle(Vector3(0, 0, 1), math.pi)
+                desired = Quaternion.multiply(base, half_turn)
+            end
+            pcall(Unit.set_local_rotation, unit, 0, desired)
+            if row.last_corrected ~= corrected then
+                row.last_corrected = corrected
+                pcall(printf, "[wt:569] applied=%s career=%s weapon=%s hand=%s slot=%s",
+                    tostring(corrected), tostring(row.career_name), tostring(row.weapon_key),
+                    tostring(row.hand), tostring(row.slot_name or "preview"))
+            end
+        end
+    end
+end
+
 -- CW crash on ghost scythe 3P spawn (crashify://77917479-d053-4d34-b6b9-629878a7e6ec).
 -- Unit hash 877616b4d5c71f36 = wpn_bw_ghost_scythe_01_3p (Necromancer base mesh). For
 -- bw_unchained, vanilla `right_hand_unit_override.bw_unchained = "..._fire"` should
@@ -835,6 +946,8 @@ mod:traced_hook("GearUtils", "create_equipment", function(func, world, slot_name
         local weapon_key = item_data.name
         _scale_weapon_units(result, weapon_key, career_name)
         _offset_weapon_units(result, weapon_key, career_name)
+        _wt569_track_3p_units(result, weapon_key, career_name, result.item_template,
+            unit_3p, slot_name, false)
     end
     return result or {}   -- never nil to the vanilla caller (see stub rationale above)
 end)
@@ -3499,6 +3612,8 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
     local fake_slot = { right_unit_3p = unit }
     _scale_weapon_units(fake_slot, weapon_key, career_name)
     _offset_weapon_units(fake_slot, weapon_key, career_name)
+    _wt569_track_3p_units(fake_slot, weapon_key, career_name, item_template,
+        nil, slot_type, not skip_wield_anim and self._wielded_slot_type == slot_type)
 
     -- v0.12.146-dev: INVENTORY-PREVIEW WIELD POSE (3P-ONLY). Correct the wield
     -- stance for cross-character ports whose wield_anim_career_3p entry omits the
@@ -4789,6 +4904,42 @@ _rt_register("issue286_greataxe_saltzpyre_wield_pose", function()
             return string.format("live %s=%s (expected to_2h_hammer_priest)",
                 career, tostring(live[career]))
         end
+    end
+end)
+
+_rt_register("issue569_wp_hammer_remap_orientation_scope", function()
+    local predicate = mod._wt569_should_rotate_3p
+    local contract = mod._wt569_orientation_contract
+    if type(predicate) ~= "function" then return "#569 orientation predicate missing" end
+    if type(contract) ~= "table" then return "#569 orientation contract missing" end
+    local mapped = { wield_anim_career_3p = {
+        wh_captain = "to_2h_hammer_priest",
+        wh_bountyhunter = "to_2h_hammer_priest",
+        wh_zealot = "to_2h_hammer_priest",
+        wh_priest = "to_2h_hammer_priest",
+    } }
+    for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+        if not predicate("dr_2h_axe", career, mapped) then
+            return "mapped non-native weapon excluded for " .. career
+        end
+    end
+    if predicate("dr_2h_axe", "wh_priest", mapped) then
+        return "Warrior Priest body incorrectly included"
+    end
+    if predicate("wh_2h_hammer", "wh_captain", mapped) then
+        return "native Warrior Priest greathammer exemption missing"
+    end
+    if predicate("dr_2h_axe", "wh_captain", { wield_anim_career_3p = {
+            wh_captain = "to_2h_sword" } }) then
+        return "non-WP-greathammer remap incorrectly included"
+    end
+    local axis = contract.axis
+    if type(axis) ~= "table" or axis[1] ~= 0 or axis[2] ~= 0 or axis[3] ~= 1 then
+        return "correction axis is not exact local Z (0,0,1)"
+    end
+    if contract.degrees ~= 180 then return "correction is not exactly 180 degrees" end
+    if contract.native_exempt_key ~= "wh_2h_hammer" then
+        return "native exemption key drifted"
     end
 end)
 

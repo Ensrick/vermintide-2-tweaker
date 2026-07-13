@@ -121,6 +121,14 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
             pcall(mod._reapply_durable_grip_offsets)
         end
 
+        -- #569: durable, absolute 3P-only local-Z half-turn for non-native
+        -- weapons on standard Saltzpyre careers whose live wield redirect is
+        -- the Warrior Priest greathammer family. Tracks local/bot/husk/preview
+        -- units and restores canonical rotation while unwielded.
+        if mod._wt569_reapply_3p_orientation then
+            pcall(mod._wt569_reapply_3p_orientation)
+        end
+
         if not mod._applied_unlocks and ItemMasterList then
             mod._applied_unlocks = true
             apply_weapon_unlocks()
@@ -275,4 +283,3 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
 end
 
 return M
-

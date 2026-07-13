@@ -4,7 +4,21 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-07-13.
+
+---
+
+### issue569-wp-remap-orientation - Standard Saltzpyre WP-remap weapons face forward
+
+| Field | Value |
+|-------|-------|
+| Symptom | Non-native 3P weapons face backwards when standard Saltzpyre careers use `to_2h_hammer_priest`. |
+| Root cause | The animation remap changes the body attachment-node orientation, while vanilla links weapon node 0 with no corrective local transform. |
+| Fix version(s) | 0.12.221-dev |
+| Category | INTEGRATION / MULTIPLAYER |
+| Repro | On standard Saltzpyre, wield two non-native families mapped to WP greathammer; observe locally and from another peer, then swap/stow. |
+| Expected post-fix | Wielded weapons receive one 180-degree local-Z correction; stowed weapons restore canonical orientation; native WP greathammer and 1P remain unchanged. |
+| Detection | `/wt_regression_test`: `issue569_wp_hammer_remap_orientation_scope` PASS. `[wt:569]` reports tracked exact weapon/career and correction state. |
 
 ---
 ## Multiplayer / Network Sync

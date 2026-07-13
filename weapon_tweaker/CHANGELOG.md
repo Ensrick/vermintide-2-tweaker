@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.221-dev (2026-07-13) - #569: Saltzpyre WP-remap 3P orientation [untested]
+
+- **Symptom:** non-native weapons on `wh_captain`, `wh_bountyhunter`, and `wh_zealot` faced backwards when their live 3P wield target was `to_2h_hammer_priest`. The animation family remains the intended one; the linked weapon-root orientation was wrong.
+- **Source boundary:** `AttachmentNodeLinking.two_handed_melee_weapon.third_person.wielded` links body `j_rightweaponattach` directly to weapon node `0` with no rotation (`attachment_node_linking.lua:2836-2864`), and `GearUtils.spawn_inventory_unit` performs that link before returning the 3P unit (`gear_utils.lua:150-185`). The candidate therefore corrects weapon node 0 after spawn and never touches 1P or the shared template.
+- **Axis:** local Z is WT's established haft/grip axis (`_weapon_grip_offsets`: +Z moves the grip down the haft). An exact 180-degree local-Z axis-angle turn flips transverse facing without reversing the longitudinal head-to-grip direction. The correction is recomputed from a boxed canonical rotation, never from the previous frame, so it cannot double-rotate.
+- **Scope:** the predicate requires a standard Saltzpyre career plus a live `wield_anim_career_3p[career] == "to_2h_hammer_priest"`, excludes `wh_priest`, and explicitly exempts `wh_2h_hammer`. Only tracked `*_unit_3p` roots are written. Wielded local-player, bot, remote-husk, and preview units are covered; unwielded units restore their captured canonical rotation.
+- **Diagnostics/regression:** raw `[wt:569] tracked` and state-change `applied=true/false` lines identify the exact unit path. `/wt_regression_test` adds `issue569_wp_hammer_remap_orientation_scope` for career/remap scope, native exemption, exact axis, and exact angle.
+- **Verify after integration:** on a standard Saltzpyre career, inspect at least two mapped families (for example Bardin Greataxe and Cog Hammer) in local 3P and from a second player's view; both must face forward through idle/attacks/swap. Then equip the native WP greathammer on Warrior Priest as the unchanged control.
+
 ## 0.12.220-dev (2026-07-13) - #286: Greataxe Saltzpyre pose post-fix lock
 
 Post-fix hardening for the already user-confirmed v0.12.205-dev Greataxe stance correction. No gameplay value changed in this build.

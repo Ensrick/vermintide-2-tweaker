@@ -180,13 +180,13 @@ All `wh_*` natives 🔁 (~14 keys).
 | we_1h_sword | Elf Sword | ✅ | key remap + scale 1.15 |
 | es_1h_flail | Empire Flail | ✅ | native-wielder push fix (incl. vanilla bugfix) |
 | bw_1h_crowbill | Crowbill | ✅ | `_default` remap |
-| dr_2h_axe | Greataxe | ✅ | `_default` remap + scale |
+| dr_2h_axe | Greataxe | ✅ | `_default` remap + scale; WP-greathammer orientation correction covered by #569 v0.12.221-dev (wired-unverified) |
 | we_crossbow_repeater | Elf Repeater Crossbow | ✅ | redirect to `to_repeating_crossbow` ("should work almost perfectly"); #441 v0.12.212-dev baked wh_* `wield_anim_career_3p = to_repeating_crossbow` (keep-preview idle was wrong; in-mission redirect never covered the previewer) |
 | we_1h_spears_shield | Elf Spear & Shield | 🧊 | live = legacy sword&shield suffix route; DECISIONS SHO7 retargets to `wh_dual_wield_axe_falchion` — **conflict, not wired** |
 | es_1h_mace / es_1h_sword / we_1h_axe | 1H family | 🔁 | universal vocab fall-through |
 | es_2h_sword_executioner | Executioner | ✅ | BAKED wh_ v0.12.201-dev (#160) → Saltzpyre 2H Sword |
 | es_bastard_sword | Bret. Longsword | 🔧 | **BAKED v0.12.213-dev (#519)** `_3p_template_remaps.bastard_sword_template.wh_` (Saltzpyre 2H Sword, 14 picks incl. `swap_charge_stance`); wired-unverified |
-| es_2h_hammer / dr_2h_cog_hammer / dr_2h_pick / bw_1h_mace / bw_ghost_scythe | 2H-blunt family ×5 | 🔧 | **BAKED v0.12.213-dev (#519)** career-scoped wh_ → WP Greathammer (`two_handed_hammers_template_1` / `two_handed_cog_hammers_template_1` / `two_handed_picks_template_1` / `one_handed_hammer_wizard_template_1` / `staff_scythe`); wired-unverified |
+| es_2h_hammer / dr_2h_cog_hammer / dr_2h_pick / bw_1h_mace / bw_ghost_scythe | 2H-blunt family ×5 | 🔧 | **BAKED v0.12.213-dev (#519)** career-scoped wh_ → WP Greathammer (`two_handed_hammers_template_1` / `two_handed_cog_hammers_template_1` / `two_handed_picks_template_1` / `one_handed_hammer_wizard_template_1` / `staff_scythe`). **#569 candidate v0.12.221-dev:** exact 180-degree local-Z weapon-root correction for every non-native standard-Saltzpyre item whose live wield target is `to_2h_hammer_priest`; native WP greathammer/1P exempt; wired-unverified |
 | dr_2h_hammer | Bardin 2H Hammer | 🔧 | NOT in batch-2 — `to_2h_hammer` TRUE on Saltz, fall-through expected, per-action unverified |
 | we_2h_axe | Glaive | 📋 | decided wh_2h_hammer (user override) |
 | es_dual_wield_hammer_sword | Mace & Sword | 📋 | decided wh_dual_hammer |
