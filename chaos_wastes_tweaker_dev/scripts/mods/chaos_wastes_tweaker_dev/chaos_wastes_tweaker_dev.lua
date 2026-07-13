@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.250-dev"
+local MOD_VERSION = "0.7.251-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -8054,6 +8054,203 @@ mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer
 
     _dbg("[ct:starting_boons] granted %d to %s (%s)%s",
         #extra, character, career_name, slot_label)
+end)
+
+-- ============================================================
+-- Starting-Boon Preview on the Tab-hold panel (#461)
+-- ============================================================
+-- Feature (issue #461): "When holding TAB in the keep, show a preview list of the
+-- starting boons with their icons on the right pop-out panel."
+--
+-- Surface: IngamePlayerListUI (the keep/mission Tab-hold player list). Its right panel
+-- (scenegraph parent "banner_right") already hosts the vanilla deed-reward icon strip
+-- (reward_item passes) AND the CW node-info boon icon (terror_event_power_up_icon), so
+-- THIS renderer is vanilla-proven to resolve Deus boon-icon textures on this exact panel
+-- (ingame_player_list_ui_v2.lua / _definitions.lua). Data source is the mod's own
+-- host-config -> available in the keep before any run exists.
+--
+-- Risk posture (untestable UI; PROJECT_STANDARDS 2.2b + "no-guessing" doctrine): we do
+-- NOT append into vanilla's `_reward_widgets` (those draw in vanilla's UNguarded pass, so
+-- a boon-icon atlas that is not resident in the keep could assert mid-loop and kill the
+-- whole panel render). Instead we build our OWN widgets and draw them in our OWN
+-- begin_pass/end_pass with each draw_widget individually pcall-wrapped -- worst case our
+-- pass no-ops and the panel is byte-identical to vanilla. Icon and name are SEPARATE
+-- widgets per row, so a boon whose icon texture will not resolve still shows its NAME
+-- (fonts are always resident): graceful degradation, never a blank/crashing row.
+--
+-- Data: `mod._ct_collect_start_boons` mirrors the grant hook's enumeration
+-- (DeusPowerUpsArray x start_boon_<name>) but resolves through `effective_setting`, so a
+-- CLIENT previews the HOST's configured boons once the host-settings sync has landed
+-- (falls back to the client's own toggles pre-sync -- see CHANGELOG limitation note).
+-- Two hooks on IngamePlayerListUI, on DISTINCT methods (singleton-clean; ct had no hook on
+-- this class): `_setup_deed_reward_data` (fires once on panel activation = build point, no
+-- per-frame allocation) and `_draw` (our guarded draw pass).
+CT_BOON_PREVIEW_461_MARKER = "boon_preview_ingame_playerlist_v0.7.251"
+
+-- Ordered, de-duplicated list of the starting boons the run will grant, host-effective.
+-- Each entry: { name, rarity, display, icon, modded }. On `mod` (not a file-local) per
+-- the Lua 5.1 200-locals cap; shared by the Tab panel + `/ct_preview_boons`.
+function mod._ct_collect_start_boons()
+    local out = {}
+    local arr = rawget(_G, "DeusPowerUpsArray")
+    if type(arr) ~= "table" then return out end
+    local tpl = rawget(_G, "DeusPowerUpTemplates")
+    local eff = mod._ct_effective_setting or function(k) return mod:get(k) end
+    local is_modded = mod._ct_is_modded_power_up
+    local seen = {}
+    for _, entry in ipairs(arr) do
+        local name = entry and entry.name
+        if name and not seen[name] and eff("start_boon_" .. name) then
+            seen[name] = true
+            local t = tpl and tpl[name]
+            out[#out + 1] = {
+                name = name,
+                rarity = entry.rarity,
+                display = mod._ct_boon_display_name(name),
+                icon = t and t.icon or nil,
+                modded = (is_modded and is_modded(name)) or false,
+            }
+        end
+    end
+    table.sort(out, function(a, b) return (a.display or ""):lower() < (b.display or ""):lower() end)
+    return out
+end
+
+-- Header widget for the boon-preview block, anchored to the reward_divider scenegraph
+-- node (where vanilla's reward header sits, above the icon rows on banner_right).
+function mod._ct_build_boon_preview_header(title)
+    return UIWidget.init(UIWidgets.create_simple_text(title, "reward_divider", 22, nil, {
+        horizontal_alignment = "left",
+        vertical_alignment = "center",
+        localize = false,
+        word_wrap = false,
+        font_size = 22,
+        font_type = "hell_shark",
+        text_color = { 255, 255, 214, 138 },
+        offset = { 4, 0, 3 },
+    }))
+end
+
+-- One icon widget + one name widget per boon, stacked as vertical rows anchored to the
+-- reward_item scenegraph node. Icon and name are SEPARATE widgets so a boon whose icon
+-- texture will not resolve still shows its name (see risk posture above).
+function mod._ct_build_boon_preview_widgets(boons)
+    local out = {}
+    local ICON, ROW_H, MAX = 40, 46, 12
+    local n = math.min(#boons, MAX)
+    for i = 1, n do
+        local b = boons[i]
+        local row_y = -(i - 1) * ROW_H
+        if b.icon then
+            out[#out + 1] = UIWidget.init(UIWidgets.create_simple_texture(
+                b.icon, "reward_item", false, false, nil, { 0, row_y, 0 }, { ICON, ICON }))
+        end
+        out[#out + 1] = UIWidget.init(UIWidgets.create_simple_text(b.display or b.name, "reward_item", 20, nil, {
+            horizontal_alignment = "left",
+            vertical_alignment = "center",
+            localize = false,
+            word_wrap = false,
+            font_size = 20,
+            font_type = "hell_shark",
+            text_color = { 255, 235, 235, 235 },
+            offset = { ICON + 14, row_y - ICON * 0.5, 2 },
+        }))
+    end
+    if #boons > n then
+        out[#out + 1] = UIWidget.init(UIWidgets.create_simple_text(
+            string.format("+%d", #boons - n), "reward_item", 18, nil, {
+                horizontal_alignment = "left",
+                vertical_alignment = "center",
+                localize = false,
+                word_wrap = false,
+                font_size = 18,
+                font_type = "hell_shark",
+                text_color = { 255, 200, 200, 200 },
+                offset = { 0, -n * ROW_H - ICON * 0.5, 2 },
+            }))
+    end
+    return out
+end
+
+-- Build point: vanilla calls _setup_deed_reward_data once when the Tab panel activates.
+-- Keep-only (self._is_in_inn); local display toggle preview_starting_boons. Builds onto
+-- the instance so the per-frame _draw hook only draws (zero per-frame allocation).
+mod:hook_safe("IngamePlayerListUI", "_setup_deed_reward_data", function(self)
+    self._ct_boon_preview_widgets = nil
+    self._ct_boon_header_widget = nil
+    if not self._is_in_inn then return end
+    if not mod:get("preview_starting_boons") then return end
+    local ok, err = pcall(function()
+        local boons = mod._ct_collect_start_boons()
+        if #boons == 0 then return end
+        self._ct_boon_preview_widgets = mod._ct_build_boon_preview_widgets(boons)
+        self._ct_boon_header_widget = mod._ct_build_boon_preview_header(
+            string.format("%s (%d)", mod:localize("ct_boon_preview_header"), #boons))
+    end)
+    if not ok then
+        self._ct_boon_preview_widgets = nil
+        self._ct_boon_header_widget = nil
+        pcall(printf, "[ct:461] boon-preview build failed (panel unaffected): %s", tostring(err))
+    end
+end)
+
+-- Draw point: our OWN begin_pass/end_pass layered on top of vanilla's, each draw_widget
+-- pcall-guarded so a non-resident boon-icon texture can never crash the panel render.
+-- hook_safe = runs after vanilla's _draw closed its pass (ingame_player_list_ui_v2.lua:1755).
+mod:hook_safe("IngamePlayerListUI", "_draw", function(self, dt)
+    local widgets = self._ct_boon_preview_widgets
+    if not widgets or #widgets == 0 then return end
+    pcall(function()
+        local r = self._ui_top_renderer
+        local sg = self._ui_scenegraph
+        local im = self._input_manager
+        local input_service = im and im:get_service("player_list_input")
+        local rs = self._render_settings
+        if not (r and sg and input_service and rs) then return end
+        UIRenderer.begin_pass(r, sg, input_service, dt, nil, rs)
+        local hdr = self._ct_boon_header_widget
+        if hdr then pcall(UIRenderer.draw_widget, r, hdr) end
+        for i = 1, #widgets do
+            pcall(UIRenderer.draw_widget, r, widgets[i])
+        end
+        UIRenderer.end_pass(r)
+    end)
+end)
+
+-- Textual preview + /verify surface for #461. Works even if the panel icons do not render,
+-- and confirms the host-effective boon list the panel would show.
+mod:command("ct_preview_boons", "List the starting boons this run will grant (host-effective) -- the #461 Tab-hold preview", function()
+    local boons = mod._ct_collect_start_boons()
+    if #boons == 0 then
+        mod:echo("[ct] No starting boons configured. Enable some under Starting Boons in the ct menu.")
+        return
+    end
+    mod:echo("%s", string.format("[ct] Starting Boons preview (%d) -- shown on the right panel while holding Tab in the keep:", #boons))
+    for i = 1, #boons do
+        local b = boons[i]
+        mod:echo("%s", string.format("  %d. %s [%s]%s", i, b.display or b.name, tostring(b.rarity),
+            b.modded and " (modded -- wire-gated for non-ct peers)" or ""))
+    end
+end)
+
+-- #461 regression: the marker + both build helpers + the display toggle stay wired, so a
+-- future refactor can't silently drop the Tab-hold boon preview.
+_rt_register("issue461_boon_preview_wired", function()
+    if CT_BOON_PREVIEW_461_MARKER ~= "boon_preview_ingame_playerlist_v0.7.251" then
+        return "#461 REGRESSION: CT_BOON_PREVIEW_461_MARKER missing/mismatch; got " .. tostring(CT_BOON_PREVIEW_461_MARKER)
+    end
+    if type(mod._ct_collect_start_boons) ~= "function" then
+        return "#461 REGRESSION: mod._ct_collect_start_boons missing"
+    end
+    if type(mod._ct_build_boon_preview_widgets) ~= "function" then
+        return "#461 REGRESSION: mod._ct_build_boon_preview_widgets missing"
+    end
+    if type(mod._ct_collect_start_boons()) ~= "table" then
+        return "#461 REGRESSION: _ct_collect_start_boons must return a table"
+    end
+    if type(mod:get("preview_starting_boons")) ~= "boolean" then
+        return "#461 REGRESSION: preview_starting_boons checkbox not registered (mod:get non-boolean)"
+    end
 end)
 
 -- ============================================================

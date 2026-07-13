@@ -789,7 +789,19 @@ local data = {
             {
                 setting_id = "starting_boons_group",
                 type = "group",
-                sub_widgets = build_start_tree(),
+                -- #461: the Tab-hold starting-boon preview toggle rides at the top of the
+                -- Starting Boons group. It is a loose option, so _groups_first renders it
+                -- BELOW the boon category collapsibles (standing menu rule); default ON.
+                sub_widgets = (function()
+                    local w = build_start_tree()
+                    table.insert(w, 1, {
+                        setting_id = "preview_starting_boons",
+                        type = "checkbox",
+                        default_value = true,
+                        tooltip = "preview_starting_boons_tooltip",
+                    })
+                    return w
+                end)(),
             },
             -- 2026-05-23 v0.7.98-dev DISABLED: Activate Dormant Boons + Skulls Event Boons
             -- VMF groups removed per user request after Chest-of-Trials crash. The

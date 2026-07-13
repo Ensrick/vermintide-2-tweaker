@@ -334,6 +334,14 @@ local loc = {
     respawn_on_chest_complete_tooltip = { en = "When a Chest of Trials is completed, revive knocked-down players and respawn dead players with a wound and 50%% temporary health. Host-only." },
 
     -- ============================================================
+    -- Starting-Boon Preview (#461)
+    -- ============================================================
+    -- Option title carries the dev status tag; ct_boon_preview_header is panel chrome (no tag).
+    preview_starting_boons = { en = "[untested] Preview Starting Boons on Tab" },
+    preview_starting_boons_tooltip = { en = "While you hold Tab in the keep, show the starting boons this run will grant (icon and name) on the right-hand pop-out panel. Reflects the host's configuration. Applies to your own screen only." },
+    ct_boon_preview_header = { en = "Starting Boons" },
+
+    -- ============================================================
     -- Mod Boons (ct-injected: Cascades + Trait-as-Boon variants)
     -- ============================================================
     -- Mod Boons (v0.7.30) — 4 ct-injected per-boon scaling boons (model: Lileath's Favour)
