@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.219-dev (2026-07-13) - #411: dead Anim Picker sources fail loud
+
+The stale Bastard Sword `swap_charge_stance` picker row is no longer present: `es_bastard_sword` was tuned and baked in v0.12.213-dev (#519), which removed all of its picker catalog entries. This build locks that outcome and generalizes the picker's own `n=0` diagnostic into a full-catalog regression check so the same class cannot silently return on another weapon.
+
+- **Hardening:** `wt_dev_anim_picker.source_event_coverage()` walks every registered picker weapon/source event and requires a matching live `Weapons.<template>.actions.*.*.anim_event`. Missing DLC templates are reported separately rather than misclassified as stale source rows.
+- **Evidence:** install prints `[wt:411] picker source coverage: weapons=N events=N dead=0 ...`; every dead row is printed with weapon, event, and template. `/wt_regression_test` now includes `issue411_dev_picker_source_events_resolve_live`.
+- **Verify (solo, keep):** run `/verify_wt_anim_picker_sources`; expect `PASS` and zero `[wt:411] dead picker source` lines. Enable the 3P Anim Picker and confirm no Bastard Sword / `swap_charge_stance` row is offered (the baked Saltzpyre mapping remains in `_wt_anim_remap.lua`).
+
 ## 0.12.218-dev (2026-07-13) - #408: Weapon Availability sorts by visible name
 
 Weapon Availability rows now sort alphabetically by the tag-stripped player-facing English label instead of source-character rank and internal weapon key. This puts entries where their visible names say they belong (including Saltzpyre's Flail on Kruber) and keeps computed `[working]` / `[untested]` / `[needs animations]` tags out of the sort key.

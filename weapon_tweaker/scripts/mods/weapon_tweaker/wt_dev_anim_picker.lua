@@ -1918,6 +1918,45 @@ function M.inspect_attacks()
     return bad
 end
 
+-- Issue #411: every source-event row advertised by the picker must resolve to
+-- at least one live sub-action on its declared source template. A stale event
+-- makes the dropdown a silent no-op (`_apply_anim_event_change` writes n=0).
+-- Returns failures plus coverage counts so both /wt_regression_test and the
+-- focused verification command exercise the exact catalog VMF registered.
+function M.source_event_coverage()
+    _ensure_catalog_built()
+    local failures, missing_templates = {}, {}
+    local weapons, events = 0, 0
+    for _, e in ipairs(_CATALOG) do
+        weapons = weapons + 1
+        local tpl = Weapons and rawget(Weapons, e.template_name)
+        if not (tpl and tpl.actions) then
+            missing_templates[#missing_templates + 1] = e.weapon_key .. "=" .. tostring(e.template_name)
+        else
+            local live = {}
+            for _, action_group in pairs(tpl.actions) do
+                if type(action_group) == "table" then
+                    for _, sub in pairs(action_group) do
+                        if type(sub) == "table" and type(sub.anim_event) == "string" then
+                            live[sub.anim_event] = true
+                        end
+                    end
+                end
+            end
+            for _, source_event in ipairs(e.attacks) do
+                events = events + 1
+                if not live[source_event] then
+                    failures[#failures + 1] = e.weapon_key .. ":" .. source_event
+                        .. " (" .. e.template_name .. ")"
+                end
+            end
+        end
+    end
+    table.sort(failures)
+    table.sort(missing_templates)
+    return failures, weapons, events, missing_templates
+end
+
 -- Regression hook (#196): a SET's vocab must list anim_event_3p VALUES (what the
 -- picker writes + the body plays), never the 1P anim_event names. Exposes a set's
 -- vocab so a test can assert the billhook charge fix didn't regress.
@@ -2006,6 +2045,29 @@ function M.install()
 
     _register_dump_command()
     _register_coverage_command()
+    mod:command("verify_wt_anim_picker_sources",
+        "Verify every Anim Picker source event writes a live weapon action", function()
+            local failures, weapons, events, missing = M.source_event_coverage()
+            if #failures == 0 then
+                mod:echo("[wt:411] PASS: %d source events across %d picker weapons resolve live",
+                    events, weapons)
+            else
+                mod:echo("[wt:411] FAIL: %d dead Anim Picker source event(s)", #failures)
+                for _, failure in ipairs(failures) do
+                    mod:echo("  %s", failure)
+                    printf("[wt:411] dead picker source: %s", failure)
+                end
+            end
+            if #missing > 0 then
+                mod:echo("[wt:411] NOTE: %d unavailable template(s) skipped; see console log", #missing)
+                printf("[wt:411] unavailable picker templates skipped: %s", table.concat(missing, ", "))
+            end
+        end)
+
+    local dead, covered_weapons, covered_events, unavailable = M.source_event_coverage()
+    printf("[wt:411] picker source coverage: weapons=%d events=%d dead=%d unavailable_templates=%d",
+        covered_weapons, covered_events, #dead, #unavailable)
+    for _, failure in ipairs(dead) do printf("[wt:411] dead picker source: %s", failure) end
 
     -- Replay user-tuned picks onto the live templates. install() runs at the END
     -- of main wt.lua — after every template patcher — so this layers user picks

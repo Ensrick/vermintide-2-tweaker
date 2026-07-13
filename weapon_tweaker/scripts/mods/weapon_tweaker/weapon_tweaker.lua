@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.218-dev"
+local MOD_VERSION = "0.12.219-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4873,6 +4873,18 @@ _rt_register("dev_picker_no_inspect_dropdown", function()
     local bad = _wt_dev_anim_picker.inspect_attacks()
     if type(bad) == "table" and #bad > 0 then
         return "inspect events present in picker (should be removed): " .. table.concat(bad, ", ")
+    end
+end)
+
+_rt_register("issue411_dev_picker_source_events_resolve_live", function()
+    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.source_event_coverage) then
+        return "picker has no source_event_coverage()"
+    end
+    local failures, weapons, events = _wt_dev_anim_picker.source_event_coverage()
+    if #failures > 0 then return "dead picker source entries: " .. table.concat(failures, ", ") end
+    if weapons == 0 or events == 0 then
+        return string.format("picker source coverage inspected nothing (weapons=%d events=%d)",
+            weapons, events)
     end
 end)
 

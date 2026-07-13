@@ -269,3 +269,8 @@ shape):
   authored-ness (`[wt:coverage]` lines). Run it once per character and paste the
   log to refresh this file's statuses. Caveat: authored ≠ visibly plays in
   chain states; 🔧 rows still need an eyeball pass.
+- Picker source rows are guarded by `/verify_wt_anim_picker_sources` and the
+  `issue411_dev_picker_source_events_resolve_live` regression check. Both walk
+  the registered catalog against live template `anim_event` values; a stale
+  source string that would produce an `n=0` write fails loud. Templates absent
+  because their DLC is unavailable are reported separately.
