@@ -15,13 +15,13 @@ Last updated: 2026-07-13.
 | Field | Value |
 |-------|-------|
 | Symptom | A primary weapon illusion applies locally, then reverts when PlayFab rebuilds the inventory mirror or after restart. |
-| Root cause | Only CIM craft records persisted their skin; server-owned item mirror state was overwritten from server `CustomData.skin`. |
+| Root cause | The first fix saved server-owned overrides only inside CIM's local craft helper. When Cosmetics Tweaker owned the customization craft bypass, explicit Apply changed the mirror but never replaced CIM's older saved override. |
 | Mod(s) | crafting_in_modded_dev |
-| Fix version(s) | 0.8.65-dev |
+| Fix version(s) | 0.8.65-dev; reopened precedence fix 0.8.66-dev |
 | Category | INTEGRATION |
-| Repro | Apply a different illusion to one of two vanilla copies of the same weapon, then restart/reload the keep. |
-| Expected post-fix | The exact edited item keeps its illusion; the same-template sibling does not change. Missing/salvaged backend IDs are pruned. |
-| Detection | Run `/cim_regression_test`; require `issue563_vanilla_skin_override_exact_backend_id` PASS. Confirm `[cim:563] ready_rehydrate` after mirror readiness. |
+| Repro | Start with saved override A on a server-owned item. In Keep and then in an Adventure mission, use the gear-icon customization view to explicitly Apply different illusion B with Cosmetics Tweaker enabled. Wait for a backend mirror-ready refresh. Repeat on a second copy of the same weapon template. |
+| Expected post-fix | Apply completion emits `[cim:563] explicit_saved ... skin=B`; every later rehydrate uses B, never A. The same-template sibling remains independent. CIM-owned crafts use their forge record and leave no stale vanilla override. Missing/salvaged backend IDs are pruned. |
+| Detection | Run `/cim_regression_test`; require `issue563_vanilla_skin_override_exact_backend_id` PASS. Confirm old A -> explicit B -> `[cim:563] ready_rehydrate` remains B in both Keep and mission. |
 
 ---
 

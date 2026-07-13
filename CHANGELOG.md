@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - `crafting_in_modded_dev` explicit illusion precedence
+
+Repo-aggregate entry for Crafting in Modded v0.8.66-dev / reopened issue #563. Successful Apply Skin completion now atomically records the newest illusion by exact backend ID even when Cosmetics Tweaker owns the local craft bypass, preventing a later mirror-ready rehydrate from restoring an older saved skin. CIM-owned crafts clear stale vanilla overrides and continue using their forge record. Added bounded diagnostics and old-A -> explicit-B -> rehydrate-B regression coverage. No Workshop deployment.
+
 ## 2026-07-13 - `character_weapon_variants` replicated cross-access swing audio
 
 Repo-aggregate entry for Character Weapon Variants v0.1.393-dev / issue #398. Cross-access 3P event substitution now occurs before vanilla encodes and sends its animation RPC, so observers receive the same receiver-compatible animation and its authored weapon-foley/exertion timeline as the owner. The change deliberately leaves playback with vanilla rather than manually emitting Wwise events. Added bounded diagnostics and runtime regression coverage; awaiting two-player verification. No Workshop deployment.

@@ -48,6 +48,7 @@ local suites = {
     "test_mp_dailies",
     "test_wt_passive_charge",
     "test_cwv_remote_audio",
+    "test_cim_skin_persistence",
 }
 
 for _, suite in ipairs(suites) do

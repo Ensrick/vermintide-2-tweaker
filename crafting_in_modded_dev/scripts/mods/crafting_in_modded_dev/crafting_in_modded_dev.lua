@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.65-dev"
+local MOD_VERSION = "0.8.66-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -6005,8 +6005,12 @@ end)
 
 _rt_register("issue563_vanilla_skin_override_exact_backend_id", function()
     local plan = mod._cim563_plan_vanilla_skin_rehydrate
+    local commit_plan = mod._cim563_plan_explicit_skin_choice
     if type(plan) ~= "function" then
         return "#563 exact-backend-id rehydrate planner missing"
+    end
+    if type(commit_plan) ~= "function" then
+        return "#563 explicit-choice persistence planner missing"
     end
     local shared_template = { slot_type = "melee", key = "es_sword_shield_breton" }
     local inventory = {
@@ -6027,6 +6031,29 @@ _rt_register("issue563_vanilla_skin_override_exact_backend_id", function()
     end
     if apply.VANILLA_INSTANCE_A.item ~= inventory.VANILLA_INSTANCE_A then
         return "planner did not retain the exact mirror item instance"
+    end
+
+    -- Reopened #563: an old saved A must be atomically replaced by the newest
+    -- explicit B before any later mirror-ready rehydrate plans its write.
+    local replaced, action = commit_plan(
+        { VANILLA_INSTANCE_A = "OLD_CWV_SKIN", VANILLA_INSTANCE_B = "SIBLING_SKIN" },
+        "VANILLA_INSTANCE_A", "NEW_VANILLA_SKIN", true
+    )
+    if action ~= "saved" or replaced.VANILLA_INSTANCE_A ~= "NEW_VANILLA_SKIN" then
+        return "explicit B did not replace stale saved A"
+    end
+    if replaced.VANILLA_INSTANCE_B ~= "SIBLING_SKIN" then
+        return "copy-on-write explicit save disturbed a sibling exact id"
+    end
+    local after_apply = plan(replaced, inventory, function() return true end)
+    if not after_apply.VANILLA_INSTANCE_A
+        or after_apply.VANILLA_INSTANCE_A.skin ~= "NEW_VANILLA_SKIN" then
+        return "mirror-ready after explicit B planned stale A"
+    end
+
+    local cleared, clear_action = commit_plan(replaced, "VANILLA_INSTANCE_A", nil, false)
+    if clear_action ~= "cleared" or cleared.VANILLA_INSTANCE_A ~= nil then
+        return "CIM-owned craft did not clear stale vanilla override"
     end
 end)
 

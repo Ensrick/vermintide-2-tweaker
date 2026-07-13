@@ -1,5 +1,11 @@
 # Crafting in Modded Changelog
 
+## 0.8.66-dev (2026-07-13): #563 newest explicit illusion wins [verify-fix]
+
+- Reopened-log root cause: the original exact-backend-ID fix saved only inside CIM's `_cim_try_illusion_apply` helper. In the in-mission customization flow, cosmetics_tweaker owned the local craft bypass, successfully changed `54DB495DEA391FF` from the old CWV runed skin to `es_2h_sword_skin_06`, and completed through vanilla's UI—but CIM emitted no save/update. The next mirror-ready edge therefore reapplied the stale saved CWV skin.
+- Added one exact-ID, copy-on-write persistence helper used by CIM's local craft path and a new observer on vanilla's semantic completion seam, `HeroWindowItemCustomization._apply_weapon_skin_craft_complete`. The customization window retains the latest clicked skin as unpersisted intent and consumes it only when Apply succeeds, so even a mirror-ready callback between craft start and completion cannot turn stale A into the committed value. Keep, mission, CIM-owned, and Cosmetics-owned flows now atomically replace the saved override with B. CIM-owned crafts persist to their forge record and clear any stale vanilla override for the same ID.
+- Bounded `[cim:563] explicit_saved`, `explicit_cleared`, and `craft_saved` diagnostics fire only on a persisted state transition. The runtime regression now proves old saved A -> explicit B -> mirror-ready plans B, preserves same-template sibling IDs, and clears stale vanilla state when forge ownership applies.
+
 ## 0.8.65-dev (2026-07-13): #563 persist vanilla illusion overrides by exact backend ID [diagnostics-armed]
 
 - Server-owned weapons now save local illusion overrides by exact backend instance ID, so a PlayFab mirror rebuild cannot silently restore the server-side `CustomData.skin` over the user's modded-realm choice.

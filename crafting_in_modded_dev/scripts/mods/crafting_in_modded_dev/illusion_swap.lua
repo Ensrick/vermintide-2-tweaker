@@ -2,10 +2,10 @@
 illusion_swap.lua — modded-realm weapon illusion swap.
 
 Migrated from cosmetics_tweaker v0.8.49 so cim ships its own copy of the
-"change cosmetics in modded realm" UI. cosmetics_tweaker yields when cim
-is present (each cosmetics_tweaker hook checks `get_mod("cim")` and
-defers to the original on hit), so both mods can be installed together
-without doubled hooks.
+"change cosmetics in modded realm" UI. cosmetics_tweaker yields when the
+release `cim` mod is present. Its ownership check does not identify the
+friends-only `cim_dev` id, so persistence must also observe vanilla's shared
+Apply Skin completion seam instead of assuming this module owned the craft.
 
 Differences from cosmetics_tweaker's version:
   * No `_custom_skin_keys` registry — cim doesn't ship custom illusions of
@@ -17,7 +17,7 @@ Differences from cosmetics_tweaker's version:
     modded item, so the cosmetic survives a game restart.
   * No offhand/shield picker (separate feature, intentionally not migrated).
 
-What it does (5 hooks + 1 helper, mirroring the original):
+What it does (6 hooks + helpers, mirroring the original plus persistence):
   1. `BackendInterfaceItemPlayfab.get_weapon_skin_from_skin_key` —
      return a synthetic backend id for any skin the player doesn't
      "own", so the illusion grid can reference it.
@@ -37,6 +37,9 @@ What it does (5 hooks + 1 helper, mirroring the original):
      forge save if the target is a modded craft.
   6. `BackendInterfaceCraftingPlayfab.update` — deferred completion
      (one frame) to match vanilla async timing.
+  7. `HeroWindowItemCustomization._apply_weapon_skin_craft_complete` —
+     record the final resolved illusion by exact item ID regardless of which
+     mod owned the craft bypass.
 
 DLC ownership is respected: skins with a `required_dlc` field in
 ItemMasterList only unlock if the player owns that DLC.
@@ -98,6 +101,68 @@ mod._cim563_plan_vanilla_skin_rehydrate = function(saved, inventory, skin_exists
         end
     end
     return apply, prune, invalid_skin
+end
+
+-- Pure copy-on-write reducer for explicit illusion choices. The returned map
+-- is the complete next persisted state, so callers publish one mod:set rather
+-- than exposing an old-value/delete/new-value transition to mirror rehydrate.
+-- `keep_override=false` is used for CIM-owned crafts: their forge record owns
+-- the skin, and any stale vanilla-instance override for the same id must go.
+mod._cim563_plan_explicit_skin_choice = function(saved, backend_id, skin_key, keep_override)
+    local next_saved = {}
+    if type(saved) == "table" then
+        for id, value in pairs(saved) do next_saved[id] = value end
+    end
+    if type(backend_id) ~= "string" or backend_id == "" then
+        return next_saved, "ignored"
+    end
+
+    local previous = next_saved[backend_id]
+    if keep_override and type(skin_key) == "string" and skin_key ~= "" then
+        next_saved[backend_id] = skin_key
+        return next_saved, previous == skin_key and "unchanged" or "saved"
+    end
+    if previous ~= nil then
+        next_saved[backend_id] = nil
+        return next_saved, "cleared"
+    end
+    return next_saved, "unchanged"
+end
+
+-- One authoritative persistence entry point shared by CIM's local craft path
+-- and the HeroWindow completion observer below. The latter is essential when
+-- cosmetics_tweaker owns the modded-realm craft bypass (notably cim_dev
+-- coexistence): its craft mutates the mirror directly and never enters
+-- `_cim_try_illusion_apply`.
+mod._cim563_commit_explicit_skin_choice = function(backend_id, item, skin_key, source)
+    if type(backend_id) ~= "string" or backend_id == "" or type(item) ~= "table" then
+        return false, "ignored"
+    end
+
+    local is_modded = mod._cim_is_modded_backend_id
+        and mod._cim_is_modded_backend_id(backend_id) == true
+    if is_modded then
+        local craft = mod._cim_get_craft and mod._cim_get_craft(backend_id)
+        if craft and type(skin_key) == "string" and skin_key ~= "" and craft.skin ~= skin_key then
+            craft.skin = skin_key
+            if mod._cim_persist_crafts then mod._cim_persist_crafts() end
+            pcall(printf, "[cim:563] craft_saved source=%s bid=%s item=%s skin=%s",
+                tostring(source), tostring(backend_id),
+                tostring(item.ItemId or item.key), tostring(skin_key))
+        end
+    end
+
+    local saved = mod:get(_CIM563_OVERRIDE_SETTING)
+    local next_saved, action = mod._cim563_plan_explicit_skin_choice(
+        saved, backend_id, skin_key, not is_modded
+    )
+    if action == "saved" or action == "cleared" then
+        mod:set(_CIM563_OVERRIDE_SETTING, next_saved)
+        pcall(printf, "[cim:563] explicit_%s source=%s bid=%s item=%s skin=%s",
+            action, tostring(source), tostring(backend_id),
+            tostring(item.ItemId or item.key), tostring(skin_key))
+    end
+    return true, action
 end
 
 local function _cim563_rehydrate_ready_mirror(mirror)
@@ -226,12 +291,18 @@ mod:hook("HeroWindowItemCustomization", "_enable_craft_button", function(func, s
 end)
 
 mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(func, self, index, ignore_item_spawn, mark_as_equipped)
+    local widget = self._illusion_widgets and self._illusion_widgets[index]
     if script_data["eac-untrusted"] and not ignore_item_spawn then
-        local widget = self._illusion_widgets and self._illusion_widgets[index]
         if widget and widget.content then
             local skin_key = widget.content.skin_key
             if skin_key and not _skin_requires_unowned_dlc(skin_key) then
                 widget.content.locked = false
+                -- Selection is preview-only, so do not persist here. Retain the
+                -- latest intent on this window instance and consume it only if
+                -- Apply completes. This also protects against a mirror-ready
+                -- callback overwriting the live mirror between craft start and
+                -- UI completion: completion commits the user's B, not stale A.
+                self._cim563_pending_explicit_skin = skin_key
             end
         end
     end
@@ -299,26 +370,11 @@ mod._cim_try_illusion_apply = function(self, career_name, item_backend_ids, reci
         weapon_item.CustomData.skin = skin_key
     end
 
-    -- Persist skin choice for modded crafts in their forge record. For a
-    -- vanilla/server-owned item, persist a separate LOCAL override by exact
-    -- backend instance id; issue #563 must never affect another copy sharing
-    -- the same weapon template.
-    if mod._cim_is_modded_backend_id and mod._cim_is_modded_backend_id(weapon_backend_id) then
-        local craft = mod._cim_get_craft and mod._cim_get_craft(weapon_backend_id)
-        if craft then
-            craft.skin = skin_key
-            if mod._cim_persist_crafts then mod._cim_persist_crafts() end
-            mod:info("[illusion_swap] persisted skin '%s' to modded craft %s",
-                skin_key, weapon_backend_id)
-        end
-    else
-        local saved = mod:get(_CIM563_OVERRIDE_SETTING)
-        if type(saved) ~= "table" then saved = {} end
-        saved[weapon_backend_id] = skin_key
-        mod:set(_CIM563_OVERRIDE_SETTING, saved)
-        pcall(printf, "[cim:563] saved bid=%s item=%s skin=%s",
-            tostring(weapon_backend_id), tostring(weapon_item.ItemId or weapon_item.key), tostring(skin_key))
-    end
+    -- Commit immediately for CIM's own local craft path. The completion hook
+    -- below repeats this idempotently, covering alternate craft owners.
+    mod._cim563_commit_explicit_skin_choice(
+        weapon_backend_id, weapon_item, skin_key, "cim_local_craft"
+    )
 
     local id = self:_new_id()
     _pending_local_craft = { interface = self, id = id }
@@ -333,6 +389,29 @@ mod:hook_safe("BackendInterfaceCraftingPlayfab", "update", function(self, dt)
         Managers.backend:dirtify_interfaces()
         _pending_local_craft = nil
     end
+end)
+
+-- Vanilla dispatches every successful Apply Skin craft through this method
+-- after the backend reports completion, then re-presents and equips the
+-- resolved item (hero_window_item_customization.lua:2502-2547). Observe that
+-- shared semantic completion instead of assuming CIM owned the craft hook.
+-- This covers Keep and in-mission HeroWindow customization, including the
+-- cosmetics_tweaker local-mirror bypass seen in the reopened #563 log.
+mod:hook_safe("HeroWindowItemCustomization", "_apply_weapon_skin_craft_complete", function(self, result)
+    if not script_data["eac-untrusted"] then return end
+    local pending_skin = self and self._cim563_pending_explicit_skin
+    if self then self._cim563_pending_explicit_skin = nil end
+    local backend_id = self and self._item_backend_id
+    local item = backend_id and self._get_item and self:_get_item(backend_id)
+    if type(item) ~= "table" then return end
+    local skin_key = pending_skin or item.skin
+    if (type(skin_key) ~= "string" or skin_key == "") and item.key
+        and WeaponSkins and WeaponSkins.default_skins then
+        skin_key = WeaponSkins.default_skins[item.key]
+    end
+    mod._cim563_commit_explicit_skin_choice(
+        backend_id, item, skin_key, "item_customization_complete"
+    )
 end)
 
 -- ============================================================
