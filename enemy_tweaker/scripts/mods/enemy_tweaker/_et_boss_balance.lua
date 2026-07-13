@@ -25,11 +25,12 @@ local mod = get_mod("enemy_tweaker")
 --
 -- SCOPE (issue 450): this module ships the breed-STAT knobs the issue asks for.
 -- The behavioral knobs in the same issue are deliberately NOT here — they need
--- runtime hooks / the Chaos Wastes grudge-mark buff system and are tracked as
--- follow-up (see CHANGELOG 0.7.34-dev): Halescourge mid-fight monster spawn at
--- 50% HP; Skarrik 30% ranged damage-reduction + Berserk (grudge-mark frenzy)
--- on Cata+; Bödvarr Crippling (grudge-mark) on Cata+; Deathrattler ratling-gun
--- tracking. Source citations for those live in the CHANGELOG entry.
+-- runtime hooks / the Chaos Wastes grudge-mark buff system, tracked as issue 531.
+-- The grudge-mark pair (Skarrik Cata+ Berserk = grudge-mark frenzy; Bödvarr Cata+
+-- Crippling = grudge-mark crippling) now ships in `_et_boss_grudge.lua` (the #531
+-- tranche-1 hook module). Still deferred there: Halescourge 50%-HP mid-fight
+-- monster spawn; Skarrik 30% ranged damage-reduction (needs a DamageUtils branch,
+-- #433); Deathrattler ratling-gun tracking. Citations live in the CHANGELOG.
 --
 -- Owned by: enemy_tweaker.lua entry point (dofile'd after _et_lifecycle, which
 -- re-applies via mod._et_apply_boss_balance on every setting change).

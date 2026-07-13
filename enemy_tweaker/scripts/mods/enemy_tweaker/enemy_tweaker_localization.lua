@@ -75,6 +75,16 @@ local loc = {
         en = "Changes Nurgloth's armor type from Berserker to Infantry, so hits land as unarmored damage. A player's damage-vs-armor is computed on that player's own machine, so for identical numbers every player should run the mod; the host always applies its own hits correctly.",
     },
 
+    -- #531 tranche 1: grudge-mark behavioral knobs (Cataclysm+, Adventure, host-only)
+    boss_grudge_skarrik_berserk = { en = "[untested] Skarrik: Berserk on Cataclysm+" },
+    boss_grudge_skarrik_berserk_tooltip = {
+        en = "Skarrik Spinemanglr (the first Skittergate boss) spawns carrying the Chaos Wastes Berserk (Frenzy) grudge mark on Cataclysm and above, in Adventure only. He builds attack-speed and move-speed stacks as he fights, like a grudge-marked monster. Host only: the buff is server-controlled and syncs to all players. Off below Cataclysm and in Chaos Wastes (where bosses already carry marks).",
+    },
+    boss_grudge_bodvarr_crippling = { en = "[untested] Bodvarr: Crippling on Cataclysm+" },
+    boss_grudge_bodvarr_crippling_tooltip = {
+        en = "Bodvarr Ribspreader (the Chaos champion boss) spawns carrying the Chaos Wastes Crippling grudge mark on Cataclysm and above, in Adventure only. Players he hits are slowed (movement, dodge, jump) for a few seconds, like a grudge-marked monster. Host only: the buff is server-controlled and syncs to all players. Off below Cataclysm and in Chaos Wastes (where bosses already carry marks).",
+    },
+
     -- ============================================================
     -- Boss Mechanic Tweaks
     -- ============================================================

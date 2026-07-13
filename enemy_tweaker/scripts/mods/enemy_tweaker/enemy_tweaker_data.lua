@@ -264,6 +264,21 @@ return {
                         default_value = false,
                         tooltip       = "boss_bal_nurgloth_armor_tooltip",
                     },
+                    -- #531 tranche 1: grudge-mark behavioral knobs (Cataclysm+,
+                    -- Adventure, host-only). Reuse vanilla CW grudge-mark buff
+                    -- templates applied at spawn. See _et_boss_grudge.lua.
+                    {
+                        setting_id    = "boss_grudge_skarrik_berserk",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_grudge_skarrik_berserk_tooltip",
+                    },
+                    {
+                        setting_id    = "boss_grudge_bodvarr_crippling",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "boss_grudge_bodvarr_crippling_tooltip",
+                    },
                 },
             },
 

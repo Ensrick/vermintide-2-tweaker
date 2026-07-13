@@ -1,5 +1,58 @@
 # Enemy Tweaker Changelog
 
+## 0.7.35-dev (2026-07-12): #531 grudge-mark behavioral knobs, tranche 1 (Skarrik Berserk / Bodvarr Crippling) [untested]
+
+First tranche of issue 531 (the 5 behavioral boss knobs deferred from #450): the
+two grudge-mark knobs, which reuse vanilla Chaos Wastes grudge-mark buff templates
+applied host-side to Adventure lord bosses at spawn on Cataclysm+. New
+`_et_boss_grudge.lua` module; two default-OFF toggles under the existing Boss
+Balance menu group.
+
+**Implemented:**
+- **Skarrik** (`skaven_storm_vermin_warlord`) Berserk on Cataclysm+: applies the
+  CW `frenzy` grudge mark = buff template `grudge_mark_frenzy`
+  (grudge_mark_settings.lua:108-111 -> buff_settings_grudge_marks.lua:549). He
+  builds attack-speed / move-speed stacks in combat like a grudge-marked monster.
+- **Bodvarr** (`chaos_exalted_champion`) Crippling on Cataclysm+: applies the CW
+  `crippling` grudge mark = buff template `grudge_mark_crippling_blow`
+  (grudge_mark_settings.lua:84-87 -> buff_settings_grudge_marks.lua:324). Players
+  he hits are slowed (movement/dodge/jump) for a few seconds.
+
+**Mechanism (verified against the decompile):** single new `hook_safe` on
+`ConflictDirector._post_spawn_unit` (conflict_director.lua:2029) - the
+spawn-complete seam every AI spawn funnels through (both spawn paths call it,
+:1865 and :2024) and the exact seam where vanilla applies grudge marks at :2041
+via `TerrorEventUtils.apply_breed_enhancements` -> `buff_system:add_buff(unit,
+buff, unit, true)` (terror_event_utils.lua:80-104). We reproduce that call for the
+one target buff. Grep-verified `_post_spawn_unit` was not already hooked (no VMF
+duplicate-hook drop).
+
+**Client sync (wire safety):** `BuffSystem.add_buff` is server-controlled and
+broadcasts `rpc_add_buff` with `NetworkLookup.buff_templates[template_name]`
+(buff_system.lua:302-305). Both grudge buffs are VANILLA templates in the base
+`BuffTemplates` table, so their wire id is identical on every peer
+(network_lookup.lua:1144) - no modded key on the wire; non-modded clients apply
+normally. Applied ONLY on the host (is_server gate), matching vanilla's
+server-authoritative model.
+
+**Double-apply guards (a CW grudge boss already carries marks):** (1) gated to
+`game_mode_key() == "adventure"` - Chaos Wastes is "deus"
+(game_mode_settings_morris.lua:4); (2) skip when `optional_data.enhancements` is
+set (any active enhancement path); (3) skip when the unit already
+`has_buff_type(buff)` (buff_extension.lua:1213).
+
+Toggles default OFF; per-spawn `[et:450]` engine-printf names the applied mark
+(rate-limited, survives mod-logging-OFF). No DLC gate needed (grudge marks are
+free Chaos Wastes content; no item surfaced to the player).
+
+**Still deferred to later #531 tranches (out of scope here):** Skarrik 30% ranged
+damage-reduction (needs a `DamageUtils.calculate_damage` branch; coordinates with
+#433, blocked on a user decision); Deathrattler ratling-gun tracking (multi-system:
+attack_anims_data timing + `AimTemplates.stormfiend` lerp); Halescourge 50%-HP
+mid-fight monster spawn (health-watch + spawn orchestration).
+
+rt: +2 checks (`boss_grudge_targets_present`, `boss_grudge_cataclysm_rank_sane`).
+
 ## 0.7.34-dev (2026-07-12): #450 Boss Balance toggles (health/armor/warp-lightning) [untested]
 
 New `_et_boss_balance.lua` module + "Boss Balance" menu group: per-boss curated
