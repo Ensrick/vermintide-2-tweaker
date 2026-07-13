@@ -1,5 +1,35 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.85-dev — 2026-07-13 — #514 LA shield pick no longer paints onto a different wielded weapon (Sword and Mace mace wrap) [untested]
+
+Fixes #514: with an LA shield pick committed on Grail Knight's secondary Bretonnian
+Sword and Shield, the shield texture wrapped around the MACE of the wielded CWV
+Sword and Mace at mission spawn. Log evidence (console 2026-07-12 20:09:55.533):
+`EMIT ... slot=one_handed_sword_shield_template_2 kind=offhand key=Kruber_bret_shield_basic2_Luidhard01`
+immediately followed by `PAINT site=network_husk ... target_mesh=units/weapons/player/wpn_emp_mace_03_t1/...`
+(both 1P and 3P mace units), with zero `APPLY SKIP wrong-weapon` lines in the session.
+
+- **Root cause.** The v0.9.72 weapon-identity guard in `_apply_la_on_unit`
+  (offhand + illusion branches) read `inv.wielded_slot` - a field that exists ONLY on
+  `SimpleHuskInventoryExtension` (`simple_husk_inventory_extension.lua:321`). On the
+  LOCAL wearer (`SimpleInventoryExtension`) the wielded slot lives at
+  `equipment.wielded_slot` (`simple_inventory_extension.lua:208/669`), so the guard's
+  wielded item resolved to nil and the `if w_item then` shape fell through PERMISSIVE,
+  painting `equipment.left_hand_wielded_unit_3p`/`_1p` of whatever weapon was in hand.
+  The spawn-time state replay of a pick stored under the Bret template key
+  (`one_handed_sword_shield_template_2`, `item_master_list_lake.lua:425`) therefore
+  landed on the wielded Sword and Mace's mace.
+- **Fix.** New shared resolver `mod._la_wielded_item_matches(inv, equipment, key,
+  allow_slot_key)` reads `equipment.wielded_slot` first (correct on both inventory
+  classes), keeps `inv.wielded_slot` as husk fallback, and both gate call sites are now
+  RESTRICTIVE when the wielded item is unresolvable: skip + re-queue (pending retry /
+  next-wield reconcile re-applies once the matching weapon is in hand) instead of
+  painting blind. Offhand entries match weapon identity only (template/name/key/
+  item_type); illusion entries keep their designed cosmetic-slot-key match.
+- **rt-check.** `cos_la_weapon_identity_gate_local_wearer` replays the issue 514 shapes
+  as a pure-table functional test (Bret template entry vs wielded cwv_es_sword_and_mace
+  must skip; own template and illusion slot-key must match; unresolvable must skip).
+
 ## 0.9.84-dev — 2026-07-13 — #518 LA weapon cosmetics yield to Chaos Wastes upgrade skins (deus-yield gate) [untested]
 
 Fixes #518: in Chaos Wastes, starting and shrine-upgraded weapons had their deus-rolled

@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.84-dev"
+local MOD_VERSION = "0.9.85-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -5503,6 +5503,41 @@ local function _level_world()
     return nil
 end
 
+-- v0.9.85-dev (#514): weapon-identity resolution for the kind=offhand and
+-- kind=illusion apply gates. Returns (match, w_item):
+--   match  = true when the stored entry key (slot_name) names the WIELDED
+--            item (template / name / key / item_type; plus the wielded SLOT
+--            name for slot-keyed entries when allow_slot_key is true).
+--   w_item = the wielded item_data, or nil when unresolvable.
+-- CRITICAL field note: the wielded slot name lives at
+-- `equipment.wielded_slot` on BOTH inventory classes
+-- (simple_inventory_extension.lua:208/669 and
+-- simple_husk_inventory_extension.lua:775). `inv.wielded_slot` exists ONLY
+-- on SimpleHuskInventoryExtension (simple_husk_inventory_extension.lua:321).
+-- The v0.9.72 guard read the husk-only field, so on the LOCAL wearer
+-- (SimpleInventoryExtension) w_item resolved to nil and the guard fell
+-- through PERMISSIVE - the spawn-time state replay then painted a
+-- Bret-shield LA pick (stored under one_handed_sword_shield_template_2,
+-- item_master_list_lake.lua:425) onto the left-hand MACE of CWV's wielded
+-- Sword and Mace (#514). Callers MUST treat "not match" - including the
+-- w_item == nil unresolvable case - as SKIP (return false): the pending
+-- retry / next-wield reconcile re-applies once the matching weapon is in
+-- hand, so restrictive-by-default cannot strand a pick.
+function mod._la_wielded_item_matches(inv, equipment, slot_name, allow_slot_key)
+    local w_slot_name = (equipment and equipment.wielded_slot)
+        or (inv and inv.wielded_slot)
+    local w_slot_data = equipment and equipment.slots and w_slot_name
+        and equipment.slots[w_slot_name]
+    local w_item = w_slot_data and w_slot_data.item_data
+    if not w_item then
+        return false, nil
+    end
+    local match = (slot_name == w_item.template) or (slot_name == w_item.name)
+        or (slot_name == w_item.key) or (slot_name == w_item.item_type)
+        or (allow_slot_key == true and slot_name == w_slot_name)
+    return match, w_item
+end
+
 -- Unified apply core. All inbound paths (cos_la_apply broadcast + pending-
 -- queue replay) converge here. Returns true if applied, false if the target
 -- unit isn't ready (caller can re-queue).
@@ -5700,23 +5735,26 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         -- the wielded item actually matches the stored key; otherwise return
         -- false (pending retry keeps it briefly; the next wield of the RIGHT
         -- weapon re-applies via the wield reconcile).
-        local w_slot_data = equipment and equipment.slots and inv.wielded_slot
-            and equipment.slots[inv.wielded_slot]
-        local w_item = w_slot_data and w_slot_data.item_data
-        if w_item then
-            local match = (slot_name == w_item.template) or (slot_name == w_item.name)
-                or (slot_name == w_item.key) or (slot_name == w_item.item_type)
-            if not match then
-                local seen = mod._la_gate_seen
-                if not seen then seen = {}; mod._la_gate_seen = seen end
-                local sk = "offhand-wrongweapon|" .. tostring(slot_name) .. "|" .. tostring(w_item.template)
-                if not seen[sk] and printf then
-                    seen[sk] = true
-                    printf("[la-state] APPLY SKIP wrong-weapon: entry key=%s but wielded template=%s name=%s (kind=offhand armoury=%s)",
-                        tostring(slot_name), tostring(w_item.template), tostring(w_item.name), tostring(armoury_key))
-                end
-                return false
+        -- v0.9.85-dev (#514): the v0.9.72 guard read `inv.wielded_slot`, a
+        -- field that exists ONLY on SimpleHuskInventoryExtension - on the
+        -- LOCAL wearer w_item was always nil and the `if w_item then` shape
+        -- fell through PERMISSIVE, painting the currently wielded left-hand
+        -- unit (Bret-shield pick wrapped around CWV Sword and Mace's mace at
+        -- spawn replay). Now resolved via mod._la_wielded_item_matches
+        -- (equipment.wielded_slot on both classes) and RESTRICTIVE when the
+        -- wielded item is unresolvable: skip + re-queue, never paint blind.
+        local match, w_item = mod._la_wielded_item_matches(inv, equipment, slot_name, false)
+        if not match then
+            local seen = mod._la_gate_seen
+            if not seen then seen = {}; mod._la_gate_seen = seen end
+            local w_tpl = w_item and w_item.template
+            local sk = "offhand-wrongweapon|" .. tostring(slot_name) .. "|" .. tostring(w_tpl)
+            if not seen[sk] and printf then
+                seen[sk] = true
+                printf("[la-state] APPLY SKIP wrong-weapon: entry key=%s but wielded template=%s name=%s (kind=offhand armoury=%s)",
+                    tostring(slot_name), tostring(w_tpl), tostring(w_item and w_item.name), tostring(armoury_key))
             end
+            return false
         end
         local left_unit = equipment and equipment.left_hand_wielded_unit_3p
         if not left_unit or not Unit.alive(left_unit) then
@@ -5802,24 +5840,24 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         -- entries are keyed by the COSMETIC SLOT ("slot_melee"/"slot_ranged",
         -- from update_cosmetic_slot); only paint when that slot is the one
         -- currently wielded (or the key matches the wielded item directly).
-        local w_slot_data = equipment and equipment.slots and inv.wielded_slot
-            and equipment.slots[inv.wielded_slot]
-        local w_item = w_slot_data and w_slot_data.item_data
-        if w_item then
-            local match = (slot_name == inv.wielded_slot)
-                or (slot_name == w_item.template) or (slot_name == w_item.name)
-                or (slot_name == w_item.key) or (slot_name == w_item.item_type)
-            if not match then
-                local seen = mod._la_gate_seen
-                if not seen then seen = {}; mod._la_gate_seen = seen end
-                local sk = "illusion-wrongweapon|" .. tostring(slot_name) .. "|" .. tostring(inv.wielded_slot)
-                if not seen[sk] and printf then
-                    seen[sk] = true
-                    printf("[la-state] APPLY SKIP wrong-weapon: entry key=%s but wielded slot=%s template=%s (kind=illusion armoury=%s)",
-                        tostring(slot_name), tostring(inv.wielded_slot), tostring(w_item.template), tostring(armoury_key))
-                end
-                return false
+        -- v0.9.85-dev (#514): same fix as the offhand branch - resolve the
+        -- wielded slot via mod._la_wielded_item_matches (equipment.wielded_slot;
+        -- `inv.wielded_slot` is husk-only, so this guard was dead on the local
+        -- wearer) and skip RESTRICTIVELY when the wielded item is unresolvable.
+        -- allow_slot_key=true keeps the designed slot-key match for illusion
+        -- entries.
+        local match, w_item = mod._la_wielded_item_matches(inv, equipment, slot_name, true)
+        if not match then
+            local seen = mod._la_gate_seen
+            if not seen then seen = {}; mod._la_gate_seen = seen end
+            local w_slot_name = (equipment and equipment.wielded_slot) or inv.wielded_slot
+            local sk = "illusion-wrongweapon|" .. tostring(slot_name) .. "|" .. tostring(w_slot_name)
+            if not seen[sk] and printf then
+                seen[sk] = true
+                printf("[la-state] APPLY SKIP wrong-weapon: entry key=%s but wielded slot=%s template=%s (kind=illusion armoury=%s)",
+                    tostring(slot_name), tostring(w_slot_name), tostring(w_item and w_item.template), tostring(armoury_key))
             end
+            return false
         end
         local right_unit = equipment and equipment.right_hand_wielded_unit_3p
         local left_unit_w = equipment and equipment.left_hand_wielded_unit_3p
@@ -8659,6 +8697,38 @@ _rt_register("cos_la_deus_yield_gate_wired", function()
     if type(v) ~= "boolean" then
         return "deus-yield gate must return boolean, got " .. type(v)
     end
+end)
+
+-- #514: the offhand/illusion weapon-identity gate must (a) resolve the
+-- wielded slot from equipment.wielded_slot (inv.wielded_slot is husk-only;
+-- reading it made the guard dead on the local wearer), and (b) be
+-- RESTRICTIVE when the wielded item is unresolvable. Pure-table functional
+-- test replaying the #514 shapes: local-wearer inventory (no inv field)
+-- wielding CWV Sword and Mace vs a pick stored under the Bret
+-- sword-and-shield template key.
+_rt_register("cos_la_weapon_identity_gate_local_wearer", function()
+    if type(mod._la_wielded_item_matches) ~= "function" then
+        return "mod._la_wielded_item_matches missing (#514 gate helper)"
+    end
+    local inv = {}  -- SimpleInventoryExtension shape: NO wielded_slot field
+    local equipment = {
+        wielded_slot = "slot_melee",
+        slots = { slot_melee = { item_data = {
+            template = "sword_and_mace_template",
+            key = "cwv_es_sword_and_mace",
+            item_type = "cwv_es_sword_and_mace",
+        } } },
+    }
+    local m = mod._la_wielded_item_matches(inv, equipment, "one_handed_sword_shield_template_2", false)
+    if m then return "#514 repro: bret template entry matched wielded sword-and-mace" end
+    m = mod._la_wielded_item_matches(inv, equipment, "sword_and_mace_template", false)
+    if not m then return "template key of the WIELDED weapon must match (local wearer)" end
+    m = mod._la_wielded_item_matches(inv, equipment, "slot_melee", false)
+    if m then return "slot-key entry must NOT match for kind=offhand (allow_slot_key=false)" end
+    m = mod._la_wielded_item_matches(inv, equipment, "slot_melee", true)
+    if not m then return "slot-key entry must match for kind=illusion (allow_slot_key=true)" end
+    local m2, w2 = mod._la_wielded_item_matches(inv, {}, "sword_and_mace_template", false)
+    if m2 or w2 ~= nil then return "unresolvable wielded item must be restrictive (false, nil)" end
 end)
 
 -- #264: reconcile must treat a missing store entry as TERMINAL ("no-entry"),
