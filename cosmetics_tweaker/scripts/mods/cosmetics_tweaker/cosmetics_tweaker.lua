@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.88-dev"
+local MOD_VERSION = "0.9.89-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -9285,18 +9285,35 @@ _rt_register("material_settings_templates_loaded", function()
     if type(templates) ~= "table" then
         return "MaterialSettingsTemplates global not loaded"
     end
-    local REQUIRED_WEAPON_MATS = {
+    -- Vanilla registers exactly these weapon templates in
+    -- weapon_material_settings_templates.lua:4-115. `white_glow` is not in
+    -- that table: it is referenced only by the Morris Nornaz skin below and
+    -- must remain a tolerated missing-template/fallback case.
+    local REQUIRED_REGISTERED_WEAPON_MATS = {
         "blue_glow", "purple_glow", "golden_glow", "deep_crimson",
-        "life_green", "lileath", "weaves", "versus", "white_glow",
+        "life_green", "lileath", "weaves", "versus",
     }
     local missing = {}
-    for _, name in ipairs(REQUIRED_WEAPON_MATS) do
+    for _, name in ipairs(REQUIRED_REGISTERED_WEAPON_MATS) do
         if type(templates[name]) ~= "table" then
             missing[#missing + 1] = name
         end
     end
     if #missing > 0 then
         return "missing weapon mat templates: " .. table.concat(missing, ", ")
+    end
+    -- Source contract: weapon_skins_morris.lua:5-12 contains the one
+    -- `white_glow` referrer, but vanilla does not register that template.
+    -- Assert the exceptional skin mapping rather than contradicting vanilla
+    -- by requiring a template. If a later game build registers white_glow,
+    -- this remains valid and naturally stops being a fallback case.
+    local weapon_skins = rawget(_G, "WeaponSkins")
+    local skins = type(weapon_skins) == "table" and weapon_skins.skins
+    local white_skin = type(skins) == "table"
+        and skins.deus_dw_1h_axe_skin_06_runed_02_white
+    if type(white_skin) ~= "table"
+            or white_skin.material_settings_name ~= "white_glow" then
+        return "white_glow fallback skin mapping missing or changed"
     end
     -- Spot-check `weaves` shape (vanilla:
     -- scripts/settings/equipment/weapon_material_settings_templates.lua:52).

@@ -7,6 +7,22 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-13.
 
 ---
+## Diagnostics / Regression Suite
+
+### white-glow-unregistered-fallback -- do not require vanilla's missing template
+
+| Field | Value |
+|-------|-------|
+| Symptom | `/cos_regression_test` always reports `material_settings_templates_loaded -- missing weapon mat templates: white_glow`. |
+| Root cause | Vanilla's Morris skin catalog contains one `white_glow` referrer, but `weapon_material_settings_templates.lua` registers only the other eight weapon template families. The suite incorrectly treated referrer names and registered template names as the same set. |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.89-dev |
+| Category | INTEGRATION |
+| Repro | Run `/cos_regression_test` in the keep on an unmodified current game data set. |
+| Expected post-fix | `material_settings_templates_loaded` passes, still checks every registered vanilla weapon template, and separately locks the lone Nornaz skin's `white_glow` fallback mapping. |
+| Detection | `/cos_regression_test`; inspect `material_settings_templates_loaded`. |
+| Tracking | GitHub issue #566. |
+
 ## Chaos Wastes integration
 
 ### la-deus-yield-active-mission-only — Pilgrimage Chamber must retain LA weapons

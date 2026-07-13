@@ -1,5 +1,20 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.89-dev - 2026-07-13 - #566 model white_glow as vanilla's fallback case [untested]
+
+- `/cos_regression_test` no longer requires a nonexistent
+  `MaterialSettingsTemplates.white_glow`. Vanilla registers the eight other
+  weapon material templates in
+  `weapon_material_settings_templates.lua:4-115`; `white_glow` is absent.
+- Coverage for the exception remains explicit: the test now asserts that
+  `deus_dw_1h_axe_skin_06_runed_02_white` still maps to `white_glow`, matching
+  `weapon_skins_morris.lua:5-12`. A later vanilla registration is tolerated,
+  but the current missing-template fallback no longer produces a false FAIL.
+
+Verify by running `/cos_regression_test` in the keep. The
+`material_settings_templates_loaded` check should pass while all eight
+vanilla-registered weapon template families remain covered.
+
 ## 0.9.88-dev - 2026-07-13 - #518 Pilgrimage Chamber keeps LA weapon cosmetics [untested]
 
 The v0.9.84 Chaos Wastes precedence gate was too broad: it yielded every
