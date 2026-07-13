@@ -7,6 +7,17 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-13.
 
 ---
+## ConflictDirector tick fault containment (#479)
+
+| Field | Value |
+|---|---|
+| Symptom | `terror_event_mixer.lua:1800` repeats every frame; latest log recorded 1,173 skipped ticks in 17.46 seconds and two ET records per failure. |
+| Cause | Post-processing left the first processed element nil; `start_event` threw before `EnemyRecycler.update_main_path_events` advanced the current event id, so the same patrol event retried forever. |
+| Fix | Log one bounded fault episode; for this exact error remove the partial active event, perform vanilla's missed index advance, and quarantine only ET pacing overrides. Never re-run the failed tick. |
+| Runtime checks | `/et_regression_test`: `issue479_tick_fault_logging_bounded`, `issue479_malformed_main_path_event_quarantined`, and `issue479_cd_tick_no_rerun_and_restore` all PASS. |
+| In-game | Play through a main-path patrol trigger. If quarantine fires, expect exactly one fault, one quarantine, one recovery summary, continued director activity, and no repeated event trigger. |
+
+---
 ## Settings lifecycle
 
 ### settings-burst-bounded -- bulk resets apply once

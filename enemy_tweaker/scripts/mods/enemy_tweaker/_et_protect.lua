@@ -111,19 +111,51 @@ end
 -- "vanilla fallback ALSO errored"). Guard-that-delegates class (issue 270).
 --
 -- _make_tick_guard builds the hook callback: body runs under pcall; on ANY
--- inner error the tick is SKIPPED — one [et:479] printf + mod:warning, no
+-- inner error the tick is SKIPPED — one [et:479] printf per fault episode, no
 -- second vanilla invocation. The body is responsible for restoring any
 -- engine-global overrides on its own error path (see _et_pacing.lua's use of
 -- _call_with_override). Factory is exposed for the regression check.
+local function _tick_fault_transition(state, ok, err)
+    if ok then
+        if state.active then
+            local suppressed = math.max(0, state.count - 1)
+            state.active = false
+            state.count = 0
+            state.error = nil
+            return "recovered", suppressed
+        end
+        return nil
+    end
+    state.count = state.count + 1
+    if not state.active then
+        state.active = true
+        state.error = tostring(err)
+        return "first", 0
+    end
+    return "repeat", state.count - 1
+end
+mod._et479_tick_fault_transition = _tick_fault_transition
+
+ET.tick_faults = ET.tick_faults or {}
 local function _make_tick_guard(class, method, label, body)
+    local fault = { active = false, count = 0 }
+    ET.tick_faults[label] = fault
     return function(func, self, ...)
         local ok, r1, r2, r3, r4 = pcall(body, func, self, ...)
-        if ok then return r1, r2, r3, r4 end
+        if ok then
+            local transition, suppressed = _tick_fault_transition(fault, true)
+            if transition == "recovered" then
+                pcall(printf, "[et:479] %s recovered; suppressed_repeat_ticks=%d",
+                    tostring(label), suppressed)
+            end
+            return r1, r2, r3, r4
+        end
         local err = tostring(r1)
-        mod:warning("[et:hook] %s (%s.%s) inner errored: %s — tick SKIPPED (issue 479: vanilla NOT re-run)",
-            tostring(label), tostring(class), tostring(method), err)
-        pcall(printf, "[et:479] skipped %s tick after inner error (no vanilla re-run; overrides restored): %s",
-            tostring(label), err)
+        local transition = _tick_fault_transition(fault, false, err)
+        if transition == "first" then
+            pcall(printf, "[et:479] %s (%s.%s) fault quarantined; tick skipped; vanilla not re-run: %s",
+                tostring(label), tostring(class), tostring(method), err)
+        end
         return nil
     end
 end

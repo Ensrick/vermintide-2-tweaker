@@ -1,5 +1,33 @@
 # Enemy Tweaker Changelog
 
+## 0.7.39-dev (2026-07-13): #479 quarantine malformed main-path event loops [untested]
+
+The latest session produced 1,173 `ConflictDirector.update` failures from
+20:08:52.716 through 20:09:10.179 (about 67 failed ticks/second). Each retry
+triggered `boss_event_chaos_spline_patrol`; `TerrorEventMixer.start_event`
+appended an event, post-processing left `elements[1]` nil, and vanilla threw at
+`terror_event_mixer.lua:1800` before `EnemyRecycler.update_main_path_events`
+could advance its index. The prior #479 no-rerun guard prevented doubled state,
+but emitted two records and skipped the entire director tick every frame.
+
+- The tick guard now opens one bounded fault episode: one log record on the
+  first failure, no repeat spam, and one recovery summary with the suppressed
+  count after a successful tick.
+- For the exact line-1800 failure only, Enemy Tweaker removes the malformed
+  partial active event and performs the same main-path index advance vanilla
+  would have performed after a successful `start_event` return. Unknown errors
+  receive no guessed recovery mutation.
+- ET spawn-pacing overrides are quarantined for the remainder of that session;
+  unrelated Enemy Tweaker systems and vanilla director execution stay active.
+- Added runtime regressions that model the observed 1,173-error burst and prove
+  one fault/recovery episode, partial-event cleanup, index advance, and pacing
+  quarantine.
+
+Verify in a mission with patrol/main-path events: no repeated
+`boss_event_chaos_spline_patrol` line-1800 loop. If the malformed event occurs,
+expect one `fault quarantined`, one `quarantined malformed main-path event`, and
+one recovery line; the mission continues with pacing overrides disabled.
+
 ## 0.7.38-dev (2026-07-13): #450/#531 target Bodvarr's runtime War Camp breed [verify-fix]
 
 The latest in-game regression run reported both `boss_balance_targets_present`

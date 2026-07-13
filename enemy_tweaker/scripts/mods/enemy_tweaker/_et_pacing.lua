@@ -49,6 +49,52 @@ local function _read_num_setting(setting_id, default_val)
     return n
 end
 
+-- #479 recurrence (2026-07-13): TerrorEventMixer.start_event can append a
+-- malformed one-element event and then throw at terror_event_mixer.lua:1800
+-- after post_process_terror_event cleared elements[1]. EnemyRecycler advances
+-- its main-path index only AFTER start_event returns, so the same event retries
+-- every frame forever. For that exact source error only, reproduce the vanilla
+-- post-return bookkeeping, remove the partial active event, and quarantine ET's
+-- pacing overrides for the rest of the session. Unknown errors fail closed:
+-- tick skipped, no guessed state mutation.
+local function _quarantine_failed_main_path_event(conflict_director, err, mixer)
+    err = tostring(err)
+    if not err:find("terror_event_mixer.lua:1800", 1, true) then return false end
+    mod._et_pacing_quarantined = true
+
+    local recycler = conflict_director and conflict_director.enemy_recycler
+    local id = recycler and recycler.current_main_path_event_id
+    local events = recycler and recycler.main_path_events
+    local event = events and id and events[id]
+    local event_name = event and event[3] -- EnemyRecycler MP_TERROR_EVENT_NAME
+    if type(event_name) ~= "string" then return false end
+
+    mixer = mixer or rawget(_G, "TerrorEventMixer")
+    local active = mixer and mixer.active_events
+    if type(active) == "table" then
+        for i = #active, 1, -1 do
+            local candidate = active[i]
+            if candidate and candidate.name == event_name and
+                    (type(candidate.elements) ~= "table" or candidate.elements[1] == nil) then
+                table.remove(active, i)
+            end
+        end
+    end
+
+    local next_id = id + 1
+    local next_event = events[next_id]
+    if next_event then
+        recycler.current_main_path_event_id = next_id
+        recycler.current_main_path_event_activation_dist = next_event[1] -- MP_TRAVEL_DIST
+    else
+        recycler.current_main_path_event_id = nil
+    end
+    pcall(printf, "[et:479] quarantined malformed main-path event=%s id=%d; pacing overrides disabled for session",
+        event_name, id)
+    return true, event_name
+end
+mod._et479_quarantine_main_path_event = _quarantine_failed_main_path_event
+
 -- ConflictDirector.update — wraps the master tick that runs horde pacing,
 -- mini-patrol, specials. We mutate RecycleSettings.max_grunts (the concurrent
 -- alive trash cap) here so the engine reads our override during pacing
@@ -66,7 +112,7 @@ if rawget(_G, "ConflictDirector") then
         mod._et_freeze_suppress_this_frame = 0
         local RS = rawget(_G, "RecycleSettings")
         local override
-        if RS then
+        if RS and not mod._et_pacing_quarantined then
             local v = _read_num_setting("max_grunts_override", 90)
             if v ~= 90 then
                 override = v
@@ -74,6 +120,7 @@ if rawget(_G, "ConflictDirector") then
         end
         local ok, r1, r2, r3, r4 = _call_with_override(RS, "max_grunts", override, func, self, ...)
         if not ok then
+            _quarantine_failed_main_path_event(self, r1)
             -- Rethrow AFTER the override was restored: the tick guard logs the
             -- [et:479] line and skips the tick (no vanilla re-run).
             error(r1, 0)
@@ -86,6 +133,7 @@ if rawget(_G, "ConflictDirector") then
     -- horde_frequency tuple around this call.
     _hook_wrap("ConflictDirector", "update_horde_pacing", "spawn_pacing.update_horde_pacing",
             function(func, self, ...)
+        if mod._et_pacing_quarantined then return func(self, ...) end
         local RS = rawget(_G, "RecycleSettings")
         local CP = rawget(_G, "CurrentPacing")
         local original_push, original_freq
@@ -116,6 +164,7 @@ if rawget(_G, "ConflictDirector") then
     -- frequency slider has no effect after the first horde dies.
     _hook_wrap("ConflictDirector", "horde_killed", "spawn_pacing.horde_killed",
             function(func, self, ...)
+        if mod._et_pacing_quarantined then return func(self, ...) end
         local CP = rawget(_G, "CurrentPacing")
         local original_freq
         if CP then
@@ -139,7 +188,7 @@ if rawget(_G, "ConflictDirector") then
     -- inside the function body.
     _hook_wrap("ConflictDirector", "update_mini_patrol", "spawn_pacing.update_mini_patrol",
             function(func, self, ...)
-        if not mod:get("ambients_ignore_threat") then
+        if mod._et_pacing_quarantined or not mod:get("ambients_ignore_threat") then
             return func(self, ...)
         end
         local CP = rawget(_G, "CurrentPacing")
@@ -168,6 +217,7 @@ if rawget(_G, "ConflictDirector") then
     -- mult < 1 reduces spawn pressure. SpawnTweaks's inverted semantics are
     -- normalized here (their lower = harder; ours higher = harder).
     mod:hook_safe(ConflictDirector, "calculate_threat_value", function(self)
+        if mod._et_pacing_quarantined then return end
         local mult = _read_num_setting("spawn_pace_multiplier", 1)
         if mult == 1 then return end
         if type(self.threat_value) ~= "number" then return end
@@ -252,6 +302,7 @@ end
 -- next pacing tick.
 if rawget(_G, "Pacing") then
     mod:hook_safe(Pacing, "update", function(self, t, dt, alive_player_units) -- luacheck: ignore t dt
+        if mod._et_pacing_quarantined then return end
         local mult = _read_num_setting("spawn_pace_multiplier", 1)
         if mult == 1 then return end
         if type(alive_player_units) ~= "table" then return end
@@ -469,4 +520,55 @@ rt_register("issue479_cd_tick_no_rerun_and_restore", function()
             return "#479 REGRESSION: ConflictDirector.update is also registered via _hook_wrap, which re-runs vanilla on inner error"
         end
     end
+end)
+
+rt_register("issue479_tick_fault_logging_bounded", function()
+    local transition = mod._et479_tick_fault_transition
+    if type(transition) ~= "function" then return "tick fault transition helper missing" end
+    local state = { active = false, count = 0 }
+    local first = transition(state, false, "boom")
+    if first ~= "first" then return "first failure did not open one fault episode" end
+    for _ = 1, 1172 do
+        if transition(state, false, "boom") ~= "repeat" then
+            return "repeat failure reopened/logged a new episode"
+        end
+    end
+    local recovered, suppressed = transition(state, true)
+    if recovered ~= "recovered" or suppressed ~= 1172 then
+        return string.format("recovery summary mismatch: transition=%s suppressed=%s",
+            tostring(recovered), tostring(suppressed))
+    end
+end)
+
+rt_register("issue479_malformed_main_path_event_quarantined", function()
+    local quarantine = mod._et479_quarantine_main_path_event
+    if type(quarantine) ~= "function" then return "main-path quarantine helper missing" end
+    local old_quarantined = mod._et_pacing_quarantined
+    local recycler = {
+        current_main_path_event_id = 1,
+        current_main_path_event_activation_dist = 10,
+        main_path_events = {
+            { 10, false, "boss_event_chaos_spline_patrol" },
+            { 20, false, "next_event" },
+        },
+    }
+    local mixer = { active_events = {{
+        name = "boss_event_chaos_spline_patrol",
+        elements = {},
+    }} }
+    local ok, name = quarantine({ enemy_recycler = recycler },
+        "scripts/managers/conflict_director/terror_event_mixer.lua:1800: attempt to index a nil value",
+        mixer)
+    local result
+    if not ok or name ~= "boss_event_chaos_spline_patrol" then
+        result = "known malformed event was not recognized"
+    elseif #mixer.active_events ~= 0 then
+        result = "partial TerrorEventMixer active event was not removed"
+    elseif recycler.current_main_path_event_id ~= 2 or recycler.current_main_path_event_activation_dist ~= 20 then
+        result = "EnemyRecycler did not receive vanilla post-return index bookkeeping"
+    elseif not mod._et_pacing_quarantined then
+        result = "ET pacing overrides were not quarantined"
+    end
+    mod._et_pacing_quarantined = old_quarantined
+    return result
 end)
