@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.61-dev"
+local MOD_VERSION = "0.8.62-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -3041,6 +3041,24 @@ local function _forge_apply_ui_polish(forge_state)
                         -- on the melee or ranged weapon viewport.
                         tt.offset = { 10, 200, 30 }
                         tt.content.item = nil
+                        -- (#521) Exactly ONE popup: the hovered slot's. The vanilla
+                        -- item_tooltip pass AUTO-appends "currently equipped"
+                        -- comparison boxes next to the hovered item's box whenever
+                        -- content.no_equipped_item is unset: it walks the career
+                        -- loadout and draws every same-slot_type item with a
+                        -- different backend_id as an extra popup
+                        -- (ui_passes.lua:3599-3645, append at :3638-3641). With
+                        -- cim/wt cross-slot loadouts both weapon slots can share a
+                        -- slot_type, so hovering EITHER weapon popped BOTH weapons'
+                        -- boxes (issue 521). The deus run-stats screen this widget's
+                        -- pass list was copied from suppresses the compare box with
+                        -- this exact flag (deus_run_stats_ui_definitions.lua:955/961)
+                        -- - cim missed it when the widget was added in 0.3.12-dev.
+                        tt.content.no_equipped_item = true
+                        -- rt-check anchor (issue 521): the regression check reads
+                        -- this content table because the widget itself only exists
+                        -- while a forge overview instance is alive.
+                        mod._cim_tooltip_content = tt.content
                         overview._cim_tooltip_widget = tt
                         if overview._top_widgets then
                             overview._top_widgets[#overview._top_widgets + 1] = tt
@@ -6310,6 +6328,34 @@ _rt_register("overview_btn_render_target", function()
         return string.format(
             "overview jewelry buttons append to %q, which is NOT a drawn array on HeroWindowWeaveForgeOverview (must be one of _top_widgets/_bottom_widgets/_top_hdr_widgets/_bottom_hdr_widgets) — buttons will not render",
             tostring(_OVERVIEW_BTN_RENDER_FIELD))
+    end
+end)
+
+_rt_register("forge_tooltip_no_equipped_compare", function()
+    -- v0.8.62-dev (issue 521): the Athanor hover tooltip widget must carry
+    -- content.no_equipped_item = true, or the vanilla item_tooltip pass appends
+    -- "currently equipped" comparison boxes from the career loadout
+    -- (ui_passes.lua:3599-3645) and hovering one weapon slot pops BOTH weapons'
+    -- popups. The widget only exists while a forge overview instance is alive,
+    -- so the creation site anchors its content table on mod._cim_tooltip_content
+    -- for this check.
+    local content = mod._cim_tooltip_content
+    if content then
+        if content.no_equipped_item ~= true then
+            return "forge hover tooltip lost no_equipped_item = true - the vanilla item_tooltip pass will append equipped-compare popups (double popup, issue 521)"
+        end
+        return
+    end
+    -- Forge not opened this session: source needle (io-safe #511; nil in retail
+    -- sandbox => skip). Split needle so this line can't self-match.
+    local ok, info = pcall(debug.getinfo, _rt_register, "S")
+    if not ok or type(info) ~= "table" or not info.source then return "skip: forge not opened; no source introspection" end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local txt = _rt_src_read(src_path)
+    if not txt then return "skip: forge not opened this session; source unreadable (retail)" end
+    local needle = 'tt.content.no_equipped_item' .. ' = true'
+    if not txt:find(needle, 1, true) then
+        return "issue 521 regression: forge tooltip widget no longer sets no_equipped_item = true (double popup returns)"
     end
 end)
 
