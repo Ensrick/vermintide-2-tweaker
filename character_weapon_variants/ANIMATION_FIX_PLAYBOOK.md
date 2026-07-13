@@ -14,7 +14,7 @@ If a remap, template clone, or hook in this codebase appears to touch `anim_even
 
 ## Three non-negotiable rules
 
-1. **1P animations are universal — never touch.** First-person hands share `first_person_base` across every character; any weapon's 1P state machine plays correctly on every character's first-person view by default. Only `anim_event_3p`, `wield_anim_3p`, `wield_anim_career_3p` are in scope. Touching `anim_event` / `wield_anim` / `state_machine` per character is harmful, not just unnecessary. The `Unit.animation_event` hook in CWV's cross-access remap is gated to fire only on the local 3P body via five early-exits — 1P calls never enter the remap path.
+1. **1P animations are universal — never touch.** First-person hands share `first_person_base` across every character; any weapon's 1P state machine plays correctly on every character's first-person view by default. Only `anim_event_3p`, `wield_anim_3p`, `wield_anim_career_3p` are in scope. Touching `anim_event` / `wield_anim` / `state_machine` per character is harmful, not just unnecessary. CWV remaps at `WeaponUnitExtension._play_3p_anim`, before vanilla serializes the 3P event; 1P calls never enter this path.
 
 2. **Closed-vocabulary rule (3P).** Every 3P remap target MUST be a string already present in the `anim_event` column of the target body's wield-SM-matching template. The skeleton-events probe (`/sm_probe`) and `Unit.has_animation_event` only report whether the master state machine knows the name; the destination state in the current sub-graph may be a stub that animates nothing. The only safe candidate universe is the target template's authored event set. There is no parallel "1P closed list" — 1P doesn't need one.
 
@@ -33,7 +33,7 @@ Classify before reaching for tools.
 | **A. Wield pose wrong** (idle stance, weapon held weird) | `wield_anim_3p` / `wield_anim_career_3p` on the variant template, or a base-template patch for the inventory previewer |
 | **B. Attack missing (event silently no-ops — body holds previous idle, NOT a T-pose; see `PROJECT_STANDARDS.md` § 9.8) / wrong direction** | `anim_event_3p` on sub-actions (System B) or runtime event-name rewrite (cross-access remap, or `weapon_tweaker` System A) |
 | **C. In-game OK, menu preview wrong** | Base template's `wield_anim_career_3p` — `HeroPreviewer` reads the base, not the clone |
-| **D. Local OK, husk wrong** | The cross-access runtime remap doesn't cover husks. Either accept the gap or port `weapon_tweaker`'s `_unit_career_name` per-unit resolver |
+| **D. Local OK, husk wrong** | Audit ordering first: the owner must substitute in `_play_3p_anim` before `NetworkLookup.anims` and the animation RPC. A later `Unit.animation_event` rewrite fixes only the owner and strands husks on the donor event. |
 | **E. Native wielder regression** | A shared template's `anim_event_3p` was mutated for a foreign career and broke the native one. Back the change out and re-do via the runtime hook |
 
 Do not skip this step. The symptom dictates which tool you reach for; the wrong tool wastes a build cycle.
@@ -43,7 +43,7 @@ Do not skip this step. The symptom dictates which tool you reach for; the wrong 
 | Situation | Pattern |
 |---|---|
 | New CWV variant item with custom template clone | **System B** — edit `anim_event_3p` on cloned sub-actions |
-| `can_wield` expansion on a shared vanilla template, action plays wrong on foreign career | **Cross-access runtime remap** — `mod:hook("Unit", "animation_event", ...)` with (item, career) dispatch |
+| `can_wield` expansion on a shared vanilla template, action plays wrong on foreign career | **Cross-access runtime remap** — `mod:hook("WeaponUnitExtension", "_play_3p_anim", ...)` with (item, career) dispatch before vanilla's RPC |
 | `can_wield` expansion, only the wield pose reads wrong | **`wield_anim_career_3p`** patch on the base template |
 | Vanilla weapon unlocked via `weapon_tweaker.weapon_unlock_map` | **System A** in `weapon_tweaker` (out of scope for this mod) |
 | In-game right but inventory preview wrong | **Base template `wield_anim_career_3p`** patch (Step 6 in System B's recipe) |
@@ -170,7 +170,7 @@ See `_create_imperial_dual_swords_template` for the canonical example. Shape:
 See `_kruber_axe_falchion_remap` and `_cross_access_action_remap` for the canonical example. Shape:
 1. Define a `local _<wielder>_<weapon>_remap = { src_event = "target_event", ... }` table. Every value MUST be in the target SM's closed list (Step 3).
 2. Register it in `_cross_access_action_remap[<base_item_key>][<career_name>]`. List exact career names — no prefix matching in this pattern.
-3. The wield-tracker hook (`SimpleInventoryExtension.wield`) and the `Unit.animation_event` hook are already in place; new entries just plug into the existing dispatch.
+3. The wield-tracker hook (`SimpleInventoryExtension.wield`) and network-bound `WeaponUnitExtension._play_3p_anim` hook are already in place; new entries just plug into the existing dispatch.
 
 ### Wield-only base patch
 
@@ -195,7 +195,7 @@ Merge keys; do not clobber. Other careers may have already added entries.
 7. `/animlog` — confirm `[MISSING]` is gone for the events you remapped, and `REMAP` markers fire on the right events.
 8. Visual check on the target career: full L-chain, full H-chain, push, push-attack. Watch the body.
 9. Inventory preview check: open the menu, confirm wield pose matches in-game.
-10. Husk check (if relevant): bot or friend wields the same weapon, watch their body. The cross-access remap pattern doesn't cover husks by default — note any gap.
+10. Husk check: have a friend wield the same weapon while you listen and watch. The owner-selected receiver event must reach the husk through vanilla replication; verify the attack motion, weapon swing foley, and character exertion together.
 11. **Native-wielder regression check**: equip on the original native career, verify nothing changed.
 
 ## Step 9 — Document the change

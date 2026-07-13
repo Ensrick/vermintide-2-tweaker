@@ -740,7 +740,7 @@ System B can't author new clips. We pick from what the target skeleton's state m
 
 System B (template clone) is the right tool when CWV ships a new item with a custom template. It is **not** the right tool when CWV expands `can_wield` on a vanilla item so a foreign career can equip the existing weapon (the "cross-access" pattern). For that case the vanilla item points at the vanilla template, which is shared with the native wielder — mutating that template's per-action `anim_event_3p` to fix the foreign wielder's animations also changes them for the native wielder, which is wrong.
 
-The engine has no per-career `anim_event_3p` resolution at the sub-action level (`weapon_unit_extension.lua:512` reads `current_action_settings.anim_event_3p` directly with no career context). So the only correct way to do per-career per-action remaps on a shared vanilla template is at the **animation-event-firing** layer: hook `Unit.animation_event` and rewrite the event when the target unit is a player 3P body whose career has a remap entry for the wielded weapon. This is the same primitive `weapon_tweaker` uses for cross-career weapon unlocks; CWV's version is scoped only to its cross-access entries.
+The engine has no per-career `anim_event_3p` resolution at the sub-action level (`weapon_unit_extension.lua:512` reads `current_action_settings.anim_event_3p` directly with no career context). The remap must therefore happen at the **network-bound 3P animation layer**: hook `WeaponUnitExtension._play_3p_anim` and replace the event before vanilla looks it up and sends its animation RPC. This ordering is load-bearing. A `Unit.animation_event` hook is too late: vanilla has already encoded and sent the donor event, so it can make the owner's body look correct while remote husks receive an event their body cannot play, including its authored swing-foley and exertion timeline.
 
 ### Where it lives
 
@@ -748,7 +748,7 @@ Code: `character_weapon_variants.lua` → "Cross-character per-action 3P anim ev
 
 1. **Per-(item, career) remap tables** — `_kruber_axe_falchion_remap`, etc. — and the dispatch table `_cross_access_action_remap[item_key][career_name] = remap`.
 2. **Wield tracker** — `mod:hook_safe("SimpleInventoryExtension", "wield", ...)` updates `_cross_access_local_weapon_key` and `_cross_access_local_career` when the local player swaps melee weapons. Cheap state for the hot-path lookup.
-3. **The hook itself** — `mod:hook("Unit", "animation_event", ...)` does five early-exits before doing real work: no event name → bypass; no tracked weapon/career → bypass; weapon not in remap → bypass; career not in remap → bypass; event has no substitute → bypass; finally, unit is not the local 3P body → bypass. Only after all five does it call the original function with the rewritten event.
+3. **The network-bound hook** — `mod:hook("WeaponUnitExtension", "_play_3p_anim", ...)` verifies the owner unit is the local 3P body, resolves the tracked (item, career, source-event) substitution, verifies the target is in `NetworkLookup.anims`, then calls vanilla with the target event. Vanilla owns both the local `Unit.animation_event` call and the RPC, so the owner and every observer consume the same receiver-compatible event.
 
 ### How to add a new cross-access remap
 
@@ -788,15 +788,15 @@ Procedure:
 
 ### What's NOT remapped
 
-- **1P events.** Universal across characters; the hook is gated to fire only on the local 3P body unit. Per the load-bearing rule from "Animation: System B," never write `anim_event` (1P), `wield_anim` (1P), or `state_machine` per character.
-- **Husks of remote players.** The hook tracks only the local player's career and weapon. A remote Kruber wielding the axe+falchion will, on your client, still play the unmapped Saltzpyre events on his husk body. Mechanics are unaffected; only visual fidelity for husks suffers. weapon_tweaker has a per-unit career resolver (`_unit_career_name`) that solves this for its own remaps; if husk fidelity matters here, port that resolver.
+- **1P events.** Universal across characters; `_play_3p_anim` is exclusively the third-person path. Per the load-bearing rule from "Animation: System B," never write `anim_event` (1P), `wield_anim` (1P), or `state_machine` per character.
+- **A second husk-side remap.** The owning peer chooses the receiver-compatible event before vanilla's RPC. Remote peers then play that same event through `AnimationSystem`; remapping it again on the listener would risk divergence and duplicate audio.
 - **Native wielders.** A career that's not a key in `_cross_access_action_remap[item_key]` falls through every event unchanged — that's why Saltzpyre's native axe+falchion animations are unaffected even though the same template still reads the event.
 - **Cross-SM clips.** This hook just rewrites event names. The substitute event still has to be authored in whichever sub-graph the foreign body is currently in (set by the wield redirect). Cross-SM grafting (firing a clip from a different sub-graph) is documented as a dead-end in "Reaching clips that live in a different SM sub-graph."
 
 ### Common mistakes (specific to this pattern)
 
 - **Mutating the base template's `anim_event_3p` to "fix" Kruber.** Affects Saltzpyre too. Use the runtime hook instead. (This bug shipped in v0.1.133 → v0.1.139 before the runtime hook was added in v0.1.140.)
-- **Forgetting the local-3P-body filter.** The hook fires on every `Unit.animation_event` call in the entire game (1P, 3P body, husks, NPCs, menu units). All five early-exits matter for both correctness (don't rewrite events on non-applicable units) and performance (cheap bypass for the 99% case).
+- **Moving the remap to `Unit.animation_event`.** That engine call happens after `_play_3p_anim` has encoded and sent `event_3p`. The owner can appear fixed while observers still get the donor event and lose both motion and animation-authored audio.
 - **Tracking weapon at every hook fire instead of via wield hook.** Querying the player's current weapon on every anim event is expensive. Track once on `SimpleInventoryExtension.wield` and read the cached value.
 - **Career-name typos.** Career names are exact strings (`es_mercenary`, not `es_meercenary`). No prefix matching in this pattern — if you want all Kruber careers, list all four.
 

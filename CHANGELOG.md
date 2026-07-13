@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - `character_weapon_variants` replicated cross-access swing audio
+
+Repo-aggregate entry for Character Weapon Variants v0.1.393-dev / issue #398. Cross-access 3P event substitution now occurs before vanilla encodes and sends its animation RPC, so observers receive the same receiver-compatible animation and its authored weapon-foley/exertion timeline as the owner. The change deliberately leaves playback with vanilla rather than manually emitting Wwise events. Added bounded diagnostics and runtime regression coverage; awaiting two-player verification. No Workshop deployment.
+
 ## 2026-07-13 - `weapon_tweaker` Moonfire HUD loadout lifecycle
 
 Repo-aggregate entry for Weapon Tweaker v0.12.228-dev / issue #585. Vanilla's energy HUD draws from the career energy extension rather than the equipped item, so drained cross-character energy could remain visible forever after Moonfire was replaced. WT now resets that nonnative stale value once when `slot_ranged` is no longer energy-based, while preserving equipped/stowed Moonfire recharge and native Kerillian handling. No Workshop deployment.

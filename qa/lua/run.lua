@@ -47,6 +47,7 @@ local suites = {
     "test_mod_tweaker_numeric_editor",
     "test_mp_dailies",
     "test_wt_passive_charge",
+    "test_cwv_remote_audio",
 }
 
 for _, suite in ipairs(suites) do

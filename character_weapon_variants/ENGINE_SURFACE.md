@@ -36,7 +36,7 @@ full wrapper (`mod:hook`, can rewrite args/returns); `[safe]` = `mod:hook_safe`
 
 | Class.method (kind) | Vanilla behavior | Why cwv hooks it | Trap / invariant |
 |---|---|---|---|
-| `SimpleInventoryExtension.wield` [safe] `:1519` | Sets the wielded slot, flips 1p/3p unit visibility, updates career/weapon state [src: `simple_inventory_extension.lua:627`] | Track local player's cross-access melee weapon+career, feeding the `Unit.animation_event` remap; also debug wield dump (`:1506-1551`) | CONSOLIDATED - `hook_safe` does not chain; a v0.1.336 duplicate silently shadowed this and broke 3P remap (`docs/VMF_RECIPES.md` §1; `_cwv_wield_hook_registration_count` guards it) |
+| `SimpleInventoryExtension.wield` [safe] `:1519` | Sets the wielded slot, flips 1p/3p unit visibility, updates career/weapon state [src: `simple_inventory_extension.lua:627`] | Track local player's cross-access melee weapon+career, feeding the network-bound `_play_3p_anim` remap; also debug wield dump (`:1506-1551`) | CONSOLIDATED - `hook_safe` does not chain; a v0.1.336 duplicate silently shadowed this and broke 3P remap (`docs/VMF_RECIPES.md` §1; `_cwv_wield_hook_registration_count` guards it) |
 | `SimpleInventoryExtension._wield_slot` [hook] `:5035` | Shows/hides the 1p/3p units for the slot being wielded [src: `simple_inventory_extension.lua:1926`] | Per-hand cwv fixups at wield time (`:5035`) | Self-owned class only - husk is a separate root (see husk rows) |
 | `SimpleInventoryExtension.show_first_person_inventory` / `show_third_person_inventory` [safe] `:5106`/`:5118` | Toggles visibility of the equipped 1p / 3p units [src: `simple_inventory_extension.lua:917`] | Keep cwv scale/grip applied across 1p<->3p visibility flips (`:5106`) | - |
 | `SimpleInventoryExtension.game_object_initialized` [hook] `:10667` | First network broadcast of the loadout once the unit's GO id is ready, via `rpc_sync_loadout_slot` [src: `simple_inventory_extension.lua:249`] | Net-safe substitution/null of cwv keys before the encode (`:10667`, #474) | Wire-safety is never toggle-gated (memory `reference_vt2_wire_safety_never_toggle_gated`; `docs/engine/03`, §31) |
@@ -48,7 +48,7 @@ full wrapper (`mod:hook`, can rewrite args/returns); `[safe]` = `mod:hook_safe`
 
 | Class.method (kind) | Vanilla behavior | Why cwv hooks it | Trap / invariant |
 |---|---|---|---|
-| `Unit.animation_event` [hook] `:1567` | Engine C-API: fires a state-machine event on a unit's anim graph; per-action 3P resolution reads `anim_event_3p` directly with no career branch [src: `scripts/unit_extensions/weapons/weapon_unit_extension.lua:512`] | Rewrite the 3P event for a cross-access career on a SHARED vanilla template (the only per-career remap layer the engine exposes) (`:1567`) | Hot path - five early-exits before work; no `pcall` protection (engine C); scoped to local 3P body only (DEVELOPMENT "cross-access") |
+| `WeaponUnitExtension._play_3p_anim` [hook] `:1618` | Resolves `event_3p`, encodes it through `NetworkLookup.anims`, sends the animation RPC, then fires the same event locally [src: `scripts/unit_extensions/weapons/weapon_unit_extension.lua:613`] | Substitute the receiver-career event before vanilla encodes it, keeping owner and husks on one animation/audio timeline (`:1618`, #398) | Never defer this to `Unit.animation_event`: that call is after the RPC and therefore owner-local only. Target must already exist in `NetworkLookup.anims`; decline safely otherwise. |
 | `WeaponSpreadExtension.init` [safe] `:4240` / `update` [hook] `:4254` | Captures the spread template on spawn; recomputes spread each frame [src: `scripts/unit_extensions/weapons/spread/weapon_spread_extension.lua:7` / `:59`] | Patch spread data BEFORE vanilla's update runs for cwv ranged variants (full wrapper, `:4254`) | `update` must be `[hook]` not `[safe]` to land before vanilla reads it (`:4252` comment) |
 | `GenericAmmoUserExtension.update` [hook] `:3903` / `add_ammo` [hook] `:3915` | Per-frame ammo/reload state; clamps added ammo to max [src: `scripts/unit_extensions/generic/generic_ammo_user_extension.lua:145` / `:345`] | Adjust ammo pools for cwv ranged variants cloned from a different base (`:3903`) | Consumption-side only - never mutate `_max_*` fields (memory `feedback_vt2_max_resource_consumption_side`) |
 
@@ -176,8 +176,8 @@ re-discover these.
   `anim_event_3p` directly with no career context [src:
   `weapon_unit_extension.lua:512`]. For cross-access on a vanilla item you cannot
   fix the foreign wielder without changing the native wielder, so the only options
-  are a per-career variant item (System B) or the `Unit.animation_event`
-  firing-layer hook (`:1567`). Mutating the shared vanilla template's per-action
+  are a per-career variant item (System B) or the network-bound
+  `WeaponUnitExtension._play_3p_anim` hook (`:1618`). Mutating the shared vanilla template's per-action
   events is wrong (DEVELOPMENT "cross-access").
 - **No cross-sub-graph clip grafting.** Firing `to_<other_sm>` as
   `pre_action_anim_event` to borrow a clip from a foreign SM sub-graph does not

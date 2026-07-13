@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.392-dev"
+local MOD_VERSION = "0.1.393-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -1400,19 +1400,25 @@ _apply_cross_access_template_wield_3p()
 --   directly with no career context). So mutating the BASE template's
 --   anim_event_3p affects EVERY wielder including the native one — wrong.
 --
--- HOW THIS WORKS:
---   We hook `Unit.animation_event` and rewrite the event name when:
+-- HOW THIS WORKS (#398):
+--   We hook `WeaponUnitExtension._play_3p_anim` and rewrite the event BEFORE
+--   vanilla resolves NetworkLookup.anims and sends rpc_anim_event_variable_float.
+--   This ordering is load-bearing: the former Unit.animation_event hook ran
+--   only after vanilla had sent the original donor-career event, so the owner
+--   saw the receiver-native clip while remote husks received a no-op event and
+--   missed that clip's embedded swing-foley + exertion timeline.
+--   The rewrite applies when:
 --     1. The target unit is the local 3P body (player.player_unit) — never 1P
 --     2. The local player's career has a remap entry for the wielded weapon
 --     3. The event matches the remap
 --   Native wielders (their career not present in the remap) are unaffected.
---   weapon_tweaker has its own Unit.animation_event hook for cross-career
---   unlocks; both hooks coexist via VMF's hook stacking.
+--   Vanilla then performs its unchanged local play + network replication, so
+--   every listener consumes the same animation/audio timeline. No sound event
+--   is manually replayed.
 --
 -- LIMITATIONS (relative to weapon_tweaker's full system):
---   - Local player only. Husks of remote players still see the base
---     template's events. Acceptable for now — visual fidelity for husks
---     is a fallback case; mechanics still work.
+--   - Owner-side decision only, but the selected event is now networked by
+--     vanilla and therefore reaches every husk/listener.
 --   - No 1P remapping (universal rule — see top-of-file ANIMATION ARCHITECTURE).
 --   - No suffix/career-prefix logic — remaps are explicit per (item, career).
 --
@@ -1457,8 +1463,8 @@ local _kruber_dual_axes_remap = {
 --
 -- 3P ONLY. 1P animations are universal across all six characters via the
 -- shared `first_person_base` unit and need no remap work. The
--- `Unit.animation_event` hook that consumes this table is gated to fire only
--- on the local 3P body (see five early-exits in the hook). Never add 1P-side
+-- `WeaponUnitExtension._play_3p_anim` hook that consumes this table is gated
+-- to the local 3P owner body before vanilla's RPC encode. Never add 1P-side
 -- fields here — `anim_event`, `wield_anim`, `state_machine` are out of scope.
 --
 -- CLOSED-VOCABULARY RULE: every value MUST be an `anim_event` already
@@ -1533,8 +1539,18 @@ local _cross_access_action_remap = {
 	},
 }
 
+-- Pure resolver shared by the network-bound hook and /cwv regression. Returning
+-- nil means vanilla's event is untouched. Targets are receiver-native events,
+-- whose animation/audio assets are already resident with that career's body;
+-- no CWV Wwise package or manual playback is required.
+_om._cross_access_target_event = function(item_key, career, source_event)
+	local item_remaps = item_key and _cross_access_action_remap[item_key]
+	local career_remaps = item_remaps and career and item_remaps[career]
+	return career_remaps and source_event and career_remaps[source_event] or nil
+end
+
 -- Track local player's wielded melee weapon key + career for cheap lookup
--- on every Unit.animation_event hit. Updated only on melee wield.
+-- on every network-bound 3P animation. Updated only on melee wield.
 local _cross_access_local_weapon_key = nil
 local _cross_access_local_career     = nil
 
@@ -1544,7 +1560,7 @@ local _cross_access_local_career     = nil
 -- bottom of this file for the cwv_debug_mode dump; that registration shadowed
 -- THIS body and silently broke 3P cross-access animation remapping (the
 -- `_cross_access_local_weapon_key` / `_career` upvalues stopped updating, so
--- the `Unit.animation_event` hook below never had its remap table to work
+-- the network-bound `_play_3p_anim` hook below never had its remap table to work
 -- with). v0.1.337 merges both bodies into this single hook.
 -- v0.1.339 (Issue #33): increment the file-scope registration counter so the
 -- `cwv_wield_hook_unique` regression test can assert this site fires exactly
@@ -1553,7 +1569,7 @@ local _cross_access_local_career     = nil
 _cwv_wield_hook_registration_count = _cwv_wield_hook_registration_count + 1
 mod:hook_safe("SimpleInventoryExtension", "wield", function(self, slot_name)
 	-- (1) Cross-access local weapon tracking (slot_melee only, local player only).
-	-- Feeds the Unit.animation_event remap hook below.
+	-- Feeds the network-bound WeaponUnitExtension remap hook below.
 	if slot_name == "slot_melee" then
 		local pm = Managers.player
 		if pm then
@@ -1594,25 +1610,46 @@ local function _local_3p_body_unit()
 	return p and p.player_unit or nil
 end
 
--- The hook itself. Cheap early-exits keep the hot path fast — we only do real
--- work when (1) we have a tracked local weapon and career, (2) that combo has
--- a remap entry, (3) the event has a substitute, AND (4) the unit is the
--- local 3P body. Native wielders, husks, 1P unit, and unrelated weapons
--- all bypass via the early returns.
-mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
-	if not event_name then return func(unit, event_name, ...) end
-	if not _cross_access_local_weapon_key or not _cross_access_local_career then
-		return func(unit, event_name, ...)
+-- Network-bound remap. WeaponUnitExtension._play_3p_anim resolves
+-- NetworkLookup.anims[event_3p] and sends it at the TOP of vanilla's body,
+-- before its eventual Unit.animation_event call. Intercepting here is the only
+-- point where one substitution owns both local playback and remote replication.
+_om._cross_access_network_log_once = {}
+mod:hook("WeaponUnitExtension", "_play_3p_anim", function(func, self, event_3p, event, owner_unit, looping_event, anim_time_scale)
+	if owner_unit ~= _local_3p_body_unit() then
+		return func(self, event_3p, event, owner_unit, looping_event, anim_time_scale)
 	end
-	local item_remaps = _cross_access_action_remap[_cross_access_local_weapon_key]
-	if not item_remaps then return func(unit, event_name, ...) end
-	local career_remaps = item_remaps[_cross_access_local_career]
-	if not career_remaps then return func(unit, event_name, ...) end
-	local target = career_remaps[event_name]
-	if not target then return func(unit, event_name, ...) end
-	if unit ~= _local_3p_body_unit() then return func(unit, event_name, ...) end
-	return func(unit, target, ...)
+	local target = _om._cross_access_target_event(
+		_cross_access_local_weapon_key, _cross_access_local_career, event_3p
+	)
+	if not target then
+		return func(self, event_3p, event, owner_unit, looping_event, anim_time_scale)
+	end
+	-- NetworkLookup has a strict missing-key metamethod. Validate with rawget so
+	-- a typo degrades to vanilla instead of crashing before the RPC is encoded.
+	local target_id = NetworkLookup and NetworkLookup.anims
+		and rawget(NetworkLookup.anims, target)
+	if not target_id then
+		local miss_key = tostring(_cross_access_local_weapon_key) .. ":" .. tostring(target)
+		if not _om._cross_access_network_log_once[miss_key] then
+			_om._cross_access_network_log_once[miss_key] = true
+			printf("[cwv:398] network remap declined: item=%s career=%s %s->%s target absent from NetworkLookup.anims",
+				tostring(_cross_access_local_weapon_key), tostring(_cross_access_local_career),
+				tostring(event_3p), tostring(target))
+		end
+		return func(self, event_3p, event, owner_unit, looping_event, anim_time_scale)
+	end
+	local log_key = tostring(_cross_access_local_weapon_key) .. ":"
+		.. tostring(_cross_access_local_career) .. ":" .. tostring(event_3p)
+	if not _om._cross_access_network_log_once[log_key] then
+		_om._cross_access_network_log_once[log_key] = true
+		printf("[cwv:398] networked 3P remap: item=%s career=%s %s->%s id=%s (vanilla RPC owns remote anim/audio)",
+			tostring(_cross_access_local_weapon_key), tostring(_cross_access_local_career),
+			tostring(event_3p), tostring(target), tostring(target_id))
+	end
+	return func(self, target, event, owner_unit, looping_event, anim_time_scale)
 end)
+_cwv_networked_3p_remap_installed = true
 
 -- ============================================================
 -- Imperial Longsword template (modified bastard_sword_template)
@@ -12767,6 +12804,41 @@ _rt_register("cwv_wield_hook_unique", function()
         return string.format(
             "expected exactly 1 SimpleInventoryExtension wield safe-hook registration, got %d -- duplicate-hook regression (VMF silently shadows the first body; see VMF_RECIPES.md sec 1)",
             _cwv_wield_hook_registration_count)
+    end
+end)
+
+_rt_register("issue398_cross_access_audio_uses_networked_receiver_event", function()
+    if _cwv_networked_3p_remap_installed ~= true then
+        return "WeaponUnitExtension._play_3p_anim network remap hook not installed"
+    end
+    if type(_om._cross_access_target_event) ~= "function" then
+        return "cross-access receiver-event resolver missing"
+    end
+
+    local checked = 0
+    local anims = rawget(_G, "NetworkLookup")
+    anims = anims and anims.anims
+    for item_key, careers in pairs(_cross_access_action_remap) do
+        for career, remaps in pairs(careers) do
+            for source, expected in pairs(remaps) do
+                checked = checked + 1
+                local target = _om._cross_access_target_event(item_key, career, source)
+                if target ~= expected then
+                    return string.format("network receiver-event drift %s/%s %s -> %s (expected %s)",
+                        tostring(item_key), tostring(career), tostring(source),
+                        tostring(target), tostring(expected))
+                end
+                if type(anims) == "table" and rawget(anims, target) == nil then
+                    return string.format("network receiver event absent from NetworkLookup.anims: %s", target)
+                end
+            end
+        end
+    end
+    if checked == 0 then
+        return "cross-access network audio regression checked no remaps"
+    end
+    if _om._cross_access_target_event("es_1h_sword", "es_mercenary", "attack_swing_left") ~= nil then
+        return "network remap leaked to unrelated/native weapon"
     end
 end)
 

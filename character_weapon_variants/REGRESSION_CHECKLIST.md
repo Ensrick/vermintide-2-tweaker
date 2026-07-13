@@ -55,6 +55,23 @@ Last updated: 2026-07-13.
 ---
 ## Multiplayer / Network Sync
 
+### issue398-cross-access-remote-audio — Owner and husk consume one receiver event
+
+**[MULTIPLAYER]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | A remote listener cannot hear weapon swing foley or character exertion for a cross-access CWV weapon, although the wielder hears both locally. |
+| Root cause | CWV substituted the donor 3P event in `Unit.animation_event`, after vanilla had already encoded and sent that event. The owner played the receiver event locally while husks received a donor event their body could no-op. |
+| Mod(s) | character_weapon_variants |
+| Fix version(s) | 0.1.393-dev (#398) |
+| Category | INTEGRATION |
+| Repro | Player A equips a cross-access weapon such as Axe and Falchion or Dual Axes on Kruber and performs light, heavy, push, and push-attack chains while Player B listens nearby. Repeat after swapping host/client roles. |
+| Expected post-fix | Player B sees each receiver-compatible attack and hears both its weapon swing foley and character exertion. Player A hears one local copy. Native-wielder and native-weapon controls remain unchanged. |
+| Detection | `/cwv_regression_test` requires `issue398_cross_access_audio_uses_networked_receiver_event` PASS. Logs show bounded `[cwv:398] networked 3P remap` lines, no `network remap declined`, and no relevant `[cwv husk-fx] ... SKIP`. Test one host-owned and one client-owned weapon, then reverse listener/wielder roles. |
+
+---
+
 ### gated-registration-divergence — Toggle-gated mod-load registration produces different network indices across peers
 
 **[MULTIPLAYER]**

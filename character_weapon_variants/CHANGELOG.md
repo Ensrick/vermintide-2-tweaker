@@ -1,5 +1,14 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.393-dev - 2026-07-13 - #398 remote cross-access swing audio [untested]
+
+- Moved cross-access 3P event substitution from `Unit.animation_event` to `WeaponUnitExtension._play_3p_anim`, before vanilla resolves `NetworkLookup.anims` and broadcasts the animation RPC. The old ordering rewrote only the owner's local body after the donor event was already sent; observers could receive an event their receiver body did not play, losing both weapon swing foley and character exertion authored on that animation timeline.
+- Kept vanilla as the single owner of local and remote animation/audio playback. CWV does not manually replay Wwise events, avoiding duplicate sounds and listener divergence. The receiver events are native to the receiver body's state machine and need no extra CWV Wwise package residency.
+- Source audit ruled out adjacent paths: husks resolving base item/template does not choose the replicated animation event; melee impact sounds use separate explicit sound-event RPCs; and issue #280's `start_weapon_fx` guard only protects attached particle FX (with zero guard skips in the paired logs).
+- Added bounded `[cwv:398]` success/decline diagnostics and `/cwv_regression_test` check `issue398_cross_access_audio_uses_networked_receiver_event`, including target `NetworkLookup.anims` validation. Coop verification remains required; no Workshop deployment.
+
+**DoD:** Universal walked. Trait gates: G-CROSS-CHAR, G-NETWORK, G-ANIMATION. Deferrals: two-player host/client swing foley, exertion, motion, native controls, and role reversal — issue #398 verification matrix.
+
 ## 0.1.392-dev - 2026-07-13 - #586 Dual Axes first-person residency [untested]
 
 - Fixed the client crash when a synchronized Kruber or Saltzpyre CWV Dual Axes loadout arrives after `ProfileSynchronizer` has already derived the previous weapon's first-person package list. Vanilla then resolves `dual_wield_axes_template_1` and immediately installs `.../melee/dual_axes`; an absent resource faults inside the engine before Lua can recover.
