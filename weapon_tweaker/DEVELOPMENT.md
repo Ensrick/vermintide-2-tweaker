@@ -821,22 +821,18 @@ Related: § Conventions "Maintain alphabetical order" below — moving a `settin
 
 ### Maintain alphabetical order in weapon menus
 
-When renaming a weapon's character prefix (e.g., "Kruber: Flail" →
-"Saltzpyre: Flail"), the entry must be moved to its new alphabetical
-position in BOTH files:
+The runtime data pass sorts every per-career melee/ranged leaf alphabetically
+by its tag-stripped player-facing English label (issue #408). It reads the raw
+localization DATA table per `docs/LOCALIZATION_STANDARD.md` section 12 and uses
+the setting id only as a deterministic fallback/tie-break, so computed status
+tags and weapon-key prefixes cannot change the visible order.
 
-1. `weapon_tweaker_localization.lua` — move the line from the old
-   character group to the new one.
-2. `weapon_tweaker_data.lua` — move the setting entry to match.
+**Why:** The VMF mod menu renders weapons in data-tree order. The central sort
+keeps that order aligned with the names users actually see, including future
+ports and renamed localization entries.
 
-Entries are grouped by character (Bardin, Kerillian, Kruber, Saltzpyre,
-Sienna) and sorted alphabetically by display name within each group.
-Every career section must be updated.
-
-**Why:** The VMF mod menu renders weapons in the order they appear in
-data.lua. Changing a display name without moving the entry breaks
-alphabetical sorting in the dropdown.
-
-**How to apply:** Any time a weapon's character label changes, treat it
-as a move operation, not just a string replacement. Update all career
-sections in both files.
+**How to apply:** Keep the authored data and localization blocks tidy for
+review, but do not hand-build source-character ordering. New unlock rows are
+sorted automatically at data load. Run `/verify_wt_availability_sort` or the
+`issue408_availability_rows_sorted_by_name` regression check after changing the
+sort or dynamic labels.

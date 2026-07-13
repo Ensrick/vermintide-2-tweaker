@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.214-dev"
+local MOD_VERSION = "0.12.215-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4232,6 +4232,84 @@ _rt_register("localization_format_safe", function()
                     k, tostring(fmt_err))
             end
         end
+    end
+end)
+
+local function _verify_availability_display_order()
+    local ok, data = pcall(mod.dofile, mod,
+        "scripts/mods/weapon_tweaker/weapon_tweaker_data")
+    if not ok or type(data) ~= "table" then
+        return { "weapon_tweaker_data not loadable: " .. tostring(data) }, 0, 0
+    end
+    local raw = mod._wt_loc_raw
+    if type(raw) ~= "table" then return { "mod._wt_loc_raw unavailable" }, 0, 0 end
+
+    local function _sort_key(setting_id)
+        local entry = raw[setting_id]
+        local label = type(entry) == "table" and entry.en
+        if type(label) ~= "string" or label == "" then return nil end
+        while true do
+            local clean, n = label:gsub("^%s*%b[]%s*", "", 1)
+            label = clean
+            if n == 0 then break end
+        end
+        return string.lower(label) .. "\0" .. setting_id, label
+    end
+
+    local failures, leaves, rows = {}, 0, 0
+    local function _walk(node)
+        if type(node) ~= "table" then return end
+        local sid = node.setting_id
+        local career = type(sid) == "string"
+            and (sid:match("^melee_(.+)$") or sid:match("^ranged_(.+)$"))
+        if career and type(node.sub_widgets) == "table" then
+            local prefix = "unlock_" .. career .. "_"
+            local prior_key, prior_label
+            leaves = leaves + 1
+            for _, child in ipairs(node.sub_widgets) do
+                local child_sid = type(child) == "table" and child.setting_id
+                if type(child_sid) == "string" and child_sid:sub(1, #prefix) == prefix then
+                    local key, label = _sort_key(child_sid)
+                    rows = rows + 1
+                    if not key then
+                        failures[#failures + 1] = child_sid .. " has no English display label"
+                    elseif prior_key and prior_key > key then
+                        failures[#failures + 1] = string.format(
+                            "%s: %q appears before %q", sid, prior_label, label)
+                    end
+                    prior_key, prior_label = key, label or child_sid
+                end
+            end
+        end
+        if type(node.sub_widgets) == "table" then
+            for _, child in ipairs(node.sub_widgets) do _walk(child) end
+        end
+        if type(node.widgets) == "table" then
+            for _, child in ipairs(node.widgets) do _walk(child) end
+        end
+        for _, child in ipairs(node) do _walk(child) end
+    end
+    _walk(data)
+    return failures, leaves, rows
+end
+
+mod:command("verify_wt_availability_sort",
+    "Verify Weapon Availability rows follow their visible names", function()
+        local failures, leaves, rows = _verify_availability_display_order()
+        if #failures == 0 then
+            mod:echo("[wt:408] PASS: %d rows across %d career leaves are sorted by visible name",
+                rows, leaves)
+        else
+            mod:echo("[wt:408] FAIL: %d ordering problem(s)", #failures)
+            for _, failure in ipairs(failures) do mod:echo("  %s", failure) end
+        end
+    end)
+
+_rt_register("issue408_availability_rows_sorted_by_name", function()
+    local failures, leaves, rows = _verify_availability_display_order()
+    if #failures > 0 then return table.concat(failures, "; ") end
+    if leaves == 0 or rows == 0 then
+        return string.format("no availability rows inspected (leaves=%d rows=%d)", leaves, rows)
     end
 end)
 
