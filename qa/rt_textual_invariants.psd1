@@ -131,6 +131,13 @@
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_map.lua'; needle='level_name = PREVIEW_LEVEL'; literal=$true; polarity='present'; issueRef='#336'; note='tier-2 def mounts the preview level (backdrop present).' }
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'; needle='_skipped_cutscene_system == self and name == "fx_fade"'; literal=$true; polarity='present'; issueRef='#140'; note='post-skip fx_fade swallow guard (stray black fade on A Parting of the Waves).' }
 
+    # -- #530: the in-mission tab strip is Adventure-only. Holseher's Map
+    #    (dlc_morris_map) opens hero_view NATIVELY, so the HeroWindowPanelConsole
+    #    on_enter hook must suspend on mechanism "deus" or the strip (incl. the
+    #    Crafting tab) un-gates across the whole CW run. Fixed gut_dev 0.2.223-dev.
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_inventory.lua'; needle='[gut:530] in-mission tab strip suspended'; literal=$true; polarity='present'; issueRef='#530'; note='deus suspend evidence line: on_enter must bail before un-gating the strip in a CW run.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_inventory.lua'; needle='if mech == "deus" then'; literal=$true; polarity='present'; issueRef='#530'; note='mechanism gate ahead of the is_in_inn flip (Holseher''s Map opens hero_view natively).' }
+
     # ============================ cim_dev ============================
     # Source: crafting_in_modded_dev/CHANGELOG.md 0.8.57-dev (issue 511). The two
     # hook-registration checks whose source-text needles skip in retail.
