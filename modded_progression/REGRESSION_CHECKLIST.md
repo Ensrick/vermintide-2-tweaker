@@ -9,6 +9,17 @@ Last updated: 2026-07-13.
 ---
 ## Backend isolation
 
+### mp-local-daily-lifecycle — roster/progress/claims/SM must share an isolated durable state
+
+| Field | Value |
+|---|---|
+| Symptom | Dailies depend on the official roster, lose progress on restart, reset twice after clock changes, or merge local rewards into official Silver Shillings. |
+| Root cause | The #568 simulation copied server-selected templates and kept claim markers in the generic currency wallet; progress still lived in vanilla quest statistics. |
+| Fix version(s) | mp v0.2.19-dev |
+| Repro | In modded play, progress and claim a daily; restart; cross/reset the wall clock; compare SM in official and modded realms. |
+| Expected post-fix | UTC roster selection is deterministic; persisted progress survives; clock rollback never rotates; claim + ledger credit is exact-once; official balance is untouched. |
+| Detection | `/mp_regression_test` passes the ownership/rotation/ledger checks; log contains bounded `[mp:daily]` generation/progress/reset/claim records and no backend reward request. |
+
 ### mp-simulated-daily-claim-local — daily claim must not enqueue PlayFab
 
 | Field | Value |

@@ -44,6 +44,7 @@ local suites = {
     "test_mod_tweaker_profiles",
     "test_et_settings_queue",
     "test_mod_tweaker_search",
+    "test_mp_dailies",
 }
 
 for _, suite in ipairs(suites) do

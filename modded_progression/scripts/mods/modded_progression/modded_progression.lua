@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.18-dev"
+local MOD_VERSION = "0.2.19-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -262,16 +262,9 @@ local function set_inventory_store(t)
 end
 
 -- ============================================================
--- Simulated daily quests (issue #568)
+-- MP-owned daily lifecycle (issues #568/#573)
 -- ============================================================
--- A daily shown by MP is a local copy with an MP-owned id.  Vanilla quest ids
--- are never treated as local: that hard ownership boundary is what prevents a
--- UI click from falling through to generateQuestRewards.
-local DAILY_STATE_KEY = "simulated_dailies"
-local DAILY_CLAIMS_KEY = "_mp_daily_claims"
-local DAILY_REWARD_KIND = "SM"
-local DAILY_REWARD_AMOUNT = 5
-local DAILY_ID_PREFIX = "mp_daily_"
+local Dailies = mod:dofile("scripts/mods/modded_progression/mp_dailies")
 local _local_quest_rewards = {}
 local _local_poll_serial = 0
 
@@ -281,165 +274,15 @@ local function _shallow_copy(source)
     return copy
 end
 
-local function _is_mp_daily_id(id)
-    return type(id) == "string" and id:sub(1, #DAILY_ID_PREFIX) == DAILY_ID_PREFIX
-end
-
-local function _daily_generation()
-    return os.date("!%Y%m%d")
-end
-
-local function _get_daily_state()
-    local state = mod:get(DAILY_STATE_KEY)
-    if type(state) ~= "table" then return nil end
-    return state
-end
-
-local function _set_daily_state(state)
-    mod:set(DAILY_STATE_KEY, state, false)
-end
-
-local function _claim_markers(wallet)
-    local markers = wallet and wallet[DAILY_CLAIMS_KEY]
-    return type(markers) == "table" and markers or {}
-end
-
-local function _daily_is_claimed(id, wallet)
-    return _claim_markers(wallet or get_currency_store())[id] ~= nil
-end
-
-local function _register_daily_templates(state)
-    if not state or type(state.entries) ~= "table" then return end
-    local templates = require("scripts/managers/quest/quest_templates").quests
-    for _, entry in pairs(state.entries) do
-        local source = templates[entry.template]
-        if source and not templates[entry.id] then
-            templates[entry.id] = _shallow_copy(source)
-        end
-        if type(entry.stat_mappings) == "table" then
-            QuestSettings.stat_mappings[entry.key] = entry.stat_mappings
-        end
-    end
-end
-
-local function _new_daily_state(vanilla_daily)
-    local generation = _daily_generation()
-    local state = { generation = generation, entries = {} }
-    local candidates = {}
-
-    -- Snapshot the day's server-selected templates, but sever their backend
-    -- identity.  From this point onward they are MP-owned simulated quests.
-    for vanilla_key, data in pairs(vanilla_daily or {}) do
-        if type(data) == "table" and type(data.name) == "string" then
-            candidates[#candidates + 1] = {
-                template = data.name,
-                stat_mappings = QuestSettings.stat_mappings[vanilla_key],
-            }
-        end
-    end
-    table.sort(candidates, function(a, b) return a.template < b.template end)
-
-    -- Backend-less/offline fallback.  These are vanilla templates, not
-    -- vanilla quest identities; MP supplies fresh local keys and stat slots.
-    if #candidates == 0 then
-        candidates = {
-            { template = "daily_collect_tomes" },
-            { template = "daily_kill_bosses" },
-            { template = "daily_score_headshots" },
-        }
-    end
-
-    for index = 1, math.min(#candidates, 3) do
-        local candidate = candidates[index]
-        local id = string.format("%s%s_%d_%s", DAILY_ID_PREFIX, generation, index, candidate.template)
-        local key = string.format("%s%s_slot_%d", DAILY_ID_PREFIX, generation, index)
-        state.entries[key] = {
-            id = id,
-            key = key,
-            template = candidate.template,
-            stat_mappings = candidate.stat_mappings or {
-                string.format("%s_progress_1", key),
-            },
-            type = "daily",
-            reward = { reward_type = "currency", currency_code = DAILY_REWARD_KIND, amount = DAILY_REWARD_AMOUNT },
-        }
-    end
-
-    _set_daily_state(state)
-    _register_daily_templates(state)
-    _dbg("simulated dailies generated generation=%s count=%d", generation, #candidates)
-    return state
-end
-
-local function _ensure_daily_state(vanilla_daily)
-    local state = _get_daily_state()
-    if not state or state.generation ~= _daily_generation() or type(state.entries) ~= "table" then
-        state = _new_daily_state(vanilla_daily)
-    else
-        _register_daily_templates(state)
-    end
-    return state
-end
-
 local function _find_daily_entry(id)
-    if not _is_mp_daily_id(id) then return nil end
-    local state = _get_daily_state()
-    if not state or type(state.entries) ~= "table" then return nil end
-    for _, entry in pairs(state.entries) do
-        if entry.id == id then return entry end
-    end
-    return nil
-end
-
-local function _build_claim_wallet(wallet, ids, find_entry)
-    find_entry = find_entry or _find_daily_entry
-    local next_wallet = _shallow_copy(wallet)
-    local markers = _shallow_copy(_claim_markers(wallet))
-    local granted = {}
-    local total = 0
-
-    for _, id in ipairs(ids) do
-        local entry = find_entry(id)
-        if not entry then return nil, nil, "Quest is not owned by Modded Progression." end
-        if not markers[id] then
-            markers[id] = { generation = _daily_generation(), amount = DAILY_REWARD_AMOUNT }
-            granted[#granted + 1] = id
-            total = total + DAILY_REWARD_AMOUNT
-        end
-    end
-    if #granted == 0 then return nil, nil, "Quest already claimed." end
-
-    next_wallet[DAILY_REWARD_KIND] = math.max(0, math.floor(next_wallet[DAILY_REWARD_KIND] or 0)) + total
-    next_wallet[DAILY_CLAIMS_KEY] = markers
-    return next_wallet, granted
-end
-
-local function _persist_claim_wallet(ids, read_wallet, write_wallet, find_entry)
-    local before = read_wallet()
-    local next_wallet, granted, reason = _build_claim_wallet(before, ids, find_entry)
-    if not next_wallet then return nil, reason end
-
-    local ok, err = pcall(write_wallet, next_wallet)
-    if not ok then return nil, "Local claim persistence failed: " .. tostring(err) end
-
-    -- A writer that silently rejects a save is also failure.  Reward amount
-    -- and idempotency markers share this one setting/write, so no partial grant
-    -- can exist between them.
-    local verified = read_wallet()
-    local verified_markers = _claim_markers(verified)
-    for _, id in ipairs(granted) do
-        if not verified_markers[id] then
-            return nil, "Local claim persistence verification failed."
-        end
-    end
-    return granted
+    return Dailies.find_by_id(id)
 end
 
 local function _local_claim(ids)
-    local granted, reason = _persist_claim_wallet(ids, get_currency_store, set_currency_store)
+    local granted, total_or_reason = Dailies.claim(ids)
     if not granted then
-        _dbg_alert("simulated daily claim rejected: %s", tostring(reason))
-        return nil, reason
+        _dbg_alert("simulated daily claim rejected: %s", tostring(total_or_reason))
+        return nil, total_or_reason
     end
 
     _local_poll_serial = _local_poll_serial + 1
@@ -448,8 +291,8 @@ local function _local_claim(ids)
         quest_key = granted,
         loot = {{
             type = "currency",
-            currency_code = DAILY_REWARD_KIND,
-            amount = DAILY_REWARD_AMOUNT * #granted,
+            currency_code = Dailies.REWARD_KIND,
+            amount = total_or_reason,
         }},
     }
     _dbg("simulated daily claim persisted count=%d poll=%s backend=none", #granted, poll_id)
@@ -513,23 +356,26 @@ mod.mark_unlocked = function(item_key)
 end
 
 mod.has_currency = function(kind, amount)
-    return get_currency(kind) >= (amount or 0)
+    local balance = kind == Dailies.REWARD_KIND and Dailies.balance() or get_currency(kind)
+    return balance >= (amount or 0)
 end
 
 mod.spend = function(kind, amount)
     amount = amount or 0
     if not mod.has_currency(kind, amount) then return false end
+    if kind == Dailies.REWARD_KIND then return Dailies.spend(amount) end
     _set_currency(kind, get_currency(kind) - amount)
     return true
 end
 
 mod.credit = function(kind, amount)
     amount = amount or 0
+    if kind == Dailies.REWARD_KIND then return Dailies.credit(amount) end
     _set_currency(kind, get_currency(kind) + amount)
 end
 
 mod.get_currency = function(kind)
-    return get_currency(kind)
+    return kind == Dailies.REWARD_KIND and Dailies.balance() or get_currency(kind)
 end
 
 mod.grant_item = function(item_data)
@@ -698,19 +544,8 @@ mod:hook("BackendInterfaceQuestsPlayfab", "get_quests", function(func, self, ...
     local quests = func(self, ...)
     if not _is_mp_realm() or type(quests) ~= "table" then return quests end
 
-    local state = _ensure_daily_state(quests.daily)
     local local_quests = _shallow_copy(quests)
-    local_quests.daily = {}
-    local wallet = get_currency_store()
-    for key, entry in pairs(state.entries) do
-        if not _daily_is_claimed(entry.id, wallet) then
-            local_quests.daily[key] = {
-                name = entry.id,
-                type = "daily",
-                reward = entry.reward,
-            }
-        end
-    end
+    local_quests.daily = Dailies.quest_slice()
     return local_quests
 end)
 
@@ -724,13 +559,61 @@ end)
 
 mod:hook("BackendInterfaceQuestsPlayfab", "get_quest_by_key", function(func, self, key, ...)
     if _is_mp_realm() then
-        local state = _get_daily_state()
-        local entry = state and state.entries and state.entries[key]
-        if entry then
-            return { name = entry.id, type = "daily", reward = entry.reward }
-        end
+        local quest = Dailies.quest_by_key(key)
+        if quest then return quest end
     end
     return func(self, key, ...)
+end)
+
+-- The vanilla evaluator supplies names/descriptions/icons from the source
+-- templates. Only objective state is replaced with MP's persisted counters.
+mod:hook("QuestManager", "get_data_by_id", function(func, self, id, ...)
+    local data, err = func(self, id, ...)
+    if _is_mp_realm() and Dailies.is_owned_id(id) then
+        return Dailies.decorate_quest_data(id, data), err
+    end
+    return data, err
+end)
+
+-- QuestManager dispatches daily, weekly, and event slices separately. Consume
+-- MP daily events locally and never create vanilla StatisticsDB quest slots.
+mod:hook("QuestManager", "_increment_quest_stats", function(func, self, quests, stats_id, ...)
+    if not _is_mp_realm() or type(quests) ~= "table" then
+        return func(self, quests, stats_id, ...)
+    end
+    local local_quests, vanilla_quests = {}, {}
+    for key, quest in pairs(quests) do
+        if type(quest) == "table" and Dailies.is_owned_id(quest.name) then
+            local_quests[key] = quest
+        else
+            vanilla_quests[key] = quest
+        end
+    end
+    if next(local_quests) then Dailies.increment(local_quests, ...) end
+    if next(vanilla_quests) then return func(self, vanilla_quests, stats_id, ...) end
+end)
+
+mod:hook("BackendInterfaceQuestsPlayfab", "get_daily_quest_update_time", function(func, self, ...)
+    if _is_mp_realm() then return Dailies.seconds_until_reset() end
+    return func(self, ...)
+end)
+
+-- Every native Silver Shilling read used by the Emporium passes this method.
+-- Returning the local ledger makes the visible number realm-correct without
+-- ever copying or merging self._chips.SM. Purchases remain blocked below until
+-- the item-grant half can be made backend-free as a separate issue.
+mod:hook("BackendInterfacePeddlerPlayFab", "get_chips", function(func, self, chip_type, ...)
+    if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then return Dailies.balance() end
+    return func(self, chip_type, ...)
+end)
+
+mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips", function(func, self, item_id, chip_type, price, callback_fn, ...)
+    if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then
+        _dbg_alert("blocked official SM purchase item=%s price=%s; local item grant not armed", tostring(item_id), tostring(price))
+        if callback_fn then callback_fn(false) end
+        return
+    end
+    return func(self, item_id, chip_type, price, callback_fn, ...)
 end)
 
 -- Native reward presentation asks the quest interface for the completed poll's
@@ -751,7 +634,7 @@ end)
 -- modded play, while official-realm calls retain the original implementation.
 mod:hook("HeroViewStateAchievements", "_claim_quest_reward", function(func, self, id, ...)
     if not _is_mp_realm() then return func(self, id, ...) end
-    if not _is_mp_daily_id(id) then
+    if not Dailies.is_owned_id(id) then
         _dbg_alert("blocked non-MP quest claim id=%s backend=none", tostring(id))
         return nil, "Only Modded Progression simulated dailies can be claimed in modded play."
     end
@@ -761,7 +644,7 @@ end)
 mod:hook("HeroViewStateAchievements", "_claim_multiple_quest_rewards", function(func, self, ids, ...)
     if not _is_mp_realm() then return func(self, ids, ...) end
     for _, id in ipairs(ids or {}) do
-        if not _is_mp_daily_id(id) then
+        if not Dailies.is_owned_id(id) then
             _dbg_alert("blocked mixed/non-MP claim-all id=%s backend=none", tostring(id))
             return nil, "Claim-all contained a quest not owned by Modded Progression."
         end
@@ -788,42 +671,25 @@ mod:hook("BackendInterfaceQuestsPlayfab", "claim_multiple_quest_rewards", functi
     return func(self, keys, ...)
 end)
 
-_rt_register("simulated_daily_claim_is_atomic_and_idempotent", function()
-    local storage = { SM = 10 }
-    local writes = 0
-    local function read() return storage end
-    local function write(value) storage = value; writes = writes + 1 end
-    local function owned(id) return _is_mp_daily_id(id) and { id = id } or nil end
-    local id = "mp_daily_rt_1"
-    local granted, reason = _persist_claim_wallet({ id }, read, write, owned)
-    if not granted or reason then return "first local claim failed: " .. tostring(reason) end
-    if storage.SM ~= 15 then return "reward and claim marker were not committed together" end
-    if not _claim_markers(storage)[id] then return "idempotency marker missing" end
-    local duplicate = _persist_claim_wallet({ id }, read, write, owned)
-    if duplicate ~= nil then return "duplicate claim was granted" end
-    if storage.SM ~= 15 or writes ~= 1 then return "duplicate claim mutated persisted wallet" end
-end)
-
-_rt_register("simulated_daily_persistence_failure_grants_nothing", function()
-    local storage = { SM = 10 }
-    local function owned(id) return { id = id } end
-    local granted = _persist_claim_wallet({ "mp_daily_rt_fail" },
-        function() return storage end,
-        function() error("injected write failure") end,
-        owned)
-    if granted ~= nil then return "failed persistence reported a grant" end
-    if storage.SM ~= 10 or next(_claim_markers(storage)) ~= nil then
-        return "failed persistence mutated the original wallet"
-    end
-end)
-
 _rt_register("simulated_daily_backend_boundary", function()
-    if _is_mp_daily_id("daily_collect_tomes") then return "vanilla id classified as MP-owned" end
-    if not _is_mp_daily_id("mp_daily_20260713_1_daily_collect_tomes") then return "MP namespace not recognized" end
+    if Dailies.is_owned_id("daily_collect_tomes") then return "vanilla id classified as MP-owned" end
+    if not Dailies.is_owned_id("mp_daily_v2_20647_1_daily_collect_tomes") then return "MP namespace not recognized" end
     -- The only cloud function strings allowed in this chunk are documentation
     -- and suppression diagnostics; local claims resolve to mp_local poll ids.
     local before = _local_poll_serial
     if before < 0 then return "invalid local poll serial" end
+end)
+
+_rt_register("daily_rotation_is_deterministic_and_clock_monotonic", function()
+    local period = Dailies._test.utc_period(1783900800)
+    if Dailies._test.utc_period(1783900800) ~= period then return "UTC period is not deterministic" end
+    local state = Dailies._test.new_state(period, nil, "regression")
+    if state.period ~= period or state.next_reset_at ~= (period + 1) * 86400 then
+        return "daily reset boundary is not the next UTC period"
+    end
+    if state.ledger.balance ~= 0 or next(state.ledger.transactions) ~= nil then
+        return "new MP ledger was not isolated/empty"
+    end
 end)
 
 -- Level-end reward popups (level-up, deed, deus, keep-decoration,
@@ -890,7 +756,7 @@ mod:command("mp_reset", "Modded Progression: wipe local store (does NOT touch Pl
     mod:set("currency", {}, false)
     mod:set("unlocks", {}, false)
     mod:set("inventory", {}, false)
-    mod:set(DAILY_STATE_KEY, {}, false)
+    Dailies.reset()
     mod:set("seeded", false, false)
     set_schema_version(0)
     mod:echo("Modded Progression: local store wiped. Restart the game to re-seed.")

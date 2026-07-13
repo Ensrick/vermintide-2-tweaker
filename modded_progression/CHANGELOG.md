@@ -1,5 +1,27 @@
 # Modded Progression — Changelog
 
+## 0.2.19-dev (2026-07-13) - #573 persistent local dailies and isolated shillings [untested]
+
+### Changed
+- Replaced the #568 server-roster snapshot with an MP-owned v2 state record. Three vanilla daily objective templates are selected deterministically per UTC day without using official quest identities.
+- Persisted roster, objective counters, claim markers, and the MP Silver Shilling ledger in one namespaced setting. A claim marks completion and credits shillings in one copy-on-write save with read-back verification.
+- Added monotonic reset handling: missed days rotate directly to the current period, while backwards clock changes retain the high-water roster and cannot mint another reward set.
+- Routed daily event mappings into local counters instead of vanilla `StatisticsDB` quest slots. Native quest presentation is retained, with progress/completion replaced from MP state.
+- Routed modded-realm `get_chips("SM")` reads to the local ledger. Official realm reads and all non-SM currencies remain vanilla. Official SM purchases are blocked in modded play until the backend-free item-grant transaction is implemented in follow-up #577; visibly distinct UI labeling/refresh is tracked in #578.
+- Retired legacy `simulated_dailies` and `_mp_daily_claims` state without importing the generic `currency.SM` value, preventing accidental official/local balance merging.
+
+### Source evidence
+- `quest_manager.lua:79-116,289-396` defines event mapping and quest presentation; `quest_settings.lua:56-70,272-289` supplies the daily targets and per-quest stat slots.
+- `backend_interface_quests_playfab.lua:25-44,81-166` shows that roster selection and reset timestamps arrive from CloudScript rather than local Lua.
+- `backend_interface_peddler_playfab.lua:61-62,240-260,661-707` is the native SM read/write/purchase seam; native purchase success depends on PlayFab-returned item instances, so it is not safe to fake as a currency-only debit.
+
+### To verify
+- In modded play, note the three dailies, make objective progress, restart, and confirm the same roster/progress returns.
+- Complete and claim a daily twice; expect one local five-shilling credit and no `generateQuestRewards` request. Claim-all must remain atomic.
+- Change the clock backwards and restart; expect the existing roster. Advance across one or more UTC days; expect exactly one current roster reset.
+- Compare the Emporium shilling number between official and modded realms. The balances must remain independent; modded SM purchase currently fails closed pending #577.
+- Run `/mp_regression_test`; expect zero failures.
+
 ## 0.2.18-dev (2026-07-13) - #568 backend-free simulated daily claims [untested]
 
 ### Changed
