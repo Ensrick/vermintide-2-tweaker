@@ -4,7 +4,20 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-07-13.
+
+---
+## Settings lifecycle
+
+### settings-burst-bounded -- bulk resets apply once
+
+| Field | Detail |
+|---|---|
+| Symptom | DEFAULT or `/et_reset` exhausts the Lua heap while many settings fire synchronous callbacks. |
+| Root cause | Each VMF notification ran the full composition restore and ConflictDirector refresh chain. |
+| Expected post-fix | Setting ids queue synchronously; one full reapply runs on the next frame regardless of burst size. |
+| Detection | Offline `test_et_settings_queue`; in-game `/et_regression_test` check `issue560_settings_reapply_coalesced`; `[et:560]` prints one applied count per drain. |
+| Repro | In a mission, open the Enemy Tweaker Mod Tweaker tab, press DEFAULT, confirm, and Apply. Defaults persist without a heap crash. |
 
 ---
 ## Multiplayer / Network Sync

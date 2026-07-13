@@ -41,7 +41,11 @@ local function _reapply_via_active_cd()
     end
 end
 
-mod.on_setting_changed = function(setting_id)
+local function _apply_setting_changes(setting_ids, latest_setting_id)
+    local setting_count = #setting_ids
+    local trigger = setting_count > 1
+        and string.format("batch:%d:last=%s", setting_count, tostring(latest_setting_id))
+        or tostring(latest_setting_id)
     -- v0.6.0-dev: wrapped in _safe so any single sub-step failure (corrupt
     -- composition, missing global, etc.) is logged via mod:warning and
     -- the rest of the chain still runs. Previously a crash in one apply
@@ -67,10 +71,10 @@ mod.on_setting_changed = function(setting_id)
         _safe("on_setting_changed:refresh_cd", function()
             local active = Managers.state and Managers.state.conflict
             if active then
-                active:refresh_conflict_director_patches("on_setting_changed:" .. tostring(setting_id))
+                active:refresh_conflict_director_patches("on_setting_changed:" .. trigger)
             end
         end)
-        mod:info("[et] settings updated (setting=%s)", tostring(setting_id))
+        mod:info("[et] settings updated (setting=%s)", trigger)
     end
     -- Re-apply the boss fly-disable multiplier on any setting change (spawn
     -- paths read the data fields live). Guarded: the boss-tweaks module is
@@ -90,10 +94,47 @@ mod.on_setting_changed = function(setting_id)
     -- Champion elite-pool retune — outside the compositions guard (independent of
     -- composition backup state; idempotent, only writes on a toggle-state change).
     _safe("on_setting_changed:champion", _apply_champion_breed_overrides)
-    _safe("on_setting_changed:BR", BR.on_setting_changed, setting_id)
+    -- BR also restores/reapplies its whole data surface, so it participates in
+    -- the same transaction boundary. Its current implementation ignores the id;
+    -- pass the latest id once for future compatibility.
+    _safe("on_setting_changed:BR", BR.on_setting_changed, latest_setting_id)
+    printf("[et:560] applied settings=%d trigger=%s lua_kb=%.0f",
+        setting_count, trigger, collectgarbage("count"))
 end
 
+-- Issue #560: one DEFAULT reset generated 249 synchronous VMF notifications.
+-- Each old callback restored/copied every composition and refreshed the active
+-- director; the game exhausted its 1 GiB Lua heap after only 34 callbacks. Both
+-- ordinary VMF events and Mod Tweaker's opt-in batch callback now enqueue into
+-- one next-frame apply. The one-frame delay is the transaction boundary.
+local _settings_queue = ET.SettingsQueue.new(_apply_setting_changes)
+ET.settings_queue = _settings_queue
+
+mod.on_setting_changed = function(setting_id)
+    _settings_queue.enqueue(setting_id)
+end
+
+mod.on_settings_batch_changed = function(setting_ids)
+    _settings_queue.enqueue_many(setting_ids)
+end
+
+local _previous_update = mod.update
+mod.update = function(dt)
+    if _previous_update then _previous_update(dt) end
+    _settings_queue.drain()
+end
+
+ET.rt_register("issue560_settings_reapply_coalesced", function()
+    if type(mod.on_settings_batch_changed) ~= "function" then
+        return "batch completion callback missing"
+    end
+    if type(ET.settings_queue) ~= "table" or type(ET.settings_queue.drain) ~= "function" then
+        return "settings queue is not wired to lifecycle"
+    end
+end)
+
 mod.on_disabled = function()
+    _settings_queue.clear()
     _safe("on_disabled:restore_compositions",      _restore_compositions)
     _safe("on_disabled:restore_size_of_interest",  _restore_size_of_interest_point)
     -- v0.7.2-dev: explicitly restore vanilla bearer stagger-immunity if we

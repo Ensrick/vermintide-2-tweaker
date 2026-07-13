@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.36-dev"
+local MOD_VERSION = "0.7.37-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -56,6 +56,7 @@ mod:dofile("scripts/mods/enemy_tweaker/_et_regression")           -- /et_regress
 mod:dofile("scripts/mods/enemy_tweaker/_et_log")                  -- logging helpers (dbg/alert/chat/spawn channels + printf probe)
 mod:dofile("scripts/mods/enemy_tweaker/_et_protect")              -- protective wrappers (_safe/_hook_wrap/tick guard #479) + multiplier math
 mod:dofile("scripts/mods/enemy_tweaker/_et_fingerprint")          -- BR + settings fingerprints, et_br_fingerprint RPC, dormant-BR stub
+mod._et.SettingsQueue = mod:dofile("scripts/mods/enemy_tweaker/_et_settings_queue") -- #560 bounded setting-change transactions
 
 -- Startup marker: unconditional mod:info (the "applied" log marker pattern).
 -- Prefix changed v0.5.14 from [et:br] -> [et] to match the universal convention

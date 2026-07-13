@@ -23,6 +23,7 @@ local mod = get_mod("gut_dev")
 -- service, exit via parent:close_menu, no self-made input service / cursor push).
 
 local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
+local transactions = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -660,7 +661,11 @@ function HeroViewStateModTweaker:apply_pending(category)
             local mid = ids[i]
             local p = self._pending[mid]
             if p and next(p) ~= nil then
-                for id, value in pairs(p) do _cat_set(category, id, value) end
+                local count, batched, batch_err = transactions.commit(category, p, _owner, _cat_set)
+                if batched then
+                    printf("[gut:560] committed owner=%s settings=%d notifications=%d error=%s",
+                        tostring(mid), count, batch_err and 0 or 1, tostring(batch_err or "none"))
+                end
                 self._pending[mid] = {}
                 any = true
             end
@@ -676,7 +681,11 @@ function HeroViewStateModTweaker:apply_pending(category)
     local key = _cat_key(category)
     local p = self._pending[key]
     if not p or next(p) == nil then return end
-    for id, value in pairs(p) do _cat_set(category, id, value) end
+    local count, batched, batch_err = transactions.commit(category, p, _owner, _cat_set)
+    if batched then
+        printf("[gut:560] committed owner=%s settings=%d notifications=%d error=%s",
+            tostring(key), count, batch_err and 0 or 1, tostring(batch_err or "none"))
+    end
     self._pending[key] = {}
     self._dirty = true   -- a LIVE write happened -> export the TOML on exit
     self:_update_apply_button()

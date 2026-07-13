@@ -5,6 +5,21 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.236-dev (2026-07-13) -- #560 bound bulk settings commits [verify-fix]
+
+- Added an opt-in Mod Tweaker transaction contract. A setting owner that exposes
+  `on_settings_batch_changed(ids)` receives all of its pending values through
+  non-notifying VMF writes, followed by exactly one completion callback. Owners
+  without that hook keep the existing per-setting notification semantics.
+- Routed both the standalone mission view and the keep HeroView sub-state through
+  the same transaction module. The DEFAULT button remains scoped to the selected
+  tab and still stages values until Apply.
+- Added `[gut:560]` commit telemetry and offline Lua 5.1 tests proving N values
+  produce N persisted writes and one owner notification.
+- Verify in a mission: open Enemy Tweaker, press DEFAULT, confirm, then Apply.
+  The game should stay responsive and the log should contain one `[gut:560]`
+  transaction line rather than a callback per setting.
+
 ## 0.2.235-dev (2026-07-13) -- #517 retire impossible retail TOML read-back [untested]
 
 - Retired the load-time TOML apply path and `/reload_config`: retail Stingray exposes no arbitrary file-read primitive, so both had always been inert while implying settings could round-trip. The parser, `io_open` guard, and boot-time apply call are removed.

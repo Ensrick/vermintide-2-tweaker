@@ -167,6 +167,28 @@ path are in `_mod_tweaker_definitions.lua` (`create_dropdown_list`'s optional `h
 `_handle_dropdown_input`). The `mod_tweaker_dropdown_filter_api` check (#505) asserts the registry +
 API + view filter methods + the header-capable factory stay wired.
 
+## Bulk setting transaction contract
+
+Apply and DEFAULT may commit hundreds of settings from one tab. VMF's
+`VMFMod:set(id, value, notify)` persists/clones the value and synchronously
+dispatches `on_setting_changed` when `notify` is true (VMF
+`modules/core/settings.lua:27-40`, `modules/core/events.lua:44-48`). A mod whose
+callback performs expensive whole-mod recomputation can opt into a bounded commit:
+
+```lua
+mod.on_settings_batch_changed = function(setting_ids)
+    -- All values are already persisted. Recompute once from current settings.
+end
+```
+
+Both Mod Tweaker view twins then write that owner's values with `notify=false`
+and invoke the callback once with a sorted array of changed setting ids. This is
+strictly opt-in: owners without the callback retain per-setting VMF notifications,
+because a generic sentinel would break callbacks that branch or clamp by id.
+The implementation lives in `_mod_tweaker_transaction.lua`; issue #560 is the
+Enemy Tweaker crash precedent. Future profiles/imports must reuse this transaction
+instead of inventing another bulk-write loop.
+
 ## Regression guard
 
 `_mod_tweaker_view.lua` / the gut regression suite must assert: no third-party (non-author)

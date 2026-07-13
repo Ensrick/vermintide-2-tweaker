@@ -11,6 +11,7 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 -- Registry of categories/values is owned by the controller (mod.mod_tweaker).
 
 local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
+local transactions = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -957,7 +958,12 @@ function ModTweakerView:apply_pending(category)
             local mid = ids[i]
             local p = self._pending[mid]
             if p and next(p) ~= nil then
-                for id, value in pairs(p) do _cat_set(category, id, value); committed[id] = value end
+                local count, batched, batch_err = transactions.commit(category, p, _owner, _cat_set)
+                for id, value in pairs(p) do committed[id] = value end
+                if batched then
+                    printf("[gut:560] committed owner=%s settings=%d notifications=%d error=%s",
+                        tostring(mid), count, batch_err and 0 or 1, tostring(batch_err or "none"))
+                end
                 self._pending[mid] = {}
                 any = true
             end
@@ -979,7 +985,11 @@ function ModTweakerView:apply_pending(category)
     local key = _cat_key(category)
     local p = self._pending[key]
     if not p or next(p) == nil then return end
-    for id, value in pairs(p) do _cat_set(category, id, value) end
+    local count, batched, batch_err = transactions.commit(category, p, _owner, _cat_set)
+    if batched then
+        printf("[gut:560] committed owner=%s settings=%d notifications=%d error=%s",
+            tostring(key), count, batch_err and 0 or 1, tostring(batch_err or "none"))
+    end
     -- (#123) Keybinds need VMF re-registration, not just a value set: register any keybind
     -- whose value was in THIS committed buffer (vmf.add_mod_keybind + generate_keybinds).
     for _, row in ipairs(self._rows or {}) do

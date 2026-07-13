@@ -1,5 +1,26 @@
 # Enemy Tweaker Changelog
 
+## 0.7.37-dev (2026-07-13): #560 coalesce setting-change bursts [verify-fix]
+
+Resetting the Enemy Tweaker tab generated 249 synchronous VMF setting
+notifications. Each callback restored all compositions and refreshed the active
+ConflictDirector; crash GUID `9dc3a082-452f-4b31-a276-6fcfe8456b68` exhausted
+the 1 GiB Lua heap after only 34 completed refreshes.
+
+- `on_setting_changed` now queues distinct ids and performs the full reapply once
+  on the next frame. A normal one-setting edit has the same result after a
+  one-frame transaction boundary; `/et_reset`, Mod Tweaker DEFAULT, and future
+  bulk writers cannot run the full chain once per id.
+- Added the opt-in `on_settings_batch_changed(ids)` completion hook consumed by
+  Tweaker: GUI, `[et:560]` count/heap telemetry, and runtime regression
+  `issue560_settings_reapply_coalesced`.
+- Added engine-free Lua 5.1 queue tests proving a burst performs zero immediate
+  applies, exactly one drain apply, and does not replay on a second drain.
+
+Verify in a mission: DEFAULT and Apply the Enemy Tweaker tab. The game should
+remain responsive, defaults should persist, and one `[et:560] applied settings=`
+line should appear without a Lua-heap crash.
+
 ## 0.7.36-dev (2026-07-13): #512 fix spawn_pacing_hook_targets_present keep false-FAIL [untested]
 
 `/et_regression_test` run at the KEEP reported FAIL:
@@ -1118,4 +1139,3 @@ Seven mods registered `mod:command("regression_test", ...)`. VT2 chat commands a
 CHANGELOG started after the fact — earlier dev iterations are not documented here. See `git log -- enemy_tweaker/` for the actual history.
 
 Future entries should follow the format used by the other tweaker mods: one `## <version> (date) — <one-line summary>` heading per change set, with bullet points or a short paragraph below.
-
