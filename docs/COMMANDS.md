@@ -32,7 +32,9 @@ wt_dev_hp_apply, wt_dev_hp_reset, wt_dump_hold_pose  -- hold-pose tuner
 god, no_enemies, clear_enemies, unstuck, cloak, unkillable, inndmg, noclip, ai,
 infinite_ammo, stamina, gigapower, ultreset, pause, time_faster, time_slower,
 -- Level control / match flow:
-win, fail, restart, killbots, die, respawn, fix_sound, bottoggle, readyup, inn,
+win, fail, restart, killbots, die, suicide, down, respawn, fix_sound, bottoggle, readyup, inn,
+--   (suicide/down = self kill / self knockdown for testing, #355; host- AND client-safe
+--    via vanilla rpc_request_insta_kill / rpc_request_knock_down, work under godmode)
 -- Bots:
 no_bots, bots_in_keep,
 -- Spawners:

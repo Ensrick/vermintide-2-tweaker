@@ -292,6 +292,116 @@ mod.gt_die = function()
 end
 
 -- ============================================================
+-- /suicide + /down — self kill / self knockdown (issue 355)
+-- ============================================================
+-- Dev/testing tool: drop YOUR OWN local player into death or bleedout on demand.
+-- Both route through VANILLA client->server request RPCs, so they are fully
+-- network-correct as HOST *and* as CLIENT (no local-only desync) and need no
+-- modded NetworkLookup key -- sidesteps the #278/#371 wire-safety class entirely
+-- (a vanilla RPC every peer already carries):
+--
+--   /suicide -> rpc_request_insta_kill(unit_go_id, damage_type_id)
+--       The exact path vanilla fires from PlayerUnitHealthExtension.entered_kill_volume
+--       [src: scripts/unit_extensions/default_player_unit/player_unit_health_extension.lua:945-955].
+--       Server handler HealthSystem.rpc_request_insta_kill asserts is_server then
+--       health_extension:die(damage_type) [src: scripts/entity_system/systems/damage/
+--       health_system.lua:706-724] -> DeathSystem:forced_kill -> kill_unit + a
+--       send_rpc_clients("rpc_forced_kill", ...) that syncs the death to every peer
+--       [src: scripts/entity_system/systems/damage/death_system.lua:282-293].
+--
+--   /down -> rpc_request_knock_down(unit_go_id)
+--       The path vanilla fires from the celebrate "falling down" buff
+--       [src: scripts/settings/dlcs/celebrate/celebrate_buff_settings.lua:668-671].
+--       Server handler HealthSystem.rpc_request_knock_down asserts is_server then
+--       health_extension:knock_down(unit) [src: health_system.lua:668-675], which
+--       calls StatusUtils.set_knocked_down_network(unit, true) [src:
+--       player_unit_health_extension.lua:223-228] to sync the downed state. The
+--       health update then transitions health->0 with a full bleedout bar on the
+--       "alive"->"knocked_down" edge [src: player_unit_health_extension.lua:327-330],
+--       so you bleed out normally -- the same end state /downbots drives for bots.
+--
+-- ONE code path serves host AND client because send_rpc_server loops back locally
+-- on the host (queue_local_rpc) and routes to the server channel on a client
+-- [src: scripts/network/network_transmit.lua:185-198]. No host/client branch and
+-- no gt RPC channel needed (unlike /respawn / level-control, which had no vanilla
+-- self-request RPC and so had to roll their own).
+--
+-- GODMODE INTERACTION (issue 355 req 4): both still work with gt godmode ON.
+-- Godmode only intercepts DamageUtils.add_damage_network / add_damage_network_player
+-- (returns 0 for a godmode unit -- general_tweaker_dev.lua godmode body); the
+-- death/knockdown paths above bypass that damage layer entirely, so NO self-action
+-- exemption is needed here (unlike the #529 fatigue gate, which had to allowlist
+-- self costs precisely because it sits ON the drain funnel). Documented caveat, not
+-- a bug: a godmode player who /down's will NOT bleed out (the knockdown_bleed DoT is
+-- add_damage_network, which godmode zeroes) -- they stay down until revived, which is
+-- the desired state for testing rescue/aid. /unkillable (script_data.player_unkillable,
+-- checked inside add_damage) is likewise bypassed -- /suicide overrides it by design.
+mod._GT_355_SELF_STATE_MARKER = "gt-355-suicide-down-vanilla-rpc"
+
+-- Shared send: resolve the local unit + its network go_id and fire the vanilla
+-- server-request RPC. `extra_arg` is nil for knock_down (unit only) or the
+-- damage_type_id for insta_kill. Returns true on send.
+local function _gt_self_state_send(rpc_name, extra_arg, verb)
+    if DamageUtils and DamageUtils.is_in_inn then
+        mod:echo("Can't " .. verb .. " in the keep.")
+        return false
+    end
+    local lp = Managers.player and Managers.player:local_player()
+    local unit = lp and lp.player_unit
+    if not (unit and Unit.alive(unit)) then
+        mod:echo("No living local player unit.")
+        return false
+    end
+    local nm = Managers.state and Managers.state.network
+    if not (nm and nm.network_transmit and nm.unit_game_object_id) then
+        mod:echo("Network not ready yet.")
+        return false
+    end
+    local go_id = nm:unit_game_object_id(unit)
+    if not go_id then
+        mod:echo("No network id for your unit yet -- try again in a moment.")
+        return false
+    end
+    if extra_arg ~= nil then
+        nm.network_transmit:send_rpc_server(rpc_name, go_id, extra_arg)
+    else
+        nm.network_transmit:send_rpc_server(rpc_name, go_id)
+    end
+    return true
+end
+
+mod.gt_suicide = function()
+    -- damage_type "forced" is the neutral self-inflicted kill type
+    -- [src: scripts/network_lookup/network_lookup.lua:1075, within damage_types].
+    local dt = NetworkLookup and NetworkLookup.damage_types and NetworkLookup.damage_types.forced
+    if not dt then
+        mod:echo("NetworkLookup.damage_types.forced unavailable.")
+        return
+    end
+    if _gt_self_state_send("rpc_request_insta_kill", dt, "die") then
+        mod:echo("Suicide: killing your character.")
+    end
+end
+
+mod.gt_down = function()
+    -- Refuse if already down/dead: knock_down has no self-guard, so a repeat
+    -- request would re-fire set_knocked_down_network for nothing.
+    local lp = Managers.player and Managers.player:local_player()
+    local unit = lp and lp.player_unit
+    if unit and Unit.alive(unit) then
+        local status_ext = ScriptUnit.has_extension(unit, "status_system")
+        if status_ext and ((status_ext.is_knocked_down and status_ext:is_knocked_down())
+                        or (status_ext.is_dead and status_ext:is_dead())) then
+            mod:echo("You're already down or dead.")
+            return
+        end
+    end
+    if _gt_self_state_send("rpc_request_knock_down", nil, "go down") then
+        mod:echo("Down: knocking your character into bleedout.")
+    end
+end
+
+-- ============================================================
 -- /respawn — force yourself back in when dead or awaiting rescue (v0.2.94-dev)
 -- ============================================================
 -- Respawn is server-authoritative, so the HOST performs it (directly for its own
@@ -415,6 +525,8 @@ mod:command("restart",   "Restart the current map",            function() mod.gt
 mod:command("killbots",  "Kill all bots (pre-round on EAC-secure realm only)", function() mod.gt_kill_bots() end)
 mod:command("downbots",  "Force all bots into bleedout (issue 448 Morr's test)", function() mod.gt_down_bots() end)
 mod:command("die",       "Kill your character",                function() mod.gt_die()           end)
+mod:command("suicide",   "Kill your own character (works as host or client, and under godmode)", function() mod.gt_suicide() end)
+mod:command("down",      "Knock your own character into bleedout (works as host or client)", function() mod.gt_down() end)
 mod:command("respawn",   "Force yourself back in when dead or awaiting rescue", function() mod.gt_respawn() end)
 mod:command("fix_sound",    "Stop the looping vortex SFX bug (post-restart in a storm)", function() mod.gt_fix_sound() end)
 

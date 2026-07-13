@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.213-dev"
+local MOD_VERSION = "0.2.214-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1306,6 +1306,34 @@ _rt_register("necro_potion_give_half_targeted_promote", function()
     end
     if sfs.Same == nil then
         return "SwapFromStorageType.Same absent — identity promotion can't target the real potion"
+    end
+end)
+
+_rt_register("gt355_suicide_down_vanilla_rpc_path", function()
+    -- Issue 355 /suicide + /down. Both commands lean on VANILLA client->server
+    -- request RPCs (rpc_request_insta_kill / rpc_request_knock_down) instead of a
+    -- modded NetworkLookup key, which is what makes them safe as host AND client
+    -- and immune to the #278/#371 wire-safety class. Pin all three load-bearing
+    -- pieces so a refactor (or a vanilla API rename) is caught at load:
+    --   1) both command bodies are wired as public mod. fields,
+    --   2) the source marker constant is present (guards against silently
+    --      reverting to a local kill_unit / set_knocked_down field write), and
+    --   3) the two vanilla RPCs + the damage_type we send still exist.
+    if type(mod.gt_suicide) ~= "function" then return "mod.gt_suicide missing" end
+    if type(mod.gt_down) ~= "function" then return "mod.gt_down missing" end
+    if mod._GT_355_SELF_STATE_MARKER ~= "gt-355-suicide-down-vanilla-rpc" then
+        return "self-state marker absent -- did /suicide or /down revert to a local (desyncing) write?"
+    end
+    local rpc = rawget(_G, "RPC")
+    if type(rpc) ~= "table" then return "RPC global table missing" end
+    if rpc.rpc_request_insta_kill == nil then
+        return "RPC.rpc_request_insta_kill absent -- vanilla self-kill path renamed?"
+    end
+    if rpc.rpc_request_knock_down == nil then
+        return "RPC.rpc_request_knock_down absent -- vanilla self-knockdown path renamed?"
+    end
+    if not (NetworkLookup and NetworkLookup.damage_types and NetworkLookup.damage_types.forced) then
+        return "NetworkLookup.damage_types.forced absent -- /suicide has no damage type to send"
     end
 end)
 

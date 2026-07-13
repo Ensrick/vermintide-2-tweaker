@@ -1,5 +1,28 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.214-dev (2026-07-13) -- #355 /suicide and /down self-state dev commands [untested]
+
+Two testing commands for your OWN local player: `/suicide` kills you, `/down` knocks you into bleedout. Both refuse in the keep and echo one confirmation line.
+
+### Mechanism (vanilla client->server request RPCs -- cited)
+Both use the SAME idiom vanilla already uses to let a player request its own death/knockdown, so they are network-correct as HOST *and* as CLIENT and carry no modded NetworkLookup key (immune to the #278/#371 wire-safety class):
+- `/suicide` sends `rpc_request_insta_kill(go_id, damage_types.forced)` -- the path `PlayerUnitHealthExtension.entered_kill_volume` fires (`player_unit_health_extension.lua:945-955`). The server handler asserts `is_server`, then `die() -> DeathSystem:forced_kill -> kill_unit` and syncs to every peer via `rpc_forced_kill` (`health_system.lua:706-724`, `death_system.lua:282-293`).
+- `/down` sends `rpc_request_knock_down(go_id)` -- the path the celebrate "falling down" buff fires (`celebrate_buff_settings.lua:668-671`). The server handler asserts `is_server`, then `knock_down(unit) -> StatusUtils.set_knocked_down_network` (`health_system.lua:668-675`, `player_unit_health_extension.lua:223-228`); the health update transitions health->0 with a full bleedout bar (`player_unit_health_extension.lua:327-330`), so you bleed out like a normal knockdown (same end state `/downbots` drives for bots).
+
+`send_rpc_server` loops back locally on the host and routes to the server channel on a client (`network_transmit.lua:185-198`), so one code path serves both -- no host/client branch and no gt RPC channel. (Contrast the pre-existing `/die`, which calls `death_system:kill_unit` locally: fine solo-host, but a CLIENT `/die` is a local-only death that desyncs. `/suicide` is the correct client-safe replacement.)
+
+### Godmode interaction (#355 req 4)
+Both work with gt godmode ON. Godmode only intercepts `DamageUtils.add_damage_network` / `add_damage_network_player` (returns 0 for a godmode unit); the death/knockdown paths bypass that damage layer, so NO self-action exemption is needed (unlike the #529 fatigue gate, which sits on the drain funnel). Documented caveat, not a bug: a godmode player who `/down`s will not bleed out (the knockdown_bleed DoT is add_damage_network, zeroed by godmode) -- they stay down until revived, which is the desired state for testing rescue/aid. `/unkillable` is likewise bypassed by `/suicide` by design.
+
+### Regression
+- New `/gt_regression_test` check `gt355_suicide_down_vanilla_rpc_path`: asserts both command bodies are wired, the source marker is present (catches a revert to a local desyncing write), and the two vanilla RPCs + `damage_types.forced` still exist (catches a vanilla API rename).
+
+### Test method (solo host + bots suffices; client path is code-identical)
+1. In a mission (not the keep), run `/down` -- you drop into bleedout; run `/suicide` -- you die outright. Both echo a confirmation; neither works in the keep.
+2. Turn on `/god`, then `/suicide` (dies) and `/down` (goes down and stays down -- godmode blocks the bleedout, expected).
+3. `/gt_regression_test` must pass `gt355_suicide_down_vanilla_rpc_path`.
+4. Coop nicety (not required to close): a CLIENT running `/suicide` / `/down` should die/down on ALL peers (proves the host-authoritative sync), whereas the old `/die` desyncs on a client.
+
 ## v0.2.213-dev (2026-07-13) -- #378 client watchdog for a missing-mod join that hangs instead of erroring [untested]
 
 Joining a modded host while missing a required mod could hang the loading screen forever with no popup, forcing alt-F4. A client-side watchdog now times the pre-game-start join phase and, on timeout, surfaces the missing-mods reveal (or a plain "join stalled" notice for a non-broadcasting host) plus a Leave button that returns to the main menu. Local-only: it reads Steam lobby_data and shows a local popup -- no new networked sends; fully inert unless we are the joining client (the host path early-outs on `lobby.is_host`).
