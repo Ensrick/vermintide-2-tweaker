@@ -8,7 +8,7 @@ local mod = get_mod("enemy_tweaker")
 -- the matching Adventure lord boss at spawn, gated to Cataclysm+:
 --   Skarrik (skaven_storm_vermin_warlord)  -> Berserk   = "frenzy"   grudge mark
 --                                             = buff  grudge_mark_frenzy
---   Bodvarr (chaos_exalted_champion)        -> Crippling = "crippling" grudge mark
+--   Bodvarr (chaos_exalted_champion_warcamp) -> Crippling = "crippling" grudge mark
 --                                             = buff  grudge_mark_crippling_blow
 --
 -- These are the two behavioral knobs from issue 450 that could not ship in the
@@ -81,6 +81,13 @@ local CATACLYSM_RANK = 6
 -- Per-boss grudge-mark config. buff = the vanilla grudge-mark buff TEMPLATE name
 -- (grudge_mark_settings.lua enhancement -> its buff template); mark = the display
 -- name of the grudge mark for the probe/tooltip.
+-- Source identity boundary: War Camp spawns Bodvarr under the suffixed breed
+-- key (terror_events_warcamp.lua:285-305; breed_chaos_exalted_champion.lua:326).
+-- The similarly suffixed `_norsca` breed is the Skittergate champion
+-- (terror_events_skittergate.lua:39-58), not Bodvarr. The unsuffixed stem is
+-- not a runtime Breeds key at all.
+local BODVARR_BREED = "chaos_exalted_champion_warcamp"
+
 local GRUDGE = {
     {
         setting = "boss_grudge_skarrik_berserk",
@@ -91,7 +98,7 @@ local GRUDGE = {
     },
     {
         setting = "boss_grudge_bodvarr_crippling",
-        breed   = "chaos_exalted_champion",
+        breed   = BODVARR_BREED,
         buff    = "grudge_mark_crippling_blow",
         mark    = "Crippling",
         label   = "Bodvarr",
@@ -168,6 +175,9 @@ rt_register("boss_grudge_targets_present", function()
     -- NetworkLookup.buff_templates (the id every peer must share for wire safety).
     local breeds = rawget(_G, "Breeds")
     if not breeds then return "Breeds global missing" end
+    if GRUDGE[2].breed ~= BODVARR_BREED then
+        return "Bodvarr grudge target drifted from War Camp breed"
+    end
     local buff_templates = rawget(_G, "BuffTemplates")
     if not buff_templates then return "BuffTemplates global missing" end
     local nl = rawget(_G, "NetworkLookup")

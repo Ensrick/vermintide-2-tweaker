@@ -1,5 +1,28 @@
 # Enemy Tweaker Changelog
 
+## 0.7.38-dev (2026-07-13): #450/#531 target Bodvarr's runtime War Camp breed [verify-fix]
+
+The latest in-game regression run reported both `boss_balance_targets_present`
+and `boss_grudge_targets_present` missing `chaos_exalted_champion`. This was a
+real inactive-feature failure, not a keep/load-order false positive: vanilla
+never registers an unsuffixed breed under that key.
+
+- Bodvarr's health balance toggle and Crippling grudge-mark hook now target
+  `chaos_exalted_champion_warcamp`, the breed spawned and counted by War Camp's
+  terror event (`terror_events_warcamp.lua:285-305`) and registered in
+  `breed_chaos_exalted_champion.lua:326`.
+- `chaos_exalted_champion_norsca` remains distinct: it is the champion spawned
+  by Skittergate (`terror_events_skittergate.lua:39-58`). The unsuffixed name is
+  only a shared source/action-family stem, not a `Breeds` entry.
+- Both runtime checks now lock the explicit War Camp mapping before checking
+  that the breed exists, preventing a future source-stem or Skittergate-key
+  substitution from silently disabling or misdirecting either feature.
+
+Verify in the keep that `/et_regression_test` passes
+`boss_balance_targets_present` and `boss_grudge_targets_present`. Then enable
+the relevant default-OFF toggle and verify against Bodvarr in War Camp; the
+Skittergate exalted champion must remain unchanged.
+
 ## 0.7.37-dev (2026-07-13): #560 coalesce setting-change bursts [verify-fix]
 
 Resetting the Enemy Tweaker tab generated 249 synchronous VMF setting

@@ -45,14 +45,22 @@ local rt_register = ET.rt_register
 -- mutating Breeds[breed].max_health in place scales only that boss.
 --   Halescourge chaos_exalted_sorcerer             -0.70  (30% less)
 --   Skarrik     skaven_storm_vermin_warlord        x1.30  (30% more)
---   Bödvarr     chaos_exalted_champion             x1.10  (10% more)
+--   Bödvarr     chaos_exalted_champion_warcamp     x1.10  (10% more)
 --   Rasknitt    skaven_grey_seer                   x0.80  (4/5x)
 --   Nurgloth    chaos_exalted_sorcerer_drachenfels x0.75  (3/4x)
 -- ----------------------------------------------------------------------------
+-- `chaos_exalted_champion` is only a source-file/action-family stem; vanilla
+-- registers no Breeds entry under it. War Camp's terror event spawns Bodvarr as
+-- `chaos_exalted_champion_warcamp` (terror_events_warcamp.lua:285-305), while
+-- Skittergate separately spawns `chaos_exalted_champion_norsca`
+-- (terror_events_skittergate.lua:39-58). Keep this identity explicit so the
+-- health toggle cannot silently retune the wrong exalted champion.
+local BODVARR_BREED = "chaos_exalted_champion_warcamp"
+
 local HEALTH = {
     { setting = "boss_bal_halescourge_health", breed = "chaos_exalted_sorcerer",             mult = 0.70, label = "Halescourge" },
     { setting = "boss_bal_skarrik_health",     breed = "skaven_storm_vermin_warlord",        mult = 1.30, label = "Skarrik" },
-    { setting = "boss_bal_bodvarr_health",     breed = "chaos_exalted_champion",             mult = 1.10, label = "Bodvarr" },
+    { setting = "boss_bal_bodvarr_health",     breed = BODVARR_BREED,                         mult = 1.10, label = "Bodvarr" },
     { setting = "boss_bal_rasknitt_health",    breed = "skaven_grey_seer",                   mult = 0.80, label = "Rasknitt" },
     { setting = "boss_bal_nurgloth_health",    breed = "chaos_exalted_sorcerer_drachenfels", mult = 0.75, label = "Nurgloth" },
 }
@@ -170,6 +178,9 @@ rt_register("boss_balance_targets_present", function()
     -- template would make a toggle silently no-op. Assert every target resolves.
     local breeds = rawget(_G, "Breeds")
     if not breeds then return "Breeds global missing" end
+    if HEALTH[3].breed ~= BODVARR_BREED then
+        return "Bodvarr health target drifted from War Camp breed"
+    end
     for i = 1, #HEALTH do
         local b = breeds[HEALTH[i].breed]
         if not b then return "missing boss breed: " .. HEALTH[i].breed end

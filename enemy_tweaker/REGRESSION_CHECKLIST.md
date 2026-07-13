@@ -19,6 +19,16 @@ Last updated: 2026-07-13.
 | Detection | Offline `test_et_settings_queue`; in-game `/et_regression_test` check `issue560_settings_reapply_coalesced`; `[et:560]` prints one applied count per drain. |
 | Repro | In a mission, open the Enemy Tweaker Mod Tweaker tab, press DEFAULT, confirm, and Apply. Defaults persist without a heap crash. |
 
+### et-bodvarr-runtime-breed-key -- boss features target War Camp's registered breed
+
+| Field | Detail |
+|---|---|
+| Symptom | `boss_balance_targets_present` and `boss_grudge_targets_present` report missing `chaos_exalted_champion`; Bodvarr health and Crippling toggles silently do nothing. |
+| Root cause | The features used the shared unsuffixed source/action-family stem, but vanilla registers and spawns Bodvarr as `chaos_exalted_champion_warcamp`. `_norsca` belongs to Skittergate's separate champion. |
+| Expected post-fix | Both Bodvarr features target only `chaos_exalted_champion_warcamp`; Skittergate remains unaffected. |
+| Detection | In-game `/et_regression_test` checks `boss_balance_targets_present` and `boss_grudge_targets_present` both pass; runtime `Breeds` contains the War Camp key and no unsuffixed key. |
+| Repro | Enable each default-OFF Bodvarr toggle and play War Camp on the required difficulty. The health multiplier/Crippling mark applies to Bodvarr; repeat Skittergate and confirm its champion is unchanged. |
+
 ---
 ## Multiplayer / Network Sync
 
