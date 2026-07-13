@@ -7,11 +7,13 @@
 
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
-    [switch]$Quiet
+    [string]$RepoRoot,
+    [switch]$Quiet,
+    [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
+if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot ".." }
 $repoRoot = (Resolve-Path $RepoRoot).Path
 $errors = @()
 $warnings = @()
@@ -116,12 +118,52 @@ function Find-UnescapedPercent([hashtable]$loc, [string]$file) {
         # directive -- otherwise it's a lone/misplaced % that string.format rejects.
         # (Evaluating each % independently would wrongly flag the 2nd % of a valid %%.)
         $stripped = $v -replace '%%', ''
-        if ($stripped -match ('%(?!' + $directive + ')')) {
+        # A percent immediately after a digit is a literal percentage in our loc
+        # surface, even when the following word begins with a conversion letter.
+        # Without this first branch, "10% chance" is misread as the directive
+        # "% c" because space is a legal numeric flag and c is a conversion.
+        # Use Regex.IsMatch for case-sensitive conversion matching. PowerShell's
+        # -match is case-insensitive and would accept invalid "% C" as "% c".
+        if ($stripped -match '\d%' -or [regex]::IsMatch($stripped, ('%(?!' + $directive + ')'))) {
             $bad += "$($file): key '$k' has an unescaped % (double it to %%): '$v'"
         }
     }
     return $bad
 }
+
+function Invoke-SelfTest {
+    $fixtures = @{
+        literal_after_digit = '10% chance'
+        literal_word        = 'Grenadier % Chance'
+        escaped_literal     = '10%% chance'
+        formatted_percent   = 'Chance: %d%%'
+        formatted_string    = 'Career: %s'
+    }
+    $bad = @(Find-UnescapedPercent $fixtures '<fixture>')
+    function Assert([bool]$condition, [string]$description) {
+        $verdict = if ($condition) { 'PASS' } else { 'FAIL' }
+        $colour = if ($condition) { 'Green' } else { 'Red' }
+        Write-Host ("  [{0}] {1}" -f $verdict, $description) -ForegroundColor $colour
+        if (-not $condition) { $script:LocalizationSelfTestPass = $false }
+    }
+
+    $script:LocalizationSelfTestPass = $true
+    Assert (($bad | Where-Object { $_ -match "key 'literal_after_digit'" }).Count -eq 1) 'detects planted 10% chance case (issue #346)'
+    Assert (($bad | Where-Object { $_ -match "key 'literal_word'" }).Count -eq 1) 'detects percent-space literal'
+    Assert (($bad | Where-Object { $_ -match "key 'escaped_literal'" }).Count -eq 0) 'accepts escaped literal percent'
+    Assert (($bad | Where-Object { $_ -match "key 'formatted_percent'" }).Count -eq 0) 'accepts directive plus escaped percent'
+    Assert (($bad | Where-Object { $_ -match "key 'formatted_string'" }).Count -eq 0) 'accepts string directive'
+    Assert ($bad.Count -eq 2) 'reports only the two unsafe fixtures'
+
+    if ($script:LocalizationSelfTestPass) {
+        Write-Host "[check_localization -SelfTest] OK -- percent detection intact." -ForegroundColor Green
+        return 0
+    }
+    Write-Host "[check_localization -SelfTest] FAILED -- percent detection regression." -ForegroundColor Red
+    return 2
+}
+
+if ($SelfTest) { exit (Invoke-SelfTest) }
 
 # Group by mod
 $modFiles = @{}
@@ -147,7 +189,7 @@ foreach ($modName in $modFiles.Keys | Sort-Object) {
         continue
     }
     if (-not $entry.data) {
-        $warnings += "${modName}: no data file (*_data.lua) found — can't cross-reference"
+        $warnings += "${modName}: no data file (*_data.lua) found -- can't cross-reference"
         # Still check for unescaped %
         $loc = Parse-LocFile $entry.loc
         $errors += (Find-UnescapedPercent $loc $entry.loc)
@@ -180,7 +222,7 @@ foreach ($modName in $modFiles.Keys | Sort-Object) {
 # Report
 Write-Host ""
 if ($errors.Count -eq 0 -and $warnings.Count -eq 0) {
-    Write-Host "[check_localization] OK — all mod localization tables are consistent." -ForegroundColor Green
+    Write-Host "[check_localization] OK -- all mod localization tables are consistent." -ForegroundColor Green
     exit 0
 }
 
