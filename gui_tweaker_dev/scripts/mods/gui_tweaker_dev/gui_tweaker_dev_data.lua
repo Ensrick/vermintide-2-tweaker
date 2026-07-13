@@ -317,10 +317,10 @@ local options_data = {
                         default_value = false,
                         tooltip     = "gut_respawn_timer_tooltip",
                         sub_widgets = {
-                            { setting_id = "gut_respawn_font_size", type = "numeric", range = { 12, 80 },  default_value = 32, decimals_number = 0, tooltip = "gut_respawn_font_size_tooltip" },
+                            { setting_id = "gut_respawn_font_size", type = "numeric", range = { 24, 160 }, default_value = 72,  decimals_number = 0, tooltip = "gut_respawn_font_size_tooltip" },
                             { setting_id = "gut_respawn_r",         type = "numeric", range = { 0, 255 },  default_value = 255, decimals_number = 0, tooltip = "gut_respawn_r" },
-                            { setting_id = "gut_respawn_g",         type = "numeric", range = { 0, 255 },  default_value = 60,  decimals_number = 0, tooltip = "gut_respawn_g" },
-                            { setting_id = "gut_respawn_b",         type = "numeric", range = { 0, 255 },  default_value = 60,  decimals_number = 0, tooltip = "gut_respawn_b" },
+                            { setting_id = "gut_respawn_g",         type = "numeric", range = { 0, 255 },  default_value = 255, decimals_number = 0, tooltip = "gut_respawn_g" },
+                            { setting_id = "gut_respawn_b",         type = "numeric", range = { 0, 255 },  default_value = 255, decimals_number = 0, tooltip = "gut_respawn_b" },
                         },
                     },
                     -- Floating Damage Numbers (MIGRATED from general_tweaker 2026-06-29).
