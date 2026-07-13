@@ -959,6 +959,19 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Expected post-fix | Before EVERY build+deploy: (1) forward-reference audit, (2) MOD_VERSION bump, (3) changelog update, (4) bundle verification, (5) hash verification. |
 | Detection | VMBLauncher build gate integrates lint suite. |
 
+### release-source-not-immutable — Published bundle cannot be rebuilt from its recorded commit
+
+| Field | Value |
+|-------|-------|
+| Symptom | A schema-2 manifest records `source_state: dirty`, or a clean entry's raw bundle hashes cannot be reproduced from `source_commit`. |
+| Root cause | The canonical ship workflow builds/uploads before committing source, so `HEAD` may be only a baseline rather than the exact build input. |
+| Mod(s) | release tooling; all published VMB mods |
+| Fix version(s) | transition gate for issue #558 |
+| Category | STATIC / PROCESS |
+| Repro | Before build, run `.\qa\check_release_reproducibility.ps1 -Mod <mod> -AuditOnly`. After publication, run the full command against a separate checkout of the manifest's `source_commit` with the recorded VMBLauncher version. |
+| Expected post-fix | Pre-build audit reports CLEAN; fresh `VMBLauncher build --clean` produces exactly the recorded `.mod_bundle` and `.mod` filenames and SHA-256 values. No deploy or upload occurs during the proof. |
+| Detection | Offline self-test: `.\qa\check_release_reproducibility.ps1 -SelfTest`. Live transition remains report-only until maintainers approve commit-before-build failure/rollback policy. |
+
 ### ugc-tool-forward-slashes — `tags = [];` causes 0x2 first-upload failure
 
 | Field | Value |

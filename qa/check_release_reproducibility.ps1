@@ -1,0 +1,230 @@
+# check_release_reproducibility.ps1 - pre-build source audit and fresh-checkout rebuild proof.
+#
+# -AuditOnly is read-only and intentionally is not wired into ship.ps1 yet. The
+# current ship doctrine commits after Workshop/GitHub publication, so a blocking
+# clean-source rule needs a maintainer-approved commit-before-build workflow.
+# The full mode builds only through VMBLauncher and compares its raw output with
+# a schema-2 manifest entry. It never deploys, uploads, or touches Workshop.
+#
+# Exit 0 = audit/proof passed; exit 2 = source or reproducibility gate failed.
+# -SelfTest is offline and auto-discovered by qa/run_selftests.ps1.
+
+[CmdletBinding()]
+param(
+    [string]$Mod,
+    [string]$CheckoutRoot,
+    [string]$ManifestPath,
+    [string]$LauncherPath,
+    [string]$LauncherSettingsPath,
+    [switch]$AuditOnly,
+    [switch]$SelfTest
+)
+
+$ErrorActionPreference = 'Stop'
+$repoRoot = Split-Path $PSScriptRoot -Parent
+. (Join-Path $repoRoot 'tools\publish-release\release-manifest.ps1')
+
+function Compare-BundleRecordSets {
+    param(
+        [Parameter(Mandatory = $true)]$Expected,
+        [Parameter(Mandatory = $true)]$Actual
+    )
+
+    $errors = [System.Collections.Generic.List[string]]::new()
+    $expectedByName = @{}
+    $actualByName = @{}
+    foreach ($record in @($Expected)) { $expectedByName["$($record.filename)"] = "$($record.sha256)" }
+    foreach ($record in @($Actual)) { $actualByName["$($record.filename)"] = "$($record.sha256)" }
+    foreach ($name in @($expectedByName.Keys | Sort-Object)) {
+        if (-not $actualByName.ContainsKey($name)) {
+            $errors.Add("fresh build is missing $name")
+        } elseif ($actualByName[$name] -ne $expectedByName[$name]) {
+            $errors.Add("$name hash mismatch: manifest $($expectedByName[$name]), fresh build $($actualByName[$name])")
+        }
+    }
+    foreach ($name in @($actualByName.Keys | Sort-Object)) {
+        if (-not $expectedByName.ContainsKey($name)) { $errors.Add("fresh build produced unrecorded file $name") }
+    }
+    return @($errors)
+}
+
+function Remove-LeafTree {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    Get-ChildItem -LiteralPath $Path -Recurse -Force -File | ForEach-Object {
+        Remove-Item -LiteralPath $_.FullName -Force
+    }
+    Get-ChildItem -LiteralPath $Path -Recurse -Force -Directory |
+        Sort-Object { $_.FullName.Length } -Descending | ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Force
+        }
+    Remove-Item -LiteralPath $Path -Force
+}
+
+function Invoke-SelfTest {
+    $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-release-repro-" + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path (Join-Path $temp 'example\bundleV2') -Force | Out-Null
+    try {
+        [System.IO.File]::WriteAllText((Join-Path $temp 'example\source.lua'), 'return true')
+        git -C $temp init --quiet
+        git -C $temp add example/source.lua
+        git -C $temp -c user.name=SelfTest -c user.email=selftest.invalid commit --quiet --no-verify -m fixture
+
+        $failures = [System.Collections.Generic.List[string]]::new()
+        function Assert([bool]$Condition, [string]$Description) {
+            if ($Condition) { Write-Host "  [PASS] $Description" -ForegroundColor Green }
+            else { Write-Host "  [FAIL] $Description" -ForegroundColor Red; $failures.Add($Description) }
+        }
+
+        Assert ((Get-ModSourceState -RepoRoot $temp -ModFolder example) -eq 'clean') 'accepts a committed mod source tree'
+        [System.IO.File]::WriteAllText((Join-Path $temp 'example\untracked.lua'), 'dirty')
+        Assert ((Get-ModSourceState -RepoRoot $temp -ModFolder example) -eq 'dirty') 'rejects uncommitted mod source'
+        Remove-Item -LiteralPath (Join-Path $temp 'example\untracked.lua') -Force
+        [System.IO.File]::WriteAllText((Join-Path $temp 'example\bundleV2\generated.mod'), 'generated')
+        Assert ((Get-ModSourceState -RepoRoot $temp -ModFolder example) -eq 'clean') 'excludes generated bundleV2 changes from source state'
+
+        $expected = @([ordered]@{ filename = 'a.mod'; sha256 = ('a' * 64) })
+        $same = @([ordered]@{ filename = 'a.mod'; sha256 = ('a' * 64) })
+        $changed = @([ordered]@{ filename = 'a.mod'; sha256 = ('b' * 64) })
+        $extra = @($same + [ordered]@{ filename = 'b.mod_bundle'; sha256 = ('c' * 64) })
+        Assert ((Compare-BundleRecordSets -Expected $expected -Actual $same).Count -eq 0) 'accepts byte-identical file records'
+        Assert ((Compare-BundleRecordSets -Expected $expected -Actual $changed).Count -eq 1) 'rejects a changed raw bundle hash'
+        Assert ((Compare-BundleRecordSets -Expected $expected -Actual $extra).Count -eq 1) 'rejects an unrecorded fresh-build output'
+
+        if ($failures.Count -gt 0) {
+            Write-Host "[check_release_reproducibility] SELF-TEST FAILED -- $($failures.Count) case(s)" -ForegroundColor Red
+            return 2
+        }
+        Write-Host '[check_release_reproducibility] SELF-TEST OK' -ForegroundColor Green
+        return 0
+    } finally {
+        Remove-LeafTree -Path $temp
+    }
+}
+
+if ($SelfTest) { exit (Invoke-SelfTest) }
+if (-not $Mod) {
+    Write-Host '[check_release_reproducibility] ERROR -- pass -Mod <folder-or-id> (or -SelfTest).' -ForegroundColor Red
+    exit 2
+}
+if (-not $CheckoutRoot) { $CheckoutRoot = $repoRoot }
+try { $CheckoutRoot = (Resolve-Path -LiteralPath $CheckoutRoot).Path }
+catch {
+    Write-Host "[check_release_reproducibility] ERROR -- checkout not found: $CheckoutRoot" -ForegroundColor Red
+    exit 2
+}
+
+$inventoryPath = Join-Path $CheckoutRoot 'tools\mod-inventory.psd1'
+if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
+    Write-Host "[check_release_reproducibility] ERROR -- mod inventory missing from checkout: $inventoryPath" -ForegroundColor Red
+    exit 2
+}
+$inventory = Import-PowerShellDataFile -Path $inventoryPath
+$matches = @($inventory.Mods | Where-Object { $_.Dir -eq $Mod -or $_.ModId -eq $Mod })
+if ($matches.Count -ne 1) {
+    Write-Host "[check_release_reproducibility] ERROR -- '$Mod' does not resolve uniquely in tools/mod-inventory.psd1." -ForegroundColor Red
+    exit 2
+}
+$modFolder = "$($matches[0].Dir)"
+$modId = "$($matches[0].ModId)"
+$sourceCommit = Get-ReleaseSourceCommit -RepoRoot $CheckoutRoot
+$sourceChanges = @(Get-ModSourceChanges -RepoRoot $CheckoutRoot -ModFolder $modFolder)
+
+Write-Host "Release source audit: $modFolder ($modId)" -ForegroundColor Cyan
+Write-Host "  checkout: $CheckoutRoot"
+Write-Host "  commit  : $sourceCommit"
+if ($sourceChanges.Count -gt 0) {
+    Write-Host '  state   : DIRTY -- immutable source precondition is not met' -ForegroundColor Red
+    foreach ($change in $sourceChanges) { Write-Host "    $change" -ForegroundColor DarkGray }
+    Write-Host '[check_release_reproducibility] BLOCKED -- commit the exact release source before any build/upload.' -ForegroundColor Red
+    exit 2
+}
+Write-Host '  state   : CLEAN' -ForegroundColor Green
+
+if ($AuditOnly) {
+    Write-Host '[check_release_reproducibility] AUDIT PASS -- source is ready for a commit-before-build workflow.' -ForegroundColor Green
+    exit 0
+}
+if (-not $ManifestPath) {
+    Write-Host '[check_release_reproducibility] ERROR -- full proof needs -ManifestPath <schema-2 manifest.json>.' -ForegroundColor Red
+    exit 2
+}
+if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
+    Write-Host "[check_release_reproducibility] ERROR -- manifest not found: $ManifestPath" -ForegroundColor Red
+    exit 2
+}
+try { $manifest = [System.IO.File]::ReadAllText($ManifestPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json }
+catch {
+    Write-Host "[check_release_reproducibility] ERROR -- invalid manifest JSON: $_" -ForegroundColor Red
+    exit 2
+}
+$entries = @($manifest.mods | Where-Object { "$($_.mod_id)" -eq $modId })
+if ($entries.Count -ne 1) {
+    Write-Host "[check_release_reproducibility] ERROR -- manifest must contain exactly one '$modId' entry." -ForegroundColor Red
+    exit 2
+}
+$entry = $entries[0]
+if ("$($entry.source_commit)" -ne $sourceCommit) {
+    Write-Host "[check_release_reproducibility] ERROR -- checkout HEAD $sourceCommit does not match manifest source_commit $($entry.source_commit)." -ForegroundColor Red
+    exit 2
+}
+if ("$($entry.source_state)" -ne 'clean') {
+    Write-Host "[check_release_reproducibility] ERROR -- manifest entry is not source_state clean." -ForegroundColor Red
+    exit 2
+}
+if ("$($entry.builder.name)" -ne 'VMBLauncher') {
+    Write-Host "[check_release_reproducibility] ERROR -- manifest builder is not VMBLauncher." -ForegroundColor Red
+    exit 2
+}
+
+if (-not $LauncherPath) {
+    $LauncherPath = Join-Path $repoRoot 'tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe'
+}
+if (-not (Test-Path -LiteralPath $LauncherPath -PathType Leaf)) {
+    Write-Host "[check_release_reproducibility] ERROR -- VMBLauncher not found: $LauncherPath" -ForegroundColor Red
+    exit 2
+}
+$launcherVersion = Get-VmbLauncherVersion -LauncherPath $LauncherPath
+if ($launcherVersion -ne "$($entry.builder.version)") {
+    Write-Host "[check_release_reproducibility] ERROR -- launcher version $launcherVersion does not match manifest builder version $($entry.builder.version)." -ForegroundColor Red
+    exit 2
+}
+
+$vmbrc = Join-Path $CheckoutRoot '.vmbrc'
+if (-not (Test-Path -LiteralPath $vmbrc -PathType Leaf)) {
+    Write-Host "[check_release_reproducibility] ERROR -- fresh checkout needs ignored .vmbrc setup; copy .vmbrc.example and adjust only machine-local paths." -ForegroundColor Red
+    exit 2
+}
+if (-not $LauncherSettingsPath) { $LauncherSettingsPath = Join-Path $env:APPDATA 'VMBLauncher\settings.json' }
+if (-not (Test-Path -LiteralPath $LauncherSettingsPath -PathType Leaf)) {
+    Write-Host "[check_release_reproducibility] ERROR -- launcher settings not found: $LauncherSettingsPath" -ForegroundColor Red
+    exit 2
+}
+
+$tempSettings = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-vmb-settings-" + [guid]::NewGuid().ToString('N') + '.json')
+try {
+    $settings = [System.IO.File]::ReadAllText($LauncherSettingsPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    $settings.ProjectRoot = $CheckoutRoot
+    $json = $settings | ConvertTo-Json -Depth 20
+    [System.IO.File]::WriteAllText($tempSettings, $json, [System.Text.UTF8Encoding]::new($false))
+
+    Write-Host "  builder : VMBLauncher $launcherVersion" -ForegroundColor Cyan
+    Write-Host "  action  : clean rebuild only (no deploy/upload)" -ForegroundColor Cyan
+    & $LauncherPath --config $tempSettings --no-banner build $modFolder --clean
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[check_release_reproducibility] ERROR -- VMBLauncher build exited $LASTEXITCODE." -ForegroundColor Red
+        exit 2
+    }
+
+    $bundleDir = Join-Path (Join-Path $CheckoutRoot $modFolder) 'bundleV2'
+    $actual = @(New-BundleFileRecords -BundleDirectory $bundleDir)
+    $errors = @(Compare-BundleRecordSets -Expected @($entry.bundle_files) -Actual $actual)
+    if ($errors.Count -gt 0) {
+        foreach ($error in $errors) { Write-Host "[check_release_reproducibility] ERROR -- $error" -ForegroundColor Red }
+        exit 2
+    }
+    Write-Host "[check_release_reproducibility] PASS -- $($actual.Count) raw file(s) rebuilt byte-identically from $sourceCommit." -ForegroundColor Green
+    exit 0
+} finally {
+    if (Test-Path -LiteralPath $tempSettings) { Remove-Item -LiteralPath $tempSettings -Force }
+}

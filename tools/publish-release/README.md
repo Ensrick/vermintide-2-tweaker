@@ -144,6 +144,7 @@ Offline validator self-test and manual validation:
 ```powershell
 .\qa\check_release_manifest.ps1 -SelfTest
 .\qa\check_release_manifest.ps1 -ManifestPath .release-stage\manifest.json -StageRoot .release-stage
+.\qa\check_release_reproducibility.ps1 -SelfTest
 ```
 
 ## Bundle integrity
@@ -183,6 +184,59 @@ outputs only after all of these are complete:
 5. Preserve existing Git history initially. Consider history rewriting only as
    a separate, coordinated decision after measuring the reproducibility and
    clone-size results.
+
+### Transition audit and fresh-checkout proof
+
+The clean-source requirement cannot safely become a late
+`publish-release.ps1` failure. The canonical `ship.ps1` sequence currently
+builds, deploys, and uploads before the source commit is created. A dirty-source
+failure in the GitHub-release step would therefore discover the problem only
+after Workshop had already changed.
+
+Until a maintainer explicitly approves a commit-before-build ship transaction,
+run the read-only preflight report before building:
+
+```powershell
+.\qa\check_release_reproducibility.ps1 -Mod <folder-or-mod-id> -AuditOnly
+```
+
+Exit 0 means the selected mod's source paths match `HEAD`; `bundleV2/` changes
+are excluded because they are generated outputs. Exit 2 lists the source
+changes that prevent `HEAD` from being an immutable build input. This audit is
+deliberately not wired into `ship.ps1` yet: doing so would make the documented
+edit-then-ship workflow unshippable without also deciding commit/push failure,
+upload failure, retry, and rollback policy.
+
+After a clean schema-2 entry has been published, prove it from a separate fresh
+checkout. Use the exact recorded commit and launcher version; configure only
+ignored machine-local files, and do not deploy or upload:
+
+```powershell
+git clone --no-local https://github.com/Ensrick/vermintide-2-tweaker.git C:\temp\vt2-repro
+git -C C:\temp\vt2-repro checkout --detach <manifest-source_commit>
+Copy-Item C:\temp\vt2-repro\.vmbrc.example C:\temp\vt2-repro\.vmbrc
+
+.\qa\check_release_reproducibility.ps1 `
+  -Mod <folder-or-mod-id> `
+  -CheckoutRoot C:\temp\vt2-repro `
+  -ManifestPath <downloaded-manifest.json> `
+  -LauncherPath <recorded-VMBLauncher.exe>
+```
+
+The verifier first requires clean mod source at the manifest's exact
+`source_commit`, requires `builder.name: VMBLauncher` and an exact launcher
+version match, then invokes only `VMBLauncher build --clean` through an isolated
+temporary settings file whose `ProjectRoot` is the fresh checkout. Every raw
+`.mod_bundle` and `.mod` filename and SHA-256 must match `bundle_files`; missing,
+extra, or changed output fails the proof. It never deploys, uploads, edits
+Workshop state, or treats a zip hash alone as reproducibility evidence.
+
+**Maintainer decision still required:** reorder the canonical transaction so
+the exact release source is committed (and decide whether it must also be
+pushed) before VMBLauncher builds. Define what happens if build, Workshop
+upload, GitHub publication, or the eventual source push fails after that point.
+Only then should the audit become a blocking `ship.ps1` preflight and newly
+staged manifests reject `source_state: dirty`.
 
 ## Mod inventory
 

@@ -14,7 +14,7 @@ function Get-ReleaseSourceCommit {
     return $commit
 }
 
-function Get-ModSourceState {
+function Get-ModSourceChanges {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
         [Parameter(Mandatory = $true)][string]$ModFolder
@@ -25,10 +25,19 @@ function Get-ModSourceState {
     # than an exact source snapshot, and the manifest says so explicitly.
     $lines = @(git -C $RepoRoot status --porcelain --untracked-files=all -- $ModFolder 2>$null)
     if ($LASTEXITCODE -ne 0) { throw "Could not inspect source state for $ModFolder." }
-    $sourceChanges = @($lines | Where-Object {
+    return @($lines | Where-Object {
         $path = "$_".Substring([Math]::Min(3, "$_".Length)).Replace('\', '/')
         $path -notmatch '(^|/)bundleV2/'
     })
+}
+
+function Get-ModSourceState {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$ModFolder
+    )
+
+    $sourceChanges = @(Get-ModSourceChanges -RepoRoot $RepoRoot -ModFolder $ModFolder)
     if ($sourceChanges.Count -eq 0) { return 'clean' }
     return 'dirty'
 }
