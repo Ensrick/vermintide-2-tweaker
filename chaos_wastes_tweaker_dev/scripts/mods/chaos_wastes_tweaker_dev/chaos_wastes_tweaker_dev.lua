@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.253-dev"
+local MOD_VERSION = "0.7.254-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -479,6 +479,30 @@ _rt_register("mission_availability_groups_457", function()
         local err = check_master(w, not AdventurePool.GROUP_IS_SINGLE[gid])
         if err then return "campaign master '" .. tostring(w.setting_id) .. "': " .. err end
     end
+    return nil
+end)
+
+-- #487 pool-floor UNDERFLOW POLICY guard. The floor must fill a short TRAVEL/SIGNATURE
+-- pool by DUPLICATING the user's ENABLED missions (so a run repeats them), and a pool
+-- with ZERO enabled missions must fall back to VANILLA contents - NOT backfill a single
+-- disabled vanilla level (the old enforce_pool_floor behavior that surfaced arenas /
+-- random maps in the user's test). Asserts the pure classifier contract at runtime;
+-- no live pool state is touched.
+_rt_register("pool_floor_underflow_duplicates_487", function()
+    local cpf = AdventurePool.classify_pool_floor
+    if type(cpf) ~= "function" then return "classify_pool_floor missing (underflow policy not exposed)" end
+    if cpf(0) ~= "fallback" then
+        return "0 enabled must be 'fallback' (vanilla, not disabled-backfill), got " .. tostring(cpf(0))
+    end
+    if cpf(1) ~= "duplicate" then
+        return "1 enabled must be 'duplicate' (repeat enabled), got " .. tostring(cpf(1))
+    end
+    local thr = AdventurePool.POOL_SAFETY_THRESHOLD
+    if type(thr) ~= "number" or thr < 4 then
+        return "POOL_SAFETY_THRESHOLD must be a number >= 4 (prevent_same_level_choice bound), got " .. tostring(thr)
+    end
+    if cpf(thr - 1) ~= "duplicate" then return "threshold-1 must still be 'duplicate'" end
+    if cpf(thr) ~= "ok" then return "threshold enabled must be 'ok' (no over-duplication)" end
     return nil
 end)
 

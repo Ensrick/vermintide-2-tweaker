@@ -22,14 +22,13 @@ WHAT IT INSTRUMENTS
     same-type path has nodes cannot be solved; the solver then burns its whole
     iteration budget (a multi-second stall = perceived freeze) and returns nil.
     ct's own `_adventure_pool.inject_duplicate_aliases` is the safety net for
-    this (mints `<key>_dupN` distinct keys up to POOL_SAFETY_THRESHOLD=4), but it
-    is guarded by `if n > 0` - a pool the user empties to ZERO could not be
-    duplicated (nothing to clone). #457 closes that gap: `_adventure_pool`'s pool
-    floor (enforce_pool_floor) backfills one vanilla level into any journey+pool a
-    config would empty, then duplication fills it to threshold, so an EMPTY line
-    below should no longer occur in normal use. This module still logs the ACTUAL
-    pool sizes the solver sees plus the solve outcome/timing - an EMPTY flag now
-    means the floor itself failed (snapshot missing), which is a real bug to chase.
+    this (mints `<key>_dupN` distinct keys up to POOL_SAFETY_THRESHOLD=4 by cloning
+    the user's ENABLED missions, so an underflowed run REPEATS them). A pool the
+    user empties of ALL enabled missions has nothing to clone; `_adventure_pool`'s
+    zero-enabled fallback (fall_back_zero_enabled_pools) restores that pool's vanilla
+    contents so the solver still has assignable keys. So an EMPTY line below should no
+    longer occur in normal use - if it does, BOTH the duplication and the fallback
+    failed (snapshot missing), which is a real bug to chase.
 
 OUTPUT
     engine `printf` only (visible with mod logging OFF, and flushed to the console

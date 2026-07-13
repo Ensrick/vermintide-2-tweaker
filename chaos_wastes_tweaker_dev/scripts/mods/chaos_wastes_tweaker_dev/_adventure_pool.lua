@@ -8,10 +8,13 @@ Two things happen here (gated on inject_adventure_maps master toggle):
      bundle but flag game_mode/mechanism = "deus".
 
   2. Vanilla CW scenarios that the user disables are removed from those same
-     pools. After filter+injection, a POOL FLOOR (#457/#487) backfills any pool the
-     configuration would EMPTY, then if any pool is still below a safety threshold we
-     duplicate each remaining level under `_dupN` suffix keys so the graph generator's
-     same-level constraints don't deadlock into a load freeze.
+     pools. After filter+injection, a POOL FLOOR (#457/#487) handles underflow: a
+     TRAVEL/SIGNATURE pool holding fewer distinct ENABLED missions than the graph
+     solver needs has its ENABLED missions DUPLICATED under `_dupN` suffix keys, so an
+     underflowed run REPEATS the missions the user chose (we never backfill levels he
+     disabled). A pool the user empties of ALL enabled missions has nothing to clone,
+     so that pool alone falls back to its vanilla contents (with a chat notice) rather
+     than deadlock the graph generator into a load freeze.
 
 Availability UI (#457 "Revamp Mission Availability"): each DLC / the Helmgart
 campaign / the CW scenarios / the event missions is a MASTER toggle
@@ -537,15 +540,26 @@ end
 -- Pool mutation
 -- =====================================================================
 
-local POOL_SAFETY_THRESHOLD = 4  -- Minimum unique entries needed per (journey × pool_type)
-                                  -- before duplicate-injection kicks in. The binding graph
-                                  -- constraint is prevent_same_level_choice (siblings of the
-                                  -- same type at a branch, deus_map_populate_settings.lua:222
-                                  -- lists only that validator for TRAVEL/SIGNATURE), whose
-                                  -- max width in the baked CW graphs is ~2-3, so 4 gives
-                                  -- headroom. Duplication needs >=1 real key to clone; the
-                                  -- pool floor (enforce_pool_floor) guarantees that, so a
-                                  -- zeroed pool can never reach the un-fillable state.
+local POOL_SAFETY_THRESHOLD = 4  -- Distinct entries needed per (journey × pool_type)
+                                  -- before duplicate-injection kicks in. The only wired
+                                  -- solver constraint for TRAVEL/SIGNATURE is
+                                  -- prevent_same_level_choice (branch-sibling width;
+                                  -- deus_map_populate_settings.lua:222 lists only that
+                                  -- validator - prevent_same_level_on_same_path is defined
+                                  -- but never wired into a journey). Its provable worst
+                                  -- case: a node has <= MAX_INCOMING_CONNECTIONS_PER_NODE
+                                  -- (3) parents, each with <= MAX_CONNECTIONS_PER_NODE (2)
+                                  -- children, so <= 3 same-type siblings + itself = 4
+                                  -- distinct keys (deus_map_base_gen_settings.lua:6-8). 4 is
+                                  -- therefore PROVABLY sufficient AND matches the user's
+                                  -- "fewer than 4" trigger (issue 487). His alternate
+                                  -- "however many non-arena/non-shrine mission nodes the
+                                  -- expedition has" framing over-counts: levels MAY repeat
+                                  -- across non-sibling nodes down a path (that path-wide
+                                  -- validator is unwired), so we need branch width, not
+                                  -- total node count. Duplication clones the user's ENABLED
+                                  -- missions (never disabled vanilla levels); a zero-enabled
+                                  -- pool has nothing to clone and falls back to vanilla.
 
 -- Snapshot of the original (untouched) journey-level LEVEL_AVAILABILITY tables,
 -- captured exactly once on first inject. Subsequent calls reset to this snapshot
@@ -645,54 +659,65 @@ local function count_real_keys(pool)
     return n
 end
 
--- First (sorted, deterministic) real key for a journey+pool from the pristine
--- snapshot. Always a level THIS journey originally shipped, so backfilling it can't
--- introduce a DLC-ownership or cross-journey-validity problem.
-local function first_snapshot_key(journey_name, pool_type)
-    local jp = _snapshot and _snapshot[journey_name] and _snapshot[journey_name][pool_type]
-    if type(jp) ~= "table" then return nil end
-    local keys = {}
-    for k in pairs(jp) do
-        if type(k) == "string" and not k:find("_dup%d+$") then keys[#keys + 1] = k end
-    end
-    if #keys == 0 then return nil end
-    table.sort(keys)
-    return keys[1], jp[keys[1]]
+-- Underflow-policy classifier (issue 487). PURE - touches no globals, mutates nothing.
+-- Given the count of ENABLED (real, non-`_dupN`) missions a TRAVEL/SIGNATURE pool holds
+-- after filter+inject, decide how the floor treats it:
+--   "ok"        - >= POOL_SAFETY_THRESHOLD distinct missions; the solver is satisfied.
+--   "duplicate" - underflow (1 .. threshold-1); clone the ENABLED missions under `_dupN`
+--                 aliases so the run REPEATS them. Never backfill disabled vanilla levels.
+--   "fallback"  - zero enabled; nothing to clone, so this pool alone falls back to its
+--                 vanilla contents (documented via chat notice) rather than freeze.
+-- Exposed on the module so /ct_regression_test can assert the contract at runtime
+-- without touching live pool state.
+function _M.classify_pool_floor(enabled_real_count)
+    if not enabled_real_count or enabled_real_count <= 0 then return "fallback" end
+    if enabled_real_count < POOL_SAFETY_THRESHOLD then return "duplicate" end
+    return "ok"
 end
 
--- Session guard so the pool-floor chat notice fires ONCE when a pool first
--- underflows and re-arms when it recovers (keyed by pool type). Lives on the module
--- table like the other cross-call state.
+-- Read-only mirror of the local constant, for the regression test.
+_M.POOL_SAFETY_THRESHOLD = POOL_SAFETY_THRESHOLD
+
+-- Session guard so the pool-floor chat notice fires ONCE per underflow episode and
+-- re-arms when the pool recovers. Keyed by pool type; the value is the last-notified
+-- STATE ("fallback" | "repeat" | nil) so a transition between the two states re-fires
+-- the right notice. Lives on the module table like the other cross-call state.
 _M._floor_notice_shown = _M._floor_notice_shown or {}
 
--- POOL FLOOR (#457 / #487). A configuration that empties a TRAVEL or SIGNATURE pool
--- starves the deus map-graph solver: with no assignable level for that node type it
--- burns its 100000-iteration backtrack budget (deus_populate_graph.lua:1006-1020) =
--- the multi-second load freeze reported in #487. inject_duplicate_aliases CANNOT
--- rescue an EMPTY pool - it clones an existing key, and there is nothing to clone
--- (the historical `if n > 0` gap). So when a pool has zero real keys we AUTO-BACKFILL
--- one vanilla level for that journey+pool from the snapshot; the duplicate-alias pass
--- then fills it to POOL_SAFETY_THRESHOLD. Runs AFTER filter+inject and BEFORE
--- duplication. Returns a { pool_type -> backfilled_key } map for the caller's notice.
-local function enforce_pool_floor()
-    local backfilled = {}
-    if not DEUS_MAP_POPULATE_SETTINGS then return backfilled end
+-- ZERO-ENABLED FALLBACK (#457 / #487). A configuration that empties a TRAVEL or
+-- SIGNATURE pool of ALL enabled missions starves the deus map-graph solver: with no
+-- assignable level for that node type it burns its 100000-iteration backtrack budget
+-- (deus_populate_graph.lua:1006-1020) = the multi-second load freeze reported in #487.
+-- The underflow policy (issue 487) fills a short pool by DUPLICATING the user's ENABLED
+-- missions - but a pool with ZERO enabled missions has nothing to clone. Rather than
+-- freeze (or silently re-add missions the user disabled), that pool ALONE falls back to
+-- its pristine vanilla contents, and the caller posts a chat notice naming the pool.
+-- Runs AFTER filter+inject and BEFORE duplication. Returns a { pool_type -> true } map
+-- of pools that fell back, for the caller's notice.
+local function fall_back_zero_enabled_pools()
+    local fellback = {}
+    if not DEUS_MAP_POPULATE_SETTINGS then return fellback end
     for journey_name, config in pairs(DEUS_MAP_POPULATE_SETTINGS) do
         local la = config.LEVEL_AVAILABILITY
         if la then
             for _, pool_type in ipairs({ "TRAVEL", "SIGNATURE" }) do
                 local pool = la[pool_type]
-                if pool and count_real_keys(pool) == 0 then
-                    local fb_key, fb_entry = first_snapshot_key(journey_name, pool_type)
-                    if fb_key and fb_entry then
-                        pool[fb_key] = fb_entry
-                        backfilled[pool_type] = fb_key  -- last journey's key wins for the notice; fine (informational)
+                if pool and _M.classify_pool_floor(count_real_keys(pool)) == "fallback" then
+                    -- Restore this pool's pristine vanilla contents (real keys only).
+                    local snap = _snapshot and _snapshot[journey_name] and _snapshot[journey_name][pool_type]
+                    if type(snap) == "table" then
+                        for k, v in pairs(snap) do
+                            if not (type(k) == "string" and k:find("_dup%d+$")) then
+                                pool[k] = v
+                            end
+                        end
+                        fellback[pool_type] = true
                     end
                 end
             end
         end
     end
-    return backfilled
+    return fellback
 end
 
 -- Duplicate any underflow pools by registering `<key>_dupN` aliases that resolve to
@@ -701,6 +726,7 @@ end
 -- graph generator's pool but render identically to the original.
 local function inject_duplicate_aliases()
     local injected = 0
+    local dup_pools = {}  -- { pool_type -> true } for pools that underflowed and got dups
     for journey_name, config in pairs(DEUS_MAP_POPULATE_SETTINGS) do
         local la = config.LEVEL_AVAILABILITY
         if la then
@@ -711,7 +737,8 @@ local function inject_duplicate_aliases()
                     local keys = {}
                     for k in pairs(pool) do keys[#keys + 1] = k end
                     local n = #keys
-                    if n > 0 and n < POOL_SAFETY_THRESHOLD then
+                    if _M.classify_pool_floor(n) == "duplicate" then
+                        dup_pools[pool_type] = true
                         local deficit = POOL_SAFETY_THRESHOLD - n
                         -- Aliases minted for THIS (journey, pool) on prior runs. We reuse
                         -- them per dup slot instead of minting new "_dupN" names each run
@@ -789,7 +816,7 @@ local function inject_duplicate_aliases()
             end
         end
     end
-    return injected
+    return injected, dup_pools
 end
 
 -- Build the LevelSettings / NetworkLookup.level_keys / TerrorEventBlueprints /
@@ -964,35 +991,54 @@ function _M.inject_pool()
     -- 2. Filter out disabled vanilla CW scenarios.
     local removed_cw = filter_cw_pool()
 
-    -- 2b. Pool floor (#457/#487): a config that empties a TRAVEL/SIGNATURE pool would
-    -- starve the graph solver into a load freeze, and duplication can't fill an EMPTY
-    -- pool. Backfill one vanilla level per emptied journey+pool and warn, naming the
-    -- pool, so the map can always be built.
-    local backfilled = enforce_pool_floor()
+    -- 2b. Zero-enabled fallback (#457/#487): a pool the user emptied of ALL enabled
+    -- missions has nothing to duplicate, so it falls back to its vanilla contents (the
+    -- notice below names it) rather than starve the graph solver into a load freeze.
+    local fellback = fall_back_zero_enabled_pools()
+
+    -- 3. Underflow duplication (#457/#487): a pool with 1..threshold-1 enabled missions
+    -- gets its ENABLED missions cloned under `_dupN` aliases, so the run REPEATS them
+    -- (we never backfill disabled vanilla levels).
+    local dups, dup_pools = inject_duplicate_aliases()
+
+    -- Notice per pool, deduped by state (once per episode; re-armed when the pool
+    -- recovers, re-fired if a pool transitions between states). Fallback outranks
+    -- repeat - "no enabled missions of this type" is the stronger message.
     for _, pool_type in ipairs({ "TRAVEL", "SIGNATURE" }) do
-        if backfilled[pool_type] then
-            if not _M._floor_notice_shown[pool_type] then
-                _M._floor_notice_shown[pool_type] = true
+        local state = fellback[pool_type] and "fallback" or (dup_pools[pool_type] and "repeat" or nil)
+        if state then
+            if _M._floor_notice_shown[pool_type] ~= state then
+                _M._floor_notice_shown[pool_type] = state
                 -- Chat notice (visible with mod logging OFF) + a printf under the #487
                 -- prefix so it lands next to the freeze diagnostic breadcrumbs.
-                pcall(function()
-                    mod:echo(string.format(
-                        "Chaos Wastes: the %s mission pool would be empty - kept '%s' so the map can still load. Enable at least one %s mission.",
-                        pool_type, tostring(backfilled[pool_type]), pool_type))
-                end)
-                if rawget(_G, "printf") then
-                    pcall(printf,
-                        "[ct:487] POOL-FLOOR backfilled %s with '%s' (config emptied the pool; auto-refilled to prevent solver starvation)",
-                        pool_type, tostring(backfilled[pool_type]))
+                if state == "fallback" then
+                    pcall(function()
+                        mod:echo(string.format(
+                            "Chaos Wastes: no %s missions enabled - using the default Chaos Wastes %s maps so the run can load. Enable at least one %s mission to change this.",
+                            pool_type, pool_type, pool_type))
+                    end)
+                    if rawget(_G, "printf") then
+                        pcall(printf,
+                            "[ct:487] POOL-FLOOR %s had ZERO enabled missions; fell back to vanilla pool contents (nothing to duplicate)",
+                            pool_type)
+                    end
+                else
+                    pcall(function()
+                        mod:echo(string.format(
+                            "Chaos Wastes: fewer %s missions enabled than the run needs - your enabled %s missions will repeat to fill it.",
+                            pool_type, pool_type))
+                    end)
+                    if rawget(_G, "printf") then
+                        pcall(printf,
+                            "[ct:487] POOL-FLOOR %s underflow; duplicated enabled missions so the run repeats them (no vanilla backfill)",
+                            pool_type)
+                    end
                 end
             end
         else
-            _M._floor_notice_shown[pool_type] = nil  -- re-arm once the pool recovers
+            _M._floor_notice_shown[pool_type] = nil  -- re-arm once the pool is healthy
         end
     end
-
-    -- 3. Inject duplicate aliases if any pool drops below safety threshold.
-    local dups = inject_duplicate_aliases()
 
     mod:info("Adventure pool: injected %d adventure, removed %d CW, added %d duplicate aliases",
         injected_adv, removed_cw, dups)
