@@ -37,6 +37,31 @@ return function(H, repo_root)
         })
     end)
 
+    H.test("search finish prefers last changed branch then falls back to top result", function()
+        local expanded = { old_outer = true, other_tab = true }
+        local tx = Search.begin(expanded,
+            { "old_outer", "top_outer", "changed_outer" }, "tab-a")
+        Search.finish(expanded, tx, { "changed_outer" }, { "top_outer" }, true)
+        H.deep_equal(expanded, { changed_outer = true, other_tab = true })
+
+        expanded = { old_outer = true, other_tab = true }
+        tx = Search.begin(expanded,
+            { "old_outer", "top_outer", "changed_outer" }, "tab-a")
+        Search.finish(expanded, tx, nil, { "top_outer" }, true)
+        H.deep_equal(expanded, { top_outer = true, other_tab = true })
+    end)
+
+    H.test("search finish keeps prior branches when auto-collapse is disabled", function()
+        local expanded = { old_outer = true, other_tab = true }
+        local tx = Search.begin(expanded, { "old_outer", "top_outer" }, "tab-a")
+        Search.finish(expanded, tx, nil, { "top_outer" }, false)
+        H.deep_equal(expanded, {
+            old_outer = true,
+            top_outer = true,
+            other_tab = true,
+        })
+    end)
+
     H.test("ancestor planner returns outer-to-inner groups and excludes result", function()
         local nodes = {
             { type = "group", key = "outer" },

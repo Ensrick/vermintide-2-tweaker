@@ -1762,7 +1762,7 @@ end)
 _rt_register("issue559_search_expansion_transaction", function()
     local ok_s, Search = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_search")
     if not ok_s or type(Search) ~= "table" then return "search transaction module unavailable" end
-    for _, name in ipairs({ "begin", "restore", "commit", "group_keys", "ancestors" }) do
+    for _, name in ipairs({ "begin", "restore", "commit", "finish", "group_keys", "ancestors" }) do
         if type(Search[name]) ~= "function" then return "Search." .. name .. " missing" end
     end
 
@@ -1780,9 +1780,17 @@ _rt_register("issue559_search_expansion_transaction", function()
         return "non-auto-collapse commit did not preserve snapshot plus result ancestors"
     end
 
+    expanded = { old_outer = true, foreign = true }
+    tx = Search.begin(expanded, { "old_outer", "top_outer", "changed_outer" }, "probe")
+    Search.finish(expanded, tx, { "changed_outer" }, { "top_outer" }, true)
+    if expanded.old_outer or expanded.top_outer or not expanded.changed_outer or not expanded.foreign then
+        return "dismissal did not prefer the last changed result branch"
+    end
+
     local ok_v, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
     if not ok_v or type(View) ~= "table" then return "ModTweakerView unavailable" end
-    for _, name in ipairs({ "_search_restore", "_search_clear_restore", "_search_commit_result" }) do
+    for _, name in ipairs({ "_search_restore", "_search_clear_restore", "_search_finish",
+                            "_search_note_setting" }) do
         if type(View[name]) ~= "function" then return "ModTweakerView:" .. name .. " missing" end
     end
 end)

@@ -195,15 +195,15 @@ The fixed search bar filters only the current tab. Matching groups and the ances
 show a nested match are rendered open, but search presentation never writes persistent collapsible
 state. The first non-empty query snapshots that tab's open groups.
 
-- Clear, Escape, a neutral click outside the search/results, tab switch, and menu exit cancel the
-  transaction and restore the exact snapshot. They never choose the first/top result implicitly.
-- Clicking a result commits navigation and then performs the original control action. With
-  auto-collapse enabled, only the result's ancestor group chain remains open; a top-level result has
-  no ancestors. With auto-collapse disabled, the snapshot remains open and required ancestors are
+- Changing a result does not dismiss or alter the filtered result set. The view remembers the most
+  recently staged setting while checkbox, dropdown, keybind, numeric, and slider interactions proceed.
+- Escape, a neutral click outside the search/results, tab/profile switch, and menu exit finish the
+  transaction. With auto-collapse enabled, only the last changed setting's ancestor chain remains
+  open; when nothing changed, the first direct result supplies the fallback chain. A top-level result
+  has no ancestors. With auto-collapse disabled, the snapshot remains open and the retained chain is
   added.
-- Dropdown, keybind capture, numeric editing, and slider drag keep their clicked row alive until the
-  modal interaction completes. The normal list rebuild then blocks the old shared-node release latch
-  until a fresh click.
+- Refocusing and editing the query resets the last-changed choice because the result set changed.
+  Backspacing to empty uses the same finish behavior as explicit dismissal.
 
 ## Per-tab settings profiles (#561)
 

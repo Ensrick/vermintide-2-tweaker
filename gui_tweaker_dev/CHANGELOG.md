@@ -7,6 +7,13 @@
 
 ## 0.2.238-dev (2026-07-13) -- #561 per-tab settings profiles [verify-fix]
 
+- Refined #559 from in-game feedback: changing a checkbox, dropdown, keybind, or slider
+  now keeps the query and filtered results visible. Escape or an outside click clears search
+  and, with auto-collapse enabled, retains the branch containing the last changed setting;
+  if nothing changed, it retains the first direct result's branch. With auto-collapse disabled,
+  the pre-search branches remain open and the retained branch is added. Engine-free transaction
+  tests cover last-changed preference, top-result fallback, and both auto-collapse modes.
+
 - Added a lower-left **PROFILES 1-10** selector to both Mod Tweaker presentations.
   Each visible tab remembers its own active slot; slot 1 lazily adopts existing
   live values, while a newly visited slot begins from declared defaults.

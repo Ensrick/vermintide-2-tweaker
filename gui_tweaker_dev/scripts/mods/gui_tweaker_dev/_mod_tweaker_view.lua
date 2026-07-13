@@ -131,6 +131,8 @@ function ModTweakerView:init(ingame_ui_context)
     self._search_caret_t = 0
     self._search_tx = nil
     self._search_rebuild_pending = nil
+    self._search_last_ancestors = nil
+    self._search_top_ancestors = nil
 end
 
 -- ---------------------------------------------------------------
@@ -866,6 +868,7 @@ function ModTweakerView:stage_set(category, setting_id, value)
     local key = owner_id or _cat_key(category)
     self._pending[key] = self._pending[key] or {}
     self._pending[key][setting_id] = value
+    self:_search_note_setting(category, setting_id)
     -- NOTE: do NOT set self._dirty here. self._dirty drives the auto-save-to-log on exit,
     -- which must reflect LIVE writes only — a pending (unapplied) edit was never written,
     -- so exiting with only-pending edits must NOT export. apply_pending sets _dirty.
@@ -1445,6 +1448,8 @@ function ModTweakerView:_search_restore()
     Search.restore(self._expanded, self._search_tx)
     self._search_tx = nil
     self._search_rebuild_pending = nil
+    self._search_last_ancestors = nil
+    self._search_top_ancestors = nil
     return true
 end
 
@@ -1455,25 +1460,35 @@ function ModTweakerView:_search_clear_restore()
     return changed
 end
 
-function ModTweakerView:_search_commit_result(row)
+function ModTweakerView:_search_finish()
     if not self._search_tx then return false end
-    Search.commit(self._expanded, self._search_tx, row and row._search_ancestors,
-        self:_auto_collapse_on())
+    Search.finish(self._expanded, self._search_tx, self._search_last_ancestors,
+        self._search_top_ancestors, self:_auto_collapse_on())
     self._search_tx = nil
     self._search_str = ""
     self._search_focused = false
-    -- The result widget must survive long enough to finish its own release/drag/capture action.
-    -- update() rebuilds once no modal interaction owns that row, then swallows stale releases.
-    self._search_rebuild_pending = true
+    self._search_rebuild_pending = nil
+    self._search_last_ancestors = nil
+    self._search_top_ancestors = nil
     return true
+end
+
+-- Result interactions keep search alive. Remember only settings that actually stage a value;
+-- Escape/outside-click later retains this branch instead of whichever row was merely opened.
+function ModTweakerView:_search_note_setting(category, setting_id)
+    if not self._search_tx then return end
+    for i = 1, #(self._rows or {}) do
+        local row = self._rows[i]
+        if row and row._category == category and row._setting_id == setting_id
+           and type(row._search_ancestors) == "table" then
+            self._search_last_ancestors = row._search_ancestors
+            return
+        end
+    end
 end
 
 local function _hot(h)
     return h and (h.is_hover or h.is_held or h.on_release or h.on_left_release)
-end
-
-local function _activated(h)
-    return h and (h.is_held or h.on_release or h.on_left_release)
 end
 
 function ModTweakerView:_search_pointer_over_result()
@@ -1500,6 +1515,9 @@ function ModTweakerView:_search_pointer_over_chrome()
     end
     for i = 1, #(self._tabs or {}) do
         if widget_hot(self._tabs[i], "hotspot") then return true end
+    end
+    for i = 1, #(self._profile_buttons or {}) do
+        if widget_hot(self._profile_buttons[i], "hotspot") then return true end
     end
     return false
 end
@@ -1578,6 +1596,8 @@ function ModTweakerView:_build_rows(category)
                 function(node) return _nf(node, "type") end,
                 function(node) return self:_group_key(node, category) end)
             self._search_tx = Search.begin(self._expanded, group_keys, category)
+            self._search_last_ancestors = nil
+            self._search_top_ancestors = nil
         end
         self._drill = nil                       -- a search supersedes any drill-down
         local keep = {}
@@ -1590,8 +1610,13 @@ function ModTweakerView:_build_rows(category)
             end
         end
         -- Freeze the direct-match set, then widen it to ancestors + matched-group descendants.
-        local matched = {}
-        for i = 1, #nodes do if keep[i] then matched[#matched + 1] = i end end
+        local matched, direct = {}, {}
+        for i = 1, #nodes do
+            if keep[i] then
+                matched[#matched + 1] = i
+                direct[i] = true
+            end
+        end
         for _, i in ipairs(matched) do
             local need = depths[i]
             for j = i - 1, 1, -1 do
@@ -1619,6 +1644,17 @@ function ModTweakerView:_build_rows(category)
                     row._search_ancestors = Search.ancestors(nodes, depths, i,
                         function(node) return _nf(node, "type") end,
                         function(node) return self:_group_key(node, category) end)
+                    if direct[i] and not self._search_top_ancestors then
+                        local path = {}
+                        for p = 1, #row._search_ancestors do
+                            path[p] = row._search_ancestors[p]
+                        end
+                        -- A directly matched collapsible is itself the result to retain.
+                        if is_group then
+                            path[#path + 1] = self:_group_key(nodes[i], category)
+                        end
+                        self._search_top_ancestors = path
+                    end
                 end
                 self:_append_row(row, err, wtype, category, setting_id, base_offset, false)
                 if row then shown = shown + 1 end
@@ -1635,11 +1671,14 @@ function ModTweakerView:_build_rows(category)
         return
     end
 
-    -- Backspace-to-empty and programmatic clears end the transaction exactly like Escape.
+    -- Backspace-to-empty and programmatic clears finish like an explicit dismissal.
     if self._search_tx then
-        Search.restore(self._expanded, self._search_tx)
+        Search.finish(self._expanded, self._search_tx, self._search_last_ancestors,
+            self._search_top_ancestors, self:_auto_collapse_on())
         self._search_tx = nil
         self._search_rebuild_pending = nil
+        self._search_last_ancestors = nil
+        self._search_top_ancestors = nil
     end
 
     -- DRILLED-IN advanced view: render only Back + parent + that parent's children.
@@ -2216,7 +2255,7 @@ function ModTweakerView:on_enter(params)
 end
 
 function ModTweakerView:on_exit()
-    self:_search_clear_restore() -- (#559) menu exit cancels presentation-only expansion state
+    self:_search_finish() -- (#559) retain last-changed/top-result branch on menu exit
     self._active = false
     self.exiting = nil
     -- (Fix 3, v0.2.151-dev) Cancel a dangling reset-confirm popup so it can't outlive the menu.
@@ -2252,7 +2291,7 @@ function ModTweakerView:on_exit()
 end
 
 function ModTweakerView:exit(return_to_game)
-    self:_search_clear_restore() -- (#559) covers X, final Escape, and external exit routing
+    self:_search_finish() -- (#559) covers X, final Escape, and external exit routing
     self.exiting = true
     -- (v0.2.82-dev — ITEM 1) Native menu-close feedback. exit() is the single funnel
     -- for leaving (ESC, the X button, and return-to-game all route here), so one
@@ -2321,23 +2360,6 @@ function ModTweakerView:update(dt, t)
     end
 
 
-    -- (#559) A clicked search result clears the query immediately, but its old row widget must
-    -- survive until a dropdown/keybind/edit/drag finishes. Rebuild only when no modal owner remains;
-    -- then block the old shared-node release latch until the user's next fresh press.
-    if self._search_rebuild_pending and not self._open_dropdown and not self._editing_row
-       and not self._capturing_keybind then
-        local dragging = false
-        for i = 1, #(self._rows or {}) do
-            if self._rows[i]._dragging then dragging = true; break end
-        end
-        if not dragging then
-            self._search_rebuild_pending = nil
-            self._dd_block_until_press = true
-            self:_build_rows(self._categories[self._selected])
-            return
-        end
-    end
-
     if input_service:get("toggle_menu", true) or input_service:get("back", true) then
         -- (v0.2.69-dev) ESC priority while a DROPDOWN POPUP is open: the FIRST ESC closes
         -- the popup (no commit) instead of closing the menu / leaving the drill.
@@ -2376,7 +2398,7 @@ function ModTweakerView:update(dt, t)
         -- (no filter, nothing else pending) closes the menu. Ordered after edit/keybind/drill so
         -- ESC first cancels those, matching the "back out one level per ESC" model.
         if self._search_focused or (self._search_str and self._search_str ~= "") then
-            self:_search_clear_restore()
+            self:_search_finish()
             self._scroll_y = 0
             _play_click()
             self:_build_rows(self._categories[self._selected])
@@ -2505,7 +2527,12 @@ end
 -- RIGHT/DELETE handling. Returns true if the query changed, so the caller re-filters only then.
 function ModTweakerView:_search_apply_keystrokes()
     local s, changed = _apply_keystrokes(self._search_str or "", _SEARCH_MAX_LEN)
-    if changed then self._search_str = s; self._search_caret_t = 0 end
+    if changed then
+        self._search_str = s
+        self._search_caret_t = 0
+        self._search_last_ancestors = nil
+        self._search_top_ancestors = nil
+    end
     return changed
 end
 
@@ -2913,7 +2940,7 @@ function ModTweakerView:_handle_input(input_service)
                 self._search_focused = false
                 if self._search_tx and not self:_search_pointer_over_result()
                    and not self:_search_pointer_over_chrome() then
-                    self:_search_clear_restore()
+                    self:_search_finish()
                     self._scroll_y = 0
                     self._dd_block_until_press = true
                     self:_build_rows(self._categories[self._selected])
@@ -3003,7 +3030,7 @@ function ModTweakerView:_handle_input(input_service)
     do
         local ah = self._apply and self._apply.content.button_hotspot
         if ah and (ah.on_release or ah.on_left_release) and not self._apply.content.disabled then
-            self:_search_clear_restore()
+            self:_search_finish()
             self:apply_pending(self._categories[self._selected])
             return
         end
@@ -3015,7 +3042,7 @@ function ModTweakerView:_handle_input(input_service)
     do
         local rh = self._reset and self._reset.content.button_hotspot
         if rh and (rh.on_release or rh.on_left_release) then
-            local search_cleared = self:_search_clear_restore()
+            local search_cleared = self:_search_finish()
             if search_cleared then
                 self._scroll_y = 0
                 self:_build_rows(self._categories[self._selected])
@@ -3031,6 +3058,7 @@ function ModTweakerView:_handle_input(input_service)
     for i = 1, #(self._profile_buttons or {}) do
         local ph = self._profile_buttons[i].content.hotspot
         if ph and (ph.on_release or ph.on_left_release) then
+            self:_search_finish()
             self:_switch_profile(i)
             return
         end
@@ -3046,7 +3074,7 @@ function ModTweakerView:_handle_input(input_service)
             _play_click()
             mod:debug("[mt:dump] input: tab[%d] clicked (was %d, drill=%s)", i, self._selected or -1, tostring(self._drill ~= nil))
             if self._more_tab_index and i == self._more_tab_index then
-                self:_search_clear_restore()
+                self:_search_finish()
                 self._drill = nil
                 self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
                 self._page = ((self._page or 0) + 1) % math.max(1, self._page_count or 1)
@@ -3055,7 +3083,7 @@ function ModTweakerView:_handle_input(input_service)
                 self:_rebuild()
                 return
             elseif (i ~= self._selected or self._drill) and self._categories[i] then
-                self:_search_clear_restore()
+                self:_search_finish()
                 self._drill = nil
                 self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
                 self._selected = i
@@ -3110,21 +3138,6 @@ function ModTweakerView:_handle_input(input_service)
         if not row._readonly and row._middle_visible ~= false
            and not (self._slider_dragging and row ~= self._slider_dragging) then
             local c = row.content
-            -- (#559) Commit navigation only for a real result interaction. The old filtered row
-            -- stays alive to perform the control action; update() rebuilds once it is safe.
-            if self._search_tx and row._search_ancestors then
-                local activated = _activated(c.row_hs)
-                    or (row._is_group and _activated(c.hotspot))
-                    or ((row._wtype == "checkbox" or row._wtype == "boolean")
-                        and (_activated(c.hotspot) or _activated(c.dec) or _activated(c.inc)))
-                    or (row._wtype == "dropdown" and _activated(c.hotspot))
-                    or (row._wtype == "keybind" and (_activated(c.hotspot)
-                        or (c.hotspot and c.hotspot.is_hover and Mouse.released(1))))
-                    or ((row._wtype == "slider" or row._wtype == "numeric")
-                        and (_activated(c.value_hs) or _activated(c.track_hs)
-                            or _activated(c.dec) or _activated(c.inc)))
-                if activated then self:_search_commit_result(row) end
-            end
             if row._is_gear then
                 -- GEAR click: drill INTO this setting's advanced sub-options. Captures
                 -- the parent setting_id + label, resets scroll, and rebuilds the list as

@@ -41,6 +41,14 @@ function Search.commit(expanded, transaction, ancestors, auto_collapse)
     for i = 1, #(ancestors or {}) do expanded[ancestors[i]] = true end
 end
 
+-- Finish a search on explicit dismissal. Prefer the last setting the user changed; when the
+-- search was only inspected, retain the first direct result's branch instead.
+function Search.finish(expanded, transaction, last_changed, top_result, auto_collapse)
+    local target = last_changed
+    if type(target) ~= "table" then target = top_result end
+    Search.commit(expanded, transaction, target or {}, auto_collapse)
+end
+
 function Search.group_keys(nodes, type_of, key_of)
     local result = {}
     for i = 1, #(nodes or {}) do
