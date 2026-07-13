@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.255-dev"
+local MOD_VERSION = "0.7.256-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -5312,6 +5312,10 @@ local MOD_BOON_LOC = {
     description_ct_boon_taal_twinned_arrow   = "Ranged attacks fire one additional projectile. Stacks with the trait. Has no effect without a ranged weapon.",
     display_name_ct_boon_asuryan_wrath       = "(Mod Boon) Asuryan's Wrath",
     description_ct_boon_asuryan_wrath        = "Melee kills have a 50%% chance to deal the killing blow's damage to a nearby enemy. Stacks with the trait.",
+    -- #464 follow-up: trait-as-boon for Anath Raema's Swiftness, always the PERMANENT
+    -- variant (independent of the tweak_anath_raema_permanent rework toggle).
+    display_name_ct_boon_anath_raema_swiftness = "(Mod Boon) Anath Raema's Swiftness",
+    description_ct_boon_anath_raema_swiftness  = "Reload time is halved, permanently, no ammo pickup needed. Stacks with the weapon trait.",
 
     -- v0.7.33 typo fix: vanilla description for Addaioth's Splendour (deus_ranged_crit_explosion
     -- trait) claims "Every 30 seconds" but the actual cooldown_duration in buff_tweak_data.lua:344
@@ -12758,6 +12762,24 @@ local CT_TRAIT_BOONS = {
     { name = "ct_boon_manann_tempest",      toggle = "enable_boon_manann_tempest",      rarity = "unique", icon = "deus_icon_meta_01", source_buff = "deus_crit_chain_lightning" },
     { name = "ct_boon_taal_twinned_arrow",  toggle = "enable_boon_taal_twinned_arrow",  rarity = "unique", icon = "deus_icon_meta_01", source_buff = "deus_extra_shot" },
     { name = "ct_boon_asuryan_wrath",       toggle = "enable_boon_asuryan_wrath",       rarity = "unique", icon = "deus_icon_meta_01", source_buff = "deus_collateral_damage_on_melee_killing_blow" },
+    -- #464 follow-up: Anath Raema's Swiftness could never appear in the Disabled/Starting
+    -- Boons menus because it is a weapon TRAIT (deus_ammo_pickup_reload_speed,
+    -- weapon_traits_morris.lua:528; rolled in the deus_ranged_ammo trait pool :853 and
+    -- deus_trollhammer_torpedo :975), NOT a DeusPowerUpTemplates power-up - vanilla has no
+    -- boon form of it, so the BOON_TREE enumeration had nothing to list. This 5th
+    -- trait-as-boon closes that gap. `literal_buffs` (fixed template) instead of
+    -- `source_buff`: the trait's BuffTemplates entry is MUTABLE (the
+    -- tweak_anath_raema_permanent rework save-and-restores it, see
+    -- apply_anath_raema_permanent_tweak ~L10755), so a load-time clone would silently
+    -- change the boon's behavior with the rework toggle's state at load. The literal is
+    -- deterministic: ALWAYS the permanent variant. multiplier -0.5 = reload HOLD TIME
+    -- x 0.5 (reload_speed is an INVERSE stat: weapon_unit_extension.lua:966 composes
+    -- value x (multiplier + 1), buff_extension.lua:1431-1432; the #464 sign-error class).
+    -- Menu category: Offensive > Ranged in BOON_TREE (beside vanilla boon_range_01
+    -- "Anath Raema's Cruel Volley"), not Mod Boons - the vanilla trait is ranged-pool
+    -- and the user looks for it by function (#464 comment 2026-07-12).
+    { name = "ct_boon_anath_raema_swiftness", toggle = "enable_boon_anath_raema_swiftness", rarity = "unique", icon = "deus_icon_meta_01",
+        literal_buffs = { { name = "ct_boon_anath_raema_swiftness", stat_buff = "reload_speed", multiplier = -0.5, max_stacks = 1 } } },
 }
 
 local function register_trait_boon(spec)
@@ -12835,7 +12857,12 @@ local function pre_register_trait_boon_lookups()
     end
     local count, placeholder_count = 0, 0
     for _, spec in ipairs(sorted) do
-        local source_template = buff_templates[spec.source_buff]
+        -- #464: a spec may carry `literal_buffs` (a fixed buff array) instead of a
+        -- `source_buff` to clone - used when the source template is runtime-mutable
+        -- (see the ct_boon_anath_raema_swiftness spec comment above). The clone loop
+        -- below copies each sub-buff, so the spec's literal stays pristine.
+        local source_template = spec.literal_buffs and { buffs = spec.literal_buffs }
+            or buff_templates[spec.source_buff]
         -- v0.7.67 hardening (QA-found): write a `templates[spec.name]` entry
         -- UNCONDITIONALLY in sorted order so `inject_dormant_boon` below doesn't
         -- early-out on missing template — if it did, `DeusPowerUpsLookup` would
@@ -13363,6 +13390,42 @@ _rt_register("modded_power_up_registry", function()
     if not f("ct_kill_heal") then return "ct_kill_heal must be in the modded registry (issue 406 re-enable)" end
     if f("natural_bond") then return "vanilla natural_bond must NOT be in the modded registry" end
     if f(nil) then return "nil must NOT be in the modded registry" end
+    return nil
+end)
+
+-- #464 follow-up: Anath Raema's Swiftness trait-as-boon must (a) be registered as a
+-- power-up, (b) carry the PERMANENT reload template with a NEGATIVE reload_speed
+-- multiplier (inverse stat - the #464 sign-error class), and (c) be exposed in BOTH
+-- boon menu surfaces (the report: user could not find it under Offensive > Ranged in
+-- either the Disabled Boons or Starting Boons trees).
+_rt_register("anath_raema_trait_boon_464", function()
+    local f = mod._ct_is_modded_power_up
+    if type(f) ~= "function" or not f("ct_boon_anath_raema_swiftness") then
+        return "ct_boon_anath_raema_swiftness must be in the modded registry"
+    end
+    local tpl = rawget(_G, "DeusPowerUpTemplates")
+    local t = tpl and tpl.ct_boon_anath_raema_swiftness
+    local b = t and t.buff_template and t.buff_template.buffs and t.buff_template.buffs[1]
+    if not b then return "DeusPowerUpTemplates.ct_boon_anath_raema_swiftness buff template missing" end
+    if b.stat_buff ~= "reload_speed" then return "boon buff must be a reload_speed stat_buff" end
+    if type(b.multiplier) ~= "number" or b.multiplier >= 0 then
+        return "reload_speed multiplier must be NEGATIVE (inverse stat; positive = SLOWER reload, the #464 bug)"
+    end
+    -- Menu exposure: walk the REALIZED widget tree (same source _ct_dump_settings uses)
+    -- so a BOON_TREE regression that drops the entry fails here, not in the field.
+    local ids_ok, ids = pcall(_collect_setting_ids)
+    if not ids_ok or type(ids) ~= "table" then return "could not collect widget setting ids" end
+    local have = {}
+    for _, id in ipairs(ids) do have[id] = true end
+    if not have["disable_boon_ct_boon_anath_raema_swiftness"] then
+        return "disable_boon_ct_boon_anath_raema_swiftness widget missing (Disabled Boons > Offensive > Ranged)"
+    end
+    if not have["start_boon_ct_boon_anath_raema_swiftness"] then
+        return "start_boon_ct_boon_anath_raema_swiftness widget missing (Starting Boons > Offensive > Ranged)"
+    end
+    if not have["enable_boon_anath_raema_swiftness"] then
+        return "enable_boon_anath_raema_swiftness widget missing (Reworks > Reworks: Boons > new)"
+    end
     return nil
 end)
 

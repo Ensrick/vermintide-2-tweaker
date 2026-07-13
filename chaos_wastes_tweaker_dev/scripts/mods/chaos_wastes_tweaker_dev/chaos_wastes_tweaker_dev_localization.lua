@@ -238,6 +238,8 @@ local loc = {
     enable_boon_taal_twinned_arrow_tooltip = { en = "Fires +1 ranged projectile per shot, added as a Unique boon that stacks with the trait. Requires a new CW run." },
     enable_boon_asuryan_wrath = { en = "[working] Rework: Asuryan's Wrath as Boon (Unique)" },
     enable_boon_asuryan_wrath_tooltip = { en = "A melee kill has a 50%% chance to deal killing-blow damage to a nearby enemy, added as a Unique boon that stacks with the trait. Requires a new Chaos Wastes run." },
+    enable_boon_anath_raema_swiftness = { en = "[untested] Rework: Anath Raema's Swiftness as Boon (Unique)" },
+    enable_boon_anath_raema_swiftness_tooltip = { en = "Adds Anath Raema's Swiftness as a Unique boon: reload time is permanently halved (the permanent form, not the on-ammo-pickup trait proc). Stacks with the trait. Requires a new CW run. Listed under Offensive: Ranged in the Disabled and Starting Boons menus." },
     tweak_anath_raema_permanent = { en = "[Issue 288] Rework: Anath Raema's Swiftness, permanent reload speed" },
     tweak_anath_raema_permanent_tooltip = { en = "No ammo pickup needed: the trait's +50%% reload speed stays active as a permanent passive while its weapon is wielded." },
     tweak_defeat_recovery = { en = "[untested] Rework: Defeat Recovery (soft wipe rescue)" },
@@ -439,6 +441,12 @@ local loc = {
     start_boon_ct_boon_asuryan_wrath   = { en = "[working] Starting Boon: (Mod Boon) Asuryan's Wrath" },
     disable_boon_ct_boon_asuryan_wrath_tooltip = { en = "(Mod Boon) Boon variant that stacks with the trait. Melee-only. Requires the Rework toggle." },
     start_boon_ct_boon_asuryan_wrath_tooltip   = { en = "(Mod Boon) Start with this boon. Requires the matching Rework toggle." },
+    -- #464 follow-up: Anath Raema's Swiftness trait-as-boon. Listed under Offensive >
+    -- Ranged (not Mod Boons) - see the BOON_TREE comment in the data file.
+    disable_boon_ct_boon_anath_raema_swiftness = { en = "[untested] Disable Boon: (Mod Boon) Anath Raema's Swiftness" },
+    start_boon_ct_boon_anath_raema_swiftness   = { en = "[untested] Starting Boon: (Mod Boon) Anath Raema's Swiftness" },
+    disable_boon_ct_boon_anath_raema_swiftness_tooltip = { en = "(Mod Boon) Permanent variant of the trait: reload time is halved while the boon is held. Rolls in chests only with the matching Rework toggle on." },
+    start_boon_ct_boon_anath_raema_swiftness_tooltip   = { en = "(Mod Boon) Start with this boon. Reload time is permanently halved, no ammo pickup needed. Works without the Rework toggle." },
     mod_boons = { en = "Mod Boons" },
 
     -- ============================================================

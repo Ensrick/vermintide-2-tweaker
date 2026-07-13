@@ -124,7 +124,15 @@ local BOON_TREE = {
             },
             {
                 category_id = "ranged",
-                items = { "boon_range_01", "boon_range_02", "deus_more_head_less_body_damage" },
+                -- #464 follow-up: ct_boon_anath_raema_swiftness is ct's trait-as-boon for
+                -- Anath Raema's Swiftness (trait deus_ammo_pickup_reload_speed - a RANGED
+                -- weapon trait, deus_ranged_ammo pool, weapon_traits_morris.lua:853; it has
+                -- NO vanilla power-up form, which is why it was absent from these menus).
+                -- Listed HERE rather than in mod_boons: the user looks for it by function,
+                -- beside vanilla boon_range_01 "Anath Raema's Cruel Volley". The four older
+                -- ct_boon_* trait-boons stay in mod_boons (their shipped menu positions).
+                items = { "boon_range_01", "boon_range_02", "deus_more_head_less_body_damage",
+                    "ct_boon_anath_raema_swiftness" },
             },
             {
                 category_id = "damage_and_power",
@@ -684,7 +692,7 @@ local data = {
                         --   (a) reworks_boons_existing_group: modify how an EXISTING
                         --       boon / property / bot-distribution behaves.
                         --   (b) reworks_boons_new_group: ADD a brand-new selectable boon
-                        --       (the four `enable_boon_*` trait-as-boon toggles).
+                        --       (the five `enable_boon_*` trait-as-boon toggles).
                         -- Sub-groups A->Z ("Existing" < "New"). All setting_ids preserved.
                         sub_widgets = {
                             {
@@ -721,6 +729,9 @@ local data = {
                                 setting_id = "reworks_boons_new_group",
                                 type = "group",
                                 sub_widgets = {
+                                    -- #464 follow-up: 5th trait-as-boon (Anath Raema's Swiftness,
+                                    -- permanent reload variant). A->Z: anath < asuryan.
+                                    { setting_id = "enable_boon_anath_raema_swiftness", type = "checkbox", default_value = false, tooltip = "enable_boon_anath_raema_swiftness_tooltip" },
                                     { setting_id = "enable_boon_asuryan_wrath",       type = "checkbox", default_value = false, tooltip = "enable_boon_asuryan_wrath_tooltip" },
                                     { setting_id = "enable_boon_manann_tempest",      type = "checkbox", default_value = false, tooltip = "enable_boon_manann_tempest_tooltip" },
                                     { setting_id = "enable_boon_taal_twinned_arrow",  type = "checkbox", default_value = false, tooltip = "enable_boon_taal_twinned_arrow_tooltip" },
