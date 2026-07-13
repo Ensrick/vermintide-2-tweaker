@@ -1,5 +1,60 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.385-dev — 2026-07-13 — #419: illusion browser previewed base mesh — spawn_units pre-pass swap [untested]
+
+### Why
+Issue #419: the illusion/skin browser (path 4, `LootItemUnitPreviewer`) can preview a cwv variant on
+its BASE weapon mesh, and the existing spawn_units transform hook then scales that un-swapped mesh
+(the reported distortion). Root cause: the browser's data-level coverage has a structural hole. Vanilla
+`_load_item_units` REBINDS item_data to the BASE ItemMasterList entry before calling
+`BackendUtils.get_item_units` (`item_key = item_data.key or item.key` then `item_data =
+ItemMasterList[item_key]`, loot_item_unit_previewer.lua:254-255, call at :270) — a cwv clone keeps
+`key` = base key by contract (clobber crashes equip). So inside our `get_item_units` hook the issue-482
+ladder's `item_data.cwv_key` rung is dead on this path, and a skinless crafted instance with a UUID
+backend_id (Athanor, issue 482) rides the pcall-guarded backend `get_item_from_id` rung ALONE; when
+that misses (interface/menu state), vanilla falls back to the base entry's units and the browser spawns
+the base mesh at :286/:302. Meanwhile the spawn_units hook's own ladder DOES resolve the def (its
+`self._item.data` is the original stamped clone, not the rebound base entry) — so the variant SCALE
+applied to the BASE mesh. cwv-shaped bids (`cwv_<key>_NNN`) and applied-illusion previews were never
+affected (rung 1 / skin data cover them), matching the issue's "verified as covered" comment; this
+closes the residual edge that comment left open.
+
+### Changed
+- NEW `_om._cwv_browser_meshswap_apply(item, spawn_data)` — the path-4 sibling of issue 237's
+  `_cwv_preview_meshswap_apply`: resolves the def via the shared issue-482 ladder against
+  `self._item` (rung 2 alive there), then rewrites any spawn_data `unit_name` that exactly equals a
+  base-entry hand unit + `_3p` to the def's override unit, residency-guarded through the shared
+  `_om._resident_override_3p` (issue 418: vanilla-player mesh only, sentinel-skipped, cwv-force-loaded
+  resident or no swap — degrade to base mesh, never an engine-fatal spawn, issue 403 class).
+  Idempotent by construction: entries the data level already swapped no longer match the base names;
+  ammo-unit entries never match. An applied illusion (item.skin) wins, mirroring the issue 237 guard.
+- `LootItemUnitPreviewer.spawn_units` hook: calls the pre-pass BEFORE the wrapped spawn (the
+  existing single hook body extended — no second hook on the pair; still full `mod:hook`, never
+  hook_safe, per the `_spawned_units`-after-return rule). Transform pass unchanged and now
+  guaranteed to scale the mesh it was tuned for.
+- NEW regression check `browser_meshswap_guards` (`/cwv_regression_test`): helper reachable,
+  non-cwv items pass untouched, applied illusion suppresses the rewrite. Positive rewrite is
+  residency-dependent, covered by the in-game verify. Log evidence marker: `[cwv:419] browser
+  mesh-swap key=... bid=... swapped=N`.
+
+### Verify in-game (solo, 1 tester)
+1. Craft a variant at the Athanor (cim_dev — UUID backend_id; the Poleaxe from issue 482 is ideal),
+   then open Okri's inventory, select the crafted variant, and open the illusion/customization view.
+2. The preview pane must show the VARIANT's mesh (Poleaxe: shortened halberd, not the base
+   greataxe/full-length mesh) with its tuned scale — compare against a non-crafted `_001` instance.
+3. A CWV-native `_001` instance and an applied-illusion preview must look unchanged (regression:
+   rung-1/skin coverage was already correct; the pre-pass must no-op there — no `[cwv:419]` line).
+4. `/cwv_regression_test` passes `browser_meshswap_guards` (and the issue 237/418/482 siblings).
+5. Log check with debug on: `[cwv:419] browser mesh-swap` appears ONLY for the crafted-instance case.
+
+**DoD:** Universal U-4 walked (no transform values touched; unit-resolution layer only). G-APPEARANCE
+walked for path 4 (WEAPON_APPEARANCE_STANDARD §3: browser Units now data + belt-and-suspenders swap;
+paths 1-3 untouched). Build hygiene: version bump + CHANGELOG + forward-ref audit
+(`_cwv_browser_meshswap_apply` defined after `_find_def`/`_resident_override_3p`/`_cwv_key_for_item`,
+before the hook body that calls it; zero new file-scope locals — 200-local ceiling respected, helper
+hung on `_om`). Trait gates: N/A (no variant added or altered). Deferrals: in-game verification
+pending (issue #419 stays open until the user confirms; standard §3 matrix note updated).
+
 ## 0.1.384-dev — 2026-07-13 — #482: crafted (UUID-bid) variants lost scale/grip — cwv_key stamp + shared resolver ladder [untested]
 
 ### Why

@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.384-dev"
+local MOD_VERSION = "0.1.385-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -9478,6 +9478,67 @@ _om._cwv_preview_meshswap_apply = function(item_name, backend_id, skin, info)
 end
 mod._cwv_preview_meshswap_apply = _om._cwv_preview_meshswap_apply  -- exposed for /cwv regression (issue 237)
 
+-- Illusion-browser mesh-swap pre-pass (issue 419) — WEAPON_APPEARANCE_STANDARD
+-- §3 path 4. The browser's data-level resolution is SUPPOSED to cover this:
+-- `LootItemUnitPreviewer._load_item_units` calls `BackendUtils.get_item_units`
+-- (loot_item_unit_previewer.lua:270) and our hook there forces the def's units.
+-- But `_load_item_units` REBINDS item_data to the BASE ItemMasterList entry
+-- first (`item_key = item_data.key or item.key` then `item_data =
+-- ItemMasterList[item_key]`, loot_item_unit_previewer.lua:254-255) — a cwv
+-- clone keeps `key` = base key, so the get_item_units hook receives the BASE
+-- entry and the #482 ladder's `item_data.cwv_key` rung is structurally dead on
+-- this path. A crafted instance with a UUID backend_id (Athanor, issue 482)
+-- then rides the pcall-guarded backend rung ALONE; when that lookup misses,
+-- the browser spawns the base mesh and the transform pass scales the WRONG
+-- mesh (the issue 419 distortion). `self._item` still carries the ORIGINAL
+-- item.data (the stamped clone), so resolving the ladder HERE sees rung 2 and
+-- cannot miss a stamped instance.
+--
+-- Guards mirror `_cwv_preview_meshswap_apply` (issue 237): an applied illusion
+-- wins (skin data already carries the variant units for cwv skins); only
+-- vanilla-player, non-sentinel, cwv-force-loaded-resident meshes swap
+-- (`_om._resident_override_3p`, issue 418) — else degrade to the base mesh,
+-- never an engine-fatal World.spawn_unit (issue 403 class). Hand identity by
+-- exact base-unit-name match ("_3p" already appended by _load_item_units,
+-- loot_item_unit_previewer.lua:286/302): ammo-unit entries and entries the
+-- data level already swapped simply don't match and pass through untouched
+-- (idempotent vs the get_item_units hook — no double-handling).
+_om._cwv_browser_meshswap_apply = function(item, spawn_data)
+	if not item or type(spawn_data) ~= "table" then return end
+	local skin = item.skin
+	if type(skin) == "string" and skin ~= "" then return end
+	local cwv_key = _om._cwv_key_for_item(item.backend_id, item.data)
+	if not cwv_key then return end
+	local def = _find_def(cwv_key)
+	if not def then return end
+	local base = ItemMasterList and rawget(ItemMasterList, def.base_weapon)
+	if not base then return end
+
+	local swapped = 0
+	for i = 1, #spawn_data do
+		local entry = spawn_data[i]
+		local name = entry.unit_name
+		local want
+		if def.right_hand_unit and type(base.right_hand_unit) == "string"
+				and name == base.right_hand_unit .. "_3p" then
+			want = _om._resident_override_3p(def.right_hand_unit)
+		elseif def.left_hand_unit and type(base.left_hand_unit) == "string"
+				and name == base.left_hand_unit .. "_3p" then
+			want = _om._resident_override_3p(def.left_hand_unit)
+		end
+		if want and want ~= name then
+			entry.unit_name = want
+			swapped = swapped + 1
+		end
+	end
+	if swapped > 0 then
+		printf("[cwv:419] browser mesh-swap key=%s bid=%s swapped=%d (R=%s L=%s)",
+			tostring(cwv_key), tostring(item.backend_id), swapped,
+			tostring(def.right_hand_unit), tostring(def.left_hand_unit))
+	end
+end
+mod._cwv_browser_meshswap_apply = _om._cwv_browser_meshswap_apply  -- exposed for /cwv regression (issue 419)
+
 local function _register_item(def, backend_id)
 	-- v0.1.345-dev: per-call trace. /give-driven registration is sparse
 	-- (one fire per chat command).
@@ -11322,6 +11383,14 @@ end)
 -- remembered this when investigating why cwv scale wasn't applying in the
 -- cosmetic picker. Don't refactor back to `hook_safe`.
 mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data)
+	-- issue 419 pre-pass: rewrite base-mesh spawn entries to the variant's
+	-- authored 3P units BEFORE vanilla spawns them. Covers the browser edge
+	-- where the data-level get_item_units resolution missed (UUID-bid crafted
+	-- instance + backend rung unavailable) — full rationale at the helper.
+	if _om._cwv_browser_meshswap_apply then
+		_om._cwv_browser_meshswap_apply(self._item, spawn_data)
+	end
+
 	local units = func(self, spawn_data)
 
 	local item = self._item
@@ -13021,6 +13090,26 @@ _rt_register("preview_meshswap_guards", function()
     if a.spawn_data[1].unit_name ~= "BASE_3p" then return "#237 guard: non-cwv backend_id must not rewrite" end
     local b = _mk(); apply("es_sword_shield", "cwv_we_sword_shield_001", "some_skin", b)
     if b.spawn_data[1].unit_name ~= "BASE_3p" then return "#237 guard: user-selected illusion (skin) must win, no rewrite" end
+end)
+
+_rt_register("browser_meshswap_guards", function()
+    -- Issue #419 (WEAPON_APPEARANCE_STANDARD §3 path 4): the illusion-browser
+    -- spawn_units pre-pass rewrites spawn_data unit_name to the cwv variant's
+    -- authored mesh when the upstream BackendUtils.get_item_units resolution
+    -- missed (the browser rebinds item_data to the BASE IML entry, so the #482
+    -- stamp rung is dead there; a UUID-bid crafted instance can fall through).
+    -- The GUARDS are load-bearing: an applied illusion (item.skin) must win,
+    -- and a non-cwv item must pass untouched. The positive rewrite depends on
+    -- runtime package residency, so it is covered by the in-game verify.
+    local apply = mod._cwv_browser_meshswap_apply
+    if type(apply) ~= "function" then return "mod._cwv_browser_meshswap_apply missing" end
+    local UNTOUCHED = "units/weapons/player/wpn_rt419/wpn_rt419_3p"
+    local sd = { { unit_name = UNTOUCHED } }
+    apply({ backend_id = "es_sword_shield_rt419", data = { name = "es_sword_shield" } }, sd)
+    if sd[1].unit_name ~= UNTOUCHED then return "#419 guard: non-cwv item must not rewrite" end
+    sd = { { unit_name = UNTOUCHED } }
+    apply({ backend_id = "cwv_es_poleaxe_001", skin = "some_skin", data = nil }, sd)
+    if sd[1].unit_name ~= UNTOUCHED then return "#419 guard: applied illusion (skin) must win, no rewrite" end
 end)
 
 _rt_register("cwv_parity_applied_state_committed_before_callbacks", function()

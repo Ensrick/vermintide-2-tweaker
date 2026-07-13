@@ -103,9 +103,12 @@ explicitly swap. `—` = not applicable.
   swaps the previewer spawn_data (#237, pending in-game verify). → §4.1.
 - Units, path 4 (illusion browser): resolves upstream via the shared
   `get_item_units` hook (loot_item_unit_previewer.lua:270 calls it; CWV forces the
-  override there) — NOT a spawn-time swap. #419 verified as covered, downgraded to
-  a verify-only edge case (an entry reaching spawn_units with no cwv backend_id or
-  skin). → §4.1.
+  override there) — PLUS, as of cwv v0.1.385-dev, a belt-and-suspenders spawn-time
+  pre-pass (`_om._cwv_browser_meshswap_apply`) closing the #419 residual edge: the
+  browser rebinds item_data to the BASE IML entry (:254-255), killing the #482
+  stamp rung inside the get_item_units hook, so a skinless UUID-bid crafted
+  instance could fall to the base mesh; the pre-pass resolves the ladder against
+  `self._item` (stamp rung alive) and is idempotent vs the data-level swap. → §4.1.
 - Units/Transform coupling: mesh-swap resolves via `_find_def` (registration-
   independent) but transform via `_transform_map` (registration-gated), so a
   unit-bearing variant that forgets a transform field swaps its mesh with NO
