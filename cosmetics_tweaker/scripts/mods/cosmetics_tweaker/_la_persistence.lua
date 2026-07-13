@@ -13,9 +13,15 @@
 --     illusions = { [backend_id] = la_skin_name },
 --   }
 --
--- Save tap points live in cosmetics_tweaker.lua at the existing _send_la_apply
--- emit call sites. Restore tap point is the player spawn hook installed at
--- the bottom of this file (extensions_ready on SimpleInventoryExtension).
+-- Save tap points (v0.9.83-dev, #520): the AUTHORITATIVE hat/armor save and
+-- clear live in cosmetics_tweaker.lua's BackendUtils.set_loadout_item hook
+-- (_install_skin_loadout_safety) - career_name arrives as a call argument
+-- there, immune to the profile_by_peer resync-window nil that silently
+-- dropped every save from the older tap. The v0.9.12 taps at the
+-- _send_la_apply emit call sites remain as redundant writers (dedup makes
+-- them idempotent). Restore: boot-time loadout_cache rehydration in
+-- _install_skin_loadout_safety + the player spawn hook installed at the
+-- bottom of this file (extensions_ready on SimpleInventoryExtension).
 --
 -- Public API on the module table (returned from dofile):
 --   M.save_cosmetic(career_name, slot, la_item_name)
@@ -72,22 +78,53 @@ end
 _load()
 
 -- Resolve career_name from a Player object. Try `player.career_name` first
--- (some careers expose it directly), then fall back to SPProfiles indexing.
+-- (some careers expose it directly), then the player unit's career/inventory
+-- extensions, then fall back to SPProfiles indexing.
+--
+-- v0.9.83-dev (#520): the player-object path routes through
+-- ProfileSynchronizer.profile_by_peer (bulldozer_player.lua:29-38/91-116),
+-- which walks `get_peers_with_full_profiles()` and returns NIL while a
+-- loadout resync is in flight — exactly the window in which the deferred
+-- attachment spawn fires update_cosmetic_slot for a menu equip
+-- (player_unit_attachment_extension.lua:267-293). The save tap then
+-- resolved career=nil and silently dropped the write, so LA hats/armor
+-- never persisted (careers=[] on disk while offhands saved fine). Fix:
+-- read the career from the UNIT-resident extensions, which are populated
+-- at unit init (career_extension.lua:23 `self._career_name`,
+-- simple_inventory_extension.lua:47) and are immune to the resync window.
 local function _career_name_for_player(player)
     if not player then return nil end
     if type(player.career_name) == "function" then
         local ok, name = pcall(player.career_name, player)
         if ok and type(name) == "string" then return name end
     end
+    -- Unit-resident fallbacks (survive the profile_by_peer resync window).
+    local unit = player.player_unit
+    if unit and Unit.alive(unit) and ScriptUnit then
+        local career_ext = ScriptUnit.has_extension(unit, "career_system")
+        if career_ext then
+            if type(career_ext.career_name) == "function" then
+                local ok, name = pcall(career_ext.career_name, career_ext)
+                if ok and type(name) == "string" then return name end
+            end
+            if type(career_ext._career_name) == "string" then
+                return career_ext._career_name
+            end
+        end
+        local inv_ext = ScriptUnit.has_extension(unit, "inventory_system")
+        if inv_ext and type(inv_ext._career_name) == "string" then
+            return inv_ext._career_name
+        end
+    end
     local profile_index = player.profile_index
     local career_index = player.career_index
     if type(profile_index) == "function" then
         local ok, idx = pcall(profile_index, player)
-        if ok then profile_index = idx end
+        profile_index = ok and idx or nil
     end
     if type(career_index) == "function" then
         local ok, idx = pcall(career_index, player)
-        if ok then career_index = idx end
+        career_index = ok and idx or nil
     end
     if not (profile_index and career_index) then return nil end
     local profiles = rawget(_G, "SPProfiles")
@@ -130,6 +167,14 @@ M.get_saved_cosmetic = function(career_name, slot)
     if not _state then _load() end
     local c = _state.careers[career_name]
     return c and c[slot] or nil
+end
+
+-- v0.9.83-dev (#520): full careers view for the boot-time loadout_cache
+-- rehydration in cosmetics_tweaker.lua (_install_skin_loadout_safety).
+-- Read-only by contract - callers must not mutate the returned table.
+M.get_all_saved_cosmetics = function()
+    if not _state then _load() end
+    return _state.careers or {}
 end
 
 M.save_illusion = function(backend_id, la_skin_name)

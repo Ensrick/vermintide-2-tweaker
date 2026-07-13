@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.82-dev"
+local MOD_VERSION = "0.9.83-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -4075,11 +4075,27 @@ local function _install_skin_loadout_safety()
             mod.loadout_cache[career_name] = mod.loadout_cache[career_name] or {}
             mod.loadout_cache[career_name][slot_name] = backend_id
             _dbg("[loadout] CACHED %s %s = %s", career_name, slot_name, backend_id)
+            -- v0.9.83-dev (#520): persist HERE, at the user-intent chokepoint.
+            -- career_name is a call ARGUMENT, so this tap has none of the
+            -- profile_by_peer resync fragility that silently dropped every
+            -- save from the update_cosmetic_slot tap (that tap stays as a
+            -- redundant second writer; save_cosmetic dedups). Without this,
+            -- loadout_cache (session-only) was the ONLY record of the equip
+            -- and the hat/outfit died with the session.
+            if LA_PERSIST and career_name then
+                LA_PERSIST.save_cosmetic(career_name, slot_name, backend_id)
+            end
             return
         end
         if (slot_name == "slot_hat" or slot_name == "slot_skin") and mod.loadout_cache[career_name] then
             _dbg("[loadout] CLEARED cache %s %s (vanilla bid=%s)", career_name, slot_name, backend_id)
             mod.loadout_cache[career_name][slot_name] = nil
+            -- v0.9.83-dev (#520): user intentionally equipped a vanilla item
+            -- over the LA one - drop the on-disk entry too, so the next boot
+            -- neither rehydrates the cache nor re-injects the LA cosmetic.
+            if LA_PERSIST and career_name then
+                LA_PERSIST.clear_cosmetic(career_name, slot_name)
+            end
         end
         return func(backend_id, career_name, slot_name)
     end)
@@ -4179,6 +4195,43 @@ local function _install_skin_loadout_safety()
         end
     end
     _fixup_server_clones()
+
+    -- v0.9.83-dev (#520): REHYDRATE mod.loadout_cache from disk. The cache is
+    -- the live source of truth for LA hat/outfit loadout state (get_loadout /
+    -- get_loadout_item_id overlay it), but it was session-only - every boot
+    -- started empty, so the equipped LA cosmetic fell back to the last REAL
+    -- backend item ("the hat I had last equipped prior to that", issue 520).
+    -- Rehydrating makes the first spawn's BackendUtils.get_loadout_item
+    -- (player_unit_attachment_extension.lua:40) resolve the LA clone directly,
+    -- and the hero view shows the LA item as equipped after a restart.
+    -- Entries whose clone no longer exists (LA variant removed) are skipped,
+    -- mirroring the offhand restore's unresolvable guard.
+    if LA_PERSIST and LA_PERSIST.get_all_saved_cosmetics then
+        local restored, skipped = 0, 0
+        for career_name, slots in pairs(LA_PERSIST.get_all_saved_cosmetics()) do
+            if type(slots) == "table" then
+                for slot_name, bid in pairs(slots) do
+                    if (slot_name == "slot_hat" or slot_name == "slot_skin")
+                        and LA_BRIDGE.backend_to_armoury[bid]
+                    then
+                        mod.loadout_cache[career_name] = mod.loadout_cache[career_name] or {}
+                        mod.loadout_cache[career_name][slot_name] = bid
+                        restored = restored + 1
+                    else
+                        skipped = skipped + 1
+                    end
+                end
+            end
+        end
+        if printf and (restored > 0 or skipped > 0) then
+            pcall(printf, "[la-state] COSMETIC-RESTORE %d hat/outfit pick(s) rehydrated from disk, %d unresolvable (LA variant missing)",
+                restored, skipped)
+        end
+    end
+
+    -- Load-time provenance marker (#520): asserted by /cos_regression_test
+    -- `cos_la_loadout_equip_capture_wired`.
+    mod._la_skin_safety_installed = true
 end
 
 -- v0.8.57-dev: prevent network sync of LA cosmetic backend_ids to peers.
@@ -4325,8 +4378,18 @@ if CosmeticUtils then
                 -- v0.9.12-dev: persist to disk so the LA hat / armor survives
                 -- the next game restart. Per-career keying mirrors vanilla's
                 -- own loadout-per-career model.
+                -- v0.9.83-dev (#520): this tap is now the REDUNDANT writer -
+                -- the authoritative save moved to the set_loadout_item hook
+                -- (career_name is an argument there). Career resolution here
+                -- runs during the loadout-resync window where profile_by_peer
+                -- returns nil; the failure must be VISIBLE, not silent.
                 local career_name = LA_PERSIST._career_name_for_player(player)
-                if career_name then LA_PERSIST.save_cosmetic(career_name, slot, item_name) end
+                if career_name then
+                    LA_PERSIST.save_cosmetic(career_name, slot, item_name)
+                elseif printf then
+                    pcall(printf, "[la-persist] WARN save skipped (career unresolved) slot=%s item=%s",
+                        tostring(slot), tostring(item_name))
+                end
             end
         end
 
@@ -4402,8 +4465,15 @@ if CosmeticUtils then
             -- entry must be cleared too — otherwise next restart re-applies a
             -- cosmetic the user already unequipped.
             if slot == "slot_hat" or slot == "slot_skin" then
+                -- v0.9.83-dev (#520): redundant clear (authoritative clear
+                -- lives in the set_loadout_item hook); log resolution loss.
                 local career_name = LA_PERSIST._career_name_for_player(player)
-                if career_name then LA_PERSIST.clear_cosmetic(career_name, slot) end
+                if career_name then
+                    LA_PERSIST.clear_cosmetic(career_name, slot)
+                elseif printf then
+                    pcall(printf, "[la-persist] WARN clear skipped (career unresolved) slot=%s",
+                        tostring(slot))
+                end
             else
                 local inv = ScriptUnit.has_extension(player.player_unit, "inventory_system")
                 local slot_data = inv and inv._equipment and inv._equipment.slots
@@ -8558,6 +8628,56 @@ _rt_register("cos_la_offhand_persistence_roundtrip", function()
     LA_PERSIST.clear_offhand(bid, hand)
     saved = LA_PERSIST.get_saved_offhands()
     if saved and saved[bid] then return "cleared offhand still present" end
+end)
+
+-- #520: hat/outfit persistence module roundtrip (save/read/clear). The
+-- careers section sat empty for weeks because no writer ever landed - this
+-- locks the module API itself.
+_rt_register("cos_la_cosmetic_persistence_roundtrip", function()
+    if not (LA_PERSIST and LA_PERSIST.save_cosmetic) then return "cosmetic API missing" end
+    local career, slot, item = "rt_fake_career", "slot_hat", "rt_fake_item_LA_rt"
+    LA_PERSIST.save_cosmetic(career, slot, item)
+    if LA_PERSIST.get_saved_cosmetic(career, slot) ~= item then
+        LA_PERSIST.clear_cosmetic(career, slot)
+        return "saved cosmetic did not read back"
+    end
+    if type(LA_PERSIST.get_all_saved_cosmetics) ~= "function"
+        or not LA_PERSIST.get_all_saved_cosmetics()[career]
+    then
+        LA_PERSIST.clear_cosmetic(career, slot)
+        return "get_all_saved_cosmetics missing entry"
+    end
+    LA_PERSIST.clear_cosmetic(career, slot)
+    if LA_PERSIST.get_saved_cosmetic(career, slot) ~= nil then
+        return "cleared cosmetic still present"
+    end
+end)
+
+-- #520: the AUTHORITATIVE save/clear tap lives in the set_loadout_item hook
+-- (career_name is a call argument - immune to the profile_by_peer resync
+-- window that silently dropped every update_cosmetic_slot-tap save). Drive
+-- the real hook with a fake LA-clone bid and verify cache + disk both write
+-- and both clear. Leaves no residue; the clone branch never calls vanilla.
+_rt_register("cos_la_loadout_equip_capture_wired", function()
+    if not get_mod("Loremasters-Armoury") then return end -- LA absent: dormant by design
+    if not mod._la_skin_safety_installed then
+        return "skin loadout safety not installed despite LA present"
+    end
+    if not (BackendUtils and BackendUtils.set_loadout_item) then
+        return "BackendUtils.set_loadout_item missing"
+    end
+    local career, slot, bid = "rt_fake_career", "slot_hat", "rt_fake_vanilla_LA_rt_key"
+    LA_BRIDGE.backend_to_armoury[bid] = "rt_fake_key"
+    local ok, err = pcall(BackendUtils.set_loadout_item, bid, career, slot)
+    local cached = mod.loadout_cache[career] and mod.loadout_cache[career][slot]
+    local saved = LA_PERSIST.get_saved_cosmetic(career, slot)
+    -- cleanup before verdict
+    LA_BRIDGE.backend_to_armoury[bid] = nil
+    if mod.loadout_cache[career] then mod.loadout_cache[career][slot] = nil end
+    LA_PERSIST.clear_cosmetic(career, slot)
+    if not ok then return "set_loadout_item errored: " .. tostring(err) end
+    if cached ~= bid then return "LA equip did not cache into loadout_cache" end
+    if saved ~= bid then return "LA equip did not persist to disk store" end
 end)
 
 -- #265 (Slice 1): the revert pipeline must stay wired end to end -- sender,

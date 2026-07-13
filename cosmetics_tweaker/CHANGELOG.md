@@ -1,5 +1,51 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.83-dev — 2026-07-13 — #520 LA hats/outfits now actually persist across restarts (save moved to the loadout chokepoint + cache rehydration) [untested]
+
+Fixes #520: the last-equipped Loremaster hat/outfit was lost on every game restart and
+the character came back wearing the previous (vanilla-persistable) hat. Log evidence
+(sessions 2026-07-12 20:06 through 2026-07-13): `la_persisted_equips.careers = []` and
+`illusions = []` on disk across dozens of sessions while `offhands` saved fine, zero
+`[la-persist] save/clear/restore` lines for hats despite confirmed LA hat equips
+(20:07:38.117 `SYNC emit kind=hat armoury=Kruber_Hippogryph_helm_white` with NO save line).
+
+- **Root cause (two-part).** (1) LA hat/outfit equips are intercepted by the
+  `BackendUtils.set_loadout_item` skin-loadout-safety hook, which caches the clone bid in
+  the SESSION-ONLY `mod.loadout_cache` and early-returns - the equip never reached any
+  persistent store. (2) The intended writer (the v0.9.12 save tap in the
+  `CosmeticUtils.update_cosmetic_slot` hook) resolved career via
+  `player:career_name()` -> `ProfileSynchronizer.profile_by_peer`
+  (bulldozer_player.lua:29-38/91-116), which returns nil while a loadout resync is in
+  flight - and the deferred attachment spawn (player_unit_attachment_extension.lua:267-293)
+  fires the tap exactly inside that window, so `career_name` came back nil and the save
+  was SILENTLY skipped, every time. Net: nothing ever wrote `careers`, and on the next boot
+  vanilla restored the last real backend hat - "the hat I had last equipped prior to that".
+- **Fix 1 - authoritative save/clear at the chokepoint.** The `set_loadout_item` hook now
+  calls `LA_PERSIST.save_cosmetic(career_name, slot, backend_id)` in its clone-cache branch
+  and `LA_PERSIST.clear_cosmetic(career_name, slot)` in its vanilla-over-LA branch.
+  `career_name` is a call ARGUMENT here - no resolution fragility, and it captures exact
+  user intent (menu equips only, never spawn/resync flows).
+- **Fix 2 - boot rehydration of `mod.loadout_cache`.** `_install_skin_loadout_safety` now
+  refills the cache from `la_persisted_equips.careers` (entries whose LA clone no longer
+  exists are skipped, mirroring the offhand restore guard). The first spawn's
+  `BackendUtils.get_loadout_item` then resolves the LA clone directly and the hero view
+  shows the LA item as equipped after a restart. Log: `[la-state] COSMETIC-RESTORE n
+  hat/outfit pick(s) rehydrated from disk, m unresolvable`.
+- **Fix 3 - hardened `_career_name_for_player`.** Falls back to the UNIT-resident career
+  data (`career_system` extension `career_name()` / `_career_name`, then
+  `inventory_system._career_name` - populated at unit init, immune to the resync window)
+  before the SPProfiles index math; a failed pcall no longer leaves the index as a
+  truthy function. The v0.9.12 update_cosmetic_slot taps stay as redundant writers
+  (save_cosmetic dedups); when their career resolution still fails they now printf
+  `[la-persist] WARN save/clear skipped (career unresolved)` instead of silently dropping.
+- **Regression checks:** `cos_la_cosmetic_persistence_roundtrip` (module save/read/clear
+  roundtrip) and `cos_la_loadout_equip_capture_wired` (drives the REAL set_loadout_item
+  hook with a fake LA-clone bid; verifies cache + disk both write, then cleans up; asserts
+  the `mod._la_skin_safety_installed` load-time marker when LA is present).
+- Files: `cosmetics_tweaker.lua` (set_loadout_item hook, rehydration, tap diagnostics,
+  rt checks, `MOD_VERSION` -> `0.9.83-dev`), `_la_persistence.lua`
+  (`_career_name_for_player` fallbacks, `get_all_saved_cosmetics`).
+
 ## 0.9.82-dev — 2026-07-12 — #416 replicate per-hand VANILLA offhand meshes to peers (sync layer + husk apply) [untested]
 
 Closes the offhand half of #416: a per-hand VANILLA shield / held-weapon unit pick
