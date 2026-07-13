@@ -702,6 +702,22 @@ Last updated: 2026-07-13.
 
 ---
 
+### issue587-baked-transform-husk-fanout — committed transforms reach remote husks
+
+| Field | Value |
+|-------|-------|
+| Symptom | Kruber Scythe/Glaive baked grip is correct in owner 3P and preview but raw on another player's remote husk. |
+| Root cause | Vanilla `SimpleHuskInventoryExtension._wield_slot` spawns husk equipment directly and never enters WT's `GearUtils.create_equipment` transform path; durable offsets also scanned only the local player. |
+| Mod(s) | weapon_tweaker |
+| Fix version(s) | wt v0.12.229-dev (#587) |
+| Category | CO-OP / STATIC |
+| Repro | Two WT peers: Player A equips Kruber Scythe and Glaive; Player B observes, then A swaps and respawns. Reverse roles. |
+| Expected post-fix | Owner, bot, remote husk, and preview consume identical baked scale/position values. Scythe is +0.6 Z and Glaive +0.285 Z on Kruber; native Sienna and unmodified Kruber control remain vanilla. #569 rotation composes; 1P is untouched. |
+| Detection | `/wt_regression_test` passes `issue587_baked_transform_husk_fanout`; bounded `[wt:587] tracked role=remote_husk ... transport=none` appears. No transform RPC/per-frame payload exists. |
+
+
+---
+
 ### wt-cim-widget-strip-removed - Dead CIM widget filtering stays removed
 
 | Field | Value |
@@ -737,6 +753,7 @@ Last updated: 2026-07-13.
 - feedback-workshop-upload-without-deploy
 - gated-registration-divergence
 - inventory-preview-hook-menuworldpreviewer
+- issue587-baked-transform-husk-fanout
 - wt-cim-widget-strip-removed
 - lua-forward-reference
 - ps5-getcontent-utf8

@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.228-dev"
+local MOD_VERSION = "0.12.229-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -431,6 +431,18 @@ local _weapon_scale_overrides = {
     dr_1h_hammer   = { we_ = {0.85, 0.85, 1} },
 }
 
+local function _resolve_scale_factor(weapon_key, career_name)
+    if not weapon_key or not career_name then return nil end
+    local overrides = _weapon_scale_overrides[weapon_key]
+    if not overrides then return nil end
+    for prefix, factor in pairs(overrides) do
+        if career_name:sub(1, #prefix) == prefix then
+            return factor
+        end
+    end
+    return nil
+end
+
 local _scale_field_probe_logged = {}
 local function _scale_weapon_units(slot_data, weapon_key, career_name)
     if not weapon_key or not career_name then return end
@@ -453,13 +465,7 @@ local function _scale_weapon_units(slot_data, weapon_key, career_name)
         end
     end
 
-    local scale_factor = nil
-    for prefix, factor in pairs(overrides) do
-        if career_name:sub(1, #prefix) == prefix then
-            scale_factor = factor
-            break
-        end
-    end
+    local scale_factor = _resolve_scale_factor(weapon_key, career_name)
     if not scale_factor then return end
 
     local scale
@@ -577,19 +583,16 @@ local _weapon_grip_offsets = {
 --   on the very next tick, resetting node 0 and erasing our offset. This is
 --   source-confirmed by wt_dev_hold_pose.lua:16-21 ("a one-shot set_local_pose is
 --   overwritten on the very next animation tick ... re-writing the local pose
---   every frame keeps the value visible"). So a large grip drop (the +6 scythe)
+--   every frame keeps the value visible"). So a large grip drop (the +0.6 scythe)
 --   looked right in preview and reverted to raw position in-game.
 --
 -- HOW THE DURABLE PATH WORKS:
 --   For weapon_keys listed here, _reapply_durable_grip_offsets() runs every frame
---   (driven from weapon_tweaker_backend.lua's mod.update) on the LOCAL player's
---   wielded 3P weapon unit(s). It is ADDITIVE-from-canonical: it reads the
---   freshly-reset canonical local_position the engine just wrote this tick and
---   adds the offset, so the result is stable frame-to-frame and NEVER compounds
---   (the read-and-add is safe ONLY because the engine resets node 0 each tick;
---   that reset is the very thing that makes a one-shot fail). This matches the
---   ADDITIVE semantics of the one-shot preview path (current + pos), so the SAME
---   value in _weapon_grip_offsets means the same thing in both views.
+--   (driven from weapon_tweaker_backend.lua's mod.update) on tracked wielded 3P
+--   weapon units: local player, bots, and remote husks. Spawn/wield registration
+--   boxes the canonical position before the one-shot offset; each tick writes
+--   canonical + baked delta. The absolute reconstruction is stable and cannot
+--   compound. No RPC is involved: every WT renderer reads the shipped tables.
 --
 -- INVARIANTS (do not break):
 --   * 3P-ONLY: writes only right_unit_3p / left_unit_3p. NEVER 1P (universal
@@ -597,8 +600,8 @@ local _weapon_grip_offsets = {
 --   * CAREER-ONLY: gated on the same prefix match as _offset_weapon_units, so
 --     only the receiving career (es_ = Kruber) is moved; the native wielder
 --     (Sienna's bw_*) finds no prefix and is untouched.
---   * LOCAL player only (owner-authoritative; husks re-pose from their own host
---     anyway). Keeps the per-frame cost to one unit.
+--   * RENDERER-LOCAL fan-out: owner, bot, and remote-husk units are weak-tracked
+--     at spawn/wield. Transient tuner values are never tracked or transported.
 --   * SINGLE SOURCE OF TRUTH: the offset VALUE lives in _weapon_grip_offsets, not
 --     here. This table is just the membership set of keys that need re-applying.
 --
@@ -618,19 +621,26 @@ local _DURABLE_GRIP_OFFSETS = {
     es_bastard_sword           = true,  -- Bretonnian Longsword on Saltzpyre (+0.08 Z, wh_-only)
 }
 
+-- Resolve the career-prefix-matched offset entry for (weapon_key, career_name)
+-- from _weapon_grip_offsets. Returns the {x, y, z[, hand]} array or nil. Shared
+-- by the one-shot and durable paths so owner bodies, bots, remote husks, and the
+-- preview all consume the same baked value.
+local function _resolve_grip_offset(weapon_key, career_name)
+    if not weapon_key or not career_name then return nil end
+    local overrides = _weapon_grip_offsets[weapon_key]
+    if not overrides then return nil end
+    for prefix, off in pairs(overrides) do
+        if career_name:sub(1, #prefix) == prefix then
+            return off
+        end
+    end
+    return nil
+end
+
 local function _offset_weapon_units(slot_data, weapon_key, career_name)
     if not weapon_key or not career_name then return end
 
-    local overrides = _weapon_grip_offsets[weapon_key]
-    if not overrides then return end
-
-    local offset = nil
-    for prefix, off in pairs(overrides) do
-        if career_name:sub(1, #prefix) == prefix then
-            offset = off
-            break
-        end
-    end
+    local offset = _resolve_grip_offset(weapon_key, career_name)
     if not offset then return end
 
     local pos = Vector3(offset[1], offset[2], offset[3])
@@ -653,103 +663,109 @@ local function _offset_weapon_units(slot_data, weapon_key, career_name)
     for _, field in ipairs(unit_fields) do
         local unit = slot_data[field]
         if unit then
-            -- POTENTIAL BUG (LOW): `Unit.local_position` is NOT pcall-wrapped
-            -- (only set_local_position is). If `unit` is invalid/destroyed
-            -- between the `if unit then` check and this line, this crashes
-            -- the whole hook. Same wrap pattern as scale would be safer.
             -- POTENTIAL BUG (LOW): if create_equipment fires multiple times for
             -- the same unit instance (e.g. weapon swap that re-wields the same
             -- key), the offset compounds (current = previous_offset_position).
             -- Vanilla units start at zero local_position so the first apply
             -- is correct; subsequent applies double up. Not currently a known
             -- issue because spawning re-creates the unit instance.
-            local current = Unit.local_position(unit, 0)
-            pcall(Unit.set_local_position, unit, 0, current + pos)
+            local ok_current, current = pcall(Unit.local_position, unit, 0)
+            if ok_current and current then
+                pcall(Unit.set_local_position, unit, 0, current + pos)
+            end
         end
     end
     _dbg("Offset %s on %s by {%.3f, %.3f, %.3f} (hand=%s)", weapon_key, career_name, offset[1], offset[2], offset[3], tostring(hand or "both"))
 end
 
--- Resolve the career-prefix-matched offset entry for (weapon_key, career_name)
--- from _weapon_grip_offsets. Returns the {x, y, z[, hand]} array or nil. Shared
--- by the one-shot path above and the durable per-frame re-apply below so both
--- read the SAME single source of truth with identical prefix-match semantics.
-local function _resolve_grip_offset(weapon_key, career_name)
-    if not weapon_key or not career_name then return nil end
-    local overrides = _weapon_grip_offsets[weapon_key]
-    if not overrides then return nil end
-    for prefix, off in pairs(overrides) do
-        if career_name:sub(1, #prefix) == prefix then
-            return off
-        end
-    end
-    return nil
+-- #587 committed transform fan-out. "Committed" means source-baked in the two
+-- tables above; the live Hold-Pose sliders remain local-player-only and never
+-- enter this path. Each WT client can resolve the base item key and husk career
+-- already supplied by vanilla, so no mod RPC (and no per-frame payload) exists.
+local _wt587_tracked_durable_3p_units = setmetatable({}, { __mode = "k" })
+local _wt587_diag_budget = 24
+
+mod._wt587_transform_contract = {
+    source = "baked_tables",
+    transport = "none",
+    rpc_channels = 0,
+    live_tuner_scope = "local_player_3p_only",
+    first_person = "unchanged",
+    components = { scale = "scale_only", offset = "position_only", rotation = "wt569_rotation_only" },
+}
+
+mod._wt587_baked_transform_plan = function(weapon_key, career_name)
+    return {
+        scale = _resolve_scale_factor(weapon_key, career_name),
+        offset = _resolve_grip_offset(weapon_key, career_name),
+        durable = _DURABLE_GRIP_OFFSETS[weapon_key] == true,
+    }
 end
 
--- DURABLE per-frame grip-offset re-apply (see _DURABLE_GRIP_OFFSETS header).
--- Called every frame from weapon_tweaker_backend.lua's mod.update. Re-applies
--- the scythe's (and any future _DURABLE_GRIP_OFFSETS member's) grip offset to
--- the LOCAL player's wielded 3P weapon unit(s) so the engine's per-tick
--- canonical-pose reset can't stomp it. 3P-ONLY, career-gated, additive-from-
--- canonical (read the freshly-reset local_position + add offset = stable, never
--- compounds — see header). Exposed on the mod table because the backend module
--- is a separate dofile scope (mod:dofile is NOT a singleton —
--- reference_vmf_dofile_not_singleton); the function closes over the file-scope
--- _weapon_grip_offsets / _DURABLE_GRIP_OFFSETS here, the single source of truth.
-function mod._reapply_durable_grip_offsets()
-    if not next(_DURABLE_GRIP_OFFSETS) then return end
-
-    local career_name = _local_career_name()
-    if not career_name then return end
-
-    local pm = Managers and Managers.player
-    local lp = pm and pm.local_player and pm:local_player()
-    local punit = lp and lp.player_unit
-    if not punit then return end
-
+local function _wt587_is_wielded(row)
+    local owner = row.owner
+    if not owner then return false end
+    local ok_alive, alive = pcall(Unit.alive, owner)
+    if not ok_alive or not alive then return false end
     local inv = ScriptUnit and ScriptUnit.has_extension
-        and ScriptUnit.has_extension(punit, "inventory_system")
-    if not inv then return end
+        and ScriptUnit.has_extension(owner, "inventory_system")
+    if not inv or type(inv.get_wielded_slot_name) ~= "function" then return false end
+    local ok_slot, wielded_slot = pcall(inv.get_wielded_slot_name, inv)
+    return ok_slot and wielded_slot == row.slot_name
+end
 
-    -- Identify the wielded weapon key. Only re-apply if it's a durable member;
-    -- otherwise this is a cheap early-out on the common (non-scythe) frame.
-    local slot_name = inv.get_wielded_slot_name and inv:get_wielded_slot_name()
-    if not slot_name then return end
-    local equipment = inv._equipment
-    if not equipment then return end
-    local slot_data = equipment.slots and equipment.slots[slot_name]
-    local weapon_key = slot_data and (slot_data.id
-        or (slot_data.item_data and slot_data.item_data.key))
-    if not weapon_key or not _DURABLE_GRIP_OFFSETS[weapon_key] then return end
-
+local function _wt587_track_durable_3p_units(slot_data, weapon_key, career_name, owner_3p, slot_name, role)
+    if not _DURABLE_GRIP_OFFSETS[weapon_key] then return 0 end
     local offset = _resolve_grip_offset(weapon_key, career_name)
-    if not offset then return end  -- career not in this weapon's offset map (e.g. Sienna native)
-
-    local pos = Vector3(offset[1], offset[2], offset[3])
-    local hand = offset.hand
-    -- 3P-ONLY (never *_unit_1p). The currently-wielded 3P units are the live
-    -- ones the engine is re-posing each frame, so these are exactly what gets
-    -- stomped without this re-apply.
-    local right_3p = equipment.right_hand_wielded_unit_3p
-    local left_3p  = equipment.left_hand_wielded_unit_3p
-    local function apply(unit)
-        if unit and Unit.alive and Unit.alive(unit) then
-            -- ADDITIVE-from-canonical: read the engine's just-reset local pos and
-            -- add the offset. Stable frame-to-frame; never compounds because the
-            -- engine reset zeroes our prior write before we read.
-            local ok_cur, current = pcall(Unit.local_position, unit, 0)
-            if ok_cur and current then
-                pcall(Unit.set_local_position, unit, 0, current + pos)
+    if not offset then return 0 end
+    local wanted_hand = offset.hand
+    local tracked = 0
+    for _, field in ipairs({ "right_unit_3p", "left_unit_3p" }) do
+        local hand = field == "right_unit_3p" and "right" or "left"
+        local unit = slot_data and slot_data[field]
+        if unit and (not wanted_hand or wanted_hand == hand)
+                and not _wt587_tracked_durable_3p_units[unit] then
+            local ok_alive, alive = pcall(Unit.alive, unit)
+            local ok_pos, base_position = pcall(Unit.local_position, unit, 0)
+            if ok_alive and alive and ok_pos and base_position then
+                _wt587_tracked_durable_3p_units[unit] = {
+                    base = Vector3Box(base_position),
+                    owner = owner_3p,
+                    slot_name = slot_name,
+                    weapon_key = weapon_key,
+                    career_name = career_name,
+                    hand = hand,
+                    offset = { offset[1], offset[2], offset[3] },
+                }
+                tracked = tracked + 1
+                if _wt587_diag_budget > 0 then
+                    _wt587_diag_budget = _wt587_diag_budget - 1
+                    pcall(printf,
+                        "[wt:587] tracked role=%s career=%s weapon=%s hand=%s slot=%s transport=none first_person=untouched",
+                        tostring(role or "owner"), tostring(career_name), tostring(weapon_key),
+                        tostring(hand), tostring(slot_name))
+                end
             end
         end
     end
-    if hand == "right" then
-        apply(right_3p)
-    elseif hand == "left" then
-        apply(left_3p)
-    else
-        apply(right_3p)
-        apply(left_3p)
+    return tracked
+end
+mod._wt587_track_durable_3p_units = _wt587_track_durable_3p_units
+
+-- Animation ticks stomp weapon node 0, so every renderer reapplies its own
+-- shipped baked delta to tracked local, bot, and remote-husk 3P units. The base
+-- pose was boxed before the one-shot spawn write; absolute base+delta avoids
+-- accumulation. Rotation (#569) and scale use separate setters and compose.
+function mod._reapply_durable_grip_offsets()
+    for unit, row in pairs(_wt587_tracked_durable_3p_units) do
+        local ok_alive, alive = pcall(Unit.alive, unit)
+        if not ok_alive or not alive then
+            _wt587_tracked_durable_3p_units[unit] = nil
+        elseif _wt587_is_wielded(row) then
+            local base = row.base:unbox()
+            local delta = Vector3(row.offset[1], row.offset[2], row.offset[3])
+            pcall(Unit.set_local_position, unit, 0, base + delta)
+        end
     end
 end
 
@@ -959,12 +975,49 @@ mod:traced_hook("GearUtils", "create_equipment", function(func, world, slot_name
     if result and item_data then
         local weapon_key = item_data.name
         _scale_weapon_units(result, weapon_key, career_name)
+        -- Capture the canonical 3P root before the one-shot offset below. The
+        -- durable renderer then owns base+delta for local players and bots.
+        _wt587_track_durable_3p_units(result, weapon_key, career_name,
+            unit_3p, slot_name, is_bot and "bot" or "owner")
         _offset_weapon_units(result, weapon_key, career_name)
         _wt569_track_3p_units(result, weapon_key, career_name, result.item_template,
             unit_3p, slot_name, false)
     end
     return result or {}   -- never nil to the vanilla caller (see stub rationale above)
 end)
+
+-- Vanilla remote-husk wield is a separate renderer. Unlike the owner path, it
+-- calls BackendUtils.get_item_units + GearUtils.spawn_inventory_unit directly
+-- and never enters GearUtils.create_equipment
+-- (simple_husk_inventory_extension.lua:641-782). Apply the same source-baked
+-- transforms after vanilla has populated equipment.*_wielded_unit_3p. The base
+-- item identity and self._career_name are already replicated by vanilla, so
+-- this fan-out is deterministic on every WT client and sends no network data.
+mod:hook_safe("SimpleHuskInventoryExtension", "_wield_slot",
+    function(self, world, equipment, slot_name, unit_1p, unit_3p)
+        local slot = equipment and equipment.slots and equipment.slots[slot_name]
+        local item_data = slot and slot.item_data
+        local weapon_key = item_data and (item_data.name or item_data.key)
+        local career_name = self and self._career_name
+        if not weapon_key or not career_name then return end
+
+        local spawned_3p = {
+            right_unit_3p = equipment.right_hand_wielded_unit_3p,
+            left_unit_3p = equipment.left_hand_wielded_unit_3p,
+        }
+        _scale_weapon_units(spawned_3p, weapon_key, career_name)
+        _wt587_track_durable_3p_units(spawned_3p, weapon_key, career_name,
+            (self and self._unit) or unit_3p, slot_name, "remote_husk")
+        _offset_weapon_units(spawned_3p, weapon_key, career_name)
+
+        local item_template = nil
+        if BackendUtils and BackendUtils.get_item_template then
+            local ok_template, resolved = pcall(BackendUtils.get_item_template, item_data)
+            item_template = ok_template and resolved or nil
+        end
+        _wt569_track_3p_units(spawned_3p, weapon_key, career_name, item_template,
+            (self and self._unit) or unit_3p, slot_name, false)
+    end)
 
 -- ============================================================
 -- Brace of Pistols on Kruber → 3P unit swap to repeating handgun
@@ -4170,6 +4223,41 @@ _rt_register("issue576_reopened_ports_and_action_chain_contract", function()
         end
     end
     if #failures > 0 then return table.concat(failures, "; ") end
+end)
+
+_rt_register("issue587_baked_transform_husk_fanout", function()
+    local contract = mod._wt587_transform_contract
+    assert(contract and contract.source == "baked_tables",
+        "committed transforms must come from shipped baked tables")
+    assert(contract.transport == "none" and contract.rpc_channels == 0,
+        "baked transform fan-out must not allocate an RPC channel or payload")
+    assert(contract.live_tuner_scope == "local_player_3p_only",
+        "transient Hold-Pose slider movement must remain local")
+    assert(contract.first_person == "unchanged",
+        "husk transform fan-out must preserve first person")
+    assert(contract.components.scale == "scale_only"
+        and contract.components.offset == "position_only"
+        and contract.components.rotation == "wt569_rotation_only",
+        "scale/position/#569 rotation must compose through separate setters")
+    assert(type(mod._wt587_track_durable_3p_units) == "function",
+        "durable 3P units need spawn/wield-time registration")
+
+    local scythe = mod._wt587_baked_transform_plan("bw_ghost_scythe", "es_knight")
+    assert(scythe.durable and scythe.offset
+        and scythe.offset[1] == 0 and scythe.offset[2] == 0 and scythe.offset[3] == 0.6,
+        "Kruber Scythe must resolve its durable +0.6 Z bake")
+
+    local glaive = mod._wt587_baked_transform_plan("we_2h_axe", "es_mercenary")
+    assert(glaive.durable and glaive.offset and glaive.offset[3] == 0.285,
+        "second transformed weapon must resolve its durable bake")
+
+    local control = mod._wt587_baked_transform_plan("es_1h_sword", "es_knight")
+    assert(control.scale == nil and control.offset == nil and control.durable == false,
+        "unmodified receiver-native control must remain untouched")
+
+    local native_scythe = mod._wt587_baked_transform_plan("bw_ghost_scythe", "bw_necromancer")
+    assert(native_scythe.offset == nil,
+        "career gate must preserve the native Sienna Scythe transform")
 end)
 
 _rt_register("wt_safe_hook_installed", function()

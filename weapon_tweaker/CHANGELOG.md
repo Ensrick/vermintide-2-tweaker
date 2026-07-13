@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.229-dev (2026-07-13) - #587 baked weapon transforms on remote husks [verify-fix-coop]
+
+- Vanilla remote wield is a separate renderer: `SimpleHuskInventoryExtension._wield_slot` resolves the replicated base item/career and calls `GearUtils.spawn_inventory_unit` directly, never `GearUtils.create_equipment` (`simple_husk_inventory_extension.lua:641-782`). WT now applies the same shipped scale/grip tables to those populated 3P husk units at wield time.
+- Durable offsets now weak-track owner, bot, and remote-husk 3P units at spawn/wield and reconstruct `boxed canonical position + baked delta` after animation stomps. The Scythe (`bw_ghost_scythe`, Kruber +0.6 Z) and Glaive (`we_2h_axe`, Kruber +0.285 Z) therefore persist on every renderer and across re-wields/respawns.
+- Transient Hold-Pose slider motion remains local-player 3P only. There is no transform RPC, channel, per-frame payload, or mutable clone identity on the wire; each WT client deterministically resolves the vanilla base key and career. Position, scale, and #569 canonical rotation continue through independent setters, and 1P is untouched.
+- Added bounded `[wt:587]` registration diagnostics (maximum 24 per session) and `/wt_regression_test` coverage for payload bounds, Scythe + second transformed weapon, native/unmodified controls, ownership scope, and component composition. Workshop not uploaded.
+- **Co-op verify:** both players run v0.12.229-dev. Player A equips Kruber Scythe, Kruber Glaive, then an unmodified Kruber 1H Sword while Player B watches in keep and mission; swap away/back and respawn once. Owner 3P, remote view, and preview must agree for both transformed weapons; control and 1P remain vanilla. Repeat with Player B as wielder. Confirm bounded `[wt:587] tracked role=remote_husk... transport=none` lines and no recurring network/transform log spam.
+
 ## 0.12.228-dev (2026-07-13) - #585 Moonfire HUD clears after loadout replacement [untested]
 
 - Vanilla `EnergyBarUI` checks only whether the always-present energy extension is below full; it never checks the ranged item. On non-Kerillian careers the native recharge rate is zero, so drained Moonfire energy remained below full forever after replacing the bow and the HUD kept drawing.
