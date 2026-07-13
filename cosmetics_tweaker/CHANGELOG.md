@@ -1,5 +1,11 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.90-dev - 2026-07-13 - #565/#570 bounded startup package loading [untested]
+
+- Replaced Cosmetics' 74 blocking offhand `sync-read` calls at startup with deduplicated asynchronous package loads. Vanilla `PackageManager.load(..., asynchronous=true)` queues packages without the call-site `ResourcePackage.flush`; the existing `_override_package_ready` gate requires both 1P and 3P units before any override is exposed, so an unfinished package safely falls back to the base mesh.
+- Tracks the single `cosmetics_tweaker` reference owned for each queued package and releases it from the existing unload lifecycle. Added `offhand_preload_async_bounded_565` regression coverage for the async/readiness/release contract.
+- Moved automatic glow-picker build/first-hook diagnostics plus dormant dependency and LA hook-registration warnings from chat to console while preserving their evidence. User-triggered command feedback is unchanged.
+
 ## 0.9.89-dev - 2026-07-13 - #566 model white_glow as vanilla's fallback case [untested]
 
 - `/cos_regression_test` no longer requires a nonexistent

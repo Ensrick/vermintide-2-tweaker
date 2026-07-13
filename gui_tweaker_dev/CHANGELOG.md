@@ -5,6 +5,10 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.239-dev (2026-07-13) -- #570 startup dependency notice is console-only [untested]
+
+- Moved the dormant automatic Simple UI dependency notice from chat to a raw console marker. Interactive UI and command feedback are unchanged.
+
 ## 0.2.238-dev (2026-07-13) -- #561 per-tab settings profiles [verify-fix]
 
 - Refined #559 from in-game feedback: changing a checkbox, dropdown, keybind, or slider

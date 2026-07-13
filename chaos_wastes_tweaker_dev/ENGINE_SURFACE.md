@@ -10,7 +10,7 @@ the named `chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/*.lua`
 module. `§N` = a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue.
 
 **Dev/stable relationship.** This documents `chaos_wastes_tweaker_dev` (`ct_dev`,
-MOD_VERSION `0.7.262-dev`, friends-only Workshop 3733366926), the ACTIVE working
+MOD_VERSION `0.7.263-dev`, friends-only Workshop 3733366926), the ACTIVE working
 stream. `chaos_wastes_tweaker/` (`ct`, public Workshop 3712929235) is its
 read-only public twin; per repo `CLAUDE.md` all in-flight work happens in the dev
 dir and promotion is a separate user-triggered action, so this doc cites only

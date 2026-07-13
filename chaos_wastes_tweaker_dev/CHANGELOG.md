@@ -1,5 +1,11 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.263-dev (2026-07-13) - #570 startup pool notices are console-only [untested]
+
+- Removed the automatic TRAVEL/SIGNATURE pool-floor notices from chat. The existing `[ct:487] POOL-FLOOR` raw-console evidence remains available with mod logging disabled, while user-invoked command feedback is unchanged.
+- Added a regression contract to `pool_floor_underflow_duplicates_487` so startup pool-state reporting cannot silently return to chat.
+- This version follows #571's `0.7.262-dev` collectible-layout reflow.
+
 ## 0.7.262-dev (2026-07-13) - #571 Tab collectible native reflow and safe-area bounds [untested]
 
 - Source trace: vanilla `IngamePlayerListUI._setup_mission_data` lays Adventure collectibles out with two entries per row, measures localized titles through `UIUtils.get_text_width`, and wraps by row (`scripts/ui/views/ingame_player_list_ui_v2.lua:436-513`). The `loot_objective` node is a 200x90 child of the 660x1080 right banner (`ingame_player_list_ui_v2_definitions.lua:192-204`), whose `fit_height` transform is applied only by `UISceneGraph.update_scenegraph` (`scripts/ui/ui_scenegraph.lua:210-297`). The ordinary Adventure HUD strip is separate: `LootObjectiveUI` builds fixed tome/grimoire multi-icon widgets and delegates their placement to `HudCustomizer` (`scripts/ui/hud_ui/loot_objective_ui.lua:5-23,52-92`); it does not own the hold-Tab overlay. CT #533 instead fixed both Tab rows at scale 0.6 during `_setup_mission_data`, before that transform existed, while retaining vanilla's unscaled 32px text and -40/50px offsets. That made the injected rows resolution-, localization-, UI-scale-, and safe-rectangle blind.

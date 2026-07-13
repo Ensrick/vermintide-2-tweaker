@@ -20,6 +20,15 @@ local mod = get_mod("cosmetics_tweaker")
 
 local GlowPicker = {}
 
+-- Issue #570: automatic UI lifecycle/diagnostic state never belongs in chat.
+-- Raw printf keeps failures visible even when VMF mod logging is disabled.
+local function _log_only(fmt, ...)
+    if rawget(_G, "printf") then
+        pcall(printf, "[cos:570] " .. fmt, ...)
+    end
+end
+GlowPicker.CHAT_DIAGNOSTICS_LOG_ONLY = true
+
 -- --------------------------------------------------------
 -- State (module-level, single popup instance)
 -- --------------------------------------------------------
@@ -576,7 +585,7 @@ end
 local function _try(label, fn, ...)
     local ok, err = pcall(fn, ...)
     if not ok then
-        mod:echo("[glow_picker] FAILED at %s: %s", label, tostring(err))
+        _log_only("[glow_picker] FAILED at %s: %s", label, tostring(err))
         mod:info("[glow_picker] FAILED at %s: %s", label, tostring(err))
         return nil, err
     end
@@ -585,18 +594,18 @@ end
 
 local function _build()
     if GlowPicker._built then return true end
-    mod:echo("[glow_picker:_build] start")
+    _log_only("[glow_picker:_build] start")
     mod:info("[glow_picker:_build] start. UISceneGraph=%s UIWidget=%s UIRenderer=%s UILayer=%s",
         tostring(UISceneGraph), tostring(UIWidget), tostring(UIRenderer), tostring(UILayer))
 
     if not (UISceneGraph and UIWidget and UIRenderer) then
-        mod:echo("[glow_picker:_build] ABORT — missing core UI globals")
+        _log_only("[glow_picker:_build] ABORT — missing core UI globals")
         return false
     end
 
     local sg_ok, sg_err = pcall(UISceneGraph.init_scenegraph, _make_scenegraph_definition())
     if not sg_ok then
-        mod:echo("[glow_picker:_build] init_scenegraph FAILED: %s", tostring(sg_err))
+        _log_only("[glow_picker:_build] init_scenegraph FAILED: %s", tostring(sg_err))
         return false
     end
     GlowPicker._scenegraph = sg_err  -- pcall returns the value as the 2nd ret
@@ -643,12 +652,12 @@ local function _build()
         local name, factory = entry[1], entry[2]
         local def_ok, def = pcall(factory)
         if not def_ok then
-            mod:echo("[glow_picker:_build] factory FAILED for %s: %s", name, tostring(def))
+            _log_only("[glow_picker:_build] factory FAILED for %s: %s", name, tostring(def))
             return false
         end
         local w_ok, w = pcall(UIWidget.init, def)
         if not w_ok then
-            mod:echo("[glow_picker:_build] UIWidget.init FAILED for %s: %s", name, tostring(w))
+            _log_only("[glow_picker:_build] UIWidget.init FAILED for %s: %s", name, tostring(w))
             return false
         end
         by_name[name] = w
@@ -691,7 +700,7 @@ local function _build()
     by_name.slider_dots_i.content.on_change    = _make_on_change("dots",  "intensity")
 
     GlowPicker._built = true
-    mod:echo("[glow_picker:_build] DONE — 23 widgets ready (M3: rune 4 + magic 12 sliders + 3 section labels + 4 chrome)")
+    _log_only("[glow_picker:_build] DONE — 23 widgets ready (M3: rune 4 + magic 12 sliders + 3 section labels + 4 chrome)")
     return true
 end
 
@@ -750,8 +759,8 @@ local _cjson_warning_shown = false
 local function _load_per_item_glow()
     if not cjson then
         if not _cjson_warning_shown then
-            mod:echo("[glow_picker] cjson global is nil — per-item glow persistence DISABLED. Live preview still works but settings won't save across game sessions.")
-            mod:warning("[glow_picker] cjson unavailable; persistence layer no-op")
+            _log_only("[glow_picker] cjson global is nil — per-item glow persistence DISABLED; live preview remains available")
+            mod:info("[glow_picker] cjson unavailable; persistence layer no-op")
             _cjson_warning_shown = true
         end
         return {}
@@ -1016,12 +1025,12 @@ GlowPicker._draw_log_frame = 0
 function GlowPicker.draw(ui_renderer, input_service, dt)
     if not GlowPicker._open then return end
     if not GlowPicker._built then
-        mod:echo("[glow_picker:draw] open=true but built=false — _build never succeeded")
+        _log_only("[glow_picker:draw] open=true but built=false — _build never succeeded")
         return
     end
     if not ui_renderer then
         if (GlowPicker._draw_log_frame % 60) == 0 then
-            mod:echo("[glow_picker:draw] ui_renderer is nil — host hook passed nothing")
+            _log_only("[glow_picker:draw] ui_renderer is nil — host hook passed nothing")
         end
         GlowPicker._draw_log_frame = GlowPicker._draw_log_frame + 1
         return
@@ -1036,27 +1045,27 @@ function GlowPicker.draw(ui_renderer, input_service, dt)
 
     local ok_u, err_u = pcall(UISceneGraph.update_scenegraph, GlowPicker._scenegraph)
     if not ok_u then
-        mod:echo("[glow_picker:draw] update_scenegraph FAILED: %s", tostring(err_u))
+        _log_only("[glow_picker:draw] update_scenegraph FAILED: %s", tostring(err_u))
         return
     end
 
     local ok_b, err_b = pcall(UIRenderer.begin_pass, ui_renderer, GlowPicker._scenegraph,
         input_service, dt, nil, { snap_pixel_positions = true })
     if not ok_b then
-        mod:echo("[glow_picker:draw] begin_pass FAILED: %s", tostring(err_b))
+        _log_only("[glow_picker:draw] begin_pass FAILED: %s", tostring(err_b))
         return
     end
 
     for i, widget in ipairs(GlowPicker._widgets) do
         local ok_w, err_w = pcall(UIRenderer.draw_widget, ui_renderer, widget)
         if not ok_w and should_log then
-            mod:echo("[glow_picker:draw] draw_widget #%d FAILED: %s", i, tostring(err_w))
+            _log_only("[glow_picker:draw] draw_widget #%d FAILED: %s", i, tostring(err_w))
         end
     end
 
     local ok_e, err_e = pcall(UIRenderer.end_pass, ui_renderer)
     if not ok_e then
-        mod:echo("[glow_picker:draw] end_pass FAILED: %s", tostring(err_e))
+        _log_only("[glow_picker:draw] end_pass FAILED: %s", tostring(err_e))
     end
 end
 

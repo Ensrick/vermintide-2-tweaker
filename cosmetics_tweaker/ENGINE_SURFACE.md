@@ -224,6 +224,20 @@ cache one across frames (GLOW_SYSTEM §Stingray gotcha); `Material.num_parameter
 `parameter_name` trigger a pcall-bypassing `resource_manager.cpp` fault and must never
 be called (`:435-438` memo).
 
+### Offhand package residency + issue-565 async startup queue (owner: `docs/engine/05`)
+
+The offhand/illusion catalog can touch dozens of unit packages. A synchronous
+`PackageManager.load` calls `ResourcePackage.load` and immediately
+`ResourcePackage.flush` [src: `package_manager.lua:69-76`]; the July 13 four-log audit
+found 74 Cosmetics-owned sync loads per launch and a repeatable ~1.58 s
+`Application::update` stall. The bulk preload now passes `asynchronous=true`, which
+uses PackageManager's serialized async queue [src: `package_manager.lua:47-66`,
+`:274-292`]. Safety comes from `_override_package_ready`: both `<unit>` and
+`<unit>_3p` must pass `Application.can_get` before `BackendUtils.get_item_units`
+exposes the override, otherwise vanilla's base mesh remains in use. Each queued path
+takes one `cosmetics_tweaker` reference; `_release_offhand_packages` balances those
+references from `mod.on_unload` (#565).
+
 ### Material-Hijack embedded package loading + issue-282 refcount lifecycle (owner: `docs/engine/05`)
 
 `_material_hijack_embedded.lua` recolours units carrying a `mat_to_use` data block by

@@ -1,5 +1,10 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.389-dev - 2026-07-13 - #570 slot-extension state is console-only [untested]
+
+- Moved both automatic slot-extension summaries (initial load and `on_all_mods_loaded`) from chat to raw console output. CWV still prints its version in chat; user-invoked command feedback remains unchanged.
+- Extended `cwv_slot_extension_scoped` with a log-only contract check.
+
 ## 0.1.388-dev - 2026-07-13 - #567 rebuild vanilla skin reverse-index [diagnostics-armed]
 
 - Latest logs repeatedly warned that three persisted CWV skins were "Incorrectly configured" during PlayFab loadout refresh: Sword and Mace, Dual Maces, and Axe and Shield. Their skin rows were not malformed: each has `item_type/slot_type = weapon_skin`, a valid `matching_item_key`, a `WeaponSkins.skins` definition, and membership in the owner's rarity-tier combination pool.

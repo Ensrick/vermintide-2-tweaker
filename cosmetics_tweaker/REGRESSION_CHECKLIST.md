@@ -9,6 +9,20 @@ Last updated: 2026-07-13.
 ---
 ## Diagnostics / Regression Suite
 
+### offhand-preload-async-bounded -- no blocking startup package storm
+
+| Field | Value |
+|-------|-------|
+| Symptom | Startup performs dozens of Cosmetics-owned synchronous package loads and stalls `Application::update` for about 1.58 seconds. |
+| Root cause | Bulk offhand preloading retained a synchronous workaround after the 1P+3P `Application.can_get` readiness gate made early override exposure safe. |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.90-dev |
+| Category | INTEGRATION |
+| Repro | Start VT2 with package debugging enabled and count `cosmetics_tweaker, sync-read` lines before the first keep frame. |
+| Expected post-fix | Offhand packages are queued as `async-read`; an unready override falls back to the base mesh; unload balances every mod-owned package reference. |
+| Detection | `/cos_regression_test` passes `offhand_preload_async_bounded_565`; startup contains `[cos:565] offhand bulk preload queued mode=async` and no Cosmetics-owned bulk `sync-read` storm. |
+| Tracking | GitHub issue #565. |
+
 ### white-glow-unregistered-fallback -- do not require vanilla's missing template
 
 | Field | Value |

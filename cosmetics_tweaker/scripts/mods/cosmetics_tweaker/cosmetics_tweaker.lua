@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.89-dev"
+local MOD_VERSION = "0.9.90-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -452,9 +452,9 @@ end)
 mod.on_game_state_changed = function(status, state_name)
     -- [heap-probe] v0.9.35-dev: per-state-transition lua_heap sampler, mirror of
     -- weapon_tweaker's, for the 1 GiB lua_heap OOM diagnosis. cosmetics is the
-    -- largest UNMEASURED suspect — it sync-force-loads 74 offhand/shield unit
-    -- packages (never unloaded) and its boot mem-probe was dead code until this
-    -- version. Logs absolute heap + delta on every transition so a keep-only ramp
+    -- once the largest UNMEASURED suspect: before #565 it sync-loaded 74
+    -- offhand/shield packages at startup. They are now asynchronously queued and
+    -- released on unload. Logs absolute heap + delta so a keep-only ramp
     -- is visible. No forced collect (would mask a retained leak). Debug-gated.
     local kb = collectgarbage("count")
     local since_last = mod._heap_probe_last_kb and (kb - mod._heap_probe_last_kb) or 0
@@ -586,6 +586,9 @@ end
 -- into thinking hot-reload is safe.
 mod.on_unload = function()
     mod:info("[unload] cosmetics_tweaker unloading")
+    if mod._release_offhand_packages then
+        mod._release_offhand_packages("mod_unload")
+    end
     -- v0.9.76-dev (#282): drop the MH embed's remaining package references so
     -- shutdown's PackageManager.destroy() walk finds them already released
     -- (the leaked-refs shape produced the crashify "not unloaded, this can
@@ -946,13 +949,15 @@ end)
 -- `unit_name .. "_3p"` are queued separately). The in-game body spawns
 -- BOTH halves; the customization previewer only spawns 3p. Load both.
 --
--- SYNCHRONOUS load (async=false): the previous async preload had a fatal
--- timing race — if the user clicked Apply before the async load finished,
--- BackendUtils.get_item_units returned an override path the engine
--- couldn't spawn yet, and it asserted in `world.spawn_unit`. Sync loads
--- block briefly (one shield package is small) and guarantee the package
--- is ready when the hook fires.
+-- ASYNCHRONOUS load: the former sync path predated `_override_package_ready`
+-- (below). Both local and husk overrides now require Application.can_get for
+-- the 1P and 3P units before exposing an override, so a queued package safely
+-- degrades to the base mesh instead of reaching world.spawn_unit early. This
+-- removes the startup ResourcePackage.flush storm while preserving the crash
+-- gate. PackageManager invokes our callback only after force_load completes.
 local _preloaded_offhand_packages = {}
+local _owned_offhand_package_refs = {}
+local _OFFHAND_PACKAGE_REFERENCE = "cosmetics_tweaker"
 local function _preload_one(package_path)
     if not package_path or package_path == "" then return end
     if _preloaded_offhand_packages[package_path] then return end
@@ -1010,18 +1015,49 @@ local function _preload_one(package_path)
         end
         return
     end
-    -- Sync load (async=false). Async returns immediately and races the
-    -- user's Apply click — sync blocks via ResourcePackage.load + flush.
+    -- Queue without prioritization. PackageManager serializes async packages
+    -- and completes one ready handle per update; no ResourcePackage.flush is
+    -- performed at the call site (package_manager.lua:20-87,260-274).
+    _preloaded_offhand_packages[package_path] = "loading"
     local ok, err = pcall(function()
-        Managers.package:load(package_path, "cosmetics_tweaker", nil, false)
+        Managers.package:load(package_path, _OFFHAND_PACKAGE_REFERENCE, function()
+            _preloaded_offhand_packages[package_path] = true
+            _dbg("[offhand] async package ready %s", package_path)
+        end, true, false)
     end)
     if ok then
-        _preloaded_offhand_packages[package_path] = true
-        _dbg("[offhand] preloaded package %s (sync)", package_path)
+        _owned_offhand_package_refs[package_path] = true
+        _dbg("[offhand] queued package %s (async)", package_path)
     else
+        _preloaded_offhand_packages[package_path] = nil
         _dbg_alert("[offhand] preload FAILED for %s: %s", package_path, tostring(err))
     end
 end
+
+-- Balance the one mod-owned reference taken for every queued package. This is
+-- wired into the existing on_unload above; pending async loads are unloadable by
+-- PackageManager too (it resolves either the async handle or loaded handle).
+mod._release_offhand_packages = function(reason)
+    local pm = Managers and Managers.package
+    if not pm then return 0 end
+    local released = 0
+    for package_path in pairs(_owned_offhand_package_refs) do
+        local count = pm.reference_count and pm:reference_count(package_path, _OFFHAND_PACKAGE_REFERENCE) or 0
+        if count and count > 0 then
+            local ok = pcall(function() pm:unload(package_path, _OFFHAND_PACKAGE_REFERENCE) end)
+            if ok then released = released + 1 end
+        end
+        _owned_offhand_package_refs[package_path] = nil
+        _preloaded_offhand_packages[package_path] = nil
+    end
+    pcall(printf, "[cos:565] offhand package references released=%d reason=%s", released, tostring(reason))
+    return released
+end
+mod._cos_offhand_preload_contract = {
+    mode = "async",
+    reference_name = _OFFHAND_PACKAGE_REFERENCE,
+    readiness_gate = "Application.can_get:1p+3p",
+}
 
 -- v0.9.3: skin-variant suffixes that share a base unit path but live in
 -- SEPARATE .package files. When a client wields a skinned variant of a
@@ -2146,7 +2182,7 @@ end)
 -- crash (feedback_cwv_cross_character_unit_packages.md).
 --
 -- Fix: enumerate every unit_path the user might equip via CT (offhand pools
--- + custom illusions) and force-load async at boot on EVERY peer.
+-- + custom illusions) and queue an async load at boot on EVERY peer.
 -- _preload_offhand_package is idempotent via the _preloaded_offhand_packages
 -- set, so re-calls are cheap.
 local _force_loaded_all_offhand_done = false
@@ -2200,12 +2236,12 @@ _force_load_all_offhand_packages = function()
         end
     end
     _force_loaded_all_offhand_done = true
-    mod:info("[offhand] force-loaded all offhand pool packages (%d preload calls, dedup'd via _preloaded_offhand_packages)", count)
-    -- [heap-probe] snapshot the lua_heap the instant the offhand packages land.
-    -- These are predominantly C++ RESOURCE memory (which collectgarbage does NOT
-    -- see), so this number is the LUA-side bookkeeping only — pair it with the
-    -- package count above when attributing the 1 GiB lua_heap breach.
-    mod:debug("[heap-probe] post offhand force-load: lua_heap %.1f MB (%.0f KB) live; %d packages retained for session (no unload path)",
+    mod:info("[offhand] queued all offhand pool packages asynchronously (%d preload calls, dedup'd via _preloaded_offhand_packages)", count)
+    pcall(printf, "[cos:565] offhand bulk preload queued mode=async calls=%d", count)
+    -- [heap-probe] snapshot Lua bookkeeping after the package requests are queued.
+    -- Package resource memory is C++-side (collectgarbage does not see it), and
+    -- async completion is intentionally spread across later PackageManager frames.
+    mod:debug("[heap-probe] post offhand async-queue: lua_heap %.1f MB (%.0f KB) live; %d preload calls (references released on unload)",
         collectgarbage("count") / 1024, collectgarbage("count"), count)
 end
 
@@ -7697,7 +7733,8 @@ mod:info("[net-safe] hook registration: CosmeticUtils=%s LoadoutUtils=%s Attachm
     tostring(_net_safe_hook_status.PUAE))
 if not (_net_safe_hook_status.CosmeticUtils and _net_safe_hook_status.LoadoutUtils
     and _net_safe_hook_status.AttachmentUtils and _net_safe_hook_status.PUAE) then
-    mod:echo("[cosmetics_tweaker] WARNING: one or more LA peer-sync hooks did NOT register. Restart VT2 if you plan to play LA cosmetics in a lobby.")
+    pcall(printf, "[cosmetics_tweaker] WARNING: one or more LA peer-sync hooks did NOT register. Restart VT2 before using LA cosmetics in a lobby.")
+    mod:info("[startup] LA peer-sync hook registration incomplete; see hook status above")
 end
 
 -- VMF calls mod.update once per frame.
@@ -7912,17 +7949,12 @@ mod.update = function(dt)
             and ItemMasterList
             and (not has_la or not has_mil) then
             if not has_mil then
-                mod:echo("[cosmetics_tweaker] MoreItemsLibrary is NOT subscribed/active. LA bridge stays dormant — host/client LA cosmetics will NOT sync. Subscribe: https://steamcommunity.com/sharedfiles/filedetails/?id=1422758813")
                 mod:info("[LA bridge] dependency missing: MoreItemsLibrary (Workshop ID 1422758813). bridge will stay dormant.")
             end
             if not has_la then
-                -- v0.9.0.14-hotfix: promote to chat. Mirrors the MIL-missing
-                -- echo above. User report 2026-05-19: Lyndsey had LA
-                -- "subscribed but not enabled" in the VMF launcher; the
-                -- existing mod:info went only to the console log so she
-                -- never knew her LA cosmetics weren't syncing. mod:echo
-                -- surfaces this in chat at boot.
-                mod:echo("[cosmetics_tweaker] Loremaster's Armoury is NOT enabled. LA cosmetics from other players will NOT render correctly. Enable Loremaster's Armoury in the F4 launcher mod list and RESTART the game.")
+                -- Startup chat is version-only (#570). Keep the actionable
+                -- dependency evidence in the console log without buffering a
+                -- non-version chat line for the first keep frame.
                 mod:info("[LA bridge] dependency missing: Loremaster's Armoury. bridge will stay dormant.")
             end
             _la_bridge_missing_dep_logged = true
@@ -8641,15 +8673,14 @@ local function _selected_slot_backend_id_and_data(host_window)
 end
 
 -- M1.2: throttled draw-hook tracer so we can confirm whether the hook is
--- firing while the user is on the screen. First fire echoes; subsequent
--- fires only log (avoid chat spam).
+-- firing while the user is on the screen. First fire is console-only (#570).
 mod._glow_hook_fired_once = mod._glow_hook_fired_once or {}
 
 local function _glow_hook_trace(class_name, event)
     local key = class_name .. ":" .. event
     if not mod._glow_hook_fired_once[key] then
         mod._glow_hook_fired_once[key] = true
-        mod:echo("[glow_picker:hook] FIRST FIRE %s (open=%s)", key, tostring(GlowPicker.is_open()))
+        pcall(printf, "[cos:570] [glow_picker:hook] FIRST FIRE %s (open=%s)", key, tostring(GlowPicker.is_open()))
         mod:info("[glow_picker:hook] FIRST FIRE %s (open=%s)", key, tostring(GlowPicker.is_open()))
     end
 end
@@ -9788,6 +9819,28 @@ _rt_register("wire_skin_null_all_senders", function()
     end
 end)
 
+_rt_register("offhand_preload_async_bounded_565", function()
+    local contract = mod._cos_offhand_preload_contract
+    if type(contract) ~= "table" or contract.mode ~= "async" then
+        return "offhand bulk preload is not asynchronous (issue 565 startup stall regression)"
+    end
+    if contract.reference_name ~= "cosmetics_tweaker" then
+        return "offhand package reference name changed; release balance cannot be proven"
+    end
+    if contract.readiness_gate ~= "Application.can_get:1p+3p" then
+        return "1P+3P unit readiness gate contract missing"
+    end
+    if type(mod._release_offhand_packages) ~= "function" then
+        return "offhand package unload/release path missing"
+    end
+end)
+
+_rt_register("automatic_chat_diagnostics_log_only_570", function()
+    if not GlowPicker.CHAT_DIAGNOSTICS_LOG_ONLY then
+        return "glow-picker lifecycle diagnostics are not marked log-only"
+    end
+end)
+
 _rt_register("mh_package_single_reference", function()
     -- issue 282: the MH embed's package loads must be exactly-once per path under
     -- the mod-owned reference name "cosmetics_tweaker_mh" (PackageManager.load
@@ -9824,8 +9877,8 @@ end)
 -- in zero console logs, leaving cosmetics' Lua footprint invisible next to
 -- weapon_tweaker's measured +12.8 MB. Mirrors weapon_tweaker.lua's boot readout.
 -- Measures the static table footprint (e.g. the ~11.9k-line _cosmetic_unlocks table)
--- at load time — the 74 offhand unit packages load later (lazily, in mod.update) and
--- are snapshotted separately at the [offhand] force-load completion log.
+-- at load time — the 74 offhand unit packages are queued later (lazily, in
+-- mod.update) and Lua bookkeeping is snapshotted after that queueing pass.
 mod:info("[mem-probe] cos boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - mod._cos_mem_t0) / 1024)
 
 -- ============================================================

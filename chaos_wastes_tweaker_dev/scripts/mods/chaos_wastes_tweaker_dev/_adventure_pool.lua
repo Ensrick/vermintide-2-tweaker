@@ -1009,25 +1009,16 @@ function _M.inject_pool()
         if state then
             if _M._floor_notice_shown[pool_type] ~= state then
                 _M._floor_notice_shown[pool_type] = state
-                -- Chat notice (visible with mod logging OFF) + a printf under the #487
-                -- prefix so it lands next to the freeze diagnostic breadcrumbs.
+                -- Startup chat is version-only (#570). Keep the decision under
+                -- the #487 raw-printf prefix so it remains visible with mod
+                -- logging OFF and lands beside the freeze breadcrumbs.
                 if state == "fallback" then
-                    pcall(function()
-                        mod:echo(string.format(
-                            "Chaos Wastes: no %s missions enabled - using the default Chaos Wastes %s maps so the run can load. Enable at least one %s mission to change this.",
-                            pool_type, pool_type, pool_type))
-                    end)
                     if rawget(_G, "printf") then
                         pcall(printf,
                             "[ct:487] POOL-FLOOR %s had ZERO enabled missions; fell back to vanilla pool contents (nothing to duplicate)",
                             pool_type)
                     end
                 else
-                    pcall(function()
-                        mod:echo(string.format(
-                            "Chaos Wastes: fewer %s missions enabled than the run needs - your enabled %s missions will repeat to fill it.",
-                            pool_type, pool_type))
-                    end)
                     if rawget(_G, "printf") then
                         pcall(printf,
                             "[ct:487] POOL-FLOOR %s underflow; duplicated enabled missions so the run repeats them (no vanilla backfill)",
@@ -1044,6 +1035,8 @@ function _M.inject_pool()
         injected_adv, removed_cw, dups)
     return injected_adv
 end
+
+_M.POOL_NOTICE_LOG_ONLY = true
 
 -- =====================================================================
 -- Diagnostics

@@ -97,7 +97,7 @@ mod.hb_on_all_mods_loaded = function()
 	end
 
 	if not get_mod("SimpleUI") then
-		mod:echo("IMPORTANT: UI TWEAKS REQUIRES THE SIMPLE UI MOD AS A DEPENDENCY TO MANAGE PRESETS")
+		pcall(printf, "[gut_dev:startup] UI Tweaks requires Simple UI to manage presets; dependency missing")
 	end
 end
 

@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.388-dev"
+local MOD_VERSION = "0.1.389-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -4194,9 +4194,10 @@ do
 				end
 			end
 		end
-		mod:echo("[cwv slot] extended slot_melee with 'ranged' on %d careers (scoped to cross_slot variants; %d non-allowed careers reverted)", extended, skipped)
+		pcall(printf, "[cwv slot] extended slot_melee with 'ranged' on %d careers (scoped to cross_slot variants; %d non-allowed careers reverted)", extended, skipped)
 		return extended
 	end
+	_om._slot_extension_log_only = true
 	_do_extend()
 	-- Re-run after all mods loaded in case CareerSettings was partial earlier.
 	function mod.on_all_mods_loaded()
@@ -12369,6 +12370,9 @@ _rt_register("cwv_slot_extension_scoped", function()
     -- 1. Source-pattern: marker constant must be present.
     if CT_CWV_SLOT_EXTENSION_MARKER_v0_1_338 ~= "cwv-slot-extension-scoped-to-cross-slot-variant-careers" then
         return "SLOT EXTENSION marker absent — was the v0.1.338 scoping fix reverted?"
+    end
+    if not _om._slot_extension_log_only then
+        return "automatic slot-extension state is not marked log-only (issue 570 startup chat regression)"
     end
     -- 2. Compute the expected allowed-careers set from `_variant_definitions`.
     --    Walk every def, union the `careers` arrays of entries with

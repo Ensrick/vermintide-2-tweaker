@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.262-dev"
+local MOD_VERSION = "0.7.263-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -517,6 +517,9 @@ end)
 _rt_register("pool_floor_underflow_duplicates_487", function()
     local cpf = AdventurePool.classify_pool_floor
     if type(cpf) ~= "function" then return "classify_pool_floor missing (underflow policy not exposed)" end
+    if not AdventurePool.POOL_NOTICE_LOG_ONLY then
+        return "pool-floor startup notices are not marked log-only (issue 570)"
+    end
     if cpf(0) ~= "fallback" then
         return "0 enabled must be 'fallback' (vanilla, not disabled-backfill), got " .. tostring(cpf(0))
     end
