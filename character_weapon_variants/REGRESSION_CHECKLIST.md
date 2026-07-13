@@ -4,7 +4,24 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-07-13.
+
+---
+
+## Weapon Skins
+
+### issue567-deferred-owner-cache - Custom skin reverse-index rebuilds
+
+| Field | Value |
+|-------|-------|
+| Symptom | Save/loadout refresh logs `Incorrectly configured weapon skins for cwv_*` and can reject or revert a persisted custom illusion. |
+| Root cause | Vanilla lazily snapshots skin-to-owner mappings before CWV's backend-deferred weapon owner rows exist, then retains the stale private cache. |
+| Mod(s) | character_weapon_variants |
+| Fix version(s) | 0.1.388-dev |
+| Category | INTEGRATION |
+| Repro | Equip the three issue #567 skins, reload the keep, and let bot/loadout refresh complete. |
+| Expected post-fix | No `Incorrectly configured weapon skins` warnings. `[cwv:567]` reports `association=valid` for all three; skins remain equipped and render locally and on a husk. |
+| Detection | Run `/cwv_regression_test`; require `issue567_skin_reverse_index_valid` PASS. |
 
 ---
 ## Multiplayer / Network Sync

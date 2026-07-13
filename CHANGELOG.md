@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-13 - `character_weapon_variants` skin reverse-index refresh
+
+Repo-aggregate entry for CWV v0.1.388-dev / issue #567. After deferred variant
+owners are registered, CWV now invalidates vanilla's lazy skin-to-weapon cache so
+persisted custom skins are indexed from their valid owner combination pools.
+Adds `[cwv:567]` diagnostics and regression coverage for the three reported
+Sword and Mace, Dual Maces, and Axe and Shield skins. Full details are in
+`character_weapon_variants/CHANGELOG.md`.
+
 ## 2026-07-13 - `crafting_in_modded_dev` auto-equips new weapons
 
 Repo-aggregate entry for `cim_dev` v0.8.64-dev / issue #562. Added a default-on
@@ -9,7 +18,6 @@ the live selected loadout index and is paired with live-avatar equipment
 recreation; disabling the option keeps the previous inventory-only behavior.
 Accessories are unaffected. Full details and regression coverage are in
 `crafting_in_modded_dev/CHANGELOG.md`.
-
 ## 2026-05-23 — `weapon_tweaker` per-career weapon toggle reorder
 
 Repo-aggregate entry for `weapon_tweaker` v0.12.71-dev (full details in

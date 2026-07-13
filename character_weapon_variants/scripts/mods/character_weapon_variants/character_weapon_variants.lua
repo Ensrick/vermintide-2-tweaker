@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.387-dev"
+local MOD_VERSION = "0.1.388-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -9659,6 +9659,51 @@ end
 
 local _auto_registered = false
 
+-- Issue #567: these are the three persisted custom skins that exposed a stale
+-- vanilla reverse-index. WeaponSkins.matching_weapon_skin_item_key builds
+-- `_matching_weapon_skin_item_keys` only once by walking ItemMasterList owners
+-- and their skin_combination_table pools (weapon_skins.lua:7824-7855). CWV
+-- registers skin definitions/pools at mod load, but the owning cwv weapon rows
+-- are deferred until the backend is ready. If vanilla builds the cache before
+-- `_auto_register_all`, the associations remain absent even after the owner rows
+-- arrive, producing "Incorrectly configured weapon skins" on save/loadout refresh.
+mod._cwv567_skin_keys = {
+	"cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1",
+	"cwv_es_dual_maces_es_1h_mace_skin_02_runed_01",
+	"cwv_es_axe_shield_wpn_emp_shield_03__axe_02_t2",
+}
+
+mod._cwv567_validate_skin_association = function(skin_key)
+	local skin_item = ItemMasterList and rawget(ItemMasterList, skin_key)
+	if type(skin_item) ~= "table" then return false, "skin ItemMasterList row missing" end
+	if skin_item.item_type ~= "weapon_skin" or skin_item.slot_type ~= "weapon_skin" then
+		return false, "skin row type/slot is not weapon_skin"
+	end
+	if not (WeaponSkins and WeaponSkins.skins and WeaponSkins.skins[skin_key]) then
+		return false, "WeaponSkins.skins row missing"
+	end
+
+	local owner_key = skin_item.matching_item_key
+	local owner = owner_key and rawget(ItemMasterList, owner_key)
+	if type(owner) ~= "table" then return false, "matching weapon row missing: " .. tostring(owner_key) end
+	local combination_key = owner.skin_combination_table
+	local combinations = combination_key and WeaponSkins.skin_combinations[combination_key]
+	if type(combinations) ~= "table" then
+		return false, "owner skin_combination_table missing: " .. tostring(combination_key)
+	end
+
+	for rarity, skins in pairs(combinations) do
+		if type(skins) == "table" then
+			for _, candidate in ipairs(skins) do
+				if candidate == skin_key then
+					return true, owner_key, combination_key, rarity
+				end
+			end
+		end
+	end
+	return false, "skin absent from owner combination pool " .. tostring(combination_key)
+end
+
 local function _auto_register_all()
 	-- v0.1.345-dev: entry trace. Sparse (one fire per session on
 	-- StateInGameRunning.on_enter; subsequent fires hit _auto_registered guard).
@@ -9760,6 +9805,51 @@ local function _auto_register_all()
 					end
 				end
 			end
+		end
+
+		-- Issue #567 root fix. The vanilla reverse-index is a lazy snapshot, not a
+		-- live view (weapon_skins.lua:7824-7855). The custom skin rows and pools
+		-- above were already valid; what was missing at the earlier snapshot was
+		-- the deferred cwv owner row carrying `skin_combination_table`. Invalidate
+		-- only after every owner has been mirrored into ItemMasterList, before the
+		-- backend refresh can validate persisted skins. Force vanilla to rebuild
+		-- the complete index now, then canonicalize every CWV skin to its explicit
+		-- IML `matching_item_key`. The canonicalization matters where two variant
+		-- owners share one combination pool: vanilla's pairs(ItemMasterList) walk
+		-- would otherwise let whichever owner iterates last win nondeterministically.
+		local skin_cache_was_built = WeaponSkins
+			and type(WeaponSkins._matching_weapon_skin_item_keys) == "table"
+		if WeaponSkins then WeaponSkins._matching_weapon_skin_item_keys = nil end
+		local rebuild_ok, rebuild_err = false, "WeaponSkins matcher unavailable"
+		if WeaponSkins and type(WeaponSkins.matching_weapon_skin_item_key) == "function" then
+			rebuild_ok, rebuild_err = pcall(
+				WeaponSkins.matching_weapon_skin_item_key,
+				mod._cwv567_skin_keys[1]
+			)
+		end
+		local rebuilt_cache = WeaponSkins and WeaponSkins._matching_weapon_skin_item_keys
+		if rebuild_ok and type(rebuilt_cache) == "table" then
+			for custom_skin_key in pairs(_custom_skin_keys) do
+				local skin_item = rawget(ItemMasterList, custom_skin_key)
+				local owner_key = skin_item and skin_item.matching_item_key
+				if owner_key then
+					rebuilt_cache[custom_skin_key] = {
+						rarity = skin_item.rarity,
+						item_key = owner_key .. "_skin",
+					}
+				end
+			end
+		else
+			pcall(printf, "[cwv:567] reverse-index rebuild FAILED err=%s", tostring(rebuild_err))
+		end
+		for _, skin_key in ipairs(mod._cwv567_skin_keys) do
+			local valid, owner_or_err, combination_key, rarity = mod._cwv567_validate_skin_association(skin_key)
+			local cache_row = type(rebuilt_cache) == "table" and rebuilt_cache[skin_key]
+			pcall(printf,
+				"[cwv:567] cache_invalidated=%s rebuild=%s skin=%s association=%s owner=%s combination=%s rarity=%s cache_item=%s",
+				tostring(skin_cache_was_built), tostring(rebuild_ok), tostring(skin_key), valid and "valid" or "INVALID",
+				tostring(owner_or_err), tostring(combination_key), tostring(rarity),
+				tostring(cache_row and cache_row.item_key))
 		end
 
 		-- CLARIFY: Per CHANGELOG v0.1.24, MIL.add_mod_items_to_local_backend does
@@ -13194,6 +13284,35 @@ _rt_register("cwv_parity_applied_state_committed_before_callbacks", function()
         return string.format(
             "applied_state() inside on_enable was %q, expected \"enabled\" -- shared lib fired callbacks before committing _applied (issue 506 regression)",
             tostring(seen_state))
+    end
+end)
+
+_rt_register("issue567_skin_reverse_index_valid", function()
+    -- The three persisted skins from issue #567 must satisfy BOTH layers of
+    -- vanilla's contract: live IML/WeaponSkins ownership and, whenever vanilla's
+    -- lazy reverse-index has been rebuilt, a cache row pointing at that owner.
+    local validate = mod._cwv567_validate_skin_association
+    if type(validate) ~= "function" then return "#567 association validator missing" end
+    local expected = {
+        cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1 = "cwv_es_sword_and_mace",
+        cwv_es_dual_maces_es_1h_mace_skin_02_runed_01 = "cwv_es_dual_maces",
+        cwv_es_axe_shield_wpn_emp_shield_03__axe_02_t2 = "cwv_es_axe_shield",
+    }
+    for skin_key, owner_key in pairs(expected) do
+        local valid, owner_or_err = validate(skin_key)
+        if not valid then return skin_key .. ": " .. tostring(owner_or_err) end
+        if owner_or_err ~= owner_key then
+            return string.format("%s owner=%s expected=%s", skin_key, tostring(owner_or_err), owner_key)
+        end
+        local cache = WeaponSkins and WeaponSkins._matching_weapon_skin_item_keys
+        if type(cache) == "table" then
+            local row = cache[skin_key]
+            if type(row) ~= "table" then return skin_key .. ": missing from rebuilt vanilla reverse-index" end
+            if row.item_key ~= owner_key .. "_skin" then
+                return string.format("%s reverse-index item_key=%s expected=%s_skin",
+                    skin_key, tostring(row.item_key), owner_key)
+            end
+        end
     end
 end)
 

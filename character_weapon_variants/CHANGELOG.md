@@ -1,5 +1,13 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.388-dev - 2026-07-13 - #567 rebuild vanilla skin reverse-index [diagnostics-armed]
+
+- Latest logs repeatedly warned that three persisted CWV skins were "Incorrectly configured" during PlayFab loadout refresh: Sword and Mace, Dual Maces, and Axe and Shield. Their skin rows were not malformed: each has `item_type/slot_type = weapon_skin`, a valid `matching_item_key`, a `WeaponSkins.skins` definition, and membership in the owner's rarity-tier combination pool.
+- Root cause is registration timing against vanilla's lazy snapshot. `WeaponSkins.matching_weapon_skin_item_key` builds `_matching_weapon_skin_item_keys` once by walking existing `ItemMasterList` owners and their `skin_combination_table` pools (`weapon_skins.lua:7824-7855`). CWV registers custom skin rows/pools at script load but defers the owning weapon rows until `StateInGameRunning.on_enter`; vanilla can snapshot before those owners exist, and never refreshes the cache itself.
+- `_auto_register_all` now invalidates the reverse-index immediately after all deferred CWV owner rows are mirrored into `ItemMasterList`, forces vanilla's complete rebuild before the backend refresh, then canonicalizes every CWV skin cache row from its explicit IML `matching_item_key`. That last step removes `pairs(ItemMasterList)` ambiguity when sibling variants share a combination pool. No identity, rarity, mesh, display-rig, or authored weapon association changed.
+- Added always-visible `[cwv:567]` diagnostics for the three reported skins, recording whether a stale cache existed and whether each live association validates after owner registration.
+- Added `/cwv_regression_test` check `issue567_skin_reverse_index_valid`, covering required skin rows, exact owner association, combination-pool membership, and the rebuilt vanilla cache row when present.
+
 ## 0.1.387-dev - 2026-07-13 - #538 /cwv_give refuses skin_only variants [untested]
 
 - `/cwv_give` now REFUSES illusion-only (`skin_only`) variant keys instead of registering them as real ownable items. Giving one (e.g. `cwv_es_longsword_nordland`) built a backend_id and called `_register_item(def, backend_id)`, mirroring the def into `ItemMasterList` and resurrecting the issue 390 crafts-as-wrong-item class for that key. `_auto_register_all` already excludes `skin_only` defs (`:9665`); the debug command bypassed that exclusion. Fix guards the command body (shared `def.skin_only` discriminator), echoing one line and returning: `<display_name> is an illusion-only variant - use the illusion browser`.
