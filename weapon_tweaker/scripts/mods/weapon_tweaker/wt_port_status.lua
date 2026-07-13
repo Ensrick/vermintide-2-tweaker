@@ -163,6 +163,20 @@ local _CONFIRMED = {
         -- v0.12.201-dev: Kruber Executioner Sword (#160) BAKED wh_ (two_handed_swords
         -- _executioner_template_1 -> Saltzpyre 2H Sword) from the tester's picks.
         es_2h_sword_executioner = true,    -- -> Saltzpyre 2H Sword
+        -- v0.12.213-dev (#519): Saltzpyre batch-2 — 10 of the 11 queued ports BAKED
+        -- career-scoped (wh_) into _3p_template_remaps (_wt_anim_remap.lua) from the
+        -- tester's persisted dev-picker picks (both persistence namespaces parsed).
+        -- dr_dual_wield_hammers had zero non-unset picks — stays in _NEEDS_ANIMS.
+        es_2h_hammer           = true,     -- -> WP Greathammer
+        dr_2h_cog_hammer       = true,     -- -> WP Greathammer
+        dr_2h_pick             = true,     -- -> WP Greathammer
+        bw_1h_mace             = true,     -- -> WP Greathammer
+        bw_ghost_scythe        = true,     -- -> WP Greathammer
+        es_bastard_sword       = true,     -- -> Saltzpyre 2H Sword
+        es_mace_shield         = true,     -- -> Dual Axe & Falchion
+        es_sword_shield        = true,     -- -> Dual Axe & Falchion
+        es_sword_shield_breton = true,     -- -> Dual Axe & Falchion
+        dr_shield_axe          = true,     -- -> Dual Axe & Falchion
     },
     -- wh_priest: all 7 entries ✅/🔁 (ANIMATION_COVERAGE.md:181-185). The only
     -- cross-prefix entry es_1h_flail is ✅; everything else is native wh_*.
@@ -230,22 +244,13 @@ local _NEEDS_ANIMS = {
     -- -> _CONFIRMED.saltzpyre). VALUE = the picker SET display label (_SALTZ_SET_LABEL);
     -- kept in lockstep with _SALTZ_WEAPON_SET (wt_dev_anim_picker.lua). Every wield-render
     -- target has a wh_* redirect in _WIELD_ANIM_CAREER_3P_PATCHES_BULK (wt_wield_patches).
+    -- v0.12.213-dev (#519): Saltzpyre batch-2 — 10 of the 11 ports were fully tuned
+    -- by the tester and BAKED career-scoped (wh_) into _3p_template_remaps
+    -- (_wt_anim_remap.lua) -> moved to _CONFIRMED above. Only dr_dual_wield_hammers
+    -- remains (zero non-unset picks in the tester's config — not yet tuned).
     saltzpyre = {
-        -- SET A — Warrior Priest Greathammer
-        es_2h_hammer           = "Warrior Priest Greathammer",
-        dr_2h_cog_hammer       = "Warrior Priest Greathammer",
-        dr_2h_pick             = "Warrior Priest Greathammer",
-        bw_1h_mace             = "Warrior Priest Greathammer",
-        bw_ghost_scythe        = "Warrior Priest Greathammer",
         -- SET B — Warrior Priest Dual Hammers
         dr_dual_wield_hammers  = "Warrior Priest Dual Hammers",
-        -- SET G — 2H Sword
-        es_bastard_sword       = "2H Sword",
-        -- SET C — Dual Axe & Falchion (shield ports; shield offhand model is a later pass)
-        es_mace_shield         = "Dual Axe & Falchion",
-        es_sword_shield        = "Dual Axe & Falchion",
-        es_sword_shield_breton = "Dual Axe & Falchion",
-        dr_shield_axe          = "Dual Axe & Falchion",
     },
     -- v0.12.193-dev: Kerillian batch 1 — the "next group" of cross-character 3P ports
     -- surfaced for dev-picker tuning (mirrors the Saltzpyre batch-1 setup). Every

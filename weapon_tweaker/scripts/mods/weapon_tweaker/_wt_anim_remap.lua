@@ -1238,6 +1238,36 @@ do
         parry_pose                              = "parry_pose",
         swap_charge_stance                      = "attack_swing_charge",
     }
+    -- ============================================================
+    -- v0.12.213-dev (#519): Saltzpyre batch-2 BAKED — 10 of the 11 queued ports
+    -- (es_2h_hammer, dr_2h_cog_hammer, dr_2h_pick, bw_1h_mace, bw_ghost_scythe,
+    -- es_bastard_sword, es_mace_shield, es_sword_shield, es_sword_shield_breton,
+    -- dr_shield_axe), pulled VERBATIM from the tester's persisted dev-picker picks
+    -- (issue #519 user_settings.txt attachment). Both persistence namespaces were
+    -- parsed per reference_wt_anim_picker_two_key_namespaces: all batch-2 picks
+    -- live in the weapon-only namespace; the template-qualified namespace holds
+    -- nothing new for these weapons. dr_dual_wield_hammers had ZERO non-unset
+    -- picks in either namespace — NOT baked, stays queued in the picker.
+    -- wh_ = the Saltzpyre-receiver redirect; every touched template already
+    -- carries its native owner prefix = false. The wh_ tables are appended to the
+    -- existing per-template entries below (alphabetical, same do-block).
+    -- ============================================================
+    R.bastard_sword_template.wh_ = {
+        attack_push                             = "attack_push",
+        attack_swing_charge_down_pose           = "attack_swing_charge_diagonal_right",
+        attack_swing_charge_left_diagonal       = "attack_swing_charge_diagonal_left",
+        attack_swing_charge_left_diagonal_pose  = "attack_swing_charge_diagonal_left",
+        attack_swing_charge_right_diagonal_pose = "attack_swing_charge_diagonal_right",
+        attack_swing_down                       = "attack_swing_down_right",
+        attack_swing_down_right                 = "attack_swing_down_right",
+        attack_swing_heavy_down                 = "attack_swing_down_right",
+        attack_swing_heavy_left_diagonal        = "attack_swing_heavy_left_diagonal",
+        attack_swing_heavy_right_diagonal       = "attack_swing_heavy_right_diagonal",
+        attack_swing_right                      = "attack_swing_right_diagonal",
+        attack_swing_up_left                    = "attack_swing_left_diagonal",
+        parry_pose                              = "parry_pose",
+        swap_charge_stance                      = "attack_swing_charge_diagonal",
+    }
     R.bw_deus_01_template_1 = R.bw_deus_01_template_1 or {}
     R.bw_deus_01_template_1.bw_ = R.bw_deus_01_template_1.bw_ or false
     R.bw_deus_01_template_1.es_ = {
@@ -1537,6 +1567,22 @@ do
         attack_swing_up_left                   = "attack_swing_heavy_left",
         parry_pose                             = "parry_pose",
     }
+    -- v0.12.213-dev (#519): dr_shield_axe on Saltzpyre -> Dual Axe & Falchion.
+    R.one_hand_axe_shield_template_1.wh_ = {
+        attack_push                            = "attack_push",
+        attack_swing_charge                    = "attack_swing_charge_down",
+        attack_swing_charge_left_diagonal_pose = "attack_swing_charge_left",
+        attack_swing_charge_left_pose          = "attack_swing_charge_left",
+        attack_swing_charge_right_pose         = "attack_swing_charge_down",
+        attack_swing_down                      = "attack_swing_down_left",
+        attack_swing_heavy                     = "attack_swing_heavy_down",
+        attack_swing_heavy_down                = "attack_swing_heavy_left",
+        attack_swing_heavy_right               = "attack_swing_heavy_down",
+        attack_swing_left_diagonal             = "attack_swing_down_left",
+        attack_swing_right_diagonal            = "attack_swing_right",
+        attack_swing_up_left                   = "attack_swing_right",
+        parry_pose                             = "parry_pose",
+    }
     R.one_handed_crowbill = R.one_handed_crowbill or {}
     R.one_handed_crowbill.bw_ = R.one_handed_crowbill.bw_ or false
     R.one_handed_crowbill.es_ = {
@@ -1702,6 +1748,20 @@ do
         attack_swing_up_left          = "attack_swing_heavy_left",
         parry_pose                    = "parry_pose",
     }
+    -- v0.12.213-dev (#519): es_mace_shield on Saltzpyre -> Dual Axe & Falchion.
+    R.one_handed_hammer_shield_template_1.wh_ = {
+        attack_push                   = "attack_push",
+        attack_swing_charge           = "attack_swing_charge_down",
+        attack_swing_charge_left_pose = "attack_swing_charge_left",
+        attack_swing_charge_pose      = "attack_swing_charge_down",
+        attack_swing_down             = "attack_swing_down",
+        attack_swing_heavy            = "attack_swing_heavy_down",
+        attack_swing_heavy_left       = "attack_swing_heavy_left",
+        attack_swing_left             = "attack_swing_heavy_left",
+        attack_swing_right_diagonal   = "attack_swing_heavy_down",
+        attack_swing_up_left          = "attack_swing_down_left",
+        parry_pose                    = "parry_pose",
+    }
     R.one_handed_hammer_template_2 = R.one_handed_hammer_template_2 or {}
     R.one_handed_hammer_template_2.dr_ = R.one_handed_hammer_template_2.dr_ or false
     R.one_handed_hammer_template_2.we_ = {
@@ -1717,6 +1777,25 @@ do
         attack_swing_right                      = "attack_swing_right",
         attack_swing_right_diagonal             = "attack_swing_right",
         parry_pose                              = "parry_pose",
+    }
+    -- v0.12.213-dev (#519): bw_1h_mace on Saltzpyre -> WP Greathammer. The
+    -- literal entry above carries bw_ = false + the Kruber es_ bake (v0.12.150).
+    R.one_handed_hammer_wizard_template_1 = R.one_handed_hammer_wizard_template_1 or {}
+    R.one_handed_hammer_wizard_template_1.bw_ = R.one_handed_hammer_wizard_template_1.bw_ or false
+    R.one_handed_hammer_wizard_template_1.wh_ = {
+        attack_push                       = "attack_push",
+        attack_swing_charge_left_diagonal = "attack_swing_charge_right_down",
+        attack_swing_charge_left_pose     = "attack_swing_charge",
+        attack_swing_charge_right_pose    = "attack_swing_charge_right",
+        attack_swing_down                 = "attack_swing_down_right",
+        attack_swing_heavy_down           = "attack_swing_heavy_right_diagonal",
+        attack_swing_heavy_left_up        = "attack_swing_heavy_right",
+        attack_swing_heavy_right_up       = "attack_swing_heavy_right",
+        attack_swing_left                 = "attack_swing_left",
+        attack_swing_left_diagonal        = "attack_swing_left",
+        attack_swing_left_diagonal_last   = "attack_swing_up_left",
+        attack_swing_right_diagonal       = "attack_swing_up",
+        parry_pose                        = "parry_pose",
     }
     R.one_handed_sword_shield_template_1 = R.one_handed_sword_shield_template_1 or {}
     R.one_handed_sword_shield_template_1.es_ = R.one_handed_sword_shield_template_1.es_ or false
@@ -1734,6 +1813,21 @@ do
         attack_swing_stab              = "push_stab",
         parry_pose                     = "parry_pose",
     }
+    -- v0.12.213-dev (#519): es_sword_shield on Saltzpyre -> Dual Axe & Falchion.
+    R.one_handed_sword_shield_template_1.wh_ = {
+        attack_push                    = "attack_push",
+        attack_swing_charge            = "attack_swing_charge_left",
+        attack_swing_charge_right_pose = "attack_swing_charge_left",
+        attack_swing_charge_stab       = "attack_swing_charge_down",
+        attack_swing_heavy             = "attack_swing_heavy_left",
+        attack_swing_heavy_right       = "attack_swing_heavy_left",
+        attack_swing_heavy_stab        = "attack_swing_heavy_down",
+        attack_swing_left              = "attack_swing_down_left",
+        attack_swing_left_diagonal     = "attack_swing_heavy_left",
+        attack_swing_right_diagonal    = "attack_swing_heavy_down",
+        attack_swing_stab              = "attack_swing_heavy_down",
+        parry_pose                     = "parry_pose",
+    }
     R.one_handed_sword_shield_template_2 = R.one_handed_sword_shield_template_2 or {}
     R.one_handed_sword_shield_template_2.es_ = R.one_handed_sword_shield_template_2.es_ or false
     R.one_handed_sword_shield_template_2.we_ = {
@@ -1748,6 +1842,21 @@ do
         attack_swing_heavy_stab           = "attack_swing_heavy_stab",
         attack_swing_stab                 = "attack_swing_stab",
         attack_swing_up_left              = "attack_swing_heavy_down_right",
+        parry_pose                        = "parry_pose",
+    }
+    -- v0.12.213-dev (#519): es_sword_shield_breton on Saltzpyre -> Dual Axe & Falchion.
+    R.one_handed_sword_shield_template_2.wh_ = {
+        attack_push                       = "attack_push",
+        attack_swing_charge               = "attack_swing_charge_left",
+        attack_swing_charge_left_diagonal = "attack_swing_charge_down",
+        attack_swing_charge_stab          = "attack_swing_charge_down",
+        attack_swing_down_right           = "attack_swing_heavy_down",
+        attack_swing_heavy                = "attack_swing_heavy_left",
+        attack_swing_heavy_breton         = "attack_swing_right_diagonal",
+        attack_swing_heavy_down           = "attack_swing_heavy_down",
+        attack_swing_heavy_stab           = "attack_swing_heavy_down",
+        attack_swing_stab                 = "attack_swing_heavy_down",
+        attack_swing_up_left              = "attack_swing_heavy_left",
         parry_pose                        = "parry_pose",
     }
     R.one_handed_throwing_axes_template = R.one_handed_throwing_axes_template or {}
@@ -1890,6 +1999,25 @@ do
         special_action                    = "attack_swing_heavy_left",
         special_action_02                 = "attack_swing_heavy_down",
     }
+    -- v0.12.213-dev (#519): bw_ghost_scythe on Saltzpyre -> WP Greathammer. The two
+    -- scythe specials have no SET A twin — mapped to the nearest events per the picks.
+    R.staff_scythe.wh_ = {
+        attack_push                       = "attack_push",
+        attack_swing_charge_left          = "attack_swing_charge_right",
+        attack_swing_charge_left_diagonal = "attack_swing_charge_right",
+        attack_swing_charge_right         = "attack_swing_charge_right",
+        attack_swing_heavy                = "attack_swing_heavy_right",
+        attack_swing_heavy_left_diagonal  = "attack_swing_heavy_right",
+        attack_swing_heavy_right          = "attack_swing_heavy_right",
+        attack_swing_left                 = "attack_swing_left",
+        attack_swing_left_diagonal        = "attack_swing_up_left",
+        attack_swing_left_diagonal_last   = "attack_swing_up_left",
+        attack_swing_right                = "attack_swing_down_right",
+        attack_swing_up_right             = "attack_swing_down_right",
+        parry_pose                        = "parry_pose",
+        special_action                    = "attack_swing_charge_right",
+        special_action_02                 = "attack_swing_heavy_right_diagonal",
+    }
     R.staff_spark_spear_template_1 = R.staff_spark_spear_template_1 or {}
     R.staff_spark_spear_template_1.bw_ = R.staff_spark_spear_template_1.bw_ or false
     R.staff_spark_spear_template_1.es_ = {
@@ -1996,6 +2124,25 @@ do
         attack_swing_up_right          = "attack_swing_right",
         parry_pose                     = "parry_pose",
     }
+    -- v0.12.213-dev (#519): dr_2h_cog_hammer on Saltzpyre -> WP Greathammer.
+    R.two_handed_cog_hammers_template_1.wh_ = {
+        attack_push                    = "attack_push",
+        attack_swing_charge            = "attack_swing_charge_right_down",
+        attack_swing_charge_pose       = "attack_swing_charge_right_down",
+        attack_swing_charge_right      = "attack_push",
+        attack_swing_charge_right_down = "attack_swing_charge_right_down",
+        attack_swing_down_left         = "attack_swing_heavy_right_diagonal",
+        attack_swing_down_right        = "attack_swing_heavy_right_diagonal",
+        attack_swing_heavy             = "attack_push",
+        attack_swing_heavy_right       = "attack_push",
+        attack_swing_left              = "attack_swing_up_left",
+        attack_swing_left_diagonal     = "attack_swing_up_left",
+        attack_swing_right_diagonal    = "attack_swing_down_right",
+        attack_swing_up                = "attack_swing_up_left",
+        attack_swing_up_pose           = "attack_swing_left",
+        attack_swing_up_right          = "attack_swing_up",
+        parry_pose                     = "parry_pose",
+    }
     R.two_handed_halberds_template_1 = R.two_handed_halberds_template_1 or {}
     R.two_handed_halberds_template_1.es_ = R.two_handed_halberds_template_1.es_ or false
     R.two_handed_halberds_template_1.wh_ = {
@@ -2058,6 +2205,20 @@ do
         attack_swing_left_diagonal = "attack_swing_left_diagonal",
         parry_pose                 = "parry_pose",
     }
+    -- v0.12.213-dev (#519): es_2h_hammer on Saltzpyre -> WP Greathammer.
+    R.two_handed_hammers_template_1.wh_ = {
+        attack_push                = "attack_push",
+        attack_swing_charge        = "attack_swing_charge",
+        attack_swing_charge_left   = "attack_swing_charge_right_down",
+        attack_swing_charge_right  = "attack_swing_charge_right",
+        attack_swing_down_left     = "attack_swing_heavy_right_diagonal",
+        attack_swing_down_right    = "attack_swing_heavy_right_diagonal",
+        attack_swing_heavy         = "attack_swing_heavy_right",
+        attack_swing_heavy_right   = "attack_swing_heavy_right",
+        attack_swing_left          = "attack_swing_left",
+        attack_swing_left_diagonal = "attack_swing_up_left",
+        parry_pose                 = "parry_pose",
+    }
     R.two_handed_picks_template_1 = R.two_handed_picks_template_1 or {}
     R.two_handed_picks_template_1.dr_ = R.two_handed_picks_template_1.dr_ or false
     R.two_handed_picks_template_1.we_ = {
@@ -2072,6 +2233,21 @@ do
         attack_swing_left                  = "attack_swing_right",
         attack_swing_left_diagonal         = "attack_swing_left",
         attack_swing_right_diagonal        = "attack_swing_right",
+        parry_pose                         = "parry_pose",
+    }
+    -- v0.12.213-dev (#519): dr_2h_pick on Saltzpyre -> WP Greathammer.
+    R.two_handed_picks_template_1.wh_ = {
+        attack_push                        = "attack_push",
+        attack_swing_charge_left_down      = "attack_swing_charge_right_down",
+        attack_swing_charge_left_down_pose = "attack_swing_charge_right_down",
+        attack_swing_charge_right_down     = "attack_swing_charge_right_down",
+        attack_swing_down_left             = "attack_swing_heavy_right_diagonal",
+        attack_swing_down_left_axe         = "attack_swing_heavy_right_diagonal",
+        attack_swing_down_right            = "attack_swing_heavy_right_diagonal",
+        attack_swing_down_right_axe        = "attack_swing_heavy_right_diagonal",
+        attack_swing_left                  = "attack_swing_left",
+        attack_swing_left_diagonal         = "attack_swing_up_left",
+        attack_swing_right_diagonal        = "attack_swing_down_right",
         parry_pose                         = "parry_pose",
     }
     R.two_handed_spears_elf_template_1 = R.two_handed_spears_elf_template_1 or {}

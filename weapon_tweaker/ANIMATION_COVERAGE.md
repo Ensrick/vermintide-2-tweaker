@@ -27,6 +27,15 @@
 > Picker wiring only, nothing baked - `_NEEDS_ANIMS.saltzpyre` + `_SALTZ_*` picker
 > tables (`wt_dev_anim_picker.lua`) carry these 11.
 
+> **UPDATE 2026-07-13 (v0.12.213-dev, #519):** the tester finished Saltzpyre batch-2;
+> **10 of the 11** ports were fully tuned (every dropdown set) and BAKED career-scoped
+> (`wh_`) into `_3p_template_remaps` (`_wt_anim_remap.lua`) - 129 picks, both config
+> namespaces parsed per `reference_wt_anim_picker_two_key_namespaces` (all lived in
+> weapon-only; template-qualified residuals were already baked in v0.12.203). Moved to
+> `_CONFIRMED.saltzpyre` + removed from the picker. **`dr_dual_wield_hammers` had ZERO
+> non-unset picks** in either namespace - NOT baked, still queued in the picker.
+> All 10 rows below are 🔧 wired-unverified until the user eyeballs them in-game.
+
 
 > Generated 2026-06-11 from a full source audit (wt v0.12.118-dev) of
 > `wt_unlock_data.lua` (`weapon_unlock_map`) cross-referenced against every
@@ -175,11 +184,14 @@ All `wh_*` natives 🔁 (~14 keys).
 | we_crossbow_repeater | Elf Repeater Crossbow | ✅ | redirect to `to_repeating_crossbow` ("should work almost perfectly"); #441 v0.12.212-dev baked wh_* `wield_anim_career_3p = to_repeating_crossbow` (keep-preview idle was wrong; in-mission redirect never covered the previewer) |
 | we_1h_spears_shield | Elf Spear & Shield | 🧊 | live = legacy sword&shield suffix route; DECISIONS SHO7 retargets to `wh_dual_wield_axe_falchion` — **conflict, not wired** |
 | es_1h_mace / es_1h_sword / we_1h_axe | 1H family | 🔁 | universal vocab fall-through |
-| es_bastard_sword / es_2h_sword_executioner | Bret. Longsword / Executioner | 🔧 | `to_bastard_sword`/`to_2h_sword` TRUE on Saltz — native melee fall-through expected, verify |
-| es_2h_hammer / dr_2h_cog_hammer / dr_2h_hammer / dr_2h_pick / bw_1h_mace / bw_ghost_scythe | 2H-blunt family ×6 | 🔧 | `to_2h_hammer` TRUE on Saltz — fall-through expected, per-action unverified |
+| es_2h_sword_executioner | Executioner | ✅ | BAKED wh_ v0.12.201-dev (#160) → Saltzpyre 2H Sword |
+| es_bastard_sword | Bret. Longsword | 🔧 | **BAKED v0.12.213-dev (#519)** `_3p_template_remaps.bastard_sword_template.wh_` (Saltzpyre 2H Sword, 14 picks incl. `swap_charge_stance`); wired-unverified |
+| es_2h_hammer / dr_2h_cog_hammer / dr_2h_pick / bw_1h_mace / bw_ghost_scythe | 2H-blunt family ×5 | 🔧 | **BAKED v0.12.213-dev (#519)** career-scoped wh_ → WP Greathammer (`two_handed_hammers_template_1` / `two_handed_cog_hammers_template_1` / `two_handed_picks_template_1` / `one_handed_hammer_wizard_template_1` / `staff_scythe`); wired-unverified |
+| dr_2h_hammer | Bardin 2H Hammer | 🔧 | NOT in batch-2 — `to_2h_hammer` TRUE on Saltz, fall-through expected, per-action unverified |
 | we_2h_axe | Glaive | 📋 | decided wh_2h_hammer (user override) |
 | es_dual_wield_hammer_sword | Mace & Sword | 📋 | decided wh_dual_hammer |
-| dr_dual_wield_axes / dr_dual_wield_hammers | Bardin duals | 📋 | decided wh_dual_hammer (partial redirect helps) |
+| dr_dual_wield_axes | Bardin Dual Axes | ✅ | BAKED wh_ v0.12.188/.203 (`dual_wield_axes_template_1.wh_` → Dual Axe & Falchion) |
+| dr_dual_wield_hammers | Bardin Dual Hammers | 📋 | batch-2 picker row live (→ WP Dual Hammers) but tester left ALL picks unset (#519) — not baked, still queued |
 | we_dual_wield_daggers / _swords / _sword_dagger | Elf duals ×3 | 📋 | decided wh_dual_wield_axe_falchion |
 | es_blunderbuss / es_handgun | Blunderbuss / Handgun | 🔧 | Saltz HAS `to_blunderbuss`/`to_handgun` per probe — may fall through natively despite decided wh_crossbow; verify before wiring |
 | es_repeating_handgun | Repeater Handgun | 📋 | decided wh_repeating_pistols |
@@ -191,7 +203,8 @@ All `wh_*` natives 🔁 (~14 keys).
 | dr_drake_pistol | Drakefire Pistols | 📋 | decided wh_brace_of_pistols |
 | dr_steam_pistol | Masterwork Pistol | 📋 | decided wh_repeating_pistols |
 | dr_deus_01 | Trollhammer | 📋 | decided wh_crossbow |
-| shield combos ×7 (dr_shield_axe, dr_shield_hammer, es_mace_shield, es_sword_shield, es_sword_shield_breton, es_deus_01, we_1h_spears_shield) | — | 📋 | SHO1-7 all decided `wh_dual_wield_axe_falchion` + **shield-offhand model dispatcher** (Wave 3, model-sub queue); es_deus_01 currently on legacy suffix route |
+| dr_shield_axe / es_mace_shield / es_sword_shield / es_sword_shield_breton | shield combos ×4 | 🔧 | **BAKED v0.12.213-dev (#519)** career-scoped wh_ → Dual Axe & Falchion (`one_hand_axe_shield_template_1` / `one_handed_hammer_shield_template_1` / `one_handed_sword_shield_template_1` / `_2`); right-hand weapon render only, **shield-offhand model dispatcher still pending** (Wave 3, model-sub queue); wired-unverified |
+| shield combos ×3 (dr_shield_hammer, es_deus_01, we_1h_spears_shield) | — | 📋 | SHO decided `wh_dual_wield_axe_falchion` + **shield-offhand model dispatcher** (Wave 3, model-sub queue); es_deus_01 currently on legacy suffix route |
 | bw_dagger | Sienna Dagger | 📋 | decided wh_fencing_sword |
 | bw_flame_sword | Flame Sword | 📋 | decided wh_1h_falchion |
 | staves ×8 (bw_skullstaff_* ×5, bw_necromancy_staff, bw_deus_01, we_life_staff) | — | 📋 | all decided wh_1h_falchion — needs cast/charge/beam wield-vocab synthesis |

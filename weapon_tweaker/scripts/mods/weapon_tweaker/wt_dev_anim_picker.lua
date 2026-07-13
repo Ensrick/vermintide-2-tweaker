@@ -1013,131 +1013,35 @@ local _SALTZ_SET_VOCAB = {
 -- falls through to idle, no T-pose, no crash). Every wield-render target is a wh_*
 -- redirect already present in _WIELD_ANIM_CAREER_3P_PATCHES_BULK (wt_wield_patches).
 -- Kept in lockstep with _NEEDS_ANIMS.saltzpyre (wt_port_status).
+-- v0.12.213-dev (#519): 10 of the 11 batch-2 ports were fully tuned and BAKED
+-- career-scoped (wh_) into _3p_template_remaps (_wt_anim_remap.lua) -> removed
+-- from _NEEDS_ANIMS.saltzpyre, so the catalog gate drops them; their entries in
+-- the three _SALTZ_* tables below are deleted to keep this mirror in lockstep.
+-- Only dr_dual_wield_hammers remains (zero non-unset picks — not yet tuned).
 local _SALTZ_WEAPON_SET = {
-    -- SET A — Warrior Priest Greathammer (to_2h_hammer_priest)
-    es_2h_hammer          = "A",
-    dr_2h_cog_hammer      = "A",
-    dr_2h_pick            = "A",
-    bw_1h_mace            = "A",
-    bw_ghost_scythe       = "A",
     -- SET B — Warrior Priest Dual Hammers (to_dual_hammers_priest)
     dr_dual_wield_hammers = "B",
-    -- SET G — Saltzpyre 2H Sword (to_2h_sword)
-    es_bastard_sword      = "G",
-    -- SET C — Dual Axe & Falchion (to_dual_axe_sword_wh). SHIELD ports: the right-hand
-    -- weapon is the tunable render; the shield offhand model is a separate later pass.
-    es_mace_shield         = "C",
-    es_sword_shield        = "C",
-    es_sword_shield_breton = "C",
-    dr_shield_axe          = "C",
 }
 
 -- Source template per Saltzpyre port (where anim_event_3p is written) = the port's
 -- own source weapon template. Confirmed against ItemMasterList.
 local _SALTZ_WEAPON_TEMPLATE = {
-    -- SET A — WP Greathammer
-    es_2h_hammer          = "two_handed_hammers_template_1",
-    dr_2h_cog_hammer      = "two_handed_cog_hammers_template_1",
-    dr_2h_pick            = "two_handed_picks_template_1",
-    bw_1h_mace            = "one_handed_hammer_wizard_template_1",
-    bw_ghost_scythe       = "staff_scythe",
     -- SET B — WP Dual Hammers
     dr_dual_wield_hammers = "dual_wield_hammers_template",
-    -- SET G — Saltzpyre 2H Sword
-    es_bastard_sword      = "bastard_sword_template",
-    -- SET C — Dual Axe & Falchion (shield ports)
-    es_mace_shield         = "one_handed_hammer_shield_template_1",
-    es_sword_shield        = "one_handed_sword_shield_template_1",
-    es_sword_shield_breton = "one_handed_sword_shield_template_2",
-    dr_shield_axe          = "one_hand_axe_shield_template_1",
+    -- v0.12.213-dev (#519): the 10 baked batch-2 entries removed (see _SALTZ_WEAPON_SET).
 }
 
 -- Per-weapon source attack anim_events (one dropdown each), deduped from the source
 -- template's actions. Receiver-independent — each list is copied VERBATIM from the
 -- matching _KERI_WEAPON_ATTACKS entry (bw_1h_mace from the Kruber _WEAPON_ATTACKS).
 local _SALTZ_WEAPON_ATTACKS = {
-    -- SET A — WP Greathammer
-    es_2h_hammer = {
-        "attack_swing_charge", "attack_swing_charge_right", "attack_swing_charge_left",
-        "attack_swing_heavy_right", "attack_swing_heavy", "attack_swing_down_left",
-        "attack_swing_left", "attack_swing_left_diagonal", "attack_swing_down_right",
-        "attack_push", "parry_pose",
-    },
-    dr_2h_cog_hammer = {
-        "attack_swing_charge", "attack_swing_charge_pose", "attack_swing_charge_right_down",
-        "attack_swing_down_right", "attack_swing_down_left", "attack_swing_up",
-        "attack_swing_up_pose", "attack_swing_right_diagonal", "attack_swing_left_diagonal",
-        "attack_swing_up_right", "attack_swing_left", "attack_push", "attack_swing_charge_right",
-        "attack_swing_heavy", "attack_swing_heavy_right", "parry_pose",
-    },
-    dr_2h_pick = {
-        "attack_swing_charge_left_down", "attack_swing_charge_right_down",
-        "attack_swing_charge_left_down_pose", "attack_swing_right_diagonal",
-        "attack_swing_left_diagonal", "attack_swing_down_left_axe", "attack_swing_down_left",
-        "attack_swing_down_right_axe", "attack_swing_down_right", "attack_swing_left",
-        "attack_push", "parry_pose",
-    },
-    bw_1h_mace = {
-        "attack_push",
-        "attack_swing_charge_left_diagonal",
-        "attack_swing_charge_left_pose",
-        "attack_swing_charge_right_pose",
-        "attack_swing_down",
-        "attack_swing_heavy_down",
-        "attack_swing_heavy_left_up",
-        "attack_swing_heavy_right_up",
-        "attack_swing_left",
-        "attack_swing_left_diagonal",
-        "attack_swing_left_diagonal_last",
-        "attack_swing_right_diagonal",
-        "parry_pose",
-    },
-    bw_ghost_scythe = {
-        "attack_swing_charge_left", "attack_swing_charge_right", "attack_swing_charge_left_diagonal",
-        "attack_swing_left_diagonal", "attack_swing_up_right", "attack_swing_left",
-        "attack_swing_right", "attack_swing_heavy", "attack_swing_heavy_right",
-        "attack_swing_heavy_left_diagonal", "attack_swing_left_diagonal_last", "attack_push",
-        "parry_pose", "special_action", "special_action_02",
-    },
+    -- v0.12.213-dev (#519): the 10 baked batch-2 entries removed (see _SALTZ_WEAPON_SET).
     -- SET B — WP Dual Hammers
     dr_dual_wield_hammers = {
         "attack_swing_charge_down", "attack_swing_charge_right", "attack_swing_charge_left",
         "attack_swing_heavy_down", "attack_swing_heavy_right_diagonal", "attack_swing_heavy_left_diagonal",
         "attack_swing_left", "attack_swing_down", "attack_swing_left_diagonal", "attack_swing_up",
         "attack_swing_stab", "attack_push", "parry_pose",
-    },
-    -- SET G — Saltzpyre 2H Sword
-    es_bastard_sword = {
-        "attack_swing_charge_left_diagonal", "attack_swing_charge_right_diagonal_pose",
-        "swap_charge_stance", "attack_swing_charge_down_pose", "attack_swing_charge_left_diagonal_pose",
-        "attack_swing_heavy_left_diagonal", "attack_swing_heavy_right_diagonal", "attack_swing_heavy_down",
-        "attack_swing_up_left", "attack_swing_right", "attack_swing_down", "attack_swing_down_right",
-        "attack_push", "parry_pose",
-    },
-    -- SET C — Dual Axe & Falchion (shield ports)
-    es_mace_shield = {
-        "attack_swing_charge", "attack_swing_charge_left_pose", "attack_swing_charge_pose",
-        "attack_swing_heavy", "attack_swing_heavy_left", "attack_swing_left",
-        "attack_swing_right_diagonal", "attack_swing_up_left", "attack_swing_down",
-        "attack_push", "parry_pose",
-    },
-    es_sword_shield = {
-        "attack_swing_charge", "attack_swing_charge_stab", "attack_swing_charge_right_pose",
-        "attack_swing_heavy", "attack_swing_heavy_right", "attack_swing_heavy_stab",
-        "attack_swing_left_diagonal", "attack_swing_right_diagonal", "attack_swing_stab",
-        "attack_swing_left", "attack_push", "parry_pose",
-    },
-    es_sword_shield_breton = {
-        "attack_swing_charge_left_diagonal", "attack_swing_charge", "attack_swing_charge_stab",
-        "attack_swing_heavy_down", "attack_swing_heavy", "attack_swing_heavy_stab",
-        "attack_swing_up_left", "attack_swing_down_right", "attack_swing_heavy_breton",
-        "attack_swing_stab", "attack_push", "parry_pose",
-    },
-    dr_shield_axe = {
-        "attack_swing_charge", "attack_swing_charge_right_pose", "attack_swing_charge_left_diagonal_pose",
-        "attack_swing_charge_left_pose", "attack_swing_heavy", "attack_swing_heavy_down",
-        "attack_swing_heavy_right", "attack_swing_left_diagonal", "attack_swing_right_diagonal",
-        "attack_swing_down", "attack_swing_up_left", "attack_push", "parry_pose",
     },
 }
 

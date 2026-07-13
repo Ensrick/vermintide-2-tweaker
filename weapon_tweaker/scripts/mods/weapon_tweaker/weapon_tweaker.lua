@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.212-dev"
+local MOD_VERSION = "0.12.213-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -3762,6 +3762,34 @@ _rt_register("billhook_anim_remap_present", function()
     -- Embedded constant marker for the fix:
     local _MARKER = "_2h_billhook"
     if #_MARKER == 0 then return "marker missing" end
+end)
+
+_rt_register("saltz_batch2_wh_remaps_baked", function()
+    -- v0.12.213-dev (#519): Saltzpyre batch-2 bake — the 10 fully-tuned ports must
+    -- each carry a career-scoped wh_ table in _3p_template_remaps (baked in
+    -- _wt_anim_remap.lua from the tester's persisted picks). Guards against a
+    -- refactor dropping the do-block appends. dr_dual_wield_hammers deliberately
+    -- absent (zero non-unset picks — still queued in the dev picker).
+    local expected = {
+        "two_handed_hammers_template_1",        -- es_2h_hammer
+        "two_handed_cog_hammers_template_1",    -- dr_2h_cog_hammer
+        "two_handed_picks_template_1",          -- dr_2h_pick
+        "one_handed_hammer_wizard_template_1",  -- bw_1h_mace
+        "staff_scythe",                         -- bw_ghost_scythe
+        "bastard_sword_template",               -- es_bastard_sword
+        "one_handed_hammer_shield_template_1",  -- es_mace_shield
+        "one_handed_sword_shield_template_1",   -- es_sword_shield
+        "one_handed_sword_shield_template_2",   -- es_sword_shield_breton
+        "one_hand_axe_shield_template_1",       -- dr_shield_axe
+    }
+    local missing = {}
+    for _, tpl in ipairs(expected) do
+        local entry = _3p_template_remaps[tpl]
+        if type(entry) ~= "table" or type(entry.wh_) ~= "table" or not next(entry.wh_) then
+            missing[#missing + 1] = tpl
+        end
+    end
+    if #missing > 0 then return "wh_ bake missing: " .. table.concat(missing, ", ") end
 end)
 
 _rt_register("wt_safe_hook_installed", function()
