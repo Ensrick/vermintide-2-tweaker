@@ -23,6 +23,14 @@ local loc = {
     suppress_live_event         = en("[working] Suppress the game's live event"),
     suppress_live_event_tooltip = en("Turn off whatever seasonal event the game currently has live: the keep goes back to the plain inn, ritual sites stop spawning, and event lighting and dialogue stop. Your own preset and mutator choices still apply on top of that. Host only, and toggling it reloads the level."),
 
+    -- issue 532: hold-Tab preview of the active mutators (option title carries the
+    -- dev status tag; the runtime panel strings below do not, per LOCALIZATION §13).
+    preview_active_mutators         = en("[untested] Preview Active Mutators on Tab"),
+    preview_active_mutators_tooltip = en("While you hold Tab in the keep, show the mutators this lobby will activate (icon and name) on the right-hand pop-out panel, alongside Chaos Wastes Tweaker's starting-boons list if you run that mod. Reflects your Event Preset and mutator checkboxes. A curse a lobby peer without the mod would crash on is listed as skipped instead. Applies to your own screen only."),
+    -- Runtime panel strings (not settings-option titles, so no dev status tag).
+    evt_mutator_preview_header        = en("Active Mutators"),
+    evt_mutator_preview_client_caveat = en("Your selection - the host's config decides"),
+
     -- Categories
     cat_difficulty = en("[working] Difficulty Modifiers"),
     cat_specials   = en("[working] Special / Elite Spawns"),

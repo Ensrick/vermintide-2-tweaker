@@ -124,29 +124,51 @@ floor (drops all curses when `curse_wire_safe()` is false) before the curses rea
 `add()` — it removes from the route rather than adding one, so no guard is
 bypassed. Registers check `dynamic_mutator_discovery`.
 Public surface: `mod._evt.active_preset`, `mod._evt.displayable_registered_mutators`,
-`mod._evt.gather_mutators`, `mod._evt.gather_active_events`,
-`mod._evt.suppress_live_event`, `mod._evt.merge_lists`.
+`mod._evt.gather_mutators`, `mod._evt.preview_selection`,
+`mod._evt.gather_active_events`, `mod._evt.suppress_live_event`,
+`mod._evt.merge_lists`. `preview_selection()` (issue 532) is the SIDE-EFFECT-FREE
+twin of `gather_mutators()`: it returns the same active mutator list (weave-only
+names dropped identically) plus the issue-430 parity-dropped curse names, but WITHOUT
+`gather_mutators`'s injection-time side effects (`notify_weave_drop` chat line,
+`_et455` template wrap) so the Tab preview can call it on every panel open. It is the
+ONLY sanctioned preview data source — the panel must never call `gather_mutators`.
 
-**`_evt_backend_hooks.lua` — manifest position 8.**
+**`_evt_preview.lua` — manifest position 8 (issue 532 Tab-hold mutator preview).**
+Two `hook_safe` on DISTINCT `IngamePlayerListUI` methods (`_setup_deed_reward_data`
+build point, `_draw` guarded own-pass) that render an "Active Mutators (N)" block on
+the player-list panel's right side, keep-only, gated on `preview_active_mutators`.
+Sibling of ct_dev's Starting-Boons preview (`CT_BOON_PREVIEW_461_MARKER`); mirrors its
+crash-proof shape (own `begin_pass`/`end_pass`, per-`draw_widget` pcall, icon + name as
+separate widgets). Consumes `mod._evt.preview_selection`. No exports; adds the helpers
+`mod._evt_mutator_display` / `mod._evt_mutator_icon` / `mod._evt_ct_boon_block_present`
+and the `/event_preview_mutators` command. Registers `issue532_mutator_preview_wired`.
+Placement coordinates with ct: both anchor to the `reward_divider` node on
+`banner_right`; when ct's boon block is active we stack ABOVE it (positive Y offset,
+capped rows), else we take ct's reward-slot position. Floor-dropped curses render
+greyed "(skipped: a peer lacks the mod)"; on a client the header carries a
+"host decides" caveat (et never syncs the host's picks). ct files are read-only
+reference; no ct file is touched.
+
+**`_evt_backend_hooks.lua` — manifest position 9.**
 The three live-event backend hooks (see Architecture below). No exports; consumes
 the selection surface.
 
-**`_evt_guard386_pacing.lua` — manifest position 9.**
+**`_evt_guard386_pacing.lua` — manifest position 10.**
 Issue 386 scalar-pacing sanitizer: `hook_safe` on
 `MutatorHandler.conflict_director_updated_settings`. Registers check
 `issue386_sanitize_pacing_scalar_to_table`. Public surface:
 `mod._et386_sanitize_pacing_scalars(pacing, difficulty)`.
 
-**`_evt_diagnostics.lua` — manifest position 10.**
+**`_evt_diagnostics.lua` — manifest position 11.**
 Read-only surfaces: `/event_probe`, `/event_active`, `/event_clear`, and the issue
 393 diagnostics-armed `ConflictDirector.init` post-init snapshot. No exports.
 
-**`_evt_apply.lua` — manifest position 11.**
+**`_evt_apply.lua` — manifest position 12.**
 Mid-game preset application (level reload plumbing), `/event_apply`, and
 `mod.on_setting_changed` — VMF allows exactly ONE assignment mod-wide and it lives
 here; never assign it in another file. No `mod._evt` exports.
 
-**`_evt_cursed_adventure.lua` — manifest position 12 (last).**
+**`_evt_cursed_adventure.lua` — manifest position 13 (last).**
 Curse package preload hooks (`MutatorHandler._activate_mutator`/`_deactivate_mutator`/
 `init`, `StateIngame.on_exit`) + the per-frame `CameraManager.shading_callback` sky
 tint. All runtime state is file-local; the per-frame hook must never read

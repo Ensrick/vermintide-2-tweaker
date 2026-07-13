@@ -98,6 +98,15 @@ local widgets = {
         default_value = false,
         tooltip       = "suppress_live_event_tooltip",
     },
+    -- issue 532: hold-Tab preview of the mutators this lobby will activate, drawn
+    -- on the player-list panel's right side (alongside ct's Starting-Boons preview
+    -- when that mod runs). Local display toggle, default on. See _evt_preview.lua.
+    {
+        setting_id    = "preview_active_mutators",
+        type          = "checkbox",
+        default_value = true,
+        tooltip       = "preview_active_mutators_tooltip",
+    },
 }
 
 for i = 1, #CATEGORIES do

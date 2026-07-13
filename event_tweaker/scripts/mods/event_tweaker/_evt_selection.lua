@@ -19,8 +19,8 @@ local mod = get_mod("event_tweaker")
 -- Owned by: event_tweaker.lua entry point (dofile'd after _evt_dlc +
 -- _evt_guard413_weave + _evt_guard455_boss_events, before the hook/command
 -- modules). Consumed via mod._evt exports: active_preset, gather_mutators,
--- gather_active_events, suppress_live_event, merge_lists,
--- displayable_registered_mutators.
+-- preview_selection (issue 532 Tab preview), gather_active_events,
+-- suppress_live_event, merge_lists, displayable_registered_mutators.
 
 local ET = mod._evt
 local rt_register = ET.rt_register
@@ -265,6 +265,72 @@ local function gather_mutators()
     return out
 end
 
+-- issue 532: the mutator selection this lobby WOULD inject, split into what
+-- actually activates and what the issue 430 curse-parity floor drops. Consumed by
+-- the Tab-hold preview (_evt_preview.lua) + /event_preview_mutators. Side-effect
+-- free: it mirrors gather_mutators()'s weave gate WITHOUT that path's chat notice
+-- (notify_weave_drop) or template mutation (_et455_guard_boss_event_mutator), so
+-- opening the panel every frame's-worth of times cannot spam chat or re-wrap
+-- dispatch fields. Returns two tables:
+--   active  = ordered { name, is_curse } that will reach append_live_event_mutators
+--             (preset + individual + floor-passing curses, deduped; weave-only
+--             names dropped outside a real Weave exactly as gather_mutators drops
+--             them -- so the preview never advertises a mutator that won't activate).
+--   dropped = curse names the parity floor removes (checkbox on + DLC owned +
+--             registered, but a lobby peer lacks event_tweaker). The panel renders
+--             these greyed/flagged so a curse that will NOT activate is never
+--             advertised as active.
+local function preview_selection()
+    local seen, active = {}, {}
+    local function consider(name, is_curse)
+        if WEAVE_ONLY_MUTATORS[name] and not _weave_wind_active() then
+            return  -- same drop gather_mutators applies; minus its chat notice
+        end
+        if not seen[name] then
+            seen[name] = true
+            active[#active + 1] = { name = name, is_curse = is_curse or false }
+        end
+    end
+
+    local preset = active_preset()
+    if preset and preset.mutators then
+        for i = 1, #preset.mutators do
+            if mutator_allowed(preset.mutators[i]) then
+                consider(preset.mutators[i], false)
+            end
+        end
+    end
+
+    local individual = selected_individual_mutators()
+    for i = 1, #individual do
+        consider(individual[i], false)
+    end
+
+    -- selected_curse_mutators() already applies the issue 430 floor (returns {}
+    -- when a peer lacks the mod), so anything it hands back genuinely activates.
+    local curses = selected_curse_mutators()
+    for i = 1, #curses do
+        consider(curses[i], true)
+    end
+
+    -- Floor-dropped curses: the user checked them and owns the DLC, but the
+    -- parity floor removed them (a lobby peer lacks event_tweaker). Enumerated
+    -- separately so the panel can list them greyed instead of silently vanishing.
+    local dropped = {}
+    if not (curse_wire_safe and curse_wire_safe()) then
+        local MT = rawget(_G, "MutatorTemplates")
+        for i = 1, #MANAGED_CURSES do
+            local c = MANAGED_CURSES[i]
+            if mod:get("mut_" .. c.id) and owns_dlc(c.dlc)
+               and (not MT or rawget(MT, c.id)) then
+                dropped[#dropped + 1] = c.id
+            end
+        end
+    end
+
+    return active, dropped
+end
+
 local function gather_active_events()
     local preset = active_preset()
     if not preset or not preset.active_events then
@@ -304,6 +370,7 @@ end
 ET.active_preset = active_preset
 ET.displayable_registered_mutators = displayable_registered_mutators
 ET.gather_mutators = gather_mutators
+ET.preview_selection = preview_selection
 ET.gather_active_events = gather_active_events
 ET.suppress_live_event = suppress_live_event
 ET.merge_lists = merge_lists

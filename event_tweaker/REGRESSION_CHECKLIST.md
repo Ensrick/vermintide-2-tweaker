@@ -63,6 +63,24 @@ Last updated: 2026-07-11 (v0.4.26-dev module split: detection pointers updated t
 
 ---
 
+### et-mutator-preview-own-pass — Tab-hold mutator preview must draw in its own guarded pass
+
+**[UI]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Player-list (Tab) panel blank/crashing, OR the "Active Mutators" block missing, OR a curse the parity floor drops advertised as active. |
+| Root cause | The preview appends into vanilla's UNguarded reward pass (a non-resident mutator-icon atlas asserts mid-loop and kills the panel), or `preview_selection()` calls `gather_mutators()` (fires `notify_weave_drop` chat spam + `_et455` template wrap every panel open), or the active list is built from raw checkbox state instead of the floor-applied selection (advertises a curse that won't inject). |
+| Mod(s) | event_tweaker |
+| Fix version(s) | event_tweaker v0.4.30-dev (issue 532) |
+| Category | INTEGRATION |
+| Repro | 1. In the keep with mutators/preset selected, hold Tab: "Active Mutators (N)" block renders on the right panel, icon+name per row, no panel crash. 2. With `ct_dev` also active + `preview_starting_boons` on: both the Starting-Boons and Active-Mutators blocks render together, stacked, no overlap. 3. Coop with a non-ET peer + a curse checked: that curse shows greyed "(skipped: a peer lacks the mod)", NOT in the active list. 4. `/event_preview_mutators` lists the same active + skipped names. |
+| Expected post-fix | Preview draws in its OWN `begin_pass`/`end_pass` with every `draw_widget` pcall-wrapped (icon + name separate widgets); `preview_selection()` is side-effect-free; floor-dropped curses render greyed, never active. |
+| Detection | Runtime: `/event_tweaker_regression_test` check `issue532_mutator_preview_wired` (marker `EVT_MUTATOR_PREVIEW_532_MARKER` + `mod._evt.preview_selection` returns two tables + `mod._evt_mutator_display` + `preview_active_mutators` boolean). Source: two `hook_safe` on distinct `IngamePlayerListUI` methods (`_setup_deed_reward_data` build, `_draw` guarded pass) in `_evt_preview.lua`. |
+
+
+---
+
 ## Localization / UI
 
 ### vmf-dropdown-options-mutated — Multi-angle-bracket cascades from shared options table
@@ -379,6 +397,7 @@ Last updated: 2026-07-11 (v0.4.26-dev module split: detection pointers updated t
 
 - et-weave-only-mutator-gate
 - et-boss-event-mutator-guard
+- et-mutator-preview-own-pass
 - feedback-deploy-vs-upload-distinction
 - feedback-mod-version-format
 - feedback-pre-deploy-checklist

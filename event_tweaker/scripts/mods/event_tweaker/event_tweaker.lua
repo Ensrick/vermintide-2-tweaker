@@ -1,7 +1,7 @@
 local mod = get_mod("event_tweaker")
 local _mem_probe_t0 = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.4.29-dev"
+local MOD_VERSION = "0.4.30-dev"
 
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([event_tweaker:LOAD] v<X> enabled fp=<hash> OK) is the canonical version
@@ -58,6 +58,7 @@ mod:dofile("scripts/mods/event_tweaker/_evt_guard413_weave")       -- issue 413:
 mod:dofile("scripts/mods/event_tweaker/_evt_guard455_boss_events") -- issue 455: boss-event mutator guard
 mod:dofile("scripts/mods/event_tweaker/_evt_guard430_curse_parity") -- issue 430: Cursed Adventure curse wire-safety floor (peer-parity beacon)
 mod:dofile("scripts/mods/event_tweaker/_evt_selection")            -- preset/checkbox/discovery selection -> gather_mutators
+mod:dofile("scripts/mods/event_tweaker/_evt_preview")              -- issue 532: Tab-hold active-mutator preview (IngamePlayerListUI)
 mod:dofile("scripts/mods/event_tweaker/_evt_backend_hooks")        -- the three live-event backend hooks
 mod:dofile("scripts/mods/event_tweaker/_evt_guard386_pacing")      -- issue 386: scalar pacing sanitizer
 mod:dofile("scripts/mods/event_tweaker/_evt_diagnostics")          -- /event_probe /event_active /event_clear + issue 393 snapshot

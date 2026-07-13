@@ -1,5 +1,26 @@
 # Tweaker: Events — Changelog
 
+## 0.4.30-dev (2026-07-12) - issue #532: preview active mutators on the Tab-hold panel [untested]
+
+### Why
+Issue #532 (feature, 2-moderate): issue 461 asked the Tab-hold player-list panel to preview "active mutators and starting boons set from the host". ct_dev shipped the Starting-Boons half (0.7.251-dev, `CT_BOON_PREVIEW_461_MARKER`); this ships the ACTIVE-MUTATORS half on the SAME right-hand panel. Before this, the host had no in-keep confirmation of which mutators their preset + checkbox picks would actually turn on.
+
+### Changed
+- New `_evt_preview.lua` (manifest position between `_evt_selection` and `_evt_backend_hooks`). Two hooks on DISTINCT `IngamePlayerListUI` methods (singleton-clean; et had NO hook on this class): `_setup_deed_reward_data` [safe] = build point (fires once on panel activation, keep-only via `self._is_in_inn`, gated on the new `preview_active_mutators` toggle; builds the widget list onto the instance so `_draw` only draws - zero per-frame allocation), and `_draw` [safe] = the guarded draw pass. Crash-proof shape mirrors ct's #461 block exactly: our OWN `begin_pass`/`end_pass` layered on vanilla's, every `draw_widget` individually pcall-wrapped, and icon + name as SEPARATE widgets per row so a mutator whose icon atlas is not resident in the keep degrades to name-only instead of asserting. Adds `mod._evt_mutator_display` / `mod._evt_mutator_icon` (name from the template's own `display_name` loc key, guarding the `<key>` miss-sentinel) and `mod._evt_ct_boon_block_present` (ct-coordination probe). New `/event_preview_mutators` chat command = the robust textual fallback + `/verify` surface. Regression check `issue532_mutator_preview_wired` (marker `EVT_MUTATOR_PREVIEW_532_MARKER` + `preview_selection` + display resolver + toggle).
+- `_evt_selection.lua` - new side-effect-free `preview_selection()` (exported `mod._evt.preview_selection`): returns the active list (preset + individual + floor-passing curses, deduped) plus the issue-430 parity-DROPPED curse names, WITHOUT `gather_mutators()`'s injection-time side effects (the `notify_weave_drop` chat line and the `_et455` template wrap). Weave-only names are dropped exactly as `gather_mutators` drops them, so the preview never advertises a mutator that will not activate.
+- `event_tweaker_data.lua` - `preview_active_mutators` checkbox (top-level, default ON).
+- `event_tweaker_localization.lua` - `preview_active_mutators` (+ tooltip; `[untested]` option-title tag) and the runtime panel strings `evt_mutator_preview_header` / `evt_mutator_preview_client_caveat` (untagged per LOCALIZATION §13).
+- `MOD_VERSION` `0.4.29-dev` -> `0.4.30-dev`.
+
+### Notes
+- **Placement coordination with ct.** Both blocks anchor to the `reward_divider` node on `banner_right` (ct's Starting-Boons header sits at Y=-700, growing DOWN). When ct's boon preview is active (`ct_dev` or `ct` loaded, enabled, `preview_starting_boons` on) we STACK our block ABOVE it (a positive Y offset on the same node, capped rows) so both render together; when ct is absent our block takes ct's reward-slot position (offset 0, growing down). ct files were read-only reference; no ct file was touched.
+- **Issue 430 parity state.** A curse the parity floor will drop (checkbox on + DLC owned + registered, but a lobby peer lacks event_tweaker) renders greyed and flagged "(skipped: a peer lacks the mod)" - never as an active mutator. Solo/all-modded lobbies show no skipped rows (the floor passes). The active list already excludes floor-dropped curses because `selected_curse_mutators()` returns `{}` when unsafe.
+- **Client caveat.** et never syncs the host's mutator picks to clients, so on a CLIENT (`not self._local_player.is_server`) the panel shows the client's OWN selection with a caveat sub-line "Your selection - the host's config decides". That is exactly, and only, what et knows client-side.
+- Keep-only, local display only (never networked). Tagged [untested] per dev status-tag doctrine; needs an in-game confirm of the panel layout (and a coop confirm that both et + ct blocks render together, and that the skipped-curse row shows with a non-ET peer).
+
+### Refs
+Issue #532 (primary), issue 461 (ct sibling half + pattern/marker), issue 430 (curse parity gate the preview reflects). Sources: ingame_player_list_ui_v2_definitions.lua (`reward_divider`/`reward_item`/`banner_right` scenegraph), ingame_player_list_ui_v2.lua:46 (`_is_in_inn`), mutator template `display_name`/`icon` fields. Check: `issue532_mutator_preview_wired`.
+
 ## 0.4.29-dev (2026-07-12) - issue #430: Cursed Adventure curse wire-safety floor (peer-parity) [untested]
 
 ### Why
