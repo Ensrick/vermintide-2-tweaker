@@ -76,6 +76,21 @@ Last updated: 2026-07-13.
 ---
 ## Multiplayer / Network Sync
 
+### starting-shrine-graph-label-floor — Filtered mission pool crashes before the starting shrine opens
+
+**[MULTIPLAYER]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Starting a CW run with Buy Starting Boons and one enabled mission logs `GRAPH-SOLVE begin ... TRAVEL=4(dup=3) SIGNATURE=4(dup=3)`, nil-indexes in `deus_populate_graph`, leaves `_path_graph` nil, and stalls/disconnects the client. |
+| Root cause | CT's duplicate floor covered branch sibling width (4) but not vanilla's baked numbered labels (up to 6). Vanilla directly indexes the shuffled pool by label before backtracking. |
+| Mod(s) | chaos_wastes_tweaker_dev |
+| Fix version(s) | ct_dev v0.7.265-dev (#458/#487) |
+| Category | INTEGRATION / MULTIPLAYER |
+| Repro | Enable adventure-map injection and Buy Starting Boons, leave exactly one TRAVEL/SIGNATURE mission enabled, then host `journey_ruin`; repeat with one client. |
+| Expected post-fix | Live pools contain at least six entries (five stable aliases for one real mission), graph solve returns a non-nil graph, and the shrine opens only on the proven `dlc_morris_map` start node. An invalid live pool restores its pristine vanilla counterpart before solve. |
+| Detection | Console has `GRAPH-SOLVE end ... graph=N nodes`; no vanilla `deus_populate_graph` nil, `_path_graph` recovery error, stall, or disconnect. `/ct_regression_test`: `pool_floor_underflow_duplicates_487` and `issue458_start_shrine_config` pass. |
+
 ### gated-registration-divergence — Toggle-gated mod-load registration produces different network indices across peers
 
 **[MULTIPLAYER]**
