@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.213-dev"
+local MOD_VERSION = "0.12.214-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -2185,6 +2185,65 @@ if mod:get("authentic_brace_of_pistols") then
 end
 
 -- ============================================================
+-- Issue #348 -- revert Patch 6.11.0 Kruber 1h sword push-attack combo
+-- ============================================================
+-- Game v6.11.0 (Vermintide-2-Source-Code @abe82ab4, 2026-05-18) reworked
+-- Kruber's Empire one-handed sword (`Weapons.one_handed_swords_template_1`).
+-- The relevant change: the push-attack (`light_attack_bopp`) combo continuation
+-- was repointed from `default` (-> first light `light_attack_left`, a horizontal
+-- sweep, good for hordes) to `default_left` (-> third light `light_attack_last`,
+-- the single-target overhead). The user finds the overhead-terminated combo worse
+-- for horde work and wants the pre-6.11.0 chain back.
+--
+-- The revert below restores the EXACT v6.10.0 `light_attack_bopp.allowed_chain_actions`
+-- table, verified verbatim from the decompile at commit 5ff26df1
+-- (`git diff 5ff26df1 abe82ab4 -- .../1h_swords.lua`). Only the push-attack chain
+-- is reverted; 6.11.0's other, unrelated changes to this sword (dodge_count 3->6,
+-- the third light's damage_profile, movement multipliers) are deliberately LEFT as
+-- current -- the issue is only about the combo routing.
+--
+-- Wire-safe by construction: this only re-routes `sub_action` between vanilla
+-- action names (`default`, `default_left`, `light_attack_*`) that exist in the
+-- base template on every peer. No NetworkLookup key is added and no damage profile
+-- is repointed, so a peer without the mod cannot diverge or crash (PROJECT_STANDARDS
+-- §9.3; same wire class as the ungated Big Rebalance chain edits). No peer-parity
+-- gate needed. Scope note: only Kruber's Empire sword changed in 6.11.0 -- Sienna's
+-- flaming sword (`flaming_sword_template_1`, `1h_swords_wizard.lua`) was NOT touched,
+-- so there is nothing to revert on her side.
+--
+-- Applied once at init when the toggle is on (mirrors `authentic_brace_of_pistols`);
+-- toggling requires a restart, which the option description states. Mutates the
+-- shared template global in place -- intended, since the chain is a property of the
+-- weapon and should revert for every career that wields it.
+local function _patch_kruber_1h_sword_push_combo_revert()
+    if not Weapons or not Weapons.one_handed_swords_template_1 then
+        pcall(printf, "[wt:348] skip: Weapons.one_handed_swords_template_1 missing (revert not applied)")
+        return
+    end
+    local ao = Weapons.one_handed_swords_template_1.actions
+        and Weapons.one_handed_swords_template_1.actions.action_one
+    local bopp = ao and ao.light_attack_bopp
+    if not (bopp and bopp.allowed_chain_actions) then
+        pcall(printf, "[wt:348] skip: light_attack_bopp chain missing on one_handed_swords_template_1")
+        return
+    end
+    -- Pre-6.11.0 (v6.10.0 @5ff26df1) light_attack_bopp.allowed_chain_actions, verbatim.
+    bopp.allowed_chain_actions = {
+        { action = "action_one",   end_time = 1.2, input = "action_one",      release_required = "action_two_hold", start_time = 0.55, sub_action = "default" },
+        { action = "action_one",   end_time = 1.2, input = "action_one_hold", release_required = "action_two_hold", start_time = 0.55, sub_action = "default" },
+        { action = "action_one",                   input = "action_one",                                            start_time = 0.85, sub_action = "default" },
+        { action = "action_two",                   input = "action_two_hold",                                       start_time = 0.55, sub_action = "default" },
+        { action = "action_wield",                 input = "action_wield",                                          start_time = 0.5,  sub_action = "default" },
+    }
+    pcall(printf, "[wt:348] reverted Kruber Empire 1h sword push-attack combo to pre-6.11.0 (light_attack_bopp -> default first-light sweep)")
+    _dbg("[wt:tpl_patch] event=applied template=one_handed_swords_template_1 feature=revert_push_combo issue=348")
+end
+
+if mod:get("wt_revert_1h_sword_push_combo") then
+    _patch_kruber_1h_sword_push_combo_revert()
+end
+
+-- ============================================================
 -- Warrior Priest punch buff (Reckoner Greathammer special)
 -- ============================================================
 -- Toggle that TRIPLES stagger and DOUBLES damage of the Warrior Priest 2h
@@ -4053,6 +4112,34 @@ _rt_register("wt_authentic_pistol_profile_registered_unconditionally", function(
     end
     if not rawget(NL.damage_profiles, "wt_authentic_pistol") then
         return "wt_authentic_pistol missing from NetworkLookup.damage_profiles (peer index would diverge)"
+    end
+end)
+
+_rt_register("wt_kruber_1h_sword_push_combo_revert", function()
+    -- Issue #348: the opt-in revert repoints Kruber's Empire 1h sword push-attack
+    -- (light_attack_bopp) combo continuation from 6.11.0's `default_left` (third
+    -- light overhead) back to the pre-6.11.0 `default` (first light sweep). Assert
+    -- the vanilla sub-actions the revert relies on still exist, and -- only when the
+    -- toggle is ON -- that the continuation actually routes to "default". Guards
+    -- against a future edit renaming the target or re-gating the patch.
+    local W = rawget(_G, "Weapons")
+    if not W or not rawget(W, "one_handed_swords_template_1") then
+        return "skip: Weapons.one_handed_swords_template_1 not loaded"
+    end
+    local actions = W.one_handed_swords_template_1.actions
+    local ao = actions and actions.action_one
+    if not ao then return "action_one missing on one_handed_swords_template_1" end
+    if not ao.default then return "action_one.default missing (revert continuation target)" end
+    local bopp = ao.light_attack_bopp
+    if not (bopp and bopp.allowed_chain_actions) then
+        return "light_attack_bopp chain missing"
+    end
+    if mod:get("wt_revert_1h_sword_push_combo") then
+        local first = bopp.allowed_chain_actions[1]
+        if not (first and first.sub_action == "default") then
+            return "toggle ON but push-attack combo not reverted (chain[1].sub_action="
+                .. tostring(first and first.sub_action) .. ")"
+        end
     end
 end)
 

@@ -1352,6 +1352,9 @@ local data = {
                     -- Explicit tooltip: the loc key ends in _tooltip, which VMF does NOT
                     -- auto-resolve (auto path only tries <setting_id>_description).
                     { setting_id = "wt_brett_sword_shield_buff", type = "checkbox", default_value = false, tooltip = "wt_brett_sword_shield_buff_tooltip" },
+                    -- Issue #348: revert 6.11.0 Kruber Empire 1h sword push-attack combo.
+                    -- Uses the auto-resolved <setting_id>_description loc key for its tooltip.
+                    { setting_id = "wt_revert_1h_sword_push_combo", type = "checkbox", default_value = false },
                     { setting_id = "moonfire_aoe_revert", type = "checkbox", default_value = false },
                     { setting_id = "wt_priest_punch_buff", type = "checkbox", default_value = false },
                 },
