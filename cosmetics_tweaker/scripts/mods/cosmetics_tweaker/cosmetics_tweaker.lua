@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.91-dev"
+local MOD_VERSION = "0.9.92-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -3808,6 +3808,11 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
         -- player_unit here, so :owner(unit_3p) resolves the peer correctly
         -- for both local + remote husk equips.
         local owner_peer_id = mod._cos.glow_owner_peer_for_unit(unit_3p)
+        if item_data and item_data.backend_id then
+            GlowPicker.restore_runtime_for(item_data.backend_id, {
+                skin = result.skin or item_data.skin,
+            })
+        end
         mod._cos.apply_glow_override({
             result.right_unit_3p, result.left_unit_3p,
             result.right_unit_1p, result.left_unit_1p,
@@ -6954,6 +6959,8 @@ local function _collect_local_glow_state()
     for _, key in ipairs(_GLOW_SETTING_KEYS) do
         state[key] = mod:get(key)
     end
+    state.active_per_item_glow = mod._active_per_item_glow
+    state.active_per_item_glow_identity = mod._active_per_item_glow_identity
     return state
 end
 
@@ -6964,6 +6971,9 @@ end
 local _glow_emit_pending = false
 local _glow_last_emit_at = 0
 local _GLOW_EMIT_THROTTLE = 0.3  -- coalesce rapid setting changes
+mod._emit_per_item_glow = function()
+    _glow_emit_pending = true
+end
 
 local function _send_local_glow_state()
     -- v0.9.0-hotfix: `Managers.player:local_player()` calls the engine's
@@ -7066,6 +7076,7 @@ mod:network_register("cos_glow_apply", function(sender_peer_id, schema_version, 
     local wearer = payload.wearer_peer_id
     if not wearer then return end
     _glow_by_peer[wearer] = payload.state
+    if mod._reapply_glow_for_peer then pcall(mod._reapply_glow_for_peer, wearer) end
 end)
 
 -- HOST: when a new peer joins, rebroadcast every known peer's glow state
@@ -8982,6 +8993,36 @@ mod:hook_safe("SimpleInventoryExtension", "_wield_slot", function(self, equipmen
         end
     end
 
+    -- Publish the applied state for the weapon that actually became wielded.
+    -- Equipment spawn order is not wield order, so this is the authoritative
+    -- place to switch/clear the coop payload after restart or weapon swapping.
+    do
+        local bid
+        for _, unit in ipairs({ unit_1p, unit_3p }) do
+            if unit and mod._unit_to_backend_id then
+                bid = mod._unit_to_backend_id[unit] or bid
+            end
+        end
+        if not bid and slot_data and type(slot_data) == "table" then
+            for _, field in ipairs({ "right_unit_1p", "left_unit_1p", "right_unit_3p", "left_unit_3p" }) do
+                local unit = slot_data[field]
+                if unit and mod._unit_to_backend_id and mod._unit_to_backend_id[unit] then
+                    bid = mod._unit_to_backend_id[unit]
+                    break
+                end
+            end
+        end
+        local next_state = bid and mod._per_item_glow_runtime and mod._per_item_glow_runtime[bid] or nil
+        local next_identity = bid and mod._per_item_glow_identity_runtime
+            and mod._per_item_glow_identity_runtime[bid] or nil
+        if mod._active_per_item_glow ~= next_state
+            or mod._active_per_item_glow_identity ~= next_identity then
+            mod._active_per_item_glow = next_state
+            mod._active_per_item_glow_identity = next_identity
+            if mod._emit_per_item_glow then mod._emit_per_item_glow() end
+        end
+    end
+
     pcall(_glow_auto_popup_for_local)
 end)
 
@@ -9315,6 +9356,18 @@ _rt_register("glow_picker_resolves_via_unit_to_backend", function()
     -- the v0.9.8.9 source path shipped in the compiled bundle).
     local _MARKER = "_unit_to_backend_id[wielded_unit]"
     if #_MARKER == 0 then return "marker missing" end
+end)
+
+_rt_register("glow_picker_apply_transaction_574", function()
+    if type(GlowPicker.apply) ~= "function" then return "explicit Apply action missing" end
+    if type(GlowPicker.restore_runtime_for) ~= "function" then return "restart restore path missing" end
+    if type(GlowPicker.identity_key) ~= "function" then return "variant identity helper missing" end
+    local rune_a = GlowPicker.identity_key("backend-1", { skin = "skin_runed_01" })
+    local rune_b = GlowPicker.identity_key("backend-1", { skin = "skin_runed_02" })
+    local copy_a = GlowPicker.identity_key("backend-2", { skin = "skin_runed_01" })
+    if rune_a == rune_b then return "different illusions share a persistence identity" end
+    if rune_a == copy_a then return "different inventory items share a persistence identity" end
+    if not GlowPicker.CHAT_DIAGNOSTICS_LOG_ONLY then return "Apply diagnostic may reach chat" end
 end)
 
 _rt_register("la_chars_compatible_same_char_allowed", function()

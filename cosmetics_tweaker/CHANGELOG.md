@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.92-dev - 2026-07-13 - #574 explicit per-illusion glow Apply transaction [untested]
+
+- Added the missing Apply button and dirty state. Slider movement remains a local live preview; Apply is the only persistence/network commit, disables itself after success, and repeated clicks do not write or emit again.
+- Closing the picker now discards unapplied edits and repaints the last committed value (or vanilla). Applied RGB is keyed by backend item plus illusion, restored during equipment spawn after restart, and repainted on local 1P/3P units.
+- Added the active applied glow to the existing host-authoritative `cos_glow_apply_req`/`cos_glow_apply` channel. Receivers cache the wearer's state and immediately repaint already-wielded remote units; hot-join replay uses the existing glow cache path.
+- Added bounded log-only `[cos:574] [glow_picker:apply]` evidence and `glow_picker_apply_transaction_574` regression coverage. No Workshop deployment in this change.
+
+- **Verify (coop):** on both peers, change a rune or magic RGB slider and confirm Apply appears active. Close without Apply and confirm the prior color returns. Reopen, change, Apply once, close/reopen, then restart the game; the exact item+illusion must retain the color in 1P and 3P. Each peer must see the other wearer's applied color. A second click without another edit must produce no additional `[glow_picker:apply]` line or peer update.
+
 ## 0.9.91-dev - 2026-07-13 - #513 score lineup resolves peers from end-view snapshot [untested]
 
 - The previous 0.9.86 fix hooked the correct `TeamPreviewer`/`HeroPreviewer` render path but resolved each lineup row through live `PlayerManager.human_players()`. Vanilla removes those player rows during the end transition before the team previewer starts loading: the failing log removes players at 21:08:34 and loads `ui_end_screen`/the lineup at 21:08:35. The resolver returned nil, so none of the `SCORE-HAT` paths ran.

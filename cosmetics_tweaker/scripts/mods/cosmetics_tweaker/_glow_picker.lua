@@ -27,6 +27,11 @@ local function _log_only(fmt, ...)
         pcall(printf, "[cos:570] " .. fmt, ...)
     end
 end
+local function _apply_log_only(fmt, ...)
+    if rawget(_G, "printf") then
+        pcall(printf, "[cos:574] " .. fmt, ...)
+    end
+end
 GlowPicker.CHAT_DIAGNOSTICS_LOG_ONLY = true
 
 -- --------------------------------------------------------
@@ -38,7 +43,26 @@ GlowPicker._widgets               = nil       -- array passed to UIRenderer.draw
 GlowPicker._widgets_by_name       = nil       -- name → widget for input dispatch
 GlowPicker._current_backend_id    = nil
 GlowPicker._current_slot_data     = nil
+GlowPicker._current_identity      = nil
+GlowPicker._committed_glow_state  = nil
+GlowPicker._dirty                 = false
 GlowPicker._built                 = false     -- scenegraph + widgets allocated once
+
+local function _clone(value)
+    if type(value) ~= "table" then return value end
+    local copy = {}
+    for key, child in pairs(value) do copy[key] = _clone(child) end
+    return copy
+end
+
+-- Backend ids identify the inventory instance; the skin suffix keeps a glow
+-- choice attached to the exact illusion variant when an item's illusion changes.
+local function _identity_key(backend_id, slot_data)
+    if backend_id == nil then return nil end
+    local skin = type(slot_data) == "table" and slot_data.skin or nil
+    return string.format("backend:%s|skin:%s", tostring(backend_id), tostring(skin or ""))
+end
+GlowPicker.identity_key = _identity_key
 
 -- --------------------------------------------------------
 -- Scenegraph: floating panel, anchored top-center, ~600x400px
@@ -107,6 +131,13 @@ local function _make_scenegraph_definition()
             vertical_alignment   = "top",
             size     = { 36, 36 },
             position = { -10, -10, 2 },
+        },
+        glow_picker_apply_btn = {
+            parent = "glow_picker_panel",
+            horizontal_alignment = "center",
+            vertical_alignment   = "bottom",
+            size     = { 180, 42 },
+            position = { 0, 18, 2 },
         },
         -- v0.9.6 M2: 4 slider rows for R, G, B, intensity. Each row is
         -- 360x24 (label 80 + gap 10 + track 200 + gap 10 + value 60).
@@ -576,6 +607,42 @@ local function _widget_close_button()
     }
 end
 
+local function _widget_apply_button()
+    return {
+        element = {
+            passes = {
+                { content_id = "hotspot", pass_type = "hotspot" },
+                { pass_type = "rect", style_id = "rect" },
+                { pass_type = "border", style_id = "border" },
+                { pass_type = "text", style_id = "text", text_id = "text" },
+            },
+        },
+        content = { text = "Apply", hotspot = {} },
+        style = {
+            rect = { size = { 180, 42 }, color = { 210, 55, 75, 35 } },
+            border = { thickness = 2, color = { 255, 210, 180, 90 } },
+            text = {
+                font_size = 22, font_type = "hell_shark_header",
+                horizontal_alignment = "center", vertical_alignment = "center",
+                text_color = { 255, 245, 235, 205 }, offset = { 0, 0, 2 },
+                size = { 180, 42 },
+            },
+        },
+        offset = { 0, 0, 2 },
+        scenegraph_id = "glow_picker_apply_btn",
+    }
+end
+
+local function _update_apply_widget()
+    local widget = GlowPicker._widgets_by_name and GlowPicker._widgets_by_name.apply_btn
+    if not widget then return end
+    local dirty = GlowPicker._dirty == true
+    widget.content.text = dirty and "Apply" or "Applied"
+    widget.style.rect.color = dirty and { 230, 55, 105, 45 } or { 150, 45, 45, 45 }
+    widget.style.border.color = dirty and { 255, 230, 195, 95 } or { 140, 120, 120, 120 }
+    widget.style.text.text_color = dirty and { 255, 245, 235, 205 } or { 160, 180, 180, 180 }
+end
+
 -- --------------------------------------------------------
 -- Build / teardown (idempotent; survives across screen re-enters)
 -- --------------------------------------------------------
@@ -623,6 +690,7 @@ local function _build()
         { "title",       _widget_title         },
         { "subtitle",    _widget_subtitle      },
         { "close_btn",   _widget_close_button  },
+        { "apply_btn",   _widget_apply_button  },
         -- RUNE family (4 sliders)
         { "slider_r",         function() return _widget_slider("glow_picker_slider_r",         "Red",       0,   255, 0, thumb_r) end },
         { "slider_g",         function() return _widget_slider("glow_picker_slider_g",         "Green",     0,   255, 0, thumb_g) end },
@@ -679,6 +747,8 @@ local function _build()
             local comp = s[component]
             if not comp then return end
             comp[field] = v
+            GlowPicker._dirty = true
+            _update_apply_widget()
             GlowPicker._live_preview()
         end
     end
@@ -700,7 +770,7 @@ local function _build()
     by_name.slider_dots_i.content.on_change    = _make_on_change("dots",  "intensity")
 
     GlowPicker._built = true
-    _log_only("[glow_picker:_build] DONE — 23 widgets ready (M3: rune 4 + magic 12 sliders + 3 section labels + 4 chrome)")
+    _log_only("[glow_picker:_build] DONE — 24 widgets ready (RGB sliders + explicit Apply transaction)")
     return true
 end
 
@@ -756,20 +826,26 @@ end
 -- holds a JSON-encoded `{ [backend_id]: { rune={r,g,b,intensity}, ... } }`
 -- map. Read on popup-open, write on popup-close.
 local _cjson_warning_shown = false
+local _persisted_cache = nil
 local function _load_per_item_glow()
+    if type(_persisted_cache) == "table" then return _persisted_cache end
     if not cjson then
         if not _cjson_warning_shown then
             _log_only("[glow_picker] cjson global is nil — per-item glow persistence DISABLED; live preview remains available")
             mod:info("[glow_picker] cjson unavailable; persistence layer no-op")
             _cjson_warning_shown = true
         end
-        return {}
+        _persisted_cache = {}
+        return _persisted_cache
     end
     local raw = mod:get("glow_per_item")
-    if not raw or raw == "" then return {} end
+    if not raw or raw == "" then
+        _persisted_cache = {}
+        return _persisted_cache
+    end
     local ok, decoded = pcall(cjson.decode, raw)
-    if ok and type(decoded) == "table" then return decoded end
-    return {}
+    _persisted_cache = (ok and type(decoded) == "table") and decoded or {}
+    return _persisted_cache
 end
 
 local function _save_per_item_glow(data)
@@ -777,7 +853,29 @@ local function _save_per_item_glow(data)
     local ok, encoded = pcall(cjson.encode, data)
     if ok and encoded then
         mod:set("glow_per_item", encoded)
+        _persisted_cache = data
     end
+end
+
+local function _persisted_state_for(backend_id, slot_data)
+    local all_data = _load_per_item_glow()
+    local identity = _identity_key(backend_id, slot_data)
+    local state = identity and all_data[identity] or nil
+    -- One-time compatibility with the original backend-id-only storage.
+    if not state and backend_id ~= nil then state = all_data[backend_id] end
+    return type(state) == "table" and _clone(state) or nil, identity
+end
+
+-- Called by the equipment spawn path so an applied value is restored after a
+-- restart before the picker is opened again.
+function GlowPicker.restore_runtime_for(backend_id, slot_data)
+    local state, identity = _persisted_state_for(backend_id, slot_data)
+    if not state or backend_id == nil then return nil end
+    mod._per_item_glow_runtime = mod._per_item_glow_runtime or {}
+    mod._per_item_glow_identity_runtime = mod._per_item_glow_identity_runtime or {}
+    mod._per_item_glow_runtime[backend_id] = state
+    mod._per_item_glow_identity_runtime[backend_id] = identity
+    return state, identity
 end
 
 -- Update slider widget values from the in-memory state. Called on
@@ -854,6 +952,7 @@ function GlowPicker.open_for(backend_id, slot_data)
     _build()
     GlowPicker._current_backend_id = backend_id
     GlowPicker._current_slot_data  = slot_data
+    GlowPicker._current_identity   = _identity_key(backend_id, slot_data)
     GlowPicker._open               = true
 
     -- v0.9.8: detect family for this item. classify() returns "rune" /
@@ -863,8 +962,10 @@ function GlowPicker.open_for(backend_id, slot_data)
     GlowPicker._current_family = family
 
     -- Load persisted state (multi-component shape supported).
-    local all_data = _load_per_item_glow()
-    local item_data = (backend_id and all_data[backend_id]) or {}
+    local persisted = _persisted_state_for(backend_id, slot_data)
+    local item_data = persisted or {}
+    GlowPicker._committed_glow_state = persisted and _clone(persisted) or nil
+    GlowPicker._dirty = false
 
     if family == "magic" then
         GlowPicker._current_glow_state = {
@@ -902,7 +1003,7 @@ function GlowPicker.open_for(backend_id, slot_data)
     -- v0.9.8: assemble family-specific draw list. Magic shows 12
     -- sliders + 3 section labels; rune shows 4 sliders.
     local by_name = GlowPicker._widgets_by_name
-    local widgets = { by_name.panel_bg, by_name.title, by_name.subtitle, by_name.close_btn }
+    local widgets = { by_name.panel_bg, by_name.title, by_name.subtitle, by_name.close_btn, by_name.apply_btn }
     if family == "magic" then
         widgets[#widgets+1] = by_name.label_lower
         widgets[#widgets+1] = by_name.slider_lower_r
@@ -926,6 +1027,7 @@ function GlowPicker.open_for(backend_id, slot_data)
         widgets[#widgets+1] = by_name.slider_intensity
     end
     GlowPicker._widgets = widgets
+    _update_apply_widget()
 
     -- Push runtime override so live preview applies immediately.
     mod._per_item_glow_runtime = mod._per_item_glow_runtime or {}
@@ -943,22 +1045,51 @@ function GlowPicker.open_for(backend_id, slot_data)
         tostring(backend_id), tostring(family), #widgets)
 end
 
+function GlowPicker.apply()
+    if not GlowPicker._open or not GlowPicker._dirty then return false end
+    local backend_id = GlowPicker._current_backend_id
+    local identity = GlowPicker._current_identity
+    local state = GlowPicker._current_glow_state
+    if backend_id == nil or identity == nil or type(state) ~= "table" then return false end
+
+    local committed = _clone(state)
+    local all_data = _load_per_item_glow()
+    all_data[identity] = committed
+    _save_per_item_glow(all_data)
+    GlowPicker._committed_glow_state = _clone(committed)
+    GlowPicker._dirty = false
+    mod._per_item_glow_runtime = mod._per_item_glow_runtime or {}
+    mod._per_item_glow_identity_runtime = mod._per_item_glow_identity_runtime or {}
+    mod._per_item_glow_runtime[backend_id] = _clone(committed)
+    mod._per_item_glow_identity_runtime[backend_id] = identity
+    mod._active_per_item_glow = _clone(committed)
+    mod._active_per_item_glow_identity = identity
+    if mod._reapply_glow_on_wielded then pcall(mod._reapply_glow_on_wielded) end
+    if mod._emit_per_item_glow then pcall(mod._emit_per_item_glow) end
+    _update_apply_widget()
+    _apply_log_only("[glow_picker:apply] committed identity=%s family=%s emit=1", identity, tostring(GlowPicker._current_family))
+    return true
+end
+
 function GlowPicker.close()
     if not GlowPicker._open then return end
-    -- Persist the current state for this backend_id.
-    if GlowPicker._current_backend_id and GlowPicker._current_glow_state then
-        local all_data = _load_per_item_glow()
-        all_data[GlowPicker._current_backend_id] = GlowPicker._current_glow_state
-        _save_per_item_glow(all_data)
-        mod:info("[glow_picker] persisted state for backend_id=%s family=%s",
-            tostring(GlowPicker._current_backend_id),
-            tostring(GlowPicker._current_family))
+    -- Close/cancel discards uncommitted preview edits and repaints the last
+    -- applied value (or vanilla when this identity had no saved override).
+    local backend_id = GlowPicker._current_backend_id
+    if backend_id ~= nil then
+        mod._per_item_glow_runtime = mod._per_item_glow_runtime or {}
+        mod._per_item_glow_runtime[backend_id] = GlowPicker._committed_glow_state
+            and _clone(GlowPicker._committed_glow_state) or nil
+        if mod._reapply_glow_on_wielded then pcall(mod._reapply_glow_on_wielded) end
     end
     GlowPicker._open               = false
     GlowPicker._current_backend_id = nil
     GlowPicker._current_slot_data  = nil
+    GlowPicker._current_identity   = nil
     GlowPicker._current_glow_state = nil
+    GlowPicker._committed_glow_state = nil
     GlowPicker._current_family     = nil
+    GlowPicker._dirty              = false
 end
 
 function GlowPicker.is_open()
@@ -978,6 +1109,13 @@ function GlowPicker.handle_input(input_service)
         hotspot.on_release = false
         GlowPicker.close()
         return true  -- swallowed: don't let click also dispatch to screen
+    end
+    local apply = by_name.apply_btn
+    local apply_hotspot = apply and apply.content and apply.content.hotspot
+    if apply_hotspot and apply_hotspot.on_release then
+        apply_hotspot.on_release = false
+        GlowPicker.apply()
+        return true
     end
     -- v0.9.3.7: dim removed → clicks OUTSIDE the panel should pass through
     -- to the cosmetic screen behind. Previously we swallowed all left-

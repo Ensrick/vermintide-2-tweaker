@@ -273,15 +273,19 @@ local function _apply_glow_to_unit(unit, owner_peer_id)
     if not unit or not _is_unit(unit) then return end
     -- v0.9.6 M2: per-item override BEFORE the global toggle gate. The
     -- popup is "always available regardless of toggle" per user direction.
-    -- Currently only RUNE component is wired (single channel,
-    -- rune_emissive_color). HDR scaling: user RGB / 255 × native template
+    -- Rune and magic components use HDR scaling: user RGB / 255 × native template
     -- brightness (9 for rune_emissive_color per _GLOW_VAR_BRIGHTNESS)
-    -- × intensity slider value. intensity=0 → skip (vanilla shows through).
-    if mod._per_item_glow_runtime and mod._unit_to_backend_id then
-        local bid = mod._unit_to_backend_id[unit]
-        if bid then
-            local pi = mod._per_item_glow_runtime[bid]
-            if pi then
+                -- × intensity slider value. intensity=0 → skip (vanilla shows through).
+    do
+        local pi
+        if owner_peer_id and not _glow_is_local_peer(owner_peer_id) then
+            local peer_state = _glow_by_peer[owner_peer_id]
+            pi = peer_state and peer_state.active_per_item_glow
+        elseif mod._per_item_glow_runtime and mod._unit_to_backend_id then
+            local bid = mod._unit_to_backend_id[unit]
+            pi = bid and mod._per_item_glow_runtime[bid] or nil
+        end
+        if type(pi) == "table" then
                 -- v0.9.8: per-item explicit OFF toggle. If user disabled
                 -- glow for this item, paint zeros (effectively disable)
                 -- and skip both per-item and global paths. Vanilla
@@ -299,12 +303,25 @@ local function _apply_glow_to_unit(unit, owner_peer_id)
                 local function _paint_var(var_name, r, g, b, intensity)
                     local info = _GLOW_VAR_BRIGHTNESS[var_name]
                     if not info then return end
-                    local scale = (info.brightness or 1) * (intensity or 1) / 255
+                    -- Peer payloads are untrusted. Ignore malformed component
+                    -- values rather than allowing arithmetic on strings/tables.
+                    if type(r) ~= "number" or type(g) ~= "number" or type(b) ~= "number"
+                        or type(intensity) ~= "number" then return end
+                    r = math.max(0, math.min(255, r))
+                    g = math.max(0, math.min(255, g))
+                    b = math.max(0, math.min(255, b))
+                    intensity = math.max(0, math.min(5, intensity))
+                    local scale = (info.brightness or 1) * intensity / 255
                     pcall(Unit.set_vector3_for_materials, unit, var_name,
                         Vector3(r * scale, g * scale, b * scale))
                 end
+                local function _component_active(component)
+                    return type(component) == "table"
+                        and type(component.intensity) == "number"
+                        and component.intensity > 0
+                end
                 -- RUNE family: single channel.
-                if pi.rune and (pi.rune.intensity or 0) > 0 then
+                if _component_active(pi.rune) then
                     _paint_var("rune_emissive_color",
                         pi.rune.r or 0, pi.rune.g or 0, pi.rune.b or 0, pi.rune.intensity)
                 end
@@ -313,32 +330,31 @@ local function _apply_glow_to_unit(unit, owner_peer_id)
                 -- upper = smoke_high+smoke_low, dots = single). All share
                 -- the user's RGB at scaled brightness so vanilla's
                 -- coordinated brightness pairs remain proportional.
-                if pi.lower and (pi.lower.intensity or 0) > 0 then
+                if _component_active(pi.lower) then
                     _paint_var("color_glow_high",
                         pi.lower.r or 0, pi.lower.g or 0, pi.lower.b or 0, pi.lower.intensity)
                     _paint_var("color_glow_low",
                         pi.lower.r or 0, pi.lower.g or 0, pi.lower.b or 0, pi.lower.intensity)
                 end
-                if pi.upper and (pi.upper.intensity or 0) > 0 then
+                if _component_active(pi.upper) then
                     _paint_var("color_smoke_high",
                         pi.upper.r or 0, pi.upper.g or 0, pi.upper.b or 0, pi.upper.intensity)
                     _paint_var("color_smoke_low",
                         pi.upper.r or 0, pi.upper.g or 0, pi.upper.b or 0, pi.upper.intensity)
                 end
-                if pi.dots and (pi.dots.intensity or 0) > 0 then
+                if _component_active(pi.dots) then
                     _paint_var("color_dots",
                         pi.dots.r or 0, pi.dots.g or 0, pi.dots.b or 0, pi.dots.intensity)
                 end
                 -- If ANY component painted, treat per-item as fully
                 -- handled — skip global override. Detection: at least
                 -- one component had intensity > 0.
-                if (pi.rune and (pi.rune.intensity or 0) > 0)
-                    or (pi.lower and (pi.lower.intensity or 0) > 0)
-                    or (pi.upper and (pi.upper.intensity or 0) > 0)
-                    or (pi.dots and (pi.dots.intensity or 0) > 0) then
+                if _component_active(pi.rune)
+                    or _component_active(pi.lower)
+                    or _component_active(pi.upper)
+                    or _component_active(pi.dots) then
                     return
                 end
-            end
         end
     end
     if not _glow_override_enabled(owner_peer_id) then return end
@@ -383,6 +399,30 @@ mod._reapply_glow_on_wielded = function()
     end
 end
 
+-- Repaint a wearer's already-spawned weapon units when an authoritative peer
+-- update arrives; otherwise the RGB would not become visible until a re-wield.
+mod._reapply_glow_for_peer = function(peer_id)
+    if not peer_id then return end
+    local pm = Managers and Managers.player
+    local players = pm and pm._human_players
+    if type(players) ~= "table" then return end
+    for _, player in pairs(players) do
+        if player and player.peer_id == peer_id then
+            local pu = player.player_unit
+            local ext = pu and ScriptUnit and ScriptUnit.has_extension
+                and ScriptUnit.has_extension(pu, "inventory_system")
+            local slot_data = ext and ext.get_wielded_slot_data and ext:get_wielded_slot_data()
+            if slot_data then
+                for _, field in ipairs({ "right_unit_1p", "right_unit_3p", "left_unit_1p", "left_unit_3p" }) do
+                    local unit = slot_data[field]
+                    if unit and _is_unit(unit) then pcall(_apply_glow_to_unit, unit, peer_id) end
+                end
+            end
+            return
+        end
+    end
+end
+
 -- Backward-compatible alias used by the existing call site at create_equipment.
 local function _glow_preset_rgb() return _glow_main_rgb() end
 
@@ -392,7 +432,6 @@ local function _glow_preset_rgb() return _glow_main_rgb() end
 -- happens at the create_equipment hook where we know the player_unit being
 -- equipped.
 local function _apply_glow_override(units, owner_peer_id)
-    if not _glow_override_enabled(owner_peer_id) then return end
     for _, u in ipairs(units) do _apply_glow_to_unit(u, owner_peer_id) end
 end
 

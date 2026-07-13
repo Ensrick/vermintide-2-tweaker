@@ -1,13 +1,13 @@
 # Glow System — cosmetics_tweaker
 
-State as of v0.9.7-glow+previewBid (2026-05-21).
+State as of v0.9.92-dev (2026-07-13).
 
 This is the canonical reference for how the glow customization system is
 wired today: which shader variables drive what visually, how the popup UI
 talks to them, how persistence works, what the current limitations are,
 and where to extend.
 
-## 1. What's working today (v0.9.7)
+## 1. What's working today (v0.9.92-dev)
 
 | Surface | Status |
 | --- | --- |
@@ -15,15 +15,16 @@ and where to extend.
 | 4 sliders: Red, Green, Blue, Intensity | ✅ |
 | RUNE family live preview on wielded weapon | ✅ |
 | RUNE family live preview on cosmetic-screen previewer | ✅ (v0.9.7 fix) |
-| Per-backend_id persistence to VMF setting `glow_per_item` | ✅ |
-| Restores saved RGB+intensity on popup re-open | ✅ |
+| Explicit dirty-state Apply button | ✅ |
+| Per-backend-item + illusion persistence to VMF setting `glow_per_item` | ✅ |
+| Restores saved RGB+intensity on popup re-open and equipment spawn | ✅ |
 | Per-item RGB takes precedence over global override toggle | ✅ |
-| Magic-family multi-component sliders (lower / upper / dots) | ❌ (M3) |
-| Auto-open popup on equip of a glow-capable item | ❌ (M3) |
+| Magic-family multi-component sliders (lower / upper / dots) | ✅ |
+| Contextual popup on glow-capable illusion selection | ✅ |
 | Toggle the per-item glow off entirely | ❌ (M3) |
 | Hide vanilla glow-cousin items from cosmetic menu | ❌ (M3) |
 | Cross-slot inheritance (main weapon glow → compatible shield) | ❌ (M3) |
-| Coop broadcast of per-item glow to peers | ❌ (M3) |
+| Host-authoritative coop broadcast of active per-item glow | ✅ |
 
 ## 2. The two glow families
 
@@ -64,7 +65,8 @@ All paths relative to `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/`.
 | File | Role |
 | --- | --- |
 | `_glow_picker.lua` | The popup UI. Scenegraph, slider widget factory, in-memory state, persistence helpers (`_load_per_item_glow` / `_save_per_item_glow`), live-preview wiring. |
-| `cosmetics_tweaker.lua` | Glow apply pipeline. `_GLOW_VAR_BRIGHTNESS` table, `_glow_rgb_for_var`, `_apply_glow_to_unit`, weak-table `mod._unit_to_backend_id`, runtime map `mod._per_item_glow_runtime`, helper `mod._reapply_glow_on_wielded`. |
+| `_cos_glow.lua` | Glow apply pipeline, peer-state reads, runtime-map consumption, and local/remote repaint helpers. |
+| `cosmetics_tweaker.lua` | Equipment/preview hooks plus the host-authoritative `cos_glow_apply_req` / `cos_glow_apply` transport. |
 | `cosmetics_tweaker_data.lua` | Existing global glow VMF settings (master toggle, presets, per-channel dropdowns). These are the "old" UI; the popup is the per-item UI that supersedes them. |
 
 ### Key tables and functions
@@ -114,11 +116,11 @@ units also get refreshed because they're in `mod._unit_to_backend_id`
 ## 4. Persistence
 
 Single VMF setting `glow_per_item` (string). JSON-encoded via the global
-`cjson` library:
+`cjson` library and keyed by backend item plus illusion:
 
 ```json
 {
-  "08fab327-10c2-46b9-9189-c56337846b2e": {
+  "backend:08fab327-10c2-46b9-9189-c56337846b2e|skin:es_sword_skin_runed_01": {
     "rune": { "r": 200, "g": 60, "b": 255, "intensity": 1.5 }
   },
   "12ab34cd-...": {
@@ -129,20 +131,20 @@ Single VMF setting `glow_per_item` (string). JSON-encoded via the global
 }
 ```
 
-* Loaded on popup open via `_load_per_item_glow()`.
-* Saved on popup close via `_save_per_item_glow()`.
-* If `cjson` is nil, persistence is no-op and a one-time chat warning
-  fires (v0.9.7 fix).
+* Loaded for preview on popup open and restored during equipment spawn.
+* Saved only by explicit `GlowPicker.apply()`; close discards preview edits.
+* If `cjson` is nil, persistence is no-op and a one-time log-only warning fires.
 
 ## 5. The popup UI
 
-Floating panel anchored top-center, 600×400, no background dim. Built
-lazily on first `open_for(...)` call. Five widgets currently:
+Floating panel anchored top-center, 600×620, no background dim. Built
+lazily on first `open_for(...)` call. It includes:
 
 * `panel_bg` — semi-opaque dark rect with border
 * `title` — "Glow Customizer"
 * `subtitle` — shows `backend_id:` and `family:` for the active item
 * `close_btn` — top-right X button
+* `apply_btn` — explicit bottom-center commit, active after a slider edit
 * `slider_r / slider_g / slider_b / slider_intensity` — 4 sliders for
   the rune component. Each slider has color-hinted thumb (red slider →
   reddish thumb), label on left, track in middle, value text on right.
@@ -167,6 +169,9 @@ Each slider's `on_change` is wired (in `_build()`) to write its component
 field (`r`, `g`, `b`, or `intensity`) on `GlowPicker._current_glow_state.rune`,
 then call `GlowPicker._live_preview()` which updates
 `mod._per_item_glow_runtime` and calls `mod._reapply_glow_on_wielded()`.
+The callback also marks the picker dirty. Apply clones the preview into
+committed/runtime state, persists it, and queues one peer emit. Repeated Apply
+without another edit is a no-op; close restores the committed snapshot.
 
 ## 6. Why per-item paints precedence over global
 
@@ -238,55 +243,18 @@ visual scan.
 
 ### g. Coop sync of per-item glow
 
-Today per-item glow is local-only. Other players see their own global
-preset on YOUR weapon, not your custom RGB. The `cos_glow_apply` RPC
-that already syncs global glow can be extended to carry per-backend_id
-overrides, but this is M3+ work and requires careful handling of
-peer-relative backend_id resolution.
+Apply sends the wearer's active committed glow through the existing
+host-authoritative glow RPC and hot-join cache. Backend ids are deliberately
+not sent as remote clients do not share backend identity; the active state is
+painted on that wearer's currently wielded weapon units. Switching to another
+saved weapon refreshes active state from the equipment-spawn path.
 
-## 8. Adding the magic family (M3 roadmap)
+## 8. Remaining extensions
 
-In rough order of implementation:
-
-1. **Extend `_apply_glow_to_unit`** — add branches mirroring the rune
-   path for `pi.lower` / `pi.upper` / `pi.dots`. Each writes to its
-   two-variable pair (or one variable for dots) with the same
-   `native_brightness * intensity / 255` scaling.
-
-2. **Detect family at popup open** — `GlowPicker.classify(slot_data)`
-   already returns `"rune"` / `"magic"` / `nil`. Use it to decide which
-   slider sections to show.
-
-3. **Add scenegraph nodes for magic-family sliders** — 12 sliders
-   stacked under 3 component sections (Lower / Upper / Dots), each with
-   a label header above its R/G/B/intensity row.
-
-4. **Conditional widget build** — `_build()` now constructs all 16 max
-   slider widgets but only adds the active family's set to
-   `GlowPicker._widgets` (the draw list). Magic family swaps in 12,
-   rune family swaps in 4.
-
-5. **Per-component `on_change` wiring** — each slider's callback writes
-   to the correct component on `_current_glow_state.{rune,lower,upper,dots}`.
-
-6. **Persisted state schema** — already supports the multi-component
-   shape; just need to read/write `pi.lower / pi.upper / pi.dots` keys.
-
-7. **Auto-open + auto-close** — hook the cosmetic screen entry / exit;
-   detect the equipped item's family via mesh suffix; open if glow,
-   close if not.
-
-8. **Hide vanilla cousins** — for each glow item, identify its vanilla
-   cousin (`x_runed_01 → x` base mapping) and filter the cosmetic menu
-   to hide cousins when a glow version is also unlocked. This needs
-   in-game verification per family before deploying broadly.
-
-9. **Cross-slot inheritance** — when main weapon's glow changes, look up
-   the equipped shield's backend_id and propagate the same RGB+intensity
-   if the shield's mesh supports compatible glow vars.
-
-10. **Coop broadcast** — extend `cos_glow_apply` to carry per-item
-    overrides keyed by wearer_peer + backend_id.
+The rune/magic picker, persistence, contextual open, and active coop sync are
+wired. Remaining optional work is explicit glow-disable UI, compatible
+cross-slot inheritance, and carefully verified filtering of vanilla cousin
+illusions. These are independent of the Apply transaction.
 
 ## 9. Adding new glow shader variables (future-proofing)
 

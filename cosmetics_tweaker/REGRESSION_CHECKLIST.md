@@ -9,6 +9,20 @@ Last updated: 2026-07-13.
 ---
 ## Diagnostics / Regression Suite
 
+### glow-picker-explicit-apply -- persistence and peer rendering
+
+| Field | Value |
+|-------|-------|
+| Symptom | RGB edits had no Apply button; closing silently persisted a mutable live-preview table and no per-item color reached peers. |
+| Root cause | The picker implemented save-on-close without dirty/committed snapshots, while the retained glow RPC carried an empty state after the global glow menu was removed. |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.92-dev |
+| Category | INTEGRATION / MULTIPLAYER |
+| Repro | Edit a glow slider, close or Apply, reopen/restart, and observe the same weapon from local 1P/3P and a second client. |
+| Expected post-fix | Close discards preview-only edits; one Apply persists the exact backend-item+illusion identity and emits one host-authoritative active-glow update; repeated Apply is a no-op. |
+| Detection | `/cos_regression_test` passes `glow_picker_apply_transaction_574`; one successful click logs one `[glow_picker:apply] committed` line. Coop verification confirms both clients repaint the wearer. |
+| Tracking | GitHub issue #574. |
+
 ### score-lineup-snapshot-peer-resolution -- local and remote LA hats
 
 | Field | Value |
