@@ -67,12 +67,15 @@
 
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
+    [string]$RepoRoot,
     [switch]$Quiet,
     [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $RepoRoot = Join-Path $PSScriptRoot ".."
+}
 $repoRoot = (Resolve-Path $RepoRoot).Path
 
 # ---- the status-label lifecycle (§ 11; user rules 2026-07-11/12) ----
