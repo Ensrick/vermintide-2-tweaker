@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.212-dev"
+local MOD_VERSION = "0.2.213-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1555,6 +1555,34 @@ _rt_register("gt_lobby_failnotify_unpack_preserves_leading_nils", function()
     if last ~= "lobby_hash" then
         return string.format("trailing format arg lost: expected 'lobby_hash', got %s", tostring(last))
     end
+end)
+
+_rt_register("gt_lobby378_watchdog_abort_reroutes_to_menu", function()
+    -- #378: the join watchdog's load-bearing invariant is that a HUNG join is
+    -- rerouted to the main menu. A pure hang leaves _wanted_state = StateIngame
+    -- (state_loading.lua:246); the abort delegates to vanilla _destroy_lobby_client,
+    -- which sets _wanted_state = StateTitleScreen (state_loading.lua:1144). Pin
+    -- that the reroute delegates there and is nil/missing-method safe (else a
+    -- refactor that force-teardowns WITHOUT the reroute would silently dump the
+    -- user into a broken StateIngame instead of the menu).
+    local reroute = mod._gt_join_watchdog_reroute
+    if type(reroute) ~= "function" then return "watchdog reroute fn not exported" end
+    if type(mod._gt_join_watchdog_tick) ~= "function" then return "watchdog tick fn not exported" end
+    local called = false
+    local fake_sl = { _wanted_state = "StateIngame_sentinel" }
+    fake_sl._destroy_lobby_client = function(s)
+        called = true
+        s._wanted_state = "StateTitleScreen_sentinel"
+    end
+    reroute(fake_sl)
+    if not called then return "reroute did not delegate to _destroy_lobby_client" end
+    if fake_sl._wanted_state ~= "StateTitleScreen_sentinel" then
+        return "reroute did not let _destroy_lobby_client redirect _wanted_state to the menu"
+    end
+    -- A StateLoading missing the method, or nil, must not throw.
+    local ok_a = pcall(reroute, {})
+    local ok_b = pcall(reroute, nil)
+    if not (ok_a and ok_b) then return "reroute raised on a StateLoading without _destroy_lobby_client" end
 end)
 
 _rt_register("bots_in_keep_helpers_exposed", function()

@@ -1015,6 +1015,29 @@ local _data = {
                                 default_value = true,
                                 tooltip       = "gt_lobby_manifest_failnotify_enabled_tooltip",
                             },
+                            -- Issue #378: the failnotify above only fires when a
+                            -- join RESOLVES to incorrect_hash. Most mod mismatches
+                            -- HANG instead (network_hash ignores the mod set), so
+                            -- this watchdog times a stalled join and surfaces the
+                            -- same reveal (or a plain stall notice) + a Leave
+                            -- button. Sibling of failnotify, not gated by it: the
+                            -- abort-without-alt-F4 is valuable even to users who
+                            -- keep the reveal off. Timeout nests under it.
+                            {
+                                setting_id    = "gt_lobby_join_watchdog_enabled",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_lobby_join_watchdog_enabled_tooltip",
+                                sub_widgets   = {
+                                    {
+                                        setting_id    = "gt_lobby_join_watchdog_timeout_seconds",
+                                        type          = "numeric",
+                                        default_value = 60,
+                                        range         = { 20, 180 },
+                                        tooltip       = "gt_lobby_join_watchdog_timeout_seconds_tooltip",
+                                    },
+                                },
+                            },
                         },
                     },
                     -- Loose options, A->Z by display label:

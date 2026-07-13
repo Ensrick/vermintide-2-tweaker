@@ -403,6 +403,174 @@ mod:hook("StateLoading", "create_popup", function(func, self, error_key, header,
     -- Suppress vanilla popup; we've taken over.
 end)
 
+-- ============================================================================
+-- Join watchdog (client side, Issue #378, v0.2.213-dev).
+-- ============================================================================
+-- The failed-join reveal above only fires when the join actually RESOLVES to
+-- `failure_start_join_server_incorrect_hash`. A mod mismatch frequently does
+-- NOT resolve there: the network_hash covers only the compiled network config,
+-- engine/content revision, the DLC set and the level-key count (`num_levels`),
+-- NOT the VMF mod set (`scripts/network/lobby_aux.lua:16-48`). So a host mod
+-- that changes breeds / items / buffs / adds a VMF RPC WITHOUT adding a
+-- level_key or a DLCSetting leaves the hash equal, the client sails past the
+-- hash gate (`state_loading.lua:1068`), and then stalls with NO timeout:
+--   * pre-hash: `_verify_joined_lobby`'s `ready_to_compare_data` gate
+--     (`state_loading.lua:1004`) never turns true if the host's Steam
+--     lobby_data (network_hash / matchmaking_type / difficulty) or `host`
+--     (`lobby:lobby_host()`) never populate client-side -> loops forever, no
+--     popup, `_lobby_verified` never set.
+--   * post-hash: the NetworkClient state machine has a timeout ONLY on
+--     `connecting` (`network_client.lua:372-382`, CONNECTION_TIMEOUT=15);
+--     `loading` / `loaded` / `waiting_enter_game` wait on host RPCs
+--     (`rpc_loading_synced`, `rpc_game_started`) with no bound.
+-- Result: indefinite loading screen, alt-F4 the only exit.
+--
+-- This watchdog times the pre-game-start join phase as a non-host client; on
+-- timeout it force-surfaces the manifest diff (or, for a non-broadcasting /
+-- vanilla host, a plain "join stalled" notice) and reroutes StateLoading back
+-- to the main menu so alt-F4 is never needed. Everything is LOCAL: it only
+-- READS Steam lobby_data and queues a LOCAL popup -- NO new networked sends.
+-- Inert unless we are the joining client (host path early-outs on
+-- `lobby.is_host`).
+
+local _wd_armed_sl   = nil    -- StateLoading instance currently being timed
+local _wd_elapsed    = 0      -- seconds accumulated in the pre-game-start phase
+local _wd_fired_for  = nil    -- StateLoading instance already surfaced (no re-fire)
+local _wd_last_err   = nil    -- de-dupe the per-frame tick-error printf
+local _queue_stall_popup      -- forward decl (Lua 5.1)
+local WD_TIMEOUT_FLOOR = 15    -- never trip faster than this, whatever the setting says
+
+-- True (returns the session lobby) when we are a NON-host client whose session
+-- lobby exists and whose join has not yet reached game-start. Level loading (the
+-- legitimately slow part) happens AFTER `game_started` in StateLoading
+-- (`state_loading.lua:1396-1452`), so gating on pre-game-start means a slow disk
+-- can't false-trip the watchdog.
+local function _wd_is_stalled_joining_client(sl)
+    local lm = Managers and Managers.lobby
+    if not (lm and lm.query_lobby) then return nil end
+    local lobby = lm:query_lobby("matchmaking_session_lobby")
+    if not lobby or lobby.is_host then return nil end
+    local nc = sl and sl._network_client
+    local states = rawget(_G, "NetworkClientStates")
+    if nc and states and (nc.state == states.game_started or nc.state == states.is_ingame) then
+        return nil
+    end
+    return lobby
+end
+
+local function _wd_timeout_seconds()
+    local v = tonumber(mod:get("gt_lobby_join_watchdog_timeout_seconds")) or 60
+    if v < WD_TIMEOUT_FLOOR then v = WD_TIMEOUT_FLOOR end
+    return v
+end
+
+-- Reroute the loading state to the main menu. Mirrors the vanilla failure path:
+-- `_verify_joined_lobby` calls `_destroy_lobby_client` right before the
+-- incorrect_hash popup (`state_loading.lua:1083`), and `_destroy_lobby_client`
+-- BOTH destroys the session lobby AND sets `self._wanted_state = StateTitleScreen`
+-- (`state_loading.lua:1128-1145`). Without this, a pure hang leaves
+-- `_wanted_state` at StateIngame (set in `_setup_init_network_view`,
+-- `state_loading.lua:246`), so the popup teardown (`_teardown_network` +
+-- `_permission_to_go_to_next_state`) would transition the user INTO a broken
+-- session (`state_loading.lua:1497` `_new_state = _wanted_state`) instead of the
+-- menu. `_teardown_network` is then set by the shared poller when the popup is
+-- dismissed, exactly as the failed-join reveal already does.
+local function _wd_reroute_to_menu(sl)
+    if sl and type(sl._destroy_lobby_client) == "function" then
+        pcall(function() sl:_destroy_lobby_client() end)
+    end
+end
+
+-- The no-manifest branch: a vanilla / non-broadcasting host, or a diff with
+-- nothing actionable. State plainly that the join stalled and offer the abort;
+-- never claim to know the cause. Reuses `_pending_popups` + the shared poller so
+-- the single "Leave" button drives the same restart_as_server teardown as the
+-- reveal popup.
+_queue_stall_popup = function(state_loading_self)
+    if not (Managers.popup and Managers.popup.queue_popup) then return false end
+    local title = _lz("gt_lobby_watchdog_stall_title", "Join timed out")
+    local body  = _lz("gt_lobby_watchdog_stall_body",
+        "The join to this lobby did not finish. The host may require mods you do not have, or may not be sharing its mod list. Leave to return to the main menu.")
+    local btn   = _lz("gt_lobby_failnotify_button_cancel", "Close")
+    local popup_id = Managers.popup:queue_popup(body, title, "restart_as_server", btn)
+    if not popup_id then return false end
+    _pending_popups[popup_id] = { diff = nil, sl = state_loading_self }
+    return true
+end
+
+local function _wd_fire(sl)
+    _wd_fired_for = sl
+    -- Never stack on a popup already up (vanilla error, or our own reveal that
+    -- DID resolve): if one exists, this isn't the silent-hang case we cover.
+    if Managers.popup and Managers.popup.has_popup and Managers.popup:has_popup() then return end
+    if next(_pending_popups) ~= nil then return end
+
+    -- Read the host manifest while the session lobby wrapper is still alive
+    -- (before the reroute destroys it).
+    local diff, body
+    local lobby_id = _safe_get_lobby_id()
+    if lobby_id then
+        local text = _fetch_manifest_for_lobby(lobby_id)
+        if text then
+            local host_entries = _parse_manifest(text)
+            if #host_entries > 0 then
+                diff = _diff_mods(host_entries, _build_local_index())
+                body = _build_popup_text(diff)
+            end
+        end
+    end
+
+    _wd_reroute_to_menu(sl)
+
+    if body and diff then
+        local intro = _lz("gt_lobby_watchdog_intro",
+            "The join to this host timed out. You appear to be missing mods it requires:")
+        if not _queue_enriched_popup(sl, intro .. "\n\n" .. body, diff) then
+            _queue_stall_popup(sl)
+        end
+    else
+        _queue_stall_popup(sl)
+    end
+    printf("[gt:378] join watchdog surfaced popup after %.0fs (manifest=%s)",
+        _wd_elapsed, tostring(body ~= nil))
+end
+
+local function _wd_tick(sl, dt)
+    if not mod:get("gt_lobby_join_watchdog_enabled") then
+        _wd_armed_sl, _wd_elapsed = nil, 0
+        return
+    end
+    local lobby = _wd_is_stalled_joining_client(sl)
+    if not lobby then
+        -- host, no session lobby, or already past game-start: disarm
+        _wd_armed_sl, _wd_elapsed = nil, 0
+        return
+    end
+    if _wd_fired_for == sl then return end   -- already surfaced for this join
+    if _wd_armed_sl ~= sl then                -- fresh StateLoading instance: (re)arm
+        _wd_armed_sl, _wd_elapsed = sl, 0
+    end
+    _wd_elapsed = _wd_elapsed + (dt or 0)
+    if _wd_elapsed >= _wd_timeout_seconds() then
+        _wd_fire(sl)
+    end
+end
+
+-- Capture the live StateLoading instance + dt each frame it updates (self-gating:
+-- fires ONLY during a loading screen). hook_safe = observation; we mutate only
+-- our own timer + (on fire) the state's documented teardown fields. Grep-verified
+-- singleton: the only other StateLoading hook in gt is create_popup above.
+mod:hook_safe("StateLoading", "update", function(self, dt, t)
+    local ok, err = pcall(_wd_tick, self, dt)
+    if not ok then
+        local msg = tostring(err)
+        if _wd_last_err ~= msg then
+            _wd_last_err = msg
+            printf("[gt:378] join watchdog tick error (repeats suppressed): %s", msg)
+        end
+    end
+end)
+
 -- Diagnostic chat command. Usage: /lobby_manifest_probe <lobby_id>
 mod:command("lobby_manifest_probe", "Fetch+dump a remote lobby's modded manifest (no join)",
 function(lobby_id_arg)
@@ -447,5 +615,13 @@ mod._gt_failnotify_drive_teardown = _drive_restart_as_server_teardown
 mod._gt_failnotify_consume_results = _consume_results
 mod._gt_failnotify_pending_popups = _pending_popups
 mod._gt_failnotify_should_defer = M._should_defer_for_existing_popup
+
+-- Issue #378 join-watchdog exports (see /gt_regression_test). `_wd_reroute_to_menu`
+-- is the load-bearing invariant this fix adds over the reveal: a hung join must be
+-- rerouted to the menu (delegates to vanilla `_destroy_lobby_client`), else the
+-- teardown would dump the user into a broken StateIngame.
+mod._gt_join_watchdog_tick    = _wd_tick
+mod._gt_join_watchdog_reroute = _wd_reroute_to_menu
+mod._gt_join_watchdog_timeout = _wd_timeout_seconds
 
 return M

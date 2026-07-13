@@ -1,5 +1,28 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.213-dev (2026-07-13) -- #378 client watchdog for a missing-mod join that hangs instead of erroring [untested]
+
+Joining a modded host while missing a required mod could hang the loading screen forever with no popup, forcing alt-F4. A client-side watchdog now times the pre-game-start join phase and, on timeout, surfaces the missing-mods reveal (or a plain "join stalled" notice for a non-broadcasting host) plus a Leave button that returns to the main menu. Local-only: it reads Steam lobby_data and shows a local popup -- no new networked sends; fully inert unless we are the joining client (the host path early-outs on `lobby.is_host`).
+
+### Root cause (why the existing reveal never fired -- cited)
+The failed-join reveal (`_gt_lobby_failed_join_reveal.lua`) only triggers when a join RESOLVES to `failure_start_join_server_incorrect_hash` (`state_loading.lua:1084`). But the `network_hash` covers only the compiled network config, engine/content revision, the DLC set and the level-key count -- NOT the VMF mod set (`scripts/network/lobby_aux.lua:16-48`, `LobbyAux.create_network_hash`). A host mod that changes breeds/items/buffs or adds a VMF RPC WITHOUT adding a level_key or a DLCSetting leaves the hash EQUAL, so the client passes the hash gate (`state_loading.lua:1068`) and then stalls with no timeout:
+- **Pre-hash:** `_verify_joined_lobby`'s `ready_to_compare_data` gate (`state_loading.lua:1004`) never turns true if the host's Steam lobby_data (`network_hash`/`matchmaking_type`/`difficulty`) or `host` never populate client-side -- it loops every frame, `_lobby_verified` never set, no popup.
+- **Post-hash:** the `NetworkClient` state machine has a timeout ONLY on `connecting` (`network_client.lua:372-382`, CONNECTION_TIMEOUT=15). `loading` / `loaded` / `waiting_enter_game` wait on host RPCs (`rpc_loading_synced`, `rpc_game_started`) with no bound.
+
+### Fix (client-side; no RPC, host unaffected)
+- New watchdog inside `_gt_lobby_failed_join_reveal.lua`: a single `hook_safe` on `StateLoading.update` (grep-verified singleton -- gt's only other StateLoading hook is `create_popup`) captures the live state instance + dt and times the pre-game-start join phase as a non-host client. Level loading (the legitimately slow part) happens AFTER `game_started` (`state_loading.lua:1396-1452`), so gating on pre-game-start means a slow disk cannot false-trip it.
+- On timeout it reads the host manifest from Steam lobby_data (reusing the reveal's `_fetch_manifest_for_lobby` / `_diff_mods` / `_build_popup_text`), then reroutes StateLoading to the main menu via vanilla `_destroy_lobby_client` (destroys the session lobby AND sets `_wanted_state = StateTitleScreen`, `state_loading.lua:1128-1145` -- without this a pure hang keeps `_wanted_state` at StateIngame and the teardown would dump the user into a broken session). The popup + Leave-button teardown reuse the existing `_pending_popups` poller. If no manifest is readable (vanilla/non-broadcasting host) the popup states only that the join stalled and offers the Leave -- it never guesses the cause.
+- Two new options in Host-Side Lobby Controls > Modded Lobby Manifest: "Recover from a stalled join" (checkbox, default on) and a nested "Stalled-join timeout (seconds)" numeric (default 60, 20-180).
+
+### Regression
+- New `/gt_regression_test` check `gt_lobby378_watchdog_abort_reroutes_to_menu`: drives the exported `_wd_reroute_to_menu` against a stub StateLoading and asserts it delegates to `_destroy_lobby_client` (the `_wanted_state` -> menu redirect) and is nil / missing-method safe, so a refactor that force-tears-down WITHOUT the reroute is caught at load.
+
+### Test method (coop, 2 humans -- verify-fix-coop)
+1. Human A hosts a lobby with a required (hash-neutral) mod that Human B does NOT have installed -- e.g. enemy_tweaker or a breed/buff mod that changes shared state but adds no level_key/DLC. Human B keeps gt_dev enabled.
+2. Human B joins A's lobby. Previously: indefinite loading screen, alt-F4 only exit. Now: within the timeout (default 60s) a popup lists the missing mod(s) with Open Workshop + Leave, OR (if A is not broadcasting its mod list) a "Join timed out" notice with Leave; clicking Leave returns to the main menu.
+3. Confirm a NORMAL join (B has all of A's mods) still completes well within the window and shows no watchdog popup.
+4. `/gt_regression_test` must pass `gt_lobby378_watchdog_abort_reroutes_to_menu`.
+
 ## v0.2.212-dev (2026-07-13) -- #384 bots stop leashing away from a downed teammate mid-aid [untested]
 
 With aid-priority ON, a bot pathing to a downed/disabled/awaiting-rescue teammate no longer gets snap-teleported back to a standing human mid-errand. The bot stays committed until the teammate is up (or the #492 watchdog bails an unreachable one so the bot can regroup). Aid-priority OFF is byte-identical vanilla behavior.

@@ -448,6 +448,12 @@ return {
     gt_lobby_manifest_failnotify_enabled = { en = "[untested] Show missing mods when a join fails" },
     gt_lobby_manifest_failnotify_enabled_tooltip = { en = "When you fail to join a modded host over a mod mismatch, replace the generic error with a list of the mods you are missing plus a button to open the Workshop. Falls back to the normal error if the host is not sharing its mod list." },
 
+    -- Issue #378: stalled-join watchdog (title strings tagged per LOCALIZATION_STANDARD 13).
+    gt_lobby_join_watchdog_enabled = { en = "[untested] [Issue 378] Recover from a stalled join" },
+    gt_lobby_join_watchdog_enabled_tooltip = { en = "If a join to a modded host hangs on the loading screen instead of erroring out, show the missing-mods list (or a plain stall notice when the host shares no mod list) and a Leave button, so you never have to alt-F4. Off leaves a hung join hanging." },
+    gt_lobby_join_watchdog_timeout_seconds = { en = "[untested] [Issue 378] Stalled-join timeout (seconds)" },
+    gt_lobby_join_watchdog_timeout_seconds_tooltip = { en = "How long a join may sit before game start before it counts as stalled, from 20 to 180 seconds. Level loading happens after this window, so a slow disk will not trip it. Default 60." },
+
     -- Loose lobby options (A->Z by display label).
     allow_duplicate_careers = { en = "[working] Allow Duplicate Careers" },
     allow_duplicate_careers_tooltip = { en = "More than one player can pick the same hero and career in the same lobby." },
@@ -559,4 +565,9 @@ return {
     gt_lobby_failnotify_cosmetic_footer    = { en = "Host also has %%d cosmetic mods you don't (gameplay unaffected)." },
     gt_lobby_failnotify_button_workshop    = { en = "Open Workshop" },
     gt_lobby_failnotify_button_cancel      = { en = "Close" },
+
+    -- Issue #378 join-watchdog rendered text (not option titles, so no status tags).
+    gt_lobby_watchdog_intro       = { en = "The join to this host timed out. You appear to be missing mods it requires:" },
+    gt_lobby_watchdog_stall_title = { en = "Join timed out" },
+    gt_lobby_watchdog_stall_body  = { en = "The join to this lobby did not finish. The host may require mods you do not have, or may not be sharing its mod list. Leave to return to the main menu." },
 }
