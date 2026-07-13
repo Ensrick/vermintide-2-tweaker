@@ -486,6 +486,13 @@ notice the change.
 
 ### Known weapon-specific remaps
 
+- **Bardin Greataxe on non-WP Saltzpyre (#286):**
+  `two_handed_axes_template_1.wield_anim_career_3p` routes `wh_captain`,
+  `wh_bountyhunter`, and `wh_zealot` to `to_2h_hammer_priest`. The old
+  `to_2h_sword` target produced a Greatsword idle/stance; Warrior Priest's
+  greathammer stance is the confirmed target. Keep the source table and applied
+  live template aligned; `/wt_regression_test`
+  `issue286_greataxe_saltzpyre_wield_pose` guards both layers.
 - **Greatsword cross-career remap (template-based).**
   `two_handed_swords_template_1` (es/wh greatsword) on Kerillian
   (`we_`): stance redirect `to_2h_sword` → `to_2h_sword_we`, plus 8
