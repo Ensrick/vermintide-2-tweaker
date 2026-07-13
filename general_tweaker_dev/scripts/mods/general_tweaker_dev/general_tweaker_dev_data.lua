@@ -201,6 +201,30 @@ local _data = {
                                 default_value = true,
                                 tooltip       = "gt_bot_ignore_surplus_selfuse_tooltip",
                             },
+                            -- #523: bots actively HEAL hurt human allies with a
+                            -- Medical Supplies kit. Widens the DORMANT vanilla
+                            -- heal_other node (bt_bot.lua:87-93) by relabeling the
+                            -- neediest reachable human "in_need_of_heal" from inside
+                            -- the _select_ally_by_utility hook (FIX 13). Prototype,
+                            -- default OFF. Pairs with the reserve toggle above:
+                            -- reserve stops self-burning the kit, this spends it on
+                            -- a hurt human. Read live in the hook -- no
+                            -- on_setting_changed. The pct slider tunes the
+                            -- permanent-health cutoff; wounded players always qualify.
+                            {
+                                setting_id    = "gt_bot_heal_allies",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_bot_heal_allies_tooltip",
+                            },
+                            {
+                                setting_id      = "gt_bot_heal_allies_pct",
+                                type            = "numeric",
+                                default_value   = 50,
+                                range           = { 10, 95 },
+                                decimals_number = 0,
+                                tooltip         = "gt_bot_heal_allies_pct_tooltip",
+                            },
                             {
                                 setting_id    = "gt_bot_aid_priority",
                                 type          = "checkbox",

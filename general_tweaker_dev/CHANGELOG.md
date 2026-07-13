@@ -1,5 +1,27 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.207-dev (2026-07-12) -- #523 bots actively heal hurt human allies (prototype) [untested]
+
+New default-OFF `gt_bot_heal_allies` sub-toggle (+ a `gt_bot_heal_allies_pct` slider, default 50) under the `gt_bot_behavior_improvements` master. When both are on, a bot carrying Medical Supplies walks up to the neediest hurt HUMAN teammate and channels a heal on them -- wounded (grey health) first, else lowest permanent-health -- when nothing needs reviving and no enemy is right next to the target. With either OFF the `_select_ally_by_utility` hook is byte-for-byte the prior behaviour. Host-side only (bot AI is server-owned); no RPC, no `NetworkLookup` key, no wire field, so nothing a non-host peer can crash or desync on.
+
+### Why (the #468 note was half-wrong)
+FIX 12's #468 note asserts "the game has no bot heal-other action". Only half true: `BTBotHealAction` (`bt_bot_heal_action.lua:15,29`) is self-heal only, but a SEPARATE vanilla node already channel-heals an ally -- `bt_bot.lua:87-93` "heal_other", a `BTBotInteractAction` driven by `BotActions.default.use_heal_on_player` (`player_bots_settings.lua:94-97`), gated by `BTConditions.can_heal_player` (`bt_bot_conditions.lua:773-807`). The full navigation + interaction + heal-apply chain exists and works; the bot runs the SAME interaction a human uses, so the heal amount, item consumption, wound removal and networking are all vanilla-native (`interactions.lua:1788` `DamageUtils.heal_network` heal_type "bandage"; `attack_templates.lua:403` `heal_percent` 0.8 = 80% of missing health; wound removed via `StatusUtils.set_wounded_network`, `damage_utils.lua:2545`). Bots "never" heal allies because of the SELECTION gate, not a missing action: `_select_ally_by_utility` only labels an ally `in_need_of_heal` when its PERMANENT health < `WANTS_TO_HEAL_THRESHOLD` (0.25) OR it is wounded, AND the bot values healing them over itself (`self_health_utiliy < health_utility` with `SELF_HEAL_STICKINESS` baked in, `player_bot_base.lua:868,932,935`).
+
+### Shape chosen: widen the dormant node (NOT a BT graft, NOT host-side steering)
+The bot tree is compiled ONCE at load from `BotBehaviors.default` via `BehaviorTree:new` (`ai_system.lua:1702-1703`) and the heal_other node is already in it, so neither a runtime graft nor a hand-rolled steer/interact is needed. FIX 13 relaxes only the SELECTION gate from inside gt's EXISTING `_select_ally_by_utility` hook (merged, no new hook -- VMF drops a 2nd on a pair): when `gt_bot_heal_allies` is on, and only when vanilla + FIX 3/3b picked nothing more urgent (need_type nil or attention-only), it relabels the neediest reachable human `in_need_of_heal`. The caller then sets `target_ally_needs_aid` / `interaction_unit` / aid destination (`player_bot_base.lua:710-720,1595-1599`) and the vanilla heal_other node paths the bot in and channels the native heal.
+
+### Added (`_gt_bot_fixes.lua` FIX 13 + data/loc)
+- **`gt_bot_heal_allies` (checkbox, default OFF).** Target selection mirrors vanilla's heal-need gates (permanent-health metric, wh_zealot >1-wound skip) but drops the self-vs-other utility bias. Disabled / downed / awaiting-respawn allies are skipped (that is a revive/rescue case, handled by FIX 3/3b), humans only, path-gated (`_ally_path_allowed`), and within a 20 m cap so a bot never abandons the team to chase a far heal.
+- **`gt_bot_heal_allies_pct` (slider, default 50, range 10-95):** permanent-health cutoff below which a human is worth healing; wounded players always qualify regardless.
+- Helpers `_gt_heal_allies_on` / `_gt_pick_human_heal_target` are declared ABOVE the hook (forward-ref-to-global trap, BUG_CLASSES 6).
+- **`[gt:523]` diagnostics (always-on dev, edge-triggered per bot):** `ACQUIRED` on target pick/retarget (hp/wounded/dist) and `CLEARED` when no eligible target remains -- so a field log shows exactly which human the bot chose and why it stopped.
+- Corrected the misleading FIX 12 note + `gt_bot_smart_self_heal` tooltip that claimed bots cannot heal others.
+
+### Known limitations (prototype)
+- Only fires on a NON-priority-enemy frame (`_update_target_ally` skips the utility picker when the bot has a priority target, `player_bot_base.lua:698`) and `can_heal_player` blocks the channel while any enemy is proximate -- so heal-during-combat does not happen. Intended for a first pass; combat-heal is a later refinement.
+- 20 m range cap is fixed (no slider yet).
+- Untested in-game; the heal-other node itself is vanilla-proven, but this specific selection widening needs a host + bots repro (below).
+
 ## v0.2.206-dev (2026-07-12) -- #469 bots immune to curated mutator/hazard AOE [untested]
 
 New default-OFF `gt_bot_aoe_immunity` sub-toggle under the `gt_bot_behavior_improvements` master. When both are on, BOTS (never humans) take zero damage from a CURATED set of environment/mutator area hazards they cannot reliably path around and die to. With either OFF the two hooks are byte-for-byte the prior godmode behaviour.

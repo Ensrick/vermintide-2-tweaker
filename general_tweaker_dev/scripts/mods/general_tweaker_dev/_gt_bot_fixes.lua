@@ -784,6 +784,134 @@ mod:hook("BTConditions", "can_activate_ability", function (func, blackboard, arg
 end)
 
 -- ----------------------------------------------------------------------------
+-- FIX 13 (#523, v0.2.207-dev): Bots actively heal hurt HUMAN allies
+-- ----------------------------------------------------------------------------
+-- WHY (this CORRECTS the FIX 12 / #468 note below)
+--   The self-heal note in FIX 12 asserts "the game has no bot heal-other action".
+--   That is only half true: BTBotHealAction (bt_bot_heal_action.lua) is self-heal
+--   only, but a SEPARATE vanilla node ALREADY channel-heals an ALLY --
+--     bt_bot.lua:87-93 "heal_other": a BTBotInteractAction driven by
+--     BotActions.default.use_heal_on_player (player_bots_settings.lua:94-97,
+--     {aim_node="j_head", input="charge_shot"}), gated by
+--     BTConditions.can_heal_player (bt_bot_conditions.lua:773-807).
+--   The whole navigation + interaction + heal-apply chain is present and working:
+--   the caller sets target_ally_needs_aid / interaction_unit / aid destination for
+--   an "in_need_of_heal" need type (player_bot_base.lua:710-720, :1595-1599), then
+--   the node runs the SAME interaction a human uses, so the heal amount, item
+--   consumption, wound removal and networking are all vanilla-native
+--   (interactions.lua:1788 DamageUtils.heal_network heal_type "bandage";
+--   attack_templates.lua:403 heal_percent 0.8 = 80%% of missing health; the wound
+--   is removed via StatusUtils.set_wounded_network, damage_utils.lua:2545).
+--
+--   The reason bots "never" heal allies is the SELECTION gate, NOT a missing
+--   action. _select_ally_by_utility only labels an ally "in_need_of_heal" when its
+--   PERMANENT health < WANTS_TO_HEAL_THRESHOLD (0.25) OR it is wounded, AND the bot
+--   values healing them over itself (self_health_utiliy < health_utility, with
+--   SELF_HEAL_STICKINESS baked into self_health_utiliy -- player_bot_base.lua:868,
+--   :932, :935), AND the bot carries a can_heal_other kit. So a bot almost always
+--   keeps its kit and the heal_other node stays dormant.
+--
+-- SHAPE (widen the dormant vanilla node -- NOT a BT graft, NOT host-side steering)
+--   The tree is compiled ONCE at load from BotBehaviors.default via
+--   BehaviorTree:new (ai_system.lua:1702-1703); the heal_other node is already in
+--   it. So neither a runtime graft nor a hand-rolled steer/interact is needed -- we
+--   just relax the SELECTION gate from inside gt's EXISTING _select_ally_by_utility
+--   hook. Under a new default-OFF toggle, and only when nothing more urgent was
+--   picked, relabel the neediest reachable HUMAN "in_need_of_heal"; the vanilla
+--   pipeline then paths the bot in and channels the native heal. Target selection
+--   per #523: wounded (grey health) first, else lowest permanent-health human,
+--   within HEAL_ALLY_MAX_DIST and path-reachable. Host-side only (bot AI is
+--   server-owned); no RPC / NetworkLookup, so no non-host peer can crash or desync.
+--
+-- COMPOSES WITH #468: a bot that RESERVES its kit
+--   (gt_bot_reserve_kits_for_players, FIX 12) is exactly the carrier this feature
+--   spends -- reserve stops the bot self-burning Medical Supplies, heal-allies
+--   walks that kit to a hurt human. Works best with reserve ON; does not require it.
+-- RISK: heal-other outranks nothing here -- it is injected LAST, only when vanilla
+--   AND FIX 3/3b picked no revive/rescue/heal (need_type nil or attention-only), so
+--   it can never delay a revive or rescue.
+local HEAL_ALLY_MAX_DIST = 20
+local HEAL_ALLY_MAX_DIST_SQ = HEAL_ALLY_MAX_DIST * HEAL_ALLY_MAX_DIST
+
+local function _gt_heal_allies_on()
+    return mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_heal_allies")
+end
+mod._gt_heal_allies_on = _gt_heal_allies_on
+
+-- Pick the neediest reachable HUMAN ally for a heal-other channel, or nil.
+-- Mirrors vanilla's heal-need gates (permanent-health metric player_bot_base.lua
+-- :926; wh_zealot >1-wound skip :922) but DROPS the self-vs-other utility bias that
+-- normally suppresses the pick. Disabled / awaiting-respawn allies are a
+-- revive/rescue case, not a heal case, and are skipped so heal-other never competes
+-- with aid. Returns (unit, real_dist, permanent_health_percent, wounded).
+local function _gt_pick_human_heal_target(self, unit, roster, self_pos, t)
+    local blackboard = self._blackboard
+    local inventory_extension = blackboard and blackboard.inventory_extension
+    if not (inventory_extension and self_pos and roster) then return nil end
+
+    local health_slot_data = inventory_extension:get_slot_data("slot_healthkit")
+    local template = health_slot_data and inventory_extension:get_item_template(health_slot_data)
+    if not (template and template.can_heal_other) then return nil end
+
+    local gt_pct = tonumber(mod:get("gt_bot_heal_allies_pct"))
+    local threshold = (gt_pct and gt_pct / 100) or 0.5
+
+    local player_manager = Managers.player
+    local best_unit, best_dist_sq, best_health, best_wounded
+
+    for k = 1, #roster do
+        local pu = roster[k]
+        if pu ~= unit and HEALTH_ALIVE[pu] then
+            local owner = player_manager and player_manager:owner(pu)
+            local status_ext = owner and owner:is_player_controlled()
+                and ScriptUnit.has_extension(pu, "status_system")
+            if status_ext and not status_ext:is_disabled()
+                    and not status_ext:is_ready_for_assisted_respawn()
+                    and not status_ext.near_vortex then
+                local health_ext = ScriptUnit.has_extension(pu, "health_system")
+                local career_ext = ScriptUnit.has_extension(pu, "career_system")
+                local career_ok = not (career_ext and career_ext:career_name() == "wh_zealot"
+                    and status_ext:num_wounds_remaining() > 1)
+                if health_ext and career_ok then
+                    local wounded = status_ext:is_wounded()
+                    local health_percent = health_ext:current_permanent_health_percent()
+                    if wounded or health_percent < threshold then
+                        local cand_pos = POSITION_LOOKUP[pu]
+                        local dist_sq = cand_pos and Vector3.distance_squared(self_pos, cand_pos)
+                        if dist_sq and dist_sq <= HEAL_ALLY_MAX_DIST_SQ then
+                            local _, allowed_aid_path = self:_ally_path_allowed(unit, pu, t)
+                            if allowed_aid_path then
+                                -- Rank: wounded first, then lowest permanent health,
+                                -- then closest (#523 "lowest-HP human, wounded first").
+                                local better = not best_unit
+                                if best_unit and not better then
+                                    if wounded ~= best_wounded then
+                                        better = wounded
+                                    elseif health_percent ~= best_health then
+                                        better = health_percent < best_health
+                                    else
+                                        better = dist_sq < (best_dist_sq or math.huge)
+                                    end
+                                end
+                                if better then
+                                    best_unit, best_dist_sq = pu, dist_sq
+                                    best_health, best_wounded = health_percent, wounded
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if best_unit then
+        return best_unit, math.sqrt(best_dist_sq), best_health, best_wounded
+    end
+end
+mod._gt_pick_human_heal_target = _gt_pick_human_heal_target
+
+-- ----------------------------------------------------------------------------
 -- FIX 3: Bots don't rescue allies awaiting (assisted) respawn
 -- ----------------------------------------------------------------------------
 -- WHAT
@@ -819,8 +947,12 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
     -- gt_bot_aid_priority sub-toggle, #297 v0.2.182-dev; v0.2.128-dev had it on
     -- the bundle alone, pre-bundle it was gt_bot_revive_priority /
     -- gt_bot_rescue_priority).
+    -- FIX 13 (#523): heal-allies also needs the body to run to reach its
+    -- injection point (after FIX 3/3b, so it can never preempt a revive/rescue).
+    local _gt_heal_allies_active = _gt_heal_allies_on()
     if not (mod:get("gt_bot_rescue_awaiting")
-            or (mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_aid_priority"))) then
+            or (mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_aid_priority"))
+            or _gt_heal_allies_active) then
         return ally, real_dist, need_type, look_at
     end
 
@@ -1005,6 +1137,29 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
             local _real = Vector3.distance(self_pos, POSITION_LOOKUP[_fr_unit])
             mod:debug("[gt:bot-priority] FORCE %s ally dist=%.1f (prior_need=%s)", _fr_need, _real, tostring(need_type))
             return _fr_unit, _real, _fr_need, false
+        end
+    end
+
+    -- FIX 13 (#523): inject a heal-other target LAST -- only when nothing more
+    -- urgent was picked (vanilla + FIX 3/3b left need_type nil or attention-only),
+    -- so a revive/rescue/awaiting pick is never downgraded, and vanilla's OWN
+    -- in_need_of_heal pick (if it ever fires) is respected.
+    if _gt_heal_allies_active
+            and (need_type == nil or need_type == "in_need_of_attention_stop"
+                 or need_type == "in_need_of_attention_look") then
+        local heal_unit, heal_dist, heal_hp, heal_wounded =
+            _gt_pick_human_heal_target(self, unit, player_and_bot_units, self_pos, t)
+        if heal_unit then
+            -- [gt:523] edge-triggered per bot (acquire / retarget only, no spam).
+            if heal_unit ~= blackboard._gt523_prev_target then
+                blackboard._gt523_prev_target = heal_unit
+                printf("[gt:523] bot heal-ally target ACQUIRED hp=%.0f%% wounded=%s dist=%.1f (relabel in_need_of_heal; drives vanilla heal_other node)",
+                    (heal_hp or 0) * 100, tostring(heal_wounded), heal_dist or -1)
+            end
+            return heal_unit, heal_dist, "in_need_of_heal", false
+        elseif blackboard._gt523_prev_target then
+            blackboard._gt523_prev_target = nil
+            printf("[gt:523] bot heal-ally target CLEARED (no eligible hurt human in range, or kit no longer heal-other)")
         end
     end
 

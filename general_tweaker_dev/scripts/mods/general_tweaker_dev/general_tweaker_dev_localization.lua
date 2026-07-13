@@ -70,10 +70,11 @@ return {
     gt_bot_greedy_pickup = { en = "[untested] Bots collect items players leave behind" },
     gt_bot_greedy_pickup_tooltip = { en = "Normally bots refuse to take potions, bombs, and healing while a nearby player has a free slot for them; with this on they collect such items anyway, then carry them and hand them over when asked or needed." },
 
-    -- #468: control WHEN a bot spends a heal on itself (bots cannot heal another
-    -- player -- that is not a game feature -- so this is self-use timing only).
+    -- #468: control WHEN a bot spends a heal on ITSELF (self-use timing only).
+    -- Making a bot walk up and heal a teammate is the separate #523 heal-allies
+    -- option below (which drives the game's own, dormant, heal-other bot action).
     gt_bot_smart_self_heal = { en = "[untested] [diag] [Issue 468] Smarter bot self-healing" },
-    gt_bot_smart_self_heal_tooltip = { en = "Decide for yourself when a bot spends healing on itself instead of the game's fixed rules, which drink a full Draught of Healing at 40 percent health and burn Medical Supplies at 20 percent even when a player could use them better. With this on, the three settings below take over. Bots cannot heal other players (the game has no such action), so this only changes self-use timing; carrying and handing items to players is the greedy-pickup option above. Works only when you are the host." },
+    gt_bot_smart_self_heal_tooltip = { en = "Decide for yourself when a bot spends healing on itself instead of the game's fixed rules, which drink a full Draught of Healing at 40 percent health and burn Medical Supplies at 20 percent even when a player could use them better. With this on, the three settings below take over. This only changes self-use timing; to make bots actually walk up and heal a teammate use the heal-allies option below, and carrying or handing items to players is the greedy-pickup option above. Works only when you are the host." },
 
     gt_bot_self_heal_pct = { en = "[untested] [Issue 468] Bot self-heal health threshold (%%)" },
     gt_bot_self_heal_pct_tooltip = { en = "A bot only heals itself once its health drops to this percentage or lower. Lower values make bots hold their healing longer (less waste); higher values make them heal sooner. Applies to both draughts and medical supplies, replacing the game's fixed 40 and 20 percent triggers." },
@@ -83,6 +84,12 @@ return {
 
     gt_bot_ignore_surplus_selfuse = { en = "[untested] [Issue 468] Bots don't top themselves off on spare healing" },
     gt_bot_ignore_surplus_selfuse_tooltip = { en = "The game tells a bot to drink its healing when more healing items are lying around than players to use them, even at high health. With this on a bot ignores that prompt and keeps its healing until it actually needs it." },
+
+    gt_bot_heal_allies = { en = "[untested] [Issue 523] Bots heal hurt allies with medical supplies" },
+    gt_bot_heal_allies_tooltip = { en = "When a bot is carrying Medical Supplies and no one needs reviving, it walks up to the most hurt teammate and heals them, wounded (grey health) players first. It only heals when the coast is clear (no enemies right next to the target), and only humans, never other bots. Pairs with the reserve option above, which stops bots from spending the kit on themselves. Prototype, off by default. Works only when you are the host." },
+
+    gt_bot_heal_allies_pct = { en = "[untested] [Issue 523] Heal allies at or below health (%%)" },
+    gt_bot_heal_allies_pct_tooltip = { en = "A teammate is considered worth healing once their permanent (white) health drops to this percentage or lower. Wounded players (grey health) are always eligible regardless of this value. Higher values make bots heal sooner; lower values save kits for the truly hurt." },
 
     gt_bot_aid_priority = { en = "[verify-fix] [Issue 492] Bots prioritize reviving and rescuing" },
     gt_bot_aid_priority_tooltip = { en = "Downed, hooked, and ledge-hanging allies always outrank following and other chores, so a bot commits to the revive or rescue and walks the whole way there." },
