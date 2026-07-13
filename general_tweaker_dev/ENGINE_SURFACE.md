@@ -111,6 +111,22 @@ register NO class hooks - they drive off gt's shared `mod._gt_register_update`
 tick or chat commands (see subsystem note 2). The probe hooks below are
 observation-only.
 
+`_gt_bot_teleport_lab.lua` adds one mod-to-mod RPC channel for debug-draw
+sharing (issue 534): `gt_draw_leash` [rpc], schema-tagged `mod.GT_DRAW_RPC_SCHEMA`
+(first positional arg, drops mismatches per `docs/VMF_RECIPES.md` §10). The HOST
+packs its bot leash lines (bot->follow, bot->host) as raw world positions in
+integer decimeters into one `|`-joined string (<~200 chars, under the 500-char
+RPC cap §4) and broadcasts to `"others"` at ~6-7 Hz when `gt_devtools_leash_lines`
++ `gt_devtools_share_draws` are both on; every gt peer with `gt_devtools_share_draws`
+on redraws the last snapshot each frame via a new `shared_draw`
+`mod._gt_register_update` consumer with its OWN LineObject (own
+`mod._gt_shared_line_object` handle under the same §32 identity-gated lifecycle
+as `_clear_and_null`), expiring after 1 s. Leash lines are the only shared draw:
+they are host-exclusive (bots + `follow_unit` are server-side), whereas the debug
+highlights enumerate per-peer entities every peer already draws locally and the
+bot HUD is fixed-pixel screen text. Bots exist only on the host, so the host is
+the sole source; the consumer skips the render on the host to avoid double-draw.
+
 | Class.method (kind) | Vanilla behavior | Why gt hooks it | Trap / invariant |
 |---|---|---|---|
 | `HeroView.on_enter/on_exit` / `HeroWindowItemCustomization.on_enter/on_exit` / `IngameUI.handle_transition` / `HeroViewStateOverview.set_layout_by_name/on_enter/_change_window` [hook] `_gt_debug_probes.lua:160-885` | Keep menu view/window transitions | Auto-dump crash-triage context (backend_id/slot/key, transition names) on the paths that produced `fa1ec6f8`/`ef637399` | Full `mod:hook` with `return func(self,...)` so the observation chains with other mods that hook the same views |

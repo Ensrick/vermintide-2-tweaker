@@ -1,5 +1,30 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.208-dev (2026-07-12) -- #534 share bot leash lines with other players [untested]
+
+New default-OFF `gt_devtools_share_draws` checkbox under the Dev Tools group. When the host has Bot leash lines on AND this on, the host broadcasts the leash lines it is drawing over a gt-only mod channel; every gt peer with the toggle on redraws them locally with its own LineObject. Only the sparse bot leash lines are shared; dense wireframe highlights and the bot HUD stay local. Host-only source, dev build only, no wire-safety exposure to vanilla peers.
+
+### Slice: why only the leash lines (justified from the draw sites)
+The leash lines are the ONE gt overlay whose data is HOST-EXCLUSIVE. Bots exist only on the host and each bot's `follow_unit` is server-side AI state (`_gt_bot_teleport_lab.lua` `_do_draw` reads `_follow_unit(blackboard)`), so a client cannot reproduce them locally. The other draws do not merit sharing: the Debug Highlights wireframes (`_gt_debug_highlights.lua`) enumerate per-peer entities (`get_entities` / `ai_system` broadphase / `human_and_bot_players`) that every peer already has and can draw itself, so sharing them wholesale would flood the channel every frame; the bot behavior HUD is fixed-pixel screen text (`Gui.text`), a per-viewer readout not a world overlay; and `_gt_saved_positions.lua` draws nothing (it is a save/recall teleport tool). The btlab breach/tether "lines" are `printf` log blocks, not world draws.
+
+### Message schema + rate bounds
+- RPC `gt_draw_leash`, schema const `mod.GT_DRAW_RPC_SCHEMA = 1` (main file, mirrors GT_LOBBY / GT_AI). Sender prepends it; receiver drops mismatches (VMF_RECIPES § 10).
+- Payload = one compact string of `|`-joined groups: `y <x> <y> <z>` (host player, optional) and `b <bx> <by> <bz> [<fx> <fy> <fz>]` per bot (follow coords omitted when the bot has no anchor). RAW world positions as integer decimeters (0.1 m), so no cross-peer unit-id resolution and nothing for a vanilla peer to decode. At the <=4-bot cap the string is ~200 chars, well under the 500-char RPC cap (VMF_RECIPES § 4).
+- Host broadcasts to `"others"` at most every 0.15 s (~6-7 Hz); receivers hold the last snapshot and redraw every frame, expiring it after 1.0 s of silence.
+- `[gt:534]` printf on send and receive, throttled to 1/s each.
+
+### Wiring (no new class hooks; ONE per pair discipline intact)
+- `_broadcast_leash` rides the existing `btlab_draw` update consumer (inside `_do_draw`, host-only path); the client render is a NEW `shared_draw` `mod._gt_register_update` consumer. No `mod:hook` added. The bot machines (448/468/492/515/523) and the 508 dispatcher are untouched.
+- The client draw follows the class-32 LineObject lifecycle: `has_world` probe, recreate on world change, identity-gated (`live == w`) cleanup, drop handles on every teardown path. Its own `mod._gt_shared_line_object` handle, separate from the leash / HUD ones.
+- Reset `mod._gt_shared_draw` + handles + throttles at the mission boundary in `_reset_mission_state` (mod-table fields, so the above-first-use reset can't hit the class-6 forward-ref-to-global trap).
+- Regression checks `gt_draw_rpc_schema_present` + `gt534_leash_share_wired` (runtime-only, no io).
+
+### Test method (needs 2 gt_dev peers: you host + RainReligion client) -- verify-fix-coop
+1. Both pin gt_dev (per-mod-id RPC channel; dev and stable can't share it).
+2. Host: Dev Tools -> Bot leash lines ON + Share debug draws ON. Play with bots present.
+3. Client: Dev Tools -> Share debug draws ON.
+4. Expected: the client sees the same yellow bot->follow and cyan bot->host lines the host sees, tracking as bots move (updates ~6 Hz). Host + client logs show throttled `[gt:534] leash-share SENT` / `RECV` lines. Toggling either end off clears that end's overlay within ~1 s; no CTD on Leave Game with the overlay on (class-32 guard).
+
 ## v0.2.207-dev (2026-07-12) -- #523 bots actively heal hurt human allies (prototype) [untested]
 
 New default-OFF `gt_bot_heal_allies` sub-toggle (+ a `gt_bot_heal_allies_pct` slider, default 50) under the `gt_bot_behavior_improvements` master. When both are on, a bot carrying Medical Supplies walks up to the neediest hurt HUMAN teammate and channels a heal on them -- wounded (grey health) first, else lowest permanent-health -- when nothing needs reviving and no enemy is right next to the target. With either OFF the `_select_ally_by_utility` hook is byte-for-byte the prior behaviour. Host-side only (bot AI is server-owned); no RPC, no `NetworkLookup` key, no wire field, so nothing a non-host peer can crash or desync on.

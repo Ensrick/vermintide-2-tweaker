@@ -344,6 +344,9 @@ return {
     gt_devtools_leash_lines = { en = "[untested] Bot leash lines (3D)" },
     gt_devtools_leash_lines_tooltip = { en = "Runs a line in the world from each bot to the teammate it follows and another to you, so the follow leash is visible at a glance. Purely visual, host-only, dev build only." },
 
+    gt_devtools_share_draws = { en = "[untested] Share debug draws with other players" },
+    gt_devtools_share_draws_tooltip = { en = "Sends the bot leash lines to other players running this mod so they see the same overlay. On the host it broadcasts the lines it is drawing; on a client it shows the host's lines. Only the sparse bot leash lines are shared: everyone draws their own wireframe highlights locally. Turn on Bot leash lines too on the host for there to be anything to share. Dev build only." },
+
     -- Debug Highlights (#302). Master + per-category wireframe overlays. Dev build
     -- only; all children default OFF. Titles carry [untested] per LOCALIZATION_STANDARD
     -- section 13; tooltips name the color and note the two known approximations.

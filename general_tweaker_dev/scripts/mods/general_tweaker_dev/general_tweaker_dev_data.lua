@@ -1255,6 +1255,18 @@ if mod == get_mod("gt" .. "_dev") then
                 default_value = false,
                 tooltip       = "gt_devtools_leash_lines_tooltip",
             },
+            -- Share debug draws with other players (issue 534). Default OFF. On
+            -- the HOST it broadcasts the bot leash lines over gt's mod channel
+            -- (gt peers only, no wire-safety exposure to vanilla peers); on any
+            -- gt peer it renders the leash lines the host shared. Only the sparse
+            -- bot leash lines are shared -- dense wireframe highlights stay local
+            -- (each peer draws its own). Feature code in _gt_bot_teleport_lab.lua.
+            {
+                setting_id    = "gt_devtools_share_draws",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "gt_devtools_share_draws_tooltip",
+            },
             -- Debug Highlights (#302). Master checkbox + per-category children
             -- (VMF native master-toggle pattern: children auto-hide while the box
             -- is unchecked). Feature code (_gt_debug_highlights.lua) draws one

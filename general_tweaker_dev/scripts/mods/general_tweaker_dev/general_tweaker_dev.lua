@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.207-dev"
+local MOD_VERSION = "0.2.208-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -34,6 +34,19 @@ mod.GT_LOBBY_RPC_SCHEMA = 1
 -- Bump ONLY when the `gt_ai_toggle_request` payload shape changes. Initial
 -- value is 1; never define lower.
 mod.GT_AI_RPC_SCHEMA = 1
+
+-- Shared-debug-draw RPC schema versioning (VMF_RECIPES.md § 10, issue 534).
+-- The `gt_draw_leash` broadcast (host -> gt peers; sender + receiver both in
+-- _gt_bot_teleport_lab.lua) prepends this as the FIRST positional arg of every
+-- send and validates it as the first arg of the receiver. VMF network messages
+-- reach only peers running gt_dev, so the payload never touches a vanilla peer
+-- (zero wire-safety exposure); a peer on a different gt_dev build fails the
+-- match and the receiver drops the snapshot -- no draw, no crash. Defined here
+-- (mirroring GT_LOBBY_RPC_SCHEMA / GT_AI_RPC_SCHEMA) so the module reads it at
+-- call time and the /gt_regression_test check below can assert it cross-module.
+-- Bump ONLY when the `gt_draw_leash` payload shape changes. Initial value is 1;
+-- never define lower.
+mod.GT_DRAW_RPC_SCHEMA = 1
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- `_dbg` routes through mod:debug (confirmation / expected behavior).
@@ -1333,6 +1346,31 @@ _rt_register("gt_ai_rpc_schema_present", function()
     end
     if mod.GT_AI_RPC_SCHEMA < 1 then
         return "mod.GT_AI_RPC_SCHEMA < 1"
+    end
+end)
+
+-- v0.2.208-dev: VMF_RECIPES § 10 / issue 534 -- assert the shared-debug-draw RPC
+-- schema constant is in place (mirrors the gt_lobby / gt_ai checks). The
+-- `gt_draw_leash` sender + receiver in _gt_bot_teleport_lab.lua both read
+-- mod.GT_DRAW_RPC_SCHEMA; a missing const would make the receiver gate compare
+-- against nil and accept any payload.
+_rt_register("gt_draw_rpc_schema_present", function()
+    if type(mod.GT_DRAW_RPC_SCHEMA) ~= "number" then
+        return "mod.GT_DRAW_RPC_SCHEMA not defined as number"
+    end
+    if mod.GT_DRAW_RPC_SCHEMA < 1 then
+        return "mod.GT_DRAW_RPC_SCHEMA < 1"
+    end
+end)
+
+-- v0.2.208-dev: issue 534 -- assert the bot-leash-line share path (host send +
+-- receiver + client draw consumer) is wired. The marker is set at LOAD in
+-- _gt_bot_teleport_lab.lua after the network event and the shared_draw update
+-- consumer are both registered. Runtime-only (no io source-grep; io is nil in
+-- the VMF sandbox).
+_rt_register("gt534_leash_share_wired", function()
+    if mod._gt534_leash_share_wired ~= true then
+        return "leash-line share not wired (issue 534: _gt_bot_teleport_lab.lua)"
     end
 end)
 

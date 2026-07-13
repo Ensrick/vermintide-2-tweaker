@@ -113,6 +113,19 @@ local function _now()
     return (ok and v) or 0
 end
 
+-- Monotonic seconds (issue 534). Application.time_since_launch() advances in
+-- every game state including boot/menu, so the leash-share send throttle and
+-- the received-snapshot staleness gate stay correct even where the "game"
+-- timer is absent. Falls back to the game clock if the API is unavailable.
+local function _mono()
+    local ok, v = pcall(function()
+        local app = rawget(_G, "Application")
+        return app and app.time_since_launch and app.time_since_launch()
+    end)
+    if ok and v then return v end
+    return _now()
+end
+
 -- per-bot throttle stamped on the blackboard. Returns true at most once per
 -- `interval` seconds for the given key.
 local function _throttle(bb, key, now, interval)
@@ -230,6 +243,16 @@ local function _reset_mission_state()
     mod._gt_btlab_gui          = nil
     mod._gt_btlab_gui_world    = nil
     mod._gt_btlab_gui_deferred = nil
+    -- issue 534: drop the shared-leash snapshot + its own cached draw handles
+    -- and reset the send/printf throttles at the mission boundary. All mod-table
+    -- fields (not file-locals) so this reset -- which sits above their first use
+    -- -- can never bind to a global (the forward-ref-to-global trap, class 6).
+    mod._gt_shared_draw        = nil
+    mod._gt_shared_line_object = nil
+    mod._gt_shared_line_world  = nil
+    mod._gt_share_next_t       = 0
+    mod._gt_share_pf_send_t    = nil
+    mod._gt_share_pf_recv_t    = nil
 end
 
 -- ============================================================================
@@ -1057,6 +1080,80 @@ local function _live_pos(unit)
     return nil
 end
 
+-- ============================================================================
+-- issue 534: SHARE the bot leash lines with other gt peers.
+-- ----------------------------------------------------------------------------
+-- The leash lines are the ONE gt overlay whose data is HOST-EXCLUSIVE: bots only
+-- exist on the host and each bot's follow_unit is server-side AI state, so a
+-- client literally cannot reproduce these locally (unlike the debug-highlights
+-- wireframes, which enumerate per-peer entities every peer already has, or the
+-- bot HUD, which is fixed-pixel screen text). So the host packs the line
+-- endpoints and broadcasts them over a gt-only mod channel; every gt peer parses
+-- and re-draws them with ITS OWN LineObject (class-32 lifecycle rules below).
+--
+-- The wire carries RAW WORLD POSITIONS as integer decimeters, never unit refs:
+-- world space is identical across peers, so no cross-peer unit-id resolution is
+-- needed and there is nothing for a vanilla peer to decode (VMF drops the event
+-- for non-gt peers -- zero wire-safety exposure). Payload is a compact string
+-- (groups joined by '|'): "y <x> <y> <z>" for the host player, "b <bx> <by> <bz>
+-- [<fx> <fy> <fz>]" per bot (follow coords omitted when the bot has no anchor).
+-- At <=4 bots the string is ~200 chars, well under the 500-char RPC cap
+-- (VMF_RECIPES § 4). Rate-limited to ~1/_SHARE_INTERVAL Hz; the receiver holds
+-- the last snapshot and each peer redraws it every frame until it goes stale.
+-- ============================================================================
+local _SHARE_RPC         = "gt_draw_leash"
+local _SHARE_INTERVAL    = 0.15   -- seconds between host broadcasts (~6-7 Hz)
+local _SHARE_STALE       = 1.0    -- drop a received snapshot older than this
+local _SHARE_MAX_BOTS    = 4      -- payload cap (all a lobby ever has is 3)
+local _SHARE_PF_INTERVAL = 1.0    -- [gt:534] printf throttle on send + receive
+
+-- pos component -> integer decimeters (0.1 m precision is plenty for a leash
+-- overlay and keeps each number short). math.floor(v*10 + 0.5) rounds to nearest.
+local function _q(v) return math.floor(v * 10 + 0.5) end
+
+-- HOST broadcast: pack the current leash endpoints and network_send to gt peers.
+-- Called from _do_draw (host-only path) when both leash-lines AND share are on.
+local function _broadcast_leash(you_pos)
+    local now = _mono()
+    if now < (mod._gt_share_next_t or 0) then return end
+    mod._gt_share_next_t = now + _SHARE_INTERVAL
+
+    local groups = {}
+    if you_pos then
+        groups[#groups + 1] = string.format("y %d %d %d",
+            _q(you_pos.x), _q(you_pos.y), _q(you_pos.z))
+    end
+    local n = 0
+    for unit, rec in pairs(_bots) do
+        if n >= _SHARE_MAX_BOTS then break end
+        local bot_pos = _live_pos(unit)
+        if bot_pos then
+            local bb         = rec.blackboard
+            local follow     = bb and _follow_unit(bb)
+            local follow_pos = _live_pos(follow)
+            if follow_pos then
+                groups[#groups + 1] = string.format("b %d %d %d %d %d %d",
+                    _q(bot_pos.x), _q(bot_pos.y), _q(bot_pos.z),
+                    _q(follow_pos.x), _q(follow_pos.y), _q(follow_pos.z))
+            else
+                groups[#groups + 1] = string.format("b %d %d %d",
+                    _q(bot_pos.x), _q(bot_pos.y), _q(bot_pos.z))
+            end
+            n = n + 1
+        end
+    end
+    if n == 0 then return end   -- no bots resolved this frame: nothing to share
+
+    local payload = table.concat(groups, "|")
+    pcall(function()
+        mod:network_send(_SHARE_RPC, "others", mod.GT_DRAW_RPC_SCHEMA, payload)
+    end)
+    if now - (mod._gt_share_pf_send_t or -1e9) >= _SHARE_PF_INTERVAL then
+        mod._gt_share_pf_send_t = now
+        _pf("[gt:534] leash-share SENT bots=%d payload_len=%d", n, #payload)
+    end
+end
+
 local function _do_draw(want_hud, want_lines)
     -- WorldManager.world() FASSERTS on a missing world (world_manager.lua:111-115);
     -- probe has_world first (#459) -- this runs from mods_update, which keeps
@@ -1147,6 +1244,14 @@ local function _do_draw(want_hud, want_lines)
             end
         end
         LineObject.dispatch(world, lo)
+    end
+
+    -- issue 534: broadcast the same leash lines to gt peers when sharing is on.
+    -- Gated on want_lines (there must be leash data to share) + the share toggle;
+    -- this runs on the HOST only (the _btlab_draw caller requires is_server), so
+    -- the host is always the sole source. Rate-limited inside _broadcast_leash.
+    if want_lines and mod:get("gt_devtools_share_draws") then
+        _broadcast_leash(you_pos)
     end
 
     if not gui then return end
@@ -1252,6 +1357,137 @@ end
 if mod._gt_register_update then
     mod._gt_register_update("btlab_draw", _btlab_draw)
 end
+
+-- ============================================================================
+-- issue 534: RECEIVE + DRAW the shared bot leash lines on every gt peer.
+-- ----------------------------------------------------------------------------
+-- Receiver parses the host's compact snapshot (pure world positions, so no
+-- cross-peer unit resolution) and stashes it on mod._gt_shared_draw with a
+-- monotonic timestamp. The shared_draw update consumer redraws it every frame
+-- with its OWN LineObject, expiring after _SHARE_STALE seconds. Schema-gated per
+-- VMF_RECIPES § 10: a peer on a different gt_dev build fails the check and the
+-- snapshot is dropped (no draw, no crash).
+-- ============================================================================
+mod:network_register(_SHARE_RPC, function(sender_peer_id, schema, payload)
+    if sender_peer_id == nil or schema ~= mod.GT_DRAW_RPC_SCHEMA then return end
+    if not IS_DEV_STREAM then return end
+    if type(payload) ~= "string" then return end
+    local snap = { t = _mono(), you = nil, bots = {} }
+    for group in string.gmatch(payload, "[^|]+") do
+        local tag = string.sub(group, 1, 1)
+        if tag == "y" then
+            local x, y, z = string.match(group, "^y (-?%d+) (-?%d+) (-?%d+)")
+            if x then
+                snap.you = { tonumber(x) / 10, tonumber(y) / 10, tonumber(z) / 10 }
+            end
+        elseif tag == "b" then
+            local bx, by, bz, fx, fy, fz = string.match(group,
+                "^b (-?%d+) (-?%d+) (-?%d+) (-?%d+) (-?%d+) (-?%d+)")
+            if bx then
+                snap.bots[#snap.bots + 1] = {
+                    tonumber(bx) / 10, tonumber(by) / 10, tonumber(bz) / 10,
+                    tonumber(fx) / 10, tonumber(fy) / 10, tonumber(fz) / 10,
+                }
+            else
+                local ox, oy, oz = string.match(group, "^b (-?%d+) (-?%d+) (-?%d+)")
+                if ox then
+                    snap.bots[#snap.bots + 1] = {
+                        tonumber(ox) / 10, tonumber(oy) / 10, tonumber(oz) / 10,
+                    }
+                end
+            end
+        end
+    end
+    mod._gt_shared_draw = snap
+    local now = snap.t
+    if now - (mod._gt_share_pf_recv_t or -1e9) >= _SHARE_PF_INTERVAL then
+        mod._gt_share_pf_recv_t = now
+        _pf("[gt:534] leash-share RECV from=%s bots=%d", tostring(sender_peer_id), #snap.bots)
+    end
+end)
+
+-- Release the shared-draw LineObject with the same #459 identity gate as
+-- _clear_and_null: reset/dispatch into a destroyed world is a C-level access
+-- violation pcall cannot catch, and a NEW same-named world passes has_world while
+-- the cached handle still points at the freed old one. Nulling the fields is
+-- always correct -- a destroyed world already freed its line objects.
+local function _shared_clear_and_null()
+    local lo = mod._gt_shared_line_object
+    local w  = mod._gt_shared_line_world
+    if lo and w then
+        local wm   = Managers.world
+        local live = wm and wm:has_world("level_world") and wm:world("level_world")
+        if live == w then
+            pcall(function()
+                LineObject.reset(lo)
+                LineObject.dispatch(w, lo)
+            end)
+        else
+            _pf("[gt:459] skipped shared LineObject cleanup - cached world is dead")
+        end
+    end
+    mod._gt_shared_line_object = nil
+    mod._gt_shared_line_world  = nil
+end
+
+-- Client-side draw of the received leash snapshot. The HOST already draws its own
+-- leash lines via _do_draw, so it never renders the shared copy (would double
+-- draw); only non-host peers do. Same world-lifecycle discipline as _do_draw.
+local function _shared_draw(dt) -- luacheck: ignore dt
+    if not IS_DEV_STREAM then _shared_clear_and_null(); return end
+    if not mod:get("gt_devtools_share_draws") then _shared_clear_and_null(); return end
+    if Managers.player and Managers.player.is_server then
+        _shared_clear_and_null()   -- source draws its own overlay; don't double up
+        return
+    end
+    local snap = mod._gt_shared_draw
+    if not snap or (_mono() - (snap.t or 0)) > _SHARE_STALE then
+        _shared_clear_and_null()   -- nothing received recently: clear the overlay
+        return
+    end
+    pcall(function()
+        local wm    = Managers.world
+        local world = wm and wm:has_world("level_world") and wm:world("level_world")
+        if not world then _shared_clear_and_null(); return end
+        if mod._gt_shared_line_world ~= world then
+            mod._gt_shared_line_object = nil
+            mod._gt_shared_line_world  = world
+        end
+        if not mod._gt_shared_line_object then
+            mod._gt_shared_line_object = World.create_line_object(world, false)
+        end
+        local lo = mod._gt_shared_line_object
+        if not lo then return end
+        LineObject.reset(lo)
+
+        local up           = Vector3(0, 0, 1.0)
+        local color_follow = Color(255, 255, 210, 40)    -- yellow: bot -> follow (matches _do_draw)
+        local color_you    = Color(255, 60, 200, 220)    -- cyan:   bot -> host player
+        local you   = snap.you
+        local you_v = you and (Vector3(you[1], you[2], you[3]) + up) or nil
+        for i = 1, #snap.bots do
+            local b     = snap.bots[i]
+            local bot_v = Vector3(b[1], b[2], b[3]) + up
+            if b[4] then
+                LineObject.add_line(lo, color_follow, bot_v, Vector3(b[4], b[5], b[6]) + up)
+            end
+            if you_v then
+                LineObject.add_line(lo, color_you, bot_v, you_v)
+            end
+        end
+        LineObject.dispatch(world, lo)
+    end)
+end
+
+if mod._gt_register_update then
+    mod._gt_register_update("shared_draw", _shared_draw)
+end
+
+-- issue 534 runtime provenance marker: the host send (_broadcast_leash inside
+-- _do_draw), the network receiver, and the client shared_draw consumer are all
+-- wired above. /gt_regression_test (gt534_leash_share_wired) asserts this without
+-- an io source-grep (io is nil in the VMF sandbox).
+mod._gt534_leash_share_wired = true
 
 -- ============================================================================
 -- Reset per-mission state on StateIngame enter (chain-wrap; never redefine the
