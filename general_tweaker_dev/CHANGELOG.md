@@ -1,5 +1,22 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.210-dev (2026-07-13) -- #454 Creature Spawner enumerates breeds live, hardcoded list demoted to category overlay [verify-fix]
+
+The Creature Spawner's unit lists (regular/dummy/misc/special/boss/all) are now built from the LIVE `Breeds` table every time a list is accessed (next/prev cycle, list dropdown change, game-state change), so DLC breeds and mod-added breeds (enemy_tweaker's et_* clones, any other mod's `Breeds[...] = ...` registrations) appear automatically. The old hardcoded 81-entry map no longer gates WHICH breeds are listed; it survives only as a category overlay preserving upstream CreatureSpawner's curated memberships. All lists stay A-Z sorted. Immediate wins vs the old list: `chaos_troll_chief` (boss) and `chaos_tether_sorcerer` (special) were absent from the hardcoded map and now list.
+
+### Mechanics (why this filter, cited)
+- Spawnable = has `base_unit`/`opt_base_unit` + `unit_template` (both read unconditionally by `ConflictDirector._spawn_unit`, src conflict_director.lua:1906-1908; nil base_unit is an index crash) + `behavior`/`horde_behavior` (behavior-tree lookup, src ai_simple_extension.lua:106). Player-hero and Versus dark-pact breeds live in the separate `PlayerBreeds` table (src breed_players.lua:5, breed_players_vs.lua:305-311) so they never enter the walk; everything in `Breeds` is stamped `is_ai = true` (src breeds.lua:305-307). Vanilla's own `debug_spawn_all_breeds` walks `pairs(Breeds)` unfiltered (src conflict_director.lua:2606), so field presence is the only real gate.
+- Uncurated breeds are slotted by their own flags: `boss = true` to Bosses, `special = true` to Specials, `race = "dummy"` to Dummy/Misc, else Regular.
+- Enumeration is LAZY (command time), never at file scope: mods register breeds at their own module load, so a boot snapshot goes stale (the `pairs(Breeds)`-at-boot class from enemy_tweaker ENGINE_SURFACE). Cycling re-locates the saved selection in the fresh list so late registrations do not skip the cursor.
+
+### Regression
+- New `/gt_regression_test` check `gt_cs_breed_list_dynamic`: injects a probe breed into `Breeds` at test time, rebuilds via `mod._gt_cs_rebuild_unit_lists`, asserts it lists in all_units + boss_units and that all_units is A-Z, then removes the probe. Marker `GT_CS_DYNAMIC_BREED_LIST_MARKER_v0_2_210` guards against reverts.
+
+### Test method (solo host, 1 tester)
+1. Solo host a mission. Set the Creature Spawner list to "All", cycle with next/prev: the list must be A-Z and include `chaos_troll_chief` and `chaos_tether_sorcerer` (absent from the old hardcoded list). Spawn one of them.
+2. Enable enemy_tweaker (with its skeleton/warlord breeds registered), same check: its et_* breeds must appear in the list (warlord under Bosses); spawn one.
+3. `/gt_regression_test` must pass `gt_cs_breed_list_dynamic`.
+
 ## v0.2.209-dev (2026-07-13) -- #529 godmode now makes stamina untouchable by enemies [verify-fix]
 
 With Godmode ON, enemy attacks no longer drain your stamina or break your block/guard: blocked hits, storm vermin sweeps, ogre shoves, boss slams, vomit/plague ground drains, and the grudge-mark and Belakor stamina drains are all skipped. Your OWN stamina costs (push, dodge) still apply as normal (infinite stamina remains the separate /stamina cheat), and stamina-replenish procs (headshot talents) keep working. Blocking looks and sounds normal; the bar just never drops from enemy hits. Godmode OFF is byte-identical behavior.

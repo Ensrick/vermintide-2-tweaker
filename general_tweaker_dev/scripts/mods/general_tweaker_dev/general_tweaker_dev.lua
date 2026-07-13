@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.209-dev"
+local MOD_VERSION = "0.2.210-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -2580,6 +2580,55 @@ _rt_register("gt_cs_transitioned_one_third_not_forced", function()
             return string.format("in_arena=%s vanilla=%s want=%s got=%s (%s)",
                 tostring(c.in_arena), tostring(c.vanilla), tostring(c.want), tostring(got), c.why)
         end
+    end
+end)
+
+_rt_register("gt_cs_breed_list_dynamic", function()
+    -- Issue #454 (v0.2.210-dev): the Creature Spawner lists are enumerated
+    -- from the LIVE Breeds table at command time; the old hardcoded
+    -- unit_categories map is a category overlay only. Probe: inject a fake
+    -- spawnable breed into Breeds, rebuild via the exposed builder, assert
+    -- it lists in all_units + boss_units (dynamic categorization) and that
+    -- all_units is A-Z sorted, then remove the probe and rebuild clean.
+    if GT_CS_DYNAMIC_BREED_LIST_MARKER_v0_2_210 ~= "gt-cs-dynamic-breed-list-i454" then
+        return "dynamic breed-list marker absent -- was the #454 fix reverted?"
+    end
+    local rebuild = mod._gt_cs_rebuild_unit_lists
+    if type(rebuild) ~= "function" then
+        return "mod._gt_cs_rebuild_unit_lists missing (lazy list builder not exposed)"
+    end
+    if not Breeds then return end -- no Breeds table in this state; static half passed
+    local probe = "gt_rt_probe_breed_454"
+    if Breeds[probe] ~= nil then
+        return "probe breed name collision in Breeds"
+    end
+    Breeds[probe] = {
+        base_unit = "units/gameplay/training_dummy/training_dummy_bob",
+        unit_template = "gt_rt_probe_template",
+        behavior = "gt_rt_probe_behavior",
+        boss = true,
+    }
+    local lists = rebuild()
+    Breeds[probe] = nil
+    local found_all, found_boss, unsorted = false, false, nil
+    local prev
+    for _, n in ipairs((lists and lists.all_units) or {}) do
+        if n == probe then found_all = true end
+        if prev and prev > n then unsorted = prev .. " > " .. n end
+        prev = n
+    end
+    for _, n in ipairs((lists and lists.boss_units) or {}) do
+        if n == probe then found_boss = true break end
+    end
+    rebuild() -- rebuild clean without the probe
+    if not found_all then
+        return "late-registered probe breed missing from all_units (boot-snapshot regression)"
+    end
+    if not found_boss then
+        return "probe breed with boss=true missing from boss_units (dynamic categorization regression)"
+    end
+    if unsorted then
+        return "all_units not A-Z sorted: " .. unsorted
     end
 end)
 
