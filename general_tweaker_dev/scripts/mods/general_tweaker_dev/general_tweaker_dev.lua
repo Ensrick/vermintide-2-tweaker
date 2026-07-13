@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.217-dev"
+local MOD_VERSION = "0.2.218-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -48,25 +48,13 @@ mod.GT_AI_RPC_SCHEMA = 1
 -- never define lower.
 mod.GT_DRAW_RPC_SCHEMA = 1
 
--- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- `_dbg` routes through mod:debug (confirmation / expected behavior; gate is
--- VMF output_mode_debug, no per-mod checkbox).
--- `_dbg_alert` (unexpected / wrong / mismatch) is LOG-ONLY via pcall-guarded
--- engine printf (#427/issue 240: mod:warning posts to CHAT under VMF
--- defaults; printf always lands in console-*.log, even with mod logging OFF,
--- and never in chat; pcall so a format slip never faults the caller).
+-- Copied shared debug helper (master: tools/shared_lib/_lib_debug.lua). The
+-- bundled copy keeps gt_dev standalone while exact-drift QA prevents a local
+-- edit from returning issue 240's mod:warning chat spam.
 -- v0.2.55: NOTE — the file ALSO redeclares `_dbg` (without prefix) inside the
 -- per-frame observation hooks block further down, which shadows this top-of-
 -- file definition for everything below that point.
-local function _dbg(fmt, ...)
-    mod:debug("[gt:dbg] " .. fmt, ...)
-end
-
-local function _dbg_alert(fmt, ...)
-    if not pcall(printf, "[gt:dbg] " .. fmt, ...) then
-        pcall(printf, "[gt:dbg] (alert format error: %s)", tostring(fmt))
-    end
-end
+local _dbg, _dbg_alert = mod:dofile("scripts/mods/general_tweaker_dev/_lib_debug")(mod, "[gt:dbg]")
 
 -- Exposed for sibling `_gt_lobby_*` modules (and any future external file
 -- that needs gt's debug-helpers). _dbg is VMF mod:debug; _dbg_alert is

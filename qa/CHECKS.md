@@ -267,6 +267,14 @@ both CI and local (the policy-engine replacement for the old CI `|| true`) —
 flip it to Standard once CWV bare globals are refactored and the baseline is
 clean.
 
+## Copied shared-library drift (issue #428)
+
+`check_shared_lib_drift.ps1` is a blocking exact-byte gate over
+`tools/shared_lib/manifest.psd1`. It rejects missing or locally edited per-mod
+`_lib_*.lua` copies, including line-ending-only drift. Repair declared copies
+with `tools/shared_lib/sync-shared-libs.ps1 -Apply`; consumers remain bundled
+and standalone at runtime.
+
 ## Current state of each check
 
 | Check | Last run | Notes |

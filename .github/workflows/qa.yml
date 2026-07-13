@@ -12,6 +12,7 @@ on:
       - "qa/**"
       - "tools/mod-lint/**"
       - "tools/mod-inventory.psd1"
+      - "tools/shared_lib/**"
       - "tools/ship/**"
       - ".github/workflows/qa.yml"
   pull_request:

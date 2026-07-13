@@ -1,5 +1,11 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.218-dev (2026-07-13) -- #428 canonical copied debug helper [untested]
+
+- Replaced gt_dev's top-level `_dbg` / `_dbg_alert` implementation with the first consumer of canonical `tools/shared_lib/_lib_debug.lua`. The bundled copy preserves standalone loading; there is no runtime dependency on another mod.
+- Behavior is unchanged: expected diagnostics use VMF's gated `mod:debug`, while alerts use pcall-guarded raw `printf` so they reach the console log without repeating issue #240's `mod:warning` chat spam.
+- Added a manifest-driven build-time sync tool and blocking exact-byte QA drift check for all copied libraries. Existing peer-parity copies are now covered too.
+
 ## v0.2.217-dev (2026-07-13) -- #364 reserve Bardin's Survival Ale for human players [verify-fix]
 
 Bots no longer automatically target Bardin's Survival Ale through either the instant-pickup path or the greedy mule-pickup postpass. The host-owned `AIBotGroupSystem._update_mule_pickups` pass now releases an ale claim vanilla assigned earlier in the tick and excludes ale while selecting a replacement; ordinary potions and bombs retain their existing behavior. The reservation keys off the pickup extension's exact `pickup_name` (`bardin_survival_ale`), matching the career-drop definition in `scripts/settings/equipment/pickups.lua:741-759`, rather than broadly excluding the entire `slot_level_event` slot.
@@ -13,7 +19,6 @@ The pickup and consumable helpers are now isolated in `_gt_bot_pickups.lua` and 
 1. Enable Bot Behavior Improvements, instant pickup, and greedy pickup; trigger Bardin's Survival Ale drop near the bot and an ordinary potion or bomb nearby.
 2. Confirm the bot does not target or remotely grab the ale, but can still collect the ordinary mule pickup.
 3. Run `/gt_regression_test` and confirm `gt364_survival_ale_reserved_for_humans` passes.
-
 ## v0.2.216-dev (2026-07-13) -- #302 Debug Highlights: rewrite renderer to screen projection (the reason it never rendered) [verify-fix]
 
 The user reported (issue #302, 2026-07-12) that the Debug Highlights overlay "has never worked in any way whatsoever" despite four shipped phases. Empirical root cause, from the user's own logs: the draw loop was NOT the problem. `console-2026-07-12-22.03.01` shows `[gt_dev:DH] drawn ... interact=48..60 players=1` once per second in-game -- 48 to 60 wireframe boxes were built and `LineObject.dispatch`ed into `level_world` every frame -- yet nothing appeared. That is direct proof that **a raw `LineObject.dispatch` does not visibly render in retail Vermintide 2.**
