@@ -903,8 +903,10 @@ local BALANCE_MODS = {
     -- Bounty Hunter: Salvaged Ammunition — drop out-of-ammo gate +
     -- passive melee-reload
     -- ============================================================
-    -- Vanilla Salvaged Ammunition restores 5% ammo on melee elite kill BUT
-    -- only when you're completely out of ammo (gate at buff_templates.lua:3052:
+    -- Vanilla Salvaged Ammunition restores 20% of max ammo on Elite kill (any
+    -- attack type -- buff_tweak_data ammo_bonus_fraction = 0.2,
+    -- talent_settings_victor.lua:127-129) BUT only when you're completely out
+    -- of ammo (gate at buff_templates.lua:3052:
     -- `if current_ammo < 1 and clip_ammo < 1`). It also reloads your ranged
     -- weapon on every melee kill (buff_templates.lua:2798).
     -- Rework: drop the out-of-ammo gate (function override below in the hook
@@ -1574,9 +1576,10 @@ local BALANCE_MODS = {
     -- patch lifts it to 5. Bounced projectiles route through `hit_player()`
     -- when they touch teammates, which already gates friendly fire via
     -- `DamageUtils.allow_friendly_fire_ranged(...)` — so vanilla bounces are
-    -- already FF-respecting by architecture. Defensive hook added in the
-    -- runtime section forces FF-skip for bounced projectiles when the rework
-    -- is enabled regardless of difficulty FF setting.
+    -- already FF-respecting by architecture. NOTE (issue 443 audit): no extra
+    -- FF-skip hook was ever shipped for this rework — bounces follow the
+    -- difficulty's normal friendly-fire rules; do not document a no-FF
+    -- guarantee anywhere.
     rework_we_waywatcher_ricochet_no_ff_5_bounces = {
         character = "kerillian",
         career    = "we_waywatcher",
@@ -3284,17 +3287,20 @@ local CRT_DESC_OVERRIDES = {
     -- ------ Bardin: Ranger Veteran ------
     ["bardin_ranger_reduced_damage_taken_headshot_desc"] = {
         setting = "rework_dr_ranger_exuberance_stacking_dr",
-        text = "Ranged headshots grant -6%% damage taken per stack, stacking up to 5x for 7 seconds. One stack per shot regardless of how many enemies it hits. Taking damage removes one stack.",
+        text = "Ranged headshots reduce damage taken by 6%% for 7 seconds, stacking up to 5 times. Taking damage removes 1 stack.",
     },
     -- ------ Bardin: Slayer ------
     ["bardin_slayer_passive_stacking_damage_desc"] = {
         setting = "rework_dr_slayer_trophy_hunter_30_stacks_bundle",
-        text = "Trophy Hunter: melee hits grant +1%% damage per stack, stacking up to 30x. Each stack lasts 2 seconds.",
+        text = "Hitting an enemy grants 1%% melee damage for 2 seconds, stacking up to 30 times.",
     },
     -- ------ Bardin: Outcast Engineer ------
+    -- NOTE: bardin_engineer_4_1_buff is a FLAT max_stacks=1 buff granted while
+    -- the pump gauge sits at maximum (talent_settings_cog_dwarf_ranger.lua:140-153,
+    -- 361-368) -- it is NOT per pump stack.
     ["bardin_engineer_power_on_max_pump_desc"] = {
         setting = "rework_dr_engineer_full_head_of_steam_4pct",
-        text = "Full Head of Steam: +4%% attack speed per pump stack while at maximum pump.",
+        text = "Attack speed is increased by 4%% while pressure is at maximum.",
     },
     -- Leading Shots (replaces Ingenious Ordnance). The talent UI resolves the
     -- title + description via the GLOBAL Localize, which does NOT see crt's
@@ -3309,180 +3315,216 @@ local CRT_DESC_OVERRIDES = {
     },
     ["crt_engineer_leading_shots_desc"] = {
         setting = "rework_dr_engineer_leading_shots",
-        text = "Every 4 ranged attacks (including the Crank Gun), your next ranged attack is a guaranteed critical hit.",
+        text = "After 4 ranged attacks, the next ranged attack is a guaranteed Critical Strike. Crank Gun shots count too.",
     },
     -- ------ Kruber: Huntsman ------
     ["markus_huntsman_passive_crit_aura_desc"] = {
         setting = "rework_es_huntsman_crit_aura_unlimited_range",
-        text = "Huntsman grants +5%% Critical Strike Chance to all allies in the party at unlimited range.",
+        text = "Grants 5%% critical strike chance to all allies at any distance.",
     },
     -- ------ Kruber: Foot Knight ------
     ["markus_knight_passive_block_cost_aura_desc"] = {
         setting = "rework_es_knight_protective_presence_10m_rock_20m",
-        text = "Rock of the Reickland: extends Protective Presence aura range to 20 meters (base aura is now 10m).",
+        text = "Increases the range of Protective Presence to 20 meters.",
     },
     ["markus_knight_free_pushes_on_block_desc"] = {
         setting = "rework_es_knight_counter_punch_stagger_stack",
-        text = "Counter-Punch: each successful block grants +30%% stagger power, stacking up to 5x. Each stack lasts 5 seconds.",
+        text = "Blocking an attack grants 30%% stagger power for 5 seconds, stacking up to 5 times.",
     },
     ["markus_knight_wide_charge_desc"] = {
         setting = "rework_es_knight_valiant_charge_great_foes_45s_battering_ram_30s",
-        text = "Battering Ram: Valiant Charge is wider and refunds 1/3 of its 45-second cooldown so the effective cooldown returns to 30 seconds.",
+        text = "Valiant Charge is wider and its cooldown is reduced from 45 to 30 seconds.",
     },
     -- ------ Kruber: Mercenary ------
     ["markus_mercenary_passive_defence_on_proc_desc"] = {
         setting = "rework_es_mercenary_blade_barrier_60x_minus_10_on_hit",
-        text = "Blade Barrier: -0.5%% damage taken per kill, stacking up to 60x (-30%% at cap). Taking damage removes 10 stacks.",
+        text = "Killing an enemy reduces damage taken by 0.5%%, stacking up to 60 times. Taking damage removes 10 stacks.",
     },
     ["markus_mercenary_passive_improved_desc"] = {
         setting = "rework_es_mercenary_enhanced_training_tiered",
-        text = "Enhanced Training: hitting 2 / 3 / 4 enemies with a melee attack grants 2 / 3 / 4 stacks of +5%% attack speed for 6 seconds (up to +20%%). Hitting fewer than 2 grants no bonus.",
+        text = "Paced Strikes triggers on hitting 2 or more enemies in one strike. Each enemy hit grants 5%% attack speed for 6 seconds, up to 4 stacks.",
     },
     -- ------ Kruber: Grail Knight ------
     ["markus_questing_knight_kills_buff_power_stacking_desc"] = {
         setting = "rework_es_questingknight_virtue_of_ideal_3pct_per_kill",
-        text = "Virtue of the Ideal: each enemy killed grants +3%% power, stacking up to 10x. Each stack lasts 10 seconds independently.",
+        text = "Killing an enemy grants 3%% power for 10 seconds, stacking up to 10 times. Each stack expires on its own timer.",
     },
     ["markus_questing_knight_parry_increased_power_desc"] = {
         setting = "rework_es_questingknight_virtue_of_discipline_double_parry",
-        text = "Virtue of Discipline: doubles your parry timing window (0.5s to 1.0s). No power bonus.",
+        text = "The timing window for a parry is doubled to 1 second. Parries no longer grant power.",
     },
+    -- NOTE: the vanilla movespeed buff keeps its ability-kill-only trigger
+    -- (markus_questing_knight_ability_kill_buff_func gates on the career skill
+    -- weapon, buff_settings_lake.lua:328-343); the crt AS/power procs fire on
+    -- ANY kill. The description reflects that split.
     ["markus_questing_knight_ability_buff_on_kill_desc"] = {
         setting = "rework_es_questingknight_virtue_of_impetuous_buffed",
-        text = "Virtue of the Impetuous Knight: killing an enemy grants +20%% movement speed, +20%% attack speed, and +20%% power for 20 seconds.",
+        text = "Killing an enemy grants 20%% attack speed and 20%% power for 20 seconds. Career Skill kills also grant 20%% movement speed for 20 seconds.",
     },
     -- ------ Kerillian: Waystalker ------
     ["kerillian_waywatcher_attack_speed_on_ranged_headshot_desc"] = {
         setting = "rework_we_waywatcher_drakiras_alacrity_passive_as",
-        text = "Drakira's Alacrity: gain a permanent +10%% attack speed while this talent is selected. No trigger required.",
+        text = "Increases attack speed by 10%%.",
     },
     ["kerillian_waywatcher_movement_speed_on_special_kill_desc"] = {
         setting = "rework_we_waywatcher_fervent_huntress_passive_ms",
-        text = "Fervent Huntress: gain a permanent +10%% movement speed while this talent is selected. No trigger required.",
+        text = "Increases movement speed by 10%%.",
     },
     ["kerillian_waywatcher_projectile_ricochet_desc"] = {
         setting = "rework_we_waywatcher_ricochet_no_ff_5_bounces",
-        text = "Ricochet: Career Skill arrows bounce to up to 5 additional targets and never trigger friendly fire on bounce.",
+        text = "Arrows bounce up to 5 times, hitting additional enemies.",
     },
     ["kerillian_waywatcher_activated_ability_restore_ammo_on_career_skill_special_kill_desc"] = {
         setting = "rework_we_waywatcher_kurnous_reward_5pct",
-        text = "Kurnous' Reward: Career Skill restores 5%% of maximum ammunition for every Special or Elite it kills.",
+        text = "Killing a Special or Elite with the Career Skill restores 5%% of maximum ammunition.",
     },
     -- ------ Kerillian: Shade ------
     ["kerillian_shade_activated_ability_phasing_desc"] = {
         setting = "rework_we_shade_hungry_wind_buffed",
-        text = "Hungry Wind: after exiting stealth, gain +20%% movement speed and +20%% power for 20 seconds.",
+        text = "Leaving stealth grants 20%% movement speed and 20%% power for 20 seconds.",
     },
     -- ------ Victor: Zealot ------
     ["victor_zealot_passive_increased_damage_desc"] = {
         setting = "rework_wh_zealot_fiery_faith_1pct_per_5_hp_max_30",
-        text = "Fiery Faith: gain +1%% power for every 5 health missing, stacking up to 30 times (+30%% maximum at full damage).",
+        text = "Gain 1%% power for every 5 health missing, stacking up to 30 times.",
     },
+    -- NOTE: the rework counts 30 missing health per stack (chunk_size 30), which
+    -- is NOT one Fiery Faith stack (5 HP per stack) -- the old text was wrong.
     ["victor_zealot_attack_speed_on_health_percent_desc"] = {
         setting = "rework_wh_zealot_castigate_4pct_as_per_fiery_faith",
-        text = "Castigate: gain +4%% attack speed for every Fiery Faith stack, up to a maximum of +20%%.",
+        text = "Gain 4%% attack speed for every 30 health missing, stacking up to 5 times.",
     },
     ["victor_zealot_passive_healing_received_desc"] = {
         setting = "rework_wh_zealot_holy_fortitude_30_max_hp",
-        text = "Holy Fortitude: gain +30 maximum health.",
+        text = "Increases max health by 30.",
     },
     -- ------ Victor: Bounty Hunter ------
+    -- Issue 443: talent descriptions must not restate the talent title, must not
+    -- mention which effects the mod made innate, and follow the 10 style rules
+    -- (max 2 sentences, no +/-, no brackets, literal numbers, plain English).
     ["victor_bountyhunter_weapon_swap_buff_desc"] = {
         setting = "rework_wh_bountyhunter_blessed_combat_25_and_passive_melee_reset",
-        text = "Blessed Combat: melee hits grant +25%% ranged damage per stack and ranged hits grant +25%% melee damage per stack (max 6 each). Melee kills reset the Blessed Shots cooldown - this effect is innate regardless of which level 20 talent is selected.",
+        text = "Melee strikes grant 25%% ranged power and ranged strikes grant 25%% melee power, stacking up to 6 times each. Melee killing blows reset the cooldown of Blessed Shots.",
     },
     ["victor_bountyhunter_party_movespeed_on_ranged_crit_desc"] = {
         setting = "rework_wh_bountyhunter_rile_the_mob_movement",
-        text = "Rile the Mob: gain a permanent +10%% movement speed while this talent is selected.",
+        text = "Increases movement speed by 10%%.",
     },
+    -- Vanilla data: the elite ammo restore is 20%% of max ammo (buff_tweak_data
+    -- victor_bountyhunter_restore_ammo_on_elite_kill.ammo_bonus_fraction = 0.2,
+    -- talent_settings_victor.lua:127-129) and the vanilla proc gates only on
+    -- breed.elite, not on melee (buff_templates.lua:3031-3060). The old "5%%,
+    -- melee Elite kills" text was wrong on both counts.
     ["victor_bountyhunter_reload_on_kill_desc"] = {
         setting = "rework_wh_bountyhunter_salvaged_ammo_no_gate_and_passive_reload",
-        text = "Salvaged Ammunition: melee Elite kills restore 5%% of maximum ammunition (no out-of-ammo requirement). Melee kills reload your ranged weapon - this is innate regardless of which level 25 talent is selected.",
+        text = "Melee killing blows reload your ranged weapon. Killing an Elite restores 20%% of maximum ammunition.",
     },
     ["victor_bountyhunter_stacking_damage_reduction_on_elite_or_special_kill_desc"] = {
         setting = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",
-        text = "Job Well Done: killing a Special grants -5%% damage taken per stack (max 6x). Taking damage removes one stack. The vanilla Elite/Special kill DR is innate across every level 25 talent.",
+        text = "Killing a Special reduces damage taken by 5%% for 60 seconds, stacking up to 6 times. Taking damage removes 1 stack.",
     },
+    -- Vanilla Just Reward: on_critical_hit proc, non-melee attack types only,
+    -- refunds template.multiplier = 0.2 of the ability cooldown, gated to once
+    -- per template.cooldown seconds (buff_templates.lua:3593-3614; tweak data
+    -- talent_settings_victor.lua:134-137). The rework only shortens the gate.
     ["victor_bountyhunter_activated_ability_reset_cooldown_on_stacks_2_desc"] = {
         setting = "rework_wh_bountyhunter_just_reward_5s_cooldown",
-        text = "Just Reward: ranged Critical Strikes refund Career Skill cooldown. Tightened to once every 5 seconds.",
+        text = "Ranged critical strikes reduce the cooldown of Locked and Loaded by 20%%. Can only trigger once every 5 seconds.",
     },
     ["victor_bountyhunter_activated_ability_railgun_desc_2"] = {
         setting = "rework_wh_bountyhunter_double_shotted_damage_double",
-        text = "Double-Shotted: in addition to its cooldown refund, activating Career Skill grants +100%% ranged power for 3 seconds (doubles the damage of the next shot).",
+        text = "Headshots with Locked and Loaded refund part of its cooldown. Activating Locked and Loaded also grants 100%% ranged power for 3 seconds.",
     },
     ["victor_bountyhunter_activated_ability_blast_shotgun_desc"] = {
         setting = "rework_wh_bountyhunter_indiscriminate_blast_refund_per_kill",
-        text = "Indiscriminate Blast: Career Skill becomes a wide blast and each kill it scores refunds an additional 1%% of cooldown.",
+        text = "Locked and Loaded fires a blast of shot. Hitting 4 or more enemies reduces its cooldown by 25%% and each enemy killed refunds 1%% more.",
     },
     -- ------ Victor: Warrior Priest ------
     ["victor_priest_6_1_desc"] = {
         setting = "rework_wh_priest_shield_of_faith_10s_110s_cd_plus_unyielding_20s",
-        text = "Unyielding Blessing: Shield of Faith lasts an additional 20 seconds (base duration is now 10 seconds; base cooldown is now 110 seconds).",
+        text = "Shield of Faith lasts 20 seconds longer.",
     },
     ["victor_priest_5_1_desc"] = {
         setting = "rework_wh_priest_prayer_of_vengeance_self_40_others_20",
-        text = "Prayer of Vengeance: the Warrior Priest gains +40%% damage versus Monsters; nearby allies gain +20%%.",
+        text = "You deal 40%% increased damage to Monsters. Nearby allies deal 20%% increased damage to Monsters.",
     },
     -- ------ Sienna: Battle Wizard ------
+    -- Vanilla stat is increased_burn_dot_damage (burn damage over time dealt),
+    -- NOT damage taken by burning enemies (talent_settings_sienna.lua:732-745).
     ["sienna_adept_increased_burn_damage_reduced_non_burn_damage_desc"] = {
         setting = "rework_bw_adept_famished_flames_buffed",
-        text = "Famished Flames: burning enemies take +150%% damage; non-burning enemies take -30%% damage.",
+        text = "Increases burn damage over time by 150%%. All other damage is reduced by 30%%.",
     },
     ["sienna_adept_power_level_on_full_charge_desc"] = {
         setting = "rework_bw_adept_volcanic_force_doubled",
-        text = "Volcanic Force: fully charging a spell increases its power by +100%%.",
+        text = "Fully charged spells gain 100%% power.",
     },
     ["sienna_adept_cooldown_reduction_on_burning_enemy_killed_desc"] = {
         setting = "rework_bw_adept_fires_from_ash_1pct_plus_thp",
-        text = "Fires from Ash: killing a burning enemy reduces Career Skill cooldown by 1%% and grants 0.5 temporary health.",
+        text = "Killing a burning enemy reduces Career Skill cooldown by 1%% and grants 0.5 temporary health.",
     },
     -- ------ Sienna: Necromancer ------
     ["sienna_necromancer_4_3_desc"] = {
         setting = "rework_bw_necromancer_withering_touch_30s",
-        text = "Withering Touch: the buff now lasts 30 seconds.",
+        text = "Hitting an enemy afflicts it with a damage over time effect lasting 30 seconds.",
     },
     ["sienna_necromancer_4_2_desc"] = {
         setting = "rework_bw_necromancer_malediction_5_souls",
-        text = "Malediction of Nagash: 5 soul stacks trigger a guaranteed Critical Strike.",
+        text = "Gathering 5 souls makes your next attack a guaranteed Critical Strike.",
     },
     ["sienna_necromancer_2_1_desc"] = {
         setting = "rework_bw_necromancer_vanhels_per_skeleton_as",
-        text = "Vanhel's Danse Macabre: gain +2%% attack speed for every skeleton currently raised, up to a maximum of +24%% (12 stacks).",
+        text = "Gain 2%% attack speed for each skeleton you control, up to 12 stacks.",
     },
     ["sienna_necromancer_5_1_desc"] = {
         setting = "rework_bw_necromancer_death_ascendant_10s",
-        text = "Death Ascendant: cooldown regeneration buff stacks now last 10 seconds.",
+        text = "The increased cooldown regeneration lasts 10 seconds.",
     },
     ["sienna_necromancer_6_1_desc"] = {
         setting = "rework_bw_necromancer_army_of_dead_buffed",
-        text = "Army of the Dead: Career Skill cooldown is halved (55 seconds) and the extra skeletons last 40 seconds before despawning.",
+        text = "Career Skill cooldown is reduced to 55 seconds. The extra skeletons last 40 seconds.",
     },
     -- ------ Sienna: Unchained ------
     ["sienna_unchained_activated_ability_fire_aura_desc"] = {
         setting = "rework_bw_unchained_wildfire_burst_and_radius",
-        text = "Wildfire: Career Skill explosion radius increased by +25%% and initial burst damage increased by +50%%.",
+        text = "Career Skill explosion radius is increased by 25%% and its burst damage by 50%%.",
     },
     -- Numb to Pain. NOTE: key is the talent's `description` FIELD
     -- (sienna_unchained_reduced_damage_taken_after_venting_desc_2), which
     -- UIUtils.get_talent_description Localizes -- NOT <talent_name>_desc. The old
     -- entry keyed "..._venting_2_desc" was DEAD (wrong key); fixed here + retext to
     -- the v0.3.36 rework.
+    -- The per-stack numbers below track the Unstable Strength rescale toggle
+    -- (5%%/10%% when on, 6%%/12%% when off), so these entries use a text
+    -- FUNCTION resolved per Localize call (see the hook below).
     ["sienna_unchained_reduced_damage_taken_after_venting_desc_2"] = {
         setting = "rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit",
-        text = "Numb to Pain: per Unstable Strength stack, -6%% damage taken AND -12%% overcharge generated by Blood Magic (-5%%/-10%% with the Unstable Strength rescale active).",
+        text = function()
+            if mod:get("rework_bw_unchained_unstable_strength_rescale") then
+                return "Each stack of Unstable Strength reduces damage taken by 5%% and overcharge gained from Blood Magic by 10%%."
+            end
+            return "Each stack of Unstable Strength reduces damage taken by 6%% and overcharge gained from Blood Magic by 12%%."
+        end,
     },
     ["sienna_unchained_reduced_overcharge_desc"] = {
         setting = "rework_bw_unchained_natural_talent_ranged",
-        text = "Natural Talent: +6%% ranged power per Unstable Strength stack (5%% with the Unstable Strength rescale active).",
+        text = function()
+            if mod:get("rework_bw_unchained_unstable_strength_rescale") then
+                return "Each stack of Unstable Strength grants 5%% ranged power."
+            end
+            return "Each stack of Unstable Strength grants 6%% ranged power."
+        end,
     },
     ["sienna_unchained_exploding_burning_enemies_desc"] = {
         setting = "rework_bw_unchained_chain_reaction_ignite",
-        text = "Chain Reaction: killing a burning enemy triggers an explosion that staggers and sets nearby enemies on fire.",
+        text = "Burning enemies explode on death, staggering and igniting nearby enemies.",
     },
+    -- Vanilla Fuel for the Fire: SIENNA gains a power stack per enemy hit by
+    -- the ability (5%% for 15s, up to 5x -- talent_settings_sienna.lua:214-218,
+    -- 1012-1030); the old "enemies take increased damage" text had it backwards.
     ["sienna_unchained_activated_ability_power_on_enemies_hit_desc"] = {
         setting = "rework_bw_unchained_fuel_for_the_fire_vent",
-        text = "Fuel for the Fire: enemies hit by your Career Skill take increased damage, and your Career Skill now clears only 25%% of your overcharge instead of all of it.",
+        text = "Each enemy hit by Career Skill grants 5%% power for 15 seconds, stacking up to 5 times. Career Skill clears only 25%% of your overcharge.",
     },
     -- Flame Unending REPLACES Abandon in the lvl-25 slot. The talent has no
     -- display_name field, so the title resolves via Localize(name) -- override the
@@ -3491,19 +3533,30 @@ local CRT_DESC_OVERRIDES = {
         setting = "rework_bw_unchained_abandon_innate_flame_unending",
         text = "Flame Unending",
     },
+    -- The buff is cooldown_regen (continuous recharge-rate stat), so the text
+    -- says "recharges faster", not "-N%% cooldown" (the old text misstated it
+    -- as a flat cooldown cut). Numbers track the Unstable Strength rescale.
     ["sienna_unchained_health_to_ult_desc"] = {
         setting = "rework_bw_unchained_abandon_innate_flame_unending",
-        text = "Flame Unending: -6%% Career Skill cooldown per Unstable Strength stack (-5%% with the Unstable Strength rescale active). Abandon is now part of your base kit.",
+        text = function()
+            if mod:get("rework_bw_unchained_unstable_strength_rescale") then
+                return "Career Skill recharges 5%% faster for each stack of Unstable Strength."
+            end
+            return "Career Skill recharges 6%% faster for each stack of Unstable Strength."
+        end,
     },
     -- Abandon, shown as a passive perk (appended to PassiveAbilitySettings.bw_3.perks
-    -- by the rework's custom_apply) while #3 is active.
+    -- by the rework's custom_apply) while #3 is active. Vanilla Abandon: while
+    -- overcharge sits at 40 or more (chunk_size 40), the ability cooldown drains
+    -- 10%% per tick at the cost of max_health/20 health per tick
+    -- (talent_settings_sienna.lua:974-991, buff_function_templates.lua:4516-4534).
     ["crt_abandon_perk_name"] = {
         setting = "rework_bw_unchained_abandon_innate_flame_unending",
         text = "Abandon",
     },
     ["crt_abandon_perk_desc"] = {
         setting = "rework_bw_unchained_abandon_innate_flame_unending",
-        text = "Abandon: your Career Skill cooldown is reduced based on your current overcharge.",
+        text = "At high overcharge, Career Skill recharges rapidly at the cost of health.",
     },
 }
 
@@ -3511,7 +3564,13 @@ mod:hook(_G, "Localize", function(func, key, ...)
     if type(key) == "string" then
         local entry = CRT_DESC_OVERRIDES[key]
         if entry and mod:get(entry.setting) then
-            return entry.text
+            local text = entry.text
+            -- Entries whose numbers depend on another toggle store a function
+            -- (issue 443); resolve it per call so toggling updates live.
+            if type(text) == "function" then
+                return text()
+            end
+            return text
         end
     end
     return func(key, ...)

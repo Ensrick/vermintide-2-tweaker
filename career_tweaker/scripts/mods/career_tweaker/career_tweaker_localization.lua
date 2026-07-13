@@ -125,7 +125,7 @@ return {
     rework_es_mercenary_enhanced_training_tiered_description          = { en = "With Enhanced Training, a melee hit on 2, 3, or 4 targets grants that many stacks of Paced Strikes (up to +20%% attack speed for 6 seconds); hitting only one target grants nothing. The base Paced Strikes talent is unchanged." },
     rework_es_knight_group                                            = { en = "[working] Foot Knight" },
     rework_es_knight_protective_presence_10m_rock_20m                 = { en = "[working] Foot Knight: Protective Presence 5m to 10m, Rock to 20m" },
-    rework_es_knight_protective_presence_10m_rock_20m_description     = { en = "Doubles the range of the Protective Presence aura to 10m. With the Rock of the Reickland talent it reaches 20m." },
+    rework_es_knight_protective_presence_10m_rock_20m_description     = { en = "Doubles the range of the Protective Presence aura to 10m. With the range talent it reaches 20m." },
     rework_es_knight_valiant_charge_great_foes_45s_battering_ram_30s             = { en = "[working] Foot Knight: Valiant Charge 45s base, Battering Ram to 30s" },
     rework_es_knight_valiant_charge_great_foes_45s_battering_ram_30s_description = { en = "Raises the Valiant Charge cooldown from 30 to 45 seconds. The Battering Ram talent brings it back down to 30 seconds and keeps its wider charge." },
     rework_es_knight_counter_punch_stagger_stack                                  = { en = "[working] Foot Knight: Counter-Punch +30%% stagger/block, x5" },
@@ -136,7 +136,7 @@ return {
     rework_es_questingknight_virtue_of_discipline_double_parry                    = { en = "[working] Grail Knight: Virtue of Discipline double parry (no power)" },
     rework_es_questingknight_virtue_of_discipline_double_parry_description        = { en = "Replaces the +20%% power on parry with a longer parry window, doubled from 0.5 to 1.0 seconds." },
     rework_es_questingknight_virtue_of_impetuous_buffed                           = { en = "[working] Grail Knight: Impetuous Knight 20s, +20%% MS/AS/Power" },
-    rework_es_questingknight_virtue_of_impetuous_buffed_description               = { en = "Changes the on-kill bonus from +35%% movement speed for 15 seconds to +20%% movement speed, attack speed, and power for 20 seconds." },
+    rework_es_questingknight_virtue_of_impetuous_buffed_description               = { en = "Any kill now grants +20%% attack speed and +20%% power for 20 seconds. The ability-kill movement speed changes from +35%% for 15 seconds to +20%% for 20 seconds and keeps its ability-kill trigger." },
 
     -- Bardin
     rework_dr_group                         = { en = "[working] Bardin" },
@@ -159,8 +159,8 @@ return {
     rework_dr_engineer_group                            = { en = "[working] Outcast Engineer" },
     rework_dr_engineer_ingenious_ordnance_240s          = { en = "[working] Outcast Engineer: Ingenious Ordnance 80s to 240s tick" },
     rework_dr_engineer_ingenious_ordnance_240s_description = { en = "Makes the free bomb from Ingenious Ordnance arrive every 240 seconds instead of every 80." },
-    rework_dr_engineer_full_head_of_steam_4pct          = { en = "[working] Outcast Engineer: Full Head of Steam 15%% to 4%% AS/stack" },
-    rework_dr_engineer_full_head_of_steam_4pct_description = { en = "Lowers Full Head of Steam's attack speed bonus from 15%% to 4%% per stack." },
+    rework_dr_engineer_full_head_of_steam_4pct          = { en = "[working] Outcast Engineer: Full Head of Steam 15%% to 4%% AS" },
+    rework_dr_engineer_full_head_of_steam_4pct_description = { en = "Lowers Full Head of Steam's flat attack speed bonus while at maximum pressure from 15%% to 4%%." },
     rework_dr_engineer_gromril_plated_shot_full_speed   = { en = "[working] Outcast Engineer: Gromril Plated Shot full speed" },
     rework_dr_engineer_gromril_plated_shot_full_speed_description = { en = "Removes the Crank Gun spin-up when Gromril Plated Shot is equipped, so the first shot fires at full speed." },
     rework_dr_engineer_leading_shots                   = { en = "[working] Outcast Engineer: Leading Shots (replaces Ingenious Ordnance)" },
@@ -168,7 +168,7 @@ return {
     -- Runtime buff loc keys for the Leading Shots talent (resolved via the
     -- _G.Localize hook in career_tweaker_balance.lua, not as widget titles).
     crt_engineer_leading_shots_name                    = { en = "Leading Shots" },
-    crt_engineer_leading_shots_desc                    = { en = "Every %s ranged attacks (including the Crank Gun), your next ranged attack is a guaranteed critical hit." },
+    crt_engineer_leading_shots_desc                    = { en = "After 4 ranged attacks, the next ranged attack is a guaranteed Critical Strike. Crank Gun shots count too." },
 
     -- Kerillian
     rework_we_group                         = { en = "[working] Kerillian" },
@@ -185,8 +185,8 @@ return {
     rework_we_waywatcher_fervent_huntress_passive_ms_description     = { en = "Replaces the +15%% movement speed for 10 seconds after an elite or special kill with a permanent flat +10%% movement speed." },
     rework_we_waywatcher_kurnous_reward_5pct                         = { en = "[working] Waystalker: Kurnous' Reward 30%% to 5%% ammo/kill" },
     rework_we_waywatcher_kurnous_reward_5pct_description             = { en = "Lowers the ammo restored per elite or special killed by the ability shot from 30%% to 5%%." },
-    rework_we_waywatcher_ricochet_no_ff_5_bounces                    = { en = "[working] Waystalker: Ricochet 3 to 5 bounces (no FF on bounces)" },
-    rework_we_waywatcher_ricochet_no_ff_5_bounces_description        = { en = "Increases how many times the ability shot ricochets, from 3 bounces to 5." },
+    rework_we_waywatcher_ricochet_no_ff_5_bounces                    = { en = "[working] Waystalker: Ricochet 3 to 5 bounces" },
+    rework_we_waywatcher_ricochet_no_ff_5_bounces_description        = { en = "Increases arrow ricochets from 3 bounces to 5. Applies to every arrow the Waystalker fires, not just the ability shot." },
     rework_we_waywatcher_serrated_shots_all_arrows                   = { en = "[working] Waystalker: Serrated Shots works on all arrow types" },
     rework_we_waywatcher_serrated_shots_all_arrows_description       = { en = "Lets the Serrated Shots bleed work with every bow, including Hagbane, which normally cannot apply it. Takes effect on your next weapon equip or mission." },
 
@@ -201,7 +201,7 @@ return {
     rework_wh_zealot_ability_green_to_thp_description   = { en = "Using Holy Fervour converts all of your normal health into temporary health. This pairs well with Zealot's bonus damage from missing health." },
     rework_wh_zealot_fiery_faith_1pct_per_5_hp_max_30                 = { en = "[working] Zealot: Fiery Faith +1%%/5 missing HP, max 30 stacks" },
     rework_wh_zealot_fiery_faith_1pct_per_5_hp_max_30_description     = { en = "Fiery Faith builds in smaller steps: +1%% per 5 missing health up to 30 stacks, instead of +5%% per 25. The +30%% cap is the same, just smoother." },
-    rework_wh_zealot_castigate_4pct_as_per_fiery_faith                = { en = "[working] Zealot: Castigate +4%% AS/Fiery Faith stack (cap +20%%)" },
+    rework_wh_zealot_castigate_4pct_as_per_fiery_faith                = { en = "[working] Zealot: Castigate +4%% AS per 30 missing HP (cap +20%%)" },
     rework_wh_zealot_castigate_4pct_as_per_fiery_faith_description    = { en = "Castigate grants +4%% attack speed per 30 missing health, up to 5 stacks." },
     rework_wh_zealot_holy_fortitude_30_max_hp                         = { en = "[working] Zealot: Holy Fortitude to +30 max HP" },
     rework_wh_zealot_holy_fortitude_30_max_hp_description             = { en = "Replaces the level 20 healing-received talent with a flat +30 maximum health." },
@@ -220,7 +220,7 @@ return {
     rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_description      = { en = "The old Job Well Done effect becomes part of the base passive. The freed talent slot instead grants -5%% damage taken per special kill, up to 6 stacks, losing one stack when you take damage." },
     rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_tooltip          = { en = "Makes the old Job Well Done passive effect part of the base kit, and turns its talent slot into a defensive one. Special kills grant -5%% damage taken per stack, up to 6 stacks, losing one stack when you take damage." },
     rework_wh_bountyhunter_just_reward_5s_cooldown                        = { en = "[working] Bounty Hunter: Just Reward 10s to 5s cooldown" },
-    rework_wh_bountyhunter_just_reward_5s_cooldown_description            = { en = "Shortens the Just Reward cooldown from 10 to 5 seconds, so the ammo refund can happen twice as often." },
+    rework_wh_bountyhunter_just_reward_5s_cooldown_description            = { en = "Shortens the Just Reward internal cooldown from 10 to 5 seconds, so the 20%% ability cooldown refund on ranged crits can happen twice as often." },
     rework_wh_bountyhunter_indiscriminate_blast_refund_per_kill           = { en = "[working] Bounty Hunter: Indiscriminate Blast +1%%/ability kill" },
     rework_wh_bountyhunter_indiscriminate_blast_refund_per_kill_description = { en = "Each kill from the Bounty Hunter ability refunds an extra 1%% of its cooldown, on top of the normal refund." },
     rework_wh_captain_group                 = { en = "[working] Witch Hunter Captain" },
@@ -251,7 +251,7 @@ return {
     rework_bw_necromancer_vanhels_per_skeleton_as                    = { en = "[working] Necromancer: Vanhel's Danse Macabre +2%%/skel cap 24%%" },
     rework_bw_necromancer_vanhels_per_skeleton_as_description        = { en = "Changes Vanhel's Danse Macabre from a flat +12%% attack speed at 4 or more skeletons to +2%% per skeleton, up to +24%%." },
     rework_bw_necromancer_death_ascendant_10s                        = { en = "[working] Necromancer: Death Ascendant 6s to 10s stack duration" },
-    rework_bw_necromancer_death_ascendant_10s_description            = { en = "Extends how long each Death Ascendant stack lasts, from 6 to 10 seconds." },
+    rework_bw_necromancer_death_ascendant_10s_description            = { en = "Extends how long the Death Ascendant cooldown regeneration buff lasts, from 6 to 10 seconds." },
     rework_bw_necromancer_army_of_dead_buffed                        = { en = "[working] Necromancer: Army of the Dead 55s CD, 40s decay" },
     rework_bw_necromancer_army_of_dead_buffed_description            = { en = "Halves the Army of the Dead cooldown from 110 to 55 seconds, and doubles how long the extra skeletons last from 20 to 40 seconds." },
     rework_bw_unchained_group                                        = { en = "[working] [diag] Unchained" },

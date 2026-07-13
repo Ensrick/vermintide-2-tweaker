@@ -1,5 +1,43 @@
 # Career Tweaker Changelog
 
+## 0.3.61-dev - 2026-07-13 - #443 talent rework descriptions rewritten to vanilla style; factual corrections [untested]
+
+### Why
+Issue #443: the AI-written in-game talent descriptions for the reworks were improper - they restated
+the talent title in the body, used +/- signs, parentheses, and dash asides, ran past 2 sentences,
+and told the player which effects the mod moved to innate perks (e.g. the Salvaged Ammunition
+reload-on-melee-kill). The issue defines 10 style rules; every entry in the `CRT_DESC_OVERRIDES`
+Localize table now follows them.
+
+### Changed
+- **Every talent-description override in `career_tweaker_balance.lua` rewritten** (~38 entries): max 2
+  sentences, no title restated, no +/- or bracket characters, literal numbers, no innate-perk
+  bookkeeping in player-facing text.
+- **Factual corrections found while re-reading each implementation** (details in the issue):
+  - Salvaged Ammunition: Elite kills restore **20%** of max ammo (vanilla `ammo_bonus_fraction = 0.2`),
+    not 5%, and the restore is not melee-gated. Stale code comment fixed too.
+  - Just Reward: names the real effect - ranged crits refund **20%** of Locked and Loaded's cooldown,
+    once every 5 seconds (option tooltip previously said "ammo refund").
+  - Castigate: stacks per **30 missing health**, not per Fiery Faith stack (title + talent text).
+  - Fuel for the Fire: Sienna **gains 5% power per enemy hit** by the Career Skill (15s, 5 stacks);
+    old text claimed enemies take increased damage.
+  - Famished Flames: buffs **burn damage over time**, not damage taken by burning enemies.
+  - Flame Unending / Abandon perk: described as faster **recharge** (`cooldown_regen`), not a flat
+    cooldown cut; Abandon perk text now notes the health cost at high overcharge.
+  - Virtue of the Impetuous Knight: movement speed keeps its **ability-kill-only** trigger; only the
+    new attack speed / power procs fire on any kill (talent text + option tooltip).
+  - Full Head of Steam: flat 4% attack speed **while at maximum pressure** (max_stacks 1), not per
+    pump stack (title, option tooltip, talent text).
+  - Ricochet: applies to **all arrows** and has **no friendly-fire exemption** (no such hook ever
+    shipped) - "(no FF on bounces)" removed from the option title, code comment corrected.
+  - Death Ascendant: single refreshing buff (max_stacks 1), not "stacks", in the option tooltip.
+  - Trophy Hunter rework text now says **melee** damage (`increased_weapon_damage_melee`).
+- **Unstable-Strength-linked descriptions resolve live**: Numb to Pain, Natural Talent, and Flame
+  Unending texts are now functions picking 5%/10% vs 6%/12% per the rescale toggle (the shared
+  Localize hook resolves `type(text) == "function"` per call).
+- Loc hygiene: "Rock of the Reickland" misspelling removed from the option tooltip; Leading Shots
+  loc mirror matches the live override text.
+
 ## 0.3.60-dev - 2026-07-12 - #405 post-fix pass: regression marker for the Fires-from-Ash heal gate [untested]
 
 ### Changed
