@@ -23,6 +23,19 @@ Last updated: 2026-07-13.
 | Expected post-fix | Handshake remains safe, then one post-parity replay restores exact Old Musket identity in either slot. Each real Old Musket shot produces one positional vanilla rifle report for other peers and no additional report for the owner. |
 | Detection | `/cwv_regression_test`: `issue474_old_musket_hot_join_identity_and_remote_fire`; logs show bounded `[cwv:579] replayed ...` on parity enable and one `[cwv:474] remote old-musket rifle fire dispatched ...` per shot. |
 
+### issue478-outrider-husk-handedness — Skinless crafted Outrider is wholly invisible remotely
+
+| Field | Value |
+|-------|-------|
+| Symptom | A crafted, skinless Outrider resolves to the correct CWV definition on the observing client, yet both remote 3P hand units are nil and the whole weapon is invisible. |
+| Root cause | Vanilla obtains base `dr_deus_01` units and branches on their hand fields before `GearUtils.spawn_inventory_unit`. The base is left-mounted, while Outrider is a right-mounted blunderbuss with `no_left_hand`; CWV's existing correction inside the later per-hand spawn could suppress the stale left call but could not create the right call vanilla never scheduled. |
+| Mod(s) | character_weapon_variants |
+| Fix version(s) | CWV v0.1.379-dev, v0.1.395-dev (#478) |
+| Category | MULTIPLAYER / CRASH FLOOR |
+| Repro | Craft an Outrider through CIM so it has no skin, equip it on Kruber, and have a second player observe it in the keep and a mission; reverse host/client roles. Include a native Bardin Trollhammer control. |
+| Expected post-fix | The observer sees only the right-hand blunderbuss. CWV preselects authored hands before vanilla's spawn branch; the later residency gate still suppresses any unsafe stale unit. Skinned/native weapons remain unchanged. |
+| Detection | `/cwv_regression_test`: `cwv_husk_nonresident_spawn_deferred`; one bounded `[cwv:478] husk preselected hands ...` line proves the upstream decision, and no nonresident-spawn error follows. |
+
 ---
 
 ## Weapon Skins

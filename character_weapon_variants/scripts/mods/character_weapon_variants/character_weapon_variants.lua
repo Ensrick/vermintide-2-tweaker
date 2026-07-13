@@ -10768,6 +10768,44 @@ do
 		return name
 	end
 
+	-- #478 handedness preselection. SimpleHuskInventoryExtension._wield_slot
+	-- asks BackendUtils for the unit table and THEN decides which per-hand
+	-- GearUtils.spawn_inventory_unit calls exist (simple_husk_inventory_extension
+	-- .lua:662-670). The later _husk_rekey_units hook cannot move a skinless
+	-- cross-character variant from the base weapon's hand to the authored hand:
+	-- for Outrider, vanilla has already scheduled only dr_deus_01's LEFT call,
+	-- while the variant is a RIGHT-mounted blunderbuss with no left unit.
+	--
+	-- Rewrite the unit table at the upstream decision seam, but only for the same
+	-- conservative skinless base+career identity accepted by the shared husk
+	-- resolver. A backend id or any skin is stronger identity owned by another
+	-- path and is left untouched. The later residency re-key/crash-floor remains
+	-- authoritative over whether the selected unit is actually safe to spawn.
+	_om._husk_preselect_units = function(result, item_data, backend_id, skin, career_name)
+		local effective_backend_id = (item_data and item_data.backend_id) or backend_id
+		if type(result) ~= "table" or effective_backend_id ~= nil then return false end
+		local resolved_skin = result.skin or skin
+		if resolved_skin ~= nil and resolved_skin ~= "" then return false end
+		local base_name = item_data and item_data.name
+		local def, reason = _om._husk_resolve_display_def(base_name, career_name, nil)
+		if not def or reason ~= "base_career" then return false end
+
+		if type(def.right_hand_unit) == "string" and def.right_hand_unit ~= "" then
+			result.right_hand_unit = def.right_hand_unit
+		end
+		if def.no_left_hand then
+			result.left_hand_unit = nil
+		elseif type(def.left_hand_unit) == "string" and def.left_hand_unit ~= "" then
+			result.left_hand_unit = def.left_hand_unit
+		end
+
+		_husk_log_once("478_preselect:" .. tostring(base_name) .. ":" .. tostring(career_name),
+			"[cwv:478] husk preselected hands before vanilla spawn branching: base=%s career=%s def=%s right=%s left=%s",
+			tostring(base_name), tostring(career_name), tostring(def.item_key),
+			tostring(result.right_hand_unit), tostring(result.left_hand_unit))
+		return true, def
+	end
+
 	-- #478 crash-floor residency predicate. Can vanilla spawn_inventory_unit spawn
 	-- this unit's "_3p" form on THIS peer without an async C-assert? DISTINCT from
 	-- _om._resident_override_3p (issue 418), which demands cwv's OWN force-load
@@ -10930,12 +10968,13 @@ do
 	--   * The OWNER path is clean after v0.1.365: item_data.ammo_unit is cleared,
 	--     and vanilla gear_utils.lua:164 gates the attach on item_units.ammo_unit.
 	--   * The HUSK resolves the BASE dr_deus_01 item_data (backend_id is nil at
-	--     simple_husk_inventory_extension.lua:662, so cwv's get_item_units override
-	--     early-returns), and dr_deus_01.ammo_unit IS the torpedo -> vanilla attaches
+	--     simple_husk_inventory_extension.lua:662). The #478 preselection now fixes
+	--     authored hands before vanilla branches, while dr_deus_01.ammo_unit IS the
+	--     torpedo unless the post-spawn strip below removes it -> vanilla attaches
 	--     it. A NATIVE item dodges this (the cwv skin rides the wire; skin.ammo_unit
 	--     = nil), a CRAFTED item does not (no skin) -- which is exactly why the bug
-	--     is CRAFTED-only. The lone defense is the career-gated post-spawn strip
-	--     above + the #478 per-hand defer, both of which need the husk career.
+	--     is CRAFTED-only. The ammo defense remains the career-gated post-spawn strip
+	--     above; #478's preselection + per-hand defer separately own weapon hands.
 	-- UNCONFIRMED: the exact per-hand rekey / #478-defer / strip branch that leaves
 	-- the torpedo, and whether "sometimes" == a husk career-lookup miss. This probe
 	-- logs the full decision at every spawn_inventory_unit call so the next 2-player
@@ -11111,7 +11150,13 @@ if BackendUtils then
 		-- `result.left_hand_unit` from the skin entry without our help, on both
 		-- in-game and previewer call paths. See `J_LEFTWEAPONATTACH_INVESTIGATION.md`.
 
-		if not backend_id then return result end
+		-- Husk calls carry no backend id. Correct skinless cross-character
+		-- handedness here, before SimpleHuskInventoryExtension branches on the
+		-- returned right/left fields and before the per-hand spawn hook can run.
+		if not backend_id then
+			_om._husk_preselect_units(result, item_data, backend_id, skin, career_name)
+			return result
+		end
 
 		-- Backend_id pattern `cwv_<key>_NNN` (NNN = any 3 digits: CWV's own
 		-- _001/_002 instances, plus cim-crafted copies 100-999, cim_dev issue
@@ -13467,6 +13512,44 @@ _rt_register("cwv_husk_nonresident_spawn_deferred", function()
     if type(_om._husk_rekey_units) ~= "function" then
         return "_om._husk_rekey_units missing -- husk re-key/suppress contract lost (#478)"
     end
+	if type(_om._husk_preselect_units) ~= "function" then
+		return "_om._husk_preselect_units missing -- #478 handedness still runs after vanilla's spawn branch"
+	end
+	-- PRE-HAND-SELECTION: vanilla's dr_deus_01 result offers only its native
+	-- left mount. A skinless Kruber echo must become the Outrider's right-mounted
+	-- blunderbuss and clear the left field BEFORE vanilla decides which hand calls
+	-- to make. This is the whole-weapon-invisible root from the paired client log.
+	local outrider = _find_def("cwv_es_outrider_grenade_launcher")
+	local base_units = {
+		left_hand_unit = "units/weapons/player/wpn_dr_deus_01/wpn_dr_deus_01",
+	}
+	local changed, pre_def = _om._husk_preselect_units(base_units,
+		{ name = "dr_deus_01" }, nil, nil, "es_mercenary")
+	if not changed or pre_def ~= outrider then
+		return "skinless dr_deus_01+es_mercenary did not resolve to Outrider before hand selection (#478)"
+	end
+	if base_units.right_hand_unit ~= outrider.right_hand_unit or base_units.left_hand_unit ~= nil then
+		return "Outrider preselection did not schedule right blunderbuss + clear native Trollhammer left hand (#478)"
+	end
+	-- Scope: explicit backend identity and any skin belong to the normal owner /
+	-- skin resolution paths and must never be rewritten by this fallback.
+	local backend_guard = { left_hand_unit = "native-left" }
+	if _om._husk_preselect_units(backend_guard, { name = "dr_deus_01" }, "some_backend_id", nil, "es_mercenary")
+			or backend_guard.left_hand_unit ~= "native-left" or backend_guard.right_hand_unit ~= nil then
+		return "Outrider preselection overreached into a backend-identified item (#478)"
+	end
+	local embedded_backend_guard = { left_hand_unit = "native-left" }
+	if _om._husk_preselect_units(embedded_backend_guard,
+			{ name = "dr_deus_01", backend_id = "embedded_backend_id" }, nil, nil, "es_mercenary")
+			or embedded_backend_guard.left_hand_unit ~= "native-left"
+			or embedded_backend_guard.right_hand_unit ~= nil then
+		return "Outrider preselection ignored item_data.backend_id (#478 owner-scope regression)"
+	end
+	local skin_guard = { left_hand_unit = "native-left" }
+	if _om._husk_preselect_units(skin_guard, { name = "dr_deus_01" }, nil, "dr_deus_01_skin_01", "es_mercenary")
+			or skin_guard.left_hand_unit ~= "native-left" or skin_guard.right_hand_unit ~= nil then
+		return "Outrider preselection overreached into a skinned item (#478/#475 Invariant 1)"
+	end
     -- Predicate: a non-existent unit path is never resident under any reference.
     if _om._husk_unit_spawnable("units/weapons/player/__cwv_rt_nonresident_478__/__cwv_rt_nonresident_478__") ~= false then
         return "_husk_unit_spawnable returned true for a non-existent unit -- crash-floor would let a non-resident spawn through (#478)"

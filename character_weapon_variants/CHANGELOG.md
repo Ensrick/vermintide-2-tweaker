@@ -1,12 +1,14 @@
 # Character Weapon Variants — Changelog
 
-## 0.1.395-dev - 2026-07-13 - #474 Old Musket hot-join identity and remote shot audio [untested]
+## 0.1.395-dev - 2026-07-13 - #474/#478 remote weapon continuity [untested]
 
 - Extended v0.1.394's crash-safe post-parity skin replay coverage to the Old Musket's cross-slot representation. The handshake still sends only the vanilla `es_handgun` id with a nulled CWV skin; after every peer acknowledges CWV, the bounded replay restores `cwv_es_musket_old_skin` in either melee or ranged slot and re-wields the active slot so the husk immediately rebuilds the custom mesh, textures, and 3P pose.
 - Restored receiver-visible firing audio without adding a modded wire id. Source inspection of `ActionHandgun` shows it replicates no sound for the vanilla handgun because `handgun_template_1` has no `fire_sound_event`; extraction of the shipped 3P handgun unit identifies its compiled report as `player_combat_weapon_rifle_fire`. CWV now detects the exact Old Musket hip/ADS shot edge and sends that vanilla event through `FirstPersonSystem.rpc_play_husk_sound_event` only, leaving the owner's compiled-unit audio untouched and avoiding a local duplicate.
 - Added `/cwv_regression_test` check `issue474_old_musket_hot_join_identity_and_remote_fire` for melee/ranged base+skin replay identity, current-slot re-wield state, both Old Musket firing actions, exactly-once shot detection, hook installation, and the source-verified vanilla network sound event.
+- Fixed the skinless crafted Outrider disappearing completely on another player's screen. The paired client log proved CWV resolved `cwv_es_outrider_grenade_launcher`, but vanilla had already inspected the base `dr_deus_01` unit table and scheduled only its left-hand spawn before CWV's per-hand re-key ran. CWV now applies the same conservative skinless `(base, career)` identity decision inside `BackendUtils.get_item_units`, replacing the base left mount with the authored right-hand blunderbuss before `SimpleHuskInventoryExtension._wield_slot` chooses which spawn calls exist.
+- Kept #478's residency-gated left-hand suppression as the crash floor after preselection. Backend-identified items, any skinned item, ambiguous/native `(base, career)` pairs, and non-CWV peers remain untouched. Extended `cwv_husk_nonresident_spawn_deferred` to lock the pre-branch right/left result plus backend/skin scope guards.
 
-**DoD:** Universal walked. Trait gates: G-CROSS-SLOT, G-NETWORK, G-APPEARANCE, audio. Deferrals: two-player initial hot join and live re-equip in both slots, model/pose/transform observation, hip/ADS shot audibility, host/client role reversal, and duplicate-audio check — issue #474 live matrix.
+**DoD:** Universal walked. Trait gates: G-CROSS-SLOT, G-NETWORK, G-APPEARANCE, audio, cross-character handedness. Deferrals: two-player initial hot join and live re-equip in both Old Musket slots, model/pose/transform observation, hip/ADS shot audibility, host/client role reversal, duplicate-audio check, plus crafted skinless Outrider right-hand-only rendering in keep and mission — issues #474/#478 live matrices.
 
 ## 0.1.394-dev - 2026-07-13 - #579 Dual Axes preview and remote cosmetic continuity [untested]
 
