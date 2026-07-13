@@ -440,10 +440,10 @@ end
 -- Repaint a wearer's already-spawned weapon units when an authoritative peer
 -- update arrives; otherwise the RGB would not become visible until a re-wield.
 mod._reapply_glow_for_peer = function(peer_id)
-    if not peer_id then return end
+    if not peer_id then return 0 end
     local pm = Managers and Managers.player
     local players = pm and pm._human_players
-    if type(players) ~= "table" then return end
+    if type(players) ~= "table" then return 0 end
     for _, player in pairs(players) do
         if player and player.peer_id == peer_id then
             local pu = player.player_unit
@@ -467,14 +467,24 @@ mod._reapply_glow_for_peer = function(peer_id)
             local wielded_data = (equipment and equipment.slots and wielded_slot)
                 and equipment.slots[wielded_slot] or slot_data
             local item_data = wielded_data and wielded_data.item_data
+            local applied = 0
+            local remote = not _glow_is_local_peer(peer_id)
+            local peer_state = remote and _glow_by_peer[peer_id] or nil
             for _, unit in pairs(units) do
                 _bind_glow_unit(unit, nil, wielded_data and wielded_data.skin,
                     wielded_slot, item_data and item_data.name, item_data and item_data.template)
-                pcall(_apply_glow_to_unit, unit, peer_id)
+                -- Report success only for a unit that can actually consume the
+                -- authoritative payload. A spawned husk with incomplete
+                -- slot/skin identity must keep the bounded join retry armed.
+                if not remote or (peer_state and _remote_glow_matches(unit, peer_state)) then
+                    pcall(_apply_glow_to_unit, unit, peer_id)
+                    applied = applied + 1
+                end
             end
-            return
+            return applied
         end
     end
+    return 0
 end
 
 -- Backward-compatible alias used by the existing call site at create_equipment.

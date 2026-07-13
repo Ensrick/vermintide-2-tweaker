@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.93-dev"
+local MOD_VERSION = "0.9.94-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -6692,6 +6692,24 @@ mod:network_register("cos_la_state_req", function(sender_peer_id, schema_version
             end
         end
     end
+    -- #574 follow-up: reuse the proven pull-on-ready request instead of
+    -- adding another RPC. The old AttachmentUtils push can precede the
+    -- joiner's ingame membership and disappear; this reply is requested by
+    -- the joiner after its host identity is usable. One targeted existing
+    -- cos_glow_apply per cached wearer feeds the normal recv + bounded local
+    -- equipment-ready repaint path.
+    local glow_n = 0
+    for wearer_peer, state in pairs(_glow_by_peer) do
+        if type(state) == "table" then
+            mod:network_send("cos_glow_apply", sender_peer_id, COS_RPC_SCHEMA, {
+                wearer_peer_id = wearer_peer,
+                state = state,
+            })
+            glow_n = glow_n + 1
+        end
+    end
+    _cos574_log("state-pull reply requester=%s glow_entries=%d new_rpc=false",
+        tostring(sender_peer_id), glow_n)
     if printf then printf("[la-state] STATE-PULL reply: %d entr(ies) -> requester=%s",
         n, tostring(sender_peer_id)) end
     -- v0.9.71-dev: explicit ack so the requester can distinguish "empty
@@ -7030,6 +7048,70 @@ end
 local _glow_emit_pending = false
 local _glow_last_emit_at = 0
 local _GLOW_EMIT_THROTTLE = 0.3  -- coalesce rapid setting changes
+local _COS574_REHYDRATE_INTERVAL = 0.25
+local _COS574_REHYDRATE_MAX_ATTEMPTS = 40
+local _COS574_REHYDRATE_WINDOW = 10
+
+-- A hot-join glow snapshot can arrive after the peer identity exists but
+-- before that peer's husk inventory has published its wielded hand units. Keep
+-- one bounded local repaint job per wearer; this retries material application
+-- only, never network traffic. The husk _wield_slot path can complete it first.
+mod._cos574_glow_rehydrate_pending = mod._cos574_glow_rehydrate_pending or {}
+mod._cos574_glow_join_contract = {
+    state_pull = "piggyback_cos_la_state_req",
+    new_rpc_channels = 0,
+    retry_network = false,
+    interval = _COS574_REHYDRATE_INTERVAL,
+    max_attempts = _COS574_REHYDRATE_MAX_ATTEMPTS,
+    window = _COS574_REHYDRATE_WINDOW,
+}
+
+local function _cos574_arm_glow_rehydrate(wearer_peer)
+    if not wearer_peer then return end
+    if mod._cos574_glow_rehydrate_pending[wearer_peer] then return end
+    local now = os.clock()
+    mod._cos574_glow_rehydrate_pending[wearer_peer] = {
+        attempts = 0,
+        next_at = now,
+        deadline = now + _COS574_REHYDRATE_WINDOW,
+    }
+    _cos574_log("rehydrate armed wearer=%s window=%ss network_retry=false",
+        tostring(wearer_peer), tostring(_COS574_REHYDRATE_WINDOW))
+end
+
+local function _cos574_complete_glow_rehydrate(wearer_peer, path, units)
+    if not wearer_peer then return end
+    local pending = mod._cos574_glow_rehydrate_pending
+    if pending and pending[wearer_peer] then
+        pending[wearer_peer] = nil
+        _cos574_log("rehydrate complete wearer=%s path=%s units=%s",
+            tostring(wearer_peer), tostring(path), tostring(units or "?"))
+    end
+end
+
+mod._cos574_glow_rehydrate_tick = function()
+    local pending = mod._cos574_glow_rehydrate_pending
+    if type(pending) ~= "table" or not next(pending) then return end
+    local now = os.clock()
+    for wearer_peer, job in pairs(pending) do
+        if now >= (job.next_at or 0) then
+            if now >= (job.deadline or 0)
+                    or (job.attempts or 0) >= _COS574_REHYDRATE_MAX_ATTEMPTS then
+                pending[wearer_peer] = nil
+                _cos574_log("rehydrate expired wearer=%s attempts=%d",
+                    tostring(wearer_peer), job.attempts or 0)
+            else
+                job.attempts = (job.attempts or 0) + 1
+                job.next_at = now + _COS574_REHYDRATE_INTERVAL
+                local ok, applied = pcall(mod._reapply_glow_for_peer, wearer_peer)
+                if ok and type(applied) == "number" and applied > 0 then
+                    _cos574_complete_glow_rehydrate(wearer_peer, "equipment_ready", applied)
+                end
+            end
+        end
+    end
+end
+
 mod._emit_per_item_glow = function()
     _glow_emit_pending = true
 end
@@ -7148,7 +7230,18 @@ mod:network_register("cos_glow_apply", function(sender_peer_id, schema_version, 
         tostring(wearer), tostring(payload.state.active_per_item_glow_identity),
         tostring(_active_glow_skin(payload.state)),
         tostring(payload.state.active_per_item_glow_slot))
-    if mod._reapply_glow_for_peer then pcall(mod._reapply_glow_for_peer, wearer) end
+    local applied = 0
+    if mod._reapply_glow_for_peer then
+        local ok_reapply, count = pcall(mod._reapply_glow_for_peer, wearer)
+        if ok_reapply and type(count) == "number" then applied = count end
+    end
+    if applied > 0 then
+        _cos574_complete_glow_rehydrate(wearer, "network_recv", applied)
+    elseif payload.state.active_per_item_glow ~= nil then
+        _cos574_arm_glow_rehydrate(wearer)
+    else
+        mod._cos574_glow_rehydrate_pending[wearer] = nil
+    end
 end)
 
 -- HOST: when a new peer joins, rebroadcast every known peer's glow state
@@ -7364,18 +7457,26 @@ mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, wor
             equipment and equipment.right_hand_wielded_unit,
             equipment and equipment.left_hand_wielded_unit,
         }
+        local peer_state = wearer_peer and _glow_by_peer[wearer_peer]
+        local glow_matches = 0
         if mod._cos.bind_glow_unit then
             for _, glow_unit in pairs(glow_units) do
                 mod._cos.bind_glow_unit(glow_unit, nil, glow_slot and glow_slot.skin,
                     slot_name, glow_item and glow_item.name, glow_item and glow_item.template)
+                if peer_state and mod._cos.remote_glow_matches
+                        and mod._cos.remote_glow_matches(glow_unit, peer_state) then
+                    glow_matches = glow_matches + 1
+                end
             end
         end
         mod._cos.apply_glow_override(glow_units, wearer_peer)
         if wearer_peer then
-            local peer_state = _glow_by_peer[wearer_peer]
             _cos574_log("repaint path=husk_wield wearer=%s skin=%s slot=%s active=%s",
                 tostring(wearer_peer), tostring(glow_slot and glow_slot.skin),
                 tostring(slot_name), tostring(peer_state and peer_state.active_per_item_glow ~= nil))
+            if peer_state and peer_state.active_per_item_glow ~= nil and glow_matches > 0 then
+                _cos574_complete_glow_rehydrate(wearer_peer, "husk_wield", glow_matches)
+            end
         end
     end
 
@@ -8214,6 +8315,11 @@ mod.update = function(dt)
 
     -- v0.9.0-dev: pump glow-state broadcast pending re-emits.
     if mod._glow_sync_tick then mod._glow_sync_tick(dt) end
+
+    -- #574: local material-only convergence for a snapshot that beat the
+    -- remote husk's equipment spawn. Quarter-second cadence, 40 attempts/10s
+    -- maximum, and no network send in the tick.
+    if mod._cos574_glow_rehydrate_tick then mod._cos574_glow_rehydrate_tick() end
 
     -- v0.8.67-dev: drain the cos_la_apply pending queue. Entries that can't
     -- apply yet (wearer unit not spawned, husk not wielding the right slot)
@@ -9523,6 +9629,19 @@ _rt_register("glow_picker_render_fanout_574", function()
     end
     if mod._cos.remote_glow_context_matches(nil, state) then
         return "unidentified remote unit must fail closed"
+    end
+    local join = mod._cos574_glow_join_contract
+    if type(join) ~= "table" or join.state_pull ~= "piggyback_cos_la_state_req" then
+        return "post-ingame pull-on-ready glow replay missing"
+    end
+    if join.new_rpc_channels ~= 0 or join.retry_network ~= false then
+        return "join rehydrate must reuse the existing pull and retry only local paint"
+    end
+    if join.max_attempts ~= 40 or join.window ~= 10 or join.interval ~= 0.25 then
+        return "equipment-ready rehydrate bounds drifted"
+    end
+    if type(mod._cos574_glow_rehydrate_tick) ~= "function" then
+        return "bounded post-equipment repaint drain missing"
     end
 end)
 

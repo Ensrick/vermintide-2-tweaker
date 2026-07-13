@@ -1,5 +1,12 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.94-dev - 2026-07-13 - #574 initial/hot-join glow convergence [verify-fix-coop]
+
+- Fixed the remaining join race where the targeted `AttachmentUtils.hot_join_sync` glow push could arrive before the joining peer was an ingame recipient, or its cached glow could arrive before the remote husk had published wielded equipment. The joiner's existing acknowledged `cos_la_state_req` pull-on-ready now also receives the host's cached glow states through the existing `cos_glow_apply` channel; no RPC name, schema, or payload shape was added.
+- A received active glow with no ready equipment now arms one local material-only repaint job for that wearer. It checks at 0.25-second cadence, stops immediately when units exist (or when husk `_wield_slot` paints first), and is hard-capped at 40 attempts/10 seconds. The retry tick never sends network traffic.
+- `_reapply_glow_for_peer` now reports how many live wield units it repainted, allowing the join path to distinguish success from the peer/husk-not-ready race. Added bounded `[cos:574] state-pull`, `rehydrate armed|complete|expired` evidence and expanded `glow_picker_render_fanout_574` to lock the zero-new-RPC and retry bounds. No Workshop deployment.
+- **Co-op verify:** both peers load v0.9.94-dev and have different committed item glows before joining. Join/hot-join without either wearer swapping weapons or opening the picker. Each initial remote husk must show the committed glow once its weapon appears. Repeat by leaving/rejoining and by joining an in-progress mission. Logs should show `state-pull reply ... glow_entries=`, then `rehydrate complete ... path=network_recv|equipment_ready|husk_wield`; no repeating glow RPC stream.
+
 ## 0.9.93-dev - 2026-07-13 - #574 glow rehydration and render fan-out [untested]
 
 - Fixed hero/inventory previews reverting after weapon swaps. Vanilla stores backend ID and skin per preview slot before asynchronous package loading; the old single mutable previewer backend ID could point at a later request by spawn time. The post-spawn path now binds from vanilla's durable per-slot record, reloads the saved item+illusion RGB, and repaints the spawned units.

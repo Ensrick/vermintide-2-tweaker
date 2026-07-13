@@ -255,6 +255,14 @@ leaving a lobby, changing network role, and rebuilding a hero preview all
 rehydrate the owner-authoritative per-instance store and repaint the new units;
 opening the picker is not required.
 
+The original host push at `AttachmentUtils.hot_join_sync` is advisory because
+vanilla can invoke it before the joiner is an ingame RPC recipient. Since
+v0.9.94, the acknowledged post-ingame `cos_la_state_req` pull also replays the
+host's glow cache using the existing `cos_glow_apply` message. If that snapshot
+beats the husk's equipment spawn, the receiver retries only local material paint
+at 0.25-second cadence, stopping on the first ready wield (or after 40 attempts /
+10 seconds). No per-frame network send or new RPC channel exists.
+
 ## 8. Remaining extensions
 
 The rune/magic picker, persistence, contextual open, and active coop sync are
