@@ -20,9 +20,24 @@ Last updated: 2026-07-13.
 | Mod(s) | chaos_wastes_tweaker_dev |
 | Fix version(s) | ct_dev v0.7.260-dev (#564) |
 | Category | UNIT |
-| Repro | Open Mod Options with CT dev enabled and inspect the Single Mission Loader's Mission Depth dropdown. |
+| Repro | Open Mod Options with CT dev enabled and inspect the Single Mission Loader's Run Progress dropdown. |
 | Expected post-fix | All five labels render with one literal `%`; startup contains no `Invalid string format` exception for `ctdm_p_1` through `ctdm_p_5`. |
 | Detection | `/ct_regression_test`: `localization_format_safe` and `mission_catalog_localization_format_safe_564` both pass. |
+
+### single-mission-loader-context-and-composition - Loader exposes invalid controls or launches outside the chamber
+
+**[INTEGRATION]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Loader can replace an active run, offers invalid path/theme combinations, omits Adventure missions, or applies only one obsolete blessing instead of the configured Starting Boons. |
+| Root cause | The original debug UI exposed graph-internal Travel/Signature, theme, and path fields independently and gated on any active Deus mechanism rather than the keep's physical Pilgrimage Chamber. |
+| Mod(s) | chaos_wastes_tweaker_dev |
+| Fix version(s) | ct_dev v0.7.261-dev (#505) |
+| Category | INTEGRATION |
+| Repro | In Mod Options inspect Single Mission Loader, then try its hotkey (1) in the ordinary keep, (2) in `morris_hub`, and (3) inside a CW mission. Repeat in the chamber with a Helmgart, DLC, Event, and normal CW selection, with and without a curse and with several Starting Boons selected. |
+| Expected post-fix | Only case 2 launches. Mission filters use user-facing families. There are no Theme, Path Variant, or Starting Blessing selectors. Curse chooses its matching theme, None uses Wastes, a valid vanilla path is selected, Run Progress stays independent, and all selected Starting Boons are granted at run setup. |
+| Detection | `/ct_regression_test`: `single_mission_loader_redesign_505` and `mission_catalog_localization_format_safe_564` pass. Runtime emits `[ct:505] single_mission_load ... starting_boons=N`; rejected locations show the Pilgrimage Chamber message and do not transition. |
 
 
 ---

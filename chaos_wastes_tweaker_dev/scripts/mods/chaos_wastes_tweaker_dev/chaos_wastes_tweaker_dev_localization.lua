@@ -1275,7 +1275,7 @@ for setting_id, entry in pairs(AdventurePool.build_loc_entries()) do
     loc[setting_id] = entry
 end
 
--- #505 Single Mission dev loader menu strings (titles, tooltips, and every
+-- #505 Single Mission Loader menu strings (titles, tooltips, and every
 -- dropdown option) are generated from the catalog so menu and loc share one
 -- source of truth (same pattern as AdventurePool above).
 local DevMission = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission_catalog")

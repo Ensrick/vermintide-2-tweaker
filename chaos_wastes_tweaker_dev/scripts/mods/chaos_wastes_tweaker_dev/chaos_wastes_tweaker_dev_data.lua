@@ -436,7 +436,7 @@ local data = {
         -- are flagged inline where they intentionally deviate from A->Z.
         widgets = {
             -- ============================================================
-            -- #505 Single Mission dev loader (host-only). Widget tree built in
+            -- #505 Single Mission Loader (host-only). Widget tree built in
             -- _ct_dev_mission_catalog.build_menu_group(); the keybind resolves
             -- mod.ct_dev_load_selected_mission. recursive_sort() places it by its
             -- localized "[untested] Dev: ..." title among the top-level groups.

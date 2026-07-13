@@ -1,11 +1,20 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.261-dev (2026-07-13) - #505 Single Mission Loader source-grounded redesign [untested]
+
+- Renamed the user-facing group to **Single Mission Loader** and restricted every launch path, including `/ct_load_mission`, to the physical Pilgrimage Chamber level (`morris_hub`). Vanilla's keep `deus_door_transition` targets that level (`scripts/unit_extensions/generic/interactions.lua:2738-2744`); being queued, on the CW map, or inside a mission no longer qualifies.
+- Rebuilt the mission dropdown from CT's canonical Adventure catalog and vanilla availability data. Its filters are **Helmgart Campaign**, **DLC Missions**, **Event Missions**, and **Chaos Wastes**; DLC entries are ownership/data-gated. Internal graph terms Travel and Signature are no longer presented as user content categories. `sig_citadel` remains explicitly available as the Citadel approach.
+- Removed the conflicting **God Theme** and **Path Variant** controls. Vanilla derives a forced curse's theme in `deus_generate_graph.lua:67-69`; without a curse the loader uses `wastes`. Vanilla level data supplies valid paths (`deus_populate_graph.lua:342-346`), so the loader deterministically chooses the first valid path instead of asking users for a potentially invalid number. **Mission Depth** is now accurately named **Run Progress**, which remains independent of layout path.
+- Removed the one-off **Starting Blessing** selector. Single Mission Loader now relies on CT's existing multi-select **Starting Boons** settings, granted by the existing `_add_initial_power_ups` integration. Each load also clears the retired `deus_force_load_blessing` override so old state cannot leak into a run.
+- Retained #564's `%%`-escaped Run Progress option localization. Expanded `/ct_regression_test` with `single_mission_loader_redesign_505`: exact chamber gate, Adventure+CW catalog and required categories, curse/theme/path composition, removed-control absence, and Starting Boons wiring.
+- No new hooks and no GUI-file edits. The runtime still calls vanilla `DeusMechanism:debug_load_deus_level` (`deus_mechanism.lua:1017-1020`). Verify only after the owning issue is deliberately advanced from `not-started`.
+
 ## 0.7.260-dev (2026-07-13) - #564 mission-depth localization format safety [untested]
 
 - Fixed five startup Crashify exceptions from the Single Mission Loader's depth dropdown. `ctdm_p_1` through `ctdm_p_5` now keep literal percent signs escaped as `%%` for VMF's `string.format` localization path; the generated fallback label is escaped too.
 - Audited CT's generated mission-catalog localization and found no other raw-percent entries. Static localization strings already use the required escaping.
 - Added `/ct_regression_test` check `mission_catalog_localization_format_safe_564`, which formats every generated catalog localization entry so future builder-added raw percents fail before release.
-- Verify after the canonical ship: confirm `[ct:LOAD] v0.7.260-dev`, open Mod Options, and check Mission Depth shows `Start (0%)`, `Early (25%)`, `Mid (50%)`, `Late (75%)`, and `Deepest (100%)` with no `string.format` Crashify exceptions. Run `/ct_regression_test` and confirm both localization checks pass.
+- Verify after the canonical ship: confirm `[ct:LOAD] v0.7.260-dev` or later, open Mod Options, and check Run Progress shows `Start (0%)`, `Early (25%)`, `Mid (50%)`, `Late (75%)`, and `Deepest (100%)` with no `string.format` Crashify exceptions. Run `/ct_regression_test` and confirm both localization checks pass.
 
 ## 0.7.259-dev (2026-07-13) - #427 _dbg_alert log-only via engine printf [untested]
 

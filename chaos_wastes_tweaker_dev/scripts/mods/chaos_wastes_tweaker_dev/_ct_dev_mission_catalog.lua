@@ -1,15 +1,16 @@
 local mod = get_mod("ct_dev")
+local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_adventure_pool")
 
--- _ct_dev_mission_catalog.lua - static data + menu/loc builders for the Single Mission dev loader (issue 505).
+-- _ct_dev_mission_catalog.lua - data + menu/loc builders for Single Mission Loader (issue 505).
 --
 -- Owns the closed vocabularies the loader forces (curses by god, minor modifiers,
--- shrine blessings, difficulties, themes, native CW base levels) plus the VMF menu
+-- difficulties, and every user-selectable mission) plus the VMF menu
 -- widget tree and its localization entries. Every list is transcribed from the
 -- decompile and carries a `file:line` citation so a Fatshark data reshuffle is
 -- auditable. PURE MODULE: no mod:hook, no mod:command, no mod.* writes - it only
 -- reads static vanilla tables and returns data, so the double dofile (once from
--- <mod>_data.lua to build widgets, once from <mod>_localization.lua to build loc,
--- once from _ct_dev_mission.lua to resolve dropdown index <-> name) is idempotent
+-- <mod>_data.lua to build widgets, from <mod>_localization.lua to build loc, and
+-- from _ct_dev_mission.lua to resolve dropdown index <-> name) is idempotent
 -- (PROJECT_STANDARDS 2.2a rule 4). The loadable level key is
 -- "<base>_<theme>_path<N>" (deus_populate_graph.lua:945); the loader composes it.
 --
@@ -59,37 +60,77 @@ _M.MODIFIERS = {
     "deus_more_monsters", "deus_less_monsters",
 }
 
--- Shrine blessings (permanent run modifiers). Source: deus_blessing_settings.lua:18-99.
--- Forced via script_data.deus_force_load_blessing (deus_run_state.lua:169-170).
-_M.BLESSINGS = {
-    "blessing_of_power", "blessing_of_shallya", "blessing_of_grimnir", "blessing_of_isha",
-    "blessing_of_ranald", "blessing_of_abundance", "blessing_holy_hand_grenade", "blessing_rally_flag",
-}
-
 -- Base difficulties. Source: difficulty_settings.lua:4-269 (ranks 2..8). ct's
 -- progressive-difficulty hook then ramps this up by run_progress at play time.
 _M.DIFFICULTIES = { "normal", "hard", "harder", "hardest", "cataclysm", "cataclysm_2", "cataclysm_3" }
 
--- Node themes. Source: deus_theme_settings.lua DEUS_THEME_TYPES (:120-127).
-_M.THEMES = { "wastes", "khorne", "nurgle", "tzeentch", "slaanesh", "belakor" }
+-- The mission picker uses user-facing content families, not the graph solver's
+-- internal TRAVEL/SIGNATURE node types. AdventurePool is already the canonical
+-- mission/name catalog for Helmgart, DLC, events and normal CW scenarios. An
+-- Adventure mission is shown only when its vanilla LevelSettings entry exists;
+-- register_mission_resolvables uses the same test as the DLC-ownership gate.
+_M.CATEGORY_HELMGART = "Helmgart Campaign"
+_M.CATEGORY_DLC      = "DLC Missions"
+_M.CATEGORY_EVENT    = "Event Missions"
+_M.CATEGORY_CW       = "Chaos Wastes"
+_M.CATEGORIES = {
+    _M.CATEGORY_HELMGART,
+    _M.CATEGORY_DLC,
+    _M.CATEGORY_EVENT,
+    _M.CATEGORY_CW,
+}
 
--- Native CW base levels. Source: deus_map_populate_settings.lua LEVEL_AVAILABILITY
--- (TRAVEL :422-448 / SIGNATURE :449-483, sig_citadel added in journey_citadel
--- :1135). arena_*/shop_* node types are out of scope per issue 505 ("if it's not
--- an arena mission").
-_M.TRAVEL_LEVELS    = { "pat_forest", "pat_town", "pat_mountain", "pat_mines", "pat_tower", "pat_bay" }
-_M.SIGNATURE_LEVELS = { "sig_mordrek", "sig_gorge", "sig_volcano", "sig_snare", "sig_crag", "sig_citadel" }
-
--- Flat base list (travel first, then signature) - the menu base dropdown index space.
-_M.BASE_LEVELS = {}
-do
-    for _, k in ipairs(_M.TRAVEL_LEVELS) do _M.BASE_LEVELS[#_M.BASE_LEVELS + 1] = k end
-    for _, k in ipairs(_M.SIGNATURE_LEVELS) do _M.BASE_LEVELS[#_M.BASE_LEVELS + 1] = k end
+_M.MISSIONS = {}
+_M.MISSION_INDEX_BY_KEY = {}
+local function add_mission(mission, category, is_native_cw)
+    if not mission or not mission.key or _M.MISSION_INDEX_BY_KEY[mission.key] then return end
+    if not is_native_cw and rawget(_G, "LevelSettings") and not rawget(LevelSettings, mission.key) then return end
+    local entry = {
+        key = mission.key,
+        name = mission.name or mission.key,
+        category = category,
+        native_cw = is_native_cw and true or false,
+    }
+    _M.MISSIONS[#_M.MISSIONS + 1] = entry
+    _M.MISSION_INDEX_BY_KEY[entry.key] = #_M.MISSIONS
 end
+
+for _, group in ipairs(AdventurePool.MISSION_GROUPS or {}) do
+    local category = group.id == "helmgart" and _M.CATEGORY_HELMGART or _M.CATEGORY_DLC
+    for _, mission in ipairs(group.missions or {}) do add_mission(mission, category, false) end
+end
+for _, mission in ipairs(AdventurePool.EVENT_MISSIONS or {}) do
+    add_mission(mission, _M.CATEGORY_EVENT, false)
+end
+for _, mission in ipairs(AdventurePool.CW_SCENARIOS or {}) do
+    add_mission(mission, _M.CATEGORY_CW, true)
+end
+-- Citadel's approach map is a normal SIGNATURE node only in journey_citadel
+-- (deus_map_populate_settings.lua:1135); it is absent from the shared CW pool
+-- catalog because availability toggles intentionally do not alter that journey.
+add_mission({ key = "sig_citadel", name = "Citadel of Eternity (Approach)" }, _M.CATEGORY_CW, true)
+
+-- Back-compat alias for diagnostic command callers; values are now the complete
+-- user-facing mission set rather than only native CW bases.
+_M.BASE_LEVELS = {}
+for _, mission in ipairs(_M.MISSIONS) do _M.BASE_LEVELS[#_M.BASE_LEVELS + 1] = mission.key end
 
 -- Depth presets -> run_progress fraction. Higher = deeper into the run (more
 -- spawns, harder trials, higher weapon-chest tier via ct's progressive hooks).
 _M.PROGRESS = { 0.0, 0.25, 0.5, 0.75, 1.0 }
+
+-- Vanilla graph population picks a valid layout path from level_info.paths
+-- (deus_populate_graph.lua:342-346,462-465). The single-node debug graph bypasses
+-- that population pass, so choose the first declared path deterministically.
+-- A forced curse also supplies its god theme (deus_generate_graph.lua:67-69);
+-- un-cursed nodes use the neutral Wastes theme.
+function _M.compose_level_key(base, curse, level_settings)
+    local theme = (curse and _M.CURSE_GOD[curse]) or "wastes"
+    local info = level_settings and level_settings[base]
+    local paths = info and info.paths
+    local path = (type(paths) == "table" and paths[1]) or 1
+    return base .. "_" .. theme .. "_path" .. tostring(path), theme, path
+end
 
 -- ===========================================================================
 -- Human-readable labels (menu display + loc generation, single source)
@@ -128,37 +169,10 @@ local MODIFIER_LABEL = {
     deus_more_monsters = "More Monsters", deus_less_monsters = "Fewer Monsters",
 }
 
-local BLESSING_LABEL = {
-    blessing_of_power        = "Blessing of Power (+50 weapon power)",
-    blessing_of_shallya      = "Blessing of Shallya",
-    blessing_of_grimnir      = "Blessing of Grimnir",
-    blessing_of_isha         = "Blessing of Isha",
-    blessing_of_ranald       = "Blessing of Ranald",
-    blessing_of_abundance    = "Blessing of Abundance",
-    blessing_holy_hand_grenade = "Holy Hand Grenade",
-    blessing_rally_flag      = "Rally Flag",
-}
-
 local DIFFICULTY_LABEL = {
     normal = "Recruit (normal)", hard = "Veteran (hard)", harder = "Champion (harder)",
     hardest = "Legend (hardest)", cataclysm = "Cataclysm", cataclysm_2 = "Cataclysm 2",
     cataclysm_3 = "Cataclysm 3",
-}
-
-local THEME_LABEL = {
-    wastes = "Wastes (neutral)", khorne = "Khorne", nurgle = "Nurgle",
-    tzeentch = "Tzeentch", slaanesh = "Slaanesh", belakor = "Be'lakor",
-}
-
--- CW mission display names. Source: _adventure_pool.lua CW_SCENARIOS names +
--- sig_citadel (citadel journey approach map).
-local LEVEL_LABEL = {
-    pat_forest = "The Forbidden Trail", pat_town = "Grimblood's Stronghold",
-    pat_mountain = "Pinnacle of Nightmares", pat_mines = "Bel'sha'ziir's Mine",
-    pat_tower = "Holseher's Tower", pat_bay = "Slaughter Bay",
-    sig_mordrek = "Count Mordrek's Fortress", sig_gorge = "The Foetid Gorge",
-    sig_volcano = "Cinder Peak", sig_snare = "The Pit of Reflections",
-    sig_crag = "The Lost City of Marakza", sig_citadel = "Citadel of Eternity (approach)",
 }
 
 -- VMF localizes dropdown options through string.format, so literal percent signs
@@ -171,9 +185,7 @@ local PROGRESS_LABEL = { "Start (0%%)", "Early (25%%)", "Mid (50%%)", "Late (75%
 
 function _M.curse_key(name)    return "ctdm_c_" .. name end
 function _M.modifier_key(name) return "ctdm_m_" .. name end
-function _M.blessing_key(name) return "ctdm_b_" .. name end
 function _M.difficulty_key(n)  return "ctdm_d_" .. n end
-function _M.theme_key(name)    return "ctdm_t_" .. name end
 function _M.base_key(name)     return "ctdm_l_" .. name end
 function _M.progress_key(i)    return "ctdm_p_" .. tostring(i) end
 
@@ -184,39 +196,30 @@ function _M.progress_key(i)    return "ctdm_p_" .. tostring(i) end
 function _M.build_loc_entries()
     local e = {}
 
-    -- Group + widget titles / tooltips. [untested] dev status tag per
+    -- Group + widget titles / tooltips. [untested] status tag per
     -- LOCALIZATION_STANDARD s13 - drops to [working] once the user confirms in-game.
-    e.ctdm_group = { en = "[untested] Dev: Single Mission Loader" }
+    e.ctdm_group = { en = "[untested] Single Mission Loader" }
 
     e.ctdm_load = { en = "Load Selected Mission Now (hotkey)" }
-    e.ctdm_load_tooltip = { en = "Host-only. Immediately loads the mission chosen below as a one-mission Chaos Wastes run.\n\nYou must already be inside a Chaos Wastes expedition (on the CW map screen or in a CW mission) - start any expedition first, then press this to jump to the exact mission you want to test." }
+    e.ctdm_load_tooltip = { en = "Host-only. Immediately starts the selected one-mission Chaos Wastes run. This hotkey works only while your character is physically inside the Pilgrimage Chamber reached through the Chaos Wastes door in the keep." }
 
     e.ctdm_base = { en = "Mission" }
-    e.ctdm_base_tooltip = { en = "The Chaos Wastes level to load. Travel maps (pat_) and Signature maps (sig_) only; arenas, shops and finales are out of scope.\n\nTo load a Campaign or DLC mission injected by Inject Adventure Missions, use the /ct_load_mission chat command with its level key (run /ct_list_missions to list them)." }
-
-    e.ctdm_theme = { en = "God Theme" }
-    e.ctdm_theme_tooltip = { en = "Which god's visual theme colours the mission. Wastes is the neutral (un-themed) look. When you also force a curse, the theme is pulled toward that curse's god automatically." }
-
-    e.ctdm_path = { en = "Path Variant" }
-    e.ctdm_path_tooltip = { en = "Which layout variant of the map to load (1-5). Not every base map has all five; if a variant does not exist the load is refused with a message." }
+    e.ctdm_base_tooltip = { en = "Choose a Helmgart Campaign, DLC, Event, or normal Chaos Wastes mission. Use the dropdown filters to narrow the list. DLC missions appear only when their vanilla level data is available." }
 
     e.ctdm_difficulty = { en = "Base Difficulty" }
     e.ctdm_difficulty_tooltip = { en = "Starting difficulty of the run. Keep Current keeps whatever the active run is on. Progressive Difficulty (if enabled) still ramps upward from here based on the depth below." }
 
-    e.ctdm_progress = { en = "Mission Depth" }
-    e.ctdm_progress_tooltip = { en = "How deep into a run this mission counts as. Deeper = more spawns, harder trials, and higher-tier weapon-chest rolls (via ct's progressive hooks). This does not pre-equip you with upgraded gear." }
+    e.ctdm_progress = { en = "Run Progress" }
+    e.ctdm_progress_tooltip = { en = "The normalized position of this node within its one-mission run. CT features may use it for pacing, difficulty, or economy scaling. It is independent from the mission's hidden layout path, which the loader chooses from vanilla's valid paths." }
 
-    e.ctdm_curse = { en = "Curse" }
-    e.ctdm_curse_tooltip = { en = "Force a specific god curse on the mission, or None for an un-cursed mission." }
+    e.ctdm_curse = { en = "Curses" }
+    e.ctdm_curse_tooltip = { en = "Force one god curse, or None for an un-cursed mission. Vanilla ties a forced curse to that curse's god theme; None uses the neutral Wastes theme." }
 
     e.ctdm_modifier1 = { en = "Minor Modifier 1" }
     e.ctdm_modifier1_tooltip = { en = "First minor modifier applied to the mission (e.g. More Coins, Fewer Specials). Best-effort: appended to the loaded node's mutator list." }
 
     e.ctdm_modifier2 = { en = "Minor Modifier 2" }
     e.ctdm_modifier2_tooltip = { en = "Second minor modifier applied to the mission. Best-effort: appended to the loaded node's mutator list." }
-
-    e.ctdm_blessing = { en = "Starting Blessing" }
-    e.ctdm_blessing_tooltip = { en = "Grant a shrine blessing for the run at the start (e.g. Blessing of Power for +50 weapon power), as if you had bought it at a shrine." }
 
     e.ctdm_with_belakor = { en = "Be'lakor Journey" }
     e.ctdm_with_belakor_tooltip = { en = "Load the mission as part of a Be'lakor journey (enables Be'lakor's curses/loci where applicable)." }
@@ -230,18 +233,11 @@ function _M.build_loc_entries()
     for _, m in ipairs(_M.MODIFIERS) do
         e[_M.modifier_key(m)] = { en = MODIFIER_LABEL[m] or m }
     end
-    for _, b in ipairs(_M.BLESSINGS) do
-        e[_M.blessing_key(b)] = { en = BLESSING_LABEL[b] or b }
-    end
     for _, d in ipairs(_M.DIFFICULTIES) do
         e[_M.difficulty_key(d)] = { en = DIFFICULTY_LABEL[d] or d }
     end
-    for _, t in ipairs(_M.THEMES) do
-        e[_M.theme_key(t)] = { en = THEME_LABEL[t] or t }
-    end
-    for _, l in ipairs(_M.BASE_LEVELS) do
-        local pool = string.sub(l, 1, 4) == "sig_" and "Signature" or "Travel"
-        e[_M.base_key(l)] = { en = (LEVEL_LABEL[l] or l) .. " [" .. pool .. "]" }
+    for _, mission in ipairs(_M.MISSIONS) do
+        e[_M.base_key(mission.key)] = { en = mission.name }
     end
     for i = 1, #_M.PROGRESS do
         e[_M.progress_key(i)] = { en = PROGRESS_LABEL[i] or (tostring(math.floor(_M.PROGRESS[i] * 100)) .. "%%") }
@@ -256,22 +252,8 @@ end
 
 function _M.base_options()
     local opts = {}
-    for i, l in ipairs(_M.BASE_LEVELS) do opts[i] = { text = _M.base_key(l), value = i } end
+    for i, mission in ipairs(_M.MISSIONS) do opts[i] = { text = _M.base_key(mission.key), value = i } end
     return opts
-end
-
-function _M.theme_options()
-    local opts = {}
-    for i, t in ipairs(_M.THEMES) do opts[i] = { text = _M.theme_key(t), value = i } end
-    return opts
-end
-
-function _M.path_options()
-    -- reuses the numeric "1".."5" loc entries already defined for other dropdowns.
-    return {
-        { text = "1", value = 1 }, { text = "2", value = 2 }, { text = "3", value = 3 },
-        { text = "4", value = 4 }, { text = "5", value = 5 },
-    }
 end
 
 function _M.difficulty_options()
@@ -298,12 +280,6 @@ function _M.modifier_options()
     return opts
 end
 
-function _M.blessing_options()
-    local opts = { { text = "ctdm_none", value = 0 } }
-    for i, b in ipairs(_M.BLESSINGS) do opts[#opts + 1] = { text = _M.blessing_key(b), value = i } end
-    return opts
-end
-
 -- ===========================================================================
 -- Menu group widget (consumed by <mod>_data.lua)
 -- ===========================================================================
@@ -320,14 +296,11 @@ function _M.build_menu_group()
                 default_value = {}, tooltip = "ctdm_load_tooltip",
             },
             { setting_id = "ctdm_base",       type = "dropdown", default_value = 1, options = _M.base_options(),       tooltip = "ctdm_base_tooltip" },
-            { setting_id = "ctdm_theme",      type = "dropdown", default_value = 1, options = _M.theme_options(),      tooltip = "ctdm_theme_tooltip" },
-            { setting_id = "ctdm_path",       type = "dropdown", default_value = 1, options = _M.path_options(),       tooltip = "ctdm_path_tooltip" },
-            { setting_id = "ctdm_difficulty", type = "dropdown", default_value = 0, options = _M.difficulty_options(), tooltip = "ctdm_difficulty_tooltip" },
-            { setting_id = "ctdm_progress",   type = "dropdown", default_value = 1, options = _M.progress_options(),   tooltip = "ctdm_progress_tooltip" },
             { setting_id = "ctdm_curse",      type = "dropdown", default_value = 0, options = _M.curse_options(),      tooltip = "ctdm_curse_tooltip" },
+            { setting_id = "ctdm_progress",   type = "dropdown", default_value = 1, options = _M.progress_options(),   tooltip = "ctdm_progress_tooltip" },
+            { setting_id = "ctdm_difficulty", type = "dropdown", default_value = 0, options = _M.difficulty_options(), tooltip = "ctdm_difficulty_tooltip" },
             { setting_id = "ctdm_modifier1",  type = "dropdown", default_value = 0, options = _M.modifier_options(),   tooltip = "ctdm_modifier1_tooltip" },
             { setting_id = "ctdm_modifier2",  type = "dropdown", default_value = 0, options = _M.modifier_options(),   tooltip = "ctdm_modifier2_tooltip" },
-            { setting_id = "ctdm_blessing",   type = "dropdown", default_value = 0, options = _M.blessing_options(),   tooltip = "ctdm_blessing_tooltip" },
             { setting_id = "ctdm_with_belakor", type = "checkbox", default_value = false, tooltip = "ctdm_with_belakor_tooltip" },
         },
     }

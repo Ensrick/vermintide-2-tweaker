@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.260-dev"
+local MOD_VERSION = "0.7.261-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -430,7 +430,7 @@ mod._ct_freeze487 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_f
 -- by the existing [ct-probe]/[ct-spawn-tally] count probes.
 mod._ct_chest132 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132")
 
--- #505 Single Mission dev loader. Registers /ct_load_mission + friends and the
+-- #505 Single Mission Loader. Registers /ct_load_mission + friends and the
 -- ct_dev_load_selected_mission menu keybind target. No hooks - it forces a run via
 -- vanilla's DeusMechanism:debug_load_deus_level + script_data overrides, so there
 -- is no (Class, method) to collide with. Loaded here (after _adventure_pool so the
@@ -438,10 +438,30 @@ mod._ct_chest132 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cu
 mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission")
 -- Regression guard: the loader module + its menu keybind target must survive any
 -- future refactor (the whole verification lever depends on them being callable).
-_rt_register("dev_single_mission_loader", function()
+_rt_register("single_mission_loader_redesign_505", function()
     if not mod._ct_dev_mission_loaded then return "single-mission loader module did not load" end
     if type(mod.ct_dev_load_selected_mission) ~= "function" then return "ct_dev_load_selected_mission keybind target missing" end
     if type(mod._ct_dev_mission_do_load) ~= "function" then return "single-mission load primitive missing" end
+    if type(mod._ct505_in_pilgrimage_chamber) ~= "function" then return "Pilgrimage Chamber gate helper missing" end
+    if not mod._ct505_in_pilgrimage_chamber("morris_hub") or mod._ct505_in_pilgrimage_chamber("inn_level") then
+        return "Pilgrimage Chamber gate must accept only morris_hub"
+    end
+    local cat = mod._ct_dev_mission_catalog
+    if type(cat) ~= "table" or type(cat.compose_level_key) ~= "function" then return "mission catalog/composer missing" end
+    if type(cat.MISSIONS) ~= "table" or #cat.MISSIONS <= #AdventurePool.CW_SCENARIOS then
+        return "mission catalog does not include Adventure plus CW missions"
+    end
+    local required = { [cat.CATEGORY_HELMGART] = false, [cat.CATEGORY_DLC] = false, [cat.CATEGORY_CW] = false }
+    for _, mission in ipairs(cat.MISSIONS) do if required[mission.category] ~= nil then required[mission.category] = true end end
+    for category, present in pairs(required) do if not present then return "mission category missing: " .. tostring(category) end end
+    local key, theme, path = cat.compose_level_key("pat_forest", "curse_rotten_miasma", { pat_forest = { paths = { 3 } } })
+    if key ~= "pat_forest_nurgle_path3" or theme ~= "nurgle" or path ~= 3 then return "curse/theme/valid-path composition mismatch" end
+    local widget = cat.build_menu_group()
+    local ids = {}
+    for _, child in ipairs(widget.sub_widgets or {}) do ids[child.setting_id] = true end
+    if ids.ctdm_theme or ids.ctdm_path or ids.ctdm_blessing then return "removed theme/path/blessing selector returned" end
+    if not (ids.ctdm_base and ids.ctdm_curse and ids.ctdm_progress) then return "required mission/curse/progress selectors missing" end
+    if not mod._ct505_uses_starting_boons then return "loader is not wired to existing Starting Boons selections" end
     return nil
 end)
 
