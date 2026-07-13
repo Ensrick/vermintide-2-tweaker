@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - `cosmetics_tweaker` score-lineup identity isolation
+
+Repo-aggregate entry for Cosmetics Tweaker v0.9.95-dev / issue #513. End-screen LA cosmetics now resolve only from an exact player-controlled profile+career score row with a complete peer/local-player tuple. Bot rows may share their host's network-owner peer but can neither inherit that host's helmet/skin nor purge the host's valid colour state when their skeleton differs. Added offline and runtime regression fixtures for the observed Grail Knight/Sienna/Warrior Priest lineup. CWV score-screen weapon rendering is unchanged. No Workshop deployment.
+
 ## 2026-07-13 - `gui_tweaker_dev` native magnifier geometry correction
 
 Follow-up Tweaker: GUI v0.2.242-dev / issue #572. In-game verification exposed that the native magnifier's 128x128 atlas tile had been incorrectly shrunk to a 22px tile, making the artwork inside its transparent padding roughly one quarter size. Mod Tweaker now uses vanilla's exact 128x128, x=-80/y=-4 geometry and x=47 text origin.
@@ -7,7 +11,6 @@ Follow-up Tweaker: GUI v0.2.242-dev / issue #572. In-game verification exposed t
 ## 2026-07-13 - `gui_tweaker_dev` native Mod Tweaker search icon
 
 Repo-aggregate entry for Tweaker: GUI v0.2.241-dev / issue #572. Mod Tweaker now reuses the vanilla inventory search field's atlas-backed `search_filters_icon`, with fixed icon/text clearance in the same scale-aware scenegraph node and no new asset or input target. Runtime regression coverage locks the material, metrics, and unchanged field hotspot. No Workshop deployment.
-
 ## 2026-07-13 - `crafting_in_modded_dev` explicit illusion precedence
 
 Repo-aggregate entry for Crafting in Modded v0.8.66-dev / reopened issue #563. Successful Apply Skin completion now atomically records the newest illusion by exact backend ID even when Cosmetics Tweaker owns the local craft bypass, preventing a later mirror-ready rehydrate from restoring an older saved skin. CIM-owned crafts clear stale vanilla overrides and continue using their forge record. Added bounded diagnostics and old-A -> explicit-B -> rehydrate-B regression coverage. No Workshop deployment.

@@ -1,12 +1,19 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.95-dev - 2026-07-13 - #513 isolate score-lineup wearer identity [verify-fix-coop]
+
+- The 0.9.93 client log proved that exact profile/career matching was still insufficient by itself: vanilla score rows for Sienna and Warrior Priest carried the host's `peer_id`, so the resolver opened the host's human-only LA store and explicitly swapped both bot helmets to Grail Knight's Loremaster mesh. Vanilla `ScoreboardHelper` records `is_player_controlled` beside that shared network-owner peer.
+- Added a pure score identity boundary that requires exact profile plus career, `is_player_controlled == true`, and a complete peer/local-player tuple. Bot and incomplete rows now fail closed and never receive `_cos_wearer_peer`; the non-score `TeamPreviewer` fallback also requires exact profile plus career.
+- The same owner/wearer distinction fixes the host-only colour loss. The spawn monitor had treated a host-owned bot's expected skeleton mismatch as a human career switch and purged the host's valid LA hat; the client happened to receive a later re-emit while the host did not. Bot mismatches remain blocked by the existing character guard but can no longer invalidate their human owner's store.
+- Bounded diagnostics now classify rejected score bots as `role=bot source=score_snapshot_bot` and retained spawn aliases as `BOT-OWNER-ALIAS`. Runtime and offline regressions reproduce the observed Grail Knight human plus Sienna/Warrior Priest bots sharing one host peer. The independent generated Sword+Mace score rendering remains owned by #416/#483 and is not changed here. No Workshop deployment.
+- **Co-op verify:** finish a mission with the host wearing the Grail Knight Loremaster helmet and with Sienna/Warrior Priest bots present. Both peers must see the helmet only on Grail Knight, with its wearer-specific colour. Logs must show `BOT-OWNER-ALIAS retained`, the Grail Knight human as `role=local|remote source=score_snapshot`, bots as `role=bot source=score_snapshot_bot peer=nil`, and no `SCORE-HAT` swap/paint following a bot row.
+
 ## 0.9.95-dev - 2026-07-13 - #483 individualized CWV sword/mace cosmetics [verify-fix-coop]
 
 - Added independent right-hand sword and left-hand mace cosmetic rows for CWV's `cwv_es_sword_and_mace`. Each row is sourced from the exact vanilla `ItemMasterList` family (`es_1h_sword` or `es_1h_mace`), rather than the generated paired-skin table, so changing one hand no longer forces a pre-zipped partner onto the other.
 - Generalized dual-weapon pool registration with a deterministic, DLC-aware `matching_item_key` source selector. Existing skin-table registrations and all other weapon pools are unchanged.
 - The selections use Cosmetics' existing direct-unit `cos_la_apply` transport, host-authoritative per-peer/per-template/per-hand store, state replay, package readiness gate, and husk render path. No RPC name, schema, hook, or CWV source changed. Added `issue483_cwv_sword_mace_individualized_cosmetics` runtime coverage.
 - **Co-op verify:** with Cosmetics v0.9.95-dev and CWV enabled on both peers, equip Sword and Mace, open weapon customization, and choose visibly different right-sword and left-mace variants. Apply, wield, swap away/back, and re-open customization; both choices must remain independent locally. Join and hot-join a second peer; both viewers must see the same sword-right/mace-left pair without either player reopening the picker. Run `/cos_regression_test` and confirm `issue483_cwv_sword_mace_individualized_cosmetics` passes.
-
 ## 0.9.94-dev - 2026-07-13 - #574 initial/hot-join glow convergence [verify-fix-coop]
 
 - Fixed the remaining join race where the targeted `AttachmentUtils.hot_join_sync` glow push could arrive before the joining peer was an ingame recipient, or its cached glow could arrive before the remote husk had published wielded equipment. The joiner's existing acknowledged `cos_la_state_req` pull-on-ready now also receives the host's cached glow states through the existing `cos_glow_apply` channel; no RPC name, schema, or payload shape was added.

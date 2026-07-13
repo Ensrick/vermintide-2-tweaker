@@ -42,13 +42,13 @@ Last updated: 2026-07-13.
 | Field | Value |
 |-------|-------|
 | Symptom | End-of-mission lineup shows each LA hat's original vanilla hat for both wearer and client. |
-| Root cause | TeamPreviewer hook ran after `PlayerManager:remove_player`; its live-player-only profile resolver returned nil even though `context.players_session_score` retained exact peer identity. |
+| Root cause | TeamPreviewer first ran after `PlayerManager:remove_player`, so it needed the score snapshot. The initial snapshot resolver then treated `peer_id` as wearer identity even though bot score rows reuse their owning host's peer, allowing the host's LA store to bleed across careers. The spawn monitor made the inverse mistake and purged the host's valid store when a host-owned bot had a different skeleton. |
 | Mod(s) | cosmetics_tweaker |
-| Fix version(s) | cosmetics_tweaker v0.9.91-dev |
+| Fix version(s) | cosmetics_tweaker v0.9.91-dev (snapshot source), v0.9.95-dev (player-controlled wearer boundary) |
 | Category | INTEGRATION / MULTIPLAYER |
 | Repro | Two modded peers equip LA hats, finish a mission, and inspect local plus remote lineup rows. |
-| Expected post-fix | Both rows resolve from `score_snapshot`; the previewer's hat mesh swaps/paints before display and both viewers see LA hats. |
-| Detection | `/cos_regression_test` passes `cos_la_score_screen_apply_wired`. Log has bounded `SCORE-ROW role=local/remote ... source=score_snapshot` followed by `SCORE-HAT` markers; no human row is `unresolved`. |
+| Expected post-fix | Human rows resolve from `score_snapshot`; their previewer hats swap/paint before display. Bot rows sharing a host peer remain vanilla, cannot read the host's LA store, and cannot purge it when their skeleton differs. |
+| Detection | `/cos_regression_test` passes `cos_la_score_screen_apply_wired`. Log has bounded `BOT-OWNER-ALIAS retained`, human `SCORE-ROW role=local/remote ... source=score_snapshot` followed by `SCORE-HAT` markers, and bot rows as `role=bot source=score_snapshot_bot peer=nil` with no subsequent bot hat swap. |
 | Tracking | GitHub issue #513. |
 
 ### offhand-preload-async-bounded -- no blocking startup package storm
@@ -108,11 +108,11 @@ Last updated: 2026-07-13.
 | Symptom | Host sees an LA hat equipped on a teammate's body that belongs to a different character (e.g. GK Pureheart helm shows up on Warrior Priest at mission start). Client view is unaffected. Often a host-owned bot whose career differs from the host's. |
 | Root cause | `_apply_la_on_unit`'s character-mismatch guard derived `owner_char_path` from the cached LA emit's `vanilla_key` instead of the actual `owner_unit`. Both `vanilla_key.unit` and `la_unit_path` resolved to the emitter's character, so the mismatch comparison was a tautology. When `_wearer_unit_for_peer` happened to return the WP bot (host owns multiple player_units), the LA mesh attached to the wrong skeleton. |
 | Mod(s) | cosmetics_tweaker |
-| Fix version(s) | cosmetics_tweaker v0.9.11-dev (guard rewritten to source `owner_char_path` from the unit's actual existing slot_hat, with SPProfiles fallback); v0.9.13-dev (extracted to pure helper `_la_chars_compatible` + behavioral tests + runtime spawn-monitor). |
+| Fix version(s) | cosmetics_tweaker v0.9.11-dev (guard rewritten to source `owner_char_path` from the unit's actual existing slot_hat, with SPProfiles fallback); v0.9.13-dev (extracted to pure helper `_la_chars_compatible` + behavioral tests + runtime spawn-monitor); v0.9.95-dev (bot mismatch cannot purge human-owner state). |
 | Category | INTEGRATION |
 | Repro | 1. Host equips an LA hat on Grail Knight (or any career). 2. Lobby has a teammate (bot or remote player) whose career differs from the host's, e.g. Warrior Priest. 3. Host starts a mission. 4. Without fix: GK LA hat may attach to WP body on host's view. |
-| Expected post-fix | LA hat stays on the host's GK body. WP body wears its vanilla WP hat. `[cos_la_apply hat] character mismatch — owner_char=... la_char=... — skipping cross-skeleton patch` logs when the cross-character case arises. Runtime monitor `[la-spawn-monitor]` does NOT log a `CROSS-SKELETON MISMATCH` warning. |
-| Detection | (a) `/cos_regression_test` — five `la_chars_compatible_*` checks must pass. (b) Runtime — `[la-spawn-monitor] CROSS-SKELETON MISMATCH` console line (warning level) on any player spawn = regression. (c) Manual — equip an LA hat on GK, start mission with a WP bot, eyeball the bot's hat. |
+| Expected post-fix | LA hat stays on the host's GK body. WP body wears its vanilla WP hat. The mismatch guard logs and skips the cross-skeleton patch. A host-owned bot may produce `CROSS-SKELETON MISMATCH` plus `BOT-OWNER-ALIAS retained`; that is expected evidence that the host store was preserved, not a failed attach. |
+| Detection | (a) `/cos_regression_test` passes the `la_chars_compatible_*` checks and `cos_la_score_screen_apply_wired`. (b) A bot mismatch must be paired with `BOT-OWNER-ALIAS retained`; no bot receives a mesh swap. (c) Manual: equip an LA hat on GK, start a mission with a WP bot, and confirm GK keeps the LA hat while WP remains vanilla through the score lineup. |
 | Tracking | GitHub issue #14. |
 
 

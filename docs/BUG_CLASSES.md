@@ -1509,3 +1509,26 @@ end
 
 ### Related Issues / commits
 - event_tweaker v0.4.25-dev; regression `issue455_boss_event_mutators_guarded`. Related: #386 (scalar-pacing sanitizer — sibling injection-time guard).
+
+## 38. Network-owner identity reused as cosmetic-wearer identity for host-owned bots
+
+**First seen:** 2026-07-13 (cosmetics_tweaker #513 score lineup; fixed v0.9.95-dev)
+**Canonical Issue:** [#513](https://github.com/Ensrick/vermintide-2-tweaker/issues/513)
+**Lives in:** any UI/render path that reconstructs a wearer from a scoreboard or roster row, then keys human-only cosmetic state by `peer_id`.
+
+### Symptoms
+- One human's helmet, skin, or other per-peer cosmetic appears on unrelated bot careers owned by that human. The log can show exact cross-profile mesh swaps even though profile+career matching appears correct.
+- Other peers may see different colours if only one side has the human's synced cosmetic store, while every affected bot still points at the same owner peer.
+
+### Diagnosis pattern
+1. `ScoreboardHelper.get_grouped_topic_statistics` records `player:network_id()` as `peer_id` for every human and bot, and records `is_player_controlled` separately (`scoreboard_helper.lua:352,360,393-398`). For a bot, that peer is its network owner, not its cosmetic wearer.
+2. If a resolver matches a bot's exact profile/career and returns its `peer_id`, a downstream per-peer human store aliases to the host. Multiple unrelated rows can therefore resolve to one peer without any career-only fallback.
+
+### Fix template
+- Treat score identity as a compound boundary: exact profile + exact career + `is_player_controlled == true` + complete peer/local-player tuple. Fail closed for bots and incomplete rows before consulting any human-only per-peer store.
+- Apply the same exact profile+career requirement to live-human fallbacks; never make career optional and never use a peer-only fallback.
+- A bot's skeleton mismatch must never invalidate state keyed to its human owner peer. Keep the cross-skeleton apply guard, but reserve store purging for a confirmed player-controlled wearer mismatch.
+- Regression-fixture one human and two bots with different profile/career pairs but the same peer. Only the human may resolve.
+
+### Related Issues / commits
+- cosmetics_tweaker v0.9.95-dev (#513), pure resolver `_cos_score_identity.lua`, runtime check `cos_la_score_screen_apply_wired`.

@@ -43,6 +43,7 @@ local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
 -- ON = challenges DISABLED). Registers the AchievementManager.outline filter at
 -- dofile time; the deferred template scrub runs from mod.update via LA_OKRI.tick.
 local LA_OKRI = mod:dofile("scripts/mods/cosmetics_tweaker/_la_okri")
+local SCORE_IDENTITY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_score_identity")
 -- v0.9.24-dev: UI diagnostic dump harness. No-op at runtime unless the
 -- enable_debug_logging VMF toggle is on. See _ui_dump.lua header for
 -- what gets dumped per window class.
@@ -4091,14 +4092,14 @@ end)
 -- instantiated directly, never the views.
 
 -- Resolve which peer a score-screen hero belongs to. hero_data carries
--- profile_index but NOT peer_id (LevelEndView._get_hero_from_score drops
--- it), and in adventure each profile is held by at most one human player,
--- so profile identity is sufficient. Bots are irrelevant: the LA store is
--- human-only. ctx = TeamPreviewer's ingame_ui_context (has
+-- profile_index/career_index but NOT peer/local-player identity
+-- (LevelEndView._get_hero_from_score drops it). The snapshot must therefore
+-- match both indexes and prove the row is player-controlled before its
+-- peer/local tuple may address the human-only LA store. ctx = TeamPreviewer's ingame_ui_context (has
 -- profile_synchronizer, state_ingame_running.lua:287); falls back to the
 -- network manager's synchronizer, then to player:profile_index().
 mod._cos_score_peer_for_profile = function(profile_index, career_index, ctx)
-    if not profile_index then return nil end
+    if profile_index == nil or career_index == nil then return nil end
 
     -- #513 follow-up: use the end view's OWN immutable score snapshot first.
     -- LevelEndViewBase stores it on context.players_session_score before the
@@ -4111,18 +4112,12 @@ mod._cos_score_peer_for_profile = function(profile_index, career_index, ctx)
     -- the snapshot restores the identity without touching network-safe item data.
     local scores = ctx and ctx.players_session_score
     if type(scores) == "table" then
-        for _, player_data in pairs(scores) do
-            if type(player_data) == "table"
-                and player_data.profile_index == profile_index
-                and (career_index == nil or player_data.career_index == career_index)
-                and player_data.peer_id
-            then
-                return player_data.peer_id, "score_snapshot"
-            end
-        end
-        -- A present end-view snapshot is authoritative. Never cross-match a
-        -- different live player after an exact profile+career miss.
-        return nil, "score_snapshot_miss"
+        -- ScoreboardHelper assigns every bot the owning host's peer_id
+        -- [src: scoreboard_helper.lua:352,393-398]. That id is network
+        -- ownership, not wearer identity. The pure resolver therefore
+        -- requires an exact profile+career HUMAN row before exposing the
+        -- human-only LA store; bot/untrusted rows fail closed.
+        return SCORE_IDENTITY.resolve_snapshot(profile_index, career_index, scores)
     end
 
     -- Keep the old live-player path as a fallback for non-end-view users of
@@ -4138,17 +4133,21 @@ mod._cos_score_peer_for_profile = function(profile_index, career_index, ctx)
     local ok_players, players = pcall(pm.human_players, pm)
     if not ok_players or type(players) ~= "table" then return nil end
     for _, p in pairs(players) do
-        local pi
+        local pi, ci
         if psync and psync.profile_by_peer and p.peer_id then
             local ok_lpid, lpid = pcall(p.local_player_id, p)
-            local ok_pi, r = pcall(psync.profile_by_peer, psync, p.peer_id, ok_lpid and lpid or 1)
-            if ok_pi then pi = r end
+            local ok_pi, rpi, rci = pcall(psync.profile_by_peer, psync, p.peer_id, ok_lpid and lpid or 1)
+            if ok_pi then pi, ci = rpi, rci end
         end
         if pi == nil and type(p.profile_index) == "function" then
             local ok_pi, r = pcall(p.profile_index, p)
             if ok_pi then pi = r end
         end
-        if pi == profile_index then
+        if ci == nil and type(p.career_index) == "function" then
+            local ok_ci, r = pcall(p.career_index, p)
+            if ok_ci then ci = r end
+        end
+        if pi == profile_index and ci == career_index then
             return p.peer_id, "live_player_fallback"
         end
     end
@@ -4176,7 +4175,8 @@ mod:hook("TeamPreviewer", "_spawn_hero", function(func, self, hero_previewer, he
                 local okn, value = pcall(Network.peer_id)
                 if okn then local_peer = value end
             end
-            local role = not peer and "unresolved" or (peer == local_peer and "local" or "remote")
+            local role = source == "score_snapshot_bot" and "bot"
+                or (not peer and "unresolved" or (peer == local_peer and "local" or "remote"))
             local token = table.concat({ tostring(hero_data.profile_index), tostring(hero_data.career_index),
                 tostring(peer), tostring(source), role,
                 tostring(peer_slots and peer_slots.slot_hat and peer_slots.slot_hat.armoury_key),
@@ -5836,6 +5836,11 @@ mod._la_spawn_monitor = function(unit)
     if not owner then return end
     local wearer_peer = owner.peer_id
     if not wearer_peer then return end
+    local is_player_controlled
+    if type(owner.is_player_controlled) == "function" then
+        local ok_controlled, controlled = pcall(owner.is_player_controlled, owner)
+        if ok_controlled then is_player_controlled = controlled end
+    end
     local equips = _la_equips_by_peer and _la_equips_by_peer[wearer_peer]
     if not equips then
         _dbg("[la-spawn-monitor] unit=%s wearer=%s local_id=%s career=%s — no cached LA equips",
@@ -5871,11 +5876,23 @@ mod._la_spawn_monitor = function(unit)
         mod:warning("[la-spawn-monitor] CROSS-SKELETON MISMATCH wearer=%s career=%s cached_armoury=%s la_path=%s — %s. v0.9.11 guard SHOULD bail the apply, but if you see vanilla logic patching this anyway it's a regression of issue #14.",
             tostring(wearer_peer), tostring(career),
             tostring(hat_entry.armoury_key), tostring(la_unit_path), tostring(reason))
-        -- v0.9.28-dev: self-heal the stale cache entry so the warning stops
-        -- firing on every subsequent spawn. The v0.9.11 guard already bailed
-        -- the visible apply, but the entry would otherwise sit in
-        -- `_la_equips_by_peer[wearer_peer].slot_hat` until peer disconnect.
-        _purge_stale_peer_slot(_la_equips_by_peer, wearer_peer, "slot_hat")
+        -- #513: only a HUMAN mismatch proves that this peer's stored hat is
+        -- stale after a career switch. Bots share their host's peer_id, so a
+        -- bot mismatch is expected ownership aliasing; purging here erased
+        -- the host's valid hat and made the host score preview lose its LA
+        -- paint while a client retained a later broadcast. The apply guard
+        -- above still blocks the cross-skeleton attach in both cases.
+        if SCORE_IDENTITY.should_purge_mismatch(is_player_controlled) then
+            _purge_stale_peer_slot(_la_equips_by_peer, wearer_peer, "slot_hat")
+        elseif printf then
+            mod._cos513_bot_alias_seen = mod._cos513_bot_alias_seen or {}
+            local alias_token = tostring(wearer_peer) .. "|" .. tostring(career)
+            if not mod._cos513_bot_alias_seen[alias_token] then
+                mod._cos513_bot_alias_seen[alias_token] = true
+                printf("[la-state] BOT-OWNER-ALIAS retained peer=%s career=%s slot=slot_hat player_controlled=%s",
+                    tostring(wearer_peer), tostring(career), tostring(is_player_controlled))
+            end
+        end
     end
 end
 
@@ -9437,19 +9454,34 @@ _rt_register("cos_la_score_screen_apply_wired", function()
     -- context score snapshot alone must resolve local and remote rows exactly.
     local fixture = { players_session_score = {
         ["peer-local:1"] = { peer_id = "peer-local", local_player_id = 1,
-            profile_index = 1, career_index = 4 },
+            profile_index = 5, career_index = 4, is_player_controlled = true },
         ["peer-remote:1"] = { peer_id = "peer-remote", local_player_id = 1,
-            profile_index = 2, career_index = 3 },
+            profile_index = 5, career_index = 1, is_player_controlled = true },
+        ["bot-sienna"] = { peer_id = "peer-local", local_player_id = 1,
+            profile_index = 1, career_index = 4, is_player_controlled = false },
+        ["bot-priest"] = { peer_id = "peer-local", local_player_id = 1,
+            profile_index = 2, career_index = 3, is_player_controlled = false },
     } }
-    local p1, s1 = mod._cos_score_peer_for_profile(1, 4, fixture)
-    local p2, s2 = mod._cos_score_peer_for_profile(2, 3, fixture)
+    local p1, s1 = mod._cos_score_peer_for_profile(5, 4, fixture)
+    local p2, s2 = mod._cos_score_peer_for_profile(5, 1, fixture)
     if p1 ~= "peer-local" or p2 ~= "peer-remote"
         or s1 ~= "score_snapshot" or s2 ~= "score_snapshot" then
         return string.format("score snapshot resolver wrong: local=%s/%s remote=%s/%s",
             tostring(p1), tostring(s1), tostring(p2), tostring(s2))
     end
-    local wrong = mod._cos_score_peer_for_profile(1, 3, fixture)
+    local wrong = mod._cos_score_peer_for_profile(5, 3, fixture)
     if wrong ~= nil then return "score resolver ignored career and cross-matched a row" end
+    local bot1, bs1 = mod._cos_score_peer_for_profile(1, 4, fixture)
+    local bot2, bs2 = mod._cos_score_peer_for_profile(2, 3, fixture)
+    if bot1 ~= nil or bot2 ~= nil or bs1 ~= "score_snapshot_bot" or bs2 ~= "score_snapshot_bot" then
+        return string.format("bot owner peer leaked into wearer identity: sienna=%s/%s priest=%s/%s",
+            tostring(bot1), tostring(bs1), tostring(bot2), tostring(bs2))
+    end
+    if SCORE_IDENTITY.should_purge_mismatch(false)
+        or SCORE_IDENTITY.should_purge_mismatch(nil)
+        or not SCORE_IDENTITY.should_purge_mismatch(true) then
+        return "spawn mismatch purge boundary does not distinguish human from bot owner alias"
+    end
 end)
 
 -- #264: reconcile must treat a missing store entry as TERMINAL ("no-entry"),
