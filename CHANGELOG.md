@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - `weapon_tweaker` Moonfire HUD loadout lifecycle
+
+Repo-aggregate entry for Weapon Tweaker v0.12.228-dev / issue #585. Vanilla's energy HUD draws from the career energy extension rather than the equipped item, so drained cross-character energy could remain visible forever after Moonfire was replaced. WT now resets that nonnative stale value once when `slot_ranged` is no longer energy-based, while preserving equipped/stowed Moonfire recharge and native Kerillian handling. No Workshop deployment.
+
 ## 2026-07-13 - `weapon_tweaker` Moonfire stowed recharge parity
 
 Repo-aggregate entry for Weapon Tweaker v0.12.227-dev / issue #584. Cross-character Moonfire now detects the energy weapon from the equipped ranged slot, matching native Kerillian recharge while melee is active. Recharge remains owner-authoritative, uses the native 1.5/s rate only for careers with no native rate, and has one shared wielded/stowed application path. No Workshop deployment.

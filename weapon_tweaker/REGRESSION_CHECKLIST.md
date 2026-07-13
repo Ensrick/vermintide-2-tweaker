@@ -1,5 +1,17 @@
 # Regression Checklist — weapon_tweaker
 
+## #585 - Moonfire energy bar clears after ranged replacement
+
+| Field | Check |
+|---|---|
+| Fix version | WT 0.12.228-dev (unverified candidate) |
+| Automated | `/wt_regression_test`: `issue585_moonfire_energy_hud_loadout_lifecycle`; offline Lua coverage checks nonnative reset, full-state no-op, Moonfire preservation, and native Kerillian exclusion. |
+| Repeater transition | On a non-Kerillian career, drain Moonfire below full, replace it with Repeater Crossbow, and return to gameplay. The energy bar disappears without a mission restart. |
+| Saltzpyre ranged | Repeat by replacing Moonfire with a normal Saltzpyre ranged weapon such as Crossbow or Handgun. No stale bar remains. |
+| Re-equip | Re-equip Moonfire, drain energy, wield melee, and verify the bar/current charge and #584 background recharge work normally. Replacing it again clears the bar once. |
+| Native control | Kerillian Moonfire and normal Kerillian loadout changes retain vanilla energy behavior; WT must not inspect or reset her nonzero native-rate extension. |
+| Log evidence | One `[wt:585] cleared stale energy HUD after ranged-slot replacement` line per successful drained-Moonfire removal; no per-frame spam after energy reaches full. |
+
 ## #584 - Moonfire recharges while stowed
 
 | Field | Check |

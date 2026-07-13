@@ -54,4 +54,21 @@ return function(H, repo_root)
         inv.slots.slot_ranged = normal_bow
         H.equal(Passive.energy_regen_delta(inv, 0, 2), nil)
     end)
+
+    H.test("WT clears stale Moonfire HUD energy after ranged replacement", function()
+        local inv = inventory(normal_bow, "slot_melee")
+        H.equal(Passive.stale_energy_hud_reset_delta(inv, 0, 12, 40), 28)
+        H.equal(Passive.stale_energy_hud_reset_delta(inv, 0, 40, 40), nil)
+        inv.slots.slot_ranged = nil
+        H.equal(Passive.stale_energy_hud_reset_delta(inv, 0, 20, 40), 20)
+    end)
+
+    H.test("WT stale energy cleanup preserves Moonfire and native Kerillian", function()
+        local inv = inventory(moonfire, "slot_melee")
+        H.equal(Passive.stale_energy_hud_reset_delta(inv, 0, 12, 40), nil)
+        inv.slots.slot_ranged = normal_bow
+        H.equal(Passive.stale_energy_hud_reset_delta(inv, 1.5, 12, 40), nil)
+        inv.slots.slot_ranged = moonfire
+        H.equal(Passive.energy_regen_delta(inv, 0, 1), 1.5)
+    end)
 end

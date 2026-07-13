@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.227-dev"
+local MOD_VERSION = "0.12.228-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -5227,6 +5227,60 @@ _rt_register("issue584_moonfire_stowed_native_regen_contract", function()
     inv.slots.slot_ranged = nil
     if passive.energy_regen_delta(inv, 0, 2) ~= nil then
         return "empty ranged slot retained stale Moonfire eligibility"
+    end
+end)
+
+_rt_register("issue585_moonfire_energy_hud_loadout_lifecycle", function()
+    local passive = weapon_backend.passive_charge
+    if not passive or not passive.energy_update_plan then
+        return "passive-charge energy HUD lifecycle planner missing"
+    end
+
+    local moonfire = {
+        actions = { action_one = { default = { kind = "bow_energy" } } },
+    }
+    local repeater = {
+        actions = { action_one = { default = { kind = "crossbow" } } },
+    }
+    local saltz_ranged = {
+        actions = { action_one = { default = { kind = "handgun" } } },
+    }
+    local inv = { slots = { slot_ranged = moonfire }, reads = 0 }
+    function inv:get_slot_data(slot_name)
+        if slot_name == "slot_ranged" then self.reads = self.reads + 1 end
+        return self.slots[slot_name]
+    end
+    function inv:get_item_template(slot_data)
+        return slot_data
+    end
+
+    local action, delta = passive.energy_update_plan(inv, 0, 1, 12, 40)
+    if action ~= "recharge" or delta ~= 1.5 then
+        return "equipped Moonfire did not retain native-rate recharge"
+    end
+    inv.slots.slot_ranged = repeater
+    action, delta = passive.energy_update_plan(inv, 0, 1, 12, 40)
+    if action ~= "reset_stale_hud" or delta ~= 28 then
+        return "Moonfire-to-repeater did not clear stale HUD energy"
+    end
+    inv.slots.slot_ranged = saltz_ranged
+    action, delta = passive.energy_update_plan(inv, 0, 1, 12, 40)
+    if action ~= "reset_stale_hud" or delta ~= 28 then
+        return "Moonfire-to-Saltzpyre-ranged did not clear stale HUD energy"
+    end
+    if passive.energy_update_plan(inv, 0, 1, 40, 40) ~= nil then
+        return "full non-energy state scheduled repeated HUD cleanup"
+    end
+    if passive.energy_update_plan(inv, 1.5, 1, 12, 40) ~= nil then
+        return "native Kerillian energy lifecycle was overridden"
+    end
+    inv.slots.slot_ranged = moonfire
+    action, delta = passive.energy_update_plan(inv, 0, 1, 40, 40)
+    if action ~= "recharge" or delta ~= 1.5 then
+        return "re-equipped Moonfire did not restore energy lifecycle"
+    end
+    if inv.reads ~= 5 then
+        return "energy lifecycle planner exceeded one ranged-slot read per update"
     end
 end)
 

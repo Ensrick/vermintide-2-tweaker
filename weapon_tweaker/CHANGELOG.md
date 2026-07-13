@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.228-dev (2026-07-13) - #585 Moonfire HUD clears after loadout replacement [untested]
+
+- Vanilla `EnergyBarUI` checks only whether the always-present energy extension is below full; it never checks the ranged item. On non-Kerillian careers the native recharge rate is zero, so drained Moonfire energy remained below full forever after replacing the bow and the HUD kept drawing.
+- The owner-side passive-charge planner now selects exactly one action from the equipped ranged slot: recharge Moonfire at 1.5/s, or reset a stranded nonnative energy value to max after Moonfire is removed. Full values schedule no repeated work.
+- The reset uses the existing clamped `energy_system:add_energy` consumption-side API. Native Kerillian's nonzero rate returns before inventory inspection, and #584's melee-active Moonfire recharge remains intact.
+- Added one bounded `[wt:585]` info record per successful stale-HUD reset, runtime regression `issue585_moonfire_energy_hud_loadout_lifecycle`, and two offline lifecycle tests. No Workshop deployment.
+
 ## 0.12.227-dev (2026-07-13) - #584 Moonfire recharge while stowed [untested]
 
 - Changed the cross-character Moonfire eligibility check from the currently wielded item to the equipped `slot_ranged` item, matching vanilla Kerillian behavior while melee is active.

@@ -166,18 +166,45 @@ function M.energy_weapon_in_ranged_slot(inv)
     return _is_energy_weapon(_slot_item_template(inv, "slot_ranged"))
 end
 
--- Pure recharge planner used by the owner-authoritative driver and regression
--- coverage. Returning one native-rate delta (rather than separate wielded and
--- stowed paths) makes the no-double-application invariant explicit.
-function M.energy_regen_delta(inv, native_rate, dt)
+-- Pure owner-side planner used by the driver and regression coverage. One
+-- ranged-slot read selects exactly one action, making recharge/reset mutually
+-- exclusive and preserving #584's no-double-application invariant.
+function M.energy_update_plan(inv, native_rate, dt, energy, max_energy)
     if native_rate ~= nil and native_rate ~= 0 then
         return nil
     end
-    if not dt or dt <= 0 or not M.energy_weapon_in_ranged_slot(inv) then
+
+    if M.energy_weapon_in_ranged_slot(inv) then
+        if not dt or dt <= 0 then
+            return nil
+        end
+        return "recharge", MOONFIRE_REGEN_RATE * dt
+    end
+
+    if type(energy) ~= "number" or type(max_energy) ~= "number"
+        or energy >= max_energy
+    then
         return nil
     end
 
-    return MOONFIRE_REGEN_RATE * dt
+    return "reset_stale_hud", max_energy - energy
+end
+
+function M.energy_regen_delta(inv, native_rate, dt)
+    local action, delta = M.energy_update_plan(inv, native_rate, dt)
+    return action == "recharge" and delta or nil
+end
+
+-- Vanilla EnergyBarUI has no item eligibility check: it draws whenever the
+-- always-present energy extension is below full. A non-Kerillian career has a
+-- zero native recharge rate, so removing Moonfire would otherwise strand that
+-- value below max and leave the bar visible forever (#585). Return a one-shot
+-- consumption-side delta only after slot_ranged ceases to be an energy weapon.
+function M.stale_energy_hud_reset_delta(inv, native_rate, energy, max_energy)
+    local action, delta = M.energy_update_plan(
+        inv, native_rate, nil, energy, max_energy
+    )
+    return action == "reset_stale_hud" and delta or nil
 end
 
 -- Per-unit body. Resolves the wielded weapon for staff venting and the equipped
@@ -214,14 +241,21 @@ local function _drive_local_player(player_unit, dt)
                 pcall(oc.remove_charge, oc, STAFF_VENT_RATE * dt)
             end
         end
-        return
     end
 
     -- --- MOONFIRE BOW: passive energy regen ---
     local energy_ext = ScriptUnit.has_extension(player_unit, "energy_system")
-    local regen_delta = energy_ext
-        and M.energy_regen_delta(inv, energy_ext._recharge_rate, dt)
-    if regen_delta then
+    local energy_action, energy_delta
+    if energy_ext then
+        energy_action, energy_delta = M.energy_update_plan(
+            inv,
+            energy_ext._recharge_rate,
+            dt,
+            energy_ext._energy,
+            energy_ext._max_energy
+        )
+    end
+    if energy_action == "recharge" then
         -- Gate (c): only when the career has NO native regen rate. The four
         -- Kerillian careers carry _recharge_rate = 1.5 and are left untouched.
         local energy = energy_ext._energy
@@ -229,7 +263,17 @@ local function _drive_local_player(player_unit, dt)
         -- Only add when below max (add_energy clamps anyway, but this skips
         -- the pointless call). Refill at the native rate.
         if energy and max_energy and energy < max_energy and energy_ext.add_energy then
-            pcall(energy_ext.add_energy, energy_ext, regen_delta)
+            pcall(energy_ext.add_energy, energy_ext, energy_delta)
+        end
+    elseif energy_action == "reset_stale_hud" then
+        if energy_ext.add_energy then
+            local ok = pcall(energy_ext.add_energy, energy_ext, energy_delta)
+            if ok then
+                -- Bounded naturally: after the successful max-energy delta,
+                -- the predicate returns nil until Moonfire is drained again
+                -- and subsequently removed.
+                mod:info("[wt:585] cleared stale energy HUD after ranged-slot replacement")
+            end
         end
     end
 end
