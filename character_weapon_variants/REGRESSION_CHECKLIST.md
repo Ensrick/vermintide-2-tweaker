@@ -8,6 +8,23 @@ Last updated: 2026-07-13.
 
 ---
 
+## Multiplayer
+
+### issue474-old-musket-remote-continuity — Hot join loses cross-slot identity and custom mesh has no remote report
+
+| Field | Value |
+|-------|-------|
+| Symptom | A joining observer sees the melee-slot Old Musket as a vanilla Handgun; after a live ranged re-equip the custom model is correct but its shot is silent for the observer. |
+| Root cause | Hot-join safety must null the locally appended CWV skin until peer parity is known, removing the only positive variant identity from the vanilla base-item wire shape. Separately, `ActionHandgun` only explicitly plays `fire_sound_event`, but vanilla Handgun defines none; its report is authored in the compiled rifle unit, which the custom mesh does not contain. |
+| Mod(s) | character_weapon_variants |
+| Fix version(s) | CWV v0.1.377-dev, v0.1.394-dev, v0.1.395-dev (#474) |
+| Category | MULTIPLAYER |
+| Repro | Equip Old Musket in melee, let a second player hot-join, then live re-equip and repeat in ranged. Observer checks custom model/pose/transforms and listens to hip/ADS shots; reverse host/client roles. |
+| Expected post-fix | Handshake remains safe, then one post-parity replay restores exact Old Musket identity in either slot. Each real Old Musket shot produces one positional vanilla rifle report for other peers and no additional report for the owner. |
+| Detection | `/cwv_regression_test`: `issue474_old_musket_hot_join_identity_and_remote_fire`; logs show bounded `[cwv:579] replayed ...` on parity enable and one `[cwv:474] remote old-musket rifle fire dispatched ...` per shot. |
+
+---
+
 ## Weapon Skins
 
 ### issue586-dual-axes-fp-residency — Resync cannot wield an unloaded state machine

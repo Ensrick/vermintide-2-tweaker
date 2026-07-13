@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.394-dev"
+local MOD_VERSION = "0.1.395-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -3783,6 +3783,83 @@ end
 
 _create_old_musket_template()
 end  -- end of do-block opened above _OLD_MUSKET_RELOAD_MULT
+
+-- #474: the vanilla handgun's report is authored in the compiled rifle unit as
+-- `player_combat_weapon_rifle_fire` (source bundle 02da877f28111a62, vanilla 3P
+-- handgun unit). The custom Old Musket mesh has no equivalent Wwise flow graph.
+-- ActionHandgun also does not ask vanilla to replicate a shot sound unless its
+-- action has fire_sound_event, and handgun_template_1 intentionally has none.
+-- Keep the owner's compiled-unit sound untouched, then send only the native
+-- remote-husk event when an Old Musket shot actually transitions out of
+-- waiting_to_shoot. This uses the vanilla FirstPersonSystem RPC and a vanilla
+-- NetworkLookup.sound_events id, so it is safe even for a peer without CWV and
+-- does not duplicate audio on the shooting peer.
+do
+	local _OLD_MUSKET_REMOTE_FIRE_EVENT = "player_combat_weapon_rifle_fire"
+	_om._old_musket_remote_fire_event = _OLD_MUSKET_REMOTE_FIRE_EVENT
+
+	_om._is_old_musket_ranged_action = function(action)
+		local template = Weapons and Weapons.old_musket_template
+		local action_one = template and template.actions and template.actions.action_one
+		if type(action_one) ~= "table" or type(action) ~= "table" then return false end
+		for _, sub_action in pairs(action_one) do
+			if sub_action == action then return true end
+		end
+		return false
+	end
+
+	_om._old_musket_shot_completed = function(action, before_state, before_extra, after_state, after_extra)
+		if not _om._is_old_musket_ranged_action(action) or before_state ~= "waiting_to_shoot" then
+			return false
+		end
+		return after_state == "shot" or (after_extra == true and before_extra ~= true)
+	end
+
+	_om._dispatch_old_musket_remote_fire = function(action_instance)
+		local lookup = rawget(_G, "NetworkLookup")
+		local sounds = lookup and lookup.sound_events
+		if not sounds or not rawget(sounds, _OLD_MUSKET_REMOTE_FIRE_EVENT) then
+			_dbg_alert("[cwv:474] remote rifle-fire event missing from vanilla NetworkLookup; shot audio not sent")
+			return false
+		end
+		local owner_unit = action_instance and action_instance.owner_unit
+		if not owner_unit or not Unit.alive(owner_unit) then return false end
+		local ok_fp, first_person = pcall(ScriptUnit.extension, owner_unit, "first_person_system")
+		if not ok_fp or not first_person then return false end
+		local player = Managers and Managers.player and Managers.player:owner(owner_unit)
+		local is_bot = player and player.bot_player == true
+		local ok
+		if is_bot and type(first_person.play_hud_sound_event) == "function" then
+			-- PlayerBotUnitFirstPerson only sends when play_on_husk=true; it also
+			-- plays once on the host, which is vanilla bot behavior.
+			ok = pcall(first_person.play_hud_sound_event, first_person,
+				_OLD_MUSKET_REMOTE_FIRE_EVENT, nil, true)
+		elseif type(first_person.play_remote_hud_sound_event) == "function" then
+			ok = pcall(first_person.play_remote_hud_sound_event, first_person,
+				_OLD_MUSKET_REMOTE_FIRE_EVENT)
+		end
+		if ok then
+			pcall(printf, "[cwv:474] remote old-musket rifle fire dispatched via vanilla husk-audio RPC")
+			return true
+		end
+		return false
+	end
+
+	if rawget(_G, "ActionHandgun") and type(ActionHandgun.client_owner_post_update) == "function" then
+		mod:hook("ActionHandgun", "client_owner_post_update", function(func, self, dt, t, world, can_damage)
+			local action = self.current_action
+			local before_state = self.state
+			local before_extra = self.extra_buff_shot
+			local result = func(self, dt, t, world, can_damage)
+			if _om._old_musket_shot_completed(action, before_state, before_extra,
+					self.state, self.extra_buff_shot) then
+				_om._dispatch_old_musket_remote_fire(self)
+			end
+			return result
+		end)
+		_om._old_musket_remote_fire_hook_installed = true
+	end
+end
 
 -- ============================================================
 -- "Old Musket" melee template (bayonet stance) — Tuskgor spear clone
@@ -12583,6 +12660,61 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
         if not def or def.item_key ~= target_key or reason ~= "skin" then
             return generated_skin .. " does not resolve to its target on the husk"
         end
+    end
+end)
+
+_rt_register("issue474_old_musket_hot_join_identity_and_remote_fire", function()
+    local plan_replay = _om._cwv_skin_replay_payloads
+    if type(plan_replay) ~= "function" then return "post-parity skin replay planner missing" end
+    if not (mod._cwv_skin_wire_surfaces and mod._cwv_skin_wire_surfaces.parity_replay) then
+        return "post-parity skin replay is not registered"
+    end
+    local payloads = plan_replay({
+        wielded_slot = "slot_melee",
+        slots = {
+            slot_melee = {
+                item_data = { name = "es_handgun" },
+                skin = "cwv_es_musket_old_skin",
+            },
+            slot_ranged = {
+                item_data = { name = "es_handgun" },
+                skin = "cwv_es_musket_old_skin",
+            },
+        },
+    })
+    local by_slot = {}
+    for _, payload in ipairs(payloads) do by_slot[payload.slot_name] = payload end
+    for _, slot_name in ipairs({ "slot_melee", "slot_ranged" }) do
+        local payload = by_slot[slot_name]
+        if not payload or payload.item_name ~= "es_handgun"
+                or payload.skin ~= "cwv_es_musket_old_skin" then
+            return slot_name .. " lost Old Musket base+skin identity in the parity replay"
+        end
+    end
+    if not by_slot.slot_melee.wielded or by_slot.slot_ranged.wielded then
+        return "cross-slot replay lost the currently wielded slot"
+    end
+
+    local template = Weapons and Weapons.old_musket_template
+    local action_one = template and template.actions and template.actions.action_one
+    local default = action_one and action_one.default
+    local zoomed = action_one and action_one.zoomed_shot
+    if not default or not zoomed then return "Old Musket ranged actions missing" end
+    if not _om._is_old_musket_ranged_action(default)
+            or not _om._is_old_musket_ranged_action(zoomed) then
+        return "Old Musket hip/ADS action identity is not recognized"
+    end
+    if not _om._old_musket_shot_completed(default, "waiting_to_shoot", false, "shot", false)
+            or _om._old_musket_shot_completed(default, "shot", false, "shot", false) then
+        return "Old Musket shot edge is not exactly-once"
+    end
+    if not _om._old_musket_remote_fire_hook_installed then
+        return "ActionHandgun remote-fire hook missing"
+    end
+    local event = _om._old_musket_remote_fire_event
+    local sounds = rawget(_G, "NetworkLookup") and NetworkLookup.sound_events
+    if event ~= "player_combat_weapon_rifle_fire" or not sounds or not rawget(sounds, event) then
+        return "source-verified vanilla rifle-fire event is not network-safe"
     end
 end)
 
