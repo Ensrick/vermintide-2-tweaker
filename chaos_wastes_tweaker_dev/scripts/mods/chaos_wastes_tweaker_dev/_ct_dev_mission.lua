@@ -260,5 +260,23 @@ mod:command("ct_list_modifiers", "List CW minor modifiers and blessings (for the
     mod:echo("Blessings: %s", table.concat(Cat.BLESSINGS, ", "))
 end)
 
+-- Issue 505 spec completion: Travel/Signature category chips for the mission
+-- dropdown, via gut's filtered-dropdown API (gut_dev 0.2.224-dev). Dropdown
+-- VALUES are 1-based indices into Cat.BASE_LEVELS, so each match fn resolves
+-- the level key first (the key-list form would test raw indices - wrong here).
+-- Nil-safe: gut absent or pre-0.2.224 = silent no-op, the dropdown still gets
+-- gut's generic type-to-filter when present, and stays a plain VMF dropdown
+-- without gut. No other file assigns mod.on_all_mods_loaded (grep-clean).
+mod.on_all_mods_loaded = function()
+    local gut = get_mod("gut_dev") or get_mod("gut")
+    if not (gut and gut.mod_tweaker and gut.mod_tweaker.register_dropdown_categories) then return end
+    local BASE = Cat.BASE_LEVELS
+    gut.mod_tweaker:register_dropdown_categories("ct_dev", "ctdm_base", {
+        { label = "Travel",    match = function(value) local k = BASE[value]; return k ~= nil and k:sub(1, 4) ~= "sig_" end },
+        { label = "Signature", match = function(value) local k = BASE[value]; return k ~= nil and k:sub(1, 4) == "sig_" end },
+    })
+    pcall(printf, "[ct:505] mission dropdown categories registered with gut filtered-dropdown API")
+end
+
 mod._ct_dev_mission_loaded = true
 pcall(printf, "[ct:505] single-mission dev loader registered (/ct_load_mission, /ct_list_missions, keybind ct_dev_load_selected_mission)")

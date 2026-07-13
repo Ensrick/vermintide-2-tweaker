@@ -1,5 +1,10 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.255-dev (2026-07-12) - #505 spec completion: Travel/Signature category chips on the mission dropdown [untested]
+
+### Changed
+- **#505: the dev-loader mission dropdown registers Travel/Signature categories with gut''s filtered-dropdown API** (gut_dev 0.2.224-dev, `register_dropdown_categories`). Dropdown values are indices into the catalog''s BASE_LEVELS, so each category match resolves the level key first. Nil-safe: without gut (or on an older gut) the registration silently no-ops and the dropdown stays plain; with gut but no registration it would still get the generic type-to-filter. This lands the last unbuilt spec item from the user''s 2026-07-12 test ("we need that dropdown feature"); the `mod.on_all_mods_loaded` assignment is the mod''s only one (grep-clean).
+
 ## 0.7.254-dev (2026-07-12) - #487 REWORK: pool underflow repeats ENABLED missions, no vanilla backfill [untested]
 
 ### #487 (bug, 0-critical) - "Chaos Wastes load freeze / underflow fills with arenas + random missions"
