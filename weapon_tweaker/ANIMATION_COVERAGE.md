@@ -145,7 +145,7 @@ All `we_*` natives 🔁 (~14 keys).
 | wh_fencing_sword | Rapier | 📋 | decided we_1h_sword |
 | wh_brace_of_pistols | Brace of Pistols | 📋 | **2-target port**: MODEL = wh_repeating_pistols mesh + ANIMS = to_repeating_crossbow_elf (model-sub queue) |
 | wh_deus_01 | Griffon-foot | 📋 | same 2-target pattern + offhand hide (model-sub queue) |
-| wh_crossbow / wh_crossbow_repeater / wh_repeating_pistols | Saltz ranged ×3 | 📋 | decided we_crossbow_repeater targets; repeater xbow partially helped by global redirect; plain crossbow likely idle no-op |
+| wh_crossbow / wh_crossbow_repeater / wh_repeating_pistols | Saltz ranged ×3 | 📋 | decided we_crossbow_repeater targets; repeater xbow partially helped by global redirect; plain crossbow likely idle no-op. #441 mirror v0.12.212-dev baked we_* `wield_anim_career_3p = to_repeating_crossbow_elf` on wh_crossbow_repeater (keep-preview idle) [untested] |
 | wh_flail_shield / wh_hammer_book / wh_hammer_shield | WP combos | 🔧 | `to_1h_hammer_shield` TRUE on Kerillian — verify native; decided we_1h_spears_shield as fallback |
 | dr_2h_cog_hammer / dr_2h_pick | Cog Hammer / Pickaxe | 📋 | decided we_2h_axe |
 | dr_dual_wield_axes / dr_dual_wield_hammers | Bardin duals | 📋 | decided we_dual_wield_swords |
@@ -172,7 +172,7 @@ All `wh_*` natives 🔁 (~14 keys).
 | es_1h_flail | Empire Flail | ✅ | native-wielder push fix (incl. vanilla bugfix) |
 | bw_1h_crowbill | Crowbill | ✅ | `_default` remap |
 | dr_2h_axe | Greataxe | ✅ | `_default` remap + scale |
-| we_crossbow_repeater | Elf Repeater Crossbow | ✅ | redirect to `to_repeating_crossbow` ("should work almost perfectly") |
+| we_crossbow_repeater | Elf Repeater Crossbow | ✅ | redirect to `to_repeating_crossbow` ("should work almost perfectly"); #441 v0.12.212-dev baked wh_* `wield_anim_career_3p = to_repeating_crossbow` (keep-preview idle was wrong; in-mission redirect never covered the previewer) |
 | we_1h_spears_shield | Elf Spear & Shield | 🧊 | live = legacy sword&shield suffix route; DECISIONS SHO7 retargets to `wh_dual_wield_axe_falchion` — **conflict, not wired** |
 | es_1h_mace / es_1h_sword / we_1h_axe | 1H family | 🔁 | universal vocab fall-through |
 | es_bastard_sword / es_2h_sword_executioner | Bret. Longsword / Executioner | 🔧 | `to_bastard_sword`/`to_2h_sword` TRUE on Saltz — native melee fall-through expected, verify |

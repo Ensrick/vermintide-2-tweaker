@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.211-dev"
+local MOD_VERSION = "0.12.212-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4402,6 +4402,38 @@ _rt_register("saltzpyre_dagger_wield_falchion", function()
     for _, c in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
         if e[c] ~= "to_1h_sword" then
             return "dagger " .. c .. " wield = " .. tostring(e[c]) .. " (expected to_1h_sword)"
+        end
+    end
+end)
+
+_rt_register("volley_crossbow_preview_wield_baked", function()
+    -- #441 (v0.12.212-dev): Kerillian's Volley Crossbow on Saltzpyre showed the wrong
+    -- idle pose in the keep inventory preview. The previewer resolves the 3P wield pose
+    -- from wield_anim_career_3p[career] or the template's base wield_anim directly
+    -- (world_hero_previewer.lua:1060-1065) and never rides the in-mission
+    -- _career_anim_redirect funnel (the preview body has no career extension), so the
+    -- receiver-native wields MUST stay baked in wt_wield_patches.bulk. Guards both
+    -- directions of the Volley Crossbow pair from reverting.
+    local wp = _WIELD_PATCHES_MODULE and _WIELD_PATCHES_MODULE.bulk
+    if not wp then return "skip: wield-patch module not loaded" end
+    local elf = wp.repeating_crossbow_elf_template
+    for _, c in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+        if not elf or elf[c] ~= "to_repeating_crossbow" then
+            return "we_crossbow_repeater " .. c .. " wield = " .. tostring(elf and elf[c]) .. " (expected to_repeating_crossbow)"
+        end
+    end
+    local whx = wp.repeating_crossbow_template_1
+    for _, c in ipairs({ "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister" }) do
+        if not whx or whx[c] ~= "to_repeating_crossbow_elf" then
+            return "wh_crossbow_repeater " .. c .. " wield = " .. tostring(whx and whx[c]) .. " (expected to_repeating_crossbow_elf)"
+        end
+    end
+    -- Live-template layer: confirm the apply actually landed on Weapons.* (catches an
+    -- apply-order regression the data-module guard above would miss).
+    if Weapons and Weapons.repeating_crossbow_elf_template then
+        local live = Weapons.repeating_crossbow_elf_template.wield_anim_career_3p
+        if not live or live.wh_captain ~= "to_repeating_crossbow" then
+            return "live repeating_crossbow_elf_template wield_anim_career_3p.wh_captain = " .. tostring(live and live.wh_captain)
         end
     end
 end)

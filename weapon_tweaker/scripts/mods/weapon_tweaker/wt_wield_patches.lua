@@ -183,8 +183,32 @@ M.bulk = {
     one_handed_sword_shield_template_1 = { we_waywatcher = "to_1h_spear_shield", we_maidenguard = "to_1h_spear_shield", we_shade = "to_1h_spear_shield", we_thornsister = "to_1h_spear_shield", wh_captain = "to_dual_axe_sword_wh", wh_bountyhunter = "to_dual_axe_sword_wh", wh_zealot = "to_dual_axe_sword_wh" },
     one_handed_sword_shield_template_2 = { we_waywatcher = "to_1h_spear_shield", we_maidenguard = "to_1h_spear_shield", we_shade = "to_1h_spear_shield", we_thornsister = "to_1h_spear_shield", wh_captain = "to_dual_axe_sword_wh", wh_bountyhunter = "to_dual_axe_sword_wh", wh_zealot = "to_dual_axe_sword_wh" },
     one_handed_throwing_axes_template = { es_mercenary = "to_1h_hammer", es_huntsman = "to_1h_hammer", es_knight = "to_1h_hammer", es_questingknight = "to_1h_hammer", we_waywatcher = "to_javelin", we_maidenguard = "to_javelin", we_shade = "to_javelin", we_thornsister = "to_javelin", wh_captain = "to_1h_axe", wh_bountyhunter = "to_1h_axe", wh_zealot = "to_1h_axe" },
-    repeating_crossbow_elf_template = { es_mercenary = "to_repeating_handgun", es_huntsman = "to_repeating_handgun", es_knight = "to_repeating_handgun", es_questingknight = "to_repeating_handgun" },
-    repeating_crossbow_template_1 = { es_mercenary = "to_repeating_handgun", es_huntsman = "to_repeating_handgun", es_knight = "to_repeating_handgun", es_questingknight = "to_repeating_handgun" },
+    -- #441 (v0.12.212-dev): ADD wh_* careers (Kerillian Volley Crossbow -> Saltzpyre).
+    -- Was es_* only, so on Saltzpyre the keep inventory previewer fell back to the
+    -- elf template's base wield_anim "to_repeating_crossbow_elf" (repeating_crossbows
+    -- _elf.lua:257) and fired it on the wh 3P body (world_hero_previewer.lua:1060-1065
+    -- reads wield_anim_career_3p[career] or base wield_anim directly) -> wrong idle
+    -- pose in the preview. In-mission was already correct because the animation_event
+    -- funnel's _career_anim_redirect.to_repeating_crossbow_elf redirects non-we_
+    -- careers to "to_repeating_crossbow" - but the preview body has no career
+    -- extension, so that funnel path is a no-op there (the v0.12.146 preview resolver
+    -- is has_anim-gated and does not cover this event). Bake the SAME receiver-native
+    -- event the in-mission redirect produces: "to_repeating_crossbow" is Saltzpyre's
+    -- own Volley Crossbow wield (repeating_crossbows.lua:245; NetworkLookup-registered,
+    -- anims_lookup_table.lua:645). Bardin/Sienna: weapon not exposed in the unlock map.
+    repeating_crossbow_elf_template = { es_mercenary = "to_repeating_handgun", es_huntsman = "to_repeating_handgun", es_knight = "to_repeating_handgun", es_questingknight = "to_repeating_handgun", wh_captain = "to_repeating_crossbow", wh_bountyhunter = "to_repeating_crossbow", wh_zealot = "to_repeating_crossbow" },
+    -- #441 mirror (v0.12.212-dev): ADD we_* careers (Saltzpyre Volley Crossbow ->
+    -- Kerillian) - the identical preview gap in the other direction: base wield_anim
+    -- "to_repeating_crossbow" is not authored native on the elf body, so the preview
+    -- held the wrong idle there too. "to_repeating_crossbow_elf" is Kerillian's native
+    -- Volley Crossbow wield (repeating_crossbows_elf.lua:257) - the same value every
+    -- other we_-receiver firearm row in this table uses. Wire-safe despite not being
+    -- NetworkLookup-registered: wield_anim_career_3p is only ever consumed by direct
+    -- Unit.animation_event (simple_inventory_extension.lua:2011-2013, simple_husk_
+    -- inventory_extension.lua:710/724, world_hero_previewer.lua:1003/1063) - it never
+    -- rides an RPC lookup (unlike wield_anim_not_loaded, see the v0.12.139 block in
+    -- weapon_tweaker.lua).
+    repeating_crossbow_template_1 = { es_mercenary = "to_repeating_handgun", es_huntsman = "to_repeating_handgun", es_knight = "to_repeating_handgun", es_questingknight = "to_repeating_handgun", we_waywatcher = "to_repeating_crossbow_elf", we_maidenguard = "to_repeating_crossbow_elf", we_shade = "to_repeating_crossbow_elf", we_thornsister = "to_repeating_crossbow_elf" },
     repeating_handgun_template_1 = { we_waywatcher = "to_repeating_crossbow_elf", we_maidenguard = "to_repeating_crossbow_elf", we_shade = "to_repeating_crossbow_elf", we_thornsister = "to_repeating_crossbow_elf", wh_captain = "to_repeater_pistol", wh_bountyhunter = "to_repeater_pistol", wh_zealot = "to_repeater_pistol" },
     repeating_pistol_template_1 = { we_waywatcher = "to_repeating_crossbow_elf", we_maidenguard = "to_repeating_crossbow_elf", we_shade = "to_repeating_crossbow_elf", we_thornsister = "to_repeating_crossbow_elf" },
     shortbow_hagbane_template_1 = { es_mercenary = "to_es_longbow", es_huntsman = "to_es_longbow", es_knight = "to_es_longbow", es_questingknight = "to_es_longbow" },
