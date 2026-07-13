@@ -1,5 +1,18 @@
 # Weapon Tweaker Changelog
 
+## 0.12.224-dev (2026-07-13) - #536: receiver-native volley reload + local 3P replay [untested]
+
+- Vanilla `GenericAmmoUserExtension.start_reload_animation` plays reload on the first-person unit and forwards the RPC away from the originating client, but never plays it on that client's third-person body. The originating player now receives one local-only 3P replay after the unchanged vanilla 1P/network path; no extra RPC is sent.
+- Elf Volley Crossbow on standard Saltzpyre careers now re-arms the receiver-native `to_repeating_crossbow` stance before the unchanged generic `reload`/`reload_last` event. This selects Saltzpyre's volley-crossbow sequence instead of the ordinary crossbow graph while preserving native weapons and Kerillian's native elf receiver.
+- Added bounded raw-log-only `[wt:536:reload]` diagnostics for missing/rejected events and dispatched-but-unverified transitions. Event existence and successful dispatch are explicitly not treated as visible-playback proof.
+- Added regression contracts for receiver-native volley routing and vanilla reload-event precedence.
+- **Verify:** in local 3P, fire and reload Elf Volley Crossbow on WHC/BH/Zealot; the reload must be visible and use the volley sequence. Repeat with native Saltzpyre Repeater and native Kerillian Volley Crossbow, then observe the port from a second peer. Run `/wt_regression_test` and retain `[wt:536:reload]` evidence. No Workshop deployment in this change.
+
+### Source evidence
+
+- `generic_ammo_user_extension.lua:287-332` omits a local owner-body animation call; `animation_system.lua:358-375` forwards a client-originated animation to every client except its origin.
+- Native Saltzpyre and elf repeater templates both emit generic `reload`, but enter different receiver stances: `to_repeating_crossbow` versus `to_repeating_crossbow_elf` (`repeating_crossbows.lua:245-250`, `repeating_crossbows_elf.lua:257-262`).
+
 ## 0.12.223-dev (2026-07-13) - #576: reopen false-confirmed 3P ports; bounded playback diagnostics [untested]
 
 - Reopened Ensorcelled Reaper and Elf Spear on standard Saltzpyre careers after live tests disproved their static `[working]` status. Both are back in the 3P picker; confirmation requires complete source-event coverage plus explicit human visual evidence.

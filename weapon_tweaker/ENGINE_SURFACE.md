@@ -11,7 +11,7 @@ and links out. Where a seam is byte-shared with `cwv` / `cosmetics_tweaker`
 `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`; `wt` line numbers are
 `weapon_tweaker.lua` unless a `_*.lua` / `weapon_tweaker_*.lua` module is named.
 `§N` = a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue.
-Grep-verified 2026-07-12 against the decompile and the mod source.
+Grep-verified 2026-07-13 against the decompile and the mod source.
 
 `wt` is the **availability control surface** for cross-character weapon access
 (any character wields any weapon) plus the **cross-character 3P-animation remap
@@ -25,7 +25,7 @@ how wt's three redirect layers intercept the firing point.
 
 ## Hook table
 
-30 engine registration sites (25 live + 5 dormant Big Rebalance), grouped below
+31 engine registration sites (26 live + 5 dormant Big Rebalance), grouped below
 into rows-of-concern. `[hook]` = full wrapper (`mod:hook`, can rewrite
 args/returns); `[safe]` = `mod:hook_safe` (post-callback, no override); `[tbl]`
 = table-form hook (plain-table target, nil-guarded). wt also owns two hook
@@ -38,7 +38,8 @@ the wrapper named in the trap column (`_safe_hook.lua`, issue 26).
 
 | Class.method (kind) | Vanilla behavior at the seam | Why wt hooks it | Trap / invariant |
 |---|---|---|---|
-| `Unit.animation_event` [hook] `_wt_anim_remap.lua` | Engine C-API: fires a state-machine event on a unit's anim graph. Per-action 3P resolution reads `anim_event_3p` (falling back to the 1P `event` when absent) and fires it on the OWNER (3P body) with no career branch [src: `scripts/unit_extensions/weapons/weapon_unit_extension.lua:512`, fired at `:652`] | THE remap funnel: for a cross-access career on a foreign weapon, rewrite the 3P event to one the receiver skeleton authors, via the three redirect layers + per-weapon remap tables (`_wt_anim_remap.lua`; moved from the entry in v0.12.210-dev Phase 2) | Hottest hook in wt - five early-exits before work (nil event, feature-off, 1P unit by captured ref, then per-unit state); 1P `first_person_unit` gets an unconditional early return so 1P is never remapped (memory `feedback_1p_animations_universal`); no `pcall` (engine C, so downstream `func` calls are `pcall`-wrapped); the module keeps its hot tables as file-local upvalues so the per-event path never indirects through `mod._wt` |
+| `Unit.animation_event` [hook] `_wt_anim_remap.lua` | Engine C-API: fires a state-machine event on a unit's anim graph. Per-action 3P resolution reads `anim_event_3p` (falling back to the 1P `event` when absent) and fires it on the OWNER (3P body) with no career branch [src: `scripts/unit_extensions/weapons/weapon_unit_extension.lua:512`, fired at `:652`] | THE singleton remap funnel: for a cross-access career on a foreign weapon, rewrite the 3P event to one the receiver skeleton authors, via the three redirect layers + per-weapon remap tables. The #536 helper in `_wt_reload_3p.lua` also re-arms Saltzpyre's native volley stance before generic elf-volley reload events. | Hottest hook in wt - five early-exits before work (nil event, feature-off, 1P unit by captured ref, then per-unit state); 1P `first_person_unit` gets an unconditional early return so 1P is never remapped (memory `feedback_1p_animations_universal`). **One registration only:** reload routing is called as a helper from this body because VMF drops a second hook on the same pair. No `pcall` around the hook itself (engine C); downstream engine calls are guarded. |
+| `GenericAmmoUserExtension.start_reload_animation` [hook] `_wt_reload_3p.lua` | Selects base/no-ammo/last/override reload event, plays it on the first-person extension, then sends `rpc_anim_event`; it never calls the originating owner body's `Unit.animation_event` [src: `scripts/unit_extensions/generic/generic_ammo_user_extension.lua:287-332`]. A client-originated RPC is relayed to every client except the origin [src: `scripts/entity_system/systems/animation/animation_system.lua:358-375`]. | After vanilla completes unchanged, replay the already-selected event once on the local owner's 3P body only. This restores the animation exposed by a local third-person camera without sending a second RPC; the singleton `Unit.animation_event` funnel then applies the receiver-native volley route. | Owner-local + first-person-extension gate. Event selection mirrors vanilla precedence before vanilla clears transient fields. Do not apply this to `ActiveReloadAmmoUserExtension`, whose native update already calls `Unit.animation_event(owner_unit, reload_event)` [src: `scripts/unit_extensions/weapons/ammo/active_reload_ammo_user_extension.lua:85-100`]. Dispatch and `has_animation_event` remain unverified until visually observed. |
 | `AnimationSystem.anim_event_with_variable_float` [hook] `:4585` | Fires a 3P anim event AND sets an anim variable (e.g. attack-speed scale) in one call [src: `scripts/entity_system/systems/animation/animation_system.lua:139`] | Guard: bail cleanly when the cross-character 3P body lacks the named anim variable, so a foreign weapon's speed-scaled event does not fault on a receiver whose SM never declared the variable (`:4585`) | Must validate `Unit.animation_find_variable` returns a number BEFORE delegating; the variable set is what differs from the plain `Unit.animation_event` path |
 
 ### Wield + per-unit remap state (owner + husk; owner doc: `docs/engine/02`)

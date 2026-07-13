@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.223-dev"
+local MOD_VERSION = "0.12.224-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -382,6 +382,9 @@ mod._wt.local_career_name = _local_career_name
 mod._wt.dbg               = _dbg
 mod._wt.dev_anim_picker   = _wt_dev_anim_picker
 mod:dofile("scripts/mods/weapon_tweaker/_wt_anim_remap")
+-- #536: reload ownership differs from attack remapping, so keep its local-3P
+-- replay and receiver-native volley contract in a separate, reload-only module.
+mod:dofile("scripts/mods/weapon_tweaker/_wt_reload_3p")
 local _safe_has_anim               = mod._wt.safe_has_anim
 local _resolve_preview_wield_event = mod._wt.resolve_preview_wield_event
 local _unit_career_name            = mod._wt.unit_career_name

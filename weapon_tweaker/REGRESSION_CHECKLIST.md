@@ -1,5 +1,16 @@
 # Regression Checklist — weapon_tweaker
 
+## #536 - local 3P reload omission / wrong Elf Volley Crossbow receiver sequence
+
+| Field | Check |
+|---|---|
+| Fix version | 0.12.224-dev (unverified candidate) |
+| Automated | `/wt_regression_test`: `reload_3p_volley_contract_is_receiver_native` and `reload_3p_event_selection_matches_vanilla_precedence` pass. |
+| Solo visual | In local 3P on WHC/BH/Zealot, fire and reload Elf Volley Crossbow. The body must visibly use the multi-stage volley-crossbow sequence, not the ordinary crossbow reload. |
+| Native controls | Saltzpyre Repeater Crossbow and Kerillian's native Elf Volley Crossbow remain unchanged. Active reload does not double-play. |
+| Coop visual | One WT player and one observer verify that origin and remote views both show the same volley reload without duplicate RPCs or crashes. |
+| Log evidence | `[wt:536:reload]` reports receiver stance and target. `dispatch_unverified` / `local_3p_replay_dispatched` requires human visual confirmation; missing/rejected transitions are failures. |
+
 ## #576 - false-confirmed scythe / elf-spear Saltzpyre 3P chains
 
 | Field | Check |

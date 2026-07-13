@@ -2641,6 +2641,20 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
     local career = _unit_career_name(unit) or (is_local and _local_career_name()) or nil
     local state = _state_for(unit)
 
+    -- #536 consolidated reload router. Unit.animation_event is wt's singleton
+    -- hot funnel; _wt_reload_3p supplies only a helper so VMF never sees a
+    -- duplicate hook registration. Re-arm the receiver-native volley stance,
+    -- then dispatch the unchanged generic reload token through the engine.
+    local reload_router = (event_name == "reload" or event_name == "reload_last")
+        and WT.reload_3p_route
+    if reload_router then
+        local reload_stance, reload_target = reload_router(unit, event_name, state, career, is_local)
+        if reload_target then
+            pcall(func, unit, reload_stance)
+            return func(unit, reload_target, ...)
+        end
+    end
+
     -- ============================================================
     -- [wt:play] dev-picker play-path trace (v0.12.145-dev) — LOGGING ONLY.
     -- ============================================================
