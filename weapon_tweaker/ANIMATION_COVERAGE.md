@@ -198,7 +198,7 @@ All `wh_*` natives 🔁 (~14 keys).
 | es_blunderbuss / es_handgun | Blunderbuss / Handgun | 🔧 | Saltz HAS `to_blunderbuss`/`to_handgun` per probe — may fall through natively despite decided wh_crossbow; verify before wiring |
 | es_repeating_handgun | Repeater Handgun | 📋 | decided wh_repeating_pistols |
 | we_shortbow / we_shortbow_hagbane | Shortbow / Hagbane | 📋 | **model sub → Volley Crossbow unit** (user override; model-sub queue) |
-| we_deus_01 | Moonfire Bow | 📋 | decided wh_crossbow (AOE/puff stat hooks already exist separately) |
+| we_deus_01 | Moonfire Bow | 🧪 | **#580 v0.12.225-dev:** 3P model sub -> Crossbow (+bolt; local/husk/preview); wh-scoped fire/aim vocabulary; 1P Moonfire untouched. Awaiting solo + coop verification. |
 | dr_1h_axe / dr_1h_hammer | Bardin 1H | 🔁 | fall-through |
 | dr_1h_throwing_axes | Throwing Axes | 📋 | decided wh_1h_axe ("will likely be goofy") |
 | dr_rakegun / dr_drakegun | Grudge-Raker / Drakegun | 📋 | decided wh_crossbow_repeater |

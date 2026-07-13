@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.225-dev (2026-07-13) - #580: Saltzpyre Moonfire crossbow presentation [untested]
+
+- Saltzpyre's Witch Hunter Captain, Bounty Hunter, and Zealot now render the Moonfire Bow (`we_deus_01`) as Saltzpyre's native crossbow in third person. The existing longbow presentation pipeline is reused for local-body, remote-husk, inventory/hero-preview, crossbow attachment-linking, and bolt-prop paths.
+- Added a `we_deus_01_template_1.wh_` runtime event map: `attack_shoot_fast -> attack_shoot`, `attack_shoot_fast_last -> attack_shoot_last`, and `draw_bow -> to_zoom`. The existing shared wield patch supplies `to_crossbow`; Warrior Priest remains excluded.
+- First-person Moonfire is deliberately untouched: bow mesh, longbow state machine, energy actions, projectiles, aim/fire events, and generic reload transition retain vanilla values.
+- Added bounded `[wt:580]` template diagnostics and regression check `issue580_moonfire_saltzpyre_crossbow_3p_contract`. Workshop not uploaded.
+
 ## 0.12.224-dev (2026-07-13) - #536: receiver-native volley reload + local 3P replay [untested]
 
 - Vanilla `GenericAmmoUserExtension.start_reload_animation` plays reload on the first-person unit and forwards the RPC away from the originating client, but never plays it on that client's third-person body. The originating player now receives one local-only 3P replay after the unchanged vanilla 1P/network path; no extra RPC is sent.

@@ -1,5 +1,16 @@
 # Regression Checklist — weapon_tweaker
 
+## #580 - Saltzpyre Moonfire Bow uses crossbow 3P presentation
+
+| Field | Check |
+|---|---|
+| Fix version | 0.12.225-dev (unverified candidate) |
+| Automated | `/wt_regression_test`: `issue580_moonfire_saltzpyre_crossbow_3p_contract` passes. It checks the shared mission/preview predicate, all three non-Priest wield mappings, wh-scoped fire/aim remaps, target linking, and the vanilla 1P fingerprint. |
+| Solo visual | On WHC, BH, and Zealot: equip Moonfire in the keep and mission, swap/stow, hip-fire, hold aim, and charged-fire. The body/preview shows Saltzpyre's crossbow and bolt while first person remains the Moonfire Bow. |
+| Coop visual | A second peer observes each career spawn, equip/swap, aim, and fire. The remote husk must retain the visible crossbow and bolt. Repeat after joining in progress. |
+| Reload/energy | Drain Moonfire energy and press reload during/after attacks. No crossbow gameplay reload or ammo behavior may replace Moonfire's vanilla energy transition; only the 3P presentation vocabulary changes. |
+| Log evidence | One bounded `[wt:580] event=applied ... native_we_untouched=true remaps=3` line at template patch time. Existing `[wt sp-longbow-crossbow]` entry/swap/skip lines identify mission/husk swap results. |
+
 ## #536 - local 3P reload omission / wrong Elf Volley Crossbow receiver sequence
 
 | Field | Check |

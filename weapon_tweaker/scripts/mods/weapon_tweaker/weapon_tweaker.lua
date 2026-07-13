@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.224-dev"
+local MOD_VERSION = "0.12.225-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -1045,6 +1045,20 @@ _force_load_brace_repeater_3p_unit()
 local _SP_CROSSBOW_3P_UNIT = "units/weapons/player/wpn_empire_crossbow_t1/wpn_empire_crossbow_tier1_3p"
 local _SP_CROSSBOW_BOLT_3P_UNIT = "units/weapons/player/wpn_crossbow_quiver/wpn_crossbow_bolt_3p"
 
+-- #580: all bow-like item keys whose Saltzpyre presentation is substituted
+-- with his native crossbow. Keep this one predicate shared by the in-mission
+-- spawn dispatcher and keep preview helper so those two ownership surfaces
+-- cannot drift. This controls 3P units only; the swap helper returns both 1P
+-- values from vanilla unchanged.
+local _SP_CROSSBOW_PRESENTATION_ITEMS = {
+    es_longbow = true,
+    we_longbow = true,
+    we_deus_01 = true,
+}
+local function _is_sp_crossbow_presentation_item(item_name)
+    return _SP_CROSSBOW_PRESENTATION_ITEMS[item_name] == true
+end
+
 local function _force_load_sp_crossbow_3p_units()
     if not (Managers and Managers.package) then return end
     for ref_name, path in pairs({
@@ -1482,6 +1496,38 @@ local function _patch_longbow_template_1_for_saltzpyre()
 end
 
 _patch_longbow_template_1_for_saltzpyre()
+
+-- ============================================================
+-- #580 Saltzpyre Moonfire Bow -> Crossbow: 3P event vocabulary
+-- ============================================================
+-- Vanilla `we_deus_01_template_1` uses the same source events as Kerillian's
+-- longbow: rapid fire `attack_shoot_fast`, charged fire `attack_shoot`, and
+-- aim `draw_bow`. Saltzpyre's native crossbow 3P state machine instead authors
+-- `attack_shoot` and `to_zoom`. Register the substitutions in wt's runtime,
+-- career-scoped funnel; never mutate the shared action tables, `wield_anim`,
+-- first-person units, energy behavior, projectile data, or state machine.
+-- `wt_wield_patches.lua` owns the matching wh_* `to_crossbow` wield entries.
+local _WE_MOONFIRE_CROSSBOW_ANIM_REMAP_3P = {
+    attack_shoot_fast      = "attack_shoot",
+    attack_shoot_fast_last = "attack_shoot_last",
+    draw_bow               = "to_zoom",
+}
+
+local function _patch_moonfire_template_1_for_saltzpyre()
+    if not Weapons or not Weapons.we_deus_01_template_1 then
+        _dbg_alert("[wt:580] event=skip template=we_deus_01_template_1 reason=missing")
+        return
+    end
+
+    _3p_template_remaps.we_deus_01_template_1 =
+        _3p_template_remaps.we_deus_01_template_1 or {}
+    _3p_template_remaps.we_deus_01_template_1.we_ = false
+    _3p_template_remaps.we_deus_01_template_1.wh_ =
+        _WE_MOONFIRE_CROSSBOW_ANIM_REMAP_3P
+    _dbg("[wt:580] event=applied template=we_deus_01_template_1 target=crossbow_template_1 scope=wh_ native_we_untouched=true remaps=3")
+end
+
+_patch_moonfire_template_1_for_saltzpyre()
 
 -- ============================================================
 -- Kruber Repeating Pistol → Repeating Handgun: base template anim patches
@@ -2744,7 +2790,7 @@ mod:traced_hook("GearUtils", "spawn_inventory_unit", function(func, world, hand,
     if not item_data then
         return v_w3p, v_a3p, v_w1p, v_a1p
     end
-    if item_data.name == "es_longbow" or item_data.name == "we_longbow" then
+    if _is_sp_crossbow_presentation_item(item_data.name) then
         return _wt_longbow_3p_swap_apply(v_w3p, v_a3p, v_w1p, v_a1p, world, hand, item_template, item_data, owner_unit_1p, owner_unit_3p, material_settings_name)
     end
     if item_data.name == "wh_repeating_pistols" then
@@ -3444,7 +3490,7 @@ end)
 -- this helper unconditionally on every equip_item; helper short-circuits when
 -- item_name isn't the longbow.
 _wt_longbow_preview_swap_apply = function(self, item_name, slot)
-    if item_name ~= "es_longbow" and item_name ~= "we_longbow" then return end
+    if not _is_sp_crossbow_presentation_item(item_name) then return end
     local career = self._current_career_name
     if not career or career:sub(1, 3) ~= "wh_" then return end
 
@@ -5022,6 +5068,58 @@ _rt_register("issue569_wp_hammer_remap_orientation_scope", function()
     local zero = plan_values(0, 0, 0, 0, 0, 0)
     if zero.position or zero.rotation then
         return "zero Hold-Pose sliders are not a no-op"
+    end
+end)
+
+_rt_register("issue580_moonfire_saltzpyre_crossbow_3p_contract", function()
+    if not rawget(_G, "Weapons") then return "skip: Weapons not loaded" end
+    local tpl = Weapons.we_deus_01_template_1
+    if type(tpl) ~= "table" then return "we_deus_01_template_1 missing" end
+
+    for _, key in ipairs({ "es_longbow", "we_longbow", "we_deus_01" }) do
+        if not _is_sp_crossbow_presentation_item(key) then
+            return "Saltzpyre crossbow presentation predicate missing " .. key
+        end
+    end
+    if _is_sp_crossbow_presentation_item("we_shortbow") then
+        return "crossbow presentation predicate widened to unrelated bow"
+    end
+
+    local wield = tpl.wield_anim_career_3p or {}
+    for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+        if wield[career] ~= "to_crossbow" then
+            return string.format("Moonfire wield mismatch %s=%s", career, tostring(wield[career]))
+        end
+    end
+    if wield.wh_priest ~= nil then return "Warrior Priest incorrectly included" end
+
+    local scoped = _3p_template_remaps.we_deus_01_template_1 or {}
+    if scoped.we_ ~= false then return "native Kerillian remap exemption missing" end
+    local wh = scoped.wh_
+    if type(wh) ~= "table"
+        or wh.attack_shoot_fast ~= "attack_shoot"
+        or wh.attack_shoot_fast_last ~= "attack_shoot_last"
+        or wh.draw_bow ~= "to_zoom" then
+        return "Moonfire Saltzpyre crossbow event map drifted"
+    end
+
+    -- Decompile fingerprint: #580 must not rewrite shared 1P/action behavior.
+    local a1 = tpl.actions and tpl.actions.action_one
+    local a2 = tpl.actions and tpl.actions.action_two
+    if tpl.wield_anim ~= "to_longbow"
+        or tpl.state_machine ~= "units/beings/player/first_person_base/state_machines/ranged/longbow"
+        or not a1 or not a1.default or a1.default.anim_event ~= "attack_shoot_fast"
+        or not a1.shoot_charged or a1.shoot_charged.anim_event ~= "attack_shoot"
+        or not a2 or not a2.default or a2.default.anim_event ~= "draw_bow"
+        or a1.default.kind ~= "bow_energy" or a2.default.kind ~= "aim_energy" then
+        return "Moonfire shared/1P action fingerprint changed"
+    end
+
+    local xbow = Weapons.crossbow_template_1
+    if not (xbow and xbow.left_hand_attachment_node_linking
+        and xbow.left_hand_attachment_node_linking.third_person
+        and xbow.ammo_data and xbow.ammo_data.ammo_unit_attachment_node_linking) then
+        return "target crossbow 3P linking contract missing"
     end
 end)
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - `weapon_tweaker` Saltzpyre Moonfire presentation
+
+Repo-aggregate entry for Weapon Tweaker v0.12.225-dev / issue #580. Moonfire Bow on WHC, Bounty Hunter, and Zealot now reuses the established Saltzpyre crossbow third-person model, bolt, attachment, preview, husk, and event-remap pipeline. Kerillian and all first-person Moonfire behavior remain untouched. Added bounded diagnostics and runtime regression coverage; awaiting solo and coop verification. Workshop not uploaded.
+
 ## 2026-07-13 - `character_weapon_variants` dual-axes cosmetic parity
 
 Repo-aggregate entry for CWV v0.1.390-dev / issue #579. Dual Axes now derives
