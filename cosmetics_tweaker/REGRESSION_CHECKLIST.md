@@ -4,7 +4,25 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-11.
+Last updated: 2026-07-13.
+
+---
+## Chaos Wastes integration
+
+### la-deus-yield-active-mission-only — Pilgrimage Chamber must retain LA weapons
+
+| Field | Value |
+|-------|-------|
+| Symptom | A recalled LA weapon cosmetic is visible in inventory/customization previews but disappears from the live weapon after entering Pilgrimage Chamber. |
+| Root cause | The weapon precedence gate treated mechanism `deus` as synonymous with an active expedition. Vanilla uses that mechanism for `inn_deus` (Pilgrimage Chamber), `map_deus` (route/shrine map), and `deus` (actual mission). |
+| Mod(s) | cosmetics_tweaker |
+| Fix version(s) | cosmetics_tweaker v0.9.88-dev |
+| Category | INTEGRATION |
+| Repro | Equip an LA cosmetic on Spear and Shield in the keep; enter `morris_hub`; then begin an expedition and upgrade the weapon. |
+| Expected post-fix | LA remains on the live weapon in Pilgrimage Chamber; the rolled/upgraded Chaos Wastes skin wins in an expedition mission; LA reasserts in a hub without losing saved or synced state. |
+| Detection | `/cos_regression_test` passes `cos_la_deus_yield_active_mission_only`; staging log contains one `[la-state] DEUS-YIELD bypass mechanism=deus game_mode=inn_deus` marker; no `DEUS-YIELD suppressed` marker occurs until game mode `deus`. |
+| Tracking | GitHub issue #518. |
+
 
 ---
 ## Multiplayer / Network Sync

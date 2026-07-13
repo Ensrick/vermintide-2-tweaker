@@ -485,10 +485,20 @@ are stored under (§6.9 / the EMIT-ON-EXIT dual-namespace write) matches every
 CW-generated weapon, and the template-keyed re-apply paths repainted the keep's
 LA pick over the rolled deus skin on every wield (issue #518).
 
-**Rule (v0.9.84-dev):** `mod._la_deus_weapon_yield()` returns true while
-`Managers.mechanism:current_mechanism_name() == "deus"`. Weapon-side applies
-(kind `offhand`/`illusion`, plus the §6.9 vanilla-mesh store and the live-body
-`_offhand_selection` mesh/paint) consult it and YIELD; hats/armor stay live.
+**Rule (v0.9.88-dev):** `mod._la_deus_weapon_yield()` returns true only when
+`Managers.mechanism:current_mechanism_name() == "deus"` **and** the current game-mode
+key is `"deus"`. The mechanism alone is not an expedition boundary: vanilla assigns
+`morris_hub`/Pilgrimage Chamber to `inn_deus`, route and shrine nodes to `map_deus`,
+and only playable expedition nodes to `deus` (`deus_mechanism.lua:28-35,730-744`;
+`deus_node_settings.lua:3-22`). The gate reads the live
+`Managers.state.game_mode:game_mode_key()` (`game_mode_manager.lua:915-917`) with
+`Managers.level_transition_handler:get_current_game_mode()` as its early-load fallback
+(`level_transition_handler.lua:387-389`). If neither key is ready yet, the current
+level uses vanilla's own classifier: `morris_hub` is hub, `dlc_morris_map` is map,
+and every other deus level is ingame (`deus_mechanism.lua:49-59`). Weapon-side applies (kind
+`offhand`/`illusion`, plus the §6.9 vanilla-mesh store and the live-body
+`_offhand_selection` mesh/paint) consult it and YIELD only in actual missions;
+hats/armor and staging-hub weapon cosmetics stay live.
 Gates sit at: the `get_item_units` husk LA + vanilla branches, the live-body
 `_offhand_selection` branch (create_equipment only; preview surfaces keep the
 pick — they render the keep instance), `_apply_la_offhand_to_units` "ingame",
@@ -496,8 +506,10 @@ pick — they render the keep instance), `_apply_la_offhand_to_units` "ingame",
 suppressed` printf), the local `_wield_slot` re-apply, and `_la_reconcile`
 (terminal reason `"deus-yield"`, treated like `"no-entry"` by the pending
 drain). Stores/emits are NOT gated — state stays warm so LA re-asserts the
-moment the mechanism returns to `adventure`. rt-check:
-`cos_la_deus_yield_gate_wired`. Follow-up (not shipped): inject LA variants
+moment the context leaves an active `deus` game mode. A deduplicated
+`[la-state] DEUS-YIELD bypass mechanism=deus game_mode=inn_deus` marker proves the
+Pilgrimage exception. rt-check: `cos_la_deus_yield_active_mission_only`. Follow-up
+(not shipped): inject LA variants
 into the deus skin pools (`WeaponSkins.skin_combinations`) per the issue's
 desired end state.
 

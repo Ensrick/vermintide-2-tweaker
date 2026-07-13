@@ -1,5 +1,34 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.88-dev - 2026-07-13 - #518 Pilgrimage Chamber keeps LA weapon cosmetics [untested]
+
+The v0.9.84 Chaos Wastes precedence gate was too broad: it yielded every
+Loremaster weapon cosmetic whenever the current mechanism was `deus`. That mechanism
+also owns the Pilgrimage Chamber staging keep (`morris_hub`, game mode `inn_deus`) and
+the route/shrine map (`map_deus`), so a correctly recalled Spear and Shield cosmetic
+disappeared from the live weapon upon entering the chamber even though the inventory
+character and cosmetic-menu previews still showed it.
+
+- **Fix.** Yield now requires both mechanism `deus` and game mode `deus`. The live
+  `GameModeManager:game_mode_key()` is preferred, with promoted
+  `LevelTransitionHandler:get_current_game_mode()` as the early-load fallback. This
+  preserves LA weapon rendering in `inn_deus` and `map_deus` while actual expedition
+  missions still yield to their starting/upgrade rarity skins. If both game-mode
+  surfaces are still starting, the current level uses vanilla's same two-special-level
+  classifier (`morris_hub`, `dlc_morris_map`, otherwise mission). Synced state, husk
+  handling, preview paths, and return-to-keep reassertion remain unchanged.
+- **Source.** `deus_mechanism.lua:28-35,730-744` defines the hub/map/mission game-mode
+  split; `deus_node_settings.lua:3-22` maps node types to `inn_deus`, `map_deus`, and
+  `deus`; `game_mode_manager.lua:915-917` and
+  `level_transition_handler.lua:387-389` expose the live/promoted keys.
+- **Diagnostics.** One deduplicated `[la-state] DEUS-YIELD bypass mechanism=deus
+  game_mode=inn_deus` line proves the staging exception ran without per-frame spam.
+- **Regression.** `cos_la_deus_yield_active_mission_only` exercises normal keep,
+  Pilgrimage Chamber, route/shrine map, and active expedition cases as pure data.
+- **Verify.** Enter Pilgrimage Chamber with an LA cosmetic equipped on Spear and
+  Shield: it remains on the live weapon. Begin an expedition and upgrade the weapon:
+  the Chaos Wastes rarity skin wins. Return to a hub: the LA cosmetic reappears.
+
 ## 0.9.87-dev - 2026-07-13 - #427 _dbg_alert log-only via engine printf [untested]
 
 - Both `_dbg_alert` copies (`cosmetics_tweaker.lua` + the byte-identical `_cos_glow.lua` copy) rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template).

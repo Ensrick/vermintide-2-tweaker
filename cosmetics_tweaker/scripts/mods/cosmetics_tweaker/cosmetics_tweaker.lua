@@ -55,7 +55,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.87-dev"
+local MOD_VERSION = "0.9.88-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -3023,7 +3023,8 @@ local _la_equips_by_peer = {}
 -- untouched here). Attached to `mod` (main chunk is near the Lua 200-local ceiling).
 mod._offhand_mesh_by_peer = mod._offhand_mesh_by_peer or {}
 
--- #518: DEUS-YIELD gate. In a Chaos Wastes (deus) run every weapon slot holds a
+-- #518: DEUS-YIELD gate. In an active Chaos Wastes expedition mission every
+-- weapon slot holds a
 -- deus-GENERATED instance: generation rolls item.skin per rarity
 -- (deus_weapon_generation.lua:246-249) and every shrine upgrade RE-rolls it at the
 -- target rarity (:318-321) from WeaponSkins.skin_combinations - the skin change IS
@@ -3034,17 +3035,69 @@ mod._offhand_mesh_by_peer = mod._offhand_mesh_by_peer or {}
 -- onto every CW starting/upgraded weapon and stomped the rolled skin on every
 -- wield (issue #518 log: "LOCAL wield-reapply stored_key=
 -- one_handed_sword_shield_template_2" repeating during SPAWN mechanism=deus).
--- PRECEDENCE: CW upgrade cosmetics WIN inside a deus run; LA re-asserts outside.
--- The gate reads the LIVE mechanism on every call and the synced stores stay
--- warm, so returning to the keep (mechanism=adventure) restores LA rendering
--- with no extra work. WEAPON-side only: hats/armor (kind="hat"/"armor") are the
+-- PRECEDENCE: CW upgrade cosmetics WIN only in an active expedition mission.
+-- The deus mechanism also owns the Pilgrimage Chamber (game mode "inn_deus")
+-- and route/shrine map ("map_deus"); only mission nodes use game mode "deus"
+-- (deus_mechanism.lua:28-35,730-744; deus_node_settings.lua:3-22). LA must stay
+-- live in those staging/map contexts. The gate reads both values on every call
+-- and the synced stores stay warm, so returning to a hub re-enables rendering
+-- without state loss. WEAPON-side only: hats/armor (kind="hat"/"armor") are the
 -- player's real backend cosmetics, persist through CW, and are never gated.
--- Attached to `mod` (main chunk is near the Lua 200-local ceiling).
+-- Helpers are attached to `mod` (main chunk is near the Lua 200-local ceiling).
+mod._la_weapon_yield_for_context = function(mechanism_name, game_mode_key)
+    return mechanism_name == "deus" and game_mode_key == "deus"
+end
+
 mod._la_deus_weapon_yield = function()
     local mm = Managers and Managers.mechanism
     if not (mm and mm.current_mechanism_name) then return false end
-    local ok, name = pcall(mm.current_mechanism_name, mm)
-    return (ok and name == "deus") or false
+    local mechanism_ok, mechanism_name = pcall(mm.current_mechanism_name, mm)
+    if not mechanism_ok or mechanism_name ~= "deus" then return false end
+
+    -- Prefer the live manager (`GameModeManager.game_mode_key`, source :915-917).
+    -- During early equipment creation it may not exist yet, so fall back to the
+    -- promoted transition data (`LevelTransitionHandler.get_current_game_mode`,
+    -- source :387-389). Both report inn_deus/map_deus/deus using the node table.
+    local game_mode_key
+    local gm = Managers and Managers.state and Managers.state.game_mode
+    if gm and gm.game_mode_key then
+        local ok, value = pcall(gm.game_mode_key, gm)
+        if ok then game_mode_key = value end
+    end
+    local lth = Managers and Managers.level_transition_handler
+    if not game_mode_key then
+        if lth and lth.get_current_game_mode then
+            local ok, value = pcall(lth.get_current_game_mode, lth)
+            if ok then game_mode_key = value end
+        end
+    end
+    if not game_mode_key and lth and lth.get_current_level_key then
+        -- Last early-load fallback. Vanilla's level classifier reserves only
+        -- morris_hub and dlc_morris_map; every other deus level is an ingame
+        -- node (deus_mechanism.lua:49-59). This keeps the fail direction safe:
+        -- staging never yields, while a mission cannot briefly repaint LA over
+        -- its rolled skin merely because GameModeManager is still starting.
+        local ok, level_key = pcall(lth.get_current_level_key, lth)
+        if ok and level_key == "morris_hub" then
+            game_mode_key = "inn_deus"
+        elseif ok and level_key == "dlc_morris_map" then
+            game_mode_key = "map_deus"
+        elseif ok and level_key then
+            game_mode_key = "deus"
+        end
+    end
+
+    local should_yield = mod._la_weapon_yield_for_context(mechanism_name, game_mode_key)
+    if not should_yield and printf then
+        mod._la_deus_context_seen = mod._la_deus_context_seen or {}
+        local seen_key = tostring(mechanism_name) .. "/" .. tostring(game_mode_key)
+        if not mod._la_deus_context_seen[seen_key] then
+            mod._la_deus_context_seen[seen_key] = true
+            printf("[la-state] DEUS-YIELD bypass mechanism=%s game_mode=%s (LA weapon cosmetics remain live)",
+                tostring(mechanism_name), tostring(game_mode_key))
+        end
+    end
+    return should_yield
 end
 
 if BackendUtils then
@@ -8876,13 +8929,29 @@ _rt_register("cos_la_reconcile_and_pull_wired", function()
     end
 end)
 
--- #518: the deus-yield gate must exist and report false OUTSIDE a deus run
--- (keep/adventure = mechanism "adventure"); every weapon-side LA apply path
--- consults it before rendering, so losing it regresses to LA stomping Chaos
--- Wastes upgrade skins. Functional: call it in the current (non-deus) context.
-_rt_register("cos_la_deus_yield_gate_wired", function()
+-- #518: the yield boundary is GAME MODE, not mechanism alone. The deus
+-- mechanism owns Pilgrimage Chamber (inn_deus), route/shrine map (map_deus),
+-- and expedition missions (deus). LA stays live in the first two and yields
+-- only in the third. Pure-table cases prevent the mechanism-only regression.
+_rt_register("cos_la_deus_yield_active_mission_only", function()
+    if type(mod._la_weapon_yield_for_context) ~= "function" then
+        return "mod._la_weapon_yield_for_context missing (#518 boundary helper)"
+    end
     if type(mod._la_deus_weapon_yield) ~= "function" then
         return "mod._la_deus_weapon_yield missing (#518 deus-yield gate)"
+    end
+    local cases = {
+        { "adventure", "inn", false, "normal keep" },
+        { "deus", "inn_deus", false, "Pilgrimage Chamber" },
+        { "deus", "map_deus", false, "route/shrine map" },
+        { "deus", "deus", true, "active expedition mission" },
+    }
+    for _, case in ipairs(cases) do
+        local actual = mod._la_weapon_yield_for_context(case[1], case[2])
+        if actual ~= case[3] then
+            return string.format("%s: mechanism=%s game_mode=%s expected=%s got=%s",
+                case[4], case[1], case[2], tostring(case[3]), tostring(actual))
+        end
     end
     local ok, v = pcall(mod._la_deus_weapon_yield)
     if not ok then return "deus-yield gate errored: " .. tostring(v) end
