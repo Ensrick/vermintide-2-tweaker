@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.208-dev"
+local MOD_VERSION = "0.2.209-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -794,6 +794,13 @@ local function _gt_godmode_active(unit)
     -- it so a missed "off" (or a disconnect) can't leave them invincible forever.
     return seen ~= nil and (_gt_net_clock - seen) < _GT_GODMODE_TIMEOUT
 end
+
+-- Issue #529: exported for the godmode stamina gate merged into the EXISTING
+-- GenericStatusExtension.add_fatigue_points hook in _gt_hacks.lua (one hook per
+-- (Class, method) — the infinite-stamina wrapper already owns that pair). The
+-- closure reads the live _godmode / _gt_godmode_peers upvalues, so the export
+-- stays current without re-assignment. Consumers must nil-check (dofile order).
+mod._gt_godmode_active = _gt_godmode_active
 
 -- Block fall damage at the source on the local player when godmode is on.
 -- The server-side `add_damage_network` hook below covers the host-self case,
@@ -2720,6 +2727,34 @@ _rt_register("fall_damage_widgets_and_scaling", function()
     local live = PlayerUnitMovementSettings.fall.heights.FALL_DAMAGE_MULTIPLIER
     if type(live) ~= "number" or live < 0 then
         return "FALL_DAMAGE_MULTIPLIER not a non-negative number after apply (got " .. tostring(live) .. ")"
+    end
+end)
+
+_rt_register("gt529_godmode_stamina_gate_wired", function()
+    -- #529: godmode must make stamina untouchable by enemies. The gate is MERGED
+    -- into the _gt_hacks.lua add_fatigue_points hook (singleton pair discipline);
+    -- this pins its three runtime dependencies without any io/source grep (#511):
+    -- the marker constant, the exported godmode predicate, and the self-action
+    -- allowlist shape (own push costs must stay payable; blocked_* must NOT be
+    -- listed as self, or enemy drain would pass through again).
+    if mod._GT_529_GODMODE_STAMINA_MARKER ~= "gt-529-godmode-stamina-gate" then
+        return "#529 marker absent — was the _gt_hacks stamina gate removed?"
+    end
+    if type(mod._gt_godmode_active) ~= "function" then
+        return "mod._gt_godmode_active not exported from the godmode section"
+    end
+    if mod._gt_godmode_active(nil) ~= false then
+        return "_gt_godmode_active(nil) should be false"
+    end
+    local self_types = mod._GT_529_SELF_FATIGUE_TYPES
+    if type(self_types) ~= "table" then
+        return "mod._GT_529_SELF_FATIGUE_TYPES not a table"
+    end
+    for _, t in ipairs({ "action_push", "action_stun_push", "action_dodge" }) do
+        if not self_types[t] then return t .. " missing from self-action allowlist" end
+    end
+    for _, t in ipairs({ "blocked_attack", "blocked_slam", "ogre_shove", "complete" }) do
+        if self_types[t] then return t .. " wrongly allowlisted as a self action" end
     end
 end)
 

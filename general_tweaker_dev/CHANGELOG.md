@@ -1,5 +1,18 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.209-dev (2026-07-13) -- #529 godmode now makes stamina untouchable by enemies [verify-fix]
+
+With Godmode ON, enemy attacks no longer drain your stamina or break your block/guard: blocked hits, storm vermin sweeps, ogre shoves, boss slams, vomit/plague ground drains, and the grudge-mark and Belakor stamina drains are all skipped. Your OWN stamina costs (push, dodge) still apply as normal (infinite stamina remains the separate /stamina cheat), and stamina-replenish procs (headshot talents) keep working. Blocking looks and sounds normal; the bar just never drops from enemy hits. Godmode OFF is byte-identical behavior.
+
+### Root cause + choke point
+Godmode only intercepted the two DamageUtils HP funnels plus disabler states; stamina rides a separate pipe. Every enemy-sourced drain funnels through `GenericStatusExtension.add_fatigue_points` ON THE OWNING MACHINE (`blocked_attack` calls it only when `not player.remote`, src generic_status_extension.lua:630,649; the function hard-rejects remote players, src :781-785; a client's drain arrives via `rpc_player_blocked_attack` and is applied by its own machine, src status_system.lua:466-477). Block-break is inside that same call (fatigue at max -> `set_block_broken`, src :823-825), so skipping the write also fixes guard breaks. The gate is merged into the EXISTING `_gt_hacks.lua` add_fatigue_points hook (singleton (Class, method) discipline) and keys on a self-action allowlist: only enemy/hazard fatigue types are dropped, identified against `PlayerUnitStatusSettings.fatigue_point_costs`. Effective as host AND as client (owner-side write = local authority); nothing networked changes, no max-stamina field touched (consumption-side doctrine).
+
+### Test method (solo, 1 tester)
+1. Godmode ON, start a mission, /spawn a horde or stand in one, hold block and let them wail on it: stamina shields must not drop and the guard must never break (block anim/sounds still play). Walk through troll vomit / plague ground while blocking: still no drain.
+2. Push and dodge with godmode ON: your own stamina cost still applies and regenerates.
+3. Godmode OFF: blocked hits drain stamina and heavy hits break guard exactly as vanilla.
+- Regression: /gt_regression_test must pass `gt529_godmode_stamina_gate_wired`.
+
 ## v0.2.208-dev (2026-07-12) -- #534 share bot leash lines with other players [untested]
 
 New default-OFF `gt_devtools_share_draws` checkbox under the Dev Tools group. When the host has Bot leash lines on AND this on, the host broadcasts the leash lines it is drawing over a gt-only mod channel; every gt peer with the toggle on redraws them locally with its own LineObject. Only the sparse bot leash lines are shared; dense wireframe highlights and the bot HUD stay local. Host-only source, dev build only, no wire-safety exposure to vanilla peers.

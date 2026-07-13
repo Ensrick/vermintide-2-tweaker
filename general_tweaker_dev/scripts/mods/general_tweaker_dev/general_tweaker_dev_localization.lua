@@ -176,8 +176,8 @@ return {
     disable_enemy_spawns = { en = "[Issue 242] Disable Enemy Spawns" },
     disable_enemy_spawns_tooltip = { en = "No new enemies appear at all: hordes, specials, bosses, patrols, and ambient critters. Enemies already present are left alone, and turning it off resumes normal spawning." },
 
-    godmode_enabled = { en = "[working] Godmode" },
-    godmode_enabled_tooltip = { en = "Makes you invincible: you take no damage and cannot be grabbed or pinned by disablers, and enemies stop noticing you. Your third-person body fades out while it is on; your own view stays normal." },
+    godmode_enabled = { en = "[verify-fix] [Issue 529] Godmode" },
+    godmode_enabled_tooltip = { en = "Makes you invincible: you take no damage, cannot be grabbed or pinned by disablers, and enemies stop noticing you. Enemy hits no longer drain your stamina or break your block; your own pushes and dodges still cost stamina. Your third-person body fades out while it is on; your own view stays normal." },
 
     noclip_enabled = { en = "[Issue 241] Noclip" },
     noclip_enabled_tooltip = { en = "Fly freely through walls and terrain: WASD moves you where you look, Space and Ctrl go up and down, and holding Shift speeds you up. Turning it off while airborne drops you to the ground." },

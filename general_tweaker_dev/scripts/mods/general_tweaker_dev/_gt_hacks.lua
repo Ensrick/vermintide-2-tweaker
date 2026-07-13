@@ -6,7 +6,8 @@ local mod = get_mod("gt_dev")
 -- other or with the main chunk):
 --
 --   * CareerExtension.update                      (Ult Controls — cooldown caps)
---   * GenericStatusExtension.add_fatigue_points   (Buffs — infinite stamina)
+--   * GenericStatusExtension.add_fatigue_points   (Buffs — infinite stamina;
+--     ALSO carries the #529 godmode stamina gate — merged concern, see 5.2)
 --   * ProfileRequester.request_profile            (Buffs — crit re-sync)
 --   * GameModeInn._cb_start_menu_closed           (Buffs — crit re-sync)
 --   * VolumetricsFlowCallbacks.unregister_fog_volume (nil-guard)
@@ -311,13 +312,62 @@ mod.gt_infinite_stamina_toggle = function()
     mod:echo(_gt_stamina_active and "Infinite stamina: ON." or "Infinite stamina: OFF.")
 end
 
+-- Issue #529 godmode stamina immunity: fatigue types the PLAYER's own actions
+-- spend. Godmode does NOT make these free (that is the separate /stamina cheat
+-- above); every OTHER positive-cost type is enemy/hazard-sourced drain (blocked_*,
+-- ogre_shove, sv_push, vomit_*, plague_ground, chaos_cleave, "complete", DLC buff
+-- drains, ...) and is skipped while godmode is on. Closed self-action vocabulary:
+-- PlayerUnitStatusSettings.fatigue_point_costs [src: scripts/settings/
+-- player_unit_status_settings.lua:19-52] has exactly action_dodge/drag/push/
+-- stun_push as self costs, plus the two values weapon actions pass via
+-- new_action.fatigue_cost ("action_stun_push"/"proc") [src: scripts/
+-- unit_extensions/weapons/actions/action_base.lua:106-117]. Negative-cost types
+-- (headshot replenish, career_victor_captain) pass through via the amount<=0
+-- check below so stamina REGAIN keeps working under godmode.
+mod._GT_529_SELF_FATIGUE_TYPES = {
+    action_dodge     = true,
+    action_drag      = true,
+    action_push      = true,
+    action_stun_push = true,
+    force_set        = true,
+    proc             = true,
+}
+mod._GT_529_GODMODE_STAMINA_MARKER = "gt-529-godmode-stamina-gate"
+
 -- Always-on wrapper. When the flag is off, the closure passes through to the
 -- original; when on, it short-circuits so fatigue cost calls never deplete
 -- the stamina bar. Avoids re-registering hooks (VMF errors on duplicates).
+--
+-- MERGED CONCERN (issue #529): the godmode stamina gate ALSO lives in this body
+-- (one hook per (Class, method) — VMF drops a second registration silently).
+-- Why this is the right choke point: every enemy-sourced stamina write funnels
+-- through add_fatigue_points ON THE OWNING MACHINE — blocked_attack only calls
+-- it when `not player.remote` [src: scripts/unit_extensions/generic/
+-- generic_status_extension.lua:630,649] and add_fatigue_points itself hard-
+-- rejects remote players [src: same file:781-785]. A client's drain arrives via
+-- rpc_player_blocked_attack and is applied by ITS OWN machine [src: scripts/
+-- entity_system/systems/status/status_system.lua:466-477], so the local godmode
+-- flag is the correct authority as host AND as client. Block-break is inside
+-- the skipped call (fatigue >= max -> set_block_broken [src: generic_status_
+-- extension.lua:823-825]), so guard can no longer be broken either. Blocking
+-- visuals/sounds stay normal: blocked_attack itself still runs (parry anim,
+-- spark particles, rumble); only the fatigue write is skipped. Consumption-side
+-- fix: no _max_ field, no pool inflation, nothing networked (fatigue simply
+-- never rises, so set_fatigue_points sync RPCs are never generated).
 if GenericStatusExtension and GenericStatusExtension.add_fatigue_points then
-    mod:hook(GenericStatusExtension, "add_fatigue_points", function(func, ...)
+    mod:hook(GenericStatusExtension, "add_fatigue_points", function(func, self, fatigue_type, attacking_unit, ...)
         if _gt_stamina_active then return end
-        return func(...)
+        -- #529: with godmode on for this unit's owner, drop enemy/hazard-sourced
+        -- fatigue. Own-action costs (push/dodge) and replenishes still apply.
+        if not mod._GT_529_SELF_FATIGUE_TYPES[fatigue_type]
+           and mod._gt_godmode_active and mod._gt_godmode_active(self.unit) then
+            local costs = PlayerUnitStatusSettings and PlayerUnitStatusSettings.fatigue_point_costs
+            local amount = costs and costs[fatigue_type]
+            if amount == nil or amount > 0 then
+                return
+            end
+        end
+        return func(self, fatigue_type, attacking_unit, ...)
     end)
 end
 
