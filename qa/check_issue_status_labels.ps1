@@ -145,6 +145,11 @@ function Test-IsLocSweep {
     return $rxLocSweep.IsMatch($Header)
 }
 
+function Get-LifecycleStateCount {
+    param([string[]]$Labels)
+    return @($Labels | Where-Object { $LifecycleLabels -contains $_ }).Count
+}
+
 # ---- gh helpers (network) ----
 function Test-GhReady {
     $gh = Get-Command gh -ErrorAction SilentlyContinue
@@ -205,6 +210,10 @@ function Invoke-SelfTest {
 
     $noHdr = "just a title line`nno version headers here"
     Assert ($null -eq (Get-TopEntry $noHdr)) "a changelog with no ## header returns null (no crash)"
+
+    Assert ((Get-LifecycleStateCount @('bug', 'not-started', 'tooling')) -eq 1) "one lifecycle label is valid (issue #498)"
+    Assert ((Get-LifecycleStateCount @('bug', 'tooling')) -eq 0) "zero lifecycle labels is detected"
+    Assert ((Get-LifecycleStateCount @('bug', 'not-started', 'verify-fix')) -eq 2) "multiple lifecycle labels are detected"
 
     Write-Host ""
     if ($script:__stpass) {
@@ -274,9 +283,9 @@ foreach ($c in ($candidates | Sort-Object Issue, Mod)) {
     }
 }
 
-# Pass 3 (issue #498): EVERY open issue must carry a lifecycle state - one of
-# the four worked statuses or not-started. Zero lifecycle labels = drift.
-$stateless = @()
+# Pass 3 (issue #498): EVERY open issue must carry exactly one lifecycle state -
+# one of the four worked statuses or not-started. Zero OR multiple = drift.
+$lifecycleDrift = @()
 $openJson = & gh issue list --state open --limit 400 --json number,labels 2>$null
 if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($openJson)) {
     try {
@@ -289,8 +298,13 @@ if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($openJson)) {
             # carry no worked-status label. An untouched one still gets not-started
             # (which already satisfies this pass), so exempt the whole class here.
             if ($lbls -contains 'documentation' -or $lbls -contains 'tooling') { continue }
-            if (-not ($lbls | Where-Object { $LifecycleLabels -contains $_ })) {
-                $stateless += [pscustomobject]@{ Issue = $o.number; Labels = ($lbls -join ',') }
+            $lifecycleCount = Get-LifecycleStateCount $lbls
+            if ($lifecycleCount -ne 1) {
+                $lifecycleDrift += [pscustomobject]@{
+                    Issue = $o.number
+                    Labels = ($lbls -join ',')
+                    LifecycleCount = $lifecycleCount
+                }
             }
         }
     } catch {}
@@ -302,16 +316,16 @@ if ($hardError) {
     exit 2
 }
 
-if ($findings.Count -eq 0 -and $stateless.Count -eq 0) {
-    Write-Host "[check_issue_status_labels] OK -- CHANGELOG-referenced issues carry status labels; every open issue carries a lifecycle state." -ForegroundColor Green
+if ($findings.Count -eq 0 -and $lifecycleDrift.Count -eq 0) {
+    Write-Host "[check_issue_status_labels] OK -- CHANGELOG-referenced issues carry status labels; every open issue carries exactly one lifecycle state." -ForegroundColor Green
     exit 0
 }
 
-if ($stateless.Count -gt 0) {
-    Write-Host ("[check_issue_status_labels] {0} open issue(s) carry NO lifecycle state (not-started / diagnostics-armed / verify-fix / verify-fix-coop / Fixed):" -f $stateless.Count) -ForegroundColor Yellow
-    foreach ($s in ($stateless | Sort-Object Issue)) {
+if ($lifecycleDrift.Count -gt 0) {
+    Write-Host ("[check_issue_status_labels] {0} open issue(s) do not carry EXACTLY ONE lifecycle state (not-started / diagnostics-armed / verify-fix / verify-fix-coop / Fixed):" -f $lifecycleDrift.Count) -ForegroundColor Yellow
+    foreach ($s in ($lifecycleDrift | Sort-Object Issue)) {
         $lbl = if ($s.Labels) { $s.Labels } else { '(no labels)' }
-        Write-Host ("  ! #{0} [{1}]" -f $s.Issue, $lbl) -ForegroundColor Yellow
+        Write-Host ("  ! #{0} [count={1}; {2}]" -f $s.Issue, $s.LifecycleCount, $lbl) -ForegroundColor Yellow
     }
 }
 
