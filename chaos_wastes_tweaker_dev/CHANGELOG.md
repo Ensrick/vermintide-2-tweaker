@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.264-dev (2026-07-13) - #406 Khaine's Communion catalogued under Mod Boons [untested]
+
+- Identified the selectable boon as CT's single canonical `DeusPowerUpTemplates.ct_kill_heal` entry, displayed as **Khaine's Communion**. Vanilla `deus_power_up_settings.lua` contains no such key and supplies no menu-category metadata; CT's `BOON_TREE` is the sole catalog used to generate both Disabled Boons and Starting Boons.
+- Moved the existing `ct_kill_heal` catalog row from the vanilla **Defensive Boons > Health** branch to **Mod Boons**. No power-up, buff, network lookup, rarity-pool entry, or setting was duplicated. Single Mission Loader already consumes the shared Starting Boons selection, so the boon is now discoverable in its intended mod-authored category.
+- Updated both tooltips and added `/ct_regression_test` check `issue406_kill_heal_mod_boon_catalog`. It requires the canonical power-up definition, exactly one disabled widget and one starting widget, and the Mod Boons parent for both; any duplicate or placement under a vanilla family fails.
+- Verify in the Pilgrimage Chamber: under Starting Boons > Mod Boons select `(Mod Boon) Khaine's Communion`, launch through Single Mission Loader, and confirm it is granted. Coop crash verification remains: a client with the boon gets a kill and does not hit `Only server can heal`.
+
 ## 0.7.263-dev (2026-07-13) - #570 startup pool notices are console-only [untested]
 
 - Removed the automatic TRAVEL/SIGNATURE pool-floor notices from chat. The existing `[ct:487] POOL-FLOOR` raw-console evidence remains available with mod logging disabled, while user-invoked command feedback is unchanged.

@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.263-dev"
+local MOD_VERSION = "0.7.264-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -13378,9 +13378,9 @@ end
 -- issue 406) and modded-boon wire exposure is peer-parity gated (issue 426 wire-safety
 -- block below). Every peer on v0.7.240-dev re-registers the name identically, so the
 -- lookup-order invariant (feedback_vt2_gated_registration_diverges) holds the same way
--- it did for the removal. The matching VMF widget line (_data.lua BOON_TREE
--- defensive_boons > health) and the kill_heal regression check are restored in the same
--- version.
+-- it did for the removal. The matching VMF widget line is catalogued once in
+-- `_data.lua` BOON_TREE > mod_boons; both Disabled Boons and Starting Boons derive
+-- from that one row. The kill_heal regression check is restored in the same version.
 do
     -- v0.7.63-alpha: register NetworkLookup names FIRST, unconditionally, BEFORE
     -- the globals-ready gate. Two peers running the same ct version must always
@@ -13795,6 +13795,51 @@ _rt_register("modded_power_up_registry", function()
     if f("natural_bond") then return "vanilla natural_bond must NOT be in the modded registry" end
     if f(nil) then return "nil must NOT be in the modded registry" end
     return nil
+end)
+
+_rt_register("issue406_kill_heal_mod_boon_catalog", function()
+    -- `ct_kill_heal` is one CT-authored DeusPowerUpTemplates entry. BOON_TREE
+    -- is only a menu catalog; moving its single row must expose the existing
+    -- definition on both generated surfaces without cloning the boon itself.
+    local templates = rawget(_G, "DeusPowerUpTemplates")
+    if type(templates) ~= "table" or type(rawget(templates, "ct_kill_heal")) ~= "table" then
+        return "canonical DeusPowerUpTemplates.ct_kill_heal definition missing (run in keep)"
+    end
+
+    local ok, data = pcall(mod.dofile, mod,
+        "scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev_data")
+    if not ok or type(data) ~= "table" then return "could not load realized CT widget catalog" end
+
+    local targets = {
+        disable_boon_ct_kill_heal = "disable_boon_mod_boons_group",
+        start_boon_ct_kill_heal = "start_boon_mod_boons_group",
+    }
+    local found = {}
+    local function walk(node, parent_id)
+        if type(node) ~= "table" then return end
+        local id = node.setting_id
+        if targets[id] then
+            found[id] = found[id] or {}
+            found[id][#found[id] + 1] = parent_id
+        end
+        local next_parent = (node.type == "group" and id) or parent_id
+        for _, field in ipairs({ "widgets", "sub_widgets" }) do
+            for _, child in ipairs(node[field] or {}) do walk(child, next_parent) end
+        end
+    end
+    walk(data.options, nil)
+
+    for setting_id, expected_parent in pairs(targets) do
+        local parents = found[setting_id] or {}
+        if #parents ~= 1 then
+            return string.format("%s occurs %d times; expected one BOON_TREE-derived widget",
+                setting_id, #parents)
+        end
+        if parents[1] ~= expected_parent then
+            return string.format("%s catalogued under %s, expected Mod Boons parent %s",
+                setting_id, tostring(parents[1]), expected_parent)
+        end
+    end
 end)
 
 -- #464 follow-up: Anath Raema's Swiftness trait-as-boon must (a) be registered as a

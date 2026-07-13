@@ -78,11 +78,6 @@ local BOON_TREE = {
                     "deus_increased_healing_taken", "deus_max_health", "healers_touch",
                     "heal_on_dot_damage_dealt", "health", "invigorating_strike",
                     "natural_bond", "transfer_temp_health_at_full",
-                    -- v0.7.240-dev (#406): re-enabled (was disabled v0.7.98-dev after a
-                    -- Chest-of-Trials crash). The user needs it selectable as a starting
-                    -- boon to verify the issue-406 client heal fix, and modded boons are
-                    -- now peer-parity gated (issue 426) so pool exposure is wire-safe.
-                    "ct_kill_heal",  -- v0.7.32 Mod Boon: 0.25 green HP per kill (exotic)
                 },
             },
             {
@@ -211,6 +206,12 @@ local BOON_TREE = {
     {
         category_id = "mod_boons",
         items = {
+            -- #406: Khaine's Communion is authored by CT as
+            -- DeusPowerUpTemplates.ct_kill_heal. Keep its one catalog row with
+            -- the other mod-authored boons, not in the vanilla Health family.
+            -- build_disable_tree/build_start_tree derive both menu surfaces from
+            -- this row, including Single Mission Loader's Starting Boons flow.
+            "ct_kill_heal",  -- 0.25 permanent green HP per kill (exotic)
             "ct_meta_stagger",
             "ct_meta_crit",
             "ct_meta_health",

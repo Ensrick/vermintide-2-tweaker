@@ -9,6 +9,21 @@ Last updated: 2026-07-13.
 ---
 ## UI layout
 
+### kill-heal-modded-boon-catalog - Khaine's Communion absent from expected Starting Boons category
+
+**[INTEGRATION]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Khaine's Communion cannot be found under Mod Boons when configuring Starting Boons for Single Mission Loader. |
+| Root cause | The restored `ct_kill_heal` BOON_TREE row was placed under the vanilla Defensive Boons > Health family even though the power-up is authored entirely by CT. |
+| Mod(s) | chaos_wastes_tweaker_dev |
+| Fix version(s) | ct_dev v0.7.264-dev (#406) |
+| Category | INTEGRATION / MENU CATALOG |
+| Repro | In the Pilgrimage Chamber, open CT options and inspect Starting Boons > Mod Boons before launching Single Mission Loader. |
+| Expected post-fix | `(Mod Boon) Khaine's Communion` appears exactly once under Mod Boons on both Disabled Boons and Starting Boons surfaces, and nowhere under a vanilla family. Selecting it grants the existing `ct_kill_heal` power-up; no duplicate definition exists. |
+| Detection | `/ct_regression_test`: `issue406_kill_heal_mod_boon_catalog` passes, then a client kill with the boon does not crash with `Only server can heal`. |
+
 ### cw-tab-collectible-safe-reflow - Injected DEUS counters cross the Tab overlay edge
 
 **[INTEGRATION]**
