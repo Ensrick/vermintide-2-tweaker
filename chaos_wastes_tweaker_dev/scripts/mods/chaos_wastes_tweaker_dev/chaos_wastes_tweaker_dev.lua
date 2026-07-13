@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.252-dev"
+local MOD_VERSION = "0.7.253-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -12037,6 +12037,58 @@ local CT_META_AMMO_ENERGY_CONSUMPTION_MARKER = "CT_META_AMMO_ENERGY_CONSUMPTION_
 -- without any explicit refresh — that's the whole point of the consumption-side pattern.
 do
     local buff_funcs = rawget(_G, "BuffFunctionTemplates")
+
+    -- Issue #256: consumption-side LOWER-bound clamp on CURRENT ammo after a
+    -- meta-ammo refresh. Marker: CT_META_AMMO_CURRENT_AMMO_FLOOR_256 (functional
+    -- regression `ct_meta_ammo_current_floor_256`; helper exposed as
+    -- `mod._ct_clamp_current_ammo_256`).
+    --
+    -- Root cause: vanilla `GenericAmmoUserExtension.refresh_buffs`
+    -- (generic_ammo_user_extension.lua:105-108) recomputes reserve as
+    --   `_available_ammo = math.min(_start_ammo - _current_ammo, _available_ammo)`
+    -- with NO floor at 0. `_start_ammo = round(_original_ammo_percent * _max_ammo)`
+    -- is scaled by the ammo fraction the weapon SPAWNED with. When a weapon that
+    -- entered a map at a partial fraction (`_original_ammo_percent` < 1) later has
+    -- its clip refilled above that scaled `_start_ammo` (ammo pickup + reload),
+    -- `_start_ammo - _current_ammo` is negative and the reserve drops below zero.
+    -- Vanilla only self-heals in the `ammo_percent == 1` branch (:110-112 `reset()`);
+    -- at any other fraction the negative persists and the HUD shows negative ammo
+    -- (issue 256). There is NO fassert on `_available_ammo`, so it is silent (unlike
+    -- `_current_ammo`, guarded by fasserts at :234 / :483) — matching the report of a
+    -- visible negative rather than a crash.
+    --
+    -- `ct_meta_ammo_refresh_capacity` is the ONLY ct seam that derives current/reserve
+    -- ammo (grep: refresh_buffs). The meta-ammo boon fires it on every boon grant. We
+    -- do NOT touch `_max_ammo` (max-resource doctrine; the issue 34 UPPER clamp lives in
+    -- the `_apply_buffs` hook). We clamp CURRENT values only: reserve floored at 0 and
+    -- clip clamped into [0, _max_ammo]. Each peer runs this for its OWN weapon (the boon
+    -- buff applies locally; AmmoSystem carries only a [0,1] fraction over the wire, which
+    -- flows through the already-clamping `add_ammo` path), so the seam clamp covers host
+    -- and client alike. Fires a `[ct:256]` printf ONLY when a clamp actually engages.
+    local function _ct_clamp_current_ammo_256(ax, seam)
+        if type(ax) ~= "table" then return end
+        local max_ammo = (type(ax._max_ammo) == "number") and ax._max_ammo or math.huge
+        local reserve = ax._available_ammo
+        if type(reserve) == "number" then
+            local clamped = math.max(0, math.min(reserve, max_ammo))
+            if clamped ~= reserve then
+                ax._available_ammo = clamped
+                pcall(printf, "[ct:256] clamped reserve ammo %s -> %d (max=%s seam=%s item=%s) issue 256",
+                    tostring(reserve), clamped, tostring(max_ammo), tostring(seam), tostring(ax.item_name))
+            end
+        end
+        local current = ax._current_ammo
+        if type(current) == "number" then
+            local clamped = math.max(0, math.min(current, max_ammo))
+            if clamped ~= current then
+                ax._current_ammo = clamped
+                pcall(printf, "[ct:256] clamped clip ammo %s -> %d (max=%s seam=%s item=%s) issue 256",
+                    tostring(current), clamped, tostring(max_ammo), tostring(seam), tostring(ax.item_name))
+            end
+        end
+    end
+    mod._ct_clamp_current_ammo_256 = _ct_clamp_current_ammo_256
+
     if buff_funcs and buff_funcs.functions then
         buff_funcs.functions.ct_meta_ammo_refresh_capacity = function (unit, buff, params)
             -- 1. Vanilla ammo refresh (preserved from old `refresh_ranged_slot_buffs`).
@@ -12048,8 +12100,11 @@ do
                     local right_hand_unit = ranged_slot_data.right_unit_1p
                     local left_ammo  = left_hand_unit  and ScriptUnit.has_extension(left_hand_unit,  "ammo_system")
                     local right_ammo = right_hand_unit and ScriptUnit.has_extension(right_hand_unit, "ammo_system")
-                    if left_ammo  then left_ammo:refresh_buffs()  end
-                    if right_ammo then right_ammo:refresh_buffs() end
+                    -- Issue #256: floor CURRENT ammo after each refresh so a partial-spawn
+                    -- weapon whose clip outgrew the percent-scaled _start_ammo can't leave
+                    -- reserve negative (vanilla refresh_buffs :108 has no >= 0 floor).
+                    if left_ammo  then left_ammo:refresh_buffs();  _ct_clamp_current_ammo_256(left_ammo,  "meta_ammo_refresh_capacity") end
+                    if right_ammo then right_ammo:refresh_buffs(); _ct_clamp_current_ammo_256(right_ammo, "meta_ammo_refresh_capacity") end
                 end
             end
 
@@ -15131,6 +15186,38 @@ _rt_register("ct_meta_ammo_no_zero_cost", function()
             return string.format("cost_factor non-monotonic: N=%d gave %.6f (prev=%.6f) — curve shape regressed", n, f, prev)
         end
         prev = f
+    end
+end)
+
+_rt_register("ct_meta_ammo_current_floor_256", function()
+    -- Issue #256: the meta-ammo refresh seam must floor CURRENT ammo so vanilla
+    -- `refresh_buffs` (generic_ammo_user_extension.lua:108, no >= 0 floor on
+    -- `_available_ammo`) can't leave a partial-spawn weapon with negative reserve.
+    -- Functional test on the exposed clamp helper: feed a fake ammo extension in the
+    -- exact broken state (negative reserve, over-max clip) and assert it lands in range
+    -- WITHOUT mutating _max_ammo.
+    local clamp = mod._ct_clamp_current_ammo_256
+    if type(clamp) ~= "function" then
+        return "mod._ct_clamp_current_ammo_256 helper missing (issue 256 seam clamp reverted?)"
+    end
+    -- Broken state: reserve went negative and clip overshot max (both out of [0,max]).
+    local ax = { _max_ammo = 20, _available_ammo = -4, _current_ammo = 25, item_name = "rt_probe" }
+    clamp(ax, "regression_probe")
+    if ax._available_ammo ~= 0 then
+        return string.format("reserve not floored: got %s, expected 0", tostring(ax._available_ammo))
+    end
+    if ax._current_ammo ~= 20 then
+        return string.format("clip not clamped to max: got %s, expected 20", tostring(ax._current_ammo))
+    end
+    if ax._max_ammo ~= 20 then
+        return string.format("_max_ammo was mutated (%s) — max-resource doctrine violated", tostring(ax._max_ammo))
+    end
+    -- In-range values must be left untouched (clamp is a no-op when already valid).
+    local ok_ax = { _max_ammo = 30, _available_ammo = 12, _current_ammo = 8 }
+    clamp(ok_ax, "regression_probe")
+    if ok_ax._available_ammo ~= 12 or ok_ax._current_ammo ~= 8 then
+        return string.format("in-range values altered: reserve %s clip %s (expected 12/8)",
+            tostring(ok_ax._available_ammo), tostring(ok_ax._current_ammo))
     end
 end)
 
