@@ -1,0 +1,100 @@
+name: Bug report
+description: Report a reproducible defect or crash with engine and test context.
+title: "[mod] "
+labels:
+  - bug
+  - not-started
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep the title to eight words after the `[mod]` prefix. Use empirical evidence and keep the body concise. Apply one mod label and one severity label after filing.
+
+        New issues start `not-started`. Replace it only when work ships: `verify-fix` for a complete one-player fix, `verify-fix-coop` for a complete fix requiring 2+ people, or `diagnostics-armed` for a live probe. Those labels require a comment with test steps and the expected result. `Fixed` requires human in-game confirmation and remains open for hardening, docs, and regression coverage. Tooling/docs issues are verified and closed autonomously instead.
+  - type: dropdown
+    id: mod
+    attributes:
+      label: Mod or area label
+      description: Apply the matching GitHub label after filing.
+      options:
+        - "Tweaker: Career"
+        - "Tweaker: Chaos Wastes"
+        - CWV
+        - "Tweaker: Cosmetics"
+        - cim
+        - dcp
+        - "Tweaker: Enemies"
+        - "Tweaker: Events"
+        - "Tweaker: General"
+        - "Tweaker: GUI"
+        - Progression
+        - "Tweaker: Weapons"
+        - WOC
+        - cross-mod
+        - tooling
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity label
+      description: Apply the matching severity label after filing.
+      options:
+        - 0-critical
+        - 1-major
+        - 2-moderate
+        - 3-low
+    validations:
+      required: true
+  - type: textarea
+    id: symptom_evidence
+    attributes:
+      label: Symptom, evidence, and reproduction
+      description: What happens, where, and with which mod version? Include minimal steps, exact log lines or crash GUID, and source file:line citations. Attach logs rather than pasting entire files.
+    validations:
+      required: true
+  - type: textarea
+    id: engine_trace
+    attributes:
+      label: Engine trace
+      description: Fill every line; use `unknown` while investigating or `N/A` with a reason for repository-only work.
+      placeholder: |
+        Vanilla entry point: Class.function — file:line
+        State owner: object, extension, manager, or table
+        Runtime lifecycle: registration / creation / update / RPC / teardown / UI render
+        Native seam: narrowest safe hook, data mutation, or API
+        Runtime unknown: timing, asset, package, geometry, or live-state fact source cannot prove
+    validations:
+      required: true
+  - type: dropdown
+    id: authority
+    attributes:
+      label: Authority
+      options:
+        - Host/server
+        - Local client/player
+        - Every peer independently
+        - Host and client have separate roles
+        - UI/local-only
+        - Unknown or not applicable
+    validations:
+      required: true
+  - type: dropdown
+    id: topology
+    attributes:
+      label: Test topology
+      options:
+        - One player / local visual verification
+        - Host plus one or more clients
+        - Dedicated host/client role comparison
+        - Static tooling or documentation only
+        - Unknown; diagnostics needed
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: Observable behavior or exact diagnostic output that would prove the issue resolved.
+    validations:
+      required: true
