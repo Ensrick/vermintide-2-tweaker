@@ -40,7 +40,7 @@ Edits to either table propagate to both sides automatically.
 --                                            differentiation; wt does NOT add this
 --                                            cross-character port.
 
-return {
+local DATA = {
     weapon_unlock_map = {
         -- Kruber
         -- v0.12.103-dev (2026-05-30): bulk-bake of cross-character ports from
@@ -160,3 +160,16 @@ return {
         es_questingknight = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
     },
 }
+
+-- #576/user correction: Saltzpyre receives Kruber's Empire Greathammer
+-- (`es_2h_hammer`, ItemMasterList template `two_handed_hammers_template_1`),
+-- not Bardin's analogous `dr_2h_hammer`. Keep the source lists readable above
+-- while enforcing the catalog contract here for all standard Saltz careers.
+for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+    local weapons = DATA.weapon_unlock_map[career]
+    for i = #weapons, 1, -1 do
+        if weapons[i] == "dr_2h_hammer" then table.remove(weapons, i) end
+    end
+end
+
+return DATA

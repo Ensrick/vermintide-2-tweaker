@@ -1188,12 +1188,14 @@ local _3p_template_remaps = {
         we_ = false, -- native (Kerillian): untouched
         wh_ = {
             attack_push                = "attack_push",
-            attack_swing_charge_left   = "attack_swing_charge_stab",
-            attack_swing_charge_right  = "attack_swing_charge_down",
+            -- #576: receiver-facing billhook anim_event_3p values. The former
+            -- targets were 1P names and could yield no visible 3P transition.
+            attack_swing_charge_left   = "attack_swing_stab_charge",
+            attack_swing_charge_right  = "attack_swing_charge_left_diagonal",
             attack_swing_down_left     = "attack_swing_left_diagonal",
             attack_swing_down_left_axe = "attack_swing_stab",
             attack_swing_down_right    = "attack_swing_stab",
-            attack_swing_heavy         = "attack_swing_heavy_down",
+            attack_swing_heavy         = "attack_swing_heavy_left_diagonal",
             attack_swing_heavy_right   = "attack_swing_heavy_stab",
             attack_swing_right         = "attack_swing_stab",
             parry_pose                 = "parry_pose",
@@ -1999,21 +2001,22 @@ do
         special_action                    = "attack_swing_heavy_left",
         special_action_02                 = "attack_swing_heavy_down",
     }
-    -- v0.12.213-dev (#519): bw_ghost_scythe on Saltzpyre -> WP Greathammer. The two
-    -- scythe specials have no SET A twin — mapped to the nearest events per the picks.
+    -- #576: source-chain candidate against staff_scythe.lua and
+    -- 2h_hammers_priest.lua. Preserve distinct H1/H2/H3 roles; picker remains
+    -- open because this table is not proof of visible playback.
     R.staff_scythe.wh_ = {
         attack_push                       = "attack_push",
         attack_swing_charge_left          = "attack_swing_charge_right",
-        attack_swing_charge_left_diagonal = "attack_swing_charge_right",
-        attack_swing_charge_right         = "attack_swing_charge_right",
-        attack_swing_heavy                = "attack_swing_heavy_right",
-        attack_swing_heavy_left_diagonal  = "attack_swing_heavy_right",
+        attack_swing_charge_left_diagonal = "attack_swing_charge_right_down",
+        attack_swing_charge_right         = "attack_swing_charge",
+        attack_swing_heavy                = "attack_swing_up",
+        attack_swing_heavy_left_diagonal  = "attack_swing_heavy_right_diagonal",
         attack_swing_heavy_right          = "attack_swing_heavy_right",
         attack_swing_left                 = "attack_swing_left",
-        attack_swing_left_diagonal        = "attack_swing_up_left",
-        attack_swing_left_diagonal_last   = "attack_swing_up_left",
+        attack_swing_left_diagonal        = "attack_swing_down_right",
+        attack_swing_left_diagonal_last   = "attack_swing_left",
         attack_swing_right                = "attack_swing_down_right",
-        attack_swing_up_right             = "attack_swing_down_right",
+        attack_swing_up_right             = "attack_swing_up_left",
         parry_pose                        = "parry_pose",
         special_action                    = "attack_swing_charge_right",
         special_action_02                 = "attack_swing_heavy_right_diagonal",
@@ -2537,6 +2540,61 @@ local _ANIM_EVENT_SAMPLE_REMAP_N = 30
 local _anim_event_call_count = 0
 local _anim_event_remap_count = 0
 
+-- #576 bounded, log-only evidence for reopened Saltzpyre ports. Neither
+-- Unit.has_animation_event nor a successful C-call acknowledges visible clip
+-- playback, so success is deliberately labelled UNVERIFIED. One record per
+-- distinct transition tuple keeps repeated frames/swings silent (max 256).
+local _WT576_KEYS = { bw_ghost_scythe = true, we_spear = true }
+local _WT576_SOURCE = {
+    bw_ghost_scythe = {
+        attack_push=true, attack_swing_charge_left=true, attack_swing_charge_left_diagonal=true,
+        attack_swing_charge_right=true, attack_swing_heavy=true,
+        attack_swing_heavy_left_diagonal=true, attack_swing_heavy_right=true,
+        attack_swing_left=true, attack_swing_left_diagonal=true,
+        attack_swing_left_diagonal_last=true, attack_swing_right=true,
+        attack_swing_up_right=true, parry_pose=true, special_action=true, special_action_02=true,
+    },
+    we_spear = {
+        attack_push=true, attack_swing_charge_left=true, attack_swing_charge_right=true,
+        attack_swing_down_left=true, attack_swing_down_left_axe=true,
+        attack_swing_down_right=true, attack_swing_heavy=true,
+        attack_swing_heavy_right=true, attack_swing_right=true,
+        parry_pose=true, push_stab=true,
+    },
+}
+local _wt576_seen, _wt576_count = {}, 0
+
+local function _wt576_phases(key, source)
+    if key == "we_spear" and source == "attack_swing_charge_right" then
+        return { "action_one.h1_charge_start", "action_one.h1_charge_loop" }
+    elseif key == "we_spear" and source == "attack_swing_heavy_right" then
+        return { "action_one.h1_charge_release", "action_one.h1_committed_attack" }
+    elseif source:find("charge", 1, true) then
+        return { "action_one.charge_start", "action_one.charge_loop" }
+    elseif source:find("heavy", 1, true) then
+        return { "action_one.charge_release", "action_one.committed_heavy" }
+    end
+    return { "action_transition" }
+end
+
+local function _wt576_diag(state, career, source, target, outcome, detail)
+    if not state or not _WT576_KEYS[state.key] or not mod:get("enable_dev_anim_picker") then return end
+    if not (_WT576_SOURCE[state.key] and _WT576_SOURCE[state.key][source]) then return end
+    for _, phase in ipairs(_wt576_phases(state.key, source)) do
+        local origin = state.remap_origin or "none"
+        local token = table.concat({ tostring(state.key), tostring(state.template), tostring(career),
+            phase, tostring(source), tostring(target), tostring(origin), tostring(outcome) }, "|")
+        if not _wt576_seen[token] and _wt576_count < 256 then
+            _wt576_seen[token] = true
+            _wt576_count = _wt576_count + 1
+            printf("[wt:576] weapon=%s template=%s career=%s phase=%s source=%s target=%s origin=%s outcome=%s detail=%s evidence=%d/256 chat=false",
+                tostring(state.key), tostring(state.template), tostring(career), phase,
+                tostring(source), tostring(target), tostring(origin), tostring(outcome),
+                tostring(detail or "none"), _wt576_count)
+        end
+    end
+end
+
 -- CLARIFY: stringified hook on the C-API class `Unit`. VMF resolves this
 -- against `_G.Unit.animation_event`. This is the central entry point — every
 -- animation event for every unit goes through here once the mod is loaded,
@@ -2618,7 +2676,7 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
         local map_parts = {}
         for src, val in pairs(map) do map_parts[#map_parts + 1] = tostring(src) .. "->" .. tostring(val) end
         table.sort(map_parts)
-        mod:info("[wt:play] READ event=%s tmpl=%s key=%s career=%s is_picked_3p_value=%s has_anim=%s picks_set={%s}",
+        mod:info("[wt:play] READ event=%s tmpl=%s key=%s career=%s is_picked_3p_value=%s has_event_capability_only=%s visible_playback=unverified picks_set={%s}",
             tostring(event_name), tostring(state.template), tostring(state.key),
             tostring(career), tostring(is_picked_3p), tostring(_safe_has_anim(unit, event_name)),
             table.concat(map_parts, ","))
@@ -2627,7 +2685,7 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
             -- Logs the FINAL event the engine receives AFTER wt's funnel. If it
             -- differs from the read event, wt renamed it — the override
             -- hypothesis, confirmed/refuted per swing.
-            mod:info("[wt:play] FINAL event=%s (read was %s)%s has_anim=%s",
+            mod:info("[wt:play] FINAL event=%s (read was %s)%s has_event_capability_only=%s visible_playback=unverified",
                 tostring(ev), tostring(event_name),
                 (tostring(ev) ~= tostring(event_name)) and " <<RENAMED BY FUNNEL>>" or " (unchanged)",
                 tostring(_safe_has_anim(u, ev)))
@@ -2671,13 +2729,20 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
     if state and event_name:sub(1, 3) == "to_" and remap_id and remap_id ~= state.last_remap_id then
         state.last_remap_id = remap_id
         state.remap = nil
+        state.remap_origin = nil
         if state.template then
             local tmpl_remap = _resolve_template_remap(state.template, career)
-            if tmpl_remap then state.remap = tmpl_remap end
+            if tmpl_remap then
+                state.remap = tmpl_remap
+                state.remap_origin = "template:" .. tostring(state.template)
+            end
         end
         if not state.remap and state.key then
             local key_remap = _resolve_key_remap(state.key, career)
-            if key_remap then state.remap = key_remap end
+            if key_remap then
+                state.remap = key_remap
+                state.remap_origin = "key:" .. tostring(state.key)
+            end
         end
         -- tmpl_remap / key_remap may be `false` (deliberate skip from
         -- `_3p_template_remaps[name][prefix] = false`). `if tmpl_remap then`
@@ -2714,7 +2779,10 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
         -- same fallback for the inverse mapping.
         if not state.remap then
             local trigger_remap = _resolve_3p_remap(event_name, career)
-            if trigger_remap then state.remap = trigger_remap end
+            if trigger_remap then
+                state.remap = trigger_remap
+                state.remap_origin = "trigger:" .. tostring(event_name)
+            end
         end
     end
 
@@ -2772,7 +2840,8 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
     -- 3P attack remap (per-unit)
     if state and state.remap then
         local target = state.remap[event_name]
-        if target and _safe_has_anim(unit, target) then
+        local target_capability = target and _safe_has_anim(unit, target)
+        if target and target_capability then
             if _log_anims then
                 local msg = "  REMAP " .. event_name .. " -> " .. target
                 mod:info(msg)
@@ -2791,8 +2860,23 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
                     tostring(event_name), tostring(target), tostring(career),
                     tostring(state.template), tostring(state.key), _anim_event_remap_count)
             end
-            pcall(func, unit, target, ...)
+            local ok, err = pcall(func, unit, target, ...)
+            if ok then
+                _wt576_diag(state, career, event_name, target,
+                    "accepted_unverified_no_observable_state_transition",
+                    "pcall_ok;has_event_is_capability_not_playback_ack")
+            else
+                _wt576_diag(state, career, event_name, target,
+                    "animation_event_call_error", tostring(err))
+            end
             return
+        end
+        if target and not target_capability then
+            _wt576_diag(state, career, event_name, target, "target_missing",
+                "Unit.has_animation_event=false")
+        elseif not target then
+            _wt576_diag(state, career, event_name, nil, "unmapped_source",
+                "source_event_has_no_remap_target")
         end
         -- Force-fire path for SM-corrupting events (see
         -- feedback_animation_remap_rules). Adding `attack_swing_stab_02 ->

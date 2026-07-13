@@ -1019,6 +1019,8 @@ local _SALTZ_SET_VOCAB = {
 -- the three _SALTZ_* tables below are deleted to keep this mirror in lockstep.
 -- Only dr_dual_wield_hammers remains (zero non-unset picks — not yet tuned).
 local _SALTZ_WEAPON_SET = {
+    bw_ghost_scythe = "A", -- #576 reopened
+    we_spear        = "F", -- #576 reopened
     -- SET B — Warrior Priest Dual Hammers (to_dual_hammers_priest)
     dr_dual_wield_hammers = "B",
 }
@@ -1026,6 +1028,8 @@ local _SALTZ_WEAPON_SET = {
 -- Source template per Saltzpyre port (where anim_event_3p is written) = the port's
 -- own source weapon template. Confirmed against ItemMasterList.
 local _SALTZ_WEAPON_TEMPLATE = {
+    bw_ghost_scythe = "staff_scythe",
+    we_spear        = "two_handed_spears_elf_template_1",
     -- SET B — WP Dual Hammers
     dr_dual_wield_hammers = "dual_wield_hammers_template",
     -- v0.12.213-dev (#519): the 10 baked batch-2 entries removed (see _SALTZ_WEAPON_SET).
@@ -1035,6 +1039,19 @@ local _SALTZ_WEAPON_TEMPLATE = {
 -- template's actions. Receiver-independent — each list is copied VERBATIM from the
 -- matching _KERI_WEAPON_ATTACKS entry (bw_1h_mace from the Kruber _WEAPON_ATTACKS).
 local _SALTZ_WEAPON_ATTACKS = {
+    bw_ghost_scythe = {
+        "attack_push", "attack_swing_charge_left", "attack_swing_charge_left_diagonal",
+        "attack_swing_charge_right", "attack_swing_heavy", "attack_swing_heavy_left_diagonal",
+        "attack_swing_heavy_right", "attack_swing_left", "attack_swing_left_diagonal",
+        "attack_swing_left_diagonal_last", "attack_swing_right", "attack_swing_up_right",
+        "parry_pose", "special_action", "special_action_02",
+    },
+    we_spear = {
+        "attack_push", "attack_swing_charge_left", "attack_swing_charge_right",
+        "attack_swing_down_left", "attack_swing_down_left_axe", "attack_swing_down_right",
+        "attack_swing_heavy", "attack_swing_heavy_right", "attack_swing_right",
+        "parry_pose", "push_stab",
+    },
     -- v0.12.213-dev (#519): the 10 baked batch-2 entries removed (see _SALTZ_WEAPON_SET).
     -- SET B — WP Dual Hammers
     dr_dual_wield_hammers = {
@@ -1963,6 +1980,17 @@ end
 function M.set_vocab_for(receiver, set)
     local rd = _RECV[receiver]
     return rd and rd.set_vocab and rd.set_vocab[set] or nil
+end
+
+-- #576 regression surface: expose the registered source-event obligations for
+-- one receiver/weapon without exposing mutable catalog internals.
+function M.source_events_for(receiver, weapon_key)
+    local rd = _RECV[receiver]
+    local src = rd and rd.weapon_attacks and rd.weapon_attacks[weapon_key]
+    if not src then return nil end
+    local out = {}
+    for i, event in ipairs(src) do out[i] = event end
+    return out
 end
 
 -- Regression hook (#159/#197): the (group setting_id, weapon_key) for every catalog

@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.222-dev"
+local MOD_VERSION = "0.12.223-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4078,6 +4078,49 @@ _rt_register("saltz_batch2_wh_remaps_baked", function()
         end
     end
     if #missing > 0 then return "wh_ bake missing: " .. table.concat(missing, ", ") end
+end)
+
+_rt_register("issue576_reopened_ports_and_action_chain_contract", function()
+    local failures = {}
+    local spear = _3p_template_remaps.two_handed_spears_elf_template_1
+    spear = spear and spear.wh_
+    if not spear or spear.attack_swing_charge_right ~= "attack_swing_charge_left_diagonal" then
+        failures[#failures + 1] = "elf spear H1 charge does not target billhook 3P charge"
+    end
+    if not spear or spear.attack_swing_heavy_right ~= "attack_swing_heavy_stab" then
+        failures[#failures + 1] = "elf spear H1 committed heavy missing"
+    end
+    local scythe = _3p_template_remaps.staff_scythe and _3p_template_remaps.staff_scythe.wh_
+    if not scythe or scythe.attack_swing_charge_left == scythe.attack_swing_charge_left_diagonal
+        or scythe.attack_swing_heavy == scythe.attack_swing_heavy_left_diagonal then
+        failures[#failures + 1] = "scythe H1/H3 roles collapsed"
+    end
+    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.source_events_for) then
+        failures[#failures + 1] = "picker source-event regression surface missing"
+    else
+        local required = {
+            bw_ghost_scythe = { "attack_swing_charge_left", "attack_swing_heavy", "attack_swing_left_diagonal" },
+            we_spear = { "attack_swing_charge_right", "attack_swing_heavy_right" },
+        }
+        for key, events in pairs(required) do
+            local got, present = _wt_dev_anim_picker.source_events_for("saltzpyre", key), {}
+            for _, event in ipairs(got or {}) do present[event] = true end
+            for _, event in ipairs(events) do
+                if not present[event] then failures[#failures + 1] = key .. " missing picker row " .. event end
+            end
+        end
+    end
+    for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+        local has_es, has_dr = false, false
+        for _, key in ipairs(weapon_unlock_map[career] or {}) do
+            has_es = has_es or key == "es_2h_hammer"
+            has_dr = has_dr or key == "dr_2h_hammer"
+        end
+        if not has_es or has_dr then
+            failures[#failures + 1] = career .. " must offer es_2h_hammer and exclude dr_2h_hammer"
+        end
+    end
+    if #failures > 0 then return table.concat(failures, "; ") end
 end)
 
 _rt_register("wt_safe_hook_installed", function()

@@ -1,5 +1,16 @@
 # Regression Checklist — weapon_tweaker
 
+## #576 - false-confirmed scythe / elf-spear Saltzpyre 3P chains
+
+| Field | Check |
+|---|---|
+| Fix version | 0.12.223-dev (unverified candidate) |
+| Automated | `/wt_regression_test`: `issue576_reopened_ports_and_action_chain_contract` and `issue411_dev_picker_source_events_resolve_live` pass. |
+| Solo visual | Enable 3P Anim Picker. On WHC/BH/Zealot test every Reaper row and Elf Spear H1 from idle: hold through charge, then release. Both wind-up and committed strike must be visible. |
+| Log evidence | `[wt:576]` separately records weapon/template/career, phase, source, target, origin and outcome. Spear H1 requires all four phase labels. `accepted_unverified*` is not a pass. |
+| Catalog | Saltzpyre offers `es_2h_hammer` and excludes `dr_2h_hammer`; Reaper's animation target remains WP Greathammer SET A. |
+| Confirmation gate | Do not return either key to `_CONFIRMED.saltzpyre` until every registered source event has explicit visual verification evidence. |
+
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) — entries that apply to weapon_tweaker.
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).

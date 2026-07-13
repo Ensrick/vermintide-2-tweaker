@@ -151,7 +151,7 @@ local _CONFIRMED = {
         we_dual_wield_sword_dagger = true, -- -> Dual Axe & Falchion
         bw_dagger = true,                  -- -> 1H Falchion
         bw_flame_sword = true,             -- -> 1H Falchion
-        we_spear = true,                   -- -> Billhook (#161)
+        -- #576: we_spear reopened after live H1 charge/release failures.
         es_halberd = true,                 -- -> Billhook (#161)
         bw_skullstaff_beam = true,         -- -> WP Greathammer
         bw_skullstaff_fireball = true,     -- -> WP Greathammer
@@ -171,7 +171,7 @@ local _CONFIRMED = {
         dr_2h_cog_hammer       = true,     -- -> WP Greathammer
         dr_2h_pick             = true,     -- -> WP Greathammer
         bw_1h_mace             = true,     -- -> WP Greathammer
-        bw_ghost_scythe        = true,     -- -> WP Greathammer
+        -- #576: bw_ghost_scythe reopened after live charge/light failures.
         es_bastard_sword       = true,     -- -> Saltzpyre 2H Sword
         es_mace_shield         = true,     -- -> Dual Axe & Falchion
         es_sword_shield        = true,     -- -> Dual Axe & Falchion
@@ -249,6 +249,9 @@ local _NEEDS_ANIMS = {
     -- (_wt_anim_remap.lua) -> moved to _CONFIRMED above. Only dr_dual_wield_hammers
     -- remains (zero non-unset picks in the tester's config — not yet tuned).
     saltzpyre = {
+        -- #576: static mappings are candidates, not visual confirmation.
+        bw_ghost_scythe       = "Warrior Priest Greathammer",
+        we_spear              = "Saltzpyre Billhook",
         -- SET B — Warrior Priest Dual Hammers
         dr_dual_wield_hammers  = "Warrior Priest Dual Hammers",
     },

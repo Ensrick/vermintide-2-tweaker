@@ -186,8 +186,10 @@ All `wh_*` natives 🔁 (~14 keys).
 | es_1h_mace / es_1h_sword / we_1h_axe | 1H family | 🔁 | universal vocab fall-through |
 | es_2h_sword_executioner | Executioner | ✅ | BAKED wh_ v0.12.201-dev (#160) → Saltzpyre 2H Sword |
 | es_bastard_sword | Bret. Longsword | 🔧 | **BAKED v0.12.213-dev (#519)** `_3p_template_remaps.bastard_sword_template.wh_` (Saltzpyre 2H Sword, 14 picks incl. `swap_charge_stance`); wired-unverified |
-| es_2h_hammer / dr_2h_cog_hammer / dr_2h_pick / bw_1h_mace / bw_ghost_scythe | 2H-blunt family ×5 | 🔧 | **BAKED v0.12.213-dev (#519)** career-scoped wh_ → WP Greathammer (`two_handed_hammers_template_1` / `two_handed_cog_hammers_template_1` / `two_handed_picks_template_1` / `one_handed_hammer_wizard_template_1` / `staff_scythe`). **#569 candidate v0.12.221-dev:** exact 180-degree local-Z weapon-root correction for every non-native standard-Saltzpyre item whose live wield target is `to_2h_hammer_priest`; native WP greathammer/1P exempt; wired-unverified |
-| dr_2h_hammer | Bardin 2H Hammer | 🔧 | NOT in batch-2 — `to_2h_hammer` TRUE on Saltz, fall-through expected, per-action unverified |
+| es_2h_hammer / dr_2h_cog_hammer / dr_2h_pick / bw_1h_mace | 2H-blunt family ×4 | 🔧 | **BAKED v0.12.213-dev (#519)** career-scoped wh_ → WP Greathammer. Saltzpyre's offered Empire Greathammer is exactly `es_2h_hammer` / `two_handed_hammers_template_1`. |
+| bw_ghost_scythe | Ensorcelled Reaper | 🧪 | **REOPENED v0.12.223-dev (#576):** live charge/heavy/light failures invalidate the old confirmed marker. All 15 source events are back in the picker with bounded `[wt:576]` diagnostics; successful calls are not visible-playback proof. |
+| we_spear | Elf Spear | 🧪 | **REOPENED v0.12.223-dev (#576):** live Saltzpyre H1 wind-up and committed heavy were invisible. Candidate now uses Billhook `anim_event_3p` values; charge start/loop/release/committed attack are separate obligations. |
+| dr_2h_hammer | Bardin 2H Hammer | ⛔ | Removed from standard Saltzpyre availability in v0.12.223-dev. Kruber's `es_2h_hammer` is the intended offered Greathammer. |
 | we_2h_axe | Glaive | 📋 | decided wh_2h_hammer (user override) |
 | es_dual_wield_hammer_sword | Mace & Sword | 📋 | decided wh_dual_hammer |
 | dr_dual_wield_axes | Bardin Dual Axes | ✅ | BAKED wh_ v0.12.188/.203 (`dual_wield_axes_template_1.wh_` → Dual Axe & Falchion) |

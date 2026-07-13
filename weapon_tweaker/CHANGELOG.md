@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.223-dev (2026-07-13) - #576: reopen false-confirmed 3P ports; bounded playback diagnostics [untested]
+
+- Reopened Ensorcelled Reaper and Elf Spear on standard Saltzpyre careers after live tests disproved their static `[working]` status. Both are back in the 3P picker; confirmation requires complete source-event coverage plus explicit human visual evidence.
+- Scythe H1/H2/H3 charges/releases no longer collapse onto one WP-Greathammer event. Elf Spear now uses Billhook `anim_event_3p` values instead of divergent 1P names; H1 charge and committed heavy remain separate obligations.
+- Added bounded, deduplicated, raw-log-only `[wt:576]` records with weapon/template, career, phase, source, target, remap origin, and outcome. Outcomes distinguish unmapped source, missing target, call error, and accepted-but-unverified/no observable transition. No chat output.
+- Standard Saltzpyre careers now offer Kruber's Empire Greathammer (`es_2h_hammer`, `two_handed_hammers_template_1`) and exclude Bardin's analogous `dr_2h_hammer`.
+- **Verify:** enable the 3P Anim Picker; test all Reaper rows and Elf Spear H1 hold/release. Expect separate `h1_charge_start`, `h1_charge_loop`, `h1_charge_release`, and `h1_committed_attack` records. Successful records remain unverified until visible playback is recorded. No Workshop deployment in this change.
+
 ## 0.12.222-dev (2026-07-13) - #569 follow-up: Hold-Pose preserves corrected/baked transforms [untested]
 
 - Latest logs prove `0.12.221-dev` applies the Saltzpyre WP-remap half-turn, after which live Hold-Pose position tuning writes an absolute identity-rotation pose every frame and clobbers it. Right-hand Z changed repeatedly while pitch/yaw/roll stayed zero; the regression is an ownership collision, not a bad #569 axis.
