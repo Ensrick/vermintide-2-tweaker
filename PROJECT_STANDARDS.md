@@ -1569,6 +1569,11 @@ reads issues as a test queue across multiple agents; padding wastes his tokens.
   - `**Fix:**` one line of direction. ONE leading hypothesis; name an alternative
     only if the fix differs.
   - `**Refs:**` bare `#N` list, no relationship essays.
+- **Markdown transport is binding:** submit multiline bodies with
+  `gh issue create/edit --body-file <file>` or `--body-file -` and real line
+  breaks. Never pass a quoted string containing escaped `\n`; GitHub renders
+  those characters literally and can turn the whole body into one malformed
+  heading. Use the bold inline labels above, not `##` section headings.
 - **Cut entirely:** restating the title, "Grounding"/background narrative,
   hedging (`[unverified]` on a hypothesis line is enough), meta-commentary,
   multi-paragraph hypothesis walkthroughs.
