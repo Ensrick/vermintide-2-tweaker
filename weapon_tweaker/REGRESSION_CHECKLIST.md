@@ -13,12 +13,12 @@ Last updated: 2026-07-13.
 | Field | Value |
 |-------|-------|
 | Symptom | Non-native 3P weapons face backwards when standard Saltzpyre careers use `to_2h_hammer_priest`. |
-| Root cause | The animation remap changes the body attachment-node orientation, while vanilla links weapon node 0 with no corrective local transform. |
-| Fix version(s) | 0.12.221-dev |
+| Root cause | The animation remap changes the body attachment-node orientation, while vanilla links weapon node 0 with no corrective local transform. Follow-up: Hold-Pose live apply rebuilt an absolute pose from slider values, so a position-only edit supplied identity rotation and erased the correction. |
+| Fix version(s) | 0.12.221-dev; Hold-Pose composition follow-up 0.12.222-dev |
 | Category | INTEGRATION / MULTIPLAYER |
-| Repro | On standard Saltzpyre, wield two non-native families mapped to WP greathammer; observe locally and from another peer, then swap/stow. |
-| Expected post-fix | Wielded weapons receive one 180-degree local-Z correction; stowed weapons restore canonical orientation; native WP greathammer and 1P remain unchanged. |
-| Detection | `/wt_regression_test`: `issue569_wp_hammer_remap_orientation_scope` PASS. `[wt:569]` reports tracked exact weapon/career and correction state. |
+| Repro | On standard Saltzpyre, wield two non-native families mapped to WP greathammer; observe locally and from another peer, then swap/stow. Enable Hold-Pose live apply; change only RH position Z while all RH rotations remain zero, then change only rotation and reset. |
+| Expected post-fix | Wielded weapons receive one 180-degree local-Z correction. Position-only tuning preserves corrected rotation and scale; rotation-only tuning preserves canonical/baked position and scale; repeated frames do not compound; zero/reset restores baseline. Native WP greathammer, 1P, preview, and husk ownership boundaries remain correct. |
+| Detection | `/wt_regression_test`: `issue569_wp_hammer_remap_orientation_scope` PASS. `[wt:569]` reports tracked exact weapon/career, correction state, and `hold-pose compose position=... rotation=... scale=preserved compounds=false`. |
 
 ---
 ## Multiplayer / Network Sync

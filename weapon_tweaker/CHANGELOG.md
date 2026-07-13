@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.222-dev (2026-07-13) - #569 follow-up: Hold-Pose preserves corrected/baked transforms [untested]
+
+- Latest logs prove `0.12.221-dev` applies the Saltzpyre WP-remap half-turn, after which live Hold-Pose position tuning writes an absolute identity-rotation pose every frame and clobbers it. Right-hand Z changed repeatedly while pitch/yaw/roll stayed zero; the regression is an ownership collision, not a bad #569 axis.
+- Reworked Hold-Pose sliders as independent deltas over one captured canonical/baked 3P baseline. Position uses only `Unit.set_local_position`; rotation uses only `Unit.set_local_rotation` with `base * delta`; scale is never written. Editing one component therefore preserves the other two, and every frame is rebuilt from the baseline so values cannot compound.
+- #569-tracked units expose their authoritative canonical-or-corrected rotation to the tuner, eliminating hook-order ambiguity. The tuner remains local-player 3P-only; #569's preview/bot/remote-husk ownership and all 1P units remain untouched.
+- Returning a component to zero restores its baseline once, then becomes a true no-op. `/wt_dev_hp_reset` restores dirty cached components immediately before clearing the cache.
+- Expanded `issue569_wp_hammer_remap_orientation_scope` with position-only, rotation-only, zero/no-op, scale-preservation, scope, and no-compounding contracts.
+
 ## 0.12.221-dev (2026-07-13) - #569: Saltzpyre WP-remap 3P orientation [untested]
 
 - **Symptom:** non-native weapons on `wh_captain`, `wh_bountyhunter`, and `wh_zealot` faced backwards when their live 3P wield target was `to_2h_hammer_priest`. The animation family remains the intended one; the linked weapon-root orientation was wrong.

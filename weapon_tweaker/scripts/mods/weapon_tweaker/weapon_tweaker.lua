@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.221-dev"
+local MOD_VERSION = "0.12.222-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -859,6 +859,17 @@ function mod._wt569_reapply_3p_orientation()
             end
         end
     end
+end
+
+-- Hold-Pose needs the same authoritative corrected baseline without depending
+-- on per-frame hook order. A nil return means the unit is outside #569 scope.
+function mod._wt569_desired_rotation_for_unit(unit)
+    local row = _wt569_tracked_3p_units[unit]
+    if not row then return nil end
+    local base = row.base:unbox()
+    if not _wt569_is_wielded(row) then return base end
+    local half_turn = Quaternion.axis_angle(Vector3(0, 0, 1), math.pi)
+    return Quaternion.multiply(base, half_turn)
 end
 
 -- CW crash on ghost scythe 3P spawn (crashify://77917479-d053-4d34-b6b9-629878a7e6ec).
@@ -4940,6 +4951,31 @@ _rt_register("issue569_wp_hammer_remap_orientation_scope", function()
     if contract.degrees ~= 180 then return "correction is not exactly 180 degrees" end
     if contract.native_exempt_key ~= "wh_2h_hammer" then
         return "native exemption key drifted"
+    end
+    local pose_contract = _wt_dev_hold_pose and _wt_dev_hold_pose._pose_contract
+    local plan_values = _wt_dev_hold_pose and _wt_dev_hold_pose._component_plan_values
+    if type(pose_contract) ~= "table" or type(plan_values) ~= "function" then
+        return "Hold-Pose composition contract missing"
+    end
+    if pose_contract.mode ~= "canonical_plus_delta"
+        or pose_contract.position_setter ~= "Unit.set_local_position"
+        or pose_contract.rotation_setter ~= "Unit.set_local_rotation"
+        or pose_contract.scale_setter ~= false
+        or pose_contract.scope ~= "local_player_3p_only"
+        or pose_contract.compounds ~= false then
+        return "Hold-Pose must preserve canonical position/rotation/scale without compounding"
+    end
+    local position_only = plan_values(0, 0, 0.1, 0, 0, 0)
+    if not position_only.position or position_only.rotation then
+        return "position-only Hold-Pose edit would overwrite canonical rotation"
+    end
+    local rotation_only = plan_values(0, 0, 0, 0, 0, 15)
+    if rotation_only.position or not rotation_only.rotation then
+        return "rotation-only Hold-Pose edit would overwrite canonical position"
+    end
+    local zero = plan_values(0, 0, 0, 0, 0, 0)
+    if zero.position or zero.rotation then
+        return "zero Hold-Pose sliders are not a no-op"
     end
 end)
 

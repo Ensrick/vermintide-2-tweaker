@@ -3,8 +3,8 @@ wt_dev_hold_pose — Dev: Weapon Hold Pose Tuner
 ==============================================
 
 Live in-game tuning of how the currently-wielded weapon is held on the local
-player's 3P body. Drives `Unit.set_local_pose` against the weapon unit each
-frame from VMF slider values (Euler rotation degrees + offset metres), then
+player's 3P body. Composes independent position/rotation deltas over the
+weapon unit's captured canonical/baked transform each frame, then
 emits a Lua-pastable `unit_attachment_node_linking`-style snippet via the
 `/wt_dump_hold_pose` chat command so the lead can bake the tuned numbers back
 into a weapon template / spawn-data helper.
@@ -12,7 +12,7 @@ into a weapon template / spawn-data helper.
 Live-apply approach (chosen)
 ----------------------------
 Per-frame re-apply via `mod:hook_safe("StateInGameRunning", "update", ...)`.
-Rationale: a one-shot `Unit.set_local_pose` write is overwritten on the very
+Rationale: a one-shot weapon-root transform write is overwritten on the very
 next animation tick when the engine re-applies the canonical attachment-node
 pose. Hooking a per-frame state update and re-writing the local pose every
 frame keeps the slider value visible. Cost is one Matrix4x4 + Vector3 +
@@ -34,8 +34,8 @@ Engine rules respected
 * No raw `Quaternion` / `Vector3` / `Matrix4x4` storage across frames. Every
   apply call recomputes from the scalar slider values.
 * `pl.player_unit` is a FIELD (chained dot), not a method call.
-* `Unit.actor` / `Unit.node` are 1-indexed where relevant; `set_local_pose`
-  uses node `0` for the unit root (matches engine canon at
+* `Unit.actor` / `Unit.node` are 1-indexed where relevant; local position and
+  rotation setters use node `0` for the unit root (matches engine canon at
   `projectile_physics_husk_locomotion_extension.lua:65` and
   `camera_state_helper.lua:21`).
 
@@ -53,6 +53,11 @@ VMF widget caveats
 local mod = get_mod("wt")
 
 local M = {}
+
+-- Weak keys keep per-unit canonical snapshots only for the lifetime of the
+-- local 3P weapon unit. Scalars and QuaternionBox are safe across frames;
+-- raw Vector3/Quaternion/Matrix4x4 values are never retained.
+local _pose_baselines = setmetatable({}, { __mode = "k" })
 
 -- ---------------------------------------------------------------------------
 -- Source-node enumeration helpers
@@ -232,51 +237,134 @@ local function _read_sliders(p)
            mod:get("wt_dev_hp_lh_rot_roll")  or 0
 end
 
--- True when every Hold-Pose slider is at its default (0). An all-zero pose is
--- the IDENTITY matrix at local origin, and writing it with set_local_pose is
--- ABSOLUTE — so applying it would CLOBBER any baked grip offset on node 0
--- (the scythe / Elven-axe durable re-apply in weapon_tweaker.lua, and the
--- one-shot _offset_weapon_units write). "0" must mean "no override, leave the
--- baked grip alone", NOT "force the weapon to origin". This guard makes the
--- untouched/zeroed tool a true no-op even if live-apply is on. Only an
--- explicitly non-zero slider value wins and overrides the bake.
+-- True when every Hold-Pose slider is at its default (0). Zero means no
+-- delta over the captured canonical/baked transform. After a tuned component
+-- returns to zero it is restored once; subsequent frames are a true no-op.
 local function _pose_is_default(p)
     local ox, oy, oz, pitch_deg, yaw_deg, roll_deg = _read_sliders(p)
     return ox == 0 and oy == 0 and oz == 0
        and pitch_deg == 0 and yaw_deg == 0 and roll_deg == 0
 end
 
--- Build a FRESH local pose matrix from scalar slider values. Returns the raw
--- Matrix4x4 (stack temporary — must be consumed before the next frame).
-local function _build_pose(p)
-    local ox, oy, oz, pitch_deg, yaw_deg, roll_deg = _read_sliders(p)
-    local pos = Vector3(ox, oy, oz)
-    -- Stingray Quaternion.from_euler_angles_xyz takes DEGREES, not radians
-    -- (vanilla crawl_space_extension.lua:14 passes 90 for a 90° turn). The old
-    -- math.rad() wrap made every rotation ~57x too small -> imperceptible, so the
-    -- rotation sliders looked like they did nothing. Pass degrees straight through.
-    local rot = Quaternion.from_euler_angles_xyz(pitch_deg, yaw_deg, roll_deg)
-    return Matrix4x4.from_quaternion_position(rot, pos)
+-- Split the slider state into independent transform components. This is a
+-- pure seam used by the runtime and #569 regression: an omitted/zero position
+-- component must never cause a rotation write, and vice versa.
+local function _component_plan_values(ox, oy, oz, pitch_deg, yaw_deg, roll_deg)
+    return {
+        position = ox ~= 0 or oy ~= 0 or oz ~= 0,
+        rotation = pitch_deg ~= 0 or yaw_deg ~= 0 or roll_deg ~= 0,
+        ox = ox, oy = oy, oz = oz,
+        pitch = pitch_deg, yaw = yaw_deg, roll = roll_deg,
+    }
+end
+local function _component_plan(p)
+    return _component_plan_values(_read_sliders(p))
+end
+M._component_plan = _component_plan
+M._component_plan_values = _component_plan_values
+M._pose_contract = {
+    mode = "canonical_plus_delta",
+    position_setter = "Unit.set_local_position",
+    rotation_setter = "Unit.set_local_rotation",
+    scale_setter = false,
+    scope = "local_player_3p_only",
+    compounds = false,
+}
+
+local function _capture_baseline(weapon_unit)
+    local ok_pos, pos = pcall(Unit.local_position, weapon_unit, 0)
+    local ok_rot, rot = pcall(Unit.local_rotation, weapon_unit, 0)
+    -- #569 owns an explicit canonical+half-turn rotation for tracked WP-remap
+    -- units. Query that authoritative pose so capture is correct regardless of
+    -- hook ordering; unrelated local units keep their live canonical rotation.
+    if mod._wt569_desired_rotation_for_unit then
+        local ok_569, desired_569 = pcall(mod._wt569_desired_rotation_for_unit, weapon_unit)
+        if ok_569 and desired_569 then
+            rot, ok_rot = desired_569, true
+        end
+    end
+    if not ok_pos or not pos or not ok_rot or not rot then return nil end
+    local row = {
+        px = pos[1], py = pos[2], pz = pos[3],
+        rotation = QuaternionBox(rot),
+        position_dirty = false,
+        rotation_dirty = false,
+    }
+    _pose_baselines[weapon_unit] = row
+    return row
 end
 
--- Apply the slider-built pose to one weapon unit. node_index 0 is the unit
--- root (matches engine canon: projectile_physics_husk_locomotion_extension
--- .lua:65 and camera_state_helper.lua:21). Wrapped in pcall as belt-and-
--- suspenders even though set_local_pose is documented as safe — engine
--- write-side fatals occasionally bypass pcall.
+-- Apply independent deltas to one local 3P weapon root. Position and rotation
+-- use separate setters so changing either component cannot reset the other or
+-- the unit scale. Every desired value is rebuilt from the captured baseline,
+-- never the previous tuner result, so repeated frames/commands do not compound.
 --
--- DEFER-TO-BAKED: when all sliders are at default (0) we DO NOT write — an
--- absolute identity-pose write would stomp the baked grip offset on node 0
--- (precedence: 0 = "no override, keep the bake"; non-zero = "override wins").
--- This keeps the durable per-frame grip re-apply (weapon_tweaker.lua
--- _reapply_durable_grip_offsets) intact at stock defaults.
+-- DEFER-TO-BAKED: with no cached dirty component, all-zero sliders do not
+-- capture or write anything. A dirty component returning to zero restores its
+-- captured baseline exactly once, then becomes a no-op.
 local function _apply_pose_to(weapon_unit, p)
     if not weapon_unit then return false end
     if not Unit.alive(weapon_unit) then return false end
-    if _pose_is_default(p) then return false end   -- defer-to-baked guard, per hand
-    local pose = _build_pose(p)
-    local ok = pcall(Unit.set_local_pose, weapon_unit, 0, pose)
-    return ok
+    local plan = _component_plan(p)
+    local row = _pose_baselines[weapon_unit]
+    if not row and not plan.position and not plan.rotation then return false end
+    row = row or _capture_baseline(weapon_unit)
+    if not row then return false end
+
+    local plan_key = tostring(plan.position) .. "/" .. tostring(plan.rotation)
+    if row.last_plan ~= plan_key then
+        row.last_plan = plan_key
+        pcall(printf,
+            "[wt:569] hold-pose compose position=%s rotation=%s base=canonical_or_baked scale=preserved compounds=false scope=local_3p",
+            tostring(plan.position), tostring(plan.rotation))
+    end
+
+    local wrote = false
+    if plan.position then
+        local desired_pos = Vector3(row.px + plan.ox, row.py + plan.oy, row.pz + plan.oz)
+        local ok = pcall(Unit.set_local_position, weapon_unit, 0, desired_pos)
+        row.position_dirty = ok or row.position_dirty
+        wrote = ok or wrote
+    elseif row.position_dirty then
+        local base_pos = Vector3(row.px, row.py, row.pz)
+        local ok = pcall(Unit.set_local_position, weapon_unit, 0, base_pos)
+        if ok then row.position_dirty = false end
+        wrote = ok or wrote
+    end
+
+    if plan.rotation then
+        -- Stingray Quaternion.from_euler_angles_xyz takes DEGREES (vanilla
+        -- crawl_space_extension.lua:14 passes 90). Delta is post-multiplied in
+        -- the captured local frame, matching #569's canonical*correction order.
+        local delta = Quaternion.from_euler_angles_xyz(plan.pitch, plan.yaw, plan.roll)
+        local desired_rot = Quaternion.multiply(row.rotation:unbox(), delta)
+        local ok = pcall(Unit.set_local_rotation, weapon_unit, 0, desired_rot)
+        row.rotation_dirty = ok or row.rotation_dirty
+        wrote = ok or wrote
+    elseif row.rotation_dirty then
+        local ok = pcall(Unit.set_local_rotation, weapon_unit, 0, row.rotation:unbox())
+        if ok then row.rotation_dirty = false end
+        wrote = ok or wrote
+    end
+    return wrote
+end
+
+local function _restore_cached_poses()
+    local restored = 0
+    for unit, row in pairs(_pose_baselines) do
+        local ok_alive, alive = pcall(Unit.alive, unit)
+        if ok_alive and alive then
+            if row.position_dirty then
+                local pos = Vector3(row.px, row.py, row.pz)
+                if pcall(Unit.set_local_position, unit, 0, pos) then restored = restored + 1 end
+            end
+            if row.rotation_dirty then
+                if pcall(Unit.set_local_rotation, unit, 0, row.rotation:unbox()) then restored = restored + 1 end
+            end
+        end
+        _pose_baselines[unit] = nil
+    end
+    return restored
 end
 
 -- Apply each hand's pose from ITS OWN sliders, independently. No hand
@@ -341,10 +429,9 @@ local function _dump_snippet()
     end
 
     mod:info("}")
-    mod:info("-- Apply via (per hand):")
-    mod:info("--   local pos = Vector3(offset_x, offset_y, offset_z)")
-    mod:info("--   local rot = Quaternion.from_euler_angles_xyz(pitch, yaw, roll)  -- DEGREES, not radians")
-    mod:info("--   Unit.set_local_pose(weapon_unit, 0, Matrix4x4.from_quaternion_position(rot, pos))")
+    mod:info("-- Apply as deltas over the captured canonical/baked transform (per hand):")
+    mod:info("--   Unit.set_local_position(unit, 0, base_pos + Vector3(offset_x, offset_y, offset_z))")
+    mod:info("--   Unit.set_local_rotation(unit, 0, Quaternion.multiply(base_rot, Quaternion.from_euler_angles_xyz(pitch, yaw, roll)))")
     mod:info("-- ==== end dump ====")
 end
 
@@ -599,13 +686,14 @@ function M.install()
             mod:set("wt_dev_hp_lh_rot_pitch", 0)
             mod:set("wt_dev_hp_lh_rot_yaw",   0)
             mod:set("wt_dev_hp_lh_rot_roll",  0)
+            local restored = _restore_cached_poses()
             -- mod:set from non-on_setting_changed paths updates the store
             -- but the open widget doesn't refresh until view re-open (see
             -- VMF_RECIPES § checkbox cached display state). The pose itself
             -- DOES re-apply correctly because _apply_pose_all reads via
             -- mod:get on the next frame.
-            mod:echo("[wt_dev_hp] sliders reset to zero (close + reopen the "
-                .. "settings menu to see the UI update)")
+            mod:echo("[wt_dev_hp] sliders reset to zero; restored %d pose component(s) "
+                .. "(close + reopen settings to see the UI update)", restored)
         end)
 
     mod:info("[wt_dev_hp] Dev: Weapon Hold Pose Tuner installed -- "

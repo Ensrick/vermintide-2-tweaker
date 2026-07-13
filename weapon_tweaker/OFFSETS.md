@@ -56,15 +56,13 @@ offset**. The model preview does NOT continuously re-drive node 0
 (`MenuWorldPreviewer` poses the weapon once), so the one-shot survives there.
 Net result: preview shows the offset, in-game shows raw position.
 
-This is **source-confirmed** by the dev tool that was used to TUNE the value:
-`wt_dev_hold_pose.lua:16-21` —
+This is also the boundary used by the dev Hold-Pose tuner: a one-shot write is
+overwritten on the next animation tick, so its live mode re-applies every
+frame. Since v0.12.222-dev (#569 follow-up), the tuner never writes an absolute
+`set_local_pose`: it composes position and rotation deltas independently over a
+captured canonical/baked pose, preserving the untouched component and scale.
 
-> "a one-shot `Unit.set_local_pose` write is overwritten on the very next
-> animation tick when the engine re-applies the canonical attachment-node pose.
-> Hooking a per-frame state update and re-writing the local pose every frame
-> keeps the slider value visible."
-
-The dev tuner only works in-game because it re-applies **every frame**. The
+The dev tuner works in-game because it re-applies **every frame**. The
 static `_offset_weapon_units` did not — so the tuned number never actually held
 in gameplay.
 
