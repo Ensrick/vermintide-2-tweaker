@@ -1609,6 +1609,12 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   of the crash). A status label without that comment is invalid and gets
   removed on sight - the user did exactly that on #479. Post the test comment
   in the same pass as the label.
+- **Complete-feature prerequisite (user rule 2026-07-12, set on issue #505):**
+  `verify-fix` NEVER goes on a partially-delivered feature. If any spec item is
+  unbuilt (deferred sub-feature, blocked dependency, "part 2 in flight"), the
+  issue carries NO verify-* label until the spec is complete or the user
+  explicitly re-scopes it - a tester filtering verify-fix must find only things
+  that can pass in full. Partial progress lives in comments, not the label.
 - **Human-verification scope (user rule 2026-07-12):** `verify-fix` / `verify-fix-coop`
   / `Fixed` are RESERVED for issues whose verification needs a human in-game -
   generating a log with evidence of the fix, or eyes-on testing/oversight. The user
