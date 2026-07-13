@@ -30,6 +30,34 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 -- ZERO BEHAVIOR CHANGE when CKC is absent: install() registers NO hooks at all,
 -- so the vanilla dropdown behaves exactly as stock.
 --
+-- THREE-SURFACE SYNC PRECEDENCE (#311, marker [CKC-SYNC-PRECEDENCE-311]). CKC's state
+-- lives in exactly TWO stores, and every surface is a LIVE view on them -- none keeps an
+-- authoritative shadow copy, so they cannot diverge:
+--   (a) MASTER ENABLE = CKC's VMF mod-enabled flag (get_mod(CKC):is_enabled()). Written
+--       via VMF mod_state_changed, read via is_enabled.
+--   (b) FEATURE OPTIONS (duration / size / pop / the shape dropdowns) = CKC's OWN VMF
+--       settings (mods_settings[CKC][id]), read/written via CKC's mod:get / mod:set.
+-- The three surfaces and what each owns:
+--   1. Vanilla Options row (THIS module) -- owns (a). Its On/Off drives the master enable
+--      live (mod_state_changed) and DISPLAYS is_enabled; it never touches (b). This is why
+--      "vanilla crosshair kill confirmation OFF => feature off" (#311): the row IS the CKC
+--      master enable when CKC is installed.
+--   2. gut Mod Tweaker > Interface > HUD > "Crosshair Kill Confirmation" group -- owns (b).
+--      _inject_ckc_into_gut (_mod_tweaker_state/_view.lua) folds CKC's option nodes in;
+--      edits write THROUGH to CKC via _cat_set -> ckc:set(id, val, true) -- the 3rd arg
+--      fires CKC's on_setting_changed so the crosshair updates live (the own-or-pin
+--      HB:set(id,v,true) cross-mod-sync doctrine). It carries NO master-enable widget (VMF
+--      enable is a mod-list flag, not a settings-tree node).
+--   3. CKC's OWN VMF options page -- also owns (b): native VMF read/write of the same store.
+-- CONVERGENCE: surfaces 2 and 3 operate on the SAME (b) store, so there is a single source
+-- of truth and last-write-wins with nothing to reconcile. They are never simultaneously
+-- interactive (2 is a hero-view state, 3 is the ESC mod-settings view -- mutually exclusive),
+-- and EACH rebuilds its rows from a live get on open, so a change made in one is reflected
+-- the next time the other opens. The known VMF caveat (mod:set does NOT repaint an
+-- already-open widget -- memory reference_vmf_checkbox_cached_display_state) therefore
+-- cannot bite: no two option surfaces are ever on screen at once. Surface 1 reads is_enabled
+-- live whenever it is shown, so a mod_state_changed from ANY path is reflected there too.
+--
 -- MODULE-SIDE LIFECYCLE CHAINING (deliberate). #313 landed while the gut main
 -- file (gui_tweaker_dev.lua) was claimed by parallel #307 freecam work, so this
 -- module does NOT rely on the main file wiring its callbacks. Instead it
@@ -62,6 +90,14 @@ local _VANILLA  = "crosshair_kill_confirm"        -- native user_setting key
 -- (#528) _S_BRIDGE (the gut_ckc_options_bridge checkbox) retired: bridge is implicit.
 local _S_SAVED  = "gut_ckc_saved_vanilla_group"    -- remembered pre-takeover vanilla group
 local GEAR      = 26                               -- gear icon square (px, 1080p ref)
+-- Vanilla drop_down geometry (options_view_definitions.lua). The setting row is ROW_W wide
+-- (DROP_DOWN_WIDGET_SIZE[1] = list_mask width 1400 - 100 = 1300, :2294-2297) and its
+-- right-aligned interactive field is BOX_W wide (INPUT_FIELD_WIDTH = 400, :3), so the field's
+-- LEFT edge is at row_x + (ROW_W - BOX_W). GEAR_GAP is the clear space between the cog's right
+-- edge and that field. Used only by _append_gear's left-gutter placement (see there).
+local ROW_W     = 1300
+local BOX_W     = 400
+local GEAR_GAP  = 14
 
 local M = {}
 local _active = false          -- CKC installed + togglable (set by install)
@@ -169,7 +205,18 @@ local function _append_gear(widget)
 
     local wo = style.offset or { 0, 0, 0 }
     local sz = style.size or { 1300, 30 }
-    local gx = (wo[1] or 0) + (sz[1] or 1300) + 10
+    -- [CKC-GEAR-LEFT-GUTTER-313] Place the cog in the empty gutter immediately LEFT of the
+    -- On/Off field, NOT to the right of the row. #313 user report (2026-07-11, reaffirmed
+    -- 2026-07-12): the old "+ ROW_W + 10" placement put the cog UNDER the page scrollbar,
+    -- which occupies the far-right ~23px of the list (scrollbar_root: background right -15,
+    -- 8 wide; options_view_definitions.lua:316-329). The row's right-aligned field already
+    -- ends at row_x + ROW_W (world ~1608) with the scrollbar starting ~29px further right,
+    -- so there is no room to its right for a comfortable cog "column". The field's left edge
+    -- is at row_x + (ROW_W - BOX_W) (hotspot offset, options_view_definitions.lua:2756-2766);
+    -- the gutter left of it holds only the short left-aligned label, so the cog gets its own
+    -- clear column there, fully clear of the scrollbar. Pure offset change -- the vanilla
+    -- box / arrow / list styles are untouched (lowest-risk fix).
+    local gx = (wo[1] or 0) + (ROW_W - BOX_W) - GEAR_GAP - GEAR
     local gy = (wo[2] or 0) + ((sz[2] or 30) / 2 - GEAR / 2)
     local gz = (wo[3] or 0) + 5
 

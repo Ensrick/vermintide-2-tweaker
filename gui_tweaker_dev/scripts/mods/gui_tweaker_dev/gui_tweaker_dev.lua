@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.229-dev"
+local MOD_VERSION = "0.2.230-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2469,6 +2469,64 @@ _rt_register("hud_collapsibles_hold_first_position", function()
         local txt = _gut_read_all(dir .. fn)
         if txt and not txt:find(splice_needle, 1, true) then
             return fn .. " lost the " .. splice_needle .. " head-of-HUD splice (#527: CKC group must lead the HUD child block)"
+        end
+    end
+end)
+
+_rt_register("ckc_gear_left_of_field_clears_scrollbar", function()
+    -- (#313) The vanilla-Options cog must sit in the gutter LEFT of the On/Off field, clear
+    -- of the page scrollbar (user report 2026-07-11 "overflows into the scrollbar"). Assert
+    -- _append_gear carries the left-gutter marker AND no longer uses the old right-of-row
+    -- "+ ROW_W + 10" placement that overlapped the scrollbar. Split needles; unreadable
+    -- source => silent skip (retail sandbox has no io -- #511).
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dir = src:match("^(.*[/\\])[^/\\]*$")
+    if not dir then return end
+    local br_txt = _gut_read_all(dir .. "_gut_ckc_bridge.lua")
+    if not br_txt then return end
+    local gutter_needle = "CKC-GEAR-LEFT-GUTTER" .. "-313"
+    if not br_txt:find(gutter_needle, 1, true) then
+        return "_gut_ckc_bridge.lua lost the " .. gutter_needle ..
+            " left-gutter cog placement -- the cog would overflow the page scrollbar again (#313)"
+    end
+    -- The old placement anchored the cog to the row's RIGHT edge (sz[1] + 10). Its return
+    -- (the scrollbar overlap) must not come back.
+    local old_needle = "(sz[1] or 1300) + " .. "10"
+    if br_txt:find(old_needle, 1, true) then
+        return "_gut_ckc_bridge.lua still places the cog at row-right (" .. old_needle ..
+            ") -- it overlaps the scrollbar; place it left of the field (#313)"
+    end
+end)
+
+_rt_register("ckc_three_surface_sync_precedence", function()
+    -- (#311) The three surfaces (vanilla row / gut Mod Tweaker HUD group / CKC's own VMF page)
+    -- converge on one source of truth. Assert (1) the bridge header documents the precedence
+    -- (marker [CKC-SYNC-PRECEDENCE-311]) and (2) the Mod Tweaker write-through fires the owner
+    -- mod's on_setting_changed live -- _cat_set calls mod_obj.set(id, value, true) so a HUD-group
+    -- edit reaches CKC (the own-or-pin doctrine). Split needles; unreadable source => skip.
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dir = src:match("^(.*[/\\])[^/\\]*$")
+    if not dir then return end
+    local br_txt = _gut_read_all(dir .. "_gut_ckc_bridge.lua")
+    if br_txt then
+        local prec_needle = "CKC-SYNC-PRECEDENCE" .. "-311"
+        if not br_txt:find(prec_needle, 1, true) then
+            return "_gut_ckc_bridge.lua header lost the " .. prec_needle ..
+                " three-surface sync precedence (#311)"
+        end
+    end
+    local st_txt = _gut_read_all(dir .. "_mod_tweaker_state.lua")
+    if st_txt then
+        -- _cat_set must fire the owner's on_setting_changed (3rd arg true) so a HUD-group
+        -- CKC edit writes THROUGH to the CKC mod live.
+        local wt_needle = "mod_obj.set, mod_obj, setting_id, value, " .. "true"
+        if not st_txt:find(wt_needle, 1, true) then
+            return "_mod_tweaker_state.lua _cat_set no longer live-fires on_setting_changed" ..
+                " (mod_obj.set ... true) -- Mod Tweaker HUD-group edits would not reach CKC (#311)"
         end
     end
 end)
