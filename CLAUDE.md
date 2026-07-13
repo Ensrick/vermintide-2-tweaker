@@ -139,7 +139,13 @@ On receiving a user bug report, read `docs/BUG_TRIAGE_RUNBOOK.md` first - it's t
 
 ## Mod Directory
 
-All active mods build via **VMB** (the launcher). Only frozen legacy `tweaker` uses the raw SDK. Purposes here are one-liners; per-mod docs (Tier 3 above / Key Reference Files below) carry the detail. Do not re-add version numbers or dated notes to this table - they drift; the mod's own CHANGELOG is the source of truth.
+The human-facing inventory in `README.md` is canonical for repository membership,
+stream, and Workshop ID. This table adds maintainer/agent implementation notes and
+must not redefine that inventory. All active mods build via **VMB** (the launcher).
+Only frozen legacy `tweaker` uses the raw SDK. Purposes here are one-liners;
+per-mod docs (Tier 3 above / Key Reference Files below) carry the detail. Do not
+re-add version numbers or dated notes to this table - they drift; the mod's own
+CHANGELOG is the source of truth.
 
 | Mod | Internal ID | Workshop ID | Stream | Purpose |
 |-----|-------------|-------------|--------|---------|
