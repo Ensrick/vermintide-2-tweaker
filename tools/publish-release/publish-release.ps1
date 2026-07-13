@@ -44,6 +44,13 @@ $launcher = Join-Path $repoRoot 'tools\vmb-launcher\bin\Release\net9.0-windows\w
 if (-not (Test-Path $launcher)) {
     throw "VMBLauncher not found at $launcher. Build it first via tools/vmb-launcher/publish.ps1 -SkipOpen"
 }
+$manifestHelpers = Join-Path $PSScriptRoot 'release-manifest.ps1'
+if (-not (Test-Path -LiteralPath $manifestHelpers)) {
+    throw "Release-manifest helpers not found at $manifestHelpers."
+}
+. $manifestHelpers
+$sourceCommit = Get-ReleaseSourceCommit -RepoRoot $repoRoot
+$builderVersion = Get-VmbLauncherVersion -LauncherPath $launcher
 
 $ghRepo = 'Ensrick/vermintide-2-tweaker'
 
@@ -209,6 +216,7 @@ if ($filterActive) {
 
 $manifestMods = @()
 $assetPaths   = @()
+$stagedIds    = @()
 
 foreach ($m in $releaseSet) {
     $modPath  = Join-Path $repoRoot $m.Folder
@@ -248,6 +256,13 @@ foreach ($m in $releaseSet) {
     Copy-Item (Join-Path $bundleDir '*') $modStage -Recurse -Force
     Set-Content -Path (Join-Path $modStage 'vt2updater_version.txt') -Value $version -Encoding ascii -NoNewline
 
+    # Provenance hashes describe VMBLauncher's raw output, before the updater
+    # sidecar is added. Hash the copied staging files so the manifest verifies
+    # the exact bytes that will enter the release zip.
+    $bundleFiles = @(New-BundleFileRecords -BundleDirectory $modStage | Where-Object {
+        $_.filename -ne 'vt2updater_version.txt'
+    })
+
     $zipPath = Join-Path $stage "$($m.Id).zip"
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
     Compress-Archive -Path (Join-Path $modStage '*') -DestinationPath $zipPath -Force
@@ -267,7 +282,15 @@ foreach ($m in $releaseSet) {
         asset_filename  = "$($m.Id).zip"
         sha256          = $sha256
         visibility      = $visibility
+        source_commit   = $sourceCommit
+        source_state    = (Get-ModSourceState -RepoRoot $repoRoot -ModFolder $m.Folder)
+        builder         = [ordered]@{
+            name    = 'VMBLauncher'
+            version = $builderVersion
+        }
+        bundle_files    = $bundleFiles
     }
+    $stagedIds += $m.Id
     Write-Host "  staged $($m.Id) v$version -> $zipPath (sha256 $($sha256.Substring(0,12))...)"
 }
 
@@ -345,6 +368,7 @@ if ($filterActive) {
 }
 
 $manifest = [ordered]@{
+    manifest_schema = 2
     release_tag  = $Tag
     published_at = (Get-Date).ToUniversalTime().ToString('o')
     mods         = $manifestMods
@@ -352,6 +376,17 @@ $manifest = [ordered]@{
 $manifestPath = Join-Path $stage 'manifest.json'
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -Path $manifestPath -Encoding utf8
 $assetPaths += $manifestPath
+
+# Block before any GitHub mutation if a newly staged entry cannot be mapped to
+# its source baseline, VMBLauncher version, or exact bundle bytes. Filtered
+# releases may carry older sibling entries without provenance until each is
+# rebuilt; the validator reports those explicitly without breaking transition.
+$manifestVerdict = Test-ReleaseManifest -Manifest $manifest -RequiredModIds $stagedIds -StageRoot $stage
+foreach ($warning in $manifestVerdict.Warnings) { Write-Warning "Release manifest: $warning" }
+if (-not $manifestVerdict.Valid) {
+    throw "Release manifest validation failed:`n - $($manifestVerdict.Errors -join "`n - ")"
+}
+Write-Host "Release manifest validation: PASS ($($stagedIds.Count) newly staged provenance entr$(if ($stagedIds.Count -eq 1) { 'y' } else { 'ies' }))." -ForegroundColor Green
 
 Write-Host ""
 Write-Host "Manifest:" -ForegroundColor Green

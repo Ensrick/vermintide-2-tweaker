@@ -78,6 +78,7 @@ e.g. after retiring/adding a mod, or to restore a dropped carry-forward entry.
 
 ```json
 {
+  "manifest_schema": 2,
   "release_tag": "mods-2026-05-21",
   "published_at": "2026-05-21T18:00:00Z",
   "mods": [
@@ -88,14 +89,62 @@ e.g. after retiring/adding a mod, or to restore a dropped carry-forward entry.
       "version": "0.7.80-alpha",
       "asset_filename": "ct.zip",
       "sha256": "228ed038b0a243256121c52df7ed67dcb85479b3039c261099a4f3e191d38e08",
-      "visibility": "public"
+      "visibility": "public",
+      "source_commit": "0123456789abcdef0123456789abcdef01234567",
+      "source_state": "clean",
+      "builder": {
+        "name": "VMBLauncher",
+        "version": "1.2.3"
+      },
+      "bundle_files": [
+        {
+          "filename": "209fb8c3c0a8c3a4.mod_bundle",
+          "sha256": "f3c1e6f691e14604711a446c8fe7090d79d7bce0b8c8035bd28a56738d937cb2"
+        },
+        {
+          "filename": "ct.mod",
+          "sha256": "616ddd4ccb968d2f858ee8d5a6311998e9f07194076c30940e365d1ee295e67f"
+        }
+      ]
     }
   ]
 }
 ```
 
-If you add/remove a field here, mirror the change in `vt2-mod-updater`'s
-`Models/ReleaseManifest.cs` — the schemas are coupled.
+The updater fields through `visibility` retain their original meaning. The
+schema-2 provenance fields are additive; consumers that ignore unknown JSON
+fields continue to work. If a consumer starts depending on these fields, mirror
+them in `vt2-mod-updater`'s `Models/ReleaseManifest.cs` and retain compatibility
+with older releases.
+
+`source_commit` is the repository `HEAD` used as the build baseline.
+`source_state` is `clean` only when the mod's source paths match that commit;
+generated `bundleV2/` changes are excluded. A `dirty` entry is intentionally
+truthful transitional metadata, not proof that the commit alone reproduces the
+bundle. Commit-before-build (or another immutable source snapshot identifier)
+is still required before the project can promise exact commit-to-bundle
+reproduction.
+
+`builder.name` is fixed to `VMBLauncher`, preserving it as the only sanctioned
+builder. `builder.version` comes from the launcher's Windows ProductVersion or
+FileVersion metadata. `bundle_files` records every raw top-level VMB output
+(`.mod_bundle` and `.mod`) by leaf filename and lowercase SHA-256. Its hashes
+describe the raw files inside the zip, while the existing entry-level `sha256`
+continues to describe the downloadable zip itself.
+
+Before any GitHub mutation, `publish-release.ps1` validates every newly staged
+entry against the copied bytes in `.release-stage`. A filtered publish carries
+older sibling entries verbatim; pre-schema provenance is allowed with a warning
+until that sibling is rebuilt, but a newly staged entry without complete
+provenance is a hard failure. This makes the migration incremental without
+rewriting releases or rebuilding unrelated mods.
+
+Offline validator self-test and manual validation:
+
+```powershell
+.\qa\check_release_manifest.ps1 -SelfTest
+.\qa\check_release_manifest.ps1 -ManifestPath .release-stage\manifest.json -StageRoot .release-stage
+```
 
 ## Bundle integrity
 
@@ -114,6 +163,26 @@ windows).
 Backwards compatibility: older consumers that don't know about `sha256` ignore the
 field. Older manifests without the field cause newer consumers to skip integrity
 verification with a debug log entry — not a hard error.
+
+## Before bundle tracking can stop
+
+This phase does not delete or ignore any tracked bundle. Stop tracking generated
+outputs only after all of these are complete:
+
+1. Publish at least one clean, schema-2 manifest entry for every active release
+   mod, with no carried pre-transition warnings.
+2. Make the release source immutable before the build so every entry records
+   `source_state: clean`, then verify a fresh checkout of `source_commit` builds
+   byte-identical raw bundle files with the recorded VMBLauncher version.
+3. Teach `vt2-mod-updater` and bisect/recovery documentation how to select a
+   release by source commit and verify each raw file, while retaining legacy
+   manifest compatibility.
+4. Add the generated output ignore rules in a coordinated transition commit and
+   confirm VMBLauncher can bootstrap a checkout with no tracked `bundleV2`
+   files. Keep genuine source assets in Git or Git LFS.
+5. Preserve existing Git history initially. Consider history rewriting only as
+   a separate, coordinated decision after measuring the reproducibility and
+   clone-size results.
 
 ## Mod inventory
 
