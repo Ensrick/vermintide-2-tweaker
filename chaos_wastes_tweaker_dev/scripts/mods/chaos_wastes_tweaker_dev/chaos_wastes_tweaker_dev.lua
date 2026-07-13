@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.256-dev"
+local MOD_VERSION = "0.7.257-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -8110,9 +8110,11 @@ end)
 -- (DeusPowerUpsArray x start_boon_<name>) but resolves through `effective_setting`, so a
 -- CLIENT previews the HOST's configured boons once the host-settings sync has landed
 -- (falls back to the client's own toggles pre-sync -- see CHANGELOG limitation note).
--- Two hooks on IngamePlayerListUI, on DISTINCT methods (singleton-clean; ct had no hook on
--- this class): `_setup_deed_reward_data` (fires once on panel activation = build point, no
--- per-frame allocation) and `_draw` (our guarded draw pass).
+-- ct's hooks on IngamePlayerListUI, all on DISTINCT methods (singleton-clean; ct had no
+-- hook on this class before #461): `_setup_deed_reward_data` (fires once on panel
+-- activation = #461 build point, no per-frame allocation), `_draw` (the SHARED guarded
+-- draw pass -- also draws the #533 deus collectible counters; NEVER add a second _draw
+-- hook), and `_setup_mission_data` (#533 build point, below).
 CT_BOON_PREVIEW_461_MARKER = "boon_preview_ingame_playerlist_v0.7.251"
 
 -- Ordered, de-duplicated list of the starting boons the run will grant, host-effective.
@@ -8223,11 +8225,16 @@ mod:hook_safe("IngamePlayerListUI", "_setup_deed_reward_data", function(self)
 end)
 
 -- Draw point: our OWN begin_pass/end_pass layered on top of vanilla's, each draw_widget
--- pcall-guarded so a non-resident boon-icon texture can never crash the panel render.
+-- pcall-guarded so a non-resident texture can never crash the panel render.
 -- hook_safe = runs after vanilla's _draw closed its pass (ingame_player_list_ui_v2.lua:1755).
+-- SINGLE ct hook on (IngamePlayerListUI, _draw) -- VMF silently drops a second
+-- registration on the same pair. This one body draws BOTH ct overlays: the #461 keep
+-- boon preview AND the #533 deus collectible counters. Each concern bails independently.
 mod:hook_safe("IngamePlayerListUI", "_draw", function(self, dt)
     local widgets = self._ct_boon_preview_widgets
-    if not widgets or #widgets == 0 then return end
+    local has_boons = widgets and #widgets > 0
+    local cw = self._ct_deus_collectibles
+    if not has_boons and not cw then return end
     pcall(function()
         local r = self._ui_top_renderer
         local sg = self._ui_scenegraph
@@ -8236,10 +8243,25 @@ mod:hook_safe("IngamePlayerListUI", "_draw", function(self, dt)
         local rs = self._render_settings
         if not (r and sg and input_service and rs) then return end
         UIRenderer.begin_pass(r, sg, input_service, dt, nil, rs)
-        local hdr = self._ct_boon_header_widget
-        if hdr then pcall(UIRenderer.draw_widget, r, hdr) end
-        for i = 1, #widgets do
-            pcall(UIRenderer.draw_widget, r, widgets[i])
+        if has_boons then
+            local hdr = self._ct_boon_header_widget
+            if hdr then pcall(UIRenderer.draw_widget, r, hdr) end
+            for i = 1, #widgets do
+                pcall(UIRenderer.draw_widget, r, widgets[i])
+            end
+        end
+        if cw then
+            -- #533: refresh the counter values (vanilla _sync_missions cadence -- every
+            -- active frame, write-on-change; ingame_player_list_ui_v2.lua:1128/:516-545),
+            -- then draw vanilla's own Collectibles header + divider (vanilla skips them
+            -- itself while _mission_count == 0 -- :1663-1665) and our two counter rows.
+            pcall(mod._ct_refresh_deus_collectibles, self)
+            if self._collectibles_name then pcall(UIRenderer.draw_widget, r, self._collectibles_name) end
+            if self._collectibles_divider then pcall(UIRenderer.draw_widget, r, self._collectibles_divider) end
+            local rows = cw.rows
+            for i = 1, #rows do
+                pcall(UIRenderer.draw_widget, r, rows[i].widget)
+            end
         end
         UIRenderer.end_pass(r)
     end)
@@ -8278,6 +8300,248 @@ _rt_register("issue461_boon_preview_wired", function()
     end
     if type(mod:get("preview_starting_boons")) ~= "boolean" then
         return "#461 REGRESSION: preview_starting_boons checkbox not registered (mod:get non-boolean)"
+    end
+end)
+
+-- ============================================================
+-- CW Collectibles on the Tab-hold panel (#533)
+-- ============================================================
+-- BUG (#533): with Adventure-missions-in-CW enabled, an injected Adventure level's
+-- Tab-hold right panel showed the ADVENTURE collectible counters (tomes / grimoires /
+-- loot dice). Root cause: LevelSettings post-processing defaults `loot_objectives =
+-- { grimoire = 2, tome = 3, ... }` onto every `mechanism == "adventure"` level
+-- (level_settings.lua:1889-1896), and IngamePlayerListUI._setup_mission_data builds
+-- the counter widgets purely from the CURRENT level's loot_objectives
+-- (ingame_player_list_ui_v2.lua:436-441) -- it never consults the RUN mechanism.
+-- Vanilla CW (deus) levels carry no loot_objectives, so vanilla builds no counters
+-- there; an injected adventure level running under the deus mechanism inherits the
+-- adventure default and builds counters for pickups that DO NOT EXIST on it (ct
+-- converts tome/grim spawners to Chests of Trials and pedestals to Pilgrim's Coins).
+--
+-- FIX: full wrapper on _setup_mission_data (sole ct hook on that method; dup-check
+-- 2026-07-13 -- the #461 hooks are on _setup_deed_reward_data/_draw). Outside a deus
+-- run (stock Adventure, keep, hubs) -> passthrough, byte-identical vanilla. Inside a
+-- deus run -> skip vanilla's build (no tome/grim/dice widgets; _mission_count stays 0
+-- so vanilla's own Collectibles header stays off) and build the DEUS counters instead:
+-- Chests of Trials + Pilgrim's Coins. Gate = "the mechanism exposes a live
+-- deus_run_controller", the same every-peer-correct idiom as on_injected_adventure_level
+-- (this file) -- NEVER IS_INJECTED_ADVENTURE_LEVEL, which is EMPTY on a client until
+-- the ct graph snapshot lands, and pointless anyway: the counters are equally right on
+-- vanilla CW levels, so ALL deus missions get them (consistent across the run).
+--
+-- DATA (peer-correct on host AND client -- both read the replicated deus-run
+-- SharedState): Chests of Trials = get_cursed_chests_purified(own_peer)
+-- (deus_run_controller.lua:2070; server-incremented for EVERY peer on chest completion
+-- :767-777, replicated via SharedState, deus_run_state.lua:20/:236-244). Pilgrim's
+-- Coins = get_player_soft_currency(own_peer) (deus_run_controller.lua:925-927 -- the
+-- EXACT getter the vanilla HUD coin indicator polls on every peer,
+-- deus_soft_currency_indicator_ui.lua:51-68), floored like that HUD (:78).
+--
+-- WIDGETS: a copy of vanilla's create_loot_widget
+-- (ingame_player_list_ui_v2_definitions.lua:843-1041 -- a file-local we cannot reach)
+-- minus its glow pass (deus_icons_coin/_boon have no `*_glow` atlas sibling), anchored
+-- on the vanilla "loot_objective" scenegraph node with vanilla's own row math. Icons
+-- are gui_icons_atlas entries (deus_icons_coin :11946, deus_icons_boon :10532) -- the
+-- same atlas family this exact panel already resolves for node-info boon/curse icons.
+-- Risk posture (untestable UI, same as #461): build is pcall-bracketed with a vanilla
+-- fallback, drawing rides the existing guarded _draw pass -- worst case the block
+-- no-ops and the panel renders pure vanilla.
+CT_CW_TAB_COLLECTIBLES_533_MARKER = "cw_tab_collectibles_deus_counters_v0.7.257"
+do
+    -- Live deus run controller or nil (stock Adventure / keep -> nil). Correct on every
+    -- peer: only the deus mechanism exposes get_deus_run_controller.
+    local function deus_run_controller_or_nil()
+        local mm = Managers.mechanism
+        local mech = mm and mm.game_mechanism and mm:game_mechanism()
+        return (mech and mech.get_deus_run_controller and mech:get_deus_run_controller()) or nil
+    end
+
+    -- The two deus counter rows (order = display order, top to bottom).
+    local ROWS = {
+        { key = "chests", icon = "deus_icons_boon", label_key = "ct_tab_chests_of_trials" },
+        { key = "coins",  icon = "deus_icons_coin", label_key = "ct_tab_pilgrims_coins" },
+    }
+    -- Both icons are 80x80 atlas entries; 0.6 scales them to the ~48px footprint the
+    -- vanilla adventure counters occupy on this node.
+    local ICON_SCALE = 0.6
+
+    -- Verbatim copy of vanilla create_loot_widget (definitions:843-1041) MINUS the
+    -- glow_icon pass/style: `texture .. "_glow"` does not exist for the deus icons and
+    -- a missing atlas texture would kill the draw. Everything else (amount-gated lit
+    -- icon over a black silhouette, title bottom-right of the icon, counter above it)
+    -- is vanilla's own layout so the pane matches the adventure counters it replaces.
+    local function create_deus_loot_widget(texture, text, scale)
+        local texture_settings = UIAtlasHelper.get_atlas_settings_by_texture_name(texture)
+        local texture_size = texture_settings.size
+        scale = scale or 1
+        return {
+            scenegraph_id = "loot_objective",
+            element = {
+                passes = {
+                    { pass_type = "text", style_id = "text", text_id = "text" },
+                    { pass_type = "text", style_id = "text_shadow", text_id = "text" },
+                    {
+                        pass_type = "text", style_id = "counter_text", text_id = "counter_text",
+                        content_check_function = function(content) return content.amount > 0 end,
+                    },
+                    {
+                        pass_type = "text", style_id = "counter_text_disabled", text_id = "counter_text",
+                        content_check_function = function(content) return content.amount == 0 end,
+                    },
+                    { pass_type = "text", style_id = "counter_text_shadow", text_id = "counter_text" },
+                    {
+                        pass_type = "texture", style_id = "icon", texture_id = "icon",
+                        content_check_function = function(content) return content.amount > 0 end,
+                    },
+                    { pass_type = "texture", style_id = "background_icon", texture_id = "icon" },
+                },
+            },
+            content = {
+                amount = 0,
+                counter_text = "x0",
+                text = text or "n/a",
+                icon = texture,
+            },
+            style = {
+                text = {
+                    font_size = 32, font_type = "hell_shark_header",
+                    horizontal_alignment = "left", vertical_alignment = "bottom",
+                    text_color = Colors.get_table("font_title"),
+                    offset = { scale * texture_size[1], scale * texture_size[2] - 50, 1 },
+                },
+                text_shadow = {
+                    font_size = 32, font_type = "hell_shark_header",
+                    horizontal_alignment = "left", vertical_alignment = "bottom",
+                    text_color = Colors.get_table("black"),
+                    offset = { scale * texture_size[1] + 1, scale * texture_size[2] - 50 - 1, 0 },
+                },
+                counter_text = {
+                    font_size = 32, font_type = "hell_shark_header",
+                    horizontal_alignment = "left", vertical_alignment = "top",
+                    text_color = Colors.get_table("font_default"),
+                    offset = { scale * texture_size[1], -40, 1 },
+                },
+                counter_text_disabled = {
+                    font_size = 32, font_type = "hell_shark_header",
+                    horizontal_alignment = "left", vertical_alignment = "top",
+                    text_color = { 255, 130, 130, 130 },
+                    offset = { scale * texture_size[1], -40, 1 },
+                },
+                counter_text_shadow = {
+                    font_size = 32, font_type = "hell_shark_header",
+                    horizontal_alignment = "left", vertical_alignment = "top",
+                    text_color = Colors.get_table("black"),
+                    offset = { scale * texture_size[1] + 1, -41, 0 },
+                },
+                icon = {
+                    horizontal_alignment = "left", vertical_alignment = "top",
+                    color = { 255, 255, 255, 255 },
+                    offset = { 0, 0, 1 },
+                    texture_size = { scale * texture_size[1], scale * texture_size[2] },
+                },
+                background_icon = {
+                    horizontal_alignment = "left", vertical_alignment = "top",
+                    color = { 255, 0, 0, 0 },
+                    offset = { 0, 0, 0 },
+                    texture_size = { scale * texture_size[1], scale * texture_size[2] },
+                },
+            },
+            offset = { 0, 0, 0 },
+        }
+    end
+
+    -- Own-peer chest/coin values, or nil outside a deus run. Exposed on mod for the
+    -- regression check and any future /verify surface.
+    function mod._ct_read_deus_collectible_values()
+        local dc = deus_run_controller_or_nil()
+        if not dc then return nil end
+        local peer = dc.get_own_peer_id and dc:get_own_peer_id()
+        if not peer then return nil end
+        local chests = (dc.get_cursed_chests_purified and dc:get_cursed_chests_purified(peer)) or 0
+        local coins = (dc.get_player_soft_currency and dc:get_player_soft_currency(peer)) or 0
+        return {
+            chests = math.floor((tonumber(chests) or 0) + 0.5),
+            coins = math.floor(tonumber(coins) or 0),  -- HUD indicator floors too (:78)
+        }
+    end
+
+    -- Build the two rows. Row placement is vanilla's own formula
+    -- (offset[2] = -(row - 1) * size_h, one entry per row): first row sits +size_h
+    -- above the loot_objective anchor, second row on it -- exactly where the vanilla
+    -- adventure counters sat.
+    function mod._ct_build_deus_collectibles()
+        local rows = {}
+        local size_h = ICON_SCALE * 80
+        for i, spec in ipairs(ROWS) do
+            local widget = UIWidget.init(create_deus_loot_widget(spec.icon, mod:localize(spec.label_key), ICON_SCALE))
+            widget.offset[1] = 0
+            widget.offset[2] = -(i - 2) * size_h
+            rows[#rows + 1] = { key = spec.key, widget = widget, last = nil }
+        end
+        return { rows = rows }
+    end
+
+    -- Per-frame value refresh while the panel draws (called from the shared _draw hook
+    -- above). Mirrors vanilla _sync_missions: only rewrite content when the value
+    -- changed (ingame_player_list_ui_v2.lua:530-543).
+    function mod._ct_refresh_deus_collectibles(self)
+        local cw = self._ct_deus_collectibles
+        if not cw then return end
+        local values = mod._ct_read_deus_collectible_values()
+        if not values then return end
+        for _, row in ipairs(cw.rows) do
+            local v = values[row.key] or 0
+            if v ~= row.last then
+                row.last = v
+                local content = row.widget.content
+                content.amount = v
+                content.counter_text = "x" .. tostring(v)
+            end
+        end
+    end
+
+    -- Build point + adventure-counter suppression. FULL wrapper (not hook_safe): under
+    -- the deus mechanism vanilla must NOT run -- it would build tome/grim/dice counters
+    -- from the injected level's defaulted loot_objectives. Keep/hubs stay vanilla.
+    mod:hook("IngamePlayerListUI", "_setup_mission_data", function(func, self, level_settings)
+        self._ct_deus_collectibles = nil
+        if self._is_in_inn or (level_settings and level_settings.hub_level)
+            or not deus_run_controller_or_nil() then
+            return func(self, level_settings)
+        end
+        local ok, err = pcall(function()
+            self._ct_deus_collectibles = mod._ct_build_deus_collectibles()
+        end)
+        if not ok then
+            self._ct_deus_collectibles = nil
+            pcall(printf, "[ct:533] deus collectibles build failed (pane falls back to vanilla): %s", tostring(err))
+            return func(self, level_settings)
+        end
+        pcall(printf, "[ct:533] Tab-hold collectibles -> deus counters (Chests of Trials + Pilgrim's Coins); adventure tome/grim/dice counters suppressed")
+        -- Deliberately NOT calling func: on a deus-run level the vanilla build is either
+        -- a no-op (vanilla CW level, no loot_objectives) or wrong (injected adventure
+        -- level, defaulted adventure loot_objectives).
+    end)
+end
+
+-- #533 regression: marker + all three helpers stay wired, and the value reader honors
+-- its outside-a-deus-run nil contract (in the keep it MUST be nil; mid-run a table).
+_rt_register("issue533_cw_tab_collectibles_wired", function()
+    if CT_CW_TAB_COLLECTIBLES_533_MARKER ~= "cw_tab_collectibles_deus_counters_v0.7.257" then
+        return "#533 REGRESSION: CT_CW_TAB_COLLECTIBLES_533_MARKER missing/mismatch; got " .. tostring(CT_CW_TAB_COLLECTIBLES_533_MARKER)
+    end
+    if type(mod._ct_build_deus_collectibles) ~= "function" then
+        return "#533 REGRESSION: mod._ct_build_deus_collectibles missing"
+    end
+    if type(mod._ct_refresh_deus_collectibles) ~= "function" then
+        return "#533 REGRESSION: mod._ct_refresh_deus_collectibles missing"
+    end
+    if type(mod._ct_read_deus_collectible_values) ~= "function" then
+        return "#533 REGRESSION: mod._ct_read_deus_collectible_values missing"
+    end
+    local v = mod._ct_read_deus_collectible_values()
+    if v ~= nil and (type(v) ~= "table" or type(v.chests) ~= "number" or type(v.coins) ~= "number") then
+        return "#533 REGRESSION: value reader contract broken (expected nil outside a deus run or {chests=n, coins=n} inside one)"
     end
 end)
 

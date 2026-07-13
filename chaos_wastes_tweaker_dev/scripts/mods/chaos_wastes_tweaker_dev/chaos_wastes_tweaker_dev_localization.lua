@@ -370,6 +370,13 @@ local loc = {
     ct_boon_preview_header = { en = "Starting Boons" },
 
     -- ============================================================
+    -- CW Collectibles on Tab (#533)
+    -- ============================================================
+    -- Panel chrome (counter row titles on the Tab-hold pane; not options, no dev status tags).
+    ct_tab_chests_of_trials = { en = "Chests of Trials" },
+    ct_tab_pilgrims_coins = { en = "Pilgrim's Coins" },
+
+    -- ============================================================
     -- Mod Boons (ct-injected: Cascades + Trait-as-Boon variants)
     -- ============================================================
     -- Mod Boons (v0.7.30) — 4 ct-injected per-boon scaling boons (model: Lileath's Favour)
