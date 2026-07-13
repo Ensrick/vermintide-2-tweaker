@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contributor guide
+    url: https://github.com/Ensrick/vermintide-2-tweaker/blob/master/CONTRIBUTING.md
+    about: Read setup, source-tracing, testing, and lifecycle guidance before filing.

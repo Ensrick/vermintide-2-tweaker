@@ -1,0 +1,100 @@
+name: Maintenance or source investigation
+description: Propose documentation, QA, refactoring, or engine-source tracing work.
+title: "[area] "
+labels:
+  - enhancement
+  - not-started
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep the title to eight words after the `[area]` prefix. Apply one area/mod label, one severity label, and optional `documentation`, `audit`, or `refactor` modifiers after filing.
+
+        Maintenance starts `not-started`. Documentation, QA, and tooling work never uses `verify-fix`, `verify-fix-coop`, `diagnostics-armed`, or `Fixed`; validate it autonomously and close it with evidence. Runtime source investigations may move to `diagnostics-armed` only after a probe ships with reproduction steps and expected output.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Mod or area label
+      description: Apply the matching GitHub label after filing.
+      options:
+        - tooling
+        - cross-mod
+        - "Tweaker: Career"
+        - "Tweaker: Chaos Wastes"
+        - CWV
+        - "Tweaker: Cosmetics"
+        - cim
+        - dcp
+        - "Tweaker: Enemies"
+        - "Tweaker: Events"
+        - "Tweaker: General"
+        - "Tweaker: GUI"
+        - Progression
+        - "Tweaker: Weapons"
+        - WOC
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity label
+      options:
+        - 0-critical
+        - 1-major
+        - 2-moderate
+        - 3-low
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Current problem and evidence
+      description: Measured repository state, broken workflow, source gap, or file:line evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Completion criteria
+      description: Commands, checks, generated output, or reviewed claims that prove the work complete.
+    validations:
+      required: true
+  - type: textarea
+    id: engine_trace
+    attributes:
+      label: Engine trace
+      description: Fill every line; use `N/A` with a reason for repository-only work.
+      placeholder: |
+        Vanilla entry point: Class.function — file:line
+        State owner: runtime object/table or repository owner file
+        Runtime lifecycle: runtime or repository workflow phase
+        Native seam: narrowest engine or repository integration point
+        Runtime unknown: unproven fact and proposed evidence
+    validations:
+      required: true
+  - type: dropdown
+    id: authority
+    attributes:
+      label: Authority
+      options:
+        - Host/server
+        - Local client/player
+        - Every peer independently
+        - Host and client have separate roles
+        - UI/local-only
+        - Repository tooling/docs only
+        - Unknown
+    validations:
+      required: true
+  - type: dropdown
+    id: topology
+    attributes:
+      label: Test topology
+      options:
+        - Static tooling or documentation only
+        - One player / local visual verification
+        - Host plus one or more clients
+        - Dedicated host/client role comparison
+        - Unknown; diagnostics needed
+    validations:
+      required: true

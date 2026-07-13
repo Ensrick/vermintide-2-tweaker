@@ -1,0 +1,99 @@
+name: Feature request
+description: Propose a new player capability with a source-native integration seam.
+title: "[mod] "
+labels:
+  - feature
+  - not-started
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep the title to eight words after the `[mod]` prefix. Describe observable behavior, not a broad wishlist. Apply one mod label and one severity label after filing.
+
+        New issues start `not-started`. Replace it only after the complete feature ships: `verify-fix` for one-player testing or `verify-fix-coop` for 2+ people, each with a test-method comment and expected result. Use `diagnostics-armed` only when a shipped probe must answer a runtime unknown. `Fixed` requires human in-game confirmation and a post-fix hardening/docs/regression pass.
+  - type: dropdown
+    id: mod
+    attributes:
+      label: Mod or area label
+      description: Apply the matching GitHub label after filing.
+      options:
+        - "Tweaker: Career"
+        - "Tweaker: Chaos Wastes"
+        - CWV
+        - "Tweaker: Cosmetics"
+        - cim
+        - dcp
+        - "Tweaker: Enemies"
+        - "Tweaker: Events"
+        - "Tweaker: General"
+        - "Tweaker: GUI"
+        - Progression
+        - "Tweaker: Weapons"
+        - WOC
+        - cross-mod
+        - tooling
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity label
+      options:
+        - 0-critical
+        - 1-major
+        - 2-moderate
+        - 3-low
+    validations:
+      required: true
+  - type: textarea
+    id: capability
+    attributes:
+      label: Player capability
+      description: What new behavior should exist, and where will the player use it?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance evidence
+      description: Concrete pass conditions, including disabled/default behavior and failure handling.
+    validations:
+      required: true
+  - type: textarea
+    id: engine_trace
+    attributes:
+      label: Engine trace
+      description: Fill every line; use `unknown` where source tracing is part of the work.
+      placeholder: |
+        Vanilla entry point: Class.function — file:line
+        State owner: object, extension, manager, or table
+        Runtime lifecycle: registration / creation / update / RPC / teardown / UI render
+        Native seam: narrowest vanilla hook, data mutation, or API
+        Runtime unknown: fact source cannot prove and proposed diagnostic
+    validations:
+      required: true
+  - type: dropdown
+    id: authority
+    attributes:
+      label: Authority
+      options:
+        - Host/server
+        - Local client/player
+        - Every peer independently
+        - Host and client have separate roles
+        - UI/local-only
+        - Unknown or not applicable
+    validations:
+      required: true
+  - type: dropdown
+    id: topology
+    attributes:
+      label: Test topology
+      options:
+        - One player / local visual verification
+        - Host plus one or more clients
+        - Dedicated host/client role comparison
+        - Static tooling or documentation only
+        - Unknown; diagnostics needed
+    validations:
+      required: true
