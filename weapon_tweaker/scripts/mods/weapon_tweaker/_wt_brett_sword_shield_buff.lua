@@ -97,6 +97,12 @@ local function _buff_profile(profile_name, dmg_mult)
     end
     local dtag = string.format("d%d_", math.floor(dmg_mult * 100 + 0.5))
     local new_name = PREFIX .. dtag .. profile_name
+    -- issue 431: record the clone SOURCE as the wire-safe fallback for the
+    -- send_rpc_attack_hit floor (_wt431_damage_profile_parity.lua). Written on
+    -- both the cache-hit and fresh-build paths; `or {}` because this file
+    -- loads before the parity module.
+    mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
+    mod._wt431_custom_profile_fallback[new_name] = profile_name
     if DamageProfileTemplates[new_name] then return new_name end
     local clone = table.clone(source, true)
     for _, field in ipairs({ "default_target", "critical_strike" }) do
@@ -188,11 +194,23 @@ local function _swap(use_buffed)
     end
 end
 
--- runtime apply / revert (called from on_setting_changed + once at load)
+-- runtime apply / revert (called from on_setting_changed, once at load, and
+-- from the issue-431 peer-parity callbacks in _wt431_damage_profile_parity.lua)
 function mod.wt_apply_brett_buff()
-    local on = mod:get("wt_brett_sword_shield_buff") and true or false
+    -- issue 431: parity gate -- the buffed wt_brettsns_* profiles are only
+    -- pointed-to while every other human peer is confirmed to run wt (a non-wt
+    -- peer would fatal decoding our appended NetworkLookup index off
+    -- rpc_attack_hit, BUG_CLASSES 31). Nil-guarded: before the beacon module
+    -- loads (or if it failed) this reads false and the template stays vanilla
+    -- (fail-safe). The anim_time_scale half of the buff rides along with the
+    -- same gate -- the buff is advertised as one package, so it applies whole
+    -- or not at all rather than shipping half its balance.
+    local allowed = type(mod._wt431_profiles_allowed) == "function"
+        and mod._wt431_profiles_allowed() == true
+    local on = (mod:get("wt_brett_sword_shield_buff") and allowed) and true or false
     _swap(on)
-    _printf("[wt:brettsns] %s (live, no restart)", on and "APPLIED" or "reverted")
+    _printf("[wt:brettsns] %s (live, no restart)%s", on and "APPLIED" or "reverted",
+        (mod:get("wt_brett_sword_shield_buff") and not allowed) and " -- toggle on but peer-parity unconfirmed, holding vanilla" or "")
 end
 
 mod.wt_apply_brett_buff()

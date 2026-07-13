@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.210-dev"
+local MOD_VERSION = "0.12.211-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -1895,7 +1895,39 @@ local function _wt_clone_shot_sniper_no_dropoff()
         rawset(tbl, key, idx)
     end
 
+    -- issue 431: record the clone SOURCE as this profile's wire-safe fallback.
+    -- The send_rpc_attack_hit floor (_wt431_damage_profile_parity.lua) coerces
+    -- the custom id back to this vanilla id if it would ever ride the wire
+    -- while a peer without wt is present. Belt-and-suspenders `or {}` because
+    -- registration sites run before the parity module loads.
+    mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
+    mod._wt431_custom_profile_fallback[key] = "shot_sniper"
+
     return key
+end
+
+-- issue 431: parity-gated repoint for the authentic-brace damage profile.
+-- _apply_authentic_brace_mode snapshots each firing sub-action's vanilla
+-- damage_profile into mod._wt431_brace_profile_slots (once, at apply time);
+-- this function (re)points them at wt_authentic_pistol only while every other
+-- human peer is confirmed to run wt, and restores the vanilla keys the moment
+-- one is not (a non-wt peer would fatal decoding our appended NetworkLookup
+-- index off rpc_attack_hit -- BUG_CLASSES 31). No-op until the mode has been
+-- applied (slots empty). Called from _apply_authentic_brace_mode and from the
+-- issue-431 peer-parity callbacks (_wt431_damage_profile_parity.lua). The rest
+-- of the authentic-brace mode (ammo/spread/speed) never rides a lookup index,
+-- so it stays applied regardless of parity.
+mod._wt431_brace_repoint = function()
+    local slots = mod._wt431_brace_profile_slots
+    if type(slots) ~= "table" then return end
+    local allowed = type(mod._wt431_profiles_allowed) == "function"
+        and mod._wt431_profiles_allowed() == true
+    for i = 1, #slots do
+        local s = slots[i]
+        if type(s.impact_data) == "table" then
+            s.impact_data.damage_profile = allowed and s.custom or s.original
+        end
+    end
 end
 
 -- Primary spread mult: applied to the default brace spread used by
@@ -1962,15 +1994,27 @@ local function _apply_authentic_brace_mode()
         return
     end
     if tpl.actions and tpl.actions.action_one then
+        -- issue 431: snapshot the vanilla damage_profile keys ONCE, then route
+        -- the repoint through mod._wt431_brace_repoint so the peer-parity gate
+        -- can revert/re-apply it live. The snapshot guard keeps a hypothetical
+        -- second apply from capturing our own custom key as "original".
+        mod._wt431_brace_profile_slots = mod._wt431_brace_profile_slots or {}
+        local slots = mod._wt431_brace_profile_slots
+        local first_apply = (#slots == 0)
         for _, sub_name in ipairs({ "default", "fast_shot", "special_action_shoot" }) do
             local sub = tpl.actions.action_one[sub_name]
             if sub then
-                if sub.impact_data then
-                    sub.impact_data.damage_profile = damage_profile_key
+                if sub.impact_data and first_apply then
+                    slots[#slots + 1] = {
+                        impact_data = sub.impact_data,
+                        original    = sub.impact_data.damage_profile,
+                        custom      = damage_profile_key,
+                    }
                 end
                 sub.ignore_shield_hit = true
             end
         end
+        mod._wt431_brace_repoint()
     end
 
     -- 2) (Removed in v0.12.15) Right-click is left alone — vanilla brace
@@ -2208,6 +2252,9 @@ do
             rawset(tbl, idx, PRIEST_PUNCH_PROFILE)
             rawset(tbl, PRIEST_PUNCH_PROFILE, idx)
         end
+        -- issue 431: clone source = wire-safe fallback for the send floor.
+        mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
+        mod._wt431_custom_profile_fallback[PRIEST_PUNCH_PROFILE] = PRIEST_PUNCH_SRC
         return true
     end
 
@@ -2220,7 +2267,14 @@ do
     mod.wt_apply_priest_punch_buff = function()
         local tpl = rawget(_G, "Weapons") and Weapons[PRIEST_HAMMER_TMPL]
         if not (tpl and tpl.actions) then return end
-        local enabled = mod:get("wt_priest_punch_buff")
+        -- issue 431: parity gate -- the custom profile is only pointed-to while
+        -- every other human peer is confirmed to run wt (a non-wt peer would
+        -- fatal decoding our appended index off rpc_attack_hit, BUG_CLASSES 31).
+        -- Nil-guarded: before the beacon module loads (or if it failed), this
+        -- reads false and the punch stays on its vanilla profile (fail-safe).
+        local allowed = type(mod._wt431_profiles_allowed) == "function"
+            and mod._wt431_profiles_allowed() == true
+        local enabled = mod:get("wt_priest_punch_buff") and allowed
         local use_profile = enabled and DamageProfileTemplates and DamageProfileTemplates[PRIEST_PUNCH_PROFILE] and PRIEST_PUNCH_PROFILE or nil
         for _, group in pairs(tpl.actions) do
             if type(group) == "table" and type(group.punch) == "table" then
@@ -2238,6 +2292,22 @@ do
     end
     mod.wt_apply_priest_punch_buff()
 end
+
+-- ============================================================
+-- Issue 431: peer-parity gate + wire floor for the custom damage profiles
+-- ============================================================
+-- Loaded AFTER all three registration sites (authentic brace above, priest
+-- punch above, _wt_brett_sword_shield_buff at the top of this file) so the
+-- fallback map is fully populated, and AFTER weapon_tweaker_backend.lua's
+-- mod.update definition (line ~81 dofile) -- the beacon's install() WRAPS
+-- mod.update and must not capture nil (crt issue-425 ordering rule). The
+-- module installs the beacon, registers the gated feature that re-runs the
+-- three apply functions on every parity flip, and hooks
+-- WeaponSystem.send_rpc_attack_hit with the unconditional sender-side floor.
+mod:dofile("scripts/mods/weapon_tweaker/_wt431_damage_profile_parity")
+-- NOTE: the beacon starts "disabled" (fail-safe), so at this instant all three
+-- toggles sit on their vanilla profiles; the first beacon tick (sub-second, in
+-- solo) flips to enabled and its callbacks re-run the three apply functions.
 
 -- ============================================================
 -- Moonfire Bow pre-nerf AOE restoration

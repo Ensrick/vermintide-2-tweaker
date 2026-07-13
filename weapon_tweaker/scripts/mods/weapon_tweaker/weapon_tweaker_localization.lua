@@ -1065,13 +1065,17 @@ local loc = {
     weapon_overrides = { en = "[working] Weapon Tweaks" },
     weapon_overrides_description = { en = "Optional changes to how certain weapons behave." },
     authentic_brace_of_pistols = { en = "[working] Authentic Brace of Pistols" },
-    authentic_brace_of_pistols_description = { en = "Reworks the Brace of Pistols into a single-shot flintlock: shots pierce armor, break shields, and keep the same damage at any range, with no aim mode, rapid fire, or manual reload. Total ammo drops from 24 to 12 and the spread is much wider. Requires a restart." },
+    authentic_brace_of_pistols_description = { en = "Reworks the Brace of Pistols into a single-shot flintlock: shots pierce armor, break shields, and keep the same damage at any range, with no aim mode, rapid fire, or manual reload. Total ammo drops from 24 to 12 and the spread is much wider. Requires a restart. Multiplayer: the custom damage profile is only active while every player in the lobby runs this mod. If someone without it is present, damage falls back to the normal pistol profile (the ammo, spread, and speed changes stay) so their game cannot crash, and it returns automatically once everyone has the mod." },
     wt_brett_sword_shield_buff = { en = "[working] Bretonnian Sword and Shield buff" },
-    wt_brett_sword_shield_buff_tooltip = { en = "Makes the Bretonnian sword and shield hit harder and faster, with extra damage against headshots, monsters, and berserkers. Its third heavy, second light, and push follow-up attacks gain an added bonus." },
+    wt_brett_sword_shield_buff_tooltip = { en = "Makes the Bretonnian sword and shield hit harder and faster, with extra damage against headshots, monsters, and berserkers. Its third heavy, second light, and push follow-up attacks gain an added bonus. Multiplayer: the buff is only active while every player in the lobby runs this mod. If someone without it is present, the weapon reverts to vanilla so their game cannot crash, and the buff returns automatically once everyone has the mod." },
     moonfire_aoe_revert = { en = "[working] Moonfire Bow: revert pre-nerf AOE" },
     moonfire_aoe_revert_description = { en = "Restores the old Moonfire Bow: every arrow bursts in a small area (about 1.5 metres) on impact, with no friendly fire. The bonus damage only applies when you are the host. The matching visual burst is a separate option in the Tweaker: Cosmetics mod." },
     wt_priest_punch_buff = { en = "[working] Warrior Priest punch: 3x stagger, 2x damage" },
-    wt_priest_punch_buff_description = { en = "Makes the Warrior Priest greathammer's special punch stagger about three times as hard and deal double damage. Works in multiplayer as long as everyone runs this mod. Off by default." },
+    wt_priest_punch_buff_description = { en = "Makes the Warrior Priest greathammer's special punch stagger about three times as hard and deal double damage. Off by default. Multiplayer: the buff is only active while every player in the lobby runs this mod. If someone without it is present, the punch reverts to vanilla so their game cannot crash, and the buff returns automatically once everyone has the mod." },
+
+    -- issue 431: label used by the peer-parity beacon's chat notices
+    -- ("Peer-parity: disabled <label> ...") when a player without wt joins.
+    wt431_custom_damage_profiles_label = { en = "the custom damage profile tweaks (Brace rework, Bret sword and shield buff, Priest punch buff)" },
 
     -- (enable_debug_logging removed v0.12.176-dev — #169; diagnostics route through VMF mod:debug)
     enable_dev_anim_picker         = { en = "[working] Dev: 3P Anim Picker (tuning only)" },
