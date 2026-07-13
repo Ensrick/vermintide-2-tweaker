@@ -1,5 +1,16 @@
 # Modded Progression — Changelog
 
+## 0.2.20-dev (2026-07-13) - #581 bypass synthetic StatisticsDatabase daily evaluation [verify-fix]
+
+- Fixed the startup crash `Failed fetching statistic using parameters: quest_statistics, mp_daily_v2_20647_slot_3_progress` (GUID `affd4123-ce2e-4d15-82fa-a972e65ade2c`).
+- MP-owned daily IDs now bypass vanilla `QuestManager.get_data_by_id` evaluation and build their UI row from the source template plus MP's local persisted progress/claim ledger. Vanilla's daily `completed`/`progress` callbacks are never called for synthetic IDs.
+- Removed synthetic `QuestSettings.stat_mappings` entries; MP daily counters remain backend-free and StatisticsDatabase-free.
+- Added `/mp_regression_test` check `mp581_owned_daily_bypasses_statistics_db`.
+
+### Test method
+1. Start the game with Modded Progression enabled and enter the keep.
+2. Expected: startup completes, the challenge board can inspect the three local dailies, and the log has no `StatisticsDatabase` lookup for an `mp_daily_v2_*` key.
+
 ## 0.2.19-dev (2026-07-13) - #573 persistent local dailies and isolated shillings [untested]
 
 ### Changed

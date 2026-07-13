@@ -107,4 +107,23 @@ return function(H, repo_root)
         restore()
         if not ok then error(failure, 0) end
     end)
+
+    H.test("MP daily UI data bypasses synthetic StatisticsDatabase mappings", function()
+        local D, _, restore = load_module()
+        local ok, failure = pcall(function()
+            local state = D.ensure(os.time())
+            local entry
+            for _, candidate in pairs(state.entries) do entry = candidate break end
+            H.truthy(entry)
+            H.equal(QuestSettings.stat_mappings[entry.key], nil)
+            local data = D.quest_data(entry.id)
+            H.equal(data.id, entry.id)
+            H.equal(data.progress[1], 0)
+            H.equal(data.progress[2], entry.target)
+            H.equal(data.completed, false)
+            H.equal(data.reward.currency_code, "SM")
+        end)
+        restore()
+        if not ok then error(failure, 0) end
+    end)
 end

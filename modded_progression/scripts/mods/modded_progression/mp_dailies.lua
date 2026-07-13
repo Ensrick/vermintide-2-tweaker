@@ -149,9 +149,6 @@ local function register_templates(state)
     for _, entry in pairs(state.entries) do
         local original = source[entry.template]
         if original and not source[entry.id] then source[entry.id] = deep_copy(original) end
-        -- Vanilla template evaluation needs a valid stat name even though MP
-        -- overrides progress from its local state immediately afterwards.
-        QuestSettings.stat_mappings[entry.key] = { entry.key .. "_progress" }
     end
 end
 
@@ -229,14 +226,41 @@ function M.key_for_id(id)
     return entry and entry.key or nil
 end
 
-function M.decorate_quest_data(id, data)
+local function display_value(value)
+    if type(value) == "function" then
+        local ok, result = pcall(value)
+        return ok and result or "<Error>"
+    end
+    if type(value) == "string" then
+        local localize = rawget(_G, "Localize")
+        if localize then
+            local ok, result = pcall(localize, value)
+            if ok then return result end
+        end
+    end
+    return value
+end
+
+-- Build the evaluated UI row without ever delegating an MP-owned id to
+-- QuestManager.get_data_by_id. Vanilla's completed/progress callbacks read a
+-- registered StatisticsDatabase definition and fatal for our intentionally
+-- local-only keys (#581). The source template remains presentation-only.
+function M.quest_data(id)
     local entry = M.find_by_id(id)
-    if not entry or type(data) ~= "table" then return data end
-    data.progress = { math.min(entry.progress or 0, entry.target), entry.target }
-    data.completed = (entry.progress or 0) >= entry.target
-    data.claimed = entry.claimed == true
-    data.reward = deep_copy(entry.reward)
-    return data
+    if not entry then return nil end
+    local source = templates()[entry.template] or {}
+    return {
+        claimed = entry.claimed == true,
+        id = id,
+        name = display_value(source.name),
+        desc = display_value(source.desc),
+        icon = source.icon,
+        summary_icon = source.summary_icon,
+        completed = (entry.progress or 0) >= entry.target,
+        progress = { math.min(entry.progress or 0, entry.target), entry.target },
+        requirements = nil,
+        reward = deep_copy(entry.reward),
+    }
 end
 
 local function mapping_matches(map, ...)

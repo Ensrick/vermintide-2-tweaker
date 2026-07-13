@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.19-dev"
+local MOD_VERSION = "0.2.20-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -568,11 +568,19 @@ end)
 -- The vanilla evaluator supplies names/descriptions/icons from the source
 -- templates. Only objective state is replaced with MP's persisted counters.
 mod:hook("QuestManager", "get_data_by_id", function(func, self, id, ...)
-    local data, err = func(self, id, ...)
     if _is_mp_realm() and Dailies.is_owned_id(id) then
-        return Dailies.decorate_quest_data(id, data), err
+        -- #581: never call vanilla first. Its daily template callbacks fetch a
+        -- StatisticsDatabase definition for quest_key .. "_progress" and fatal
+        -- because MP daily counters intentionally live only in VMF persistence.
+        return Dailies.quest_data(id)
     end
-    return data, err
+    return func(self, id, ...)
+end)
+
+_rt_register("mp581_owned_daily_bypasses_statistics_db", function()
+    if type(Dailies.quest_data) ~= "function" then
+        return "local daily evaluator missing; MP-owned ids may reach StatisticsDatabase"
+    end
 end)
 
 -- QuestManager dispatches daily, weekly, and event slices separately. Consume
