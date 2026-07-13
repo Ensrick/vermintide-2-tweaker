@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.257-dev"
+local MOD_VERSION = "0.7.258-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -8111,11 +8111,64 @@ end)
 -- CLIENT previews the HOST's configured boons once the host-settings sync has landed
 -- (falls back to the client's own toggles pre-sync -- see CHANGELOG limitation note).
 -- ct's hooks on IngamePlayerListUI, all on DISTINCT methods (singleton-clean; ct had no
--- hook on this class before #461): `_setup_deed_reward_data` (fires once on panel
--- activation = #461 build point, no per-frame allocation), `_draw` (the SHARED guarded
--- draw pass -- also draws the #533 deus collectible counters; NEVER add a second _draw
--- hook), and `_setup_mission_data` (#533 build point, below).
-CT_BOON_PREVIEW_461_MARKER = "boon_preview_ingame_playerlist_v0.7.251"
+-- hook on this class before #461): `_setup_deed_reward_data` (fires on EVERY panel
+-- activation -- set_active(true) calls it, ingame_player_list_ui_v2.lua:1224 -- so the
+-- gate below re-evaluates per Tab press), `_draw` (the SHARED guarded draw pass -- also
+-- draws the #533 deus collectible counters; NEVER add a second _draw hook), and
+-- `_setup_mission_data` (#533 build point, below).
+--
+-- v0.7.258 follow-up fixes (user report on the 0.7.251 ship):
+-- (1) "header but no rows": the first ship anchored rows on the "reward_item"
+--     scenegraph node, which carries NO size and so inherits banner_right's full
+--     660x1080 rect (ui_scenegraph.lua:109 `node_def.size or parent.size`). That node's
+--     origin computes to world y = -750 (below the screen); vanilla only renders there
+--     via pass-level vertical_alignment "top" inside the inherited rect
+--     (create_reward_item icon style, _definitions.lua:1750, aligned by
+--     UIUtils.align_box_inplace, helpers/ui_utils.lua:542-558). Our rows used
+--     center/default alignment, so every row landed at negative screen y -- invisible --
+--     while the header, anchored on the SIZED "reward_divider" node ({264,32}, world
+--     y~348 at 1080p reference), rendered fine. Fix: anchor ALL rows on
+--     "reward_divider" too and stack them below the header with per-row offsets
+--     (2 columns x 9 rows, 28px pitch, "+N more" overflow) inside the band that is
+--     empty in the gated context (no deed rewards, no collectibles in the keep).
+-- (2) "shows all over the keep": now gated on the party actually QUEUING a Chaos
+--     Wastes expedition -- see mod._ct_preparing_cw_expedition below.
+CT_BOON_PREVIEW_461_MARKER = "boon_preview_ingame_playerlist_v0.7.258"
+
+-- TRUE while this peer's party is queued for a Chaos Wastes expedition (host pressed
+-- host/start on a CW journey; not yet transitioned out of the keep). Direct port of
+-- vanilla MatchmakingManager.is_matchmaking_versus (matchmaking_manager.lua:1256-1266)
+-- retargeted at mechanism "deus":
+--  * host path: set_matchmaking_data writes lobby_data.mechanism = "deus"
+--    (matchmaking_manager.lua:985) for public AND private games; host state leaves
+--    MatchmakingStateIdle while hosting the search.
+--  * client path: rpc_set_matchmaking always sends is_matchmaking=true to party
+--    clients (matchmaking_manager.lua:1083), putting them in
+--    MatchmakingStateFriendClient (non-idle), and they read the host lobby's
+--    replicated "mechanism" field like vanilla does.
+--  * reset path: loading into any hub level rewrites matchmaking="false" and
+--    refreshes the mechanism field (state_loading.lua:2584/:2597), and cancel sends
+--    rpc_set_matchmaking(false) -> Idle, so the block disappears after a cancel or a
+--    finished run. Whole body pcall-bracketed: any nil seam = just no preview.
+function mod._ct_preparing_cw_expedition()
+    local ok, res = pcall(function()
+        local mm = Managers.matchmaking
+        if not mm then return false end
+        local state = mm._state
+        local is_matchmaking = state and state.NAME ~= "MatchmakingStateIdle"
+        local lobby = mm.lobby
+        local lobby_client = (state and state.lobby_client)
+            or (Managers.lobby and (Managers.lobby:query_lobby("matchmaking_session_lobby")
+                or Managers.lobby:query_lobby("matchmaking_join_lobby")))
+        local lobby_mechanism = lobby and lobby.lobby_data and lobby:lobby_data("mechanism")
+        local client_mechanism = lobby_client and lobby_client.lobby_data and lobby_client:lobby_data("mechanism")
+        local is_lobby_matchmaking = lobby and lobby.lobby_data and lobby:lobby_data("matchmaking") == "true"
+        local is_client_matchmaking = lobby_client and lobby_client.lobby_data and lobby_client:lobby_data("matchmaking") == "true"
+        return ((is_matchmaking or is_lobby_matchmaking or is_client_matchmaking)
+            and (lobby_mechanism == "deus" or client_mechanism == "deus")) or false
+    end)
+    return (ok and res) or false
+end
 
 -- Ordered, de-duplicated list of the starting boons the run will grant, host-effective.
 -- Each entry: { name, rarity, display, icon, modded }. On `mod` (not a file-local) per
@@ -8161,61 +8214,98 @@ function mod._ct_build_boon_preview_header(title)
     }))
 end
 
--- One icon widget + one name widget per boon, stacked as vertical rows anchored to the
--- reward_item scenegraph node. Icon and name are SEPARATE widgets so a boon whose icon
--- texture will not resolve still shows its name (see risk posture above).
+-- One icon widget + one name widget per boon. Icon and name are SEPARATE widgets so a
+-- boon whose icon texture will not resolve still shows its name (see risk posture
+-- above). ALL rows are anchored on the SIZED "reward_divider" scenegraph node -- the
+-- node the header provably renders on -- never on the sizeless "reward_item" node (the
+-- v0.7.251 off-screen bug; see the follow-up note in the banner comment). Layout:
+-- 2 columns x 9 rows below the header, 28px row pitch, 330px column pitch, inside the
+-- band (screen y ~340 down to ~90 at 1080p reference) that is empty while a CW
+-- expedition is queued (no deed rewards, no keep collectibles). Overflow past 18
+-- becomes a "+N more" line; /ct_preview_boons always lists everything.
 function mod._ct_build_boon_preview_widgets(boons)
+    -- UTF-8 safe truncation (cut on a codepoint boundary so a curly quote or accented
+    -- glyph can never be split into an invalid byte sequence). Function-scoped local:
+    -- the file's top-level chunk is near the Lua 5.1 200-locals cap.
+    local function trunc(s, max_bytes)
+        if type(s) ~= "string" or #s <= max_bytes then return s end
+        local cut = max_bytes
+        while cut > 1 do
+            local b = s:byte(cut + 1)
+            if not b or b < 0x80 or b >= 0xC0 then break end -- next byte starts a codepoint (or end)
+            cut = cut - 1
+        end
+        return s:sub(1, cut) .. "..."
+    end
     local out = {}
-    local ICON, ROW_H, MAX = 40, 46, 12
+    local ICON, ROW_H, COL_W, NUM_ROWS = 24, 28, 330, 9
+    local MAX = NUM_ROWS * 2
     local n = math.min(#boons, MAX)
     for i = 1, n do
         local b = boons[i]
-        local row_y = -(i - 1) * ROW_H
+        local col = (i - 1) % 2
+        local row = math.floor((i - 1) / 2)
+        local x = 4 + col * COL_W
+        -- Offsets are relative to the reward_divider node (origin y ~348, center ~364
+        -- at 1080p reference): text is v-centered in the node's 32px box then pushed
+        -- down per row; the icon (drawn from its bottom-left corner by the texture
+        -- pass) gets +4 so its center matches the text center.
+        local row_center_offset = -(34 + row * ROW_H)
         if b.icon then
             out[#out + 1] = UIWidget.init(UIWidgets.create_simple_texture(
-                b.icon, "reward_item", false, false, nil, { 0, row_y, 0 }, { ICON, ICON }))
+                b.icon, "reward_divider", false, false, nil,
+                { x, row_center_offset + 4, 1 }, { ICON, ICON }))
         end
-        out[#out + 1] = UIWidget.init(UIWidgets.create_simple_text(b.display or b.name, "reward_item", 20, nil, {
-            horizontal_alignment = "left",
-            vertical_alignment = "center",
-            localize = false,
-            word_wrap = false,
-            font_size = 20,
-            font_type = "hell_shark",
-            text_color = { 255, 235, 235, 235 },
-            offset = { ICON + 14, row_y - ICON * 0.5, 2 },
-        }))
-    end
-    if #boons > n then
         out[#out + 1] = UIWidget.init(UIWidgets.create_simple_text(
-            string.format("+%d", #boons - n), "reward_item", 18, nil, {
+            trunc(b.display or b.name, 30), "reward_divider", 16, nil, {
                 horizontal_alignment = "left",
                 vertical_alignment = "center",
                 localize = false,
                 word_wrap = false,
-                font_size = 18,
+                font_size = 16,
+                font_type = "hell_shark",
+                text_color = { 255, 235, 235, 235 },
+                offset = { x + ICON + 8, row_center_offset, 2 },
+            }))
+    end
+    if #boons > n then
+        out[#out + 1] = UIWidget.init(UIWidgets.create_simple_text(
+            string.format("+%d more", #boons - n), "reward_divider", 16, nil, {
+                horizontal_alignment = "left",
+                vertical_alignment = "center",
+                localize = false,
+                word_wrap = false,
+                font_size = 16,
                 font_type = "hell_shark",
                 text_color = { 255, 200, 200, 200 },
-                offset = { 0, -n * ROW_H - ICON * 0.5, 2 },
+                offset = { 4, -(34 + NUM_ROWS * ROW_H), 2 },
             }))
     end
     return out
 end
 
--- Build point: vanilla calls _setup_deed_reward_data once when the Tab panel activates.
--- Keep-only (self._is_in_inn); local display toggle preview_starting_boons. Builds onto
--- the instance so the per-frame _draw hook only draws (zero per-frame allocation).
+-- Build point: vanilla calls _setup_deed_reward_data on EVERY panel activation
+-- (set_active(true), ingame_player_list_ui_v2.lua:1224), so all three gates below
+-- re-evaluate per Tab press. Gates: keep-only (self._is_in_inn), local display toggle
+-- preview_starting_boons, and (v0.7.258, the user's "should only show while the team
+-- prepares an expedition" report) a queued Chaos Wastes expedition. Builds onto the
+-- instance so the per-frame _draw hook only draws (zero per-frame allocation).
 mod:hook_safe("IngamePlayerListUI", "_setup_deed_reward_data", function(self)
     self._ct_boon_preview_widgets = nil
     self._ct_boon_header_widget = nil
     if not self._is_in_inn then return end
     if not mod:get("preview_starting_boons") then return end
+    if not mod._ct_preparing_cw_expedition() then
+        pcall(printf, "[ct:461] boon preview suppressed: no Chaos Wastes expedition queued")
+        return
+    end
     local ok, err = pcall(function()
         local boons = mod._ct_collect_start_boons()
         if #boons == 0 then return end
         self._ct_boon_preview_widgets = mod._ct_build_boon_preview_widgets(boons)
         self._ct_boon_header_widget = mod._ct_build_boon_preview_header(
             string.format("%s (%d)", mod:localize("ct_boon_preview_header"), #boons))
+        pcall(printf, "[ct:461] boon preview built: %d boons (CW expedition queued)", #boons)
     end)
     if not ok then
         self._ct_boon_preview_widgets = nil
@@ -8275,18 +8365,21 @@ mod:command("ct_preview_boons", "List the starting boons this run will grant (ho
         mod:echo("[ct] No starting boons configured. Enable some under Starting Boons in the ct menu.")
         return
     end
-    mod:echo("%s", string.format("[ct] Starting Boons preview (%d) -- shown on the right panel while holding Tab in the keep:", #boons))
+    mod:echo("%s", string.format("[ct] Starting Boons preview (%d) -- shown on the Tab panel while a CW expedition is queued in the keep:", #boons))
     for i = 1, #boons do
         local b = boons[i]
         mod:echo("%s", string.format("  %d. %s [%s]%s", i, b.display or b.name, tostring(b.rarity),
             b.modded and " (modded -- wire-gated for non-ct peers)" or ""))
     end
+    mod:echo("%s", mod._ct_preparing_cw_expedition()
+        and "[ct] CW expedition queued: the Tab panel shows this list now."
+        or "[ct] No CW expedition queued: the Tab panel stays vanilla until the host starts one.")
 end)
 
 -- #461 regression: the marker + both build helpers + the display toggle stay wired, so a
 -- future refactor can't silently drop the Tab-hold boon preview.
 _rt_register("issue461_boon_preview_wired", function()
-    if CT_BOON_PREVIEW_461_MARKER ~= "boon_preview_ingame_playerlist_v0.7.251" then
+    if CT_BOON_PREVIEW_461_MARKER ~= "boon_preview_ingame_playerlist_v0.7.258" then
         return "#461 REGRESSION: CT_BOON_PREVIEW_461_MARKER missing/mismatch; got " .. tostring(CT_BOON_PREVIEW_461_MARKER)
     end
     if type(mod._ct_collect_start_boons) ~= "function" then
@@ -8300,6 +8393,25 @@ _rt_register("issue461_boon_preview_wired", function()
     end
     if type(mod:get("preview_starting_boons")) ~= "boolean" then
         return "#461 REGRESSION: preview_starting_boons checkbox not registered (mod:get non-boolean)"
+    end
+    -- v0.7.258 follow-ups: the CW-queue gate must exist and be callable anywhere
+    -- (returns plain false outside a queued expedition, never throws), and no row
+    -- widget may ever anchor on the sizeless "reward_item" node again (the off-screen
+    -- bug class: header visible, zero rows).
+    if type(mod._ct_preparing_cw_expedition) ~= "function" then
+        return "#461 REGRESSION: mod._ct_preparing_cw_expedition missing (CW-queue gate)"
+    end
+    if type(mod._ct_preparing_cw_expedition()) ~= "boolean" then
+        return "#461 REGRESSION: _ct_preparing_cw_expedition must return a boolean"
+    end
+    local sample = mod._ct_build_boon_preview_widgets({ { name = "rt_probe", display = "rt probe", icon = nil } })
+    if type(sample) ~= "table" or #sample == 0 then
+        return "#461 REGRESSION: _ct_build_boon_preview_widgets built no widgets for a 1-boon list"
+    end
+    for i = 1, #sample do
+        if sample[i].scenegraph_id == "reward_item" then
+            return "#461 REGRESSION: preview widget anchored on sizeless reward_item node (off-screen bug class)"
+        end
     end
 end)
 
