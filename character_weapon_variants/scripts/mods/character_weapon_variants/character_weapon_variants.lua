@@ -11334,6 +11334,42 @@ do
 	end
 
 	local _null_logged = {}
+	-- #416/#483 mission-transition recovery. A sender can observe a newly
+	-- reconstructed peer roster between the last confirmed parity tick and the
+	-- replacement peer's ack. Nulling is still mandatory at that instant, but the
+	-- shared gate can remain logically "enabled" if the ack lands before its next
+	-- poll, so no disable->enable callback edge exists to replay the selected skin.
+	-- Record every withheld CWV identity and retry for a bounded window. The pure
+	-- step helper is exported for the runtime regression; production polls at most
+	-- twice per second and sends only after parity is positively confirmed.
+	_om._cwv_skin_replay_pending_step = function(pending, dt, parity_check, replay_fn)
+		if type(pending) ~= "table" then return nil, 0 end
+		pending.elapsed = (pending.elapsed or 0) + (dt or 0)
+		pending.poll = (pending.poll or 0) + (dt or 0)
+		if pending.elapsed >= 60 then return nil, 0, "expired" end
+		if pending.poll < 0.5 then return pending, 0 end
+		pending.poll = 0
+		local ok_parity, parity_live = pcall(parity_check)
+		if not ok_parity or parity_live ~= true then return pending, 0 end
+		local ok, sent = pcall(replay_fn)
+		if ok and type(sent) == "number" and sent > 0 then
+			return nil, sent, "sent"
+		end
+		return pending, 0
+	end
+
+	local function _mark_skin_replay_pending(context, saved)
+		if not saved then return end
+		local count = 0
+		for _ in pairs(saved) do count = count + 1 end
+		_om._cwv_skin_replay_pending = {
+			context = context,
+			count = count,
+			elapsed = 0,
+			poll = 0,
+		}
+	end
+
 	local function _wire_null_skins(slots, send_fn, context, force)
 		if not force and _wire_parity_live() then
 			-- Every lobby peer runs cwv: the skin is decodable everywhere and
@@ -11367,6 +11403,12 @@ do
 			for slot_data, skin in pairs(saved) do
 				slot_data.skin = skin
 			end
+			-- A forced hot-join sync can run before the joining peer is even visible
+			-- in the roster; all_peers_have could therefore be vacuously/stale true.
+			-- Keep that path exclusively on the existing settled parity-enable edge.
+			-- The bounded poll owns only ordinary transition/resync sends whose roster
+			-- was observed and explicitly returned parity=false.
+			if not force then _mark_skin_replay_pending(context, saved) end
 		end
 		return r1, r2, r3, r4
 	end
@@ -11439,6 +11481,18 @@ do
 		return sent
 	end
 
+	local function _replay_and_clear_pending(reason)
+		local sent = _om._replay_cwv_skins_after_parity()
+		if sent > 0 and _om._cwv_skin_replay_pending then
+			local pending = _om._cwv_skin_replay_pending
+			_om._cwv_skin_replay_pending = nil
+			pcall(printf,
+				"[cwv:416/483] deferred skin identity replayed after parity recovery: slots=%d source=%s trigger=%s",
+				sent, tostring(pending.context), tostring(reason))
+		end
+		return sent
+	end
+
 	mod._cwv_skin_wire_surfaces = {}
 
 	mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
@@ -11479,10 +11533,37 @@ do
 	if pp and type(pp.register_gated_feature) == "function" then
 		pp:register_gated_feature("cwv_skin_hot_join_replay", {
 			label = "remote weapon cosmetics",
-			on_enable = _om._replay_cwv_skins_after_parity,
+			on_enable = function() return _replay_and_clear_pending("parity_enable_edge") end,
 		})
 		mod._cwv_skin_wire_surfaces.parity_replay = true
 	end
+
+	-- The peer-parity library installed the current mod.update wrapper near boot.
+	-- Chain after it so an enable edge gets first chance to replay. If no edge was
+	-- observed, this bounded retry closes the mission-transition race. A genuinely
+	-- mixed lobby never passes _wire_parity_live and therefore never sends a CWV id.
+	local previous_update = mod.update
+	mod.update = function(dt)
+		if previous_update then previous_update(dt) end
+		local pending = _om._cwv_skin_replay_pending
+		if not pending then return end
+		local next_pending, sent, outcome = _om._cwv_skin_replay_pending_step(
+			pending, dt, _wire_parity_live, function()
+				return _replay_and_clear_pending("bounded_transition_poll")
+			end)
+		-- _replay_and_clear_pending may already have cleared the shared field.
+		if sent > 0 then
+			_om._cwv_skin_replay_pending = nil
+		elseif outcome == "expired" then
+			_om._cwv_skin_replay_pending = nil
+			pcall(printf,
+				"[cwv:416/483] deferred skin replay expired safely after 60s: source=%s slots=%s (parity never confirmed / equipment unavailable)",
+				tostring(pending.context), tostring(pending.count))
+		else
+			_om._cwv_skin_replay_pending = next_pending
+		end
+	end
+	mod._cwv_skin_wire_surfaces.transition_replay = true
 end
 _om._skin_wire_hook_installed = true
 
@@ -12705,6 +12786,71 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
         if not def or def.item_key ~= target_key or reason ~= "skin" then
             return generated_skin .. " does not resolve to its target on the husk"
         end
+    end
+end)
+
+_rt_register("issue416_483_transition_generated_skin_replay", function()
+    local exact_skin = "cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1"
+    local plan_replay = _om._cwv_skin_replay_payloads
+    local null_skins = _om._wire_null_skins
+    local step = _om._cwv_skin_replay_pending_step
+    if type(plan_replay) ~= "function" or type(null_skins) ~= "function" or type(step) ~= "function" then
+        return "#416/#483 transition replay helpers are not installed"
+    end
+    if not (mod._cwv_skin_wire_surfaces and mod._cwv_skin_wire_surfaces.transition_replay) then
+        return "#416/#483 bounded transition replay update is not installed"
+    end
+
+    -- The exact generated pair from the repro must retain both authored meshes
+    -- and its clone-name-clobbered vanilla base id in a replay payload.
+    local skin = WeaponSkins and WeaponSkins.skins and WeaponSkins.skins[exact_skin]
+    if type(skin) ~= "table" or type(skin.right_hand_unit) ~= "string"
+            or type(skin.left_hand_unit) ~= "string" then
+        return exact_skin .. " is absent or lost one generated hand"
+    end
+    local payloads = plan_replay({
+        wielded_slot = "slot_melee",
+        slots = {
+            slot_melee = {
+                item_data = { name = "es_dual_wield_hammer_sword" },
+                skin = exact_skin,
+            },
+        },
+    })
+    if #payloads ~= 1 or payloads[1].item_name ~= "es_dual_wield_hammer_sword"
+            or payloads[1].skin ~= exact_skin or payloads[1].wielded ~= true then
+        return "Sword+Mace mission-transition replay lost exact base+generated-skin+wield identity"
+    end
+
+    -- Reproduce the transition send: parity is transiently false, so the wire
+    -- sees n/a, the selected live skin is restored, and a deferred replay is
+    -- scheduled. Restore global probe state before assertions return.
+    local real_pp = mod._cwv_peer_parity
+    local real_pending = _om._cwv_skin_replay_pending
+    mod._cwv_peer_parity = { all_peers_have = function() return false end }
+    local slot = { skin = exact_skin }
+    local at_send
+    null_skins({ slot }, function() at_send = slot.skin end, "rt416_transition", false)
+    local pending = _om._cwv_skin_replay_pending
+    mod._cwv_peer_parity = real_pp
+    _om._cwv_skin_replay_pending = real_pending
+    if at_send ~= nil or slot.skin ~= exact_skin or type(pending) ~= "table" then
+        return "transition null did not restore the live Sword+Mace skin and schedule recovery"
+    end
+
+    -- No unsafe replay while parity is false. The first confirmed half-second
+    -- poll sends exactly once and consumes the pending state even if the shared
+    -- feature never observed a disable->enable edge.
+    local calls = 0
+    local p, sent = step(pending, 0.5, function() return false end,
+        function() calls = calls + 1 return 1 end)
+    if not p or sent ~= 0 or calls ~= 0 then
+        return "deferred generated-skin replay ran while parity was unconfirmed"
+    end
+    p, sent = step(p, 0.5, function() return true end,
+        function() calls = calls + 1 return 1 end)
+    if p ~= nil or sent ~= 1 or calls ~= 1 then
+        return "deferred generated-skin replay did not send exactly once after parity recovery"
     end
 end)
 

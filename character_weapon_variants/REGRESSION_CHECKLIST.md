@@ -36,6 +36,19 @@ Last updated: 2026-07-13.
 | Expected post-fix | The observer sees only the right-hand blunderbuss. CWV preselects authored hands before vanilla's spawn branch; the later residency gate still suppresses any unsafe stale unit. Skinned/native weapons remain unchanged. |
 | Detection | `/cwv_regression_test`: `cwv_husk_nonresident_spawn_deferred`; one bounded `[cwv:478] husk preselected hands ...` line proves the upstream decision, and no nonresident-spawn error follows. |
 
+### issue416-483-transition-generated-skin-replay — Mission load permanently replaces paired cosmetic with base donor
+
+| Field | Value |
+|-------|-------|
+| Symptom | A generated Sword+Mace skin rides correctly in the keep, but mission-transition `game_object_initialized` sees transient parity false, wires `n/a`, and the observer permanently sees the base mace+sword. |
+| Root cause | The replacement roster briefly lacks a fresh peer acknowledgement. Nulling is required for decoder safety, but if the ack arrives before the parity library's next poll, its applied state never crosses disabled->enabled and the existing edge-triggered replay does not run. |
+| Mod(s) | character_weapon_variants |
+| Fix version(s) | CWV v0.1.395-dev (#416/#483) |
+| Category | MULTIPLAYER / APPEARANCE / TRANSITION |
+| Repro | Select generated skin `cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1`, verify it remotely in the keep, then load a mission without re-equipping. Reverse host/client roles. |
+| Expected post-fix | The transient send may safely carry `n/a`; once parity is confirmed, one bounded replay restores the exact sword-right/mace-left skin and current wield. A peer without CWV never receives the modded skin id. |
+| Detection | `/cwv_regression_test`: `issue416_483_transition_generated_skin_replay`; log shows `[cwv:416/483] deferred skin identity replayed ...` after a transition-time `[cwv:495] ... -> n/a` line. |
+
 ---
 
 ## Weapon Skins
