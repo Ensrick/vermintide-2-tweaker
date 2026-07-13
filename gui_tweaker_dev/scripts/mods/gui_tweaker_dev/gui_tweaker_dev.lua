@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.228-dev"
+local MOD_VERSION = "0.2.229-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -321,6 +321,39 @@ _rt_register("localization_format_safe", function()
                     "loc key %q has invalid format string (escape literal %% as %%%%): %s",
                     k, tostring(fmt_err))
             end
+        end
+    end
+end)
+
+_rt_register("all_languages_defer_340", function()
+    -- (#340) The all-languages feature is DETECT-AND-DEFER, not a font swap. The source
+    -- mod "Support All Languages" (3232229691) ships a CUSTOM ~32 MB CJK atlas in its own
+    -- bundle (see _gut_all_languages.lua header), so gut cannot re-point Fonts at it —
+    -- doing so would target a material gut does not ship (Gui material-not-found for every
+    -- text surface). This check pins the module to a pure defer: it must LOAD and it must
+    -- NEVER perform the swap or install hooks. If a future edit sets does_font_swap true
+    -- (or the module fails to load), this fails.
+    local t = mod._GUT_ALL_LANGUAGES
+    if type(t) ~= "table" then
+        return "#340 regression: _gut_all_languages module didn't load (mod._GUT_ALL_LANGUAGES missing)"
+    end
+    if t.does_font_swap ~= false then
+        return "#340 regression: all-languages module now swaps Fonts (does_font_swap ~= false) -- gut ships no atlas, so this points every text surface at a missing material"
+    end
+    if t.installs_hooks ~= false then
+        return "#340 regression: all-languages module now installs hooks (it must stay a pure detect-and-defer no-op)"
+    end
+    if t.case ~= "custom_font_resource_case2" then
+        return "#340 regression: all-languages case changed from custom_font_resource_case2 (the ported mod ships its own font bundle -- re-verify before changing the port shape)"
+    end
+    -- Source guard (io-safe; nil in retail => skip, runs under tools/CI): the module must
+    -- not contain a live Fonts[1] assignment. Needle split so this line can't self-match.
+    local ok, info = pcall(debug.getinfo, function() return mod._GUT_ALL_LANGUAGES end, "S")
+    if ok and type(info) == "table" and info.source then
+        local dir = (info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source):match("^(.*[/\\])[^/\\]*$")
+        local txt = dir and _rt_src_read(dir .. "_gut_all_languages.lua")
+        if txt and txt:find("arial%[1%]%s*=%s*arial" .. "_unicode_path") then
+            return "#340 regression: _gut_all_languages.lua reintroduced the Fonts[1] swap from the source mod (gut ships no atlas -> broken render)"
         end
     end
 end)
@@ -2738,6 +2771,15 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_diag_optionsview")
 -- Must dofile AFTER on_setting_changed (~632) + the on_all_mods_loaded chain (~2001), both
 -- well above here. See _gut_ckc_bridge.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_ckc_bridge")
+
+-- (#340) All-language display support: DETECT-AND-DEFER only. The source mod
+-- "Support All Languages" (Workshop 3232229691) ships a CUSTOM ~32 MB CJK font
+-- atlas inside its own bundle (decompiled mechanism in _gut_all_languages.lua),
+-- so gut cannot deliver the feature without redistributing another author's font.
+-- This module installs NO hooks, adds NO menu toggle, and performs NO font swap —
+-- it records the case-2 finding + a defer guard and printf-logs whether the
+-- standalone mod is present. Resolution is documentation + recommend 3232229691.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_all_languages")
 
 -- Bestiary & Armory (absorbed): merged weapon (Armory) + enemy (Bestiary)
 -- compendium with a PURE-DYNAMIC data layer — weapons enumerated live from
