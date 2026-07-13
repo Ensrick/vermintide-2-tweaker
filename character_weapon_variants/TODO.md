@@ -1,5 +1,11 @@
 # Character Weapon Variants — To-Do
 
+## #579 dual-axes cosmetic parity live matrix
+
+- [ ] On an account with Scorpion and Bögenhafen, confirm every `wh_1h_axe` illusion appears for both `cwv_es_dual_axes` and `cwv_wh_dual_axes`; on an account missing each DLC, confirm its cosmetic remains locked.
+- [ ] Apply representative base, runed, Bögenhafen, and weave illusions; verify both axes in the illusion browser, inventory preview, 1P, and another player's 3P view, then re-equip and reload to confirm persistence.
+- [ ] Run `/cwv_regression_test` in the keep and confirm `dual_axes_cosmetic_family_parity` passes.
+
 ## Completed
 - [x] **First variant: Weave Forged Axe and Shield** — `cwv_es_axe_shield` (magic rarity, base template) for Kruber (Merc/Huntsman/FK). Mainhand: Saltzpyre's weave hatchet, offhand: Kruber's weave CW shield.
 - [x] **Veteran Axe and Shield** — `cwv_es_axe_shield_exotic` (unique/veteran rarity) with Opportunist trait, block cost reduction, power vs skaven. Red background, cosmetics menu, full item behavior.

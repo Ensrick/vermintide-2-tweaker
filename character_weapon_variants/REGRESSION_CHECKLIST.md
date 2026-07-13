@@ -162,6 +162,22 @@ Last updated: 2026-07-13.
 
 ---
 
+### cwv-cosmetic-family-parity — Same-family harvest drifts from canonical owner pool
+
+| Field | Value |
+|-------|-------|
+| Symptom | A CWV variant offers only some cosmetics from the corresponding vanilla weapon; DLC/weave skins are commonly absent. |
+| Root cause | The registrar scans `ItemMasterList` at one load instant or appends only to a fixed set of rarity tiers. Vanilla's authoritative pool is the owner's `WeaponSkins.skin_combinations` table, which DLC files extend with tiers such as `magic`; the default skin is stored separately in `WeaponSkins.default_skins`. |
+| Mod(s) | character_weapon_variants |
+| Fix version(s) | CWV v0.1.390-dev (#579) |
+| Category | INTEGRATION |
+| Repro | Open the Dual Axes illusion picker and compare its unique cosmetic keys with `wh_1h_axe_skins` plus `WeaponSkins.default_skins.wh_1h_axe`; verify weave and Bögenhafen entries. |
+| Expected post-fix | Exact source/clone key-set parity; source tier memberships and `required_dlc` are preserved; each clone has both hands and the family display rig. |
+| Detection | `/cwv_regression_test` check `dual_axes_cosmetic_family_parity`. |
+
+
+---
+
 ### 3p-anim-fix-process — Closed-vocab + visual-verify procedure for cross-character anims
 
 | Field | Value |

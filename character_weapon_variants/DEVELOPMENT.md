@@ -520,7 +520,9 @@ The registration function (`_register_custom_illusions`) injects each illusion i
 3. `WeaponSkins.skin_combinations[table_name]` — adds to the correct rarity tier so it appears in the cosmetics browser
 4. `NetworkLookup.weapon_skins` — network serialization (uses `rawget`/`rawset`)
 
-A `hook_safe` on `BackendInterfaceCraftingPlayfab.get_unlocked_weapon_skins` marks all custom skins as unlocked.
+A `hook_safe` on `BackendInterfaceCraftingPlayfab.get_unlocked_weapon_skins` marks custom skins as unlocked only when their copied `ItemMasterList.required_dlc` is absent or owned. Never omit the source ownership field from a clone: a custom key is not permission to bypass DLC ownership.
+
+For complete same-family harvests, derive the source key set from the owner's `WeaponSkins.skin_combinations[ItemMasterList[owner].skin_combination_table]`, preserving every tier membership, then add `WeaponSkins.default_skins[owner]` because vanilla stores the default outside the combination pool. Do not discover a family by scanning `ItemMasterList`: DLC tables can merge later, and a fixed destination tier schema silently drops later tiers such as `magic`. Canonical examples: `cwv_es_dual_axes` and `cwv_wh_dual_axes` / issue #579.
 
 ### Step 1: Find the vanilla skin keys
 

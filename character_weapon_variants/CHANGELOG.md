@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.390-dev - 2026-07-13 - #579 dual-axes cosmetic-family parity [untested]
+
+- Replaced the load-order-sensitive `ItemMasterList` scan for Dual Axes illusions with derivation from vanilla's authoritative `WeaponSkins.skin_combinations.wh_1h_axe_skins` owner pool, plus the separately registered vanilla default skin. Both `cwv_es_dual_axes` and `cwv_wh_dual_axes` now own curated pools with every source tier membership, including DLC-added `magic`/`bogenhafen` tiers, so future compatible single-axe cosmetics join both variants without another hand-maintained list.
+- Each generated illusion mirrors the source axe into both hands and forces `display_dual_axes` in both `ItemMasterList` and `WeaponSkins.skins`. Source names, icons, rarity, material settings, and template continue to be inherited; both network lookup tables and the CWV wire-safety key set remain populated.
+- Copied each source skin's `required_dlc` onto its CWV clone and made CWV's custom-skin unlock hook honor that field. Scorpion and Bögenhafen cosmetics therefore remain unavailable without their original DLC instead of being granted by the custom-key path.
+- Added `/cwv_regression_test` check `dual_axes_cosmetic_family_parity`: compares the canonical source and generated key sets and verifies tier membership, source mesh, both hands, dual display rig, exact owner, DLC requirement, and both network lookups.
+- Static/source gates walked: vanilla `wh_1h_axe` owner and skin pools, DLC combination merge, customization enumeration, `BackendUtils.get_item_units`, CWV preview/browser/wire paths, and Cosmetics Tweaker's DLC-gated custom-illusion bridge. Live inventory/1P/3P/reload verification remains tracked in `TODO.md` and issue #579.
+
+**DoD:** Universal walked. Trait gates: G-DUAL, G-CROSS-CHAR, G-CUSTOM-ILLUSION, G-APPEARANCE. Deferrals: live inventory preview, illusion browser, 1P/3P equip, DLC-account, and reload verification — TODO `#579 dual-axes cosmetic parity live matrix`.
+
 ## 0.1.389-dev - 2026-07-13 - #570 slot-extension state is console-only [untested]
 
 - Moved both automatic slot-extension summaries (initial load and `on_all_mods_loaded`) from chat to raw console output. CWV still prints its version in chat; user-invoked command feedback remains unchanged.

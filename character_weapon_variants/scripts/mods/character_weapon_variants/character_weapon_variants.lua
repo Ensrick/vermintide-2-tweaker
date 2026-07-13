@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.389-dev"
+local MOD_VERSION = "0.1.390-dev"
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -1115,6 +1115,9 @@ local _variant_definitions = {
 		rarity          = "exotic",
 		traits          = { "melee_attack_speed_on_crit" },
 		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
+		-- Saltzpyre's variant uses the same canonical wh_1h_axe cosmetic
+		-- family as Kruber's twin-hatchet variant, in its own curated pool.
+		item_type       = "cwv_wh_dual_axes",
 	},
 	-- ============================================================
 	-- Dual Maces — Kruber's 1H mace model dual-wielded
@@ -7470,6 +7473,7 @@ local function _register_variant_skins()
 			cwv_es_dual_swords    = "units/weapons/weapon_display/display_dual_weapons",
 			-- Identical-mesh hatchets; vanilla precedent: dw_dual_axe_skin_01 (`weapon_skins.lua:2364`)
 			cwv_es_dual_axes      = "units/weapons/weapon_display/display_dual_axes",
+			cwv_wh_dual_axes      = "units/weapons/weapon_display/display_dual_axes",
 			-- Identical-mesh empire maces; vanilla precedent: dual_wield_hammers
 			-- skins in `weapon_skins_bless.lua:395` use display_dual_hammers.
 			cwv_es_dual_maces             = "units/weapons/weapon_display/display_dual_hammers",
@@ -7630,6 +7634,7 @@ local function _register_cwv_skin_combinations()
 		cwv_es_axe_shield              = "cwv_es_axe_shield_skins",
 		cwv_es_dual_swords             = "cwv_es_dual_swords_skins",
 		cwv_es_dual_axes               = "cwv_es_dual_axes_skins",
+		cwv_wh_dual_axes               = "cwv_wh_dual_axes_skins",
 		cwv_es_dual_maces              = "cwv_es_dual_maces_skins",
 		cwv_wh_dual_maces              = "cwv_wh_dual_maces_skins",
 		cwv_es_sword_and_mace          = "cwv_es_sword_and_mace_skins",
@@ -8120,12 +8125,19 @@ local function _register_saltzpyre_1h_axe_dual_illusions()
 	local source_keys = {}
 	for source_key in pairs(source_memberships) do source_keys[#source_keys + 1] = source_key end
 	table.sort(source_keys)
-	local source_by_clone = {}
-	_om._dual_axes_source_by_skin = source_by_clone
+	local targets = {
+		{ item_key = "cwv_es_dual_axes", combo = "cwv_es_dual_axes_skins", careers = _es_careers },
+		{ item_key = "cwv_wh_dual_axes", combo = "cwv_wh_dual_axes_skins", careers = _wh_careers },
+	}
+	local source_by_target = {}
+	_om._dual_axes_source_by_skin = source_by_target
 
-	local registered = 0
-	for _, source_key in ipairs(source_keys) do
-		local new_key = "cwv_es_dual_axes_" .. source_key
+	for _, target in ipairs(targets) do
+		local source_by_clone = {}
+		source_by_target[target.item_key] = source_by_clone
+		local registered = 0
+		for _, source_key in ipairs(source_keys) do
+		local new_key = target.item_key .. "_" .. source_key
 		local source = WeaponSkins.skins[source_key]
 		local source_item = rawget(ItemMasterList, source_key)
 		if not source or not source.right_hand_unit or not source_item
@@ -8143,7 +8155,7 @@ local function _register_saltzpyre_1h_axe_dual_illusions()
 			name              = new_key,
 			item_type         = "weapon_skin",
 			slot_type         = "weapon_skin",
-			matching_item_key = "cwv_es_dual_axes",
+			matching_item_key = target.item_key,
 			rarity            = source.rarity,
 			display_name      = source.display_name,
 			description       = source.description,
@@ -8154,7 +8166,7 @@ local function _register_saltzpyre_1h_axe_dual_illusions()
 			right_hand_unit   = source.right_hand_unit,
 			left_hand_unit    = source.right_hand_unit,
 			template          = source.template,
-			can_wield         = _es_careers,
+			can_wield         = target.careers,
 		}
 		-- Ownership remains attached to the cosmetic, not the CWV weapon.  The
 		-- unlock hook below consults this copied field before exposing the clone.
@@ -8185,7 +8197,7 @@ local function _register_saltzpyre_1h_axe_dual_illusions()
 		end
 		WeaponSkins.skins[new_key] = ws_entry
 
-		local combos = WeaponSkins.skin_combinations.cwv_es_dual_axes_skins
+		local combos = WeaponSkins.skin_combinations[target.combo]
 		if combos then
 			for _, tier_name in ipairs(source_memberships[source_key]) do
 				local tier = combos[tier_name]
@@ -8218,9 +8230,10 @@ local function _register_saltzpyre_1h_axe_dual_illusions()
 		_custom_skin_keys[new_key] = true
 		registered = registered + 1
 		::continue::
-	end
+		end
 
-	mod:info("Registered %d Saltzpyre 1h axe cosmetics as cwv_es_dual_axes illusions", registered)
+		mod:info("Registered %d Saltzpyre 1h axe cosmetics as %s illusions", registered, target.item_key)
+	end
 end
 
 _register_saltzpyre_1h_axe_dual_illusions()
@@ -9334,6 +9347,7 @@ local function _build_entry(def, backend_id)
 		cwv_es_axe_shield              = "cwv_es_axe_shield_skins",
 		cwv_es_dual_swords             = "cwv_es_dual_swords_skins",
 		cwv_es_dual_axes               = "cwv_es_dual_axes_skins",
+		cwv_wh_dual_axes               = "cwv_wh_dual_axes_skins",
 		cwv_es_dual_maces              = "cwv_es_dual_maces_skins",
 		cwv_wh_dual_maces              = "cwv_wh_dual_maces_skins",
 		cwv_es_sword_and_mace          = "cwv_es_sword_and_mace_skins",
@@ -12217,10 +12231,8 @@ _rt_register("dual_axes_cosmetic_family_parity", function()
         return "WeaponSkins/ItemMasterList not loaded yet (run in-keep)"
     end
     local source_combo = ws.skin_combinations.wh_1h_axe_skins
-    local clone_combo = ws.skin_combinations.cwv_es_dual_axes_skins
-    local source_by_clone = _om._dual_axes_source_by_skin
-    if type(source_combo) ~= "table" or type(clone_combo) ~= "table"
-            or type(source_by_clone) ~= "table" then
+    local source_by_target = _om._dual_axes_source_by_skin
+    if type(source_combo) ~= "table" or type(source_by_target) ~= "table" then
         return "dual-axes source/destination cosmetic family was not registered"
     end
 
@@ -12236,52 +12248,63 @@ _rt_register("dual_axes_cosmetic_family_parity", function()
     local default_skin = ws.default_skins and ws.default_skins.wh_1h_axe
     if default_skin then expected[default_skin] = true end
 
-    local actual = {}
-    for clone_key, source_key in pairs(source_by_clone) do
-        actual[source_key] = true
-        local source = ws.skins[source_key]
-        local clone = ws.skins[clone_key]
-        local source_item = rawget(iml, source_key)
-        local clone_item = rawget(iml, clone_key)
-        if not source or not clone or not source_item or not clone_item then
-            return string.format("dual-axes clone incomplete: %s <- %s", clone_key, source_key)
+    local targets = {
+        cwv_es_dual_axes = "cwv_es_dual_axes_skins",
+        cwv_wh_dual_axes = "cwv_wh_dual_axes_skins",
+    }
+    for target_key, combo_name in pairs(targets) do
+        local clone_combo = ws.skin_combinations[combo_name]
+        local source_by_clone = source_by_target[target_key]
+        if type(clone_combo) ~= "table" or type(source_by_clone) ~= "table" then
+            return "dual-axes target family was not registered: " .. target_key
         end
-        if clone.right_hand_unit ~= source.right_hand_unit
-                or clone.left_hand_unit ~= source.right_hand_unit
-                or clone.display_unit ~= "units/weapons/weapon_display/display_dual_axes" then
-            return string.format("dual-axes hand/display mismatch: %s <- %s", clone_key, source_key)
-        end
-        if clone_item.matching_item_key ~= "cwv_es_dual_axes"
-                or clone_item.required_dlc ~= source_item.required_dlc then
-            return string.format("dual-axes owner/DLC mismatch: %s <- %s", clone_key, source_key)
-        end
-        if not rawget(NetworkLookup.weapon_skins, clone_key)
-                or not rawget(NetworkLookup.item_names, clone_key) then
-            return "dual-axes clone missing network lookup: " .. clone_key
-        end
-        for tier_name in pairs(memberships[source_key] or {}) do
-            local found = false
-            for _, key in ipairs(clone_combo[tier_name] or {}) do
-                if key == clone_key then found = true break end
+        local actual = {}
+        for clone_key, source_key in pairs(source_by_clone) do
+            actual[source_key] = true
+            local source = ws.skins[source_key]
+            local clone = ws.skins[clone_key]
+            local source_item = rawget(iml, source_key)
+            local clone_item = rawget(iml, clone_key)
+            if not source or not clone or not source_item or not clone_item then
+                return string.format("dual-axes clone incomplete: %s <- %s", clone_key, source_key)
             end
-            if not found then
-                return string.format("dual-axes tier parity missing: %s in %s", clone_key, tier_name)
+            if clone.right_hand_unit ~= source.right_hand_unit
+                    or clone.left_hand_unit ~= source.right_hand_unit
+                    or clone.display_unit ~= "units/weapons/weapon_display/display_dual_axes" then
+                return string.format("dual-axes hand/display mismatch: %s <- %s", clone_key, source_key)
+            end
+            if clone_item.matching_item_key ~= target_key
+                    or clone_item.required_dlc ~= source_item.required_dlc then
+                return string.format("dual-axes owner/DLC mismatch: %s <- %s", clone_key, source_key)
+            end
+            if not rawget(NetworkLookup.weapon_skins, clone_key)
+                    or not rawget(NetworkLookup.item_names, clone_key) then
+                return "dual-axes clone missing network lookup: " .. clone_key
+            end
+            for tier_name in pairs(memberships[source_key] or {}) do
+                local found = false
+                for _, key in ipairs(clone_combo[tier_name] or {}) do
+                    if key == clone_key then found = true break end
+                end
+                if not found then
+                    return string.format("dual-axes tier parity missing: %s in %s", clone_key, tier_name)
+                end
             end
         end
-    end
 
-    local missing, extra = {}, {}
-    for source_key in pairs(expected) do
-        if not actual[source_key] then missing[#missing + 1] = source_key end
-    end
-    for source_key in pairs(actual) do
-        if not expected[source_key] then extra[#extra + 1] = source_key end
-    end
-    if #missing > 0 or #extra > 0 then
-        table.sort(missing)
-        table.sort(extra)
-        return string.format("dual-axes cosmetic set drift: missing=[%s] extra=[%s]",
-            table.concat(missing, ","), table.concat(extra, ","))
+        local missing, extra = {}, {}
+        for source_key in pairs(expected) do
+            if not actual[source_key] then missing[#missing + 1] = source_key end
+        end
+        for source_key in pairs(actual) do
+            if not expected[source_key] then extra[#extra + 1] = source_key end
+        end
+        if #missing > 0 or #extra > 0 then
+            table.sort(missing)
+            table.sort(extra)
+            return string.format("dual-axes cosmetic set drift for %s: missing=[%s] extra=[%s]",
+                target_key, table.concat(missing, ","), table.concat(extra, ","))
+        end
     end
 end)
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-13 - `character_weapon_variants` dual-axes cosmetic parity
+
+Repo-aggregate entry for CWV v0.1.390-dev / issue #579. Dual Axes now derives
+its illusion set from the canonical Saltzpyre one-handed-axe combination pool,
+including DLC-added tiers and the separate default skin. Generated clones keep
+the source DLC requirement, both hand meshes, the dual-axes display rig, and
+network registration. A runtime regression compares the source and generated
+key sets. Full details are in `character_weapon_variants/CHANGELOG.md`.
+
 ## 2026-07-13 - `character_weapon_variants` skin reverse-index refresh
 
 Repo-aggregate entry for CWV v0.1.388-dev / issue #567. After deferred variant
