@@ -1,5 +1,14 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.396-dev - 2026-07-13 - #586 generated dual-weapon first-person residency [verify-fix-coop]
+
+- Rain's client crash `c41fc284-f1cf-42b7-b519-bddc52aed4cf` proves #586 was a generated dual-weapon class, not a Dual Axes exception. A synchronized `cwv_es_dual_maces` loadout reached `SimpleInventoryExtension:_wield_slot` with the prior loadout's first-person package snapshot, then C-fataled when `PlayerUnitFirstPerson:set_state_machine` requested non-resident `.../melee/dual_hammers`. The new Cosmetics/CWV paired illusions had already rendered correctly and are not the crash source.
+- Replaced the one-path Dual Axes lease with a closed, source-verified catalog covering every generated CWV dual owner: Imperial Dual Swords, Sword and Mace, both Dual Axes, both Dual Maces, and Dual Warrior-Priest Hammers. Their five vanilla state-machine packages are acquired synchronously once, held under distinct CWV references, retried only after a cold package-manager boundary, and released on disable/unload.
+- Preserved the original #586 Axes inspection fields and runtime check name while expanding `issue586_cross_character_dual_axes_fp_residency` to prove all five leases are singular/idempotent and every one of the seven generated paired items resolves every intended receiver career to its protected package.
+- **Co-op verify:** both peers load v0.1.396-dev. As client, equip Dual Axes, then Dual Maces, then each remaining generated dual weapon through the inventory/loadout resync path; swap away and back after each. No equip may silently fail or crash. Reverse host/client roles and repeat Dual Maces. `/cwv_regression_test` must pass `issue586_cross_character_dual_axes_fp_residency`.
+
+**DoD:** Universal walked. Trait gates: G-DUAL, G-CROSS-CHAR, package lifecycle, multiplayer resync. Deferrals: the two-player transition matrix above and package release observation on both peers — issue #586.
+
 ## 0.1.395-dev - 2026-07-13 - #474/#478 remote weapon continuity [untested]
 
 - Extended v0.1.394's crash-safe post-parity skin replay coverage to the Old Musket's cross-slot representation. The handshake still sends only the vanilla `es_handgun` id with a nulled CWV skin; after every peer acknowledges CWV, the bounded replay restores `cwv_es_musket_old_skin` in either melee or ranged slot and re-wields the active slot so the husk immediately rebuilds the custom mesh, textures, and 3P pose.

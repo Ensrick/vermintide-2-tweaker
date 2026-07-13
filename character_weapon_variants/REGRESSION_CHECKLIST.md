@@ -53,18 +53,18 @@ Last updated: 2026-07-13.
 
 ## Weapon Skins
 
-### issue586-dual-axes-fp-residency — Resync cannot wield an unloaded state machine
+### issue586-generated-dual-fp-residency — Resync cannot wield an unloaded state machine
 
 | Field | Value |
 |-------|-------|
-| Symptom | Client C-fatals on `units/beings/player/first_person_base/state_machines/melee/dual_axes` while a CWV Dual Axes loadout is resynchronized. |
-| Root cause | `ProfileSynchronizer` built its first-person package list from the prior backend loadout, then CWV's equipment resync wielded `dual_wield_axes_template_1` before the new state-machine package was resident. |
+| Symptom | Client C-fatals on a generated dual weapon's first-person state machine (`dual_axes` first, then `dual_hammers`) while a CWV loadout is resynchronized. |
+| Root cause | `ProfileSynchronizer` built its first-person package list from the prior backend loadout, then CWV's equipment resync wielded a different generated dual template before the new state-machine package was resident. The original Axes-only lease protected one instance, not the class. |
 | Mod(s) | character_weapon_variants |
-| Fix version(s) | 0.1.392-dev (#586) |
+| Fix version(s) | 0.1.392-dev (Dual Axes); 0.1.396-dev (all generated dual owners), #586 |
 | Category | INTEGRATION / CRASH |
-| Repro | As client, equip `cwv_es_dual_axes` or `cwv_wh_dual_axes` through a loadout resync whose previous melee weapon uses another state machine. |
-| Expected post-fix | The CWV-owned `dual_axes` FP package lease is already resident; equip, swap away/back, character change, and loadout resync do not crash or increase its reference count. |
-| Detection | `/cwv_regression_test`: `issue586_cross_character_dual_axes_fp_residency`; then verify both ES and WH variants through the live transition matrix above. |
+| Repro | As client, equip Dual Axes then Dual Maces through loadout resync while the previous melee weapon uses another state machine; continue through the other generated dual owners. |
+| Expected post-fix | All five source-verified generated-dual FP packages are resident before resync; equip, swap away/back, character change, and loadout resync do not crash or increase reference counts. |
+| Detection | `/cwv_regression_test`: `issue586_cross_character_dual_axes_fp_residency` validates all seven paired items and five package leases; then run the coop transition/role-reversal matrix. |
 
 ### issue582-dual-axes-owner-boundary — Native base must not compete with CWV variants
 

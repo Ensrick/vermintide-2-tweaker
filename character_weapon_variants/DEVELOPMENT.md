@@ -1436,6 +1436,18 @@ unexpected non-nil values.
 
 ### Cross-character unit references need package loading
 
+Generated dual weapons have an additional first-person residency invariant.
+`ProfileSynchronizer` may snapshot the prior backend loadout's package set before
+CWV's resynchronized equipment replaces it. The next `_wield_slot` immediately
+installs the new template's state machine, so asynchronous loading or a
+per-weapon special case is unsafe: engine C faults before Lua can recover.
+Issue #586 therefore owns a closed catalog of all generated dual owners and the
+five source-verified vanilla state-machine paths they resolve to (`dual_swords`,
+`dual_hammer_sword_es`, `dual_axes`, `dual_hammers`, and
+`dual_hammers_priest`). Add every new paired owner to that catalog and the
+runtime receiver matrix in the same change; acquire each package synchronously
+under one lifecycle-balanced CWV reference.
+
 Vanilla queues inventory packages off the equipped item's
 `right_hand_unit` / `left_hand_unit` and the item's `required_dlc`
 chain. It does **NOT** walk every reference inside the template,
