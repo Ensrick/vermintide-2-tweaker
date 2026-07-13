@@ -1,5 +1,17 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.216-dev (2026-07-13) -- #364 reserve Bardin's Survival Ale for human players [verify-fix]
+
+Bots no longer automatically target Bardin's Survival Ale through either the instant-pickup path or the greedy mule-pickup postpass. The host-owned `AIBotGroupSystem._update_mule_pickups` pass now releases an ale claim vanilla assigned earlier in the tick and excludes ale while selecting a replacement; ordinary potions and bombs retain their existing behavior. The reservation keys off the pickup extension's exact `pickup_name` (`bardin_survival_ale`), matching the career-drop definition in `scripts/settings/equipment/pickups.lua:741-759`, rather than broadly excluding the entire `slot_level_event` slot.
+
+### Regression
+- New `/gt_regression_test` check `gt364_survival_ale_reserved_for_humans` proves the exact ale name is reserved while a normal potion, grenade, and nil remain unreserved.
+
+### Test method (solo host + one Bardin bot suffices)
+1. Enable Bot Behavior Improvements, instant pickup, and greedy pickup; trigger Bardin's Survival Ale drop near the bot and an ordinary potion or bomb nearby.
+2. Confirm the bot does not target or remotely grab the ale, but can still collect the ordinary mule pickup.
+3. Run `/gt_regression_test` and confirm `gt364_survival_ale_reserved_for_humans` passes.
+
 ## v0.2.215-dev (2026-07-13) -- #303 Freeze AI dev tool (command + keybind) [untested]
 
 A dev-only testing tool that halts every enemy AI in place so you can inspect positioning, hitboxes, or set up a scenario, and pauses new spawns while it is held. Ships BOTH as the `/freezeai` chat command and as a keybind-able "Freeze AI" setting in the dev-only Dev Tools group (`keybind_type = function_call` -> `mod.gt_freeze_ai_toggle`). Host-only: AI brains run on the server, so the toggle refuses on a client with one echo. One confirmation echo per toggle ("AI frozen" / "AI unfrozen"); diagnostics are printf-only (`[gt:303]`).

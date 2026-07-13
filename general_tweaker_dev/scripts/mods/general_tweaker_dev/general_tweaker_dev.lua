@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.215-dev"
+local MOD_VERSION = "0.2.216-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -385,6 +385,7 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
+mod._gt_rt_register = _rt_register
 mod:command("gt_regression_test", "Run regression smoke checks for past bugs", function()
     local pass, fail = 0, 0
     mod:echo("=== gt regression_test (v%s) ===", MOD_VERSION)
@@ -2109,7 +2110,7 @@ _rt_register("gt_bot261_leash_conflict_invariants", function()
     -- on _enemy_path_allowed; (c) FIX 10's greedy pickup post-passes still honour
     -- vanilla's follow-range gates; (d) exactly ONE hook each on should_teleport
     -- and BTBotTeleportToAllyAction.run (VMF drops a 2nd on the same pair).
-    -- #511 (v0.2.202-dev): the source-grep half (io.open over _gt_bot_fixes.lua and
+    -- #511 (v0.2.202-dev): the source-grep half (io.open over the bot modules and
     -- the sibling _gt_improved_bot_combat.lua) was removed -- io is nil in the VMF
     -- sandbox, so it threw and reported FAIL on healthy code. The greedy-pickup
     -- marker constant is the runtime residual; the STATIC invariants it grepped move
@@ -2262,7 +2263,7 @@ end)
 
 _rt_register("bot_greedy_pickup_hooks_present", function()
     -- #297 item 8 (v0.2.182-dev): the greedy-pickup post-passes must exist --
-    -- marker global set beside the FIX 10 hooks in _gt_bot_fixes.lua, plus both
+    -- marker global set beside the FIX 10 hooks in _gt_bot_pickups.lua, plus both
     -- hook_safe registrations on AIBotGroupSystem._update_mule_pickups /
     -- _update_health_pickups (fresh (Class, method) pairs, grep-verified at
     -- authoring time). Source read is best-effort.
@@ -3174,6 +3175,8 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_failed_join_reveal")
 
 -- Bot Options: Necromancer potion handoff, Ironbreaker revive-during-ult,
 -- rescue allies awaiting respawn. Host-side bot AI fixes; no network registration.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_pickups")
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_consumables")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_fixes")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_prioritize_specials")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_weave_unlock")
