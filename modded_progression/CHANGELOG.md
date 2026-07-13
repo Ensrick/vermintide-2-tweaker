@@ -1,5 +1,24 @@
 # Modded Progression — Changelog
 
+## 0.2.18-dev (2026-07-13) - #568 backend-free simulated daily claims [untested]
+
+### Changed
+- Replaced the modded-realm daily quest surface with three locally namespaced `mp_daily_*` simulations. The day's vanilla templates may seed the presentation/progress mapping, but their backend quest identities are discarded.
+- Intercepted the exact single and claim-all UI methods before `QuestManager` can enqueue `generateQuestRewards`. Unknown or official ids are rejected in modded play; official-realm behavior remains vanilla.
+- Added an atomic claim ledger inside the local currency record. Reward balance and per-id idempotency markers persist in one write, with read-back verification; a failed write grants nothing.
+- Returned synthetic local poll rewards through the native reward presentation path, so claimed entries refresh immediately without a PlayFab poll.
+- Added defense-in-depth backend claim guards and four `/mp_regression_test` checks for atomicity, persistence failure, namespace/realm ownership, and duplicate rejection.
+
+### Source evidence
+- `hero_view_state_achievements.lua:1273-1349` routes individual/claim-all quest clicks into `QuestManager`.
+- `quest_manager.lua:448-493` resolves backend keys and requests rewards.
+- `backend_interface_quests_playfab.lua:285-302, 500-522` enqueues `generateQuestRewards`.
+
+### To verify
+- Complete and claim one simulated daily, then use claim-all on two completed dailies. Expect immediate reward/removal and no `generateQuestRewards`, EAC request, error 511, or forced exit in the log.
+- Restart and confirm claimed dailies cannot grant again and the local shilling balance persists.
+- Run `/mp_regression_test`; expect zero failures.
+
 ## 0.2.17-dev (2026-07-12) - issue 509: regression-harness backfill (_with_eac_off contract + sibling API) [untested]
 
 ### Why

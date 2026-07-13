@@ -64,8 +64,10 @@ Mission ends
 |---|---|---|
 | End-of-mission rewards | `generateEndOfLevelLoot` | `end_of_level_loot_request_cb` (loot_playfab.lua:192) |
 | Open loot chest | `generateLootChestRewards` | `loot_chest_rewards_request_cb` (loot_playfab.lua:49) |
-| Claim Okri's challenge (single) | `generateAchievementRewards` | `achievement_rewards_request_cb` (loot_playfab.lua:478) |
-| Claim challenges (batch) | (same) | `claim_multiple_achievement_rewards_request_cb` (loot_playfab.lua:678) |
+| Claim Okri's achievement (single) | `generateAchievementRewards` | `achievement_rewards_request_cb` (loot_playfab.lua:478) |
+| Claim achievements (batch) | (same) | `claim_multiple_achievement_rewards_request_cb` (loot_playfab.lua:678) |
+| Claim quest/daily (single) | `generateQuestRewards` | `BackendInterfaceQuestsPlayfab.claim_quest_rewards` (`backend_interface_quests_playfab.lua:285`) |
+| Claim quests/dailies (batch) | `generateQuestRewards` | `BackendInterfaceQuestsPlayfab.claim_multiple_quest_rewards` (`backend_interface_quests_playfab.lua:500`) |
 | Lohner's purchase | `PurchaseItem` + `storePurchaseMade` | `_exchange_chips_success_cb` (peddler_playfab.lua:676), `_store_purchase_made_cb` (peddler_playfab.lua:723) |
 | Daily login rewards | `claimStoreRewards` | `_claim_store_rewards_cb` (peddler_playfab.lua:830) |
 | Forge / salvage / re-roll / upgrade | `BackendInterfaceCraftingPlayfab.*` | (open research — item #1) |

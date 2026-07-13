@@ -4,7 +4,22 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-07-13.
+
+---
+## Backend isolation
+
+### mp-simulated-daily-claim-local — daily claim must not enqueue PlayFab
+
+| Field | Value |
+|-------|-------|
+| Symptom | Claiming a completed daily enqueues `generateQuestRewards`, requests EAC, raises backend error 511, and forces exit. |
+| Root cause | MP exposed backend daily ids and only un-gated claim UI; individual `_claim_quest_reward` still called `QuestManager.claim_reward`. |
+| Fix version(s) | mp v0.2.18-dev |
+| Category | INTEGRATION / CRITICAL |
+| Repro | In modded realm, complete one `mp_daily_*` entry and claim it; repeat with claim-all. |
+| Expected post-fix | Local shillings and claim marker persist atomically; entry refreshes immediately; no `generateQuestRewards`, EAC request, 511, or exit. Unknown/official ids receive no local grant. |
+| Detection | Run `/mp_regression_test`, then inspect the session log around each claim. Restart and prove the same id cannot grant twice. |
 
 ---
 ## Multiplayer / Network Sync

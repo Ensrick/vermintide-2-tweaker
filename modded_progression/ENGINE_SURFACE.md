@@ -9,7 +9,7 @@ names each engine seam, cites the vanilla behavior, and links out. Decompile
 paths are relative to `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`;
 `mp` line numbers are `modded_progression.lua` unless noted. `§N` =
 a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue. Grep-verified
-2026-07-12 against the decompile.
+2026-07-13 against the decompile.
 
 `mp` re-enables vanilla progression (XP, loot, currency, Okri's Challenges,
 Lohner's, keep crafting) in the modded realm, storing all state in VMF settings
@@ -19,17 +19,17 @@ is NOT one master gate: the PlayFab commit-suppression sites keep the real
 account safe and must stay live, while a separate set of UI sites merely grey out
 buttons and skip reward popups. `mp` therefore flips the flag to nil only inside
 a bracketed window around each vanilla UI/progression call, restores it on every
-exit path, and leaves the commit-suppression gate untouched. As of v0.2.16-dev
-the interception layer is scaffolding: 10 hooks + the sibling API are live; the
-`BackendInterface*Playfab` mirror interceptions in `PLAN.md` are not yet wired.
+exit path, and leaves the commit-suppression gate untouched. As of v0.2.18-dev,
+simulated daily exposure and claim are the first fully local backend interception;
+the remaining `BackendInterface*Playfab` routes in `PLAN.md` are not yet wired.
 
 ## Hook table
 
-10 registration sites, all `mod:hook` (full wrapper), all string-form. `[hook]` =
+18 registration sites, all `mod:hook` (full wrapper), all string-form. `[hook]` =
 full wrapper (can rewrite args/returns). Nine route through the shared
-`_with_eac_off` wrapper (`:390`), which brackets the vanilla call between a
-flag-clear and a flag-restore; one (`IngameUI.not_in_modded`) is a flat
-return-true override. There are no `hook_safe` sites and no table-form hooks. The
+`_with_eac_off` wrapper, one (`IngameUI.not_in_modded`) is a flat return-true
+override, and eight own the simulated-daily read/claim boundary. There are no
+`hook_safe` sites and no table-form hooks. The
 `_with_eac_off` wrapper is a single load-bearing row-of-concern (issue 434) called
 out below and shared by all nine of its callers.
 
@@ -56,6 +56,15 @@ out below and shared by all nine of its callers.
 | Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
 |---|---|---|---|
 | `AchievementManager.trigger_event` [hook] `:460` | The entry point for EVERY achievement progress event (kill counts, mission completion, tome/grim, etc.); returns immediately when `DEDICATED_SERVER or script_data["eac-untrusted"]` is true [src: `scripts/managers/achievements/achievement_manager.lua:124-125` verified] | Run the body with the flag cleared so challenge progress counters actually tick - without this, un-gating the claim button gets nothing (PLAN.md research #3) (`:460`) | ROW-OF-CONCERN: highest throw-exposure `_with_eac_off` caller (hot per-mission path) - this is the fn issue 434's restore-on-throw exists to protect. The `DEDICATED_SERVER` half of the gate still holds (only the `eac-untrusted` half is flipped). `AchievementManager.update` (`:294`, the Steam platform-push loop) is deliberately LEFT gated - local tracking needs no Steam push [src: `achievement_manager.lua:294` verified] |
+
+### Simulated daily ownership and claim (issue 568; owner doc: `docs/engine/11`)
+
+| Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
+|---|---|---|---|
+| `BackendInterfaceQuestsPlayfab.get_quests` / `get_quest_key` / `get_quest_by_key` [hooks] | Supplies quest records and maps display ids to backend keys [src: `scripts/managers/backend_playfab/backend_interface_quests_playfab.lua:153-161,740-798`] | Replace the modded-realm daily slice with persisted, namespaced `mp_daily_*` copies while leaving official-realm reads untouched | An MP id resolves only through the local ownership store; a vanilla id is never locally granted |
+| `HeroViewStateAchievements._claim_quest_reward` / `_claim_multiple_quest_rewards` [hooks] | Calls `QuestManager.can_claim*` then `claim_reward` / `claim_multiple_quest_rewards` [src: `scripts/ui/views/hero_view/states/hero_view_state_achievements.lua:1324-1351`] | Stop single and claim-all at the UI boundary, atomically persist local reward + idempotency marker, and return a synthetic poll id | Exact issue-568 escape seam. Unknown/official ids are rejected in modded play; official realm delegates vanilla |
+| `BackendInterfaceQuestsPlayfab.get_quest_rewards` [hook] | Returns completed backend poll loot for native reward presentation [src: `scripts/managers/backend_playfab/backend_interface_quests_playfab.lua:810-812`] | Resolve one-shot synthetic local poll rewards so the native UI presents and refreshes immediately | Synthetic entries are removed on read to keep the transient map bounded |
+| `BackendInterfaceQuestsPlayfab.claim_quest_rewards` / `claim_multiple_quest_rewards` [hooks] | Enqueues `generateQuestRewards` through the PlayFab request queue [src: `scripts/managers/backend_playfab/backend_interface_quests_playfab.lua:285-302,500-522`] | Defense-in-depth suppression for any missed modded-realm caller | No quest identity may reach these methods from MP's modded surface; official realm delegates vanilla |
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for mp's cases)
 
