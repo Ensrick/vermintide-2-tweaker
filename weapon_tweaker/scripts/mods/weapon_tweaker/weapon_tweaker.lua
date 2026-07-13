@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.214-dev"
+local MOD_VERSION = "0.12.215-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -2411,6 +2411,81 @@ local _MOONFIRE_AOE_TEMPLATE = {
 if rawget(_G, "ExplosionTemplates") then
     ExplosionTemplates[_MOONFIRE_AOE_NAME] = _MOONFIRE_AOE_TEMPLATE
 end
+
+-- issue #535: register the AoE template into NetworkLookup.explosion_templates
+-- UNCONDITIONALLY at load (PROJECT_STANDARDS 9.3, index determinism across wt
+-- peers), mirroring the damage_profiles append idiom above (~:1891). The lookup
+-- is frozen at engine boot with a strict __index that errors on any missing key
+-- [src: scripts/network_lookup/network_lookup.lua build :1211 (create_lookup
+-- {"n/a"}, ExplosionTemplates); strict __index :2360-2367]. Forward + reverse
+-- append, rawget-guarded so it registers once.
+--
+-- WIRE-PATH ANALYSIS (why this registration is belt-and-suspenders, NOT
+-- load-bearing): the moonfire hook calls DamageUtils.create_explosion DIRECTLY
+-- (below), never AreaDamageSystem.create_explosion. DamageUtils.create_explosion
+-- never encodes via NetworkLookup.explosion_templates; its only AoE-network
+-- touch is area_damage_system:add_aoe_damage_target [src: damage_utils.lua:1470],
+-- which stores the name as a STRING in a host-only local ring buffer and
+-- resolves it through ExplosionUtils.get_template -> ExplosionTemplates[name]
+-- [src: area_damage_system.lua:280,331,347], never NetworkLookup. The ONLY
+-- NetworkLookup.explosion_templates[name] encode in the explosion path is
+-- AreaDamageSystem.create_explosion [src: area_damage_system.lua:162], which the
+-- moonfire path never reaches. So this name never rides the wire: it cannot
+-- strict-__index-fatal on encode (the wt shooter's machine) nor on decode (a
+-- non-wt peer). Full trace in weapon_tweaker/ENGINE_SURFACE.md. Registration is
+-- still done for index determinism + to kill the footgun should a future change
+-- ever route moonfire through AreaDamageSystem.create_explosion.
+do
+    local NL = rawget(_G, "NetworkLookup")
+    local lookup = NL and NL.explosion_templates
+    if lookup and not rawget(lookup, _MOONFIRE_AOE_NAME) then
+        local idx = #lookup + 1
+        rawset(lookup, idx, _MOONFIRE_AOE_NAME)
+        rawset(lookup, _MOONFIRE_AOE_NAME, idx)
+        pcall(printf, "[wt:535] registered %s into NetworkLookup.explosion_templates at index %d (wire-inert; see ENGINE_SURFACE.md)", _MOONFIRE_AOE_NAME, idx)
+    end
+    -- Record the wire-safe vanilla fallback for the moonfire AoE. machinegun_poison_arrow
+    -- is the closest vanilla explosion template: same gameplay shape - damage_profile
+    -- "poison_aoe", sound "arrow_hit_poison_cloud", no_prop_damage, use_attacker_power_level
+    -- [src: scripts/settings/explosion_templates.lua:6-15]. There is NO active
+    -- sender-side floor hook, because moonfire has no NetworkLookup send path
+    -- (analysis above) - this is the documented substitute a floor WOULD coerce
+    -- to if a send path is ever added, and the /wt_regression_test check below
+    -- asserts it resolves to a real vanilla index. Same map shape as the #431
+    -- damage-profile fallback (mod._wt431_custom_profile_fallback).
+    mod._wt535_explosion_template_fallback = mod._wt535_explosion_template_fallback or {}
+    mod._wt535_explosion_template_fallback[_MOONFIRE_AOE_NAME] = "machinegun_poison_arrow"
+end
+
+-- issue #535 regression: the moonfire AoE template must be registered in BOTH
+-- ExplosionTemplates (local resolution) and NetworkLookup.explosion_templates
+-- (wire index determinism), and its recorded wire-safe fallback must resolve to
+-- a real vanilla index.
+_rt_register("wt_535_moonfire_explosion_registered", function()
+    local tmpl = rawget(_G, "ExplosionTemplates")
+    if not tmpl then return "skip: ExplosionTemplates not loaded (run in-mission)" end
+    local entry = rawget(tmpl, _MOONFIRE_AOE_NAME)
+    if type(entry) ~= "table" then return "wt_moonfire_aoe_revert missing from ExplosionTemplates" end
+    if entry.name ~= _MOONFIRE_AOE_NAME then return "wt_moonfire_aoe_revert entry missing its .name field" end
+    local NL = rawget(_G, "NetworkLookup")
+    local lookup = NL and NL.explosion_templates
+    if not lookup then return "skip: NetworkLookup.explosion_templates not loaded" end
+    local idx = rawget(lookup, _MOONFIRE_AOE_NAME)
+    if type(idx) ~= "number" then
+        return "wt_moonfire_aoe_revert not in NetworkLookup.explosion_templates (an encode would strict-__index fatal)"
+    end
+    if rawget(lookup, idx) ~= _MOONFIRE_AOE_NAME then
+        return "NetworkLookup.explosion_templates reverse map broken (idx->name mismatch)"
+    end
+    local map = mod._wt535_explosion_template_fallback
+    local fb = map and map[_MOONFIRE_AOE_NAME]
+    if type(fb) ~= "string" or fb == _MOONFIRE_AOE_NAME then
+        return "moonfire wire-safe fallback not recorded (must be a vanilla name, not the custom one)"
+    end
+    if not rawget(lookup, fb) then
+        return string.format("wire-safe fallback %s not in NetworkLookup.explosion_templates", tostring(fb))
+    end
+end)
 
 local _moonfire_jitter_offsets = {
     Vector3Box(0.35, 0, 0.1),
