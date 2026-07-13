@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.216-dev"
+local MOD_VERSION = "0.12.217-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4627,6 +4627,28 @@ _rt_register("volley_crossbow_preview_wield_baked", function()
         local live = Weapons.repeating_crossbow_elf_template.wield_anim_career_3p
         if not live or live.wh_captain ~= "to_repeating_crossbow" then
             return "live repeating_crossbow_elf_template wield_anim_career_3p.wh_captain = " .. tostring(live and live.wh_captain)
+        end
+    end
+end)
+
+_rt_register("issue286_greataxe_saltzpyre_wield_pose", function()
+    -- #286 post-fix lock: Bardin's Greataxe on the three non-WP Saltzpyre
+    -- careers must use the Warrior Priest greathammer wield/idle stance, not the
+    -- old greatsword stance. Guard both the source table and the applied live
+    -- Weapons table so an apply-order regression cannot hide behind correct data.
+    local wp = _WIELD_PATCHES_MODULE and _WIELD_PATCHES_MODULE.bulk
+    local configured = wp and wp.two_handed_axes_template_1
+    if not configured then return "two_handed_axes_template_1 wield patch missing" end
+    local live = Weapons and Weapons.two_handed_axes_template_1
+        and Weapons.two_handed_axes_template_1.wield_anim_career_3p
+    for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+        if configured[career] ~= "to_2h_hammer_priest" then
+            return string.format("configured %s=%s (expected to_2h_hammer_priest)",
+                career, tostring(configured[career]))
+        end
+        if live and live[career] ~= "to_2h_hammer_priest" then
+            return string.format("live %s=%s (expected to_2h_hammer_priest)",
+                career, tostring(live[career]))
         end
     end
 end)

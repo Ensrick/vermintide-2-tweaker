@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.217-dev (2026-07-13) - #286: Greataxe Saltzpyre pose post-fix lock
+
+Post-fix hardening for the already user-confirmed v0.12.205-dev Greataxe stance correction. No gameplay value changed in this build.
+
+- **Regression:** new `issue286_greataxe_saltzpyre_wield_pose` check locks `wt_wield_patches.bulk.two_handed_axes_template_1` for `wh_captain`, `wh_bountyhunter`, and `wh_zealot` to `to_2h_hammer_priest`, then checks the applied live `Weapons` table when available. It fails if either layer returns to the old `to_2h_sword` stance.
+- **Docs:** `DEVELOPMENT.md` now records this weapon-specific wield redirect and its regression owner beside the other known remaps.
+- **Verify:** run `/wt_regression_test`; expect `issue286_greataxe_saltzpyre_wield_pose: PASS`. Human visual verification is already recorded on issue #286 against v0.12.205-dev.
+
 ## 0.12.216-dev (2026-07-13) - #411: dead Anim Picker sources fail loud
 
 The stale Bastard Sword `swap_charge_stance` picker row is no longer present: `es_bastard_sword` was tuned and baked in v0.12.213-dev (#519), which removed all of its picker catalog entries. This build locks that outcome and generalizes the picker's own `n=0` diagnostic into a full-catalog regression check so the same class cannot silently return on another weapon.
