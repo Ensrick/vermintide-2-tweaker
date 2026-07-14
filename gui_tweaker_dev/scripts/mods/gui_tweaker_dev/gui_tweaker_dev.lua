@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.252-dev"
+local MOD_VERSION = "0.2.253-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2824,6 +2824,28 @@ _rt_register("ckc_bridge_implicit_no_toggle", function()
     local br_txt = _gut_read_all(dir .. "_gut_ckc_bridge.lua")
     if br_txt and br_txt:find('"' .. retired .. '"', 1, true) then
         return "_gut_ckc_bridge.lua reads " .. retired .. " again (#528: no availability gate; _is_active = CKC presence only)"
+    end
+end)
+
+_rt_register("ckc_bridge_uses_native_checkbox", function()
+    local bridge = mod._gut_ckc_bridge
+    local policy = bridge and bridge.widget_policy
+    if type(policy) ~= "table" or type(policy.prepare_definition) ~= "function" then
+        return "CKC native-checkbox policy missing (#528 follow-up)"
+    end
+    local row = { setting_name = "crosshair_kill_confirm", widget_type = "drop_down" }
+    local token = policy.prepare_definition({ row }, "crosshair_kill_confirm", true)
+    if not token or row.widget_type ~= "checkbox" then
+        return "CKC row was not redirected through native checkbox factory"
+    end
+    policy.restore_definition(token)
+    if row.widget_type ~= "drop_down" then
+        return "CKC row definition was not restored after native list build"
+    end
+    local content = { flag = false }
+    policy.restore_checkbox(content, true)
+    if policy.checkbox_value(content) ~= true then
+        return "CKC checkbox does not round-trip content.flag"
     end
 end)
 

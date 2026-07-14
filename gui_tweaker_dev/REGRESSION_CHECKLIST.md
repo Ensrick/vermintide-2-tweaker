@@ -4,6 +4,14 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md
 
 Last updated: 2026-07-13.
 
+## CKC native Options checkbox (#528 follow-up)
+
+- [ ] With CKC installed and togglable, Options > Gameplay renders Crosshair Kill Confirmation as one native checkbox, never an On/Off dropdown.
+- [ ] Checking/unchecking the box live-enables/disables CKC and does not re-enable vanilla kill confirmation.
+- [ ] The cog remains visible beside the checkbox, clears the scrollbar, and focuses Mod Tweaker > Interface > HUD > Crosshair Kill Confirmation.
+- [ ] With CKC absent or non-togglable, the untouched stock multi-option dropdown renders.
+- [ ] `/gut_regression_test` passes `ckc_bridge_uses_native_checkbox`.
+
 ## HUD edit drag geometry (#547)
 
 - [ ] Enter HUD edit mode and inspect all ten registered HUD elements at the current resolution.

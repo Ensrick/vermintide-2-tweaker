@@ -11,11 +11,11 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 -- CrosshairUI. With CKC installed the native marker is redundant/competing.
 --
 -- This bridge, whenever CKC is installed AND togglable, TAKES OVER the native
--- crosshair_kill_confirm dropdown in the vanilla Options menu. (#528: the bridge
+-- crosshair_kill_confirm row in the vanilla Options menu. (#528: the bridge
 -- is IMPLICIT - the former gut_ckc_options_bridge availability checkbox is gone;
 -- CKC present = bridge active, no toggle. The old saved value is left orphaned
 -- in mods_settings, unread.) The takeover:
---   * the dropdown becomes a 2-option On / Off toggle that LIVE-drives the CKC
+--   * the row becomes a native checkbox that LIVE-drives the CKC
 --     MOD via VMF's mod_state_changed (parity with the VMF-menu checkbox), NOT
 --     staged through the options Apply pipeline;
 --   * the native crosshair_kill_confirm user_setting is FORCED "off" (the prior
@@ -71,12 +71,11 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 -- SOURCE PROVENANCE (verified 2026-07-05):
 --   * vanilla setup/change/saved-value callbacks are SYNTHESIZED named methods on
 --     OptionsView (options_view_settings.lua generate_settings:1298-1333; the
---     drop_down setup returns (selection, options, menu_setting_name, default_index)
---     :1228-1271; change reads content.options_values[content.current_selection]
---     :1210-1226; saved_value sets content.current_selection :1273-1296).
---   * build_drop_down_widget returns UIWidget.init(definition) via
---     create_drop_down_widget (options_view.lua:1270-1289, options_view_definitions
---     .lua:2299-3047, ui_widget.lua:13-46) -- an ALREADY-INITIALIZED widget, so we
+--     OptionsView.build_checkbox_widget consumes (flag, text, default), stores the
+--     boolean in content.flag, and calls the synthesized callback after the native
+--     checkbox pass flips it (options_view.lua:308-313, 1029-1147, 1483-1504;
+--     options_view_definitions.lua:1299-1421).
+--   * create_checkbox_widget returns an ALREADY-INITIALIZED widget, so we
 --     append our gear passes to element.passes + gear content/style then RE-INIT the
 --     widget (a fresh, correctly-sized pass_data array) and return that.
 --   * VMF live toggle: get_mod("VMF").mod_state_changed(name, bool)
@@ -87,17 +86,15 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 
 local _CKC_NAME = "Crosshair Kill Confirmation"
 local _VANILLA  = "crosshair_kill_confirm"        -- native user_setting key
+local WidgetPolicy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_ckc_widget_policy")
 -- (#528) _S_BRIDGE (the gut_ckc_options_bridge checkbox) retired: bridge is implicit.
 local _S_SAVED  = "gut_ckc_saved_vanilla_group"    -- remembered pre-takeover vanilla group
 local GEAR      = 26                               -- gear icon square (px, 1080p ref)
--- Vanilla drop_down geometry (options_view_definitions.lua). The setting row is ROW_W wide
--- (DROP_DOWN_WIDGET_SIZE[1] = list_mask width 1400 - 100 = 1300, :2294-2297) and its
--- right-aligned interactive field is BOX_W wide (INPUT_FIELD_WIDTH = 400, :3), so the field's
--- LEFT edge is at row_x + (ROW_W - BOX_W). GEAR_GAP is the clear space between the cog's right
--- edge and that field. Used only by _append_gear's left-gutter placement (see there).
-local ROW_W     = 1300
-local BOX_W     = 400
-local GEAR_GAP  = 14
+-- Native checkbox geometry from options_view_definitions.lua:1411-1421. The cog
+-- sits alongside the 16px box and remains far clear of the list scrollbar.
+local CHECKBOX_X = 642
+local CHECKBOX_W = 16
+local GEAR_GAP   = 14
 
 local M = {}
 local _active = false          -- CKC installed + togglable (set by install)
@@ -106,12 +103,6 @@ local _hooks_installed = false
 -- ---------------------------------------------------------------
 -- Small helpers
 -- ---------------------------------------------------------------
-
-local function _loc(key)
-    local ok, s = pcall(Localize, key)
-    if ok and type(s) == "string" then return s end
-    return key
-end
 
 local function _ckc()
     return get_mod(_CKC_NAME)
@@ -187,14 +178,14 @@ local function _restore()
 end
 
 -- ---------------------------------------------------------------
--- Gear button (appended to the crosshair_kill_confirm dropdown row)
+-- Gear button (appended to the bridged crosshair_kill_confirm checkbox row)
 -- ---------------------------------------------------------------
 
--- Append a cog icon + hotspot to an ALREADY-INITIALIZED dropdown widget and return
+-- Append a cog icon + hotspot to an ALREADY-INITIALIZED checkbox widget and return
 -- a freshly re-initialized widget (UIWidget.init rebuilds pass_data to the new pass
 -- count -- the original pass_data is a fixed-size Script.new_array we must not grow).
--- Placed in the free gap right of the 1300px row (mask is 1400 wide). masked = true
--- on the texture passes so it clips to the settings list like the sibling passes.
+-- Placed immediately right of the native checkbox. masked = true on the texture
+-- passes so it clips to the settings list like the sibling passes.
 local function _append_gear(widget)
     local style   = widget.style
     local content = widget.content
@@ -205,18 +196,10 @@ local function _append_gear(widget)
 
     local wo = style.offset or { 0, 0, 0 }
     local sz = style.size or { 1300, 30 }
-    -- [CKC-GEAR-LEFT-GUTTER-313] Place the cog in the empty gutter immediately LEFT of the
-    -- On/Off field, NOT to the right of the row. #313 user report (2026-07-11, reaffirmed
-    -- 2026-07-12): the old "+ ROW_W + 10" placement put the cog UNDER the page scrollbar,
-    -- which occupies the far-right ~23px of the list (scrollbar_root: background right -15,
-    -- 8 wide; options_view_definitions.lua:316-329). The row's right-aligned field already
-    -- ends at row_x + ROW_W (world ~1608) with the scrollbar starting ~29px further right,
-    -- so there is no room to its right for a comfortable cog "column". The field's left edge
-    -- is at row_x + (ROW_W - BOX_W) (hotspot offset, options_view_definitions.lua:2756-2766);
-    -- the gutter left of it holds only the short left-aligned label, so the cog gets its own
-    -- clear column there, fully clear of the scrollbar. Pure offset change -- the vanilla
-    -- box / arrow / list styles are untouched (lowest-risk fix).
-    local gx = (wo[1] or 0) + (ROW_W - BOX_W) - GEAR_GAP - GEAR
+    -- [CKC-GEAR-LEFT-GUTTER-313] #528 now uses vanilla's checkbox at x=642
+    -- (options_view_definitions.lua:1411-1421). Keep the #313 scrollbar guarantee by
+    -- placing the cog beside that checkbox, far inside the list rather than at row-right.
+    local gx = (wo[1] or 0) + CHECKBOX_X + CHECKBOX_W + GEAR_GAP
     local gy = (wo[2] or 0) + ((sz[2] or 30) / 2 - GEAR / 2)
     local gz = (wo[3] or 0) + 5
 
@@ -310,33 +293,25 @@ end
 --   OptionsView.cb_crosshair_kill_confirm_setup
 --   OptionsView.cb_crosshair_kill_confirm
 --   OptionsView.cb_crosshair_kill_confirm_saved_value
---   OptionsView.build_drop_down_widget
+--   OptionsView.build_checkbox_widget
 --   OptionsView.update            (hook_safe; gear click poll + one-time enforce)
 
 local function _register_hooks()
     if _hooks_installed then return end
     _hooks_installed = true
 
-    -- setup: replace the 6-group vanilla list with a 2-option On/Off list reflecting
-    -- CKC's live enabled state. Return shape matches setup_function EXACTLY:
-    -- (selection_index, options, menu_setting_name, default_index).
+    -- setup: native checkbox contract is (boolean flag, localized label key, default).
     mod:hook("OptionsView", "cb_crosshair_kill_confirm_setup", function(func, self)
         if not _is_active() then return func(self) end
-        local options = {
-            { text = _loc("menu_settings_on"),  value = true },
-            { text = _loc("menu_settings_off"), value = false },
-        }
-        local selection = _ckc_enabled() and 1 or 2
-        return selection, options, "menu_settings_crosshair_kill_confirm", 1
+        return WidgetPolicy.checkbox_setup(_ckc_enabled(), "menu_settings_crosshair_kill_confirm")
     end)
 
-    -- change: read the chosen boolean (mirrors set_function's non-slider extraction)
+    -- change: read the native checkbox boolean
     -- and LIVE-toggle the CKC mod via VMF. Deliberately does NOT call func, so the
     -- native user_setting stays forced "off" (never staged into the Apply pipeline).
     mod:hook("OptionsView", "cb_crosshair_kill_confirm", function(func, self, content, style)
         if not _is_active() then return func(self, content, style) end
-        local chosen
-        pcall(function() chosen = content.options_values[content.current_selection] end)
+        local chosen = WidgetPolicy.checkbox_value(content)
         local vmf = get_mod("VMF")
         if vmf and type(vmf.mod_state_changed) == "function" then
             pcall(vmf.mod_state_changed, _CKC_NAME, chosen == true)
@@ -344,20 +319,16 @@ local function _register_hooks()
         _printf("[gut_dev:ckc] options toggle -> CKC %s (live)", chosen == true and "ENABLED" or "DISABLED")
     end)
 
-    -- saved_value: point current_selection at the index matching CKC's enabled state
-    -- (mirrors saved_value_function writing content.current_selection).
+    -- saved_value: repaint the checkbox from CKC's live enabled state.
     mod:hook("OptionsView", "cb_crosshair_kill_confirm_saved_value", function(func, self, widget)
         if not _is_active() then return func(self, widget) end
         local content = widget and widget.content
-        if type(content) == "table" then
-            local on = _ckc_enabled()
-            local ov = content.options_values
-            content.current_selection = (ov and table.find(ov, on)) or (on and 1 or 2)
-        end
+        WidgetPolicy.restore_checkbox(content, _ckc_enabled())
     end)
 
-    -- gear: append the cog to the crosshair_kill_confirm row after the vanilla build.
-    mod:hook("OptionsView", "build_drop_down_widget", function(func, self, element, scenegraph_id, base_offset)
+    -- gear: append the cog after the consolidated list hook has redirected this one
+    -- definition through vanilla's checkbox builder.
+    mod:hook("OptionsView", "build_checkbox_widget", function(func, self, element, scenegraph_id, base_offset)
         local widget = func(self, element, scenegraph_id, base_offset)
         if not _is_active() then return widget end
         if not (type(element) == "table" and element.setting_name == _VANILLA) then return widget end
@@ -383,6 +354,18 @@ local function _register_hooks()
     end)
 
     _printf("[gut_dev:ckc] OptionsView hooks registered (5 methods)")
+end
+
+-- Called from the existing singleton OptionsView.build_settings_list hook owned by
+-- _gut_video_profiles.lua. The temporary mutation makes vanilla dispatch this row
+-- through build_checkbox_widget; restoration after the list build keeps the global
+-- settings definition pristine and absent-CKC behavior byte-for-byte vanilla.
+function M.prepare_settings_definition(definition)
+    return WidgetPolicy.prepare_definition(definition, _VANILLA, _is_active())
+end
+
+function M.restore_settings_definition(token)
+    WidgetPolicy.restore_definition(token)
 end
 
 -- ---------------------------------------------------------------
@@ -413,6 +396,7 @@ M.is_active   = _is_active
 M.enforce     = _enforce
 M.restore     = _restore
 M._CKC_NAME   = _CKC_NAME
+M.widget_policy = WidgetPolicy
 mod._GUT_CKC_BRIDGE_MARKER = "gut-ckc-bridge-313"
 mod._gut_ckc_bridge = M
 

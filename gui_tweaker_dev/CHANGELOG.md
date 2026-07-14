@@ -9,6 +9,17 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.253-dev (2026-07-13) -- #528 CKC native checkbox follow-up [verify-fix]
+
+- Replaced the bridged Crosshair Kill Confirmation two-option dropdown with the OptionsView's native checkbox widget. The checkbox still live-enables/disables the CKC mod; the native competing kill-confirm setting remains suppressed.
+- Retained the CKC settings cog and moved it beside the native checkbox, safely inside the settings list and clear of the scrollbar.
+- Consolidated the temporary row-type rewrite into GUT's existing `OptionsView.build_settings_list` hook, avoiding a duplicate hook. The shared vanilla definition is restored immediately after each list build, so CKC-absent behavior remains the original dropdown.
+- Added Lua 5.1 and `/gut_regression_test` coverage for exact-row dispatch, boolean `content.flag` semantics, definition restoration, and malformed-input fallback.
+
+### Verify
+
+With Crosshair Kill Confirmation installed and togglable, open Options > Gameplay. Crosshair Kill Confirmation must render as one native checkbox with a working cog, not an On/Off dropdown. Toggle it both ways and confirm CKC responds live. Open the cog and confirm it still focuses Interface > HUD > Crosshair Kill Confirmation. Disable/uninstall CKC and confirm the stock multi-option dropdown returns.
+
 ## 0.2.251-dev (2026-07-13) -- #547 HUD edit drag-box alignment [verify-fix]
 
 - Restored vanilla's two-node HUD-customizer contract: offsets still write to each registered movement node, while hit testing, confinement, and overlay drawing now use the element's separate positive-size render-bounds node.

@@ -177,14 +177,25 @@ local profile_elements = {
     { widget_type = "empty", size_y = 30, gut_video_profile_control = true },
 }
 
--- Mandatory duplicate-hook preflight: gut_dev has no other hook on
--- OptionsView.build_settings_list. CKC owns build_drop_down_widget, not this pair.
+-- Mandatory duplicate-hook preflight: this remains gut_dev's one singleton hook on
+-- OptionsView.build_settings_list. The CKC bridge contributes its temporary row-type
+-- rewrite through this hook instead of registering a colliding second hook (#528).
 mod:hook("OptionsView", "build_settings_list", function(func, self, definition, scenegraph_id)
-    if scenegraph_id ~= "video_settings_list" then return func(self, definition, scenegraph_id) end
-    local extended = {}
-    for i = 1, #profile_elements do extended[#extended + 1] = profile_elements[i] end
-    for i = 1, #definition do extended[#extended + 1] = definition[i] end
-    return func(self, extended, scenegraph_id)
+    local bridge = mod._gut_ckc_bridge
+    local token = bridge and bridge.prepare_settings_definition
+        and bridge.prepare_settings_definition(definition) or nil
+    local built_definition = definition
+    if scenegraph_id == "video_settings_list" then
+        built_definition = {}
+        for i = 1, #profile_elements do built_definition[#built_definition + 1] = profile_elements[i] end
+        for i = 1, #definition do built_definition[#built_definition + 1] = definition[i] end
+    end
+    local ok, result = pcall(func, self, built_definition, scenegraph_id)
+    if token and bridge and bridge.restore_settings_definition then
+        bridge.restore_settings_definition(token)
+    end
+    if not ok then error(result) end
+    return result
 end)
 mod._gut_video_profiles_hook_installed = true
 
