@@ -1,5 +1,16 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.226-dev (2026-07-14) -- #385 bound close-range no-path teleport retries [verify-fix]
+
+- Source audit identified the formerly `unknown` trigger: vanilla's bot tree has a second `BTBotTeleportToAllyAction` node named `teleport_no_path`, driven by `BTConditions.cant_reach_ally` after sustained path failures and without the 40 m leash distance floor.
+- The existing `cant_reach_ally` hook now stamps `vanilla_no_path`, so Bot Teleport Lab D1 records name the real branch instead of inferring only from distance.
+- The first close-range no-path teleport remains available. Further no-path teleports while the bot is still below the configured leash are suppressed for five seconds, then allowed to retry; outside-leash, ordinary leash, aid, backward-threshold, and invalid-state paths remain unchanged. Suppression emits one latched raw-console `[gt:385]` line per burst.
+- Added pure offline policy coverage and `/gt_regression_test` check `gt_bot385_close_no_path_retry_bound`.
+
+### Test method
+
+As solo host with bots and a 15 m follow distance, reproduce the geometry/path-failure location that previously caused repeated close-range teleports. The first unstick may occur, but no bot may teleport repeatedly within five seconds while below 15 m. D1 must name `vanilla_no_path` or `backward_no_path`, and suppressed repeats must emit one bounded `[gt:385]` line.
+
 ## v0.2.225-dev (2026-07-13) -- #241 cover every noclip boundary-death route [verify-fix-coop]
 
 - The latest attached reproduction was a solo listen host, but never emitted the existing `HealthSystem.suicide` suppression record. Source audit identified the missing route: authored kill volumes call `PlayerUnitHealthExtension.entered_kill_volume`, which sends `rpc_request_insta_kill` even on a listen host.

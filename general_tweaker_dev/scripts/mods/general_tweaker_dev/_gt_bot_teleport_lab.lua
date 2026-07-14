@@ -499,7 +499,7 @@ local function _push_snapshot(trigger_unit, trigger_info)
     while #_snaps > _SNAP_MAX do table.remove(_snaps, 1) end
 end
 
-mod._gt_btlab_observe_teleport = function(self, unit, blackboard, pre_box) -- luacheck: ignore self
+mod._gt_btlab_observe_teleport = function(self, unit, blackboard, pre_box, decision_reason) -- luacheck: ignore self
     if not IS_DEV_STREAM then return end
     -- Dormant-F9 cooldown source: stamp the last-teleport time for this bot on
     -- EVERY teleport the lab sees. Kept so the retired F9 cooldown is re-armable
@@ -517,7 +517,12 @@ mod._gt_btlab_observe_teleport = function(self, unit, blackboard, pre_box) -- lu
         local measured = dec and dec.dist
         local leash    = (dec and dec.leash) or (mod:get("gt_bot_follow_distance_m") or 40.0)
         local trigger
-        if measured then
+        if decision_reason and decision_reason ~= "other" then
+            trigger = string.format("%s (measured %s, leash %.0fm)",
+                decision_reason,
+                measured and string.format("%.1fm", measured) or "n/a",
+                leash)
+        elseif measured then
             if measured >= 40.0 then
                 trigger = string.format("vanilla-40m (measured %.1fm)", measured)
             elseif leash < 40.0 and measured >= leash then

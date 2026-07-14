@@ -4,7 +4,17 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-13.
+Last updated: 2026-07-14.
+
+## Close-range no-path teleport retry bound (#385)
+
+- [ ] With a 15 m follow distance, a bot at a path-failure/no-return seam may execute one `vanilla_no_path` or `backward_no_path` unstick.
+- [ ] While the bot remains below 15 m, another no-path teleport is suppressed for five seconds and emits one latched `[gt:385]` record rather than a per-frame flood.
+- [ ] Outside the leash, after the retry window, and for ordinary `vanilla_40m` / `tighter_leash` branches, teleport behavior remains available.
+- [ ] `[gt:btlab:d1]` names the exact no-path branch instead of `trigger=unknown`.
+- [ ] `/gt_regression_test` passes `gt_bot385_close_no_path_retry_bound`; offline `test_gt_teleport_loop_policy.lua` passes.
+
+---
 
 ## Noclip world-boundary death routes (#241)
 

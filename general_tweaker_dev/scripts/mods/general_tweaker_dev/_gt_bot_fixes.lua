@@ -1666,6 +1666,43 @@ local function _gt_cant_reach_ally_backward_wants(blackboard)
 end
 mod._gt_cant_reach_ally_backward_wants = _gt_cant_reach_ally_backward_wants
 
+-- #385 exact distance for the no-path branch. Vanilla cant_reach_ally and the
+-- teleport action both use whereabouts:last_position_on_navmesh; matching that
+-- source avoids classifying a navmesh separation with a stale raw unit pose.
+mod._gt385_no_path_distance = function(blackboard)
+    if not blackboard then return nil end
+    local group_ext = blackboard.ai_bot_group_extension
+    local follow_unit = group_ext and group_ext.data and group_ext.data.follow_unit
+    if not ALIVE[follow_unit] then return nil end
+    local self_wb = ScriptUnit.has_extension(blackboard.unit, "whereabouts_system")
+    local follow_wb = ScriptUnit.has_extension(follow_unit, "whereabouts_system")
+    local self_position = self_wb and self_wb:last_position_on_navmesh()
+    local follow_position = follow_wb and follow_wb:last_position_on_navmesh()
+    if not self_position or not follow_position then return nil end
+    return math.sqrt(Vector3.distance_squared(self_position, follow_position))
+end
+
+mod._gt385_should_suppress_no_path = function(blackboard, reason)
+    if not blackboard then return false end
+    local distance = mod._gt385_no_path_distance(blackboard)
+    local leash = mod:get("gt_bot_follow_distance_m") or 40.0
+    local now = Managers.time and Managers.time.time and Managers.time:time("game")
+    local policy = mod._gt_teleport_loop_policy
+    if policy and policy.should_suppress_no_path(distance, leash, now,
+            blackboard._gt385_last_no_path_t) then
+        if rawget(_G, "printf") and not blackboard._gt385_suppress_latched then
+            blackboard._gt385_suppress_latched = true
+            printf("[gt:385] suppressed repeated %s teleport dist=%.1fm leash=%.1fm age=%.1fs retry=%.1fs",
+                tostring(reason), distance, leash,
+                now - blackboard._gt385_last_no_path_t, policy.NO_PATH_RETRY_S)
+        end
+        blackboard._gt139_tp_reason = nil
+        return true
+    end
+    blackboard._gt385_suppress_latched = nil
+    return false
+end
+
 mod:hook("BTConditions", "should_teleport", function (func, blackboard)
     -- Bot Teleport Lab (diagnostics) dispatch: D1 decision-recorder + D4 segment
     -- probe + D5 aid probe. Merged here because VMF drops a 2nd hook on this
@@ -1799,7 +1836,17 @@ GT_BOT_FOLLOW_MODE_DROPDOWN_MARKER_v0_2_152 = "gt-bot-follow-mode-dropdown-conso
 mod:hook("BTConditions", "cant_reach_ally", function (func, blackboard)
     local want = func(blackboard) and true or false
     if want then
-        return true                                  -- vanilla forward teleport_no_path, untouched
+        -- #385: this is vanilla's SECOND teleport trigger, the
+        -- `teleport_no_path` node (bt_bot.lua:431-435), not the leash node.
+        -- It has no distance floor: cant_reach_ally fires after sustained path
+        -- failures (bt_bot_conditions.lua:1167-1203), explaining the observed
+        -- 2.8-15 m `unknown` events. Keep the first legitimate unstick, but
+        -- suppress repeats below the configured leash for five seconds.
+        if mod._gt385_should_suppress_no_path(blackboard, "vanilla_no_path") then
+            return false
+        end
+        blackboard._gt139_tp_reason = "vanilla_no_path"
+        return true
     end
     if not blackboard or not _gt_ignore_backward_gate_on() then
         if blackboard then blackboard._gt515_creach_latched = nil end
@@ -1821,6 +1868,9 @@ mod:hook("BTConditions", "cant_reach_ally", function (func, blackboard)
             blackboard._gt515_creach_latched = "veto"
             printf("[gt:515] cant_reach_ally backward teleport VETOED -- teammate needs aid, bot paths to revive")
         end
+        return false
+    end
+    if mod._gt385_should_suppress_no_path(blackboard, "backward_no_path") then
         return false
     end
     -- Allowed: stamp the reason so the existing BTBotTeleportToAllyAction.run probe
@@ -1878,6 +1928,10 @@ mod:hook("BTBotTeleportToAllyAction", "run", function (func, self, unit, blackbo
     -- for every teleport (vanilla 40 m, tighter leash, backward, no-path).
     if blackboard then
         blackboard._gt515_last_tp_t = t
+        if mod._gt_teleport_loop_policy
+                and mod._gt_teleport_loop_policy.is_no_path_reason(p139_reason) then
+            blackboard._gt385_last_no_path_t = t
+        end
     end
 
     -- ---- PRESERVED FIX 7 / #139 body (unchanged) ----
@@ -1920,14 +1974,13 @@ mod:hook("BTBotTeleportToAllyAction", "run", function (func, self, unit, blackbo
         printf("[139:bot_tp] bot=%s dist_to_downed=%.1fm reason=%s post_dist=%.1fm target=%.1f,%.1f,%.1f t=%.2f",
             bot_career, p139_pre_dist or -1, p139_reason, post_dist, tx, ty, tz, t)
     end
-    if blackboard then
-        blackboard._gt139_tp_reason = nil
-    end
-
     -- Bot Teleport Lab dispatch (post): D1 full event line + D8 counter + D9 set
     -- + D10 snapshot. pcall-guarded + gated inside the lab fn.
     if mod._gt_btlab_observe_teleport then
-        mod._gt_btlab_observe_teleport(self, unit, blackboard, btlab_pre)
+        mod._gt_btlab_observe_teleport(self, unit, blackboard, btlab_pre, p139_reason)
+    end
+    if blackboard then
+        blackboard._gt139_tp_reason = nil
     end
 
     return result

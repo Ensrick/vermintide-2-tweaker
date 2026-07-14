@@ -83,6 +83,7 @@ local suites = {
     "test_mod_tweaker_slider_steps",
     "test_gut_ckc_checkbox",
     "test_gt_chest_pickup_probe",
+    "test_gt_teleport_loop_policy",
     "test_cos_glow_lifecycle",
     "test_peer_parity_transition",
     "test_ct_boon_catalog",

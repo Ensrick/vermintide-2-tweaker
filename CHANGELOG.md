@@ -4,6 +4,10 @@
 
 Tweaker: Cosmetics v0.9.99-dev / issue #376 resolves Loremaster-authored inventory icons from the persisted backend item instead of mutating global skin tables. Same-type item instances remain visually independent, missing metadata fails closed to vanilla, and a delayed backend reconciliation drops overrides for deleted items while preserving CIM-forged records during mirror restoration. Solo in-game verification remains required; no deployment is part of this commit.
 
+## 2026-07-14 - Bound close-range bot no-path teleport retries
+
+Tweaker: General v0.2.226-dev / issue #385 identifies vanilla's distance-independent `teleport_no_path` branch as the former unknown trigger. The first path-failure unstick remains intact; repeated no-path teleports below the configured leash are bounded to one attempt per five seconds and now carry exact D1 branch attribution. Solo in-game verification remains required; no deployment is part of this commit.
+
 ## 2026-07-13 - Cosmetics independent dual-weapon offhands
 
 Tweaker: Cosmetics v0.9.97-dev / issue #583 makes the normal illusion row authoritative for a dual weapon's main hand and adds one independent offhand row. The same per-instance/per-hand persistence and host-authoritative direct-mesh path now covers native Warrior Priest Dual Skullsplitters and all seven current CWV dual families across preview, local equipment, transition replay, and remote husks. Invalid or stale hand meshes fail closed to the paired main illusion. Two-player verification remains required.

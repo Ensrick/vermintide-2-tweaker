@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.225-dev"
+local MOD_VERSION = "0.2.226-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -2049,6 +2049,30 @@ _rt_register("gt_bot515_cant_reach_backward_bypass", function()
     end
 end)
 
+_rt_register("gt_bot385_close_no_path_retry_bound", function()
+    local policy = mod._gt_teleport_loop_policy
+    if not (policy and type(policy.should_suppress_no_path) == "function") then
+        return "issue-385 no-path retry policy missing"
+    end
+    if type(mod._gt385_should_suppress_no_path) ~= "function" then
+        return "issue-385 engine-facing no-path suppression seam missing"
+    end
+    if policy.should_suppress_no_path(2.8, 15, 102, 100) ~= true then
+        return "close repeated no-path teleport must be suppressed inside retry window"
+    end
+    if policy.should_suppress_no_path(2.8, 15, 106, 100) ~= false then
+        return "close no-path teleport must retry after bounded cooldown"
+    end
+    if policy.should_suppress_no_path(20, 15, 102, 100) ~= false then
+        return "outside-leash no-path teleport must remain available"
+    end
+    if not policy.is_no_path_reason("vanilla_no_path")
+            or not policy.is_no_path_reason("backward_no_path")
+            or policy.is_no_path_reason("tighter_leash") then
+        return "no-path reason classifier is not exact"
+    end
+end)
+
 _rt_register("gt_bot383_fix9_splits_follow_position", function()
     -- issue 383 (v0.2.194-dev): FIX 9 (split bots among humans) must set
     -- data.follow_position -- a vanilla-spacing fan point around each bot's OWN
@@ -3305,6 +3329,7 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_lobby_failed_join_reveal")
 -- Host-side bot options and AI fixes; no network registration.
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_pickups")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_consumables")
+mod._gt_teleport_loop_policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_teleport_loop_policy")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_fixes")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_prioritize_specials")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_weave_unlock")
