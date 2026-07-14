@@ -1,8 +1,9 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.399-dev"
+local MOD_VERSION = "0.1.400-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
+mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -6177,9 +6178,13 @@ local _TJ_VISUAL_PULL_BACK_M    = 0
 --       and the transient projectile_units index encode vanilla. Cosmetic only:
 --       impact_data / damage come from the action, untouched.
 --
--- Pure, ungateable helpers (no toggle argument, mirroring cim's
--- `_cim_wire_safe_rarity`); a vanilla substitute is chosen so the coerced index
--- exists in every peer's boot-time NetworkLookup regardless of DLC ownership.
+-- The pickup is a GAMEPLAY axis: the vanilla throwing-axe substitute below is
+-- wire-safe, but its interaction callback only accepts ammo_type
+-- "throwing_axe". Tuskgor Javelin advertises "throwing_javelin", so the old
+-- unconditional substitution made every recovered spear inert even in solo.
+-- Keep the real pickup only after peer parity is positively confirmed (solo is
+-- vacuously safe); otherwise degrade to the vanilla key so a non-CWV peer can
+-- never cold-decode the appended lookup index.
 -- NOTE (not closed here): the BOMB's world/pool pickup (_TJB_PICKUP_KEY, ~6708)
 -- is a GAMEPLAY axis -- coercing it to a vanilla grenade would change what a
 -- cwv player picks up -- so it is left for the issue 371 peer-parity gate, per
@@ -6191,9 +6196,22 @@ _om._tj_pickup_wire_map = {
 	[_TJ_PICKUP_KEY]      = "ammo_throwing_axe_01_t1",
 	[_TJ_LINK_PICKUP_KEY] = "link_ammo_throwing_axe_01_t1",
 }
--- Returns a vanilla pickup name for a cwv thrown-impact key, or nil (pass-through).
-function _om._wire_safe_pickup_name(pickup_name)
-	return _om._tj_pickup_wire_map[pickup_name]
+-- Returns a vanilla fallback while parity is unconfirmed, or nil to preserve
+-- the functional CWV pickup. The optional override exists for deterministic
+-- regression checks only; live callers omit it.
+function _om._wire_safe_pickup_name(pickup_name, parity_override)
+	local all_have = parity_override
+	if all_have == nil then
+		local pp = mod._cwv_peer_parity
+		if pp and type(pp.all_peers_have) == "function" then
+			local ok, result = pcall(pp.all_peers_have, pp)
+			all_have = ok and result == true
+		else
+			all_have = false
+		end
+	end
+	return mod._cwv_javelin_pickup.wire_fallback(
+		pickup_name, _om._tj_pickup_wire_map, all_have)
 end
 _om._TJ_INFLIGHT_MODDED_UNIT   = _TJ_BOAR_SPEAR_UNIT
 _om._TJ_INFLIGHT_SAFE_TEMPLATE = "javelin"   -- vanilla ProjectileUnits key (elf javelin)
@@ -6625,8 +6643,9 @@ end)
 -- Path A entry on thrower's side — trace + issue 424 wire-safe substitution.
 -- The vanilla body encodes NetworkLookup.pickup_names[pickup_name] and sends
 -- rpc_spawn_linked_pickup (player_projectile_unit_extension.lua:1354-1359);
--- swapping the cwv key for a vanilla one BEFORE func() keeps a non-cwv peer
--- from cold-decoding the appended index (BUG_CLASSES 31). Ungateable.
+-- while parity is unconfirmed, swapping the cwv key for a vanilla one BEFORE
+-- func() keeps a non-cwv peer from cold-decoding the appended index
+-- (BUG_CLASSES 31). Confirmed-CWV lobbies retain the functional original.
 mod:hook("PlayerProjectileUnitExtension", "_spawn_linked_pickup_projectile", function(func, self, pickup_name, ...)
 	if _is_our_pickup(pickup_name) then
 		_dbg("[cwv stick:trace] _spawn_linked_pickup_projectile fired (pickup=%s)", tostring(pickup_name))
@@ -14245,9 +14264,9 @@ _rt_register("cwv_wire_safe_thrown_variant_installed", function()
     -- (impact pickup names + the bomb's in-flight boar-spear husk /
     -- projectile_units) append cwv-only NetworkLookup indices that ride vanilla
     -- projectile/pickup spawn RPCs. Assert BOTH sender-side substitution hooks
-    -- are installed AND that the pure helpers actually coerce every tracked
-    -- modded index to a REAL vanilla one (taking no toggle argument), so a
-    -- modded index can never survive to the wire path.
+    -- are installed AND that the pickup helper retains gameplay only with
+    -- positive peer parity, while unconfirmed parity coerces every tracked
+    -- modded index to a real vanilla one.
     if _om._tj_pickup_wire_hook_installed ~= true then
         return "thrown-pickup wire-safety senders not installed (issue 424 non-cwv-peer CTD regression)"
     end
@@ -14266,7 +14285,7 @@ _rt_register("cwv_wire_safe_thrown_variant_installed", function()
     -- its declared vanilla target, and that target must be a non-cwv key present
     -- in NetworkLookup.pickup_names on every peer.
     for cwv_key, vanilla_key in pairs(_om._tj_pickup_wire_map) do
-        local safe = _om._wire_safe_pickup_name(cwv_key)
+        local safe = _om._wire_safe_pickup_name(cwv_key, false)
         if safe ~= vanilla_key then
             return string.format("pickup %s did not coerce to its vanilla target (got %s)",
                 tostring(cwv_key), tostring(safe))
@@ -14277,10 +14296,13 @@ _rt_register("cwv_wire_safe_thrown_variant_installed", function()
         if type(pn) == "table" and rawget(pn, safe) == nil then
             return string.format("pickup substitute %s absent from NetworkLookup.pickup_names", tostring(safe))
         end
+        if _om._wire_safe_pickup_name(cwv_key, true) ~= nil then
+            return string.format("pickup %s was substituted despite confirmed peer parity", tostring(cwv_key))
+        end
     end
     -- Negative control: a genuine vanilla pickup must pass through unchanged (nil),
     -- so the coercion can only ever touch the tracked cwv keys.
-    if _om._wire_safe_pickup_name("ammo_throwing_axe_01_t1") ~= nil then
+    if _om._wire_safe_pickup_name("ammo_throwing_axe_01_t1", false) ~= nil then
         return "wire-safe helper coerced a vanilla pickup name (should only map cwv keys)"
     end
     -- In-flight projectile axis: a fake projectile_units carrying the cwv

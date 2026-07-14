@@ -8,6 +8,23 @@ Last updated: 2026-07-13.
 
 ---
 
+## Thrown pickups
+
+### issue296-javelin-recovery — Wire-safe substitute rejects javelin ammo
+
+| Field | Value |
+|-------|-------|
+| Symptom | Tuskgor Javelins cannot be recovered after impact, although ordinary ammo crates can refill the finite stack. |
+| Root cause | The sender unconditionally replaced the CWV recovery pickup with a vanilla throwing-axe pickup. Vanilla gates that pickup on ammo type `throwing_axe`, while the javelin exposes `throwing_javelin`. |
+| Mod(s) | character_weapon_variants |
+| Fix version(s) | CWV v0.1.400-dev (#296) |
+| Category | MULTIPLAYER / GAMEPLAY |
+| Repro | In solo and an all-CWV two-player lobby, throw into floor and wall, then recover the landed/stuck spear. Repeat host/client roles; also verify a mixed lobby does not crash. |
+| Expected post-fix | Confirmed-CWV lobbies retain the functional CWV pickup. Unconfirmed/mixed parity substitutes the boot-stable vanilla key and never sends a CWV-only lookup index. Ordinary ammo crates refill without creating natural javelin loot. |
+| Detection | Offline `test_cwv_javelin_pickup.lua`; runtime `cwv_wire_safe_thrown_variant_installed`. |
+
+---
+
 ## Multiplayer
 
 ### issue396-imperial-longsword-identity — Vanilla base wire loses CWV ownership

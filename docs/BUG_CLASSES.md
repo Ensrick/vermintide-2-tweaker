@@ -1628,3 +1628,20 @@ Related coverage: Cosmetics runtime `glow_picker_apply_transaction_574` and
 `glow_picker_render_fanout_574`; offline `test_cos_glow_lifecycle.lua`; tier-a
 source invariants for exact identity, explicit Apply, acknowledged state pull,
 and no-network-retry convergence.
+
+## 44. Wire-safe substitute is mechanically incompatible
+
+**First seen:** 2026-07-13 (CWV issue #296; fixed v0.1.400-dev)
+**Canonical Issue:** [#296](https://github.com/Ensrick/vermintide-2-tweaker/issues/296)
+
+A mod-only pickup can require wire protection without being cosmetically
+equivalent to its vanilla substitute. Trace both the encode/decode path and the
+substitute's interaction callbacks. If ammo kind, ownership, refill, or delete
+semantics differ, treat it as a gameplay axis: keep the real key only under
+positive peer parity and degrade safely while parity is unknown or mixed.
+
+For thrown weapons, do not confuse the tiny recovery-pickup spawn weight with
+ordinary map loot. Verify the generic ammo-refill path separately.
+
+Related coverage: CWV `cwv_wire_safe_thrown_variant_installed` and offline
+`test_cwv_javelin_pickup.lua`.

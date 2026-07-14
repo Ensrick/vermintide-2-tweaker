@@ -288,6 +288,10 @@ force-load, derived-class hooks. Canonical:
   by tag (white outline visible) and walk-over.
 - [ ] **Live test:** throw at wall — projectile sticks (or
   bounces/dissipates per design). No crash on impact.
+- [ ] If the recovered pickup uses a mod-only `NetworkLookup` key,
+  preserve that functional pickup only under confirmed peer parity;
+  the mixed-lobby fallback must remain wire-safe. Verify solo,
+  all-modded host/client, and one non-modded peer.
 
 ---
 

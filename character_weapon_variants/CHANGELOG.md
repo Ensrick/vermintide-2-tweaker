@@ -1,5 +1,19 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.400-dev - 2026-07-13 - #296 recoverable Tuskgor Javelins [not deployed]
+
+- Fixed the recovered Tuskgor Javelin becoming an inert throwing-axe pickup.
+  Vanilla only offers that pickup to `throwing_axe`; CWV uses
+  `throwing_javelin`.
+- The real CWV recovery pickup now rides only after peer parity confirms every
+  human has CWV (solo is safe). Unconfirmed or mixed lobbies retain the vanilla
+  wire fallback, so no CWV-only lookup index reaches a non-CWV peer.
+- Natural loot weighting remains unchanged. Ordinary ammo crates already refill
+  the finite javelin stack; impact pickups remain one-spear recovery objects.
+- Added offline parity/fallback tests and strengthened the runtime wire-safety
+  check. In-game verification requires solo plus host/client and mixed-lobby
+  impact recovery checks.
+
 ## 0.1.399-dev - 2026-07-13 - #458 transition-safe shared peer parity [not deployed]
 
 - The shared parity beacon preserves a positive same-peer acknowledgement across a bounded 15-second PlayerManager roster absence during level transitions and delays missing-peer chat for 10 seconds. New, expired, or never-confirmed peers remain fail-closed immediately; this removes the observed false disable/re-enable chat cycle without relaxing wire safety.

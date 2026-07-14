@@ -1653,6 +1653,15 @@ The shippable `cwv_es_musket` variant works because its
 The crash only hit `cwv_es_musket_old` (v0.1.271–276) because it
 tried `units/cwv_es_musket_custom/cwv_es_musket_custom`.
 
+## Thrown-pickup wire safety is a gameplay boundary
+
+A vanilla fallback key can be safe to encode but mechanically incompatible.
+The Tuskgor Javelin uses ammo type `throwing_javelin`; vanilla throwing-axe
+pickups only interact with `throwing_axe`. Preserve the CWV recovery pickup
+when peer parity is confirmed, and use the vanilla fallback only while parity
+is unconfirmed. Never increase its tiny throwing-weapon `spawn_weighting` to
+make it ordinary map loot; normal ammo crates already refill the finite stack.
+
 ## Build discipline — don't fabricate breakpoints
 
 When proposing trait/property combos for new variants:
