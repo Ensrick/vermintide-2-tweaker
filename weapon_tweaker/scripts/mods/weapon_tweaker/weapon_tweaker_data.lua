@@ -1,4 +1,6 @@
 local mod = get_mod("wt")
+local _cwv_present = get_mod("character_weapon_variants") ~= nil
+local _cwv_overlap_default = _cwv_present
 
 local data = {
     name = mod:localize("mod_name"),
@@ -40,8 +42,9 @@ local data = {
                                     { setting_id = "unlock_es_mercenary_dr_2h_cog_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_dr_2h_pick", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_dr_shield_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_mercenary_wh_1h_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_mercenary_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_mercenary_wh_1h_axe", type = "checkbox", default_value = _cwv_overlap_default },
+                                    { setting_id = "unlock_es_mercenary_wh_1h_falchion", type = "checkbox", default_value = _cwv_overlap_default },
+                                    { setting_id = "unlock_es_mercenary_wh_dual_wield_axe_falchion", type = "checkbox", default_value = _cwv_overlap_default },
                                     { setting_id = "unlock_es_mercenary_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_wh_2h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_mercenary_wh_dual_hammer", type = "checkbox", default_value = false },
@@ -86,8 +89,9 @@ local data = {
                                     { setting_id = "unlock_es_huntsman_dr_2h_cog_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_dr_2h_pick", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_dr_shield_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_huntsman_wh_1h_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_huntsman_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_huntsman_wh_1h_axe", type = "checkbox", default_value = _cwv_overlap_default },
+                                    { setting_id = "unlock_es_huntsman_wh_1h_falchion", type = "checkbox", default_value = _cwv_overlap_default },
+                                    { setting_id = "unlock_es_huntsman_wh_dual_wield_axe_falchion", type = "checkbox", default_value = _cwv_overlap_default },
                                     { setting_id = "unlock_es_huntsman_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_wh_2h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_huntsman_wh_dual_hammer", type = "checkbox", default_value = false },
@@ -133,8 +137,9 @@ local data = {
                                     { setting_id = "unlock_es_knight_dr_2h_cog_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_dr_2h_pick", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_dr_shield_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_knight_wh_1h_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_knight_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_knight_wh_1h_axe", type = "checkbox", default_value = _cwv_overlap_default },
+                                    { setting_id = "unlock_es_knight_wh_1h_falchion", type = "checkbox", default_value = _cwv_overlap_default },
+                                    { setting_id = "unlock_es_knight_wh_dual_wield_axe_falchion", type = "checkbox", default_value = _cwv_overlap_default },
                                     { setting_id = "unlock_es_knight_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_wh_2h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_knight_wh_dual_hammer", type = "checkbox", default_value = false },
@@ -180,8 +185,9 @@ local data = {
                                     { setting_id = "unlock_es_questingknight_dr_2h_cog_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_dr_2h_pick", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_dr_shield_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_questingknight_wh_1h_axe", type = "checkbox", default_value = false },
-                                    { setting_id = "unlock_es_questingknight_wh_1h_falchion", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_questingknight_wh_1h_axe", type = "checkbox", default_value = _cwv_overlap_default },
+                                    { setting_id = "unlock_es_questingknight_wh_1h_falchion", type = "checkbox", default_value = _cwv_overlap_default },
+                                    { setting_id = "unlock_es_questingknight_wh_dual_wield_axe_falchion", type = "checkbox", default_value = _cwv_overlap_default },
                                     { setting_id = "unlock_es_questingknight_wh_2h_billhook", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_wh_2h_hammer", type = "checkbox", default_value = false },
                                     { setting_id = "unlock_es_questingknight_wh_dual_hammer", type = "checkbox", default_value = false },
@@ -1627,6 +1633,29 @@ data.options.widgets[#data.options.widgets + 1] = _picker_checkbox
 -- (or nil when its dynamic catalog is empty); nil-check before appending.
 local _hp_tree = _wt_dev_hold_pose_data.build_widget_tree()
 if _hp_tree then data.options.widgets[#data.options.widgets + 1] = _hp_tree end
+
+-- #368: VMF builds this file before CWV performs its deferred in-keep clone
+-- registration, so the menu uses WT's bounded definition catalog. The runtime
+-- writer still enumerates ItemMasterList and only touches positive
+-- `cwv_variant == true` entries. Persisted values override these defaults.
+if _cwv_present then
+    local catalog = mod:dofile("scripts/mods/weapon_tweaker/wt_cwv_variant_catalog")
+    local rows = {}
+    for _, variant in ipairs(catalog) do
+        rows[#rows + 1] = {
+            setting_id = "unlock_cwv_variant_" .. variant.key,
+            type = "checkbox",
+            default_value = true,
+        }
+    end
+    if #rows > 0 then
+        data.options.widgets[1].sub_widgets[#data.options.widgets[1].sub_widgets + 1] = {
+            setting_id = "cwv_variant_availability",
+            type = "group",
+            sub_widgets = rows,
+        }
+    end
+end
 
 -- ---------------------------------------------------------------------------
 -- Weapon Availability: normalize row order (#179, #408).

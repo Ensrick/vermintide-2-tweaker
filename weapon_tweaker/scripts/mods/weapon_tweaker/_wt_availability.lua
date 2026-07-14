@@ -15,7 +15,7 @@
 -- Owned by: weapon_tweaker.lua entry point. Consumed via: mod:dofile (after
 -- wt_unlock_data.lua populates mod._wt.weapon_unlock_map / .cwv_managed, and
 -- before the lifecycle callbacks that call these functions are defined).
--- Shared state: reads mod._wt.weapon_unlock_map + mod._wt.cwv_managed; exports
+-- Shared state: reads mod._wt.weapon_unlock_map; exports
 -- mod._wt.apply_weapon_unlocks / .patch_career_actions_on_weapons /
 -- .clear_weapon_unlocks / .clear_career_action_injections. `feature_enabled`
 -- stays in the entry (the anim funnel reads it on a hot path).
@@ -23,9 +23,10 @@
 local mod = get_mod("wt")
 local WT = mod._wt
 local weapon_unlock_map = WT.weapon_unlock_map
-local _cwv_managed       = WT.cwv_managed
 local _cwv_conditional   = WT.cwv_conditional_managed
 local _cwv_ownership     = mod:dofile("scripts/mods/weapon_tweaker/_wt_cwv_ownership")
+local _cwv_variant_catalog = mod:dofile("scripts/mods/weapon_tweaker/wt_cwv_variant_catalog")
+WT.cwv_variant_catalog = _cwv_variant_catalog
 WT.cwv_ownership         = _cwv_ownership
 
 local function _cwv_active()
@@ -41,10 +42,10 @@ end
 -- removed careers from these weapons' can_wield, idempotently. Originally
 -- Kruber-only in v0.12.57; generalized for #582 in v0.12.226-dev.
 local _removed_pairs = {
-    es_mercenary      = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
-    es_huntsman       = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
-    es_knight         = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
-    es_questingknight = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
+    es_mercenary      = { "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
+    es_huntsman       = { "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
+    es_knight         = { "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
+    es_questingknight = { "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
     -- #582/#594: these native Bardin items are not Saltzpyre ownership rows.
     -- Explicit tombstones clean hot-reloaded/persisted can_wield mutations
     -- from earlier WT versions even though the pairs no longer exist in map.
@@ -73,6 +74,31 @@ local function _strip_removed_unlocks()
     end
 end
 
+local function _set_career(item, career, enabled)
+    if not item then return end
+    item.can_wield = item.can_wield or {}
+    for i = #item.can_wield, 1, -1 do
+        if item.can_wield[i] == career then table.remove(item.can_wield, i) end
+    end
+    if enabled then item.can_wield[#item.can_wield + 1] = career end
+end
+
+-- CWV registers owner definitions after VMF has built WT's menu. Enumerate
+-- the live IML on every bounded availability reconciliation and only claim a
+-- catalog row when CWV's positive marker is present.
+local function _apply_cwv_variant_unlocks()
+    if not _cwv_active() or not ItemMasterList then return end
+    for _, variant in ipairs(_cwv_variant_catalog) do
+        local item = rawget(ItemMasterList, variant.key)
+        if item and item.cwv_variant == true then
+            local enabled = mod:get("unlock_cwv_variant_" .. variant.key) == true
+            for _, career in ipairs(variant.careers) do
+                _set_career(item, career, enabled)
+            end
+        end
+    end
+end
+
 -- CLARIFY: The strip-then-add pattern is required because this runs on
 -- on_setting_changed too — toggling a checkbox off must REMOVE the career
 -- from can_wield, not just leave it. Direct-modifying ItemMasterList is the
@@ -90,17 +116,11 @@ local function apply_weapon_unlocks()
     -- Strip all mod-managed careers from can_wield
     for career, weapons in pairs(weapon_unlock_map) do
         for _, weapon_key in ipairs(weapons) do
-            local legacy_skip = _cwv_ownership.should_yield_native(
-                career, weapon_key, has_cwv, _cwv_managed)
-            local conditional_yield = _cwv_ownership.should_yield_native(
-                career, weapon_key, has_cwv, _cwv_conditional)
-            if not legacy_skip or conditional_yield then
-                local item = rawget(ItemMasterList, weapon_key)
-                if item and item.can_wield then
-                    for i = #item.can_wield, 1, -1 do
-                        if item.can_wield[i] == career then
-                            table.remove(item.can_wield, i)
-                        end
+            local item = rawget(ItemMasterList, weapon_key)
+            if item and item.can_wield then
+                for i = #item.can_wield, 1, -1 do
+                    if item.can_wield[i] == career then
+                        table.remove(item.can_wield, i)
                     end
                 end
             end
@@ -110,11 +130,9 @@ local function apply_weapon_unlocks()
     -- Add back only enabled ones
     for career, weapons in pairs(weapon_unlock_map) do
         for _, weapon_key in ipairs(weapons) do
-            local legacy_skip = _cwv_ownership.should_yield_native(
-                career, weapon_key, has_cwv, _cwv_managed)
             local conditional_yield = _cwv_ownership.should_yield_native(
                 career, weapon_key, has_cwv, _cwv_conditional)
-            if not legacy_skip and not conditional_yield then
+            if not conditional_yield then
                 if mod:get("unlock_" .. career .. "_" .. weapon_key) then
                     local item = rawget(ItemMasterList, weapon_key)
                     if item then
@@ -131,6 +149,7 @@ local function apply_weapon_unlocks()
             end
         end
     end
+    _apply_cwv_variant_unlocks()
 end
 
 -- CLARIFY: tracks which (template, action_name) entries were injected by

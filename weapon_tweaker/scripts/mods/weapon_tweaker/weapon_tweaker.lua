@@ -110,7 +110,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.239-dev"
+local MOD_VERSION = "0.12.240-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -301,7 +301,6 @@ local weapon_unlock_map = _wt_unlock_data.weapon_unlock_map
 -- v0.12.209-dev: bridged onto mod._wt for the _wt_availability module (which
 -- owns the can_wield strip/add); the entry no longer reads _cwv_managed itself.
 mod._wt.weapon_unlock_map = weapon_unlock_map
-mod._wt.cwv_managed        = _wt_unlock_data.cwv_managed
 mod._wt.cwv_conditional_managed = _wt_unlock_data.cwv_conditional_managed
 
 -- Availability control surface (can_wield strip/add + career-ability action
@@ -3976,6 +3975,10 @@ mod.on_game_state_changed = function(status, state_name)
 
     mod:info("Weapon Tweaker: Baseline Active")
     apply_weapon_unlocks()
+    -- #368: CWV registers clone definitions from its own state-enter callback.
+    -- Reconcile once more on the following frame so WT is the deterministic
+    -- final can_wield writer regardless of VMF callback ordering.
+    mod._wt368_deferred_availability = true
     patch_career_actions_on_weapons()
     apply_trait_filters()
     _wt_bolt_staff_overcharge_runtime.apply()
@@ -5482,6 +5485,25 @@ _rt_register("issue594_saltzpyre_hammer_shield_ownership", function()
                 return "#594 stale Bardin Hammer+Shield can_wield entry: " .. career
             end
         end
+    end
+end)
+
+_rt_register("issue368_cwv_independent_availability", function()
+    local required = { "wh_1h_axe", "wh_1h_falchion", "wh_dual_wield_axe_falchion" }
+    for _, career in ipairs({ "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }) do
+        local found = {}
+        for _, key in ipairs(weapon_unlock_map[career] or {}) do found[key] = true end
+        for _, key in ipairs(required) do
+            if not found[key] then return string.format("missing WT row %s/%s", career, key) end
+        end
+    end
+    local live = 0
+    for _, variant in ipairs(mod._wt.cwv_variant_catalog or {}) do
+        local item = ItemMasterList and rawget(ItemMasterList, variant.key)
+        if item and item.cwv_variant == true then live = live + 1 end
+    end
+    if get_mod("character_weapon_variants") and live == 0 then
+        return "CWV present but no marked variants registered (run in keep)"
     end
 end)
 

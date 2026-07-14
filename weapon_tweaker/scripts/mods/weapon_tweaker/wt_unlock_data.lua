@@ -3,7 +3,7 @@
  wt_unlock_data.lua — shared source of truth for the weapon-unlock tables
 ============================================================================
 
-Returns `{ weapon_unlock_map = {...}, cwv_managed = {...} }`. Both
+Returns `{ weapon_unlock_map = {...}, cwv_conditional_managed = {...} }`. Both
 `weapon_tweaker.lua` (main script) AND `wt_dev_anim_picker.lua` (dev menu)
 `mod:dofile` this file directly.
 
@@ -150,17 +150,7 @@ local DATA = {
         bw_necromancer    = { "bw_1h_crowbill", "bw_dagger", "bw_ghost_scythe", "bw_flame_sword", "bw_1h_flail_flaming", "bw_1h_mace", "bw_sword", "bw_skullstaff_beam", "bw_skullstaff_spear", "bw_skullstaff_geiser", "bw_deus_01", "bw_skullstaff_fireball", "bw_necromancy_staff" },
     },
 
-    -- Pairs CWV publishes its own custom items for. wt skips adding these
-    -- to can_wield (and the dev anim picker skips them in its catalog walk)
-    -- so the two mods don't compete.
-    cwv_managed = {
-        es_mercenary      = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
-        es_huntsman       = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
-        es_knight         = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
-        es_questingknight = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
-    },
-
-    -- #593: unlike legacy cwv_managed rows, these are reversible live
+    -- #593: these are reversible live
     -- handoffs. WT owns the fallback while CWV is inactive and strips it on
     -- an active transition, then restores the saved WT preference on disable.
     cwv_conditional_managed = {
@@ -179,6 +169,17 @@ local DATA = {
 -- Kruber's `es_mace_shield` and remove Bardin's `dr_shield_hammer` regardless
 -- of CWV state. Vanilla authors both from the 1h_hammers_shield base, while
 -- Bardin's template adds three dwarf-specific light-attack range modifiers.
+-- #368: WT and CWV are independent availability providers. Axe + Falchion is
+-- therefore a normal WT Kruber row (the old cwv_managed cede is gone).
+for _, career in ipairs({ "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }) do
+    local weapons = DATA.weapon_unlock_map[career]
+    local found = false
+    for _, weapon_key in ipairs(weapons) do
+        if weapon_key == "wh_dual_wield_axe_falchion" then found = true; break end
+    end
+    if not found then weapons[#weapons + 1] = "wh_dual_wield_axe_falchion" end
+end
+
 for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
     local weapons = DATA.weapon_unlock_map[career]
     for i = #weapons, 1, -1 do

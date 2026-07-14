@@ -46,7 +46,7 @@ return function(H, repo_root)
 
     H.test("CWV state cannot change native Saltzpyre ownership", function()
         for _, career in ipairs(careers) do
-            H.equal(unlocks.cwv_managed[career], nil)
+            H.equal(unlocks.cwv_managed, nil)
             H.equal(unlocks.cwv_conditional_managed[career], nil)
         end
     end)

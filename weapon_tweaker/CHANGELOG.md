@@ -1,5 +1,16 @@
 # Weapon Tweaker Changelog
 
+## 0.12.240-dev (2026-07-14) - #368 independent WT/CWV availability [verify-fix]
+
+- Removed the legacy `cwv_managed` cede path. Kruber's Saltzpyre Axe, Falchion, and Axe & Falchion are ordinary WT-owned rows; their fresh defaults follow CWV presence while persisted choices continue to win.
+- Removed `wh_1h_axe` from the stale-removal tombstones that clobbered CWV every state transition. WT now performs one deferred next-frame reconciliation after state entry, making its enabled/disabled choice the final bounded `can_wield` write after CWV registration.
+- Added a CWV availability group covering all 29 authored non-skin variant definitions. Runtime application enumerates the live `ItemMasterList` and only mutates entries positively marked `cwv_variant == true`; each toggle defaults on and controls the variant's authored receiver careers.
+- Added offline coverage plus `/wt_regression_test` check `issue368_cwv_independent_availability` for cede removal, all twelve overlap rows/widgets, conditional defaults, marker gating, catalog bounds, and deferred final-write wiring.
+
+### Solo verify
+
+With CWV enabled, enter the keep and confirm the three Saltzpyre weapons remain available on each Kruber career and the Career Weapon Variants availability group defaults on. Disable one vanilla overlap and one CWV clone, transition keep-to-mission and back, and confirm only those choices remain unavailable. Re-enable them and confirm availability returns. Repeat once with CWV absent: the three cross-character WT rows must retain their standalone opt-in defaults.
+
 ## 0.12.239-dev (2026-07-14) - #388 Deepwood cross-career overcharge presentation [verify-fix-coop]
 
 - Corrected the issue's original mechanism: Deepwood Staff uses `overcharge_system`, not Moonfire's `energy_system`. Vanilla binds its green HUD palette, thorn screen particles, warning sounds, decay, and non-exploding policy to `OverchargeData.we_thornsister` when the player extension is created, so a Kruber port receives generic defaults before equipment is considered.

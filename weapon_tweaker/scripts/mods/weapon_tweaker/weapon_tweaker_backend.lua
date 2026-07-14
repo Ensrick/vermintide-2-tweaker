@@ -124,6 +124,11 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
     -- `mod.update = function(dt) ... end`); the deferred-init guards below
     -- ignore it, but the passive-charge tick needs it.
     mod.update = function(dt)
+        if mod._wt368_deferred_availability then
+            mod._wt368_deferred_availability = nil
+            apply_weapon_unlocks()
+            mod:info("[wt:368] deferred final availability reconciliation applied")
+        end
         -- Per-frame passive-charge restore (cross-character staves / Moonfire
         -- Bow). Self-gated on its VMF toggle (default OFF) and the local owned
         -- player only; pcall-isolated internally so it can never break init.

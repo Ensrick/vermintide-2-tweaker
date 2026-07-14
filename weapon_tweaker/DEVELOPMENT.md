@@ -6,7 +6,8 @@ WT fallback ports remain real features when their dedicated CWV equivalent is
 absent. A row in `cwv_conditional_managed` is a live ownership handoff, not a
 permanent tombstone: WT suppresses the donor-native pair only while CWV is
 loaded and enabled, then restores the user's WT toggle when CWV is disabled or
-removed. Legacy `cwv_managed` rows keep their existing behavior.
+removed. Issue #368 removes the legacy `cwv_managed` cede entirely; WT and
+CWV may overlap, and WT is the final availability control surface.
 
 Use `_wt_cwv_ownership.lua` on both the `can_wield` writer and backend cache
 reader. Reconcile only on active-state transitions. Keep settings widgets and
@@ -43,7 +44,7 @@ Big-Rebalance module.
 pattern) carries cross-module state. It is created in the entry manifest and
 populated with the handles the `_wt_*` modules consume BEFORE they are
 `mod:dofile`'d: `MOD_VERSION` (regression banner), `weapon_unlock_map` +
-`cwv_managed` (availability), and — for the anim core — `feature_enabled`,
+`cwv_conditional_managed` (the narrow #593 native-substitution handoff), and — for the anim core — `feature_enabled`,
 `local_career_name`, `dbg`, `dev_anim_picker` (the four hot-path handles the
 funnel reads, captured as module-local upvalues so the per-event path never
 indirects through `mod._wt`), plus the one-time `build_3p_template_remaps`
@@ -59,7 +60,7 @@ SEPARATE key from the established flat `mod._wt_*` fields (`mod._wt_link_filter`
 | `_wt_anim_remap_data.lua` | Declarative `_3p_template_remaps` catalog. Returns a one-time builder that receives the three existing shared remap tables and returns one mutable template catalog; no `mod`, engine, hook, command, or runtime-event dependency. The entry manifest loads it immediately before `_wt_anim_remap.lua` and publishes the builder as `mod._wt.build_3p_template_remaps`. |
 | `_wt_anim_remap.lua` | The 3P anim-remap CORE (v0.12.210-dev Phase 2, catalog split in v0.12.235-dev). Owns the three redirect layers (`_anim_redirect`/`_career_anim_redirect`/`_suffix_career_map` + `_try_suffix_redirect`/`_safe_has_anim`), the per-weapon/key remap tables (`_3p_remap_*`/`_3p_key_remaps`), constructs the sibling's `_3p_template_remaps` catalog, and owns all resolvers, the weak-keyed per-unit remap state (`_unit_state`/`_state_for`), the `Unit.animation_event` funnel hook, the two wield hooks (`SimpleInventoryExtension`/`SimpleHuskInventoryExtension`) that populate the state, the anim-funnel commands (`/info`,`/animlog`,`/force3p`,`/force1p`), and the keep-previewer pose resolver `_resolve_preview_wield_event`. Hot tables are file-local upvalues (per-event-hot path). Reads `mod._wt.feature_enabled`/`.local_career_name`/`.dbg`/`.dev_anim_picker`/`.MOD_VERSION`/`.weapon_unlock_map`/`.build_3p_template_remaps`; exports `mod._wt.safe_has_anim`/`.resolve_preview_wield_event`/`.unit_career_name`/`.unit_state`/`.suffix_career_map`/`.three_p_template_remaps` (all non-hot-path reads by the entry's port pipeline, previewer, and rt-checks). The `wield_anim_career_3p` patchers, force-loads, and mesh swaps stay in the entry (port-pipeline-coupled, Phase 3). |
 | `_wt_regression.lua` | `/wt_regression_test` harness: `_RT_CHECKS` + `rt_register` + the command. Loads FIRST. Reads `mod._wt.MOD_VERSION`; exports `mod._wt.rt_register`. The check bodies stay inline in the entry (they close over its file-locals) via `local _rt_register = mod._wt.rt_register`. |
-| `_wt_availability.lua` | Cross-character weapon availability: `apply_weapon_unlocks` (can_wield strip/add), `patch_career_actions_on_weapons` (career-ability action injection), `clear_weapon_unlocks` / `clear_career_action_injections` (on_disabled revert), `_removed_pairs` tombstone cleanup (including #582 native Dual Axes ownership), `_career_action_injections`. Reads `mod._wt.weapon_unlock_map` / `.cwv_managed`; exports the four functions. Backend hooks stay in `weapon_tweaker_backend.lua` (unchanged). |
+| `_wt_availability.lua` | Cross-character weapon availability: `apply_weapon_unlocks` (can_wield strip/add), CWV marked-variant final writes, `patch_career_actions_on_weapons` (career-ability action injection), disable cleanup, and removed-pair tombstones. Reads `mod._wt.weapon_unlock_map`, `.cwv_conditional_managed`, and `wt_cwv_variant_catalog.lua`; exports the four lifecycle functions. |
 | `_wt_trait_pools.lua` | CW weapon-trait pool filtering (`_trait_pool_sources`, snapshot, `apply_trait_filters` / `revert_trait_pools`). Currently a retired no-op stub (menu removed 2026-06-29) kept so nothing dangles. Reads `WeaponTraits`; exports `mod._wt.apply_trait_filters` / `.revert_trait_pools` + the legacy flat `mod._apply_trait_filters` / `mod._revert_trait_pools`. |
 | `_wt_diagnostics.lua` | Read-only diagnostic dump/probe commands (`/sm_probe`, `/dump`, `/dump_actions`, `/dump_weapons`, `/wt_dump_wielded`) + the wield-time weapon-data dump and its sole `SimpleInventoryExtension._wield_slot` hook_safe. Reads engine globals only; no exports; leaf. |
 | `_wt_longbow_zoom_probe.lua` | Pure, engine-free bounded lifecycle for #316's automatically armed owner-side Empire Longbow zoom probe. Owns exact career/template targeting, due-time observation, one-shot finish, and the three-attempt cap; the entry owns the three `ActionAim` hooks and raw-console formatting. Returns its module table directly and has no `mod` or engine dependency. |

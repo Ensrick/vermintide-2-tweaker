@@ -94,6 +94,7 @@ local loc = {
     unlock_es_mercenary_we_spear = { en = "Kerillian: Spear" },
     unlock_es_mercenary_wh_1h_axe = { en = "Saltzpyre: Axe" },
     unlock_es_mercenary_wh_1h_falchion = { en = "Saltzpyre: Falchion" },
+    unlock_es_mercenary_wh_dual_wield_axe_falchion = { en = "Saltzpyre: Axe and Falchion" },
     unlock_es_mercenary_wh_2h_billhook = { en = "Saltzpyre: Billhook" },
     unlock_es_mercenary_wh_2h_hammer = { en = "Saltzpyre: Holy Great Hammer" },
     unlock_es_mercenary_wh_dual_hammer = { en = "Saltzpyre: Dual Skull-Splitters" },
@@ -163,6 +164,7 @@ local loc = {
     unlock_es_huntsman_we_spear = { en = "Kerillian: Spear" },
     unlock_es_huntsman_wh_1h_axe = { en = "Saltzpyre: Axe" },
     unlock_es_huntsman_wh_1h_falchion = { en = "Saltzpyre: Falchion" },
+    unlock_es_huntsman_wh_dual_wield_axe_falchion = { en = "Saltzpyre: Axe and Falchion" },
     unlock_es_huntsman_wh_2h_billhook = { en = "Saltzpyre: Billhook" },
     unlock_es_huntsman_wh_2h_hammer = { en = "Saltzpyre: Holy Great Hammer" },
     unlock_es_huntsman_wh_dual_hammer = { en = "Saltzpyre: Dual Skull-Splitters" },
@@ -233,6 +235,7 @@ local loc = {
     unlock_es_knight_we_spear = { en = "Kerillian: Spear" },
     unlock_es_knight_wh_1h_axe = { en = "Saltzpyre: Axe" },
     unlock_es_knight_wh_1h_falchion = { en = "Saltzpyre: Falchion" },
+    unlock_es_knight_wh_dual_wield_axe_falchion = { en = "Saltzpyre: Axe and Falchion" },
     unlock_es_knight_wh_2h_billhook = { en = "Saltzpyre: Billhook" },
     unlock_es_knight_wh_2h_hammer = { en = "Saltzpyre: Holy Great Hammer" },
     unlock_es_knight_wh_dual_hammer = { en = "Saltzpyre: Dual Skull-Splitters" },
@@ -303,6 +306,7 @@ local loc = {
     unlock_es_questingknight_we_spear = { en = "Kerillian: Spear" },
     unlock_es_questingknight_wh_1h_axe = { en = "Saltzpyre: Axe" },
     unlock_es_questingknight_wh_1h_falchion = { en = "Saltzpyre: Falchion" },
+    unlock_es_questingknight_wh_dual_wield_axe_falchion = { en = "Saltzpyre: Axe and Falchion" },
     unlock_es_questingknight_wh_2h_billhook = { en = "Saltzpyre: Billhook" },
     unlock_es_questingknight_wh_2h_hammer = { en = "Saltzpyre: Holy Great Hammer" },
     unlock_es_questingknight_wh_dual_hammer = { en = "Saltzpyre: Dual Skull-Splitters" },
@@ -1305,6 +1309,42 @@ end
 
 -- Strip a leading "[...]" tag (any case) + following spaces from a label, so the
 -- computed tag replaces the old hand-typed one instead of stacking on it.
+loc.cwv_variant_availability = { en = "Career Weapon Variants" }
+local _cwv_variant_labels = {
+    cwv_es_axe_shield = "Kruber: Axe and Shield",
+    cwv_es_axe_shield_veteran = "Kruber: Imperial Axe and Shield",
+    cwv_we_sword_shield = "Kerillian: Sword and Shield",
+    cwv_we_sword_shield_veteran = "Kerillian: Elven Sword and Shield",
+    cwv_es_longsword = "Kruber: Imperial Longsword",
+    cwv_es_longsword_blackguard = "Kruber: Black Guard Blade",
+    cwv_es_longsword_shield = "Kruber: Imperial Longsword and Shield",
+    cwv_es_javelin = "Kruber: Tuskgor Javelin",
+    cwv_wh_javelin = "Saltzpyre: Tuskgor Javelin",
+    cwv_es_outrider_grenade_launcher = "Kruber: Outrider Grenade Launcher",
+    cwv_es_crossbow = "Kruber: Crossbow",
+    cwv_es_musket = "Kruber: Musket",
+    cwv_es_musket_old = "Kruber: Old Musket",
+    cwv_dr_priest_greathammer = "Bardin: Sigmarite Greathammer",
+    cwv_es_priest_greathammer = "Kruber: Sigmarite Greathammer",
+    cwv_es_warpriest_hammer = "Kruber: Warrior-Priest Hammer",
+    cwv_es_maul = "Kruber: Maul",
+    cwv_es_poleaxe = "Kruber: Poleaxe",
+    cwv_es_rapier = "Kruber: Rapier",
+    cwv_es_dual_swords = "Kruber: Imperial Dual Swords",
+    cwv_es_sword_and_mace = "Kruber: Sword and Mace",
+    cwv_es_cudgel = "Kruber: Cudgel",
+    cwv_es_shortsword = "Kruber: Shortsword",
+    cwv_es_dual_axes = "Kruber: Dual Axes",
+    cwv_wh_dual_axes = "Saltzpyre: Dual Axes",
+    cwv_es_dual_maces = "Kruber: Dual Maces",
+    cwv_wh_dual_maces = "Saltzpyre: Dual Maces",
+    cwv_es_dual_warpriest_hammers = "Kruber: Dual Warrior-Priest Hammers",
+    cwv_es_warpriest_hammer_shield = "Kruber: Warrior-Priest Hammer and Shield",
+}
+for key, label in pairs(_cwv_variant_labels) do
+    loc["unlock_cwv_variant_" .. key] = { en = label }
+end
+
 local function _strip_leading_tag(s)
     return (s:gsub("^%s*%b[]%s*", ""))
 end
