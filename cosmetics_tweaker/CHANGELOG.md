@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.107-dev - 2026-07-14 - #377 glow editor access regression [verify-fix]
+
+- Decoupled the contextual `EDIT GLOW` control from the optional `cos_glow_badge` texture. When custom texture registration is unavailable, glow-capable CWV and vanilla illusions still expose the editor through a material-free button; badge overlays continue to fail closed independently.
+- The skin classifier, exact backend-item/illusion identity, explicit Apply transaction, and glow synchronization are unchanged.
+
+### Solo verification
+
+Select several vanilla and CWV glow-capable illusions. `EDIT GLOW` must appear even if the optional badge texture is unavailable; non-glow illusions must keep it disabled. Open/close the editor, change RGB, press Apply, and confirm the committed color persists after a weapon swap.
+
 ## 0.9.106-dev - 2026-07-14 - #373 Loremaster textures on Weavebound/Shyish shields [verify-fix-coop]
 
 - Fixed compatible Weavebound/Shyish magic shield units rejecting Loremaster texture painting because those units do not expose the diffuse slot used by LA.

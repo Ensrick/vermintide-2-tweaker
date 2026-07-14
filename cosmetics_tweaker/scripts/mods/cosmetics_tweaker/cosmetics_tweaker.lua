@@ -62,7 +62,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.106-dev"
+local MOD_VERSION = "0.9.107-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -718,44 +718,50 @@ local function _refresh_glow_editor_button(self, skin_key)
             and { 255, 255, 255, 255 }
             or { 110, 128, 128, 128 }
     end
+    local button_style = widget.style and widget.style.button
+    if button_style then
+        button_style.color = policy.available
+            and (policy.selected and { 245, 90, 65, 20 } or { 230, 30, 30, 38 })
+            or { 110, 30, 30, 38 }
+    end
     return family
 end
 
 local function _create_glow_editor_button()
-    if not (UIAtlasHelper and UIAtlasHelper.has_texture_by_name
-        and UIAtlasHelper.has_texture_by_name("cos_glow_badge")) then
-        return nil
-    end
-    local definitions = local_require(
-        "scripts/ui/views/hero_view/windows/definitions/hero_window_item_customization_definitions")
-    local definition = definitions.create_illusion_button()
-    definition.element.passes[#definition.element.passes + 1] = {
-        pass_type = "text",
-        text_id = "glow_editor_label",
-        style_id = "glow_editor_label",
+    -- #377: editor access cannot depend on optional badge art. Some shipped
+    -- renderer configurations do not expose the custom single texture through
+    -- UIAtlasHelper, which used to return nil here and remove glow options for
+    -- every item even though skin classification was correct.
+    local definition = {
+        element = { passes = {
+            { content_id = "button_hotspot", pass_type = "hotspot", style_id = "button" },
+            { pass_type = "rect", style_id = "button" },
+            { pass_type = "border", style_id = "button_border" },
+            { pass_type = "text", text_id = "glow_editor_label", style_id = "glow_editor_label" },
+        } },
+        content = {
+            button_hotspot = {},
+            glow_editor_label = mod:localize("glow_picker_editor_button"),
+        },
+        style = {
+            button = {
+                size = { 96, 38 }, color = { 230, 30, 30, 38 }, offset = { 0, 0, 1 },
+            },
+            button_border = {
+                size = { 96, 38 }, thickness = 2,
+                color = { 255, 200, 170, 90 }, offset = { 0, 0, 2 },
+            },
+            glow_editor_label = {
+                size = { 96, 38 }, font_size = 13, font_type = "hell_shark",
+                horizontal_alignment = "center", vertical_alignment = "center",
+                text_color = { 255, 255, 255, 255 }, offset = { 0, 0, 3 },
+            },
+        },
+        scenegraph_id = "screen",
+        offset = { 1272, 380, 20 },
     }
-    definition.content.glow_editor_label = mod:localize("glow_picker_editor_button")
-    definition.style.glow_editor_label = {
-        size = { 45, 45 },
-        font_size = 13,
-        font_type = "hell_shark",
-        horizontal_alignment = "center",
-        vertical_alignment = "center",
-        text_color = { 255, 255, 255, 255 },
-        offset = { 0, 0, 3 },
-    }
-    definition.scenegraph_id = "screen"
     local widget = UIWidget.init(definition)
-    widget.content.icon_texture = "cos_glow_badge"
-    widget.content.locked = false
     widget.content.equipped = false
-    widget.style.icon_texture.size = { 45, 45 }
-    widget.style.icon_texture.texture_size = { 45, 45 }
-    widget.style.icon_texture.offset = { 0, 0, 1 }
-    -- The picker occupies x=660..1260 and ends at y=380 in the shared 1920x1080
-    -- logical space. Keep the control immediately outside that bottom-right
-    -- corner so it remains visible/clickable while the popup draws above it.
-    widget.offset = { 1272, 380, 20 }
     return widget
 end
 
