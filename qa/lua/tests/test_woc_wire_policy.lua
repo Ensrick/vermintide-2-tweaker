@@ -35,4 +35,22 @@ return function(H, repo_root)
 		H.truthy(source:find("_blightreaper_sync_seen = true", 1, true))
 		H.truthy(source:find("rawget(names, woc_id) ~= ITEM_KEY", 1, true))
 	end)
+
+	H.test("WOC issue 595 packages its wire policy and guards module load failure", function()
+		local package_path = repo_root
+			.. "/weapons_of_chaos/resource_packages/weapons_of_chaos/weapons_of_chaos.package"
+		local package_file = assert(io.open(package_path, "rb"))
+		local package_source = package_file:read("*a")
+		package_file:close()
+		H.truthy(package_source:find(
+			'"scripts/mods/weapons_of_chaos/_woc_wire_policy"', 1, true))
+
+		local main_path = repo_root
+			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+		local main_file = assert(io.open(main_path, "rb"))
+		local main_source = main_file:read("*a")
+		main_file:close()
+		H.truthy(main_source:find('type(_wire_policy.safe_item) ~= "function"', 1, true))
+		H.truthy(main_source:find("[WOC:595] wire policy unavailable", 1, true))
+	end)
 end

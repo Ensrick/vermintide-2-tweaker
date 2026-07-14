@@ -1,4 +1,5 @@
 lua = [
+	"scripts/mods/weapons_of_chaos/_woc_wire_policy"
 	"scripts/mods/weapons_of_chaos/weapons_of_chaos"
 	"scripts/mods/weapons_of_chaos/weapons_of_chaos_data"
 	"scripts/mods/weapons_of_chaos/weapons_of_chaos_localization"

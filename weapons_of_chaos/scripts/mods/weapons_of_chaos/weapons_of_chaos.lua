@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.11-dev"
+local MOD_VERSION = "0.1.12-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -147,6 +147,21 @@ local BACKEND_ID  = ITEM_KEY .. "_001"
 local BASE_WEAPON = "es_1h_sword"                       -- Kruber 1H sword (clone source)
 local TEMPLATE    = "one_handed_swords_template_1"      -- 1H sword moveset / hit detection
 local _wire_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_wire_policy")
+if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" then
+	-- Packaging failures must not become startup crashes. Preserve ordinary
+	-- vanilla loadout syncs, but fail closed for explicit WOC identities because
+	-- sending one to a peer without WOC is a peer-fatal wire contract violation.
+	printf("[WOC:595] wire policy unavailable; explicit woc_ loadout sync will fail closed")
+	_wire_policy = {
+		safe_item = function(item)
+			local key = item and item.key
+			if type(key) == "string" and key:sub(1, 4) == "woc_" then
+				return nil
+			end
+			return item
+		end,
+	}
+end
 
 -- Held mesh (INTERIM). Base es_1h_sword right_hand_unit
 -- (item_master_list_exported.lua:6548) — always resident with the player

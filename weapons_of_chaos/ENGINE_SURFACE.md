@@ -14,7 +14,7 @@ vanilla behavior, and links out. Decompile paths are relative to
 `WOC` lets player characters wield ENEMY weapons and named keep-trophy artifacts
 via the duplicate-item approach modeled on `character_weapon_variants`: it clones
 a player base weapon template into a new MoreItemsLibrary item and swaps the held
-mesh to a different `.unit`. As of v0.1.11-dev there is ONE item - the Blightreaper
+mesh to a different `.unit`. As of v0.1.12-dev there is ONE item - the Blightreaper
 (Kruber 1H sword, all careers), rendered on an interim base-Empire-sword mesh
 because the intended keep-trophy prop is not runtime-loadable (see dead ends). Its
 engine contact is small: a display-name `Localize` hook, a registration-timing

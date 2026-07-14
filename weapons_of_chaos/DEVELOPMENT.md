@@ -201,6 +201,15 @@ verbatim; only the mesh source differs.
   enemy skeletons). CWV's `_type_transforms` / scale+grip-offset machinery is
   the tool; apply on the **3P units only** (`feedback_cross_char_transforms_3p_only`).
 
+- **Lua module packaging.** Every literal
+  `mod:dofile("scripts/mods/weapons_of_chaos/<module>")` target must also appear
+  in `resource_packages/weapons_of_chaos/weapons_of_chaos.package`. Loose-source
+  tests do not prove Workshop residency. The blocking Quick gate
+  `qa/check_dofile_package_coverage.ps1` enforces source existence and package
+  coverage; after adding a module, also list the built bundle and match its
+  Murmur64 resource hash. Added after the v0.1.11-dev #595 startup crash; see
+  `POSTMORTEMS.md`.
+
 - **Package loading.** Enemy weapon units load when the relevant enemies spawn
   in a mission, but they are **not** guaranteed loaded in the keep or in a
   mission that doesn't spawn that faction. A player equipping a beastman weapon

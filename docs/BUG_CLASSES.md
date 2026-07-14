@@ -1645,3 +1645,38 @@ ordinary map loot. Verify the generic ammo-refill path separately.
 
 Related coverage: CWV `cwv_wire_safe_thrown_variant_installed` and offline
 `test_cwv_javelin_pickup.lua`.
+
+## 45. Literal `mod:dofile` helper omitted from the compiled resource package
+
+**First seen:** 2026-07-14 (Weapons of Chaos v0.1.11-dev)
+**Canonical Issue:** [#595](https://github.com/Ensrick/vermintide-2-tweaker/issues/595)
+**Lives in:** any VMB mod that adds a Lua helper and loads it with a literal
+`mod:dofile(...)` while its `.package` uses an explicit Lua file list.
+
+### Symptoms
+- Source and offline Lua tests pass because the helper exists in the checkout.
+- The shipped game log reports `Resource not found: scripts/mods/<mod>/<helper>.lua`.
+- `mod:dofile` returns nil through VMF's safe-call boundary; a later hook indexes
+  the expected module table and crashes during an otherwise unrelated lifecycle
+  event such as initial player spawn.
+
+### Diagnosis pattern
+1. Match the first resource error to a literal `mod:dofile` target.
+2. Read the owning `resource_packages/<mod>/<mod>.package`; an explicit `lua =
+   [...]` list that omits the new helper is the root cause.
+3. Do not accept source-level unit coverage as bundle evidence. Build with
+   VMBLauncher and Murmur-hash the resource path; the resulting hash must appear
+   as a `.lua` entry in the built mod bundle.
+
+### Fix template
+- Add the helper path to the owning package, or use the mod-root wildcard when
+  that mod intentionally compiles every module.
+- Validate the returned module shape before registering consumers. Preserve
+  unrelated vanilla behavior and fail closed for unsafe mod-owned identities.
+- Keep `qa/check_dofile_package_coverage.ps1` in the Quick gate. It checks every
+  literal dofile target in the canonical active-mod inventory for both source
+  existence and package coverage.
+
+### Related Issues / commits
+- WOC v0.1.12-dev (#595); offline `test_woc_wire_policy.lua`; repository gate
+  `check_dofile_package_coverage.ps1`.

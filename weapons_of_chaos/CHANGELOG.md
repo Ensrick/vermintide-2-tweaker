@@ -1,5 +1,34 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.12-dev (2026-07-14) - #595 startup crash: bundled wire policy + fail-closed guard [verify-fix]
+
+### Why
+Weapons of Chaos v0.1.11-dev could not finish entering the keep. The source
+called `mod:dofile("scripts/mods/weapons_of_chaos/_woc_wire_policy")`, but the
+resource package still enumerated only the original three Lua files. VMB
+therefore omitted the helper from the Workshop bundle. The failed load returned
+`nil`, and the first player loadout sync indexed `_wire_policy.safe_item`,
+crashing at `weapons_of_chaos.lua:338` (crash GUID
+`5906f1d7-ed94-444b-8f61-832ee17c1e49`).
+
+### Changed
+- Added `_woc_wire_policy` to WOC's compiled Lua resource manifest.
+- Added a module-shape guard: ordinary vanilla items still delegate unchanged,
+  while an explicit `woc_` identity fails closed instead of reaching the wire
+  or crashing if the helper is ever unavailable again.
+- Added the repository-wide `check_dofile_package_coverage` quick gate so every
+  literal `mod:dofile` target must exist in source and be covered by its active
+  mod's `.package` Lua list (exactly or by wildcard).
+- Extended WOC's Lua regression coverage for the package entry and fallback
+  guard.
+
+### Test method
+1. Enable Weapons of Chaos v0.1.12-dev and More Items Library.
+2. Start the game and enter the keep.
+3. Confirm the initial player unit spawns and the log contains no
+   `_woc_wire_policy.lua` resource error or `_wire_policy` nil crash.
+4. Run `/woc_regression_test`; require zero failures.
+
 ## 0.1.11-dev (2026-07-14) - #509 live wire-contract evidence [verify-fix] [not deployed]
 
 ### Why
