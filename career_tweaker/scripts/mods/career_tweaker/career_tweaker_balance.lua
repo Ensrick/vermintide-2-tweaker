@@ -1,4 +1,5 @@
 local mod = get_mod("crt")
+mod._crt.dance_of_blades = mod:dofile("scripts/mods/career_tweaker/_crt_dance_of_blades")
 
 -- ============================================================
 -- crt_* buff name pre-registration (UNCONDITIONAL)
@@ -50,6 +51,9 @@ local _CRT_BUFF_NAMES = {
     "crt_engineer_leading_shots_crit",
     "crt_knight_counter_punch_proc",
     "crt_knight_counter_punch_stack",
+    "crt_maidenguard_dance_of_blades_dodge",
+    "crt_maidenguard_dance_of_blades_proc",
+    "crt_maidenguard_dance_of_blades_stack",
     "crt_mainstay_universal_stagger",
     "crt_merc_blade_barrier_proc",
     "crt_merc_blade_barrier_remover",
@@ -303,6 +307,20 @@ local function _crt_ensure_wire_safe_funcs()
             if removed then _crt_log_wire_block("distance_aura_driver") end
         end
     end
+    if fns and fns.crt_maidenguard_dance_blocking_dodge == nil then
+        -- Dance of Blades (#473): retain only vanilla's blocking-dodge branch.
+        -- The replacement kill proc is a separate wire-gated talent buff, so a
+        -- non-blocking dodge deliberately grants no power and sends no RPC.
+        fns.crt_maidenguard_dance_blocking_dodge = function(owner_unit, buff)
+            if not (owner_unit and Unit.alive(owner_unit)) then return end
+            local status = ScriptUnit.has_extension(owner_unit, "status_system")
+            if not (status and status.blocking) then return end
+            local extension = ScriptUnit.has_extension(owner_unit, "buff_system")
+            local names = buff.template and buff.template.dodge_buffs_to_add
+            if not (extension and type(names) == "table") then return end
+            for i = 1, #names do extension:add_buff(names[i]) end
+        end
+    end
 end
 _crt_ensure_wire_safe_funcs()
 
@@ -515,6 +533,60 @@ local BALANCE_MODS = {
             end
             saved.focused_talent_buff_original = nil
             saved.focused_tooltip_power_original = nil
+        end,
+    },
+    -- Dance of Blades (#473): vanilla `kerillian_maidenguard_versatile_dodge`
+    -- grants its power reward on a non-blocking dodge. Replace that branch with
+    -- one +2% damage / +2% damage-taken pair per kill, up to 15 independently
+    -- expiring two-second stacks, while preserving the native blocking-dodge
+    -- distance/speed buffs. The stack add uses rpc_add_buff, so peer parity is
+    -- mandatory and the live proc wrapper remains the final send gate.
+    rework_we_maidenguard_dance_of_blades = {
+        character = "kerillian",
+        career = "we_maidenguard",
+        network_unsafe = true,
+        patches = {},
+        custom_apply = function(saved)
+            if not BuffTemplates or not Talents or not TalentIDLookup then return end
+            local policy = mod._crt.dance_of_blades
+            if type(policy) ~= "table" or type(policy.templates) ~= "function" then return end
+            _crt_ensure_wire_safe_funcs()
+            local templates = policy.templates()
+            saved.dance_created_names = {}
+            for _, name in ipairs({ policy.dodge_buff, policy.proc_buff, policy.stack_buff }) do
+                local existing = rawget(BuffTemplates, name)
+                if existing == nil or existing._crt_pending then
+                    BuffTemplates[name] = templates[name]
+                    saved.dance_created_names[#saved.dance_created_names + 1] = name
+                end
+            end
+            local lookup = TalentIDLookup.kerillian_maidenguard_versatile_dodge
+            local talent = lookup and Talents[lookup.hero_name]
+                and Talents[lookup.hero_name][lookup.talent_id]
+            if talent and talent.buffs then
+                saved.dance_talent_buffs_original = {}
+                for i = 1, #talent.buffs do
+                    saved.dance_talent_buffs_original[i] = talent.buffs[i]
+                end
+                talent.buffs = { policy.dodge_buff, policy.proc_buff }
+            end
+            pcall(printf, "[crt:473] Dance of Blades applied: damage=2%% vulnerability=2%% stacks=15 duration=2s independent=true")
+        end,
+        custom_restore = function(saved)
+            local policy = mod._crt.dance_of_blades
+            local lookup = TalentIDLookup and TalentIDLookup.kerillian_maidenguard_versatile_dodge
+            local talent = lookup and Talents and Talents[lookup.hero_name]
+                and Talents[lookup.hero_name][lookup.talent_id]
+            if talent and saved.dance_talent_buffs_original then
+                talent.buffs = saved.dance_talent_buffs_original
+            end
+            if BuffTemplates and saved.dance_created_names then
+                for _, name in ipairs(saved.dance_created_names) do
+                    BuffTemplates[name] = _crt_make_stub()
+                end
+            end
+            saved.dance_talent_buffs_original = nil
+            saved.dance_created_names = nil
         end,
     },
     rework_es_mercenary_hellborgs_tutelage = {
@@ -3440,6 +3512,10 @@ local CRT_DESC_OVERRIDES = {
     ["kerillian_waywatcher_activated_ability_restore_ammo_on_career_skill_special_kill_desc"] = {
         setting = "rework_we_waywatcher_kurnous_reward_5pct",
         text = "Killing a Special or Elite with the Career Skill restores 5%% of maximum ammunition.",
+    },
+    ["kerillian_maidenguard_versatile_dodge_desc"] = {
+        setting = "rework_we_maidenguard_dance_of_blades",
+        text = "Killing an enemy grants 2%% damage and increases damage taken by 2%% for 2 seconds, stacking up to 15 times. Each stack expires independently; dodging while blocking increases dodge distance by 20%%.",
     },
     -- ------ Kerillian: Shade ------
     ["kerillian_shade_activated_ability_phasing_desc"] = {

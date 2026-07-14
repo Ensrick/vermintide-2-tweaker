@@ -51,7 +51,7 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 | `career_tweaker_localization.lua` | Localized strings. | returns the loc table | before data (VMF) |
 | `_crt_damage_classification.lua` | Pure #334/#472 damage-category policy: chip/AOE, self-DoT, and Focused Spirit's Ratling extension. Engine-free and unit-tested. | returns `{ is_chip_or_aoe, is_self_dot, focused_spirit_ignores }`, published as `mod._crt.damage_classification` | first script module, before balance |
 | `career_tweaker_balance.lua` | The BALANCE_MODS rework catalog + apply/restore engine, the crt_* buff pre-registration, AND the issue-425 wire-safety subsystem (parity gate, wire-safe proc/driver wrappers, hot-join replay filter). | returns `{ apply, restore, active_count, parity_gate_ok, wire_parity_live, network_unsafe_ids, BALANCE_MODS }`; sets `mod._crt_registered_buff_names`, `mod._crt_mod_registered_buff_names` | after damage classification (entry captures `balance`) |
-| `career_tweaker_big_rebalance.lua` | Big Rebalance port. **ON ICE** (bt retired 2026-06-08): not dofile'd; a stub honors the `{apply,restore,active_count}` contract in the entry. | (dormant) | not loaded |
+| Big Rebalance (retired) | The unreachable port was deleted in 0.3.70-dev (#433). Recover historical source from git only as part of a new registration/parity design. | none | absent |
 | `career_tweaker_tourney.lua` | Tourney Balance Testing port (`trn_*` toggles). Same `{apply,restore,active_count}` contract. | returns the contract table | after balance |
 | `career_tweaker_armor_overcharge.lua` | Seven armor/overcharge/Focused-Spirit controls using one `DamageUtils.apply_buffs_to_damage` hook and one consolidated `PlayerUnitHealthExtension.add_damage` hook. Owns Focused Spirit's proc wrapper and one-frame cooldown re-arm; the stacking template fields remain in balance's reversible lifecycle. | installs its own hooks; exports `mod._crt_focused_spirit_tick(dt)` | after tourney |
 | `career_tweaker_oe_cooldown.lua` | Outcast Engineer cooldown-reduction benefit. Driven per-frame from the entry's `mod.update`. | `mod._crt_oe_cdr_tick(dt)`, `mod._crt_oe_cdr_clear` | after armor |
@@ -106,9 +106,9 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 - **The issue-425 beacon block sits AFTER `mod.update` is defined.** The shared
   lib's `install()` WRAPS the existing `mod.update`; running it earlier would
   capture nil and drop the OE + dump ticks.
-- **`career_tweaker_big_rebalance.lua` is not loaded** (bt retired); the entry
-  substitutes a `{apply,restore,active_count}` stub. To revive: restore bt,
-  delete the stub, un-comment the dofile.
+- **Big Rebalance has no script module or lifecycle stub.** Old `cbr_*` saved
+  values are preserved but unread. The prefix remains reserved by the blocking
+  retirement gate; revival starts from git history under a new architecture.
 
 ## Issue-425 wire safety (why it stays in balance)
 

@@ -550,6 +550,17 @@ return {
                 setting_id = "talent_reworks_group",
                 type       = "group",
                 sub_widgets = {
+                    -- Issue #445: live rework-family controls. These are ordinary
+                    -- checkboxes so stock VMF can use them; crt enforces the same
+                    -- single-select contract that Mod Tweaker registers via #446.
+                    {
+                        setting_id = "rework_master_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "rework_master_ensrick", type = "checkbox", default_value = false },
+                            { setting_id = "rework_master_tourney", type = "checkbox", default_value = false },
+                        },
+                    },
                     -- General (cross-career)
                     {
                         setting_id  = "rework_general_group",
@@ -652,6 +663,7 @@ return {
                                 sub_widgets = {
                                     { setting_id = "rework_we_maidenguard_crit_chance_5_to_10", type = "checkbox", default_value = false },
                                     { setting_id = "rework_we_maidenguard_focused_spirit_stacks", type = "checkbox", default_value = false },
+                                    { setting_id = "rework_we_maidenguard_dance_of_blades", type = "checkbox", default_value = false },
                                 },
                             },
                             {
@@ -700,9 +712,6 @@ return {
                                     { setting_id = "rework_wh_bountyhunter_blessed_combat_25_and_passive_melee_reset",    type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_bountyhunter_rile_the_mob_movement",                        type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_bountyhunter_salvaged_ammo_no_gate_and_passive_reload",     type = "checkbox", default_value = false },
-                                    -- MUTEX cluster member: bh_passive_choice (see career_tweaker.lua mutex.declare).
-                                    -- Its (B) sibling cbr_bh_passive_perks_rework lives in the ON-ICE Big
-                                    -- Rebalance block above, so only this (A) member is live right now.
                                     { setting_id = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",    type = "checkbox", default_value = false, tooltip = "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_tooltip" },
                                     { setting_id = "rework_wh_bountyhunter_just_reward_5s_cooldown",                      type = "checkbox", default_value = false },
                                     { setting_id = "rework_wh_bountyhunter_indiscriminate_blast_refund_per_kill",         type = "checkbox", default_value = false },

@@ -36,12 +36,6 @@ local restore_talent_swaps      = mod._crt.restore_talent_swaps
 local get_talent_swap_originals = mod._crt.get_talent_swap_originals
 local set_talent_swap_originals = mod._crt.set_talent_swap_originals
 
--- v0.3.10: source-pattern marker constant for the /crt_regression_test
--- `crt_big_rebalance_uses_rawget` check (audit `.test_coverage_audit_2026-05-24.md`
--- PARTIAL row 3 — promoted to PASS by adding a runtime check beside the
--- existing strict-table-lookup lint coverage).
-local CT_CRT_BIG_REBALANCE_RAWGET_MARKER_v0_3_10 = "crt-big-rebalance-rawget-hardened"
-
 -- /regression_test scaffold.
 local _RT_CHECKS = {}
 local function _rt_register(name, fn)
@@ -87,6 +81,9 @@ local _CRT_BUFF_NAMES_EXPECTED = {
     "crt_engineer_leading_shots_crit",
     "crt_knight_counter_punch_proc",
     "crt_knight_counter_punch_stack",
+    "crt_maidenguard_dance_of_blades_dodge",
+    "crt_maidenguard_dance_of_blades_proc",
+    "crt_maidenguard_dance_of_blades_stack",
     "crt_mainstay_universal_stagger",
     "crt_merc_blade_barrier_proc",
     "crt_merc_blade_barrier_remover",
@@ -146,34 +143,6 @@ _rt_register("rawget_on_buff_templates_marker", function()
     -- text from balance.lua's header comment is compiled into the bundle.
     local _MARKER = "must use `rawget(t, key)` for existence checks"
     if #_MARKER == 0 then return "marker missing" end
-end)
-
-_rt_register("crt_big_rebalance_uses_rawget", function()
-    -- v0.3.9/.10: `_register_talent_buff_template_if_missing` in
-    -- `career_tweaker_big_rebalance.lua:124` uses
-    -- `rawget(NetworkLookup.buff_templates, name)` for the pre-register guard
-    -- so the registration is safe against the strict `__index` metatable
-    -- vanilla installs on `NetworkLookup.*` tables. The strict-table-lookup
-    -- lint covers static-pattern regressions; this runtime check is the
-    -- belt-and-suspenders companion required by §15 of PROJECT_STANDARDS.md.
-    --
-    -- 1. Source-pattern: marker constant must be present.
-    if CT_CRT_BIG_REBALANCE_RAWGET_MARKER_v0_3_10 ~= "crt-big-rebalance-rawget-hardened" then
-        return "RAWGET marker absent — was the v0.3.9 big_rebalance hardening reverted?"
-    end
-    -- 2. Runtime-state: rawget against a known-bad key on
-    --    NetworkLookup.buff_templates must return nil without raising.
-    local NL = rawget(_G, "NetworkLookup")
-    local bt = NL and NL.buff_templates
-    if type(bt) == "table" then
-        local ok, value = pcall(rawget, bt, "__crt_rawget_probe_does_not_exist__")
-        if not ok then
-            return "rawget(NetworkLookup.buff_templates, <bad-key>) RAISED — strict-metatable behavior changed"
-        end
-        if value ~= nil then
-            return "rawget(NetworkLookup.buff_templates, <bad-key>) returned non-nil — unexpected"
-        end
-    end
 end)
 
 _rt_register("dbg_helpers_two_channel", function()
@@ -678,6 +647,27 @@ _rt_register("crt_mod_tweaker_exclusive_groups_registered", function()
     end
 end)
 
+_rt_register("issue445_rework_family_masters", function()
+    local policy = mod._crt and mod._crt.rework_master_policy
+    if type(policy) ~= "table" or type(policy.plan) ~= "function"
+        or type(policy.derive_masters) ~= "function" then
+        return "rework-master policy missing"
+    end
+    if #(policy.ensrick_ids or {}) < 50 then
+        return "native rework family catalog unexpectedly small: " .. tostring(#(policy.ensrick_ids or {}))
+    end
+    if #(policy.tourney_ids or {}) < 10 then
+        return "Tourney family catalog unexpectedly small: " .. tostring(#(policy.tourney_ids or {}))
+    end
+    local mutex = mod._crt and mod._crt.mutex
+    local members = mutex and mutex.CLUSTERS and mutex.CLUSTERS.rework_family_master_choice
+    if type(members) ~= "table" or #members ~= 2
+        or members[1] ~= "rework_master_ensrick"
+        or members[2] ~= "rework_master_tourney" then
+        return "live rework-family mutex pair missing or reordered"
+    end
+end)
+
 _rt_register("issue405_heal_network_is_server_gated", function()
     -- Issue 405 (client CTD on Fires-from-Ash THP heal): the heal_from_proc
     -- call must stay behind the Managers.player.is_server gate. The gate site
@@ -774,4 +764,37 @@ _rt_register("issue440_bardin_disabler_probe", function()
         return "Bardin disabler probe hook/tick wiring drifted"
     end
     return probe.regression_check()
+end)
+
+_rt_register("issue473_dance_of_blades_contract", function()
+    local policy = mod._crt and mod._crt.dance_of_blades
+    if type(policy) ~= "table" or type(policy.templates) ~= "function"
+       or type(policy.validate) ~= "function" then
+        return "Dance of Blades policy missing"
+    end
+    if not policy.validate(policy.templates()) then
+        return "Dance of Blades pure stack contract drifted"
+    end
+    local defs = balance and balance.BALANCE_MODS
+    local rework = defs and defs.rework_we_maidenguard_dance_of_blades
+    if type(rework) ~= "table" or rework.network_unsafe ~= true then
+        return "Dance of Blades rework missing peer-parity classification"
+    end
+    local BFT = rawget(_G, "BuffFunctionTemplates")
+    local fns = BFT and BFT.functions
+    if type(fns) ~= "table"
+       or type(fns.crt_maidenguard_dance_blocking_dodge) ~= "function" then
+        return "Dance of Blades blocking-dodge function missing"
+    end
+    if mod:get("rework_we_maidenguard_dance_of_blades")
+       and balance.parity_gate_ok and balance.parity_gate_ok() then
+        local stack = BuffTemplates and BuffTemplates[policy.stack_buff]
+        if not policy.validate({
+            [policy.dodge_buff] = BuffTemplates[policy.dodge_buff],
+            [policy.proc_buff] = BuffTemplates[policy.proc_buff],
+            [policy.stack_buff] = stack,
+        }) then
+            return "enabled Dance of Blades templates do not match policy"
+        end
+    end
 end)

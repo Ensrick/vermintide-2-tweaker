@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.3.68-dev"
+local MOD_VERSION = "0.3.71-dev"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
@@ -110,31 +110,92 @@ end
 -- or the safe-stub above -- either way a table honoring the read contract.
 mod._crt.balance = balance
 
--- Big Rebalance integration (~160 opt-in toggles, all default false). The BR
--- buffs / damage profiles / explosion templates are registered by buff_tweaker
--- (bt) as the shared registry; this module's per-feature toggles gate on
--- bt:is_br_active() (see career_tweaker_big_rebalance.lua:46-48) before
--- applying. (bt took ownership of the shared registry, eliminating the
--- previously byte-identical registration files that wt/ct/et each shipped.)
--- BR ON ICE (bt retired 2026-06-08; heap relief 2026-06-18). Module no longer
--- dofile'd, so its ~2768 lines of data/hooks never load into the 1 GiB lua_heap.
--- Stub preserves the {apply, restore, active_count} contract read at lines
--- 433/465/485/531. To revive: restore bt, delete the stub, un-comment below.
--- local ok_br, big_rebalance = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_big_rebalance")
--- if not ok_br then
---     mod:error("Failed to load Big Rebalance module: %s", tostring(big_rebalance))
---     big_rebalance = { apply = function() end, restore = function() end, active_count = function() return 0 end }
--- end
-local big_rebalance = { apply = function() end, restore = function() end, active_count = function() return 0 end }
+-- Big Rebalance was retired under #321 and its unreachable implementation was
+-- deleted under #433. Old cbr_* saved values remain untouched and reserved;
+-- reactivation requires a new reviewed architecture recovered from git history.
 
 -- Tourney Balance Testing port (PHASE 1: clean per-career data mutations,
 -- ~17 default-OFF trn_* toggles). Same {apply,restore,active_count} contract
--- as balance / big_rebalance. See career_tweaker_tourney.lua header.
+-- as the native balance engine. See career_tweaker_tourney.lua header.
 local ok_trn, tourney = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_tourney")
 if not ok_trn then
     mod:error("Failed to load Tourney module: %s", tostring(tourney))
     tourney = { apply = function() end, restore = function() end, active_count = function() return 0 end }
 end
+
+-- Issue #445: family-wide rework masters. The policy is engine-free and owns
+-- catalog normalization/planning; this file owns the bounded VMF setting batch
+-- and one final apply per engine. Retired cbr_* entries are deliberately absent.
+local ok_rmp, rework_master_module = pcall(mod.dofile, mod,
+    "scripts/mods/career_tweaker/_crt_rework_master_policy")
+local rework_master_policy
+if ok_rmp and type(rework_master_module) == "table" and type(rework_master_module.new) == "function" then
+    rework_master_policy = rework_master_module.new(
+        balance and balance.BALANCE_MODS or {},
+        tourney and (tourney.TOGGLE_IDS or tourney.TOURNEY_MODS) or {})
+else
+    mod:error("Failed to load rework-master policy: %s", tostring(rework_master_module))
+    rework_master_module = {
+        MASTER_ENSRICK = "rework_master_ensrick",
+        MASTER_TOURNEY = "rework_master_tourney",
+    }
+    rework_master_policy = {
+        ensrick_ids = {}, tourney_ids = {},
+        is_member = function() return nil end,
+        plan = function() return {} end,
+        derive_masters = function() return {} end,
+    }
+end
+
+local _rework_master_batch = false
+
+local function _rework_master_snapshot()
+    local state = {}
+    for _, id in ipairs(rework_master_policy.ensrick_ids or {}) do state[id] = mod:get(id) and true or false end
+    for _, id in ipairs(rework_master_policy.tourney_ids or {}) do state[id] = mod:get(id) and true or false end
+    state[rework_master_module.MASTER_ENSRICK] = mod:get(rework_master_module.MASTER_ENSRICK) and true or false
+    state[rework_master_module.MASTER_TOURNEY] = mod:get(rework_master_module.MASTER_TOURNEY) and true or false
+    return state
+end
+
+local function _write_rework_master_changes(changes)
+    _rework_master_batch = true
+    local ok, err = pcall(function()
+        for i = 1, #changes do mod:set(changes[i].id, changes[i].value) end
+    end)
+    _rework_master_batch = false
+    if not ok then
+        mod:warning("[crt:445] family preset setting batch failed: %s", tostring(err))
+        return false
+    end
+    return true
+end
+
+local function _apply_rework_master(family, enabled)
+    local changes = rework_master_policy:plan(family, enabled, _rework_master_snapshot())
+    if not _write_rework_master_changes(changes) then return end
+    -- Every nested on_setting_changed callback returned under the batch guard;
+    -- run each owner exactly once after the complete desired state is visible.
+    if balance and balance.apply then balance.apply() end
+    if tourney and tourney.apply then tourney.apply() end
+    pcall(printf, "[crt:445] family=%s enabled=%s writes=%d ensrick=%d tourney=%d",
+        tostring(family), tostring(enabled), #changes,
+        #(rework_master_policy.ensrick_ids or {}), #(rework_master_policy.tourney_ids or {}))
+end
+
+local function _sync_rework_master_indicators()
+    local desired = rework_master_policy:derive_masters(_rework_master_snapshot())
+    local changes = {}
+    for _, id in ipairs({ rework_master_module.MASTER_ENSRICK, rework_master_module.MASTER_TOURNEY }) do
+        local value = desired[id] and true or false
+        if (mod:get(id) and true or false) ~= value then
+            changes[#changes + 1] = { id = id, value = value }
+        end
+    end
+    _write_rework_master_changes(changes)
+end
+
+mod._crt.rework_master_policy = rework_master_policy
 
 -- Armor, Overcharge & Focused Spirit toggles (one default-ON exemption plus
 -- six opt-in controls). Six controls are runtime hooks gated live on mod:get;
@@ -195,23 +256,11 @@ local ok_bdp, _bdp = pcall(mod.dofile, mod,
     "scripts/mods/career_tweaker/_crt_bardin_disabler_probe")
 if not ok_bdp then mod:error("Failed to load Bardin disabler probe: %s", tostring(_bdp)) end
 
--- Demo cluster: Bounty Hunter passive choice. The vanilla BH passive
--- ("Job Well Done" — ammo on special kill) has two competing reworks:
---   * `rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr`
---       (mine) — adds DR on special kill + buffs the ammo passive.
---   * `cbr_bh_passive_perks_rework` (Core's BR) — full passive-perk list
---     rewrite.
--- Both touch the same passive and can't sensibly coexist. Toggling one
--- on auto-unticks the other; both off = vanilla.
---
--- More clusters will land here as additional rework / cbr overlaps
--- surface. New ones must:
---   1. Use defaults `false` on every member (= vanilla baseline).
---   2. Live inside a shared `_group` widget so the UI groups them visually.
---   3. Have a tooltip on at least one member that says "alternative to X".
-mutex.declare("bh_passive_choice", {
-    "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",
-    "cbr_bh_passive_perks_rework",
+-- Live #445/#446 group. Unlike the old BH example, both members are active and
+-- visible; the retired cbr_* catalog is never used as a UI dependency.
+mutex.declare("rework_family_master_choice", {
+    rework_master_module.MASTER_ENSRICK,
+    rework_master_module.MASTER_TOURNEY,
 })
 
 -- ============================================================
@@ -230,14 +279,9 @@ mutex.declare("bh_passive_choice", {
 -- no per-group code -- the registry is data-driven.
 --
 -- Single source of truth is crt's own mutex.CLUSTERS, so every cluster declared
--- via mutex.declare auto-registers here with no extra code. Today that is
--- bh_passive_choice (Ensrick's BH "Job Well Done" passive rework vs Core BR's
--- passive-perks rework -- the same passive). The issue's named "Zealot THP
--- Conversions" group would auto-register the moment crt gains a SECOND Zealot
--- THP-conversion rework and declares the cluster: crt currently ships only ONE
--- such toggle (rework_wh_zealot_ability_green_to_thp), and gut -- like
--- mutex.declare -- rejects a solo group, so there is nothing to wire for Zealot
--- yet (the mock-up's other options are not implemented in crt).
+-- via mutex.declare auto-registers here with no extra code. The first live group
+-- is #445's native-vs-Tourney family preset pair. The earlier #446 demonstration
+-- referenced a hidden cbr_* sibling and was removed when Big Rebalance retired.
 --
 -- Pre-existing both-ON state: neither layer reconciles a saved config where two
 -- siblings are already ON at boot (both are change-triggered, not boot-sweeping).
@@ -469,13 +513,9 @@ mod.on_game_state_changed = function(status, state_name)
     if status == "enter" and state_name == "StateIngame" and mod._crt_start_dump_retry then
         mod._crt_start_dump_retry()
     end
-    -- Defensive nil-check: if a dofile failure slipped past pcall (VMF's
-    -- `mod:dofile` doesn't always raise — sometimes returns nil + logs the
-    -- error separately, leaving the safe-stub fallback at line 13 dormant),
-    -- balance/big_rebalance can end up nil rather than the stub. Skip cleanly
-    -- instead of crashing the lifecycle.
+    -- Defensive nil-check: VMF's `mod:dofile` can return nil after logging an
+    -- error instead of raising, so skip cleanly rather than crashing lifecycle.
     if balance and balance.apply then balance.apply() end
-    if big_rebalance and big_rebalance.apply then big_rebalance.apply() end
     if tourney and tourney.apply then tourney.apply() end
 end
 
@@ -486,12 +526,25 @@ mod.on_setting_changed = function(setting_id)
     -- on every click. Use _dbg if a diagnostic trace is needed in future.
     _dbg("on_setting_changed: %s", tostring(setting_id))
 
+    -- Programmatic leaf writes from a family preset are synchronous VMF
+    -- callbacks. Suppress them so a 60+ setting preset remains one bounded
+    -- owner apply rather than repeating full restore/apply work per leaf.
+    if _rework_master_batch then return end
+
+    if setting_id == rework_master_module.MASTER_ENSRICK then
+        _apply_rework_master("ensrick", mod:get(setting_id) and true or false)
+        return
+    elseif setting_id == rework_master_module.MASTER_TOURNEY then
+        _apply_rework_master("tourney", mod:get(setting_id) and true or false)
+        return
+    end
+
     -- Mutex enforcement runs BEFORE the apply dispatch. If `setting_id` is a
     -- member of a declared cluster and was just toggled on, the enforcer
     -- programmatically unchecks its siblings (which re-fires on_setting_changed
     -- for each sibling — the apply dispatch below handles that fan-out
-    -- naturally because each fired setting_id matches the right ^rework_ or
-    -- ^cbr_ prefix). Re-entry guard inside `mutex.enforce` keeps the recursion
+    -- naturally because each fired setting_id matches its family prefix).
+    -- Re-entry guard inside `mutex.enforce` keeps the recursion
     -- bounded to one level.
     mutex.enforce(setting_id)
 
@@ -506,12 +559,12 @@ mod.on_setting_changed = function(setting_id)
         if tourney and tourney.apply then tourney.apply() end
     end
 
-    if setting_id:find("^cbr_") then
-        if big_rebalance and big_rebalance.apply then big_rebalance.apply() end
-    end
-
     if setting_id:find("^trn_") then
         if tourney and tourney.apply then tourney.apply() end
+    end
+
+    if rework_master_policy:is_member(setting_id) then
+        _sync_rework_master_indicators()
     end
 
     -- Career-select lock state is baked at populate; refresh the open hero view so
@@ -524,7 +577,7 @@ end
 
 mod.on_disabled = function()
     -- audit 2026-06-07 (v0.3.22-dev), BUG_CLASSES §7: previously on_disabled only
-    -- unwound the balance / big_rebalance buff-template mutations and left talent
+    -- unwound the balance buff-template mutations and left talent
     -- swaps + the global table/hook mutations behind. Restore what's CHEAP, echo
     -- the limitation for the rest (matches gt v0.2.56's documented-limitation
     -- pattern, Issue #15).
@@ -532,9 +585,8 @@ mod.on_disabled = function()
     -- Cheaply reversible (done here):
     --   * Talent swaps — re-bind saved originals into TalentTrees / CareerSettings
     --     (rebind only; _talent_swap_originals already holds the pre-swap values).
-    --   * Balance reworks + Big Rebalance — restore the patched BuffTemplate fields.
+    --   * Native + Tourney balance reworks — restore patched BuffTemplate fields.
     if balance and balance.restore then balance.restore() end
-    if big_rebalance and big_rebalance.restore then big_rebalance.restore() end
     if tourney and tourney.restore then tourney.restore() end
     restore_talent_swaps()
     -- Drop the OE cooldown-reduction managed bonus cleanly (the tick also self-
@@ -586,8 +638,6 @@ mod:command("ct_status", "Show Career Tweaker version and active swaps/balance m
 
     local bal_count = (balance and balance.active_count and balance.active_count()) or 0
     mod:echo("  Balance mods active: " .. tostring(bal_count))
-    local br_count = (big_rebalance and big_rebalance.active_count and big_rebalance.active_count()) or 0
-    mod:echo("  Big Rebalance toggles active: " .. tostring(br_count))
 end)
 
 -- ============================================================

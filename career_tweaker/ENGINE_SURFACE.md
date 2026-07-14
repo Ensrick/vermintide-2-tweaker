@@ -115,11 +115,15 @@ are NOT hooks and do not appear in the table above, but they are engine contact 
 follow the same restore discipline. (3) **`mod:hook`** - the 20 table rows, for the
 per-frame/per-action seams the data patch can't reach. New reworks that touch a
 NETWORKED buff path must additionally route through a `crt_wire_safe_*` wrapper (see
-next note).
+next note). #473 Dance of Blades replaces the talent's buff-name list with one
+blocking-dodge driver and one kill driver; the latter grants a paired
+`damage_dealt`/`damage_taken` stack through the existing wire-safe add wrapper.
+Its two-second stacks set `refresh_durations=false`, so every kill retains its own
+expiry rather than refreshing the full stack group.
 
 ### Networked buffs + peer parity (owner: `docs/engine/03`; project `project_vt2_cross_peer_wire_safety`)
 
-Eight rework toggles push a mod-registered buff name onto a vanilla NETWORKED buff
+Nine rework toggles push a mod-registered buff name onto a vanilla NETWORKED buff
 path (server-controlled buff drivers, special-kill procs, the tourney WP aura). Each
 encodes `NetworkLookup.buff_templates[name]` and sends `rpc_add_buff`; a peer without
 crt has no entry at that index, so `BuffSystem.rpc_add_buff` fatals on the strict

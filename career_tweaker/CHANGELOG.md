@@ -1,5 +1,32 @@
 # Career Tweaker Changelog
 
+## 0.3.71-dev - 2026-07-14 - #473 Dance of Blades rework [verify-fix-coop; not deployed]
+
+- Added an opt-in Handmaiden rework for the vanilla `kerillian_maidenguard_versatile_dodge` talent: each kill grants 2% damage dealt and 2% increased damage taken for two seconds, up to 15 stacks (30%/30%).
+- Every stack uses its own non-refreshing two-second lifetime. Rapid kills build the requested window; a later kill cannot extend an older stack.
+- Preserved the vanilla blocking-dodge branch, including its authored 20% dodge-distance benefit and associated dodge-speed handling. Non-blocking dodges no longer grant the vanilla power reward while the rework is active.
+- Used `damage_dealt` instead of generic power so the benefit does not inflate stagger. The vulnerability uses one `damage_taken` stacking bucket, producing a linear 30% at cap rather than compounding 1.02 fifteen times.
+- Registered three custom buff names unconditionally in canonical alphabetical order. The kill add routes through the existing live peer-parity wrapper, the entire rework degrades to vanilla when any peer lacks Career Tweaker, and no new RPC was introduced.
+- Added reversible talent/template lifecycle, live talent text, pure policy tests, runtime check `issue473_dance_of_blades_contract`, and `DANCE_OF_BLADES_REWORK.md` with co-op verification.
+
+## 0.3.70-dev - 2026-07-14 - #433 remove dead Big Rebalance implementation [not deployed]
+
+- Applied #321's retirement decision to the Career Tweaker portion of #433: deleted the unreachable 133,687-byte `career_tweaker_big_rebalance.lua` implementation. It was never loaded, still contained 27 incomplete bodies, and depended on the retired `bt` registration owner. Historical recovery remains available through git; copying it back is not a supported reactivation path.
+- Removed the no-op `big_rebalance` lifecycle stub, dead `^cbr_` setting dispatch, restore/apply/count calls, obsolete status output, and the runtime check that claimed to harden code which no longer executes. Old `cbr_*` values remain untouched in VMF storage and the prefix remains reserved by the retirement gate.
+- Preserved the active native and Tourney rework engines and #445 family masters unchanged. Added host-runtime tests for dead-file/stub absence plus live-family retention, and extended `check_retired_big_rebalance.ps1` so the deleted Career implementation cannot silently return to shipped scripts.
+
+**Repository verification:** no in-game behavior was removed because the module had no loader. Require the blocking retirement check, Career Tweaker lint, and Lua unit suite to pass. #433 remains open until the equivalent WT/WT-dev and Enemy Tweaker dead implementations receive their own isolated cleanup/version passes.
+
+## 0.3.69-dev - 2026-07-14 - #445 rework-family master controls [verify-fix]
+
+- Added two live, mutually exclusive family controls under Talent Reworks: **Enable all Ensrick's Reworks** and **Enable all Tourney Balance Reworks**. Enabling one applies its complete active catalog and clears the rival family; turning it off clears only that family. Partial individual selections are a valid custom state and leave both masters off.
+- Bulk selection is bounded: nested VMF callbacks are suppressed while changed leaf settings are written, then the native-rework and Tourney owners each apply once. The plan writes only values that actually changed and logs one compact `[crt:445]` summary.
+- Every active leaf title now derives a `[Ensrick's Reworks]` or `[Tourney Balance]` suffix from its stable setting prefix. Groups, tooltips, and master rows remain concise. Retired `cbr_*` entries are neither revived nor used as a master dependency.
+- Replaced #446's hidden retired-BR demonstration cluster with the two visible family controls. The stock VMF menu is enforced by crt itself; Mod Tweaker also receives the same mutex pair through its existing data-driven exclusive-group API.
+- Offline coverage proves complete-family/rival clearing, custom-state preservation, exact master indicators, suffix completeness, plain-checkbox widget wiring, and write de-duplication. Runtime check `issue445_rework_family_masters` validates the live catalogs and mutex declaration.
+
+**Solo verify after deployment:** open Career Tweaker in Mod Tweaker. Under Talent Reworks > Rework Family Presets, enable Ensrick's master and confirm its active leaf rows turn on while every Tourney row is off; switch to Tourney and confirm the inverse with an immediate repaint. Turn Tourney off and confirm its leaves clear. Finally enable one individual leaf and confirm both master controls remain off as a custom selection. Run `/crt_regression_test` and require `PASS: issue445_rework_family_masters` plus `PASS: crt_mod_tweaker_exclusive_groups_registered`.
+
 ## 0.3.68-dev - 2026-07-14 - #440 Bardin disabler dodge investigation [diagnostics-armed; coop-required]
 
 - **Finding, not a balance fix.** The decompiled Lua provides one shared dodge movement/status path for all five heroes. Packmaster and Lifeleech consume that same dodge status without a profile branch. Bardin's shorter first-person height is camera presentation data and is never read by those paths. No evidence supports changing Bardin's dodge distance or timing.

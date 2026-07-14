@@ -55,7 +55,6 @@ as of 2026-07-11; re-verify after a game patch. Anything not verified is tagged
 | crt (`career_tweaker/`) | `scripts/mods/career_tweaker/career_tweaker.lua` | Talent SWAPS: re-binds `TalentTrees[profile][index]` and `CareerSettings` pointers (:266-321), restores on disable (:561-598); talent dump harness :643 |
 | crt | `career_tweaker_balance.lua` | The live talent-rework engine. Unconditional `crt_*` buff-name pre-registration :36-103; per-toggle patches mutate `BuffTemplates[buff].buffs[1][field]` (:112-121); hooks (`TalentExtension.has_talent_perk` :2958, `ActionUtils.get_critical_strike_chance` :2985, `TalentExtension.apply_buffs_from_talents` hook_safe :3603, THP proc :3481-3496) |
 | crt | `career_tweaker_armor_overcharge.lua` | Exactly two hooks (:54): `DamageUtils.apply_buffs_to_damage` :212 (gromril + Unchained overcharge shims) and `PlayerUnitHealthExtension.add_damage` :281 (Necromancer counter shim) |
-| crt | `career_tweaker_big_rebalance.lua` | BR ON ICE - inert stub early-return :32; legacy registration helpers :112-158 kept for reference |
 | ct (`chaos_wastes_tweaker_dev/`) | `chaos_wastes_tweaker_dev.lua` | Boon system: `_register_in_network_lookup` :10192-10201, `inject_dormant_boon` :10211-10336 (unconditional network registration, toggle-gated pool insert :10343-10378), meta boons `_make_meta_proc` :11117 / `register_meta_boon` :11142, kill-heal boon proc :12105-12116 |
 | bt (RETIRED) | `_archive/buff_tweaker_v0.1.12-alpha/scripts/mods/buff_tweaker/buff_tweaker_registrations.lua` | The canonical Big Rebalance shared registration list: 272 buff templates + 37 damage profiles + 16 explosion templates + 3 stat-buff methods, alphabetically sorted, order LOAD-BEARING (:1-56). Consumers (wt/ct/et/crt) gate on `(get_mod("bt") or {}).is_br_active` and go inert without it (`CLAUDE.md` Mod Directory, bt row) |
 
@@ -77,7 +76,7 @@ as of 2026-07-11; re-verify after a game patch. Anything not verified is tagged
 3. Mods load AFTER all of this. Consequences:
    - Runtime writes to `TalentBuffTemplates[hero]` or `DeusPowerUpBuffTemplates` alone do
      NOTHING - the merge already ran. Write `BuffTemplates[name]` directly as well
-     (crt does both: `career_tweaker_big_rebalance.lua:123-135`; ct documents it:
+     (ct documents both writes at
      `chaos_wastes_tweaker_dev.lua:10301-10310`).
    - A mod-added template is invisible to the wire until the mod ALSO appends the
      `idx<->name` pair into `NetworkLookup.buff_templates`
@@ -211,7 +210,7 @@ Rule zero for all of these: grep the mod for an existing hook on the same
 | `TalentExtension.apply_buffs_from_talents` (hook_safe) | Post-pass to add/patch talent-driven buffs after vanilla applied (`career_tweaker_balance.lua:3603`) | Runs on owner AND server per the buffer table (section 2.2) - the post-pass runs wherever vanilla ran; make the body idempotent |
 | Template data mutation (no hook) | Patch `BuffTemplates[name].buffs[1][field]` at toggle-on, restore originals at toggle-off (`career_tweaker_balance.lua:112-121`). Takes effect on the next `apply_buffs_from_talents` (mission load / talent change) | Mutation is GLOBAL - hits every unit and career using the template (memory `reference_wt_shared_template_global_mutation_breaks_native`). Never mutate a LIVE buff instance's `template` - it is the shared table (`buff_extension.lua:304`) |
 | Per-application override (no hook) | Pass `params.external_optional_multiplier/_bonus/_duration/...` to `add_buff` (`buff_extension.lua:240-246`) when OUR code is the caller | Only covers buffs we add ourselves; vanilla add sites pass their own params |
-| New buff template registration | Write `BuffTemplates[name]` + append `NetworkLookup.buff_templates` pairwise, UNCONDITIONALLY at mod load, sorted (`career_tweaker_balance.lua:83-103`); talent-tagged names also into `TalentBuffTemplates[hero]` (`career_tweaker_big_rebalance.lua:123-135`) | Existence checks on NetworkLookup MUST be `rawget` - the `__index` metatable errors (`network_lookup.lua:2360-2367`; burn note `career_tweaker_balance.lua:86-90`). Never tie registration to a toggle (section 4.2) |
+| New buff template registration | Write `BuffTemplates[name]` + append `NetworkLookup.buff_templates` pairwise, UNCONDITIONALLY at mod load, sorted (`career_tweaker_balance.lua:83-103`); if introspection requires the source talent table too, write both tables as ct documents at `chaos_wastes_tweaker_dev.lua:10301-10310` | Existence checks on NetworkLookup MUST be `rawget` - the `__index` metatable errors (`network_lookup.lua:2360-2367`; burn note `career_tweaker_balance.lua:86-90`). Never tie registration to a toggle (section 4.2) |
 | `ProcFunctions[name]` / `BuffFunctionTemplates.functions[name]` | Plain global writes; resolved by name at proc time (`buff_extension.lua:1351`) / apply time (:400) | Write BOTH tables when one name serves both roles (`chaos_wastes_tweaker_dev.lua:11158-11166`). Proc bodies run on the proc owner's machine - anything server-authoritative inside them needs an `is_server` gate (section 4.1) |
 | `DeusPowerUpTemplates[name]` mutation (ct boon tweaks) | Mutate `DeusPowerUpTemplates` (read live by the apply path, `deus_power_up_utils.lua:250` per ct's note `chaos_wastes_tweaker_dev.lua:9204-9213`) | Mutating `DeusPowerUpBuffTemplates` does nothing after boot (merge already ran, `morris_buff_settings.lua:7310`) |
 | Talent swap (crt) | Re-bind `TalentTrees[profile][tree_index]` and CareerSettings pointers, saving originals (`career_tweaker.lua:266-321`) | UI caches: refresh `HeroWindowTalents` on swap (`career_tweaker.lua:216-226`). Swaps are LOCAL data - both peers need crt for consistent bot/remote behavior [unverified scope of desync] |
@@ -296,7 +295,8 @@ MUTATE consumption math per-toggle at runtime (feature gating).
 `WeaponTraits/WeaveTraits.buff_templates` are all merged INTO `BuffTemplates` at parse
 time (`buff_templates.lua:9578-9587`, `morris_buff_settings.lua:7310`). Post-boot writes
 must target `BuffTemplates` (and `NetworkLookup`) directly; write the source table too
-only for introspection symmetry (`career_tweaker_big_rebalance.lua:170-175` doc note).
+only for introspection symmetry (ct's live example is
+`chaos_wastes_tweaker_dev.lua:10301-10310`).
 
 ### 4.7 THP/heal-type semantics
 
@@ -366,14 +366,7 @@ Ranked candidates; each names our code, the engine-idiomatic alternative, and th
    `BuffSystem.add_buff_synced` (`buff_system.lua:849`) once the #426 parity gate exists,
    or document the "all peers must run ct" requirement on the toggle.
 
-4. **P1 - dead Big Rebalance code shipping in crt.**
-   `career_tweaker_big_rebalance.lua:32` early-returns above ~2,700 inert lines (same
-   pattern in et/wt per `docs/OOP_REFACTOR_PLAN.md:116-118`). Pending user decision
-   (#433) - do not delete unilaterally; if BR revives, the registration list must come
-   back as ONE shared sorted list (the bt pattern,
-   `buff_tweaker_registrations.lua:1-42`), not per-mod copies.
-
-5. **P2 - crt talent reworks mutate shared templates where per-application params exist.**
+4. **P2 - crt talent reworks mutate shared templates where per-application params exist.**
    The patch engine writes `BuffTemplates[buff].buffs[1][field]` globally
    (`career_tweaker_balance.lua:112-121`). For vanilla-applied talent buffs this is the
    only lever (vanilla add sites pass no params) - fine. But for buffs crt's OWN procs
@@ -383,17 +376,16 @@ Ranked candidates; each names our code, the engine-idiomatic alternative, and th
    `reference_wt_shared_template_global_mutation_breaks_native`). Prefer it in new
    crt proc code.
 
-6. **P2 - crt stub template shape diverges from the engine-validated stub.**
+5. **P2 - crt stub template shape should exercise normal ID bookkeeping before removal/count use.**
    `career_tweaker_balance.lua:36-38` uses `{ buffs = {}, _crt_pending = true }` (zero
    sub-buffs: `add_buff` returns `sub_buffs_added = 0`, skips `_buff_id_refs` :493-498);
-   the BR stub used one no-op stat buff (`career_tweaker_big_rebalance.lua:62-73`),
-   which exercises the normal add/remove path. Zero-sub-buff templates are accepted by
+   a one-no-op-stat-buff shape would exercise the normal add/remove path. Zero-sub-buff templates are accepted by
    `add_buff` (loop :184 simply doesn't run) but produce ids with no `_buff_id_refs`
    entry - if any future code calls `num_sub_buffs`/`remove_buff` on such an id, verify
    the nil-ref path (`buff_extension.lua:861, :889`) before relying on it. Cheap
    hardening: adopt the one-no-op-stat-buff stub shape in `_crt_make_stub`.
 
-7. **P2 - ct kill-heal semantics vs wounded state.**
+6. **P2 - ct kill-heal semantics vs wounded state.**
    `chaos_wastes_tweaker_dev.lua:12114` uses `health_regen` for a permanent heal;
    `heal_can_remove_wounded` excludes it (`generic_status_extension.lua:2251`), so the
    boon can fill green health while the wounded (death-on-next-down) flag stays set.

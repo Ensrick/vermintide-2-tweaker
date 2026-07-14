@@ -6,10 +6,10 @@ The consumer fragments are not a coherent standalone feature:
 
 | Consumer | Current contract |
 |---|---|
-| Tweaker: Weapons | BR module is not loaded; `br_*` widgets are hidden. |
+| Tweaker: Weapons | Stable/dev BR implementations, definitions, and lifecycle stubs were deleted under #433; `br_*` widgets remain hidden historical reservations. |
 | Tweaker: Chaos Wastes | No BR option surface or BR registration owner. The remaining optional `bt.net_replay` calls are historical diagnostics, not BR mechanics. |
-| Tweaker: Enemies | BR module is not loaded; `br_*` widgets are hidden. Its damage/stagger rewrites would also require an explicit peer-parity contract before reactivation. |
-| Tweaker: Careers | BR module is replaced by a no-op lifecycle stub; `cbr_*` widgets and localization are hidden. Twenty-seven archived toggle bodies remain unimplemented. |
+| Tweaker: Enemies | BR implementation, fingerprint RPC, and lifecycle stub were deleted under #433; `br_*` widgets remain hidden historical reservations. Any rewrite would require a new peer-parity contract. |
+| Tweaker: Careers | BR implementation and lifecycle stub were deleted in 0.3.70-dev (#433); `cbr_*` widgets and localization remain hidden historical reservations. The incomplete source is recoverable from git history. |
 
 ## Migration policy
 

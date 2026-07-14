@@ -33,8 +33,8 @@ Dimensions: 1 Decomposition, 2 Encapsulation, 3 Duplication, 4 Hook hygiene,
 **Read of the results.** Hook hygiene is uniformly strong (the duplicate-hook doctrine
 worked - zero duplicate `(Class, method)` pairs found anywhere). The systemic weaknesses
 are: (a) god-file decomposition (six mods at 2-4x the 2500-line hard limit), (b) three
-mods with open cross-peer wire gaps, (c) dead Big Rebalance code shipping in three mods,
-and (d) per the docs/gates audit: **0 of 9 binding rules are fully machine-enforced** -
+mods with open cross-peer wire gaps, and (c) per the docs/gates audit: **0 of 9 binding
+rules are fully machine-enforced** -
 pre-commit runs `-Quick` (skips ~10 of 18 checks), CI runs 7 checks with 5
 `continue-on-error`, and the duplicate-hook lint is absent from CI entirely.
 
@@ -52,9 +52,8 @@ pre-commit runs `-Quick` (skips ~10 of 18 checks), CI runs 7 checks with 5
 | Custom damage profiles ride vanilla RPCs | wt | #431 | M | Gameplay axis: parity gate. |
 | WOC raw `woc_` key fall-through if base-index guard short-circuits | weapons_of_chaos | #422 | S | Make the fallback fail-safe (skip send, not raw key). |
 
-**WS1.5 - peer-parity framework (#371, prerequisite for the gameplay axes):** promote
-enemy_tweaker's `et_br_fingerprint` handshake (currently DORMANT - no live broadcaster)
-into a copied `_lib_peer_parity.lua`: broadcast a mod fingerprint on peer join, expose
+**WS1.5 - peer-parity framework (#371, prerequisite for the gameplay axes):** use the
+copied `_lib_peer_parity.lua` contract: broadcast a mod fingerprint on peer join, expose
 `all_peers_have(mod_id)`, auto-disable + grey out gated features in the gut Mod Tweaker,
 notify the user which features are off and which peer lacks the mod. NEVER gate
 sender-side substitution on it (BUG_CLASSES 31).
@@ -114,9 +113,9 @@ touches a god file extracts its seam as part of the change, never "later".
 
 - `_MEM_PROBE_T0_*` bare `_G` globals in 6 mods -> namespace under `mod.`.
 - Closed-issue instrumentation still live (cosmetics `[cos:trace]` for #264/265/267/268 etc.).
-- Dead Big Rebalance code: crt 2,774-line file dead-on-disk, enemy 1,287-line dead module,
-  wt ~3,500 dormant lines. NEEDS USER DECISION (#433): BR integration is a live initiative;
-  archive-and-delete vs keep-dormant is not mine to decide unilaterally.
+- Retired Big Rebalance code was deleted from crt, enemy, and both wt trees under #433;
+  hidden setting identifiers remain reserved for save compatibility, and source remains
+  recoverable from git history.
 - ct menu tooltip em dashes (violates a NON-NEGOTIABLE) - fix in dev now.
 - Inline TODOs -> GitHub issues (cwv ~10, cim, wt, mp).
 - Stale §3.6 migration-table rows (woc), stale "chasm" refs (vdl).

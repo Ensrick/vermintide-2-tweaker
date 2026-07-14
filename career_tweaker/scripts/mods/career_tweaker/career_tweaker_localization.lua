@@ -1,10 +1,16 @@
-return {
+local localization = {
     mod_name = {
         en = "Tweaker: Careers",
     },
     mod_description = {
         en = "Swap talents and abilities between careers, and turn a large set of optional talent reworks on or off.",
     },
+
+    rework_master_group = { en = "Rework Family Presets" },
+    rework_master_ensrick = { en = "Enable all Ensrick's Reworks" },
+    rework_master_ensrick_description = { en = "Enables every active native Career Tweaker rework and disables every Tourney Balance port. Turn it off to clear that family; individual edits return the controls to a custom state." },
+    rework_master_tourney = { en = "Enable all Tourney Balance Reworks" },
+    rework_master_tourney_description = { en = "Enables every active Tourney Balance career port and disables every native Career Tweaker rework. Turn it off to clear that family; individual edits return the controls to a custom state." },
 
     -- ============================================================
     -- Armor & Overcharge (hook-based; v0.3.32-dev)
@@ -181,6 +187,8 @@ return {
     rework_we_maidenguard_crit_chance_5_to_10_description  = { en = "Doubles Handmaiden's flat critical hit chance talent from +5%% to +10%%." },
     rework_we_maidenguard_focused_spirit_stacks             = { en = "[untested] [Issue 472] Handmaiden: Focused Spirit stacking rework" },
     rework_we_maidenguard_focused_spirit_stacks_description = { en = "Focused Spirit starts empty and gains 5%% power every 10 seconds without an ordinary hit, up to five stacks. An ordinary hit removes one stack and restarts the ten-second timer; the separate chip-damage option controls which damage is ignored." },
+    rework_we_maidenguard_dance_of_blades                    = { en = "[verify-fix] Handmaiden: Dance of Blades kill-stack rework" },
+    rework_we_maidenguard_dance_of_blades_description        = { en = "Kills grant 2%% damage and 2%% increased damage taken for 2 seconds, up to 15 independently expiring stacks. Dodging while blocking retains the native 20%% dodge-distance benefit." },
     rework_we_shade_group                                  = { en = "[working] Shade" },
     rework_we_shade_hungry_wind_buffed                     = { en = "[working] Shade: Hungry Wind 20s, +20%% MS / +20%% Power" },
     rework_we_shade_hungry_wind_buffed_description         = { en = "Improves the after-stealth bonus from 10 seconds of +10%% movement speed and +15%% power to 20 seconds of +20%% movement speed and +20%% power." },
@@ -222,7 +230,7 @@ return {
     rework_wh_bountyhunter_rile_the_mob_movement_description              = { en = "Replaces the team speed on ranged crit with a permanent +10%% movement speed for yourself only." },
     rework_wh_bountyhunter_salvaged_ammo_no_gate_and_passive_reload                   = { en = "[working] Bounty Hunter: Salvaged Ammo no gate (+reload innate)" },
     rework_wh_bountyhunter_salvaged_ammo_no_gate_and_passive_reload_description       = { en = "Removes the requirement to be out of ammo for Salvaged Ammo. Melee kills reloading your ranged weapon now works with every level 25 talent." },
-    rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr                  = { en = "[working]     (A) BH passive: Job Well Done innate +5%%/stack DR" },
+    rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr                  = { en = "[working] Bounty Hunter: Job Well Done innate +5%%/stack DR" },
     rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_description      = { en = "The old Job Well Done effect becomes part of the base passive. The freed talent slot instead grants -5%% damage taken per special kill, up to 6 stacks, losing one stack when you take damage." },
     rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr_tooltip          = { en = "Makes the old Job Well Done passive effect part of the base kit, and turns its talent slot into a defensive one. Special kills grant -5%% damage taken per stack, up to 6 stacks, losing one stack when you take damage." },
     rework_wh_bountyhunter_just_reward_5s_cooldown                        = { en = "[working] Bounty Hunter: Just Reward 10s to 5s cooldown" },
@@ -742,3 +750,26 @@ return {
     trn_bw_necromancer_tooltip = { en = "The spell-cast buff becomes +5%% ranged weapon damage, the crit-cleave talent loses its +25%% crit power, and Cursed Blood spreads at 10%% instead of 25%%." },
 
 }
+
+-- Issue #445 attribution is derived from stable setting identity instead of a
+-- hand-maintained label list. Only leaf option titles are decorated: groups,
+-- descriptions/tooltips, and the two master controls keep concise labels.
+for key, row in pairs(localization) do
+    local family
+    if key:find("^rework_") then family = "Ensrick's Reworks" end
+    if key:find("^trn_") then family = "Tourney Balance" end
+    local is_leaf = family
+        and not key:find("_group$")
+        and not key:find("_description$")
+        and not key:find("_tooltip$")
+        and not key:find("^rework_master_")
+    if is_leaf and type(row) == "table" then
+        for language, text in pairs(row) do
+            if type(text) == "string" and not text:find("[" .. family .. "]", 1, true) then
+                row[language] = text .. " [" .. family .. "]"
+            end
+        end
+    end
+end
+
+return localization

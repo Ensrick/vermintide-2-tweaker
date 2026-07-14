@@ -1,6 +1,6 @@
 # Career Tweaker Code Review (2026-05-23, v0.3.7-dev)
 
-> **[SUPERSEDED 2026-07-07 — bt retired]** buff_tweaker (`bt`, Workshop 3730358590) was retired 2026-06 and archived to `_archive/buff_tweaker_v0.1.12-alpha/`; `get_mod("bt")` is always nil now. Every review point below that treats bt as a live sister mod / Big Rebalance master / future proc-registration provider is historical. career_tweaker's (`crt`) BR sub-toggles guard on `if not (bt and bt.is_br_active) then return false end`, so with bt gone they are permanently INERT (no crash, and NOT stripped). The bt-blocked stub work will never be unblocked. Preserved below for historical reference.
+> **[SUPERSEDED 2026-07-14 — #433 retired the implementation]** The Big Rebalance implementation described below was deleted. Hidden `cbr_*` identifiers remain reserved only for save compatibility; historical source is recoverable from git. Do not treat BR findings in this snapshot as current work.
 
 **Scope:** all Lua source in career_tweaker/ (excluding undleV2/, build artifacts, and archived files).
 

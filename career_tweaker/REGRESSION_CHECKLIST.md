@@ -9,6 +9,16 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-14.
 
 ---
+## Rework-family master controls (#445)
+
+| Field | Value |
+|-------|-------|
+| Scope | Active Career Tweaker native reworks and Tourney Balance ports only. Retired Big Rebalance keys remain hidden and inert. |
+| Expected | Selecting either family enables its complete catalog, clears the rival family, and performs one final apply per owner. Turning a master off clears only that family; any partial leaf selection shows both masters off. |
+| Labels | Every active leaf title ends in `[Ensrick's Reworks]` or `[Tourney Balance]`; navigation groups and tooltips do not. |
+| Detection | Offline `test_crt_rework_master_policy.lua`; runtime `/crt_regression_test` checks `issue445_rework_family_masters` and `crt_mod_tweaker_exclusive_groups_registered`; solo UI walk in CHANGELOG 0.3.69-dev. |
+
+---
 ## Bardin disabler dodge investigation (#440)
 
 | Field | Value |

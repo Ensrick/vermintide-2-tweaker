@@ -8,6 +8,22 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 $errors = [System.Collections.Generic.List[string]]::new()
 
+# Issue #433 disposal is complete. Retired implementations are recoverable from
+# git history and must not return to any shipped script tree.
+$removedImplementations = @(
+    'career_tweaker/scripts/mods/career_tweaker/career_tweaker_big_rebalance.lua',
+    'enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker_big_rebalance.lua',
+    'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance.lua',
+    'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance_defs.lua',
+    'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_big_rebalance.lua',
+    'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_big_rebalance_defs.lua'
+)
+foreach ($path in $removedImplementations) {
+    if (Test-Path (Join-Path $root $path)) {
+        $errors.Add("retired implementation returned to shipped tree: $path")
+    }
+}
+
 function Active-Lua([string]$relativePath) {
     $text = Get-Content (Join-Path $root $relativePath) -Raw
     # Strip Lua long comments (--[=[ ... ]=]) and ordinary line comments. The
@@ -49,6 +65,9 @@ foreach ($path in $entrypoints) {
     $active = Active-Lua $path
     if ($active -match '(?:dofile|require)\s*\(?[^\r\n]*big_rebalance') {
         $errors.Add("retired Big Rebalance module loaded by $path")
+    }
+    if ($path -match '(?:career|enemy|weapon)_tweaker' -and $active -match 'big_rebalance') {
+        $errors.Add("retired consumer retained executable Big Rebalance lifecycle plumbing: $path")
     }
 }
 
