@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.400-dev"
+local MOD_VERSION = "0.1.401-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 
@@ -47,6 +47,7 @@ local _cwv_wield_hook_registration_count = 0
 -- what broke the v0.1.330/331 attempt). Fields keep their original names so the
 -- refactor is a pure `_om.` prefix with no behavior change.
 local _om = {}
+mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_pair_state").install(mod, _om)
 
 -- Single source of truth for the husk override-unit package ref (issue #418).
 -- Used by BOTH the residency force-load producer (_force_load_husk_override_units)
@@ -1610,6 +1611,14 @@ mod:hook_safe("SimpleInventoryExtension", "wield", function(self, slot_name)
 			_om._old_musket_record_and_publish(self.owner_unit, slot_name, item_data,
 				item_data.mod_data and item_data.mod_data.cwv_musket_stance or "ranged", "wield")
 		end
+	end
+
+	-- #567: the exact generated Sword+Mace illusion is mod-to-mod state, not a
+	-- safe vanilla NetworkLookup value while transition parity is unknown.
+	-- Publish only on the existing wield event so swap-away/swap-back repairs a
+	-- husk immediately without adding polling or another hook on this surface.
+	if _om._exact_pair_publish_inventory then
+		_om._exact_pair_publish_inventory(self, "wield")
 	end
 end)
 
@@ -4916,6 +4925,9 @@ mod:hook_safe("SimpleHuskInventoryExtension", "_wield_slot", function(self, worl
 			_live(equipment and equipment.right_hand_wielded_unit_3p),
 			_live(equipment and equipment.left_hand_wielded_unit_3p))
 	end)
+	if _om._exact_pair_on_husk_wield then
+		_om._exact_pair_on_husk_wield(self, slot_name)
+	end
 end)
 _cwv_husk_wield_diag_installed = true
 
@@ -9953,7 +9965,38 @@ _om._cwv_preview_meshswap_apply = function(item_name, backend_id, skin, info)
 	if (type(effective_skin) ~= "string" or effective_skin == "") and type(info) == "table" then
 		effective_skin = info.skin_name
 	end
-	if type(effective_skin) == "string" and effective_skin ~= "" then return end
+	if type(effective_skin) == "string" and effective_skin ~= "" then
+		-- #567: MenuWorldPreviewer can retain the selected skin name while its
+		-- already-built spawn recipe still contains the base Mace+Sword hands.
+		-- Rebuild that recipe from the authoritative generated-skin row. This is
+		-- deliberately limited to the exact Sword+Mace family; every other
+		-- selected illusion continues to own vanilla's recipe unchanged.
+		if _om._exact_pair_skin_predicate
+				and _om._exact_pair_skin_predicate(effective_skin) then
+			local selected = WeaponSkins and WeaponSkins.skins
+				and WeaponSkins.skins[effective_skin]
+			if type(selected) == "table" then
+				local swapped = 0
+				for _, entry in ipairs(info.spawn_data) do
+					if not entry.is_ammo_unit then
+						local base = entry.right_hand and selected.right_hand_unit
+							or (entry.left_hand and selected.left_hand_unit)
+						local want = base and _om._resident_override_3p(base)
+						if want and entry.unit_name ~= want then
+							entry.unit_name = want
+							swapped = swapped + 1
+						end
+					end
+				end
+				if swapped > 0 then
+					printf("[cwv:567] preview exact-pair skin=%s swapped=%d R=%s L=%s",
+						effective_skin, swapped, tostring(selected.right_hand_unit),
+						tostring(selected.left_hand_unit))
+				end
+			end
+		end
+		return
+	end
 	-- #482: shared ladder instead of the bare bid pattern -- an Athanor-crafted
 	-- instance (UUID bid) resolves via the backend item's stamped cwv_key, so
 	-- the inventory preview swaps to the variant mesh for crafted copies too.
@@ -10312,6 +10355,14 @@ end
 -- assumption breaks for future game-state changes.
 mod:hook_safe("StateInGameRunning", "on_enter", function()
 	_auto_register_all()
+	-- #567: this boundary also covers a peer joining directly into an existing
+	-- Keep/mission after the install-time VMF query ran without a network backend.
+	-- Query every CWV owner, then publish our own current state. Both are bounded
+	-- one-shot messages on gameplay entry, never update-loop traffic.
+	if _om._exact_pair_query then _om._exact_pair_query("gameplay_enter") end
+	if _om._exact_pair_publish_local then
+		_om._exact_pair_publish_local("gameplay_enter")
+	end
 end)
 
 -- Animation remapping handled entirely via template, 3P-only:
@@ -11773,9 +11824,13 @@ do
 			return func(self, unit, unit_go_id)
 		end
 		_send_identity_slots(slots, "game_object_initialized", true)
-		return _wire_null_skins(slots, function()
+		local r1, r2, r3, r4 = _wire_null_skins(slots, function()
 			return func(self, unit, unit_go_id)
 		end, "game_object_initialized", false)
+		if _om._exact_pair_publish_inventory then
+			_om._exact_pair_publish_inventory(self, "game_object_initialized")
+		end
+		return r1, r2, r3, r4
 	end)
 	mod._cwv_skin_wire_surfaces.game_object_initialized = true
 	mod._cwv_identity_surfaces.game_object_initialized = true
@@ -11789,9 +11844,13 @@ do
 			return func(self, equipment_to_spawn, skip_wield)
 		end
 		-- Single slot-shaped table; wrap in a one-element array for the helper.
-		return _wire_null_skins({ equipment_to_spawn }, function()
+		local r1, r2, r3, r4 = _wire_null_skins({ equipment_to_spawn }, function()
 			return func(self, equipment_to_spawn, skip_wield)
 		end, "spawn_resynced_loadout", false)
+		if _om._exact_pair_publish_inventory then
+			_om._exact_pair_publish_inventory(self, "spawn_resynced_loadout")
+		end
+		return r1, r2, r3, r4
 	end)
 	mod._cwv_skin_wire_surfaces.spawn_resynced_loadout = true
 	mod._cwv_identity_surfaces.spawn_resynced_loadout = true
@@ -11802,9 +11861,13 @@ do
 			return func(peer_id, unit, equipment, additional_items)
 		end
 		-- force=true: the joining peer's parity is unknowable here by construction.
-		return _wire_null_skins(slots, function()
+		local r1, r2, r3, r4 = _wire_null_skins(slots, function()
 			return func(peer_id, unit, equipment, additional_items)
 		end, "hot_join_sync", true)
+		if _om._exact_pair_publish_local then
+			_om._exact_pair_publish_local("hot_join_sync")
+		end
+		return r1, r2, r3, r4
 	end)
 	mod._cwv_skin_wire_surfaces.hot_join_sync = true
 
@@ -14713,6 +14776,19 @@ _rt_register("issue567_skin_reverse_index_valid", function()
                     skin_key, tostring(row.item_key), owner_key)
             end
         end
+    end
+    if type(_om._exact_pair_skin_predicate) ~= "function" then
+        return "#567 exact-pair protocol predicate missing"
+    end
+    local exact = "cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1"
+    if not _om._exact_pair_skin_predicate(exact) then
+        return "#567 exact Sword+Mace skin is outside replay protocol"
+    end
+    local skin = WeaponSkins and WeaponSkins.skins and WeaponSkins.skins[exact]
+    if not skin
+        or not tostring(skin.right_hand_unit):find("wpn_emp_sword_02_t1", 1, true)
+        or not tostring(skin.left_hand_unit):find("wpn_emp_mace_03_t1", 1, true) then
+        return "#567 exact skin lost sword-right/mace-left authored hand order"
     end
 end)
 

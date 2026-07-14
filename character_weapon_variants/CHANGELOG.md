@@ -1,5 +1,12 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.401-dev - 2026-07-13 - #567 exact Sword+Mace transition state [diagnostics-armed]
+
+- Paired logs prove the reported skin was accepted and rendered exactly in the Keep; the later mission transition withheld the modded skin while parity was unknown, then the bounded vanilla replay expired before the replacement peer acknowledgement. This was transition fallback, not another vanilla configuration rejection.
+- Added a schema-gated VMF-only exact-pair state channel. Wield, initial game-object sync, resynced loadout, and hot join now publish the already-registered Sword+Mace skin string directly to CWV peers, which cache and reapply it to the vanilla base item on both immediate transition and later husk reconstruction. No modded identifier enters a vanilla `NetworkLookup`, mixed lobbies remain wire-safe, and there is no update loop.
+- Inventory preview now rebuilds precomputed right/left spawn data from the authoritative selected generated-skin row, preserving the exact sword-right/mace-left illusion instead of falling back to the variant defaults.
+- Added Lua 5.1 host tests plus runtime assertions for protocol isolation, exact base+skin reconstruction, all transition surfaces, and authored hand order. **Co-op verify:** equip the reported Sword+Mace skin, confirm both peers in the Keep, enter a mission as client, swap away/back, inspect inventory and illusion previews, hot-join once, then reverse owner/observer roles. Require bounded `[cwv:567] exact-pair tx/rx/apply` diagnostics and no reversion to vanilla Mace+Sword.
+
 ## 0.1.400-dev - 2026-07-13 - #296 recoverable Tuskgor Javelins [not deployed]
 
 - Fixed the recovered Tuskgor Javelin becoming an inert throwing-axe pickup.

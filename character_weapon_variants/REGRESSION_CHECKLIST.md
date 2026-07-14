@@ -116,14 +116,14 @@ Last updated: 2026-07-13.
 
 | Field | Value |
 |-------|-------|
-| Symptom | Save/loadout refresh logs `Incorrectly configured weapon skins for cwv_*` and can reject or revert a persisted custom illusion. |
-| Root cause | Vanilla lazily snapshots skin-to-owner mappings before CWV's backend-deferred weapon owner rows exist, then retains the stale private cache. |
+| Symptom | Save/loadout refresh can log `Incorrectly configured weapon skins for cwv_*`; separately, a correctly accepted Sword+Mace illusion can revert to vanilla Mace+Sword when a client enters a mission. |
+| Root cause | Configuration rejection: vanilla lazily snapshots skin-to-owner mappings before CWV's backend-deferred owner rows exist. Transition fallback: CWV correctly withholds a modded skin id while parity is unknown, but the replacement-peer acknowledgement can arrive after the bounded vanilla replay expires, leaving the husk on the skinless base pair. Paired #567 logs prove the reported Sword+Mace instance was accepted and exact in the Keep before the later fallback. |
 | Mod(s) | character_weapon_variants |
-| Fix version(s) | 0.1.388-dev |
+| Fix version(s) | 0.1.388-dev (reverse-index); 0.1.399-dev (transition state + preview) |
 | Category | INTEGRATION |
-| Repro | Equip the three issue #567 skins, reload the keep, and let bot/loadout refresh complete. |
-| Expected post-fix | No `Incorrectly configured weapon skins` warnings. `[cwv:567]` reports `association=valid` for all three; skins remain equipped and render locally and on a husk. |
-| Detection | Run `/cwv_regression_test`; require `issue567_skin_reverse_index_valid` PASS. |
+| Repro | Equip `cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1` as client. Confirm sword-right/mace-left on owner and observer in the Keep; enter a mission, swap away/back, inspect inventory and illusion previews, then hot-join once. Reverse owner/observer roles. Also reload each of the three original #567 persisted skins. |
+| Expected post-fix | No configuration warning. The exact sword-02 right hand and mace-03 left hand persist through lobby, mission entry, swap, preview, hot join, and husk reconstruction. Mixed/no-CWV peers receive only the vanilla base fallback and no modded vanilla lookup id. |
+| Detection | `/cwv_regression_test`: `issue567_skin_reverse_index_valid` PASS. Lua host suite covers VMF-only schema, exact base+skin replay, and every event surface. Co-op logs show bounded `[cwv:567] exact-pair tx/rx/apply` lines; no transition reversion and no per-frame traffic. |
 
 ---
 ## Multiplayer / Network Sync
