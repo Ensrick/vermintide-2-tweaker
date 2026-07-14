@@ -1,5 +1,24 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.272-dev (2026-07-14) -- #528 CKC Options checkbox renderer crash [verify-fix]
+
+- Fixed the verification crash while scrolling Options > Gameplay to Crosshair Kill Confirmation. The borrowed checkbox factory wrote raw `checkbox_checked` / `checkbox_unchecked` materials, but the active Options list renderer does not load them (`ui_passes.lua:134`).
+- The row keeps native checkbox flag/hotspot behavior, but its visual is normalized before first draw to the resident `matchmaking_checkbox` atlas sprite plus a material-free border. A malformed future factory shape suppresses the unsafe texture pass instead of crashing.
+- Offline and in-game regression coverage now executes the native local-offset overwrite and proves it cannot restore either missing raw material.
+
+### Solo verify
+
+Open Options > Gameplay and scroll until Crosshair Kill Confirmation is visible. Its checkbox and gear button must render without a `checkbox_checked`/`checkbox_unchecked` material crash; toggle it once and run `/gut_regression_test`.
+
+## 0.2.272-dev (2026-07-14) -- #572 search magnifier vertical alignment [verify-fix]
+
+- Lowered Mod Tweaker's in-field search magnifier by three design pixels. The offset is the rounded proportional equivalent of vanilla's `-4` placement at 128 px for the current 95 px tile.
+- Preserved the current size, horizontal placement, text clearance, hotspot, contextual prompt, and focus-hide behavior. Offline/runtime coverage now locks the native source offset and scaling formula.
+
+### Solo verify
+
+Open Mod Tweaker on several tabs and inspect the unfocused search field. The magnifier should be vertically centered inside the field, remain 95 px, and disappear when the field receives focus.
+
 ## 0.2.271-dev (2026-07-14) -- #352 THP localization repair; #572 search-field geometry [verify-fix]
 
 - Fixed Original Temporary Health Names assigning internal talent record IDs as localization keys, which rendered as underscore-delimited `<...>` placeholders. All 60 legacy English names now use explicit mod-owned backend localization keys, are re-registered after localizer reinitialization, and restore the exact shared vanilla names when the toggle is disabled.

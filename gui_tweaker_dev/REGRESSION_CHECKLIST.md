@@ -83,6 +83,7 @@ Last updated: 2026-07-14.
 
 ## CKC native Options checkbox (#528 follow-up)
 
+- [ ] Scroll until the CKC row enters/leaves the visible mask repeatedly; no `Material checkbox_checked not found in Gui` crash occurs.
 - [ ] With CKC installed and togglable, Options > Gameplay renders Crosshair Kill Confirmation as one native checkbox, never an On/Off dropdown.
 - [ ] Checking/unchecking the box live-enables/disables CKC and does not re-enable vanilla kill confirmation.
 - [ ] The cog remains visible beside the checkbox, clears the scrollbar, and focuses Mod Tweaker > Interface > HUD > Crosshair Kill Confirmation.

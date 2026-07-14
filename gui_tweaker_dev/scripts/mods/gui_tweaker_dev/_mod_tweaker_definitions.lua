@@ -2025,7 +2025,9 @@ local function create_search_box()
     -- separate inventory filter-control region; copying it to this full-width field put
     -- the visible glyph outside the bar. Render the padded tile 15% smaller than #572's
     -- prior 112px pass and translate its centred art wholly inside the field (about x=8..32).
-    local ICON_TEXTURE, ICON_SIZE, ICON_X, ICON_Y = "search_filters_icon", 95, -28, 0
+    -- Vanilla centers the 128px atlas tile at y=-4. Preserve that optical
+    -- alignment at our 95px scale: round(-4 * 95 / 128) = -3 design pixels.
+    local ICON_TEXTURE, ICON_SIZE, ICON_X, ICON_Y = "search_filters_icon", 95, -28, -3
     local TEXT_X = 47
     return UIWidget.init({
         scenegraph_id = "mt_search",
@@ -2086,7 +2088,8 @@ return {
     search_icon_contract = {
         texture = "search_filters_icon", native_size = 128, size = 95,
         previous_size = 112, scale_from_previous = 95 / 112,
-        scale = 0.7421875, icon_x = -28, icon_y = 0,
+        scale = 0.7421875, icon_x = -28, icon_y = -3,
+        native_icon_y = -4,
         visible_left = 8, visible_right = 32, text_x = 47,
         hotspot_w = ROW_W, hotspot_h = SEARCH_BOX_H,
         focus_content_key = "search_focused",

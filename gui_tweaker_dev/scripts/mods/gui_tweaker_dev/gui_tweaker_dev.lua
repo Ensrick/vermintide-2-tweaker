@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.271-dev"
+local MOD_VERSION = "0.2.272-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1914,7 +1914,9 @@ _rt_register("issue572_mod_tweaker_native_search_icon", function()
         or contract.source ~= "HeroWindowCraftingInventoryConsole"
         or contract.native_size ~= 128 or contract.size ~= 95
         or contract.previous_size ~= 112 or contract.scale_from_previous ~= (95 / 112)
-        or contract.scale ~= 0.7421875 or contract.icon_x ~= -28 or contract.icon_y ~= 0
+        or contract.scale ~= 0.7421875 or contract.icon_x ~= -28 or contract.icon_y ~= -3
+        or contract.native_icon_y ~= -4
+        or contract.icon_y ~= math.floor((contract.native_icon_y * contract.size / contract.native_size) + 0.5)
         or contract.visible_left ~= 8 or contract.visible_right ~= 32 then
         return "inventory magnifier material/source contract drifted"
     end
@@ -2947,6 +2949,28 @@ _rt_register("ckc_bridge_uses_native_checkbox", function()
     policy.restore_checkbox(content, true)
     if policy.checkbox_value(content) ~= true then
         return "CKC checkbox does not round-trip content.flag"
+    end
+    local render = bridge and bridge.render_policy
+    if type(render) ~= "table" or type(render.harden) ~= "function" then
+        return "CKC renderer-safe checkbox policy missing (#528 crash regression)"
+    end
+    local widget = {
+        content = { flag = false, checkbox = "checkbox_unchecked" },
+        style = { checkbox = { size = { 16, 16 } } },
+        element = { passes = {
+            { pass_type = "local_offset", offset_function = function(_, _, c)
+                c.checkbox = c.flag and "checkbox_checked" or "checkbox_unchecked"
+            end },
+            { pass_type = "texture", style_id = "checkbox", texture_id = "checkbox" },
+        } },
+    }
+    if not render.harden(widget) then
+        return "CKC borrowed checkbox could not be hardened"
+    end
+    widget.content.flag = true
+    widget.element.passes[1].offset_function(nil, nil, widget.content, nil)
+    if widget.content.checkbox ~= "matchmaking_checkbox" then
+        return "CKC native offset restored a missing raw checkbox material"
     end
 end)
 

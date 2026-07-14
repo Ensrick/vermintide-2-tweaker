@@ -87,13 +87,16 @@ return function(H, repo_root)
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()
-        H.truthy(source:find('ICON_TEXTURE, ICON_SIZE, ICON_X, ICON_Y = "search_filters_icon", 95, -28, 0', 1, true))
+        H.truthy(source:find('ICON_TEXTURE, ICON_SIZE, ICON_X, ICON_Y = "search_filters_icon", 95, -28, -3', 1, true))
+        H.truthy(source:find('native_icon_y = -4', 1, true))
         H.truthy(source:find('content_check_function = search_icon_visible', 1, true))
         H.truthy(source:find('return not content.search_focused', 1, true))
         H.truthy(source:find('local TEXT_X = 47', 1, true))
         H.truthy(source:find('offset = { ICON_X, ICON_Y, 3 }', 1, true))
         H.truthy(source:find('offset = { TEXT_X, 0, 4 }, size = { W - TEXT_X - PAD, H }', 1, true))
         H.truthy(source:find('hotspot  = { size = { W, H }, offset = { 0, 0, 0 } }', 1, true))
+        H.equal(math.floor((-4 * 95 / 128) + 0.5), -3,
+            "scaled icon y must retain the native inventory optical alignment")
 
         local view_path = repo_root
             .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua"

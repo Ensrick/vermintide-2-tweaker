@@ -87,6 +87,7 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 local _CKC_NAME = "Crosshair Kill Confirmation"
 local _VANILLA  = "crosshair_kill_confirm"        -- native user_setting key
 local WidgetPolicy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_ckc_widget_policy")
+local RenderPolicy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_ckc_render_policy")
 -- (#528) _S_BRIDGE (the gut_ckc_options_bridge checkbox) retired: bridge is implicit.
 local _S_SAVED  = "gut_ckc_saved_vanilla_group"    -- remembered pre-takeover vanilla group
 local GEAR      = 26                               -- gear icon square (px, 1080p ref)
@@ -332,6 +333,19 @@ local function _register_hooks()
         local widget = func(self, element, scenegraph_id, base_offset)
         if not _is_active() then return widget end
         if not (type(element) == "table" and element.setting_name == _VANILLA) then return widget end
+        -- #528 verification crash: OptionsView's factory writes raw checkbox
+        -- materials which this gameplay-list renderer does not load. Preserve
+        -- native flag/hotspot behavior and harden only this borrowed row.
+        local hardened = RenderPolicy.harden(widget)
+        if not hardened then
+            _printf("[gut_dev:528] CKC checkbox hardening failed; suppressing unsafe texture pass")
+            local passes = widget and widget.element and widget.element.passes or {}
+            for _, pass in ipairs(passes) do
+                if pass.pass_type == "texture" and pass.texture_id == "checkbox" then
+                    pass.content_check_function = function() return false end
+                end
+            end
+        end
         local ok, augmented = pcall(_append_gear, widget)
         if ok and type(augmented) == "table" then return augmented end
         return widget
@@ -397,6 +411,7 @@ M.enforce     = _enforce
 M.restore     = _restore
 M._CKC_NAME   = _CKC_NAME
 M.widget_policy = WidgetPolicy
+M.render_policy = RenderPolicy
 mod._GUT_CKC_BRIDGE_MARKER = "gut-ckc-bridge-313"
 mod._gut_ckc_bridge = M
 
