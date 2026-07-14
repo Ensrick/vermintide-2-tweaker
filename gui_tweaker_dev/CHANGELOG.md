@@ -1,5 +1,16 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.256-dev (2026-07-14) -- #352 original temporary-health talent names [verify-fix]
+
+- Added a default-off **Original Temporary Health Names** toggle that restores the distinct, career-specific names for all 60 vanilla level-five temporary-health talents.
+- Preserved the canonical talent records and mechanics. The option changes only each allow-listed talent's `display_name` to its own `name` localization key; disabling it restores the exact display key captured at load.
+- Avoided changing the four shared THP localization keys, so one career's original name cannot leak onto another career or a modded talent.
+- Added `/gut_regression_test` coverage `issue352_original_thp_names_exact_identity` for the complete 60-record allow-list, enabled identity, and disabled restoration paths.
+
+### Verify
+
+In the keep, open Options > Mod Options > Tweaker: GUI > Talents and enable **Original Temporary Health Names**. Inspect the level-five talent row on at least one career for each hero; it should show that career's distinct original names while the selected talents and descriptions remain unchanged. Disable the option and reopen Talents; the current shared names should return. Run `/gut_regression_test` and confirm `issue352_original_thp_names_exact_identity` passes.
+
 ## 0.2.255-dev (2026-07-13) -- #353 LA cosmetics in native loadouts [verify-fix]
 
 - Extended GUT's post-Loremaster's Armoury `BackendUtils.set_loadout_item` capture from gear to all cosmetic loadout slots, covering LA-cloned dispatch that can bypass the concrete PlayFab mirror hooks.

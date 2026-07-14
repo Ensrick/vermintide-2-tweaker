@@ -2,7 +2,15 @@
 
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md) for Tweaker: GUI dev.
 
-Last updated: 2026-07-13.
+Last updated: 2026-07-14.
+
+## Original temporary-health talent names (#352)
+
+- [ ] The option is off by default; all careers retain the game's current shared THP names until enabled.
+- [ ] With the option enabled, each hero's four careers show their distinct original names on the level-five talent row.
+- [ ] Existing talent selections, descriptions, icons, buffs, and mechanics do not change when toggling either direction.
+- [ ] Disabling the option restores the exact shared display keys captured at load; no career-specific name leaks onto another career or a modded talent.
+- [ ] `/gut_regression_test` passes `issue352_original_thp_names_exact_identity` and reports all 60 canonical records.
 
 ## WT cross-character loadout lifecycle trace (#354)
 

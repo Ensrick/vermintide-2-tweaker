@@ -391,6 +391,17 @@ return {
         en = "While in the modded realm, use the loadouts saved in your non-modded (official) game, read-only: the I to VI bar shows your official gameplay loadouts, and gear, talent, loadout-switch and bot-designation changes all snap back so your official saves are never touched. Cosmetics (weapon illusion, hat, portrait frame, victory pose) stay changeable and are kept modded-side only. Turn off (default) to keep fully separate modded loadouts that never touch your official ones.",
     },
 
+    -- Original career-specific temporary-health talent names (#352).
+    gut_talents_group = {
+        en = "Talents",
+    },
+    gut_original_thp_names = {
+        en = "[verify-fix] [Issue 352] Original Temporary Health Names",
+    },
+    gut_original_thp_names_tooltip = {
+        en = "Restores each career's original names for the three level-five temporary-health talents. Mechanics and talent selections do not change. Off by default.",
+    },
+
     -- ============================================================
     -- Overlays (parry indicator, respawn timer, damage numbers) - now inside the
     -- HUD category (gut_hide_hud_ui_group); the "On-Screen Overlays" category and

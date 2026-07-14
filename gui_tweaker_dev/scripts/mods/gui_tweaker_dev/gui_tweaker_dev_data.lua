@@ -494,6 +494,21 @@ local options_data = {
                 },
             },
             -- ================================================================
+            -- Talents -- original career-specific THP names (#352)
+            -- ================================================================
+            {
+                setting_id  = "gut_talents_group",
+                type        = "group",
+                sub_widgets = {
+                    {
+                        setting_id    = "gut_original_thp_names",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gut_original_thp_names_tooltip",
+                    },
+                },
+            },
+            -- ================================================================
             -- Main Menu & Startup (MIGRATED from general_tweaker 2026-06-29, #190;
             -- Cutscenes & Monologues nested here in the 2026-07-02 reorg)
             -- ================================================================

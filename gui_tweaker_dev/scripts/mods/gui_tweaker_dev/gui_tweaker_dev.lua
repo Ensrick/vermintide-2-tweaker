@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.255-dev"
+local MOD_VERSION = "0.2.256-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -925,7 +925,11 @@ mod.on_setting_changed = function(setting_id)
         mod._gut_chain_probe.on_setting_changed = true
         return
     end
-    if setting_id == "gut_mission_inventory_enabled" then
+    if setting_id == "gut_original_thp_names" then
+        if mod._gut_original_thp_names then
+            mod._gut_original_thp_names.apply(mod:get(setting_id) and true or false)
+        end
+    elseif setting_id == "gut_mission_inventory_enabled" then
         -- In-mission inventory's InventorySettings loadout-access data patch (body in
         -- _gut_mission_inventory.lua). Hero-select no longer couples in: since the
         -- #173 rewire it opens CharacterSelectionView, which doesn't read this gate.
@@ -3263,6 +3267,20 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_ckc_bridge")
 -- it records the case-2 finding + a defer guard and printf-logs whether the
 -- standalone mod is present. Resolution is documentation + recommend 3232229691.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_all_languages")
+
+-- Original per-career names for the three level-five temporary-health talents
+-- (#352). This mutates only each canonical talent record's presentation key.
+do
+    local ok, api = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_original_thp_names")
+    if ok and type(api) == "table" then
+        mod._gut_original_thp_names = api
+        _rt_register("issue352_original_thp_names_exact_identity", function()
+            return api.validate(mod:get("gut_original_thp_names") and true or false)
+        end)
+    else
+        _dbg_alert("[gut:352] original THP-name module failed: %s", tostring(api))
+    end
+end
 
 -- (#314) Clean compatibility phase for the external sanctioned-but-unlicensed
 -- Simple UI mod. Confines its public live window records to the current screen;
