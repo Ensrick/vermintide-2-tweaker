@@ -1,5 +1,17 @@
 # Crafting in Modded Changelog
 
+## 0.8.72-dev (2026-07-13): #524 one bounded CWV acquisition selector [verify-fix] [not deployed]
+
+- Completed the #592 ownership split: CWV registers definition-only `ItemMasterList` rows, while CIM alone creates and persists owned instances. The standard Craft Item grid now runs through one pure acquisition-selector policy instead of an ad hoc key scan.
+- Canonical identity prefers CIM's explicit acquisition key and CWV's self-identifying `cwv_key`, with the historical `cwv_<key>_NNN` backend shape as compatibility fallback. This prevents inherited base `.key`/`.name` fields from producing another 300-power selector beside the same CWV weapon.
+- The policy compacts stale/repeated CIM selectors, gives a real default-rarity blacksmith row precedence, ignores modded-rarity crafted instances for selector ownership, and appends missing selectors in deterministic key order. Repeated craft and repeated-injection coverage proves the bound remains one selector per CWV key.
+- Source boundary: vanilla `can_craft_with` admits only melee/ranged/accessory rows whose backend rarity is `default` (`backend_interface_common.lua:498-508`); CIM crafts remain `modded` and persist only through `_forged_weapons`. No PlayFab write, migration, deletion, or CWV acquisition is added.
+
+### Test method
+1. Open the standard Craft Item grid with CIM and CWV enabled and note one blacksmith/base selector for Imperial Longsword.
+2. Craft that weapon twice, leave and reopen the grid, and confirm there is still exactly one selector for Imperial Longsword, not one additional 300-power row per craft.
+3. Confirm both crafted Modded-rarity instances remain separately visible in the ordinary inventory and run `/cim_regression_test`; require `issue524_cwv_selector_bounded` PASS.
+
 ## 0.8.71-dev (2026-07-13): #521 hover tooltip follows weapon panel [verify-fix]
 
 - The first #521 fix removed vanilla's extra equipped-comparison card, but CIM still parented its one shared tooltip to the center viewport for both weapon slots. The ranged card therefore appeared over the primary panel position.

@@ -22,6 +22,8 @@ and reverts everything. This matches how the Athanor handles property/trait edit
 ]]
 
 local mod = get_mod("cim_dev")
+local template_selector = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_template_selector")
+mod._cim_template_selector = template_selector
 
 -- ============================================================
 -- Lifecycle: track when the standard forge UI is open
@@ -1280,6 +1282,8 @@ local function _build_template_cache()
             local bid = "cim_template_" .. key
             _template_cache[bid] = {
                 backend_id = bid,
+                cim_acquisition_template = true,
+                cim_acquisition_key = key,
                 key = key,
                 ItemId = key,
                 ItemInstanceId = bid,
@@ -1331,20 +1335,7 @@ mod._cim_inject_templates = function(items, filter)
     end
     if not next(_template_cache) then _build_template_cache() end
 
-    local seen_keys = {}
-    for _, it in ipairs(items) do
-        local k = it and (it.key or (it.data and it.data.key))
-        if k then seen_keys[k] = true end
-    end
-
-    for _, tpl in pairs(_template_cache) do
-        local k = tpl.key
-        if k and not seen_keys[k] then
-            items[#items + 1] = tpl
-            seen_keys[k] = true
-        end
-    end
-    return items
+    return template_selector.inject(items, _template_cache)
 end
 
 -- The Craft Item recipe's synth (`_make_craft_synth`) looks up the input via

@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.71-dev"
+local MOD_VERSION = "0.8.72-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -6269,6 +6269,42 @@ _rt_register("cwv_registration_is_not_acquisition", function()
     end
     if mod._cim_is_modded_backend_id("cwv_rt_unpersisted_definition_001") then
         return "#592 regression: unpersisted CWV prefix still treated as acquired"
+    end
+end)
+
+_rt_register("issue524_cwv_selector_bounded", function()
+    local selector = mod._cim_template_selector
+    if type(selector) ~= "table" or type(selector.inject) ~= "function" then
+        return "CIM/CWV template selector policy is not loaded"
+    end
+    local legacy = {
+        backend_id = "cwv_rt_longsword_001",
+        rarity = "default",
+        key = "es_bastard_sword",
+        data = { key = "es_bastard_sword" },
+    }
+    local synthetic = {
+        backend_id = "cim_template_cwv_rt_longsword",
+        rarity = "default",
+        key = "cwv_rt_longsword",
+        cim_acquisition_template = true,
+        cim_acquisition_key = "cwv_rt_longsword",
+    }
+    local rows = { legacy, synthetic, synthetic }
+    selector.inject(rows, { synthetic })
+    if #rows ~= 1 or rows[1] ~= legacy then
+        return "legacy/default CWV row did not suppress duplicate synthetic selectors"
+    end
+    local crafted = {
+        backend_id = "cwv_rt_longsword_100",
+        rarity = "modded",
+        data = { cwv_key = "cwv_rt_longsword" },
+    }
+    rows = { crafted }
+    selector.inject(rows, { synthetic })
+    selector.inject(rows, { synthetic })
+    if #rows ~= 2 or rows[1] ~= crafted or rows[2] ~= synthetic then
+        return "crafted CWV instance changed the one-selector acquisition bound"
     end
 end)
 

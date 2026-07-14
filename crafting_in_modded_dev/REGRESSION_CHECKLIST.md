@@ -6,6 +6,20 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+### cwv-acquisition-selector-bound - issue #524
+
+| Field | Value |
+|---|---|
+| Symptom | Each crafted CWV weapon appears to add another 300-power base/blacksmith choice in the standard Craft Item grid. |
+| Root cause | CWV clones inherit the base weapon `.key`/`.name`; acquisition selectors were deduplicated with an ad hoc key scan rather than exact CIM/CWV identity. |
+| Fix version(s) | cim_dev 0.8.72-dev |
+| Category | SOLO |
+| Repro | Open the standard Craft Item grid, craft Imperial Longsword twice, then leave and reopen the grid. |
+| Expected post-fix | Exactly one Imperial Longsword selector remains; the two separate Modded-rarity crafts appear only in ordinary inventory. |
+| Detection | Offline `test_cim_cwv_template_selector.lua` passes and `/cim_regression_test` passes `issue524_cwv_selector_bounded`. |
+
+---
+
 ### athanor-tooltip-slot-anchor - issue #521
 
 | Field | Value |
