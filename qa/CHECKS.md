@@ -98,6 +98,7 @@ the committed baseline always matches CI regardless of the local checkout.
 |---|---|---|---|---|
 | 1 | Forward-reference crashes (5+ instances) | `feedback_lua_forward_reference.md` | `luacheck` `--no-self` flag catches use-before-decl | AUTO (CI) |
 | 2 | Unescaped `%` in localization strings (13 found in one audit); digit-percent literals such as `10% chance` must not be mistaken for `% c` format directives (#346) | `feedback_keep_docs_current.md` + AUDIT_section_c.md | `check_localization.ps1` parses localization values, strips `%%`, rejects digit-percent literals and invalid remaining directives. Self-test: `-SelfTest` (literal, escaped, and formatted fixtures). | AUTO (script) |
+| 2a | Cross-mod translations begin before English/1.0 freeze, omit a Fatshark PC language, or drift Lua format tokens (#444) | `docs/TRANSLATION_READINESS_444.md` | `check_translation_readiness.ps1` v1.0.0 inventories `fr/pl/es/tr/de/br-pt/ru`, compares ordered format signatures, and has fixture coverage. Default is diagnostic while blocked; `-Strict` is the future release gate. | MANUAL (diagnostic) |
 | 3 | Bare `_foo = function` globals (namespace pollution, CWV has 9) | AUDIT_section_d.md | `luacheck` `unused`/`global` warning | AUTO (CI) |
 | 4 | Lua 5.1 incompatibility (`table.unpack`, `goto` in SDK mods) | CLAUDE.md "Lua Environment" | `luacheck` Lua 5.1 dialect mode | AUTO (CI) |
 | 5 | Unused locals / dead code | AUDIT_section_d.md | `luacheck` `unused` warning | AUTO (CI) |

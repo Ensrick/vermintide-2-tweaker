@@ -4,6 +4,11 @@ Canonical convention for every `*_localization.lua` file across the tweaker mono
 
 **Snapshot:** 2026-05-21. See [`AUDIT_section_c.md`](./AUDIT_section_c.md) for the full localization sweep (13 P0 unescaped `%`, 8 P1 missing keys, 1247 P2 orphans) and [`AUDIT_2026_05_21.md`](./AUDIT_2026_05_21.md) for the master audit and the documentation gaps this doc closes.
 
+Cross-language release policy and the versioned readiness audit live in
+[`TRANSLATION_READINESS_444.md`](./TRANSLATION_READINESS_444.md). Until English
+copy and the intended 1.0 release set are frozen, translation coverage is
+diagnostic rather than a shipping gate.
+
 ---
 
 ## 1. Core rule — `mod:localize` runs `safe_string_format`
