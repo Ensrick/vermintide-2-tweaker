@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - Cosmetics independent dual-weapon offhands
+
+Tweaker: Cosmetics v0.9.97-dev / issue #583 makes the normal illusion row authoritative for a dual weapon's main hand and adds one independent offhand row. The same per-instance/per-hand persistence and host-authoritative direct-mesh path now covers native Warrior Priest Dual Skullsplitters and all seven current CWV dual families across preview, local equipment, transition replay, and remote husks. Invalid or stale hand meshes fail closed to the paired main illusion. Two-player verification remains required.
+
 ## 2026-07-13 - Saltzpyre Hammer+Shield ownership
 
 Tweaker: Weapons v0.12.232-dev / issue #594 removes Bardin's native Hammer and Shield from Witch Hunter Captain, Bounty Hunter, and Zealot while retaining Kruber's Mace and Shield as the human-faction option. Menu and localization rows are removed, prior `can_wield` mutations are scrubbed, stale backend cache ownership fails closed, and the rule is invariant across CWV absent/active/disabled states. No deployment is part of this commit.
@@ -7,7 +11,6 @@ Tweaker: Weapons v0.12.232-dev / issue #594 removes Bardin's native Hammer and S
 ## 2026-07-13 - CWV Imperial Longsword identity continuity
 
 Character Weapon Variants v0.1.398-dev / issue #396 separates the owned **Imperial Longsword** from its **Helmgart Watchsword** illusion and adds a same-mod item-key side channel for the owner identity that vanilla's base-item wire shape discards. Existing vanilla skin and wield RPCs remain authoritative for the exact cosmetic and render timing; receivers validate the marker against the base weapon and clear it when the slot becomes native. Runtime coverage spans initial sync, live resync, post-parity hot join/transition recovery, remote husk resolution, and inventory preview. Two-player verification remains required; no deployment is part of this commit.
-
 ## 2026-07-13 - `gui_tweaker_dev` Mod Tweaker magnifier focus correction
 
 Tweaker: GUI v0.2.243-dev / issue #572 scales the native padded inventory magnifier tile to 7/8 (112x112), positions its approximately 28px visible glyph wholly inside Mod Tweaker's 30px search field, and hides only that passive texture while the unchanged full-field hotspot is focused. Text origin and all search transactions remain unchanged. Offline and runtime contracts cover geometry, focus visibility, view wiring, and hotspot preservation. In-game visual confirmation remains under `verify-fix`; no Workshop deployment is part of this commit.

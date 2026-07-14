@@ -95,6 +95,12 @@ exact hand column; `Follow Main Illusion` stores no override. Native definitions
 are available at Cosmetics load, while CWV's seven generated dual families are
 built lazily after CWV registers its string-keyed skins.
 
+The native reference is `scripts/settings/dlcs/bless/weapon_skins_bless.lua`:
+the `wh_dual_hammer_skin_*` records carry both hand fields and
+`wh_dual_hammer_skins` supplies the rarity buckets. The owning item type is
+`wh_dual_hammer` in `item_master_list_bless.lua`. Do not infer hand meshes from
+display names or inventory icons; source the authored hand field.
+
 Committed direct meshes persist as `offhands[backend_id][left_hand_unit].unit_path`.
 Restore and remote husk application accept the path only when it remains in the
 current item type's compatible left-hand pool. A salvaged item, removed variant,
