@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.3.71-dev"
+local MOD_VERSION = "0.3.73-dev"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
@@ -261,6 +261,14 @@ if not ok_bdp then mod:error("Failed to load Bardin disabler probe: %s", tostrin
 mutex.declare("rework_family_master_choice", {
     rework_master_module.MASTER_ENSRICK,
     rework_master_module.MASTER_TOURNEY,
+})
+
+-- #447 supplies the second Zealot green-to-THP design anticipated by #446.
+-- They are alternative conversion models, so selecting one disables the other
+-- in both the stock VMF options and Mod Tweaker's checkbox-radio bridge.
+mutex.declare("zealot_thp_conversions", {
+    "rework_wh_zealot_ability_green_to_thp",
+    "rework_wh_zealot_flagellation",
 })
 
 -- ============================================================
@@ -726,6 +734,12 @@ end
 -- ============================================================
 -- Regression smoke suite (/crt_regression_test)
 -- ============================================================
+local ok_flagellation, flagellation_err = pcall(mod.dofile, mod,
+    "scripts/mods/career_tweaker/_crt_flagellation")
+if not ok_flagellation then
+    mod:error("Failed to load Flagellation rework: %s", tostring(flagellation_err))
+end
+
 -- Split to _crt_regression.lua (v0.3.57-dev). LAST in the manifest: its check
 -- bodies capture mod._crt.balance + the talent-swap restore/accessors + the
 -- _dbg helpers + MOD_VERSION at load, all populated above. Keep this before the

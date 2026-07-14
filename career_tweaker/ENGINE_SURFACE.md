@@ -70,6 +70,7 @@ issue-425 peer-parity beacon (`_lib_peer_parity.lua`) adds NO hooks - it POLLS
 |---|---|---|---|
 | `DamageUtils.apply_buffs_to_damage` [hook,tbl] `career_tweaker_armor_overcharge.lua` | The single chokepoint for gromril consumption and Unchained overcharge-on-damage conversion [src: `scripts/helpers/damage_utils.lua:2134`; gromril `:2335-2345`, overcharge `:2196-2224`] | Temporarily shim the victim's `be.has_buff_type` (hide the gromril marker) or `be.apply_buffs_to_value` (no-op `damage_taken_to_overcharge`) for exempt hits, then restore | Table-form (`DamageUtils` plain table). Host-authoritative. `pcall` + unconditional restore of both shims even if `func` raises; capture all 3 returns (`docs/VMF_RECIPES.md` §2). Fast early-out when all five overcharge/armor toggles are off |
 | `PlayerUnitHealthExtension.add_damage` [hook,tbl] `career_tweaker_armor_overcharge.lua` | Applies damage to a player and fires `on_damage_taken` with only attacker, amount, and damage type [src: `scripts/unit_extensions/default_player_unit/player_unit_health_extension.lua:702-703`]. The full method still has `damage_source_name`, required to distinguish Ratling projectiles (`projectile_system.lua:947,994`; Ratling passes its breed name in `bt_ratling_gunner_shoot_action.lua:603`). | Preserve Necromancer Cursed Armor on #334 chip ticks and publish a synchronous full-context record so Focused Spirit can ignore DoT/gas/warpfire/Ratling damage. Under #472's opt-in rework, its proc removes one stack and refreshes the vanilla ten-second cooldown. | One consolidated full 18-parameter hook; no second registration. Both transient context fields are save/restored after `pcall`. Focused Spirit reuses vanilla buff names, so no NetworkLookup/RPC schema expansion. |
+| `PlayerUnitHealthExtension.add_heal` [hook] `_crt_flagellation.lua` | Applies permanent or temporary healing, caps it to maximum health, and replicates the realized heal [src: `player_unit_health_extension.lua:842-899`] | #447 measures THP realized during an exact Zealot level-5 proc window and converts half as much green health for Flagellation | Server-only conversion through vanilla `convert_to_temp` (`:1187-1207`). Four native proc wrappers supply the synchronous attribution boundary; generic `heal_from_proc` is insufficient. No custom buff/RPC/lookup |
 | `BuffSystem.hot_join_sync` [hook] `career_tweaker_balance.lua:4102` | Replays EVERY `server_controlled_buffs` entry to a joining peer via `rpc_add_buff`, encoding `NetworkLookup.buff_templates[name]` [src: `scripts/entity_system/systems/buff/buff_system.lua:66`, encode at `:87`; `rpc_add_buff` decode `:417`] | Sender-side, UNCONDITIONAL: hide `crt_*` (and mod-registered-name) entries from the ONE replay pass so a non-crt joiner never decodes a modded index and fatals (`:4102`, issue 425) | Wire safety is never toggle-gated (memory `reference_vt2_wire_safety_never_toggle_gated`; `docs/engine/03` §31). The replay fires during the join handshake BEFORE any parity ack can exist, so no roster gate can win that race - filter is the only fix. `pcall` the wrapped sync, restore stashed entries unconditionally, rethrow to preserve vanilla failure semantics |
 
 ### Disabler/dodge diagnostics (observation only)
@@ -119,7 +120,14 @@ next note). #473 Dance of Blades replaces the talent's buff-name list with one
 blocking-dodge driver and one kill driver; the latter grants a paired
 `damage_dealt`/`damage_taken` stack through the existing wire-safe add wrapper.
 Its two-second stacks set `refresh_durations=false`, so every kill retains its own
-expiry rather than refreshing the full stack group.
+expiry rather than refreshing the full stack group. #367 is another reversible
+table mutation: the Ranger ale's stock action authors `total_time=1.9` [src:
+`scripts/settings/equipment/weapon_templates/bardin_survival_ale.lua:5-23`], and
+crt sets only `anim_time_scale=1.9`. `WeaponUnitExtension` divides both action
+completion and 1P/3P animation playback by that scale [src:
+`scripts/unit_extensions/weapons/weapon_unit_extension.lua:486-489,577-590`],
+so neither presentation nor the `ActionOneTimeConsumable.finish` buff grant can
+lead the other. The balance restore path returns the prior field or exact nil.
 
 ### Networked buffs + peer parity (owner: `docs/engine/03`; project `project_vt2_cross_peer_wire_safety`)
 

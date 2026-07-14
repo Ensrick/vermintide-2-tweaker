@@ -1,5 +1,23 @@
 # Career Tweaker Changelog
 
+## 0.3.73-dev - 2026-07-14 - #367 one-second Ranger ale drink [verify-fix; not deployed]
+
+- Added a default-off **Ranger Veteran: One-second ale drinking** rework. Vanilla's ale action has `total_time = 1.9`; the rework sets its native `anim_time_scale` to 1.9, so `WeaponUnitExtension` resolves both action completion and first-person/third-person playback to one second through the same source-verified scale.
+- Preserved the stock `one_time_consumable` finish path, standard ale buff, ammo consumption, animation events, and network RPC. The option changes no buff duration or stack behavior and composes independently with #366.
+- The balance lifecycle snapshots whether the template originally had an animation scale and restores either its exact value or exact absence on toggle-off/disable. Unexpected template shapes fail closed.
+- Added offline lifecycle/structure coverage and runtime check `issue367_ale_one_second_drink`.
+
+**Solo verify:** enable the option under Talent Reworks > Ranger Veteran, drink an ale, and confirm the animation and control lock both finish together in about one second and the buff is granted once. Disable it and confirm the stock 1.9-second drink returns. Run `/crt_regression_test` and require `PASS: issue367_ale_one_second_drink`.
+
+## 0.3.72-dev - 2026-07-14 - #447 Zealot Flagellation [verify-fix; not deployed]
+
+- Added an opt-in replacement for Zealot's Devotion talent: **Flagellation**. While that talent and any level-5 THP talent are selected, each realized THP gain converts half as much permanent health into THP; four gained THP converts two green health.
+- Scoped attribution to the four native proc functions referenced by Zealot's three live level-5 THP templates. The health hook acts only during those synchronous proc windows, so Natural Bond, supplies, career abilities, boons, and unrelated `heal_from_proc` effects do not trigger conversion.
+- Vanilla applies and caps THP first. Conversion uses the observed temporary-health delta, caps to remaining permanent health, and delegates to the existing server-authoritative `convert_to_temp` path.
+- Resolved Devotion from the live Zealot talent table by localized title rather than hard-coding an identifier absent from the older decompile. If resolution fails after a game update, the feature remains inert and emits a bounded `[crt:447]` candidate census instead of targeting another talent.
+- Registered the hook-owned toggle in the native rework catalog so #445's Ensrick family control includes it. Declared the anticipated `zealot_thp_conversions` mutex cluster: Flagellation and the Holy Fervour green-to-THP rework are alternative conversion models and cannot be enabled together.
+- Reused Career Tweaker's consolidated Localize hook for the Flagellation title/description. Added no buff, RPC, or `NetworkLookup` entry. Added pure policy/structure tests, runtime check `issue447_flagellation_contract`, `FLAGELLATION_REWORK.md`, and engine-surface documentation.
+
 ## 0.3.71-dev - 2026-07-14 - #473 Dance of Blades rework [verify-fix-coop; not deployed]
 
 - Added an opt-in Handmaiden rework for the vanilla `kerillian_maidenguard_versatile_dodge` talent: each kill grants 2% damage dealt and 2% increased damage taken for two seconds, up to 15 stacks (30%/30%).

@@ -755,6 +755,23 @@ _rt_register("issue366_ale_independent_stack_decay", function()
     end
 end)
 
+_rt_register("issue367_ale_one_second_drink", function()
+    local defs = balance and balance.BALANCE_MODS
+    local rework = defs and defs.rework_dr_ranger_ale_one_second_drink
+    if type(rework) ~= "table" or type(rework.custom_apply) ~= "function"
+       or type(rework.custom_restore) ~= "function" then
+        return "Ranger ale action-time rework missing"
+    end
+    if mod:get("rework_dr_ranger_ale_one_second_drink") then
+        local template = WeaponTemplates and WeaponTemplates.bardin_survival_ale
+        local action = template and template.actions and template.actions.action_one
+            and template.actions.action_one.default
+        if not action or action.total_time ~= 1.9 or action.anim_time_scale ~= 1.9 then
+            return "enabled Ranger ale action did not resolve to one second"
+        end
+    end
+end)
+
 _rt_register("issue440_bardin_disabler_probe", function()
     local probe = mod._crt and mod._crt.bardin_disabler_probe
     if type(probe) ~= "table" or type(probe.regression_check) ~= "function" then
@@ -796,5 +813,32 @@ _rt_register("issue473_dance_of_blades_contract", function()
         }) then
             return "enabled Dance of Blades templates do not match policy"
         end
+    end
+end)
+
+_rt_register("issue447_flagellation_contract", function()
+    local feature = mod._crt and mod._crt.flagellation
+    local policy = feature and feature.policy
+    if type(policy) ~= "table" or type(policy.conversion_amount) ~= "function"
+       or type(policy.resolve_devotion) ~= "function" then
+        return "Flagellation policy missing"
+    end
+    local amount, gained = policy.conversion_amount(10, 14, 100)
+    if amount ~= 2 or gained ~= 4 then return "Flagellation ratio self-test failed" end
+    if feature.hook_installed ~= true or type(feature.proc_names) ~= "table"
+       or #feature.proc_names < 3 then
+        return "Flagellation level-5 proc/add_heal wiring incomplete"
+    end
+    local defs = balance and balance.BALANCE_MODS
+    if type(defs and defs.rework_wh_zealot_flagellation) ~= "table" then
+        return "Flagellation missing from native/Ensrick rework catalog"
+    end
+    local clusters = mod._crt and mod._crt.mutex and mod._crt.mutex.CLUSTERS
+    local zealot_mutex = clusters and clusters.zealot_thp_conversions
+    if type(zealot_mutex) ~= "table" or #zealot_mutex ~= 2 then
+        return "Zealot THP conversion mutex missing"
+    end
+    if not feature.devotion then
+        return "live Devotion talent unresolved; inspect automatic [crt:447] census"
     end
 end)

@@ -438,6 +438,14 @@ local BALANCE_MODS = {
         career    = "wh_zealot",
         patches   = {},
     },
+    -- #447 Flagellation is implemented by _crt_flagellation.lua. Keep an
+    -- empty owner entry here so the native rework engine and #445's Ensrick
+    -- family master treat the hook-owned toggle as part of the live catalog.
+    rework_wh_zealot_flagellation = {
+        character = "victor",
+        career    = "wh_zealot",
+        patches   = {},
+    },
     -- Zealot's row-1 +5% power talent (victor_zealot_power, multiplier 0.05).
     -- Career-specific template — patch doesn't bleed into other careers'
     -- equivalents.
@@ -459,6 +467,36 @@ local BALANCE_MODS = {
         },
         custom_apply = function()
             pcall(printf, "[crt:366] applied independent 300-second timers to 2 Ranger ale sub-buffs")
+        end,
+    },
+    -- Ranger Veteran ale (#367): WeaponUnitExtension divides both action
+    -- completion and the 1P/3P animation by `anim_time_scale`
+    -- (weapon_unit_extension.lua:486-489, 577-590). The stock action has
+    -- total_time=1.9 and no authored scale, so 1.9 compresses the complete
+    -- drink to exactly one second without letting gameplay finish ahead of the
+    -- visible animation. The standard buff/RPC path remains untouched.
+    rework_dr_ranger_ale_one_second_drink = {
+        character = "bardin",
+        career = "dr_ranger",
+        patches = {},
+        custom_apply = function(saved)
+            local template = WeaponTemplates and WeaponTemplates.bardin_survival_ale
+            local action = template and template.actions and template.actions.action_one
+                and template.actions.action_one.default
+            if not action or tonumber(action.total_time) ~= 1.9 then return end
+            saved.ale_anim_time_scale_had_value = action.anim_time_scale ~= nil
+            saved.ale_anim_time_scale_original = action.anim_time_scale
+            action.anim_time_scale = 1.9
+        end,
+        custom_restore = function(saved)
+            local template = WeaponTemplates and WeaponTemplates.bardin_survival_ale
+            local action = template and template.actions and template.actions.action_one
+                and template.actions.action_one.default
+            if not action or saved.ale_anim_time_scale_had_value == nil then return end
+            action.anim_time_scale = saved.ale_anim_time_scale_had_value
+                and saved.ale_anim_time_scale_original or nil
+            saved.ale_anim_time_scale_had_value = nil
+            saved.ale_anim_time_scale_original = nil
         end,
     },
     -- Ranger Veteran's base HP pool: vanilla 100 → 125 (+25). Patches
@@ -3701,7 +3739,8 @@ local CRT_DESC_OVERRIDES = {
 
 mod:hook(_G, "Localize", function(func, key, ...)
     if type(key) == "string" then
-        local entry = CRT_DESC_OVERRIDES[key]
+        local extra = mod._crt and mod._crt.extra_desc_overrides
+        local entry = CRT_DESC_OVERRIDES[key] or (extra and extra[key])
         if entry and mod:get(entry.setting) then
             local text = entry.text
             -- Entries whose numbers depend on another toggle store a function
