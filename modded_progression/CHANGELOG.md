@@ -1,5 +1,9 @@
 # Modded Progression — Changelog
 
+## 0.2.26-dev (2026-07-14) - #219 orphan localization cleanup [verify-fix]
+
+- Removed the dead `starting_state_description` fallback. The dropdown explicitly uses `starting_state_tooltip`, so the near-duplicate description key had no consumer.
+
 ## 0.2.25-dev (2026-07-14) - #578 automatic shilling refresh evidence [verify-fix]
 
 - Added sparse `[mp:578] wallet_refresh` and `affordability_refresh` evidence at the existing realm/revision invalidation edges. A normal Emporium test now proves the local label, visible revision, realm, and product refresh in the console log without running a command.

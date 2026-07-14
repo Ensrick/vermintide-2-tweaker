@@ -538,22 +538,10 @@ local loc = {
     start_boon_dormant_group = { en = "[working] Starting Boons: Dormant Boons" },
     disable_boon_properties_group = { en = "[working] Disable Boons: Properties" },
     disable_boon_talents_group = { en = "[working] Disable Boons: Talents" },
-    disable_boon_skulls_and_sets_group = { en = "Disable Boons: Skulls & Sets" },
-    disable_boon_combat_group = { en = "Disable Boons: Combat" },
-    disable_boon_ability_cooldown_group = { en = "Disable Boons: Ability Cooldown" },
-    disable_boon_defense_and_dr_group = { en = "Disable Boons: Defense, Damage Reduction & Parry" },
-    disable_boon_healing_and_sustain_group = { en = "Disable Boons: Healing, THP & Health Gain" },
     disable_boon_orbs_group = { en = "[working] Disable Boons: Orbs" },
-    start_boon_ability_cooldown_group = { en = "Starting Boons: Ability Cooldown" },
-    start_boon_defense_and_dr_group = { en = "Starting Boons: Defense, Damage Reduction & Parry" },
     start_boon_orbs_group = { en = "[working] Starting Boons: Orbs" },
-    disable_boon_utility_and_team_group = { en = "Disable Boons: Utility & Team" },
     start_boon_properties_group = { en = "[working] Starting Boons: Properties" },
     start_boon_talents_group = { en = "[working] Starting Boons: Talents" },
-    start_boon_skulls_and_sets_group = { en = "Starting Boons: Skulls & Sets" },
-    start_boon_combat_group = { en = "Starting Boons: Combat" },
-    start_boon_healing_and_sustain_group = { en = "Starting Boons: Healing, THP & Health Gain" },
-    start_boon_utility_and_team_group = { en = "Starting Boons: Utility & Team" },
     -- BOON_TREE category_id display names (v0.7.90). These are VMF group headers
     -- shown in the Disabled Boons and Starting Boons menus. Organized by hierarchy.
     -- Top-level categories:

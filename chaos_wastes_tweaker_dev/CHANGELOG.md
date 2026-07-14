@@ -1,5 +1,9 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.288-dev (2026-07-14) - #219 orphan localization cleanup [verify-fix]
+
+- Removed twelve pre-v0.7.90 boon-group labels whose category ids no longer exist in `BOON_TREE`. Current property, talent, set, orb, gamble, misc, and dormant headers remain intact.
+
 ## 0.7.287-dev (2026-07-14) - #141 save/resume readiness [diagnostics-armed]
 
 - Added an observation-only inventory of the native rejoin surfaces needed for expedition save/resume: seven run-configuration getters, four progress getters, shared-state full sync, and per-player power-up/currency/loadout read-write families.

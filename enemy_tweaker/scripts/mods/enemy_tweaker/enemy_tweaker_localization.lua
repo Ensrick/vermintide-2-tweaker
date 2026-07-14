@@ -300,8 +300,6 @@ local loc = {
     br_breed_trash_flags_tooltip        = {
         en = "Sets breed.trash = true on the 11 horde-rank breeds. Consumed by the Maidenguard res-time DR path in Tweaker: Careers.",
     },
-    br_per_breed_overrides_group        = { en = "Per-breed overrides" },
-
     br_stagger_damage_group             = { en = "Stagger / Damage math" },
     br_stagger_ai_rewrite               = { en = "BR: stagger_ai rewrite" },
     br_stagger_ai_rewrite_tooltip       = {

@@ -1,5 +1,9 @@
 # Enemy Tweaker Changelog
 
+## 0.7.50-dev (2026-07-14): #219 orphan localization cleanup [verify-fix]
+
+- Removed the unused `br_per_breed_overrides_group` label. The retired Big Rebalance block has no live data-tree consumer.
+
 ## 0.7.49-dev (2026-07-14): #453 transitive and live modifier readiness [not deployed]
 
 - Upgraded the 15-modifier audit from root identifiers to each bounded child-buff chain and every named apply/update/event/remove callback. Missing child templates, asymmetric child wire ids, missing functions, and a 32-template traversal cap now fail closed.
