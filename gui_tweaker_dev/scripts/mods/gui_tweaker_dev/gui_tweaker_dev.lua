@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.270-dev"
+local MOD_VERSION = "0.2.271-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1569,6 +1569,12 @@ local function _register_button_loc()
     local loc = Managers and Managers.localizer
     if loc and loc.append_backend_localizations then
         pcall(loc.append_backend_localizations, loc, { mod_tweaker_button_name = "Mod Tweaker" })
+        -- #352 uses the same native backend-localization path for the explicit
+        -- legacy THP names. Re-supply them after language/localizer re-init.
+        local thp_names = mod._gut_original_thp_names
+        if thp_names and thp_names.register_backend_localizations then
+            thp_names.register_backend_localizations()
+        end
         -- PROBE: after registering, what does the engine localizer actually return
         -- for the key? If this prints "Mod Tweaker", the append works and any <> the
         -- user still sees is a DIFFERENT element (not this ESC button). If it prints
@@ -1906,8 +1912,10 @@ _rt_register("issue572_mod_tweaker_native_search_icon", function()
     local contract = defs.search_icon_contract
     if type(contract) ~= "table" or contract.texture ~= "search_filters_icon"
         or contract.source ~= "HeroWindowCraftingInventoryConsole"
-        or contract.native_size ~= 128 or contract.size ~= 112
-        or contract.scale ~= 0.875 or contract.icon_x ~= -70 or contract.icon_y ~= 0 then
+        or contract.native_size ~= 128 or contract.size ~= 95
+        or contract.previous_size ~= 112 or contract.scale_from_previous ~= (95 / 112)
+        or contract.scale ~= 0.7421875 or contract.icon_x ~= -28 or contract.icon_y ~= 0
+        or contract.visible_left ~= 8 or contract.visible_right ~= 32 then
         return "inventory magnifier material/source contract drifted"
     end
     if type(defs.search_icon_visible) ~= "function"
@@ -1934,6 +1942,12 @@ _rt_register("issue572_mod_tweaker_native_search_icon", function()
     end
     if not text or not text.offset or text.offset[1] < contract.text_x then
         return "search text can overlap the magnifier"
+    end
+    local ok_v, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+    if not ok_v or type(View) ~= "table" or type(View._search_placeholder) ~= "function"
+        or View._search_placeholder({ _selected = 1, _tabs = { { content = { text = "PROGRESSION" } } } })
+            ~= "Search PROGRESSION" then
+        return "active-tab search placeholder drifted"
     end
     local hotspot = widget.style and widget.style.hotspot
     if not widget.content.hotspot or not hotspot or not hotspot.size

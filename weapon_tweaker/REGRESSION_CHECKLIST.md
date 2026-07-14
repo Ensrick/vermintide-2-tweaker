@@ -1,5 +1,17 @@
 # Regression Checklist — weapon_tweaker
 
+## #112 - Saltzpyre Empire Handgun grip offset
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.249-dev |
+| Automated | Offline `test_wt_saltzpyre_coverage` locks `{0, -0.17, -0.05}`, durable membership, and runtime registration. `/wt_regression_test`: `issue112_saltzpyre_handgun_baked_offset` checks all three standard Saltzpyre careers, native Kruber exclusion, and an unmodified ranged control. |
+| Solo repro | On Witch Hunter Captain, Bounty Hunter, or Zealot, equip Kruber's Empire Handgun and inspect the third-person model after wielding, firing, swapping away, and swapping back. |
+| Expected | Handgun root position retains Y `-0.17` and Z `-0.05` relative to its canonical pose. X, rotation, and scale remain canonical/baked; animation ticks do not erase or compound the correction. First person and native Kruber Handgun remain unchanged. |
+| Renderer scope | The source-baked durable table is consumed by owner, bot, remote-husk, and inventory-preview paths without transform RPC traffic. The position is solo-verifiable locally; #587 separately guards renderer fan-out. |
+
+---
+
 ## #391 - per-career CWV availability
 
 | Field | Check |

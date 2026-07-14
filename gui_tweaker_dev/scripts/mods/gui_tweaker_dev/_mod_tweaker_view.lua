@@ -2472,6 +2472,20 @@ local _EDIT_MAX_LEN = 16
 -- (#497) Max search query length (free text; the numeric editor's cap is _EDIT_MAX_LEN).
 local _SEARCH_MAX_LEN = 40
 
+-- (#572) Use the exact visible label of the active tab, including category overrides
+-- such as CRAFTING/CWV/PROGRESSION. This keeps the empty-field prompt contextual without
+-- introducing a second localization/name map that can drift from the tab chrome.
+local function _search_placeholder(self)
+    local tab = self and self._tabs and self._tabs[self._selected]
+    local label = tab and tab.content and tab.content.text
+    if label == nil or label == "" then
+        local category = self and self._categories and self._categories[self._selected]
+        label = category and (category.label or category.mod_id)
+    end
+    if label == nil or label == "" then label = "this tab" end
+    return "Search " .. tostring(label)
+end
+
 -- (#497 / #505) Shared raw-keystroke reader. Applies this frame's Keyboard.keystrokes() to a
 -- query string: Backspace erases the last char, printable ASCII (32-126) appends up to max_len.
 -- Returns (new_str, changed). Reused by the per-tab search box (#497) and the open-dropdown
@@ -3724,7 +3738,7 @@ function ModTweakerView:_draw(dt, input_service)
         sc.search_focused = focused
         self._search_caret_t = (self._search_caret_t or 0) + (dt or 0)
         if q == "" and not focused then
-            sc.text = "Search this tab... (click, then type to filter)"
+            sc.text = _search_placeholder(self)
             if sty.text and sty.text.text_color then
                 sty.text.text_color[1], sty.text.text_color[2], sty.text.text_color[3], sty.text.text_color[4] = 160, 120, 120, 120
             end
@@ -3833,5 +3847,6 @@ end
 -- + grid-snap helpers, unit-testable without building a live view. Statics, not methods.
 ModTweakerView._resolve_step = _resolve_step
 ModTweakerView._snap_and_clamp = _snap_and_clamp
+ModTweakerView._search_placeholder = _search_placeholder
 
 return ModTweakerView

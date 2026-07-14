@@ -69,4 +69,13 @@ return function(H, repo_root)
         H.truthy(source:find('mod:command("wt_audit_saltzpyre_3p"', 1, true))
         H.truthy(source:find("careers=3 parity=%s ports=%d", 1, true))
     end)
+
+    H.test("WT #112 Saltzpyre Handgun retains its receiver-scoped baked offset", function()
+        local file = assert(io.open(root .. "weapon_tweaker.lua", "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.truthy(source:find("es_handgun = { wh_ = {0, -0.17, -0.05} }", 1, true))
+        H.truthy(source:find("es_handgun                 = true", 1, true))
+        H.truthy(source:find('issue112_saltzpyre_handgun_baked_offset', 1, true))
+    end)
 end

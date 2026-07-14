@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.271-dev (2026-07-14) -- #352 THP localization repair; #572 search-field geometry [verify-fix]
+
+- Fixed Original Temporary Health Names assigning internal talent record IDs as localization keys, which rendered as underscore-delimited `<...>` placeholders. All 60 legacy English names now use explicit mod-owned backend localization keys, are re-registered after localizer reinitialization, and restore the exact shared vanilla names when the toggle is disabled.
+- Corrected Mod Tweaker's native search magnifier after the prior vanilla offset placed it left of the full-width field. The padded atlas tile is now 95px (15% smaller than the prior 112px pass), translated inside the bar, and still disappears while the field is focused.
+- Replaced the generic empty-field prompt with `Search <current tab name>`, sourced from the same rendered tab label. Added offline and runtime coverage for localization reload/apply/restore and the search widget's focus, geometry, hotspot, and contextual prompt contracts.
+
+### Solo verify
+
+Enable Original Temporary Health Names and inspect every career's level-five talent row; names such as `Drillmaster` must appear without `<internal_key>` placeholders before and after a language/localizer reload. In Mod Tweaker, switch between tabs and confirm the empty prompt follows the active tab, the magnifier is wholly inside the bar at the corrected size, and it disappears on focus. Run `/gut_regression_test`; the #352 and #572 checks must pass.
+
 ## 0.2.270-dev (2026-07-14) -- #219 confirmed localization orphan cleanup [verify-fix]
 
 - Removed only `gut_hud_visibility_group`, the obsolete label for a container dissolved in 0.2.164. The active `gut_hide_hud_ui_group`, `hb_group`, HUD-mode dropdown, cycle hotkey, settings IDs, defaults, and runtime behavior are unchanged.

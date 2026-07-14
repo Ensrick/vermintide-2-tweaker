@@ -33,6 +33,7 @@ per-frame re-apply. Single source of truth — never split the value across file
 |---|---|---|---|---|
 | Necromancer Ghost Scythe (`bw_ghost_scythe`) | Kruber (`es_`) | `{0, 0, 0.6}` | #2 durable | renders as Greathammer; `es_`-only; corrected in v0.12.153-dev; husk fan-out v0.12.229-dev |
 | Elven 2H Axe / Glaive (`we_2h_axe`, `two_handed_axes_template_2`) | Kruber (`es_`) | `{0, 0, 0.285}` | #2 durable | renders as Greathammer; `es_`-only; +0.285 Z; v0.12.152-dev. Grip offset is independent of the anim bake — the Glaive's 3P anim is NOT yet baked (still in the dev picker). |
+| Empire Handgun (`es_handgun`) | Saltzpyre (`wh_`) | `{0, -0.17, -0.05}` | #2 durable | Restores the receiver-scoped correction lost after the unsafe shared-linking-table bake was removed in v0.12.136; standard Saltzpyre careers only; v0.12.249-dev. |
 
 The small static nudges (`we_1h_sword`/`bw_sword`/`es_1h_sword` +0.05, the wh hammers
 +0.15, the `es_2h_sword`/`wh_2h_sword` −0.085) use path #1 only and are not listed
@@ -103,6 +104,9 @@ in-game.
 - **CAREER-ONLY.** Offsets are prefix-gated (`es_` = Kruber, etc.). The native
   wielder's career prefix finds no entry → offset stays nil → early return. The
   Scythe's `es_` entry never moves Sienna's native scythe.
+- **POSITION COMPOSES.** Baked offsets use only `Unit.set_local_position`.
+  Rotation (#569) and scale retain their own canonical setters, so the Handgun's
+  Y/Z correction cannot zero either component.
 - **NEVER raw-write a shared linking table.** `unit_attachment_node_linking
   .third_person` on `staff_scythe` is shared with Sienna — a raw write there
   would break her grip. The durable re-apply is career-gated instead.

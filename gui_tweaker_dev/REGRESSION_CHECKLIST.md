@@ -57,9 +57,11 @@ Last updated: 2026-07-14.
 
 - [ ] The option is off by default; all careers retain the game's current shared THP names until enabled.
 - [ ] With the option enabled, each hero's four careers show their distinct original names on the level-five talent row.
+- [ ] Talent titles are readable names such as `Drillmaster`, never internal IDs with underscores inside `<...>`.
 - [ ] Existing talent selections, descriptions, icons, buffs, and mechanics do not change when toggling either direction.
 - [ ] Disabling the option restores the exact shared display keys captured at load; no career-specific name leaks onto another career or a modded talent.
-- [ ] `/gut_regression_test` passes `issue352_original_thp_names_exact_identity` and reports all 60 canonical records.
+- [ ] A language/localizer re-init does not drop the restored names; all 60 mod-owned backend localization keys are re-supplied.
+- [ ] `/gut_regression_test` passes `issue352_original_thp_names_exact_identity` and reports all 60 canonical records; the offline Lua suite passes the explicit-name and re-init coverage.
 
 ## WT cross-character loadout lifecycle trace (#354)
 
@@ -177,12 +179,12 @@ Last updated: 2026-07-14.
 
 | Field | Value |
 |-------|-------|
-| Symptom | The native magnifier appears too large for Mod Tweaker's 30px field and remains visible after the user clicks into the field to type. |
-| Root cause | Vanilla's padded 128px atlas tile geometry was copied from a taller inventory control without a Mod Tweaker focus-visibility contract. |
-| Fix version(s) | gui_tweaker_dev v0.2.243-dev (#572) |
+| Symptom | The native magnifier appears too large and to the left of Mod Tweaker's field; its generic prompt does not identify the active tab. |
+| Root cause | Vanilla's negative icon offset belongs to a separate filter-control region, but was copied onto Mod Tweaker's full-width field; the prompt was hard-coded. |
+| Fix version(s) | gui_tweaker_dev v0.2.243-dev, v0.2.271-dev (#572) |
 | Category | UNIT / UI INTEGRATION |
 | Repro | Open Mod Tweaker in Keep and mission, inspect the empty field, click anywhere in it, type, then leave focus; repeat at a non-default UI scale. |
-| Expected post-fix | An approximately 28px glyph sits wholly inside the unfocused 30px field, disappears while focused, and returns after focus leaves. Text begins at x=47 and the full-field hotspot and search transactions do not change. |
+| Expected post-fix | The 95px padded tile (15% smaller than 112px) places its visible glyph approximately at x=8..32 inside the unfocused field, disappears while focused, and returns after focus leaves. The prompt reads `Search <current tab name>`; text begins at x=47 and the full-field hotspot and search transactions do not change. |
 | Detection | Offline `test_mod_tweaker_search.lua`; `/gut_regression_test`: `issue572_mod_tweaker_native_search_icon`; in-game visual/focus confirmation while issue #572 carries `verify-fix`. |
 
 ### issue575-numeric-caret-native-metrics — caret follows proportional glyph boundaries

@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.248-dev"
+local MOD_VERSION = "0.12.249-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -548,6 +548,14 @@ local _weapon_grip_offsets = {
     -- in-game (the value was user-tuned via the per-frame hold-pose tuner). 3P-only.
     -- (User-tuned +0.08 Z, 2026-06-28.)
     es_bastard_sword = { wh_ = {0, 0, 0.08} },
+    -- Empire Handgun (es_handgun) on standard Saltzpyre bodies. The original
+    -- correction was removed in v0.12.136 because it had been written into the
+    -- shared attachment-linking table and therefore also moved native wielders.
+    -- Keep the replacement receiver-scoped: all wh_* careers resolve this baked
+    -- Y/Z delta, while every es_* Kruber career falls through untouched. It is
+    -- durable because animation ticks were the user-observed source of the lost
+    -- offset. Position-only application composes with #569 rotation and scale.
+    es_handgun = { wh_ = {0, -0.17, -0.05} },
     -- NOTE: this table is the SINGLE SOURCE OF TRUTH for every 3P grip nudge
     -- (preview AND in-game read it). Two application paths consume it:
     --   * SMALL static nudges (the 0.05-0.15 entries above): a one-shot additive
@@ -612,6 +620,7 @@ local _DURABLE_GRIP_OFFSETS = {
     bw_necromancy_staff        = true,  -- Sienna Soulstealer Staff on Kruber (+0.6 Z, es_-only)
     bw_deus_01                 = true,  -- Sienna Coruscation Staff on Kruber (+0.6 Z, es_-only)
     es_bastard_sword           = true,  -- Bretonnian Longsword on Saltzpyre (+0.08 Z, wh_-only)
+    es_handgun                 = true,  -- Empire Handgun on Saltzpyre (-0.17 Y, -0.05 Z, wh_-only)
 }
 
 -- Resolve the career-prefix-matched offset entry for (weapon_key, career_name)
@@ -4347,6 +4356,26 @@ _rt_register("issue587_baked_transform_husk_fanout", function()
     local native_scythe = mod._wt587_baked_transform_plan("bw_ghost_scythe", "bw_necromancer")
     assert(native_scythe.offset == nil,
         "career gate must preserve the native Sienna Scythe transform")
+end)
+
+_rt_register("issue112_saltzpyre_handgun_baked_offset", function()
+    local plan = mod._wt587_baked_transform_plan
+    assert(type(plan) == "function", "baked transform resolver missing")
+    for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+        local handgun = plan("es_handgun", career)
+        assert(handgun.durable and handgun.offset,
+            "Empire Handgun offset must use durable 3P reapply on " .. career)
+        assert(handgun.offset[1] == 0
+            and handgun.offset[2] == -0.17
+            and handgun.offset[3] == -0.05,
+            "Empire Handgun offset drifted on " .. career)
+    end
+    local native = plan("es_handgun", "es_huntsman")
+    assert(native.offset == nil and native.durable,
+        "Kruber's native Empire Handgun must not receive Saltzpyre's offset")
+    local control = plan("wh_crossbow", "wh_captain")
+    assert(control.offset == nil and control.durable == false,
+        "unmodified Saltzpyre ranged control must remain untouched")
 end)
 
 _rt_register("wt_safe_hook_installed", function()

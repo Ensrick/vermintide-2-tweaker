@@ -209,9 +209,10 @@ as a filter STAGE inside the view's own `_build_rows` row-rebuild pipeline (flat
 label-matching nodes + their ancestors + matched-group descendants) -- not a hook. Its #572
 magnifier is the exact atlas-backed `search_filters_icon` material used by
 `HeroWindowCraftingInventoryConsole` [src: `hero_window_crafting_inventory_console_definitions.lua:503-504,779-796`].
-The atlas entry is a padded 128x128 tile. Mod Tweaker's field is only 30px tall, so the tile is rendered
-at 7/8 scale (112x112, x=-70/y=0): its approximately 28px visible glyph remains wholly inside the field
-while text retains the native x=47 origin. The view mirrors `_search_focused` into widget content each
+The atlas entry is a padded 128x128 tile. Mod Tweaker renders the tile at 95x95 (15% smaller than the
+prior 112px pass) and x=-28/y=0, placing its visible glyph at approximately x=8..32 wholly inside the
+30px field while text retains x=47. The empty prompt is `Search <active tab label>`, sourced from the
+same rendered tab widget rather than a duplicate label map. The view mirrors `_search_focused` into widget content each
 frame; the texture pass draws only while unfocused. It remains passive, and the original full-field
 hotspot is still the only input target. Filter rendering is
 transactional: `_mod_tweaker_search.lua` snapshots the selected tab's persistent expansion set on

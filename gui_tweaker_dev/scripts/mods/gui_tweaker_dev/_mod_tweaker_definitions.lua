@@ -2012,20 +2012,20 @@ scenegraph_definition.mt_search = {
 -- focus emphasis. #572 reuses the exact atlas-backed inventory search material from
 -- HeroWindowCraftingInventoryConsole (`search_filters_icon`, gui_menus_atlas), so no
 -- custom asset/package is introduced. The icon is a passive texture pass: the existing
--- full-field hotspot remains the only focus/click target. #572 follow-up: Mod Tweaker's
--- field is only 30px tall, so render the padded native tile at 7/8 scale (the visible
--- glyph becomes about 28px), keep that glyph inside the field, and hide it while typing.
+-- full-field hotspot remains the only focus/click target. #572 follow-up: render the
+-- padded tile at 95px (112px reduced by 15%, rounded), translate its visible glyph into
+-- the field, and hide it while typing.
 local function search_icon_visible(content)
     return not content.search_focused
 end
 
 local function create_search_box()
     local W, H, PAD = ROW_W, SEARCH_BOX_H, 14
-    -- The atlas entry is a padded 128x128 tile. Vanilla intentionally renders the
-    -- full tile at x=-80 so the visible magnifier ends at x=48; shrinking the tile
-    -- itself also shrinks the glyph hidden inside its transparent padding. Seven-eighths
-    -- preserves the padded-atlas geometry while reducing the visible 32px glyph by 12.5%.
-    local ICON_TEXTURE, ICON_SIZE, ICON_X, ICON_Y = "search_filters_icon", 112, -70, 0
+    -- The atlas entry is a padded 128x128 tile. Vanilla's negative offset belongs to a
+    -- separate inventory filter-control region; copying it to this full-width field put
+    -- the visible glyph outside the bar. Render the padded tile 15% smaller than #572's
+    -- prior 112px pass and translate its centred art wholly inside the field (about x=8..32).
+    local ICON_TEXTURE, ICON_SIZE, ICON_X, ICON_Y = "search_filters_icon", 95, -28, 0
     local TEXT_X = 47
     return UIWidget.init({
         scenegraph_id = "mt_search",
@@ -2084,8 +2084,10 @@ return {
     create_search_box = create_search_box,
     search_sg = "mt_search",
     search_icon_contract = {
-        texture = "search_filters_icon", native_size = 128, size = 112,
-        scale = 0.875, icon_x = -70, icon_y = 0, text_x = 47,
+        texture = "search_filters_icon", native_size = 128, size = 95,
+        previous_size = 112, scale_from_previous = 95 / 112,
+        scale = 0.7421875, icon_x = -28, icon_y = 0,
+        visible_left = 8, visible_right = 32, text_x = 47,
         hotspot_w = ROW_W, hotspot_h = SEARCH_BOX_H,
         focus_content_key = "search_focused",
         source = "HeroWindowCraftingInventoryConsole",

@@ -1,5 +1,16 @@
 # Weapon Tweaker Changelog
 
+## 0.12.249-dev (2026-07-14) - #112 restore Saltzpyre Handgun grip offset [verify-fix]
+
+- Restored the user-tuned Empire Handgun third-person position on standard Saltzpyre careers: local Y `-0.17`, local Z `-0.05`, and unchanged X. The prior v0.12.135 correction was removed in v0.12.136 because it mutated a shared attachment-linking table; its intended receiver-scoped replacement had never been added to the canonical baked offset table.
+- Added `es_handgun.wh_ = {0, -0.17, -0.05}` to `_weapon_grip_offsets` and the durable reapply set. Captain, Bounty Hunter, and Zealot consume the correction; native Kruber careers do not. The existing owner/bot/husk tracker reconstructs canonical position plus the delta every frame, so animation ticks cannot erase it and repeated frames cannot compound it.
+- Position, rotation, and scale remain separate transform components. This change never writes first-person units, never resets #569 rotation or scale, never mutates a shared weapon template, and adds no RPC or per-frame network traffic.
+- Added offline and `/wt_regression_test` coverage for the exact axes, durable membership, all standard Saltzpyre careers, native Kruber exclusion, and an unmodified ranged control.
+
+### Solo verify
+
+On Witch Hunter Captain, Bounty Hunter, or Zealot, equip Kruber's Empire Handgun and inspect it in third person. Wield, fire, swap away, and swap back; the model should retain the corrected Y/Z seating without moving first person. Run `/wt_regression_test` and require `issue112_saltzpyre_handgun_baked_offset` to pass.
+
 ## 0.12.248-dev (2026-07-14) - #113 Warrior Priest 3P coverage reconciliation [verify-fix]
 
 - Reconciled Warrior Priest as its own receiver: the live catalog is exactly seven melee weapons, comprising six native `wh_*` entries and one cross-character port (`es_1h_flail`). The cross-character census is 1 working, 0 pending, 0 untested, 0 offsets, and 0 picker-visible.
