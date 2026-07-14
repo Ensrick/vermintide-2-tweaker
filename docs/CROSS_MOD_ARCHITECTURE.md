@@ -92,16 +92,21 @@ toggles default ON when CWV is installed and cover CWV's own variant items per c
 - **Weapon glow maps:** RGB color picker for `rune_emissive_color`
 - **Custom illusion injection:** New weapon skins via WeaponSkins table patching
 
-### Enhanced features (when character_weapon_variants is installed)
-- Detects character_weapon_variants via `get_mod("new_weapons_mod_id")` at load
-- Registers additional offhand options for new weapon items (e.g., the "Imperial Axe and Shield" item gets Kruber's full shield roster in offhand swap)
-- Provides cosmetic variation on top of the new mod's base items
-- Custom icons for new weapons could live here OR in the character_weapon_variants (TBD — wherever the icon assets are bundled)
+### CWV integration (implemented in cosmetics_tweaker)
+- Detects the real mod id with `get_mod("character_weapon_variants")`.
+- Discovers the seven authored CWV dual-weapon families and builds independent
+  left/right cosmetic pools for them; package preloading and saved-offhand
+  restore wait until that catalogue is available.
+- This behavior lives in `cosmetics_tweaker`. CWV's own
+  `_detect_companion_mods()` helper does not enable it; that helper only records
+  optional-mod presence for CWV's status/log output.
 
-### Enhanced features (when weapon_tweaker is installed)
-- Detects weapon_tweaker via `get_mod("wt")`
-- For raw cross-career unlocks (not new mod items), applies per-character cosmetic defaults so the weapon doesn't look out of place
-- Example: Kerillian equipping Kruber's sword+shield via weapon_tweaker → cosmetics_tweaker auto-applies elven shield as default offhand
+### weapon_tweaker integration
+- `cosmetics_tweaker` resolves `get_mod("wt")` only at the features that need
+  it (for example, avoiding a duplicate Moonfire impact puff while wt's AOE
+  revert is active).
+- Do not infer a general cosmetic-default handshake from mod presence. Any new
+  wt/cosmetics integration must identify and document its concrete consumer.
 
 ### What it does NOT do
 - Does not create new weapon items (that's the character_weapon_variants)
@@ -139,13 +144,16 @@ toggles default ON when CWV is installed and cover CWV's own variant items per c
 
 ### Interface points
 - **weapon_tweaker:** independent — wt does NOT defer to CWV's items (that "defer" model is retired, Issue #368). Both mods may cover the same weapon+receiver; wt is the availability control surface and, when installed alongside CWV, exposes a compatible item master plus authored-career toggles for every catalogued `cwv_variant` item (CWV itself has no availability controls). See the "weapon_tweaker ↔ character_weapon_variants" section at the top of this doc.
-- **cosmetics_tweaker:** Can detect this mod and register offhand/illusion options for its items
+- **cosmetics_tweaker:** cosmetics detects CWV directly and discovers authored
+  dual-family offhand pools. CWV's companion-detection return values remain
+  diagnostic-only.
 
 ---
 
-## Detection Pattern
+## Optional-mod detection
 
-All three mods use the same optional detection pattern:
+There is no shared three-mod handshake. Each consumer resolves the sibling it
+actually needs, at the feature boundary that consumes it:
 
 ```lua
 -- In cosmetics_tweaker:
@@ -153,16 +161,36 @@ local cwv = get_mod("character_weapon_variants")  -- nil if not installed
 local weapon_tweaker = get_mod("wt")               -- nil if not installed
 
 if cwv then
-    -- Register enhanced offhand options for new weapon items
-    -- Register custom cosmetic defaults
+    -- cosmetics_tweaker discovers CWV dual-family offhand pools
 end
 
 if weapon_tweaker then
-    -- Apply per-character cosmetic defaults for raw cross-career unlocks
+    -- gate one concrete wt-aware behavior
 end
 ```
 
-No hard dependencies. Each mod's core features work standalone.
+CWV also resolves `wt` and `cosmetics_tweaker` in
+`_detect_companion_mods()`, but those return values are consumed only by
+`/cwv` status output. They are not feature flags. No hard dependencies are
+created by these optional lookups; each mod's core features work standalone.
+
+### CIM ↔ CWV backend-ID convention (load-bearing)
+
+CIM and CWV do not exchange ownership through `get_mod()`. A crafted CWV
+instance uses the wire/render identity `cwv_<item-key>_<three digits>`; CWV's
+resolvers consume that shape to recover the variant definition when vanilla has
+collapsed the item back to its inherited base key. CIM's active dev stream owns
+crafted instances by exact membership in `_forged_weapons` (#592), not by this
+prefix. Its legacy saved-loadout migration still recognizes `cwv_`-prefixed IDs
+so an older CWV loadout is not purged before migration can resolve it.
+
+The `cwv_` prefix is therefore a compatibility contract, not a general
+"modded-item ownership" test. If its shape changes, update together:
+
+- CWV `_cwv_key_for_item` and other backend-ID resolvers;
+- CIM's CWV minting/selector compatibility paths;
+- CIM's legacy `_modded_loadout_purge_stale` exception; and
+- this section plus both mods' regression coverage.
 
 ---
 

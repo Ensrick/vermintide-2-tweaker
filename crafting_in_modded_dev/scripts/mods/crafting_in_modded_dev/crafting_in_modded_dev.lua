@@ -1169,6 +1169,8 @@ end
 -- and doesn't match `cwv_*` (character_weapon_variants). Stale entries
 -- pointing to non-existent items can't be restored anyway, so dropping them
 -- avoids re-trying the same MISSING restore log line every session.
+-- LOAD-BEARING compatibility exception, not ownership: see
+-- docs/CROSS_MOD_ARCHITECTURE.md "CIM ↔ CWV backend-ID convention" and #70/#592.
 local function _modded_loadout_purge_stale()
     local removed = 0
     -- Indexed schema: career -> index -> slot -> bid.
