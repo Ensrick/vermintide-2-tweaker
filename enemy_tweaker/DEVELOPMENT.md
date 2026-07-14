@@ -69,6 +69,7 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_boss_tweaks`, `_et_nurgloth_probe` | pre-existing modules (fly-disable duration; issue 275 probe) |
 | `_et_boss_balance` | #450 per-boss balance toggles (health/armor/warp-lightning; pure data mutation, no hooks). Bodvarr is runtime breed `chaos_exalted_champion_warcamp`, never the unsuffixed source-family stem. |
 | `_et_boss_grudge` | #531 grudge-mark behavioral knobs (Skarrik Berserk / Bodvarr Crippling on Cata+ Adventure); single `hook_safe` on `ConflictDirector._post_spawn_unit`, applies vanilla CW grudge-mark buff templates host-side. Bodvarr maps to `chaos_exalted_champion_warcamp`; `_norsca` is the Skittergate champion. |
+| `_et_boss_ideas` | #451 read-only feasibility audit for proposed boss variants. Prints a bounded source/runtime inventory automatically at mod load; owns no spawn hook and never injects arena-coupled lord breeds. See `BOSS_IDEA_FEASIBILITY.md`. |
 
 Where new code goes: the module whose "Owns" row it extends; a new subsystem gets a
 new `_et_<name>.lua` + one manifest line + a row here (same discipline as

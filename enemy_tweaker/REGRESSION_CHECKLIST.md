@@ -4,7 +4,17 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-13.
+Last updated: 2026-07-14.
+
+---
+## Boss idea portability audit (#451)
+
+| Field | Detail |
+|---|---|
+| Safety boundary | Never put `skaven_stormfiend_boss`, `skaven_grey_seer`, `chaos_exalted_sorcerer`, or `chaos_troll_chief` directly into the ordinary monster pool. Their vanilla action sets are arena-coupled. |
+| Automatic diagnostic | On mod load, exactly seven log-only `[et:451]` lines report candidate presence and the four runtime action-shape risks. No user command is required. |
+| Runtime check | `/et_regression_test`: `issue451_boss_ideas_safely_decomposed` reports PASS with six candidates, all source/model breeds present, and four arena-risk markers detected. |
+| Lifecycle | `diagnostics-armed`. Convert to `verify-fix-coop` only after one portable clone has an explicit spawn option and peer-safe asset/package coverage. |
 
 ---
 ## Per-difficulty enemy health multiplier (#369)

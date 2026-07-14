@@ -1,0 +1,29 @@
+# Boss Idea Feasibility (#451)
+
+Issue #451 proposes six boss concepts. None of the vanilla lord breeds should be inserted directly into ordinary monster spawns. Their models are reusable candidates, but their behavior/action sets carry authored-arena assumptions.
+
+## Source boundary
+
+| Concept | Source finding | Safe implementation boundary |
+|---|---|---|
+| Chosen Chaos Warrior with shield | Bodvarr is registered as `chaos_exalted_champion_warcamp`; a regular Chaos Warrior is `chaos_raider`. | Create a new breed from regular Chaos Warrior AI, then validate the Bodvarr model plus shield/sword inventory. Do not clone Bodvarr behavior. |
+| Chosen Chaos Warrior with greataxe | Same Bodvarr/regular-warrior split. | First portable prototype: regular Chaos Warrior AI, 2,000-health data, monster stagger policy, and a model/inventory compatibility probe. |
+| Stormfiend with ratling guns | Deathrattler's generated selector consumes intro and mount state (`bt_selector_stormfiend_boss.lua:53-122`); its actions define `mount_unit` and `dual_shoot_intro` (`breed_skaven_stormfiend_boss.lua:404,1131`). | Build a portable action/behavior subset before using the boss model. |
+| Skaven Warlock | The Grey Seer selector dereferences `blackboard.mounted_data.mount_unit` (`bt_selector_grey_seer.lua:117-118,252`); its actions also use named Grey Seer spawners (`breed_skaven_grey_seer.lua:285-314`). | New non-mounted behavior tree and portable spawn policy are required. |
+| Chaos Sorcerer | Halescourge actions use named `sorcerer_boss` spawners (`breed_chaos_exalted_sorcerer.lua:302-360,560-564`). | Replace arena teleport/spawn queries before a general-map spawn option exists. |
+| Troll Chieftain | Its downed phases spawn oil sockets/barrels, query boss spawners, disable active objectives, and fire `boss_arena_alcove_*` flow events (`breed_chaos_troll_chief.lua:1175-1524`). | Clone the breed/action data and remove or replace every arena phase event. Never mutate vanilla tables in place. |
+
+The Troll Chieftain is globally registered (`breeds.lua:56`) but dynamically loaded as `level_specific` (`enemy_package_loader_settings.lua:38-48`). Registration alone does not make its arena behavior portable.
+
+## Diagnostics contract
+
+`_et_boss_ideas.lua` performs a read-only audit once at mod load. It checks that all source/model breeds exist and that the four arena-coupled action shapes are still present. Output is bounded to seven engine-log lines under `[et:451]`; no setting, hook, spawn, or shared game table is changed.
+
+`/et_regression_test` locks the six-candidate list and forces a new source audit if a game update removes one of the known arena-risk markers. The diagnostic itself needs no manual command.
+
+## Recommended implementation order
+
+1. Chosen Chaos Warrior with greataxe: smallest portable regular-AI prototype.
+2. Chosen Chaos Warrior with shield: add shield inventory and shield animation validation.
+3. Troll Chieftain: cloned action set with all arena phase side effects removed.
+4. Halescourge, Deathrattler, and Rasknitt concepts only after portable behavior trees are designed and covered by two-player package/network tests.

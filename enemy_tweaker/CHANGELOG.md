@@ -1,5 +1,12 @@
 # Enemy Tweaker Changelog
 
+## 0.7.42-dev (2026-07-14): #451 boss-idea feasibility diagnostics [not deployed]
+
+- Added a bounded, automatic runtime audit for all six proposed boss concepts. It writes one summary and six detail lines to the engine console log, so it remains visible with VMF logging disabled and requires no command or gameplay repro.
+- Deliberately did not inject the four vanilla lord breeds into ordinary monster spawns. Source review found arena-owned mount, spawner, phase, objective, and level-flow behavior that is unsafe outside the bosses' authored maps.
+- Added a runtime regression that locks the six-candidate decomposition and requires all four arena-coupling markers to remain detectable. Diagnostics are automatic; no manual command or gameplay repro is required.
+- Added `BOSS_IDEA_FEASIBILITY.md` with the source-backed implementation boundary and recommended order. Lifecycle: `[diagnostics-armed]`; the next safe implementation slice is a new regular-AI Chaos Warrior prototype, not reuse of a lord behavior tree.
+
 ## 0.7.41-dev (2026-07-13): #369 per-difficulty enemy health multipliers [not deployed]
 
 - Added a 0.1x-5.0x health slider, defaulting to vanilla 1.0x, to every Recruit-through-Cataclysm-3 difficulty block.
