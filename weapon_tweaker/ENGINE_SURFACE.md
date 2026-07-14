@@ -25,7 +25,7 @@ how wt's three redirect layers intercept the firing point.
 
 ## Hook table
 
-31 engine registration sites (26 live + 5 dormant Big Rebalance), grouped below
+26 live engine registration sites, grouped below
 into rows-of-concern. `[hook]` = full wrapper (`mod:hook`, can rewrite
 args/returns); `[safe]` = `mod:hook_safe` (post-callback, no override); `[tbl]`
 = table-form hook (plain-table target, nil-guarded). wt also owns two hook
@@ -95,13 +95,11 @@ the wrapper named in the trap column (`_safe_hook.lua`, issue 26).
 | `PlayerUnitStatusSettings.overcharge_values.spark` `_wt_bolt_staff_overcharge.lua` (#341) | Both alternating Bolt Staff primary sub-actions name the unique `spark` key [src: `staff_spark_spear.lua:24,108`]; `ActionChargedProjectileUtility.fire_charged_projectile` resolves that key at fire time and passes it to `add_charge` [src: `action_charged_projectile.lua:41-58`] | Optional 40% primary-overcharge reduction by scaling the captured scalar to 0.6; live setting changes reapply it | Snapshot and restore the exact pre-WT value; never mutate the charged `spear*` keys, damage, cadence, or action tables. No hook, NetworkLookup entry, or RPC surface |
 | local `PlayerUnitOverchargeExtension` scalars + `OverchargeBarUI.set_charge_bar_fraction` [safe,tbl,deferred] `_wt_overcharge_presentation.lua` (#388) | Player creation copies career-keyed `OverchargeData` into the owner extension [src: `bulldozer_player.lua:206`; `player_unit_overcharge_extension.lua:9-77`]; HUD draw independently selects `OverchargeData[player:career_name()].overcharge_ui` [src: `overcharge_bar_ui.lua:234-271`] | While exact `we_life_staff` is ranged-equipped off-career, reversibly project Sister decay/sound/screen/non-explosion fields and apply its native green palette to local/spectator HUD | Owner-local scalar mutation only; overcharge value replication stays vanilla. HUD class is mission-lazy, so install table-form only after `_G.OverchargeBarUI` exists. Clear live particles before profile transitions; restore exact captured nil/non-nil fields on removal/disable. No RPC, NetworkLookup, or husk mutation |
 
-### Dev tooling + Big Rebalance (dormant)
+### Dev tooling
 
 | Class.method (kind) | Vanilla behavior | Why wt hooks it | Trap / invariant |
 |---|---|---|---|
 | `StateInGameRunning.update` [safe] `wt_dev_hold_pose.lua` | Per-frame in-mission tick [src: `scripts/game_state/state_ingame_running.lua`] | Hold-Pose tuner: compose local-player 3P position and rotation deltas independently over one captured canonical/baked weapon-root transform | Per-frame hook stays on `hook_safe` (NOT `traced_hook`) to avoid trace flood; inert unless live apply is on. Never use absolute `set_local_pose`: position-only must preserve #569 rotation/scale, rotation-only must preserve baked position/scale, and desired values rebuild from baseline rather than the prior frame |
-| `GenericStatusExtension.init` [safe] `weapon_tweaker_big_rebalance.lua:2326` (dormant - BR on ice, #433) | Constructs the per-unit status extension [src: `scripts/unit_extensions/generic/generic_status_extension.lua`] | Would seed a default `dodge_count` for the BR dodge-count knob | BR module is ON ICE (#433); consumers guard on `bt.is_br_active` so the whole module goes inert without `bt` (buff_tweaker retired) |
-| `ActionFlamethrower._select_targets` [hook] `:2407` / `ActionBeam.client_owner_post_update` [hook] `:2472` / `ActionTrueFlightBow.client_owner_start_action` [hook] `:2497` / `.fire` [hook] `:2543` (all dormant - BR on ice, #433) | Vanilla per-action target selection / beam tick / true-flight aim + fire [src: `scripts/unit_extensions/weapons/actions/action_flamethrower.lua`, `action_beam.lua`, `action_true_flight_bow.lua`] | Would apply Big Rebalance behavior tweaks to these weapon actions | Registered only when the BR feature-gate is on; dormant while BR is on ice (#433) |
 
 ## Subsystem notes (how the vanilla flow runs, for wt's cases)
 

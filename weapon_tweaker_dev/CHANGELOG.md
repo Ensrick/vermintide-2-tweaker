@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.139-dev (2026-07-14) - #433 remove dead Big Rebalance payload [not deployed]
+
+- Mirrored stable WT's retirement cleanup: deleted the unreachable Big Rebalance implementation and definitions (165,617 bytes total), its no-op lifecycle dispatch, and its dead-only true-flight regression helpers/checks.
+- Active dev animation tooling and all normal WT features remain unchanged. Saved `br_*` values are preserved and their identifiers remain reserved.
+- Repository-only verification: retired-BR absence gate, WT-dev lint, Lua tests, and Quick QA. No in-game behavior existed to verify.
+
 ## 0.12.138-dev (2026-07-13) - #321 retire stale Big Rebalance product surface [not deployed]
 
 - Big Rebalance remains intentionally unloaded and its `br_*` options remain hidden; the Workshop description no longer advertises the retired `bt` integration.

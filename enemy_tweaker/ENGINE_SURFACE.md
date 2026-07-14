@@ -30,11 +30,9 @@ error; `_hook_wrap_table` = the same for a plain dispatcher table (table-form);
 NEVER re-runs vanilla. Legend below: `[wrap]` / `[wrap,tbl]` / `[tick]` name the
 factory; `[safe]` / `[hook]` are direct `mod:hook_safe` / `mod:hook`; `[tbl]` marks
 a class/table passed by reference. `tools/mod-lint/lint-mod.ps1` enforces one hook
-per (Class, method) ACROSS the 17 modules. NOTE: `enemy_tweaker_big_rebalance.lua`
-carries 3 more `mod:hook` sites (`DamageUtils.stagger_ai`, `.calculate_damage`,
-`ActionShieldSlam._hit`) but it is DORMANT - not in the entry manifest, not
-`require`'d (BR on ice since bt retired 2026-06-08, issue 433 pending) - so those
-do not register and are excluded here.
+per (Class, method) ACROSS the 17 active modules. The retired Big Rebalance module
+and its three dormant hook registrations were deleted under #433, so they are not
+part of the count or table.
 
 ### Conflict-director lifecycle re-apply (owner doc: `docs/engine/07`)
 
@@ -187,9 +185,9 @@ added, or a cited vanilla line drifts after a game patch, edit the affected row 
 the SAME commit. This doc complements, and must not duplicate, `DEVELOPMENT.md` (the
 breed-adding checklist + removed-feature history in full) - when the breed/spawn
 mechanics change, `DEVELOPMENT.md` is primary and this doc's rows are the follow-on
-edit. If BR is un-mothballed (issue 433), add the 3 `enemy_tweaker_big_rebalance.lua`
-hooks (`DamageUtils.stagger_ai`/`.calculate_damage`, `ActionShieldSlam._hit`) to the
-table and bump the site count. Line numbers are against the 2026-07-12 decompile -
+edit. Any future balance-system replacement must document its engine registrations
+as a new design; the retired BR hooks are not a template to silently restore. Line
+numbers are against the 2026-07-12 decompile -
 match crash logs by function name, not line. The `table.clone` target carries an
 `[unverified]` exact line (function grep-confirmed present in `foundation/scripts/util/`).
 Section shape (hook table -> subsystem notes -> dead ends) matches

@@ -1314,20 +1314,15 @@ local data = {
 -- menu group is commented out so the inert BR toggles don't appear in the VMF menu.
 -- To restore, delete this opener line and the closing long-comment marker below.
             -- ============================================================
-            -- Core's Big Rebalance integration.  All defaults are `false`
-            -- so the system is opt-in. The master toggle gates the
-            -- registration block (NewDamageProfileTemplates / buffs /
-            -- explosions / StatBuff app-methods) and must be on for ANY
-            -- of the per-toggle changes to take effect — many of the
-            -- writes reference profiles that only exist after master is on.
-            -- See `weapon_tweaker_big_rebalance_registrations.lua` for the
-            -- cross-mod alphabetical registration list (identical across wt/ct/et).
+            -- Retired Big Rebalance identifiers. This entire block remains
+            -- hidden so old settings files retain stable br_* keys; there is
+            -- no implementation or registration owner behind these widgets.
             -- ============================================================
             {
                 setting_id = "br_master",
                 type = "group",
                 sub_widgets = {
-                    -- Master toggle moved to `bt` (Tweaker: Buffs). Subscribe to
+                    -- Historical master identifier; intentionally inactive.
                     -- that mod and enable its master to make these wt sub-toggles
                     -- functional. A placeholder text widget would be nice here
                     -- but VMF doesn't expose one; leaving the explanation in
@@ -1640,14 +1635,8 @@ if _hp_tree then data.options.widgets[#data.options.widgets + 1] = _hp_tree end
 -- `cwv_variant == true` entries. Persisted values override these defaults.
 if _cwv_present then
     local catalog = mod:dofile("scripts/mods/weapon_tweaker/wt_cwv_variant_catalog")
-    local rows = {}
-    for _, variant in ipairs(catalog) do
-        rows[#rows + 1] = {
-            setting_id = "unlock_cwv_variant_" .. variant.key,
-            type = "checkbox",
-            default_value = true,
-        }
-    end
+    local policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_cwv_availability_policy")
+    local rows = policy.build_widgets(catalog)
     if #rows > 0 then
         data.options.widgets[1].sub_widgets[#data.options.widgets[1].sub_widgets + 1] = {
             setting_id = "cwv_variant_availability",

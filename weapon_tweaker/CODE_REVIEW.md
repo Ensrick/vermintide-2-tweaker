@@ -1,6 +1,6 @@
 # Weapon Tweaker Code Review (2026-05-23, v0.12.68-dev)
 
-> **[SUPERSEDED 2026-07-07 — bt retired]** buff_tweaker (`bt`, Workshop 3730358590) was retired 2026-06 and archived to `_archive/buff_tweaker_v0.1.12-alpha/`; `get_mod("bt")` is always nil now. Every reference below to bt as a live sister mod / Big Rebalance master registry is historical. wt's ~113 BR sub-toggles guard on `(get_mod("bt") or {}):is_br_active()`, so with bt gone they are permanently INERT (no crash, and NOT stripped). The correct `(get_mod('bt') or {})` nil-guard stays as-is. Preserved below for historical reference.
+> **[SUPERSEDED 2026-07-14 — #433 retired the implementation]** The Big Rebalance implementation and definitions described below were deleted from both WT trees. Hidden `br_*` identifiers remain reserved only for save compatibility; historical source is recoverable from git. Do not treat BR findings in this snapshot as current work.
 
 ## Summary
 

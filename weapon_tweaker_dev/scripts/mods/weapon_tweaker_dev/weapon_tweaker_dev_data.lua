@@ -1441,20 +1441,15 @@ local data = {
 -- menu group is commented out so the inert BR toggles don't appear in the VMF menu.
 -- To restore, delete this opener line and the closing long-comment marker below.
             -- ============================================================
-            -- Core's Big Rebalance integration.  All defaults are `false`
-            -- so the system is opt-in. The master toggle gates the
-            -- registration block (NewDamageProfileTemplates / buffs /
-            -- explosions / StatBuff app-methods) and must be on for ANY
-            -- of the per-toggle changes to take effect — many of the
-            -- writes reference profiles that only exist after master is on.
-            -- See `weapon_tweaker_big_rebalance_registrations.lua` for the
-            -- cross-mod alphabetical registration list (identical across wt/ct/et).
+            -- Retired Big Rebalance identifiers. This entire block remains
+            -- hidden so old settings files retain stable br_* keys; there is
+            -- no implementation or registration owner behind these widgets.
             -- ============================================================
             {
                 setting_id = "br_master",
                 type = "group",
                 sub_widgets = {
-                    -- Master toggle moved to `bt` (Tweaker: Buffs). Subscribe to
+                    -- Historical master identifier; intentionally inactive.
                     -- that mod and enable its master to make these wt sub-toggles
                     -- functional. A placeholder text widget would be nice here
                     -- but VMF doesn't expose one; leaving the explanation in

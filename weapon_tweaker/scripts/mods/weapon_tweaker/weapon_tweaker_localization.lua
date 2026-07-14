@@ -1341,8 +1341,35 @@ local _cwv_variant_labels = {
     cwv_es_dual_warpriest_hammers = "Kruber: Dual Warrior-Priest Hammers",
     cwv_es_warpriest_hammer_shield = "Kruber: Warrior-Priest Hammer and Shield",
 }
+local _cwv_career_labels = {
+    es_mercenary = "Mercenary",
+    es_huntsman = "Huntsman",
+    es_knight = "Foot Knight",
+    es_questingknight = "Grail Knight",
+    wh_zealot = "Zealot",
+    wh_bountyhunter = "Bounty Hunter",
+    wh_captain = "Witch Hunter Captain",
+    wh_priest = "Warrior Priest",
+    dr_ranger = "Ranger Veteran",
+    dr_ironbreaker = "Ironbreaker",
+    dr_slayer = "Slayer",
+    dr_engineer = "Outcast Engineer",
+    we_waywatcher = "Waystalker",
+    we_maidenguard = "Handmaiden",
+    we_shade = "Shade",
+    we_thornsister = "Sister of the Thorn",
+}
+local _cwv_catalog = mod:dofile("scripts/mods/weapon_tweaker/wt_cwv_variant_catalog")
+local _cwv_availability_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_cwv_availability_policy")
 for key, label in pairs(_cwv_variant_labels) do
     loc["unlock_cwv_variant_" .. key] = { en = label }
+end
+for _, variant in ipairs(_cwv_catalog) do
+    for _, career_name in ipairs(variant.careers) do
+        loc[_cwv_availability_policy.career_setting_id(variant.key, career_name)] = {
+            en = _cwv_career_labels[career_name] or career_name,
+        }
+    end
 end
 
 local function _strip_leading_tag(s)

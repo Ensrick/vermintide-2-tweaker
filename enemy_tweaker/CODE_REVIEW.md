@@ -5,6 +5,8 @@
 > or move the doc to `_archive/audits/2026-05-24/`.
 # Enemy Tweaker Code Review (2026-05-24)
 
+> **[SUPERSEDED 2026-07-14 — #433 retired the implementation]** The Big Rebalance module, lifecycle stub, and fingerprint RPC described below were deleted. Hidden `br_*` identifiers remain reserved only for save compatibility; historical source is recoverable from git. Do not treat BR findings in this snapshot as current work.
+
 **Version reviewed:** `0.7.1-dev` (per `MOD_VERSION` in `scripts/mods/enemy_tweaker/enemy_tweaker.lua:3`).
 
 > **Header re-stamped 2026-05-29; body findings predate this version and may be stale — see GitHub Issues for current state.** This review was originally written against `0.5.7-dev`; the header version was corrected to match disk on 2026-05-29 but the body below was NOT re-reviewed. Treat individual findings as point-in-time observations from the `0.5.7-dev` era.

@@ -112,9 +112,9 @@ Last updated: 2026-07-14.
 | Mod(s) | weapon_tweaker, chaos_wastes_tweaker, enemy_tweaker, buff_tweaker |
 | Fix version(s) | buff_tweaker v0.0.1+ (consolidated registration via single bt master); also see byte-identical canonical lists shipped 2026-05-21. |
 | Category | STATIC |
-| Repro | (Lint-checkable via diff of `*_big_rebalance_registrations.lua`.) |
-| Expected post-fix | Each BR-aware mod ships byte-identical sorted canonical list, OR all peers consume bt for BR registration. |
-| Detection | Diff `wt/scripts/.../weapon_tweaker_big_rebalance_registrations.lua` against ct/et equivalents — only filename comment and `local mod = get_mod(...)` should differ. |
+| Repro | Run `qa/check_retired_big_rebalance.ps1`. |
+| Expected post-fix | Retired BR implementation/registration files stay absent; hidden identifiers remain reserved only for save compatibility. |
+| Detection | The blocking retirement gate rejects restored loaders, executable lifecycle plumbing, or unhidden BR widgets. |
 
 
 ---

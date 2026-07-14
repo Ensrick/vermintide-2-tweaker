@@ -1,5 +1,22 @@
 # Weapon Tweaker Changelog
 
+## 0.12.242-dev (2026-07-14) - #391 per-career CWV availability [not deployed]
+
+- Expanded #368's bounded 29-item CWV availability catalog from one all-careers switch per variant to one backward-compatible item master with four independent authored-career children. Existing `unlock_cwv_variant_<item>` values retain their meaning; a saved false still disables that entire item, while each career now has its own default-on `unlock_cwv_variant_<career>_<item>` choice.
+- The final `can_wield` reconciliation now composes the item master and exact career choice before replacing only that career's membership. It still requires the live `ItemMasterList` entry's positive `cwv_variant == true` marker and performs no hooks, RPCs, per-frame work, or writes outside CWV's authored receiver list.
+- Source confirmation resolved the issue's gating question: CWV copies each definition's `careers` array directly into the clone's `can_wield`; vanilla's backend wield and inventory-filter functions test membership in that array (`character_weapon_variants.lua:9769-9771`; decompile `backend_interface_common.lua:15-24,93-111`). Foot Knight has no separate item gate. Grail Knight and Warrior Priest remain subject to owning/selecting those careers, not a CWV item restriction.
+- Added pure Lua schema/decision coverage and runtime regression check `issue391_cwv_per_career_availability`. Repository verification requires 29 compatible masters, 116 unique career children, exact composition behavior, positive-marker gating, and live Dual Axes reconciliation.
+
+### Solo verify
+
+With CWV active, open Weapon Availability -> Career Weapon Variants. Expand Kruber Dual Axes and independently disable Foot Knight while leaving Mercenary, Huntsman, and Grail Knight enabled. Transition keep-to-mission and back: only Foot Knight must lose the CWV item. Re-enable Foot Knight, disable the Kruber Dual Axes parent, and confirm all four Kruber careers lose it; re-enable the parent and confirm each saved child choice returns. Repeat the child-only check on Saltzpyre Dual Axes with Warrior Priest. Run `/wt_regression_test` and expect `issue391_cwv_per_career_availability` to pass.
+
+## 0.12.241-dev (2026-07-14) - #433 remove dead Big Rebalance payload [not deployed]
+
+- Deleted the unreachable Big Rebalance implementation and definitions (166,554 bytes total), its no-op lifecycle dispatch, and two regression checks that exercised formulas callable only from the retired hooks. Historical source remains recoverable from git.
+- Preserved every active weapon-availability, animation, transform, backend, and trait-pool path. Existing saved `br_*` values remain untouched; the hidden identifier catalog and prefix stay reserved by the blocking retirement gate.
+- Repository-only verification: retired-BR absence gate, WT lint, Lua tests, and Quick QA. No in-game behavior existed to verify.
+
 ## 0.12.240-dev (2026-07-14) - #368 independent WT/CWV availability [verify-fix]
 
 - Removed the legacy `cwv_managed` cede path. Kruber's Saltzpyre Axe, Falchion, and Axe & Falchion are ordinary WT-owned rows; their fresh defaults follow CWV presence while persisted choices continue to win.

@@ -9,8 +9,10 @@ return function(H, repo_root)
     local root = repo_root .. "/weapon_tweaker/scripts/mods/weapon_tweaker/"
     local unlocks = dofile(root .. "wt_unlock_data.lua")
     local catalog = dofile(root .. "wt_cwv_variant_catalog.lua")
+    local policy = dofile(root .. "_wt_cwv_availability_policy.lua")
     local data = read(root .. "weapon_tweaker_data.lua")
     local availability = read(root .. "_wt_availability.lua")
+    local localization = read(root .. "weapon_tweaker_localization.lua")
     local entry = read(root .. "weapon_tweaker.lua")
     local backend = read(root .. "weapon_tweaker_backend.lua")
     local careers = { "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }
@@ -49,7 +51,54 @@ return function(H, repo_root)
         end
         H.truthy(data:find('default_value = true', 1, true))
         H.truthy(availability:find("item.cwv_variant == true", 1, true))
-        H.truthy(availability:find('mod:get("unlock_cwv_variant_" .. variant.key)', 1, true))
+        H.truthy(availability:find("_cwv_availability_policy.is_enabled", 1, true))
+    end)
+
+    H.test("issue391 builds one compatible master and four career toggles per CWV item", function()
+        local rows = policy.build_widgets(catalog)
+        H.equal(#rows, 29)
+        local seen = {}
+        local child_count = 0
+        for index, row in ipairs(rows) do
+            local variant = catalog[index]
+            H.equal(row.setting_id, "unlock_cwv_variant_" .. variant.key)
+            H.equal(row.type, "checkbox")
+            H.equal(row.default_value, true)
+            H.equal(#row.sub_widgets, #variant.careers)
+            for child_index, child in ipairs(row.sub_widgets) do
+                local career = variant.careers[child_index]
+                local expected = "unlock_cwv_variant_" .. career .. "_" .. variant.key
+                H.equal(child.setting_id, expected)
+                H.equal(child.type, "checkbox")
+                H.equal(child.default_value, true)
+                H.equal(seen[expected], nil, expected)
+                seen[expected] = true
+                child_count = child_count + 1
+            end
+        end
+        H.equal(child_count, 116)
+    end)
+
+    H.test("issue391 policy composes legacy item master with exact career choice", function()
+        local values = {
+            unlock_cwv_variant_cwv_es_dual_axes = true,
+            unlock_cwv_variant_es_knight_cwv_es_dual_axes = true,
+            unlock_cwv_variant_es_questingknight_cwv_es_dual_axes = false,
+        }
+        local function get(setting_id) return values[setting_id] end
+        H.equal(policy.is_enabled(get, "cwv_es_dual_axes", "es_knight"), true)
+        H.equal(policy.is_enabled(get, "cwv_es_dual_axes", "es_questingknight"), false)
+        values.unlock_cwv_variant_cwv_es_dual_axes = false
+        H.equal(policy.is_enabled(get, "cwv_es_dual_axes", "es_knight"), false)
+        H.equal(policy.is_enabled(nil, "cwv_es_dual_axes", "es_knight"), false)
+    end)
+
+    H.test("issue391 production consumes shared schema in data runtime and localization", function()
+        H.truthy(data:find("policy.build_widgets(catalog)", 1, true))
+        H.truthy(availability:find("_cwv_availability_policy.is_enabled", 1, true))
+        H.truthy(localization:find("_cwv_availability_policy.career_setting_id", 1, true))
+        H.truthy(localization:find('es_knight = "Foot Knight"', 1, true))
+        H.truthy(localization:find('wh_priest = "Warrior Priest"', 1, true))
     end)
 
     H.test("issue368 WT performs a deferred final write", function()

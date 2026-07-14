@@ -625,20 +625,14 @@ return {
                 },
             },
 
---[==[ BIG REBALANCE WIDGETS — ON ICE (bt retired 2026-06-08). The br_group menu
--- group is commented out so the inert BR toggles don't appear in the VMF menu.
--- To restore, delete this opener line and the closing long-comment marker below.
-            -- BIG REBALANCE (Core's BR / "Weapon Balance" decompile)
-            -- All defaults false; master gates registrations across mods
-            -- (same setting_id pattern in wt + ct, OR-merged at runtime).
-            -- See enemy_tweaker_big_rebalance.lua + ..._registrations.lua.
+--[==[ RETIRED BIG REBALANCE IDENTIFIERS. The br_group menu remains commented out
+-- so old settings retain stable br_* keys without exposing inert controls. There
+-- is no implementation or registration owner; revival requires a new design.
             {
                 setting_id  = "br_group",
                 type        = "group",
                 sub_widgets = {
-                    -- Master toggle moved to the new `bt` (Tweaker: Buffs) mod.
-                    -- Subscribe to it and enable its master to make these et BR
-                    -- sub-toggles functional.
+                    -- Historical master identifier; intentionally inactive.
 
                     -- Breed tuning
                     {

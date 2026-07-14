@@ -48,7 +48,7 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_regression` | `/et_regression_test` harness + generic checks (loads FIRST) |
 | `_et_log` | dbg/alert/chat/spawn log channels + printf probe |
 | `_et_protect` | `_safe`/`_hook_wrap`/`_make_tick_guard` (#479: skip tick on inner error, NEVER re-run vanilla) + `_call_with_override` + multiplier math |
-| `_et_fingerprint` | BR + settings fingerprints, `et_br_fingerprint` RPC, dormant-BR stub |
+| `_et_fingerprint` | Deterministic whole-mod settings fingerprint used by diagnostics and parity checks |
 | `_et_settings_queue` | Engine-free next-frame coalescer for VMF/Mod Tweaker setting bursts (#560) |
 | `_et_health_multiplier_core` | Engine-free bounds, hostile-breed policy, and health-percentage rescale math (#369) |
 | `_et_horde_presets` | horde preset catalog + composition backup/apply + CHS horde size |

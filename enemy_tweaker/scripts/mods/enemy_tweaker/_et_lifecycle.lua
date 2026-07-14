@@ -1,11 +1,11 @@
 local mod = get_mod("enemy_tweaker")
 
--- _et_lifecycle.lua — VMF lifecycle callbacks + dormant-BR bootstrap
+-- _et_lifecycle.lua — VMF lifecycle callbacks
 --
 -- on_setting_changed / on_disabled / on_enabled: the re-apply / restore
 -- chains over every provider module. VMF allows exactly ONE assignment of
 -- each callback mod-wide and they live HERE — never assign them in another
--- file. Also fires the (stubbed, dormant) BR bootstrap once at load.
+-- file.
 --
 -- Owned by: enemy_tweaker.lua entry point (dofile'd after every provider it
 -- consumes: presets, swaps, mimic, roaming, champion, banner). No mod._et
@@ -27,7 +27,6 @@ local _apply_faction_swap_to_current_horde_settings = ET.apply_faction_swap_to_c
 local _apply_champion_breed_overrides = ET.apply_champion_breed_overrides
 local _apply_difficulty_mimic = ET.apply_difficulty_mimic
 local _original_compositions_pacing_ref = ET.original_compositions_pacing
-local BR = ET.BR
 
 local function _reapply_via_active_cd()
     -- For settings whose effect lives on the Current* tables (faction-swap,
@@ -51,7 +50,7 @@ local function _apply_setting_changes(setting_ids, latest_setting_id)
     -- the rest of the chain still runs. Previously a crash in one apply
     -- function could leave Current* settings half-applied with no log.
     if not _original_compositions_pacing_ref() then
-        _dbg_alert("on_setting_changed: _original_compositions_pacing nil (mod loaded but compositions never backed up) — skipping reapply; BR.on_setting_changed still runs")
+        _dbg_alert("on_setting_changed: _original_compositions_pacing nil (mod loaded but compositions never backed up) — skipping composition reapply")
     else
         _safe("on_setting_changed:restore",       _restore_compositions)
         _safe("on_setting_changed:apply_preset",  _apply_horde_preset)
@@ -66,7 +65,7 @@ local function _apply_setting_changes(setting_ids, latest_setting_id)
         -- stale until the next zone boundary. on_enabled already reseeds;
         -- mirror the same reseed here for any setting change. Permissive
         -- trigger (any et setting) — every group (horde / mimic / specials /
-        -- breed-swap / faction-swap / BR) can plausibly influence the cache,
+        -- breed-swap / faction-swap) can plausibly influence the cache,
         -- and a no-op refresh between zones is cheap.
         _safe("on_setting_changed:refresh_cd", function()
             local active = Managers.state and Managers.state.conflict
@@ -99,10 +98,6 @@ local function _apply_setting_changes(setting_ids, latest_setting_id)
     -- Champion elite-pool retune — outside the compositions guard (independent of
     -- composition backup state; idempotent, only writes on a toggle-state change).
     _safe("on_setting_changed:champion", _apply_champion_breed_overrides)
-    -- BR also restores/reapplies its whole data surface, so it participates in
-    -- the same transaction boundary. Its current implementation ignores the id;
-    -- pass the latest id once for future compatibility.
-    _safe("on_setting_changed:BR", BR.on_setting_changed, latest_setting_id)
     printf("[et:560] applied settings=%d trigger=%s lua_kb=%.0f",
         setting_count, trigger, collectgarbage("count"))
 end
@@ -164,7 +159,6 @@ mod.on_disabled = function()
     if mod._et_apply_health_multipliers then
         _safe("on_disabled:health_multiplier", mod._et_apply_health_multipliers)
     end
-    _safe("on_disabled:BR", BR.on_disabled)
     mod:echo("Enemy Tweaker disabled — compositions restored")
 end
 
@@ -203,16 +197,4 @@ mod.on_enabled = function()
     if mod._et_apply_health_multipliers then
         _safe("on_enabled:health_multiplier", mod._et_apply_health_multipliers)
     end
-    _safe("on_enabled:BR", BR.on_enabled)
 end
-
--- ============================================================
--- Big Rebalance bootstrap
--- ============================================================
--- VMF calls `mod.on_enabled` when the mod is initially enabled in the
--- launcher, but not on every game start if the mod stays enabled across
--- sessions. Trigger BR.on_enabled at file-load time so registrations
--- and hooks are in place from boot. Idempotent (guarded by internal
--- _br_master_applied / _br_hooks_installed flags). BR is the DORMANT stub
--- (see _et_fingerprint.lua) — this call is a no-op until #433 revives it.
-BR.on_enabled()

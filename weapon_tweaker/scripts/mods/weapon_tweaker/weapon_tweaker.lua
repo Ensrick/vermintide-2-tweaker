@@ -82,35 +82,11 @@ local _mp_pre_backend = collectgarbage("count")  -- [mem-probe]
 local weapon_backend = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_backend")
 mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total below — baseline is set after this)", (collectgarbage("count") - _mp_pre_backend) / 1024)  -- [mem-probe]
 
--- ============================================================
--- BIG REBALANCE — ON ICE (v0.12.122-dev, 2026-06-18)
--- ============================================================
--- The entire Big Rebalance integration is mothballed. bt (buff_tweaker) was
--- retired 2026-06-08, so BR's _master() gate has been permanently false — BR
--- did NOTHING — yet weapon_tweaker_big_rebalance.lua + _big_rebalance_defs.lua
--- still loaded their full payload (DamageProfile / Explosion / Buff defs + the
--- ~2600-line hook installers) into the hard 1 GiB lua_heap at boot, contributing
--- to the lua_heap OOM crashes. We stop loading them entirely. To UN-ICE: restore
--- bt, then un-comment the dofile line below and delete the `if true then return`
--- guard banners at the top of the two BR module files. (Reversal is purely
--- un-commenting; both BR files are still shipped in the bundle, just dormant.)
--- local big_rebalance = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_big_rebalance")  -- BR ON ICE
-local big_rebalance = { apply_all = function() end }
--- The two true-flight formula helpers were file-scope in the BR module (NOT
--- behind the master gate) purely so wt's /wt_regression_test markers can assert
--- them with BR off. Preserve them on the stub so those tests stay green —
--- gameplay is unchanged: their only callers live in the master-gated trueflight
--- hook, which is never installed once bt is retired.
-function mod._wt_tf_projectile_speed(speed, i)
-    if i > 1 then return speed * (1 - i * 0.05) end
-    return speed
-end
-function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
-    local extra_shots_idx = num_projectiles - (num_extra_shots or 0) + 1
-    return extra_shots_idx <= i
-end
+-- Big Rebalance was retired under #321. Its unreachable implementation,
+-- definitions, lifecycle stub, and dead-only formula checks were deleted under
+-- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.240-dev"
+local MOD_VERSION = "0.12.242-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -3987,12 +3963,6 @@ mod.on_game_state_changed = function(status, state_name)
     -- so this guarantees bw_necromancer's soul_rip particles are resident before the
     -- staff can be wielded in a mission (2026-06-29 nicho create_particles crash).
     mod._force_load_necromancer_fx_package()
-    -- Re-apply Big Rebalance writes on every state transition.  Most BR
-    -- changes mutate Weapons/DamageProfileTemplates which the engine
-    -- caches at boot, so this is largely defensive — but cheap and
-    -- consistent with the existing pattern in this hook.
-    big_rebalance.apply_all()
-
     -- Loadout dump on StateIngame entry (routed through mod:debug channel).
     if status == "enter" and state_name == "StateIngame" then
         _dbg_dump_local_player_loadout()
@@ -4041,13 +4011,6 @@ mod.on_setting_changed = function(setting_id)
         weapon_backend.refresh_on_setting_change(mod)
     elseif setting_id and (setting_id:find("^trait_") or setting_id:find("^cw_trait_")) then
         apply_trait_filters()
-    elseif setting_id and setting_id:find("^br_") then
-        -- Big Rebalance toggles: re-apply on every change.  Most BR writes
-        -- are idempotent (direct field assignments on shared template
-        -- tables) so re-running the whole apply is safe at runtime.  The
-        -- master registration block runs once per session (re-init is a
-        -- no-op after the first pass).
-        big_rebalance.apply_all()
     elseif setting_id and setting_id:find("^wt_dev_anim_") then
         -- Dev: 3P anim picker — mutate live Weapons.<tpl> tables.
         _wt_dev_anim_picker.on_setting_changed(setting_id)
@@ -4218,15 +4181,6 @@ _rt_register("issue341_bolt_staff_primary_overcharge_contract", function()
         return "#341: Bolt Staff primary actions no longer share the spark key"
     end
 end)
-
--- ============================================================
--- Core's Big Rebalance — initial apply.
--- Runs once at mod load, after every helper in this file is defined
--- so the apply functions can safely call anything they need.
--- See `weapon_tweaker_big_rebalance_registrations.lua` for the
--- cross-mod alphabetical registration list.
--- ============================================================
-big_rebalance.apply_all()
 
 -- ============================================================
 -- /regression_test checks (see scaffold near MOD_VERSION).
@@ -4712,60 +4666,6 @@ _rt_register("wt_kruber_1h_sword_push_combo_revert", function()
                 .. tostring(first and first.sub_action) .. ")"
         end
     end
-end)
-
-_rt_register("wt_br_trueflight_speed_falloff_matches_vanilla", function()
-    -- v0.12.116: the BR true-flight fire reimpl shipped vanilla's per-projectile
-    -- speed falloff sign-flipped — speed * (i * 0.05 - 1) instead of vanilla's
-    -- speed * (1 - i * 0.05) (action_true_flight_bow.lua:152) — so with
-    -- br_hook_trueflight_fire on, every projectile after the first launched
-    -- BACKWARDS at negative speed under multi-shot fires. The formula now lives in
-    -- mod._wt_tf_projectile_speed (file scope in weapon_tweaker_big_rebalance.lua).
-    local f = mod._wt_tf_projectile_speed
-    if type(f) ~= "function" then
-        return "_wt_tf_projectile_speed missing — BR true-flight falloff regressed or moved"
-    end
-    if f(10, 1) ~= 10 then
-        return "i=1 (first projectile) must pass speed through unmodified"
-    end
-    local expected = 10 * (1 - 2 * 0.05)  -- vanilla falloff for i=2
-    local got = f(10, 2)
-    if math.abs(got - expected) > 1e-9 then
-        return string.format("i=2: expected %.4f (vanilla falloff), got %.4f (sign-flip regression?)", expected, got)
-    end
-    for i = 2, 5 do
-        if f(10, i) <= 0 then
-            return string.format("i=%d produced non-positive speed %.4f — projectile would fire backwards", i, f(10, i))
-        end
-    end
-end)
-
-_rt_register("wt_br_trueflight_extra_shot_gating_matches_vanilla", function()
-    -- v0.12.117 (Issue #74): the BR true-flight fire reimpl gated
-    -- set_shooting/ammo/overcharge on `self.extra_buff_shot`, which is only ever
-    -- assigned false — so extra-shot-buff projectiles wrongly bumped spread state
-    -- and charged ammo/overcharge. Vanilla derives a per-projectile is_extra_shot
-    -- (action_true_flight_bow.lua:128,132): extra_shots_idx = num_projectiles -
-    -- num_extra_shots + 1; is_extra_shot = extra_shots_idx <= i. The formula now
-    -- lives in mod._wt_tf_is_extra_shot; assert it matches vanilla's truth table.
-    local f = mod._wt_tf_is_extra_shot
-    if type(f) ~= "function" then
-        return "_wt_tf_is_extra_shot missing — BR true-flight extra-shot gating regressed or moved"
-    end
-    -- No extra shots: nothing is an extra shot.
-    for i = 1, 3 do
-        if f(i, 3, 0) then return string.format("i=%d flagged extra with num_extra_shots=0", i) end
-    end
-    -- 5 projectiles, 2 extra: vanilla idx = 5-2+1 = 4 → i=1..3 normal, i=4..5 extra.
-    for i = 1, 3 do
-        if f(i, 5, 2) then return string.format("i=%d flagged extra (expected normal; idx=4)", i) end
-    end
-    for i = 4, 5 do
-        if not f(i, 5, 2) then return string.format("i=%d not flagged extra (expected extra; idx=4)", i) end
-    end
-    -- nil num_extra_shots must behave as 0 (start_action always sets it, but the
-    -- helper is the last line of defense).
-    if f(1, 1, nil) then return "nil num_extra_shots treated as extra shot" end
 end)
 
 _rt_register("dbg_helpers_two_channel", function()
@@ -5504,6 +5404,44 @@ _rt_register("issue368_cwv_independent_availability", function()
     end
     if get_mod("character_weapon_variants") and live == 0 then
         return "CWV present but no marked variants registered (run in keep)"
+    end
+end)
+
+_rt_register("issue391_cwv_per_career_availability", function()
+    local policy = mod._wt.cwv_availability_policy
+    local catalog = mod._wt.cwv_variant_catalog
+    if type(policy) ~= "table" or type(catalog) ~= "table" then
+        return "#391 availability policy or catalog missing"
+    end
+
+    local rows = policy.build_widgets(catalog)
+    if #rows ~= #catalog then return "#391 item master count drift" end
+    for index, variant in ipairs(catalog) do
+        local row = rows[index]
+        if not row or row.setting_id ~= policy.master_setting_id(variant.key) then
+            return "#391 master setting drift: " .. tostring(variant.key)
+        end
+        if #row.sub_widgets ~= #variant.careers then
+            return "#391 career setting count drift: " .. tostring(variant.key)
+        end
+    end
+
+    if not mod._wt.cwv_ownership.cwv_is_active(get_mod("character_weapon_variants")) then
+        return "skip: CWV inactive"
+    end
+    local variant = rawget(_G, "ItemMasterList") and rawget(ItemMasterList, "cwv_es_dual_axes")
+    if not variant or variant.cwv_variant ~= true then
+        return "skip: CWV Dual Axes not registered (run in keep)"
+    end
+    local present = {}
+    for _, career in ipairs(variant.can_wield or {}) do present[career] = true end
+    for _, career in ipairs({ "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }) do
+        local expected = policy.is_enabled(function(setting_id) return mod:get(setting_id) end,
+            "cwv_es_dual_axes", career)
+        if present[career] ~= expected then
+            return string.format("#391 live mismatch %s expected=%s actual=%s",
+                career, tostring(expected), tostring(present[career] == true))
+        end
     end
 end)
 

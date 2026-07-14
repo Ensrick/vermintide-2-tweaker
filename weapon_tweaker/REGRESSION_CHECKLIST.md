@@ -1,5 +1,18 @@
 # Regression Checklist — weapon_tweaker
 
+## #391 - per-career CWV availability
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.242-dev (not deployed) |
+| Automated | Offline `test_wt_cwv_independence` requires 29 preserved item-master IDs, 116 unique default-on career children, exact master/child composition, positive `cwv_variant` marker gating, and shared data/runtime/localization schema. `/wt_regression_test`: `issue391_cwv_per_career_availability`. |
+| Exact career | With the Kruber Dual Axes parent enabled, disable Foot Knight only. Keep and mission inventory must retain the item for Mercenary, Huntsman, and Grail Knight and remove it only from Foot Knight. Re-enable it and repeat on Saltzpyre Dual Axes / Warrior Priest. |
+| Compatibility master | Disable the existing per-item parent: all four authored careers lose the item. Re-enable it: each persisted child choice resumes without being overwritten. |
+| Boundaries | WT touches only a live catalog key positively marked `cwv_variant == true`, and only the careers authored in that catalog row. CWV absent/disabled produces no clone writes. No hook, RPC, or per-frame work is added. |
+| Source contract | CWV assigns `def.careers` directly to clone `can_wield`; vanilla `BackendInterfaceCommon.can_wield` and inventory macros use exact membership. Career DLC ownership remains a separate vanilla career-selection gate. |
+
+---
+
 ## #388 - Deepwood cross-career overcharge presentation
 
 | Check | Expected |
@@ -198,9 +211,9 @@ Last updated: 2026-07-13.
 | Mod(s) | weapon_tweaker, chaos_wastes_tweaker, enemy_tweaker, buff_tweaker |
 | Fix version(s) | buff_tweaker v0.0.1+ (consolidated registration via single bt master); also see byte-identical canonical lists shipped 2026-05-21. |
 | Category | STATIC |
-| Repro | (Lint-checkable via diff of `*_big_rebalance_registrations.lua`.) |
-| Expected post-fix | Each BR-aware mod ships byte-identical sorted canonical list, OR all peers consume bt for BR registration. |
-| Detection | Diff `wt/scripts/.../weapon_tweaker_big_rebalance_registrations.lua` against ct/et equivalents — only filename comment and `local mod = get_mod(...)` should differ. |
+| Repro | Run `qa/check_retired_big_rebalance.ps1`. |
+| Expected post-fix | Retired BR implementation/registration files stay absent; hidden identifiers remain reserved only for save compatibility. |
+| Detection | The blocking retirement gate rejects restored loaders, executable lifecycle plumbing, or unhidden BR widgets. |
 
 
 ---

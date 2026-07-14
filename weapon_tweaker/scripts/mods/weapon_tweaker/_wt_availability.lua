@@ -26,11 +26,17 @@ local weapon_unlock_map = WT.weapon_unlock_map
 local _cwv_conditional   = WT.cwv_conditional_managed
 local _cwv_ownership     = mod:dofile("scripts/mods/weapon_tweaker/_wt_cwv_ownership")
 local _cwv_variant_catalog = mod:dofile("scripts/mods/weapon_tweaker/wt_cwv_variant_catalog")
+local _cwv_availability_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_cwv_availability_policy")
 WT.cwv_variant_catalog = _cwv_variant_catalog
 WT.cwv_ownership         = _cwv_ownership
+WT.cwv_availability_policy = _cwv_availability_policy
 
 local function _cwv_active()
     return _cwv_ownership.cwv_is_active(get_mod("character_weapon_variants"))
+end
+
+local function _get_setting(setting_id)
+    return mod:get(setting_id)
 end
 
 -- Pairs removed from `weapon_unlock_map`. Users who had the
@@ -91,8 +97,11 @@ local function _apply_cwv_variant_unlocks()
     for _, variant in ipairs(_cwv_variant_catalog) do
         local item = rawget(ItemMasterList, variant.key)
         if item and item.cwv_variant == true then
-            local enabled = mod:get("unlock_cwv_variant_" .. variant.key) == true
             for _, career in ipairs(variant.careers) do
+                local enabled = _cwv_availability_policy.is_enabled(
+                    _get_setting,
+                    variant.key,
+                    career)
                 _set_career(item, career, enabled)
             end
         end

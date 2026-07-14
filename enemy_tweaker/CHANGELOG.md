@@ -1,5 +1,11 @@
 # Enemy Tweaker Changelog
 
+## 0.7.45-dev (2026-07-14): #433 remove dead Big Rebalance payload [not deployed]
+
+- Deleted the unreachable 77,622-byte Big Rebalance implementation after #321 resolved its registration/parity design in favor of retirement. Removed the dormant lifecycle API stub, all no-op apply/restore calls, the BR-only peer fingerprint RPC, and the obsolete regression check for dead lookup code.
+- Kept Enemy Tweaker's deterministic whole-mod settings fingerprint used by `[et:LOAD]`. Active presets, swaps, director refresh, boss balance, enemy-health multipliers, and the new #452/#453 diagnostics are unchanged.
+- Existing saved `br_*` values remain untouched; the hidden identifier catalog and prefix stay reserved. Repository gates now require every retired implementation to remain absent, so no in-game verification is necessary.
+
 ## 0.7.44-dev (2026-07-14): #453 enemy-modifier catalog diagnostics [not deployed]
 
 - Resolved the requested catalog to 15 native templates: 13 standard Chaos Wastes grudge marks, Geheimnisnacht Repulse (`shockwave` / `grudge_mark_shockwave_attacks`), and Devious Delvings Berserk (`termite_base` / `grudge_mark_termite_boss_raging`).

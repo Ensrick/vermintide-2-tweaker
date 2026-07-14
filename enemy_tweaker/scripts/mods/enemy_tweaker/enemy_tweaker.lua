@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.44-dev"
+local MOD_VERSION = "0.7.45-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -42,10 +42,9 @@ mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 -- v0.7.31-dev split moved each check into the module that owns what it checks,
 -- so the print ORDER follows this manifest -- see CHANGELOG).
 --
--- enemy_tweaker_big_rebalance.lua is DORMANT (BR on ice since bt retired
--- 2026-06-08; user decision #433 pending): it is deliberately NOT in this
--- manifest and NOT require()'d -- the stub in _et_fingerprint.lua preserves
--- its public API. Do not load, edit, or delete it without #433 being decided.
+-- Big Rebalance was retired under #321. Its unreachable implementation,
+-- fingerprint RPC, and lifecycle stub were deleted under #433; saved br_* keys
+-- remain untouched and reserved by the repository retirement gate.
 --
 -- Data shared with enemy_tweaker_data.lua / _localization.lua lives in the
 -- require()'d enemy_tweaker_breeds.lua module instead (VMF loads localization
@@ -55,7 +54,7 @@ mod._et = { version = MOD_VERSION, rpc_schema = ET_RPC_SCHEMA }
 mod:dofile("scripts/mods/enemy_tweaker/_et_regression")           -- /et_regression_test harness + generic checks
 mod:dofile("scripts/mods/enemy_tweaker/_et_log")                  -- logging helpers (dbg/alert/chat/spawn channels + printf probe)
 mod:dofile("scripts/mods/enemy_tweaker/_et_protect")              -- protective wrappers (_safe/_hook_wrap/tick guard #479) + multiplier math
-mod:dofile("scripts/mods/enemy_tweaker/_et_fingerprint")          -- BR + settings fingerprints, et_br_fingerprint RPC, dormant-BR stub
+mod:dofile("scripts/mods/enemy_tweaker/_et_fingerprint")          -- deterministic whole-mod settings fingerprint
 mod._et.SettingsQueue = mod:dofile("scripts/mods/enemy_tweaker/_et_settings_queue") -- #560 bounded setting-change transactions
 mod._et.HealthMultiplierCore = mod:dofile("scripts/mods/enemy_tweaker/_et_health_multiplier_core") -- #369 engine-free bounds/policy
 mod._et.SpecialVariantsCore = mod:dofile("scripts/mods/enemy_tweaker/_et_special_variants_core") -- #452 engine-free asset census
