@@ -54,7 +54,7 @@ return function(H, repo_root)
         H.truthy(availability:find("_cwv_availability_policy.is_enabled", 1, true))
     end)
 
-    H.test("issue391 builds one compatible master and four career toggles per CWV item", function()
+    H.test("issue391 builds one compatible master and exact career toggles per CWV item", function()
         local rows = policy.build_widgets(catalog)
         H.equal(#rows, 29)
         local seen = {}
@@ -76,7 +76,26 @@ return function(H, repo_root)
                 child_count = child_count + 1
             end
         end
-        H.equal(child_count, 116)
+        H.equal(child_count, 122)
+    end)
+
+    H.test("issue593 Empire Axe Shield replaces Saltz native fallback only while CWV is active", function()
+        local by_key = {}
+        for _, row in ipairs(catalog) do by_key[row.key] = row end
+        for _, key in ipairs({ "cwv_es_axe_shield", "cwv_es_axe_shield_veteran" }) do
+            local row = by_key[key]
+            H.truthy(row, key)
+            H.equal(#row.careers, 7)
+            H.equal(#row.conditional_careers, 3)
+            for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+                H.equal(contains(row.careers, career), true, key .. "/" .. career)
+                H.equal(contains(row.conditional_careers, career), true, key .. "/conditional/" .. career)
+                H.equal(unlocks.cwv_conditional_managed[career].dr_shield_axe, true)
+            end
+            H.equal(contains(row.careers, "wh_priest"), false)
+        end
+        H.truthy(availability:find("variant.conditional_careers or {}", 1, true))
+        H.truthy(availability:find("_career_action_injections[item.template]", 1, true))
     end)
 
     H.test("issue391 policy composes legacy item master with exact career choice", function()

@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.249-dev"
+local MOD_VERSION = "0.12.250-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4036,7 +4036,7 @@ mod.on_setting_changed = function(setting_id)
 end
 
 -- Install basic backend hooks (UI filtering and can_wield override)
-weapon_backend.install(mod, weapon_unlock_map, apply_weapon_unlocks)
+weapon_backend.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_actions_on_weapons)
 if weapon_backend.overcharge_presentation then
     for _, check in ipairs(weapon_backend.overcharge_presentation.rt_checks or {}) do
         _rt_register(check.name, check.fn)
@@ -5478,7 +5478,10 @@ end)
 _rt_register("issue593_conditional_cwv_axe_shield_ownership", function()
     local policy = mod._wt.cwv_ownership
     if type(policy) ~= "table" then return "#593 conditional ownership policy missing" end
-    local careers = { "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }
+    local careers = {
+        "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+        "wh_captain", "wh_bountyhunter", "wh_zealot",
+    }
     for _, career in ipairs(careers) do
         local managed = mod._wt.cwv_conditional_managed[career]
         if not managed or managed.dr_shield_axe ~= true then
@@ -5520,6 +5523,41 @@ _rt_register("issue593_conditional_cwv_axe_shield_ownership", function()
             if present[career] ~= expected then
                 return string.format("#593 runtime mismatch %s active=%s enabled=%s present=%s",
                     career, tostring(active), tostring(enabled), tostring(present[career]))
+            end
+        end
+    end
+
+    for _, key in ipairs({ "cwv_es_axe_shield", "cwv_es_axe_shield_veteran" }) do
+        local variant = rawget(_G, "ItemMasterList") and rawget(ItemMasterList, key)
+        if active and variant and variant.cwv_variant == true then
+            local present = {}
+            for _, career in ipairs(variant.can_wield or {}) do present[career] = true end
+            for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+                local expected = mod._wt.cwv_availability_policy.is_enabled(
+                    function(setting_id) return mod:get(setting_id) end, key, career)
+                if present[career] ~= expected then
+                    return string.format("#593 CWV variant mismatch key=%s career=%s expected=%s actual=%s",
+                        key, career, tostring(expected), tostring(present[career] == true))
+                end
+                if expected and CareerSettings and Weapons and ActionTemplates then
+                    local cs = CareerSettings[career]
+                    local ability = cs and cs.activated_ability and cs.activated_ability[1]
+                    local action_name = ability and ability.action_name
+                    local tmpl = variant.template and Weapons[variant.template]
+                    if action_name and ActionTemplates[action_name]
+                        and (not tmpl or not tmpl.actions or not tmpl.actions[action_name]) then
+                        return string.format("#593 CWV variant missing career action key=%s career=%s action=%s",
+                            key, career, action_name)
+                    end
+                end
+            end
+        elseif not active and variant and variant.cwv_variant == true then
+            for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+                for _, value in ipairs(variant.can_wield or {}) do
+                    if value == career then
+                        return "#593 inactive CWV variant leaked to " .. career .. ": " .. key
+                    end
+                end
             end
         end
     end

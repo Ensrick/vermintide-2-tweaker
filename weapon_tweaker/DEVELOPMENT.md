@@ -14,6 +14,17 @@ reader. Reconcile only on active-state transitions. Keep settings widgets and
 localization intact so suppressed preferences return without a restart; never
 suppress the donor's native careers.
 
+Issue #593 applies this handoff to both Kruber and standard Saltzpyre. With CWV
+active, WT suppresses Bardin's `dr_shield_axe` for those seven receivers and
+exposes `cwv_es_axe_shield` / `_veteran` to the three standard Saltzpyre careers.
+The catalog's `conditional_careers` field marks only WT-added cross-receiver
+owners; an inactive CWV or disabled WT strips those additions without touching
+CWV's four authored Kruber owners. Warrior Priest is outside this handoff.
+The same transition reconciliation rebuilds template career-action injections;
+otherwise disabling CWV would leave Saltzpyre ability actions on the variant's
+shared template, while a default-on variant with the donor fallback disabled
+would never receive those actions in the first place.
+
 Architecture, gotchas, and conventions for `weapon_tweaker`. Read alongside
 `CHANGELOG.md` (history), `CODE_REVIEW.md` (current health), `REGRESSION_CHECKLIST.md`
 (pre-release gates), and `CROSS_CHARACTER_PORT_RECIPE.md` (the seven-step procedure

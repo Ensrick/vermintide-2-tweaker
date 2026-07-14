@@ -93,16 +93,26 @@ end
 -- the live IML on every bounded availability reconciliation and only claim a
 -- catalog row when CWV's positive marker is present.
 local function _apply_cwv_variant_unlocks()
-    if not _cwv_active() or not ItemMasterList then return end
+    if not ItemMasterList then return end
+    local active = _cwv_active()
     for _, variant in ipairs(_cwv_variant_catalog) do
         local item = rawget(ItemMasterList, variant.key)
         if item and item.cwv_variant == true then
-            for _, career in ipairs(variant.careers) do
-                local enabled = _cwv_availability_policy.is_enabled(
-                    _get_setting,
-                    variant.key,
-                    career)
-                _set_career(item, career, enabled)
+            if active then
+                for _, career in ipairs(variant.careers) do
+                    local enabled = _cwv_availability_policy.is_enabled(
+                        _get_setting,
+                        variant.key,
+                        career)
+                    _set_career(item, career, enabled)
+                end
+            else
+                -- CWV owns its authored careers. WT removes only cross-receiver
+                -- careers that this catalog explicitly adds, so disabling or
+                -- hot-reloading CWV cannot leave its Empire Axe+Shield on Saltz.
+                for _, career in ipairs(variant.conditional_careers or {}) do
+                    _set_career(item, career, false)
+                end
             end
         end
     end
@@ -208,6 +218,34 @@ local function patch_career_actions_on_weapons()
             end
         end
     end
+
+    -- WT's conditional CWV cross-receivers also need their career ability on
+    -- the live variant template. The donor fallback happens to share that
+    -- template, but its checkbox may be off while the default-on CWV child is
+    -- enabled; relying on the donor row would therefore make Saltz abilities
+    -- silently unavailable with the Empire variant equipped.
+    if _cwv_active() then
+        for _, variant in ipairs(_cwv_variant_catalog) do
+            local item = rawget(ItemMasterList, variant.key)
+            if item and item.cwv_variant == true then
+                for _, career in ipairs(variant.conditional_careers or {}) do
+                    if _cwv_availability_policy.is_enabled(_get_setting, variant.key, career) then
+                        local cs = CareerSettings[career]
+                        local ability = cs and cs.activated_ability and cs.activated_ability[1]
+                        local action_name = ability and ability.action_name
+                        local action_template = action_name and ActionTemplates[action_name]
+                        local tmpl = item.template and Weapons[item.template]
+                        if action_template and tmpl and tmpl.actions and not tmpl.actions[action_name] then
+                            tmpl.actions[action_name] = action_template
+                            _career_action_injections[item.template] =
+                                _career_action_injections[item.template] or {}
+                            _career_action_injections[item.template][action_name] = true
+                        end
+                    end
+                end
+            end
+        end
+    end
 end
 
 -- Clean disable: strip every cross-career career name this mod added to ItemMasterList[*].can_wield
@@ -227,6 +265,16 @@ local function clear_weapon_unlocks()
                         table.remove(item.can_wield, i)
                     end
                 end
+            end
+        end
+    end
+    -- Remove WT-owned cross-receiver access to live CWV variants as well. The
+    -- four authored Kruber careers remain CWV-owned and are not touched here.
+    for _, variant in ipairs(_cwv_variant_catalog) do
+        local item = rawget(ItemMasterList, variant.key)
+        if item and item.cwv_variant == true then
+            for _, career in ipairs(variant.conditional_careers or {}) do
+                _set_career(item, career, false)
             end
         end
     end

@@ -158,6 +158,11 @@ local DATA = {
         es_huntsman       = { dr_shield_axe = true },
         es_knight         = { dr_shield_axe = true },
         es_questingknight = { dr_shield_axe = true },
+        -- #593 follow-up: standard Saltzpyre gets the same reversible handoff.
+        -- CWV active -> Empire CWV Axe+Shield; CWV absent -> Bardin WT fallback.
+        wh_captain        = { dr_shield_axe = true },
+        wh_bountyhunter   = { dr_shield_axe = true },
+        wh_zealot         = { dr_shield_axe = true },
     },
 }
 

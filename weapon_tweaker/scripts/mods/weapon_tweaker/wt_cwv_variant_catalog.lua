@@ -4,12 +4,22 @@
 -- settings tree before CWV registers its deferred ItemMasterList clones.
 local ES = { "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }
 local WH = { "wh_zealot", "wh_bountyhunter", "wh_captain", "wh_priest" }
+local WH_STANDARD = { "wh_captain", "wh_bountyhunter", "wh_zealot" }
+local ES_AND_WH_STANDARD = {
+    "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+    "wh_captain", "wh_bountyhunter", "wh_zealot",
+}
 local DR = { "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer" }
 local WE = { "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister" }
 
 return {
-    { key = "cwv_es_axe_shield", careers = ES },
-    { key = "cwv_es_axe_shield_veteran", careers = ES },
+    -- #593 follow-up: when CWV owns the Axe+Shield family, WT exposes its
+    -- Empire variant to the same standard Saltzpyre receivers that otherwise
+    -- receive Bardin's native fallback. `conditional_careers` distinguishes
+    -- WT's cross-receiver addition from CWV's four authored Kruber owners so a
+    -- CWV disable/hot-reload can remove only WT's contribution.
+    { key = "cwv_es_axe_shield", careers = ES_AND_WH_STANDARD, conditional_careers = WH_STANDARD },
+    { key = "cwv_es_axe_shield_veteran", careers = ES_AND_WH_STANDARD, conditional_careers = WH_STANDARD },
     { key = "cwv_we_sword_shield", careers = WE },
     { key = "cwv_we_sword_shield_veteran", careers = WE },
     { key = "cwv_es_longsword", careers = ES },

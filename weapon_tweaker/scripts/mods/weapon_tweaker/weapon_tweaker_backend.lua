@@ -20,10 +20,10 @@ local function feature_enabled(mod, setting_id, default_value)
 end
 
 -- CLARIFY: invoked once at the bottom of weapon_tweaker.lua (~L3043). Sets
--- up backend hooks. Note: `apply_weapon_unlocks` is passed in but never
--- called from this module — only retained because it might be needed for
--- legacy code paths or future use. Could be dropped from the signature.
-function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
+-- up backend hooks. The two availability callbacks are invoked together only
+-- on a bounded CWV active-state transition so can_wield and career actions
+-- cannot drift across enable/disable/hot-reload.
+function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_actions_on_weapons)
     mod.loadout_cache = mod.loadout_cache or {}
     local cwv_ownership = mod._wt and mod._wt.cwv_ownership
     local cwv_managed = mod._wt and mod._wt.cwv_conditional_managed or {}
@@ -163,6 +163,7 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
         if owns_axe_shield ~= M._last_cwv_active then
             M._last_cwv_active = owns_axe_shield
             apply_weapon_unlocks()
+            patch_career_actions_on_weapons()
             M.refresh_on_setting_change(mod)
             mod:info("[wt:593] CWV ownership transition active=%s; native Kruber Axe+Shield reconciled",
                 tostring(owns_axe_shield))

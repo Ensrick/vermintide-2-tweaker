@@ -44,10 +44,14 @@ return function(H, repo_root)
         H.truthy(entry:find('is_mod_unlocked_weapon(career, "dr_shield_hammer")', 1, true))
     end)
 
-    H.test("CWV state cannot change native Saltzpyre ownership", function()
+    H.test("CWV changes only Saltzpyre Axe Shield ownership", function()
         for _, career in ipairs(careers) do
             H.equal(unlocks.cwv_managed, nil)
-            H.equal(unlocks.cwv_conditional_managed[career], nil)
+            local managed = unlocks.cwv_conditional_managed[career]
+            H.truthy(managed)
+            H.equal(managed.dr_shield_axe, true)
+            H.equal(managed.dr_shield_hammer, nil)
+            H.equal(managed.dr_dual_wield_axes, nil)
         end
     end)
 end

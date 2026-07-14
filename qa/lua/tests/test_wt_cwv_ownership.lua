@@ -4,6 +4,7 @@ return function(H, repo_root)
     local managed = {
         es_mercenary = { dr_shield_axe = true },
         es_knight = { dr_shield_axe = true },
+        wh_captain = { dr_shield_axe = true },
     }
 
     H.test("WT detects absent disabled and active CWV", function()
@@ -18,6 +19,9 @@ return function(H, repo_root)
         H.equal(policy.should_yield_native("es_mercenary", "dr_shield_axe", false, managed), false)
         H.equal(policy.should_yield_native("es_mercenary", "dr_shield_axe", true, managed), true)
         H.equal(policy.should_yield_native("es_mercenary", "dr_2h_axe", true, managed), false)
+        H.equal(policy.should_yield_native("wh_captain", "dr_shield_axe", false, managed), false)
+        H.equal(policy.should_yield_native("wh_captain", "dr_shield_axe", true, managed), true)
+        H.equal(policy.should_yield_native("wh_priest", "dr_shield_axe", true, managed), false)
         H.equal(policy.should_yield_native("dr_ranger", "dr_shield_axe", true, managed), false)
     end)
 
@@ -28,6 +32,7 @@ return function(H, repo_root)
         file:close()
         H.truthy(source:find("owns_axe_shield ~= M._last_cwv_active", 1, true))
         H.truthy(source:find("apply_weapon_unlocks()", 1, true))
+        H.truthy(source:find("patch_career_actions_on_weapons()", 1, true))
         H.truthy(source:find("M.refresh_on_setting_change(mod)", 1, true))
     end)
 end

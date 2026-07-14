@@ -1,5 +1,16 @@
 # Weapon Tweaker Changelog
 
+## 0.12.250-dev (2026-07-14) - #593 extend Axe+Shield CWV handoff to Saltzpyre [verify-fix]
+
+- Extended the existing reversible Axe+Shield ownership boundary from Kruber to Witch Hunter Captain, Bounty Hunter, and Zealot. With CWV active, WT no longer offers Bardin's native `dr_shield_axe` to those careers; with CWV absent or disabled, their saved WT native toggle remains the fallback.
+- Added the Empire CWV family (`cwv_es_axe_shield` and `cwv_es_axe_shield_veteran`) to WT's availability surface for the three standard Saltzpyre careers. The variants retain their canonical CWV identity, cosmetics, and base moveset instead of masquerading as Bardin's native item. Warrior Priest is deliberately excluded because the existing Saltzpyre shield-port routing covers only the standard body.
+- Added explicit conditional-career metadata so disabling/hot-reloading CWV or disabling WT removes only WT's three cross-receiver additions. CWV's four authored Kruber owners are untouched. The existing active-state transition reconciles `can_wield` and rejects stale cached native loadouts without a restart. WT also injects each receiving Saltzpyre career's activated-ability action into the live variant template, so a default-on CWV child does not depend on the donor fallback checkbox being enabled.
+- Expanded offline and runtime regression coverage for all seven handoff receivers, both Empire variants, active/inactive transitions, exact settings composition, and the Warrior Priest/native Bardin boundaries.
+
+### Solo verify
+
+On WHC, Bounty Hunter, or Zealot with CWV inactive, enable WT's Bardin Axe+Shield fallback and confirm it appears. Enable CWV: the Bardin item must disappear and both Empire CWV Axe+Shield variants must be available. Disable CWV again: the Empire variants must disappear and the saved Bardin fallback must return. Run `/wt_regression_test` and require `issue593_conditional_cwv_axe_shield_ownership` to pass.
+
 ## 0.12.249-dev (2026-07-14) - #112 restore Saltzpyre Handgun grip offset [verify-fix]
 
 - Restored the user-tuned Empire Handgun third-person position on standard Saltzpyre careers: local Y `-0.17`, local Z `-0.05`, and unchanged X. The prior v0.12.135 correction was removed in v0.12.136 because it mutated a shared attachment-linking table; its intended receiver-scoped replacement had never been added to the canonical baked offset table.
