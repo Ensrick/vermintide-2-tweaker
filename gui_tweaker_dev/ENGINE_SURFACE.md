@@ -16,7 +16,7 @@ line by line, as were `IngameUI.setup_views` / the DLC `ui_views` seam and
 grep-verified when written).
 
 **Dev/stable relationship.** This documents `gui_tweaker_dev` (`gut_dev`,
-MOD_VERSION `0.2.247-dev`, friends-only Workshop 3751024698), the ACTIVE working
+MOD_VERSION `0.2.248-dev`, friends-only Workshop 3751024698), the ACTIVE working
 stream. `gui_tweaker/` (`gut`, public-alpha Workshop 3732144878) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gut_dev`
@@ -186,7 +186,11 @@ The HUD is a set of element classes (`AbilityUI`, `EquipmentUI`, `BuffUI`, `Boss
 ### 5. View / window injection (owner: `docs/engine/09`)
 
 `IngameUI.setup_views` [src: `ingame_ui.lua:145`] builds `self.views` from `view_settings.views_function(ctx)` [src: `:146`] and is called from `IngameUI.init` with the context passed as an ARGUMENT [src: `:107`] - `self.ingame_ui_context` is not stored until later [src: `:138`]. Vanilla registers DLC-provided views by mapping over the DLC `ui_views` lists at the top of the same file [src: `DLCUtils.map_list("ui_views", ...)`, `:33`]. gut does NOT go through that DLC path - it injects `mod_tweaker_view` (and the `gut_compendium` / `gut_mod_tweaker` HeroView sub-states) directly into the built `self.views` / HeroView screen list, capturing the context ARG at the `setup_views` post-hook (reading `self.ingame_ui_context` there is nil and crashed the view construction, so the transition-time lazy `_attach_view` is the guaranteed path). The Mod Tweaker view is a `class()` that BORROWS the IngameUI renderer (never creates one), registers a modal input service, and exits via `transition_with_fade("ingame_menu")`. The per-tab
-search bar (#497/#559) adds NO engine seam: it is a fixed `mt_search` widget above the (shrunk)
+label policy is engine-free presentation data shared by both presentations through
+`_mod_tweaker_tab_labels.lua`; its `mp` to `PROGRESSION` mapping (#525) changes neither
+Modded Progression's VMF name/settings nor the #573/#578 progression systems, and adds no
+localization or engine hook. The per-tab search bar (#497/#559) adds NO engine seam: it is a
+fixed `mt_search` widget above the (shrunk)
 `list_mask`, focused on click, fed by `Keyboard.keystrokes()` (the same raw path the numeric
 type-to-edit uses, chat-blocked via `ChatManager.block_chat_input_for_one_frame`), and applied
 as a filter STAGE inside the view's own `_build_rows` row-rebuild pipeline (flat render of

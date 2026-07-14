@@ -27,6 +27,7 @@ local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
 local transactions = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction")
 local profiles = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profiles")
 local disabled_sections = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_disabled_sections")
+local tab_labels = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_tab_labels")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -1457,15 +1458,6 @@ local function _truncate(s, n)
     return s
 end
 
--- Per-mod tab-label overrides (keyed by mod_id, both stable + dev ids). An entry
--- here REPLACES the derived label outright (applied BEFORE the "Tweaker: " prefix
--- strip + truncation), so the tab reads EXACTLY the override string. Extend by
--- adding a `<mod_id> = "LABEL"` line. gt/gt_dev are deliberately absent — their
--- VMF name already reads "General", so the prefix-strip path yields "General".
-local _TAB_LABEL_OVERRIDE = {
-    cim = "CRAFTING", cim_dev = "CRAFTING",
-}
-
 function HeroViewStateModTweaker:_rebuild()
     -- Every VMF mod becomes a category (gut included, via its real settings);
     -- then any controller-registered category VMF didn't already provide.
@@ -1528,7 +1520,7 @@ function HeroViewStateModTweaker:_rebuild()
         local ts = { font_type = "hell_shark", font_size = 20, upper_case = true }
         local font, scaled = UIFontByResolution(ts)
         for _, c in ipairs(cats) do
-            local override = _TAB_LABEL_OVERRIDE[c.mod_id]
+            local override = tab_labels.exact(c.mod_id)
             local lbl
             if override then
                 lbl = override
@@ -1561,7 +1553,7 @@ function HeroViewStateModTweaker:_rebuild()
         -- applied BEFORE the prefix-strip/truncate so the tab reads exactly the
         -- override; otherwise drop the "Tweaker: " prefix (this menu is all my
         -- tweaker mods) and truncate to fit the tab.
-        local override = _TAB_LABEL_OVERRIDE[cat.mod_id]
+        local override = tab_labels.exact(cat.mod_id)
         local lbl
         if override then
             lbl = override

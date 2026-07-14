@@ -5,6 +5,14 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.248-dev (2026-07-13) -- #525 Progression tab label [not deployed]
+
+- Source-audited both Mod Tweaker presentations. They derive top-tab chrome from each VMF mod's readable name and truncate it to 16 characters, so `Modded Progression` could not render as the requested exact `Progression` label.
+- Added one engine-free exact-label policy shared by the standalone and HeroView presentations. The `mp` category now renders as `PROGRESSION`; existing Crafting and CWV compact labels also share this policy, removing a pre-existing presentation mismatch.
+- This is presentation-only: Modded Progression keeps its VMF identity and readable name, and no quest, shilling, wallet, or backend behavior from #573/#578 changes.
+- Added offline coverage in `test_mod_tweaker_tab_labels.lua` and `/gut_regression_test` check `issue525_progression_tab_label`.
+- **Solo verify after deployment:** open Mod Tweaker in the keep and in a mission with Modded Progression enabled. Its top tab must read `PROGRESSION`, select the existing progression settings, and neither overflow nor show `Modded Progress...`. Existing `CRAFTING` and `CWV` labels must remain unchanged.
+
 ## 0.2.247-dev (2026-07-13) -- #522 inventory backdrop resolver [verify-fix]
 
 - Fixed the first implementation's incorrect assumption that the engine's `local_require` cache is always mirrored in Lua's `package.loaded`. Vanilla loads the character-preview definitions with `local_require`; when no `package.loaded` entry existed, GUT found the preview class but silently left its viewport unchanged, matching the user's no-change report.

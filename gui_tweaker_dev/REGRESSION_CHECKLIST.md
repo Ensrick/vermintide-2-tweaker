@@ -30,6 +30,18 @@ Last updated: 2026-07-13.
 
 ## Mod Tweaker
 
+### issue525-progression-tab-label — readable name leaks into compact chrome
+
+| Field | Value |
+|-------|-------|
+| Symptom | Modded Progression's generated top tab uses or truncates `Modded Progression` instead of reading `Progression`. |
+| Root cause | Both Mod Tweaker presentations derived compact tab chrome directly from each VMF mod's readable name; their exact-label tables were duplicated and had already drifted. |
+| Fix version(s) | gui_tweaker_dev v0.2.248-dev (not deployed) |
+| Category | UNIT / UI INTEGRATION |
+| Repro | Enable Modded Progression, then open Mod Tweaker in the keep and in a mission. |
+| Expected post-fix | The existing Modded Progression category renders as the exact `PROGRESSION` top-tab label in both presentations. Its settings and VMF identity are unchanged. |
+| Detection | Offline `test_mod_tweaker_tab_labels.lua`; `/gut_regression_test`: `issue525_progression_tab_label`; solo visual confirmation required after deployment. |
+
 ### issue318-disabled-integrations-in-place — disabled mod escapes or disappears
 
 | Field | Value |

@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.247-dev"
+local MOD_VERSION = "0.2.248-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1777,6 +1777,12 @@ _rt_register("mod_tweaker_api_present", function()
     MT:set(probe_id, "probe_flag", true)
     if MT:get(probe_id, "probe_flag") ~= true then return "get() did not reflect set()" end
 end)
+
+-- (#525) Register the engine-free tab-label policy's live check once.
+do
+    local labels = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_tab_labels")
+    for _, c in ipairs(labels.rt_checks or {}) do _rt_register(c.name, c.fn) end
+end
 
 -- (#559) Search expansion is a transaction, not a write-through rendering shortcut. Exercise the
 -- production pure helper in the live Lua 5.1 runtime and assert the view exposes every lifecycle
