@@ -1,5 +1,17 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.225-dev (2026-07-13) -- #241 cover every noclip boundary-death route [verify-fix-coop]
+
+- The latest attached reproduction was a solo listen host, but never emitted the existing `HealthSystem.suicide` suppression record. Source audit identified the missing route: authored kill volumes call `PlayerUnitHealthExtension.entered_kill_volume`, which sends `rpc_request_insta_kill` even on a listen host.
+- Noclip now suppresses that local kill-volume callback before it queues or sends the instant-kill request. The existing host `z < -240` suicide gate remains in place.
+- Client `z < -240` checks use a third path, `NetworkTransmit.send_rpc_server("rpc_suicide", go_id)`. An exact local-unit/go-id gate now drops only that request while noclip is active, avoiding any need for the remote host to know a client's noclip state.
+- All gates require active noclip and the local player identity. Ordinary deaths, other RPCs, remote players, and every route with noclip off remain vanilla; the broad `PlayerUnitHealthExtension.die` funnel is deliberately not hooked.
+- Added offline policy coverage and `/gt_regression_test` check `issue241_noclip_boundary_routes`.
+
+### Test method
+
+As solo host, enable noclip and fly sideways through an authored instant-death boundary, then below `z=-240`; neither route may kill the player. Repeat as a joining client for both boundary types. Confirm one bounded `[gt][noclip] issue #241: suppressed ...` record per encountered route, turn noclip off, and verify an ordinary death still works.
+
 ## v0.2.224-dev (2026-07-13) -- #548 godmode stagger gate and debuff trace [diagnostics-armed]
 
 - Source audit confirmed that boss launches bypass the HP-damage result through the separate `DamageUtils.stagger_player` funnel. Godmode now drops that stagger call for the protected human without writing a persistent status flag or changing ordinary stagger behavior.

@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.224-dev"
+local MOD_VERSION = "0.2.225-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -3097,6 +3097,12 @@ _rt_register("issue548_godmode_stagger_and_debuff_probe", function()
     end
     if mod._gt548_buff_probe_wired ~= true then
         return "bounded godmode buff observer is not wired"
+    end
+end)
+
+_rt_register("issue241_noclip_boundary_routes", function()
+    if mod._gt241_boundary_suppression_wired ~= true then
+        return "noclip boundary suppression is not fully wired"
     end
 end)
 

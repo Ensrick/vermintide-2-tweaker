@@ -6,6 +6,16 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+## Noclip world-boundary death routes (#241)
+
+- [ ] As solo host with noclip on, an authored kill volume logs `kill-volume instant death` once and does not kill the local player.
+- [ ] As solo host with noclip on, flying below `z=-240` logs `host out-of-bounds suicide` once and does not kill the local player.
+- [ ] **[MULTIPLAYER]** As a joining client with noclip on, repeat both tests; the deep-floor route logs `client out-of-bounds suicide RPC` once and the host does not kill the client.
+- [ ] With noclip off, kill volumes, deep-floor death, and ordinary combat death remain vanilla; remote players are never protected by the local gate.
+- [ ] `/gt_regression_test` passes `issue241_noclip_boundary_routes`.
+
+---
+
 ## Godmode stagger and debuff trace (#548)
 
 - [ ] With godmode enabled, direct boss/monster hits no longer launch the protected player.

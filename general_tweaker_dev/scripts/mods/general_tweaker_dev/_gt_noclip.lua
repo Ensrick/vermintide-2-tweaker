@@ -1,4 +1,5 @@
 local mod = get_mod("gt_dev")
+local BoundaryPolicy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_noclip_boundary_policy")
 
 -- _gt_noclip.lua — Noclip (player body flies through walls)
 --
@@ -45,7 +46,13 @@ local _noclip_active = false
 -- Issue #241: latch so the out-of-bounds-suicide suppression logs once per fly
 -- episode. The z<-240 check re-fires every frame while the body is below the
 -- world, so an unlatched printf would spam the console log.
-local _oob_suicide_logged = false
+local _boundary_route_logged = {}
+
+local function _log_boundary_suppression(route, detail)
+    if _boundary_route_logged[route] then return end
+    _boundary_route_logged[route] = true
+    printf("[gt][noclip] issue #241: suppressed %s for local player (%s)", route, detail)
+end
 
 local function _local_player_unit()
     local pm = Managers.player
@@ -63,7 +70,7 @@ end
 -- and the shared post_spawn_reapply consumer (godmode + noclip) resolve it.
 mod._gt_apply_noclip = function(enabled)
     _noclip_active = enabled and true or false
-    _oob_suicide_logged = false  -- fresh episode: re-arm the #241 OOB-death log
+    _boundary_route_logged = {}  -- fresh episode: log each #241 route at most once
     local loco, unit = _local_locomotion()
     if not loco then
         mod:info("[noclip] no locomotion extension yet (not in a level?) — flag stored, will re-arm on player spawn via extensions_ready hook")
@@ -152,7 +159,7 @@ end)
 -- Issue #241: decouple the local player from world-boundary safety
 -- mechanics WHILE noclip is active, so free-flying past the playable
 -- edge or below the map no longer yanks you out of noclip or kills you.
--- Two mechanics, three hooks, ALL gated on (_noclip_active AND the unit
+-- Three mechanics, five hooks, ALL gated on (_noclip_active AND the unit
 -- is the local player), so they are completely inert with noclip off or
 -- for any other unit:
 --
@@ -164,22 +171,25 @@ end)
 --       jumping/leaping path. Returning false stops the change_state
 --       into "ledge_hanging" -- which is also what lerp-snaps you onto
 --       the ledge (the "teleport-back" in the report).
---   (2) "Fell out of the world" DEATH. The z < -240 check inlined in
+--   (2) Authored KILL VOLUMES. PlayerUnitHealthExtension.entered_kill_volume
+--       sends rpc_request_insta_kill even for the listen host. Suppress the
+--       local callback before it queues/sends that request.
+--   (3) "Fell out of the world" DEATH. The z < -240 check inlined in
 --       both states routes through HealthSystem.suicide(self, unit) on
---       the host (health_system.lua:176); suppress it for the local
---       player. NOTE: when the local player is a *client*, that same
---       check instead does network_transmit:send_rpc_server("rpc_suicide")
---       and the death is decided on the remote host, which this hook
---       cannot reach -- tracked as a follow-up on #241.
+--       the host; suppress it for the local player. A client sends the exact
+--       rpc_suicide/go-id pair instead, so the NetworkTransmit hook drops only
+--       that local request before it leaves the client. No remote state is
+--       needed and other players' death traffic is untouched.
 --
--- Pre-flight (2026-07-06): grepped general_tweaker_dev for existing hooks
--- on these three (Class, method) pairs -- none. gt's bot code uses the
+-- Pre-flight (2026-07-13): grepped general_tweaker_dev for existing hooks
+-- on these five (Class, method) pairs -- none. gt's bot code uses the
 -- status-extension method get_is_ledge_hanging(), a distinct symbol, not
 -- CharacterStateHelper.is_ledge_hanging.
 -- ============================================================
 
 local function _is_local_noclip_unit(unit)
-    return _noclip_active and unit == _local_player_unit()
+    return BoundaryPolicy.should_suppress_unit_route(
+        _noclip_active, unit, _local_player_unit())
 end
 
 mod:hook("CharacterStateHelper", "is_ledge_hanging", function(func, world, unit, params)
@@ -198,16 +208,39 @@ end)
 
 mod:hook("HealthSystem", "suicide", function(func, self, unit)
     if _is_local_noclip_unit(unit) then
-        if not _oob_suicide_logged then
-            printf("[gt][noclip] issue #241: suppressed out-of-bounds suicide for local player (z<-240 while noclipping)")
-            _oob_suicide_logged = true
-        end
+        _log_boundary_suppression("host out-of-bounds suicide", "z<-240 while noclipping")
         return
     end
     return func(self, unit)
 end)
 
-printf("[gt][noclip] issue #241: boundary-safety suppression armed (ledge-grab + out-of-bounds death)")
+mod:hook("PlayerUnitHealthExtension", "entered_kill_volume", function(func, self, t)
+    if _is_local_noclip_unit(self and self.unit) then
+        _log_boundary_suppression("kill-volume instant death", "rpc_request_insta_kill blocked")
+        return
+    end
+    return func(self, t)
+end)
+
+mod:hook("NetworkTransmit", "send_rpc_server", function(func, self, rpc_name, ...)
+    if rpc_name == "rpc_suicide" and _noclip_active then
+        local go_id = ...
+        local unit = _local_player_unit()
+        local state = Managers.state
+        local storage = state and state.unit_storage
+        local local_go_id = unit and storage and storage:go_id(unit)
+
+        if BoundaryPolicy.should_suppress_rpc(
+                _noclip_active, rpc_name, go_id, local_go_id) then
+            _log_boundary_suppression("client out-of-bounds suicide RPC", "local rpc_suicide blocked")
+            return
+        end
+    end
+    return func(self, rpc_name, ...)
+end)
+
+mod._gt241_boundary_suppression_wired = true
+printf("[gt][noclip] issue #241: boundary-safety suppression armed (ledge-grab + kill-volume + host/client out-of-bounds death)")
 
 -- Called from the main file's on_game_state_changed: locomotion extensions are
 -- torn down across level transitions; the next player spawn comes back in
