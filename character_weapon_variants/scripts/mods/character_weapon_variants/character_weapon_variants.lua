@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.405-dev"
+local MOD_VERSION = "0.1.406-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -1098,7 +1098,7 @@ local _variant_definitions = {
 		careers         = _es_all_careers,
 		right_hand_unit = "units/weapons/player/wpn_axe_hatchet_t1/wpn_axe_hatchet_t1",
 		left_hand_unit  = "units/weapons/player/wpn_axe_hatchet_t1/wpn_axe_hatchet_t1",
-		inventory_icon  = "icon_wpn_axe_hatchet_t1",
+		inventory_icon  = "icon_wpn_axe_hatchet_t1_dual_cwv",
 		hud_icon        = "weapon_generic_icon_axe1h",
 		skin_display_name = "Dual Axes",
 		rarity          = "exotic",
@@ -1119,7 +1119,7 @@ local _variant_definitions = {
 		careers         = _wh_all_careers,
 		right_hand_unit = "units/weapons/player/wpn_axe_hatchet_t1/wpn_axe_hatchet_t1",
 		left_hand_unit  = "units/weapons/player/wpn_axe_hatchet_t1/wpn_axe_hatchet_t1",
-		inventory_icon  = "icon_wpn_axe_hatchet_t1",
+		inventory_icon  = "icon_wpn_axe_hatchet_t1_dual_cwv",
 		hud_icon        = "weapon_generic_icon_axe1h",
 		skin_display_name = "Dual Axes",
 		rarity          = "exotic",
@@ -8557,6 +8557,22 @@ _register_kruber_1h_sword_dual_illusions()
 local function _register_saltzpyre_1h_axe_dual_illusions()
 	if not ItemMasterList or not WeaponSkins then return end
 
+	-- CWV's authored thumbnail follows the PRIMARY/right-hand axe. This is
+	-- intentionally different from the future shield-family rule, where the
+	-- offhand shield will own the combined icon identity.
+	local dual_inventory_icons = {
+		icon_axe_hatchet_t2_magic_01 = "icon_axe_hatchet_t2_magic_01_dual_cwv",
+		icon_wh_1h_axe_skin_06_magic_02 = "icon_wh_1h_axe_skin_06_magic_02_dual_cwv",
+		icon_wpn_axe_02_t1 = "icon_wpn_axe_02_t1_dual_cwv",
+		icon_wpn_axe_02_t2 = "icon_wpn_axe_02_t2_dual_cwv",
+		icon_wpn_axe_02_t2_runed_06 = "icon_wpn_axe_02_t2_runed_06_dual_cwv",
+		icon_wpn_axe_03_t1 = "icon_wpn_axe_03_t1_dual_cwv",
+		icon_wpn_axe_03_t2 = "icon_wpn_axe_03_t2_dual_cwv",
+		icon_wpn_axe_hatchet_t1 = "icon_wpn_axe_hatchet_t1_dual_cwv",
+		icon_wpn_axe_hatchet_t2 = "icon_wpn_axe_hatchet_t2_dual_cwv",
+	}
+	_om._dual_axes_inventory_icon_by_source = dual_inventory_icons
+
 	-- The combination table is the vanilla cosmetic owner's authoritative
 	-- family.  Scanning ItemMasterList here used to depend on DLC load order,
 	-- and the fixed destination tier list then silently dropped Scorpion's
@@ -8601,6 +8617,12 @@ local function _register_saltzpyre_1h_axe_dual_illusions()
 		local source_item = rawget(ItemMasterList, source_key)
 		if not source or not source.right_hand_unit or not source_item
 				or source_item.matching_item_key ~= "wh_1h_axe" then goto continue end
+		local dual_inventory_icon = dual_inventory_icons[source.inventory_icon]
+		if not dual_inventory_icon then
+			mod:warning("Dual Axes icon missing for primary cosmetic %s (source icon=%s); using source icon",
+				tostring(source_key), tostring(source.inventory_icon))
+			dual_inventory_icon = source.inventory_icon
+		end
 		source_by_clone[new_key] = source_key
 		if _custom_skin_keys[new_key] then goto continue end
 
@@ -8620,7 +8642,7 @@ local function _register_saltzpyre_1h_axe_dual_illusions()
 			description       = source.description,
 			display_unit      = dual_display_unit,
 			hud_icon          = source.hud_icon,
-			inventory_icon    = source.inventory_icon,
+			inventory_icon    = dual_inventory_icon,
 			information_text  = "information_weapon_skin",
 			right_hand_unit   = source.right_hand_unit,
 			left_hand_unit    = source.right_hand_unit,
@@ -8645,7 +8667,7 @@ local function _register_saltzpyre_1h_axe_dual_illusions()
 			display_name    = source.display_name,
 			display_unit    = dual_display_unit,
 			hud_icon        = source.hud_icon,
-			inventory_icon  = source.inventory_icon,
+			inventory_icon  = dual_inventory_icon,
 			rarity          = source.rarity,
 			right_hand_unit = source.right_hand_unit,
 			left_hand_unit  = source.right_hand_unit,
@@ -12985,11 +13007,15 @@ _rt_register("dual_axes_cosmetic_family_parity", function()
             or type(ws.skin_combinations) ~= "table" or type(iml) ~= "table" then
         return "WeaponSkins/ItemMasterList not loaded yet (run in-keep)"
     end
-    local source_combo = ws.skin_combinations.wh_1h_axe_skins
-    local source_by_target = _om._dual_axes_source_by_skin
-    if type(source_combo) ~= "table" or type(source_by_target) ~= "table" then
-        return "dual-axes source/destination cosmetic family was not registered"
-    end
+	local source_combo = ws.skin_combinations.wh_1h_axe_skins
+	local source_by_target = _om._dual_axes_source_by_skin
+	local icon_by_source = _om._dual_axes_inventory_icon_by_source
+	if type(source_combo) ~= "table" or type(source_by_target) ~= "table" then
+		return "dual-axes source/destination cosmetic family was not registered"
+	end
+	if type(icon_by_source) ~= "table" then
+		return "dual-axes primary-icon mapping was not registered"
+	end
 
     local expected = {}
     local memberships = {}
@@ -13023,11 +13049,17 @@ _rt_register("dual_axes_cosmetic_family_parity", function()
             if not source or not clone or not source_item or not clone_item then
                 return string.format("dual-axes clone incomplete: %s <- %s", clone_key, source_key)
             end
-            if clone.right_hand_unit ~= source.right_hand_unit
-                    or clone.left_hand_unit ~= source.right_hand_unit
-                    or clone.display_unit ~= "units/weapons/weapon_display/display_dual_axes" then
-                return string.format("dual-axes hand/display mismatch: %s <- %s", clone_key, source_key)
-            end
+			if clone.right_hand_unit ~= source.right_hand_unit
+					or clone.left_hand_unit ~= source.right_hand_unit
+					or clone.display_unit ~= "units/weapons/weapon_display/display_dual_axes" then
+				return string.format("dual-axes hand/display mismatch: %s <- %s", clone_key, source_key)
+			end
+			local expected_icon = icon_by_source[source.inventory_icon]
+			if not expected_icon or clone.inventory_icon ~= expected_icon
+					or clone_item.inventory_icon ~= expected_icon then
+				return string.format("dual-axes primary icon mismatch: %s <- %s (%s)",
+					clone_key, source_key, tostring(source.inventory_icon))
+			end
             if clone_item.matching_item_key ~= target_key
                     or clone_item.required_dlc ~= source_item.required_dlc then
                 return string.format("dual-axes owner/DLC mismatch: %s <- %s", clone_key, source_key)

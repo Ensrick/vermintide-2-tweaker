@@ -5,6 +5,24 @@ return {
 	name = "Character Weapon Variants",
 	description = mod:localize("mod_description"),
 	is_togglable = true,
+	custom_gui_textures = {
+		atlases = {
+			{
+				"materials/character_weapon_variants/cwv_weapon_icons",
+				"cwv_weapon_icons",
+				"cwv_weapon_icons_masked",
+				nil,
+				nil,
+				"cwv_weapon_icons",
+			},
+		},
+		ui_renderer_injections = {
+			{ "ingame_ui", "materials/character_weapon_variants/cwv_weapon_icons" },
+			{ "hero_view", "materials/character_weapon_variants/cwv_weapon_icons" },
+			{ "loading_view", "materials/character_weapon_variants/cwv_weapon_icons" },
+			{ "popup_manager", "materials/character_weapon_variants/cwv_weapon_icons" },
+		},
+	},
 	options = {
 		-- Loose variant toggles sorted A->Z by display label: Bomb Slot
 		-- (Tuskgor Javelin), Kruber Crossbow, Mace and Sword.

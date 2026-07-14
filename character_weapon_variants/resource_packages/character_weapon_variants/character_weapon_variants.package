@@ -1,5 +1,10 @@
 lua = [
-	"scripts/mods/character_weapon_variants/*"
+	"scripts/mods/character_weapon_variants/*",
+	"materials/character_weapon_variants/*"
+]
+
+material = [
+	"materials/character_weapon_variants/*"
 ]
 
 unit = [

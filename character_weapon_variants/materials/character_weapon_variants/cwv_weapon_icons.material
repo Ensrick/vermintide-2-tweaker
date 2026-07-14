@@ -1,0 +1,23 @@
+cwv_weapon_icons = {
+	material_contexts = {
+		surface_material = ""
+	}
+
+	shader = "gui:DIFFUSE_MAP"
+
+	textures = {
+		diffuse_map = "textures/character_weapon_variants/cwv_weapon_icons"
+	}
+}
+
+cwv_weapon_icons_masked = {
+	material_contexts = {
+		surface_material = ""
+	}
+
+	shader = "gui_gradient:DIFFUSE_MAP:MASKED"
+
+	textures = {
+		diffuse_map = "textures/character_weapon_variants/cwv_weapon_icons"
+	}
+}

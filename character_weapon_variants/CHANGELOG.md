@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.406-dev - 2026-07-14 - #583 primary-owned Dual Axes inventory icons [verify-fix-coop]
+
+- Added the nine user-authored paired-axe thumbnails as a packaged CWV atlas, covering every current Saltzpyre one-handed axe cosmetic used by Kruber's and Saltzpyre's CWV Dual Axes.
+- Generated Dual Axes illusions now select their inventory thumbnail from the primary/right-hand axe cosmetic. Independently changing the offhand through Tweaker: Cosmetics therefore does not replace the item icon. Runed skins that intentionally share the same primary icon reuse the matching paired thumbnail.
+- Changed both base Dual Axes items from the single Patchwork Axe thumbnail to its paired-axe version. Added runtime regression coverage proving every source skin has an authored primary-icon mapping and that both generated skin layers carry the same result.
+- This establishes only the dual-weapon rule. Shield families intentionally use the offhand shield as icon owner; Loremaster's Armoury shields use LA's authored icon mapping through Tweaker: Cosmetics rather than this CWV atlas.
+
+### Solo verify
+
+Open either CWV Dual Axes item in CIM and cycle through every available primary illusion. The inventory/forge and illusion-picker thumbnail must show the matching pair. In Tweaker: Cosmetics, change only the offhand axe and confirm the icon remains tied to the unchanged primary; then change the primary and confirm the icon follows it. Run `/cwv_regression_test`; `dual_axes_cosmetic_family_parity` must pass.
+
+**DoD:** Universal walked. Trait gates: G-DUAL, G-CUSTOM-ILLUSION, G-APPEARANCE. Deferrals: live inventory/CIM/independent-hand visual verification; shield-owned and Loremaster's Armoury icon routing remains Cosmetics-owned.
+
 ## 0.1.405-dev - 2026-07-14 - #420 shared WeaponAppearance consumer [verify-fix]
 
 - Replaced CWV's private transform implementation with its bundled, byte-identical copy of the repository `WeaponAppearance` library. Existing CWV callers, all four render-path resolvers, legacy thin wrappers, and the `mod._cwv_weapon_appearance` compatibility handle remain unchanged.
