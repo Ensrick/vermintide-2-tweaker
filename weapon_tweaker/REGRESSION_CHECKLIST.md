@@ -1,5 +1,17 @@
 # Regression Checklist — weapon_tweaker
 
+## #596 - Infantry Spear availability
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.252-dev (not deployed) |
+| Automated | Offline `test_wt_cwv_independence` locks all 20 career controls, the three authored default-on Kruber careers, and 17 default-off expansion careers. CWV's `test_cwv_infantry_spear` covers the weapon contract. |
+| Default owners | Mercenary, Huntsman, and Foot Knight retain Infantry Spear when their children remain enabled. Each child can be disabled independently. Grail Knight defaults off. |
+| Expansion | Grail Knight or any non-Kruber career receives the weapon only when that exact WT child is enabled. Disabling the parent removes all owners without erasing child choices. |
+| Transition | With CWV active, toggle one authored and one expansion career, then disable/re-enable WT and CWV. Exact choices return without duplicate `can_wield` entries. |
+
+---
+
 ## #112 - Saltzpyre Kruber shield rotation
 
 | Field | Check |
@@ -41,7 +53,7 @@
 | Field | Check |
 |---|---|
 | Candidate version | WT 0.12.242-dev (not deployed) |
-| Automated | Offline `test_wt_cwv_independence` requires 29 preserved item-master IDs, 122 unique default-on career children (116 authored plus six #593 Saltzpyre Axe+Shield children), exact master/child composition, positive `cwv_variant` marker gating, and shared data/runtime/localization schema. `/wt_regression_test`: `issue391_cwv_per_career_availability`. |
+| Automated | Offline `test_wt_cwv_independence` requires 30 preserved item-master IDs and 142 unique career children, including #596's three default-on and 17 default-off controls, exact master/child composition, positive `cwv_variant` marker gating, and shared data/runtime/localization schema. `/wt_regression_test`: `issue391_cwv_per_career_availability`. |
 | Exact career | With the Kruber Dual Axes parent enabled, disable Foot Knight only. Keep and mission inventory must retain the item for Mercenary, Huntsman, and Grail Knight and remove it only from Foot Knight. Re-enable it and repeat on Saltzpyre Dual Axes / Warrior Priest. |
 | Compatibility master | Disable the existing per-item parent: every catalogued career loses the item. Re-enable it: each persisted child choice resumes without being overwritten. Most items retain four authored children; the two #593 Empire Axe+Shield rows also expose three standard Saltzpyre children. |
 | Boundaries | WT touches only a live catalog key positively marked `cwv_variant == true`, and only the careers authored in that catalog row. CWV absent/disabled produces no clone writes. No hook, RPC, or per-frame work is added. |

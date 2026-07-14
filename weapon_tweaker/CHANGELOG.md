@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.252-dev (2026-07-14) - #596 Infantry Spear availability [verify-fix-coop]
+
+- Added CWV Infantry Spear to WT's bounded availability catalog. Mercenary, Huntsman, and Foot Knight are default-on and independently disableable; Grail Knight and all other careers are exposed default-off.
+- WT removes only its 17 optional receivers when CWV/WT is disabled and restores the three CWV-authored careers. Every enabled receiver receives its career-ability action on the live custom template.
+- Extended the pure availability policy and offline tests for per-career defaults, all 20 careers, Grail Knight opt-in, lifecycle restoration, and the 30-item CWV catalog.
+
 ## 0.12.251-dev (2026-07-14) - #112 tune Saltzpyre Kruber shield rotation [verify-fix-coop]
 
 - Baked the requested local Euler correction `{X=25, Y=-17.5, Z=-15}` for Empire Mace & Shield, Empire Sword & Shield, Bretonnian Sword & Shield, and the CWV Empire Axe & Shield family on Witch Hunter Captain, Bounty Hunter, and Zealot. These are the Kruber-derived shield ports currently seated on Saltzpyre's Axe+Falchion third-person vocabulary.
@@ -7,9 +13,9 @@
 - Generalized the existing durable #569 orientation owner to compose either its canonical WP-remap half-turn or a keyed Euler delta over the captured canonical rotation. Owner, bot, remote-husk, and inventory-preview 3P roots consume the same shipped transform; first person is never written, rotations are reconstructed without accumulation, and no RPC or per-frame payload was added.
 - Added offline and `/wt_regression_test` coverage for the exact triplet, every standard Saltzpyre career, all intended shield keys, Spear & Shield exclusion, native Kruber/Warrior Priest controls, clone-name compatibility, and transform ownership scope.
 
-### Solo verify
+### Co-op verify
 
-On Witch Hunter Captain, Bounty Hunter, or Zealot, equip Empire Mace & Shield, Empire Sword & Shield, Bretonnian Sword & Shield, then CWV Empire Axe & Shield. Inspect each in third person through wield, block, attack, swap away/back, and inventory preview; each should retain the new seating. Kruber Spear & Shield must remain unchanged. Run `/wt_regression_test` and require `issue112_saltzpyre_kruber_shield_baked_rotation` to pass.
+On Witch Hunter Captain, Bounty Hunter, or Zealot, equip Empire Mace & Shield, Empire Sword & Shield, Bretonnian Sword & Shield, then CWV Empire Axe & Shield. Inspect each in third person through wield, block, attack, swap away/back, and inventory preview; each should retain the new seating. A second player must confirm the same seating on the remote husk after spawn and weapon swaps. Kruber Spear & Shield must remain unchanged. Run `/wt_regression_test` and require `issue112_saltzpyre_kruber_shield_baked_rotation` to pass.
 
 ## 0.12.250-dev (2026-07-14) - #593 extend Axe+Shield CWV handoff to Saltzpyre [verify-fix]
 

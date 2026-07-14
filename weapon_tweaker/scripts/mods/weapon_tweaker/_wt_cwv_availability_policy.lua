@@ -15,11 +15,18 @@ function M.build_widgets(catalog)
     local rows = {}
     for _, variant in ipairs(catalog or {}) do
         local children = {}
+        local defaults = nil
+        if type(variant.default_careers) == "table" then
+            defaults = {}
+            for _, career_name in ipairs(variant.default_careers) do
+                defaults[career_name] = true
+            end
+        end
         for _, career_name in ipairs(variant.careers or {}) do
             children[#children + 1] = {
                 setting_id = M.career_setting_id(variant.key, career_name),
                 type = "checkbox",
-                default_value = true,
+                default_value = defaults == nil or defaults[career_name] == true,
             }
         end
         rows[#rows + 1] = {

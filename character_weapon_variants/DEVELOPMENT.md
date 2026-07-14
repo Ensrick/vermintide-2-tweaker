@@ -1734,3 +1734,9 @@ Use `ItemMasterList` keys (not `item_type`):
 - `wh_1h_axe` — Saltzpyre's one-handed axe
 
 Full catalog: see `ITEM_LIST.md` in the repo root.
+
+## #596 Infantry Spear reference implementation
+
+`cwv_es_infantry_spear` is the canonical independently-scaled melee clone. Its behavior source is `two_handed_spears_elf_template_1`; its model source is the right-hand spear field of `es_deus_01` and that owner's seven skins [src: `spears_wood_elf.lua:1-4,1559`; `item_master_list_morris.lua:137-159`; `weapon_skins_morris.lua:144-267`]. `ActionUtils.get_action_time_scale` starts from `anim_time_scale or 1`, while action completion, chain windows, and sweep hit windows divide by that scale [src: `action_utils.lua:538-563`; `weapon_unit_extension.lua:477-490,930-936`; `action_sweep.lua:153-156,455-459`]. Accordingly, the helper scales only `melee_start` and `sweep`; it does not rewrite individual timestamps or unrelated block/push actions.
+
+Damage, impact, and cleave remain separate `_clone_damage_profile` multipliers. Never scale the generic `damage_profile_inner`/`damage_profile_outer` push rows when a spec asks for weapon-hit tuning only.

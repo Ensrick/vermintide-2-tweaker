@@ -1,5 +1,14 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.407-dev - 2026-07-14 - #596 Infantry Spear [verify-fix-coop]
+
+- Added **Infantry Spear** for Mercenary, Huntsman, and Foot Knight, using Kerillian's two-handed Spear moveset and only the spear half of Kruber's native Chaos Wastes Spear+Shield models. Grail Knight is excluded from CWV's authored defaults.
+- Independently applied 0.85 attack timing, 1.075 direct-hit damage, 1.15 impact/stagger, and 1.15 cleave. Only `melee_start` and `sweep` timing is slowed; block, ordinary push, wield, and inspect stay untouched. Only direct `damage_profile` rows are cloned, so push inner/outer profiles are not tuned.
+- Reused Kruber's existing elf-spear-to-polearm third-person stance and career-local event redirects before vanilla animation replication. Added all seven Spear+Shield spear models as shield-free illusions with their material settings.
+- Added `/cwv_regression_test` check `cwv_issue596_infantry_spear_contract` and offline coverage for multipliers, scope, careers, model ownership, and WT integration.
+
+**DoD:** Universal, G-CROSS-CHAR, G-3P-ANIM, G-CUSTOM-ILLUSION, and G-APPEARANCE walked structurally. Deferrals: inventory/illusion rendering, attack feel, package residency for every DLC illusion, and owner/remote visible animation quality require live verification.
+
 ## 0.1.406-dev - 2026-07-14 - #583 primary-owned Dual Axes inventory icons [verify-fix-coop]
 
 - Added the nine user-authored paired-axe thumbnails as a packaged CWV atlas, covering every current Saltzpyre one-handed axe cosmetic used by Kruber's and Saltzpyre's CWV Dual Axes.

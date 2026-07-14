@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.406-dev"
+local MOD_VERSION = "0.1.407-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -51,6 +51,7 @@ local _cwv_wield_hook_registration_count = 0
 -- what broke the v0.1.330/331 attempt). Fields keep their original names so the
 -- refactor is a pure `_om.` prefix with no behavior change.
 local _om = {}
+_om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear")
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_pair_state").install(mod, _om)
 
 -- Single source of truth for the husk override-unit package ref (issue #418).
@@ -368,6 +369,29 @@ local _variant_definitions = {
 		rarity          = "default",
 		power_level     = 5,
 		template        = "elven_sword_shield_template",
+	},
+	{
+		-- Infantry Spear: Kerillian's two-handed spear action graph on Kruber,
+		-- rendered with the spear half of his native Chaos Wastes Spear+Shield.
+		-- The custom template independently tunes attack timing and the three
+		-- damage-profile axes; push/block/wield/inspect actions stay at source
+		-- values. WT owns optional career expansion beyond these three authored
+		-- careers (including Grail Knight, default off).
+		item_key        = "cwv_es_infantry_spear",
+		base_weapon     = "we_spear",
+		display_name    = "Infantry Spear",
+		description     = "A long state-issue spear used without a shield, trading elven speed for heavier thrusts and broader sweeps.",
+		character       = "empire_soldier",
+		careers         = _om.infantry_spear.DEFAULT_CAREERS,
+		right_hand_unit = "units/weapons/player/wpn_es_deus_spear_01/wpn_es_deus_spear_01",
+		inventory_icon  = "icon_wpn_empire_spearshield_t1",
+		hud_icon        = "weapon_generic_icon_falken",
+		skin_display_name = "Infantry Spear",
+		rarity          = "exotic",
+		template        = "cwv_infantry_spear_template",
+		traits          = { "melee_attack_speed_on_crit" },
+		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
+		item_type       = "cwv_es_infantry_spear",
 	},
 	{
 		item_key        = "cwv_we_sword_shield_veteran",
@@ -1469,6 +1493,14 @@ local _kruber_dual_axes_remap = {
 	attack_swing_heavy           = "attack_swing_heavy_left_diagonal",
 }
 
+-- Same Kruber receiver redirects WT currently applies when he wields the
+-- vanilla elf spear. Stored on `_om` instead of another file-scope local
+-- because this chunk sits at Lua 5.1's 200-local ceiling.
+_om._kruber_infantry_spear_remap = {
+	attack_swing_down_left_axe = "attack_swing_down_left",
+	attack_swing_left          = "attack_swing_down_left",
+}
+
 -- Reusable Kruber-on-axe-falchion remap (same for all 4 Kruber careers).
 --
 -- 3P ONLY. 1P animations are universal across all six characters via the
@@ -1535,6 +1567,12 @@ local _kruber_axe_falchion_remap = {
 -- new cross-access weapons are introduced. Career names must be exact (career
 -- prefix matching could be added later if needed).
 local _cross_access_action_remap = {
+	cwv_es_infantry_spear = {
+		es_mercenary      = _om._kruber_infantry_spear_remap,
+		es_huntsman       = _om._kruber_infantry_spear_remap,
+		es_knight         = _om._kruber_infantry_spear_remap,
+		es_questingknight = _om._kruber_infantry_spear_remap,
+	},
 	wh_dual_wield_axe_falchion = {
 		es_mercenary      = _kruber_axe_falchion_remap,
 		es_huntsman       = _kruber_axe_falchion_remap,
@@ -1785,6 +1823,88 @@ local function _clone_damage_profile(source_name, prefix, mults)
 	end
 
 	return new_name
+end
+
+-- ============================================================
+-- Infantry Spear (Kerillian spear moveset on Kruber's unshielded CW spear)
+-- ============================================================
+do
+	local infantry = _om.infantry_spear
+
+	local function _create_infantry_spear_template()
+		if not Weapons or not Weapons.two_handed_spears_elf_template_1 then
+			mod:warning("two_handed_spears_elf_template_1 not found - Infantry Spear unavailable")
+			return
+		end
+		if Weapons[infantry.TEMPLATE_KEY] then return end
+
+		local template = table.clone(Weapons.two_handed_spears_elf_template_1, true)
+		for _, action_group in pairs(template.actions or {}) do
+			if type(action_group) == "table" then
+				for _, sub_action in pairs(action_group) do
+					if type(sub_action) == "table" then
+						local scaled = infantry.scaled_attack_time(
+							sub_action.kind, sub_action.anim_time_scale)
+						if scaled ~= nil then sub_action.anim_time_scale = scaled end
+						-- Only direct attack profiles are tuned. The spear's ordinary
+						-- push uses damage_profile_inner/outer and remains vanilla.
+						if sub_action.damage_profile then
+							sub_action.damage_profile = _clone_damage_profile(
+								sub_action.damage_profile, "cwv_infantry_spear_", {
+									damage = infantry.DAMAGE_MULT,
+									stagger = infantry.STAGGER_MULT,
+									cleave = infantry.CLEAVE_MULT,
+								})
+						end
+					end
+				end
+			end
+		end
+
+		-- 3P only. Kruber's existing WT elf-spear port enters the polearm
+		-- graph; the two per-action substitutions are applied career-locally
+		-- by `_cross_access_action_remap` before vanilla replicates the event.
+		-- Keeping them out of shared action fields preserves Kerillian when WT
+		-- enables this item on its source owner.
+		template.wield_anim_3p = "to_polearm"
+		template.wield_anim_career_3p = template.wield_anim_career_3p or {}
+		for _, career in ipairs({
+			"es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+		}) do
+			template.wield_anim_career_3p[career] = "to_polearm"
+		end
+		-- Foreign base templates do not necessarily carry Kruber's career
+		-- ability actions. Mirror the three authored careers at construction;
+		-- WT injects optional receivers only while their toggle is enabled.
+		for _, career in ipairs(infantry.DEFAULT_CAREERS) do
+			local settings = CareerSettings and CareerSettings[career]
+			local ability = settings and settings.activated_ability
+			ability = ability and ability[1]
+			local action_name = ability and ability.action_name
+			local action = action_name and ActionTemplates and ActionTemplates[action_name]
+			if action_name and action and not template.actions[action_name] then
+				template.actions[action_name] = action
+			end
+		end
+
+		Weapons[infantry.TEMPLATE_KEY] = template
+		-- CWV entries inherit `.name = we_spear`; inventory preview template
+		-- lookup therefore resolves the base table. Patch only Kruber's 3P
+		-- career stance so the preview and runtime use the same polearm graph.
+		local preview_base = Weapons.two_handed_spears_elf_template_1
+		preview_base.wield_anim_career_3p = preview_base.wield_anim_career_3p or {}
+		for _, career in ipairs({
+			"es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+		}) do
+			preview_base.wield_anim_career_3p[career] = "to_polearm"
+		end
+		mod:info("Created %s (speed=%.1f%% damage=%.1f%% stagger=%.1f%% cleave=%.1f%%)",
+			infantry.TEMPLATE_KEY, infantry.SPEED_MULT * 100,
+			infantry.DAMAGE_MULT * 100, infantry.STAGGER_MULT * 100,
+			infantry.CLEAVE_MULT * 100)
+	end
+
+	_create_infantry_spear_template()
 end
 
 -- ANIM ADDENDUM: this function only touches stats + 3P fields. 1P animations
@@ -8091,6 +8211,7 @@ local function _register_cwv_skin_combinations()
 		cwv_imperial_longsword         = "cwv_imperial_longsword_skins",
 		cwv_es_longsword_shield        = "cwv_es_longsword_shield_skins",
 		cwv_es_axe_shield              = "cwv_es_axe_shield_skins",
+		cwv_es_infantry_spear          = "cwv_es_infantry_spear_skins",
 		cwv_es_dual_swords             = "cwv_es_dual_swords_skins",
 		cwv_es_dual_axes               = "cwv_es_dual_axes_skins",
 		cwv_wh_dual_axes               = "cwv_wh_dual_axes_skins",
@@ -8412,6 +8533,74 @@ local function _register_custom_illusions()
 end
 
 _register_custom_illusions()
+
+-- Spear+Shield spear halves -> Infantry Spear illusions. The source shield is
+-- deliberately not copied; only its paired right-hand spear model is owned by
+-- this two-handed item.
+do
+	local infantry = _om.infantry_spear
+	local function _register_infantry_spear_illusions()
+		if not ItemMasterList or not WeaponSkins then return end
+		local combo = WeaponSkins.skin_combinations[infantry.SKIN_COMBINATION]
+		local elf_display = WeaponSkins.skins.we_spear_skin_01
+		elf_display = elf_display and elf_display.display_unit
+		local registered = 0
+
+		for _, source_key in ipairs(infantry.SPEAR_SHIELD_SKINS) do
+			local source = WeaponSkins.skins[source_key]
+			if source and type(source.right_hand_unit) == "string" then
+				local suffix = source_key:gsub("^es_deus_01_skin_", "")
+				if suffix == "" then suffix = "01" end
+				local skin_key = infantry.ITEM_KEY .. "_" .. suffix
+				if not _custom_skin_keys[skin_key] then
+					local row = {
+						key = skin_key, name = skin_key,
+						item_type = "weapon_skin", slot_type = "weapon_skin",
+						matching_item_key = infantry.ITEM_KEY,
+						rarity = source.rarity or "exotic",
+						display_name = infantry.ITEM_KEY .. "_skin_name",
+						description = infantry.ITEM_KEY .. "_description",
+						display_unit = elf_display or source.display_unit,
+						hud_icon = "weapon_generic_icon_falken",
+						inventory_icon = source.inventory_icon or "icon_wpn_empire_spearshield_t1",
+						information_text = "information_weapon_skin",
+						right_hand_unit = source.right_hand_unit,
+						template = infantry.TEMPLATE_KEY,
+						can_wield = infantry.DEFAULT_CAREERS,
+					}
+					if source.material_settings_name then
+						row.material_settings_name = source.material_settings_name
+					end
+					ItemMasterList[skin_key] = row
+					WeaponSkins.skins[skin_key] = {
+						description = row.description, display_name = row.display_name,
+						display_unit = row.display_unit, hud_icon = row.hud_icon,
+						inventory_icon = row.inventory_icon, rarity = row.rarity,
+						right_hand_unit = source.right_hand_unit,
+						template = infantry.TEMPLATE_KEY,
+						material_settings_name = source.material_settings_name,
+					}
+					local tier = combo and combo[row.rarity]
+					if tier then tier[#tier + 1] = skin_key end
+					for _, lookup_name in ipairs({ "weapon_skins", "item_names" }) do
+						local lookup = NetworkLookup and NetworkLookup[lookup_name]
+						if lookup and not rawget(lookup, skin_key) then
+							local idx = #lookup + 1
+							rawset(lookup, idx, skin_key)
+							rawset(lookup, skin_key, idx)
+						end
+					end
+					_om._skin_keys = _om._skin_keys or {}
+					_om._skin_keys[skin_key] = true
+					_custom_skin_keys[skin_key] = true
+					registered = registered + 1
+				end
+			end
+		end
+		mod:info("Registered %d shield-free Spear+Shield models for Infantry Spear", registered)
+	end
+	_register_infantry_spear_illusions()
+end
 
 -- ============================================================
 -- Kruber 1h sword cosmetics → cwv_es_dual_swords illusions
@@ -9826,6 +10015,7 @@ local function _build_entry(def, backend_id)
 		cwv_imperial_longsword         = "cwv_imperial_longsword_skins",
 		cwv_es_longsword_shield        = "cwv_es_longsword_shield_skins",
 		cwv_es_axe_shield              = "cwv_es_axe_shield_skins",
+		cwv_es_infantry_spear          = "cwv_es_infantry_spear_skins",
 		cwv_es_dual_swords             = "cwv_es_dual_swords_skins",
 		cwv_es_dual_axes               = "cwv_es_dual_axes_skins",
 		cwv_wh_dual_axes               = "cwv_wh_dual_axes_skins",
@@ -14044,6 +14234,54 @@ _rt_register("cwv_unit_bearing_variants_registered", function()
     if #missing > 0 then
         return "unit-bearing variants NOT in _transform_map (#417 reg-gate fork): " .. table.concat(missing, ", ")
     end
+end)
+
+_rt_register("cwv_issue596_infantry_spear_contract", function()
+	local infantry = _om.infantry_spear
+	local def = _find_def(infantry.ITEM_KEY)
+	if not def then return "Infantry Spear definition missing" end
+	if def.base_weapon ~= "we_spear"
+			or def.right_hand_unit ~= "units/weapons/player/wpn_es_deus_spear_01/wpn_es_deus_spear_01" then
+		return "Infantry Spear base/model contract drifted"
+	end
+	if #(def.careers or {}) ~= 3 or def.careers[1] ~= "es_mercenary"
+			or def.careers[2] ~= "es_huntsman" or def.careers[3] ~= "es_knight" then
+		return "Infantry Spear authored careers drifted (must exclude Grail Knight)"
+	end
+	local source = Weapons and Weapons.two_handed_spears_elf_template_1
+	local tuned = Weapons and Weapons[infantry.TEMPLATE_KEY]
+	if not source or not tuned then return "Infantry Spear source/tuned template missing" end
+	local checked_timing, checked_profiles = 0, 0
+	for action_name, source_group in pairs(source.actions or {}) do
+		local tuned_group = tuned.actions and tuned.actions[action_name]
+		if type(source_group) == "table" and type(tuned_group) == "table" then
+			for sub_name, source_action in pairs(source_group) do
+				local tuned_action = tuned_group[sub_name]
+				if type(source_action) == "table" and type(tuned_action) == "table" then
+					local expected = infantry.scaled_attack_time(
+						source_action.kind, source_action.anim_time_scale)
+					if source_action.kind == "melee_start" or source_action.kind == "sweep" then
+						checked_timing = checked_timing + 1
+						if type(tuned_action.anim_time_scale) ~= "number"
+								or math.abs(tuned_action.anim_time_scale - expected) > 0.000001 then
+							return string.format("Infantry Spear timing drift at %s.%s", action_name, sub_name)
+						end
+					end
+					if source_action.damage_profile then
+						checked_profiles = checked_profiles + 1
+						local key = tuned_action.damage_profile
+						if type(key) ~= "string" or key:find("cwv_infantry_spear_", 1, true) ~= 1
+								or _om._cwv_damage_profile_wire_source[key] ~= source_action.damage_profile then
+							return string.format("Infantry Spear profile drift at %s.%s", action_name, sub_name)
+						end
+					end
+				end
+			end
+		end
+	end
+	if checked_timing == 0 or checked_profiles == 0 then
+		return "Infantry Spear contract walk was vacuous"
+	end
 end)
 
 _rt_register("cwv_husk_override_ref_shared", function()

@@ -42,7 +42,7 @@ return function(H, repo_root)
     end)
 
     H.test("issue368 CWV clone catalog is bounded and marker-gated", function()
-        H.equal(#catalog, 29)
+        H.equal(#catalog, 30)
         local seen = {}
         for _, row in ipairs(catalog) do
             H.equal(seen[row.key], nil, row.key)
@@ -56,7 +56,7 @@ return function(H, repo_root)
 
     H.test("issue391 builds one compatible master and exact career toggles per CWV item", function()
         local rows = policy.build_widgets(catalog)
-        H.equal(#rows, 29)
+        H.equal(#rows, 30)
         local seen = {}
         local child_count = 0
         for index, row in ipairs(rows) do
@@ -70,13 +70,33 @@ return function(H, repo_root)
                 local expected = "unlock_cwv_variant_" .. career .. "_" .. variant.key
                 H.equal(child.setting_id, expected)
                 H.equal(child.type, "checkbox")
-                H.equal(child.default_value, true)
+                local expected_default = true
+                if variant.key == "cwv_es_infantry_spear" then
+                    expected_default = career == "es_mercenary"
+                        or career == "es_huntsman" or career == "es_knight"
+                end
+                H.equal(child.default_value, expected_default)
                 H.equal(seen[expected], nil, expected)
                 seen[expected] = true
                 child_count = child_count + 1
             end
         end
-        H.equal(child_count, 122)
+        H.equal(child_count, 142)
+    end)
+
+    H.test("CWV #596 Infantry Spear controls default to three Kruber careers", function()
+        local by_key = {}
+        for _, row in ipairs(catalog) do by_key[row.key] = row end
+        local row = by_key.cwv_es_infantry_spear
+        H.truthy(row)
+        H.equal(#row.careers, 20)
+        H.equal(#row.default_careers, 3)
+        H.equal(#row.authored_careers, 3)
+        H.equal(#row.conditional_careers, 17)
+        H.equal(contains(row.default_careers, "es_questingknight"), false)
+        H.equal(contains(row.conditional_careers, "es_questingknight"), true)
+        H.equal(contains(row.careers, "bw_necromancer"), true)
+        H.truthy(availability:find("variant.authored_careers or {}", 1, true))
     end)
 
     H.test("issue593 Empire Axe Shield replaces Saltz native fallback only while CWV is active", function()

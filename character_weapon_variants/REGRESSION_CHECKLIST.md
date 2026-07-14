@@ -8,6 +8,16 @@ Last updated: 2026-07-14.
 
 ---
 
+## #596 Infantry Spear
+
+- [ ] CIM lists Infantry Spear for Mercenary, Huntsman, and Foot Knight; CWV alone does not offer it to Grail Knight.
+- [ ] Default and all six alternate illusions render only the Spear+Shield spear half in inventory, illusion preview, first person, local third person, and a remote husk.
+- [ ] Light/heavy/push-attack chains feel 15% slower; block and ordinary push timing remain elf-spear baseline.
+- [ ] `/cwv_regression_test` passes `cwv_issue596_infantry_spear_contract`; offline `test_cwv_infantry_spear.lua` passes.
+- [ ] With WT, each default career can be disabled; Grail Knight and another non-Kruber career are default-off but can be enabled. Career abilities remain usable while wielding it.
+
+---
+
 ## Smoke Bomb preflight (#343)
 
 - [ ] Enter a keep or mission and attach the automatically emitted `[cwv:343]` record; `/cwv_smoke_bomb_probe` can explicitly record a later recheck.

@@ -924,6 +924,12 @@ Related: § Conventions "Maintain alphabetical order" below — moving a `settin
 
 ## Conventions
 
+### CWV authored defaults and expansion careers
+
+CWV catalog rows may declare `default_careers` separately from `careers` (introduced for #596 Infantry Spear). `careers` is the complete bounded set WT may manage; `default_careers` is the subset whose child toggles start enabled. Use `authored_careers` when deactivation must restore the CWV definition to a narrower native set. On WT/CWV deactivation, remove WT-only expansion careers and restore that authored set; never persist expanded `can_wield` membership into the inactive owner.
+
+The availability pass must also inject the source weapon's career-ability action template for every enabled career, including authored defaults. This keeps newly defined CWV items functional on both their intended careers and explicit WT expansions without a per-frame hook or new transport.
+
 ### Maintain alphabetical order in weapon menus
 
 The runtime data pass sorts every per-career melee/ranged leaf alphabetically

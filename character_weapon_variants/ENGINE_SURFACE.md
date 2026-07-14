@@ -46,6 +46,8 @@ full wrapper (`mod:hook`, can rewrite args/returns); `[safe]` = `mod:hook_safe`
 
 ### Weapon animation / spread / ammo (tangent to `docs/engine/10`)
 
+Infantry Spear adds no hook. It deep-clones `two_handed_spears_elf_template_1`, scales only attack-bearing action time/profile fields, and supplies Kruber's 3P polearm stance through the existing network-bound remap seam [src: `spears_wood_elf.lua:1-4,1559`; `action_utils.lua:538-563`; `weapon_unit_extension.lua:627-655`]. Its visuals copy only `right_hand_unit` from the `es_deus_01` skin family; the shield field is intentionally absent [src: `weapon_skins_morris.lua:144-267`].
+
 | Class.method (kind) | Vanilla behavior | Why cwv hooks it | Trap / invariant |
 |---|---|---|---|
 | `WeaponUnitExtension._play_3p_anim` [hook] `:1618` | Resolves `event_3p`, encodes it through `NetworkLookup.anims`, sends the animation RPC, then fires the same event locally [src: `scripts/unit_extensions/weapons/weapon_unit_extension.lua:627-655`] | Substitute the receiver-career baked event (#398) or enabled dev-picker choice (#317) before vanilla encodes it, keeping owner and husks on one animation/audio timeline | Never defer this to `Unit.animation_event`: that call is after the RPC and therefore owner-local only. Picker choices must be receiver-closed-vocabulary and master-toggle gated; target must already exist in `NetworkLookup.anims`, else decline safely. |

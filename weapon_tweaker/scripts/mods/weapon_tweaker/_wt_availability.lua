@@ -113,6 +113,9 @@ local function _apply_cwv_variant_unlocks()
                 for _, career in ipairs(variant.conditional_careers or {}) do
                     _set_career(item, career, false)
                 end
+                for _, career in ipairs(variant.authored_careers or {}) do
+                    _set_career(item, career, true)
+                end
             end
         end
     end
@@ -219,16 +222,15 @@ local function patch_career_actions_on_weapons()
         end
     end
 
-    -- WT's conditional CWV cross-receivers also need their career ability on
-    -- the live variant template. The donor fallback happens to share that
-    -- template, but its checkbox may be off while the default-on CWV child is
-    -- enabled; relying on the donor row would therefore make Saltz abilities
-    -- silently unavailable with the Empire variant equipped.
+    -- Every enabled CWV career needs its career ability on the live variant
+    -- template. The donor fallback may be off independently, and Infantry
+    -- Spear also exposes default-off receivers that its authored template
+    -- cannot know about without WT.
     if _cwv_active() then
         for _, variant in ipairs(_cwv_variant_catalog) do
             local item = rawget(ItemMasterList, variant.key)
             if item and item.cwv_variant == true then
-                for _, career in ipairs(variant.conditional_careers or {}) do
+                for _, career in ipairs(variant.careers or {}) do
                     if _cwv_availability_policy.is_enabled(_get_setting, variant.key, career) then
                         local cs = CareerSettings[career]
                         local ability = cs and cs.activated_ability and cs.activated_ability[1]
@@ -275,6 +277,9 @@ local function clear_weapon_unlocks()
         if item and item.cwv_variant == true then
             for _, career in ipairs(variant.conditional_careers or {}) do
                 _set_career(item, career, false)
+            end
+            for _, career in ipairs(variant.authored_careers or {}) do
+                _set_career(item, career, true)
             end
         end
     end

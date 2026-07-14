@@ -1313,6 +1313,7 @@ loc.cwv_variant_availability = { en = "Career Weapon Variants" }
 local _cwv_variant_labels = {
     cwv_es_axe_shield = "Kruber: Axe and Shield",
     cwv_es_axe_shield_veteran = "Kruber: Imperial Axe and Shield",
+    cwv_es_infantry_spear = "Kruber: Infantry Spear",
     cwv_we_sword_shield = "Kerillian: Sword and Shield",
     cwv_we_sword_shield_veteran = "Kerillian: Elven Sword and Shield",
     cwv_es_longsword = "Kruber: Imperial Longsword",
@@ -1358,6 +1359,10 @@ local _cwv_career_labels = {
     we_maidenguard = "Handmaiden",
     we_shade = "Shade",
     we_thornsister = "Sister of the Thorn",
+    bw_adept = "Battle Wizard",
+    bw_scholar = "Pyromancer",
+    bw_unchained = "Unchained",
+    bw_necromancer = "Necromancer",
 }
 local _cwv_catalog = mod:dofile("scripts/mods/weapon_tweaker/wt_cwv_variant_catalog")
 local _cwv_availability_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_cwv_availability_policy")
