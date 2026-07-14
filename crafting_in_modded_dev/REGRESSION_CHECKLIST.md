@@ -6,6 +6,20 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+### athanor-literal-property-values - issue #244
+
+| Field | Value |
+|---|---|
+| Symptom | Forging three of five Attack Speed bubbles displays/applies 4.2% on the resulting item instead of the picker value of 3%. |
+| Root cause | The Weave picker bubble fraction was stored directly as the Adventure property's normalized interpolation parameter. |
+| Fix version(s) | cim_dev 0.8.74-dev |
+| Category | SOLO |
+| Repro | Set Attack Speed to three bubbles, inspect the item, then reopen the Athanor. Repeat at four/five bubbles and with one signed reduction property. |
+| Expected post-fix | Three/four/five bubbles round-trip as 3%/4%/5%; normalized zero preserves the low-end property; special/discrete properties are unchanged. |
+| Detection | Offline `test_cim_property_value_policy.lua` passes and `/cim_regression_test` passes `issue244_athanor_literal_property_values`. |
+
+---
+
 ### cw-trait-exact-slot-family - issue #414
 
 | Field | Value |

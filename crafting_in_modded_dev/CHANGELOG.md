@@ -1,5 +1,20 @@
 # Crafting in Modded Changelog
 
+## 0.8.74-dev (2026-07-14): #244 literal Athanor property values [verify-fix] [not deployed]
+
+- Fixed the Athanor writing its absolute Weave bubble fraction directly into an ordinary item's normalized Adventure property field. Three of five Attack Speed bubbles previously stored `0.6`; vanilla then interpolated that across the 3%-5% Adventure range and displayed/applied 4.2% instead of the forged 3%.
+- Added a symmetric conversion for two-endpoint Adventure ranges: bubble writes translate the absolute picker value into normalized storage, and item reads translate the stored value back into the original bubble count. A normalized zero remains a present low-end property instead of disappearing on reopen.
+- Descending signed ranges (for example reduction properties) use the same bounded conversion. Existing special handling for stamina, movement speed, scalar values, and discrete bonus tables is unchanged.
+- Source boundary: the Athanor displays `UIUtils.get_weave_property_value_text` from its scalar Weave maximum (`ui_utils.lua:115-135`), while ordinary item descriptions and buffs interpolate the stored value across the Adventure range (`ui_utils.lua:137-173`; `buff_extension.lua:207-237`).
+- Added pure policy coverage and runtime regression `issue244_athanor_literal_property_values`.
+
+### Test method
+1. In the Athanor, set Attack Speed to three bubbles (3%), apply it, and inspect the item in inventory/customization; it must show 3%, not 4.2%.
+2. Leave and reopen the Athanor; the same property must still occupy three bubbles.
+3. Repeat at four and five bubbles; the item must show 4% and 5% respectively.
+4. Check one reduction property with a descending signed range, then confirm stamina and movement speed retain their established special behavior.
+5. Run `/cim_regression_test` and require `issue244_athanor_literal_property_values` PASS.
+
 ## 0.8.73-dev (2026-07-14): #414 exact-slot Chaos Wastes trait rerolls [verify-fix] [not deployed]
 
 - Fixed `Allow Chaos Wastes traits` flattening every CW trait category into every weapon. Standard-bench rerolls now add only the three vanilla melee families to melee weapons and only the six vanilla ranged families to ranged weapons.

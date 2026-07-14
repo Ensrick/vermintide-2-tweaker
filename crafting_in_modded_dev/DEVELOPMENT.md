@@ -30,6 +30,7 @@ new module needs only its manifest dofile line + a row here.
 | `modded_rarities.lua` | Custom "modded" rarity registration (Colors/UISettings/RaritySettings/NetworkLookup table contacts), `_G.Localize` supply, deus weapon-pool scrub, Jewellery->Accessories relabel. Pre-existing. |
 | `standard_forge.lua` | The standard Keep crafting bench: material-clean craft/salvage/reroll synth into the backend mirror, the EAC choke-point `craft`/`_get_valid_recipe`/`enqueue` hooks, CraftPage requirement forcing, jewelry-slot pin. Pre-existing. |
 | `_cim_trait_slot_policy.lua` | Pure #414 mapping of vanilla's three melee and six ranged Chaos Wastes trait categories to exact `slot_type`; shared by standard rerolls and the Athanor picker. |
+| `_cim_property_value_policy.lua` | Pure #244 symmetric conversion between absolute Athanor/Weave bubble values and normalized two-endpoint Adventure property storage. |
 | `illusion_swap.lua` | Modded-realm weapon-skin apply (migrated from cosmetics_tweaker v0.8.49); synthetic skin ids, Apply-button eac-clear, unlocked-skin marking. Pre-existing. |
 | `saveweapon_import.lua` | One-shot SaveWeapon-mod importer command. Pre-existing. |
 | `_accessory_craft_panel.lua` | The 3-per-slot accessory craft-button overlay (own scenegraph). Pre-existing. |
@@ -48,6 +49,7 @@ new module needs only its manifest dofile line + a row here.
   (VMF drops the second - NON-NEGOTIABLE 8).
 - **New inventory/salvage grid filter behavior** -> `_cim_inventory_filter.lua`.
 - **New CW trait/category eligibility rule** -> `_cim_trait_slot_policy.lua`; keep it engine-free and cover exact vanilla category names offline.
+- **New Athanor property value/range rule** -> `_cim_property_value_policy.lua`; keep it engine-free, symmetric, and preserve the entry's special discrete-property paths.
 - **New read-only diagnostic dump command** with no cim-state dependency ->
   `_cim_dump_commands.lua`. A dump that reads `_custom_forge_active` / `_forged_weapons`
   stays in the entry until those locals are promoted (Phase 2).

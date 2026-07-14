@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.73-dev"
+local MOD_VERSION = "0.8.74-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -263,6 +263,13 @@ if _ok_tsp then
 else
     mod:error("Failed to load _cim_trait_slot_policy: %s", tostring(_trait_slot_policy))
 end
+
+-- Pure #244 conversion between the Athanor's absolute Weave bubble values and
+-- the normalized interpolation parameter stored on ordinary Adventure items.
+-- Keep it on `mod`: the entry chunk is close to Lua 5.1's 200-local limit.
+mod._cim244_property_value_policy = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_property_value_policy")
+mod.CIM244_PROPERTY_VALUE_POLICY_MARKER_v0_8_74 = true
 
 -- Standard Keep crafting — same Athanor pattern: mutations are session-only because
 -- we block PlayFab commits while the forge is open. v0.2.0 crashed because we left
@@ -3635,7 +3642,22 @@ _value_for_bubbles = function(weave_key, count)
         return math.min(count / 5, 1.0)
     end
     local cap = _bubble_cap(weave_key)
-    if cap == 5 then return math.min(count / 5, 1.0) end
+    if cap == 5 then
+        -- #244: the picker shows an ABSOLUTE fraction of the Weave maximum,
+        -- but an Adventure item stores a NORMALIZED interpolation parameter.
+        -- Attack speed 3/5 means 3%; storing 0.6 made the ordinary item path
+        -- interpolate 60% across 3..5 and display/apply 4.2%.
+        local policy = mod._cim244_property_value_policy
+        local WP, Weave = rawget(_G, "WeaponProperties"), rawget(_G, "WeaveProperties")
+        local adv = WP and WP.properties and WP.properties[bare]
+        local weave = Weave and Weave.properties and Weave.properties["weave_" .. bare]
+        local adv_value = adv and adv.description_values and adv.description_values[1]
+        local weave_value = weave and weave.description_values and weave.description_values[1]
+        local converted = policy and policy.storage_for_bubbles(
+            adv_value and adv_value.value, weave_value and weave_value.value, count, cap)
+        if converted ~= nil then return converted end
+        return math.min(count / 5, 1.0)
+    end
     if count <= 0 then return 0 end
     if count >= cap then return 1.0 end
     -- For stamina cap=2 and count=1: lands at 0.4 (vanilla tier 2 = +1).
@@ -3648,8 +3670,25 @@ end
 -- visible +N stamina readout.
 _bubbles_for_value = function(weave_key, value)
     local cap = _bubble_cap(weave_key)
-    if value == nil or value <= 0 then return 0 end
-    if cap == 5 then return math.max(1, math.ceil(value * 5)) end
+    if value == nil then return 0 end
+    if cap == 5 then
+        -- Symmetric #244 read path. Normalized zero is the range's valid low
+        -- endpoint (3% attack speed), so it must seed three bubbles instead of
+        -- making the property disappear on the next Athanor open.
+        local bare = _bare_property(weave_key)
+        local policy = mod._cim244_property_value_policy
+        local WP, Weave = rawget(_G, "WeaponProperties"), rawget(_G, "WeaveProperties")
+        local adv = WP and WP.properties and WP.properties[bare]
+        local weave = Weave and Weave.properties and Weave.properties["weave_" .. bare]
+        local adv_value = adv and adv.description_values and adv.description_values[1]
+        local weave_value = weave and weave.description_values and weave.description_values[1]
+        local converted = policy and policy.bubbles_for_storage(
+            adv_value and adv_value.value, weave_value and weave_value.value, value, cap)
+        if converted ~= nil then return converted end
+        if value <= 0 then return 0 end
+        return math.max(1, math.ceil(value * 5))
+    end
+    if value <= 0 then return 0 end
     if cap == 1 then return 1 end
     if cap == 2 then
         return value >= 0.6 and 2 or 1
@@ -6381,6 +6420,40 @@ _rt_register("localization_format_safe", function()
                     k, tostring(fmt_err))
             end
         end
+    end
+end)
+
+_rt_register("issue244_athanor_literal_property_values", function()
+    local policy = mod._cim244_property_value_policy
+    if type(policy) ~= "table"
+        or type(policy.storage_for_bubbles) ~= "function"
+        or type(policy.bubbles_for_storage) ~= "function"
+    then
+        return "#244 property-value policy is unavailable"
+    end
+
+    local stored = policy.storage_for_bubbles({ 0.03, 0.05 }, 0.05, 3, 5)
+    if type(stored) ~= "number" or math.abs(stored) > 0.000001 then
+        return string.format("3%% attack speed expected normalized 0, got %s", tostring(stored))
+    end
+    local bubbles = policy.bubbles_for_storage({ 0.03, 0.05 }, 0.05, stored, 5)
+    if bubbles ~= 3 then
+        return string.format("normalized low endpoint expected 3 bubbles, got %s", tostring(bubbles))
+    end
+
+    local WP, Weave = rawget(_G, "WeaponProperties"), rawget(_G, "WeaveProperties")
+    local adv = WP and WP.properties and WP.properties.attack_speed
+    local weave = Weave and Weave.properties and Weave.properties.weave_attack_speed
+    local adv_value = adv and adv.description_values and adv.description_values[1]
+    local weave_value = weave and weave.description_values and weave.description_values[1]
+    if not (adv_value and type(adv_value.value) == "table"
+        and weave_value and type(weave_value.value) == "number")
+    then
+        return "native attack-speed property shapes changed"
+    end
+    local live_stored = policy.storage_for_bubbles(adv_value.value, weave_value.value, 3, 5)
+    if type(live_stored) ~= "number" or math.abs(live_stored) > 0.000001 then
+        return string.format("native 3%% attack-speed conversion got %s", tostring(live_stored))
     end
 end)
 
