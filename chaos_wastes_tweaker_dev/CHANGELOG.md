@@ -1,5 +1,56 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.281-dev (2026-07-14) - #361 Rotten Miasma customization [verify-fix-coop; not deployed]
+
+- Added a Rotten Miasma subgroup under Curses with an opt-in permanent purifying-torch carrier, a 2-30 metre safe-area radius slider (vanilla 8), and a 0.1-5 second stack-interval slider (vanilla 1.3).
+- Permanent mode remembers the living player who last picked up the relic. Dropping it frees the level-event slot while the existing protection sphere continues following that player; a later pickup transfers ownership to the new carrier.
+- Preserved vanilla's sole networked safe-area unit and mutator lifecycle. CT calls the live `MutatorTemplates.curse_rotten_miasma.server.update` exactly once, then composes the remembered position onto the same unit; no parallel aura, custom RPC, buff id, or network lookup is introduced.
+- Radius changes update the live buff's effective distance and the unit's visual flow radius together. Exposure timing continues through vanilla's existing buff tick field. All values use the host-effective settings channel.
+- Added bounded `[ct:361]` transition evidence, pure slider/ownership tests, the runtime check `issue361_miasma_customization_installed`, `MIASMA_TWEAKS.md`, and an engine-surface record. Verify with host and client because the protection sphere and carrier transfer must agree on both peers.
+
+## 0.7.280-dev (2026-07-14) - #331 Bots category and coin pickup [verify-fix; not deployed]
+
+- Added the requested top-level Bots category and moved all six existing bot-facing options into it without changing their setting ids or saved values.
+- Added opt-in **Bots Automatically Pick Up Pilgrim's Coins**. Host-owned bots use vanilla Money Magnet's bounded pattern: once per second, query within 10 metres, accept only `deus_soft_currency`, and start the normal forced `pickup_object` interaction.
+- The feature never teleports/destroys a pickup and never directly writes currency. Normal `GameModeDeus`/run-controller processing remains authoritative, including the coin multiplier and #466 independent bot-ledger propagation.
+- Consolidated coin pickup into CT's existing single `PlayerBotBase.update` hook. It has an independent throttle, skips bots already interacting, reuses a per-bot results array, and uses a weak-key 1.5-second claim to prevent multiple bots racing one coin.
+- Hardened interaction failure by releasing the claim and bounded `[ct:331]` evidence to 32 rows. Added the runtime check `issue331_bot_coin_pickup_installed`, engine-free policy/structure tests, `BOT_TWEAKS.md`, and this engine-surface record.
+
+## 0.7.279-dev (2026-07-14) - #467 boon price/tier baseline [diagnostics-armed; not deployed]
+
+- Source audit established that vanilla has no per-boon price: shrine cost is keyed only by the four live serialized rarities (`event=100`, `rare=200`, `exotic=250`, `unique=300`), boon altars are a separate flat 150, and Chest of Trials rewards are free.
+- Armed an automatic, observation-only live census on the first Chaos Wastes run setup in each process. It logs every post-mod pool entry as a sorted `[ct:467]` row with internal id, current rarity, current shrine price, resolved display name, and resolved description; no command is required.
+- Bounded the census to 192 boon rows, normalized/capped text, and added tier summaries plus missing-price, missing-template, and multi-rarity anomaly classification. It emits no RPC and mutates no pool, template, cost, or run-state data.
+- Added the optional `/ct_boon_price_audit` re-run convenience, runtime check `boon_price_audit_armed`, pure policy/plan validation tests, and `BOON_PRICE_REWORK.md` documenting every consumer a future individual-price manifest must update atomically.
+- The requested balance mutation remains intentionally deferred: issue #467 does not yet specify the new hierarchy or individual values. Applying invented tiers/prices would be an unreviewed balance change and could desynchronize UI, local purchase, host RPC validation, telemetry, and the #466 bot economy.
+
+## 0.7.278-dev (2026-07-14) - #466 independent bot boon/weapon economy [verify-fix-coop; not deployed]
+
+- Gave every host-owned bot an independent vanilla Deus soft-currency row. Fresh bots seed from the host's live balance; positive host coin pickups credit every current bot by the same final multiplier-adjusted amount. #465 departure handoffs may replace the seed with the departing human's balance.
+- Purchased boon altars now charge each bot the exact displayed/scaled altar cost and skip bots with insufficient funds. Chest of Trials and end-of-level grants remain free, matching the game source.
+- Covered the missing shrine boundary: vanilla `_try_buy_power_up` writes SharedState directly and never calls `add_power_ups`, so the old mirror/random hook could not see shrine purchases. Bots now make the configured mirror/random same-rarity choice and independently pay the discount-adjusted shrine price.
+- Weapon swap/upgrade mirroring now calculates cost from each bot's own current weapon rarity. An unaffordable bot keeps its weapon; failed grants/equips refund atomically.
+- Preserved disabled-boon and peer-parity gates, added a shared random-choice helper, bounded `[ct:466]` transaction evidence to 64 rows per run, and added the runtime check `bot_boon_economy_installed`.
+- Added pure offline policy tests and `BOT_BOON_ECONOMY.md`. Career/talent/weapon weighting remains intentionally deferred until the project owner supplies the curated priority list; this release provides its economy and source-coverage substrate.
+
+## 0.7.277-dev (2026-07-14) - #465 replacement-player progression compensation [verify-fix-coop; not deployed]
+
+- Added enabled-by-default, host-controlled replacement compensation at vanilla's exact `GameModeDeus` human-leave, bot-add, and bot-remove lifecycle seams.
+- A departure-created bot inherits the human's granted boons, persistent buffs, Pilgrim's Coin, and serialized melee/ranged Chaos Wastes weapons. A human replacing a bot inherits that bot's boon/buff/weapon state and receives the host's current coin balance.
+- Marks copied peer/profile rows initialized so the later vanilla initial-setup RPC cannot overwrite the handoff, and rebuilds the incoming player's spawn data once so the compensated weapons are used on first spawn.
+- Fails closed if vanilla removes a fallback bot with a different profile/career; cross-career serialized weapon state is not copied.
+- Copies only existing vanilla SharedState fields, with no custom RPC or per-frame polling. Snapshots are bounded to six table levels / 256 entries and `[ct:465]` diagnostics to 32 lines per run.
+- Preserves #426 wire safety: until every peer proves CT parity, CT-owned power-up and persistent-buff identifiers are filtered from the handoff rather than exposing an unknown network lookup index.
+- Added pure offline policy coverage and `REPLACEMENT_COMPENSATION.md` with a disconnect/rejoin co-op verification script.
+
+## 0.7.276-dev (2026-07-14) - #460 progressive difficulty advanced settings [verify-fix-coop; not deployed]
+
+- Corrected the existing partial ramp to the requested schedule: only maps 3 and 5 add one difficulty tier. Maps 1-2 retain the starting tier, maps 3-4 use +1, and map 5 onward uses +2.
+- Added an enabled-by-default difficulty-increase sub-toggle beneath the off-by-default Progressive Difficulty master.
+- Added the -100% to 0% progress-based coin reduction (default -25%). From map 3 onward it scales the configured Coin Pickup Multiplier; for example 2.00x becomes 1.50x. The existing one-coin engine floor remains.
+- The ceiling dynamically admits Cataclysm 4/5 if another installed system registers them. Stock VT2 defines only through Cataclysm 3, so it caps there and never crosses into `versus_base`.
+- Added a pure progression policy, four offline regression cases, updated runtime assertions, and `PROGRESSIVE_DIFFICULTY.md`. Both advanced settings use host-effective values; verify with two players.
+
 ## 0.7.275-dev (2026-07-14) - #358 Manann's Tempest cooldown HUD timers [verify-fix-coop; not deployed]
 
 - **Fix.** When the existing `tweak_manann_tempest_cooldown` gate allows a real critical-hit chain, the proc owner now sees the native Manann's Tempest trait icon count down for the exact eight-second cooldown. With the toggle off, ineligible damage, or a rejected proc, no display is created and vanilla behavior is unchanged.

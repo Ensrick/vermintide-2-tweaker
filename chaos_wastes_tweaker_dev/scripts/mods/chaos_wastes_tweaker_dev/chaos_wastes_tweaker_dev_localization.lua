@@ -25,8 +25,17 @@ local loc = {
     enable_group_master_tooltip = { en = "Turns this whole mission set on or off at once. Expand \"Choose Missions\" underneath to include only some of them.\n\nAt least one Travel-type and one Signature-type mission must stay enabled overall. If you disable everything, one mission is kept automatically and a chat message names the pool, so the Chaos Wastes map can always be built (prevents the issue-487 load freeze).\n\nHost-only. Applies to your next expedition." },
     enable_group_single_tooltip = { en = "Turns this mission on or off.\n\nAt least one Travel-type and one Signature-type mission must stay enabled overall. If you disable everything, one mission is kept automatically and a chat message names the pool (prevents the issue-487 load freeze).\n\nHost-only. Applies to your next expedition." },
     replace_shrines_with_missions = { en = "[working] Replace Shrines with Missions" },
-    progressive_difficulty = { en = "[diag] Progressive Difficulty" },
-    progressive_difficulty_tooltip = { en = "The first two missions of a run use your starting difficulty. Every mission after that steps up one tier (for example Legend, then Cataclysm, then Cataclysm 2, then Cataclysm 3), capping at Cataclysm 3. Host-controlled: the whole lobby follows the host's setting." },
+    progressive_difficulty = { en = "[untested] Progressive Difficulty" },
+    progressive_difficulty_tooltip = { en = "Enables the progression options below. Off keeps the selected difficulty and normal coin multiplier for the whole pilgrimage. Host-controlled." },
+    progressive_difficulty_increase = { en = "[untested] Difficulty Increases with Progress" },
+    progressive_difficulty_increase_tooltip = { en = "Raises difficulty by one tier on maps 3 and 5. Caps at Cataclysm 5 when those tiers are registered; vanilla installations cap at Cataclysm 3. Host-controlled." },
+    progressive_coin_reduction = { en = "[untested] Coin Multiplier Progress Reduction" },
+    progressive_coin_reduction_tooltip = { en = "Reduces the configured Coin Pickup Multiplier by this percentage from map 3 onward. -25 turns a 2.00x multiplier into 1.50x. -100 reduces each pickup to the engine minimum of 1 coin. Host-controlled." },
+    replacement_player_compensation = { en = "[untested] Replacement Player Compensation" },
+    replacement_player_compensation_tooltip = { en = "Host-controlled and enabled by default. When a player leaves during a pilgrimage, their boons, persistent buffs, Pilgrim's Coin, and upgraded Chaos Wastes weapons pass to the replacement bot. A player replacing a bot inherits that bot's boons and weapons, while their coin balance is set to the host's current balance. CT-only boons are copied only after every peer proves CT compatibility." },
+    bots_group = { en = "[working] Bots" },
+    bots_pick_up_pilgrims_coins = { en = "[verify-fix] Bots Automatically Pick Up Pilgrim's Coins" },
+    bots_pick_up_pilgrims_coins_tooltip = { en = "Once per second, each living bot checks within 10 metres and uses the normal interaction on one Pilgrim's Coin. Bots do not touch other pickups, do not interrupt an interaction already in progress, and do not directly create or credit coins. Host-only." },
 
     -- #458 Buy Starting Boons (start-node shrine shop). Titles carry dev status tags
     -- (LOCALIZATION_STANDARD s13); tooltips are bodies (untagged). No literal % to escape.
@@ -135,6 +144,13 @@ local loc = {
     -- ============================================================
     curses_group = { en = "[working] Curses" },
     disabled_curses_group = { en = "[working] Disabled Curses" },
+    miasma_group = { en = "[verify-fix] Rotten Miasma" },
+    miasma_permanent_carrier = { en = "[verify-fix] Permanent Purifying Torch Carrier" },
+    miasma_permanent_carrier_tooltip = { en = "After a player picks up the purifying torch, its safe area follows that living player even when the torch is dropped. A later player who picks it up becomes the new carrier. Host's setting applies to the lobby." },
+    miasma_safe_radius = { en = "[verify-fix] Safe Area Radius" },
+    miasma_safe_radius_tooltip = { en = "Sets the Rotten Miasma protection sphere's visual and effective radius in metres. Vanilla is 8. Host's value applies to the lobby." },
+    miasma_stack_interval = { en = "[verify-fix] Miasma Stack Interval" },
+    miasma_stack_interval_tooltip = { en = "Seconds between curse-stack changes while outside or inside the safe area. Lower values apply and remove stacks faster. Vanilla is 1.3 seconds. Host's value applies to the lobby." },
     force_belakor = { en = "[working] Always Include Belakor's Temple" },
     -- v0.7.200-dev (#104): rolling-window cap on Corrupted Flesh gas clouds.
     flesh_guard_clouds_per_minute = { en = "[diag] Corrupted Flesh: max clouds per minute" },
@@ -296,14 +312,14 @@ local loc = {
     rv_no_save_morgrim = { en = "[verify-fix] [diag] [Issue 259] Block Ranger Veteran from Saving Morgrim's" },
     rv_no_save_morgrim_tooltip = { en = "The Survivalist passive can no longer save Morgrim's Bomb; other grenades are unaffected." },
     -- v0.7.76: Bot Boon Mirror (Phase 3.1)
-    bots_mirror_host_boons = { en = "[working] Shared Blessings: Bots Mirror Host's Boons" },
-    bots_mirror_host_boons_tooltip = { en = "Whenever the host picks a boon at a shrine, altar, or chest, every bot gets the same one. Host-only." },
+    bots_mirror_host_boons = { en = "[verify-fix] Shared Blessings: Bots Mirror Host's Boons" },
+    bots_mirror_host_boons_tooltip = { en = "Whenever the host picks a boon at a shrine, altar, or Chest of Trials, every bot gets the same one. Each bot has its own Pilgrim's Coin balance: purchased boons are granted only when that bot can afford the real cost, while free rewards stay free. Host-only." },
     -- v0.7.120-dev: Bot Boon Random Roll (mutex alternative to mirror)
-    bots_get_random_boons = { en = "[working] Shared Blessings: Bots Roll Random Boons" },
-    bots_get_random_boons_tooltip = { en = "Whenever the host picks a boon, each bot gets its own random boon of the same rarity from the same pool, so bots usually differ from each other and the host. Turning this on turns off 'Bots Mirror Host's Boons'. Host-only." },
+    bots_get_random_boons = { en = "[verify-fix] Shared Blessings: Bots Roll Random Boons" },
+    bots_get_random_boons_tooltip = { en = "Whenever the host picks a boon, each bot gets its own random eligible boon of the same rarity, including at shrines, altars, and Chests of Trials. Each bot pays purchased-boon costs from its own Pilgrim's Coin balance; free rewards stay free. Turning this on turns off 'Bots Mirror Host's Boons'. Host-only." },
     -- v0.7.120-dev: Bot Weapon Upgrade Mirror
-    bots_mirror_host_weapon_upgrades = { en = "[diag] Shared Reliquaries: Bots Get Host's Weapon Upgrades" },
-    bots_mirror_host_weapon_upgrades_tooltip = { en = "Whenever the host uses a Chaos Wastes weapon altar, each bot gets the matching result: a swap altar gives the bot a new random weapon of the same rarity, and an upgrade altar upgrades the bot's current weapon to the same rarity with rerolled traits. Host-only." },
+    bots_mirror_host_weapon_upgrades = { en = "[verify-fix] Shared Reliquaries: Bots Get Host's Weapon Upgrades" },
+    bots_mirror_host_weapon_upgrades_tooltip = { en = "Whenever the host uses a Chaos Wastes weapon altar, each bot can buy the matching result from its own Pilgrim's Coin balance. The cost is calculated from that bot's current weapon rarity; a bot that cannot afford it keeps its weapon. Swap altars roll a new weapon of the target rarity, and upgrade altars upgrade the current slot. Host-only." },
     announce_bot_boons = { en = "[working] Announce Bot Boons in Chat" },
     announce_bot_boons_tooltip = { en = "Only you see it: a chat line names each bot and the boon it got whenever bots are given boons. Works only while 'Bots Mirror Host's Boons' or 'Bots Roll Random Boons' is on. Host-only." },
     -- Blessed Bots: Survival Boons (any gamemode; _ct_blessed_bots.lua)

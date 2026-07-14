@@ -1,3 +1,11 @@
+-- _ct_blessed_bots.lua - Consolidated host-side bot features for CT.
+--
+-- Owns CT's single PlayerBotBase.update hook. Blessed Bots and automatic
+-- Pilgrim's Coin pickup use independent bounded throttles so neither feature
+-- adds another per-frame engine query or competing hook.
+--
+-- Owned by: chaos_wastes_tweaker_dev.lua entry point. Consumed via: mod:dofile.
+
 local mod = get_mod("ct_dev")
 
 -- ============================================================================
@@ -34,6 +42,65 @@ local ScriptUnit = ScriptUnit
 local HEALTH_ALIVE = HEALTH_ALIVE
 local Managers = Managers
 local BuffUtils = BuffUtils
+local coin_policy = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_bot_coin_pickup")
+mod._ct_bot_coin_pickup = coin_policy
+
+local _coin_claims = setmetatable({}, { __mode = "k" })
+local _coin_log_count = 0
+
+local function _clear_array(tbl)
+    for i = #tbl, 1, -1 do tbl[i] = nil end
+end
+
+local function _try_pick_up_coin(unit, blackboard, t)
+    local due, next_t = coin_policy.poll_due(t, blackboard._ct_coin_pickup_next_t)
+    if not due then return end
+    blackboard._ct_coin_pickup_next_t = next_t
+
+    local entity = Managers.state.entity
+    local pickup_system = entity and entity:system("pickup_system")
+    local interactor_extension = ScriptUnit.has_extension(unit, "interactor_system")
+    if not (pickup_system and interactor_extension) then return end
+    if interactor_extension.is_interacting and interactor_extension:is_interacting() then return end
+
+    local position = POSITION_LOOKUP[unit]
+    if not position then return end
+    local results = blackboard._ct_coin_pickup_results
+    if not results then
+        results = {}
+        blackboard._ct_coin_pickup_results = results
+    else
+        _clear_array(results)
+    end
+    local count = tonumber(pickup_system:get_pickups(position, coin_policy.range, results)) or 0
+    for i = 1, count do
+        local pickup_unit = results[i]
+        local pickup_extension = pickup_unit
+            and ScriptUnit.has_extension(pickup_unit, "pickup_system")
+        if pickup_extension
+            and coin_policy.can_claim(pickup_extension.pickup_name, _coin_claims[pickup_unit], t) then
+            _coin_claims[pickup_unit] = coin_policy.claim_until(t)
+            local forced = true
+            local ok = pcall(interactor_extension.start_interaction, interactor_extension,
+                false, pickup_unit, "pickup_object", forced)
+            if not ok then
+                _coin_claims[pickup_unit] = nil
+                if _coin_log_count < 32 then
+                    _coin_log_count = _coin_log_count + 1
+                    pcall(printf, "[ct:331] bot coin interaction rejected count=%d",
+                        _coin_log_count)
+                end
+                return
+            end
+            if _coin_log_count < 32 then
+                _coin_log_count = _coin_log_count + 1
+                pcall(printf, "[ct:331] bot coin interaction started count=%d range=%dm claim_ttl=%.1fs",
+                    _coin_log_count, coin_policy.range, coin_policy.claim_ttl)
+            end
+            return
+        end
+    end
+end
 
 -- Rarity suffixes per the DeusPowerUpRarityPool listing (each boon appears once):
 --   deus_second_wind / last_player_standing_power_reg -> exotic
@@ -97,14 +164,20 @@ end
 -- for this mod (no duplicate). Re-checks every ~2s so boons re-apply after a
 -- bot dies and respawns.
 mod:hook_safe("PlayerBotBase", "update", function (self, unit, input, dt, context, t)
-    -- Throttle FIRST so the ~60Hz-per-bot common path is just a blackboard field
-    -- read + a float compare. The mod:get / _is_server checks (and everything
-    -- below) then run at most once per 2s per bot, not every frame. Advancing
-    -- next_t before those checks means a disabled feature also only re-polls every
-    -- 2s (worst case: enabling mid-session delays the first grant up to 2s).
+    -- This remains CT's only PlayerBotBase.update hook. Coin pickup and Blessed
+    -- Bots keep independent throttles (1s / 2s); the per-frame common path only
+    -- reads settings/timestamps and never queries PickupSystem.
     local blackboard = self._blackboard
     if not blackboard then
         return
+    end
+
+    local server = _is_server()
+    local alive = HEALTH_ALIVE[unit]
+    if mod:get("bots_pick_up_pilgrims_coins") then
+        if server and alive then _try_pick_up_coin(unit, blackboard, t) end
+    elseif next(_coin_claims) ~= nil then
+        _coin_claims = setmetatable({}, { __mode = "k" })
     end
 
     local next_t = blackboard._ct_blessed_next_t or 0
@@ -116,11 +189,11 @@ mod:hook_safe("PlayerBotBase", "update", function (self, unit, input, dt, contex
     if not mod:get("ct_blessed_bots") then
         return
     end
-    if not _is_server() then
+    if not server then
         return
     end
 
-    if not HEALTH_ALIVE[unit] then
+    if not alive then
         return
     end
     if not _ensure_deus_buffs_registered() then

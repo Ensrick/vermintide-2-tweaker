@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.275-dev"
+local MOD_VERSION = "0.7.281-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -804,6 +804,184 @@ local _ct_book_spawner_census
 -- `variadic_hooks_arity_preserved`.
 local CT_VARIADIC_ARITY_MARKER = "unpack_arity:select_count_v0.7.133"
 
+-- #466 independent bot economy. Bot progression uses the host's DeusRunState
+-- (bots are host-owned local-player rows), so existing vanilla SharedState fields
+-- provide a separate balance per bot without a new network protocol.
+CT_BOT_ECONOMY_MARKER = "bot_economy:independent_charge_gate_v0.7.278"
+mod._ct_bot_economy = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_bot_economy")
+mod._ct_bot_economy_log_count = 0
+mod._ct_bot_economy_initialized = {}
+
+-- #467 observation-only baseline for a future curated boon price/tier manifest.
+-- Vanilla prices shrine boons solely by rarity, so changing an individual value
+-- safely requires coordinated UI, purchase, telemetry, RPC-validation, and bot
+-- economy work. Until the owner supplies that manifest, capture the complete live
+-- post-mod pool once without mutating it.
+CT_BOON_PRICE_AUDIT_MARKER = "boon_price_audit:auto_once_bounded_v0.7.279"
+mod._ct_boon_pricing_audit = mod:dofile(
+    "scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_pricing_audit")
+mod._ct467_audit_done = false
+mod._ct467_last_audit = nil
+
+function mod._ct467_flat_text(value, limit)
+    local text = tostring(value or "")
+    text = text:gsub("[\r\n\t]+", " "):gsub("%s+", " ")
+    limit = limit or 240
+    if #text > limit then text = text:sub(1, limit - 3) .. "..." end
+    return text
+end
+
+function mod._ct_boon_price_audit_once(force, run_controller)
+    if mod._ct467_audit_done and not force then return mod._ct467_last_audit end
+    local by_rarity = rawget(_G, "DeusPowerUpsArrayByRarity")
+    local templates = rawget(_G, "DeusPowerUpTemplates")
+    local costs = rawget(_G, "DeusCostSettings")
+    local price_by_rarity = costs and costs.shop and costs.shop.power_ups
+    if type(by_rarity) ~= "table" or type(templates) ~= "table"
+        or type(price_by_rarity) ~= "table" then
+        return nil
+    end
+
+    local max_records = 192
+    local report = mod._ct_boon_pricing_audit.audit(
+        by_rarity, price_by_rarity, templates, max_records)
+    if report.total <= 0 then return nil end
+    mod._ct467_audit_done = true
+    mod._ct467_last_audit = report
+
+    local profile_index, career_index
+    local run_state = run_controller and run_controller._run_state
+    if run_state and run_state.get_own_peer_id and run_state.get_player_profile then
+        local own_peer = run_state:get_own_peer_id()
+        profile_index, career_index = run_state:get_player_profile(own_peer, REAL_PLAYER_LOCAL_ID)
+    end
+
+    pcall(printf, "[ct:467] summary total=%d cap=%d stock_prices{event=%s rare=%s exotic=%s unique=%s}",
+        report.total, max_records, tostring(price_by_rarity.event), tostring(price_by_rarity.rare),
+        tostring(price_by_rarity.exotic), tostring(price_by_rarity.unique))
+    for _, rarity in ipairs({ "event", "rare", "exotic", "unique" }) do
+        pcall(printf, "[ct:467] tier rarity=%s count=%d shop=%s",
+            rarity, report.counts[rarity] or 0, tostring(price_by_rarity[rarity]))
+    end
+
+    for _, record in ipairs(report.records) do
+        local template = templates[record.name]
+        local display = record.display_key or record.name
+        if mod._ct_boon_display_name then
+            local ok, resolved = pcall(mod._ct_boon_display_name, record.name)
+            if ok and resolved then display = resolved end
+        elseif record.display_key and rawget(_G, "Localize") then
+            local ok, resolved = pcall(Localize, record.display_key)
+            if ok and resolved then display = resolved end
+        end
+
+        local description = record.description_key or ""
+        local entry
+        for _, candidate in ipairs(by_rarity[record.rarity] or {}) do
+            if type(candidate) == "table" and (candidate.name or candidate[1]) == record.name then
+                entry = candidate
+                break
+            end
+        end
+        if entry and rawget(_G, "DeusPowerUpUtils")
+            and type(DeusPowerUpUtils.get_power_up_description) == "function" then
+            local ok, resolved = pcall(DeusPowerUpUtils.get_power_up_description,
+                entry, profile_index, career_index)
+            if ok and resolved then description = resolved end
+        elseif template and template.advanced_description and rawget(_G, "Localize") then
+            local ok, resolved = pcall(Localize, template.advanced_description)
+            if ok and resolved then description = resolved end
+        end
+        pcall(printf, "[ct:467] row name=%s rarity=%s shop=%s display=%s description=%s",
+            record.name, tostring(record.rarity), tostring(record.shop_price),
+            mod._ct467_flat_text(display, 120), mod._ct467_flat_text(description, 240))
+    end
+    for _, anomaly in ipairs(report.anomalies) do
+        pcall(printf, "[ct:467] anomaly %s", mod._ct467_flat_text(anomaly, 180))
+    end
+    pcall(printf, "[ct:467] complete emitted=%d truncated=%d anomalies=%d observation_only=true",
+        #report.records, report.truncated, #report.anomalies)
+    return report
+end
+
+function mod._ct_bot_economy_active()
+    return effective_setting("bots_mirror_host_boons")
+        or effective_setting("bots_get_random_boons")
+        or effective_setting("bots_mirror_host_weapon_upgrades")
+end
+
+function mod._ct_bot_economy_log(fmt, ...)
+    if mod._ct_bot_economy_log_count >= 64 then return end
+    mod._ct_bot_economy_log_count = mod._ct_bot_economy_log_count + 1
+    pcall(printf, "[ct:466] " .. fmt, ...)
+end
+
+function mod._ct_bot_economy_players()
+    local pm = Managers.player
+    local players = pm and pm.human_and_bot_players and pm:human_and_bot_players()
+    local bots = {}
+    for _, player in pairs(players or {}) do
+        if player and player.bot_player then bots[#bots + 1] = player end
+    end
+    return bots
+end
+
+function mod._ct_bot_economy_charge(run_state, bot, cost, reason)
+    local peer_id, local_player_id = bot:network_id(), bot:local_player_id()
+    local ledger_key = tostring(peer_id) .. ":" .. tostring(local_player_id)
+    local before
+    if mod._ct_bot_economy_initialized[ledger_key] then
+        before = run_state:get_player_soft_currency(peer_id, local_player_id) or 0
+    else
+        local host_peer = run_state:get_server_peer_id()
+        before = run_state:get_player_soft_currency(host_peer, REAL_PLAYER_LOCAL_ID) or 0
+        run_state:set_player_soft_currency(peer_id, local_player_id, before)
+        mod._ct_bot_economy_initialized[ledger_key] = true
+    end
+    local affordable, after = mod._ct_bot_economy.charge(before, cost)
+    if affordable then run_state:set_player_soft_currency(peer_id, local_player_id, after) end
+    mod._ct_bot_economy_log("charge bot=%s reason=%s cost=%s before=%s after=%s allowed=%s",
+        tostring(bot.name and bot:name() or local_player_id), tostring(reason), tostring(cost),
+        tostring(before), tostring(after), tostring(affordable))
+    return affordable
+end
+
+function mod._ct_bot_economy_credit_all(run_state, earned)
+    for _, bot in ipairs(mod._ct_bot_economy_players()) do
+        local peer_id, local_player_id = bot:network_id(), bot:local_player_id()
+        local before = run_state:get_player_soft_currency(peer_id, local_player_id) or 0
+        local ledger_key = tostring(peer_id) .. ":" .. tostring(local_player_id)
+        local after
+        if mod._ct_bot_economy_initialized[ledger_key] then
+            after = mod._ct_bot_economy.credit(before, earned)
+        else
+            -- A mode enabled after bot creation has no seed event. At the first
+            -- observed host pickup, initialize to the host's already-updated live
+            -- balance instead of losing all pre-toggle earnings.
+            local host_peer = run_state:get_server_peer_id()
+            after = run_state:get_player_soft_currency(host_peer, REAL_PLAYER_LOCAL_ID) or 0
+            mod._ct_bot_economy_initialized[ledger_key] = true
+        end
+        run_state:set_player_soft_currency(peer_id, local_player_id, after)
+        mod._ct_bot_economy_log("credit bot=%s earned=%s before=%s after=%s",
+            tostring(bot.name and bot:name() or local_player_id), tostring(earned),
+            tostring(before), tostring(after))
+    end
+end
+
+function mod._ct_bot_economy_seed_all(run_state)
+    local host_peer = run_state:get_server_peer_id()
+    local host_balance = run_state:get_player_soft_currency(host_peer, REAL_PLAYER_LOCAL_ID) or 0
+    for _, bot in ipairs(mod._ct_bot_economy_players()) do
+        local peer_id, local_player_id = bot:network_id(), bot:local_player_id()
+        local ledger_key = tostring(peer_id) .. ":" .. tostring(local_player_id)
+        run_state:set_player_soft_currency(peer_id, local_player_id, host_balance)
+        mod._ct_bot_economy_initialized[ledger_key] = true
+        mod._ct_bot_economy_log("seed bot=%s balance=%s at run setup",
+            tostring(bot.name and bot:name() or local_player_id), tostring(host_balance))
+    end
+end
+
 -- CLARIFY: Vanilla signature is `on_soft_currency_picked_up(self, amount, type)`. The `amount` is
 -- args[1] (NOT args[2] — that mistake was the cause of an early-version coin multiplier bug; see
 -- "Coin multiplier not working (wrong argument index)" in DEVELOPMENT.md).
@@ -820,10 +998,31 @@ mod:hook("DeusRunController", "on_soft_currency_picked_up", function(func, self,
         -- v0.7.55: route through effective_setting so a client picking up coins applies
         -- the host's coin_multiplier (matches what the host's own pickups grant).
         local multiplier = effective_setting("coin_multiplier") or 1
+        -- #460: once map three begins, reduce the configured multiplier by the
+        -- requested percentage. The master toggle gates both advanced options;
+        -- the difficulty-increase sub-toggle is intentionally independent.
+        local policy = mod._ct_progressive_policy
+        if policy and effective_setting("progressive_difficulty") then
+            local run_state = self and self._run_state
+            local completed = (run_state and run_state.get_completed_level_count
+                and run_state:get_completed_level_count()) or 0
+            local reduction = effective_setting("progressive_coin_reduction")
+            multiplier = policy.coin_multiplier(multiplier, reduction, completed)
+            if completed >= 2 and completed ~= mod._ct_progcoin_last_logged then
+                mod._ct_progcoin_last_logged = completed
+                pcall(printf, "[ct:460] map=%d completed=%d coin_multiplier=%.3f reduction=%s%%",
+                    completed + 1, completed, multiplier, tostring(reduction))
+            end
+        end
         args[1] = math.max(1, math.floor(raw_amount * multiplier))
     end
 
-    return func(self, unpack(args, 1, n))
+    local result_a, result_b = func(self, unpack(args, 1, n))
+    if type(args[1]) == "number" and args[1] > 0 and self and self._run_state
+        and self._run_state:is_server() and mod._ct_bot_economy_active() then
+        mod._ct_bot_economy_credit_all(self._run_state, args[1])
+    end
+    return result_a, result_b
 end)
 
 -- ============================================================
@@ -1201,7 +1400,7 @@ mod:hook("DeusChestExtension", "get_purchase_cost", function(func, self)
 end)
 
 -- v0.7.131-dev: altar-reuse re-arm logic LIVES INSIDE the consolidated
--- `mod:hook_safe("DeusChestExtension", "open_chest", ...)` further down the
+-- consolidated `mod:hook("DeusChestExtension", "open_chest", ...)` further down the
 -- file (search for `_ct_consolidated_open_chest_hook`). DO NOT add a second
 -- `mod:hook("DeusChestExtension", "open_chest", ...)` here — VMF silently
 -- drops duplicate hooks on the same (Class, method) per mod (see VMF_RECIPES.md
@@ -2527,12 +2726,12 @@ end
 -- ============================================================
 -- Progressive Difficulty (run-wide toggle)
 -- ============================================================
--- Steps the CW mission difficulty up one tier per mission after the first two.
--- First 2 missions = the run's starting difficulty; mission 3 = start+1, mission 4 =
--- start+2, ..., capped at Cataclysm 3 (never versus_base). Driven off the run
--- controller's completed-level count (the mission ordinal): at mission N,
--- get_completed_level_count() == N-1, so step = max(0, completed - 1).
---   completed 0 (M1) -> +0 | completed 1 (M2) -> +0 | completed 2 (M3) -> +1 | ...
+-- #460 advanced policy: step only on maps 3 and 5. First 2 missions use the
+-- starting difficulty; maps 3-4 use start+1; map 5 onward uses start+2.
+-- Vanilla registers only through Cataclysm 3. If a compatible difficulty mod
+-- registers Cataclysm 4/5 in DifficultyLookup+Difficulties, the dynamic ceiling
+-- admits them; otherwise it safely caps at the highest registered Cata tier and
+-- never crosses into versus_base.
 --
 -- Lever: hook DeusRunController.get_run_difficulty, the value that flows through
 -- deus_mechanism get_next_level_data (deus_mechanism.lua:166) -> the level transition
@@ -2546,23 +2745,18 @@ end
 --
 -- Caveat: a peer that HOT-JOINS mid-run inherits the host's already-stepped difficulty
 -- as its "start" and could over-step; peers present at run start are unaffected.
-CT_PROGRESSIVE_DIFFICULTY_MARKER = "progressive_difficulty:step_after_two_missions_cap_cata3_v0.7.217"
+CT_PROGRESSIVE_DIFFICULTY_MARKER = "progressive_difficulty:maps_3_and_5_dynamic_cata5_coin_reduction_v0.7.276"
+mod._ct_progressive_policy = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_progressive_difficulty")
 mod._ct_progdiff_step = function(start_key, completed_level_count)
     local Diff = rawget(_G, "Difficulties")
     local Lookup = rawget(_G, "DifficultyLookup")
-    if type(Diff) ~= "table" or type(Lookup) ~= "table" then return start_key end
-    local start_idx = Lookup[start_key]
-    if type(start_idx) ~= "number" then return start_key end
-    -- Cap at Cataclysm 3; NEVER step onto versus_base (the entry above cata3).
-    local cap_idx = Lookup["cataclysm_3"] or 7
-    local step = math.max(0, (tonumber(completed_level_count) or 0) - 1)
-    local target_idx = math.min(start_idx + step, cap_idx)
-    return Diff[target_idx] or start_key
+    return mod._ct_progressive_policy.difficulty(start_key, completed_level_count, Diff, Lookup)
 end
 
 mod:hook("DeusRunController", "get_run_difficulty", function(func, self)
     local base = func(self)
-    if not effective_setting("progressive_difficulty") then return base end
+    if not effective_setting("progressive_difficulty")
+        or not effective_setting("progressive_difficulty_increase") then return base end
     local start_key = mod._ct_progdiff_start or base
     local run_state = self and self._run_state
     local completed = (run_state and run_state.get_completed_level_count
@@ -2574,6 +2768,177 @@ mod:hook("DeusRunController", "get_run_difficulty", function(func, self)
             completed + 1, completed, tostring(start_key), tostring(stepped))
     end
     return stepped
+end)
+
+-- ============================================================
+-- Replacement-player progression compensation (Issue #465)
+-- ============================================================
+-- Vanilla keeps CW progression under (peer, local-player, profile, career) keys.
+-- Removing a bot for a joiner does not move those keys, and adding a bot after a
+-- departure initializes a fresh profile row. Preserve the selected replacement's
+-- boons, persistent buffs, and serialized melee/ranged CW weapons at the exact
+-- GameModeDeus add/remove boundaries. A joining human receives the host's current
+-- coin balance, per the feature specification; a departure-created bot receives
+-- the departing human's balance until another human takes over.
+--
+-- Direct run-state writes use only vanilla SharedState fields. No custom RPC or
+-- per-frame polling is involved. If CT peer parity has not been positively proven,
+-- CT-owned boon/buff names are filtered before the copy so this convenience feature
+-- can never put an unknown NetworkLookup index on a joining peer's wire.
+CT_REPLACEMENT_COMPENSATION_MARKER = "replacement_compensation:host_state_handoff_v0.7.277"
+mod._ct_replacement_policy = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_replacement_compensation")
+mod._ct_replacement_cache = {}
+mod._ct_replacement_log_count = 0
+
+function mod._ct_replacement_log(fmt, ...)
+    if mod._ct_replacement_log_count >= 32 then return end
+    mod._ct_replacement_log_count = mod._ct_replacement_log_count + 1
+    pcall(printf, "[ct:465] " .. fmt, ...)
+end
+
+function mod._ct_replacement_filtered(snapshot)
+    local wire_safe = mod._ct_wire_safe and mod._ct_wire_safe() or false
+    local ok, filtered, removed_power_ups, removed_buffs = pcall(
+        mod._ct_replacement_policy.wire_safe_copy, snapshot, wire_safe,
+        mod._ct_is_modded_power_up, mod._ct_is_ct_buff_template)
+    if not ok then return nil, 0, 0, filtered end
+    return filtered, removed_power_ups, removed_buffs
+end
+
+function mod._ct_replacement_capture(run_state, peer_id, local_player_id, profile_index, career_index)
+    local ok, snapshot, reason = pcall(mod._ct_replacement_policy.capture, run_state,
+        peer_id, local_player_id, profile_index, career_index)
+    if not ok then return nil, snapshot end
+    return snapshot, reason
+end
+
+function mod._ct_replacement_apply(run_state, peer_id, local_player_id, profile_index, career_index, snapshot, coins)
+    local ok, applied, reason = pcall(mod._ct_replacement_policy.apply, run_state,
+        peer_id, local_player_id, profile_index, career_index, snapshot, coins)
+    if not ok then return false, applied end
+    return applied, reason
+end
+
+mod:hook("GameModeDeus", "player_left_game_session", function(func, self, peer_id, local_player_id)
+    if self and self._is_server and effective_setting("replacement_player_compensation") then
+        local run_state = self._deus_run_controller and self._deus_run_controller._run_state
+        if run_state then
+            local profile_index, career_index = run_state:get_player_profile(peer_id, local_player_id)
+            if not profile_index or profile_index == 0 then
+                local player = Managers.player and Managers.player:player(peer_id, local_player_id)
+                profile_index = player and player.profile_index and player:profile_index() or profile_index
+                career_index = player and player.career_index and player:career_index() or career_index
+            end
+            local snapshot, reason = mod._ct_replacement_capture(run_state, peer_id,
+                local_player_id, profile_index, career_index)
+            local key = mod._ct_replacement_policy.profile_key(profile_index, career_index)
+            if snapshot and key then
+                mod._ct_replacement_cache[key] = mod._ct_replacement_cache[key] or {}
+                mod._ct_replacement_cache[key][#mod._ct_replacement_cache[key] + 1] = snapshot
+                mod._ct_replacement_log("captured departing human peer=%s local=%s profile=%s:%s boons=%d coins=%s",
+                    tostring(peer_id), tostring(local_player_id), tostring(profile_index),
+                    tostring(career_index), #(snapshot.power_ups or {}), tostring(snapshot.coins))
+            else
+                mod._ct_replacement_log("departure capture skipped peer=%s local=%s reason=%s",
+                    tostring(peer_id), tostring(local_player_id), tostring(reason))
+            end
+        end
+    end
+    return func(self, peer_id, local_player_id)
+end)
+
+mod:hook_safe("GameModeDeus", "_add_bot", function(self)
+    if not (self and self._is_server) then return end
+    local bots = self._bot_players
+    local bot = bots and bots[#bots]
+    local run_state = self._deus_run_controller and self._deus_run_controller._run_state
+    if not (bot and run_state) then return end
+
+    -- Fresh bots begin with their own ledger seeded from the host's live balance.
+    -- A #465 departure snapshot, when present, intentionally overwrites this seed
+    -- below with the departing human's balance.
+    if mod._ct_bot_economy_active() then
+        local bot_peer, bot_local = bot:network_id(), bot:local_player_id()
+        local ledger_key = tostring(bot_peer) .. ":" .. tostring(bot_local)
+        local host_peer = run_state:get_server_peer_id()
+        local host_coins = run_state:get_player_soft_currency(host_peer, REAL_PLAYER_LOCAL_ID) or 0
+        run_state:set_player_soft_currency(bot_peer, bot_local, host_coins)
+        mod._ct_bot_economy_initialized[ledger_key] = true
+        mod._ct_bot_economy_log("initialized bot=%s balance=%s from host",
+            tostring(bot.name and bot:name() or bot_local), tostring(host_coins))
+    end
+
+    if not effective_setting("replacement_player_compensation") then return end
+
+    local profile_index = bot:profile_index()
+    local career_index = bot:career_index()
+    local key = mod._ct_replacement_policy.profile_key(profile_index, career_index)
+    local queue = key and mod._ct_replacement_cache[key]
+    local snapshot = queue and queue[1]
+    if not snapshot then return end
+
+    local filtered, removed_power_ups, removed_buffs, filter_reason = mod._ct_replacement_filtered(snapshot)
+    local ok, reason = mod._ct_replacement_apply(run_state, bot:network_id(),
+        bot:local_player_id(), profile_index, career_index, filtered)
+    if ok then
+        table.remove(queue, 1)
+        if #queue == 0 then mod._ct_replacement_cache[key] = nil end
+    end
+    mod._ct_replacement_log("human->bot profile=%s:%s applied=%s boons=%d coins=%s parity_filtered=%d/%d reason=%s",
+        tostring(profile_index), tostring(career_index), tostring(ok),
+        #(filtered and filtered.power_ups or {}), tostring(filtered and filtered.coins),
+        removed_power_ups or 0, removed_buffs or 0, tostring(reason or filter_reason))
+end)
+
+mod:hook("GameModeDeus", "remove_bot", function(func, self, party_id, peer_id, local_player_id, update_safe)
+    local bot = func(self, party_id, peer_id, local_player_id, update_safe)
+    if not (bot and self and self._is_server and effective_setting("replacement_player_compensation")) then
+        return bot
+    end
+
+    local run_controller = self._deus_run_controller
+    local run_state = run_controller and run_controller._run_state
+    if not run_state then return bot end
+
+    local bot_profile = bot:profile_index()
+    local bot_career = bot:career_index()
+    local snapshot, reason = mod._ct_replacement_capture(run_state, bot:network_id(),
+        bot:local_player_id(), bot_profile, bot_career)
+    local target_profile, target_career = run_state:get_player_profile(peer_id, local_player_id)
+    if not mod._ct_replacement_policy.same_identity(bot_profile, bot_career,
+        target_profile, target_career) then
+        mod._ct_replacement_log("bot->human skipped incompatible identity bot=%s:%s target=%s:%s",
+            tostring(bot_profile), tostring(bot_career), tostring(target_profile), tostring(target_career))
+        return bot
+    end
+    if not snapshot then
+        mod._ct_replacement_log("bot->human capture skipped target=%s reason=%s", tostring(peer_id), tostring(reason))
+        return bot
+    end
+
+    local filtered, removed_power_ups, removed_buffs, filter_reason = mod._ct_replacement_filtered(snapshot)
+    local host_peer = run_state:get_server_peer_id()
+    local host_coins = run_state:get_player_soft_currency(host_peer, REAL_PLAYER_LOCAL_ID)
+    local ok, apply_reason = mod._ct_replacement_apply(run_state, peer_id, local_player_id,
+        target_profile, target_career, filtered, host_coins)
+
+    -- player_entered_game_session may have restored spawn data before party assignment.
+    -- Rebuild it once after the authoritative row is copied so the first spawn consumes
+    -- the compensated weapons and buffs rather than the joiner's temporary initial row.
+    if ok and self._deus_spawning and self._deus_spawning._restore_player_game_mode_data then
+        local status = Managers.party and Managers.party:get_player_status(peer_id, local_player_id)
+        if status then
+            local restore_ok, restored = pcall(self._deus_spawning._restore_player_game_mode_data,
+                self._deus_spawning, peer_id, local_player_id, target_profile, target_career)
+            if restore_ok then status.game_mode_data = restored end
+        end
+    end
+
+    mod._ct_replacement_log("bot->human bot_profile=%s:%s target=%s:%s applied=%s boons=%d host_coins=%s parity_filtered=%d/%d reason=%s",
+        tostring(bot_profile), tostring(bot_career), tostring(target_profile), tostring(target_career),
+        tostring(ok), #(filtered and filtered.power_ups or {}), tostring(host_coins),
+        removed_power_ups or 0, removed_buffs or 0, tostring(apply_reason or filter_reason))
+    return bot
 end)
 
 -- ============================================================
@@ -2644,6 +3009,11 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- the unstepped base on every peer present (step==0 at completed==0).
     mod._ct_progdiff_start = args[2]
     mod._ct_progdiff_last_logged = nil
+    mod._ct_progcoin_last_logged = nil
+    mod._ct_replacement_cache = {}
+    mod._ct_replacement_log_count = 0
+    mod._ct_bot_economy_initialized = {}
+    mod._ct_bot_economy_log_count = 0
     -- Vanilla signature: (run_seed, difficulty, journey_name, dominant_god,
     -- initial_own_soft_currency, telemetry_id, with_belakor, mutators, boons)
     -- so initial_own_soft_currency is args[5].
@@ -2681,6 +3051,15 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     end
 
     local ret_a, ret_b = func(self, unpack(args, 1, n))
+
+    -- #467 requires no command: after vanilla has materialized the live rarity
+    -- arrays, emit one bounded, sorted census per process on both host and client.
+    mod._ct_boon_price_audit_once(false, self)
+
+    if self and self._run_state and self._run_state:is_server()
+        and mod._ct_bot_economy_active() then
+        mod._ct_bot_economy_seed_all(self._run_state)
+    end
 
     if mod._ct_freeze487 then
         mod._ct_freeze487.finish_generate(args[3], self._path_graph)
@@ -9211,6 +9590,27 @@ function mod._ct_boon_display_name(name)
     return tostring(name)
 end
 
+-- Shared rarity picker for altar/CoT mirrors and direct shrine-shop purchases.
+-- The raw rarity registry retains disabled and CT-injected entries for lookup
+-- parity, so every consumer must pass this same eligibility gate.
+function mod._ct_bot_pick_random_for_rarity(rarity)
+    local bucket = rawget(_G, "DeusPowerUpsArrayByRarity") and DeusPowerUpsArrayByRarity[rarity]
+    if not bucket or #bucket == 0 then return nil end
+    local eligible = {}
+    for i = 1, #bucket do
+        local entry = bucket[i]
+        local name = entry and entry.name
+        local parity_blocked = name and mod._ct_is_modded_power_up
+            and mod._ct_is_modded_power_up(name)
+            and not (mod._ct_wire_safe and mod._ct_wire_safe())
+        if name and not mod._ct_boon_disabled(name) and not parity_blocked then
+            eligible[#eligible + 1] = name
+        end
+    end
+    if #eligible == 0 then return nil end
+    return eligible[math.random(1, #eligible)]
+end
+
 -- (#144 boon-list snapshot helper removed with the retired [ct:boon144] SHRINK trace — the
 -- list was proven never to lose the boon; the live instrument is mod._ct_vauls_anvil_reconcile.)
 
@@ -9296,9 +9696,10 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
         -- (DeusCursedChestView._on_button_pressed wrapper). All markers are set+cleared
         -- synchronously within one call stack (single frame) — no race. "untagged" on the
         -- host with present=true and one boon is, per the #211 vanilla call-site map, the
-        -- boon-ALTAR grant inside DeusChestExtension.open_chest — NOT pre-taggable because
-        -- ct's ONLY open_chest hook is the consolidated hook_safe (post-call; VMF drops a
-        -- second hook on the same Class+method). That path is already double-covered by the
+        -- boon-ALTAR grant inside DeusChestExtension.open_chest. The consolidated full
+        -- wrapper publishes the exact pre-purchase price for this synchronous call stack;
+        -- a second hook on the same Class+method would violate the singleton invariant.
+        -- That path is already double-covered by the
         -- roll-pool strip + the pre-grant gate above. Raw printf: the host runs VMF
         -- logging OFF, so mod:info/_dbg never lands there (diagnostics doctrine).
         local grant_source = tostring(mod._ct_grant_source or "untagged")
@@ -9357,47 +9758,21 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
     _dbg("[bot-boon] mode=%s host_grant=%d bot_count=%d",
         mode_random and "random" or "mirror", #new_power_ups, #bots)
 
+    -- The audited untagged + present=true path is a purchased boon altar. The
+    -- consolidated open_chest wrapper publishes its exact scaled purchase cost
+    -- only for the duration of vanilla open_chest -> add_power_ups. CoT/view and
+    -- end-of-level grants stay free, matching vanilla.
+    local incoming_source = mod._ct_grant_source
+    local boon_cost_source = (incoming_source == nil and present == true
+        and mod._ct_bot_altar_cost ~= nil) and "boon_altar" or tostring(incoming_source or "free_grant")
+    local boon_cost = mod._ct_bot_economy.grant_cost(boon_cost_source, mod._ct_bot_altar_cost)
+
     -- v0.7.120-dev: per-bot independent random pick from DeusPowerUpsArrayByRarity[rarity].
     -- Picks a random entry of the SAME rarity the host just got, then materializes via
     -- generate_specific_power_up (gives each bot a fresh client_id). Falls back to a
     -- mirror grant for that slot if the rarity bucket is empty / missing.
     local function _pick_random_for_rarity(rarity)
-        local bucket = rawget(_G, "DeusPowerUpsArrayByRarity") and DeusPowerUpsArrayByRarity[rarity]
-        if not bucket or #bucket == 0 then
-            return nil
-        end
-        -- v0.7.200-dev (#211 ROOT-CAUSE FIX): this picker sampled the RAW rarity bucket,
-        -- which is only stripped of disabled boons INSIDE the generate_random_power_ups
-        -- hook's remove-then-restore window — outside that window it always contains every
-        -- boon. The pick was then granted via add_power_ups with the pre-grant gate
-        -- deliberately skipped (_ct_bot_mirror_active), so `bots_get_random_boons` handed
-        -- bots user-disabled boons (host log 2026-07-01: grenadier / deus_second_wind /
-        -- deus_push_charge / skill_by_block, all with disable_boon_<name>=true). Filter the
-        -- bucket through the same shared disable check the pool strip uses. Bomb-boon
-        -- exclusivity and altar no-repeat are NOT applied here: both are per-recipient
-        -- state (the bot's own boon list / the peer's altar history), which this
-        -- rarity-matched random pick has never consulted — unchanged behavior.
-        local eligible = {}
-        for i = 1, #bucket do
-            local entry = bucket[i]
-            local nm = entry and entry.name
-            -- v0.7.240-dev (#426): this picker samples DeusPowerUpsArrayByRarity, a
-            -- REGISTRATION table that is never pool-ejected (ejecting it would break
-            -- cross-peer id parity), and the resulting grant re-enters add_power_ups
-            -- with _ct_bot_mirror_active set, which skips the pre-grant parity filter.
-            -- Without this check the bot random roll was a straight bypass of every
-            -- parity gate (review finding, pre-ship). Reject modded names here too.
-            local parity_blocked = nm and mod._ct_is_modded_power_up
-                and mod._ct_is_modded_power_up(nm)
-                and not (mod._ct_wire_safe and mod._ct_wire_safe())
-            if nm and not mod._ct_boon_disabled(nm) and not parity_blocked then
-                eligible[#eligible + 1] = nm
-            end
-        end
-        if #eligible == 0 then
-            return nil  -- whole bucket disabled -> caller falls back to mirroring the host's (already-gated) boon
-        end
-        return eligible[math.random(1, #eligible)]
+        return mod._ct_bot_pick_random_for_rarity(rarity)
     end
 
     -- Clone the power-up list per-bot. Each call needs fresh client_ids so the
@@ -9458,8 +9833,29 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
                     end
                 end
             end
-            -- present=false: don't trigger the reward-popup UI for bot grants.
-            self:add_power_ups(cloned, bot:local_player_id(), false)
+            -- Charge only if at least one wire-safe boon survived selection. Bots
+            -- that cannot afford a purchased altar receive nothing; free CoT and
+            -- end-of-level grants use cost=0 and always pass this gate.
+            local affordable = #cloned > 0 and mod._ct_bot_economy_charge(run_state,
+                bot, boon_cost, boon_cost_source)
+            if affordable then
+                -- present=false: don't trigger the reward-popup UI for bot grants.
+                local grant_ok, grant_err = pcall(self.add_power_ups, self,
+                    cloned, bot:local_player_id(), false)
+                if not grant_ok then
+                    local peer_id, bot_local = bot:network_id(), bot:local_player_id()
+                    local balance = run_state:get_player_soft_currency(peer_id, bot_local) or 0
+                    run_state:set_player_soft_currency(peer_id, bot_local,
+                        mod._ct_bot_economy.credit(balance, boon_cost))
+                    mod._ct_bot_economy_log("boon grant failed/refunded bot=%s source=%s cost=%s error=%s",
+                        tostring(bot.name and bot:name() or bot_local), tostring(boon_cost_source),
+                        tostring(boon_cost), tostring(grant_err))
+                end
+            elseif #cloned > 0 then
+                mod._ct_bot_economy_log("boon skipped bot=%s source=%s cost=%s selected=%d",
+                    tostring(bot.name and bot:name() or bot:local_player_id()),
+                    tostring(boon_cost_source), tostring(boon_cost), #cloned)
+            end
         end
     end)
     _ct_bot_mirror_active = false
@@ -9472,6 +9868,66 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
 
     _dbg("[bot-boon] %s %d boon(s) onto %d bot(s)",
         mode_random and "rolled" or "mirrored", #new_power_ups, #bots)
+end)
+
+-- Shrine-shop purchases do NOT call add_power_ups: vanilla _try_buy_power_up
+-- writes the buyer's SharedState row directly. Own this second source seam so
+-- bot boon modes cover shrines as their tooltips promise, with an independent
+-- affordability gate and the same random/disabled/parity policy as altars.
+mod:hook("DeusRunController", "_try_buy_power_up", function(func, self, buyer, power_up, discount)
+    local bought = func(self, buyer, power_up, discount)
+    if not bought or _ct_bot_mirror_active then return bought end
+    local run_state = self and self._run_state
+    if not (run_state and run_state:is_server() and buyer == run_state:get_own_peer_id()) then return bought end
+
+    local mode_mirror = effective_setting("bots_mirror_host_boons")
+    local mode_random = effective_setting("bots_get_random_boons")
+    if not (mode_mirror or mode_random) or not power_up then return bought end
+
+    local cost = mod._ct_bot_economy.shop_boon_cost(rawget(_G, "DeusCostSettings"),
+        power_up.rarity, discount)
+    _ct_bot_mirror_active = true
+    local ok, err = pcall(function()
+        for _, bot in ipairs(mod._ct_bot_economy_players()) do
+            if bot.player_unit and Unit.alive(bot.player_unit) then
+                local boon_name = power_up.name
+                if mode_random then
+                    boon_name = mod._ct_bot_pick_random_for_rarity(power_up.rarity) or boon_name
+                end
+                local blocked = mod._ct_boon_disabled(boon_name)
+                    or (mod._ct_is_modded_power_up and mod._ct_is_modded_power_up(boon_name)
+                        and not (mod._ct_wire_safe and mod._ct_wire_safe()))
+                if not blocked and mod._ct_bot_economy_charge(run_state, bot, cost, "shrine_boon") then
+                    local generated = DeusPowerUpUtils.generate_specific_power_up(boon_name, power_up.rarity)
+                    local grant_ok, grant_err = pcall(self.add_power_ups, self,
+                        { generated }, bot:local_player_id(), false)
+                    if not grant_ok then
+                        local peer_id, local_player_id = bot:network_id(), bot:local_player_id()
+                        local balance = run_state:get_player_soft_currency(peer_id, local_player_id) or 0
+                        run_state:set_player_soft_currency(peer_id, local_player_id,
+                            mod._ct_bot_economy.credit(balance, cost))
+                        mod._ct_bot_economy_log("shrine grant failed/refunded bot=%s cost=%s error=%s",
+                            tostring(bot.name and bot:name() or local_player_id), tostring(cost), tostring(grant_err))
+                    end
+                    if grant_ok then
+                        local profile_index, career_index = run_state:get_player_profile(
+                            bot:network_id(), bot:local_player_id())
+                        mod._ct_bot_economy_log("shrine choice bot=%s profile=%s:%s mode=%s boon=%s rarity=%s cost=%s",
+                            tostring(bot.name and bot:name() or bot:local_player_id()),
+                            tostring(profile_index), tostring(career_index),
+                            mode_random and "random" or "mirror", tostring(boon_name),
+                            tostring(power_up.rarity), tostring(cost))
+                    end
+                elseif blocked then
+                    mod._ct_bot_economy_log("shrine choice blocked bot=%s boon=%s parity_or_disabled=true",
+                        tostring(bot.name and bot:name() or bot:local_player_id()), tostring(boon_name))
+                end
+            end
+        end
+    end)
+    _ct_bot_mirror_active = false
+    if not ok then mod._ct_bot_economy_log("shrine bot purchase error=%s", tostring(err)) end
+    return bought
 end)
 
 -- #144 install-time finding (kept for the record): there is NO fixed max-boon cap in vanilla. A
@@ -9495,6 +9951,83 @@ _rt_register("bot_boon_announce_wired", function()
     end
     if type(mod:get("announce_bot_boons")) ~= "boolean" then
         return "BOT-BOON REGRESSION: announce_bot_boons checkbox not registered (mod:get is non-boolean)"
+    end
+end)
+
+_rt_register("bot_boon_economy_installed", function()
+    if CT_BOT_ECONOMY_MARKER ~= "bot_economy:independent_charge_gate_v0.7.278" then
+        return "#466 bot economy marker missing or stale"
+    end
+    local economy = mod._ct_bot_economy
+    if type(economy) ~= "table" or type(economy.charge) ~= "function"
+        or type(economy.credit) ~= "function" or type(economy.weapon_cost) ~= "function"
+        or type(economy.shop_boon_cost) ~= "function" then
+        return "#466 bot economy policy incomplete"
+    end
+    local allowed, balance = economy.charge(150, 100)
+    if not allowed or balance ~= 50 then return "#466 affordable charge self-test failed" end
+    allowed, balance = economy.charge(50, 100)
+    if allowed or balance ~= 50 then return "#466 insufficient-funds self-test failed" end
+    if type(mod._ct_bot_pick_random_for_rarity) ~= "function"
+        or type(mod._ct_bot_economy_charge) ~= "function" then
+        return "#466 bot choice/charge runtime helper missing"
+    end
+end)
+
+_rt_register("issue331_bot_coin_pickup_installed", function()
+    local policy = mod._ct_bot_coin_pickup
+    if type(policy) ~= "table" or type(policy.poll_due) ~= "function"
+        or type(policy.can_claim) ~= "function" or type(policy.claim_until) ~= "function" then
+        return "#331 bot coin pickup policy missing or incomplete"
+    end
+    if policy.pickup_name ~= "deus_soft_currency" or policy.range ~= 10
+        or policy.poll_interval ~= 1 or policy.claim_ttl ~= 1.5 then
+        return "#331 bot coin pickup vanilla bounds drifted"
+    end
+    local due, next_t = policy.poll_due(10, 9)
+    if not due or next_t ~= 11 then return "#331 poll self-test failed" end
+    if policy.can_claim("healing_draught", 0, 10)
+        or not policy.can_claim("deus_soft_currency", 10, 10)
+        or policy.can_claim("deus_soft_currency", 11, 10) then
+        return "#331 claim/identity self-test failed"
+    end
+end)
+
+_rt_register("issue361_miasma_customization_installed", function()
+    local policy = mod._ct_miasma_policy
+    if type(policy) ~= "table" or type(policy.radius) ~= "function"
+        or type(policy.interval) ~= "function" or type(policy.select_owner) ~= "function" then
+        return "#361 Miasma policy missing or incomplete"
+    end
+    if policy.radius(nil) ~= 8 or policy.interval(nil) ~= 1.3
+        or policy.radius(100) ~= 30 or policy.interval(0) ~= 0.1 then
+        return "#361 Miasma slider self-test failed"
+    end
+    if not rawget(_G, "__ct_miasma361_hook_installed") then
+        return "#361 live MutatorTemplates curse update hook missing"
+    end
+    if type(mod._ct_sync_miasma) ~= "function" or not mod._ct_sync_miasma() then
+        return "#361 Miasma buff template unavailable"
+    end
+end)
+
+_rt_register("boon_price_audit_armed", function()
+    if CT_BOON_PRICE_AUDIT_MARKER ~= "boon_price_audit:auto_once_bounded_v0.7.279" then
+        return "#467 boon price audit marker missing or stale"
+    end
+    local audit = mod._ct_boon_pricing_audit
+    if type(audit) ~= "table" or type(audit.audit) ~= "function"
+        or type(audit.validate_plan) ~= "function" then
+        return "#467 pure audit/plan policy incomplete"
+    end
+    if type(mod._ct_boon_price_audit_once) ~= "function" then
+        return "#467 automatic runtime census missing"
+    end
+    local report = audit.audit({ rare = { { name = "ct_467_self_test" } } },
+        { rare = 200 }, { ct_467_self_test = {} }, 1)
+    if report.total ~= 1 or #report.records ~= 1
+        or report.records[1].shop_price ~= 200 or #report.anomalies ~= 0 then
+        return "#467 audit self-test failed"
     end
 end)
 
@@ -9941,7 +10474,7 @@ end)
 -- altar-reuse "fix" sat there as dead code for two releases. Catch via
 -- /ct_regression_test → `open_chest_hook_singleton`. Source-pattern marker:
 -- the string `_ct_consolidated_open_chest_hook` on this line.
-mod:hook_safe("DeusChestExtension", "open_chest", function(self)
+mod:hook("DeusChestExtension", "open_chest", function(func, self)
     -- #100 fix (v0.7.169-dev): capture the rarity vanilla open_chest JUST used to
     -- upgrade the host's weapon, BEFORE the upgrade-altar re-arm block below bumps
     -- self._rarity one tier higher for the NEXT use. The bot-weapon-mirror (further
@@ -9951,6 +10484,14 @@ mod:hook_safe("DeusChestExtension", "open_chest", function(self)
     -- bots got exotic). Captured for all chest types; only the upgrade path is bumped,
     -- so swap_melee/swap_ranged see their unchanged self._rarity here.
     local _opened_rarity = self._rarity
+    local _opened_cost = self:get_purchase_cost()
+    local prior_bot_altar_cost = mod._ct_bot_altar_cost
+    if self._chest_type == DEUS_CHEST_TYPES.power_up then
+        mod._ct_bot_altar_cost = _opened_cost
+    end
+    local vanilla_ok, vanilla_err = pcall(func, self)
+    mod._ct_bot_altar_cost = prior_bot_altar_cost
+    if not vanilla_ok then error(vanilla_err) end
     -- v0.7.131-dev altar-reuse re-arm (was a separate mod:hook in v0.7.129/.130,
     -- which collided with the bot-weapon-mirror hook below and was dropped by
     -- VMF). Runs FIRST so re-arm fires regardless of bot-mirror reentrancy state.
@@ -10155,8 +10696,8 @@ mod:hook_safe("DeusChestExtension", "open_chest", function(self)
                 tostring(bot:network_id() or "?"), target_slot)
             local seed = HashUtils.fnv32_hash(bot_seed_input)
             local new_weapon
+            local current = _bot_get_current_loadout(bot, run_state, host_peer_id, target_slot)
             if chest_type == DEUS_CHEST_TYPES.upgrade then
-                local current = _bot_get_current_loadout(bot, run_state, host_peer_id, target_slot)
                 if current then
                     local current_order = RaritySettings[current.rarity] and RaritySettings[current.rarity].order or 0
                     local target_order = RaritySettings[target_rarity] and RaritySettings[target_rarity].order or 0
@@ -10195,9 +10736,24 @@ mod:hook_safe("DeusChestExtension", "open_chest", function(self)
                     tostring(pre_rarity), tostring(new_weapon and new_weapon.rarity))
             end)
             if new_weapon then
-                local equipped_ok, equip_err = _bot_equip_weapon(bot, new_weapon, target_slot, run_state, host_peer_id)
-                if not equipped_ok then
-                    _dbg_alert("[bot-weap] equip failed bot_idx=%d: %s", bi, tostring(equip_err))
+                local bot_cost = mod._ct_bot_economy.weapon_cost(rawget(_G, "DeusCostSettings"),
+                    chest_type, current and current.rarity, target_rarity, _opened_cost)
+                if mod._ct_bot_economy_charge(run_state, bot, bot_cost, "weapon_" .. tostring(chest_type)) then
+                    local equipped_ok, equip_err = _bot_equip_weapon(bot, new_weapon, target_slot, run_state, host_peer_id)
+                    if not equipped_ok then
+                        -- A failed equip must be economically atomic: restore the
+                        -- charge and leave the bot's prior weapon intact.
+                        local peer_id, local_player_id = bot:network_id(), bot:local_player_id()
+                        local balance = run_state:get_player_soft_currency(peer_id, local_player_id) or 0
+                        run_state:set_player_soft_currency(peer_id, local_player_id,
+                            mod._ct_bot_economy.credit(balance, bot_cost))
+                        _dbg_alert("[bot-weap] equip failed bot_idx=%d (refunded %d): %s",
+                            bi, bot_cost, tostring(equip_err))
+                    end
+                else
+                    mod._ct_bot_economy_log("weapon skipped bot=%s chest=%s cost=%s current=%s target=%s",
+                        tostring(bot.name and bot:name() or bot:local_player_id()), tostring(chest_type),
+                        tostring(bot_cost), tostring(current and current.rarity), tostring(target_rarity))
                 end
             else
                 _dbg("[bot-weap] bot_idx=%d produced no new weapon (skip)", bi)
@@ -13693,6 +14249,7 @@ sync_host_dependent_state = function()
     -- User-suggestion mechanic tweaks live in _ct_mechanic_tweaks.lua (own chunk to
     -- stay under the 200-local main-chunk cap); re-applied here on host-settings receipt.
     if mod._ct_sync_shadow_skull_stun then mod._ct_sync_shadow_skull_stun() end
+    if mod._ct_sync_miasma then mod._ct_sync_miasma() end
     -- 2026-05-23 v0.7.100-dev FULLY PURGED: sync_dormant_boons() — function no longer
     -- exists (block-commented along with DORMANT_BOON_RARITY). Re-enable alongside the
     -- L4721-style apply-site uncomment.
@@ -14494,6 +15051,9 @@ mod.on_setting_changed = function(setting_id)
         sync_anath_raema_permanent()
     elseif setting_id == "tweak_shadow_skull_stun_sec" then
         if mod._ct_sync_shadow_skull_stun then mod._ct_sync_shadow_skull_stun() end
+    elseif setting_id == "miasma_permanent_carrier"
+        or setting_id == "miasma_safe_radius" or setting_id == "miasma_stack_interval" then
+        if mod._ct_sync_miasma then mod._ct_sync_miasma() end
     -- 2026-05-23 v0.7.98-dev DISABLED: dormant + skulls event toggles removed from VMF menu.
     -- Their setting_id prefixes will never fire here because the widgets no longer exist, but
     -- comment them out to make the disable explicit (re-enable alongside data.lua + loc).
@@ -14653,6 +15213,20 @@ mod:command("dump_boon_loc", "Dump resolved display names and descriptions for a
     end
 
     mod:echo(string.format("dump_boon_loc: %d boons dumped to log. Check console log for tab-separated output.", count))
+end)
+
+mod:command("ct_boon_price_audit", "Re-run the bounded #467 live boon tier/price census", function()
+    mod._ct467_audit_done = false
+    local mechanism = Managers and Managers.mechanism
+        and Managers.mechanism.game_mechanism and Managers.mechanism:game_mechanism()
+    local run_controller = mechanism and mechanism.get_deus_run_controller
+        and mechanism:get_deus_run_controller()
+    local report = mod._ct_boon_price_audit_once(true, run_controller)
+    if report then
+        mod:echo("Boon price census written to the log: %d live rows.", report.total)
+    else
+        mod:echo("Boon price census unavailable; enter Chaos Wastes and try again.")
+    end
 end)
 
 mod:command("dump_boons", "Deep dump of all DeusPowerUpTemplates + buff data to log", function(filter)
@@ -15368,8 +15942,7 @@ _rt_register("progressive_difficulty_installed", function()
     if type(CT_PROGRESSIVE_DIFFICULTY_MARKER) ~= "string" or #CT_PROGRESSIVE_DIFFICULTY_MARKER == 0 then
         return "CT_PROGRESSIVE_DIFFICULTY_MARKER not defined (progressive difficulty missing)"
     end
-    -- Self-test the ramp: Legend (hardest) + many missions must CAP at cataclysm_3,
-    -- and the first two missions (completed 0 and 1) must stay at the start tier.
+    -- Self-test the exact #460 schedule: maps 3 and 5 are the only step edges.
     local step = mod._ct_progdiff_step
     if step then
         if rawget(_G, "Difficulties") then
@@ -15379,16 +15952,44 @@ _rt_register("progressive_difficulty_installed", function()
             if step("hardest", 2) ~= "cataclysm" then
                 return "progressive_difficulty mission-3 step wrong (expected cataclysm)"
             end
-            if step("hardest", 100) ~= "cataclysm_3" then
-                return "progressive_difficulty does not cap at cataclysm_3 (got " .. tostring(step("hardest", 100)) .. ")"
+            if step("hardest", 3) ~= "cataclysm" then
+                return "progressive_difficulty changed again before mission 5"
+            end
+            if step("hardest", 4) ~= "cataclysm_2" or step("hardest", 100) ~= "cataclysm_2" then
+                return "progressive_difficulty mission-5/cap step wrong"
             end
         end
     else
         return "mod._ct_progdiff_step not defined"
     end
+    local policy = mod._ct_progressive_policy
+    if not policy
+        or policy.coin_multiplier(2, -25, 1) ~= 2
+        or policy.coin_multiplier(2, -25, 2) ~= 1.5 then
+        return "progressive coin reduction policy missing or wrong"
+    end
     local cls = rawget(_G, "DeusRunController")
     if cls and type(cls.get_run_difficulty) ~= "function" then
         return "get_run_difficulty missing on DeusRunController"
+    end
+end)
+
+_rt_register("replacement_player_compensation_installed", function()
+    if CT_REPLACEMENT_COMPENSATION_MARKER ~= "replacement_compensation:host_state_handoff_v0.7.277" then
+        return "replacement compensation marker missing or stale"
+    end
+    local policy = mod._ct_replacement_policy
+    if type(policy) ~= "table" or type(policy.capture) ~= "function"
+        or type(policy.apply) ~= "function" or type(policy.wire_safe_copy) ~= "function" then
+        return "replacement compensation policy incomplete"
+    end
+    if type(mod._ct_replacement_filtered) ~= "function" then
+        return "replacement compensation wire filter missing"
+    end
+    local cls = rawget(_G, "GameModeDeus")
+    if cls and (type(cls.player_left_game_session) ~= "function"
+        or type(cls._add_bot) ~= "function" or type(cls.remove_bot) ~= "function") then
+        return "GameModeDeus replacement lifecycle seam missing"
     end
 end)
 
@@ -16596,8 +17197,12 @@ end)
 -- exposed mod._ct_effective_setting; exposes mod._ct_sync_* for the re-apply hubs.
 mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_mechanic_tweaks")
 
--- Blessed Bots: Survival Boons (any gamemode). Host-side; single PlayerBotBase.update
--- hook for this mod; no network registration.
+-- #361 Rotten Miasma: compose permanent carrier ownership and host-effective
+-- radius/exposure timing onto vanilla's one networked safe-area unit.
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_miasma")
+
+-- Consolidated bot features: coin pickup (1s) + Blessed Bots (2s). Host-side;
+-- single PlayerBotBase.update hook; no network registration.
 mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_blessed_bots")
 
 -- Duplicate-career map-vote chips: when two peers share a career (gt's

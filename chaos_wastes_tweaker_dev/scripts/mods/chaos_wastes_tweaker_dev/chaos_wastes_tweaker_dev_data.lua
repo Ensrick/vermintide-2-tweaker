@@ -452,6 +452,22 @@ local data = {
                 type = "checkbox",
                 default_value = false,
                 tooltip = "progressive_difficulty_tooltip",
+                sub_widgets = {
+                    {
+                        setting_id = "progressive_difficulty_increase",
+                        type = "checkbox",
+                        default_value = true,
+                        tooltip = "progressive_difficulty_increase_tooltip",
+                    },
+                    {
+                        setting_id = "progressive_coin_reduction",
+                        type = "numeric",
+                        default_value = -25,
+                        range = { -100, 0 },
+                        decimals_number = 0,
+                        tooltip = "progressive_coin_reduction_tooltip",
+                    },
+                },
             },
             -- ============================================================
             -- Buy Starting Boons (#458): top-level like Progressive Difficulty
@@ -612,6 +628,15 @@ local data = {
                         },
                     },
                     {
+                        setting_id = "miasma_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "miasma_permanent_carrier", type = "checkbox", default_value = false, tooltip = "miasma_permanent_carrier_tooltip" },
+                            { setting_id = "miasma_safe_radius", type = "numeric", default_value = 8, range = { 2, 30 }, decimals_number = 1, tooltip = "miasma_safe_radius_tooltip" },
+                            { setting_id = "miasma_stack_interval", type = "numeric", default_value = 1.3, range = { 0.1, 5 }, decimals_number = 1, tooltip = "miasma_stack_interval_tooltip" },
+                        },
+                    },
+                    {
                         setting_id = "disabled_curses_group",
                         type = "group",
                         -- DELIBERATE ORDER (not plain A->Z): grouped by host god, then
@@ -677,6 +702,21 @@ local data = {
                 },
             },
             -- ============================================================
+            -- Bots (#331)
+            -- ============================================================
+            {
+                setting_id = "bots_group",
+                type = "group",
+                sub_widgets = {
+                    { setting_id = "ct_blessed_bots", type = "checkbox", default_value = false, tooltip = "ct_blessed_bots_tooltip" },
+                    { setting_id = "bots_pick_up_pilgrims_coins", type = "checkbox", default_value = false, tooltip = "bots_pick_up_pilgrims_coins_tooltip" },
+                    { setting_id = "announce_bot_boons", type = "checkbox", default_value = false, tooltip = "announce_bot_boons_tooltip" },
+                    { setting_id = "bots_mirror_host_boons", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_boons_tooltip" },
+                    { setting_id = "bots_get_random_boons", type = "checkbox", default_value = false, tooltip = "bots_get_random_boons_tooltip" },
+                    { setting_id = "bots_mirror_host_weapon_upgrades", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_weapon_upgrades_tooltip" },
+                },
+            },
+            -- ============================================================
             -- Reworks
             -- ============================================================
             {
@@ -707,8 +747,6 @@ local data = {
                                 sub_widgets = {
                                     { setting_id = "tweak_miracle_of_isha_aegis",  type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_aegis_tooltip" },
                                     { setting_id = "tweak_miracle_of_isha_wounds", type = "checkbox", default_value = false, tooltip = "tweak_miracle_of_isha_wounds_tooltip" },
-                                    { setting_id = "announce_bot_boons",               type = "checkbox", default_value = false, tooltip = "announce_bot_boons_tooltip" },
-                                    { setting_id = "ct_blessed_bots", type = "checkbox", default_value = false, tooltip = "ct_blessed_bots_tooltip" },
                                     { setting_id = "rv_no_save_morgrim", type = "checkbox", default_value = false, tooltip = "rv_no_save_morgrim_tooltip" },
                                     { setting_id = "bomb_boon_cooldown", type = "numeric", default_value = 0, range = { 0, 600 }, decimals_number = 0, tooltip = "bomb_boon_cooldown_tooltip" },
                                     { setting_id = "bomb_boon_exclusive", type = "checkbox", default_value = false, tooltip = "bomb_boon_exclusive_tooltip" },
@@ -720,9 +758,7 @@ local data = {
                                     { setting_id = "tweak_reckless_swings", type = "checkbox", default_value = false, tooltip = "tweak_reckless_swings_tooltip" },
                                     { setting_id = "tweak_manann_tempest_cooldown",   type = "checkbox", default_value = false, tooltip = "tweak_manann_tempest_cooldown_tooltip" },
                                     { setting_id = "tweak_boon_movespeed", type = "checkbox", default_value = false, tooltip = "tweak_boon_movespeed_tooltip" },
-                                    { setting_id = "bots_mirror_host_boons", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_boons_tooltip" },
-                                    { setting_id = "bots_get_random_boons",            type = "checkbox", default_value = false, tooltip = "bots_get_random_boons_tooltip" },
-                                    { setting_id = "bots_mirror_host_weapon_upgrades", type = "checkbox", default_value = false, tooltip = "bots_mirror_host_weapon_upgrades_tooltip" },
+                                    { setting_id = "replacement_player_compensation", type = "checkbox", default_value = true, tooltip = "replacement_player_compensation_tooltip" },
                                     { setting_id = "ulric_pack_unlimited_range", type = "checkbox", default_value = false, tooltip = "ulric_pack_unlimited_range_tooltip" },
                                 },
                             },
