@@ -4,7 +4,17 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-13.
+Last updated: 2026-07-14.
+
+---
+
+## Smoke Bomb preflight (#343)
+
+- [ ] Enter a keep or mission and attach the automatically emitted `[cwv:343]` record; `/cwv_smoke_bomb_probe` can explicitly record a later recheck.
+- [ ] `base=true` proves the vanilla frag-grenade projectile, Ranger career template/item, and Ranger smoke explosion effect+sound are loaded.
+- [ ] `area=true` proves the Ranger buff retains its 8 m shared `buff_area` and source-backed landing-position contract; `pool=<count>/1.000000 healthy=true` proves the current grenade sampler remains normalized before any new member is considered.
+- [ ] The probe never registers an item/lookup, changes pickup weighting, spawns a unit, adds a buff, or throws a projectile. It stops after three explicit runs.
+- [ ] `/cwv_regression_test` passes `issue343_smoke_bomb_diagnostics`; offline `test_cwv_smoke_bomb_probe.lua` passes.
 
 ---
 

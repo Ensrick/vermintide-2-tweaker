@@ -1,5 +1,12 @@
 # Character Weapon Variants — To-Do
 
+## #343 Smoke Bomb implementation gates
+
+- [ ] Resolve the existing bomb-slot registration quarantine first: the v0.1.352/.353 Tuskgor experiment made all CWV variants disappear despite no registration exception. Do not add another `ItemMasterList`/`NetworkLookup`/`Pickups.grenades` member until that mutation is isolated.
+- [ ] Decide the visual compromise. Vanilla's `rpc_create_explosion` carries one scalar scale value; it cannot stretch `fx/wpnfx_smoke_grenade_impact` only on Z as requested. A stock-size/uniform-scale fallback needs approval, otherwise a shippable custom FX asset is required.
+- [ ] Once registration is safe, clone vanilla `grenade` for slot 5 and use the Ranger grenade hand units and first-person state machine. On the server's single latched impact/timer edge, add `bardin_ranger_activated_ability` with `buff_area_position=impact_position`; retain vanilla `BuffAreaExtension` enter/leave and synchronized invisibility behavior.
+- [ ] Gate pool injection on confirmed peer parity; never transmit locally appended item/pickup/explosion/buff identifiers to a peer without the exact CWV schema. Walk Universal, G-THROWN, G-CROSS-CHAR, G-APPEARANCE, and host/client/mixed-lobby verification before enabling it.
+
 ## #579 dual-axes cosmetic parity live matrix
 
 - [ ] On an account with Scorpion and Bögenhafen, confirm every `wh_1h_axe` illusion appears for both `cwv_es_dual_axes` and `cwv_wh_dual_axes`; on an account missing each DLC, confirm its cosmetic remains locked.

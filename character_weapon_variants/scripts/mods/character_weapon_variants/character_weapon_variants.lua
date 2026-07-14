@@ -1,11 +1,13 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.403-dev"
+local MOD_VERSION = "0.1.404-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
+mod._cwv_smoke_bomb_probe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_smoke_bomb_probe")
+mod._cwv_smoke_bomb_probe.install(mod)
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -12902,6 +12904,12 @@ mod.on_game_state_changed = function(status, state_name)
         _dbg("  loadout: no local player_unit yet (state=%s)", tostring(state_name))
         return
     end
+    -- #343: first live keep/mission boundary records the observation-only smoke
+    -- bomb prerequisite snapshot automatically. It is log-only and one-shot;
+    -- the explicit command remains available for at most two later rechecks.
+    if mod._cwv_smoke_bomb_probe then
+        mod._cwv_smoke_bomb_probe.auto_run(mod)
+    end
     local ok_inv, inv = pcall(ScriptUnit.extension, player_unit, "inventory_system")
     if not ok_inv or not inv or not inv.equipment then
         _dbg("  loadout: no inventory_system on local player (state=%s)", tostring(state_name))
@@ -14562,6 +14570,29 @@ _rt_register("cwv_peer_parity_registration_unconditional", function()
     -- and the gated feature's id is the POOL, not the registration.
     if _om._TJB_REGISTRATION_UNGATED_MARKER ~= "cwv-tjb-networklookup-registration-never-peer-gated" then
         return "registration-parity marker missing/altered -- registration must stay ungated (class 31)"
+    end
+end)
+
+_rt_register("issue343_smoke_bomb_diagnostics", function()
+    local probe = mod._cwv_smoke_bomb_probe
+    if type(probe) ~= "table" or type(probe.classify) ~= "function"
+            or type(probe.collect_snapshot) ~= "function" or type(probe.run) ~= "function"
+            or type(probe.auto_run) ~= "function" then
+        return "issue #343 smoke-bomb probe module did not load"
+    end
+    if probe.MAX_RUNS ~= 3 then
+        return "issue #343 probe cap changed from three explicit runs"
+    end
+    local result = probe.classify({
+        grenade_template = true, grenade_projectile = true,
+        ranger_template = true, ranger_item = true, smoke_explosion = true,
+        ranger_area_buff = true, buff_area_position_contract = true,
+        pool_count = 3, pool_sum = 1,
+    })
+    if not (result.base_ready and result.area_ready and result.pool_healthy)
+            or result.exact_z_scale_ready ~= false
+            or result.registration_quarantined ~= true then
+        return "issue #343 diagnostic truth table failed"
     end
 end)
 

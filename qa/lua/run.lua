@@ -71,6 +71,7 @@ local suites = {
     "test_cwv_acquisition",
     "test_cwv_javelin_pickup",
     "test_cwv_exact_pair_state",
+    "test_cwv_smoke_bomb_probe",
     "test_cim_skin_persistence",
     "test_cim_bulk_cleanup",
     "test_cim_cwv_template_selector",

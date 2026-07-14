@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.404-dev - 2026-07-14 - #343 Smoke Bomb source preflight [diagnostics-armed]
+
+- Audited the requested throwable against the actual Ranger Veteran and frag-grenade paths. Ranger smoke is not an explosion-applied invisibility effect: `ActionCareerDRRanger` adds `bardin_ranger_activated_ability`; that buff spawns a shared 8 m `buff_aoe_unit`, whose native enter/leave logic adds and removes synchronized invisibility. `BuffExtension.add_buff` already accepts `params.buff_area_position`, providing a source-native landing-position seam (`action_career_dr_ranger.lua:35-64`, `talent_settings_bardin.lua:1038-1072`, `buff_extension.lua:362-382`).
+- Added an observation-only, three-run-capped preflight. It records automatically at the first live keep/mission boundary; `/cwv_smoke_bomb_probe` permits two later rechecks. The record covers the frag projectile, Ranger held/animation template, smoke explosion FX/sound, shared area buff, and normalized grenade pickup pool. It does not register a lookup/item, alter pool weights, spawn a unit, add a buff, or throw anything.
+- Kept the actual item quarantined for two concrete reasons. First, CWV's existing v0.1.352/.353 bomb-slot registration experiment made every ordinary CWV variant disappear without a Lua registration error, and remains hard-disabled. Second, the stock explosion protocol accepts one scalar scale value; it cannot produce the requested Z-only taller smoke effect. The implementation plan and explicit gates are recorded in `TODO.md` rather than repeating that unsafe registration shape.
+- Added offline classifier/mutation-floor coverage and `/cwv_regression_test` check `issue343_smoke_bomb_diagnostics`.
+
+### Test method
+
+Enter the keep or a mission, then attach the automatically emitted `[cwv:343]` log record. If it was missed, `/cwv_smoke_bomb_probe` records another bounded snapshot. A healthy source surface reports `base=true area=true`, a pool total near `1.000000`, `healthy=true`, `exact_z_scale=false`, and `registration_quarantined=true`. Run `/cwv_regression_test` and confirm `issue343_smoke_bomb_diagnostics` passes.
+
+**DoD:** Source preflight and the G-THROWN/G-NETWORK risk gates were walked for diagnostics only. Deferrals: actual item/pickup registration, impact-area actuation, anisotropic smoke FX, and the complete Universal/G-CROSS-CHAR/G-APPEARANCE live matrix remain in `TODO.md`.
+
 ## 0.1.403-dev - 2026-07-14 - #317 career-scoped 3P animation picker [verify-fix-coop]
 
 - Added a new **Dev Options → 3P Animation Picker** with live, persisted controls for CWV Dual Axes on Saltzpyre and Kruber. Each attack can be routed only to events authored by the receiver-native Axe and Falchion or Mace and Sword animation vocabulary; resetting a row or disabling the picker restores the existing baked/default behavior.
