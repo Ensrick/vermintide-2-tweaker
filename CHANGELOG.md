@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - Post-fix audit for #582, #584, and #585
+
+User verification closes the WT/CWV native Dual Axes ownership boundary and the Moonfire equipped-slot resource lifecycle fixes. The audit confirms runtime and offline regression coverage, documents native-versus-variant ownership and persistent player-resource rules, corrects the generated name-map owner after Cosmetics extraction, and regenerates the deterministic catalog without forbidden native Dual Axes rows.
+
 ## 2026-07-13 - Post-fix audit for #575
 
 User verification confirms Tweaker: GUI v0.2.240-dev aligns the Mod Tweaker numeric caret across clicks, navigation, signs, decimals, and UI scaling. The shipped native-metric implementation and its runtime/offline geometry tests satisfy the behavior contract. Post-fix hardening adds tier-a source invariants for native scaled-font measurement and both live Mod Tweaker presentation call sites, plus an owning regression checklist and BUG_CLASSES entry for renderer-metric drift.

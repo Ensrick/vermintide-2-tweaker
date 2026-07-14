@@ -22,7 +22,7 @@ pwsh -NoProfile -File tools/gen-name-map/gen-name-map.ps1 -GenDate 2026-05-30
 
 Deterministic + sorted output → regeneration produces a clean, reviewable diff.
 Run it after any change to: a mod's definition tables (cwv `_variant_definitions`,
-cosmetics `_custom_illusions`, wt `weapon_unlock_map`), a mod's
+cosmetics `_cos_illusions.lua` `_custom_illusions`, wt `weapon_unlock_map`), a mod's
 `_localization.lua`, or when the decompiled VT2 source is updated.
 
 ## What supersedes what

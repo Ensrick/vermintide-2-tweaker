@@ -1,8 +1,8 @@
 {
   "_banner": "GENERATED — do not edit; run tools/gen-name-map/gen-name-map.ps1",
-  "_generated": "2026-05-30",
+  "_generated": "2026-07-13",
   "_source": "vanilla decompile + mod definition tables (see gen-name-map.ps1 header for provenance)",
-  "_entry_count": 3732,
+  "_entry_count": 3975,
   "_name_dump": {
     "found": false,
     "note": "no in-game name dump found; vanilla strings stay unresolved"
@@ -443,7 +443,7 @@
       "display_name": "Dual Axes",
       "display_name_source": "literal",
       "loc_key": "cwv_wh_dual_axes_name",
-      "item_type": "dr_dual_wield_axes",
+      "item_type": "cwv_wh_dual_axes",
       "slot_type": "",
       "careers": [
         null
@@ -54215,22 +54215,6 @@
       "reason": ""
     },
     {
-      "key": "es_huntsman::dr_dual_wield_axes",
-      "kind": "wt_unlock",
-      "display_name": "Bardin: Dual Axes",
-      "display_name_source": "mod_loc",
-      "loc_key": "unlock_es_huntsman_dr_dual_wield_axes",
-      "item_type": "weapon_access",
-      "slot_type": "",
-      "careers": [
-        "es_huntsman"
-      ],
-      "source": "weapon_tweaker",
-      "required_dlc": "",
-      "unresolved": false,
-      "reason": ""
-    },
-    {
       "key": "es_huntsman::dr_shield_axe",
       "kind": "wt_unlock",
       "display_name": "Bardin: Axe and Shield",
@@ -54871,6 +54855,22 @@
       "reason": ""
     },
     {
+      "key": "es_huntsman::wh_crossbow",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Crossbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_es_huntsman_wh_crossbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "es_huntsman"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "es_huntsman::wh_crossbow_repeater",
       "kind": "wt_unlock",
       "display_name": "Saltzpyre: Volley Crossbow",
@@ -55292,22 +55292,6 @@
       "display_name": "Bardin: Drakegun",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_es_knight_dr_drakegun",
-      "item_type": "weapon_access",
-      "slot_type": "",
-      "careers": [
-        "es_knight"
-      ],
-      "source": "weapon_tweaker",
-      "required_dlc": "",
-      "unresolved": false,
-      "reason": ""
-    },
-    {
-      "key": "es_knight::dr_dual_wield_axes",
-      "kind": "wt_unlock",
-      "display_name": "Bardin: Dual Axes",
-      "display_name_source": "mod_loc",
-      "loc_key": "unlock_es_knight_dr_dual_wield_axes",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -55975,6 +55959,22 @@
       "reason": ""
     },
     {
+      "key": "es_knight::wh_crossbow",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Crossbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_es_knight_wh_crossbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "es_knight"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "es_knight::wh_crossbow_repeater",
       "kind": "wt_unlock",
       "display_name": "Saltzpyre: Volley Crossbow",
@@ -56396,22 +56396,6 @@
       "display_name": "Bardin: Drakegun",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_es_mercenary_dr_drakegun",
-      "item_type": "weapon_access",
-      "slot_type": "",
-      "careers": [
-        "es_mercenary"
-      ],
-      "source": "weapon_tweaker",
-      "required_dlc": "",
-      "unresolved": false,
-      "reason": ""
-    },
-    {
-      "key": "es_mercenary::dr_dual_wield_axes",
-      "kind": "wt_unlock",
-      "display_name": "Bardin: Dual Axes",
-      "display_name_source": "mod_loc",
-      "loc_key": "unlock_es_mercenary_dr_dual_wield_axes",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -57079,6 +57063,22 @@
       "reason": ""
     },
     {
+      "key": "es_mercenary::wh_crossbow",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Crossbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_es_mercenary_wh_crossbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "es_mercenary"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "es_mercenary::wh_crossbow_repeater",
       "kind": "wt_unlock",
       "display_name": "Saltzpyre: Volley Crossbow",
@@ -57500,22 +57500,6 @@
       "display_name": "Bardin: Drakegun",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_es_questingknight_dr_drakegun",
-      "item_type": "weapon_access",
-      "slot_type": "",
-      "careers": [
-        "es_questingknight"
-      ],
-      "source": "weapon_tweaker",
-      "required_dlc": "",
-      "unresolved": false,
-      "reason": ""
-    },
-    {
-      "key": "es_questingknight::dr_dual_wield_axes",
-      "kind": "wt_unlock",
-      "display_name": "Bardin: Dual Axes",
-      "display_name_source": "mod_loc",
-      "loc_key": "unlock_es_questingknight_dr_dual_wield_axes",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -58183,6 +58167,22 @@
       "reason": ""
     },
     {
+      "key": "es_questingknight::wh_crossbow",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Crossbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_es_questingknight_wh_crossbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "es_questingknight"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "es_questingknight::wh_crossbow_repeater",
       "kind": "wt_unlock",
       "display_name": "Saltzpyre: Volley Crossbow",
@@ -58288,6 +58288,198 @@
       "slot_type": "",
       "careers": [
         "es_questingknight"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_1h_crowbill",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Crowbill",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_1h_crowbill",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_1h_flail_flaming",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flaming Flail",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_1h_flail_flaming",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_dagger",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Dagger",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_dagger",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Coruscation Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_flame_sword",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flame Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_flame_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_ghost_scythe",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Ensorcelled Reaper",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_ghost_scythe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_necromancy_staff",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Soulstealer Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_necromancy_staff",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_skullstaff_beam",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Beam Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_skullstaff_beam",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_skullstaff_fireball",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Fireball Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_skullstaff_fireball",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_skullstaff_flamethrower",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flamestorm Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_skullstaff_flamethrower",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_skullstaff_geiser",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Conflagration Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_skullstaff_geiser",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::bw_skullstaff_spear",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Bolt Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_bw_skullstaff_spear",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
       ],
       "source": "weapon_tweaker",
       "required_dlc": "",
@@ -59047,6 +59239,118 @@
       "reason": ""
     },
     {
+      "key": "we_maidenguard::wh_1h_falchion",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Falchion",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_1h_falchion",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_1h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 1H Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_1h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_2h_billhook",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Billhook",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_2h_billhook",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_2h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 2H Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_2h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_2h_sword",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 2H Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_2h_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_brace_of_pistols",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Brace of Pistols",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_brace_of_pistols",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_crossbow",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Crossbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_crossbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "we_maidenguard::wh_crossbow_repeater",
       "kind": "wt_unlock",
       "display_name": "Saltzpyre: Volley Crossbow",
@@ -59056,6 +59360,326 @@
       "slot_type": "",
       "careers": [
         "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Griffon-foot",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_dual_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Dual Hammers",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_dual_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_dual_wield_axe_falchion",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Axe & Falchion",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_dual_wield_axe_falchion",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_fencing_sword",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Rapier",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_fencing_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_flail_shield",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Flail and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_flail_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_hammer_book",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Hammer and Tome",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_hammer_book",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_hammer_shield",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Skull-Splitter and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_hammer_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_maidenguard::wh_repeating_pistols",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Repeater Pistol",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_maidenguard_wh_repeating_pistols",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_maidenguard"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_1h_crowbill",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Crowbill",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_1h_crowbill",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_1h_flail_flaming",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flaming Flail",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_1h_flail_flaming",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_dagger",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Dagger",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_dagger",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Coruscation Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_flame_sword",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flame Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_flame_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_ghost_scythe",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Ensorcelled Reaper",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_ghost_scythe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_necromancy_staff",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Soulstealer Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_necromancy_staff",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_skullstaff_beam",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Beam Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_skullstaff_beam",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_skullstaff_fireball",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Fireball Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_skullstaff_fireball",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_skullstaff_flamethrower",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flamestorm Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_skullstaff_flamethrower",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_skullstaff_geiser",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Conflagration Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_skullstaff_geiser",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::bw_skullstaff_spear",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Bolt Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_bw_skullstaff_spear",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
       ],
       "source": "weapon_tweaker",
       "required_dlc": "",
@@ -59815,6 +60439,118 @@
       "reason": ""
     },
     {
+      "key": "we_shade::wh_1h_falchion",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Falchion",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_1h_falchion",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_1h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 1H Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_1h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_2h_billhook",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Billhook",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_2h_billhook",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_2h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 2H Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_2h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_2h_sword",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 2H Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_2h_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_brace_of_pistols",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Brace of Pistols",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_brace_of_pistols",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_crossbow",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Crossbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_crossbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "we_shade::wh_crossbow_repeater",
       "kind": "wt_unlock",
       "display_name": "Saltzpyre: Volley Crossbow",
@@ -59824,6 +60560,326 @@
       "slot_type": "",
       "careers": [
         "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Griffon-foot",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_dual_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Dual Hammers",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_dual_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_dual_wield_axe_falchion",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Axe & Falchion",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_dual_wield_axe_falchion",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_fencing_sword",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Rapier",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_fencing_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_flail_shield",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Flail and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_flail_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_hammer_book",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Hammer and Tome",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_hammer_book",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_hammer_shield",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Skull-Splitter and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_hammer_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_shade::wh_repeating_pistols",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Repeater Pistol",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_shade_wh_repeating_pistols",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_shade"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_1h_crowbill",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Crowbill",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_1h_crowbill",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_1h_flail_flaming",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flaming Flail",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_1h_flail_flaming",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_dagger",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Dagger",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_dagger",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Coruscation Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_flame_sword",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flame Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_flame_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_ghost_scythe",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Ensorcelled Reaper",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_ghost_scythe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_necromancy_staff",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Soulstealer Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_necromancy_staff",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_skullstaff_beam",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Beam Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_skullstaff_beam",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_skullstaff_fireball",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Fireball Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_skullstaff_fireball",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_skullstaff_flamethrower",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flamestorm Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_skullstaff_flamethrower",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_skullstaff_geiser",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Conflagration Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_skullstaff_geiser",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::bw_skullstaff_spear",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Bolt Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_bw_skullstaff_spear",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
       ],
       "source": "weapon_tweaker",
       "required_dlc": "",
@@ -60599,6 +61655,118 @@
       "reason": ""
     },
     {
+      "key": "we_thornsister::wh_1h_falchion",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Falchion",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_1h_falchion",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_1h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 1H Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_1h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_2h_billhook",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Billhook",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_2h_billhook",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_2h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 2H Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_2h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_2h_sword",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 2H Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_2h_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_brace_of_pistols",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Brace of Pistols",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_brace_of_pistols",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_crossbow",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Crossbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_crossbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "we_thornsister::wh_crossbow_repeater",
       "kind": "wt_unlock",
       "display_name": "Saltzpyre: Volley Crossbow",
@@ -60608,6 +61776,326 @@
       "slot_type": "",
       "careers": [
         "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Griffon-foot",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_dual_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Dual Hammers",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_dual_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_dual_wield_axe_falchion",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Axe & Falchion",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_dual_wield_axe_falchion",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_fencing_sword",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Rapier",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_fencing_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_flail_shield",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Flail and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_flail_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_hammer_book",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Hammer and Tome",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_hammer_book",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_hammer_shield",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Skull-Splitter and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_hammer_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_thornsister::wh_repeating_pistols",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Repeater Pistol",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_thornsister_wh_repeating_pistols",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_thornsister"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_1h_crowbill",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Crowbill",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_1h_crowbill",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_1h_flail_flaming",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flaming Flail",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_1h_flail_flaming",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_dagger",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Dagger",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_dagger",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Coruscation Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_flame_sword",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flame Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_flame_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_ghost_scythe",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Ensorcelled Reaper",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_ghost_scythe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_necromancy_staff",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Soulstealer Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_necromancy_staff",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_skullstaff_beam",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Beam Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_skullstaff_beam",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_skullstaff_fireball",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Fireball Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_skullstaff_fireball",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_skullstaff_flamethrower",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flamestorm Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_skullstaff_flamethrower",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_skullstaff_geiser",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Conflagration Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_skullstaff_geiser",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::bw_skullstaff_spear",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Bolt Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_bw_skullstaff_spear",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
       ],
       "source": "weapon_tweaker",
       "required_dlc": "",
@@ -61367,6 +62855,118 @@
       "reason": ""
     },
     {
+      "key": "we_waywatcher::wh_1h_falchion",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Falchion",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_1h_falchion",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_1h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 1H Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_1h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_2h_billhook",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Billhook",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_2h_billhook",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_2h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 2H Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_2h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_2h_sword",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: 2H Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_2h_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_brace_of_pistols",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Brace of Pistols",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_brace_of_pistols",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_crossbow",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Crossbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_crossbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "we_waywatcher::wh_crossbow_repeater",
       "kind": "wt_unlock",
       "display_name": "Saltzpyre: Volley Crossbow",
@@ -61383,11 +62983,507 @@
       "reason": ""
     },
     {
+      "key": "we_waywatcher::wh_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Griffon-foot",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_dual_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Dual Hammers",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_dual_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_dual_wield_axe_falchion",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Axe & Falchion",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_dual_wield_axe_falchion",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_fencing_sword",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Rapier",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_fencing_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_flail_shield",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Flail and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_flail_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_hammer_book",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Hammer and Tome",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_hammer_book",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_hammer_shield",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Skull-Splitter and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_hammer_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "we_waywatcher::wh_repeating_pistols",
+      "kind": "wt_unlock",
+      "display_name": "Saltzpyre: Repeater Pistol",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_we_waywatcher_wh_repeating_pistols",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "we_waywatcher"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_bountyhunter::bw_1h_crowbill",
       "kind": "wt_unlock",
       "display_name": "Sienna: Crowbill",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_wh_bountyhunter_bw_1h_crowbill",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::bw_1h_mace",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Mace",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_bw_1h_mace",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::bw_dagger",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Dagger",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_bw_dagger",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::bw_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Coruscation Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_bw_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::bw_flame_sword",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flame Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_bw_flame_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::bw_ghost_scythe",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Ensorcelled Reaper",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_bw_ghost_scythe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::bw_necromancy_staff",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Soulstealer Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_bw_necromancy_staff",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::bw_skullstaff_beam",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Beam Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_bw_skullstaff_beam",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::bw_skullstaff_fireball",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Fireball Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_bw_skullstaff_fireball",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::bw_skullstaff_flamethrower",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flamestorm Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_bw_skullstaff_flamethrower",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::bw_skullstaff_geiser",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Conflagration Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_bw_skullstaff_geiser",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::bw_skullstaff_spear",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Bolt Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_bw_skullstaff_spear",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_1h_throwing_axes",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Throwing Axes",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_1h_throwing_axes",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_2h_axe",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Greataxe",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_2h_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_2h_cog_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Cog Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_2h_cog_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_2h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: 2H Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_2h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_2h_pick",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Pickaxe",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_2h_pick",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Trollhammer Torpedo",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_drake_pistol",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Drakefire Pistols",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_drake_pistol",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_drakegun",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Drakegun",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_drakegun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_rakegun",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Grudge-Raker",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_rakegun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_shield_axe",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Axe and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_shield_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_shield_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Hammer and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_shield_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::dr_steam_pistol",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Masterwork Pistol",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_dr_steam_pistol",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -61447,11 +63543,107 @@
       "reason": ""
     },
     {
+      "key": "wh_bountyhunter::es_2h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Greathammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_es_2h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_bountyhunter::es_2h_heavy_spear",
       "kind": "wt_unlock",
       "display_name": "Kruber: Tuskgor Spear",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_wh_bountyhunter_es_2h_heavy_spear",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::es_2h_sword_executioner",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Executioner Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_es_2h_sword_executioner",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::es_bastard_sword",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Bretonnian Longsword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_es_bastard_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::es_blunderbuss",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Blunderbuss",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_es_blunderbuss",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::es_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Spear and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_es_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::es_dual_wield_hammer_sword",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Mace and Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_es_dual_wield_hammer_sword",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -61479,11 +63671,123 @@
       "reason": ""
     },
     {
+      "key": "wh_bountyhunter::es_handgun",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Handgun",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_es_handgun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_bountyhunter::es_longbow",
       "kind": "wt_unlock",
       "display_name": "Kruber: Longbow",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_wh_bountyhunter_es_longbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::es_mace_shield",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Mace and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_es_mace_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::es_repeating_handgun",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Repeater Handgun",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_es_repeating_handgun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::es_sword_shield",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Sword and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_es_sword_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::es_sword_shield_breton",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Bretonnian Sword and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_es_sword_shield_breton",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::we_1h_axe",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: 1H Axe",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_we_1h_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::we_1h_spears_shield",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Spear and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_we_1h_spears_shield",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -61511,6 +63815,38 @@
       "reason": ""
     },
     {
+      "key": "wh_bountyhunter::we_2h_axe",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Glaive",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_we_2h_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::we_2h_sword",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Elf 2H Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_we_2h_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_bountyhunter::we_crossbow_repeater",
       "kind": "wt_unlock",
       "display_name": "Kerillian: Volley Crossbow",
@@ -61527,11 +63863,123 @@
       "reason": ""
     },
     {
+      "key": "wh_bountyhunter::we_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Moonfire Bow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_we_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::we_dual_wield_daggers",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Dual Daggers",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_we_dual_wield_daggers",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::we_dual_wield_sword_dagger",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Sword & Dagger",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_we_dual_wield_sword_dagger",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::we_dual_wield_swords",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Dual Swords",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_we_dual_wield_swords",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::we_javelin",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Javelin",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_we_javelin",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_bountyhunter::we_longbow",
       "kind": "wt_unlock",
       "display_name": "Kerillian: Longbow",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_wh_bountyhunter_we_longbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::we_shortbow",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Shortbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_we_shortbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_bountyhunter"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_bountyhunter::we_shortbow_hagbane",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Hagbane Shortbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_bountyhunter_we_shortbow_hagbane",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -61799,6 +64247,374 @@
       "reason": ""
     },
     {
+      "key": "wh_captain::bw_1h_mace",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Mace",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_bw_1h_mace",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::bw_dagger",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Dagger",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_bw_dagger",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::bw_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Coruscation Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_bw_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::bw_flame_sword",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flame Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_bw_flame_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::bw_ghost_scythe",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Ensorcelled Reaper",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_bw_ghost_scythe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::bw_necromancy_staff",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Soulstealer Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_bw_necromancy_staff",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::bw_skullstaff_beam",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Beam Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_bw_skullstaff_beam",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::bw_skullstaff_fireball",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Fireball Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_bw_skullstaff_fireball",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::bw_skullstaff_flamethrower",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flamestorm Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_bw_skullstaff_flamethrower",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::bw_skullstaff_geiser",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Conflagration Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_bw_skullstaff_geiser",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::bw_skullstaff_spear",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Bolt Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_bw_skullstaff_spear",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_1h_throwing_axes",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Throwing Axes",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_1h_throwing_axes",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_2h_axe",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Greataxe",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_2h_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_2h_cog_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Cog Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_2h_cog_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_2h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: 2H Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_2h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_2h_pick",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Pickaxe",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_2h_pick",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Trollhammer Torpedo",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_drake_pistol",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Drakefire Pistols",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_drake_pistol",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_drakegun",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Drakegun",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_drakegun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_rakegun",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Grudge-Raker",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_rakegun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_shield_axe",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Axe and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_shield_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_shield_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Hammer and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_shield_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::dr_steam_pistol",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Masterwork Pistol",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_dr_steam_pistol",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_captain::es_1h_flail",
       "kind": "wt_unlock",
       "display_name": "Saltzpyre: Flail",
@@ -61847,11 +64663,107 @@
       "reason": ""
     },
     {
+      "key": "wh_captain::es_2h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Greathammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_es_2h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_captain::es_2h_heavy_spear",
       "kind": "wt_unlock",
       "display_name": "Kruber: Tuskgor Spear",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_wh_captain_es_2h_heavy_spear",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::es_2h_sword_executioner",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Executioner Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_es_2h_sword_executioner",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::es_bastard_sword",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Bretonnian Longsword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_es_bastard_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::es_blunderbuss",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Blunderbuss",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_es_blunderbuss",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::es_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Spear and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_es_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::es_dual_wield_hammer_sword",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Mace and Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_es_dual_wield_hammer_sword",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -61879,11 +64791,123 @@
       "reason": ""
     },
     {
+      "key": "wh_captain::es_handgun",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Handgun",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_es_handgun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_captain::es_longbow",
       "kind": "wt_unlock",
       "display_name": "Kruber: Longbow",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_wh_captain_es_longbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::es_mace_shield",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Mace and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_es_mace_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::es_repeating_handgun",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Repeater Handgun",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_es_repeating_handgun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::es_sword_shield",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Sword and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_es_sword_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::es_sword_shield_breton",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Bretonnian Sword and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_es_sword_shield_breton",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::we_1h_axe",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: 1H Axe",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_we_1h_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::we_1h_spears_shield",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Spear and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_we_1h_spears_shield",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -61911,6 +64935,38 @@
       "reason": ""
     },
     {
+      "key": "wh_captain::we_2h_axe",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Glaive",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_we_2h_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::we_2h_sword",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Elf 2H Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_we_2h_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_captain::we_crossbow_repeater",
       "kind": "wt_unlock",
       "display_name": "Kerillian: Volley Crossbow",
@@ -61927,11 +64983,123 @@
       "reason": ""
     },
     {
+      "key": "wh_captain::we_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Moonfire Bow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_we_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::we_dual_wield_daggers",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Dual Daggers",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_we_dual_wield_daggers",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::we_dual_wield_sword_dagger",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Sword & Dagger",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_we_dual_wield_sword_dagger",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::we_dual_wield_swords",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Dual Swords",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_we_dual_wield_swords",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::we_javelin",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Javelin",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_we_javelin",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_captain::we_longbow",
       "kind": "wt_unlock",
       "display_name": "Kerillian: Longbow",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_wh_captain_we_longbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::we_shortbow",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Shortbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_we_shortbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_captain"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_captain::we_shortbow_hagbane",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Hagbane Shortbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_captain_we_shortbow_hagbane",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -62311,6 +65479,374 @@
       "reason": ""
     },
     {
+      "key": "wh_zealot::bw_1h_mace",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Mace",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_bw_1h_mace",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::bw_dagger",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Dagger",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_bw_dagger",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::bw_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Coruscation Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_bw_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::bw_flame_sword",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flame Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_bw_flame_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::bw_ghost_scythe",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Ensorcelled Reaper",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_bw_ghost_scythe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::bw_necromancy_staff",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Soulstealer Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_bw_necromancy_staff",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::bw_skullstaff_beam",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Beam Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_bw_skullstaff_beam",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::bw_skullstaff_fireball",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Fireball Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_bw_skullstaff_fireball",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::bw_skullstaff_flamethrower",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Flamestorm Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_bw_skullstaff_flamethrower",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::bw_skullstaff_geiser",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Conflagration Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_bw_skullstaff_geiser",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::bw_skullstaff_spear",
+      "kind": "wt_unlock",
+      "display_name": "Sienna: Bolt Staff",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_bw_skullstaff_spear",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_1h_throwing_axes",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Throwing Axes",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_1h_throwing_axes",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_2h_axe",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Greataxe",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_2h_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_2h_cog_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Cog Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_2h_cog_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_2h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: 2H Hammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_2h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_2h_pick",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Pickaxe",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_2h_pick",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Trollhammer Torpedo",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_drake_pistol",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Drakefire Pistols",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_drake_pistol",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_drakegun",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Drakegun",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_drakegun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_rakegun",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Grudge-Raker",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_rakegun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_shield_axe",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Axe and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_shield_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_shield_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Hammer and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_shield_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::dr_steam_pistol",
+      "kind": "wt_unlock",
+      "display_name": "Bardin: Masterwork Pistol",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_dr_steam_pistol",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_zealot::es_1h_flail",
       "kind": "wt_unlock",
       "display_name": "Saltzpyre: Flail",
@@ -62359,11 +65895,107 @@
       "reason": ""
     },
     {
+      "key": "wh_zealot::es_2h_hammer",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Greathammer",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_es_2h_hammer",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_zealot::es_2h_heavy_spear",
       "kind": "wt_unlock",
       "display_name": "Kruber: Tuskgor Spear",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_wh_zealot_es_2h_heavy_spear",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::es_2h_sword_executioner",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Executioner Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_es_2h_sword_executioner",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::es_bastard_sword",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Bretonnian Longsword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_es_bastard_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::es_blunderbuss",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Blunderbuss",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_es_blunderbuss",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::es_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Spear and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_es_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::es_dual_wield_hammer_sword",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Mace and Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_es_dual_wield_hammer_sword",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -62391,11 +66023,123 @@
       "reason": ""
     },
     {
+      "key": "wh_zealot::es_handgun",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Handgun",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_es_handgun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_zealot::es_longbow",
       "kind": "wt_unlock",
       "display_name": "Kruber: Longbow",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_wh_zealot_es_longbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::es_mace_shield",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Mace and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_es_mace_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::es_repeating_handgun",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Repeater Handgun",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_es_repeating_handgun",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::es_sword_shield",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Sword and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_es_sword_shield",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::es_sword_shield_breton",
+      "kind": "wt_unlock",
+      "display_name": "Kruber: Bretonnian Sword and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_es_sword_shield_breton",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::we_1h_axe",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: 1H Axe",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_we_1h_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::we_1h_spears_shield",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Spear and Shield",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_we_1h_spears_shield",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [
@@ -62423,6 +66167,38 @@
       "reason": ""
     },
     {
+      "key": "wh_zealot::we_2h_axe",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Glaive",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_we_2h_axe",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::we_2h_sword",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Elf 2H Sword",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_we_2h_sword",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_zealot::we_crossbow_repeater",
       "kind": "wt_unlock",
       "display_name": "Kerillian: Volley Crossbow",
@@ -62439,11 +66215,123 @@
       "reason": ""
     },
     {
+      "key": "wh_zealot::we_deus_01",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Moonfire Bow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_we_deus_01",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::we_dual_wield_daggers",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Dual Daggers",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_we_dual_wield_daggers",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::we_dual_wield_sword_dagger",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Sword & Dagger",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_we_dual_wield_sword_dagger",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::we_dual_wield_swords",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Dual Swords",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_we_dual_wield_swords",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::we_javelin",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Javelin",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_we_javelin",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
       "key": "wh_zealot::we_longbow",
       "kind": "wt_unlock",
       "display_name": "Kerillian: Longbow",
       "display_name_source": "mod_loc",
       "loc_key": "unlock_wh_zealot_we_longbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::we_shortbow",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Shortbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_we_shortbow",
+      "item_type": "weapon_access",
+      "slot_type": "",
+      "careers": [
+        "wh_zealot"
+      ],
+      "source": "weapon_tweaker",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "wh_zealot::we_shortbow_hagbane",
+      "kind": "wt_unlock",
+      "display_name": "Kerillian: Hagbane Shortbow",
+      "display_name_source": "mod_loc",
+      "loc_key": "unlock_wh_zealot_we_shortbow_hagbane",
       "item_type": "weapon_access",
       "slot_type": "",
       "careers": [

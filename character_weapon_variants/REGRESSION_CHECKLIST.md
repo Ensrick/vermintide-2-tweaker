@@ -73,7 +73,7 @@ Last updated: 2026-07-13.
 | Symptom | Kruber/Saltzpyre can equip native `dr_dual_wield_axes`; CWV correctly declines to re-key it, bypassing the dedicated variant's ownership/cosmetic identity. |
 | Root cause | WT independently exposed Bardin's native base alongside CWV's `cwv_es_dual_axes` and `cwv_wh_dual_axes`. |
 | Mod(s) | weapon_tweaker, character_weapon_variants |
-| Fix version(s) | WT v0.12.226-dev; CWV v0.1.391-dev (#582) |
+| Fix version(s) | WT v0.12.226-dev; CWV v0.1.391-dev (#582; user verified 2026-07-13) |
 | Category | INTEGRATION |
 | Repro | Enable WT native Dual Axes on Kruber/Saltzpyre, equip a Bardin illusion, and observe the key remains `dr_dual_wield_axes` rather than a CWV owner. |
 | Expected post-fix | Native base has no ES/WH receiver; both dedicated CWV entries remain registered for their four receiver careers with #579 cosmetic parity. |

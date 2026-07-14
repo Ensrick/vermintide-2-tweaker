@@ -1557,3 +1557,21 @@ end
 
 ### Related Issues / commits
 - gui_tweaker_dev v0.2.240-dev (#575), runtime `mod_tweaker_numeric_caret_geometry`, offline `test_mod_tweaker_numeric_editor.lua`.
+
+## 40. Native cross-access item competes with variant owner
+
+**First seen:** 2026-07-13 (WT/CWV issue #582)
+**Canonical Issue:** [#582](https://github.com/Ensrick/vermintide-2-tweaker/issues/582)
+
+When one mod exposes a donor's native item through `can_wield` while another owns a receiver-specific clone, the player sees duplicate-looking weapons but only the variant has the intended cosmetics, persistence, and routing. Pick one receiver owner. Remove the donor-native entry from every control/catalog surface, tombstone stale `can_wield` state, and reject invalid cached loadouts through vanilla fallback. Regression coverage must prove native exclusion and dedicated-variant registration/cosmetic parity for every intended receiver.
+
+Related coverage: WT `issue582_native_dual_axes_cwv_ownership_boundary`; CWV `issue582_dual_axes_native_variant_ownership_boundary` and `dual_axes_cosmetic_family_parity`.
+
+## 41. Persistent resource follows wielded instead of equipped slot
+
+**First seen:** 2026-07-13 (WT issues #584 and #585)
+**Canonical Issues:** [#584](https://github.com/Ensrick/vermintide-2-tweaker/issues/584), [#585](https://github.com/Ensrick/vermintide-2-tweaker/issues/585)
+
+A career-owned resource extension outlives the weapon instance. Detecting only the wielded item stops passive recharge while melee is active and can leave a stale HUD bar after replacement. Use one owner-local planner that reads the owning equipped slot and selects exactly one action: recharge, neutralize stale state after removal, or no-op. Exclude native owners and test wielded/stowed parity, replacement, re-equip, repeated swaps, and bounded slot reads.
+
+Related coverage: WT `issue584_moonfire_stowed_native_regen_contract`, `issue585_moonfire_energy_hud_loadout_lifecycle`, and `qa/lua/tests/test_wt_passive_charge.lua`.

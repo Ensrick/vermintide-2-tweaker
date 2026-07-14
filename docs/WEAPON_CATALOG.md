@@ -473,7 +473,7 @@ live in `character_weapon_variants/RECIPES.md`. Animation fixes use
 | `wh_1h_falchion` | Kruber (all) | (none currently) | (none) |
 | `wh_dual_wield_axe_falchion` | Kruber (all) | `to_dual_hammer_sword_es` | `_kruber_axe_falchion_remap` (4 entries) |
 | `es_dual_wield_hammer_sword` | Saltzpyre (all) | (none currently) | (none) |
-| `dr_dual_wield_axes` | Kruber (all), Saltzpyre (all) | Kruber → mace+sword; Saltzpyre → axe+falchion | `_kruber_dual_axes_remap` for Kruber |
+| `dr_dual_wield_axes` | Kerillian (all) | Kerillian → dual swords | Native Bardin ownership remains unchanged; Kruber/Saltzpyre use `cwv_es_dual_axes` / `cwv_wh_dual_axes` instead (#582) |
 
 ---
 

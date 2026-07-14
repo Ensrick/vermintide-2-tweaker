@@ -126,6 +126,22 @@ Genuine functional cross-character ports (brace, longbow, billhook, etc.)
 - **`cosmetics_tweaker` cross-char cosmetic swap (planned)** — destination
   for identical-functional ports being removed from wt.
 
+### Native base vs dedicated variant ownership
+
+When CWV owns a dedicated receiver-specific item, WT must not also expose the
+donor's native base to that receiver. The two entries are not interchangeable:
+the CWV key owns its curated cosmetics, persistence identity, and receiver-side
+presentation routing. Offering the native key beside it bypasses those contracts
+and leaves CWV correct but unable to recognize the item.
+
+Issue #582 is the canonical boundary: Bardin's native `dr_dual_wield_axes`
+remains native for Bardin and keeps WT's existing Kerillian access, but Kruber
+and Saltzpyre receive only `cwv_es_dual_axes` and `cwv_wh_dual_axes`. Removing a
+previous WT pair requires all four layers in one change: unlock-map row, widget,
+localization/dev-picker claim, and an idempotent `can_wield` tombstone plus stale
+loadout-cache rejection. Regression must assert both the native exclusion and
+the dedicated variant registrations.
+
 ---
 
 ## Animation remap
@@ -364,6 +380,26 @@ when it doesn't crash.
 Established 2026-05-19 during the `we_longbow`-on-Saltzpyre Port A
 shipment; user stated the rule directly after seeing the Port A patcher
 table.
+
+### Persistent weapon resources follow equipped-slot lifecycle
+
+Player resource extensions such as Moonfire energy belong to the player and
+survive weapon swaps; they are not recreated when `slot_ranged` changes. A
+per-frame compatibility helper therefore has two separate questions:
+
+1. Eligibility follows the item equipped in `slot_ranged`, not merely the
+   currently wielded slot. Otherwise a stowed Moonfire stops regenerating
+   (#584).
+2. When the energy weapon leaves `slot_ranged`, nonnative residual energy must
+   return to its neutral/full value once. Vanilla `EnergyBarUI` renders from the
+   persistent energy extension, so package unload or inventory refresh alone
+   cannot hide a stranded bar (#585).
+
+Keep both operations owner-local and mutually exclusive through one planner and
+one `energy_system:add_energy` site. Read the ranged slot once per tick; return
+before inventory inspection when the career already owns a nonzero native
+recharge rate. Tests must cover wielded/stowed parity, repeated slot swaps,
+non-energy replacements, empty slots, full-state no-op, and native Kerillian.
 
 ### Three-layer remap system
 

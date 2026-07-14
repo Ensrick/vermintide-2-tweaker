@@ -1,7 +1,7 @@
 <!-- GENERATED — do not edit; run tools/gen-name-map/gen-name-map.ps1 -->
 # Authoritative Name Map (key -> in-game display name)
 
-**Generated:** 2026-05-30 &nbsp;|&nbsp; **Entries:** 3732
+**Generated:** 2026-07-13 &nbsp;|&nbsp; **Entries:** 3975
 
 > This file is REGENERATED from ground truth (vanilla decompile + each mod's own
 > definition tables). **Grep this instead of trusting the legacy hand-maintained**
@@ -54,7 +54,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `cwv_es_warpriest_hammer_shield` | Warrior-Priest Hammer and Shield | cwv_es_warpriest_hammer_shield |  | literal |
 | `cwv_we_sword_shield` | Sword and Shield | es_sword_shield | we_waywatcher, we_maidenguard, we_shade, we_thornsister | literal |
 | `cwv_we_sword_shield_veteran` | Elven Sword and Shield | es_sword_shield | we_waywatcher, we_maidenguard, we_shade, we_thornsister | literal |
-| `cwv_wh_dual_axes` | Dual Axes | dr_dual_wield_axes |  | literal |
+| `cwv_wh_dual_axes` | Dual Axes | cwv_wh_dual_axes |  | literal |
 | `cwv_wh_dual_maces` | Dual Maces | cwv_wh_dual_maces |  | literal |
 | `cwv_wh_javelin` | Tuskgor Javelin | we_javelin |  | literal |
 
@@ -3188,7 +3188,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 
 ## source: weapon_tweaker
 
-### kind: wt_unlock (689 entries, 0 unresolved)
+### kind: wt_unlock (932 entries, 0 unresolved)
 
 | key | display name | item_type | careers | provenance |
 |-----|--------------|-----------|---------|------------|
@@ -3351,7 +3351,6 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `es_huntsman::dr_deus_01` | Bardin: Trollhammer Torpedo | weapon_access | es_huntsman | mod_loc |
 | `es_huntsman::dr_drake_pistol` | Bardin: Drakefire Pistols | weapon_access | es_huntsman | mod_loc |
 | `es_huntsman::dr_drakegun` | Bardin: Drakegun | weapon_access | es_huntsman | mod_loc |
-| `es_huntsman::dr_dual_wield_axes` | Bardin: Dual Axes | weapon_access | es_huntsman | mod_loc |
 | `es_huntsman::dr_shield_axe` | Bardin: Axe and Shield | weapon_access | es_huntsman | mod_loc |
 | `es_huntsman::dr_steam_pistol` | Bardin: Masterwork Pistol | weapon_access | es_huntsman | mod_loc |
 | `es_huntsman::es_1h_flail` | Saltzpyre: Flail | weapon_access | es_huntsman | mod_loc |
@@ -3392,6 +3391,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `es_huntsman::wh_2h_billhook` | Saltzpyre: Billhook | weapon_access | es_huntsman | mod_loc |
 | `es_huntsman::wh_2h_hammer` | Saltzpyre: Holy Great Hammer | weapon_access | es_huntsman | mod_loc |
 | `es_huntsman::wh_brace_of_pistols` | Saltzpyre: Brace of Pistols | weapon_access | es_huntsman | mod_loc |
+| `es_huntsman::wh_crossbow` | Saltzpyre: Crossbow | weapon_access | es_huntsman | mod_loc |
 | `es_huntsman::wh_crossbow_repeater` | Saltzpyre: Volley Crossbow | weapon_access | es_huntsman | mod_loc |
 | `es_huntsman::wh_deus_01` | Saltzpyre: Griffon-foot | weapon_access | es_huntsman | mod_loc |
 | `es_huntsman::wh_dual_hammer` | Saltzpyre: Dual Skull-Splitters | weapon_access | es_huntsman | mod_loc |
@@ -3419,7 +3419,6 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `es_knight::dr_deus_01` | Bardin: Trollhammer Torpedo | weapon_access | es_knight | mod_loc |
 | `es_knight::dr_drake_pistol` | Bardin: Drakefire Pistols | weapon_access | es_knight | mod_loc |
 | `es_knight::dr_drakegun` | Bardin: Drakegun | weapon_access | es_knight | mod_loc |
-| `es_knight::dr_dual_wield_axes` | Bardin: Dual Axes | weapon_access | es_knight | mod_loc |
 | `es_knight::dr_shield_axe` | Bardin: Axe and Shield | weapon_access | es_knight | mod_loc |
 | `es_knight::dr_steam_pistol` | Bardin: Masterwork Pistol | weapon_access | es_knight | mod_loc |
 | `es_knight::es_1h_flail` | Saltzpyre: Flail | weapon_access | es_knight | mod_loc |
@@ -3461,6 +3460,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `es_knight::wh_2h_billhook` | Saltzpyre: Billhook | weapon_access | es_knight | mod_loc |
 | `es_knight::wh_2h_hammer` | Saltzpyre: Holy Great Hammer | weapon_access | es_knight | mod_loc |
 | `es_knight::wh_brace_of_pistols` | Saltzpyre: Brace of Pistols | weapon_access | es_knight | mod_loc |
+| `es_knight::wh_crossbow` | Saltzpyre: Crossbow | weapon_access | es_knight | mod_loc |
 | `es_knight::wh_crossbow_repeater` | Saltzpyre: Volley Crossbow | weapon_access | es_knight | mod_loc |
 | `es_knight::wh_deus_01` | Saltzpyre: Griffon-foot | weapon_access | es_knight | mod_loc |
 | `es_knight::wh_dual_hammer` | Saltzpyre: Dual Skull-Splitters | weapon_access | es_knight | mod_loc |
@@ -3488,7 +3488,6 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `es_mercenary::dr_deus_01` | Bardin: Trollhammer Torpedo | weapon_access | es_mercenary | mod_loc |
 | `es_mercenary::dr_drake_pistol` | Bardin: Drakefire Pistols | weapon_access | es_mercenary | mod_loc |
 | `es_mercenary::dr_drakegun` | Bardin: Drakegun | weapon_access | es_mercenary | mod_loc |
-| `es_mercenary::dr_dual_wield_axes` | Bardin: Dual Axes | weapon_access | es_mercenary | mod_loc |
 | `es_mercenary::dr_shield_axe` | Bardin: Axe and Shield | weapon_access | es_mercenary | mod_loc |
 | `es_mercenary::dr_steam_pistol` | Bardin: Masterwork Pistol | weapon_access | es_mercenary | mod_loc |
 | `es_mercenary::es_1h_flail` | Saltzpyre: Flail | weapon_access | es_mercenary | mod_loc |
@@ -3530,6 +3529,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `es_mercenary::wh_2h_billhook` | Saltzpyre: Billhook | weapon_access | es_mercenary | mod_loc |
 | `es_mercenary::wh_2h_hammer` | Saltzpyre: Holy Great Hammer | weapon_access | es_mercenary | mod_loc |
 | `es_mercenary::wh_brace_of_pistols` | Saltzpyre: Brace of Pistols | weapon_access | es_mercenary | mod_loc |
+| `es_mercenary::wh_crossbow` | Saltzpyre: Crossbow | weapon_access | es_mercenary | mod_loc |
 | `es_mercenary::wh_crossbow_repeater` | Saltzpyre: Volley Crossbow | weapon_access | es_mercenary | mod_loc |
 | `es_mercenary::wh_deus_01` | Saltzpyre: Griffon-foot | weapon_access | es_mercenary | mod_loc |
 | `es_mercenary::wh_dual_hammer` | Saltzpyre: Dual Skull-Splitters | weapon_access | es_mercenary | mod_loc |
@@ -3557,7 +3557,6 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `es_questingknight::dr_deus_01` | Bardin: Trollhammer Torpedo | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::dr_drake_pistol` | Bardin: Drakefire Pistols | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::dr_drakegun` | Bardin: Drakegun | weapon_access | es_questingknight | mod_loc |
-| `es_questingknight::dr_dual_wield_axes` | Bardin: Dual Axes | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::dr_shield_axe` | Bardin: Axe and Shield | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::dr_steam_pistol` | Bardin: Masterwork Pistol | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::es_1h_flail` | Saltzpyre: Flail | weapon_access | es_questingknight | mod_loc |
@@ -3599,6 +3598,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `es_questingknight::wh_2h_billhook` | Saltzpyre: Billhook | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::wh_2h_hammer` | Saltzpyre: Holy Great Hammer | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::wh_brace_of_pistols` | Saltzpyre: Brace of Pistols | weapon_access | es_questingknight | mod_loc |
+| `es_questingknight::wh_crossbow` | Saltzpyre: Crossbow | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::wh_crossbow_repeater` | Saltzpyre: Volley Crossbow | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::wh_deus_01` | Saltzpyre: Griffon-foot | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::wh_dual_hammer` | Saltzpyre: Dual Skull-Splitters | weapon_access | es_questingknight | mod_loc |
@@ -3606,6 +3606,18 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `es_questingknight::wh_flail_shield` | Saltzpyre: Flail and Shield | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::wh_hammer_book` | Saltzpyre: Hammer and Tome | weapon_access | es_questingknight | mod_loc |
 | `es_questingknight::wh_repeating_pistols` | Saltzpyre: Repeating Pistol | weapon_access | es_questingknight | mod_loc |
+| `we_maidenguard::bw_1h_crowbill` | Sienna: Crowbill | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::bw_1h_flail_flaming` | Sienna: Flaming Flail | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::bw_dagger` | Sienna: Dagger | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::bw_deus_01` | Sienna: Coruscation Staff | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::bw_flame_sword` | Sienna: Flame Sword | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::bw_ghost_scythe` | Sienna: Ensorcelled Reaper | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::bw_necromancy_staff` | Sienna: Soulstealer Staff | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::bw_skullstaff_beam` | Sienna: Beam Staff | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::bw_skullstaff_fireball` | Sienna: Fireball Staff | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::bw_skullstaff_flamethrower` | Sienna: Flamestorm Staff | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::bw_skullstaff_geiser` | Sienna: Conflagration Staff | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::bw_skullstaff_spear` | Sienna: Bolt Staff | weapon_access | we_maidenguard | mod_loc |
 | `we_maidenguard::dr_1h_hammer` | Bardin: Hammer | weapon_access | we_maidenguard | mod_loc |
 | `we_maidenguard::dr_1h_throwing_axes` | Bardin: Throwing Axes | weapon_access | we_maidenguard | mod_loc |
 | `we_maidenguard::dr_2h_axe` | Bardin: Great Axe | weapon_access | we_maidenguard | mod_loc |
@@ -3653,7 +3665,34 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `we_maidenguard::we_shortbow_hagbane` | Kerillian: Hagbane Short Bow | weapon_access | we_maidenguard | mod_loc |
 | `we_maidenguard::we_spear` | Kerillian: Spear | weapon_access | we_maidenguard | mod_loc |
 | `we_maidenguard::wh_1h_axe` | Saltzpyre: Axe | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_1h_falchion` | Saltzpyre: Falchion | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_1h_hammer` | Saltzpyre: 1H Hammer | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_2h_billhook` | Saltzpyre: Billhook | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_2h_hammer` | Saltzpyre: 2H Hammer | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_2h_sword` | Saltzpyre: 2H Sword | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_brace_of_pistols` | Saltzpyre: Brace of Pistols | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_crossbow` | Saltzpyre: Crossbow | weapon_access | we_maidenguard | mod_loc |
 | `we_maidenguard::wh_crossbow_repeater` | Saltzpyre: Volley Crossbow | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_deus_01` | Saltzpyre: Griffon-foot | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_dual_hammer` | Saltzpyre: Dual Hammers | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_dual_wield_axe_falchion` | Saltzpyre: Axe & Falchion | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_fencing_sword` | Saltzpyre: Rapier | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_flail_shield` | Saltzpyre: Flail and Shield | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_hammer_book` | Saltzpyre: Hammer and Tome | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_hammer_shield` | Saltzpyre: Skull-Splitter and Shield | weapon_access | we_maidenguard | mod_loc |
+| `we_maidenguard::wh_repeating_pistols` | Saltzpyre: Repeater Pistol | weapon_access | we_maidenguard | mod_loc |
+| `we_shade::bw_1h_crowbill` | Sienna: Crowbill | weapon_access | we_shade | mod_loc |
+| `we_shade::bw_1h_flail_flaming` | Sienna: Flaming Flail | weapon_access | we_shade | mod_loc |
+| `we_shade::bw_dagger` | Sienna: Dagger | weapon_access | we_shade | mod_loc |
+| `we_shade::bw_deus_01` | Sienna: Coruscation Staff | weapon_access | we_shade | mod_loc |
+| `we_shade::bw_flame_sword` | Sienna: Flame Sword | weapon_access | we_shade | mod_loc |
+| `we_shade::bw_ghost_scythe` | Sienna: Ensorcelled Reaper | weapon_access | we_shade | mod_loc |
+| `we_shade::bw_necromancy_staff` | Sienna: Soulstealer Staff | weapon_access | we_shade | mod_loc |
+| `we_shade::bw_skullstaff_beam` | Sienna: Beam Staff | weapon_access | we_shade | mod_loc |
+| `we_shade::bw_skullstaff_fireball` | Sienna: Fireball Staff | weapon_access | we_shade | mod_loc |
+| `we_shade::bw_skullstaff_flamethrower` | Sienna: Flamestorm Staff | weapon_access | we_shade | mod_loc |
+| `we_shade::bw_skullstaff_geiser` | Sienna: Conflagration Staff | weapon_access | we_shade | mod_loc |
+| `we_shade::bw_skullstaff_spear` | Sienna: Bolt Staff | weapon_access | we_shade | mod_loc |
 | `we_shade::dr_1h_hammer` | Bardin: Hammer | weapon_access | we_shade | mod_loc |
 | `we_shade::dr_1h_throwing_axes` | Bardin: Throwing Axes | weapon_access | we_shade | mod_loc |
 | `we_shade::dr_2h_axe` | Bardin: Great Axe | weapon_access | we_shade | mod_loc |
@@ -3701,7 +3740,34 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `we_shade::we_shortbow_hagbane` | Kerillian: Hagbane Short Bow | weapon_access | we_shade | mod_loc |
 | `we_shade::we_spear` | Kerillian: Spear | weapon_access | we_shade | mod_loc |
 | `we_shade::wh_1h_axe` | Saltzpyre: Axe | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_1h_falchion` | Saltzpyre: Falchion | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_1h_hammer` | Saltzpyre: 1H Hammer | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_2h_billhook` | Saltzpyre: Billhook | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_2h_hammer` | Saltzpyre: 2H Hammer | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_2h_sword` | Saltzpyre: 2H Sword | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_brace_of_pistols` | Saltzpyre: Brace of Pistols | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_crossbow` | Saltzpyre: Crossbow | weapon_access | we_shade | mod_loc |
 | `we_shade::wh_crossbow_repeater` | Saltzpyre: Volley Crossbow | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_deus_01` | Saltzpyre: Griffon-foot | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_dual_hammer` | Saltzpyre: Dual Hammers | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_dual_wield_axe_falchion` | Saltzpyre: Axe & Falchion | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_fencing_sword` | Saltzpyre: Rapier | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_flail_shield` | Saltzpyre: Flail and Shield | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_hammer_book` | Saltzpyre: Hammer and Tome | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_hammer_shield` | Saltzpyre: Skull-Splitter and Shield | weapon_access | we_shade | mod_loc |
+| `we_shade::wh_repeating_pistols` | Saltzpyre: Repeater Pistol | weapon_access | we_shade | mod_loc |
+| `we_thornsister::bw_1h_crowbill` | Sienna: Crowbill | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::bw_1h_flail_flaming` | Sienna: Flaming Flail | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::bw_dagger` | Sienna: Dagger | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::bw_deus_01` | Sienna: Coruscation Staff | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::bw_flame_sword` | Sienna: Flame Sword | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::bw_ghost_scythe` | Sienna: Ensorcelled Reaper | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::bw_necromancy_staff` | Sienna: Soulstealer Staff | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::bw_skullstaff_beam` | Sienna: Beam Staff | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::bw_skullstaff_fireball` | Sienna: Fireball Staff | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::bw_skullstaff_flamethrower` | Sienna: Flamestorm Staff | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::bw_skullstaff_geiser` | Sienna: Conflagration Staff | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::bw_skullstaff_spear` | Sienna: Bolt Staff | weapon_access | we_thornsister | mod_loc |
 | `we_thornsister::dr_1h_hammer` | Bardin: Hammer | weapon_access | we_thornsister | mod_loc |
 | `we_thornsister::dr_1h_throwing_axes` | Bardin: Throwing Axes | weapon_access | we_thornsister | mod_loc |
 | `we_thornsister::dr_2h_axe` | Bardin: Great Axe | weapon_access | we_thornsister | mod_loc |
@@ -3750,7 +3816,34 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `we_thornsister::we_shortbow_hagbane` | Kerillian: Hagbane Short Bow | weapon_access | we_thornsister | mod_loc |
 | `we_thornsister::we_spear` | Kerillian: Spear | weapon_access | we_thornsister | mod_loc |
 | `we_thornsister::wh_1h_axe` | Saltzpyre: Axe | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_1h_falchion` | Saltzpyre: Falchion | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_1h_hammer` | Saltzpyre: 1H Hammer | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_2h_billhook` | Saltzpyre: Billhook | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_2h_hammer` | Saltzpyre: 2H Hammer | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_2h_sword` | Saltzpyre: 2H Sword | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_brace_of_pistols` | Saltzpyre: Brace of Pistols | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_crossbow` | Saltzpyre: Crossbow | weapon_access | we_thornsister | mod_loc |
 | `we_thornsister::wh_crossbow_repeater` | Saltzpyre: Volley Crossbow | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_deus_01` | Saltzpyre: Griffon-foot | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_dual_hammer` | Saltzpyre: Dual Hammers | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_dual_wield_axe_falchion` | Saltzpyre: Axe & Falchion | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_fencing_sword` | Saltzpyre: Rapier | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_flail_shield` | Saltzpyre: Flail and Shield | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_hammer_book` | Saltzpyre: Hammer and Tome | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_hammer_shield` | Saltzpyre: Skull-Splitter and Shield | weapon_access | we_thornsister | mod_loc |
+| `we_thornsister::wh_repeating_pistols` | Saltzpyre: Repeater Pistol | weapon_access | we_thornsister | mod_loc |
+| `we_waywatcher::bw_1h_crowbill` | Sienna: Crowbill | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::bw_1h_flail_flaming` | Sienna: Flaming Flail | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::bw_dagger` | Sienna: Dagger | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::bw_deus_01` | Sienna: Coruscation Staff | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::bw_flame_sword` | Sienna: Flame Sword | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::bw_ghost_scythe` | Sienna: Ensorcelled Reaper | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::bw_necromancy_staff` | Sienna: Soulstealer Staff | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::bw_skullstaff_beam` | Sienna: Beam Staff | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::bw_skullstaff_fireball` | Sienna: Fireball Staff | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::bw_skullstaff_flamethrower` | Sienna: Flamestorm Staff | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::bw_skullstaff_geiser` | Sienna: Conflagration Staff | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::bw_skullstaff_spear` | Sienna: Bolt Staff | weapon_access | we_waywatcher | mod_loc |
 | `we_waywatcher::dr_1h_hammer` | Bardin: Hammer | weapon_access | we_waywatcher | mod_loc |
 | `we_waywatcher::dr_1h_throwing_axes` | Bardin: Throwing Axes | weapon_access | we_waywatcher | mod_loc |
 | `we_waywatcher::dr_2h_axe` | Bardin: Great Axe | weapon_access | we_waywatcher | mod_loc |
@@ -3798,17 +3891,77 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `we_waywatcher::we_shortbow_hagbane` | Kerillian: Hagbane Short Bow | weapon_access | we_waywatcher | mod_loc |
 | `we_waywatcher::we_spear` | Kerillian: Spear | weapon_access | we_waywatcher | mod_loc |
 | `we_waywatcher::wh_1h_axe` | Saltzpyre: Axe | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_1h_falchion` | Saltzpyre: Falchion | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_1h_hammer` | Saltzpyre: 1H Hammer | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_2h_billhook` | Saltzpyre: Billhook | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_2h_hammer` | Saltzpyre: 2H Hammer | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_2h_sword` | Saltzpyre: 2H Sword | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_brace_of_pistols` | Saltzpyre: Brace of Pistols | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_crossbow` | Saltzpyre: Crossbow | weapon_access | we_waywatcher | mod_loc |
 | `we_waywatcher::wh_crossbow_repeater` | Saltzpyre: Volley Crossbow | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_deus_01` | Saltzpyre: Griffon-foot | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_dual_hammer` | Saltzpyre: Dual Hammers | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_dual_wield_axe_falchion` | Saltzpyre: Axe & Falchion | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_fencing_sword` | Saltzpyre: Rapier | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_flail_shield` | Saltzpyre: Flail and Shield | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_hammer_book` | Saltzpyre: Hammer and Tome | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_hammer_shield` | Saltzpyre: Skull-Splitter and Shield | weapon_access | we_waywatcher | mod_loc |
+| `we_waywatcher::wh_repeating_pistols` | Saltzpyre: Repeater Pistol | weapon_access | we_waywatcher | mod_loc |
 | `wh_bountyhunter::bw_1h_crowbill` | Sienna: Crowbill | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::bw_1h_mace` | Sienna: Mace | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::bw_dagger` | Sienna: Dagger | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::bw_deus_01` | Sienna: Coruscation Staff | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::bw_flame_sword` | Sienna: Flame Sword | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::bw_ghost_scythe` | Sienna: Ensorcelled Reaper | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::bw_necromancy_staff` | Sienna: Soulstealer Staff | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::bw_skullstaff_beam` | Sienna: Beam Staff | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::bw_skullstaff_fireball` | Sienna: Fireball Staff | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::bw_skullstaff_flamethrower` | Sienna: Flamestorm Staff | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::bw_skullstaff_geiser` | Sienna: Conflagration Staff | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::bw_skullstaff_spear` | Sienna: Bolt Staff | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_1h_throwing_axes` | Bardin: Throwing Axes | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_2h_axe` | Bardin: Greataxe | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_2h_cog_hammer` | Bardin: Cog Hammer | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_2h_hammer` | Bardin: 2H Hammer | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_2h_pick` | Bardin: Pickaxe | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_deus_01` | Bardin: Trollhammer Torpedo | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_drake_pistol` | Bardin: Drakefire Pistols | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_drakegun` | Bardin: Drakegun | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_rakegun` | Bardin: Grudge-Raker | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_shield_axe` | Bardin: Axe and Shield | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_shield_hammer` | Bardin: Hammer and Shield | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_steam_pistol` | Bardin: Masterwork Pistol | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::es_1h_flail` | Saltzpyre: Flail | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::es_1h_mace` | Kruber: Mace | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::es_1h_sword` | Kruber: Sword | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::es_2h_hammer` | Kruber: Greathammer | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::es_2h_heavy_spear` | Kruber: Tuskgor Spear | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::es_2h_sword_executioner` | Kruber: Executioner Sword | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::es_bastard_sword` | Kruber: Bretonnian Longsword | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::es_blunderbuss` | Kruber: Blunderbuss | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::es_deus_01` | Kruber: Spear and Shield | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::es_dual_wield_hammer_sword` | Kruber: Mace and Sword | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::es_halberd` | Kruber: Halberd | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::es_handgun` | Kruber: Handgun | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::es_longbow` | Kruber: Longbow | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::es_mace_shield` | Kruber: Mace and Shield | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::es_repeating_handgun` | Kruber: Repeater Handgun | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::es_sword_shield` | Kruber: Sword and Shield | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::es_sword_shield_breton` | Kruber: Bretonnian Sword and Shield | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::we_1h_axe` | Kerillian: 1H Axe | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::we_1h_spears_shield` | Kerillian: Spear and Shield | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::we_1h_sword` | Kerillian: Sword | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::we_2h_axe` | Kerillian: Glaive | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::we_2h_sword` | Kerillian: Elf 2H Sword | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::we_crossbow_repeater` | Kerillian: Volley Crossbow | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::we_deus_01` | Kerillian: Moonfire Bow | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::we_dual_wield_daggers` | Kerillian: Dual Daggers | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::we_dual_wield_sword_dagger` | Kerillian: Sword & Dagger | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::we_dual_wield_swords` | Kerillian: Dual Swords | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::we_javelin` | Kerillian: Javelin | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::we_longbow` | Kerillian: Longbow | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::we_shortbow` | Kerillian: Shortbow | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::we_shortbow_hagbane` | Kerillian: Hagbane Shortbow | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::we_spear` | Kerillian: Spear | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::wh_1h_axe` | Saltzpyre: Axe | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::wh_1h_falchion` | Saltzpyre: Falchion | weapon_access | wh_bountyhunter | mod_loc |
@@ -3825,15 +3978,60 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `wh_bountyhunter::wh_fencing_sword` | Saltzpyre: Rapier | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::wh_repeating_pistols` | Saltzpyre: Repeating Pistol | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_captain::bw_1h_crowbill` | Sienna: Crowbill | weapon_access | wh_captain | mod_loc |
+| `wh_captain::bw_1h_mace` | Sienna: Mace | weapon_access | wh_captain | mod_loc |
+| `wh_captain::bw_dagger` | Sienna: Dagger | weapon_access | wh_captain | mod_loc |
+| `wh_captain::bw_deus_01` | Sienna: Coruscation Staff | weapon_access | wh_captain | mod_loc |
+| `wh_captain::bw_flame_sword` | Sienna: Flame Sword | weapon_access | wh_captain | mod_loc |
+| `wh_captain::bw_ghost_scythe` | Sienna: Ensorcelled Reaper | weapon_access | wh_captain | mod_loc |
+| `wh_captain::bw_necromancy_staff` | Sienna: Soulstealer Staff | weapon_access | wh_captain | mod_loc |
+| `wh_captain::bw_skullstaff_beam` | Sienna: Beam Staff | weapon_access | wh_captain | mod_loc |
+| `wh_captain::bw_skullstaff_fireball` | Sienna: Fireball Staff | weapon_access | wh_captain | mod_loc |
+| `wh_captain::bw_skullstaff_flamethrower` | Sienna: Flamestorm Staff | weapon_access | wh_captain | mod_loc |
+| `wh_captain::bw_skullstaff_geiser` | Sienna: Conflagration Staff | weapon_access | wh_captain | mod_loc |
+| `wh_captain::bw_skullstaff_spear` | Sienna: Bolt Staff | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_1h_throwing_axes` | Bardin: Throwing Axes | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_2h_axe` | Bardin: Greataxe | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_2h_cog_hammer` | Bardin: Cog Hammer | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_2h_hammer` | Bardin: 2H Hammer | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_2h_pick` | Bardin: Pickaxe | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_deus_01` | Bardin: Trollhammer Torpedo | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_drake_pistol` | Bardin: Drakefire Pistols | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_drakegun` | Bardin: Drakegun | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_rakegun` | Bardin: Grudge-Raker | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_shield_axe` | Bardin: Axe and Shield | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_shield_hammer` | Bardin: Hammer and Shield | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_steam_pistol` | Bardin: Masterwork Pistol | weapon_access | wh_captain | mod_loc |
 | `wh_captain::es_1h_flail` | Saltzpyre: Flail | weapon_access | wh_captain | mod_loc |
 | `wh_captain::es_1h_mace` | Kruber: Mace | weapon_access | wh_captain | mod_loc |
 | `wh_captain::es_1h_sword` | Kruber: Sword | weapon_access | wh_captain | mod_loc |
+| `wh_captain::es_2h_hammer` | Kruber: Greathammer | weapon_access | wh_captain | mod_loc |
 | `wh_captain::es_2h_heavy_spear` | Kruber: Tuskgor Spear | weapon_access | wh_captain | mod_loc |
+| `wh_captain::es_2h_sword_executioner` | Kruber: Executioner Sword | weapon_access | wh_captain | mod_loc |
+| `wh_captain::es_bastard_sword` | Kruber: Bretonnian Longsword | weapon_access | wh_captain | mod_loc |
+| `wh_captain::es_blunderbuss` | Kruber: Blunderbuss | weapon_access | wh_captain | mod_loc |
+| `wh_captain::es_deus_01` | Kruber: Spear and Shield | weapon_access | wh_captain | mod_loc |
+| `wh_captain::es_dual_wield_hammer_sword` | Kruber: Mace and Sword | weapon_access | wh_captain | mod_loc |
 | `wh_captain::es_halberd` | Kruber: Halberd | weapon_access | wh_captain | mod_loc |
+| `wh_captain::es_handgun` | Kruber: Handgun | weapon_access | wh_captain | mod_loc |
 | `wh_captain::es_longbow` | Kruber: Longbow | weapon_access | wh_captain | mod_loc |
+| `wh_captain::es_mace_shield` | Kruber: Mace and Shield | weapon_access | wh_captain | mod_loc |
+| `wh_captain::es_repeating_handgun` | Kruber: Repeater Handgun | weapon_access | wh_captain | mod_loc |
+| `wh_captain::es_sword_shield` | Kruber: Sword and Shield | weapon_access | wh_captain | mod_loc |
+| `wh_captain::es_sword_shield_breton` | Kruber: Bretonnian Sword and Shield | weapon_access | wh_captain | mod_loc |
+| `wh_captain::we_1h_axe` | Kerillian: 1H Axe | weapon_access | wh_captain | mod_loc |
+| `wh_captain::we_1h_spears_shield` | Kerillian: Spear and Shield | weapon_access | wh_captain | mod_loc |
 | `wh_captain::we_1h_sword` | Kerillian: Sword | weapon_access | wh_captain | mod_loc |
+| `wh_captain::we_2h_axe` | Kerillian: Glaive | weapon_access | wh_captain | mod_loc |
+| `wh_captain::we_2h_sword` | Kerillian: Elf 2H Sword | weapon_access | wh_captain | mod_loc |
 | `wh_captain::we_crossbow_repeater` | Kerillian: Volley Crossbow | weapon_access | wh_captain | mod_loc |
+| `wh_captain::we_deus_01` | Kerillian: Moonfire Bow | weapon_access | wh_captain | mod_loc |
+| `wh_captain::we_dual_wield_daggers` | Kerillian: Dual Daggers | weapon_access | wh_captain | mod_loc |
+| `wh_captain::we_dual_wield_sword_dagger` | Kerillian: Sword & Dagger | weapon_access | wh_captain | mod_loc |
+| `wh_captain::we_dual_wield_swords` | Kerillian: Dual Swords | weapon_access | wh_captain | mod_loc |
+| `wh_captain::we_javelin` | Kerillian: Javelin | weapon_access | wh_captain | mod_loc |
 | `wh_captain::we_longbow` | Kerillian: Longbow | weapon_access | wh_captain | mod_loc |
+| `wh_captain::we_shortbow` | Kerillian: Shortbow | weapon_access | wh_captain | mod_loc |
+| `wh_captain::we_shortbow_hagbane` | Kerillian: Hagbane Shortbow | weapon_access | wh_captain | mod_loc |
 | `wh_captain::we_spear` | Kerillian: Spear | weapon_access | wh_captain | mod_loc |
 | `wh_captain::wh_1h_axe` | Saltzpyre: Axe | weapon_access | wh_captain | mod_loc |
 | `wh_captain::wh_1h_falchion` | Saltzpyre: Falchion | weapon_access | wh_captain | mod_loc |
@@ -3857,15 +4055,60 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `wh_priest::wh_hammer_book` | Saltzpyre: Hammer and Tome | weapon_access | wh_priest | mod_loc |
 | `wh_priest::wh_hammer_shield` | Saltzpyre: Skull-Splitter and Shield | weapon_access | wh_priest | mod_loc |
 | `wh_zealot::bw_1h_crowbill` | Sienna: Crowbill | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::bw_1h_mace` | Sienna: Mace | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::bw_dagger` | Sienna: Dagger | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::bw_deus_01` | Sienna: Coruscation Staff | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::bw_flame_sword` | Sienna: Flame Sword | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::bw_ghost_scythe` | Sienna: Ensorcelled Reaper | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::bw_necromancy_staff` | Sienna: Soulstealer Staff | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::bw_skullstaff_beam` | Sienna: Beam Staff | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::bw_skullstaff_fireball` | Sienna: Fireball Staff | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::bw_skullstaff_flamethrower` | Sienna: Flamestorm Staff | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::bw_skullstaff_geiser` | Sienna: Conflagration Staff | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::bw_skullstaff_spear` | Sienna: Bolt Staff | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_1h_throwing_axes` | Bardin: Throwing Axes | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_2h_axe` | Bardin: Greataxe | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_2h_cog_hammer` | Bardin: Cog Hammer | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_2h_hammer` | Bardin: 2H Hammer | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_2h_pick` | Bardin: Pickaxe | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_deus_01` | Bardin: Trollhammer Torpedo | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_drake_pistol` | Bardin: Drakefire Pistols | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_drakegun` | Bardin: Drakegun | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_rakegun` | Bardin: Grudge-Raker | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_shield_axe` | Bardin: Axe and Shield | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_shield_hammer` | Bardin: Hammer and Shield | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_steam_pistol` | Bardin: Masterwork Pistol | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::es_1h_flail` | Saltzpyre: Flail | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::es_1h_mace` | Kruber: Mace | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::es_1h_sword` | Kruber: Sword | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::es_2h_hammer` | Kruber: Greathammer | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::es_2h_heavy_spear` | Kruber: Tuskgor Spear | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::es_2h_sword_executioner` | Kruber: Executioner Sword | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::es_bastard_sword` | Kruber: Bretonnian Longsword | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::es_blunderbuss` | Kruber: Blunderbuss | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::es_deus_01` | Kruber: Spear and Shield | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::es_dual_wield_hammer_sword` | Kruber: Mace and Sword | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::es_halberd` | Kruber: Halberd | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::es_handgun` | Kruber: Handgun | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::es_longbow` | Kruber: Longbow | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::es_mace_shield` | Kruber: Mace and Shield | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::es_repeating_handgun` | Kruber: Repeater Handgun | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::es_sword_shield` | Kruber: Sword and Shield | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::es_sword_shield_breton` | Kruber: Bretonnian Sword and Shield | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::we_1h_axe` | Kerillian: 1H Axe | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::we_1h_spears_shield` | Kerillian: Spear and Shield | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::we_1h_sword` | Kerillian: Sword | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::we_2h_axe` | Kerillian: Glaive | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::we_2h_sword` | Kerillian: Elf 2H Sword | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::we_crossbow_repeater` | Kerillian: Volley Crossbow | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::we_deus_01` | Kerillian: Moonfire Bow | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::we_dual_wield_daggers` | Kerillian: Dual Daggers | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::we_dual_wield_sword_dagger` | Kerillian: Sword & Dagger | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::we_dual_wield_swords` | Kerillian: Dual Swords | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::we_javelin` | Kerillian: Javelin | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::we_longbow` | Kerillian: Longbow | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::we_shortbow` | Kerillian: Shortbow | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::we_shortbow_hagbane` | Kerillian: Hagbane Shortbow | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::we_spear` | Kerillian: Spear | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::wh_1h_axe` | Saltzpyre: Axe | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::wh_1h_falchion` | Saltzpyre: Falchion | weapon_access | wh_zealot | mod_loc |

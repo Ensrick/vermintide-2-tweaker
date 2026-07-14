@@ -4,7 +4,7 @@
 
 | Field | Check |
 |---|---|
-| Fix version | WT 0.12.228-dev (unverified candidate) |
+| Fix version | WT 0.12.228-dev (user verified 2026-07-13) |
 | Automated | `/wt_regression_test`: `issue585_moonfire_energy_hud_loadout_lifecycle`; offline Lua coverage checks nonnative reset, full-state no-op, Moonfire preservation, and native Kerillian exclusion. |
 | Repeater transition | On a non-Kerillian career, drain Moonfire below full, replace it with Repeater Crossbow, and return to gameplay. The energy bar disappears without a mission restart. |
 | Saltzpyre ranged | Repeat by replacing Moonfire with a normal Saltzpyre ranged weapon such as Crossbow or Handgun. No stale bar remains. |
@@ -16,7 +16,7 @@
 
 | Field | Check |
 |---|---|
-| Fix version | WT 0.12.227-dev (unverified candidate) |
+| Fix version | WT 0.12.227-dev (user verified 2026-07-13) |
 | Automated | `/wt_regression_test`: `issue584_moonfire_stowed_native_regen_contract` covers melee-active Moonfire, bow-active single-rate behavior, native Kerillian exclusion, non-Moonfire replacement, and an empty ranged slot. |
 | Cross-career | On Kruber, Bardin, Saltzpyre, or Sienna with Moonfire equipped: drain energy, switch to melee, and verify the bar continues refilling at the native 1.5/s rate. |
 | Slot swaps | Repeatedly swap melee/ranged while below maximum. Recharge speed must remain constant, with no doubled increments or pause while melee is active. |
@@ -27,7 +27,7 @@
 
 | Field | Check |
 |---|---|
-| Fix version | WT 0.12.226-dev; CWV 0.1.391-dev (unverified candidates) |
+| Fix version | WT 0.12.226-dev; CWV 0.1.391-dev (user verified 2026-07-13) |
 | Automated | `/wt_regression_test`: `issue582_native_dual_axes_cwv_ownership_boundary`; `/cwv_regression_test`: `issue582_dual_axes_native_variant_ownership_boundary` and `dual_axes_cosmetic_family_parity`. |
 | Availability | Native `dr_dual_wield_axes` is absent from every Kruber and Saltzpyre WT category/control. Bardin remains unchanged. Kerillian remains unchanged. |
 | CWV owners | Kruber receives `cwv_es_dual_axes`; Saltzpyre receives `cwv_wh_dual_axes`. Both retain their full curated illusion pools and receiver-specific 3P mappings. |

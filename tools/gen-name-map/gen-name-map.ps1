@@ -41,8 +41,7 @@
 #         (line ~6246), exposed via the _G Localize hook (line ~6259). The
 #         commented-out --[[ ]] musket block (~582-602) is SKIPPED.
 #       * cosmetics _custom_illusions[].display_name (literal English) in
-#         cosmetics_tweaker.lua (~line 988); mirrored into _custom_loc
-#         (~line 1266).
+#         _cos_illusions.lua; mirrored into the mod's localization/runtime tables.
 #       * wt  weapon_unlock_map (career -> {weapon_key,...}) in wt_unlock_data.lua
 #         (~line 44); loc keys unlock_<career>_<weapon> in weapon_tweaker_localization.lua.
 #   - Mod loc tables: <mod>/scripts/mods/<mod>/<mod>_localization.lua
@@ -634,7 +633,7 @@ Log "      cwv variant entries: $cwvCount"
 # ============================================================================
 Log "[5/6] Parsing cosmetics_tweaker _custom_illusions..."
 $cosCount = 0
-$cosFile = Join-Path $repoRoot 'cosmetics_tweaker\scripts\mods\cosmetics_tweaker\cosmetics_tweaker.lua'
+$cosFile = Join-Path $repoRoot 'cosmetics_tweaker\scripts\mods\cosmetics_tweaker\_cos_illusions.lua'
 if (Test-Path $cosFile) {
     $cosText = Read-Utf8 $cosFile
     $ciStart = [regex]::Match($cosText, 'local\s+_custom_illusions\s*=\s*\{')
