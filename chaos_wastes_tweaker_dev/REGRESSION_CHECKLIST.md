@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+### bomb-bubble-owner-cooldown-display - issue #357
+
+| Field | Value |
+|---|---|
+| Symptom | Bomb-bubble cooldown gating has no visible owner timer, so players cannot tell when their boon can proc again. |
+| Root cause | The host-only gameplay gate stamped its private buff instance but had no owner-targeted presentation path. |
+| Fix version(s) | ct_dev 0.7.274-dev (not deployed) |
+| Category | COOP / OWNER UI / HOST AUTHORITY / VMF RPC |
+| Repro | With two players holding supported bomb-bubble boons and a nonzero cooldown, throw grenades from each peer and observe both buff bars. |
+| Expected post-fix | Each affected owner sees only their own native boon icon count down for the configured interval. Gated procs do not restart it; interval zero shows nothing and preserves vanilla behavior. |
+| Detection | Offline `test_ct_bomb_cooldown_display.lua`; `/ct_regression_test`: `issue357_bomb_bubble_cooldown_display`; bounded `[ct:357]` apply/drop rows. |
+
 ### starting-talent-career-identity - issue #556
 
 | Field | Value |

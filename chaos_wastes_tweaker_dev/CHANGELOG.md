@@ -1,5 +1,16 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.274-dev (2026-07-14) - #357 bomb-bubble cooldown HUD timer [verify-fix-coop; not deployed]
+
+- **Fix.** When the existing host-authoritative `grenade_explode_buff_area` gate allows one of the concentration, critical-chance, healing, or speed bomb bubbles, CT now shows that boon's native icon as a cooldown timer on the affected player's buff bar for exactly the configured interval. An interval of zero remains vanilla and creates no display.
+- **Wire safety.** The four presentation-only templates are registered only in the local runtime `BuffTemplates` table and never in vanilla `NetworkLookup`. The host applies directly for its local owner or sends one bounded VMF event to the remote owner. The receiver requires the current `CT_RPC_SCHEMA`, requires the sender to be the resolved host, allowlists the four boon ids, and rejects zero, NaN, or out-of-range durations. Other players do not receive the timer.
+- **Gameplay invariant.** The notification occurs only after the existing allowed-branch `_ct_last_bubble_t` stamp. It does not move the stamp, change the rejection branch, alter the configured interval, or replace the final vanilla proc call.
+- **Regression.** Added offline `test_ct_bomb_cooldown_display.lua` coverage for exact template/icon identity, owner-only host validation, malformed payload rejection, zero semantics, local-only registration, and allowed-branch ordering. Runtime `/ct_regression_test` adds `issue357_bomb_bubble_cooldown_display`.
+
+**Source audit:** vanilla defines the four boon icons and their shared `grenade_explode_buff_area` proc in `deus_power_up_settings.lua:4380-4510`; `BuffUI` renders active templates carrying `icon`, `duration`, and `is_cooldown` (`buff_ui.lua:108-186`); `BuffExtension.add_buff` accepts `external_optional_duration` (`buff_extension.lua:165-244`). `PlayerManager.owner` and `RemotePlayer.network_id` provide the owner-to-peer route (`player_manager.lua:344-346`; `remote_player.lua:135-144`).
+
+**Verify after deployment (two players):** equip different supported bomb-bubble boons on host and client and set a nonzero cooldown. Each owner must see only their own boon icon count down for the full configured interval after an allowed grenade proc; a gated grenade must not restart it. Check all four boon icons. Set the interval to zero and confirm neither a timer nor CT gating appears. Run `/ct_regression_test` and require `issue357_bomb_bubble_cooldown_display` to pass.
+
 ## 0.7.273-dev (2026-07-14) - #556 career-specific starting talents [verify-fix; not deployed]
 
 - **Root cause.** CT treated every configured starting boon as a static template. Vanilla talent power-ups are deliberately generic (`talent_<tier>_<column>`): their template carries only `talent_tier`/`talent_index`, and every native UI resolves the actual talent name and icon through `DeusPowerUpUtils` with the viewer's profile/career. CT's Tab preview instead read the absent generic `display_name`/`icon`, so it showed an internal id and no icon.

@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.273-dev"
+local MOD_VERSION = "0.7.274-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -76,6 +76,12 @@ pcall(printf, "Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 -- VMF_RECIPES.md § 10 documents the full design + when to bump.
 local CT_RPC_SCHEMA = 1
 pcall(printf, "[ct:rpc] schema_version=%d", CT_RPC_SCHEMA)
+
+-- #357 uses one owner-targeted VMF event and client-local BuffTemplates. Keeping
+-- this on `mod` avoids another file-chunk local near Lua 5.1's 200-local limit.
+mod._ct_bomb_cooldown_display = mod:dofile(
+    "scripts/mods/chaos_wastes_tweaker_dev/_ct_bomb_cooldown_display")
+mod._ct_bomb_cooldown_display.install(CT_RPC_SCHEMA)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- `_dbg` is for confirmation / expected behavior — mod:debug (file only,
@@ -10945,6 +10951,10 @@ if rawget(_G, "ProcFunctions") and ProcFunctions.grenade_explode_buff_area then
                     return  -- rate-limited: skip the buff-area spawn this explosion
                 end
                 buff._ct_last_bubble_t = t
+                -- Presentation only: the display module either applies a local HUD
+                -- buff for the host-owner or sends one bounded, owner-targeted VMF
+                -- event. It cannot alter this gate's timestamp or vanilla proc call.
+                mod._ct_bomb_cooldown_display.notify_allowed(owner_unit, name, interval)
                 pcall(printf, "[ct-bomb-boon] supportbomb '%s' proc allowed (min interval %ds)",
                     tostring(name), interval)
             end
@@ -16323,6 +16333,10 @@ _rt_register("ct_rpc_schema_present", function()
     if CT_RPC_SCHEMA < 1 then
         return string.format("CT_RPC_SCHEMA=%d is < 1 (initial value should be 1)", CT_RPC_SCHEMA)
     end
+end)
+
+_rt_register("issue357_bomb_bubble_cooldown_display", function()
+    return mod._ct_bomb_cooldown_display.regression_check(CT_RPC_SCHEMA)
 end)
 
 
