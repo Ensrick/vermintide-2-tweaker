@@ -1,0 +1,35 @@
+return function(H, repo_root)
+    local path = repo_root .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_offhand_preload_lifecycle.lua"
+    local chunk, err = loadfile(path)
+    if not chunk then error(err) end
+    local Lifecycle = chunk()
+
+    H.test("Cosmetics offhand preload accepts only its live generation", function()
+        local ledger = Lifecycle.new()
+        local token = ledger:begin("shared_package")
+        H.truthy(token)
+        H.truthy(ledger:complete("shared_package", token))
+        H.equal("ready", ledger.states.shared_package)
+        H.equal(1, ledger.stats.ready)
+    end)
+
+    H.test("Cosmetics offhand preload rejects callback retained by another owner", function()
+        local ledger = Lifecycle.new()
+        local token = ledger:begin("shared_package")
+        local released = ledger:release()
+        H.deep_equal({ "shared_package" }, released)
+        H.truthy(not ledger:complete("shared_package", token))
+        H.equal(nil, ledger.states.shared_package)
+        H.equal(1, ledger.stats.late_callbacks_ignored)
+        H.equal(nil, ledger:begin("after_unload"))
+    end)
+
+    H.test("Cosmetics offhand preload acquisition is deduplicated and cancellable", function()
+        local ledger = Lifecycle.new()
+        local token = ledger:begin("one")
+        H.equal(nil, ledger:begin("one"))
+        H.truthy(ledger:cancel("one", token))
+        H.equal(0, ledger.stats.acquired)
+        H.equal(nil, ledger.states.one)
+    end)
+end

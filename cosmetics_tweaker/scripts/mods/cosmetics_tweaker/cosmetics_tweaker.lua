@@ -44,6 +44,7 @@ local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
 -- dofile time; the deferred template scrub runs from mod.update via LA_OKRI.tick.
 local LA_OKRI = mod:dofile("scripts/mods/cosmetics_tweaker/_la_okri")
 local SCORE_IDENTITY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_score_identity")
+local OFFHAND_PRELOAD_LIFECYCLE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_preload_lifecycle")
 -- v0.9.24-dev: UI diagnostic dump harness. No-op at runtime unless the
 -- enable_debug_logging VMF toggle is on. See _ui_dump.lua header for
 -- what gets dumped per window class.
@@ -56,7 +57,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.95-dev"
+local MOD_VERSION = "0.9.96-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -970,15 +971,16 @@ end)
 -- degrades to the base mesh instead of reaching world.spawn_unit early. This
 -- removes the startup ResourcePackage.flush storm while preserving the crash
 -- gate. PackageManager invokes our callback only after force_load completes.
-local _preloaded_offhand_packages = {}
-local _owned_offhand_package_refs = {}
-local _OFFHAND_PACKAGE_REFERENCE = "cosmetics_tweaker"
+local _offhand_preload_lifecycle = OFFHAND_PRELOAD_LIFECYCLE.new()
+local _preloaded_offhand_packages = _offhand_preload_lifecycle.states
+local _OFFHAND_PACKAGE_REFERENCE = "cosmetics_tweaker_offhand"
+local _offhand_late_callback_reports = 0
 local function _preload_one(package_path)
     if not package_path or package_path == "" then return end
     if _preloaded_offhand_packages[package_path] then return end
     if not Managers or not Managers.package then return end
     if Managers.package:has_loaded(package_path) then
-        _preloaded_offhand_packages[package_path] = true
+        _offhand_preload_lifecycle:mark_resident(package_path)
         return
     end
     -- Skip if the unit is already engine-resident via a resource_package
@@ -994,7 +996,7 @@ local function _preload_one(package_path)
     -- can_get("unit", ...) check is the engine's authoritative
     -- "spawnable?" answer regardless of which package provides the unit.
     if Application and Application.can_get and Application.can_get("unit", package_path) then
-        _preloaded_offhand_packages[package_path] = true
+        _offhand_preload_lifecycle:mark_resident(package_path)
         _dbg("[offhand] %s already engine-resident (no standalone load needed)", package_path)
         return
     end
@@ -1033,18 +1035,23 @@ local function _preload_one(package_path)
     -- Queue without prioritization. PackageManager serializes async packages
     -- and completes one ready handle per update; no ResourcePackage.flush is
     -- performed at the call site (package_manager.lua:20-87,260-274).
-    _preloaded_offhand_packages[package_path] = "loading"
+    local generation = _offhand_preload_lifecycle:begin(package_path)
+    if not generation then return end
     local ok, err = pcall(function()
         Managers.package:load(package_path, _OFFHAND_PACKAGE_REFERENCE, function()
-            _preloaded_offhand_packages[package_path] = true
-            _dbg("[offhand] async package ready %s", package_path)
+            if _offhand_preload_lifecycle:complete(package_path, generation) then
+                _dbg("[offhand] async package ready %s", package_path)
+            elseif _offhand_late_callback_reports < 4 then
+                _offhand_late_callback_reports = _offhand_late_callback_reports + 1
+                pcall(printf, "[cos:565] ignored late offhand preload callback path=%s report=%d/4",
+                    tostring(package_path), _offhand_late_callback_reports)
+            end
         end, true, false)
     end)
     if ok then
-        _owned_offhand_package_refs[package_path] = true
         _dbg("[offhand] queued package %s (async)", package_path)
     else
-        _preloaded_offhand_packages[package_path] = nil
+        _offhand_preload_lifecycle:cancel(package_path, generation)
         _dbg_alert("[offhand] preload FAILED for %s: %s", package_path, tostring(err))
     end
 end
@@ -1054,25 +1061,72 @@ end
 -- PackageManager too (it resolves either the async handle or loaded handle).
 mod._release_offhand_packages = function(reason)
     local pm = Managers and Managers.package
-    if not pm then return 0 end
-    local released = 0
-    for package_path in pairs(_owned_offhand_package_refs) do
-        local count = pm.reference_count and pm:reference_count(package_path, _OFFHAND_PACKAGE_REFERENCE) or 0
-        if count and count > 0 then
-            local ok = pcall(function() pm:unload(package_path, _OFFHAND_PACKAGE_REFERENCE) end)
-            if ok then released = released + 1 end
-        end
-        _owned_offhand_package_refs[package_path] = nil
-        _preloaded_offhand_packages[package_path] = nil
+    -- Invalidate the generation BEFORE touching PackageManager. If another
+    -- owner keeps a shared async handle alive, vanilla retains our callback in
+    -- that handle even after our reference is removed (package_manager.lua
+    -- :41-48, :196-237). The callback must observe the dead generation.
+    local owned_paths = _offhand_preload_lifecycle:release()
+    if not pm then
+        pcall(printf, "[cos:565] offhand lifecycle invalidated without package manager acquired=%d reason=%s",
+            #owned_paths, tostring(reason))
+        return 0
     end
-    pcall(printf, "[cos:565] offhand package references released=%d reason=%s", released, tostring(reason))
+    local released = 0
+    local failed = 0
+    local detail_reports = 0
+    for _, package_path in ipairs(owned_paths) do
+        local count = pm.reference_count and pm:reference_count(package_path, _OFFHAND_PACKAGE_REFERENCE) or 0
+        if not count or count < 1 then
+            failed = failed + 1
+            if detail_reports < 4 then
+                detail_reports = detail_reports + 1
+                pcall(printf, "[cos:565] offhand reference missing at release path=%s report=%d/4",
+                    tostring(package_path), detail_reports)
+            end
+        else
+            -- `begin` dedupes acquisition, so the expected count is exactly
+            -- one. If an earlier regression somehow duplicated this private
+            -- reference, drain every copy: no other subsystem owns this name.
+            if count ~= 1 and detail_reports < 4 then
+                detail_reports = detail_reports + 1
+                pcall(printf, "[cos:565] offhand reference count mismatch path=%s count=%d report=%d/4",
+                    tostring(package_path), count, detail_reports)
+            end
+            local path_ok = true
+            local last_err
+            for _ = 1, count do
+                local ok, err = pcall(function() pm:unload(package_path, _OFFHAND_PACKAGE_REFERENCE) end)
+                if not ok then
+                    path_ok = false
+                    last_err = err
+                    break
+                end
+            end
+            if path_ok then
+                released = released + 1
+            else
+                failed = failed + 1
+                if detail_reports < 4 then
+                    detail_reports = detail_reports + 1
+                    pcall(printf, "[cos:565] offhand reference release failed path=%s error=%s report=%d/4",
+                        tostring(package_path), tostring(last_err), detail_reports)
+                end
+            end
+        end
+    end
+    pcall(printf, "[cos:565] offhand lifecycle release acquired=%d released=%d failed=%d late_callbacks=%d reason=%s",
+        #owned_paths, released, failed,
+        _offhand_preload_lifecycle.stats.late_callbacks_ignored, tostring(reason))
     return released
 end
 mod._cos_offhand_preload_contract = {
     mode = "async",
     reference_name = _OFFHAND_PACKAGE_REFERENCE,
     readiness_gate = "Application.can_get:1p+3p",
+    callback_guard = "generation_token",
+    max_lifecycle_reports = 4,
 }
+mod._cos_offhand_preload_lifecycle = _offhand_preload_lifecycle
 
 -- v0.9.3: skin-variant suffixes that share a base unit path but live in
 -- SEPARATE .package files. When a client wields a skinned variant of a
@@ -10362,7 +10416,7 @@ _rt_register("offhand_preload_async_bounded_565", function()
     if type(contract) ~= "table" or contract.mode ~= "async" then
         return "offhand bulk preload is not asynchronous (issue 565 startup stall regression)"
     end
-    if contract.reference_name ~= "cosmetics_tweaker" then
+    if contract.reference_name ~= "cosmetics_tweaker_offhand" then
         return "offhand package reference name changed; release balance cannot be proven"
     end
     if contract.readiness_gate ~= "Application.can_get:1p+3p" then
@@ -10370,6 +10424,33 @@ _rt_register("offhand_preload_async_bounded_565", function()
     end
     if type(mod._release_offhand_packages) ~= "function" then
         return "offhand package unload/release path missing"
+    end
+    if contract.callback_guard ~= "generation_token" or contract.max_lifecycle_reports ~= 4 then
+        return "late async callback guard is missing or unbounded"
+    end
+    local live = mod._cos_offhand_preload_lifecycle
+    local pm = Managers and Managers.package
+    if live and pm and pm.reference_count then
+        for package_path in pairs(live.owned) do
+            local count = pm:reference_count(package_path, contract.reference_name)
+            if count ~= 1 then
+                return string.format("offhand package %s has %s private references; expected exactly one",
+                    tostring(package_path), tostring(count))
+            end
+        end
+    end
+    local probe = OFFHAND_PRELOAD_LIFECYCLE.new()
+    local token = probe:begin("rt_shared_async_package")
+    if not token or not probe:complete("rt_shared_async_package", token) then
+        return "lifecycle ledger rejected an active callback"
+    end
+    local released = probe:release()
+    if #released ~= 1 or released[1] ~= "rt_shared_async_package" then
+        return "lifecycle release did not return the exact owned reference"
+    end
+    if probe:complete("rt_shared_async_package", token) ~= false
+            or probe.stats.late_callbacks_ignored ~= 1 then
+        return "callback after release was not rejected exactly once"
     end
 end)
 

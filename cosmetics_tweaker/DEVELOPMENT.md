@@ -44,10 +44,11 @@ exactly once from the manifest.
 | `_cos_unlocks.lua` | Per-career cosmetic unlocks (`apply_cosmetic_unlocks` + `_CHARACTER_CAREERS`), Unlock-All portrait frames, vanilla-unobtainable cosmetic grants, the two `PlayFabMirrorAdventure` hooks, `/frames_status` + `/cosmetics_status`. Exports `mod._cos.apply_cosmetic_unlocks`. |
 | `_cos_render.lua` | Render-path weapon scale/grip apply layer (v0.9.78-dev Phase 2): the two visual-override data tables (`_unit_path_scale_overrides` + `_breton_sword_thiccc`, empty `_weapon_grip_offsets`) and the resolve/apply helpers (`_resolve_for_career`, `_resolve_render_unit_path`, `_resolve_factor`, `_apply_unit_path_scale_hand`, `_scale_units`, `_offset_units`), plus the `_is_unit` liveness primitive. Exports `mod._cos.{is_unit, scale_units, offset_units, apply_unit_path_scale_hand}`; reads nothing off `mod._cos`. The render HOOKS that drive these stay in the entry. |
 | `_cos_glow.lua` | Weapon glow APPLY subsystem (v0.9.79-dev Phase 3): the `_COLOR_PRESETS` table, the shader-variable brightness/group maps (`_GLOW_VAR_BRIGHTNESS` + `_GLOW_GROUP_COLOR_SETTING`), the per-peer glow read helpers (`_glow_get` family), `_glow_owner_peer_for_unit`, `_apply_glow_to_unit` / `_apply_glow_override`, `mod._reapply_glow_on_wielded`, the template-mutation apply hook (`_hook_apply_with_template_mutation` on `GearUtils`/`CosmeticUtils`/`_G.apply_material_settings`) + `mod._try_install_flow_glow_hook`, the `_cosmetics_tweaker_glow` `MaterialSettingsTemplate` + its `GearUtils.spawn_inventory_unit` injection hook. Captures `mod._cos.is_unit`; inits `mod._glow_by_peer` + `mod._unit_to_backend_id`; reads `mod._per_item_glow_runtime` (owned by `_glow_picker`). Exports `mod._cos.{apply_glow_override, glow_owner_peer_for_unit}`. The three render HOOKS that drive the paint, the per-peer glow broadcast RPC layer, and `/glow_status`+`/glow_trace` stay in the entry. |
+| `_cos_offhand_preload_lifecycle.lua` | Pure generation-scoped ownership/readiness ledger for #565 async offhand packages. It has no engine or mod dependencies so shared-handle callbacks retained after unload can be reproduced offline. The entry owns all PackageManager calls and bounded diagnostics. |
 
 Pre-existing `_*.lua` modules (`_la_bridge`, `_material_hijack_embedded[_anim]`,
 `_moreitemslibrary_embedded`, `_cosmetic_unlocks`, `_tpe`, `_glow_picker`,
-`_la_persistence`, `_la_okri`, `_ui_dump`, `_cos_diag_lasync`, `_la_prefix_embedded`)
+`_la_persistence`, `_la_okri`, `_ui_dump`, `_cos_diag_lasync`, `_cos_offhand_preload_lifecycle`, `_la_prefix_embedded`)
 predate this split and are captured as entry locals by the top manifest — leave
 their internals alone.
 
@@ -109,9 +110,11 @@ For LA options, the target mesh comes from `variant.new_units[1]` in LA's SKIN_L
 When the user picks an offhand override, our `BackendUtils.get_item_units` hook sets `result.left_hand_unit` to a path whose package may not be in the equipped skin's package chain. The engine asserts if the unit isn't loaded.
 
 Rules:
-1. **Sync load only.** `Managers.package:load(path, "cosmetics_tweaker", nil, false)`. Async returns immediately and races the user's Apply click. Sync blocks via `ResourcePackage.load + flush` (see `foundation/scripts/managers/package/package_manager.lua:80-86`) — for one shield package the hitch is unnoticeable.
+1. **Async, non-prioritized load only.** `Managers.package:load(path, "cosmetics_tweaker_offhand", callback, true, false)`. The 1P+3P `Application.can_get` gate keeps an override hidden until the units are spawnable, so there is no reason to block startup with `ResourcePackage.flush`.
 2. **Load both halves.** `<unit_path>` AND `<unit_path>_3p`. The in-game body needs both; the customization preview only needs 3p.
-3. **Defensive gate.** `_override_package_ready(unit_path)` in the `BackendUtils.get_item_units` hook verifies both packages via `Managers.package:has_loaded(...)` before applying the override.
+3. **Defensive gate.** `_override_package_ready(unit_path)` in the `BackendUtils.get_item_units` hook verifies both units via `Application.can_get("unit", ...)` before applying the override.
+4. **Generation-scoped callback.** Vanilla retains callbacks on a shared in-flight package when our reference unloads but another owner remains. Invalidate the lifecycle generation before unloading; a callback with the dead token must never recreate readiness state. Never mutate PackageManager's private callback table.
+5. **One owned reference per path.** Dedupe before `load`, release the exact sorted ownership snapshot once on mod unload, and keep detailed late-callback/release-failure diagnostics capped at four rows.
 
 ### `has_skin` gate (don't mutate base templates)
 The `BackendUtils.get_item_units` mesh override and the LA paint must both skip when no illusion is equipped — applying overrides to the base weapon template would leak LA visuals onto items the user didn't customize.

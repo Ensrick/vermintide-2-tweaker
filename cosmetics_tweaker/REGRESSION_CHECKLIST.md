@@ -56,13 +56,13 @@ Last updated: 2026-07-13.
 | Field | Value |
 |-------|-------|
 | Symptom | Startup performs dozens of Cosmetics-owned synchronous package loads and stalls `Application::update` for about 1.58 seconds. |
-| Root cause | Bulk offhand preloading retained a synchronous workaround after the 1P+3P `Application.can_get` readiness gate made early override exposure safe. |
+| Root cause | Bulk offhand preloading retained a synchronous workaround after the 1P+3P `Application.can_get` readiness gate made early override exposure safe. Follow-up: vanilla retains our callback on a shared in-flight handle after our reference unloads, so an unguarded callback could repopulate cleared readiness state. |
 | Mod(s) | cosmetics_tweaker |
-| Fix version(s) | cosmetics_tweaker v0.9.90-dev |
+| Fix version(s) | cosmetics_tweaker v0.9.90-dev (async conversion), v0.9.96-dev (generation-scoped unload callback) |
 | Category | INTEGRATION |
 | Repro | Start VT2 with package debugging enabled and count `cosmetics_tweaker, sync-read` lines before the first keep frame. |
-| Expected post-fix | Offhand packages are queued as `async-read`; an unready override falls back to the base mesh; unload balances every mod-owned package reference. |
-| Detection | `/cos_regression_test` passes `offhand_preload_async_bounded_565`; startup contains `[cos:565] offhand bulk preload queued mode=async` and no Cosmetics-owned bulk `sync-read` storm. |
+| Expected post-fix | Offhand packages are queued as `async-read`; an unready override falls back to the base mesh; unload balances every `cosmetics_tweaker_offhand` reference; a callback retained by another owner after unload is rejected by its stale generation token. |
+| Detection | `/cos_regression_test` passes `offhand_preload_async_bounded_565`; offline lifecycle tests pass; startup contains `[cos:565] offhand bulk preload queued mode=async` and no Cosmetics-owned bulk `sync-read` storm. Shutdown prints one lifecycle summary. Any late callback is ignored and detailed rows are capped at 4. |
 | Tracking | GitHub issue #565. |
 
 ### white-glow-unregistered-fallback -- do not require vanilla's missing template

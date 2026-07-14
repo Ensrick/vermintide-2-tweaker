@@ -1,5 +1,12 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.96-dev - 2026-07-13 - #565 reject async preload callbacks after unload [not deployed]
+
+- The shipped async conversion balanced every observed session (100 unique loads and 100 releases), but vanilla retains callbacks on a shared in-flight package when one reference unloads and another owner remains (`package_manager.lua:41-48`, `:196-237`). Cosmetics' old callback could therefore run after mod unload and recreate a `ready` entry in the registry that unload had just cleared.
+- Added a generation-scoped lifecycle ledger. Each acquired path carries the active generation; unload invalidates the generation and clears ownership before calling PackageManager. A callback retained by another owner is ignored and cannot repopulate readiness state. Late-callback and release-failure diagnostics are raw-console only and capped at four detailed rows per process.
+- Renamed the package reference from the generic `cosmetics_tweaker` to `cosmetics_tweaker_offhand`, making shutdown attribution unambiguous from unrelated package owners. The one-reference-per-path rule, asynchronous/non-prioritized queue, invalid-package filter, and 1P+3P `Application.can_get` render gate are unchanged.
+- Added runtime and offline Lua coverage for active completion, exact release snapshots, late shared-handle callback rejection, deduplication, and failed-load cancellation. In-game verification remains: rapid shutdown/restart while packages are loading, ordinary keep/mission transitions, customization previews, local body and remote husks; no late callback may restore state after the lifecycle release marker.
+
 ## Post-fix audit - 2026-07-13 - #574 verified complete
 
 - User co-op verification confirms peer glow sync after weapon swaps, exact per-instance persistence across game exit, inventory-preview parity, and automatic reconstruction after a client leaves and rejoins.

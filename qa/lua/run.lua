@@ -60,6 +60,7 @@ local suites = {
     "test_cos_glow_lifecycle",
     "test_peer_parity_transition",
     "test_ct_boon_catalog",
+    "test_cos_offhand_preload_lifecycle",
 }
 
 for _, suite in ipairs(suites) do
