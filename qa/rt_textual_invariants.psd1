@@ -163,6 +163,12 @@
     @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'; needle='"HeroWindowWeaveProperties", "_populate_menu_option_widget"'; literal=$true; polarity='present'; issueRef='#239'; note='weave-forge cost-hide hook must stay installed.' }
     @{ mod='cim_dev'; file='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'; needle='widget.content.price_text = ""'; literal=$true; polarity='present'; issueRef='#239'; note='the price_text blank in the cost-hide hook (Cost:0 clutter removal).' }
 
+    # ============================ mp ============================
+    # #589: un-gating StoreLoginRewardsPopup without owning the authenticated
+    # claimStoreRewards request forced modded players out via EAC/backend 511.
+    @{ mod='mp'; file='modded_progression/scripts/mods/modded_progression/modded_progression.lua'; needle='mod:hook("StoreLoginRewardsPopup", "_claim_rewards"'; literal=$true; polarity='present'; issueRef='#589'; note='UI claim action is intercepted before it enters the backend-wait state.' }
+    @{ mod='mp'; file='modded_progression/scripts/mods/modded_progression/modded_progression.lua'; needle='mod:hook("BackendInterfacePeddlerPlayFab", "claim_login_rewards"'; literal=$true; polarity='present'; issueRef='#589'; note='request-boundary guard prevents every modded caller from enqueueing claimStoreRewards.' }
+
     # ============================ WOC ============================
     # Source: weapons_of_chaos/CHANGELOG.md 0.1.10-dev (issue 511).
     @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'; needle='mod:hook(LoadoutUtils, "sync_loadout_slot"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#422'; note='wire-safety sender hook is a SINGLETON (VMF drops a 2nd; non-WOC peers CTD if 0).' }

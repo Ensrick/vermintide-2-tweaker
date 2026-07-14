@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.20-dev"
+local MOD_VERSION = "0.2.21-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -524,6 +524,59 @@ local function _is_mp_realm()
     return script_data["eac-untrusted"] == true or (mod._mp_modded_depth or 0) > 0
 end
 
+-- #589: StoreLoginRewardsPopup._claim_rewards calls the peddler interface
+-- directly, and BackendInterfacePeddlerPlayFab.claim_login_rewards enqueues
+-- claimStoreRewards as an authenticated write. MP used to un-grey that button
+-- without owning the request boundary, so the modded realm requested an EAC
+-- challenge, received backend 511, and was forced out of the game.
+--
+-- Login rewards cannot be granted locally yet: their mixed item/currency
+-- payload needs the durable mirror-overlay inventory transaction that remains
+-- under construction. Fail closed at BOTH the UI action and backend request
+-- boundary. Official-realm calls run the original function byte-for-byte.
+local function _route_store_login_claim(func, self, ...)
+    if _is_mp_realm() then return false, 0, nil end
+    local n, results = _capture(func(self, ...))
+    return true, n, results
+end
+
+local function _disable_store_login_claim(popup)
+    local widgets = popup and popup._widgets_by_name
+    local claim = widgets and widgets.claim_button
+    local hotspot = claim and claim.content and claim.content.button_hotspot
+    if hotspot then hotspot.disable_button = true end
+    return hotspot ~= nil
+end
+
+_rt_register("mp589_store_login_claim_request_boundary", function()
+    local saved_flag = script_data["eac-untrusted"]
+    local saved_depth = mod._mp_modded_depth
+    local calls = 0
+    local fake = function() calls = calls + 1; return "official", nil, 3 end
+
+    mod._mp_modded_depth = 0
+    script_data["eac-untrusted"] = nil
+    local allowed, n, results = _route_store_login_claim(fake, nil)
+    local official_ok = allowed and calls == 1 and n == 3 and results[1] == "official" and results[2] == nil and results[3] == 3
+
+    script_data["eac-untrusted"] = true
+    local blocked = not _route_store_login_claim(fake, nil)
+    local modded_ok = blocked and calls == 1
+
+    script_data["eac-untrusted"] = saved_flag
+    mod._mp_modded_depth = saved_depth
+    if not official_ok then return "official login-reward claim was not passed through exactly" end
+    if not modded_ok then return "modded login-reward claim reached the request function" end
+end)
+
+_rt_register("mp589_store_login_claim_ui_disabled", function()
+    local popup = { _widgets_by_name = { claim_button = { content = { button_hotspot = { disable_button = false } } } } }
+    if not _disable_store_login_claim(popup) then return "claim-button hotspot was not found" end
+    if popup._widgets_by_name.claim_button.content.button_hotspot.disable_button ~= true then
+        return "modded login-reward claim button remained enabled"
+    end
+end)
+
 _rt_register("simulated_daily_realm_boundary", function()
     local saved = script_data["eac-untrusted"]
     local official_seen, modded_seen
@@ -624,6 +677,20 @@ mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips", function(func, self
     return func(self, item_id, chip_type, price, callback_fn, ...)
 end)
 
+-- Defense in depth for #589. The UI hook below is the normal interception,
+-- but no alternate caller may enqueue authenticated claimStoreRewards in the
+-- modded realm. Leave `_is_done_claiming` true so a caller cannot become stuck
+-- waiting on a callback that intentionally never exists.
+mod:hook("BackendInterfacePeddlerPlayFab", "claim_login_rewards", function(func, self, ...)
+    local allowed, n, results = _route_store_login_claim(func, self, ...)
+    if not allowed then
+        self._is_done_claiming = true
+        _dbg_alert("blocked store login reward claim (claimStoreRewards suppressed; local grant not armed)")
+        return nil
+    end
+    return unpack(results, 1, n)
+end)
+
 -- Native reward presentation asks the quest interface for the completed poll's
 -- loot. Synthetic ids exist only in this in-memory map and never enter PlayFab.
 mod:hook("BackendInterfaceQuestsPlayfab", "get_quest_rewards", function(func, self, id, ...)
@@ -717,7 +784,25 @@ mod:hook("HeroViewStateAchievements", "_handle_claim_all_challenges", _with_eac_
 --   _create_ui_elements (line 57)         — login-rewards claim button
 mod:hook("StoreWindowItemPreview", "_set_unlock_button_states", _with_eac_off)
 mod:hook("StoreItemPurchasePopup", "_create_ui_elements", _with_eac_off)
-mod:hook("StoreLoginRewardsPopup", "_create_ui_elements", _with_eac_off)
+-- #589: this surface previously used _with_eac_off, which deliberately
+-- un-greyed a button whose authenticated claimStoreRewards write was not
+-- intercepted. Keep the native modded-realm disable state and reinforce it
+-- after creation. Also guard the action itself against direct/gamepad callers.
+mod:hook("StoreLoginRewardsPopup", "_create_ui_elements", function(func, self, ...)
+    local n, results = _capture(func(self, ...))
+    if _is_mp_realm() then _disable_store_login_claim(self) end
+    return unpack(results, 1, n)
+end)
+
+mod:hook("StoreLoginRewardsPopup", "_claim_rewards", function(func, self, ...)
+    local allowed, n, results = _route_store_login_claim(func, self, ...)
+    if not allowed then
+        _disable_store_login_claim(self)
+        _dbg_alert("blocked store login reward UI claim; backend=none")
+        return nil
+    end
+    return unpack(results, 1, n)
+end)
 
 -- Vanilla keep crafting bench:
 --   _enable_craft_button (line 1878)        — flips `enable` arg to false

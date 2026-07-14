@@ -69,7 +69,7 @@ Mission ends
 | Claim quest/daily (single) | `generateQuestRewards` | `BackendInterfaceQuestsPlayfab.claim_quest_rewards` (`backend_interface_quests_playfab.lua:285`) |
 | Claim quests/dailies (batch) | `generateQuestRewards` | `BackendInterfaceQuestsPlayfab.claim_multiple_quest_rewards` (`backend_interface_quests_playfab.lua:500`) |
 | Lohner's purchase | `PurchaseItem` + `storePurchaseMade` | `_exchange_chips_success_cb` (peddler_playfab.lua:676), `_store_purchase_made_cb` (peddler_playfab.lua:723) |
-| Daily login rewards | `claimStoreRewards` | `_claim_store_rewards_cb` (peddler_playfab.lua:830) |
+| Daily login rewards | `claimStoreRewards` | `_claim_store_rewards_cb` (peddler_playfab.lua:830). **Current #589 safety boundary:** popup remains disabled and both UI/backend claim methods fail closed in the modded realm; do not re-enable until this mixed item/currency callback has a durable local transaction. |
 | Forge / salvage / re-roll / upgrade | `BackendInterfaceCraftingPlayfab.*` | (open research — item #1) |
 
 ## UI gates to override

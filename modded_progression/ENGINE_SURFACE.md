@@ -25,13 +25,13 @@ the remaining `BackendInterface*Playfab` routes in `PLAN.md` are not yet wired.
 
 ## Hook table
 
-18 registration sites, all `mod:hook` (full wrapper), all string-form. `[hook]` =
-full wrapper (can rewrite args/returns). Nine route through the shared
+25 registration sites, all `mod:hook` (full wrapper), all string-form. `[hook]` =
+full wrapper (can rewrite args/returns). Eight route through the shared
 `_with_eac_off` wrapper, one (`IngameUI.not_in_modded`) is a flat return-true
-override, and eight own the simulated-daily read/claim boundary. There are no
+override, and the remainder own local progression/read/claim boundaries. There are no
 `hook_safe` sites and no table-form hooks. The
 `_with_eac_off` wrapper is a single load-bearing row-of-concern (issue 434) called
-out below and shared by all nine of its callers.
+out below and shared by all eight of its callers.
 
 ### The EAC-window bracket - shared wrapper (row-of-concern: issue 434) (owner doc: `docs/engine/11`)
 
@@ -47,7 +47,7 @@ out below and shared by all nine of its callers.
 | `HeroViewStateAchievements._create_entries` [hook] `:435` / `_handle_claim_all_challenges` [hook] `:436` | Okri's Challenges list: `_create_entries` sets the `completed`/claimable flag per entry (`:646`); `_handle_claim_all_challenges` gates the claim-all button (`:2992`) [src: `scripts/ui/views/hero_view/states/hero_view_state_achievements.lua`, lines per PLAN.md] | Un-gate the challenge list + claim-all so earned challenges are claimable (`:435`) | Two distinct methods on one class, no hook collision; both `_with_eac_off` |
 | `StoreWindowItemPreview._set_unlock_button_states` [hook] `:442` | Lohner's Emporium: enables/disables the buy button (`:1873`) [src: `scripts/ui/views/store/windows/store_window_item_preview.lua` per PLAN.md] | Enable the buy button for currency the modded realm holds (`:442`) | `_with_eac_off` |
 | `StoreItemPurchasePopup._create_ui_elements` [hook] `:443` | Emporium purchase-confirm popup buy-button disable flag (`:1149`) [src: `scripts/ui/views/store/store_item_purchase_popup.lua` per PLAN.md] | Enable the confirm-buy button (`:443`) | `_with_eac_off` |
-| `StoreLoginRewardsPopup._create_ui_elements` [hook] `:444` | Daily-login-rewards claim button (`:57`) [src: `scripts/ui/views/store/store_login_rewards_popup.lua` per PLAN.md] | Enable the login-rewards claim button (`:444`) | `_with_eac_off` |
+| `StoreLoginRewardsPopup._create_ui_elements` / `_claim_rewards` + `BackendInterfacePeddlerPlayFab.claim_login_rewards` [hooks] | Popup construction disables the button in modded play; `_claim_rewards` otherwise enters claiming state and calls the peddler method; that method enqueues authenticated `claimStoreRewards` [src: `store_login_rewards_popup.lua:41-59,181-216`; `backend_interface_peddler_playfab.lua:811-828`] | #589 fail-closed boundary: retain/reinforce the disabled UI, intercept direct activation, and reject every modded backend caller before enqueue; official realm is unchanged | Local mixed item/currency transaction is not armed; two runtime checks cover UI + request policy, and textual QA locks both hooks |
 | `HeroWindowItemCustomization._enable_craft_button` [hook] `:449` / `_update_state_craft_button` [hook] `:450` | Vanilla keep crafting bench: `_enable_craft_button` flips the `enable` arg false in modded (`:1878`); `_update_state_craft_button` sets the button-hotspot disable flag (`:1928`) [src: `scripts/ui/views/hero_view/windows/hero_window_item_customization.lua` per PLAN.md] | Re-enable the keep bench craft button so vanilla-cost crafting works (`:449`) | `_with_eac_off`; cim owns the Athanor sandbox, mp owns the keep bench (`docs/CROSS_MOD_ARCHITECTURE.md` Mod 4) |
 | `IngameUI.not_in_modded` [hook] `:454` | Returns `not script_data["eac-untrusted"]` - a generic "is this a trusted UI surface" query [src: `scripts/ui/views/ingame_ui.lua:381-382` verified] | Force-return true so generic UI surfaces treat the session as trusted (`:454`) | The ONLY hook that is a flat override, not an `_with_eac_off` bracket - it does not touch the global flag, so no commit-suppression exposure |
 

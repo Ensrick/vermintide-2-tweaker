@@ -1,5 +1,19 @@
 # Modded Progression — Changelog
 
+## 0.2.21-dev (2026-07-13) - #589 block store login reward PlayFab claims [verify-fix]
+
+- Fixed the critical modded-realm exit caused by the daily login reward popup. The native path is `StoreLoginRewardsPopup._claim_rewards` -> `BackendInterfacePeddlerPlayFab.claim_login_rewards` -> authenticated `claimStoreRewards`; the request triggers an EAC challenge, backend 511, and the fatal `-1` popup.
+- The login-reward claim button now remains disabled in modded play, and the UI action is independently intercepted before it can change into the claiming/waiting state. Official-realm popup behavior is unchanged.
+- Added defense in depth at `BackendInterfacePeddlerPlayFab.claim_login_rewards`: every modded-realm caller is rejected before `request_queue:enqueue`, while official calls and return values pass through unchanged. The done flag remains true so no caller waits for a suppressed callback.
+- Login rewards are intentionally fail-closed until MP owns a durable local transaction for their mixed item/currency payload; no reward is silently duplicated, lost, or written to the real account.
+- Added `/mp_regression_test` checks `mp589_store_login_claim_request_boundary` and `mp589_store_login_claim_ui_disabled`, plus repository textual locks on both interception hooks.
+
+**Source audit:** `store_login_rewards_popup.lua:181-216` changes UI state then invokes `claim_login_rewards`; `backend_interface_peddler_playfab.lua:811-828` creates `FunctionName = "claimStoreRewards"` and enqueues it as a write; `_claim_store_rewards_cb` mutates items, currencies, chest inventory, telemetry, and save data from the PlayFab result, so fabricating that callback without an atomic local ledger is unsafe.
+
+**Log evidence:** `console-2026-07-14-00.16.57-1b7e5c2d-a05a-4242-af33-33801883bc40.log` loaded MP `0.2.20-dev` and completed the #581 startup path without a synthetic `StatisticsDatabase` failure. At `00:20:37.395` it enqueued `claimStoreRewards`; the EAC challenge was disabled, backend reason `511` followed, and the `-1` dialog forced exit. This is the exact #589 path, not a recurrence of #581.
+
+**Test:** In the modded realm, open Lohner's Emporium and the daily login reward popup. The claim button must be disabled. Attempt mouse/gamepad activation and run `/mp_regression_test`; expect both #589 checks to pass and no `claimStoreRewards`, EAC challenge, backend 511, `-1`, or forced exit in the log. Then enter the official realm and confirm the same reward button and native claim still work normally.
+
 ## 0.2.20-dev (2026-07-13) - #581 bypass synthetic StatisticsDatabase daily evaluation [verify-fix]
 
 - Fixed the startup crash `Failed fetching statistic using parameters: quest_statistics, mp_daily_v2_20647_slot_3_progress` (GUID `affd4123-ce2e-4d15-82fa-a972e65ade2c`).

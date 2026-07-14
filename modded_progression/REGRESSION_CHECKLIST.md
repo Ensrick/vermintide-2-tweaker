@@ -5,11 +5,24 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
 - [ ] #581: startup/keep challenge-board polling never reads an `mp_daily_v2_*` key from `StatisticsDatabase`; `/mp_regression_test` passes `mp581_owned_daily_bypasses_statistics_db`.
+- [ ] #589: the modded login-reward button remains disabled and no caller reaches `claimStoreRewards`; `/mp_regression_test` passes both `mp589_store_login_claim_*` checks. Official-realm claim remains vanilla.
 
 Last updated: 2026-07-13.
 
 ---
 ## Backend isolation
+
+### mp-store-login-reward-fail-closed - login reward must not enqueue PlayFab
+
+| Field | Value |
+|-------|-------|
+| Symptom | Claiming the Emporium daily login reward requests EAC, receives backend 511 / `-1`, and forces the game to exit. |
+| Root cause | MP un-gated `StoreLoginRewardsPopup._create_ui_elements` but did not intercept `_claim_rewards` or `BackendInterfacePeddlerPlayFab.claim_login_rewards`, which enqueues authenticated `claimStoreRewards`. |
+| Fix version(s) | mp v0.2.21-dev |
+| Category | INTEGRATION / CRITICAL |
+| Repro | In the modded realm, open the Emporium login-reward popup and attempt mouse/gamepad activation. |
+| Expected post-fix | Button stays disabled; direct and backend calls fail closed; no PlayFab request, EAC challenge, 511, `-1`, or exit. Official realm remains native. |
+| Detection | `/mp_regression_test` passes `mp589_store_login_claim_request_boundary` and `mp589_store_login_claim_ui_disabled`; inspect the log for absence of `claimStoreRewards`. |
 
 ### mp-local-daily-lifecycle — roster/progress/claims/SM must share an isolated durable state
 
