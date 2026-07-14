@@ -1,5 +1,14 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.236-dev (2026-07-14) -- #242 complete enemy-spawn suppression [verify-fix]
+
+- Regression-locked the existing two-layer spawn block: both `ConflictDirector` spawn entry points refuse future units while the native `script_data` gates stop patrol, monster, horde, roaming, special, and critter producers before they queue work.
+- Added `/gt_regression_test` check `issue242_all_spawn_classes_blocked` and engine-free source coverage. The toggle remains reversible and does not despawn enemies that already exist.
+
+### Solo verify
+
+Enable **Disable Enemy Spawns** before starting a mission and play through a full level. No ambient enemies, hordes, specials, patrols, monsters, or critters should spawn. Disable it and confirm pacing resumes. Run `/gt_regression_test` and require `issue242_all_spawn_classes_blocked` to pass.
+
 ## v0.2.235-dev (2026-07-14) -- #333 offline Twitch mode and event allow-list [verify-fix-coop]
 
 - Added a default-off **Offline Twitch Mode** that lets the host run ordinary Twitch votes without an account, channel, or stream. It reuses Fatshark's native Twitch game-mode object, timers, random tie resolution, effects, vote UI, game objects, and RPCs.

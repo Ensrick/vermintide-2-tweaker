@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.235-dev"
+local MOD_VERSION = "0.2.236-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1153,6 +1153,26 @@ mod._gt_apply_spawn_block = function()
 end
 
 _apply_script_data_no_enemies(mod:get("disable_enemy_spawns"))
+
+_rt_register("issue242_all_spawn_classes_blocked", function()
+    local required = {
+        ai_mini_patrol_disabled = true,
+        ai_boss_spawning_disabled = true,
+        ai_horde_spawning_disabled = true,
+        ai_roaming_spawning_disabled = true,
+        ai_specials_spawning_disabled = true,
+        ai_critter_spawning_disabled = true,
+    }
+    for _, name in ipairs(_AI_SPAWN_FLAGS) do
+        required[name] = nil
+    end
+    for name in pairs(required) do
+        return "missing spawn-block flag: " .. name
+    end
+    if type(mod._gt_apply_spawn_block) ~= "function" then
+        return "spawn-block reapply boundary missing"
+    end
+end)
 
 mod:command("no_enemies", "Toggle blocking all enemy spawns", function()
     local new_val = not mod:get("disable_enemy_spawns")
