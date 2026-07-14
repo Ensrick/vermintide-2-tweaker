@@ -1,5 +1,13 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.100-dev - 2026-07-14 - #377 in-view glow auto-open toggle [verify-fix]
+
+- Added one square toggle at middle-left of the weapon customization view. It uses vanilla's illusion-button widget and existing scenegraph, lights when automatic glow-picker opening is ON, and greys/disables itself for non-glow illusions.
+- The preference persists per user under `glow_picker_auto_popup_enabled`, defaults ON, and gates both illusion-selection and once-per-keep wield auto-opening. The `/glow_picker` command remains an explicit manual entry point while automatic opening is OFF.
+- Reused the consolidated customization setup/draw/illusion hooks; no hook, renderer, RPC, or network state was added. Added runtime regression `glow_auto_open_in_view_toggle_377` for default-ON, persisted-OFF, and non-glow disabled policy.
+
+- **Verify (solo):** open weapon customization on a glow-capable illusion. Confirm the middle-left square is lit and selecting another glow illusion opens the picker. Click the square OFF, select glow illusions, leave/reopen customization, and restart; the square must remain OFF and the picker must not auto-open. `/glow_picker` must still open it manually. Select a non-glow illusion and confirm the square is greyed and cannot be toggled. Run `/cos_regression_test` and confirm `glow_auto_open_in_view_toggle_377` passes.
+
 ## 0.9.99-dev - 2026-07-14 - #376 exact-item LA persistence and icons [verify-fix]
 
 - Inventory/loadout grids now show Loremaster's Armoury's authored icon only for the exact backend item carrying the persisted LA illusion or offhand choice. The resolver uses `SKIN_LIST[armoury_key].icons[vanilla_skin]`, preserves the other three vanilla UI-information returns, and never mutates shared `WeaponSkins` or `ItemMasterList` icon fields.

@@ -1,6 +1,7 @@
 # Glow System — cosmetics_tweaker
 
-State as of v0.9.94-dev (2026-07-13), verified in co-op.
+State as of v0.9.100-dev (2026-07-14); glow sync verified in co-op and the
+in-view auto-open preference is awaiting solo verification.
 
 This is the canonical reference for how the glow customization system is
 wired today: which shader variables drive what visually, how the popup UI
@@ -23,6 +24,7 @@ and where to extend.
 | Per-item RGB takes precedence over global override toggle | ✅ |
 | Magic-family multi-component sliders (lower / upper / dots) | ✅ |
 | Contextual popup on glow-capable illusion selection | ✅ |
+| In-view persistent auto-open toggle | ✅ (v0.9.100-dev) |
 | Toggle the per-item glow off entirely | ❌ (M3) |
 | Hide vanilla glow-cousin items from cosmetic menu | ❌ (M3) |
 | Cross-slot inheritance (main weapon glow → compatible shield) | ❌ (M3) |
@@ -196,7 +198,11 @@ no per-item customizations still see the global preset behavior.
 ### a. Context and command access coexist
 
 Selecting a glow-capable illusion opens the picker contextually. The
-`/glow_picker` command remains available as a diagnostic/manual entry point.
+middle-left square button in `HeroWindowItemCustomization` controls this automatic
+opening. It defaults ON, persists per user as `glow_picker_auto_popup_enabled`,
+lights while ON, and greys out when the previewed illusion has no glow family.
+The same preference gates the once-per-keep wield auto-open. `/glow_picker` remains
+available as the explicit manual entry point while automatic opening is OFF.
 
 ### b. Toggle off
 

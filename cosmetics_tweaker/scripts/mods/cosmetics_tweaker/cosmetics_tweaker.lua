@@ -58,7 +58,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.99-dev"
+local MOD_VERSION = "0.9.100-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -668,6 +668,83 @@ end
 
 local _fake_skin_backend_ids = {}
 
+-- Issue #377: keep the picker contextual while controlling automatic opening
+-- from the customization view instead of the VMF settings menu. Reusing the
+-- pre-v0.9.38 setting id preserves this per-user choice without exposing a
+-- duplicate checkbox. Nil deliberately means ON (the default/current behavior).
+local _GLOW_AUTO_POPUP_SETTING = "glow_picker_auto_popup_enabled"
+
+local function _glow_auto_popup_policy(stored_value, family)
+    local enabled = stored_value ~= false
+    local available = family ~= nil
+    return available, enabled, available and enabled
+end
+mod._glow_auto_popup_policy_377 = _glow_auto_popup_policy
+
+local function _glow_auto_popup_enabled()
+    return mod:get(_GLOW_AUTO_POPUP_SETTING) ~= false
+end
+
+local function _refresh_glow_auto_button(self, skin_key)
+    local widget = self and self._ct_glow_auto_widget
+    if not widget then return nil end
+
+    local family = skin_key and GlowPicker.classify({ skin = skin_key }) or nil
+    local available, enabled = _glow_auto_popup_policy(
+        mod:get(_GLOW_AUTO_POPUP_SETTING), family)
+    local content = widget.content
+    local hotspot = content and content.button_hotspot
+    if not content or not hotspot then return family end
+
+    content.glow_family = family
+    content.glow_skin = skin_key
+    content.equipped = available and enabled
+    hotspot.disable_button = not available
+    hotspot.is_selected = available and enabled
+
+    local icon_style = widget.style and widget.style.icon_texture
+    if icon_style then
+        icon_style.color = available
+            and { 255, 255, 255, 255 }
+            or { 110, 128, 128, 128 }
+    end
+    local label_style = widget.style and widget.style.glow_auto_label
+    if label_style then
+        label_style.text_color = available
+            and { 255, 255, 255, 255 }
+            or { 110, 128, 128, 128 }
+    end
+    return family
+end
+
+local function _create_glow_auto_button()
+    local definitions = local_require(
+        "scripts/ui/views/hero_view/windows/definitions/hero_window_item_customization_definitions")
+    local definition = definitions.create_illusion_button()
+    definition.element.passes[#definition.element.passes + 1] = {
+        pass_type = "text",
+        text_id = "glow_auto_label",
+        style_id = "glow_auto_label",
+    }
+    definition.content.glow_auto_label = mod:localize("glow_picker_auto_button")
+    definition.style.glow_auto_label = {
+        font_size = 13,
+        font_type = "hell_shark",
+        horizontal_alignment = "center",
+        vertical_alignment = "center",
+        text_color = { 255, 255, 255, 255 },
+        offset = { 0, 0, 3 },
+    }
+    local widget = UIWidget.init(definition)
+    widget.content.icon_texture = "button_illusion_default"
+    widget.content.locked = false
+    widget.content.equipped = false
+    -- `illusions_root` is bottom-centre. This offset places the square control
+    -- at middle-left without mutating vanilla's shared scenegraph definition.
+    widget.offset = { -700, 355, 20 }
+    return widget
+end
+
 -- cim coexistence: when cim is loaded, it owns the modded-realm illusion swap.
 -- These hooks defer to the original at fire time so cosmetics_tweaker's
 -- _custom_skin_keys (LA bridge + ct's own custom illusions) still work, but
@@ -792,14 +869,12 @@ mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(f
     -- internal handling doesn't matter.
     do
         local picked_skin = widget and widget.content and widget.content.skin_key
-        -- v0.9.38-dev: auto-open is now implicit (always on). The
-        -- glow_picker_auto_popup_enabled toggle was removed — glow is driven
-        -- entirely through this in-cosmetic-picker glow menu, so the popup is
-        -- always wanted on selection.
         if picked_skin then
-            local family = GlowPicker.classify({ skin = picked_skin })
+            local family = _refresh_glow_auto_button(self, picked_skin)
             local bid = self._item_backend_id
-            if family and bid then
+            local _, _, should_open = _glow_auto_popup_policy(
+                mod:get(_GLOW_AUTO_POPUP_SETTING), family)
+            if should_open and bid then
                 GlowPicker.open_for(bid, { skin = picked_skin })
                 mod:info("[glow_picker:auto] opened on illusion select bid=%s skin=%s family=%s",
                     tostring(bid), tostring(picked_skin), tostring(family))
@@ -2707,6 +2782,23 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
     self._ct_offhand_divider_widget = nil
     self._ct_selected_offhand_index = nil
 
+    -- #377: one persistent, in-view square toggle. Recreate it with the
+    -- customization screen's widgets so no stale hotspot survives a rebuild.
+    self._ct_glow_auto_widget = _create_glow_auto_button()
+
+    local initial_skin = item and item.skin
+    if (not initial_skin or initial_skin == "") and item and item.backend_id
+            and Managers and Managers.backend then
+        local items_iface = Managers.backend:get_interface("items")
+        if items_iface and items_iface.get_skin then
+            initial_skin = items_iface:get_skin(item.backend_id)
+        end
+    end
+    if not initial_skin and item and item.key and WeaponSkins and WeaponSkins.default_skins then
+        initial_skin = WeaponSkins.default_skins[item.key]
+    end
+    _refresh_glow_auto_button(self, initial_skin)
+
     _dbg("[offhand] _setup_illusions called, item=%s", tostring(item and item.key))
 
     -- v0.8.55-dev: stash for the BackendUtils.get_item_units hook fallback.
@@ -2947,6 +3039,26 @@ end)
 
 mod:hook("HeroWindowItemCustomization", "_state_draw_overview", function(func, self, ui_renderer, dt)
     func(self, ui_renderer, dt)
+
+    -- #377: draw and consume the contextual auto-open toggle before the
+    -- offhand-row early return below, so ordinary one-handed weapons get it.
+    local glow_widget = self._ct_glow_auto_widget
+    local sg = ui_renderer and ui_renderer.ui_scenegraph
+    if glow_widget and sg and sg[glow_widget.scenegraph_id] then
+        UIRenderer.draw_widget(ui_renderer, glow_widget)
+        local family = glow_widget.content and glow_widget.content.glow_family
+        -- Consume the release edge even while disabled so it cannot become a
+        -- stale click if the user next previews a glow-capable illusion.
+        local pressed = self:_is_button_pressed(glow_widget)
+        if family and pressed then
+            local enabled = not _glow_auto_popup_enabled()
+            mod:set(_GLOW_AUTO_POPUP_SETTING, enabled)
+            _refresh_glow_auto_button(self, glow_widget.content.glow_skin)
+            self:_play_sound("play_gui_equipment_inventory_select")
+            mod:info("[glow_picker:auto] in-view toggle enabled=%s family=%s",
+                tostring(enabled), tostring(family))
+        end
+    end
 
     local offhand_widgets = self._ct_offhand_widgets
     if not offhand_widgets or #offhand_widgets == 0 then return end
@@ -9486,9 +9598,9 @@ local function _glow_state_is_active(pi)
 end
 
 local function _glow_auto_popup_for_local()
-    -- v0.9.38-dev: auto-popup on wield is now implicit (always on); the
-    -- glow_picker_auto_popup_enabled gate was removed. The once-per-keep
-    -- guard (_glow_auto_popup_shown[bid], below) still prevents spam.
+    -- #377: the in-view toggle governs selection-triggered and once-per-keep
+    -- wield-triggered automatic opening alike.
+    if not _glow_auto_popup_enabled() then return end
     if GlowPicker.is_open() then return end
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
     if not in_keep then return end
@@ -9959,6 +10071,23 @@ _rt_register("unit_to_backend_id_populated", function()
     local mt = getmetatable(mod._unit_to_backend_id)
     if not (mt and mt.__mode and mt.__mode:find("k")) then
         return "_unit_to_backend_id missing weak-key metatable"
+    end
+end)
+
+_rt_register("glow_auto_open_in_view_toggle_377", function()
+    local policy = mod._glow_auto_popup_policy_377
+    if type(policy) ~= "function" then return "auto-open policy missing" end
+    local available, enabled, should_open = policy(nil, "rune")
+    if not (available and enabled and should_open) then
+        return "unset preference did not default ON for glow family"
+    end
+    available, enabled, should_open = policy(false, "magic")
+    if not (available and not enabled and not should_open) then
+        return "stored OFF preference did not suppress auto-open"
+    end
+    available, enabled, should_open = policy(true, nil)
+    if available or not enabled or should_open then
+        return "non-glow preview did not disable the contextual control"
     end
 end)
 
