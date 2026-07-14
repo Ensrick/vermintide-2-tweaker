@@ -49,6 +49,7 @@ local suites = {
     "test_wt_passive_charge",
     "test_wt_cwv_ownership",
     "test_cwv_remote_audio",
+    "test_cwv_remote_identity",
     "test_cwv_acquisition",
     "test_cim_skin_persistence",
     "test_cos_score_identity",

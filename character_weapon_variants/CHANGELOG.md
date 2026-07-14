@@ -1,5 +1,14 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.398-dev - 2026-07-13 - #396 Imperial Longsword identity continuity [untested]
+
+- Separated the owned weapon from its cosmetic identity. `cwv_es_longsword` is now canonically **Imperial Longsword**; the save-compatible illusion key `cwv_es_longsword_nordland` is restored to its earlier, mesh-appropriate **Helmgart Watchsword** name. The shared `cwv_imperial_longsword` item-type label now keeps the first owning definition instead of being overwritten by the last illusion-only sibling.
+- Added an absence-safe VMF item-identity side channel for the axis vanilla cannot carry. Vanilla still sends only the stable base item id and authoritative skin; CWV now sends the owning `cwv_*` key on initial game-object sync, live resync, and the post-parity replay edge. Receivers validate the key against its base weapon before husk re-key/transform, so Weapon Tweaker's widened `can_wield` set no longer makes an actual Imperial Longsword indistinguishable from a native Bretonnian Longsword.
+- Kept skin/unit selection native and exact. The marker establishes ownership only; the selected skin template still supplies the hand mesh, including `cwv_es_longsword_nordland_skin`. A native-slot payload clears stale identity. The receiver performs at most one immediate re-wield when a changed marker arrives for the active slot, covering both identity-before-equipment and equipment-before-identity ordering without polling.
+- Added `/cwv_regression_test` check `issue396_imperial_longsword_identity_and_remote_husk` for distinct localization, initial/resync/parity sender coverage, marker validation and clearing, base-boundary safety, exact Helmgart hot-join replay, husk skin resolution, and inventory character-preview preservation.
+
+**DoD:** Universal walked. Trait gates: G-CROSS-CHAR, G-CUSTOM-ILLUSION, G-NETWORK, G-APPEARANCE. Deferrals: two-player initial lobby join, swap-away/back, keep-to-mission transition, inventory preview, native Bretonnian Longsword control, and host/client role reversal — issue #396 live matrix.
+
 ## 0.1.398-dev - 2026-07-13 - #593 canonical Kruber Axe+Shield ownership [untested]
 
 - Both `cwv_es_axe_shield` definitions now use the complete four-career Kruber receiver set, including Grail Knight, so WT can yield Bardin's native donor without leaving one Kruber career without the canonical equivalent.

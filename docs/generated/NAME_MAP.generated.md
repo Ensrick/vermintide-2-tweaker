@@ -23,7 +23,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 
 | key | display name | item_type | careers | provenance |
 |-----|--------------|-----------|---------|------------|
-| `cwv_es_longsword_nordland` | Nordland Claymore | cwv_imperial_longsword |  | literal |
+| `cwv_es_longsword_nordland` | Helmgart Watchsword | cwv_imperial_longsword |  | literal |
 
 ### kind: cwv_variant (28 entries, 0 unresolved)
 
@@ -39,7 +39,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `cwv_es_dual_swords` | Imperial Dual Swords | cwv_es_dual_swords |  | literal |
 | `cwv_es_dual_warpriest_hammers` | Dual Warrior-Priest Hammers | cwv_es_dual_warpriest_hammers |  | literal |
 | `cwv_es_javelin` | Tuskgor Javelin | we_javelin |  | literal |
-| `cwv_es_longsword` | Recruit Longsword | cwv_imperial_longsword |  | literal |
+| `cwv_es_longsword` | Imperial Longsword | cwv_imperial_longsword |  | literal |
 | `cwv_es_longsword_blackguard` | Black Guard Blade | cwv_imperial_longsword |  | literal |
 | `cwv_es_longsword_shield` | Imperial Longsword and Shield | cwv_es_longsword_shield |  | literal |
 | `cwv_es_maul` | Maul | cwv_es_maul |  | literal |

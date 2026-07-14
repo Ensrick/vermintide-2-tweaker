@@ -255,7 +255,7 @@ no-ops, see `ANIMATION_FIX_PLAYBOOK.md`.
 
 ## Recipe A2 — Two-handed melee
 
-**Canon:** `cwv_es_longsword` (Recruit Longsword, default-rarity blacksmith
+**Canon:** `cwv_es_longsword` (Imperial Longsword, default-rarity blacksmith
 template, line ~135) and `cwv_es_longsword_blackguard` (Black Guard Blade,
 unique, line ~158).
 
@@ -264,7 +264,7 @@ shipped 2H families demonstrate two patterns:
 
 - **Curated unique** (Black Guard Blade): `rarity = "unique"`, traits
   pre-applied, ships with a fixed illusion baked in.
-- **Default-rarity blacksmith template** (Recruit Longsword): `rarity =
+- **Default-rarity blacksmith template** (Imperial Longsword): `rarity =
   "default"`, `power_level = 5`. Forge will let the player re-roll
   properties, salvage, and apply illusions to it. **Read DEVELOPMENT.md
   "Blacksmith Template Pattern" before writing one of these** — the
@@ -297,14 +297,14 @@ shipped 2H families demonstrate two patterns:
 {
     item_key        = "cwv_es_longsword",
     base_weapon     = "es_bastard_sword",
-    display_name    = "Recruit Longsword",
+    display_name    = "Imperial Longsword",
     description     = "<lore text>",
     character       = "empire_soldier",
     careers         = _es_all_careers,
     right_hand_unit = "units/weapons/player/wpn_empire_2h_sword_04_t1/wpn_2h_sword_04_t1",
     inventory_icon  = "icon_wpn_empire_2h_sword_04_t1",
     hud_icon        = "weapon_generic_icon_sword",
-    skin_display_name = "Recruit Longsword",
+    skin_display_name = "Imperial Longsword",
     rarity          = "default",
     power_level     = 5,                              -- low; the forge rolls properties
     template        = "imperial_longsword_template",
@@ -745,7 +745,7 @@ lines ~2230–2256 and `ANIMATION_FIX_PLAYBOOK.md`.
 
 ## Recipe A7 — Skin-only variant (illusion-only)
 
-**Canon:** `cwv_es_longsword_nordland` (Nordland Claymore, line ~258).
+**Canon:** `cwv_es_longsword_nordland` (Helmgart Watchsword, line ~258; internal key retained for save compatibility).
 
 **Pattern:** the variant exists only to expose a look as a cosmetic
 illusion on sibling variants. The player never sees it as a wieldable
@@ -757,14 +757,14 @@ inventory item.
 {
     item_key        = "cwv_es_longsword_nordland",
     base_weapon     = "es_bastard_sword",
-    display_name    = "Nordland Claymore",
+    display_name    = "Helmgart Watchsword",
     description     = "<lore text>",
     character       = "empire_soldier",
     careers         = _es_all_careers,
     right_hand_unit = "units/weapons/player/wpn_greatsword/wpn_greatsword",
     inventory_icon  = "icon_wpn_greatsword",
     hud_icon        = "weapon_generic_icon_sword",
-    skin_display_name = "Nordland Claymore",
+    skin_display_name = "Helmgart Watchsword",
     rarity          = "exotic",
     template        = "imperial_longsword_template",
     item_type       = "cwv_imperial_longsword",

@@ -448,7 +448,7 @@ live in `character_weapon_variants/RECIPES.md`. Animation fixes use
 | `cwv_we_sword_shield` | Shield (default) | `es_sword_shield` | Kerillian (all) | **Remap** + `wield_anim_3p = "to_1h_spear_shield"` (`elven_sword_shield_template`) | 5 attack-event remaps + base-template wield patch for previewer |
 | `cwv_we_sword_shield_veteran` | Shield (unique) | `es_sword_shield` | Kerillian (all) | Same as above | |
 | `cwv_es_longsword` | 2H melee (default) | `es_bastard_sword` | Kruber (all) | Native | `imperial_longsword_template` stat-clone |
-| `cwv_es_longsword_blackguard` | 2H melee (unique) | `es_bastard_sword` | Kruber (all) | Native | Same template as Recruit Longsword |
+| `cwv_es_longsword_blackguard` | 2H melee (unique) | `es_bastard_sword` | Kruber (all) | Native | Same template as Imperial Longsword |
 | `cwv_es_longsword_nordland` | Skin-only | `es_bastard_sword` | Kruber (all) | n/a (skin only) | Surfaces `wpn_greatsword` mesh as illusion option |
 | `cwv_es_javelin` | Ranged ammo | `we_javelin` | Kruber (all) | **Remap** (`_tj_anim_remap`) + per-career wield routing (`to_es_deus_01`) | `tuskgor_javelin_template`; custom `Pickups.ammo` + `ProjectileUnits` registration |
 | `cwv_wh_javelin` | Ranged ammo | `we_javelin` | Saltzpyre (all) | Same as above; `wh_priest → to_1h_hammer_shield`, others `→ to_1h_sword_shield` | |

@@ -383,8 +383,8 @@ local _variant_definitions = {
 	{
 		item_key        = "cwv_es_longsword",
 		base_weapon     = "es_bastard_sword",
-		display_name    = "Recruit Longsword",
-		description     = "Standard issue to the state regiments of the Reikland. Forged in their thousands by the smithies of Altdorf — serviceable steel for the men who hold the line against beast and greenskin alike.",
+		display_name    = "Imperial Longsword",
+		description     = "Standard-issue Imperial longsword of the Reikland state regiments. Forged in their thousands by the smithies of Altdorf - serviceable steel for the men who hold the line against beast and greenskin alike.",
 		character       = "empire_soldier",
 		careers         = _es_all_careers,
 		-- QUESTION: model is from two_handed_swords_template_1 (Kruber greatsword) but
@@ -394,7 +394,7 @@ local _variant_definitions = {
 		right_hand_unit = "units/weapons/player/wpn_empire_2h_sword_04_t1/wpn_2h_sword_04_t1",
 		inventory_icon  = "icon_wpn_empire_2h_sword_04_t1",
 		hud_icon        = "weapon_generic_icon_sword",
-		skin_display_name = "Recruit Longsword",
+		skin_display_name = "Imperial Longsword",
 		rarity          = "default",
 		-- CLARIFY: power_level = 5 is intentional (a "blacksmith template" item per
 		-- CHANGELOG v0.1.25), not a typo for 300. Properties roll on power_level.
@@ -423,7 +423,7 @@ local _variant_definitions = {
 		-- Imperial Longsword and Shield: Bretonnian sword+shield moveset
 		-- (`one_handed_sword_shield_template_2`, native to es_questingknight)
 		-- repurposed as Kruber's longsword+shield combo. Right hand uses the
-		-- Recruit Longsword mesh (`wpn_2h_sword_04_t1`); left hand uses
+		-- Imperial Longsword mesh (`wpn_2h_sword_04_t1`); left hand uses
 		-- Kruber's standard Empire shield (`wpn_emp_shield_02`). Cosmetic
 		-- illusion picker registers every unique shield from the vanilla
 		-- `es_sword_shield` skin pool (Empire Shield 01 / 02 / 03 / 04 / 05
@@ -738,14 +738,17 @@ local _variant_definitions = {
 	{
 		item_key        = "cwv_es_longsword_nordland",
 		base_weapon     = "es_bastard_sword",
-		display_name    = "Nordland Claymore",
-		description     = "Forged for the swordsmen of Nordland's coastal regiments, who have stood against the Norscan reaver from Salzenmund to the Sea of Claws. The grip is bound in seal-hide for a surer hold in the rain and salt-spray of the northern shore.",
+		-- Save-compatible internal key. This illusion originally shipped under an
+		-- invented Nordland identity, but CWV first catalogued this mesh as the
+		-- Helmgart watch pattern. Keep the key so persisted cosmetics survive.
+		display_name    = "Helmgart Watchsword",
+		description     = "An Imperial longsword in the Helmgart watch pattern, carried by the soldiers who guard the mountain pass against raiders from the Reikwald and beyond.",
 		character       = "empire_soldier",
 		careers         = _es_all_careers,
 		right_hand_unit = "units/weapons/player/wpn_greatsword/wpn_greatsword",
 		inventory_icon  = "icon_wpn_greatsword",
 		hud_icon        = "weapon_generic_icon_sword",
-		skin_display_name = "Nordland Claymore",
+		skin_display_name = "Helmgart Watchsword",
 		rarity          = "exotic",
 		template        = "imperial_longsword_template",
 		item_type       = "cwv_imperial_longsword",
@@ -5016,7 +5019,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	-- (vanilla overrides via the resident-3p helper, mod-bundled custom meshes
 	-- via the custom-bundle predicate). No-op when nothing resolves.
 	if not owner_unit_1p and _om._husk_rekey_units then
-		if _om._husk_rekey_units(hand, item_data, item_units, owner_unit_3p) then
+		if _om._husk_rekey_units(hand, item_data, item_units, owner_unit_3p, slot_name) then
 			-- #478 residency-gated defer: the resolved variant would hand vanilla a
 			-- NON-RESIDENT unit for this hand (a Deus-only base mesh outside Chaos
 			-- Wastes -- e.g. the Outrider keeping dr_deus_01's Trollhammer left-mount).
@@ -5068,7 +5071,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 		-- issues 397/394: apply the CWV scale/offset transform to the husk 3P
 		-- weapon unit, mirroring the owner-side create_equipment hook.
 		if _om._husk_apply_cwv_transform then
-			_om._husk_apply_cwv_transform(hand, item_data, item_units, v_w3p, owner_unit_3p)
+			_om._husk_apply_cwv_transform(hand, item_data, item_units, v_w3p, owner_unit_3p, slot_name)
 		end
 	end
 
@@ -7485,12 +7488,14 @@ for _, def in ipairs(_variant_definitions) do
 	-- override here ensures the cwv variant always displays its own name in
 	-- weapon-type labels, loot drop banners, and the cosmetics inventory
 	-- header.
-	-- CLARIFY: Multiple variants can share def.item_type (e.g. all three
-	-- Imperial Longsword entries share "cwv_imperial_longsword"). The last
-	-- iteration wins; that's intentional — those variants share a display
-	-- family ("Imperial Longsword").
+	-- Multiple variants can share def.item_type (e.g. the Imperial Longsword
+	-- owner and its illusion-only siblings). The FIRST owning definition is the
+	-- canonical weapon-family label. Never let a later curated/skin-only entry
+	-- rename the owned weapon in inventory headers (issue #396).
 	local effective_item_type = def.item_type or def.item_key
-	_display_names[effective_item_type] = def.display_name
+	if _display_names[effective_item_type] == nil then
+		_display_names[effective_item_type] = def.display_name
+	end
 end
 
 -- Pickup HUD popup strings. Vanilla pickup interaction code calls Localize()
@@ -7941,8 +7946,8 @@ local _custom_illusions = {
 	{ skin_key = "cwv_il_es_02_runed_01", matching_weapon = "es_bastard_sword", source_skin = "es_2h_sword_skin_02_runed_01", target_combo = "cwv_imperial_longsword_skins", can_wield = _es_careers },
 	{ skin_key = "cwv_il_es_03",          matching_weapon = "es_bastard_sword", source_skin = "es_2h_sword_skin_03",          target_combo = "cwv_imperial_longsword_skins", can_wield = _es_careers },
 	-- Curated-variant mesh assignments (must NOT collide with vanilla clones):
-	--   Recruit Longsword   → wpn_empire_2h_sword_04_t1 (= es_2h_sword_skin_05)
-	--   Nordland Claymore   → wpn_empire_2h_sword_03_t2 (= es_2h_sword_skin_04)
+	--   Imperial Longsword  → wpn_empire_2h_sword_04_t1 (= es_2h_sword_skin_05)
+	--   Helmgart Watchsword → wpn_greatsword (= es_2h_sword_skin_06)
 	--   Black Guard Blade   → wpn_empire_2h_sword_03_t2 (= es_2h_sword_skin_04 — currently shares mesh with Nordland; user knows, will resolve elsewhere)
 	-- Drop vanilla clones that duplicate a curated variant by mesh path:
 	-- cwv_il_es_04 / cwv_il_es_05 / cwv_il_es_06 (the latter shares mesh with
@@ -8949,10 +8954,10 @@ _register_rapier_illusions()
 -- meshes directly.
 --
 -- Pairing rationale (best-effort thematic without localization access):
---   * Plain state-issue shields (01_t1, 02) → Recruit Longsword
+--   * Plain state-issue shields (01_t1, 02) → Imperial Longsword
 --     (wpn_2h_sword_04_t1) — both basic Reikland regiment kit.
 --   * Mid-tier sealhide / coastal-style shields (03 + runed variant) →
---     Nordland Claymore (wpn_greatsword) — coastal regiment theme.
+--     Helmgart Watchsword (wpn_greatsword) — western-pass watch theme.
 --   * Ornate / runed / magic shields (04, 04_magic_01, 05, 02_runed_01) →
 --     Black Guard Blade (wpn_2h_sword_03_t2) — knightly / Knights of
 --     Morr theme.
@@ -8982,10 +8987,10 @@ local _ILS_WH_SWORD_05_RUNE = "units/weapons/player/wpn_empire_2h_sword_05_t1/wp
 -- it, the per-shield key would collide and only the first registers.
 local _IMPERIAL_LONGSWORD_SHIELD_PAIRINGS = {
 	-- ── Imperial sword family ─────────────────────────────────────
-	-- Plentiful / basic: Recruit Longsword + plain Reikland shields.
+	-- Plentiful / basic: Imperial Longsword + plain Reikland shields.
 	{ left = "units/weapons/player/wpn_empire_shield_01_t1/wpn_emp_shield_01_t1",     right = _ILS_RECRUIT_SWORD,    rarity = "plentiful", suffix = "recruit" },
 	{ left = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02",           right = _ILS_RECRUIT_SWORD,    rarity = "plentiful", suffix = "recruit" },
-	-- Rare / mid-tier: Nordland Claymore + sealhide-style shields.
+	-- Rare / mid-tier: Helmgart Watchsword + mid-tier shields.
 	{ left = "units/weapons/player/wpn_empire_shield_03/wpn_emp_shield_03",           right = _ILS_NORDLAND_SWORD,   rarity = "rare",      suffix = "nordland" },
 	-- Exotic: Black Guard Blade + ornate shields.
 	{ left = "units/weapons/player/wpn_empire_shield_04/wpn_emp_shield_04",           right = _ILS_BLACKGUARD_SWORD, rarity = "exotic",    suffix = "blackguard" },
@@ -10133,7 +10138,7 @@ end)
 -- one edit, not three.
 
 local _type_transforms = {
-	-- Imperial Longsword family (Recruit Longsword, Nordland Claymore, Black Guard Blade).
+	-- Imperial Longsword family (Imperial Longsword, Helmgart Watchsword, Black Guard Blade).
 	-- Y trims 20% off width (Imperial greatsword's wide axis is Y, not X like the
 	-- Bretonian — this is independent of cosmetics_tweaker's `_breton_sword_thiccc`
 	-- factor `{0.65, 1, 1}` on `wpn_emp_gk_sword_*`); Z trims 10% off blade length.
@@ -10787,13 +10792,15 @@ do
 	--     guard -- force-loading it is the issue 403 boot fatal).
 	--   * Idempotent and fail-safe: decline/no-op leaves item_units untouched
 	--     (vanilla then spawns whatever the skin data already put there).
-	_om._husk_rekey_units = function(hand, item_data, item_units, owner_unit_3p)
+	_om._husk_rekey_units = function(hand, item_data, item_units, owner_unit_3p, slot_name)
 		if not (item_data and item_units) then return end
 		local base_name = item_data.name
 		if not base_name then return end
 		local skin = item_units.skin
 		local career = _husk_career_name(owner_unit_3p)
-		local def, reason = _om._husk_resolve_display_def(base_name, career, skin)
+		local def = _om._husk_identity_def and _om._husk_identity_def(owner_unit_3p, slot_name, base_name)
+		local reason = def and "identity" or nil
+		if not def then def, reason = _om._husk_resolve_display_def(base_name, career, skin) end
 		if not def then
 			-- Decision diagnostics (#474/#475), scoped to bases a cwv variant
 			-- clones so common native wields don't spam; once per shape.
@@ -10824,7 +10831,7 @@ do
 		end
 		local field = (hand == "right") and "right_hand_unit" or "left_hand_unit"
 		local override
-		if reason == "skin" and WeaponSkins and WeaponSkins.skins then
+		if (reason == "skin" or reason == "identity") and WeaponSkins and WeaponSkins.skins then
 			local skin_tmpl = rawget(WeaponSkins.skins, skin)
 			local skin_unit = skin_tmpl and skin_tmpl[field]
 			if type(skin_unit) == "string" and skin_unit ~= "" then override = skin_unit end
@@ -10958,7 +10965,7 @@ do
 	-- once the skin/backend_id are absent). When nothing resolves and the item
 	-- is a CWV base weapon, log it: that is the disambiguating evidence for the
 	-- #392 base-resolution umbrella (husk never sees the CWV instance).
-	_om._husk_apply_cwv_transform = function(hand, item_data, item_units, weapon_unit_3p, owner_unit_3p)
+	_om._husk_apply_cwv_transform = function(hand, item_data, item_units, weapon_unit_3p, owner_unit_3p, slot_name)
 		if not (weapon_unit_3p and _is_unit(weapon_unit_3p)) then
 			-- The 3P weapon unit is nil/dead. For a CWV base weapon this means the
 			-- spawn returned nothing (override unit non-resident on this client, or
@@ -10973,7 +10980,9 @@ do
 			return
 		end
 		local skin = item_units and item_units.skin
-		local def = _resolve_cwv_def(item_data, skin)
+		local def = _om._husk_identity_def
+			and _om._husk_identity_def(owner_unit_3p, slot_name, item_data and item_data.name)
+			or _resolve_cwv_def(item_data, skin)
 		if not def and skin == nil then
 			-- #392/#397 fallback, #475-hardened: base+career positive signal for
 			-- SKINLESS echoes only, can_wield evaluated LAZILY at wield time. A
@@ -11235,6 +11244,115 @@ do
 	end
 	_om._wire_parity_live = _wire_parity_live
 
+	-- #396 positive owner identity. Vanilla equipment RPCs deliberately encode a
+	-- CWV clone as its stable base item name, so the receiver cannot distinguish
+	-- an Imperial Longsword from a native Bretonnian Longsword when the selected
+	-- skin is nil/vanilla-looking. Carry only the missing item-key axis over VMF's
+	-- same-mod channel; the ordinary vanilla RPC remains authoritative for slot,
+	-- skin, units, and wield timing. The side channel is absence-safe for non-CWV
+	-- peers and bounded to equip/resync/parity edges (never per-frame).
+	local _IDENTITY_SCHEMA = 1
+	local _remote_identity = {}
+	local _identity_last_sent = {}
+	_om._cwv_remote_identity = _remote_identity
+	mod._cwv_identity_surfaces = { network = true }
+
+	_om._cwv_identity_payloads = function(slots)
+		local payloads = {}
+		if type(slots) ~= "table" then return payloads end
+		for slot_name, slot_data in pairs(slots) do
+			if slot_name == "slot_melee" or slot_name == "slot_ranged" then
+				local item_data = slot_data and slot_data.item_data
+				local key = item_data and _om._cwv_key_for_item(item_data.backend_id, item_data)
+				local def = key and _find_def(key)
+				payloads[#payloads + 1] = {
+					slot = slot_name,
+					item_key = (def and not def.skin_only) and key or "",
+				}
+			end
+		end
+		return payloads
+	end
+
+	_om._cwv_accept_identity = function(sender_peer_id, schema, payload)
+		if schema ~= _IDENTITY_SCHEMA or type(sender_peer_id) ~= "string"
+				or type(payload) ~= "table" then return false, "invalid" end
+		local slot_name = payload.slot
+		if slot_name ~= "slot_melee" and slot_name ~= "slot_ranged" then
+			return false, "slot"
+		end
+		local key = payload.item_key
+		if key ~= "" then
+			local def = type(key) == "string" and _find_def(key)
+			if not def or def.skin_only then return false, "item" end
+		end
+		local by_slot = _remote_identity[sender_peer_id]
+		if not by_slot then
+			by_slot = {}
+			_remote_identity[sender_peer_id] = by_slot
+		end
+		local previous = by_slot[slot_name]
+		by_slot[slot_name] = key ~= "" and key or nil
+		return previous ~= by_slot[slot_name], "ok"
+	end
+
+	_om._cwv_identity_def_for_peer = function(peer_id, slot_name, base_name)
+		local key = peer_id and _remote_identity[peer_id]
+		key = key and key[slot_name]
+		local def = key and _find_def(key)
+		if not def or def.skin_only or def.base_weapon ~= base_name then return nil end
+		return def
+	end
+
+	_om._husk_identity_def = function(owner_unit_3p, slot_name, base_name)
+		if not owner_unit_3p then return nil end
+		local player
+		pcall(function() player = Managers.player:owner(owner_unit_3p) end)
+		local peer_id = player and (player.peer_id or (player.network_id and player:network_id()))
+		return _om._cwv_identity_def_for_peer(peer_id, slot_name, base_name)
+	end
+
+	local function _send_identity_slots(slots, context, force)
+		local payloads = _om._cwv_identity_payloads(slots)
+		local sent = 0
+		for _, payload in ipairs(payloads) do
+			local signature = payload.item_key
+			if force or _identity_last_sent[payload.slot] ~= signature then
+				local ok = pcall(mod.network_send, mod,
+					"cwv_item_identity", "all", _IDENTITY_SCHEMA, payload)
+				if ok then
+					_identity_last_sent[payload.slot] = signature
+					sent = sent + 1
+				end
+			end
+		end
+		if sent > 0 then
+			pcall(printf, "[cwv:396] item identity sent: context=%s slots=%d", tostring(context), sent)
+		end
+		return sent
+	end
+	_om._cwv_send_identity_slots = _send_identity_slots
+
+	mod:network_register("cwv_item_identity", function(sender_peer_id, schema, payload)
+		local changed = _om._cwv_accept_identity(sender_peer_id, schema, payload)
+		if not changed then return end
+		pcall(printf, "[cwv:396] item identity received: peer=%s slot=%s key=%s",
+			tostring(sender_peer_id), tostring(payload.slot), tostring(payload.item_key))
+		-- If vanilla equipment arrived first, rebuild the currently wielded husk
+		-- once. If identity arrived first, the following vanilla wield RPC is the
+		-- rebuild. Either ordering converges without polling.
+		local pm = Managers and Managers.player
+		local player = pm and pm.player_from_peer_id and pm:player_from_peer_id(sender_peer_id)
+		local unit = player and player.player_unit
+		if unit and Unit.alive(unit) then
+			local inventory
+			pcall(function() inventory = ScriptUnit.extension(unit, "inventory_system") end)
+			if inventory and inventory.wielded_slot == payload.slot and type(inventory.wield) == "function" then
+				pcall(inventory.wield, inventory, payload.slot)
+			end
+		end
+	end)
+
 	-- issue 476 diagnostic (printf, dev-always-on). Makes the husk-illusion wire
 	-- DECISION legible in the WIELDER's own log at equip time. A remote view (the
 	-- host + other clients) renders the wielder as a HUSK, which resolves the BASE
@@ -11399,6 +11517,7 @@ do
 		local ok_inv, inventory = pcall(ScriptUnit.extension, unit, "inventory_system")
 		if not ok_inv or not inventory or type(inventory.equipment) ~= "function" then return 0 end
 		local equipment = inventory:equipment()
+		_send_identity_slots(equipment and equipment.slots, "parity_replay", true)
 		local payloads = _om._cwv_skin_replay_payloads(equipment)
 		if #payloads == 0 then return 0 end
 		local go_id = storage:go_id(unit)
@@ -11445,13 +11564,19 @@ do
 		if not slots then
 			return func(self, unit, unit_go_id)
 		end
+		_send_identity_slots(slots, "game_object_initialized", true)
 		return _wire_null_skins(slots, function()
 			return func(self, unit, unit_go_id)
 		end, "game_object_initialized", false)
 	end)
 	mod._cwv_skin_wire_surfaces.game_object_initialized = true
+	mod._cwv_identity_surfaces.game_object_initialized = true
 
 	mod:hook("SimpleInventoryExtension", "_spawn_resynced_loadout", function(func, self, equipment_to_spawn, skip_wield)
+		if equipment_to_spawn and equipment_to_spawn.slot_id then
+			_send_identity_slots({ [equipment_to_spawn.slot_id] = equipment_to_spawn },
+				"spawn_resynced_loadout", false)
+		end
 		if not (equipment_to_spawn and equipment_to_spawn.skin) then
 			return func(self, equipment_to_spawn, skip_wield)
 		end
@@ -11461,6 +11586,7 @@ do
 		end, "spawn_resynced_loadout", false)
 	end)
 	mod._cwv_skin_wire_surfaces.spawn_resynced_loadout = true
+	mod._cwv_identity_surfaces.spawn_resynced_loadout = true
 
 	mod:hook("GearUtils", "hot_join_sync", function(func, peer_id, unit, equipment, additional_items)
 		local slots = equipment and equipment.slots
@@ -11481,6 +11607,7 @@ do
 			on_enable = function() return _replay_and_clear_pending("parity_enable_edge") end,
 		})
 		mod._cwv_skin_wire_surfaces.parity_replay = true
+		mod._cwv_identity_surfaces.parity_replay = true
 	end
 
 	-- The peer-parity library installed the current mod.update wrapper near boot.
@@ -12664,6 +12791,80 @@ _rt_register("dual_axes_cosmetic_family_parity", function()
                 target_key, table.concat(missing, ","), table.concat(extra, ","))
         end
     end
+end)
+
+_rt_register("issue396_imperial_longsword_identity_and_remote_husk", function()
+	local owner = _find_def("cwv_es_longsword")
+	local illusion = _find_def("cwv_es_longsword_nordland")
+	if not owner or owner.display_name ~= "Imperial Longsword" then
+		return "owned cwv_es_longsword is not canonically named Imperial Longsword"
+	end
+	if not illusion or not illusion.skin_only
+			or illusion.skin_display_name ~= "Helmgart Watchsword" then
+		return "save-compatible cwv_es_longsword_nordland is not a distinct Helmgart Watchsword illusion"
+	end
+	if _display_names.cwv_imperial_longsword ~= "Imperial Longsword"
+			or _display_names.cwv_es_longsword_nordland_skin_name ~= "Helmgart Watchsword" then
+		return "weapon-family and illusion localization keys are conflated"
+	end
+
+	local surfaces = mod._cwv_identity_surfaces
+	for _, name in ipairs({ "network", "game_object_initialized", "spawn_resynced_loadout", "parity_replay" }) do
+		if not (surfaces and surfaces[name]) then return "missing CWV identity surface: " .. name end
+	end
+	local plan = _om._cwv_identity_payloads
+	local accept = _om._cwv_accept_identity
+	local resolve = _om._cwv_identity_def_for_peer
+	if type(plan) ~= "function" or type(accept) ~= "function" or type(resolve) ~= "function" then
+		return "CWV item-identity side-channel helpers missing"
+	end
+	local payloads = plan({
+		slot_melee = { item_data = { name = "es_bastard_sword", cwv_key = "cwv_es_longsword" } },
+		slot_ranged = { item_data = { name = "es_handgun" } },
+	})
+	local by_slot = {}
+	for _, payload in ipairs(payloads) do by_slot[payload.slot] = payload end
+	if not by_slot.slot_melee or by_slot.slot_melee.item_key ~= "cwv_es_longsword"
+			or not by_slot.slot_ranged or by_slot.slot_ranged.item_key ~= "" then
+		return "identity planner did not preserve CWV owner and native clear payloads"
+	end
+	local changed = accept("rt396-peer", 1, by_slot.slot_melee)
+	local resolved = resolve("rt396-peer", "slot_melee", "es_bastard_sword")
+	if changed ~= true or resolved ~= owner then
+		return "receiver did not resolve the explicit Imperial Longsword marker over its vanilla base"
+	end
+	if resolve("rt396-peer", "slot_melee", "es_handgun") ~= nil then
+		return "identity marker crossed its authored base-weapon boundary"
+	end
+	accept("rt396-peer", 1, { slot = "slot_melee", item_key = "" })
+	if resolve("rt396-peer", "slot_melee", "es_bastard_sword") ~= nil then
+		return "native-slot clear left stale CWV identity behind"
+	end
+
+	local replay = _om._cwv_skin_replay_payloads
+	local skin_key = "cwv_es_longsword_nordland_skin"
+	local skin_payloads = replay and replay({
+		wielded_slot = "slot_melee",
+		slots = { slot_melee = { item_data = { name = "es_bastard_sword" }, skin = skin_key } },
+	}) or {}
+	if #skin_payloads ~= 1 or skin_payloads[1].skin ~= skin_key
+			or skin_payloads[1].item_name ~= "es_bastard_sword" or not skin_payloads[1].wielded then
+		return "hot-join/transition replay lost the exact Helmgart illusion or current wield"
+	end
+	local skin_def, reason = _om._husk_resolve_display_def("es_bastard_sword", "es_mercenary", skin_key)
+	if skin_def ~= illusion or reason ~= "skin" then
+		return "Helmgart skin does not positively resolve its exact remote-husk mesh"
+	end
+	local preview = mod._cwv_preview_meshswap_apply
+	local info = {
+		skin_name = skin_key,
+		spawn_data = { { right_hand = true, unit_name = illusion.right_hand_unit .. "_3p" } },
+	}
+	if type(preview) ~= "function" then return "inventory preview mesh-swap helper missing" end
+	preview("es_bastard_sword", "cwv_es_longsword_001", skin_key, info)
+	if info.spawn_data[1].unit_name ~= illusion.right_hand_unit .. "_3p" then
+		return "inventory character preview replaced the selected Helmgart mesh"
+	end
 end)
 
 _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()

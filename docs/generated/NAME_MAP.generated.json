@@ -11,7 +11,7 @@
     {
       "key": "cwv_es_longsword_nordland",
       "kind": "cwv_skin_only",
-      "display_name": "Nordland Claymore",
+      "display_name": "Helmgart Watchsword",
       "display_name_source": "literal",
       "loc_key": "cwv_es_longsword_nordland_name",
       "item_type": "cwv_imperial_longsword",
@@ -194,7 +194,7 @@
     {
       "key": "cwv_es_longsword",
       "kind": "cwv_variant",
-      "display_name": "Recruit Longsword",
+      "display_name": "Imperial Longsword",
       "display_name_source": "literal",
       "loc_key": "cwv_es_longsword_name",
       "item_type": "cwv_imperial_longsword",

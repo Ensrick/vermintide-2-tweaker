@@ -192,7 +192,7 @@ item.CustomData.rarity = "unique"  -- serialized rarity
 
 ## Blacksmith Template Pattern
 
-A "blacksmith template" is the unlocked white/grey starter weapon that the forge will let the player re-roll properties on, salvage, and apply illusions to — same UX as vanilla `es_bastard_sword`'s default-rarity drop from a commendation chest. CWV's `cwv_es_longsword` (Recruit Longsword) and `cwv_es_axe_shield` are examples.
+A "blacksmith template" is the unlocked white/grey starter weapon that the forge will let the player re-roll properties on, salvage, and apply illusions to — same UX as vanilla `es_bastard_sword`'s default-rarity drop from a commendation chest. CWV's `cwv_es_longsword` (Imperial Longsword) and `cwv_es_axe_shield` are examples.
 
 ### Def fields
 
@@ -283,7 +283,7 @@ end
 Set on the item entry so the backend resolves to the variant's skin **as the curated default cosmetic**. Done ONLY for non-default-rarity variants — see "Blacksmith Template Pattern" above.
 
 - **Curated exotic / unique variants** (e.g. Black Guard Blade, Imperial Axe and Shield): pre-apply the skin. They ship with their illusion baked in as part of their identity.
-- **Default-rarity blacksmith templates** (e.g. Recruit Longsword): leave both fields nil. The mesh comes from `entry.right_hand_unit` directly via the `BackendUtils.get_item_units` cwv-override hook. Pre-applying a skin would make the forge treat the item as a locked illusion variant.
+- **Default-rarity blacksmith templates** (e.g. Imperial Longsword): leave both fields nil. The mesh comes from `entry.right_hand_unit` directly via the `BackendUtils.get_item_units` cwv-override hook. Pre-applying a skin would make the forge treat the item as a locked illusion variant.
 
 `_build_entry` gates the pre-apply on `def.rarity ~= "default"`.
 

@@ -10,6 +10,19 @@ Last updated: 2026-07-13.
 
 ## Multiplayer
 
+### issue396-imperial-longsword-identity — Vanilla base wire loses CWV ownership
+
+| Field | Value |
+|-------|-------|
+| Symptom | An Imperial Longsword using the Helmgart illusion can be invisible or appear as a native Bretonnian Longsword on another player's lobby husk; the UI also labels both weapon and illusion with one incorrect name. |
+| Root cause | Vanilla synchronizes the CWV clone as `es_bastard_sword`, and a missing/vanilla-looking skin carries no positive owner identity. WT can make that base/career pair native, so CWV's corruption guard correctly refuses to infer a variant. Separately, the last shared-item-type localization writer was the illusion-only definition. |
+| Mod(s) | character_weapon_variants; weapon_tweaker compatibility boundary |
+| Fix version(s) | CWV v0.1.398-dev (#396) |
+| Category | MULTIPLAYER / APPEARANCE / LOCALIZATION |
+| Repro | Equip Imperial Longsword with Helmgart Watchsword; second player observes initial lobby, swap away/back, mission transition, and inventory preview. Repeat roles and include native Bretonnian Longsword control. |
+| Expected post-fix | Owned item remains Imperial Longsword; illusion remains Helmgart Watchsword. The same-mod owner marker resolves only against `es_bastard_sword`, while vanilla skin data supplies the exact remote mesh. Native control is untouched. |
+| Detection | `/cwv_regression_test`: `issue396_imperial_longsword_identity_and_remote_husk`; bounded `[cwv:396] item identity sent/received` lines, followed by husk wield with `cwv_es_longsword_nordland_skin`. |
+
 ### issue474-old-musket-remote-continuity — Hot join loses cross-slot identity and custom mesh has no remote report
 
 | Field | Value |
