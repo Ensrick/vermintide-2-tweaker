@@ -113,7 +113,7 @@ cwv_despawn_probes, cwv_give, cwv_give_javelin
 amulet_n, amulet_c, amulet_t, forge_dump, forge_dump_props,
 forge_dump_backend, craft_dump, forge, forge_trait, forge_props,
 forge_skin, forge_power, forge_cancel, forge_confirm, salvage_debug,
-forge_list, forge_delete, inv_dump, mirror_dump, craft_recent
+forge_list, forge_delete, forge_delete_all, inv_dump, mirror_dump, craft_recent
 ```
 
 ### `enemy` (enemy_tweaker)

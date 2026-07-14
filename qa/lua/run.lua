@@ -60,6 +60,7 @@ local suites = {
     "test_cwv_javelin_pickup",
     "test_cwv_exact_pair_state",
     "test_cim_skin_persistence",
+    "test_cim_bulk_cleanup",
     "test_cos_score_identity",
     "test_gut_native_loadout_policy",
     "test_gt_dummy_collision_policy",

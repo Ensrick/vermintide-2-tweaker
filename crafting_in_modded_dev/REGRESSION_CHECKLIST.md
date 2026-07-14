@@ -8,6 +8,21 @@ Last updated: 2026-07-13.
 
 ---
 
+## Bulk Cleanup
+
+### issue277-exact-cim-weapon-cleanup - Destructive cleanup fails closed
+
+| Field | Value |
+|-------|-------|
+| Scope | Only backend IDs present in CIM's exact `_forged_weapons` store whose live ItemMasterList row is `melee` or `ranged`. Accessories, unresolved definitions, rarity-only rows, prefix-only rows, and ordinary backend items are retained. |
+| Safety | `/forge_delete_all` previews and snapshots the exact set. `/forge_delete_all CONFIRM` proceeds only if the set is unchanged and no candidate appears in a current or saved loadout; uncertainty refuses the entire transaction. |
+| Persistence | The runtime mirror row, legacy MoreItemsLibrary row, CIM forged record, dormant modded-loadout references, and exact-ID illusion override are removed; forge persistence and UI refresh run once per batch. |
+| Repro | Craft two weapons and one accessory. Leave every craft unequipped. Run `/forge_delete_all`, review the counts, then run `/forge_delete_all CONFIRM`. Restart and verify the weapons do not return while the accessory and every vanilla item remain. |
+| Negative cases | Equip one CIM weapon in any current or saved loadout and confirm the command deletes nothing. Preview, craft another weapon, then confirm and verify the changed-set guard refuses. Disable a source mod and verify its unresolved record is retained. |
+| Detection | Run the offline Lua suite and `/cim_regression_test`; require `issue277_bulk_cleanup_exact_owner_transaction` PASS. |
+
+---
+
 ## Illusion Persistence
 
 ### issue563-vanilla-illusion-exact-id - Vanilla skin override survives mirror rebuild

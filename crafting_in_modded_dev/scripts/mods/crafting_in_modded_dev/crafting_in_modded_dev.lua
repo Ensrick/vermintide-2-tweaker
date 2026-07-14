@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.67-dev"
+local MOD_VERSION = "0.8.68-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -305,6 +305,10 @@ if not _ok_dumpc then mod:error("Failed to load _cim_dump_commands: %s", tostrin
 -- above). The inline HDR regression checks (hdr_bloom / hdr_upgrade) that stay in this
 -- file call _is_in_keep(); the alias lets those bodies register byte-identically.
 local _is_in_keep = mod._cim_is_in_keep
+-- Pure destructive-cleanup policy (#277), shared with the offline Lua suite.
+-- Loaded once and kept on the mod table to preserve entry-chunk local headroom.
+mod._cim277_bulk_core = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_cleanup_core")
+mod.CIM277_BULK_CLEANUP_MARKER_v0_8_68 = true
 -- Backward-compat: pre-v0.7.0 cim used `rarity = "promo"` for crafts. Keep
 -- "promo" registered in NetworkLookup.rarities too so legacy saved items can
 -- still round-trip through inventory sync until they get re-crafted/migrated.
@@ -1125,50 +1129,17 @@ _modded_loadout_load()
 -- Public helper for sibling modules (standard_forge.lua salvage synth) to drop
 -- a salvaged backend_id out of the saved loadout — otherwise loadout-restore
 -- on next session would try to re-equip a non-existent item.
-mod._cim_clear_modded_loadout_for_bid = function(backend_id)
-    if not backend_id then return end
-    local dirty = false
-    -- Indexed schema: career -> index -> slot -> bid. BUT v0.8.14-dev defers the
-    -- flat->indexed migration to the first mirror-ready restore pass, so this
-    -- helper may run (salvage) while a career is STILL flat (career -> slot ->
-    -- bid). Handle BOTH shapes so a pre-migration salvage still clears the bid
-    -- and never strands a dangling restore target. Detected per career via the
-    -- same `_career_value_is_flat` heuristic used by the migration.
-    for career_name, value in pairs(_modded_loadout) do
-        if type(value) == "table" then
-            if _career_value_is_flat(value) then
-                -- Flat: value is slot -> bid (possibly with stray numeric->table
-                -- corrupt entries, which we walk into too).
-                for slot_name, bid in pairs(value) do
-                    if type(bid) == "string" then
-                        if bid == backend_id then
-                            value[slot_name] = nil
-                            dirty = true
-                        end
-                    elseif type(bid) == "table" then
-                        -- Stray numeric->table (mixed/corrupt) — treat as an
-                        -- index sub-table.
-                        for s, b in pairs(bid) do
-                            if b == backend_id then bid[s] = nil; dirty = true end
-                        end
-                    end
-                end
-            else
-                -- Indexed: value is index -> {slot -> bid}.
-                for _index, slots in pairs(value) do
-                    if type(slots) == "table" then
-                        for slot_name, bid in pairs(slots) do
-                            if bid == backend_id then
-                                slots[slot_name] = nil
-                                dirty = true
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
+mod._cim_clear_modded_loadout_for_bids = function(backend_ids)
+    local core = mod._cim277_bulk_core
+    local dirty = core and core.clear_loadout_refs
+        and core.clear_loadout_refs(_modded_loadout, backend_ids)
     if dirty then _modded_loadout_save() end
+    return dirty and true or false
+end
+
+mod._cim_clear_modded_loadout_for_bid = function(backend_id)
+    if not backend_id then return false end
+    return mod._cim_clear_modded_loadout_for_bids({ backend_id })
 end
 
 -- v0.7.33-alpha one-shot migration. Old (pre-v0.7.33) cim never cleared
@@ -5572,6 +5543,53 @@ mod:command("forge_list", "List all forged weapons", function()
     end
 end)
 
+-- Issue #277: one exact-owner deletion transaction shared by single and bulk
+-- cleanup. PlayFabMirrorBase.remove_item only unmarks `new` and nils the exact
+-- `_inventory_items[backend_id]` row (playfab_mirror_base.lua:2547-2555).
+-- Persistence is then cleaned in one write per store so a restart cannot
+-- re-inject the craft or revive an obsolete loadout/illusion reference.
+mod._cim277_delete_owned_ids = function(backend_ids)
+    local mirror = Managers.backend and Managers.backend:get_backend_mirror()
+    local items = Managers.backend and Managers.backend:get_interface("items")
+    if not mirror or type(mirror._inventory_items) ~= "table" or not items then
+        return 0, "backend mirror is not ready"
+    end
+
+    local exact, legacy_mil = {}, {}
+    for i = 1, #(backend_ids or {}) do
+        local backend_id = backend_ids[i]
+        local record = _forged_weapons[backend_id]
+        if record then
+            exact[#exact + 1] = backend_id
+            if record.via_mirror == false then legacy_mil[#legacy_mil + 1] = backend_id end
+        end
+    end
+    if #exact == 0 then return 0, nil end
+
+    if mod._cim_clear_modded_loadout_for_bids then
+        mod._cim_clear_modded_loadout_for_bids(exact)
+    end
+
+    local core = mod._cim277_bulk_core
+    local overrides = mod:get("vanilla_skin_overrides_by_backend_id")
+    if core and core.clear_map_keys and core.clear_map_keys(overrides, exact) then
+        mod:set("vanilla_skin_overrides_by_backend_id", overrides)
+    end
+
+    -- Remove local runtime rows first. The exact ownership snapshot remains in
+    -- `_forged_weapons` until every mirror/MIL removal has been attempted.
+    for i = 1, #exact do mirror:remove_item(exact[i]) end
+    if #legacy_mil > 0 and _forge_detect_mil() then
+        pcall(_more_items_lib.remove_mod_items_from_local_backend,
+            _more_items_lib, legacy_mil, "crafting_in_modded_dev")
+    end
+
+    for i = 1, #exact do _forged_weapons[exact[i]] = nil end
+    _forge_save()
+    items:_refresh()
+    return #exact, nil
+end
+
 mod:command("forge_delete", "Delete a forged weapon (usage: /forge_delete <backend_id or index>)", function(id_or_idx)
     if not id_or_idx then
         mod:echo("Usage: /forge_delete <backend_id or index from /forge_list>")
@@ -5603,21 +5621,142 @@ mod:command("forge_delete", "Delete a forged weapon (usage: /forge_delete <backe
         end
     end
 
-    if _forge_detect_mil() then
-        pcall(_more_items_lib.remove_mod_items_from_local_backend, _more_items_lib, {target_bid}, "crafting_in_modded_dev")
+    local items = Managers.backend and Managers.backend:get_interface("items")
+    if not items then
+        mod:echo("Forge: backend is not ready")
+        return
     end
-    _forged_weapons[target_bid] = nil
-    _forge_save()
-    if Managers.backend then
-        local items = Managers.backend:get_interface("items")
-        if items then items:_refresh() end
+    local ok_current, current = pcall(items.equipped_by, items, target_bid)
+    local ok_saved, saved = pcall(items.is_equipped_by_any_loadout, items, target_bid)
+    if not ok_current or not ok_saved then
+        mod:echo("Forge: could not prove the item is unequipped; nothing was deleted")
+        return
     end
-    mod:echo("Forge: deleted " .. target_bid)
+    if (type(current) == "table" and #current > 0) or (type(saved) == "table" and #saved > 0) then
+        mod:echo("Forge: unequip this item from every current and saved loadout before deleting it")
+        return
+    end
+
+    local removed, err = mod._cim277_delete_owned_ids({ target_bid })
+    if err then
+        mod:echo("Forge: delete refused: " .. err)
+    elseif removed == 1 then
+        mod:echo("Forge: deleted " .. target_bid)
+    else
+        mod:echo("Forge: item was no longer owned by CIM; nothing was deleted")
+    end
+end)
+
+mod:command("forge_delete_all", "Delete every unequipped CIM-crafted weapon (run once to preview, then /forge_delete_all CONFIRM)", function(confirm)
+    local core = mod._cim277_bulk_core
+    local items = Managers.backend and Managers.backend:get_interface("items")
+    local mirror = Managers.backend and Managers.backend:get_backend_mirror()
+    if not core or not items or not mirror or type(mirror._inventory_items) ~= "table" then
+        mod:echo("Forge cleanup: backend is not ready; nothing was deleted")
+        return
+    end
+
+    local weapon_ids, retained_non_weapons, retained_unresolved =
+        core.classify(_forged_weapons, ItemMasterList)
+    if #weapon_ids == 0 then
+        mod._cim277_pending_bulk_delete = nil
+        mod:echo(string.format("Forge cleanup: no resolvable CIM-crafted weapons. Retained: %d accessories/non-weapons, %d unresolved definitions.",
+            #retained_non_weapons, #retained_unresolved))
+        return
+    end
+
+    local function is_equipped(backend_id)
+        local ok_current, current = pcall(items.equipped_by, items, backend_id)
+        local ok_saved, saved = pcall(items.is_equipped_by_any_loadout, items, backend_id)
+        if not ok_current or not ok_saved or type(current) ~= "table" or type(saved) ~= "table" then
+            return nil
+        end
+        return #current > 0 or #saved > 0
+    end
+    local deletable, blocked, uncertain = core.partition_equipped(weapon_ids, is_equipped)
+    if #uncertain > 0 then
+        mod._cim277_pending_bulk_delete = nil
+        mod:echo(string.format("Forge cleanup refused: equip state was unavailable for %d weapon(s); nothing was deleted.", #uncertain))
+        return
+    end
+    if #blocked > 0 then
+        mod._cim277_pending_bulk_delete = nil
+        mod:echo(string.format("Forge cleanup refused: %d CIM weapon(s) are equipped in a current or saved loadout. Unequip all of them first; nothing was deleted.", #blocked))
+        for i = 1, math.min(#blocked, 5) do mod:echo("  equipped: " .. blocked[i]) end
+        return
+    end
+
+    local signature = core.signature(deletable)
+    if confirm ~= "CONFIRM" then
+        mod._cim277_pending_bulk_delete = signature
+        mod:echo(string.format("Forge cleanup preview: DELETE %d exact CIM-crafted weapon(s). Retain %d accessories/non-weapons and %d unresolved definitions.",
+            #deletable, #retained_non_weapons, #retained_unresolved))
+        mod:echo("This cannot be undone. Run /forge_delete_all CONFIRM to delete this exact preview set.")
+        return
+    end
+
+    if mod._cim277_pending_bulk_delete ~= signature then
+        mod._cim277_pending_bulk_delete = nil
+        mod:echo("Forge cleanup refused: the craft set changed or no matching preview exists. Run /forge_delete_all again.")
+        return
+    end
+    mod._cim277_pending_bulk_delete = nil
+
+    local removed, err = mod._cim277_delete_owned_ids(deletable)
+    if err then
+        mod:echo("Forge cleanup refused: " .. err .. "; nothing was deleted")
+        return
+    end
+    mod:echo(string.format("Forge cleanup: deleted %d CIM-crafted weapon(s). Retained %d accessories/non-weapons and %d unresolved definitions.",
+        removed, #retained_non_weapons, #retained_unresolved))
 end)
 
 -- ============================================================
 -- /regression_test checks (see scaffold near MOD_VERSION).
 -- ============================================================
+
+_rt_register("issue277_bulk_cleanup_exact_owner_transaction", function()
+    local core = mod._cim277_bulk_core
+    if type(core) ~= "table" or type(core.classify) ~= "function"
+            or type(core.partition_equipped) ~= "function"
+            or type(core.clear_loadout_refs) ~= "function"
+            or type(mod._cim277_delete_owned_ids) ~= "function"
+            or mod.CIM277_BULK_CLEANUP_MARKER_v0_8_68 ~= true then
+        return "#277 cleanup policy/runtime wiring missing"
+    end
+
+    local weapons, retained, unresolved = core.classify({
+        owned_weapon = { item_key = "weapon" },
+        owned_accessory = { item_key = "accessory" },
+        owned_missing = { item_key = "missing" },
+    }, {
+        weapon = { slot_type = "melee" },
+        accessory = { slot_type = "necklace" },
+        rarity_only_not_owned = { slot_type = "ranged", rarity = "modded" },
+    })
+    if #weapons ~= 1 or weapons[1] ~= "owned_weapon"
+            or #retained ~= 1 or retained[1] ~= "owned_accessory"
+            or #unresolved ~= 1 or unresolved[1] ~= "owned_missing" then
+        return "exact-owner weapon classification failed"
+    end
+
+    local deletable, blocked, uncertain = core.partition_equipped(
+        { "free", "equipped", "unknown" },
+        function(id)
+            if id == "free" then return false end
+            if id == "equipped" then return true end
+            return nil
+        end
+    )
+    if #deletable ~= 1 or deletable[1] ~= "free"
+            or #blocked ~= 1 or blocked[1] ~= "equipped"
+            or #uncertain ~= 1 or uncertain[1] ~= "unknown" then
+        return "equipped/uncertain fail-closed partition failed"
+    end
+    if core.signature({ "b", "a" }) ~= core.signature({ "a", "b" }) then
+        return "confirmation signature changed with iteration order"
+    end
+end)
 
 _rt_register("weave_talent_forge_level_guard_present", function()
     -- Issue #71 (2026-06-01): pressing the amulet under the modded forge crashed

@@ -1,5 +1,21 @@
 # Crafting in Modded Changelog
 
+## 0.8.68-dev (2026-07-13): #277 exact-owner bulk weapon cleanup [verify-fix] [not deployed]
+
+- Added `/forge_delete_all` as a two-step destructive workflow: the first call previews and snapshots the exact candidate set; `/forge_delete_all CONFIRM` proceeds only if that set is unchanged.
+- Candidates come only from CIM's `_forged_weapons` acquisition store and must resolve to an ItemMasterList `melee` or `ranged` row. Rarity-only items, UUID/CWV-prefix guesses, ordinary backend items, accessories, and unavailable definitions are retained.
+- The preflight queries both current equips and every saved loadout using vanilla's `equipped_by` and `is_equipped_by_any_loadout` surfaces. Any equipped candidate or unavailable equip state refuses the entire batch with no partial delete.
+- A confirmed batch deletes the exact local mirror rows, legacy MoreItemsLibrary rows when present, forged persistence records, dormant CIM loadout references, and exact-ID illusion overrides, then persists/refreshes once. The existing `/forge_delete` command now shares the same cleanup path and also refuses equipped/uncertain items.
+- Source boundary: `PlayFabMirrorBase.remove_item` only unmarks the exact id as new and clears `_inventory_items[backend_id]` (`playfab_mirror_base.lua:2547-2555`); `BackendInterfaceItemPlayfab.is_equipped_by_any_loadout` scans every career loadout (`backend_interface_item_playfab.lua:785-801`). No PlayFab remove request, commit, hook, RPC, or network value is introduced.
+- Added pure policy module `_cim_bulk_cleanup_core.lua`, offline suite `test_cim_bulk_cleanup.lua`, and runtime check `issue277_bulk_cleanup_exact_owner_transaction`.
+
+### Test method
+1. Craft two weapons and one accessory; unequip both weapons from every current and saved loadout.
+2. Run `/forge_delete_all`, verify the preview counts, then run `/forge_delete_all CONFIRM` and confirm only the two weapons disappear.
+3. Restart and confirm the deleted weapons do not return, while the accessory and ordinary inventory are unchanged.
+4. Negative cases: equip a CIM weapon and verify the batch refuses; preview, craft another weapon, and verify stale confirmation refuses; disable a source mod and verify its unresolved saved record is retained.
+5. Run `/cim_regression_test` and require `issue277_bulk_cleanup_exact_owner_transaction` PASS.
+
 ## 0.8.67-dev (2026-07-13): #592 exact crafts are the only CWV ownership [untested]
 
 - CWV supplies definition-only rows, so CIM injects the one acquisition template and no longer deduplicates against historical CWV-owned `_001` items.
