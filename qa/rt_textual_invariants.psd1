@@ -135,6 +135,8 @@
     @{ mod='ct_dev'; file='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua'; needle='mod._ct_force_finale_god(result[1], config)'; literal=$true; polarity='present'; minCount=2; issueRef='#145'; note='force-finale-god wired at BOTH deus_populate_graph branches (>= 2 call sites).' }
 
     # ============================ gut_dev ============================
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadout_policy.lua'; needle='backend_id:match("^cwv_.+_%d%d%d$")'; literal=$true; polarity='present'; issueRef='#287'; note='readonly overlay accepts only exact CWV backend-instance identity.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua'; needle='Policy.readonly_action(slot, v) == "preserve"'; literal=$true; polarity='present'; issueRef='#287'; note='whole-loadout reads use the same mod-owned predicate as single-slot reads/writes.' }
     # Source: gui_tweaker_dev/CHANGELOG.md 0.2.220-dev (issue 511). The two
     # source-only checks: mission_map_preview_backdrop (#336) reads _gt module the
     # mission-map file; cutscene_postskip_fade_swallow (#140).

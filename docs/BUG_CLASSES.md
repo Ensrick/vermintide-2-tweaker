@@ -1492,6 +1492,9 @@ end
 ### Related Issues / commits
 - gut_dev v0.2.215-dev (#402). Related: class 31 (wire safety — same "modded value must not reach a context that can't handle it" root, persistence axis vs wire axis); #174 (the original isolation this regression breached).
 
+### Read-only mod-owned instance exception (#287)
+`Use non-modded loadouts` must not turn a receiver-local mod-owned equip into a snap-back loop. Preserve cosmetics and exact mod-owned backend instances in a modded-only overlay while leaving the official row untouched; do not classify by slot alone. For CWV the closed identity is `^cwv_.+_%d%d%d$`, covering native and CIM-crafted variant instances without accepting arbitrary official IDs. Reads and writes must share the same predicate, including whole-loadout preview reads. Choosing an ordinary weapon clears the mod-owned overlay value and falls through to official rather than persisting the attempted ordinary ID. Regression-test modded preservation and `MODE_OFF` official inertness together.
+
 ## 37. Injected/enabled vanilla mutator indexes a per-level-conditional CurrentBossSettings field unguarded (host fatal on fixed-end-boss levels)
 
 **First seen:** 2026-07-09 (event_tweaker #455; fixed v0.4.25-dev)

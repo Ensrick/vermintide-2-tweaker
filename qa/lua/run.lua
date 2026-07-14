@@ -50,6 +50,7 @@ local suites = {
     "test_cwv_remote_audio",
     "test_cim_skin_persistence",
     "test_cos_score_identity",
+    "test_gut_native_loadout_policy",
 }
 
 for _, suite in ipairs(suites) do

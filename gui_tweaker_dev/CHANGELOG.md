@@ -11,6 +11,13 @@
 - Now matches `HeroWindowCraftingInventoryConsole` exactly: 128x128 texture size, x=-80/y=-4 offset, and search text beginning at x=47. The transparent tile may extend outside the 30px field, while its visible magnifier remains inside it.
 - Updated offline and runtime regression contracts to lock the atlas-aware geometry rather than a guessed visible-glyph size.
 
+### #287 preserve CWV instances under non-modded loadouts [verify-fix-coop]
+
+- Paired host/client logs isolate the failure to Tweaker's read-only boundary: with `gut_use_non_modded_loadouts` on, the client successfully built and wielded `cwv_es_dual_axes_001`, but every matching `slot_melee` write was blocked and immediately retried through the loadout resync path. The same instance equipped cleanly as soon as the setting committed off.
+- Generalized #287's cosmetic-only readonly overlay to preserve exact CWV-owned backend instances (`cwv_*_NNN`) in melee/ranged slots. Ordinary weapons, jewelry, talents, loadout selection, and bot designation remain official-read-only; choosing an ordinary weapon clears a prior CWV overlay and falls back to the untouched official row.
+- Extracted the pure policy to `_gut_native_loadout_policy.lua`. Offline Lua coverage proves Dual Axes, Dual Maces, and crafted CWV IDs survive in the modded overlay while official realm mode remains fully inert and ordinary official IDs are never written into the overlay.
+- **Verify with two players:** enable Use non-modded loadouts on the client; equip CWV Dual Axes and Dual Maces in both weapon slots; swap away and back, then relaunch. The selected CWV instance must remain equipped, the peer must see/wield it, and no repeated BLOCKED/resync loop or crash may occur. Enter official afterward and confirm only the original official weapons are present.
+
 ## 0.2.241-dev (2026-07-13) -- #572 native inventory magnifier in Mod Tweaker search [verify-fix]
 
 - Added the vanilla inventory search material `search_filters_icon` from `gui_menus_atlas` to Mod Tweaker's fixed per-tab search field. It is an atlas-backed passive texture pass, so no custom asset, package load, or additional input target is introduced.
