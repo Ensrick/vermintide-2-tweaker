@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.398-dev"
+local MOD_VERSION = "0.1.399-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
@@ -1601,6 +1601,13 @@ mod:hook_safe("SimpleInventoryExtension", "wield", function(self, slot_name)
 				tostring(item_data.template),
 				tostring(slot_data.skin),
 				tostring(self._career_name))
+		end
+		-- #474: wield/swap is a reconstruction boundary. Publishing here is
+		-- event-driven (never per-frame) and also seeds the inventory preview's
+		-- backend-id stance cache.
+		if _om._old_musket_record_and_publish then
+			_om._old_musket_record_and_publish(self.owner_unit, slot_name, item_data,
+				item_data.mod_data and item_data.mod_data.cwv_musket_stance or "ranged", "wield")
 		end
 	end
 end)
@@ -3227,6 +3234,13 @@ local function _toggle_musket_stance_and_rewield(player_unit)
 	local current = item_data.mod_data.cwv_musket_stance or "ranged"
 	local next_stance = (current == "ranged") and "melee" or "ranged"
 	item_data.mod_data.cwv_musket_stance = next_stance
+	-- #474: stance is presentation state as well as a local template choice.
+	-- Record and publish the edge before the destroy/add cycle so observers can
+	-- converge even if their husk rebuild lands before ours finishes.
+	if _om._old_musket_record_and_publish then
+		_om._old_musket_record_and_publish(player_unit, wielded_slot, item_data,
+			next_stance, "toggle")
+	end
 
 	-- v0.1.307: capture EXACT ammo state (chambered + reserve + reloading flag)
 	-- separately, instead of a single `total_ammo_fraction`. The fraction
@@ -3820,30 +3834,16 @@ do
 	end
 
 	_om._dispatch_old_musket_remote_fire = function(action_instance)
-		local lookup = rawget(_G, "NetworkLookup")
-		local sounds = lookup and lookup.sound_events
-		if not sounds or not rawget(sounds, _OLD_MUSKET_REMOTE_FIRE_EVENT) then
-			_dbg_alert("[cwv:474] remote rifle-fire event missing from vanilla NetworkLookup; shot audio not sent")
-			return false
-		end
 		local owner_unit = action_instance and action_instance.owner_unit
 		if not owner_unit or not Unit.alive(owner_unit) then return false end
-		local ok_fp, first_person = pcall(ScriptUnit.extension, owner_unit, "first_person_system")
-		if not ok_fp or not first_person then return false end
-		local player = Managers and Managers.player and Managers.player:owner(owner_unit)
-		local is_bot = player and player.bot_player == true
-		local ok
-		if is_bot and type(first_person.play_hud_sound_event) == "function" then
-			-- PlayerBotUnitFirstPerson only sends when play_on_husk=true; it also
-			-- plays once on the host, which is vanilla bot behavior.
-			ok = pcall(first_person.play_hud_sound_event, first_person,
-				_OLD_MUSKET_REMOTE_FIRE_EVENT, nil, true)
-		elseif type(first_person.play_remote_hud_sound_event) == "function" then
-			ok = pcall(first_person.play_remote_hud_sound_event, first_person,
-				_OLD_MUSKET_REMOTE_FIRE_EVENT)
-		end
+		-- The paired #474 log proves the compiled rifle report is a valid Wwise
+		-- event but is NOT present in NetworkLookup.sound_events. Therefore the
+		-- native husk-audio RPC cannot encode it. Reuse the bounded CWV channel;
+		-- receivers trigger the exact compiled report locally on the owner husk.
+		local ok = _om._old_musket_publish_fire
+			and _om._old_musket_publish_fire(owner_unit, _OLD_MUSKET_REMOTE_FIRE_EVENT)
 		if ok then
-			pcall(printf, "[cwv:474] remote old-musket rifle fire dispatched via vanilla husk-audio RPC")
+			pcall(printf, "[cwv:474] remote old-musket rifle fire dispatched via bounded CWV event")
 			return true
 		end
 		return false
@@ -5601,14 +5601,18 @@ _om._track_old_musket_unit = function(unit, perspective, mode)
 	if not unit or not Unit.alive(unit) then return end
 	if perspective == "1p" then
 		if mode == "melee" then
+			_om._CWV_OLD_MUSKET_UNITS_1P_RANGED[unit] = nil
 			_om._CWV_OLD_MUSKET_UNITS_1P_MELEE[unit] = true
 		else
+			_om._CWV_OLD_MUSKET_UNITS_1P_MELEE[unit] = nil
 			_om._CWV_OLD_MUSKET_UNITS_1P_RANGED[unit] = true
 		end
 	else
 		if mode == "melee" then
+			_om._CWV_OLD_MUSKET_UNITS_3P_RANGED[unit] = nil
 			_om._CWV_OLD_MUSKET_UNITS_3P_MELEE[unit] = true
 		else
+			_om._CWV_OLD_MUSKET_UNITS_3P_MELEE[unit] = nil
 			_om._CWV_OLD_MUSKET_UNITS_3P_RANGED[unit] = true
 		end
 	end
@@ -5636,8 +5640,7 @@ _om._apply_old_musket_textures = function(unit)
 	end
 end
 
-_om._apply_old_musket_transform = function(unit, perspective, mode)
-	if not unit or not Unit.alive(unit) then return end
+_om._old_musket_transform_components = function(perspective, mode)
 	local pos, rot, scale
 	if perspective == "1p" then
 		if mode == "melee" then
@@ -5652,11 +5655,190 @@ _om._apply_old_musket_transform = function(unit, perspective, mode)
 			pos, rot, scale = _om._CWV_OLD_MUSKET_POS_3P_RANGED, _om._CWV_OLD_MUSKET_ROT_3P_RANGED, _om._CWV_OLD_MUSKET_SCALE_3P_RANGED
 		end
 	end
+	return pos, rot, scale
+end
+
+_om._apply_old_musket_transform = function(unit, perspective, mode)
+	if not unit or not Unit.alive(unit) then return end
+	local pos, rot, scale = _om._old_musket_transform_components(perspective, mode)
 	pcall(Unit.set_local_position, unit, 0, Vector3(pos[1], pos[2], pos[3]))
 	-- rot is a QuaternionBox (or nil for identity); see v0.1.298 note.
 	-- Unbox to get a fresh raw Quaternion for the API call.
 	pcall(Unit.set_local_rotation, unit, 0, rot and rot:unbox() or Quaternion.identity())
 	pcall(Unit.set_local_scale, unit, 0, Vector3(scale[1], scale[2], scale[3]))
+end
+
+-- #474: Old Musket stance is explicit, durable presentation state. Vanilla's
+-- equipment RPC deliberately carries the base es_handgun identity, so the
+-- stance cannot be inferred by a remote husk. This VMF channel sends one small
+-- transition record on toggle/wield/state-entry and a query/reply on join. It
+-- never polls or transmits per frame. Receivers cache by owner+slot; a late
+-- husk/preview reconstruction consumes the same state as an immediate update.
+do
+	local CHANNEL, SCHEMA = "cwv_old_musket_mode_v1", 1
+	local modes_by_owner = setmetatable({}, { __mode = "k" })
+	local modes_by_peer = {}
+	local modes_by_backend = {}
+	local diag_seen, diag_count, DIAG_MAX = {}, 0, 48
+	_om._old_musket_modes_by_owner = modes_by_owner
+	_om._old_musket_modes_by_backend = modes_by_backend
+
+	local function old_bid(item_data)
+		local bid = item_data and (item_data.backend_id
+			or (item_data.mod_data and item_data.mod_data.backend_id))
+		return type(bid) == "string" and bid:match("^cwv_es_musket_old") and bid or nil
+	end
+
+	local function diag_once(key, fmt, ...)
+		if diag_seen[key] or diag_count >= DIAG_MAX then return end
+		diag_seen[key], diag_count = true, diag_count + 1
+		pcall(printf, "[cwv:474] " .. fmt, ...)
+	end
+
+	local function send(recipient, op, slot_name, mode, bid)
+		if type(mod.network_send) ~= "function" then return false end
+		local ok = pcall(function()
+			mod:network_send(CHANNEL, recipient or "others", SCHEMA, op,
+				slot_name or "", mode or "", bid or "")
+		end)
+		return ok
+	end
+
+	local function owner_slot(owner_unit)
+		if not owner_unit or not Unit.alive(owner_unit) then return nil end
+		local ok, inv = pcall(ScriptUnit.extension, owner_unit, "inventory_system")
+		if not ok or not inv or not inv.equipment then return nil end
+		local equipment = inv:equipment()
+		return equipment and equipment.wielded_slot, equipment
+	end
+
+	local function apply_owner(owner_unit, slot_name, mode, surface)
+		local wielded_slot, equipment = owner_slot(owner_unit)
+		if wielded_slot ~= slot_name or not equipment then return false end
+		local unit = equipment.right_hand_wielded_unit_3p
+		if not unit or not Unit.alive(unit) then return false end
+		_om._track_old_musket_unit(unit, "3p", mode)
+		_om._apply_old_musket_textures(unit)
+		_om._apply_old_musket_transform(unit, "3p", mode)
+		local pos, _, scale = _om._old_musket_transform_components("3p", mode)
+		diag_once("apply:" .. tostring(owner_unit) .. ":" .. slot_name .. ":" .. mode .. ":" .. surface,
+			"presentation owner=%s slot=%s surface=%s mode=%s final_pos=(%.3f,%.3f,%.3f) final_scale=(%.3f,%.3f,%.3f)",
+			tostring(owner_unit), slot_name, surface, mode,
+			pos[1], pos[2], pos[3], scale[1], scale[2], scale[3])
+		return true
+	end
+
+	local function peer_for_owner(owner_unit)
+		local pm = Managers and Managers.player
+		local ok, player = pm and pcall(pm.owner, pm, owner_unit)
+		player = ok and player or nil
+		if not player then return nil end
+		if type(player.peer_id) == "string" then return player.peer_id end
+		local nok, peer_id = pcall(player.network_id, player)
+		return nok and peer_id or nil
+	end
+
+	_om._old_musket_mode_for_owner = function(owner_unit, slot_name)
+		local slots = owner_unit and modes_by_owner[owner_unit]
+		if not slots then slots = modes_by_peer[peer_for_owner(owner_unit)] end
+		if not slots then return "ranged" end
+		if not slot_name then slot_name = owner_slot(owner_unit) end
+		return slots[slot_name] or "ranged"
+	end
+
+	_om._old_musket_record_and_publish = function(owner_unit, slot_name, item_data, mode, reason, recipient)
+		local bid = old_bid(item_data)
+		if not bid or (mode ~= "melee" and mode ~= "ranged") then return false end
+		modes_by_backend[bid] = mode
+		if owner_unit then
+			local slots = modes_by_owner[owner_unit] or {}
+			modes_by_owner[owner_unit], slots[slot_name] = slots, mode
+		end
+		send(recipient, "state", slot_name, mode, bid)
+		diag_once("tx:" .. tostring(owner_unit) .. ":" .. slot_name .. ":" .. mode .. ":" .. tostring(reason),
+			"state tx owner=%s slot=%s mode=%s bid=%s reason=%s",
+			tostring(owner_unit), slot_name, mode, bid, tostring(reason))
+		return true
+	end
+
+	_om._old_musket_publish_local_loadout = function(recipient, reason)
+		local pm = Managers and Managers.player
+		local ok, player = pm and pcall(pm.local_player, pm, 1)
+		player = ok and player or nil
+		local owner_unit = player and player.player_unit
+		local _, equipment = owner_slot(owner_unit)
+		local slots = equipment and equipment.slots
+		if type(slots) ~= "table" then return 0 end
+		local n = 0
+		for slot_name, slot_data in pairs(slots) do
+			local item_data = slot_data and slot_data.item_data
+			if old_bid(item_data) then
+				local mode = item_data.mod_data and item_data.mod_data.cwv_musket_stance or "ranged"
+				if _om._old_musket_record_and_publish(owner_unit, slot_name, item_data,
+						mode, reason, recipient) then n = n + 1 end
+			end
+		end
+		return n
+	end
+
+	_om._old_musket_request_states = function(reason)
+		send("others", "query")
+		_om._old_musket_publish_local_loadout(nil, reason or "state_boundary")
+	end
+
+	_om._old_musket_publish_fire = function(owner_unit, event_name)
+		local slot_name, equipment = owner_slot(owner_unit)
+		local slot_data = equipment and equipment.slots and equipment.slots[slot_name]
+		local bid = old_bid(slot_data and slot_data.item_data)
+		if not bid or event_name ~= "player_combat_weapon_rifle_fire" then return false end
+		return send("others", "fire", slot_name, event_name, bid)
+	end
+
+	if type(mod.network_register) == "function" then
+		pcall(function()
+			mod:network_register(CHANNEL, function(sender_peer_id, schema, op, slot_name, mode, bid)
+				if schema ~= SCHEMA then return end
+				if op == "query" then
+					_om._old_musket_publish_local_loadout(sender_peer_id, "query_reply")
+					return
+				end
+				if op == "fire" then
+					if mode ~= "player_combat_weapon_rifle_fire" or type(bid) ~= "string"
+							or not bid:match("^cwv_es_musket_old") then return end
+					local pm = Managers and Managers.player
+					local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id, 1)
+					player = ok and player or nil
+					local owner_unit = player and player.player_unit
+					local world = rawget(_G, "Application") and Application.main_world()
+					if owner_unit and Unit.alive(owner_unit) and world and rawget(_G, "WwiseUtils") then
+						local played = pcall(WwiseUtils.trigger_unit_event, world, mode, owner_unit, 0)
+						diag_once("fire:" .. tostring(sender_peer_id) .. ":" .. tostring(bid),
+							"remote fire peer=%s owner=%s bid=%s played=%s",
+							tostring(sender_peer_id), tostring(owner_unit), bid, tostring(played))
+					end
+					return
+				end
+				if op ~= "state" or (mode ~= "melee" and mode ~= "ranged")
+						or type(slot_name) ~= "string" or type(bid) ~= "string"
+						or not bid:match("^cwv_es_musket_old") then return end
+				local peer_slots = modes_by_peer[sender_peer_id] or {}
+				modes_by_peer[sender_peer_id], peer_slots[slot_name], modes_by_backend[bid] = peer_slots, mode, mode
+				local pm = Managers and Managers.player
+				local ok, player = pm and pcall(pm.player_from_peer_id, pm, sender_peer_id, 1)
+				player = ok and player or nil
+				local owner_unit = player and player.player_unit
+				if not owner_unit then return end
+				local slots = modes_by_owner[owner_unit] or {}
+				modes_by_owner[owner_unit], slots[slot_name] = slots, mode
+				apply_owner(owner_unit, slot_name, mode, "remote_event")
+				diag_once("rx:" .. tostring(sender_peer_id) .. ":" .. slot_name .. ":" .. mode,
+					"state rx peer=%s owner=%s slot=%s mode=%s bid=%s",
+					tostring(sender_peer_id), tostring(owner_unit), slot_name, mode, bid)
+			end)
+		end)
+	end
+	_om._old_musket_mode_channel = CHANNEL
+	_om._old_musket_mode_schema = SCHEMA
 end
 
 -- v0.1.293 approach A: spawn a hidden vanilla rifle alongside our custom mesh
@@ -11043,17 +11225,24 @@ do
 		-- def positively identifies the Old Musket AND the custom mesh actually
 		-- spawned (item_units reflects the pre-spawn re-key decision): the
 		-- absolute pose is authored for the custom mesh and must never touch a
-		-- base handgun that spawned on a residency decline. Stance is
-		-- unknowable on the husk (the wire item is the base handgun in either
-		-- stance) -- use the ranged pose. Weak-keyed tracking keeps live-tune
-		-- commands consistent and cannot leak husk units.
+		-- base handgun that spawned on a residency decline. Stance comes from
+		-- the bounded #474 presentation channel; ranged is only the safe
+		-- pre-handshake fallback.
 		if def.item_key == "cwv_es_musket_old" and hand == "right"
 				and item_units and item_units.right_hand_unit == def.right_hand_unit then
+			local wielded_slot = nil
+			if owner_unit_3p and Unit.alive(owner_unit_3p) then
+				local ok_inv, inv = pcall(ScriptUnit.extension, owner_unit_3p, "inventory_system")
+				local eq = ok_inv and inv and inv.equipment and inv:equipment()
+				wielded_slot = eq and eq.wielded_slot
+			end
+			local mode = _om._old_musket_mode_for_owner
+				and _om._old_musket_mode_for_owner(owner_unit_3p, wielded_slot) or "ranged"
 			pcall(_om._apply_old_musket_textures, weapon_unit_3p)
-			pcall(_om._track_old_musket_unit, weapon_unit_3p, "3p", "ranged")
-			pcall(_om._apply_old_musket_transform, weapon_unit_3p, "3p", "ranged")
-			pcall(printf, "[cwv:474] husk old-musket parity: textures + 3p ranged pose applied (hand=%s skin=%s)",
-				tostring(hand), tostring(skin))
+			pcall(_om._track_old_musket_unit, weapon_unit_3p, "3p", mode)
+			pcall(_om._apply_old_musket_transform, weapon_unit_3p, "3p", mode)
+			pcall(printf, "[cwv:474] husk old-musket presentation: textures + 3p %s pose applied (slot=%s hand=%s skin=%s)",
+				tostring(mode), tostring(wielded_slot), tostring(hand), tostring(skin))
 		end
 	end
 end
@@ -11870,6 +12059,11 @@ local function _cwv_spawn_item_post(self, item_name)
 		local item_data = info and info.item_data
 		if item_data and item_data.mod_data and item_data.mod_data.cwv_musket_stance == "melee" then
 			_stance = "melee"
+		elseif info and info.backend_id and _om._old_musket_modes_by_backend then
+			-- HeroPreviewer retains backend_id but normally drops item_data, which
+			-- made the old branch permanently choose ranged. The transition cache
+			-- is the durable bridge between gameplay and preview reconstruction.
+			_stance = _om._old_musket_modes_by_backend[info.backend_id] or "ranged"
 		end
 		_dbg("[cwv preview] firing for cwv_es_musket_old: unit=%s stance=%s", tostring(slot.right), _stance)
 		-- Inline diagnostic texture binding (so we can SEE per-call results)
@@ -11907,6 +12101,23 @@ local function _cwv_spawn_item_post(self, item_name)
 		end
 		if _om._apply_old_musket_transform then
 			_om._apply_old_musket_transform(slot.right, "3p", _stance)
+		end
+		-- Vanilla resolves preview animation from the inherited es_handgun name,
+		-- so melee mode otherwise keeps the rifle idle even when the mesh pose is
+		-- correct. Replay the selected template's career-aware wield event once
+		-- after reconstruction.
+		local stance_template = _stance == "melee" and Weapons.old_musket_template_melee
+			or Weapons.old_musket_template
+		local wield_event = stance_template and stance_template.wield_anim
+		local by_career = stance_template and stance_template.wield_anim_career_3p
+			or stance_template and stance_template.wield_anim_career
+		if by_career and self._current_career_name then
+			wield_event = by_career[self._current_career_name] or wield_event
+		end
+		if wield_event and self.character_unit and Unit.alive(self.character_unit) then
+			pcall(Unit.animation_event, self.character_unit, wield_event)
+			pcall(printf, "[cwv:474] preview presentation slot=%s bid=%s mode=%s anim=%s",
+				tostring(slot_index), tostring(info and info.backend_id), _stance, tostring(wield_event))
 		end
 	elseif def.item_key == "cwv_es_musket_old" then
 		-- v0.1.341-dev: promoted to `_dbg_alert` — "gate failed" is an
@@ -12572,9 +12783,14 @@ mod.on_game_state_changed = function(status, state_name)
     _dbg("on_game_state_changed: status=%s state=%s registered_cwv_items=%d",
         tostring(status), tostring(state_name), n)
 
-    -- Only attempt the loadout snapshot on `enter` (the new state is now
-    -- active) — `exit` fires before extensions are wired in the next state.
-    if status ~= "enter" then return end
+	-- Only attempt the loadout snapshot on `enter` (the new state is now
+	-- active) — `exit` fires before extensions are wired in the next state.
+	if status ~= "enter" then return end
+	-- #474: a mission/keep state enter is a bounded reconstruction boundary.
+	-- Query peers and replay our current slots once; no timer or frame traffic.
+	if _om._old_musket_request_states then
+		_om._old_musket_request_states("game_state_enter:" .. tostring(state_name))
+	end
 
     -- `Managers.player:local_player()` internally calls `peer_id()`, which
     -- THROWS "Network backend has not been set" on early state-enters
@@ -13048,11 +13264,28 @@ _rt_register("issue474_old_musket_hot_join_identity_and_remote_fire", function()
     if not _om._old_musket_remote_fire_hook_installed then
         return "ActionHandgun remote-fire hook missing"
     end
-    local event = _om._old_musket_remote_fire_event
-    local sounds = rawget(_G, "NetworkLookup") and NetworkLookup.sound_events
-    if event ~= "player_combat_weapon_rifle_fire" or not sounds or not rawget(sounds, event) then
-        return "source-verified vanilla rifle-fire event is not network-safe"
-    end
+	local event = _om._old_musket_remote_fire_event
+	if event ~= "player_combat_weapon_rifle_fire"
+			or type(_om._old_musket_publish_fire) ~= "function" then
+		return "compiled rifle report is not routed through the bounded CWV channel"
+	end
+	if _om._old_musket_mode_channel ~= "cwv_old_musket_mode_v1"
+			or _om._old_musket_mode_schema ~= 1
+			or type(_om._old_musket_record_and_publish) ~= "function"
+			or type(_om._old_musket_mode_for_owner) ~= "function"
+			or type(_om._old_musket_modes_by_backend) ~= "table" then
+		return "Old Musket explicit presentation-state contract is incomplete"
+	end
+	for _, perspective in ipairs({ "1p", "3p" }) do
+		for _, mode in ipairs({ "ranged", "melee" }) do
+			local pos, rot, scale = _om._old_musket_transform_components(perspective, mode)
+			if type(pos) ~= "table" or not rot or type(scale) ~= "table"
+					or pos[1] == nil or pos[2] == nil or pos[3] == nil
+					or scale[1] == nil or scale[2] == nil or scale[3] == nil then
+				return perspective .. "/" .. mode .. " does not preserve the full saved transform"
+			end
+		end
+	end
 end)
 
 _rt_register("issue582_dual_axes_native_variant_ownership_boundary", function()

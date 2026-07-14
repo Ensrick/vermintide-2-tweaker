@@ -1,6 +1,17 @@
 # Character Weapon Variants — Changelog
 
-## 0.1.398-dev - 2026-07-13 - #396 Imperial Longsword identity continuity [untested]
+## 0.1.399-dev - 2026-07-13 - #474 Old Musket presentation state [diagnostics-armed]
+
+- Replaced the remote husk's hard-coded ranged pose with explicit Old Musket mode state. Toggle and wield transitions publish one owner/slot/backend-id record; mission entry and hot join use one query/reply replay. Receivers cache the mode and reapply it immediately or on the next husk reconstruction, with no per-frame traffic.
+- Inventory hero preview now resolves melee/ranged mode from the exact backend instance even though vanilla drops mutable item data from its preview record. It applies the complete saved 3P position/rotation/scale triplet and replays the selected template's career-aware wield animation after reconstruction.
+- Fixed stale live-tune buckets: a unit changing modes is removed from its old perspective/mode bucket before entering the new one, so later saved-transform reapply cannot overwrite it with the previous stance.
+- Corrected remote firing audio from the paired host/client evidence. `player_combat_weapon_rifle_fire` is the compiled rifle Wwise report but is absent from `NetworkLookup.sound_events`; the native husk-audio RPC therefore rejected every shot. The exact report now travels as a bounded CWV shot event and is triggered locally on the observing owner's husk.
+- Added bounded transition diagnostics (maximum 48 distinct records per session) for owner, slot, backend identity, surface, state, and final transform, plus host regression coverage for state-channel ownership, reconstruction consumers, full transform triplets, and the non-`NetworkLookup` audio path.
+- **Co-op verify:** both peers use v0.1.399-dev. Equip Old Musket in Primary, toggle melee/ranged while the other peer watches, swap away/back, open the owner inventory hero preview in each mode, enter a mission, and hot-join once. Repeat in Secondary and reverse host/client roles. The observer must see the matching stance/pose after every boundary and hear exactly one rifle report per hip/ADS shot. `/cwv_regression_test` must pass `issue474_old_musket_hot_join_identity_and_remote_fire` on both peers.
+
+**DoD:** Universal walked. Trait gates: G-CROSS-SLOT, G-NETWORK, G-APPEARANCE, owner 1P/3P, remote husk, preview reconstruction, bounded audio. Deferral: the two-player matrix above remains diagnostics-armed on issue #474.
+
+## 0.1.399-dev - 2026-07-13 - #396 Imperial Longsword identity continuity [untested]
 
 - Separated the owned weapon from its cosmetic identity. `cwv_es_longsword` is now canonically **Imperial Longsword**; the save-compatible illusion key `cwv_es_longsword_nordland` is restored to its earlier, mesh-appropriate **Helmgart Watchsword** name. The shared `cwv_imperial_longsword` item-type label now keeps the first owning definition instead of being overwritten by the last illusion-only sibling.
 - Added an absence-safe VMF item-identity side channel for the axis vanilla cannot carry. Vanilla still sends only the stable base item id and authoritative skin; CWV now sends the owning `cwv_*` key on initial game-object sync, live resync, and the post-parity replay edge. Receivers validate the key against its base weapon before husk re-key/transform, so Weapon Tweaker's widened `can_wield` set no longer makes an actual Imperial Longsword indistinguishable from a native Bretonnian Longsword.

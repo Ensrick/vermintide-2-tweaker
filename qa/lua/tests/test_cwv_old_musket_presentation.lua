@@ -1,0 +1,41 @@
+return function(H, repo_root)
+    local path = repo_root
+        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    local file = assert(io.open(path, "rb"))
+    local source = file:read("*a")
+    file:close()
+
+    H.test("Old Musket mode uses one event-driven state channel", function()
+        local start = assert(source:find('local CHANNEL, SCHEMA = "cwv_old_musket_mode_v1", 1', 1, true))
+        local finish = assert(source:find('-- v0.1.293 approach A:', start, true))
+        local channel = source:sub(start, finish)
+        H.truthy(source:find('mod:network_register(CHANNEL', 1, true))
+        H.truthy(source:find('send("others", "query")', 1, true))
+        H.truthy(source:find('_om._old_musket_record_and_publish(player_unit, wielded_slot', 1, true))
+        H.equal(channel:find('mod.update = function(dt)', 1, true), nil)
+    end)
+
+    H.test("Old Musket consumers share cached owner and backend state", function()
+        H.truthy(source:find('_om._old_musket_mode_for_owner(owner_unit_3p, wielded_slot)', 1, true))
+        H.truthy(source:find('_om._old_musket_modes_by_backend[info.backend_id]', 1, true))
+        H.truthy(source:find('Weapons.old_musket_template_melee', 1, true))
+        H.truthy(source:find('pcall(Unit.animation_event, self.character_unit, wield_event)', 1, true))
+    end)
+
+    H.test("Old Musket rifle report bypasses absent NetworkLookup safely", function()
+        local start = assert(source:find('_om._dispatch_old_musket_remote_fire = function', 1, true))
+        local finish = assert(source:find('if rawget(_G, "ActionHandgun")', start, true))
+        local dispatch = source:sub(start, finish)
+        H.truthy(dispatch:find('_om._old_musket_publish_fire', 1, true))
+        H.equal(dispatch:find('rawget(sounds', 1, true), nil)
+        H.truthy(source:find('WwiseUtils.trigger_unit_event, world, mode, owner_unit, 0', 1, true))
+    end)
+
+    H.test("Old Musket transform writes full saved triplets and re-buckets units", function()
+        H.truthy(source:find('_om._old_musket_transform_components = function', 1, true))
+        H.truthy(source:find('Unit.set_local_position, unit, 0, Vector3(pos[1], pos[2], pos[3])', 1, true))
+        H.truthy(source:find('Unit.set_local_scale, unit, 0, Vector3(scale[1], scale[2], scale[3])', 1, true))
+        H.truthy(source:find('_om._CWV_OLD_MUSKET_UNITS_3P_RANGED[unit] = nil', 1, true))
+        H.truthy(source:find('_om._CWV_OLD_MUSKET_UNITS_3P_MELEE[unit] = nil', 1, true))
+    end)
+end
