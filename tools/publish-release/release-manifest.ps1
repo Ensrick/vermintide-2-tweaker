@@ -133,7 +133,12 @@ function Test-ReleaseManifest {
             if ($name -like '*.mod') { $hasDescriptor = $true }
             $wantHash = "$($bundle.sha256)"
             if ($wantHash -notmatch '^[0-9a-f]{64}$') { $errors.Add("$bundlePrefix.sha256 must be lowercase SHA-256"); continue }
-            if ($StageRoot) {
+            # A filtered publish stages only RequiredModIds. Carried siblings
+            # keep their provenance records verbatim, but their bundle files
+            # intentionally are not copied into StageRoot when the target
+            # release already exists. Validate bytes only for entries this run
+            # actually staged; full publishes pass every mod as required.
+            if ($StageRoot -and $mustHaveProvenance) {
                 $stagedPath = Join-Path (Join-Path $StageRoot $id) $name
                 if (-not (Test-Path -LiteralPath $stagedPath -PathType Leaf)) {
                     $errors.Add("$bundlePrefix is missing from staged files: $stagedPath")
@@ -145,7 +150,7 @@ function Test-ReleaseManifest {
         }
         if (-not $hasModBundle) { $errors.Add("$prefix.bundle_files must include at least one .mod_bundle") }
         if (-not $hasDescriptor) { $errors.Add("$prefix.bundle_files must include the .mod descriptor") }
-        if ($StageRoot) {
+        if ($StageRoot -and $mustHaveProvenance) {
             $stagedDir = Join-Path $StageRoot $id
             if (Test-Path -LiteralPath $stagedDir -PathType Container) {
                 $actualNames = @(Get-ChildItem -LiteralPath $stagedDir -File | Where-Object {

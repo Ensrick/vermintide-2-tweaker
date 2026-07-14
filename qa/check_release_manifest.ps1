@@ -73,6 +73,28 @@ function Invoke-SelfTest {
         $legacyRequired = Test-ReleaseManifest -Manifest $legacy -RequiredModIds @('legacy')
         Assert (-not $legacyRequired.Valid) 'rejects newly staged entry without provenance'
 
+        $carried = [ordered]@{
+            mod_id = 'carried'; friendly_name = 'Carried'; workshop_id = '9876543210'
+            version = '9.9.9-dev'; asset_filename = 'carried.zip'; sha256 = ('d' * 64)
+            visibility = 'friends_only'; source_commit = ('e' * 40); source_state = 'clean'
+            builder = [ordered]@{ name = 'VMBLauncher'; version = '1.2.3' }
+            bundle_files = @(
+                [ordered]@{ filename = 'bbbbbbbbbbbbbbbb.mod_bundle'; sha256 = ('f' * 64) },
+                [ordered]@{ filename = 'carried.mod'; sha256 = ('1' * 64) }
+            )
+        }
+        $filteredManifest = [ordered]@{
+            manifest_schema = 2; release_tag = 'mods-test'; published_at = '2026-07-13T00:00:00Z'
+            mods = @($entry, $carried)
+        }
+        $filtered = Test-ReleaseManifest -Manifest $filteredManifest -RequiredModIds @('example') -StageRoot $temp
+        Assert $filtered.Valid 'filtered publish does not require carried sibling bundle files in StageRoot'
+
+        $carried.source_commit = 'bad'
+        $badCarriedMetadata = Test-ReleaseManifest -Manifest $filteredManifest -RequiredModIds @('example') -StageRoot $temp
+        Assert (-not $badCarriedMetadata.Valid) 'filtered publish still validates carried sibling provenance metadata'
+        $carried.source_commit = ('e' * 40)
+
         if ($failures.Count -gt 0) {
             Write-Host "[check_release_manifest] SELF-TEST FAILED -- $($failures.Count) case(s)" -ForegroundColor Red
             return 2
