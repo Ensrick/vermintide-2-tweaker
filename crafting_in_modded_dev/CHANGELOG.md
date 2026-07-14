@@ -1,5 +1,11 @@
 # Crafting in Modded Changelog
 
+## 0.8.67-dev (2026-07-13): #592 exact crafts are the only CWV ownership [untested]
+
+- CWV supplies definition-only rows, so CIM injects the one acquisition template and no longer deduplicates against historical CWV-owned `_001` items.
+- `_cim_is_modded_backend_id` recognizes only exact `_forged_weapons` entries; a `cwv_` prefix alone is not ownership. This preserves legitimate CIM crafts while stale auto-grant loadouts become purgeable.
+- Verify with CWV 0.1.397-dev; `/cim_regression_test` must pass `cwv_registration_is_not_acquisition`.
+
 ## 0.8.66-dev (2026-07-13): #563 newest explicit illusion wins [verify-fix]
 
 - Reopened-log root cause: the original exact-backend-ID fix saved only inside CIM's `_cim_try_illusion_apply` helper. In the in-mission customization flow, cosmetics_tweaker owned the local craft bypass, successfully changed `54DB495DEA391FF` from the old CWV runed skin to `es_2h_sword_skin_06`, and completed through vanilla's UI—but CIM emitted no save/update. The next mirror-ready edge therefore reapplied the stale saved CWV skin.

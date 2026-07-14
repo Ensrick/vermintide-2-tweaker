@@ -1321,10 +1321,9 @@ mod._cim_rebuild_template_cache = _build_template_cache
 -- template for them -- they stay correctly non-craftable (get the look via the
 -- real family member + the Nordland illusion in the cosmetic picker).
 mod._cim390_inject_key_keyed = true
--- issue 524: the dedup below ALSO derives the cwv variant key from a
--- `cwv_<key>_NNN` backend_id so CWV's own blacksmith template suppresses cim's
--- redundant synthetic one. Marker consumed by /cim_regression_test.
-mod._cim524_cwv_blacksmith_dedup = true
+-- #592: CWV contributes definitions, never owned blacksmith items. Therefore
+-- CIM's one key-keyed synthetic template is the sole acquisition selector.
+mod._cim592_cwv_registration_only = true
 mod._cim_inject_templates = function(items, filter)
     if not _is_active() then return items end
     if type(filter) ~= "string" or not filter:find("can_craft_with", 1, true) then
@@ -1336,25 +1335,6 @@ mod._cim_inject_templates = function(items, filter)
     for _, it in ipairs(items) do
         local k = it and (it.key or (it.data and it.data.key))
         if k then seen_keys[k] = true end
-        -- issue 524: also record the CWV variant key derived from a
-        -- `cwv_<key>_NNN` backend_id. CWV registers each non-skin-only variant
-        -- as its OWN default-rarity blacksmith template (backend_id
-        -- `cwv_<key>_001`), which already passes vanilla `can_craft_with` and
-        -- sits in `items`. But that template item carries the INHERITED base
-        -- `.key`/`.name` (e.g. `es_bastard_sword`) - CWV never clobbers them
-        -- (clone_name_clobber) and ItemMasterList's boot-time `item.key = key`
-        -- stamp ran before CWV inserted its entry - so the plain key check above
-        -- records "es_bastard_sword", NOT "cwv_es_longsword". Without deriving
-        -- the cwv key here, `tpl.key == "cwv_es_longsword"` misses the dedup and
-        -- cim injects a REDUNDANT synthetic template on top of CWV's real one:
-        -- a duplicate "base item" in the craft grid, visible at the synth's
-        -- base_power (300) next to CWV's blacksmith 5 (the power divergence only
-        -- surfaced after v0.7.24 raised the synth template from a hardcoded 5).
-        local bid = it and it.backend_id
-        if type(bid) == "string" then
-            local cwv_key = bid:match("^(cwv_.-)_%d%d%d$")
-            if cwv_key then seen_keys[cwv_key] = true end
-        end
     end
 
     for _, tpl in pairs(_template_cache) do

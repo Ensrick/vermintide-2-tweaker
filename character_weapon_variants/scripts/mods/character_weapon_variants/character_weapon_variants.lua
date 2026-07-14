@@ -1,7 +1,8 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.396-dev"
+local MOD_VERSION = "0.1.397-dev"
+mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -9620,21 +9621,29 @@ local function _build_entry(def, backend_id)
 	props_json = props_json .. "}"
 
 	entry.rarity = "default"
+	entry.cwv_definition = backend_id == nil
 
-	entry.mod_data = {
-		backend_id = backend_id,
-		ItemInstanceId = backend_id,
-		CustomData = {
-			traits = traits_json,
-			power_level = tostring(power_level),
-			properties = props_json,
+	-- Registration and acquisition are deliberately separate (#592). The IML
+	-- owner row is definition-only and therefore carries no backend identity.
+	-- CIM supplies mod_data only when it mints an exact, persisted craft.
+	if backend_id then
+		entry.mod_data = {
+			backend_id = backend_id,
+			ItemInstanceId = backend_id,
+			CustomData = {
+				traits = traits_json,
+				power_level = tostring(power_level),
+				properties = props_json,
+				rarity = "default",
+			},
 			rarity = "default",
-		},
-		rarity = "default",
-		traits = table.clone(traits, true),
-		power_level = power_level,
-		properties = table.clone(properties, true),
-	}
+			traits = table.clone(traits, true),
+			power_level = power_level,
+			properties = table.clone(properties, true),
+		}
+	else
+		entry.mod_data = nil
+	end
 
 	-- Pre-apply the item's own illusion as the curated cosmetic ONLY for
 	-- non-default-rarity variants. Exotic / unique CWV weapons ship with
@@ -9651,7 +9660,7 @@ local function _build_entry(def, backend_id)
 	-- the upstream lookup resolved item_data to. The skin entry is still
 	-- registered by `_register_variant_skins` so OTHER variants of the
 	-- same item_type can apply this variant's look as an illusion.
-	if not def.no_skin and def.rarity ~= "default" then
+	if backend_id and not def.no_skin and def.rarity ~= "default" then
 		local skin_key = def.item_key .. "_skin"
 		entry.mod_data.CustomData.skin = skin_key
 		entry.mod_data.skin = skin_key
@@ -9836,60 +9845,12 @@ _om._cwv_browser_meshswap_apply = function(item, spawn_data)
 end
 mod._cwv_browser_meshswap_apply = _om._cwv_browser_meshswap_apply  -- exposed for /cwv regression (issue 419)
 
-local function _register_item(def, backend_id)
-	-- v0.1.345-dev: per-call trace. /give-driven registration is sparse
-	-- (one fire per chat command).
-	_dbg("[cwv:register_item] event=enter key=%s backend_id=%s",
-		tostring(def and def.item_key), tostring(backend_id))
-	local mil = get_mod("MoreItemsLibrary")
-	if not mil then
-		_dbg_alert("[cwv:register_item] event=fail_no_mil key=%s", tostring(def and def.item_key))
-		mod:warning("MoreItemsLibrary not found — cannot register %s", def.item_key)
-		return false
-	end
-
-	local entry = _build_entry(def, backend_id)
-	if not entry then
-		_dbg_alert("[cwv:register_item] event=fail_build_entry_nil key=%s", tostring(def and def.item_key))
-		return false
-	end
-
-	mil:add_mod_items_to_local_backend({entry}, "character_weapon_variants")
-
-	-- MIL stores items in its private local-backend table, NOT in
-	-- ItemMasterList. But vanilla `HeroPreviewer.equip_item`
-	-- (world_hero_previewer.lua:674) does `item_data = ItemMasterList[item_name]`
-	-- and then passes the result to `BackendUtils.get_item_units(item_data, ...)`
-	-- — if item_data is nil the next line indexes nil and the game crashes.
-	-- Mirror our entries into ItemMasterList so equip_item resolves them.
-	-- Guarded with `not ItemMasterList[key]` to avoid clobbering anything
-	-- another mod registered (or a previous session's entry that still lives
-	-- across hot-reloads).
-	if ItemMasterList and not rawget(ItemMasterList, def.item_key) then
-		ItemMasterList[def.item_key] = entry
-	end
-
-	if NetworkLookup and NetworkLookup.item_names and not rawget(NetworkLookup.item_names, def.item_key) then
-		local idx = #NetworkLookup.item_names + 1
-		rawset(NetworkLookup.item_names, idx, def.item_key)
-		rawset(NetworkLookup.item_names, def.item_key, idx)
-	end
-
-	_registered_keys[def.item_key] = backend_id
-	_dbg("[cwv:register_item] event=exit_success key=%s backend_id=%s iml_inserted=1 item_master_list_mirrored=%s",
-		tostring(def and def.item_key), tostring(backend_id),
-		tostring(ItemMasterList and rawget(ItemMasterList, def.item_key) ~= nil))
-	return true
-end
-
 -- issue #538: /cwv_give must REFUSE skin_only (illusion-only) variants. A
 -- skin_only def (e.g. cwv_es_longsword_nordland) is deliberately excluded from
--- _auto_register_all (:9665) because it exists only to seed a custom skin/illusion
--- entry, never a real ownable item. The give path below builds a backend_id and
--- calls _register_item(def, backend_id), which mirrors the def into ItemMasterList
--- -- resurrecting the "issue 390" crafts-as-wrong-item class for that key. Guard
--- the command instead of the registration function so the auto_register exclusion
--- and the give refusal share the single `def.skin_only` discriminator. Exposed on
+-- _auto_register_all because it exists only to seed a custom skin/illusion entry,
+-- never a real craftable definition. The command is now entirely informational
+-- (#592), while the discriminator preserves the more specific illusion guidance.
+-- Exposed on
 -- _om so the regression suite can assert the guard exists without driving the full
 -- give path (which has echo + registration side effects). io is nil in the retail
 -- sandbox, so a source self-grep check is impossible; this predicate is the seam.
@@ -9913,36 +9874,9 @@ local function _give_variant(item_key)
 		mod:echo("%s is an illusion-only variant - use the illusion browser", def.display_name)
 		return
 	end
-
-	if _registered_keys[item_key] then
-		mod:echo("%s is already in your inventory", def.display_name)
-		return
-	end
-
-	local backend_id = def.item_key .. "_001"
-	if not _register_item(def, backend_id) then
-		mod:echo("Failed to register %s", def.display_name)
-		return
-	end
-
-	if Managers and Managers.backend then
-		local backend_items = Managers.backend:get_interface("items")
-		if backend_items and backend_items._refresh then
-			backend_items:_refresh()
-		end
-
-		local rarity = def.rarity or "exotic"
-		if rarity ~= "default" and backend_items then
-			local item = backend_items:get_item_from_id(backend_id)
-			if item then
-				item.rarity = rarity
-				item.data.rarity = rarity
-				item.CustomData.rarity = rarity
-			end
-		end
-	end
-
-	mod:echo("Gave %s", def.display_name)
+	-- #592: CWV never acquires weapons. CIM's crafting surface owns creation,
+	-- persistence, and the selected primary/secondary equip destination.
+	mod:echo("Craft %s through Crafting in Modded", def.display_name)
 end
 
 -- ============================================================
@@ -10007,11 +9941,6 @@ local function _auto_register_all()
 	end
 
 	local mil = get_mod("MoreItemsLibrary")
-	if not mil then
-		_dbg_alert("[cwv:auto_register] event=fail_no_mil")
-		mod:warning("MoreItemsLibrary not found — variant weapons will not be available")
-		return
-	end
 
 	local entries = {}
 	local pending_defs = {}
@@ -10028,56 +9957,25 @@ local function _auto_register_all()
 		if def.item_key == "cwv_es_crossbow" and not mod:get("enable_cwv_es_crossbow") then
 			goto continue
 		end
-		-- v0.1.271: support `def.instances = N` to register N backend
-		-- entries of the same variant with backend_ids `<key>_001`,
-		-- `<key>_002`, ... Each entry is a unique inventory item the
-		-- player can equip independently. Optional `def.instance_skins`
-		-- array provides a pre-applied skin per instance (nil = use the
-		-- variant's default auto-applied skin).
-		local instance_count = def.instances or 1
-		for i = 1, instance_count do
-			local backend_id = string.format("%s_%03d", def.item_key, i)
-			-- Skip if a backend_id for this slot is already registered.
-			-- (Per-instance tracking uses backend_id as key; per-key
-			-- tracking just stores the first registered backend_id.)
-			if _registered_keys[backend_id] then
-				n_skipped_already_registered = n_skipped_already_registered + 1
-				goto next_instance
-			end
-			local entry = _build_entry(def, backend_id)
-			if entry then
-				n_built_ok = n_built_ok + 1
-				-- Per-instance skin override (instance 2+ can pre-apply
-				-- a different cosmetic illusion without a separate
-				-- variant def).
-				local instance_skin = def.instance_skins and def.instance_skins[i]
-				if instance_skin and entry.mod_data then
-					entry.mod_data.CustomData = entry.mod_data.CustomData or {}
-					entry.mod_data.CustomData.skin = instance_skin
-					entry.mod_data.skin = instance_skin
-				end
-				entries[#entries + 1] = entry
-				pending_defs[#pending_defs + 1] = { def = def, backend_id = backend_id, instance = i }
-				_registered_keys[backend_id] = backend_id
-				-- Also store under the item_key for backward-compat with
-				-- the per-key check elsewhere in the file (first instance wins).
-				if not _registered_keys[def.item_key] then
-					_registered_keys[def.item_key] = backend_id
-				end
-			else
-				n_build_failed = n_build_failed + 1
-			end
-			::next_instance::
+		if _registered_keys[def.item_key] then
+			n_skipped_already_registered = n_skipped_already_registered + 1
+			goto continue
+		end
+		local entry = _build_entry(def, nil)
+		if entry then
+			n_built_ok = n_built_ok + 1
+			entries[#entries + 1] = entry
+			pending_defs[#pending_defs + 1] = { def = def, entry = entry }
+			_registered_keys[def.item_key] = def.item_key
+		else
+			n_build_failed = n_build_failed + 1
 		end
 		::continue::
 	end
 
 	if #entries > 0 then
-		mil:add_mod_items_to_local_backend(entries, "character_weapon_variants")
-
-		-- See _register_item: HeroPreviewer.equip_item needs ItemMasterList[key]
-		-- to be non-nil. MIL only stores in its private backend; mirror into
-		-- ItemMasterList so vanilla equip paths can resolve our items.
+		-- Register owner definitions only. Acquisition belongs exclusively to CIM;
+		-- no CWV row is added to MIL's local backend (#592).
 		if ItemMasterList then
 			for _, pending in ipairs(pending_defs) do
 				local key = pending.def.item_key
@@ -10088,13 +9986,7 @@ local function _auto_register_all()
 				-- See CHANGELOG v0.1.333 + Issue tracking; the same defensive
 				-- pattern is already used on NetworkLookup.item_names 20 lines below.
 				if not rawget(ItemMasterList, key) then
-					-- find this entry in `entries` (parallel to pending_defs order)
-					for _, e in ipairs(entries) do
-						if e.mod_data and e.mod_data.backend_id == pending.backend_id then
-							ItemMasterList[key] = e
-							break
-						end
-					end
+					ItemMasterList[key] = pending.entry
 				end
 			end
 		end
@@ -10159,26 +10051,35 @@ local function _auto_register_all()
 			end
 		end
 
-		local backend_items = Managers.backend:get_interface("items")
-		if backend_items and backend_items._refresh then
-			backend_items:_refresh()
-		end
-
-		for _, pending in ipairs(pending_defs) do
-			local rarity = pending.def.rarity or "exotic"
-			if rarity ~= "default" and backend_items then
-				local item = backend_items:get_item_from_id(pending.backend_id)
-				if item then
-					item.rarity = rarity
-					item.data.rarity = rarity
-					item.CustomData.rarity = rarity
-					_dbg("Set %s rarity to %s", pending.backend_id, rarity)
-				end
-			end
-		end
-
-		_dbg("Registered %d variant weapons", #entries)
+		_dbg("Registered %d variant definitions (zero inventory instances)", #entries)
 	end
+
+	-- One-time-compatible migration for sessions/hot-reloads that still contain
+	-- CWV's historical auto-grants. The allowlist is derived from the authored
+	-- old instance counts, and exact CIM persistence wins. IDs minted by CIM
+	-- start at _100 today, but the ownership callback makes the boundary robust
+	-- even if a legitimate saved craft reused _001 in an older/manual build.
+	local legacy_ids = mod._cwv_acquisition.legacy_auto_grant_ids(_variant_definitions)
+	local cim_dev = get_mod("cim_dev")
+	local cim_public = get_mod("cim")
+	local function is_cim_owned(backend_id)
+		return (cim_dev and cim_dev._cim_get_craft and cim_dev._cim_get_craft(backend_id) ~= nil)
+			or (cim_public and cim_public._cim_get_craft and cim_public._cim_get_craft(backend_id) ~= nil)
+	end
+	local purge = {}
+	for backend_id in pairs(legacy_ids) do
+		if mod._cwv_acquisition.should_remove(backend_id, legacy_ids, is_cim_owned) then
+			purge[#purge + 1] = backend_id
+		end
+	end
+	table.sort(purge)
+	local removed = 0
+	if #purge > 0 and mil and type(mil.remove_mod_items_from_local_backend) == "function" then
+		mil:remove_mod_items_from_local_backend(purge, "character_weapon_variants")
+		removed = #purge
+	end
+	mod:info("[cwv:592] registration_only=%d legacy_ids_purged=%d cim_exact_ids_preserved=true",
+		#entries, removed)
 
 	_auto_registered = true
 	-- v0.1.356-dev: VISIBLE (mod:info, not _dbg) registration summary so the
@@ -10190,7 +10091,7 @@ local function _auto_register_all()
 		n_built_ok, n_build_failed, n_skipped_skin_only, n_skipped_already_registered, #entries, #_variant_definitions)
 	do
 		local keys = {}
-		for _, p in ipairs(pending_defs) do keys[#keys + 1] = p.backend_id end
+		for _, p in ipairs(pending_defs) do keys[#keys + 1] = p.def.item_key end
 		mod:info("[cwv:auto_register] registered keys: %s", table.concat(keys, ", "))
 	end
 end
@@ -14247,6 +14148,32 @@ _rt_register("give_refuses_skin_only", function()
     if #leaked > 0 then
         return "#538: skin_only variant(s) leaked into the ownable registry: " .. table.concat(leaked, ", ")
     end
+end)
+
+_rt_register("issue592_registration_not_acquisition", function()
+	local ownership = mod._cwv_acquisition
+	if type(ownership) ~= "table" then return "#592 acquisition helper missing" end
+	local legacy = ownership.legacy_auto_grant_ids(_variant_definitions)
+	if not legacy.cwv_es_musket_old_001 or not legacy.cwv_es_musket_old_002 then
+		return "#592 historical multi-instance migration ledger incomplete"
+	end
+	if ownership.should_remove("cwv_es_musket_old_001", legacy, function() return false end) ~= true then
+		return "#592 exact historical auto-grant was not removable"
+	end
+	if ownership.should_remove("cwv_es_musket_old_001", legacy, function() return true end) ~= false then
+		return "#592 exact CIM-owned craft was not preserved"
+	end
+	if ownership.should_remove("cwv_es_musket_old_100", legacy, function() return false end) ~= false then
+		return "#592 CIM craft range was captured by migration"
+	end
+	for _, def in ipairs(_variant_definitions) do
+		if not def.skin_only and _registered_keys[def.item_key] then
+			local row = ItemMasterList and rawget(ItemMasterList, def.item_key)
+			if not row or row.cwv_definition ~= true or row.mod_data ~= nil then
+				return "#592 definition acquired backend identity: " .. tostring(def.item_key)
+			end
+		end
+	end
 end)
 
 _rt_register("cwv_parity_applied_state_committed_before_callbacks", function()

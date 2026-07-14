@@ -1,5 +1,11 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.397-dev - 2026-07-13 - #592 registration is not acquisition [untested]
+
+- CWV now registers one definition-only `ItemMasterList` owner and network name per non-skin-only variant. It no longer adds owned items to MoreItemsLibrary's local backend, and `/cwv_give` directs players to CIM.
+- The migration removes only the exact historical auto-grant ledger (`_001`, plus authored `_002` instances). An exact ID in CIM's persisted craft table is always preserved; `_100`+ and UUID crafts are outside the migration set.
+- **Verify:** before crafting, no CWV weapons appear as owned inventory. Each CWV definition appears once in CIM's Craft Item selector. Craft one into Primary and one into Secondary; each exact item auto-equips in the selected slot and survives restart. Both regression commands must pass their #592 checks.
+
 ## 0.1.396-dev - 2026-07-13 - #586 generated dual-weapon first-person residency [verify-fix-coop]
 
 - Rain's client crash `c41fc284-f1cf-42b7-b519-bddc52aed4cf` proves #586 was a generated dual-weapon class, not a Dual Axes exception. A synchronized `cwv_es_dual_maces` loadout reached `SimpleInventoryExtension:_wield_slot` with the prior loadout's first-person package snapshot, then C-fataled when `PlayerUnitFirstPerson:set_state_machine` requested non-resident `.../melee/dual_hammers`. The new Cosmetics/CWV paired illusions had already rendered correctly and are not the crash source.

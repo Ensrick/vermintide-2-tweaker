@@ -1,5 +1,18 @@
 # Character Weapon Variants — Development Guide
 
+## Registration and acquisition contract
+
+CWV owns weapon definitions: `ItemMasterList` rows, templates, skins, packages,
+and network lookup entries. It must never add a player-owned instance to a
+local/backend inventory. Crafting in Modded is the sole acquisition owner: it
+mints the backend ID, persists that exact ID, and equips the Primary or
+Secondary slot the player chose.
+
+Do not infer ownership from a `cwv_` prefix. A CWV item is owned only when its
+exact backend ID exists in CIM's persisted craft table. Migration code may
+remove only the finite historical auto-grant IDs derived from authored
+`instances` counts; broad prefix or numeric-range deletion is forbidden.
+
 > **Before declaring a variant complete: walk
 > `DEFINITION_OF_DONE.md`.** Universal + trait-gated checklists, plus
 > the `**DoD:**` footer that every variant CHANGELOG entry must end

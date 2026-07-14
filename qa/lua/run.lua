@@ -48,6 +48,7 @@ local suites = {
     "test_mp_dailies",
     "test_wt_passive_charge",
     "test_cwv_remote_audio",
+    "test_cwv_acquisition",
     "test_cim_skin_persistence",
     "test_cos_score_identity",
     "test_gut_native_loadout_policy",
