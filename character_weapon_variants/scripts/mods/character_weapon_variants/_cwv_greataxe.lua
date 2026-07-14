@@ -13,6 +13,12 @@ M.TEMPLATE_KEY = "cwv_greataxe_template"
 M.BASE_WEAPON = "dr_2h_axe"
 M.ITEM_TYPE = "cwv_es_greataxe"
 M.SKIN_COMBINATION = "cwv_es_greataxe_skins"
+-- Mod-defined package names are not visible to vanilla previewers' global
+-- `Application.resource_package` lookup.  The custom unit itself is resident
+-- through CWV's mod-scoped master package; previewers load this vanilla Bardin
+-- Greataxe package as a lifetime/reference anchor instead.
+M.PREVIEW_PACKAGE_ALIAS =
+	"units/weapons/player/wpn_dw_2h_axe_01_t1/wpn_dw_2h_axe_01_t1_3p"
 
 M.DEFAULT_CAREERS = {
 	"es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
@@ -119,6 +125,18 @@ end
 function M.default_model()
 	for _, model in ipairs(M.MODELS) do
 		if M.is_usable_model(model) then return model end
+	end
+	return nil
+end
+
+function M.preview_package_alias(package_name)
+	if type(package_name) ~= "string" then return nil end
+	for _, model in ipairs(M.MODELS) do
+		local unit = model.right_hand_unit
+		if type(unit) == "string"
+			and (package_name == unit or package_name == unit .. "_3p") then
+			return M.PREVIEW_PACKAGE_ALIAS
+		end
 	end
 	return nil
 end

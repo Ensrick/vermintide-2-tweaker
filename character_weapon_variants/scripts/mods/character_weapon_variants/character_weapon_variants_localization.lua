@@ -36,6 +36,12 @@ local loc = {
 	-- ============================================================
 	enable_cwv_es_crossbow         = { en = "[working] Kruber: Crossbow (Saltzpyre's, rifle anims)" },
 	enable_cwv_es_crossbow_tooltip = { en = "When on, adds a version of Saltzpyre's crossbow that Kruber can wield, animated like his handgun in the third-person view. It is on by default." },
+	enable_cwv_dual_axes_cleave = { en = "Dual Axes: 10%% More Cleave" },
+	enable_cwv_dual_axes_cleave_tooltip = { en = "On by default. All direct light, heavy, and push-follow-up attacks with Dual Axes have 10%% more cleave. Ordinary push, stagger power, damage, timing, and non-Dual-Axes weapons are unchanged." },
+	enable_cwv_dual_axes_light_crit = { en = "Dual Axes: +10%% Light Critical Chance" },
+	enable_cwv_dual_axes_light_crit_tooltip = { en = "On by default. Every Dual Axes light attack, including its push follow-up, has at least 10 percentage points of additional critical-strike chance. Any stronger authored bonus is preserved. Heavy attacks and other weapon families are unchanged." },
+	enable_cwv_greataxe_light_crit = { en = "Greataxe: +10%% Light Critical Chance" },
+	enable_cwv_greataxe_light_crit_tooltip = { en = "On by default. Every Bardin Greataxe light attack, including its push follow-up, has at least 10 percentage points of additional critical-strike chance. The upward light already at 10%% remains at 10%%, and any stronger authored bonus is preserved. This also applies to Kruber's CWV Greataxe." },
 	enable_cwv_mace_hammer_identity = { en = "[verify-fix] Distinguish Maces and Hammers" },
 	enable_cwv_mace_hammer_identity_tooltip = { en = "On by default. One-handed maces, mace and shield, and Dual Maces attack 5%% faster. One-handed hammers, hammer and shield, and Dual Hammers deal 12.5%% more direct damage but have 25%% less cleave. Stagger, ordinary pushes, blocks, wield actions, two-handed hammers, Hammer and Tome, Maul, and mixed Mace and Sword weapons are unchanged." },
 	cwv_es_crossbow_name           = { en = "Crossbow" },

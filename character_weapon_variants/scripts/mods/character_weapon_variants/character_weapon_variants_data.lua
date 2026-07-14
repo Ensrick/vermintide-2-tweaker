@@ -24,8 +24,8 @@ return {
 		},
 	},
 	options = {
-		-- Loose variant toggles sorted A->Z by display label: Bomb Slot
-		-- (Tuskgor Javelin), Kruber Crossbow, Mace and Hammer Identity,
+		-- Loose variant toggles sorted A->Z by display label: Bomb Slot,
+		-- Dual Axes, Greataxe, Kruber Crossbow, Mace and Hammer Identity,
 		-- Mace and Sword.
 		widgets = {
 			{
@@ -50,6 +50,24 @@ return {
 				type          = "checkbox",
 				default_value = true,
 				tooltip       = "enable_cwv_tuskgor_javelin_bomb_tooltip",
+			},
+			{
+				setting_id    = "enable_cwv_dual_axes_cleave",
+				type          = "checkbox",
+				default_value = true,
+				tooltip       = "enable_cwv_dual_axes_cleave_tooltip",
+			},
+			{
+				setting_id    = "enable_cwv_dual_axes_light_crit",
+				type          = "checkbox",
+				default_value = true,
+				tooltip       = "enable_cwv_dual_axes_light_crit_tooltip",
+			},
+			{
+				setting_id    = "enable_cwv_greataxe_light_crit",
+				type          = "checkbox",
+				default_value = true,
+				tooltip       = "enable_cwv_greataxe_light_crit_tooltip",
 			},
 			-- v0.1.347-dev: cwv_es_crossbow variant toggle (Saltzpyre's
 			-- crossbow on all 4 Kruber careers, rifle 3P anim mapping).

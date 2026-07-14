@@ -100,6 +100,7 @@ local suites = {
     "test_cwv_greataxe",
     "test_cwv_infantry_spear",
     "test_cwv_mace_hammer_identity",
+    "test_cwv_axe_balance",
     "test_cwv_smoke_bomb_probe",
     "test_cim_skin_persistence",
     "test_cim_bulk_cleanup",

@@ -1,6 +1,0 @@
-unit = [
-	"units/cwv_es_greataxe/axe_04/axe_04"
-	"units/cwv_es_greataxe/axe_04/axe_04_3p"
-]
-texture = [ "textures/cwv_es_greataxe/axe_04/*" ]
-material = [ "units/cwv_es_greataxe/axe_04/axe_04" ]

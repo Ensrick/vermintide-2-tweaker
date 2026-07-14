@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.408-dev"
+local MOD_VERSION = "0.1.409-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -54,8 +54,12 @@ local _om = {}
 _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear")
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
 _om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe")
+_om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
+_om.mod_unit_preview.install(_om.greataxe)
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
 _om.mace_hammer_identity = _om.mace_hammer_identity_policy.new()
+_om.axe_balance_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_axe_balance")
+_om.axe_balance = _om.axe_balance_policy.new()
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_pair_state").install(mod, _om)
 
 -- Single source of truth for the husk override-unit package ref (issue #418).
@@ -1310,6 +1314,13 @@ do
 	function mod.on_setting_changed(setting_id)
 		if setting_id == policy.SETTING_ID then
 			_om._apply_mace_hammer_identity(mod:get(policy.SETTING_ID) ~= false)
+		elseif _om._apply_axe_balance then
+			local axe = _om.axe_balance_policy
+			if setting_id == axe.GREATAXE_LIGHT_CRIT_SETTING
+					or setting_id == axe.DUAL_AXES_LIGHT_CRIT_SETTING
+					or setting_id == axe.DUAL_AXES_CLEAVE_SETTING then
+				_om._apply_axe_balance(setting_id, false)
+			end
 		end
 	end
 end
@@ -2839,6 +2850,44 @@ do
 	end
 
 	_create_greataxe_template()
+end
+
+-- Issue #601: apply the three independent axe identity settings only after
+-- the CWV Kruber Greataxe clone exists. Dual Axes variants inherit the native
+-- Bardin template, so one reversible mutation covers native and CWV items.
+do
+	local policy = _om.axe_balance_policy
+	local state = _om.axe_balance
+	local function deep_clone(value)
+		return table.clone(value, true)
+	end
+	local function register_damage_profile(profile_name)
+		local lookup = NetworkLookup and NetworkLookup.damage_profiles
+		if type(profile_name) ~= "string" or not lookup or rawget(lookup, profile_name) then return end
+		local index = #lookup + 1
+		rawset(lookup, index, profile_name)
+		rawset(lookup, profile_name, index)
+	end
+	_om._apply_axe_balance = function(setting_id, force_off)
+		local function enabled(id)
+			return not force_off and mod:get(id) ~= false
+		end
+		if not setting_id or setting_id == policy.GREATAXE_LIGHT_CRIT_SETTING then
+			state:apply_greataxe_crit(enabled(policy.GREATAXE_LIGHT_CRIT_SETTING), Weapons)
+		end
+		if not setting_id or setting_id == policy.DUAL_AXES_LIGHT_CRIT_SETTING then
+			state:apply_dual_crit(enabled(policy.DUAL_AXES_LIGHT_CRIT_SETTING), Weapons)
+		end
+		if not setting_id or setting_id == policy.DUAL_AXES_CLEAVE_SETTING then
+			state:apply_dual_cleave(enabled(policy.DUAL_AXES_CLEAVE_SETTING),
+				Weapons, DamageProfileTemplates, PowerLevelTemplates, deep_clone,
+				_om._record_cwv_dp_source, register_damage_profile)
+		end
+		mod:info("[cwv:601] greataxe_light_crit=%s dual_light_crit=%s dual_cleave=%s",
+			tostring(state.greataxe_crit_enabled), tostring(state.dual_crit_enabled),
+			tostring(state.dual_cleave_enabled))
+	end
+	_om._apply_axe_balance(nil, false)
 end
 
 -- ============================================================
@@ -12476,6 +12525,10 @@ end)
 -- remembered this when investigating why cwv scale wasn't applying in the
 -- cosmetic picker. Don't refactor back to `hook_safe`.
 mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data)
+	-- #597: when the mod-scoped custom resource is unexpectedly absent, the
+	-- package bridge records a vanilla fallback rather than letting this
+	-- preview path call World.spawn_unit on a missing custom unit.
+	_om.mod_unit_preview.apply_loot_fallbacks(self, spawn_data)
 	-- issue 419 pre-pass: rewrite base-mesh spawn entries to the variant's
 	-- authored 3P units BEFORE vanilla spawns them. Covers the browser edge
 	-- where the data-level get_item_units resolution missed (UUID-bid crafted
@@ -13088,14 +13141,17 @@ mod.on_enabled = function()
 	-- assignment is the final VMF callback value.
 	_om._apply_mace_hammer_identity(
 		mod:get(_om.mace_hammer_identity_policy.SETTING_ID) ~= false)
+	_om._apply_axe_balance(nil, false)
 end
 
 mod.on_disabled = function()
+	_om._apply_axe_balance(nil, true)
 	_om._apply_mace_hammer_identity(false)
     _om._release_dual_weapon_fp_residency("mod_disabled")
 end
 
 mod.on_unload = function()
+	_om._apply_axe_balance(nil, true)
 	_om._apply_mace_hammer_identity(false)
     _om._release_dual_weapon_fp_residency("mod_unload")
 end

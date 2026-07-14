@@ -57,7 +57,7 @@ return function(H, repo_root)
             H.equal(model.key, "cwv_es_greataxe_skin_" .. id)
             H.equal(model.display_name, "Greataxe Model " .. id)
             H.equal(model.right_hand_unit, unit_root)
-            for _, suffix in ipairs({ ".fbx", ".unit", "_3p.fbx", "_3p.unit", ".material", ".package", "_3p.package", "_assets.package" }) do
+            for _, suffix in ipairs({ ".fbx", ".unit", "_3p.fbx", "_3p.unit", ".material" }) do
                 local handle = io.open(repo_root .. "/character_weapon_variants/" .. unit_root .. suffix, "rb")
                 H.truthy(handle, unit_root .. suffix .. " must be packaged")
                 if handle then handle:close() end
@@ -80,4 +80,37 @@ return function(H, repo_root)
         H.equal(usable[#usable].key, "cwv_es_greataxe_skin_test")
         policy.MODELS = original
     end)
+
+	H.test("CWV #597 custom preview packages borrow a vanilla global anchor", function()
+		local anchor = "units/weapons/player/wpn_dw_2h_axe_01_t1/wpn_dw_2h_axe_01_t1_3p"
+		H.equal(policy.PREVIEW_PACKAGE_ALIAS, anchor)
+		local master = read(repo_root
+			.. "/character_weapon_variants/resource_packages/character_weapon_variants/character_weapon_variants.package")
+		for _, model in ipairs(policy.MODELS) do
+			H.equal(policy.preview_package_alias(model.right_hand_unit), anchor)
+			H.equal(policy.preview_package_alias(model.right_hand_unit .. "_3p"), anchor)
+			-- The mod-scoped master owns residency; the vanilla alias is only
+			-- the previewer's globally discoverable lifetime reference.
+			H.truthy(master:find('"' .. model.right_hand_unit .. '"', 1, true))
+			H.truthy(master:find('"' .. model.right_hand_unit .. '_3p"', 1, true))
+		end
+		H.equal(master:find("package = [", 1, true), nil,
+			"custom preview units must be flattened into the runtime root")
+		for id = 1, 5 do
+			local suffix = string.format("axe_%02d", id)
+			H.truthy(master:find('"units/cwv_es_greataxe/' .. suffix .. '/' .. suffix .. '"', 1, true))
+			H.truthy(master:find('"textures/cwv_es_greataxe/' .. suffix .. '/*"', 1, true))
+		end
+		H.equal(policy.preview_package_alias("units/vanilla/control_3p"), nil)
+	end)
+
+	H.test("CWV #597 preview bridge guards package load spawn and unload", function()
+		local source = read(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_mod_unit_preview.lua")
+		H.truthy(source:find('mod:hook("LootItemUnitPreviewer", "load_package"', 1, true))
+		H.truthy(source:find('mod:hook("LootItemUnitPreviewer", "_unload_packages"', 1, true))
+		H.truthy(source:find('mod:hook("HeroPreviewer", "_load_packages"', 1, true))
+		H.truthy(source:find("Application.can_get, \"unit\"", 1, true))
+		H.truthy(source:find("apply_loot_fallbacks", 1, true))
+	end)
 end

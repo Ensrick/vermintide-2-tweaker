@@ -1067,3 +1067,18 @@ Last updated: 2026-07-14.
   repeated ON/OFF/ON changes do not compound any multiplier.
 - [ ] Host/client with the same CWV build agree on hit damage and cleave; a
   generated `cwv_mhi_*` profile is present in `NetworkLookup.damage_profiles`.
+## Axe identity balance toggles (Issue #601)
+
+- [ ] All three settings default ON and can be toggled independently.
+- [ ] Bardin Greataxe and CWV Kruber Greataxe light releases have at least 10
+  percentage points of additional critical chance; the upward light remains
+  at its authored 10%, and stronger authored bonuses remain unchanged.
+- [ ] Dual Axes light releases, including the push follow-up, have at least 10
+  percentage points of additional critical chance; heavy releases do not.
+- [ ] Every direct Dual Axes light, heavy, and push-follow-up profile has 10%
+  more attack/impact cleave. Damage, stagger power, timing, and ordinary push
+  remain unchanged.
+- [ ] OFF restores exact original crit/profile fields. ON/OFF/ON does not
+  compound, and changing either Dual Axes toggle does not disturb the other.
+- [ ] Native Bardin Dual Axes plus CWV Kruber and Saltzpyre Dual Axes agree on
+  host/client results; all `cwv_axe_cleave_*` profiles are network registered.

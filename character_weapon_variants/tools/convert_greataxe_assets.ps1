@@ -57,19 +57,6 @@ common = {
 }
 '@
 
-$assetPackageTemplate = @'
-unit = [
-	"units/cwv_es_greataxe/axe___ID__/axe___ID__"
-	"units/cwv_es_greataxe/axe___ID__/axe___ID___3p"
-]
-texture = [ "textures/cwv_es_greataxe/axe___ID__/*" ]
-material = [ "units/cwv_es_greataxe/axe___ID__/axe___ID__" ]
-'@
-
-$forwardPackageTemplate = @'
-package = [ "units/cwv_es_greataxe/axe___ID__/axe___ID___assets" ]
-'@
-
 $standardMaterial = 'C:\Program Files (x86)\Steam\steamapps\common\Vermintide 2 SDK\core\stingray_renderer\shader_import\standard.material'
 if (-not (Test-Path -LiteralPath $standardMaterial)) { throw "SDK standard material not found: $standardMaterial" }
 $materialBase = Get-Content -Raw -LiteralPath $standardMaterial
@@ -106,14 +93,9 @@ foreach ($asset in $assets) {
 
     $unit1p = $unitTemplate.Replace('__ID__', $id).Replace('__SHADOW__', 'false')
     $unit3p = $unitTemplate.Replace('__ID__', $id).Replace('__SHADOW__', 'true')
-    $assetPackage = $assetPackageTemplate.Replace('__ID__', $id)
-    $forwardPackage = $forwardPackageTemplate.Replace('__ID__', $id)
     $material = $materialBase.Replace('__ID__', $id)
     $unit1p | Set-Content -LiteralPath (Join-Path $unitDir "axe_$id.unit") -Encoding utf8NoBOM
     $unit3p | Set-Content -LiteralPath (Join-Path $unitDir "axe_${id}_3p.unit") -Encoding utf8NoBOM
-    $assetPackage | Set-Content -LiteralPath (Join-Path $unitDir "axe_${id}_assets.package") -Encoding utf8NoBOM
-    $forwardPackage | Set-Content -LiteralPath (Join-Path $unitDir "axe_$id.package") -Encoding utf8NoBOM
-    $forwardPackage | Set-Content -LiteralPath (Join-Path $unitDir "axe_${id}_3p.package") -Encoding utf8NoBOM
     $material | Set-Content -LiteralPath (Join-Path $unitDir "axe_$id.material") -Encoding utf8NoBOM
 
     $channels = @('albedo','normal','roughness','metallic','ao')

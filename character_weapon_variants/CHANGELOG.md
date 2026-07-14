@@ -1,5 +1,24 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.409-dev - 2026-07-14 - #597 Greataxe Athanor resource crash [verify-fix-coop]
+
+- Flattened all five Greataxe models' first- and third-person units, materials, and textures into CWV's mod-scoped master package. The prior forwarding bundles existed on disk but were not runtime load roots, causing Athanor to crash on `f4c81c97baad78f8` when selecting Model 01.
+- Added a preview bridge that borrows a vanilla Bardin Greataxe package only for PackageManager lifetime tracking while spawning the resident custom model. If residency is genuinely absent, preview rendering fails closed to the vanilla anchor rather than crashing.
+- Added a compiled-bundle reachability gate: every authored custom unit must exist inside an explicit runtime root bundle. Merely producing or uploading a same-hash bundle no longer counts as proof of residency.
+
+### Co-op verification
+
+Craft/select every Greataxe model through CIM's Athanor, then inspect each in inventory preview, first person, local third person, and from a second player's view. No selection may crash or silently fall back to the vanilla Greataxe. Run `/cwv_regression_test` and require all #597 checks to pass.
+
+## 0.1.409-dev - 2026-07-14 - #601 axe identity balance [verify-fix]
+
+- Added three independent, default-on toggles: Greataxe lights have at least +10 percentage points critical chance; Dual Axes lights have at least +10 points; and all eight direct Dual Axes sweeps have 10% more attack and impact cleave.
+- Existing +10% Greataxe light bonuses do not compound to +20%, stronger authored bonuses remain intact, and disabling each toggle restores its exact original fields. Dual Axes cleave uses isolated, network-registered profile clones and does not alter damage, stagger, ordinary pushes, or other axe families.
+
+### Solo verification
+
+Toggle each axe option independently and compare Greataxe lights, Dual Axes lights, and all Dual Axes light/heavy sweeps. Confirm crit never compounds across toggles, cleave changes do not change damage or stagger, and disabling restores vanilla behavior. Run `/cwv_regression_test` and require all #601 checks to pass.
+
 ## 0.1.408-dev - 2026-07-14 - #597 #579 Greataxe and exact paired appearance [verify-fix-coop]
 
 - Replaced the retired Poleaxe with a Bardin-parity Kruber Greataxe. Five deduplicated CC BY 4.0 models ship as provisional illusions through the proven custom-FBX pipeline, with complete attribution and reproducible conversion tooling. All four Kruber careers are authored owners; WT controls every optional receiver.

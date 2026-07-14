@@ -46,10 +46,12 @@ material at its normal Steam path. Override `-SourceRoot`, `-Blender`,
 The Blender helper joins geometry, emits one `axe_mat` material slot,
 normalizes the inferred handle to two units along positive X, and writes a JSON
 conversion report beside the untracked sources. The wrapper generates 1P/3P
-FBX and unit resources, a PBR material, lightweight 1P/3P sibling packages
-forwarding to one shared asset package per illusion, processed five-map texture
-sets, and `.texture` definitions. The shared package prevents the 1P and 3P
-package names from embedding a second full copy of the same textures.
+FBX and unit resources, a PBR material, processed five-map texture sets, and
+`.texture` definitions. All ten units, five materials, and texture directories
+are flattened into CWV's master package. Do not generate unit-named sibling
+packages: vanilla previewers resolve those through the global package namespace,
+which cannot discover Workshop-defined paths. CWV's preview bridge borrows a
+vanilla Greataxe package reference while spawning the resident custom unit.
 
 Compilation proves only that Stingray accepts the resource graph. Each illusion
 still needs in-game 1P, local 3P, remote-husk, inventory-preview, and illusion-
