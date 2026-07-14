@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.411-dev"
+local MOD_VERSION = "0.1.412-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -55,12 +55,11 @@ _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inf
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
 _om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe")
 _om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_maces")
+_om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus_identity")
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
 _om.mod_unit_preview.install(_om.greataxe)
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
 _om.mace_hammer_identity = _om.mace_hammer_identity_policy.new()
-_om.axe_balance_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_axe_balance")
-_om.axe_balance = _om.axe_balance_policy.new()
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_pair_state").install(mod, _om)
 
 -- Single source of truth for the husk override-unit package ref (issue #418).
@@ -1366,13 +1365,6 @@ do
 	function mod.on_setting_changed(setting_id)
 		if setting_id == policy.SETTING_ID then
 			_om._apply_mace_hammer_identity(mod:get(policy.SETTING_ID) ~= false)
-		elseif _om._apply_axe_balance then
-			local axe = _om.axe_balance_policy
-			if setting_id == axe.GREATAXE_LIGHT_CRIT_SETTING
-					or setting_id == axe.DUAL_AXES_LIGHT_CRIT_SETTING
-					or setting_id == axe.DUAL_AXES_CLEAVE_SETTING then
-				_om._apply_axe_balance(setting_id, false)
-			end
 		end
 	end
 end
@@ -2902,44 +2894,6 @@ do
 	end
 
 	_create_greataxe_template()
-end
-
--- Issue #601: apply the three independent axe identity settings only after
--- the CWV Kruber Greataxe clone exists. Dual Axes variants inherit the native
--- Bardin template, so one reversible mutation covers native and CWV items.
-do
-	local policy = _om.axe_balance_policy
-	local state = _om.axe_balance
-	local function deep_clone(value)
-		return table.clone(value, true)
-	end
-	local function register_damage_profile(profile_name)
-		local lookup = NetworkLookup and NetworkLookup.damage_profiles
-		if type(profile_name) ~= "string" or not lookup or rawget(lookup, profile_name) then return end
-		local index = #lookup + 1
-		rawset(lookup, index, profile_name)
-		rawset(lookup, profile_name, index)
-	end
-	_om._apply_axe_balance = function(setting_id, force_off)
-		local function enabled(id)
-			return not force_off and mod:get(id) ~= false
-		end
-		if not setting_id or setting_id == policy.GREATAXE_LIGHT_CRIT_SETTING then
-			state:apply_greataxe_crit(enabled(policy.GREATAXE_LIGHT_CRIT_SETTING), Weapons)
-		end
-		if not setting_id or setting_id == policy.DUAL_AXES_LIGHT_CRIT_SETTING then
-			state:apply_dual_crit(enabled(policy.DUAL_AXES_LIGHT_CRIT_SETTING), Weapons)
-		end
-		if not setting_id or setting_id == policy.DUAL_AXES_CLEAVE_SETTING then
-			state:apply_dual_cleave(enabled(policy.DUAL_AXES_CLEAVE_SETTING),
-				Weapons, DamageProfileTemplates, PowerLevelTemplates, deep_clone,
-				_om._record_cwv_dp_source, register_damage_profile)
-		end
-		mod:info("[cwv:601] greataxe_light_crit=%s dual_light_crit=%s dual_cleave=%s",
-			tostring(state.greataxe_crit_enabled), tostring(state.dual_crit_enabled),
-			tostring(state.dual_cleave_enabled))
-	end
-	_om._apply_axe_balance(nil, false)
 end
 
 -- ============================================================
@@ -7926,10 +7880,12 @@ end
 -- ============================================================
 
 local _display_names = {}
+local _item_text = mod:dofile("scripts/mods/character_weapon_variants/_cwv_item_text")
 
 for _, def in ipairs(_variant_definitions) do
 	_display_names[def.item_key .. "_name"] = def.display_name
-	_display_names[def.item_key .. "_description"] = def.description
+	_display_names[def.item_key .. "_description"] =
+		_item_text.description(def.display_name, def.description)
 	if def.skin_display_name then
 		_display_names[def.item_key .. "_skin_name"] = def.skin_display_name
 	end
@@ -10460,6 +10416,41 @@ end
 
 local _auto_registered = false
 
+-- Issue #273: Chaos Wastes converts starting weapons by exact item key. Every
+-- concrete CWV owner receives a dedicated DeusWeapons identity whose base_item
+-- remains that CWV row; borrowing only the vanilla generation contract keeps
+-- properties/traits valid without collapsing template, item_type, skin pool,
+-- or render units to def.base_weapon. This mutates no inventory and therefore
+-- preserves #592's registration-only/no-auto-grant boundary.
+_om.install_deus_identities = function(reason)
+	local exact_identity_allowed = false
+	local parity = mod._cwv_peer_parity
+	if parity and type(parity.all_peers_have) == "function" then
+		local ok, result = pcall(parity.all_peers_have, parity)
+		exact_identity_allowed = ok and result == true
+	end
+	local report = _om.deus_identity.install(
+		_variant_definitions, ItemMasterList,
+		rawget(_G, "DeusStartingWeaponTypeMapping"),
+		rawget(_G, "DeusWeapons"), exact_identity_allowed)
+	local fingerprint = string.format("%d:%d:%d:%d:%s", report.installed,
+		report.existing, report.degraded, #report.skipped,
+		tostring(exact_identity_allowed))
+	if fingerprint ~= _om.deus_identity_fingerprint then
+		_om.deus_identity_fingerprint = fingerprint
+		local sample = {}
+		for index = 1, math.min(#report.skipped, 8) do
+			sample[#sample + 1] = report.skipped[index]
+		end
+		pcall(printf,
+			"[cwv:273] deus_identity reason=%s exact=%s installed=%d existing=%d degraded=%d skipped=%d sample=%s",
+			tostring(reason), tostring(exact_identity_allowed), report.installed,
+			report.existing, report.degraded, #report.skipped,
+			table.concat(sample, ","))
+	end
+	return report
+end
+
 -- Issue #567: these are the three persisted custom skins that exposed a stale
 -- vanilla reverse-index. WeaponSkins.matching_weapon_skin_item_key builds
 -- `_matching_weapon_skin_item_keys` only once by walking ItemMasterList owners
@@ -10681,6 +10672,7 @@ end
 -- assumption breaks for future game-state changes.
 mod:hook_safe("StateInGameRunning", "on_enter", function()
 	_auto_register_all()
+	_om.install_deus_identities("gameplay_enter")
 	-- #567: this boundary also covers a peer joining directly into an existing
 	-- Keep/mission after the install-time VMF query ran without a network backend.
 	-- Query every CWV owner, then publish our own current state. Both are bounded
@@ -10690,6 +10682,16 @@ mod:hook_safe("StateInGameRunning", "on_enter", function()
 		_om._exact_pair_publish_local("gameplay_enter")
 	end
 end)
+
+-- Last-chance boundary for starting a run in the same session before another
+-- gameplay-enter callback. Installation is idempotent and completes before
+-- vanilla reads DeusStartingWeaponTypeMapping inside _setup_run.
+if rawget(_G, "DeusMechanism") then
+	mod:hook("DeusMechanism", "_setup_run", function(func, self, ...)
+		_om.install_deus_identities("setup_run")
+		return func(self, ...)
+	end)
+end
 
 -- Animation remapping handled entirely via template, 3P-only:
 -- - anim_event_3p overrides in elven_sword_shield_template (attack anims)
@@ -13209,17 +13211,14 @@ mod.on_enabled = function()
 	-- assignment is the final VMF callback value.
 	_om._apply_mace_hammer_identity(
 		mod:get(_om.mace_hammer_identity_policy.SETTING_ID) ~= false)
-	_om._apply_axe_balance(nil, false)
 end
 
 mod.on_disabled = function()
-	_om._apply_axe_balance(nil, true)
 	_om._apply_mace_hammer_identity(false)
     _om._release_dual_weapon_fp_residency("mod_disabled")
 end
 
 mod.on_unload = function()
-	_om._apply_axe_balance(nil, true)
 	_om._apply_mace_hammer_identity(false)
     _om._release_dual_weapon_fp_residency("mod_unload")
 end
@@ -13624,6 +13623,34 @@ _rt_register("issue412_old_musket_universal_special_interrupt", function()
 	if not toggle or toggle.anim_end_event ~= "attack_finished"
 			or type(toggle.anim_end_event_condition_func) ~= "function" then
 		return "melee toggle interruption animation cleanup missing"
+	end
+end)
+
+_rt_register("issue273_cwv_deus_identity_is_exact", function()
+	local report = _om.install_deus_identities("runtime_regression")
+	if #report.skipped > 0 then
+		return string.format("%d CWV owners lack a dedicated Deus identity: %s",
+			#report.skipped, table.concat(report.skipped, ","))
+	end
+	for _, item_key in ipairs({ "cwv_wh_dual_axes", "cwv_es_dual_axes" }) do
+		local deus_key = rawget(DeusStartingWeaponTypeMapping, item_key)
+		if not report.exact_identity_allowed then
+			if deus_key ~= "deus_dr_dual_wield_axes" then
+				return item_key .. " mixed-parity fallback is not wire-safe Dual Axes"
+			end
+			goto continue_issue273
+		end
+		local row = deus_key and rawget(DeusWeapons, deus_key)
+		local owner = rawget(ItemMasterList, item_key)
+		local single_axe = rawget(ItemMasterList, "dr_1h_axe")
+		if deus_key ~= "deus_" .. item_key or not row or row.base_item ~= item_key then
+			return item_key .. " collapses to a non-CWV Deus owner"
+		end
+		if not owner or owner.item_type ~= item_key
+				or (single_axe and owner.template == single_axe.template) then
+			return item_key .. " lost its individualized item_type/template"
+		end
+		::continue_issue273::
 	end
 end)
 

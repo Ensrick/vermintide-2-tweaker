@@ -1,5 +1,19 @@
 # Weapon Tweaker — Development Notes
 
+## General axe identity balance (Issue #601)
+
+Weapon Tweaker owns the three default-on controls under `Weapon Tweaks`:
+Greataxe light critical chance, Dual Axes light critical chance, and Dual Axes
+cleave. `_wt_axe_balance.lua` is engine-free and reversible. It always targets
+the native templates and treats `cwv_greataxe_template` as optional, scanning
+again when CWV's late registration becomes ready. CWV absence is therefore a
+normal supported state, not an error or dependency boundary.
+
+Generated `wt_axe_cleave_*` profiles clone source damage and cleave rows,
+scaling only cleave attack/impact. Disabling restores exact captured action
+fields; repeated enabled reconciliation only discovers previously unseen late
+actions and never compounds existing mutations.
+
 ## Conditional CWV ownership
 
 WT fallback ports remain real features when their dedicated CWV equivalent is

@@ -1,5 +1,24 @@
 # Weapon Tweaker Changelog
 
+## 0.12.255-dev (2026-07-14) - #603 Ranger Veteran Dual Axes inventory idle [verify-fix]
+
+- The native diagnostic proved Ranger Veteran Dual Axes selected the correct `to_dual_axes` event, but the inventory-screen character preview lost that pose after unit spawn/link.
+- Reasserted the same native event once after preview spawn only for the exact Ranger Veteran + Dual Axes combination. Known-good Dual Hammers, Slayer, first person, and every mission animation path remain untouched.
+- Expanded the repository appearance standard: every third-person model, transform, and pose change must explicitly cover the inventory-screen character preview alongside owner 3P, bots, remote husks, lobby, score/team, and other preview cells.
+
+### Solo verification
+
+On Ranger Veteran, open the inventory-screen character preview with Dual Axes and compare it with known-good Dual Hammers. Dual Axes must retain their distinct native idle after the preview finishes loading; Dual Hammers and Slayer must remain unchanged.
+
+## 0.12.255-dev (2026-07-14) - #601 axe identity ownership and #593 menu reconciliation [verify-fix]
+
+- Moved the three default-on Greataxe/Dual Axes balance controls into Weapon Tweaks. Native weapons work with WT alone; the optional CWV Kruber Greataxe is discovered after its late template registration without creating a hard dependency.
+- With CWV active, the frozen WT menu tree now removes Bardin Axe+Shield fallback rows for Kruber and standard Saltzpyre while retaining their saved values. Runtime reconciliation also observes when both CWV Empire variants become ready, preventing load-order and cache final-write drift.
+
+### Solo verification
+
+Confirm the three axe balance toggles appear under Weapon Tweaks and work with WT alone; with CWV installed, its Greataxe joins the same policy. On Witch Hunter Captain with CWV active, Bardin Axe & Shield must be absent and the CWV Empire/Kruber Axe & Shield option must be present. Disable/re-enable CWV and confirm ownership reconciles without duplicate or stale rows.
+
 ## 0.12.254-dev (2026-07-14) - #602 Dawi Mace family availability [verify-fix-coop]
 
 - Added all three CWV Dawi Mace variants to WT's bounded career catalog. Their source-backed Bardin careers keep the CWV defaults; every other career is exposed as an independent default-off option.

@@ -77,6 +77,11 @@ return function(H, repo_root)
         H.truthy(source:find("es_handgun = { wh_ = {0, -0.17, -0.05} }", 1, true))
         H.truthy(source:find("es_handgun                 = true", 1, true))
         H.truthy(source:find('issue112_saltzpyre_handgun_baked_offset', 1, true))
+        local cwv_data_file = assert(io.open(repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants_data.lua", "rb"))
+        local cwv_data = cwv_data_file:read("*a")
+        cwv_data_file:close()
+        H.equal(cwv_data:find("handgun_offset", 1, true), nil)
     end)
 
     H.test("WT #112 Saltzpyre Kruber shields retain the shared baked rotation", function()

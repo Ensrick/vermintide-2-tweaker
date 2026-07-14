@@ -32,7 +32,15 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
             and cwv_ownership.cwv_is_active(get_mod("character_weapon_variants"))
             or false
     end
+    local function cwv_axe_shield_ready()
+        if not ItemMasterList then return false end
+        local base = rawget(ItemMasterList, "cwv_es_axe_shield")
+        local veteran = rawget(ItemMasterList, "cwv_es_axe_shield_veteran")
+        return base and base.cwv_variant == true
+            and veteran and veteran.cwv_variant == true or false
+    end
     M._last_cwv_active = cwv_active()
+    M._last_cwv_axe_shield_ready = cwv_axe_shield_ready()
 
     -- Passive overcharge-vent / energy-regen restore for cross-character
     -- overcharge weapons (Sienna staves) + the Moonfire Bow on careers that
@@ -160,13 +168,17 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
         -- state transition. Reconcile exactly once per ownership transition:
         -- can_wield is strip/rebuilt and stale WT loadout-cache rows are pruned.
         local owns_axe_shield = cwv_active()
-        if owns_axe_shield ~= M._last_cwv_active then
+        local axe_shield_ready = cwv_axe_shield_ready()
+        if owns_axe_shield ~= M._last_cwv_active
+                or axe_shield_ready ~= M._last_cwv_axe_shield_ready then
             M._last_cwv_active = owns_axe_shield
+            M._last_cwv_axe_shield_ready = axe_shield_ready
             apply_weapon_unlocks()
             patch_career_actions_on_weapons()
+            if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
             M.refresh_on_setting_change(mod)
-            mod:info("[wt:593] CWV ownership transition active=%s; native Kruber Axe+Shield reconciled",
-                tostring(owns_axe_shield))
+            mod:info("[wt:593] CWV ownership transition active=%s variants_ready=%s; native Axe+Shield reconciled",
+                tostring(owns_axe_shield), tostring(axe_shield_ready))
         end
 
         if not mod._applied_unlocks and ItemMasterList then

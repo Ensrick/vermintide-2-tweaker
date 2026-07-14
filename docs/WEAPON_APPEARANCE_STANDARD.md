@@ -10,7 +10,7 @@ The rule the whole document enforces:
 
 > **A weapon's appearance is a function of its variant definition, NOT of which
 > code path happens to be spawning it or who is looking at it.** Every render
-> path resolves the SAME five appearance concerns from the SAME source of truth,
+> path resolves the SAME six appearance concerns from the SAME source of truth,
 > through the SAME interface. No path may re-implement a concern inline.
 
 Applies to `character_weapon_variants` (CWV), `cosmetics_tweaker`, and
@@ -28,7 +28,7 @@ resource.
 
 ---
 
-## §1 The four render paths
+## §1 The four spawn paths and every presentation surface
 
 A weapon unit is spawned by exactly one of four paths depending on WHO is
 looking and WHERE. A fix that only touches one path is by definition incomplete.
@@ -39,6 +39,13 @@ looking and WHERE. A fix that only touches one path is by definition incomplete.
 | 2 | **Husk (remote)** | `GearUtils.spawn_inventory_unit` (discriminator: `owner_unit_1p == nil`) | Every OTHER player's screen — the wielder rendered as a husk | returned 3P weapon units |
 | 3 | **Inventory preview** | `MenuWorldPreviewer._spawn_item` → `_cwv_spawn_item_post` | Hero/inventory character-preview mannequin | `self._equipment_units[slot_index].{right,left}` |
 | 4 | **Illusion browser** | `LootItemUnitPreviewer.spawn_units` | Cosmetic/illusion picker preview pane | returned `units` array (1=left, 2=right) |
+
+Those four engine spawn paths do not reduce the verification surface to four
+screens. Owner local 3P, bots, remote husks, the inventory-screen character
+preview, illusion/Athanor previews, lobby presentation, and score/team previews
+are separate acceptance cells even when two cells eventually reuse one spawn
+primitive. Never infer that an inventory preview works because owner 3P works,
+or that a score preview works because the inventory preview works.
 
 **Load-bearing facts (do not relearn the hard way):**
 
@@ -72,9 +79,9 @@ looking and WHERE. A fix that only touches one path is by definition incomplete.
 
 ---
 
-## §2 The five appearance concerns (the interface)
+## §2 The six appearance concerns (the interface)
 
-Every render path resolves these five concerns. This is the interface; the code
+Every render path resolves these six concerns. This is the interface; the code
 module that owns each is named. New code calls the module — it never re-derives.
 
 | Concern | Owns | Source of truth | Module |
@@ -84,6 +91,7 @@ module that owns each is named. New code calls the module — it never re-derive
 | **Texture** | per-material texture set + per-instance persistence | variant custom texture set; LA `_la_persistence` per `backend_id` | `_resolve_variant_textures` (Phase 2) |
 | **Ammo** | attach / strip projectile+ammo units | `def.no_ammo_unit` | husk ammo-strip block |
 | **Residency** | force-load override units so the spawn yields a unit | data-driven walk of every def's override units | `_force_load_husk_override_units` |
+| **Pose/animation** | wield/idle state and attack playback on each 3P body | native template wield event plus canonical career/template remap data | weapon animation resolver; preview reuses the selected native event |
 
 Plus a cross-cutting concern:
 
@@ -106,6 +114,7 @@ explicitly swap. `—` = not applicable.
 | Texture | ✓ | ✓ | ✓ | ✓ |
 | Ammo | data | ✓ (strip) | — | — |
 | Residency | ✓ (owner too — #415) | ✓ | n/a (preview world resident) | n/a |
+| Pose/animation (3P) | ✓ | ✓ | ✓ | preview-specific / n/a when no body |
 | Sync | source | consumer (§5) | — | — |
 
 **The gaps this standard is closing** (as of 2026-07-07):
@@ -256,6 +265,28 @@ in a SINGLE shared constant + predicate, not re-inlined per site (issue #418):
 `_force_load_axe_shield_husk_units` currently omits the safety predicates that
 the data-driven pass and the preview swap both carry.
 
+### §4.6 Pose/animation
+
+Model correctness does not prove pose correctness. Every 3P-capable surface
+must resolve the weapon's wield/idle event and combat events from the canonical
+template plus career-remap data. Do not create a second independent table for
+the inventory character preview or score/team preview.
+
+The inventory-screen character is a `MenuWorldPreviewer` body, not the owner's
+in-world 3P unit. Vanilla selects
+`wield_anim_career_3p[career]`, then `wield_anim_career[career]`, then
+`wield_anim`. A preview correction must preserve that precedence, target the
+derived preview class, and fire only on `self.character_unit`. A body reporting
+`Unit.has_animation_event == true` proves capability, not that an earlier event
+survived later spawn/link transitions; when evidence proves a timing loss,
+reassert the same canonically selected event after spawn rather than changing
+mission routing.
+
+For every pose change, explicitly cover owner local 3P, bots, remote husks,
+inventory-screen character preview, score/team preview, and any other body
+preview. First-person behavior is a separate control and must remain unchanged
+unless the issue explicitly targets it.
+
 ---
 
 ## §5 Sync contract
@@ -288,16 +319,19 @@ variant. This is issue #392, the true umbrella under #394/#396/#397/#399/#416.
 No appearance change is "done" until confirmed in EVERY applicable cell (user
 in-game; compile is not verification `[bugclass: CLAUDE.md #10]`).
 
-| Observer / surface | Units | Transform | Texture | Ammo |
-|--------------------|:-----:|:---------:|:-------:|:----:|
-| Owner, keep (3P mannequin body) | ☐ | ☐ | ☐ | ☐ |
-| Owner, mission (3P) | ☐ | ☐ | ☐ | ☐ |
-| Owner, 1P view | — | ☐ (1P sep.) | ☐ | — |
-| Client/husk, mission | ☐ | ☐ | ☐ | ☐ |
-| Inventory preview (path 3) | ☐ | ☐ | ☐ | — |
-| Illusion browser (path 4) | ☐ | ☐ | ☐ | — |
-| Re-equip / unequip (persistence) | ☐ | — | ☐ | — |
-| Hot-join (husk resync) | ☐ | ☐ | ☐ | ☐ |
+| Observer / surface | Units/model | Transform | Texture | Pose/animation | Ammo |
+|--------------------|:-----------:|:---------:|:-------:|:--------------:|:----:|
+| Owner, keep local 3P | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Owner, mission local 3P | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Owner, 1P view | — | ☐ (1P sep.) | ☐ | control | — |
+| Bot, keep + mission | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Client/remote husk, keep + mission | ☐ | ☐ | ☐ | ☐ | ☐ |
+| **Inventory-screen character preview (path 3)** | ☐ | ☐ | ☐ | ☐ | — |
+| Illusion/Athanor or other item preview (path 4) | ☐ | ☐ | ☐/n/a | n/a | — |
+| Lobby character presentation | ☐ | ☐ | ☐ | ☐ | — |
+| End-of-mission score/team preview | ☐ | ☐ | ☐ | ☐ | — |
+| Re-equip / unequip (persistence) | ☐ | — | ☐ | ☐ | — |
+| Hot-join (husk resync) | ☐ | ☐ | ☐ | ☐ | ☐ |
 
 A row that passes for the owner but fails for the husk is the #392 class. A cell
 that passes in-world but fails in preview is the #237 class.
@@ -330,12 +364,13 @@ that passes in-world but fails in preview is the #237 class.
 ## §8 DoD gate — `G-APPEARANCE`
 
 Add to `character_weapon_variants/DEFINITION_OF_DONE.md`. Trigger: the variant
-overrides ANY of units / transform / texture / ammo relative to its base weapon
+overrides ANY of units / transform / texture / ammo / pose relative to its base weapon
 (i.e. essentially every cross-character variant).
 
 Walk:
-1. Every overridden concern resolves through its §2 module — NO inline
-   `Unit.set_local_*` / `Material.set_texture` / hand-spawned unit at a call site.
+1. Every overridden concern, including wield/idle pose, resolves through its
+   §2 owner — NO inline `Unit.set_local_*` / `Material.set_texture` /
+   hand-spawned unit at a call site.
 2. The §6 verification matrix is walked for every applicable cell, host AND
    client, with the user confirming in-game.
 3. If husk correctness depends on the cwv identity surviving the wire, the §5

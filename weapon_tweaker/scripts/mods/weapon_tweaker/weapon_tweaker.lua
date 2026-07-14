@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.254-dev"
+local MOD_VERSION = "0.12.255-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -123,6 +123,8 @@ mod:dofile("scripts/mods/weapon_tweaker/_safe_hook")
 -- See feedback_no_premature_dev_gates.md.
 local _wt_dev_anim_picker = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_anim_picker")
 local _wt_dev_hold_pose   = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_hold_pose")
+local _wt_axe_balance_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_axe_balance")
+local _wt_axe_balance = _wt_axe_balance_policy.new()
 -- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
 -- mutates the weapon template, so a restart is needed to apply/revert).
 mod:dofile("scripts/mods/weapon_tweaker/_wt_brett_sword_shield_buff")
@@ -3821,6 +3823,22 @@ _wt_capture_preview_item_key = function(self, item_key, slot)
     end
 end
 
+-- #603: the native previewer chooses the correct `to_dual_axes` event for
+-- Ranger Veteran, and the live preview body authors that event, but its first
+-- pre-link fire does not leave the body in the Dual Axes idle. Return the
+-- vanilla-selected event only for that exact preview tuple so the spawn hook
+-- can reassert it after the item has finished linking. This is deliberately a
+-- pure selector: Dual Hammers are the known-good control, Slayer stays native,
+-- and no in-mission animation surface calls it.
+local function _wt603_post_spawn_preview_event(weapon_key, career_name, fired_event)
+    if weapon_key == "dr_dual_wield_axes"
+            and career_name == "dr_ranger"
+            and fired_event == "to_dual_axes" then
+        return fired_event
+    end
+    return nil
+end
+
 -- v0.12.114-dev: converted from hook_safe to mod:hook (full wrapper) so we
 -- can PRE-VALIDATE attachment_node_linking before the original _spawn_item_unit
 -- calls link_units. Previously hook_safe ran AFTER spawn (post-crash, useless
@@ -3876,12 +3894,11 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
             -- get_wield_anim: wield_anim_career_3p[career] -> base wield_anim).
             local wac3p = item_template.wield_anim_career_3p
             local fired = (wac3p and wac3p[preview_career]) or item_template.wield_anim
-            -- #603: Ranger Veteran's Dual Hammers preview was reported using
-            -- the wrong idle. Vanilla's previewer fires this exact resolved
-            -- event directly, while the dwarf body may author both subtly
-            -- different dual-wield stances. Record the actual choice and body
-            -- capabilities once per weapon/event without adding another hook
-            -- or changing the pose before the runtime evidence is known.
+            -- #603 evidence: Ranger Dual Axes resolves to `to_dual_axes`, and
+            -- the preview body authors BOTH subtly different dual-wield
+            -- stances. The selection is correct; reassert that same native
+            -- event after spawn/link so the preview cannot remain in the
+            -- Dual Hammers idle. This hook is inventory-preview-only.
             if preview_career == "dr_ranger"
                     and (weapon_key == "dr_dual_wield_hammers"
                         or weapon_key == "dr_dual_wield_axes") then
@@ -3895,6 +3912,11 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
                         tostring(_safe_has_anim(preview_body, "to_dual_axes")),
                         tostring(_safe_has_anim(preview_body, "to_dual_hammers")))
                 end
+            end
+            local post_spawn_event = _wt603_post_spawn_preview_event(
+                weapon_key, preview_career, fired)
+            if post_spawn_event and _safe_has_anim(preview_body, post_spawn_event) then
+                pcall(Unit.animation_event, preview_body, post_spawn_event)
             end
             if fired then
                 local resolved = _resolve_preview_wield_event(preview_body, fired, preview_career)
@@ -4039,6 +4061,7 @@ mod.on_game_state_changed = function(status, state_name)
     mod._wt368_deferred_availability = true
     patch_career_actions_on_weapons()
     apply_trait_filters()
+    if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
     _wt_bolt_staff_overcharge_runtime.apply()
     -- Re-attempt the Necromancer FX force-load (idempotent). DLC ownership can be
     -- unresolved at mod-init even for owners; by any state transition it's resolved,
@@ -4080,6 +4103,7 @@ end
 mod.on_disabled = function()
     if weapon_backend.overcharge_presentation then pcall(weapon_backend.overcharge_presentation.restore) end
     _wt_bolt_staff_overcharge_runtime.revert()
+    if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, true) end
     clear_weapon_unlocks()
     clear_career_action_injections()
     revert_trait_pools()
@@ -4102,9 +4126,44 @@ mod.on_setting_changed = function(setting_id)
         if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
     elseif setting_id == _wt_bolt_staff_overcharge.SETTING_ID then
         _wt_bolt_staff_overcharge_runtime.apply()
+    elseif setting_id == _wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING
+            or setting_id == _wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING
+            or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING then
+        mod._wt_apply_axe_balance(setting_id, false)
     end
     -- wt_dev_hp_* settings are read by the hold-pose tuner's per-frame hook
     -- via mod:get directly, no dispatcher branch needed.
+end
+
+do
+    local function register_profile(name)
+        local lookup = NetworkLookup and NetworkLookup.damage_profiles
+        if type(name) ~= "string" or not lookup or rawget(lookup, name) then return end
+        local index = #lookup + 1
+        rawset(lookup, index, name)
+        rawset(lookup, name, index)
+    end
+    mod._wt_apply_axe_balance = function(setting_id, force_off)
+        if type(Weapons) ~= "table" then return end
+        local function enabled(id) return not force_off and mod:get(id) ~= false end
+        if not setting_id or setting_id == _wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING then
+            _wt_axe_balance:apply_greataxe_crit(
+                enabled(_wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING), Weapons)
+        end
+        if not setting_id or setting_id == _wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING then
+            _wt_axe_balance:apply_dual_crit(
+                enabled(_wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING), Weapons)
+        end
+        if not setting_id or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING then
+            if type(DamageProfileTemplates) == "table" and type(PowerLevelTemplates) == "table" then
+                _wt_axe_balance:apply_dual_cleave(
+                    enabled(_wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING), Weapons,
+                    DamageProfileTemplates, PowerLevelTemplates,
+                    function(value) return table.clone(value, true) end, register_profile)
+            end
+        end
+    end
+    mod._wt_apply_axe_balance(nil, false)
 end
 
 -- Install basic backend hooks (UI filtering and can_wield override)
@@ -4393,6 +4452,15 @@ _rt_register("issue576_reopened_ports_and_action_chain_contract", function()
         end
     end
     if #failures > 0 then return table.concat(failures, "; ") end
+end)
+
+_rt_register("issue603_ranger_dual_axes_inventory_preview_pose", function()
+    return _wt603_post_spawn_preview_event(
+            "dr_dual_wield_axes", "dr_ranger", "to_dual_axes") == "to_dual_axes"
+        and _wt603_post_spawn_preview_event(
+            "dr_dual_wield_hammers", "dr_ranger", "to_dual_hammers") == nil
+        and _wt603_post_spawn_preview_event(
+            "dr_dual_wield_axes", "dr_slayer", "to_dual_axes") == nil
 end)
 
 _rt_register("issue587_baked_transform_husk_fanout", function()

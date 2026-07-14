@@ -1780,8 +1780,13 @@ exclusions. Source provenance: VT2
 and `item_master_list_carousel.lua:2057,2129,2199`.
 ## Axe identity balance toggles (Issue #601)
 
-Three default-on settings remain independent: Greataxe light critical chance,
-Dual Axes light critical chance, and Dual Axes cleave.
+Ownership moved to Weapon Tweaker under its Weapon Tweaks group. CWV has no
+settings or lifecycle mutation for this general balance policy; it contributes
+only the optional `cwv_greataxe_template`, which WT safely skips when absent.
+See `weapon_tweaker/DEVELOPMENT.md` for the implementation contract.
+
+The three default-on WT settings remain independent: Greataxe light critical
+chance, Dual Axes light critical chance, and Dual Axes cleave.
 `additional_critical_strike_chance` is floored at `0.10` on named
 `light_attack_*` sweep releases. Existing stronger values are preserved; the
 Greataxe upward light already authored at `0.10` therefore remains `0.10`
@@ -1794,10 +1799,10 @@ template is their single gameplay owner.
 
 Dual Axes cleave swaps `damage_profile`, `damage_profile_left`, and
 `damage_profile_right` on every direct `kind = "sweep"` attack. Generated
-`cwv_axe_cleave_*` profiles clone the original profile and its cleave row,
+`wt_axe_cleave_*` profiles clone the original profile and its cleave row,
 scaling only cleave `attack` and `impact` by `1.10`. Damage, stagger power,
 timing, and source rows remain unchanged. Each toggle snapshots exact prior
-fields, is idempotent, restores independently, and composes into CWV's one
-canonical enable/disable/unload callback owner. Source provenance: VT2
+fields, is idempotent, restores independently, and composes into WT's lifecycle
+callback owner. Source provenance: VT2
 `scripts/settings/equipment/weapon_templates/2h_axes.lua:185-1048`,
 `dual_wield_axes.lua:348-1775`, and `scripts/helpers/action_utils.lua:23-28`.

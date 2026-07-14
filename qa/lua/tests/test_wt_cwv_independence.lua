@@ -119,6 +119,15 @@ return function(H, repo_root)
         end
         H.truthy(availability:find("variant.conditional_careers or {}", 1, true))
         H.truthy(availability:find("_career_action_injections[item.template]", 1, true))
+        H.truthy(data:find("if _cwv_present then", 1, true))
+        for _, id in ipairs({
+            "unlock_es_mercenary_dr_shield_axe", "unlock_es_huntsman_dr_shield_axe",
+            "unlock_es_knight_dr_shield_axe", "unlock_es_questingknight_dr_shield_axe",
+            "unlock_wh_captain_dr_shield_axe", "unlock_wh_bountyhunter_dr_shield_axe",
+            "unlock_wh_zealot_dr_shield_axe",
+        }) do
+            H.truthy(data:find(id .. " = true", 1, true), id)
+        end
     end)
 
     H.test("issue391 policy composes legacy item master with exact career choice", function()

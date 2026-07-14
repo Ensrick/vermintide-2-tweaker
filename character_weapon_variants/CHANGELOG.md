@@ -1,5 +1,20 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.412-dev - 2026-07-14 - #273 preserve CWV identities in Chaos Wastes [verify-fix-coop]
+
+- Added one dedicated Chaos Wastes/Deus item row per concrete CWV weapon. Property and trait generation are borrowed from the authored vanilla base, while the CWV template, item type, skin family, and render identity remain individualized through run setup, serialization, upgrades, transitions, and reconstruction.
+- Mixed or unknown-parity lobbies fall back to the equivalent vanilla weapon family rather than a career-default single weapon. CWV Dual Axes therefore degrade to vanilla Dual Axes, never a one-handed axe, without transmitting custom identifiers to peers that cannot resolve them.
+- Added bounded `[cwv:273] deus_identity` evidence and source-backed regression coverage. No inventory mutation or automatic grant was added.
+
+### Co-op verification
+
+Enter Chaos Wastes with a CWV Dual Axes instance equipped. In an all-CWV lobby it must remain that exact CWV Dual Axes item throughout the run; with a peer lacking CWV it must safely remain a dual-axe family weapon rather than collapsing to a single axe. Check upgrades, map transitions, reconnect/reconstruction, inventory preview, and both players' third-person views.
+
+## 0.1.412-dev - 2026-07-14 - #601 ownership correction [verify-fix]
+
+- Removed the general Greataxe and Dual Axes balance controls from CWV. They are now owned and presented by Weapon Tweaker under Weapon Tweaks; CWV only supplies its optional Kruber Greataxe template when installed.
+- Renamed the bomb-slot option to exactly `Javelin` and normalized generated item descriptions so a title is not repeated as the first line of its own description.
+
 ## 0.1.411-dev - 2026-07-14 - #597 Greataxe ProfileSynchronizer package crash [verify-fix-coop]
 
 - Fixed the remaining post-craft crash after `0.1.410-dev`: `ProfileSynchronizer` used `WeaponUtils.get_weapon_packages` and queued a resident custom Greataxe unit path as a standalone package, causing `Resource ... was not found` in `PackageManager._pop_queue`.
@@ -41,6 +56,8 @@ Craft each Greataxe model through CIM with automatic equip enabled. Confirm craf
 Craft/select every Greataxe model through CIM's Athanor, then inspect each in inventory preview, first person, local third person, and from a second player's view. No selection may crash or silently fall back to the vanilla Greataxe. Run `/cwv_regression_test` and require all #597 checks to pass.
 
 ## 0.1.409-dev - 2026-07-14 - #601 axe identity balance [verify-fix]
+
+> Superseded before the next deployment: ownership moved to Weapon Tweaker. The behavior below remains the policy contract, not a CWV settings surface.
 
 - Added three independent, default-on toggles: Greataxe lights have at least +10 percentage points critical chance; Dual Axes lights have at least +10 points; and all eight direct Dual Axes sweeps have 10% more attack and impact cleave.
 - Existing +10% Greataxe light bonuses do not compound to +20%, stronger authored bonuses remain intact, and disabling each toggle restores its exact original fields. Dual Axes cleave uses isolated, network-registered profile clones and does not alter damage, stagger, ordinary pushes, or other axe families.

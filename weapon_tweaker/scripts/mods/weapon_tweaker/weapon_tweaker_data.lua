@@ -1,5 +1,6 @@
 local mod = get_mod("wt")
-local _cwv_present = get_mod("character_weapon_variants") ~= nil
+local _cwv_ownership = mod:dofile("scripts/mods/weapon_tweaker/_wt_cwv_ownership")
+local _cwv_present = _cwv_ownership.cwv_is_active(get_mod("character_weapon_variants"))
 local _cwv_overlap_default = _cwv_present
 
 local data = {
@@ -1299,6 +1300,9 @@ local data = {
                 -- Leaves sorted A->Z by display label (repo standing sort rule).
                 sub_widgets = {
                     { setting_id = "authentic_brace_of_pistols", type = "checkbox", default_value = false },
+                    { setting_id = "wt_dual_axes_cleave", type = "checkbox", default_value = true },
+                    { setting_id = "wt_dual_axes_light_crit", type = "checkbox", default_value = true },
+                    { setting_id = "wt_greataxe_light_crit", type = "checkbox", default_value = true },
                     { setting_id = "wt_bolt_staff_primary_overcharge_reduction", type = "checkbox", default_value = false },
                     -- Explicit tooltip: the loc key ends in _tooltip, which VMF does NOT
                     -- auto-resolve (auto path only tries <setting_id>_description).
@@ -1721,6 +1725,34 @@ if not mod._wt408_availability_sort_logged then
     mod._wt408_availability_sort_logged = true
     printf("[wt:408] applied: sorted %d Weapon Availability rows by tag-stripped display name",
         _availability_rows_sorted)
+end
+
+-- #593: menu ownership must match runtime ownership. VMF freezes this tree at
+-- load, so remove the Bardin fallback rows when active CWV will supply the
+-- Empire variants. Saved fallback values are untouched and return next load
+-- when CWV is absent/disabled.
+if _cwv_present then
+    local hidden = {
+        unlock_es_mercenary_dr_shield_axe = true,
+        unlock_es_huntsman_dr_shield_axe = true,
+        unlock_es_knight_dr_shield_axe = true,
+        unlock_es_questingknight_dr_shield_axe = true,
+        unlock_wh_captain_dr_shield_axe = true,
+        unlock_wh_bountyhunter_dr_shield_axe = true,
+        unlock_wh_zealot_dr_shield_axe = true,
+    }
+    local function strip(nodes)
+        if type(nodes) ~= "table" then return end
+        for i = #nodes, 1, -1 do
+            local node = nodes[i]
+            if type(node) == "table" and hidden[node.setting_id] then
+                table.remove(nodes, i)
+            elseif type(node) == "table" then
+                strip(node.sub_widgets)
+            end
+        end
+    end
+    strip(data.options.widgets)
 end
 
 return data
