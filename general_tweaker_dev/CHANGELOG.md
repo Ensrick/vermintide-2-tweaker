@@ -1,5 +1,19 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.228-dev (2026-07-14) -- #523 configurable bot healing of allies [verify-fix]
+
+- Expanded Medical Supplies heal-allies with separate non-wounded and wounded permanent-health thresholds. Non-wounded defaults to 15%; 0 effectively disables ordinary top-offs. Wounded defaults to 100%, preserving immediate eligibility after a wound while allowing the host to delay it.
+- Added **Do not heal non-wounded Zealots** (on by default) and **Heal Zealot when wounded** (on by default), so Zealot players can retain low permanent health without making a wound lethal.
+- While enabled, the configured policy replaces vanilla's fixed 25% / Zealot target-selection rule, then returns only `in_need_of_heal`; vanilla's `BTConditions.can_heal_player` and `BTBotInteractAction` still own threat checks, navigation completion, bandaging, consumption, wound removal, healing, and networking (`player_bot_base.lua:843-1008`, `bt_bot_conditions.lua:773-807`, `bt_bot.lua:87-93`). No heal RPC or replacement action was added.
+- Added pure Lua coverage and `/gt_regression_test` check `issue523_bot_heal_allies_policy`.
+
+### Test method
+
+1. Solo-host with bots. Enable Bot Behavior Improvements and Bots heal hurt allies; give a bot Medical Supplies. At the default 15% ordinary threshold, verify it heals the human at or below 15% permanent health but not just above it. Set the threshold to 0 and verify no ordinary top-off occurs.
+2. Become wounded at high permanent health. At the default 100% wounded threshold the bot should bandage the human once the coast is clear. Lower the wounded threshold and verify it waits until that value.
+3. As non-wounded Zealot below the ordinary threshold, confirm the default exclusion preserves low permanent health. Become wounded and confirm the default wounded-Zealot toggle permits healing; turn that toggle off and confirm it no longer does.
+4. A revive/rescue and nearby enemies must retain vanilla priority/safety. Run `/gt_regression_test` and confirm `issue523_bot_heal_allies_policy` passes.
+
 ## v0.2.227-dev (2026-07-14) -- #549 Godmode power and ammo children [verify-fix-coop]
 
 - Added two default-off child toggles beneath Godmode: **9999 Damage Per Strike** and **Unlimited Ammo**. Both are inert while the Godmode parent is off.

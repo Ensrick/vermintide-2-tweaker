@@ -209,8 +209,8 @@ local _data = {
                             -- default OFF. Pairs with the reserve toggle above:
                             -- reserve stops self-burning the kit, this spends it on
                             -- a hurt human. Read live in the hook -- no
-                            -- on_setting_changed. The pct slider tunes the
-                            -- permanent-health cutoff; wounded players always qualify.
+                            -- on_setting_changed. Separate pct sliders tune wounded
+                            -- and non-wounded cutoffs; Zealot policy stays explicit.
                             {
                                 setting_id    = "gt_bot_heal_allies",
                                 type          = "checkbox",
@@ -220,10 +220,30 @@ local _data = {
                             {
                                 setting_id      = "gt_bot_heal_allies_pct",
                                 type            = "numeric",
-                                default_value   = 50,
-                                range           = { 10, 95 },
+                                default_value   = 15,
+                                range           = { 0, 100 },
                                 decimals_number = 0,
                                 tooltip         = "gt_bot_heal_allies_pct_tooltip",
+                            },
+                            {
+                                setting_id      = "gt_bot_heal_wounded_allies_pct",
+                                type            = "numeric",
+                                default_value   = 100,
+                                range           = { 0, 100 },
+                                decimals_number = 0,
+                                tooltip         = "gt_bot_heal_wounded_allies_pct_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_heal_allies_exclude_zealot",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_heal_allies_exclude_zealot_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_heal_wounded_zealot",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_heal_wounded_zealot_tooltip",
                             },
                             {
                                 setting_id    = "gt_bot_aid_priority",

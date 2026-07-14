@@ -6,6 +6,16 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+## Bot heal-allies policy (#523)
+
+- [ ] With the feature on, a bot carrying Medical Supplies selects a non-wounded human at 15% permanent health, but not just above it; setting the slider to 0 prevents ordinary top-off heals.
+- [ ] A wounded human is eligible up to the separate 100% default threshold; lowering that threshold delays wounded healing independently.
+- [ ] Non-wounded Zealot is excluded by default. Wounded Zealot remains eligible by default, and turning off Heal Zealot when wounded excludes that case too.
+- [ ] Revive/rescue targets still outrank healing; Draughts never heal others; enemies nearby still block the native `can_heal_player` action.
+- [ ] `/gt_regression_test` passes `issue523_bot_heal_allies_policy`; offline `test_gt_bot_heal_policy.lua` passes.
+
+---
+
 ## Godmode outgoing damage and ammo (#549, supersedes #382)
 
 - [ ] **[MULTIPLAYER]** Host and joining client each enable Godmode + 9999 Damage Per Strike; each positive enemy hit resolves as 9999 on the authoritative host.

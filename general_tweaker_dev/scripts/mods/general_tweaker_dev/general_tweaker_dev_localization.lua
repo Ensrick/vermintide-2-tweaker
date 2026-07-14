@@ -86,10 +86,19 @@ return {
     gt_bot_ignore_surplus_selfuse_tooltip = { en = "The game tells a bot to drink its healing when more healing items are lying around than players to use them, even at high health. With this on a bot ignores that prompt and keeps its healing until it actually needs it." },
 
     gt_bot_heal_allies = { en = "[untested] [Issue 523] Bots heal hurt allies with medical supplies" },
-    gt_bot_heal_allies_tooltip = { en = "When a bot is carrying Medical Supplies and no one needs reviving, it walks up to the most hurt teammate and heals them, wounded (grey health) players first. It only heals when the coast is clear (no enemies right next to the target), and only humans, never other bots. Pairs with the reserve option above, which stops bots from spending the kit on themselves. Prototype, off by default. Works only when you are the host." },
+    gt_bot_heal_allies_tooltip = { en = "When a bot is carrying Medical Supplies and no one needs reviving, it walks up to the most hurt eligible teammate and heals them, wounded (grey health) players first. It only heals when the coast is clear (no enemies right next to the target), and only humans, never other bots. Pairs with the reserve option above, which stops bots from spending the kit on themselves. Works only when you are the host." },
 
     gt_bot_heal_allies_pct = { en = "[untested] [Issue 523] Heal allies at or below health (%%)" },
-    gt_bot_heal_allies_pct_tooltip = { en = "A teammate is considered worth healing once their permanent (white) health drops to this percentage or lower. Wounded players (grey health) are always eligible regardless of this value. Higher values make bots heal sooner; lower values save kits for the truly hurt." },
+    gt_bot_heal_allies_pct_tooltip = { en = "A non-wounded teammate is eligible once their permanent (white) health reaches this percentage or lower. Set 0 to prevent bots from using kits on non-wounded allies. The wounded threshold below is separate." },
+
+    gt_bot_heal_wounded_allies_pct = { en = "[untested] [Issue 523] Heal wounded allies at or below health (%%)" },
+    gt_bot_heal_wounded_allies_pct_tooltip = { en = "A wounded (grey-health) teammate is eligible once their permanent health reaches this percentage or lower. The default 100 makes every wounded teammate eligible; lower it if bots should wait." },
+
+    gt_bot_heal_allies_exclude_zealot = { en = "[untested] [Issue 523] Do not heal non-wounded Zealots" },
+    gt_bot_heal_allies_exclude_zealot_tooltip = { en = "Keep a non-wounded Zealot's permanent health low so the player can build temporary health. Wounded Zealots are controlled separately below." },
+
+    gt_bot_heal_wounded_zealot = { en = "[untested] [Issue 523] Heal Zealot when wounded" },
+    gt_bot_heal_wounded_zealot_tooltip = { en = "Allow bots to spend Medical Supplies on a wounded Zealot when the wounded-health threshold is met. On by default because another knockdown would otherwise kill them." },
 
     gt_bot_aid_priority = { en = "[verify-fix] [Issue 492] Bots prioritize reviving and rescuing" },
     gt_bot_aid_priority_tooltip = { en = "Downed, hooked, and ledge-hanging allies always outrank following and other chores, so a bot commits to the revive or rescue and walks the whole way there." },

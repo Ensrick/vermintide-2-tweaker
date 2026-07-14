@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.227-dev"
+local MOD_VERSION = "0.2.228-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -2484,6 +2484,36 @@ _rt_register("gt_bot468_smart_self_heal_wired", function()
     end
     if type(mod:get("gt_bot_ignore_surplus_selfuse")) ~= "boolean" then
         return "gt_bot_ignore_surplus_selfuse does not resolve to a boolean via mod:get -- checkbox missing / renamed?"
+    end
+end)
+
+_rt_register("issue523_bot_heal_allies_policy", function()
+    local policy = mod._gt_bot_heal_policy
+    if type(policy) ~= "table" or type(policy.is_eligible) ~= "function" then
+        return "issue #523 pure policy did not load"
+    end
+    local expected = {
+        gt_bot_heal_allies = "boolean",
+        gt_bot_heal_allies_pct = "number",
+        gt_bot_heal_wounded_allies_pct = "number",
+        gt_bot_heal_allies_exclude_zealot = "boolean",
+        gt_bot_heal_wounded_zealot = "boolean",
+    }
+    for setting_id, expected_type in pairs(expected) do
+        local value = mod:get(setting_id)
+        if expected_type == "number" then value = tonumber(value) end
+        if type(value) ~= expected_type then
+            return setting_id .. " did not resolve as " .. expected_type
+        end
+    end
+    local defaults = { regular_percent = 15, wounded_percent = 100,
+        exclude_zealot = true, heal_wounded_zealot = true }
+    if not policy.is_eligible(0.15, false, false, defaults)
+            or policy.is_eligible(0.151, false, false, defaults)
+            or not policy.is_eligible(1, true, false, defaults)
+            or policy.is_eligible(0.01, false, true, defaults)
+            or not policy.is_eligible(0.5, true, true, defaults) then
+        return "issue #523 default eligibility truth table failed"
     end
 end)
 

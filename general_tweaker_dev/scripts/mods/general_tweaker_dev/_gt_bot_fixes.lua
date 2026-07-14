@@ -1,4 +1,5 @@
 local mod = get_mod("gt_dev")
+mod._gt_bot_heal_policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_heal_policy")
 
 -- ============================================================================
 -- Bot Options -- AI teammate behavior fixes
@@ -666,9 +667,11 @@ end
 mod._gt_heal_allies_on = _gt_heal_allies_on
 
 -- Pick the neediest reachable HUMAN ally for a heal-other channel, or nil.
--- Mirrors vanilla's heal-need gates (permanent-health metric player_bot_base.lua
--- :926; wh_zealot >1-wound skip :922) but DROPS the self-vs-other utility bias that
--- normally suppresses the pick. Disabled / awaiting-respawn allies are a
+-- Mirrors vanilla's permanent-health metric (player_bot_base.lua:926), but
+-- replaces its fixed 25% / Zealot selection policy with the issue #523 controls
+-- and DROPS only the self-vs-other utility bias that normally suppresses the pick.
+-- BTConditions.can_heal_player remains the final native safety gate
+-- (bt_bot_conditions.lua:773-807). Disabled / awaiting-respawn allies are a
 -- revive/rescue case, not a heal case, and are skipped so heal-other never competes
 -- with aid. Returns (unit, real_dist, permanent_health_percent, wounded).
 local function _gt_pick_human_heal_target(self, unit, roster, self_pos, t)
@@ -680,8 +683,14 @@ local function _gt_pick_human_heal_target(self, unit, roster, self_pos, t)
     local template = health_slot_data and inventory_extension:get_item_template(health_slot_data)
     if not (template and template.can_heal_other) then return nil end
 
-    local gt_pct = tonumber(mod:get("gt_bot_heal_allies_pct"))
-    local threshold = (gt_pct and gt_pct / 100) or 0.5
+    local policy = mod._gt_bot_heal_policy
+    if not (policy and policy.is_eligible) then return nil end
+    local options = {
+        regular_percent = mod:get("gt_bot_heal_allies_pct"),
+        wounded_percent = mod:get("gt_bot_heal_wounded_allies_pct"),
+        exclude_zealot = mod:get("gt_bot_heal_allies_exclude_zealot"),
+        heal_wounded_zealot = mod:get("gt_bot_heal_wounded_zealot"),
+    }
 
     local player_manager = Managers.player
     local best_unit, best_dist_sq, best_health, best_wounded
@@ -697,12 +706,11 @@ local function _gt_pick_human_heal_target(self, unit, roster, self_pos, t)
                     and not status_ext.near_vortex then
                 local health_ext = ScriptUnit.has_extension(pu, "health_system")
                 local career_ext = ScriptUnit.has_extension(pu, "career_system")
-                local career_ok = not (career_ext and career_ext:career_name() == "wh_zealot"
-                    and status_ext:num_wounds_remaining() > 1)
-                if health_ext and career_ok then
+                if health_ext then
                     local wounded = status_ext:is_wounded()
                     local health_percent = health_ext:current_permanent_health_percent()
-                    if wounded or health_percent < threshold then
+                    local is_zealot = career_ext and career_ext:career_name() == "wh_zealot"
+                    if policy.is_eligible(health_percent, wounded, is_zealot, options) then
                         local cand_pos = POSITION_LOOKUP[pu]
                         local dist_sq = cand_pos and Vector3.distance_squared(self_pos, cand_pos)
                         if dist_sq and dist_sq <= HEAL_ALLY_MAX_DIST_SQ then
@@ -817,6 +825,14 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
             return nil, nil, nil, nil
         end
         return ally, real_dist, need_type, look_at
+    end
+
+    -- While #523 is enabled, its explicit thresholds and Zealot policy replace
+    -- vanilla's fixed 25% heal-selection rule. Discard only vanilla's heal pick,
+    -- then let the policy scan below choose the best eligible HUMAN. The native
+    -- can_heal_player condition and interact action still receive the final pick.
+    if _gt_heal_allies_active and need_type == "in_need_of_heal" then
+        ally, real_dist, need_type, look_at = nil, nil, nil, nil
     end
 
     local side_manager = Managers.state.side
@@ -1002,9 +1018,10 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
     end
 
     -- FIX 13 (#523): inject a heal-other target LAST -- only when nothing more
-    -- urgent was picked (vanilla + FIX 3/3b left need_type nil or attention-only),
-    -- so a revive/rescue/awaiting pick is never downgraded, and vanilla's OWN
-    -- in_need_of_heal pick (if it ever fires) is respected.
+    -- urgent was picked (vanilla + FIX 3/3b left need_type nil or attention-only;
+    -- a vanilla heal pick was cleared above so the configured policy owns it),
+    -- so a revive/rescue/awaiting pick is never downgraded. Vanilla heal picks
+    -- alone are intentionally re-evaluated against the configured policy.
     if _gt_heal_allies_active
             and (need_type == nil or need_type == "in_need_of_attention_stop"
                  or need_type == "in_need_of_attention_look") then
