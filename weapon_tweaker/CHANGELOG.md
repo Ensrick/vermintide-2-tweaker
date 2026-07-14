@@ -1,5 +1,50 @@
 # Weapon Tweaker Changelog
 
+## 0.12.248-dev (2026-07-14) - #113 Warrior Priest 3P coverage reconciliation [verify-fix]
+
+- Reconciled Warrior Priest as its own receiver: the live catalog is exactly seven melee weapons, comprising six native `wh_*` entries and one cross-character port (`es_1h_flail`). The cross-character census is 1 working, 0 pending, 0 untested, 0 offsets, and 0 picker-visible.
+- Added the missing dev-only presentation for Empire Flail's shipped Warrior Priest event map. This describes the existing per-unit flail correction without inventing a whole-weapon model or animation substitute.
+- Added a bounded closed-catalog startup census and `/wt_audit_warrior_priest_3p`. It reports unexpected or missing entries so a future ranged or ordinary-Saltzpyre availability leak is immediately visible; it does not mutate the catalog.
+- Added a current audit ledger and offline regression coverage for the exact seven-key melee allow-list, six/native-one/cross split, working status, target/model honesty, absent picker membership, and diagnostic wiring.
+
+### Solo verify
+
+Start once with WT enabled and require `[wt:113] Warrior Priest catalog=7 native=6 cross=1 working=1 needs_anims=0 picker=0 unexpected=0 missing=0` in the log. In dev Weapon Availability, Empire Flail must read `[working → Warrior Priest flail event map]`; no ranged or unexpected row may appear. `/wt_audit_warrior_priest_3p` logs the single cross-character row. No co-op session is required because this pass changes coverage classification/presentation diagnostics only.
+
+## 0.12.247-dev (2026-07-14) - #112 Saltzpyre non-WP 3P coverage reconciliation [diagnostics-armed]
+
+- Reconciled `wh_captain`, `wh_bountyhunter`, and `wh_zealot` against the live unlock source. Each now has the same 54 distinct cross-character ports (17 Kruber, 10 Bardin, 15 Kerillian, 12 Sienna), not the issue's stale 61-row snapshot.
+- Corrected Empire Mace, Empire Sword, and Kerillian 1H Axe from the generic pending fallback to `[working]`, matching the documented universal/native 1H event-family behavior and the explicit Saltzpyre axe wield route.
+- Removed the unreachable Bardin Dual Hammers status declaration. That native Bardin item is no longer offered on non-WP Saltzpyre and had no live picker catalog, so retaining it advertised a tuning path the player could not enter.
+- Added honest dev annotations for 13 still-pending source/coverage-backed targets without promoting them or manufacturing empty picker controls. Reaper and Elf Spear remain the only two picker-visible rows; Shortbow and Hagbane remain pending with no shipped target/model substitute.
+- Added one bounded three-career parity census, `/wt_audit_saltzpyre_3p`, a current audit ledger, and offline regression coverage for exact counts, parity, classifications, target honesty, stale-row absence, and diagnostics wiring.
+
+### Diagnostic capture
+
+Start once with WT enabled and require `[wt:112] Saltzpyre non-WP careers=3 parity=true ports=54 working=37 needs_anims=17 untested=0 picker=2 hidden_needs_anims=15 targets=15 no_target=2` in the log. Run `/wt_audit_saltzpyre_3p` for the bounded 17-row unresolved list. Target labels are routing evidence, not visual-playback proof.
+
+## 0.12.246-dev (2026-07-14) - #111 Kerillian 3P coverage reconciliation [diagnostics-armed]
+
+- Reconciled all four Kerillian careers against the live unlock source: each has 60 cross-character ports, currently split into 44 working, 14 needing animations, and 2 genuinely untested. The issue's old 11-confirmed snapshot predates the 33-port picker bake and subsequent confirmed rows.
+- Corrected the two coverage gaps (`es_1h_mace`, `es_longbow`) from the generic `[needs animations]` fallback to `[untested]`; no receiver target is documented for either, so implying a decision would be false.
+- Added source-backed dev annotations for the 14 remaining ranged ports whose coverage target is the Elf Repeater Crossbow. The labels do not promote those ports or expose empty picker controls: all 14 still lack a baked per-attack map and matching static picker catalog.
+- Added one bounded startup census, `/wt_audit_kerillian_3p`, an updated coverage ledger, a detailed audit/migration queue, and offline regression coverage for exact career parity, status counts, known/unknown target honesty, and diagnostic wiring.
+
+### Diagnostic capture
+
+Start once with WT enabled and require `[wt:111] Kerillian 3P ports=60 working=44 needs_anims=14 untested=2 picker=0 hidden_needs_anims=14` in the log. Run `/wt_audit_kerillian_3p` for the bounded unresolved-row list. Do not infer visual success from a target label; the 14 ranged rows still require static picker vocabularies, tuning, and baking.
+
+## 0.12.245-dev (2026-07-14) - #110 Bardin 3P coverage reconciliation [verify-fix]
+
+- Reconciled all four Bardin careers against the live unlock source: each has exactly five cross-character ports, and source/coverage proves all five working. Empire Handgun now follows its documented Bardin-native `to_handgun` classification instead of falling through to `[needs animations]` merely because its item key has an `es_` prefix.
+- Added honest dev-only annotations for the four melee ports. They identify a Bardin-scoped 1H event map rather than inventing a whole-weapon substitute that the source does not establish. Empire Handgun stays plain `[working]`; Bardin has no model substitutes.
+- Added one bounded startup census and `/wt_audit_bardin_3p` for the full five-row log record. The audit is read-only and does not mutate animation templates, unlocks, settings, or network state.
+- Added offline regression coverage for career parity, the five-working status contract, display annotations, absent model substitutions, and diagnostic wiring.
+
+### Solo verify
+
+Open dev Weapon Availability for each Bardin career. Elf Sword, Empire Sword, Falchion, and Crowbill must show `[working → Bardin 1H event map]`; Empire Handgun must show plain `[working]`. Run `/wt_audit_bardin_3p` and require `ports=5 working=5 needs_anims=0 untested=0 picker=0` in the log. No co-op session is required because this pass changes status/display diagnostics only.
+
 ## 0.12.244-dev (2026-07-14) - #109 Kruber 3P coverage drift audit [diagnostics-armed]
 
 - Reconciled the tracker against the live unlock source: all four Kruber careers now share 52 cross-character ports, split into 37 working, 13 needing animations, and 2 untested. Since the previous 51-row snapshot, native Bardin Dual Axes was removed while Saltzpyre Crossbow and the independently WT-owned Axe & Falchion became live rows.

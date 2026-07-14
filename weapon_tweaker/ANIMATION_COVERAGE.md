@@ -150,6 +150,8 @@ All `we_*` natives 🔁 (~14 keys).
 | es_2h_sword_executioner / es_bastard_sword | Executioner / Bret. Longsword | 🔧 | wield covered by greatsword redirect; per-action only if same template — verify |
 | es_dual_wield_hammer_sword | Mace & Sword | 📋 | decided we_dual_wield_sword_dagger |
 | es_blunderbuss / es_handgun / es_repeating_handgun | Kruber ranged ×3 | 📋 | decided `we_crossbow_repeater→to_repeating_crossbow_elf` |
+| es_1h_mace | Empire 1H Mace | ❓ | #111: live unlock row has no source-backed receiver target; explicit `[untested]` |
+| es_longbow | Empire Longbow | ❓ | #111: live unlock row has no source-backed receiver target; explicit `[untested]` |
 | wh_1h_hammer | Saltz: 1H Hammer | 🔧 | wired to_1h_sword fix; decided we_1h_axe — review |
 | wh_2h_hammer | Saltz: 2H Hammer | 📋 | decided we_2h_axe |
 | wh_dual_hammer | Dual Hammers | 📋 | decided we_dual_wield_swords |
@@ -196,12 +198,13 @@ All `wh_*` natives 🔁 (~14 keys).
 | we_2h_axe | Glaive | 📋 | decided wh_2h_hammer (user override) |
 | es_dual_wield_hammer_sword | Mace & Sword | 📋 | decided wh_dual_hammer |
 | dr_dual_wield_axes | Bardin Dual Axes | ⛔ | **#582 v0.12.226-dev:** native Bardin item removed from Saltzpyre availability; use CWV's dedicated `cwv_wh_dual_axes`. The template remap remains for the CWV-owned variant. |
-| dr_dual_wield_hammers | Bardin Dual Hammers | 📋 | batch-2 picker row live (→ WP Dual Hammers) but tester left ALL picks unset (#519) — not baked, still queued |
+| dr_dual_wield_hammers | Bardin Dual Hammers | ⛔ | no longer offered by WT on non-WP Saltzpyre; #112 removes the stale unreachable status row |
 | we_dual_wield_daggers / _swords / _sword_dagger | Elf duals ×3 | 📋 | decided wh_dual_wield_axe_falchion |
 | es_blunderbuss / es_handgun | Blunderbuss / Handgun | 🔧 | Saltz HAS `to_blunderbuss`/`to_handgun` per probe — may fall through natively despite decided wh_crossbow; verify before wiring |
 | es_repeating_handgun | Repeater Handgun | 📋 | decided wh_repeating_pistols |
 | we_shortbow / we_shortbow_hagbane | Shortbow / Hagbane | 📋 | **model sub → Volley Crossbow unit** (user override; model-sub queue) |
 | we_deus_01 | Moonfire Bow | 🧪 | **#580 v0.12.225-dev:** 3P model sub -> Crossbow (+bolt; local/husk/preview); wh-scoped fire/aim vocabulary; 1P Moonfire untouched. Awaiting solo + coop verification. |
+
 | dr_1h_axe / dr_1h_hammer | Bardin 1H | 🔁 | fall-through |
 | dr_1h_throwing_axes | Throwing Axes | 📋 | decided wh_1h_axe ("will likely be goofy") |
 | dr_rakegun / dr_drakegun | Grudge-Raker / Drakegun | 📋 | decided wh_crossbow_repeater |
@@ -215,6 +218,14 @@ All `wh_*` natives 🔁 (~14 keys).
 | staves ×8 (bw_skullstaff_* ×5, bw_necromancy_staff, bw_deus_01, we_life_staff) | — | 📋 | all decided wh_1h_falchion — needs cast/charge/beam wield-vocab synthesis |
 | we_javelin | Javelin | 📋 | decided wh_1h_axe (no Saltz thrown vocab) |
 
+> **#112 live census (v0.12.247-dev):** all three non-WP careers have the same
+> 54 cross-character ports: 37 working and 17 needing animations. Of the 17,
+> only the reopened Reaper and Elf Spear are intentionally picker-visible; 13
+> more have source/coverage-backed target labels but no static picker catalog,
+> while the two shortbows remain queued model-substitute work with no shipped
+> target. The older 61-port tracker includes weapons removed by later ownership
+> and redundancy decisions.
+
 ## Receiver: BARDIN (dr_ranger / dr_ironbreaker / dr_slayer / dr_engineer)
 
 All `dr_*` natives 🔁 (~15 keys; duals get the non-Slayer redirect).
@@ -225,13 +236,19 @@ All `dr_*` natives 🔁 (~15 keys; duals get the non-Slayer redirect).
 | es_1h_sword | Empire Sword | ✅ dr_ key remap (3-heavy chain fix) + grip |
 | wh_1h_falchion | Falchion | ✅ dr_ remap (heavy variants differentiated) |
 | bw_1h_crowbill | Crowbill | ✅ dr_ remap + scale 1.05 |
-| es_handgun | Empire Handgun | 🔁 native `to_handgun` |
+| es_handgun | Empire Handgun | ✅/🔁 native `to_handgun`; #110 explicit confirmed-status entry fixes the old prefix-driven `[needs animations]` menu drift |
 
 ## Receiver: WARRIOR PRIEST (wh_priest)
 
 Melee-only by hard rule (rt check `wh_priest_no_bows` + picker filter). All 7
 entries ✅/🔁 (native WP vocab + priest-specific redirects). The only
 cross-prefix row is es_1h_flail ✅.
+
+> **#113 live census (v0.12.248-dev):** the closed catalog remains exactly seven
+> melee weapons: six native `wh_*` rows plus the working Empire Flail. The flail
+> now exposes its shipped Warrior Priest event-map target in dev labels. A bounded
+> startup/command audit reports missing or unexpected catalog entries, so future
+> ordinary-Saltzpyre or ranged leakage cannot pass silently.
 
 ## Receiver: SIENNA (bw_adept / bw_scholar / bw_unchained / bw_necromancer)
 

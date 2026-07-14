@@ -107,6 +107,10 @@ local _CONFIRMED = {
     bardin = {
         bw_1h_crowbill = true, es_1h_sword = true, we_1h_sword = true,
         wh_1h_falchion = true,
+        -- #110: Empire Handgun shares Bardin's native handgun template/vocab.
+        -- Coverage classifies this as native fall-through; catalog it explicitly
+        -- because the es_ item prefix is not receiver-native.
+        es_handgun = true,
     },
     kerillian = {
         bw_1h_crowbill = true, dr_2h_axe = true, es_1h_flail = true,
@@ -132,9 +136,10 @@ local _CONFIRMED = {
     },
     saltzpyre = {
         bw_1h_crowbill = true, dr_2h_axe = true, es_1h_flail = true,
-        es_2h_heavy_spear = true, es_longbow = true,
+        es_1h_mace = true, es_1h_sword = true, es_2h_heavy_spear = true,
+        es_longbow = true,
         we_1h_sword = true, we_2h_sword = true, we_crossbow_repeater = true,
-        we_longbow = true,
+        we_1h_axe = true, we_longbow = true,
         -- wh_flail (Saltzpyre's regular Flail) is NATIVE on Saltzpyre's careers
         -- (es_1h_flail confirmed; native flail handled by prefix rule too).
         -- v0.12.188-dev: all 17 Saltzpyre batch-1/2/3 ports BAKED career-scoped
@@ -202,6 +207,9 @@ local _NEEDS_OFFSETS = {
 -- char_key -> { weapon_key = true } : no decision captured yet -> [Untested].
 local _UNTESTED = {
     kruber = { we_javelin = true, we_life_staff = true },
+    -- #111: present in every Kerillian unlock list but absent from the coverage
+    -- decision ledger. Do not let the generic fallback imply a target exists.
+    kerillian = { es_1h_mace = true, es_longbow = true },
 }
 
 -- ===========================================================================
@@ -244,14 +252,16 @@ local _NEEDS_ANIMS = {
     -- target has a wh_* redirect in _WIELD_ANIM_CAREER_3P_PATCHES_BULK (wt_wield_patches).
     -- v0.12.213-dev (#519): Saltzpyre batch-2 — 10 of the 11 ports were fully tuned
     -- by the tester and BAKED career-scoped (wh_) into _3p_template_remaps
-    -- (_wt_anim_remap.lua) -> moved to _CONFIRMED above. Only dr_dual_wield_hammers
-    -- remains (zero non-unset picks in the tester's config — not yet tuned).
+    -- (_wt_anim_remap.lua) -> moved to _CONFIRMED above. The former
+    -- dr_dual_wield_hammers row is no longer offered on Saltzpyre and was removed
+    -- from this table under #112. Only the two #576 reopened ports remain live.
     saltzpyre = {
         -- #576: static mappings are candidates, not visual confirmation.
         bw_ghost_scythe       = "Warrior Priest Greathammer",
         we_spear              = "Saltzpyre Billhook",
-        -- SET B — Warrior Priest Dual Hammers
-        dr_dual_wield_hammers  = "Warrior Priest Dual Hammers",
+        -- #112: dr_dual_wield_hammers is no longer present in any non-WP
+        -- Saltzpyre unlock list and has no picker row. Do not retain an
+        -- unreachable status entry that falsely implies it can be tuned here.
     },
     -- v0.12.193-dev: Kerillian batch 1 — the "next group" of cross-character 3P ports
     -- surfaced for dev-picker tuning (mirrors the Saltzpyre batch-1 setup). Every
@@ -282,6 +292,43 @@ local _DIAGNOSTIC_TARGET = {
         we_crossbow_repeater = "Repeater Handgun",
         wh_crossbow_repeater = "Repeater Handgun",
         wh_deus_01 = "Repeater Handgun",
+    },
+    kerillian = {
+        -- #111: coverage-ledger decisions for the remaining unbaked ranged
+        -- surface. These labels describe the chosen receiver vocabulary only;
+        -- they do not promote the port to working or picker-ready.
+        dr_crossbow = "Elf Repeater Crossbow",
+        dr_deus_01 = "Elf Repeater Crossbow",
+        dr_drake_pistol = "Elf Repeater Crossbow",
+        dr_drakegun = "Elf Repeater Crossbow",
+        dr_rakegun = "Elf Repeater Crossbow",
+        dr_steam_pistol = "Elf Repeater Crossbow",
+        es_blunderbuss = "Elf Repeater Crossbow",
+        es_handgun = "Elf Repeater Crossbow",
+        es_repeating_handgun = "Elf Repeater Crossbow",
+        wh_brace_of_pistols = "Elf Repeater Crossbow",
+        wh_crossbow = "Elf Repeater Crossbow",
+        wh_crossbow_repeater = "Elf Repeater Crossbow",
+        wh_deus_01 = "Elf Repeater Crossbow",
+        wh_repeating_pistols = "Elf Repeater Crossbow",
+    },
+    saltzpyre = {
+        -- #112: source/coverage-backed receiver targets for live ports which
+        -- remain unbaked or visually unverified. These are diagnostic labels,
+        -- not promotions to working and not implicit picker membership.
+        dr_1h_throwing_axes = "Saltzpyre 1H Axe",
+        dr_deus_01 = "Saltzpyre Crossbow",
+        dr_drake_pistol = "Brace of Pistols",
+        dr_drakegun = "Volley Crossbow",
+        dr_rakegun = "Volley Crossbow",
+        dr_steam_pistol = "Repeater Pistol",
+        es_blunderbuss = "Saltzpyre Crossbow",
+        es_deus_01 = "Dual Axe & Falchion",
+        es_handgun = "Saltzpyre Crossbow",
+        es_repeating_handgun = "Repeater Pistol",
+        we_1h_spears_shield = "Dual Axe & Falchion",
+        we_deus_01 = "Saltzpyre Crossbow",
+        we_javelin = "Saltzpyre 1H Axe",
     },
 }
 
@@ -315,7 +362,21 @@ local _REDIRECT_DISPLAY = {
         we_1h_axe = "Witch Hunter 1H Axe",
         wh_hammer_book = "1H Mace/Skullsplitter",
     },
+    bardin = {
+        -- #110: event-level dr_-scoped remaps, not whole-weapon substitutions.
+        we_1h_sword = "Bardin 1H event map",
+        es_1h_sword = "Bardin 1H event map",
+        wh_1h_falchion = "Bardin 1H event map",
+        bw_1h_crowbill = "Bardin 1H event map",
+    },
+    wh_priest = {
+        -- #113: the Empire Flail keeps its own wield vocabulary on the Priest
+        -- body, with the shipped per-unit push/heavy correction. This is an
+        -- event-map label, not a claim that another whole weapon is substituted.
+        es_1h_flail = "Warrior Priest flail event map",
+    },
     saltzpyre = {
+        we_1h_axe = "Saltzpyre 1H Axe",
         we_2h_axe = "Warrior Priest Greathammer",
         es_2h_hammer = "Warrior Priest Greathammer",
         dr_2h_cog_hammer = "Warrior Priest Greathammer",
