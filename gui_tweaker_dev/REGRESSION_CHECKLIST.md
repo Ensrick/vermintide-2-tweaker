@@ -11,6 +11,14 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md
 
 Last updated: 2026-07-14.
 
+## Localization lifecycle sync (#345)
+
+- [ ] Third-Person Camera (#209) and Allow crafting bench in mission (#80) display `[verify-fix]` with their issue number.
+- [ ] Toggle Skip Cutscenes (#126) and Use non-modded loadouts (#287) do not display `[diag]` unless diagnostics are armed again on GitHub.
+- [ ] Enable In-Mission Inventory Access names open #87 only; closed crash #193 and its crash tag are absent.
+- [ ] `pwsh -NoProfile -File qa/check_issue_tag_sync.ps1` no longer reports these five GUT rows.
+- [ ] `/gut_regression_test` passes `issue345_gut_loc_status_sync`.
+
 ## Original temporary-health talent names (#352)
 
 - [ ] The option is off by default; all careers retain the game's current shared THP names until enabled.
@@ -54,6 +62,14 @@ Last updated: 2026-07-14.
 - [ ] Drag pivot-based equipment, buffs, boss health, duties, books, and news-feed elements; the rectangle follows the moved element without an offset.
 - [ ] Edge confinement still uses the visible rectangle, and offsets survive closing/reopening the HUD.
 - [ ] `/gut_regression_test` passes `hud_drag_geometry_uses_render_bounds`.
+
+## HUD editor live coverage (#310)
+
+- [ ] Enter HUD edit mode once in a mission and confirm exactly ten `[gut:310] HUD coverage id=...` rows plus one summary are emitted; no coverage rows repeat while the mode remains active.
+- [ ] `career_ability_bar` reports `scenegraph=_ui_scenegraph` when its live view exists and receives a correctly aligned drag box instead of being silently omitted.
+- [ ] Exit and re-enter edit mode; one fresh bounded snapshot is emitted, allowing a changed career/HUD state to be compared.
+- [ ] Missing or naturally inactive HUD classes report a named status and do not raise or prevent other elements from being edited.
+- [ ] `/gut_regression_test` passes `issue310_hud_scenegraph_alias_coverage`.
 
 ## Mod Tweaker settings-tree ordering (#557)
 

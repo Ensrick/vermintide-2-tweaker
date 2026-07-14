@@ -43,10 +43,23 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 -- working feature to gate) and installs NO hooks.
 
 local STANDALONE_NAME = "support-all-languages"
+local UNICODE_MATERIAL = "fonts/ArialUnicodeMS"
+local FONT_KEYS = {
+    "arial",
+    "arial_masked",
+    "arial_write_mask",
+    "hell_shark_arial",
+    "hell_shark_arial_masked",
+    "hell_shark_arial_write_mask",
+    "chat_output_font",
+    "chat_output_font_masked",
+}
 
 -- Detect the standalone mod (installed = registered; enabled = its own on/off state).
 local function _standalone()
-    return get_mod(STANDALONE_NAME)
+    local lookup = rawget(_G, "get_mod")
+    if type(lookup) ~= "function" then return nil end
+    return lookup(STANDALONE_NAME)
 end
 
 local function _standalone_enabled()
@@ -54,6 +67,44 @@ local function _standalone_enabled()
     if not m or type(m.is_enabled) ~= "function" then return false end
     local ok, en = pcall(m.is_enabled, m)
     return ok and en and true or false
+end
+
+-- Read-only inspection of the exact eight entries mutated by the standalone
+-- mod. This is intentionally evaluated on demand: its on_enabled callback may
+-- run after gut's module load, so a load-time snapshot alone can be stale.
+local function _inspect_fonts()
+    local fonts = rawget(_G, "Fonts")
+    local result = {
+        total = #FONT_KEYS,
+        unicode = 0,
+        other = 0,
+        missing = 0,
+        materials = {},
+    }
+
+    for _, key in ipairs(FONT_KEYS) do
+        local row = type(fonts) == "table" and rawget(fonts, key) or nil
+        local material = type(row) == "table" and rawget(row, 1) or nil
+        result.materials[key] = material
+        if material == UNICODE_MATERIAL then
+            result.unicode = result.unicode + 1
+        elseif type(material) == "string" then
+            result.other = result.other + 1
+        else
+            result.missing = result.missing + 1
+        end
+    end
+
+    if result.unicode == result.total then
+        result.state = "unicode_active"
+    elseif result.unicode > 0 then
+        result.state = "partial_swap"
+    elseif result.missing > 0 then
+        result.state = "font_rows_missing"
+    else
+        result.state = "vanilla_or_other_provider"
+    end
+    return result
 end
 
 -- Marker read by the /gut_regression_test check `all_languages_defer_340`. Its shape
@@ -65,6 +116,9 @@ mod._GUT_ALL_LANGUAGES = {
     installs_hooks = false,
     standalone_present = _standalone() ~= nil,
     standalone_enabled = _standalone_enabled(),
+    unicode_material = UNICODE_MATERIAL,
+    font_keys = FONT_KEYS,
+    inspect_fonts = _inspect_fonts,
 }
 
 if mod._GUT_ALL_LANGUAGES.standalone_enabled then
@@ -74,5 +128,22 @@ elseif mod._GUT_ALL_LANGUAGES.standalone_present then
 else
     _printf("[gut:340] all-languages: standalone '%s' absent; gut ships no font atlas (case 2), inert. Recommend Workshop 3232229691.", STANDALONE_NAME)
 end
+
+-- Explicit, user-invoked diagnostics only; never pollute launch chat. This
+-- distinguishes an absent provider from a provider that is enabled but whose
+-- callback/material package did not take effect.
+mod:command("gut_all_languages_status", "Diagnose issue #340 all-language font support", function()
+    local present = _standalone() ~= nil
+    local enabled = _standalone_enabled()
+    local scan = _inspect_fonts()
+    mod:echo("[gut:340] standalone present=%s enabled=%s; fonts=%s (%d/%d Unicode, %d missing)",
+        tostring(present), tostring(enabled), scan.state,
+        scan.unicode, scan.total, scan.missing)
+    if enabled and scan.state ~= "unicode_active" then
+        mod:echo("[gut:340] standalone is enabled but its eight-font swap is incomplete; check its load/package state.")
+    elseif not enabled and scan.state ~= "unicode_active" then
+        mod:echo("[gut:340] no Unicode atlas is active; use Workshop 3232229691 or a future redistributable atlas provider.")
+    end
+end)
 
 return mod._GUT_ALL_LANGUAGES

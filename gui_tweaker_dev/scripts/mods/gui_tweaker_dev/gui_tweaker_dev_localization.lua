@@ -37,7 +37,7 @@ return {
         en = "[working] 3rd-Person Camera",
     },
     gut_tp_camera_enabled = {
-        en = "[Issue 209] Enable Third-Person Camera",
+        en = "[verify-fix] [Issue 209] Enable Third-Person Camera",
     },
     gut_tp_camera_enabled_tooltip = {
         en = "Turns on a third-person camera view. Can also be toggled with the /tp chat command.",
@@ -99,7 +99,7 @@ return {
         en = "When on, cutscenes are skipped automatically the moment they start, so you never see them. Leave off to skip them manually with ESC or Space.",
     },
     gut_skip_cutscenes_hotkey = {
-        en = "[Issue 126] [verify-fix] [diag] Toggle Skip Cutscenes (Hotkey)",
+        en = "[verify-fix] [Issue 126] Toggle Skip Cutscenes (Hotkey)",
     },
     gut_skip_cutscenes_hotkey_tooltip = {
         en = "Hotkey to turn the Skip Cutscenes option on or off. Same as the /skipcutscenes chat command.",
@@ -272,7 +272,7 @@ return {
         en = "[working] In-Mission Inventory",
     },
     gut_mission_inventory_enabled = {
-        en = "[Issue 193 & 87] [crash] [verify-fix] Enable In-Mission Inventory Access",
+        en = "[verify-fix] [Issue 87] Enable In-Mission Inventory Access",
     },
     gut_mission_inventory_enabled_tooltip = {
         en = "Lets you open your inventory during a mission and adds an Open Inventory entry to the in-game menu; use the keybind below or /inv, since the keep's normal inventory hotkeys often will not work mid-mission. Works in Adventure only, not Chaos Wastes.",
@@ -290,7 +290,7 @@ return {
         en = "Hotkey to open your inventory while in a mission. Same as the /inv command, and works even though the standard inventory keys are blocked mid-mission.",
     },
     gut_cim_bench_in_mission = {
-        en = "[untested] [Issue 80] Allow crafting bench in mission",
+        en = "[verify-fix] [Issue 80] Allow crafting bench in mission",
     },
     gut_cim_bench_in_mission_tooltip = {
         en = "Requires Crafting in Modded (this option only appears when it is installed). OFF (default): the standard crafting bench does not open during missions. ON: it also opens inside Adventure missions via Crafting in Modded's bench hotkey, /cim_craft_standard, or the Crafting tab in the mid-mission menu (when 'Show menu tabs in-mission' is on); the Athanor stays Keep-only either way. In-mission menus were never meant to run mid-mission, so if you hit a crash with this on, please send the log.",
@@ -385,7 +385,7 @@ return {
     gut_use_non_modded_loadouts = {
         -- User-confirmed in-game 2026-07-02 (read-only official loadouts in modded).
         -- #287 cosmetic-exemption fix awaiting in-game confirmation: [verify-fix].
-        en = "[verify-fix] [diag] [Issue 287] Use non-modded loadouts",
+        en = "[verify-fix] [Issue 287] Use non-modded loadouts",
     },
     gut_use_non_modded_loadouts_tooltip = {
         en = "While in the modded realm, use the loadouts saved in your non-modded (official) game, read-only: the I to VI bar shows your official gameplay loadouts, and gear, talent, loadout-switch and bot-designation changes all snap back so your official saves are never touched. Cosmetics (weapon illusion, hat, portrait frame, victory pose) stay changeable and are kept modded-side only. Turn off (default) to keep fully separate modded loadouts that never touch your official ones.",

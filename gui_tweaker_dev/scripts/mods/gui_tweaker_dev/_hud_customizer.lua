@@ -91,6 +91,37 @@ local REGISTRY_BY_ID = {}
 for i = 1, #REGISTRY do REGISTRY_BY_ID[REGISTRY[i].id] = REGISTRY[i] end
 CustomizerModule.REGISTRY_BY_ID = REGISTRY_BY_ID
 
+-- (#310) HUD classes are not consistent about scenegraph visibility. Most of the
+-- original classes expose `ui_scenegraph`, but CareerAbilityBarUI stores the same
+-- live table as `_ui_scenegraph` (career_ability_bar_ui.lua:101).
+function CustomizerModule.scenegraph_for_view(view)
+    if type(view) ~= "table" then return nil, "missing_view" end
+    if type(view.ui_scenegraph) == "table" then return view.ui_scenegraph, "ui_scenegraph" end
+    if type(view._ui_scenegraph) == "table" then return view._ui_scenegraph, "_ui_scenegraph" end
+    return nil, "missing_scenegraph"
+end
+
+-- Pure coverage classifier used by the bounded live #310 probe and offline tests.
+function CustomizerModule.coverage_status(view, entry)
+    if type(entry) ~= "table" then return "missing_entry", "none" end
+    local scenegraph, source = CustomizerModule.scenegraph_for_view(view)
+    if not scenegraph then return source, source end
+    local move = scenegraph[entry.scenegraph_node_id]
+    if not move then return "missing_move_node", source end
+    local drag_id = entry.drag_scenegraph_node_id or entry.scenegraph_node_id
+    local drag = scenegraph[drag_id]
+    if not drag and drag_id ~= entry.scenegraph_node_id then
+        return "move_fallback", source
+    end
+    if not drag then return "missing_drag_node", source end
+    local size = drag.size
+    if not (size and tonumber(size[1]) and tonumber(size[1]) > 0
+            and tonumber(size[2]) and tonumber(size[2]) > 0) then
+        return "nominal_size_fallback", source
+    end
+    return "ready", source
+end
+
 -- Resolve the rectangle used by hit testing, confinement, and overlay drawing.
 -- The movement node remains entry.scenegraph_node_id. Missing dynamic nodes (for
 -- example an empty news feed) fall back safely to the movement node + nominal size.
@@ -118,6 +149,7 @@ local _drag_start_offset = nil
 local _offsets_cache = {}
 local _resolution_key = nil
 local _live_views = {}
+local _coverage_probe_emitted = false
 
 -- "1920x1080" from current resolution; nil-safe if RESOLUTION_LOOKUP is missing.
 local function _resolution_key_now()
@@ -190,8 +222,9 @@ end
 -- this both zeros gut's own contribution and clears any residual gut offset so the
 -- two can't stack. See _gut_uitweaks_sync.lua for the element map + verification.
 local function _apply_offset_to_scenegraph(view, node_id, widget_id, force)
-    if not view or not view.ui_scenegraph then return end
-    local node = view.ui_scenegraph[node_id]
+    local scenegraph = CustomizerModule.scenegraph_for_view(view)
+    if not scenegraph then return end
+    local node = scenegraph[node_id]
     if not node or not node.local_position then return end
     local sync = mod._gut_uitweaks_sync
     if sync and sync.is_owned and sync.is_owned(widget_id) then
@@ -263,6 +296,31 @@ function CustomizerModule.set_sticky(enabled)
     end
 end
 
+-- (#310) Emit one bounded inventory per edit-mode entry. Ten registry rows plus
+-- one summary identify absent views, graph spelling, and node/size readiness.
+local function _emit_coverage_probe()
+    if _coverage_probe_emitted then return end
+    _coverage_probe_emitted = true
+    local ready, fallback, missing = 0, 0, 0
+    for i = 1, #REGISTRY do
+        local entry = REGISTRY[i]
+        local view = _live_views[entry.class_name]
+        local status, source = CustomizerModule.coverage_status(view, entry)
+        if status == "ready" then
+            ready = ready + 1
+        elseif status == "move_fallback" or status == "nominal_size_fallback" then
+            fallback = fallback + 1
+        else
+            missing = missing + 1
+        end
+        printf("[gut:310] HUD coverage id=%s class=%s status=%s scenegraph=%s move=%s drag=%s",
+            tostring(entry.id), tostring(entry.class_name), tostring(status), tostring(source),
+            tostring(entry.scenegraph_node_id), tostring(entry.drag_scenegraph_node_id))
+    end
+    printf("[gut:310] HUD coverage summary ready=%d fallback=%d missing=%d total=%d",
+        ready, fallback, missing, #REGISTRY)
+end
+
 -- Reset transient drag/hover state to a clean baseline.
 local function _clear_drag_state()
     _drag_active = nil
@@ -320,12 +378,14 @@ function CustomizerModule.tick_activation()
             -- is_input_blocked hook reads should_suspend_input()).
             printf("[gut:310] HUD edit mode ON -- local input suspended (resolution %s)",
                 tostring(_resolution_key or _resolution_key_now()))
+            pcall(_emit_coverage_probe)
         else
             pcall(ShowCursorStack.hide, "gut_edit_hud")
             -- _dbg: cursor_stack pop
             pcall(_dbg, "[gui_tweaker] cursor_stack: pop reason=gut_edit_hud")
             printf("[gut:310] HUD edit mode OFF -- local input restored")
             _clear_drag_state()
+            _coverage_probe_emitted = false
         end
         _was_edit_mode = now
     end
@@ -368,7 +428,8 @@ function CustomizerModule.tick_drag()
             -- UI Tweaks and are left to HB's own layout, so this path is gut-native only.
             local entry = REGISTRY_BY_ID[_drag_active]
             local view  = entry and _live_views[entry.class_name]
-            local node, size = CustomizerModule.drag_geometry(view and view.ui_scenegraph, entry)
+            local scenegraph = CustomizerModule.scenegraph_for_view(view)
+            local node, size = CustomizerModule.drag_geometry(scenegraph, entry)
             if node and node.world_position then
                 local adx, ady = _get_widget_offset(_drag_active)
                 local ok_c, cdx, cdy = pcall(CustomizerModule.confine_delta,
@@ -403,7 +464,8 @@ function CustomizerModule.tick_drag()
     for i = 1, #REGISTRY do
         local entry = REGISTRY[i]
         local view = _live_views[entry.class_name]
-        local node, size = CustomizerModule.drag_geometry(view and view.ui_scenegraph, entry)
+        local scenegraph = CustomizerModule.scenegraph_for_view(view)
+        local node, size = CustomizerModule.drag_geometry(scenegraph, entry)
         if node and node.world_position then
             local pos = Vector3(node.world_position[1], node.world_position[2], 999)
             local hit = false
@@ -458,7 +520,8 @@ function CustomizerModule.draw_overlay(ui_renderer)
     for i = 1, #REGISTRY do
         local entry = REGISTRY[i]
         local view = _live_views[entry.class_name]
-        local node, size = CustomizerModule.drag_geometry(view and view.ui_scenegraph, entry)
+        local scenegraph = CustomizerModule.scenegraph_for_view(view)
+        local node, size = CustomizerModule.drag_geometry(scenegraph, entry)
         if node and node.world_position then
             local pos = Vector3(node.world_position[1], node.world_position[2], 999)
             local color = default_color
@@ -493,7 +556,8 @@ function CustomizerModule.install_hooks()
                 pcall(_apply_offset_to_scenegraph, self, entry.scenegraph_node_id, entry.id, false)
                 -- _dbg: widget_init / widget_init_skip
                 pcall(function()
-                    local node = self and self.ui_scenegraph and self.ui_scenegraph[entry.scenegraph_node_id]
+                    local scenegraph = CustomizerModule.scenegraph_for_view(self)
+                    local node = scenegraph and scenegraph[entry.scenegraph_node_id]
                     if not node then
                         _dbg_alert("[gui_tweaker] widget_init_skip: id=%s class=%s reason=scenegraph_node_missing",
                             tostring(entry.id), tostring(entry.class_name))
@@ -554,7 +618,8 @@ function CustomizerModule.reset_widget(widget_id)
     _save_offsets()
     local view = _live_views[entry.class_name]
     if view then
-        local node = view.ui_scenegraph and view.ui_scenegraph[entry.scenegraph_node_id]
+        local scenegraph = CustomizerModule.scenegraph_for_view(view)
+        local node = scenegraph and scenegraph[entry.scenegraph_node_id]
         if node and node.local_position then
             node.local_position[1] = entry.vanilla_position[1]
             node.local_position[2] = entry.vanilla_position[2]

@@ -1,5 +1,26 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.259-dev (2026-07-14) -- #345 localization lifecycle sync [verify-fix]
+
+- Re-derived the GUT status-tag slice from current GitHub state instead of applying the stale July 5 audit literally. Third-Person Camera (#209) and the in-mission crafting bench (#80) now show `[verify-fix]`; the generic menu tag also correctly represents #287's `verify-fix-coop` lifecycle.
+- Removed the orphan `[diag]` tags from cutscene skip #126 and readonly-loadout #287 because neither issue currently carries `diagnostics-armed`.
+- Removed closed crash #193 and its crash marker from **Enable In-Mission Inventory Access**, retaining open verification issue #87. The sibling menu-tabs row continues to carry `[crash]` because open crash #155 still applies there.
+- Added retail-safe runtime regression `issue345_gut_loc_status_sync`; the repository-wide advisory checker remains the cross-surface source of truth.
+
+### Verify
+
+Open Tweaker: GUI and inspect Third-Person Camera, Toggle Skip Cutscenes, Enable In-Mission Inventory Access, Allow crafting bench in mission, and Use non-modded loadouts. Their prefixes must match the current issue lifecycle without closed #193 or orphan `[diag]` tags. Run `/gut_regression_test` and confirm `issue345_gut_loc_status_sync` passes.
+
+## 0.2.258-dev (2026-07-14) -- #310 HUD editor coverage diagnostics [diagnostics-armed]
+
+- Fixed the existing editor's scenegraph resolver for `CareerAbilityBarUI`: vanilla stores that class's live graph as `_ui_scenegraph`, while the editor previously read only the public `ui_scenegraph` spelling used by the other registered HUD classes. Drag, overlay, reset, and geometry resolution now use one public/private resolver.
+- Entering HUD edit mode now emits one bounded ten-element `[gut:310] HUD coverage` inventory plus a summary. Each row distinguishes a missing live view, missing scenegraph, incorrect movement node, dedicated drag-node fallback, nominal-size fallback, and ready geometry. Exiting re-arms the snapshot for the next deliberate test; it never logs per frame.
+- Added offline and in-game regression coverage `issue310_hud_scenegraph_alias_coverage`. This is a diagnostic slice, not completion of the master feature: corner resize, hidden-element previews, cursor affordances, guides, and the remaining HUD registry are still outstanding.
+
+### Diagnose
+
+Enter a mission, bind and press **Enter HUD Edit Mode**, then attach every `[gut:310] HUD coverage` line from the log. Exercise at least one career with a visible energy/overcharge bar and one gamepad career-skill bar if available. Confirm the career ability bar now receives a correctly aligned edit box when present. Run `/gut_regression_test` and confirm `issue310_hud_scenegraph_alias_coverage` passes.
+
 ## 0.2.257-dev (2026-07-14) -- #438 On Yer Feet revive scoreboard credit [verify-fix]
 
 - Vanilla's ordinary interaction revive and Warrior Priest's Comet's Gift both call `StatisticsUtil.register_revive`; Mercenary's `rpc_request_revive` server handler revives the target and emits telemetry but omits that statistics transaction.

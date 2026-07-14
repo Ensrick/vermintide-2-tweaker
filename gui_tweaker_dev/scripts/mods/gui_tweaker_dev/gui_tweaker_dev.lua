@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.257-dev"
+local MOD_VERSION = "0.2.259-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -146,6 +146,33 @@ _rt_register("dbg_helpers_two_channel", function()
     if not ok then return "_dbg raised" end
     ok = pcall(_dbg_alert, "smoke test")
     if not ok then return "_dbg_alert raised" end
+end)
+
+-- (#345) Dev option status tags mirror GitHub lifecycle state. This runtime check
+-- keeps the corrected GUT slice visible even in retail, where source-grep checks
+-- cannot use `io`. `verify-fix-coop` intentionally maps to the same menu-facing
+-- `[verify-fix]` tag; `[diag]` appears only while diagnostics-armed is active.
+_rt_register("issue345_gut_loc_status_sync", function()
+    local checks = {
+        { "gut_tp_camera_enabled",       "[verify-fix] [Issue 209]", "[diag]" },
+        { "gut_skip_cutscenes_hotkey",   "[verify-fix] [Issue 126]", "[diag]" },
+        { "gut_mission_inventory_enabled","[verify-fix] [Issue 87]",  "Issue 193" },
+        { "gut_cim_bench_in_mission",    "[verify-fix] [Issue 80]",  "[untested]" },
+        { "gut_use_non_modded_loadouts", "[verify-fix] [Issue 287]", "[diag]" },
+    }
+    for i = 1, #checks do
+        local key, required, forbidden = checks[i][1], checks[i][2], checks[i][3]
+        local ok, value = pcall(mod.localize, mod, key)
+        if not ok or type(value) ~= "string" then
+            return string.format("%s localization unavailable", key)
+        end
+        if not string.find(value, required, 1, true) then
+            return string.format("%s missing %s", key, required)
+        end
+        if forbidden and string.find(value, forbidden, 1, true) then
+            return string.format("%s retains stale %s", key, forbidden)
+        end
+    end
 end)
 
 _rt_register("lifecycle_chain_integrity", function()
@@ -1139,6 +1166,29 @@ _rt_register("hud_drag_geometry_uses_render_bounds", function()
     end
     if entry.scenegraph_node_id ~= "pivot" then
         return "#547 changed equipment movement target instead of only drag bounds"
+    end
+end)
+
+-- (#310) CareerAbilityBarUI uses `_ui_scenegraph` while the other registered HUD
+-- classes generally use `ui_scenegraph`. Keep that bar in the editor and pin the
+-- bounded coverage classifier used to prioritize the remaining resize work.
+_rt_register("issue310_hud_scenegraph_alias_coverage", function()
+    if type(Customizer.scenegraph_for_view) ~= "function" then
+        return "scenegraph_for_view missing"
+    end
+    if type(Customizer.coverage_status) ~= "function" then
+        return "coverage_status missing"
+    end
+    local private = { _ui_scenegraph = { ability_bar = {
+        world_position = { 1, 2, 3 }, size = { 250, 16 }, local_position = { 0, -200, 1 },
+    } } }
+    local scenegraph, source = Customizer.scenegraph_for_view(private)
+    if scenegraph ~= private._ui_scenegraph or source ~= "_ui_scenegraph" then
+        return "private CareerAbilityBarUI scenegraph alias did not resolve"
+    end
+    local status = Customizer.coverage_status(private, Customizer.REGISTRY_BY_ID.career_ability_bar)
+    if status ~= "ready" then
+        return "career ability bar coverage expected ready, got " .. tostring(status)
     end
 end)
 

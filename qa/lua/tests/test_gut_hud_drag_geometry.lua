@@ -42,4 +42,38 @@ return function(H, repo_root)
         H.equal(size[2], 120)
         H.equal(Customizer.drag_geometry(nil, entry), nil)
     end)
+
+    H.test("HUD customizer resolves public and private scenegraph fields", function()
+        local public = { ui_scenegraph = { marker = true } }
+        local private = { _ui_scenegraph = { marker = true } }
+        local sg, source = Customizer.scenegraph_for_view(public)
+        H.equal(sg, public.ui_scenegraph)
+        H.equal(source, "ui_scenegraph")
+        sg, source = Customizer.scenegraph_for_view(private)
+        H.equal(sg, private._ui_scenegraph)
+        H.equal(source, "_ui_scenegraph")
+        sg, source = Customizer.scenegraph_for_view({})
+        H.equal(sg, nil)
+        H.equal(source, "missing_scenegraph")
+    end)
+
+    H.test("HUD coverage classifier distinguishes ready fallback and missing states", function()
+        local entry = Customizer.REGISTRY_BY_ID.career_ability_bar
+        local private = { _ui_scenegraph = { ability_bar = {
+            world_position = { 10, 20, 1 }, size = { 250, 16 }, local_position = { 0, -200, 1 },
+        } } }
+        local status, source = Customizer.coverage_status(private, entry)
+        H.equal(status, "ready")
+        H.equal(source, "_ui_scenegraph")
+        H.equal(Customizer.coverage_status(nil, entry), "missing_view")
+
+        local news = Customizer.REGISTRY_BY_ID.news_feed
+        status = Customizer.coverage_status({ ui_scenegraph = {
+            pivot = { world_position = { 1, 2, 3 }, size = { 0, 0 } },
+        } }, news)
+        H.equal(status, "move_fallback")
+
+        status = Customizer.coverage_status({ ui_scenegraph = {} }, entry)
+        H.equal(status, "missing_move_node")
+    end)
 end
