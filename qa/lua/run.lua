@@ -72,6 +72,7 @@ local suites = {
     "test_mp_quest_boundary",
     "test_mp_shilling_ui_policy",
     "test_mp_emporium_purchase",
+    "test_mp_loot_diag",
     "test_wt_passive_charge",
     "test_wt_overcharge_presentation",
     "test_wt_bolt_staff_overcharge",

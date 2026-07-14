@@ -1,5 +1,15 @@
 # Modded Progression — Changelog
 
+## 0.2.28-dev (2026-07-14) - #607 source-backed loot diagnostics [diagnostics-armed]
+
+- Added passive, official-realm-only observation of ordinary mission chest/vault backend callback results. Each returned payload records the chest family, hero, game mode, item keys/rarities/power, property/trait/skin presence, unlock-kind counts, consumption result, and matching runtime rarity-table row.
+- The diagnostic adds no backend request and runs before the unchanged native callback. It never captures in the modded realm, never stores player or backend instance ids, retains at most 12 openings and six item summaries per opening, and can be retired through one explicit module flag.
+- Added `/mp_loot_diag` to display capture status plus static local catalogue facts, or `/mp_loot_diag reset` to clear only the diagnostic ledger. Arming is automatic; the command is not required before an ordinary official chest opening.
+- Did not fabricate local randomized equipment. Vanilla Lua shows that `generateLootChestRewards` is CloudScript and that rarity tables arrive dynamically in backend read-only data, while the item-selection/property/trait/duplicate algorithm is absent from extracted client source.
+- Added deterministic engine-free tests for sanitization, bounds, stable rarity ordering, item-list truncation, and catalogue census, plus runtime regression `mp607_official_loot_capture_is_bounded_and_realm_gated`.
+
+**Test:** In the official realm, open one ordinary mission chest or vault through the normal Spoils of War screen. No command is needed before opening. The log must contain exactly one `[mp:607] CAPTURE applied ... backend=observed-only` line. Run `/mp_loot_diag` afterward to show the bounded summary. Enter the modded realm and confirm navigation adds no new capture; `/mp_loot_diag reset` clears only these observations.
+
 ## 0.2.27-dev (2026-07-14) - #578 restore vanilla Silver Shilling presentation [verify-fix]
 
 - Removed every user-facing `Local` qualifier from the modded Silver Shilling wallet, tooltip, purchase action, daily reward row, and claim popup. These surfaces now use the original vanilla localization and presentation paths unchanged.

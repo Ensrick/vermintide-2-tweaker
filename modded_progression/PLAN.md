@@ -206,6 +206,17 @@ Confirmed server-side. Not in Lua source. Two paths forward:
 
 For v0.1.0: ship approximations. Refine after live testing.
 
+**Issue #607 decision (2026-07-14): approximations are no longer acceptable for
+the mission-container feature.** The requested behavior requires source-backed
+rarity, eligibility, property/trait, power, DLC, and duplicate contracts. Client
+Lua proves the opening call is `generateLootChestRewards` CloudScript
+(`backend_interface_loot_playfab.lua:28-46`) and only consumes its returned item
+records (`:49-150`). Rarity tables are also delivered dynamically by backend
+read-only data (`playfab_mirror_base.lua:1084-1116`). MP v0.2.28-dev therefore
+ships bounded observation-only diagnostics for ordinary official openings; it
+does not generate approximate local equipment. The diagnostic must be retired
+before the behavioral feature ships.
+
 ## Items still gated on a runtime dump
 
 1. `crafting_recipes` table (ingredients per recipe, dispatch names) — dump via `dofile + table.dump` from in-game console.

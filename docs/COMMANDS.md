@@ -132,7 +132,7 @@ vdl_dump, vdl_save, vdl_level, vdl_help
 
 ### `mp` (modded_progression)
 ```
-mp_dump, mp_reset
+mp_dump, mp_loot_diag, mp_reset
 ```
 
 ### `dcp` (dynamic_cosmetic_portraits)
