@@ -6,7 +6,7 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 - [ ] #577: one modded SM purchase debits local shillings once, grants/owns the exact item immediately and after restart, and never enqueues `PurchaseItem` or `storePurchaseMade`.
 - [ ] #577: repeat/double activation, stale price, owned item, insufficient funds, unavailable/DLC/platform/bundle offer, and failed persistence cannot double-spend or partially grant; official purchase remains vanilla.
-- [ ] #578: modded Emporium wallet, tooltip, SM purchase action, daily reward row, and claim popup say local/Modded Progression; official play has no local label.
+- [ ] #578: modded Emporium wallet, tooltip, SM purchase action, daily reward row, and claim popup use the exact vanilla Silver Shilling presentation, with no `Local` qualifier.
 - [ ] #578: claim, credit, debit, `/mp_reset`, and realm transition invalidate wallet/preview affordability; `/mp_regression_test` passes `mp578_local_shilling_ui_lifecycle`.
 - [ ] #578: each observed revision/realm edge emits one `[mp:578] wallet_refresh` and `affordability_refresh` line; unchanged frames emit none.
 - [ ] #581: startup/keep challenge-board polling never reads an `mp_daily_v2_*` key from `StatisticsDatabase`; `/mp_regression_test` passes `mp581_owned_daily_bypasses_statistics_db`.

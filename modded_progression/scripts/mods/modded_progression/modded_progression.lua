@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.26-dev"
+local MOD_VERSION = "0.2.27-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -636,48 +636,16 @@ local function _mp577_owned(item_key, offer)
     return false
 end
 
--- Issue #578: the local SM ledger must never masquerade as Fatshark's account
--- balance. Vanilla already owns the correct UI lifecycle seams:
+-- Issue #578: preserve the native Silver Shilling presentation while keeping
+-- the SM ledger isolated behind the modded-realm backend boundary. Vanilla
+-- already owns the correct UI lifecycle seams:
 -- StoreWindowPanel._sync_player_wallet rebuilds only when its cached amount is
 -- invalidated [src: store_window_panel.lua:601-652], while the item preview
 -- recomputes affordability when _sync_products_version returns true [src:
 -- store_window_item_preview.lua:401-443,872-993]. Merge the local ledger's
 -- monotonic transaction serial into those seams; no new update loop exists.
-local _mp578_loc_redirect = {
-    menu_store_panel_currency_tooltip_title = "mp_local_shillings_name",
-    menu_store_panel_currency_tooltip_desc = "mp_local_shillings_description",
-    menu_store_panel_currency_tooltip_obtain_desc = "mp_local_shillings_obtain",
-    mp_local_shillings_name = "mp_local_shillings_name",
-    mp_local_shillings_description = "mp_local_shillings_description",
-    mp_local_shillings_claimed = "mp_local_shillings_claimed",
-}
-
--- VMF localization is private to the mod; vanilla item/reward UIs call the
--- global Localize function. Supply only the exact MP/SM keys while the modded
--- realm owns the surface, then delegate every official and non-SM lookup.
-mod:hook(_G, "Localize", function(func, key, ...)
-    local redirect = _mp578_loc_redirect[key]
-    if redirect and _is_mp_realm() then return mod:localize(redirect) end
-    return func(key, ...)
-end)
-
-local _mp578_fake_currency_hooked = false
-if BackendUtils then
-    mod:hook(BackendUtils, "get_fake_currency_item", function(func, currency_code, amount, ...)
-        local data, item_key, description = func(currency_code, amount, ...)
-        if ShillingUI.is_local_shilling(_is_mp_realm(), currency_code) and type(data) == "table" then
-            -- Vanilla returns a fresh table.clone, so these identifiers cannot
-            -- contaminate Currencies or the official realm [src:
-            -- backend_utils.lua:326-348]. They cover challenge-row tooltips and
-            -- the post-claim RewardPopupUI presentation.
-            data.display_name = "mp_local_shillings_name"
-            data.description = "mp_local_shillings_description"
-            description = "mp_local_shillings_claimed"
-        end
-        return data, item_key, description
-    end)
-    _mp578_fake_currency_hooked = true
-end
+-- Do not override Localize, fake-currency metadata, wallet text, or purchase
+-- titles here: all visible wording must remain byte-for-byte vanilla.
 
 mod:hook("StoreWindowPanel", "_sync_player_wallet", function(func, self, ...)
     local is_modded = _is_mp_realm()
@@ -687,45 +655,11 @@ mod:hook("StoreWindowPanel", "_sync_player_wallet", function(func, self, ...)
     if refresh and self._currencies then self._currencies.SM = nil end
 
     local n, results = _capture(func(self, ...))
-    local widgets = self._top_widgets_by_name
-    local widget = widgets and widgets.currency_panel_widget_SM
-    local content = widget and widget.content
-    if content then
-        if is_modded then
-            -- The marker makes the hot native sync allocation-free when the
-            -- text is unchanged, while still recovering if another currency
-            -- dirties vanilla's whole wallet row.
-            if content.currency_text ~= content._mp578_labeled_text then
-                local labeled = ShillingUI.wallet_text(content.currency_text,
-                    mod:localize("mp_local_wallet_prefix"))
-                content.currency_text = labeled
-                content._mp578_labeled_text = labeled
-            end
-        else
-            content._mp578_labeled_text = nil
-        end
-    end
     self._mp578_wallet_realm = is_modded
     self._mp578_wallet_revision = visible_revision
     if refresh then
-        mod:info("[mp:578] wallet_refresh realm=%s revision=%s local_label=%s",
-            is_modded and "modded" or "official", tostring(visible_revision),
-            tostring(content and content.currency_text or "unavailable"))
-    end
-    return unpack(results, 1, n)
-end)
-
-mod:hook("StoreWindowItemPreview", "_set_price", function(func, self, price, currency_type, ...)
-    local n, results = _capture(func(self, price, currency_type, ...))
-    local widget = self._top_widgets_by_name and self._top_widgets_by_name.unlock_button
-    local content = widget and widget.content
-    if content then
-        self._mp578_base_purchase_title = self._mp578_base_purchase_title or content.title_text
-        if ShillingUI.is_local_shilling(_is_mp_realm(), currency_type) then
-            content.title_text = mod:localize("mp_local_purchase_button")
-        else
-            content.title_text = self._mp578_base_purchase_title
-        end
+        mod:info("[mp:578] wallet_refresh realm=%s revision=%s presentation=vanilla",
+            is_modded and "modded" or "official", tostring(visible_revision))
     end
     return unpack(results, 1, n)
 end)
@@ -747,13 +681,9 @@ mod:hook("StoreWindowItemPreview", "_sync_products_version", function(func, self
 end)
 
 _rt_register("mp578_local_shilling_ui_lifecycle", function()
-    if not _mp578_fake_currency_hooked then return "BackendUtils currency hook was not installed" end
     if type(Dailies.ui_revision) ~= "function" then return "local ledger revision seam missing" end
     local refresh = ShillingUI.needs_refresh(false, -1, true, 1)
     if not refresh then return "official-to-modded realm transition did not invalidate UI" end
-    if ShillingUI.wallet_text("5", "[Local]") ~= "[Local] 5" then
-        return "local wallet label policy missing"
-    end
 end)
 
 -- #589: StoreLoginRewardsPopup._claim_rewards calls the peddler interface

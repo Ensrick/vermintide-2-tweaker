@@ -1,16 +1,24 @@
 # Modded Progression — Changelog
 
+## 0.2.27-dev (2026-07-14) - #578 restore vanilla Silver Shilling presentation [verify-fix]
+
+- Removed every user-facing `Local` qualifier from the modded Silver Shilling wallet, tooltip, purchase action, daily reward row, and claim popup. These surfaces now use the original vanilla localization and presentation paths unchanged.
+- Preserved the namespaced offline ledger, backend isolation, transaction persistence, and realm/revision refresh behavior. Only presentation hooks and localization were removed.
+- Added regression coverage that rejects wallet/purchase/fake-currency localization overrides while retaining the isolated SM policy and bounded refresh evidence.
+
+**Test:** In modded play, confirm the Emporium wallet, tooltip, purchase action, daily reward row, and claim popup look identical to vanilla. Claim, credit, debit, or reset shillings and confirm wallet/affordability still refresh. Official Silver Shillings and backend behavior remain unchanged.
+
 ## 0.2.26-dev (2026-07-14) - #219 orphan localization cleanup [verify-fix]
 
 - Removed the dead `starting_state_description` fallback. The dropdown explicitly uses `starting_state_tooltip`, so the near-duplicate description key had no consumer.
 
 ## 0.2.25-dev (2026-07-14) - #578 automatic shilling refresh evidence [verify-fix]
 
-- Added sparse `[mp:578] wallet_refresh` and `affordability_refresh` evidence at the existing realm/revision invalidation edges. A normal Emporium test now proves the local label, visible revision, realm, and product refresh in the console log without running a command.
+- Added sparse `[mp:578] wallet_refresh` and `affordability_refresh` evidence at the existing realm/revision invalidation edges. A normal Emporium test now proves the visible revision, realm, and product refresh in the console log without running a command.
 - Logging occurs only when `ShillingUI.needs_refresh` is true: initial view ownership, a local ledger transaction/reset, or a realm transition. It adds no poll, per-frame allocation, backend call, or chat output.
 - Extended offline coverage to lock both log sites behind the bounded refresh branch and prevent accidental duplicate instrumentation.
 
-**Test:** Open the Emporium in modded play, credit/debit/reset local shillings, then enter official play. The log should show one wallet and affordability line per observed revision/realm edge, with no repeating line on unchanged frames. Existing labels and `/mp_regression_test` must remain correct.
+**Test:** Open the Emporium in modded play, credit/debit/reset local shillings, then enter official play. The log should show one wallet and affordability line per observed revision/realm edge, with no repeating line on unchanged frames. Vanilla presentation and `/mp_regression_test` must remain correct.
 
 ## 0.2.24-dev (2026-07-13) - #577 backend-free Emporium purchases [not deployed]
 
