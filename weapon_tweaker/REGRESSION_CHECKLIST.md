@@ -1,5 +1,17 @@
 # Regression Checklist — weapon_tweaker
 
+## #388 - Deepwood cross-career overcharge presentation
+
+| Check | Expected |
+|---|---|
+| Automated | Offline `test_wt_overcharge_presentation` passes exact identity, native profile projection, threshold colors, owner-local/runtime wiring, lazy HUD hook, and restore presence. `/wt_regression_test` passes `issue388_deepwood_overcharge_profile`. |
+| Owner | On Kruber, Deepwood low/medium/high overcharge uses the Sister green bar, thorn screen particles, life-staff warning sounds, native decay/lockout, and no generic explosion. |
+| Transition | Swap Deepwood out and back. One bounded `[wt:388] ... restored/applied` record appears per transition; prior extension fields and live screen particles do not leak. Disabling WT also restores. |
+| Co-op | Both peers run the build. Repeat with each peer as owner; the other observes and spectates. Owner and spectator HUDs agree, overcharge value replication remains smooth, and no new RPC/desync appears. |
+| Negative controls | Native Sister Deepwood is untouched. Moonfire remains on `energy_system`; Sienna/Bardin overcharge weapons retain their own colors, sounds, particles, and explosion policy. |
+
+---
+
 ## #341 - Bolt Staff primary overcharge reduction
 
 | Field | Check |

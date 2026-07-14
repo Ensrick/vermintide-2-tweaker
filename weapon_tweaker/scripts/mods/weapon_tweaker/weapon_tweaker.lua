@@ -110,7 +110,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.237-dev"
+local MOD_VERSION = "0.12.238-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4021,6 +4021,7 @@ end
 -- _wt_availability.lua in the v0.12.209-dev OOP split; on_disabled below calls
 -- them via the entry's file-local aliases from the manifest.
 mod.on_disabled = function()
+    if weapon_backend.overcharge_presentation then pcall(weapon_backend.overcharge_presentation.restore) end
     _wt_bolt_staff_overcharge_runtime.revert()
     clear_weapon_unlocks()
     clear_career_action_injections()
@@ -4058,6 +4059,11 @@ end
 
 -- Install basic backend hooks (UI filtering and can_wield override)
 weapon_backend.install(mod, weapon_unlock_map, apply_weapon_unlocks)
+if weapon_backend.overcharge_presentation then
+    for _, check in ipairs(weapon_backend.overcharge_presentation.rt_checks or {}) do
+        _rt_register(check.name, check.fn)
+    end
+end
 -- v0.12.68-dev: removed `mod.weapon_unlock_map = weapon_unlock_map` public
 -- export. Repo grep + sibling-mod audit (AUDIT_section_e.md, weapon_tweaker
 -- CODE_REVIEW.md, character_weapon_variants check) confirmed zero external

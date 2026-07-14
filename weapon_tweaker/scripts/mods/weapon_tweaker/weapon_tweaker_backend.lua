@@ -41,6 +41,8 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
     -- module header for the full networking / consumption-side rationale.
     local passive_charge = mod:dofile("scripts/mods/weapon_tweaker/_wt_passive_charge")
     M.passive_charge = passive_charge
+    local overcharge_presentation = mod:dofile("scripts/mods/weapon_tweaker/_wt_overcharge_presentation")
+    M.overcharge_presentation = overcharge_presentation
 
     local function is_mod_unlocked_weapon(career_name, weapon_key)
         if not career_name or not weapon_key then
@@ -126,6 +128,7 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
         -- Bow). Self-gated on its VMF toggle (default OFF) and the local owned
         -- player only; pcall-isolated internally so it can never break init.
         passive_charge.tick(dt)
+        pcall(overcharge_presentation.tick)
 
         -- Per-frame DURABLE 3P grip-offset re-apply (the Necromancer Ghost
         -- Scythe on Kruber, etc.). A one-shot create_equipment offset is stomped

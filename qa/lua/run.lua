@@ -56,6 +56,7 @@ local suites = {
     "test_mp_shilling_ui_policy",
     "test_mp_emporium_purchase",
     "test_wt_passive_charge",
+    "test_wt_overcharge_presentation",
     "test_wt_bolt_staff_overcharge",
     "test_wt_longbow_zoom_probe",
     "test_wt_cwv_ownership",

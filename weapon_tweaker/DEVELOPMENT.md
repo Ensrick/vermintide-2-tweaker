@@ -64,6 +64,7 @@ SEPARATE key from the established flat `mod._wt_*` fields (`mod._wt_link_filter`
 | `_wt_diagnostics.lua` | Read-only diagnostic dump/probe commands (`/sm_probe`, `/dump`, `/dump_actions`, `/dump_weapons`, `/wt_dump_wielded`) + the wield-time weapon-data dump and its sole `SimpleInventoryExtension._wield_slot` hook_safe. Reads engine globals only; no exports; leaf. |
 | `_wt_longbow_zoom_probe.lua` | Pure, engine-free bounded lifecycle for #316's automatically armed owner-side Empire Longbow zoom probe. Owns exact career/template targeting, due-time observation, one-shot finish, and the three-attempt cap; the entry owns the three `ActionAim` hooks and raw-console formatting. Returns its module table directly and has no `mod` or engine dependency. |
 | `_wt_bolt_staff_overcharge.lua` | Issue #341's hook-free Bolt Staff primary-overcharge transaction. Owns the 0.6 planner plus snapshot/apply/revert runtime for the unique `PlayerUnitStatusSettings.overcharge_values.spark` scalar. Returns its module table directly; the entry wires init, lifecycle, setting-change, disable, and runtime regression surfaces. |
+| `_wt_overcharge_presentation.lua` + `_policy` | Issue #388's cross-career Deepwood parity. The owner-side module reversibly projects `OverchargeData.we_thornsister` onto the local player's existing overcharge extension while `we_life_staff` is equipped, and lazily hooks `OverchargeBarUI.set_charge_bar_fraction` for local/spectator native colors. The pure sibling owns identity/profile/color tests. No transport is added. |
 
 Pre-existing `_*.lua` / `wt_*.lua` modules (`_safe_hook`, `_wt_brett_sword_shield_buff`,
 `_wt_passive_charge`, `wt_dev_anim_picker`, `wt_dev_hold_pose`, `wt_unlock_data`,
@@ -423,6 +424,12 @@ one `energy_system:add_energy` site. Read the ranged slot once per tick; return
 before inventory inspection when the career already owns a nonzero native
 recharge rate. Tests must cover wielded/stowed parity, repeated slot swaps,
 non-energy replacements, empty slots, full-state no-op, and native Kerillian.
+
+### Weapon-scoped presentation over a career-scoped overcharge extension (#388)
+
+Deepwood Staff is an overcharge weapon (`staff_life.lua` actions name `overcharge_type` and query `overcharge_system`), not an `energy_system` weapon. At player construction, `BulldozerPlayer` selects `OverchargeData[career_name]` (`bulldozer_player.lua:206`) and `PlayerUnitOverchargeExtension.init` copies the selected row's decay, warning sounds, screen particles, and explosion policy into scalar fields (`player_unit_overcharge_extension.lua:9-77`). `OverchargeBarUI.set_charge_bar_fraction` separately reads the career row on every draw (`overcharge_bar_ui.lua:234-271`). Therefore an off-career Deepwood cannot inherit Sister presentation from its item template.
+
+WT resolves that mismatch at the two actual owners: `_wt_overcharge_presentation` snapshots and projects the native Sister profile on the local owner extension while the exact staff is in `slot_ranged`, then restores on removal/disable; its lazy HUD post-hook applies `OverchargeData.we_thornsister.overcharge_ui` after vanilla has populated the widget. `PlayerHuskOverchargeExtension` only consumes replicated values and has no warning/particle policy (`player_husk_overcharge_extension.lua:7-133`), so no husk mutation or RPC is appropriate. Spectator HUDs resolve the spectated inventory locally through the same HUD hook.
 
 ### Three-layer remap system
 
