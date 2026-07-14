@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.233-dev (2026-07-13) - #316 Kruber Longbow zoom probe [not deployed]
+
+- Source review separates the owner camera from the body animation: vanilla `ActionAim` starts camera zoom after the Empire Longbow's authored 0.22-second delay on every career, while WT's existing v0.12.192 `draw_bow -> to_zoom` mapping affects only third-person presentation on Mercenary, Foot Knight, and Grail Knight. Huntsman remains native.
+- Because #316 contains no log or current-build reproduction, this build does not speculate with another behavior mutation. It arms a three-attempt, owner-only `[wt:316]` probe for the exact three non-Huntsman Kruber careers and Empire Longbow templates.
+- Each attempt emits one start row and one bounded result row. `finished_before_observation` means aim ended before the probe observed the authored zoom time; `not_zoomed` isolates the failure to `ActionAim`/status state; `zoomed zoom_mode=zoom_in` with no visible FOV change isolates it to camera presentation. No chat, RPC, remote-player work, or per-frame output remains after the result.
+- Offline coverage locks exact target scope, due-time observation, one-shot completion, and the three-attempt cap. `/wt_regression_test` adds `issue316_kruber_longbow_zoom_contract` for the vanilla action fingerprint, all three cross-career remaps, Huntsman exclusion, and probe bound.
+- **Solo verify after deployment:** equip Kruber's Longbow on Mercenary, Foot Knight, and Grail Knight. On each career hold aim for at least one second, up to three total attempts per session, and confirm the first-person FOV zoom plus the third-person aim pose. Save the `[wt:316]` rows and `/wt_regression_test` result. No co-op tester is required for this owner-camera issue.
+
 ## 0.12.232-dev (2026-07-13) - #594 Saltzpyre Hammer+Shield ownership [not deployed]
 
 - Removed Bardin's native `dr_shield_hammer` from Witch Hunter Captain, Bounty Hunter, and Zealot availability. Kruber's `es_mace_shield` remains the human-faction control for those careers.
