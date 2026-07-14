@@ -68,6 +68,7 @@ local suites = {
     "test_ct_boon_catalog",
     "test_cos_offhand_preload_lifecycle",
     "test_cos_dual_offhands",
+    "test_gt_disconnect_grace",
 }
 
 for _, suite in ipairs(suites) do

@@ -701,6 +701,9 @@ end
 -- remove_player in this repo (verified). If another mod ships a
 -- hook_safe on these, switch to full mod:hook.
 mod:hook_safe("PlayerManager", "add_remote_player", function(self, peer_id, ...)
+    if type(mod._gt_disconnect_grace_on_remote_join) == "function" then
+        pcall(mod._gt_disconnect_grace_on_remote_join, peer_id)
+    end
     _dbg("[ai_event] add_remote_player peer=%s", tostring(peer_id))
     _gt_dump_ai_now("peer_join")
 end)

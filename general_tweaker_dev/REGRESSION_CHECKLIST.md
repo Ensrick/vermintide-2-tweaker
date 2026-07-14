@@ -6,12 +6,23 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+## Host disconnect lifecycle probe (#309)
+
+- [ ] **[MULTIPLAYER]** Host runs `/gt_disconnect_grace_probe`, then one alive client disconnects and reconnects within 30 seconds.
+- [ ] Host log contains bounded `[gt:309]` `pre_on_enter`, `post_on_enter`, six scheduled samples, and (when the same peer identity returns in-window) `rejoin`; total records never exceeds 10.
+- [ ] The probe does not delay removal, add invulnerability, send an RPC, or otherwise change vanilla disconnect/bot-fill behavior.
+- [ ] `/gt_regression_test` passes `issue309_disconnect_grace_diagnostics_armed`.
+
+---
+
 ## Keep dummy player collision (#304)
 
 - [ ] With the toggle off (default), a keep training dummy blocks the local player as vanilla does.
 - [ ] With the toggle on, the local player walks through the dummy while hit markers/damage readout and all authored hit zones still work.
 - [ ] Turning the toggle off restores blocking immediately; enemies outside keep-type levels are unaffected.
 - [ ] `/gt_regression_test` passes `gt304_keep_dummy_constraint_scope`.
+
+---
 
 ## Debug Highlights local renderer (#302)
 

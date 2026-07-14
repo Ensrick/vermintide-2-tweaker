@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.220-dev"
+local MOD_VERSION = "0.2.221-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -3083,6 +3083,10 @@ end
 -- order). Every observation hook is a singleton; all cross-file coupling is
 -- via mod._* fields resolved at call time (the AI Takeover module's debug wrap
 -- reads mod._gt_dump_ai_now; this module reads mod._gt_ai_* state for the dump).
+-- Issue #309: observation-only host disconnect lifecycle trace. Loaded before
+-- _gt_debug_probes so its existing add_remote_player singleton can dispatch
+-- reconnect evidence into this module without registering a duplicate hook.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_disconnect_grace_diag")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_debug_probes")
 
 -- Console dump commands (level / glossary / cosmetics / items / hero-view) +

@@ -1,6 +1,19 @@
 ﻿# General Tweaker Changelog
 
-## v0.2.220-dev (2026-07-13) -- #304 keep dummy player collision toggle [not deployed]
+## v0.2.221-dev (2026-07-13) -- #309 disconnect lifecycle trace [diagnostics-armed]
+
+- Audited the host disconnect path rather than adding a speculative invulnerability flag. Vanilla enters `PeerStates.Disconnecting.on_enter`, removes the peer from the `GameSession`, calls `GameNetworkManager.remove_peer` (which removes every player owned by that peer), clears the party slot, and only then lets the game mode fill the opening with a new host-owned bot. Delaying that function would also delay EAC, game-object, profile, party, and mechanism teardown.
+- Added `/gt_disconnect_grace_probe`, an explicit host-only one-event probe. It records the remote player's player/unit/party/slot state immediately before and after `Disconnecting.on_enter`, then at 0.05, 0.25, 1, 3, 10, and 30 seconds. A same-peer `add_remote_player` event is correlated as a reconnect. The probe is capped at 10 records and makes no gameplay or network mutation.
+- Added runtime check `issue309_disconnect_grace_diagnostics_armed` and offline coverage for one-shot arming, bounded sampling, and exact-peer reconnect correlation.
+
+### Co-op test method
+
+1. Host enables `gt_dev`, starts a mission with one client, and runs `/gt_disconnect_grace_probe`.
+2. The client disconnects while alive, then reconnects within 30 seconds.
+3. Attach the host log containing all `[gt:309]` lines. Confirm the pre/post lines establish whether the human unit survives the synchronous teardown and the samples establish when the replacement bot occupies the slot.
+4. Run `/gt_regression_test`; `issue309_disconnect_grace_diagnostics_armed` must pass.
+
+## v0.2.220-dev (2026-07-13) -- #304 keep dummy player collision toggle [verify-fix]
 
 - Added an off-by-default Gameplay toggle that lets the local player walk through training dummies in keep-type levels.
 - Source tracing showed that player blocking comes from `Breeds.training_dummy.player_locomotion_constrain_radius = 0.7`, copied onto authoritative and husk AI extensions and consumed by `PlayerUnitLocomotionExtension`; it does not require disabling the dummy's collision actors.
