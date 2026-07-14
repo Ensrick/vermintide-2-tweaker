@@ -536,6 +536,29 @@ local function register_network_lookup_key(key)
     rawset(lookup, key, n)
 end
 
+-- Duplicate pool entries exist only to give the graph solver enough distinct
+-- choices.  They must not become distinct network levels.  Vanilla resolves
+-- graph-only aliases through config.LEVEL_ALIAS after constructing the themed
+-- path key (deus_populate_graph.lua:1096-1099), so point every duplicate
+-- permutation back to its already-registered source permutation.
+function _M.map_duplicate_level_aliases(config, alias_key, alias_dls)
+    if type(config) ~= "table" or type(alias_key) ~= "string"
+            or type(alias_dls) ~= "table" or type(alias_dls.base_level_name) ~= "string" then
+        return 0
+    end
+    config.LEVEL_ALIAS = config.LEVEL_ALIAS or {}
+    local mapped = 0
+    for _, theme_name in ipairs(ALL_THEMES) do
+        for _, path in ipairs(alias_dls.paths or { 1 }) do
+            local alias_perm = alias_key .. "_" .. theme_name .. "_path" .. path
+            local original_perm = alias_dls.base_level_name .. "_" .. theme_name .. "_path" .. path
+            config.LEVEL_ALIAS[alias_perm] = original_perm
+            mapped = mapped + 1
+        end
+    end
+    return mapped
+end
+
 -- =====================================================================
 -- Pool mutation
 -- =====================================================================
@@ -779,25 +802,17 @@ local function inject_duplicate_aliases()
                                     locations       = base_dls.locations or {},
                                     packages        = base_dls.packages or {},
                                 }
-                                -- Mirror LevelSettings permutation entries so the engine can
-                                -- resolve <alias>_<theme>_path<n>.
-                                for _, theme_name in ipairs(ALL_THEMES) do
-                                    for _, path in ipairs(DEUS_LEVEL_SETTINGS[alias_key].paths) do
-                                        local original_perm = base_key .. "_" .. theme_name .. "_path" .. path
-                                        local alias_perm    = alias_key .. "_" .. theme_name .. "_path" .. path
-                                        local source = rawget(LevelSettings, original_perm)
-                                        if source and not rawget(LevelSettings, alias_perm) then
-                                            local clone = table.clone(source)
-                                            clone.level_key = alias_perm
-                                            clone.level_id  = alias_perm
-                                            LevelSettings[alias_perm] = clone
-                                        end
-                                        register_network_lookup_key(alias_perm)
-                                    end
-                                end
                                 slots[dup_idx + 1] = alias_key
                                 alias_dls = DEUS_LEVEL_SETTINGS[alias_key]
                             end
+
+                            -- Keep the alias distinct only while vanilla solves the graph.
+                            -- The final node.level is rewritten to the source permutation,
+                            -- which is already present in LevelSettings/NetworkLookup.  The
+                            -- old code registered six network levels per alias; 39 aliases
+                            -- plus the 35-mission static catalog produced 1,026 entries and
+                            -- exceeded weight_array.max_size=1,024 at network startup (#590).
+                            _M.map_duplicate_level_aliases(config, alias_key, alias_dls)
 
                             -- Add (or re-add, after reset_to_snapshot cleared the pool) the
                             -- alias to this pool. On the reuse path the DEUS_LEVEL_SETTINGS /

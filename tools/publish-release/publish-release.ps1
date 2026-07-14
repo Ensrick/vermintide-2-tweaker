@@ -118,6 +118,18 @@ if ($filterActive) {
 # Comments + throw strings are ASCII only - PowerShell parses .ps1 as
 # Windows-1252 by default and mangles em-dashes (memory:
 # feedback_ps5_getcontent_utf8).
+$levelBudgetGate = Join-Path $repoRoot 'qa\check_level_lookup_budget.ps1'
+if (Test-Path $levelBudgetGate) {
+    Write-Host ""
+    Write-Host "==> CT network level-key budget" -ForegroundColor Cyan
+    & $levelBudgetGate
+    if ($LASTEXITCODE -ne 0) {
+        throw "Release blocked: CT adventure LevelSettings/NetworkLookup additions exceed the fixed weight_array budget or duplicate aliases consume network keys."
+    }
+} else {
+    throw "Release blocked: required level-key budget gate is missing at $levelBudgetGate"
+}
+
 $linter = Join-Path $repoRoot 'tools\mod-lint\lint-mod.ps1'
 if (Test-Path $linter) {
     if ($filterActive) {

@@ -328,3 +328,13 @@ If the divergent state can be host-synced via the existing settings broadcast (t
 - Two apply sites: post-`deus_populate_graph` (common) + `DeusMapScene.on_enter` (late-arrival re-apply)
 
 **Host-migration is NOT covered** — the new host's snapshot represents its pre-migration state. Document as known limit; revisit only if visible drift after migration is reported.
+
+## Adventure pool duplicate aliases and the network level budget
+
+`NetworkLookup.level_keys` is bounded by `Network.type_info("weight_array").max_size` during `scripts/network_lookup/network_constants.lua`. In the 2026 yearly-events build the fixed limit is 1,024 and the vanilla prefix observed before CT injection is 582. CT's static catalog currently costs `35 missions x 6 themes = 210`, leaving 232 keys of headroom.
+
+Pool-floor `_dupN` entries are solver identities, not new playable levels. Do not clone them into `LevelSettings` or register them in `NetworkLookup.level_keys`. Put their fully composed keys in the current journey's `config.LEVEL_ALIAS` instead:
+
+`ground_zero_dup1_belakor_path1 -> ground_zero_belakor_path1`
+
+Vanilla `deus_populate_graph.lua:1096-1099` applies this alias after graph placement and before the node leaves the generator, preserving the chosen source mission, theme, and path without spending a network key. `qa/check_level_lookup_budget.ps1` is a blocking Quick/full QA and publish gate. It must be updated deliberately if a future VT2 executable changes the logged vanilla prefix or the engine array capacity.

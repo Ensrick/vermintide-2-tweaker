@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.264-dev"
+local MOD_VERSION = "0.7.265-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -532,6 +532,21 @@ _rt_register("pool_floor_underflow_duplicates_487", function()
     end
     if cpf(thr - 1) ~= "duplicate" then return "threshold-1 must still be 'duplicate'" end
     if cpf(thr) ~= "ok" then return "threshold enabled must be 'ok' (no over-duplication)" end
+    if type(AdventurePool.map_duplicate_level_aliases) ~= "function" then
+        return "map_duplicate_level_aliases missing (#590 network lookup budget)"
+    end
+    local fake_config = { LEVEL_ALIAS = {} }
+    local mapped = AdventurePool.map_duplicate_level_aliases(fake_config, "ground_zero_dup1", {
+        base_level_name = "ground_zero",
+        paths = { 1 },
+    })
+    if mapped ~= 6 then return "duplicate alias did not map all six themes" end
+    if fake_config.LEVEL_ALIAS.ground_zero_belakor_path1 ~= nil then
+        return "duplicate alias mapper overwrote a source permutation"
+    end
+    if fake_config.LEVEL_ALIAS.ground_zero_dup1_belakor_path1 ~= "ground_zero_belakor_path1" then
+        return "duplicate alias did not collapse to its registered source permutation"
+    end
     return nil
 end)
 

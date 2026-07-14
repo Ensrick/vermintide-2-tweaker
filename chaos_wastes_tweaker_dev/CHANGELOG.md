@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.265-dev (2026-07-13) - #590 duplicate pool aliases no longer exhaust network level keys [verify-fix]
+
+- Crash GUID `9bd4c67f-8633-4b29-b4e3-7e306bd82feb` failed in `network_constants.lua:56` before the keep loaded: `NetworkLookup.level_keys` had grown past the fixed `weight_array.max_size`. The log captured CT's vanilla prefix at 582, while CT's 35 adventure missions add 210 theme permutations and the user's one-mission pool floor minted 39 duplicate aliases. The old six network permutations per alias produced `582 + 210 + 234 = 1,026`, two above the engine's 1,024-entry limit.
+- Duplicate aliases now remain distinct only in `LEVEL_AVAILABILITY`, where vanilla's graph solver needs them. Each `<base>_dupN_<theme>_path1` is mapped through the source-native `config.LEVEL_ALIAS` table to the already-registered `<base>_<theme>_path1`; `deus_populate_graph.lua:1096-1099` performs that rewrite before the final node is networked. Repeated enabled missions, theme, path, and peer-stable adventure registration are preserved at a bounded 792 lookup entries.
+- Added the blocking `qa/check_level_lookup_budget.ps1` gate to both Quick/full QA and `publish-release.ps1`. It derives the current mission/theme catalog cost, enforces the 1,024 ceiling, and forbids duplicate `LevelSettings` or `NetworkLookup` registration. `/ct_regression_test` also proves all six duplicate permutations collapse to their source keys without overwriting them.
+- Runtime-only verification: start the game with the reported one-enabled-mission/39-alias configuration, reach the Pilgrimage Chamber without the startup assert, and launch a run whose graph repeats that mission. The static gate cannot execute Stingray's network initialization or observe a future game update's vanilla 582 baseline; compare the startup `Lobby hash shim installed` count after game updates and update the pinned gate baseline if Fatshark changes it.
+
 ## 0.7.264-dev (2026-07-13) - #406 Khaine's Communion catalogued under Mod Boons [untested]
 
 - Identified the selectable boon as CT's single canonical `DeusPowerUpTemplates.ct_kill_heal` entry, displayed as **Khaine's Communion**. Vanilla `deus_power_up_settings.lua` contains no such key and supplies no menu-category metadata; CT's `BOON_TREE` is the sole catalog used to generate both Disabled Boons and Starting Boons.

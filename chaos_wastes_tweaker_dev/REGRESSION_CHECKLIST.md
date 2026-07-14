@@ -7,6 +7,23 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-13.
 
 ---
+## Startup and network lookup bounds
+
+### issue590-level-key-budget - Duplicate pool aliases exceed weight_array capacity
+
+**[CRASH / STATIC + INTEGRATION]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Game crashes during `StateLoadingRestartNetwork` with `Too many levels in LevelSettings, global.network_config value weight_array needs to be raised.` |
+| Root cause | The 582-key vanilla prefix plus 35 adventure missions x 6 themes (210) plus 39 pool-floor aliases x 6 cloned permutations (234) reached 1,026 keys, exceeding the engine's 1,024-entry array. |
+| Mod(s) | chaos_wastes_tweaker_dev |
+| Fix version(s) | ct_dev v0.7.265-dev (#590) |
+| Expected post-fix | Duplicate graph choices resolve through `LEVEL_ALIAS` and add zero network keys. The static catalog is 792/1,024 with 232 entries of headroom. |
+| Automatic detection | Blocking `qa/check_level_lookup_budget.ps1`, wired into Quick/full QA and `publish-release.ps1`; `/ct_regression_test` additionally checks the six-theme alias mapping. |
+| Runtime-only verification | With one Adventure mission enabled and the CW pools filtered enough to create 39 aliases, restart the game, reach the Pilgrimage Chamber, and launch a run that repeats the enabled mission. Confirm no network-constants assert and confirm the repeated mission keeps its rolled theme/path. After a VT2 update, compare the logged vanilla lookup prefix with the gate's pinned 582 baseline. |
+
+---
 ## UI layout
 
 ### kill-heal-modded-boon-catalog - Khaine's Communion absent from expected Starting Boons category
