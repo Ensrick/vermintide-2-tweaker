@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.231-dev"
+local MOD_VERSION = "0.12.232-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -5266,6 +5266,34 @@ _rt_register("issue582_native_dual_axes_cwv_ownership_boundary", function()
         for _, career in ipairs(native.can_wield) do
             if career:sub(1, 3) == "es_" or career:sub(1, 3) == "wh_" then
                 return "native Dual Axes can_wield ownership leak: " .. career
+            end
+        end
+    end
+end)
+
+_rt_register("issue594_saltzpyre_hammer_shield_ownership", function()
+    local careers = { "wh_captain", "wh_bountyhunter", "wh_zealot" }
+    for _, career in ipairs(careers) do
+        local has_empire, has_dwarf = false, false
+        for _, key in ipairs(weapon_unlock_map[career] or {}) do
+            if key == "es_mace_shield" then has_empire = true end
+            if key == "dr_shield_hammer" then has_dwarf = true end
+        end
+        if not has_empire or has_dwarf then
+            return string.format("#594 ownership mismatch %s empire=%s dwarf=%s",
+                career, tostring(has_empire), tostring(has_dwarf))
+        end
+        if weapon_backend.is_mod_unlocked_weapon
+            and weapon_backend.is_mod_unlocked_weapon(career, "dr_shield_hammer") then
+            return "#594 backend accepts stale Bardin Hammer+Shield for " .. career
+        end
+    end
+
+    local native = rawget(_G, "ItemMasterList") and rawget(ItemMasterList, "dr_shield_hammer")
+    if native and type(native.can_wield) == "table" then
+        for _, career in ipairs(native.can_wield) do
+            if career == "wh_captain" or career == "wh_bountyhunter" or career == "wh_zealot" then
+                return "#594 stale Bardin Hammer+Shield can_wield entry: " .. career
             end
         end
     end

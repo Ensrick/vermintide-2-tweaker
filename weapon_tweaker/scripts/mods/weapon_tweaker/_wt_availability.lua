@@ -45,12 +45,12 @@ local _removed_pairs = {
     es_huntsman       = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
     es_knight         = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
     es_questingknight = { "wh_1h_axe", "wh_hammer_shield", "dr_shield_hammer", "dr_dual_wield_axes" },
-    -- #582: native Bardin Dual Axes are not a Saltzpyre item. These explicit
-    -- tombstones also clean a hot-reloaded/persisted can_wield mutation from
-    -- earlier WT versions even though the pair no longer exists in the map.
-    wh_captain        = { "dr_dual_wield_axes" },
-    wh_bountyhunter   = { "dr_dual_wield_axes" },
-    wh_zealot         = { "dr_dual_wield_axes" },
+    -- #582/#594: these native Bardin items are not Saltzpyre ownership rows.
+    -- Explicit tombstones clean hot-reloaded/persisted can_wield mutations
+    -- from earlier WT versions even though the pairs no longer exist in map.
+    wh_captain        = { "dr_dual_wield_axes", "dr_shield_hammer" },
+    wh_bountyhunter   = { "dr_dual_wield_axes", "dr_shield_hammer" },
+    wh_zealot         = { "dr_dual_wield_axes", "dr_shield_hammer" },
 }
 
 local function _strip_removed_unlocks()

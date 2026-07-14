@@ -823,7 +823,6 @@ local loc = {
     unlock_wh_captain_es_sword_shield_breton = { en = "Kruber: Bretonnian Sword and Shield" },
     unlock_wh_captain_es_deus_01 = { en = "Kruber: Spear and Shield" },
     unlock_wh_captain_dr_shield_axe = { en = "Bardin: Axe and Shield" },
-    unlock_wh_captain_dr_shield_hammer = { en = "Bardin: Hammer and Shield" },
     unlock_wh_captain_we_1h_spears_shield = { en = "Kerillian: Spear and Shield" },
     -- Saltzpyre: Bounty Hunter
     unlock_wh_bountyhunter_wh_1h_axe = { en = "Saltzpyre: Axe" },
@@ -901,7 +900,6 @@ local loc = {
     unlock_wh_bountyhunter_es_sword_shield_breton = { en = "Kruber: Bretonnian Sword and Shield" },
     unlock_wh_bountyhunter_es_deus_01 = { en = "Kruber: Spear and Shield" },
     unlock_wh_bountyhunter_dr_shield_axe = { en = "Bardin: Axe and Shield" },
-    unlock_wh_bountyhunter_dr_shield_hammer = { en = "Bardin: Hammer and Shield" },
     unlock_wh_bountyhunter_we_1h_spears_shield = { en = "Kerillian: Spear and Shield" },
     -- Saltzpyre: Zealot
     unlock_wh_zealot_wh_1h_axe = { en = "Saltzpyre: Axe" },
@@ -979,7 +977,6 @@ local loc = {
     unlock_wh_zealot_es_sword_shield_breton = { en = "Kruber: Bretonnian Sword and Shield" },
     unlock_wh_zealot_es_deus_01 = { en = "Kruber: Spear and Shield" },
     unlock_wh_zealot_dr_shield_axe = { en = "Bardin: Axe and Shield" },
-    unlock_wh_zealot_dr_shield_hammer = { en = "Bardin: Hammer and Shield" },
     unlock_wh_zealot_we_1h_spears_shield = { en = "Kerillian: Spear and Shield" },
     -- Saltzpyre: Warrior Priest
     unlock_wh_priest_wh_1h_hammer = { en = "Saltzpyre: Skull-Splitter" },

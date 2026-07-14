@@ -750,6 +750,22 @@ Last updated: 2026-07-13.
 
 ---
 
+---
+
+### issue594-saltzpyre-hammer-shield-ownership
+
+| Field | Value |
+|-------|-------|
+| Symptom | WT offers Bardin Hammer & Shield beside the more appropriate Kruber Mace & Shield on all three non-Priest Saltzpyre careers. |
+| Root cause | The June shield-combo override added both native item keys even though the existing analogue policy already preferred the Empire pair. |
+| Mod(s) | weapon_tweaker |
+| Fix version(s) | wt v0.12.232-dev (#594) |
+| Category | STATIC / OWNERSHIP |
+| Repro | Open Weapon Availability for Witch Hunter Captain, Bounty Hunter, or Zealot and inspect shield-combo rows. |
+| Expected post-fix | Kruber Mace & Shield remains; Bardin Hammer & Shield is absent. Old enabled settings cannot preserve `can_wield` or backend-cache ownership. CWV absent/active/disabled produces the same result. |
+| Detection | Lua suite passes `test_wt_native_ownership`; `/wt_regression_test` passes `issue594_saltzpyre_hammer_shield_ownership`. |
+
+
 ## Slugs
 
 - 1p-animations-universal
@@ -771,6 +787,7 @@ Last updated: 2026-07-13.
 - inventory-preview-hook-menuworldpreviewer
 - issue290-billhook-bake-merge
 - issue587-baked-transform-husk-fanout
+- issue594-saltzpyre-hammer-shield-ownership
 - wt-cim-widget-strip-removed
 - lua-forward-reference
 - ps5-getcontent-utf8

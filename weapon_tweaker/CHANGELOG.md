@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.232-dev (2026-07-13) - #594 Saltzpyre Hammer+Shield ownership [not deployed]
+
+- Removed Bardin's native `dr_shield_hammer` from Witch Hunter Captain, Bounty Hunter, and Zealot availability. Kruber's `es_mace_shield` remains the human-faction control for those careers.
+- Removed the three dead menu/localization rows and added migration tombstones so an enabled setting from an older build cannot leave Saltzpyre in `ItemMasterList.dr_shield_hammer.can_wield` or a stale WT backend loadout.
+- The exclusion is unconditional: absent, active, disabled, and hot-reloaded CWV states produce the same native ownership. CWV's separately authored variants are untouched.
+- Vanilla provenance: both items use sibling clones of the common `1h_hammers_shield.lua` base; Bardin's `_template_2` adds three light-attack range modifiers at lines 1350-1352, so this is an ownership/theme decision rather than a claim of byte-identical templates.
+- Offline and `/wt_regression_test` coverage lock map, menu, localization, stale migration, backend rejection, and CWV independence. In-game verification remains required.
+
 ## 0.12.231-dev (2026-07-13) - #458 transition-safe shared peer parity [not deployed]
 
 - The shared parity beacon preserves a positive same-peer acknowledgement across a bounded 15-second PlayerManager roster absence during level transitions and delays missing-peer chat for 10 seconds. New, expired, or never-confirmed peers remain fail-closed immediately; this removes the observed false disable/re-enable chat cycle without relaxing wire safety.

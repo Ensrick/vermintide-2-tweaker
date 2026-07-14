@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - Saltzpyre Hammer+Shield ownership
+
+Tweaker: Weapons v0.12.232-dev / issue #594 removes Bardin's native Hammer and Shield from Witch Hunter Captain, Bounty Hunter, and Zealot while retaining Kruber's Mace and Shield as the human-faction option. Menu and localization rows are removed, prior `can_wield` mutations are scrubbed, stale backend cache ownership fails closed, and the rule is invariant across CWV absent/active/disabled states. No deployment is part of this commit.
+
 ## 2026-07-13 - CWV Imperial Longsword identity continuity
 
 Character Weapon Variants v0.1.398-dev / issue #396 separates the owned **Imperial Longsword** from its **Helmgart Watchsword** illusion and adds a same-mod item-key side channel for the owner identity that vanilla's base-item wire shape discards. Existing vanilla skin and wield RPCs remain authoritative for the exact cosmetic and render timing; receivers validate the marker against the base weapon and clear it when the slot becomes native. Runtime coverage spans initial sync, live resync, post-parity hot join/transition recovery, remote husk resolution, and inventory preview. Two-player verification remains required; no deployment is part of this commit.

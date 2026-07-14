@@ -116,7 +116,7 @@ is **AVAILABLE** on all 4 careers.
 
 ## Receiver: Saltzpyre — non-WP (`wh_captain`, `wh_bountyhunter`, `wh_zealot`)
 
-Cross-char pool: 66 · AVAILABLE 57 · ANALOGOUS 5 · CWV 0 · **GAP 4**
+Cross-char pool: 66 · AVAILABLE 56 · ANALOGOUS 6 · CWV 0 · **GAP 4**
 
 Walked (Batches KS / A / B / C / D / E + Shield-Combos Override). All non-`wh_`
 weapons are AVAILABLE except the rows below. The 4 GAPs are ports the decisions
@@ -129,6 +129,7 @@ doc marked ADD but which are absent from `weapon_unlock_map` (bake misses).
 | `es_2h_sword` | Empire: 2H Sword | Kruber | melee | ANALOGOUS(→`wh_2h_sword`) | KS2 skip |
 | `dr_crossbow` | Bardin: Crossbow | Bardin | ranged | ANALOGOUS(→`wh_crossbow`) | BS-B-skip-1 |
 | `dr_handgun` | Bardin: Handgun | Bardin | ranged | ANALOGOUS(→`es_handgun`) | BS-B-skip-2; `es_handgun` IS available |
+| `dr_shield_hammer` | Bardin: Hammer & Shield | Bardin | melee | ANALOGOUS(→`es_mace_shield`) | #594: Empire Mace & Shield route retained |
 | `dr_1h_axe` | Bardin: 1H Axe | Bardin | melee | **GAP** | Decided ADD (BS-A1 →`wh_1h_axe`) but not in unlock_map |
 | `dr_1h_hammer` | Bardin: 1H Hammer | Bardin | melee | **GAP** | Decided ADD (BS-A2 →`wh_1h_hammer`) but not in unlock_map |
 | `dr_dual_wield_hammers` | Bardin: Dual Hammers | Bardin | melee | **GAP** | Decided ADD (BS-B3 →`wh_dual_hammer`) but not in unlock_map |

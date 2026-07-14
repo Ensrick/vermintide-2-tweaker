@@ -48,6 +48,7 @@ local suites = {
     "test_mp_dailies",
     "test_wt_passive_charge",
     "test_wt_cwv_ownership",
+    "test_wt_native_ownership",
     "test_cwv_remote_audio",
     "test_cwv_remote_identity",
     "test_cwv_old_musket_presentation",

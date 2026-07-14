@@ -175,10 +175,16 @@ local DATA = {
 -- (`es_2h_hammer`, ItemMasterList template `two_handed_hammers_template_1`),
 -- not Bardin's analogous `dr_2h_hammer`. Keep the source lists readable above
 -- while enforcing the catalog contract here for all standard Saltz careers.
+-- #594 applies the same native-ownership boundary to shield hammers: keep
+-- Kruber's `es_mace_shield` and remove Bardin's `dr_shield_hammer` regardless
+-- of CWV state. Vanilla authors both from the 1h_hammers_shield base, while
+-- Bardin's template adds three dwarf-specific light-attack range modifiers.
 for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
     local weapons = DATA.weapon_unlock_map[career]
     for i = #weapons, 1, -1 do
-        if weapons[i] == "dr_2h_hammer" then table.remove(weapons, i) end
+        if weapons[i] == "dr_2h_hammer" or weapons[i] == "dr_shield_hammer" then
+            table.remove(weapons, i)
+        end
     end
 end
 
