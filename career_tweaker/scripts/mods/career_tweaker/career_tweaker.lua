@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.3.64-dev"
+local MOD_VERSION = "0.3.65-dev"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
@@ -93,6 +93,10 @@ end
 -- ============================================================
 -- Concern modules (Phase 1 OOP split, v0.3.57-dev)
 -- ============================================================
+-- Pure damage-category policy must load before the armor/overcharge consumer.
+-- It contains no hooks or engine reads and is shared through mod._crt.
+mod._crt.damage_classification = mod:dofile("scripts/mods/career_tweaker/_crt_damage_classification")
+
 -- Safe-stub fallback (CHANGELOG 0.2.2): if dofile fails we substitute no-op
 -- functions so on_game_state_changed / on_setting_changed / on_disabled
 -- (which all call balance.apply / balance.restore) don't crash.
@@ -132,10 +136,10 @@ if not ok_trn then
     tourney = { apply = function() end, restore = function() end, active_count = function() return 0 end }
 end
 
--- Armor & Overcharge toggles (5 default-OFF gameplay hooks). Unlike balance /
--- tourney these are pure runtime hooks gated live on mod:get — NO
--- {apply,restore,active_count} contract and NO on_setting_changed dispatch; VMF
--- re-reads mod:get and deactivates the hooks when the mod is disabled. The
+-- Armor, Overcharge & Focused Spirit toggles (one default-ON exemption plus
+-- six opt-in controls). Six controls are runtime hooks gated live on mod:get;
+-- the stacking option's reversible template fields are owned by the balance
+-- lifecycle. VMF re-reads the runtime settings when the mod is disabled. The
 -- module installs exactly one mod:hook on DamageUtils.apply_buffs_to_damage and
 -- one on PlayerUnitHealthExtension.add_damage (both confirmed un-hooked elsewhere
 -- in crt). See career_tweaker_armor_overcharge.lua header for the authority model.
@@ -591,6 +595,9 @@ mod.update = function(dt)
     -- Outcast Engineer cooldown-reduction benefit (self-throttled + self-gated on
     -- the toggle, the OE career, and the local player). Driven here, not a hook.
     if mod._crt_oe_cdr_tick then mod._crt_oe_cdr_tick(dt) end
+    -- Focused Spirit's stack-growth cooldown re-arms one frame after the old
+    -- cooldown's remove callback, avoiding refresh of a buff being removed.
+    if mod._crt_focused_spirit_tick then mod._crt_focused_spirit_tick(dt) end
     -- Auto-dump retry pump for reworked careers (no-op unless armed at StateIngame).
     if mod._crt_dump_retry_tick then mod._crt_dump_retry_tick(dt) end
 end

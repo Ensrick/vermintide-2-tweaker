@@ -1,7 +1,7 @@
 -- career_tweaker / _crt_regression.lua
 --
 -- Responsibility: the /crt_regression_test smoke suite. Owns the harness
--- (_rt_register + the _RT_CHECKS registry + the command) and all 21 check
+-- (_rt_register + the _RT_CHECKS registry + the command) and all check
 -- bodies, IN THEIR FROZEN REGISTRATION ORDER. The suite is load-bearing for the
 -- issue 425 cross-peer wire safety: every check here must still register and
 -- structurally pass. Check NAMES and their registration ORDER are frozen surface
@@ -686,5 +686,39 @@ _rt_register("issue405_heal_network_is_server_gated", function()
     -- Runtime marker per the issue 511 doctrine (no source self-read).
     if mod._crt405_heal_is_server_gated ~= true then
         return "Fires-from-Ash THP heal missing its is_server gate marker (issue 405 client CTD class)"
+    end
+end)
+
+_rt_register("issue472_focused_spirit_contract", function()
+    local policy = mod._crt and mod._crt.damage_classification
+    if type(policy) ~= "table" or type(policy.focused_spirit_ignores) ~= "function" then
+        return "shared damage-classification policy missing"
+    end
+    local unit = {}
+    if not policy.focused_spirit_ignores(unit, unit, nil, "wounded_dot")
+       or not policy.focused_spirit_ignores({}, unit, "skaven_ratling_gunner", "shot_machinegun")
+       or policy.focused_spirit_ignores({}, unit, "skaven_storm_vermin", "light_attack") then
+        return "Focused Spirit ignore policy boundary drifted"
+    end
+
+    local defs = balance and balance.BALANCE_MODS
+    local rework = defs and defs.rework_we_maidenguard_focused_spirit_stacks
+    if type(rework) ~= "table" or #rework.patches ~= 4 then
+        return "Focused Spirit stacking rework patches missing"
+    end
+
+    local PF = rawget(_G, "ProcFunctions")
+    local BFT = rawget(_G, "BuffFunctionTemplates")
+    local fns = BFT and BFT.functions
+    if type(PF) ~= "table" or type(PF.crt_focused_spirit_damage_taken) ~= "function" then
+        return "Focused Spirit one-stack proc wrapper missing"
+    end
+    if type(fns) ~= "table" or type(fns.crt_focused_spirit_arm_growth) ~= "function" then
+        return "Focused Spirit growth re-arm function missing"
+    end
+    local tmpl = BuffTemplates and BuffTemplates.kerillian_maidenguard_power_level_on_unharmed
+    local sub = tmpl and tmpl.buffs and tmpl.buffs[1]
+    if not sub or sub.buff_func ~= "crt_focused_spirit_damage_taken" then
+        return "Focused Spirit vanilla proc was not routed through crt wrapper"
     end
 end)

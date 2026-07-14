@@ -1,5 +1,12 @@
 # Career Tweaker Changelog
 
+## 0.3.65-dev - 2026-07-13 - #472 Handmaiden Focused Spirit exclusions and stacking rework [not deployed]
+
+- Added a default-ON Focused Spirit exemption for the same source-verified chip classes used by #334: generic `dot_debuff`, poison/warpfire/AOE damage types, self `wounded_dot`, plus Ratling projectile sources (`skaven_ratling_gunner` / `vs_ratling_gunner`). Ordinary enemy hits still reset the talent. The full `damage_source_name` is captured in the existing `PlayerUnitHealthExtension.add_damage` hook because the vanilla Focused Spirit proc receives only attacker, amount, and damage type.
+- Added an opt-in stacking rework: Focused Spirit starts empty, gains one 5% power stack after each vanilla ten-second no-damage cooldown, caps at five stacks, and an ordinary hit removes exactly one stack and restarts the timer. It reuses only the two vanilla Focused Spirit buff names; no modded NetworkLookup entry or new RPC is introduced.
+- Moved #334's exact chip/self-DoT predicates into the pure `_crt_damage_classification.lua` manifest module. Offline tests lock its old boundary and the new gas, warpfire, Ratling, and ordinary-hit cases. `/crt_regression_test` adds `issue472_focused_spirit_contract` for the reversible patch catalog and proc/update wiring.
+- **Solo verify after deployment:** equip Focused Spirit. With the exemption ON, confirm Unquenchable Thirst, Nurgle's Rot, gas, Warpfire Thrower, and Ratling damage do not reset it, while a normal melee hit does. Then enable the stacking rework, reload Handmaiden, wait through five ten-second windows for 25% power, and confirm each ordinary hit removes one stack rather than all five.
+
 ## 0.3.64-dev - 2026-07-13 - #321 retire stale Big Rebalance product surface [not deployed]
 
 - Confirmed the professional retirement path: the BR module stays replaced by its no-op lifecycle stub and the `cbr_*` widget/localization catalogs stay hidden. Reactivation is rejected while 27 archived bodies remain unimplemented and no shared registration owner exists.

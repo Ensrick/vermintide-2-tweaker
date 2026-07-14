@@ -4,9 +4,19 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-> **Suite location (v0.3.57-dev):** the `/crt_regression_test` harness and all 19 check bodies moved from `career_tweaker.lua` into `scripts/mods/career_tweaker/_crt_regression.lua` (Phase 1 OOP split). Check names + registration order are unchanged. The talent-swap and diagnostics concerns the checks reference now live in `_crt_talent_swap.lua` / `_crt_diagnostics.lua` (see `DEVELOPMENT.md` module map).
+> **Suite location (v0.3.57-dev):** the `/crt_regression_test` harness and all check bodies moved from `career_tweaker.lua` into `scripts/mods/career_tweaker/_crt_regression.lua` (Phase 1 OOP split). Check names + registration order are unchanged. The talent-swap and diagnostics concerns the checks reference now live in `_crt_talent_swap.lua` / `_crt_diagnostics.lua` (see `DEVELOPMENT.md` module map).
 
-Last updated: 2026-07-12.
+Last updated: 2026-07-13.
+
+---
+## Handmaiden Focused Spirit (#472)
+
+| Field | Value |
+|-------|-------|
+| Symptom | Damage-over-time, gas, Warpfire Throwers, and Ratling Gunners reset Focused Spirit; the requested stacking variant does not exist. |
+| Source boundary | Vanilla's proc receives only attacker, amount, and damage type (`player_unit_health_extension.lua:702-703`), so Ratling identity must be captured from the full `add_damage` call's `damage_source_name`. |
+| Expected | Default exemption preserves Focused Spirit through the named chip classes. Opt-in rework starts at zero, gains one 5% stack per ten seconds up to five, and loses one stack per ordinary hit. |
+| Detection | Run the three `test_crt_damage_classification.lua` cases and `/crt_regression_test` check `issue472_focused_spirit_contract`, then perform the solo in-game walk in CHANGELOG 0.3.65-dev. |
 
 ---
 ## Multiplayer / Network Sync

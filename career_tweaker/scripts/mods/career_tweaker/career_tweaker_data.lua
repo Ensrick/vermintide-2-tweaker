@@ -61,6 +61,7 @@ return {
                     { setting_id = "unchained_no_overcharge_from_ff",       type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_ff_tooltip" },
                     { setting_id = "unchained_no_overcharge_from_disablers", type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_disablers_tooltip" },
                     { setting_id = "unchained_no_overcharge_from_self_dot",  type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_self_dot_tooltip" },
+                    { setting_id = "maidenguard_focused_spirit_ignore_chip_damage", type = "checkbox", default_value = true, tooltip = "maidenguard_focused_spirit_ignore_chip_damage_tooltip" },
                     { setting_id = "oe_benefit_from_cooldown_reduction",    type = "checkbox", default_value = false, tooltip = "oe_benefit_from_cooldown_reduction_tooltip" },
                 },
             },
@@ -649,6 +650,7 @@ return {
                                 type        = "group",
                                 sub_widgets = {
                                     { setting_id = "rework_we_maidenguard_crit_chance_5_to_10", type = "checkbox", default_value = false },
+                                    { setting_id = "rework_we_maidenguard_focused_spirit_stacks", type = "checkbox", default_value = false },
                                 },
                             },
                             {

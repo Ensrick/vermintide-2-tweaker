@@ -385,6 +385,13 @@ local function _build_stat_buff_rework(talent_name, buff_field, new_value)
     }
 end
 
+local function _focused_spirit_talent()
+    if not Talents or not TalentIDLookup then return nil end
+    local lookup = TalentIDLookup.kerillian_maidenguard_power_level_on_unharmed
+    local hero_talents = lookup and Talents[lookup.hero_name]
+    return hero_talents and hero_talents[lookup.talent_id]
+end
+
 local BALANCE_MODS = {
     -- Waystalker: Serrated Shots works on EVERY arrow type.
     -- Serrated Shots (talent kerillian_waywatcher_critical_bleed, perk
@@ -454,6 +461,46 @@ local BALANCE_MODS = {
     -- Buff field is `bonus` not `multiplier` — critical_strike_chance stat_buff
     -- consumes bonus additively at the buff_extension level.
     rework_we_maidenguard_crit_chance_5_to_10 = _build_stat_buff_rework("kerillian_maidenguard_crit_chance", "bonus", 0.10),
+    -- Focused Spirit (#472): start on the vanilla 10-second cooldown, then add
+    -- one 5% power stack per completed no-damage window (max five). The proc
+    -- wrapper / one-stack removal live in career_tweaker_armor_overcharge.lua;
+    -- these reversible patches only shape the vanilla buff and talent entry.
+    rework_we_maidenguard_focused_spirit_stacks = {
+        character = "kerillian",
+        career = "we_maidenguard",
+        patches = {
+            { buff = "kerillian_maidenguard_power_level_on_unharmed", field = "multiplier", value = 0.05 },
+            { buff = "kerillian_maidenguard_power_level_on_unharmed", field = "max_stacks", value = 5 },
+            { buff = "kerillian_maidenguard_power_level_on_unharmed", field = "remove_on_proc", value = false },
+            { buff = "kerillian_maidenguard_power_level_on_unharmed", field = "apply_buff_func", value = "crt_focused_spirit_arm_growth" },
+        },
+        custom_apply = function(saved)
+            local talent = _focused_spirit_talent()
+            if not talent then return end
+            saved.focused_talent_buff_original = talent.buffs and talent.buffs[1]
+            if talent.buffs then
+                talent.buffs[1] = "kerillian_maidenguard_power_level_on_unharmed_cooldown"
+            end
+            local dv = talent.description_values and talent.description_values[2]
+            if dv then
+                saved.focused_tooltip_power_original = dv.value
+                dv.value = 0.05
+            end
+        end,
+        custom_restore = function(saved)
+            local talent = _focused_spirit_talent()
+            if not talent then return end
+            if talent.buffs and saved.focused_talent_buff_original ~= nil then
+                talent.buffs[1] = saved.focused_talent_buff_original
+            end
+            local dv = talent.description_values and talent.description_values[2]
+            if dv and saved.focused_tooltip_power_original ~= nil then
+                dv.value = saved.focused_tooltip_power_original
+            end
+            saved.focused_talent_buff_original = nil
+            saved.focused_tooltip_power_original = nil
+        end,
+    },
     rework_es_mercenary_hellborgs_tutelage = {
         character = "markus",
         career    = "es_mercenary",

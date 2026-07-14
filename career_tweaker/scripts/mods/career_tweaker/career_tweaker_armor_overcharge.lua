@@ -1,14 +1,18 @@
 local mod = get_mod("crt")
+local DamageClass = mod._crt and mod._crt.damage_classification
 
 -- ============================================================
 -- Armor & Overcharge toggles (hook-based)  [crt v0.3.52-dev]
 -- ============================================================
--- Five opt-in (default-OFF) gameplay toggles that exempt certain damage from
+-- Seven gameplay toggles that exempt certain damage from
 -- consuming Ironbreaker Gromril Armour / Necromancer Cursed Armor counters, or
--- from feeding Sienna Unchained's overcharge passive. All five are pure runtime
+-- from feeding Sienna Unchained's overcharge passive / resetting Handmaiden's
+-- Focused Spirit. Six are pure runtime
 -- hooks gated on `mod:get(...)` — no {apply,restore,active_count} lifecycle
 -- contract (VMF re-reads mod:get live and deactivates the hooks when the mod is
--- disabled). dofile'd from career_tweaker.lua, same as career_tweaker_tourney.
+-- disabled). The Focused Spirit stacking toggle uses the balance module's
+-- reversible template-patch lifecycle; its damage handling still routes through
+-- this module's existing add_damage hook. dofile'd from career_tweaker.lua.
 --
 -- ── Self-inflicted DoT coverage (Issue #334) ─────────────────────────────────
 -- The Chaos Wastes Slaanesh curse "Unquenchable Thirst" (internally
@@ -85,24 +89,6 @@ local mod = get_mod("crt")
 -- on_damage_taken procs for the tick (the pre-v0.3.56 defect); the per-proc
 -- wrapper below fixes it while preserving the counter's accounting exactly.
 
--- ── Source-verified constant sets (transcribed; do NOT rely on game globals) ──
--- Burning / fire DoTs hard-code damage_source = "dot_debuff" when there's no
--- source breed (buff_function_templates.lua:695). DoTs WITH a source breed use
--- the breed name instead, so this is the conservative chip key.
-local DOT_SOURCE = "dot_debuff"
-
--- AOE damage_type set — globadier poison gas, stormfiend/warpfire-rat warpfire,
--- blightstorm vortex, bile troll bile, ratling area, plaguelord plague.
--- (weapons.lua:67-74)
-local DAMAGE_TYPES_AOE = {
-    plague_face   = true,
-    poison        = true,
-    vomit_face    = true,
-    vomit_ground  = true,
-    warpfire_face = true,
-    warpfire_ground = true,
-}
-
 -- Special-disabler breed keys (documentation / clarity aid). The PRIMARY test is
 -- the generic `rawget(Breeds, damage_source).special == true` — this set just
 -- names the canonical disablers (Hookrat / Assassin / Leech). All carry
@@ -116,6 +102,8 @@ local DISABLER_BREEDS = {
 
 local GROMRIL_MARKER = "bardin_ironbreaker_gromril_armour"
 local NECRO_COUNTER   = "sienna_necromancer_5_2_counter"
+local FOCUSED_SPIRIT  = "kerillian_maidenguard_power_level_on_unharmed"
+local FOCUSED_COOLDOWN = "kerillian_maidenguard_power_level_on_unharmed_cooldown"
 
 -- The Cursed Armor counter is consumed by ONE proc buff
 -- (sienna_necromancer_5_2_counter_remover, talent_settings_shovel.lua:347-360)
@@ -125,24 +113,17 @@ local NECRO_COUNTER   = "sienna_necromancer_5_2_counter"
 -- consume without swallowing any other on_damage_taken proc.
 local NECRO_COUNTER_REMOVER    = "sienna_necromancer_5_2_counter_remover"
 local CRT_COUNTER_REMOVER_FUNC = "crt_cursed_armor_counter_remover"
+local CRT_FOCUSED_PROC_FUNC    = "crt_focused_spirit_damage_taken"
+local CRT_FOCUSED_GROW_FUNC    = "crt_focused_spirit_arm_growth"
 
 -- ── Predicate helpers (all damage-context reads nil-guarded) ─────────────────
 
--- True when this hit is a chip / DoT / AOE source that toggle #1 exempts.
-local function _is_chip_or_aoe(damage_source, damage_type)
-    if damage_source == DOT_SOURCE then return true end
-    if damage_type and DAMAGE_TYPES_AOE[damage_type] then return true end
-    return false
-end
-
--- True for self-inflicted DoT ticks: CW curses (Unquenchable Thirst), event
--- mutator DoTs, Nurgle's Rot. These stamp damage_type "wounded_dot" with the
--- victim as its own attacker (e.g. morris_buff_settings.lua:636-646). Used to
--- exempt these ticks from consuming Gromril / Necromancer Cursed Armor and, via
--- toggle #5, from feeding Unchained Blood Magic overcharge (#334).
-local function _is_self_dot(attacker_unit, attacked_unit, damage_type)
-    return damage_type == "wounded_dot" and attacker_unit ~= nil and attacker_unit == attacked_unit
-end
+-- Shared #334 policy is manifest-loaded and engine-free. Keeping these aliases
+-- means the proven Gromril / Cursed Armor / Blood Magic boundary is unchanged
+-- while Focused Spirit can consume the same classifier (#472).
+local _is_chip_or_aoe = DamageClass.is_chip_or_aoe
+local _is_self_dot = DamageClass.is_self_dot
+local _focused_spirit_ignores = DamageClass.focused_spirit_ignores
 
 -- True when `damage_source` names a special breed (generic test + named set).
 local function _is_special_source(damage_source)
@@ -336,6 +317,121 @@ local function _crt_install_cursed_armor_wrapper()
 end
 _crt_install_cursed_armor_wrapper()
 
+-- ── Handmaiden Focused Spirit (#472) ────────────────────────────────────────
+-- Vanilla's event proc sees only (attacker, amount, damage_type), while the
+-- source identity needed to distinguish Ratling fire lives one frame higher in
+-- PlayerUnitHealthExtension.add_damage. The existing hook below therefore
+-- publishes a synchronous, per-victim context for this proc wrapper. Ignored
+-- chip damage returns false (preserves vanilla's active buff). Under the opt-in
+-- stacking rework, one ordinary hit removes exactly one stack and re-arms the
+-- vanilla 10-second cooldown; the remaining stack procs no-op for that hit.
+local function _focused_spirit_has_talent(unit)
+    local te = unit and ScriptUnit.has_extension(unit, "talent_system")
+    return te and te.has_talent
+        and te:has_talent("kerillian_maidenguard_power_level_on_unharmed")
+end
+
+local _focused_rearm = setmetatable({}, { __mode = "k" })
+
+local function _focused_stack_count(be)
+    local stacks = be and be.get_stacking_buff and be:get_stacking_buff(FOCUSED_SPIRIT)
+    return stacks and #stacks or 0
+end
+
+local function _focused_add_local_cooldown(unit, be)
+    if not (unit and be and be.add_buff) then return end
+    be:add_buff(FOCUSED_COOLDOWN, { attacker_unit = unit })
+end
+
+local function _focused_request_cooldown(unit, attacker_unit, damage_amount)
+    local PF = rawget(_G, "ProcFunctions")
+    local vanilla = PF and PF.maidenguard_reset_unharmed_buff
+    if vanilla then
+        -- The vanilla proc does not inspect `buff`; it uses these params to
+        -- choose server-local add_buff vs client rpc_add_buff.
+        vanilla(unit, nil, { attacker_unit, damage_amount })
+    end
+end
+
+local function _crt_install_focused_spirit_wrapper()
+    local PF = rawget(_G, "ProcFunctions")
+    local BFT = rawget(_G, "BuffFunctionTemplates")
+    local BT = rawget(_G, "BuffTemplates")
+    local fns = BFT and BFT.functions
+    if type(PF) ~= "table" or type(fns) ~= "table" or type(BT) ~= "table" then return end
+
+    -- Called after each newly-added power stack. Cooldown expiry adds the next
+    -- stack from inside remove_buff, before the expiring cooldown is physically
+    -- removed, so re-arm on the next frame rather than refreshing a dying buff.
+    fns[CRT_FOCUSED_GROW_FUNC] = function(owner_unit)
+        if not mod:get("rework_we_maidenguard_focused_spirit_stacks") then return end
+        local be = ScriptUnit.has_extension(owner_unit, "buff_system")
+        if be and _focused_stack_count(be) < 5 then
+            _focused_rearm[owner_unit] = true
+        end
+    end
+
+    PF[CRT_FOCUSED_PROC_FUNC] = function(owner_unit, buff, params, world, proc_event_params)
+        local vanilla = PF.maidenguard_reset_unharmed_buff
+        local ctx = mod._crt_focused_spirit_damage_context
+        if ctx and ctx.unit == owner_unit and ctx.ignored then
+            return false
+        end
+        if not mod:get("rework_we_maidenguard_focused_spirit_stacks") then
+            return vanilla and vanilla(owner_unit, buff, params, world, proc_event_params)
+        end
+
+        -- Preserve vanilla's real-hit boundary: self damage and zero-damage
+        -- notifications neither consume a stack nor restart its growth timer.
+        local attacker_unit = params and params[1]
+        local damage_amount = params and params[2]
+        if attacker_unit == owner_unit or damage_amount == 0 then
+            return false
+        end
+
+        if not ctx or ctx.unit ~= owner_unit or ctx.handled then
+            return false
+        end
+        ctx.handled = true
+
+        local be = ScriptUnit.has_extension(owner_unit, "buff_system")
+        if be and buff and buff.id then
+            be:remove_buff(buff.id)
+        end
+        -- Reuse vanilla's authority-aware cooldown add / RPC path. Returning
+        -- false prevents BuffExtension.trigger_procs from removing more stacks.
+        if vanilla then
+            vanilla(owner_unit, buff, params, world, proc_event_params)
+        end
+        return false
+    end
+
+    local tmpl = rawget(BT, FOCUSED_SPIRIT)
+    local sub = tmpl and tmpl.buffs and tmpl.buffs[1]
+    if type(sub) == "table"
+       and (sub.buff_func == "maidenguard_reset_unharmed_buff"
+            or sub.buff_func == CRT_FOCUSED_PROC_FUNC) then
+        sub.buff_func = CRT_FOCUSED_PROC_FUNC
+    end
+end
+_crt_install_focused_spirit_wrapper()
+
+-- One-frame deferred cooldown re-arm used only by the stacking rework. The
+-- entry's single mod.update calls this field; no extra update assignment/hook.
+mod._crt_focused_spirit_tick = function()
+    local alive = rawget(_G, "ALIVE")
+    for unit in pairs(_focused_rearm) do
+        _focused_rearm[unit] = nil
+        if mod:get("rework_we_maidenguard_focused_spirit_stacks")
+           and alive and alive[unit] then
+            local be = ScriptUnit.has_extension(unit, "buff_system")
+            if be and _focused_stack_count(be) < 5 then
+                _focused_add_local_cooldown(unit, be)
+            end
+        end
+    end
+end
+
 -- ── Hook #2: PlayerUnitHealthExtension.add_damage (Necromancer Cursed Armor, #1)
 -- The on_damage_taken proc that consumes a Cursed Armor counter fires from
 -- player_unit_health_extension.lua:702-703. The proc only receives
@@ -349,10 +445,11 @@ mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_
         hit_react_type, is_critical_strike, added_dot, first_hit, total_hits, attack_type, backstab_multiplier, target_index)
 
     local set_exempt, prev_exempt = false, nil
+    local set_focused_context, prev_focused_context = false, nil
+    local unit = self.unit
+    local be = unit and ScriptUnit.has_extension(unit, "buff_system")
 
     if mod:get("armor_gromril_ignore_chip") then
-        local unit = self.unit
-        local be = unit and ScriptUnit.has_extension(unit, "buff_system")
         if be and be.has_buff_type and be:has_buff_type(NECRO_COUNTER)
            and (_is_chip_or_aoe(damage_source_name, damage_type)
                 or _is_self_dot(attacker_unit, self.unit, damage_type)) then
@@ -366,6 +463,35 @@ mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_
         end
     end
 
+    -- Focused Spirit's vanilla proc lacks damage_source_name, so carry the full
+    -- add_damage context across the synchronous trigger_procs call. Temporary
+    -- health degeneration never fires on_damage_taken and is excluded here too.
+    local focused_ignore_on = mod:get("maidenguard_focused_spirit_ignore_chip_damage")
+    local focused_rework_on = mod:get("rework_we_maidenguard_focused_spirit_stacks")
+    if (focused_ignore_on or focused_rework_on)
+       and damage_amount and damage_amount > 0
+       and damage_source_name ~= "temporary_health_degen"
+       and _focused_spirit_has_talent(unit) then
+        local ignored = focused_ignore_on
+            and _focused_spirit_ignores(attacker_unit, unit, damage_source_name, damage_type)
+        prev_focused_context = mod._crt_focused_spirit_damage_context
+        mod._crt_focused_spirit_damage_context = {
+            unit = unit,
+            ignored = ignored,
+            handled = false,
+        }
+        set_focused_context = true
+
+        -- At zero stacks there is no event buff to run the proc wrapper. A real
+        -- hit still restarts the ten-second no-damage window; ignored chip does
+        -- not touch the timer. Route through vanilla so its server/RPC authority
+        -- split refreshes the max_stacks=1 cooldown.
+        if focused_rework_on and not ignored and attacker_unit ~= unit
+           and be and _focused_stack_count(be) == 0 then
+            _focused_request_cooldown(unit, attacker_unit, damage_amount)
+        end
+    end
+
     -- add_damage returns nothing meaningful, but wrap in pcall so the exempt flag
     -- is always cleared even if vanilla raises mid-call.
     local ok, err = pcall(func, self, attacker_unit, damage_amount, hit_zone_name, damage_type, hit_position,
@@ -373,10 +499,13 @@ mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_
         is_critical_strike, added_dot, first_hit, total_hits, attack_type, backstab_multiplier, target_index)
 
     if set_exempt then mod._crt_cursed_armor_exempt_unit = prev_exempt end
+    if set_focused_context then
+        mod._crt_focused_spirit_damage_context = prev_focused_context
+    end
 
     if not ok then
         error(err, 0)
     end
 end)
 
-mod:info("[crt] armor/overcharge module loaded (5 toggles, 2 hooks)")
+mod:info("[crt] armor/overcharge module loaded (7 toggles, 2 hooks)")
