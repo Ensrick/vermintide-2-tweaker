@@ -1,4 +1,5 @@
 local mod = get_mod("character_weapon_variants")
+local _anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
 
 return {
 	name = "Character Weapon Variants",
@@ -8,6 +9,19 @@ return {
 		-- Loose variant toggles sorted A->Z by display label: Bomb Slot
 		-- (Tuskgor Javelin), Kruber Crossbow, Mace and Sword.
 		widgets = {
+			{
+				setting_id = "cwv_dev_options",
+				type = "group",
+				sub_widgets = {
+					{
+						setting_id = "enable_cwv_dev_anim_picker",
+						type = "checkbox",
+						default_value = false,
+						tooltip = "enable_cwv_dev_anim_picker_tooltip",
+						sub_widgets = _anim_picker.build_widget_tree(),
+					},
+				},
+			},
 			-- Bomb-slot Tuskgor Javelin — single-use thrown spear injected into
 			-- the grenade pickup pool (does not replace frag/fire bombs).
 			-- Default ON; takes effect on next keep/level load (pool is built

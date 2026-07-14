@@ -1,7 +1,11 @@
-return {
+local mod = get_mod("character_weapon_variants")
+local loc = {
 	mod_description = {
 		en = "Adds new weapon variants that combine models from different characters into lore-friendly weapons.",
 	},
+	cwv_dev_options = { en = "Dev Options" },
+	enable_cwv_dev_anim_picker = { en = "[verify-fix-coop] 3P Animation Picker" },
+	enable_cwv_dev_anim_picker_tooltip = { en = "Shows live third-person animation controls for CWV weapons. Picks are saved and apply to the selected receiver only. First-person animations are never changed." },
 	mace_sword_tweak = {
 		en = "[working] Mace and Sword Name and Cosmetic Tweak",
 	},
@@ -45,3 +49,8 @@ return {
 	cwv_es_musket                  = { en = "Musket" },
 
 }
+
+local _anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
+for key, value in pairs(_anim_picker.loc_keys()) do loc[key] = value end
+
+return loc

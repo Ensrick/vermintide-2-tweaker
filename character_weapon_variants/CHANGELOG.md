@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.403-dev - 2026-07-14 - #317 career-scoped 3P animation picker [verify-fix-coop]
+
+- Added a new **Dev Options → 3P Animation Picker** with live, persisted controls for CWV Dual Axes on Saltzpyre and Kruber. Each attack can be routed only to events authored by the receiver-native Axe and Falchion or Mace and Sword animation vocabulary; resetting a row or disabling the picker restores the existing baked/default behavior.
+- Applied picks through CWV's existing owner-side `WeaponUnitExtension._play_3p_anim` seam before vanilla's animation RPC encode. This keeps first-person behavior untouched, avoids mutating Bardin's shared Dual Axes template, and lets vanilla replicate the chosen receiver event and its authored audio timeline to observers without a new RPC.
+- Added `/cwv_dump_anim_picks`, runtime check `issue317_career_scoped_animation_picker`, and Lua 5.1 coverage for receiver isolation, toggle/reset fallback, fresh VMF option tables, hostile persisted-value rejection, closed-vocabulary enforcement, shared-template immutability, and transport reuse.
+
+**Co-op verify:** both peers run v0.1.403-dev. Enable **Dev Options → 3P Animation Picker**, equip CWV Dual Axes on Saltzpyre, change one light and one heavy row, and confirm the very next attacks visibly use those choices for owner third person and the observing peer. Reset both rows to **use baked/default event**, repeat on Kruber, then run `/cwv_dump_anim_picks` and `/cwv_regression_test`. Reverse owner/observer roles; Bardin's native Dual Axes must remain unchanged and no duplicate animation/audio or disconnect may occur.
+
+**DoD:** Universal walked. Trait gates: G-CROSS-CHAR, G-3P-ANIM, receiver-scoped shared-template ownership, remote husk replication. Deferral: visible chain-context quality of arbitrary user-selected events requires the two-player tuning matrix above.
+
 ## 0.1.402-dev - 2026-07-14 - #412 Old Musket universal special interrupt [verify-fix-coop]
 
 - Made the Old Musket's special stance swap reachable from frame zero of every running ranged and melee sub-action. A pure, idempotent template policy appends one native `allowed_chain_actions` edge to attack startup/release, firing/recovery, reload, aim, block, push, sweep, and all other cloned handgun/Tuskgor-spear actions while preserving their authored chains.

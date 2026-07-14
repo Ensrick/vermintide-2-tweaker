@@ -1,10 +1,11 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.402-dev"
+local MOD_VERSION = "0.1.403-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
+mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -1551,6 +1552,8 @@ local _cross_access_action_remap = {
 -- whose animation/audio assets are already resident with that career's body;
 -- no CWV Wwise package or manual playback is required.
 _om._cross_access_target_event = function(item_key, career, source_event)
+	local picked = mod._cwv_dev_anim_picker.resolve(item_key, career, source_event)
+	if picked then return picked end
 	local item_remaps = item_key and _cross_access_action_remap[item_key]
 	local career_remaps = item_remaps and career and item_remaps[career]
 	return career_remaps and source_event and career_remaps[source_event] or nil
@@ -13018,6 +13021,10 @@ _rt_register("cwv_variant_flag_present", function()
     end
 end)
 
+_rt_register("issue317_career_scoped_animation_picker", function()
+	return mod._cwv_dev_anim_picker.regression_check()
+end)
+
 _rt_register("dual_axes_cosmetic_family_parity", function()
     local ws = rawget(_G, "WeaponSkins")
     local iml = rawget(_G, "ItemMasterList")
@@ -14819,6 +14826,8 @@ _rt_register("issue567_skin_reverse_index_valid", function()
         return "#567 exact skin lost sword-right/mace-left authored hand order"
     end
 end)
+
+mod._cwv_dev_anim_picker.install()
 
 mod:info("Character Weapon Variants v%s loaded", MOD_VERSION)
 
