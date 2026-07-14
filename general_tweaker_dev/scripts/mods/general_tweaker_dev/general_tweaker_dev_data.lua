@@ -356,6 +356,28 @@ local _data = {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "gt_bot_rescue_awaiting_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_bot_rescue_awaiting_ignore_leash",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_rescue_awaiting_ignore_leash_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_rescue_awaiting_custom_range",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_bot_rescue_awaiting_custom_range_tooltip",
+                            },
+                            {
+                                setting_id      = "gt_bot_rescue_awaiting_range_m",
+                                type            = "numeric",
+                                default_value   = 40.0,
+                                range           = { 10.0, 100.0 },
+                                decimals_number = 1,
+                                tooltip         = "gt_bot_rescue_awaiting_range_m_tooltip",
+                            },
+                        },
                     },
                     -- Bot-roster presence (whether bots exist / where). Still
                     -- runtime kill-switched (#65).

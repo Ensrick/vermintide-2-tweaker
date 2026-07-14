@@ -6,6 +6,17 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+## Awaiting-rescue bot leash policy (#300)
+
+- [ ] Parent toggle off: vanilla behavior remains unchanged and bots do not select awaiting-respawn allies through gt.
+- [ ] Parent on + Ignore follow leash on (default): existing unlimited awaiting-rescue pursuit remains available.
+- [ ] Ignore follow leash off + custom range off: pursuit is bounded by the active Follow snap-back distance.
+- [ ] Ignore follow leash off + custom range on: the dedicated 10-100 m slider bounds the pick, including the exact boundary.
+- [ ] Ordinary knocked-down, ledge, and hook rescues remain unchanged; no second hook or network field is introduced.
+- [ ] `/gt_regression_test` passes `issue300_rescue_awaiting_range_policy`.
+
+---
+
 ## Host disconnect lifecycle probe (#309)
 
 - [ ] **[MULTIPLAYER]** Host runs `/gt_disconnect_grace_probe`, then one alive client disconnects and reconnects within 30 seconds.

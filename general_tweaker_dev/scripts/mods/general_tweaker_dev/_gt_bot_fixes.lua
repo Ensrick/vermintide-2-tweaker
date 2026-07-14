@@ -766,6 +766,30 @@ mod._gt_pick_human_heal_target = _gt_pick_human_heal_target
 --   This wrapper calls the original first, so it composes with other bot mods
 --   that also hook _select_ally_by_utility. It only ADDS a target when vanilla
 --   found nothing more urgent.
+--
+-- RANGE POLICY (#300)
+--   Vanilla's own follow teleport gate is 40 m (1600 squared meters) in
+--   BTConditions.should_teleport (bt_bot_conditions.lua:14,451-480). Keep the
+--   historical unlimited rescue behavior by default, but let the host bound
+--   this injected candidate scan either to gt's active follow-leash setting or
+--   to a dedicated 10-100 m override. Filtering here, before the relabel, keeps
+--   the native navigation/interaction path intact and needs no additional hook.
+mod._gt_rescue_awaiting_distance_cap = function(ignore_leash, custom_range_enabled, custom_range_m, follow_range_m)
+    if ignore_leash then
+        return nil
+    end
+
+    local custom = custom_range_enabled and true or false
+    local value = tonumber(custom and custom_range_m or follow_range_m) or 40.0
+    local maximum = custom and 100.0 or 40.0
+    return math.max(10.0, math.min(maximum, value))
+end
+
+mod._gt_rescue_awaiting_within_cap = function(distance_m, cap_m)
+    return cap_m == nil or (type(distance_m) == "number" and distance_m <= cap_m)
+end
+mod.GT_BOT300_RESCUE_RANGE_POLICY_MARKER_v0_2_221 = true
+
 mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit, blackboard, breed, t)
     local ally, real_dist, need_type, look_at = func(self, unit, blackboard, breed, t)
 
@@ -777,7 +801,8 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
     -- FIX 13 (#523): heal-allies also needs the body to run to reach its
     -- injection point (after FIX 3/3b, so it can never preempt a revive/rescue).
     local _gt_heal_allies_active = _gt_heal_allies_on()
-    if not (mod:get("gt_bot_rescue_awaiting")
+    local _gt_rescue_awaiting_active = mod:get("gt_bot_rescue_awaiting")
+    if not (_gt_rescue_awaiting_active
             or (mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_aid_priority"))
             or _gt_heal_allies_active) then
         return ally, real_dist, need_type, look_at
@@ -816,7 +841,13 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
     local player_and_bot_units = side:player_units()
     local self_pos = POSITION_LOOKUP[unit]
     local best_unit, best_dist
-    local considered, blocked_path, not_alive = 0, 0, 0
+    local considered, blocked_path, blocked_range, not_alive = 0, 0, 0, 0
+    local rescue_distance_cap = _gt_rescue_awaiting_active and mod._gt_rescue_awaiting_distance_cap(
+        mod:get("gt_bot_rescue_awaiting_ignore_leash"),
+        mod:get("gt_bot_rescue_awaiting_custom_range"),
+        mod:get("gt_bot_rescue_awaiting_range_m"),
+        mod:get("gt_bot_follow_distance_m")
+    ) or nil
 
     do
         -- Throttled heartbeat: proves the wrapper runs and shows the roster size,
@@ -859,7 +890,9 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
                     -- nil-guard both positions: a just-spawned remote awaiting unit
                     -- can momentarily lack a POSITION_LOOKUP entry (skip this frame).
                     local d = Vector3.distance(self_pos, cand_pos)
-                    if not best_dist or d < best_dist then
+                    if not mod._gt_rescue_awaiting_within_cap(d, rescue_distance_cap) then
+                        blocked_range = blocked_range + 1
+                    elseif not best_dist or d < best_dist then
                         best_dist = d
                         best_unit = player_unit
                     end
@@ -872,12 +905,13 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         local next_t = blackboard._gt_rescue_log_t or 0
         if t >= next_t then
             blackboard._gt_rescue_log_t = t + 2.0
-            mod:debug("[gt:bot-rescue] awaiting=%d picked=%s not_health_alive=%d path_blocked=%d prior_need=%s",
-                considered, best_unit and "yes" or "no", not_alive, blocked_path, tostring(need_type))
+            mod:debug("[gt:bot-rescue] awaiting=%d picked=%s not_health_alive=%d path_blocked=%d range_blocked=%d cap_m=%s prior_need=%s",
+                considered, best_unit and "yes" or "no", not_alive, blocked_path, blocked_range,
+                rescue_distance_cap and string.format("%.1f", rescue_distance_cap) or "unlimited", tostring(need_type))
         end
     end
 
-    if best_unit and mod:get("gt_bot_rescue_awaiting") then
+    if best_unit and _gt_rescue_awaiting_active then
         -- Relabel as knocked_down so the existing revive branch handles it; the
         -- contextual interaction resolves to assisted_respawn on this ally.
         -- (Gated on gt_bot_rescue_awaiting so the awaiting scan above can run for

@@ -1,5 +1,19 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.222-dev (2026-07-13) -- #300 bound awaiting-rescue bot pursuit [verify-fix]
+
+- Added nested controls under `gt_bot_rescue_awaiting`: `Ignore follow leash for awaiting rescues` remains on by default to preserve the existing unlimited pursuit, while turning it off bounds bot selection to the current `gt_bot_follow_distance_m` leash. An off-by-default custom-range toggle can instead use a dedicated 40 m default slider with a 10-100 m range.
+- The bound is applied inside gt's existing `PlayerBotBase._select_ally_by_utility` candidate scan before the awaiting ally is relabelled `knocked_down`; no new hook, navigation implementation, interaction, RPC, or network field was added.
+- Vanilla source establishes the seams: its ally picker excludes `is_ready_for_assisted_respawn()` players (`player_bot_base.lua:843-1008`), its normal follow teleport threshold is 40 m (`bt_bot_conditions.lua:14,451-480`, `FOLLOW_TELEPORT_DISTANCE_SQ = 1600`), and the native bot interaction remains contextual (`bt_bot_interact_action.lua:71`) so the selected respawn unit still resolves to `assisted_respawn` (`interactions.lua:562`).
+- Added `/gt_regression_test` check `issue300_rescue_awaiting_range_policy` for widget defaults/ranges, all three policy modes, clamping, and exact-boundary behavior.
+
+### Test method
+1. Host a solo mission with bots and enable `Bots rescue allies awaiting respawn`.
+2. Leave `Ignore follow leash for awaiting rescues` on. Enter assisted respawn far from the bots and confirm the historical cross-map rescue pursuit remains available.
+3. Turn ignore-leash off and custom range off. Set `Follow snap-back distance` to a recognizable value such as 20 m; confirm an awaiting ally beyond it is not selected, while one inside it is.
+4. Enable the custom range, set it to 40 m, and repeat on either side of the boundary. Confirm ordinary revives/rescues and normal follow behavior are unchanged.
+5. Run `/gt_regression_test` and confirm `issue300_rescue_awaiting_range_policy` passes.
+
 ## v0.2.221-dev (2026-07-13) -- #309 disconnect lifecycle trace [diagnostics-armed]
 
 - Audited the host disconnect path rather than adding a speculative invulnerability flag. Vanilla enters `PeerStates.Disconnecting.on_enter`, removes the peer from the `GameSession`, calls `GameNetworkManager.remove_peer` (which removes every player owned by that peer), clears the party slot, and only then lets the game mode fill the opening with a new host-owned bot. Delaying that function would also delay EAC, game-object, profile, party, and mechanism teardown.

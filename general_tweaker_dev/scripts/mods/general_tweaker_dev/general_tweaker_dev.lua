@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.221-dev"
+local MOD_VERSION = "0.2.222-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -2854,6 +2854,53 @@ _rt_register("bots_in_keep_setting_registered", function()
     walk(data)
     if not found then
         return "gt_bots_in_keep widget not found in data file widget tree"
+    end
+end)
+
+_rt_register("issue300_rescue_awaiting_range_policy", function()
+    local ok, data = pcall(require, "scripts/mods/general_tweaker_dev/general_tweaker_dev_data")
+    if not ok or type(data) ~= "table" then return "could not require data file" end
+
+    local widgets = {}
+    local function walk(node)
+        if type(node) ~= "table" then return end
+        if node.setting_id then widgets[node.setting_id] = node end
+        for _, child in pairs(node) do
+            if type(child) == "table" then walk(child) end
+        end
+    end
+    walk(data)
+
+    local parent = widgets.gt_bot_rescue_awaiting
+    local ignore = widgets.gt_bot_rescue_awaiting_ignore_leash
+    local custom = widgets.gt_bot_rescue_awaiting_custom_range
+    local range = widgets.gt_bot_rescue_awaiting_range_m
+    if not parent or type(parent.sub_widgets) ~= "table" then return "rescue parent/sub_widgets missing" end
+    if not ignore or ignore.type ~= "checkbox" or ignore.default_value ~= true then
+        return "ignore-leash child must be a default-ON checkbox"
+    end
+    if not custom or custom.type ~= "checkbox" or custom.default_value ~= false then
+        return "custom-range child must be a default-OFF checkbox"
+    end
+    if not range or range.type ~= "numeric" or range.default_value ~= 40.0
+            or type(range.range) ~= "table" or range.range[1] ~= 10.0 or range.range[2] ~= 100.0 then
+        return "custom range must be numeric, default 40, range 10-100"
+    end
+
+    local cap = mod._gt_rescue_awaiting_distance_cap
+    local within = mod._gt_rescue_awaiting_within_cap
+    if type(cap) ~= "function" or type(within) ~= "function"
+            or mod.GT_BOT300_RESCUE_RANGE_POLICY_MARKER_v0_2_221 ~= true then
+        return "#300 policy helpers/marker not loaded"
+    end
+    if cap(true, true, 75, 25) ~= nil then return "ignore-leash mode was not unlimited" end
+    if cap(false, false, 75, 25) ~= 25 then return "normal mode did not use follow leash" end
+    if cap(false, true, 75, 25) ~= 75 then return "custom mode did not use custom range" end
+    if cap(false, true, 1, 25) ~= 10 or cap(false, true, 200, 25) ~= 100 then
+        return "custom range clamp is not 10-100"
+    end
+    if not within(40, 40) or within(40.1, 40) or not within(1000, nil) then
+        return "range boundary/unlimited predicate failed"
     end
 end)
 

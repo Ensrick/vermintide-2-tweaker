@@ -148,8 +148,17 @@ return {
     gt_bot_drink_horde_count = { en = "Enemies needed for a horde" },
     gt_bot_drink_horde_count_tooltip = { en = "How many ordinary trash enemies must be in range at once before it counts as a horde worth a potion." },
 
-    gt_bot_rescue_awaiting = { en = "[Issue 300] Bots rescue allies awaiting respawn" },
-    gt_bot_rescue_awaiting_tooltip = { en = "Vanilla bots ignore a teammate waiting to be rescued at a respawn point; this sends them to go free that ally. Works only when you are the host; experimental, so verify it in game." },
+    gt_bot_rescue_awaiting = { en = "[verify-fix] [Issue 300] Bots rescue allies awaiting respawn" },
+    gt_bot_rescue_awaiting_tooltip = { en = "Vanilla bots ignore a teammate waiting to be rescued at a respawn point; this sends them to go free that ally. The nested options control how far bots may leave the team for a rescue. Works only when you are the host." },
+
+    gt_bot_rescue_awaiting_ignore_leash = { en = "Ignore follow leash for awaiting rescues" },
+    gt_bot_rescue_awaiting_ignore_leash_tooltip = { en = "On by default. Bots may cross the mission to rescue an awaiting teammate, matching this feature's existing behavior. Turn this off to apply either the normal follow leash or the custom rescue range below." },
+
+    gt_bot_rescue_awaiting_custom_range = { en = "Use a custom awaiting-rescue range" },
+    gt_bot_rescue_awaiting_custom_range_tooltip = { en = "When Ignore follow leash is off, use the dedicated range below instead of the current Follow snap-back distance. Off by default." },
+
+    gt_bot_rescue_awaiting_range_m = { en = "Custom awaiting-rescue range (meters)" },
+    gt_bot_rescue_awaiting_range_m_tooltip = { en = "Maximum straight-line distance at which a bot may select an awaiting-rescue teammate when the custom range is enabled. Defaults to 40 meters and can be set from 10 to 100." },
 
     gt_no_bots = { en = "[untested] Disable Bots" },
     gt_no_bots_tooltip = { en = "Keeps bots from filling empty party slots and instantly removes any already present, for true solo runs. Works only when you are the host and stays in effect across missions until you turn it off." },
