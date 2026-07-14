@@ -128,6 +128,20 @@ return {
     gut_hud_mode_tooltip = {
         en = "Controls how much of the HUD is hidden: Off shows everything, Partial hides most UI but keeps prompts and subtitles, Complete hides everything for screenshots, and Camera also hides your first-person arms and weapon.",
     },
+    gut_scoreboard_live_native = {
+        en = "[verify-fix] Expanded Scoreboard (Live + End Screen)",
+    },
+    gut_scoreboard_live_native_tooltip = {
+        en = "Adds the same expanded statistics panel while you hold Tab in an Adventure mission and on its end screen. It shows the eleven statistics Vermintide already tracks; no custom stat hooks or network messages are added. Disable the standalone Tab Scoreboard mod before using this page.",
+    },
+    gut_scoreboard_live_sort = { en = "Sort players by" },
+    gut_scoreboard_live_sort_tooltip = { en = "Orders the four player columns by the selected live statistic. Damage Taken sorts lowest first; other statistics sort highest first." },
+    gut_scoreboard_sort_name = { en = "Player name" },
+    gut_scoreboard_sort_damage = { en = "Damage dealt" },
+    gut_scoreboard_sort_taken = { en = "Damage taken (lowest first)" },
+    gut_scoreboard_sort_elites = { en = "Elite kills" },
+    gut_scoreboard_sort_specials = { en = "Special kills" },
+    gut_scoreboard_sort_kills = { en = "Total kills" },
     gut_preserve_disconnected_scoreboard = {
         en = "[verify-fix] [Issue 437] Preserve Disconnected Player Scores",
     },
@@ -153,14 +167,6 @@ return {
     gut_edit_hud_hotkey_tooltip = {
         en = "Hotkey to enter or exit HUD edit mode, where you click and drag HUD elements to reposition them. Same as the /edit_hud chat command.",
     },
-    -- Retained: gut_hud_visibility_group was the standalone "Hide UI" container.
-    -- Its members (dropdown + cycle hotkey) now sit directly under
-    -- gut_hide_hud_ui_group, so this label is no longer referenced by a widget.
-    -- Kept (not deleted) per the localization orphan policy.
-    gut_hud_visibility_group = {
-        en = "Hide UI",
-    },
-
     -- Sync + vanilla-mirror subgroup, now nested UNDER the "UI Tweaks" group
     -- (hb_group) per user direction, so all UI Tweaks options share one heading.
     -- Renamed from "UI Tweaks Integration" (the parent is already "UI Tweaks", so
@@ -407,6 +413,17 @@ return {
     gut_original_thp_names_tooltip = {
         en = "Restores each career's original names for the three level-five temporary-health talents. Mechanics and talent selections do not change. Off by default.",
     },
+    gut_surface_hidden_passives = {
+        en = "[verify-fix] [Issue 153] Surface Hidden Career Passives",
+    },
+    gut_surface_hidden_passives_tooltip = {
+        en = "Shows source-confirmed innate career bonuses that the normal talent screen omits. Display only; talents and gameplay data are unchanged. On by default.",
+    },
+    gut_hidden_passive_heading = { en = "Innate Perks" },
+    gut_hidden_passive_whc_headshot_name = { en = "Power of Sigmar" },
+    gut_hidden_passive_whc_headshot_desc = { en = "+25%% headshot damage." },
+    gut_hidden_passive_whc_crit_name = { en = "Sigmar's Charm" },
+    gut_hidden_passive_whc_crit_desc = { en = "+5%% base critical-strike chance." },
 
     -- ============================================================
     -- Overlays (parry indicator, respawn timer, damage numbers) - now inside the

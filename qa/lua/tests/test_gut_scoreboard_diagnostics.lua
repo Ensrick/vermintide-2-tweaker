@@ -1,7 +1,7 @@
 return function(H, repo_root)
-    local path = repo_root
+    local policy_path = repo_root
         .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_scoreboard_policy.lua"
-    local Policy = assert(loadfile(path))()
+    local Policy = assert(loadfile(policy_path))()
 
     H.test("GUT scoreboard inventory resolves scalar and composite topics", function()
         local topics = {
@@ -106,5 +106,70 @@ return function(H, repo_root)
         H.equal(count, 2)
         H.equal(table.concat(writes, ","),
             "kills_total=9,damage_dealt_per_breed/rat_ogre=123")
+    end)
+
+    H.test("GUT #272 native page is deterministic and capped to four players", function()
+        local topics = {
+            { name = "damage_dealt", display_text = "damage" },
+            { name = "damage_taken", display_text = "taken" },
+        }
+        local players = {}
+        for i, name in ipairs({ "Echo", "Delta", "Charlie", "Bravo", "Alpha" }) do
+            players["id" .. i] = { name = name, group_scores = { offense = {
+                { stat_name = "damage_dealt", score = i * 10 },
+                { stat_name = "damage_taken", score = 60 - i * 10 },
+            } } }
+        end
+        local page = Policy.build_native_page(players, topics, "damage_dealt", 4)
+        H.equal(#page.players, 4)
+        H.equal(page.players[1].name, "Alpha")
+        H.equal(page.players[4].name, "Delta")
+        H.equal(page.topics[2].name, "damage_taken")
+    end)
+
+    H.test("GUT #272 native page preserves snapshot and damage-taken ordering", function()
+        local source = {
+            a = { name = "Zulu", group_scores = { offense = {
+                { stat_name = "damage_taken", score = 30 },
+            } } },
+            b = { name = "Alpha", group_scores = { offense = {
+                { stat_name = "damage_taken", score = 10 },
+            } } },
+            c = { name = "Missing", group_scores = { offense = {} } },
+        }
+        local page = Policy.build_native_page(source, {
+            { name = "damage_taken", display_text = "taken" },
+        }, "damage_taken", 4)
+        H.equal(page.players[1].name, "Alpha")
+        H.equal(page.players[3].name, "Missing")
+        page.players[1].scores.damage_taken = 999
+        H.equal(source.b.group_scores.offense[1].score, 10)
+    end)
+
+    H.test("GUT #272 native topic model is unique and hard capped", function()
+        local topics = {}
+        for i = 1, 15 do
+            topics[#topics + 1] = { name = "stat_" .. i, display_text = "label_" .. i }
+        end
+        topics[#topics + 1] = { name = "stat_1", display_text = "duplicate" }
+        local page = Policy.build_native_page({}, topics, "player_name", 4)
+        H.equal(#page.topics, Policy.MAX_NATIVE_TOPICS)
+        H.equal(page.topics[1].display_text, "label_1")
+    end)
+
+    H.test("GUT #272 native pages own bounded draw seams and no transport", function()
+        local live_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_scoreboard_live.lua"
+        local f = assert(io.open(live_path, "rb"))
+        local live = f:read("*a")
+        f:close()
+        local _, tab_hooks = live:gsub('mod:hook_safe%("IngamePlayerListUI", "_draw"', "")
+        local _, end_hooks = live:gsub('mod:hook_safe%("EndViewStateScore", "draw"', "")
+        H.equal(tab_hooks, 1)
+        H.equal(end_hooks, 1)
+        H.truthy(live:find("get_grouped_topic_statistics", 1, true) ~= nil)
+        H.truthy(live:find("UTF8Utils", 1, true) ~= nil)
+        H.equal(live:find("network_register", 1, true), nil)
+        H.equal(live:find("rpc_", 1, true), nil)
     end)
 end

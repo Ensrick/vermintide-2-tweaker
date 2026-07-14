@@ -11,6 +11,15 @@ local GUT_HUD_MODE_OPTIONS = {
     { text = "gut_hud_mode_opt_camera",   value = "camera" },
 }
 
+local GUT_SCOREBOARD_SORT_OPTIONS = {
+    { text = "gut_scoreboard_sort_name", value = "player_name" },
+    { text = "gut_scoreboard_sort_damage", value = "damage_dealt" },
+    { text = "gut_scoreboard_sort_taken", value = "damage_taken" },
+    { text = "gut_scoreboard_sort_elites", value = "kills_elites" },
+    { text = "gut_scoreboard_sort_specials", value = "kills_specials" },
+    { text = "gut_scoreboard_sort_kills", value = "kills_total" },
+}
+
 -- Inventory character-preview backdrop (#522). Values are keys into the
 -- BACKDROPS catalog in _gut_inventory_backdrop.lua ("vanilla" = no swap);
 -- the rt check cross-verifies the pairing.
@@ -246,6 +255,21 @@ local options_data = {
                     -- Cycle off -> partial -> complete -> camera via dropdown,
                     -- /hud, or hotkey. (Container gut_hud_visibility_group was
                     -- dissolved into this group; its members live here directly.)
+                    {
+                        setting_id    = "gut_scoreboard_live_native",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gut_scoreboard_live_native_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gut_scoreboard_live_sort",
+                                type          = "dropdown",
+                                default_value = "player_name",
+                                options       = GUT_SCOREBOARD_SORT_OPTIONS,
+                                tooltip       = "gut_scoreboard_live_sort_tooltip",
+                            },
+                        },
+                    },
                     {
                         setting_id    = "gut_hud_mode",
                         type          = "dropdown",
@@ -511,6 +535,12 @@ local options_data = {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "gut_original_thp_names_tooltip",
+                    },
+                    {
+                        setting_id    = "gut_surface_hidden_passives",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = "gut_surface_hidden_passives_tooltip",
                     },
                 },
             },

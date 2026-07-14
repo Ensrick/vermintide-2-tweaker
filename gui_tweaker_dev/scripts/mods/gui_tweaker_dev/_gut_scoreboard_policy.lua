@@ -2,6 +2,7 @@
 -- module feeds it vanilla ScoreboardHelper data; offline Lua 5.1 QA exercises
 -- malformed and complete shapes without constructing game managers.
 local M = {}
+M.MAX_NATIVE_TOPICS = 11
 
 function M.inspect_catalog(topics, groups)
     local result = {
@@ -193,6 +194,74 @@ function M.restore_stat_values(records, write_value, limit)
         end
     end
     return restored
+end
+
+local function _score_map(player)
+    local scores = {}
+    for _, group in pairs(type(player) == "table" and player.group_scores or {}) do
+        for _, entry in ipairs(type(group) == "table" and group or {}) do
+            if type(entry) == "table" and type(entry.stat_name) == "string"
+                    and type(entry.score) == "number" then
+                scores[entry.stat_name] = entry.score
+            end
+        end
+    end
+    return scores
+end
+
+-- Build the bounded, renderer-neutral model shared by the live Tab page and a
+-- future end-screen page. No StatisticsDatabase or engine object crosses this
+-- boundary, so presentation ordering cannot mutate the native snapshot.
+function M.build_native_page(players, topics, sort_topic, limit)
+    local page = { topics = {}, players = {} }
+    limit = math.min(math.max(tonumber(limit) or 4, 1), 4)
+
+    local seen_topics = {}
+    for _, topic in ipairs(type(topics) == "table" and topics or {}) do
+        if type(topic) == "table" and type(topic.name) == "string"
+                and type(topic.display_text) == "string"
+                and not seen_topics[topic.name]
+                and #page.topics < M.MAX_NATIVE_TOPICS then
+            seen_topics[topic.name] = true
+            page.topics[#page.topics + 1] = {
+                name = topic.name,
+                display_text = topic.display_text,
+            }
+        end
+    end
+
+    for stats_id, player in pairs(type(players) == "table" and players or {}) do
+        if type(player) == "table" and type(player.name) == "string" then
+            page.players[#page.players + 1] = {
+                stats_id = tostring(stats_id),
+                name = player.name,
+                scores = _score_map(player),
+            }
+        end
+    end
+
+    table.sort(page.players, function(a, b)
+        if sort_topic and sort_topic ~= "player_name" then
+            local av, bv = a.scores[sort_topic], b.scores[sort_topic]
+            local a_has, b_has = type(av) == "number", type(bv) == "number"
+            -- Missing rows are incomplete snapshots, never a winning zero (or
+            -- negative infinity). Keep them last for both ascending and
+            -- descending statistics.
+            if a_has ~= b_has then return a_has end
+            if a_has and av ~= bv then
+                -- Vanilla treats lower damage taken as better; every other
+                -- exposed sort follows the ordinary descending scoreboard rule.
+                if sort_topic == "damage_taken" then return av < bv end
+                return av > bv
+            end
+        end
+        local an, bn = string.lower(a.name), string.lower(b.name)
+        if an ~= bn then return an < bn end
+        return a.stats_id < b.stats_id
+    end)
+
+    while #page.players > limit do table.remove(page.players) end
+    return page
 end
 
 return M

@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.263-dev"
+local MOD_VERSION = "0.2.270-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -3192,6 +3192,52 @@ if type(_gut_native_loadouts) == "table" and type(_gut_native_loadouts.rt_checks
     end
 end
 
+-- Native-loadout 30-slot capacity census (#231). The six-button window has
+-- direct logical-index coupling across selection/context/delete/bot paths, so
+-- this phase records the data, frozen-widget and asset boundaries without
+-- mutating the realm-shared InventorySettings table.
+do
+    local ok, api = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_loadout_capacity_probe")
+    if ok and type(api) == "table" then
+        for _, check in ipairs(api.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        _dbg_alert("[gut:231] capacity probe failed: %s", tostring(api))
+    end
+end
+
+-- Bot designated-loadout victory pose (#232). PlayerBot.spawn passes is_bot for
+-- skin/frame but omits it for the adjacent pose lookup; repair that one argument
+-- only while the synchronous bot-spawn call is active.
+do
+    local ok, api = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_bot_pose")
+    if ok and type(api) == "table" then
+        for _, check in ipairs(api.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        _dbg_alert("[gut:232] bot-pose module failed: %s", tostring(api))
+    end
+end
+
+-- Held-Tab weapon property refresh (#245). The v2 player list renders a
+-- detached RPC loadout row; while visible, reconcile only the local equipped
+-- melee/ranged properties from their exact live backend instances at 4 Hz.
+do
+    local ok, api = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_tab_property_refresh")
+    if ok and type(api) == "table" then
+        for _, check in ipairs(api.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        _dbg_alert("[gut:245] Tab property refresh failed: %s", tostring(api))
+    end
+end
+
 -- Floating Damage Numbers (MIGRATED from general_tweaker 2026-06-29): client-side,
 -- networking-free numbers over enemies you damage, via the engine's own
 -- DamageNumbersUI + DamageUtils.add_unit_floating_damage_numbers. Registers its OWN
@@ -3381,6 +3427,20 @@ do
     end
 end
 
+-- Source-confirmed hidden innate career bonuses (#153). Presentation only:
+-- hooks run after vanilla population and never mutate career/passive tables.
+do
+    local ok, api = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_hidden_passives")
+    if ok and type(api) == "table" then
+        for _, check in ipairs(api.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        _dbg_alert("[gut:153] hidden-passive module failed: %s", tostring(api))
+    end
+end
+
 -- (#314) Clean compatibility phase for the external sanctioned-but-unlicensed
 -- Simple UI mod. Confines its public live window records to the current screen;
 -- no upstream code/assets are copied and no external function is replaced.
@@ -3413,12 +3473,10 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/hb_data")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/hide_elements")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/level_loading_screen")
 
--- Scoreboard feature inventory (#272). This is the central home for GUT's
--- open-issue probes, not a one-off hook module. It inventories the vanilla
--- eleven-topic scoreboard, takes one bounded live mission snapshot through
--- ScoreboardHelper, and records which requested fields require new accumulation.
--- It adds no UI or network transport and does not copy the unlicensed external
--- Tab Scoreboard implementation. See SCOREBOARD_RESEARCH_272.md.
+-- Scoreboard feature inventory (#272 phase 1). This central diagnostics module
+-- inventories the vanilla eleven-topic catalog and records which requested
+-- fields require new accumulation. Phase 2's independent live presenter is
+-- loaded below; neither phase copies the unlicensed external implementation.
 do
     local ok, diagnostics = pcall(mod.dofile, mod,
         "scripts/mods/gui_tweaker_dev/_gut_diagnostics")
@@ -3428,6 +3486,21 @@ do
         end
     else
         printf("[gut:272] diagnostics module failed: %s", tostring(diagnostics))
+    end
+end
+
+-- Native live Tab statistics page (#272 phase 2). This consumes only the
+-- ScoreboardHelper snapshot inventoried above and draws through the existing
+-- IngamePlayerListUI lifecycle; no competing Tab input or custom transport.
+do
+    local ok, live_page = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_scoreboard_live")
+    if ok and type(live_page) == "table" then
+        for _, check in ipairs(live_page.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        printf("[gut:272] live scoreboard module failed: %s", tostring(live_page))
     end
 end
 

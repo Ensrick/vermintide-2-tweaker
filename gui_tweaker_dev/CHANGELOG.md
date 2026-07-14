@@ -1,5 +1,72 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.270-dev (2026-07-14) -- #219 confirmed localization orphan cleanup [verify-fix]
+
+- Removed only `gut_hud_visibility_group`, the obsolete label for a container dissolved in 0.2.164. The active `gut_hide_hud_ui_group`, `hb_group`, HUD-mode dropdown, cycle hotkey, settings IDs, defaults, and runtime behavior are unchanged.
+- Added a bounded source regression that requires the orphan definition to stay absent while the live HUD group and its direct child controls remain present in both settings data and localization.
+
+## 0.2.269-dev (2026-07-14) -- #250 Chaos Wastes held-Tab talent tiers [verify-fix]
+
+- Fixed vanilla's positional assumption in the held-Tab talent preview. Chaos Wastes stores initial talents and later talent boons as one flat power-up-derived ID list, while the player list treats indices 1–6 as tiers 1–6; empty or duplicate tiers therefore shift later icons into incorrect cells.
+- In Chaos Wastes only, maps active IDs back through the current career's talent tree and post-processes the six presentation cells by real tier. The first active talent per tier is retained because initial loadout talents are inserted before purchased/event boons.
+- Does not mutate talent extensions, backends, power-ups, buffs, trees, privacy, or networking. It composes through #245's existing player-list hook, caps evidence to sixteen unique repairs, and adds source-bound documentation plus engine-free sparse/duplicate-tier coverage.
+
+### Solo verify
+
+Enter Chaos Wastes with one talent tier unselected, acquire a talent boon, and hold Tab. Confirm each icon remains in its actual tier and the empty tier does not shift later icons. Acquire a boon duplicating an already selected tier and confirm the selected talent remains displayed there; the boon must remain active through vanilla gameplay/boon UI. Attach the bounded `[gut:250]` line and run `/gut_regression_test`; both #250 checks must pass.
+
+## 0.2.268-dev (2026-07-14) -- #245 held-Tab weapon property refresh [verify-fix]
+
+- Fixed stale local weapon properties in the v2 held-Tab tooltip. Vanilla renders detached `PlayerManager.player_loadouts` RPC copies and reads—but does not use—the live inventory equipment in the same update path, so in-place property changes never reach the displayed row.
+- While Tab is active, reconciles only the local equipped melee/ranged rows from their exact live backend instances, at most four times per second. It verifies item identity and copies properties only after a deterministic fingerprint changes; no polling occurs while Tab is closed.
+- Adds no equip, buff, backend-write, or RPC work. Remote rows remain vanilla network snapshots. Change evidence is capped to sixteen lines per process, with runtime regression `issue245_tab_weapon_property_refresh` and engine-free coverage.
+
+### Solo verify
+
+Equip a weapon, note its held-Tab tooltip, change that exact instance's properties through CIM, then hold Tab and hover it again without swapping. The tooltip must show the new properties within 0.25 seconds. Attach the bounded `[gut:245]` line and run `/gut_regression_test`; `issue245_tab_weapon_property_refresh` must pass.
+
+## 0.2.267-dev (2026-07-14) -- #232 bot designated victory pose [verify-fix]
+
+- Fixed the one-argument vanilla oversight in `PlayerBot.spawn`: skin and frame request the bot loadout, but the adjacent victory-pose lookup omitted `is_bot` and selected the human's active-loadout pose.
+- Brackets only synchronous bot spawn and supplies `is_bot=true` only to a missing `slot_pose` argument. Explicit arguments, human calls, other cosmetic slots, unsupported-mechanism fallback, native loadout storage, networking, scoreboard collection, and podium playback remain vanilla-owned.
+- Added a bounded one-line-per-career repair trace, runtime regression `issue232_bot_designated_victory_pose`, source-bound documentation, and engine-free call-boundary coverage.
+
+### Solo verify
+
+Give a bot's designated loadout a victory pose different from that career's human-selected loadout, complete an Adventure mission with the bot, and confirm the podium uses the designated pose. Attach the career's single `[gut:232]` line and run `/gut_regression_test`; `issue232_bot_designated_victory_pose` must pass.
+
+## 0.2.266-dev (2026-07-14) -- #231 native loadout capacity [diagnostics-armed]
+
+- Confirmed that GUT's modded-only native store already accepts a raised cap, while the native hero-view window is still structurally limited: its definitions freeze one widget per custom row at module load and later selection, context-menu, delete, bot, animation, and draw paths index those widgets by logical slot.
+- Added an automatic two-line boot/window census and `/gut_loadout_capacity_probe`. It reports custom rows, declared cap, physical widgets, greatest persisted row, duplicate indices, missing icon/title ranges, and cutover readiness without changing inventory settings, widgets, stores, or backend state.
+- Added a tested pure capacity policy and `LOADOUT_CAPACITY_RESEARCH_231.md`, which defines the safe five-page/six-reusable-button implementation boundary and the choice between packaged VII–XXX textures or text-rendered Roman numerals. A data-only raise was deliberately withheld because it would produce an off-screen strip and request absent atlas materials.
+
+### Diagnose
+
+Open the native loadout-selection window once, run `/gut_loadout_capacity_probe`, and attach the four bounded `[gut:231]` lines (two from `window_enter`, two from `command`). Run `/gut_regression_test` and confirm `issue231_native_loadout_capacity_diagnostics` passes. The stock expected state is six custom rows, cap six, six widgets, and missing icon/title ranges 7–30.
+
+## 0.2.265-dev (2026-07-14) -- #153 hidden career passive perks [verify-fix]
+
+- Added the default-on **Surface Hidden Career Passives** talent-menu option. Witch Hunter Captain now shows the two source-confirmed but vanilla-hidden bonuses: Power of Sigmar (+25% headshot damage) and Sigmar's Charm (+5% base critical-strike chance).
+- Hooks both PC and console talent-window population after vanilla and changes only the passive-description widget. It does not mutate `PassiveAbilitySettings`, career attributes, buffs, talent selection, or network state, and composes with Career Tweaker-added passive perks.
+- Added fail-closed source-signature checks, idempotent bounded text composition, `/gut_hidden_passive_probe`, runtime regression `issue153_hidden_passives_display_only`, and engine-free coverage. Further career entries require explicit source confirmation rather than inferring player-facing claims from internal buff names.
+
+### Solo verify
+
+Enable **Surface Hidden Career Passives**, open Witch Hunter Captain's Talents screen, and confirm both named bonuses appear under the passive description. Switch careers and confirm their normal descriptions are unchanged; toggle the option off and reopen the screen to confirm the added lines disappear. Run `/gut_regression_test` and confirm `issue153_hidden_passives_display_only` passes.
+
+## 0.2.264-dev (2026-07-14) -- #272 expanded native scoreboard [verify-fix-coop]
+
+- Promoted #272 from inventory-only diagnostics to a bounded first implementation: the default-off **Expanded Scoreboard** shows all eleven native Adventure statistics both while the existing player-list/Tab view is open and on the Adventure end screen.
+- Reuses `ScoreboardHelper.get_grouped_topic_statistics` and vanilla hot-join transport. The detached presentation model is capped to four players, refreshed at most four times per second, and can sort by name, total damage, damage taken, elite kills, special kills, or total kills.
+- Draws through one `IngamePlayerListUI._draw` observer and one `EndViewStateScore.draw` observer, sharing the same detached presentation model. It adds no competing Tab input, replacement end state, statistic hooks, RPC, or lookup mutation and declines to overlap the installed external scoreboard.
+- Added offline coverage for deterministic ordering, lower-is-better damage-taken sorting, caps, snapshot detachment, and transport absence. Added runtime regression `issue272_native_live_scoreboard_page`.
+- Kept the issue scope honest: shared per-stat visibility, boss-damage late-join parity, and authoritative custom friendly-fire/healing/damage-split accumulation remain explicit later phases in `SCOREBOARD_RESEARCH_272.md`.
+
+### Co-op verify
+
+Disable the standalone Tab Scoreboard mod, enable **Expanded Scoreboard**, and enter an Adventure mission with another player. Hold Tab and confirm four-or-fewer columns display all eleven native statistics and update during play, then confirm the same sorted page appears on the end screen. Change each sort choice, then have a client hot-join and confirm ordinary synced totals agree (boss damage remains a documented late-join gap). Attach the bounded `[gut:272] native_page` lines. Run `/gut_regression_test` and confirm both `issue272_scoreboard_inventory_diagnostics` and `issue272_native_live_scoreboard_page` pass.
+
 ## 0.2.263-dev (2026-07-14) -- #89 Cosmetics-only mission customize close-proof [verify-fix]
 
 - Audited the deferred #89 implementation plan against the shipped #84/#87/#172 architecture. The requested capability is already complete: GUT owns the only mid-mission entry and its two CIM-derived level-free mount hooks, while Cosmetics owns the mission-aware preview lighting, illusion rendering, and apply path. Moving duplicate mount hooks into Cosmetics now would add a second owner without changing capability and would complicate CIM coexistence.

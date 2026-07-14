@@ -64,14 +64,23 @@ views cannot disagree.
 
 ## Phased implementation
 
-1. **Inventory diagnostics (this version).** Prove the current catalog and live
-   snapshot shape with capped `[gut:272]` records. No UI, mutation, hooks, or RPC.
-2. **Native live page.** Add an opt-in Tab page containing only native snapshot
-   fields, with pure sorting/visibility policy shared with the end screen.
-3. **Native end-screen pages.** Reuse that policy and snapshot without changing
-   the engine's score transport.
+1. **Inventory diagnostics (complete in v0.2.260-dev).** Prove the current
+   catalog and live snapshot shape with capped `[gut:272]` records.
+2. **Native live page (implemented in v0.2.264-dev).** The default-off
+   **Expanded Scoreboard** draws all eleven native topics through the
+   existing `IngamePlayerListUI._draw` lifecycle. Its pure model is capped to
+   four detached player records, offers six deterministic sort choices, and is
+   refreshed at most four times per second. It adds no input owner, statistic
+   accumulator, RPC, or lookup entry and declines to draw alongside the
+   installed external scoreboard.
+3. **Native end-screen page (implemented in v0.2.264-dev).** The same detached
+   model renders from `context.players_session_score` after vanilla's
+   `EndViewStateScore.draw`; it adds no replacement state or score transport.
 4. **Custom statistics.** Add one field family at a time with an authoritative
    owner, bounded wire schema, hot-join state, and two-player regression matrix.
 
-The issue remains diagnostic until phase 1 produces a live snapshot. UI work is
-not feature-complete merely because the catalog regression passes.
+The issue remains open after the native presentation slice. Friendly-fire
+damage, healing amount, and melee/ranged
+damage require separately specified host-authoritative accumulation before they
+may appear; boss damage still needs late-join parity. Per-stat visibility should
+be shared by the Tab and end-screen presenters rather than added to only one.
