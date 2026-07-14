@@ -27,10 +27,9 @@ Cross-file contract (unchanged by the move):
   * Exposes mod._ct_cot_rotate_pick / mod._ct_ensure_warlord_trial (and the two
     warlord-trial marker flags) on `mod` for those same call sites.
 
-NOTE (pre-existing, preserved by the move): the main file's boon-roll hook calls
-`pcall(_ct128_strip_parry_cooldowns)` as a bare GLOBAL. _ct128_strip_parry_cooldowns
-is (and was) a chunk-local, so that call resolved to nil (a no-op) before extraction
-and still does after. The move does not change that; the call site was left untouched.
+The parry-cooldown strip is published on `mod` because its deferred caller lives in
+the main chunk. Keeping that cross-file boundary explicit prevents a bare-global
+lookup from being swallowed by `pcall` as a silent no-op (#342).
 ]]
 
 local mod = get_mod("ct_dev")
@@ -990,7 +989,7 @@ mod._ct_ensure_warlord_trial()
 -- proc to once per cooldown duration via vanilla buff_extension cooldown
 -- check (buff_extension.lua:1378-1390). Nuking that field at mod boot makes
 -- every successful timed block fire the proc — no cooldown.
-local function _ct128_strip_parry_cooldowns()
+mod._ct128_strip_parry_cooldowns = function()
     local templates = rawget(_G, "DeusPowerUpTemplates")
     if not (templates and templates.power_ups) then
         _dbg("[ct128] DeusPowerUpTemplates not ready; parry-cooldown strip skipped")

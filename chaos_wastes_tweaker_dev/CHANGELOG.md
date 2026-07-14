@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.269-dev (2026-07-13) - #342 parry cooldown deferred call fixed [verify-fix]
+
+- **Root cause.** The boon-roll hook called `_ct128_strip_parry_cooldowns` as a bare global, but extraction left the function local to `_ct_combat_hooks.lua`. `pcall(nil)` swallowed the scope error, so `static_blade` and `boon_skulls_03` retained their vanilla cooldown fields.
+- **Fix.** The combat module now publishes the bounded, idempotent mutation as `mod._ct128_strip_parry_cooldowns`; the deferred caller resolves that explicit cross-file contract and logs a bounded warning if the contract or call fails.
+- **Regression.** Runtime regression now requires the published function before checking both target templates. Offline coverage locks the module export, caller, error surface, and rejects the former bare-global call.
+- **Verify.** Roll either target parry boon, run `/ct_regression_test`, and require `parry_cooldowns_stripped_post_load` to pass. Consecutive successful timed blocks should proc without the former cooldown. Solo verification is sufficient.
+
 ## 0.7.268-dev (2026-07-13) - #288 Anath Raema registry-load race fixed [not deployed]
 
 - **Source-backed root cause.** `GearUtils.get_property_and_trait_buffs` carries only the trait buff name; `SimpleInventoryExtension.apply_buffs` and `BuffExtension.add_buff` resolve `BuffTemplates` when the weapon buff is instantiated. CT's startup sync could run before one or both Morris registries existed, then considered the first registry patched "done" and never guaranteed a retry for the later `BuffTemplates` table. The original save map also keyed both registries by the same buff name, so one original overwrote the other.

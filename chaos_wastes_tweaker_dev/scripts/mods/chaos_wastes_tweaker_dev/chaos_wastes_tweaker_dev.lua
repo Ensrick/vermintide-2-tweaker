@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.268-dev"
+local MOD_VERSION = "0.7.269-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -2988,7 +2988,7 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
     sync_boon_movespeed()
 
     -- v0.7.130-dev: piggyback on this hook to lazily apply the items 5+6
-    -- parry-cooldown strip. The earlier boot-time `pcall(_ct128_strip_parry_cooldowns)`
+    -- parry-cooldown strip. The earlier boot-time attempt to call the strip
     -- ran BEFORE morris settings populated DeusPowerUpTemplates (log line 1308 of
     -- console-2026-05-29-02.03.57: "DeusPowerUpTemplates not ready; parry-cooldown
     -- strip skipped"), so the cooldowns survived and items 5+6 never actually
@@ -2996,7 +2996,15 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
     -- and BEFORE any altar interaction (rolls happen at chest spawn, before player
     -- opens it). The strip body is idempotent — once `cooldown_buff` is nil, the
     -- next call's `for` loop is a no-op. Safe to call from every roll.
-    pcall(_ct128_strip_parry_cooldowns)
+    local strip = mod._ct128_strip_parry_cooldowns
+    if type(strip) ~= "function" then
+        mod:warning("[ct:342] parry-cooldown strip unavailable after combat-hook load")
+    else
+        local strip_ok, strip_result = pcall(strip)
+        if not strip_ok then
+            mod:warning("[ct:342] parry-cooldown strip failed: %s", tostring(strip_result))
+        end
+    end
 
     return new_seed, new_power_ups
 end)
@@ -15342,6 +15350,9 @@ end)
 -- non-failing "pre-roll, will retry post-roll" status by returning nil only
 -- when both are nil (after the first roll fires `_ct128_strip_parry_cooldowns`).
 _rt_register("parry_cooldowns_stripped_post_load", function()
+    if type(mod._ct128_strip_parry_cooldowns) ~= "function" then
+        return "#342 REGRESSION: deferred parry-cooldown strip is not published on mod"
+    end
     local templates = rawget(_G, "DeusPowerUpTemplates")
     if not (templates and templates.power_ups) then
         return nil  -- pre-load, can't verify yet

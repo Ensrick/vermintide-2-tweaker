@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+### parry-cooldown-deferred-contract - issue #342
+
+| Field | Value |
+|---|---|
+| Symptom | Consecutive timed blocks retain the vanilla proc cooldown even though CT intends both parry boons to proc every time. |
+| Root cause | The boon-roll hook referenced a function local to another Lua chunk as a bare global; `pcall(nil)` swallowed the scope failure. |
+| Fix version(s) | ct_dev 0.7.269-dev |
+| Category | SOLO |
+| Repro | Acquire `static_blade` or `boon_skulls_03`, then make consecutive successful timed blocks. |
+| Expected post-fix | The target template's `cooldown_buff` field is absent and each timed block may proc. |
+| Detection | `/ct_regression_test` passes `parry_cooldowns_stripped_post_load`; contract failures emit bounded `[ct:342]` warnings. |
+
 ### anath-raema-registry-retry - issue #288
 
 | Field | Value |

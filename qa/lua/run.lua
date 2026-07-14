@@ -70,6 +70,7 @@ local suites = {
     "test_cos_glow_lifecycle",
     "test_peer_parity_transition",
     "test_ct_boon_catalog",
+    "test_ct_parry_cooldown_contract",
     "test_cos_offhand_preload_lifecycle",
     "test_cos_dual_offhands",
     "test_gt_disconnect_grace",
