@@ -1,5 +1,16 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.273-dev (2026-07-14) - #556 career-specific starting talents [verify-fix; not deployed]
+
+- **Root cause.** CT treated every configured starting boon as a static template. Vanilla talent power-ups are deliberately generic (`talent_<tier>_<column>`): their template carries only `talent_tier`/`talent_index`, and every native UI resolves the actual talent name and icon through `DeusPowerUpUtils` with the viewer's profile/career. CT's Tab preview instead read the absent generic `display_name`/`icon`, so it showed an internal id and no icon.
+- **Identity fix.** The starting-boon preview now resolves talent rows through vanilla's `get_power_up_name_text` and `get_power_up_icon` using the local player's current profile/career. Non-talents and unavailable-player fallback behavior are unchanged.
+- **Duplicate fix.** Vanilla `_add_initial_power_ups` materializes the player's selected talents before CT's `hook_safe` callback. CT now records that post-call canonical name set and skips a configured talent already present there. A configured different talent still appends; non-talent starting boons retain their prior behavior. Bounded `[ct:556]` telemetry records only the number skipped.
+- **Regression.** Added offline suite `test_ct_starting_talent_identity.lua` and runtime `/ct_regression_test` check `issue556_starting_talent_identity`, covering the fifth hook argument, exact duplicate policy, non-talent control, and live career name/icon resolution.
+
+**Source audit:** `deus_run_controller.lua:471-495` turns each selected talent tier/column into a generic power-up before setting the run-state list. `deus_power_up_utils.lua:259-266,298-322` maps that generic template through the career's talent tree and returns its native icon/name.
+
+**Verify after deployment (solo):** choose a career, note its currently selected row-2 talent, then enable both that exact `Talent 2 <column>` and a different row-2 talent under Starting Boons. Queue a Chaos Wastes expedition and hold Tab: both configured rows must show that career's real talent names/icons, never `talent_2_2` or a blank icon. Start the run: the selected talent must appear once, while the different configured talent is added. Run `/ct_regression_test` and require `issue556_starting_talent_identity` to pass.
+
 ## 0.7.272-dev (2026-07-14) - #351 Adventure collectibles become host-owned Pilgrim's Coins [not deployed]
 
 - Fixed Ravaged Art and Loot Dice surviving as unusable Adventure collectibles inside CT-injected Chaos Wastes missions. Ravaged Art is the exact `painting_scrap` pickup, which was deliberately absent from the collectible identity map because CT assumed its zero spread count would replace every spawn; guaranteed level spawners are not governed by that count.

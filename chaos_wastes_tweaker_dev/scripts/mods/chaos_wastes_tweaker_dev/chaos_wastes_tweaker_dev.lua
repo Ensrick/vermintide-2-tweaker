@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.272-dev"
+local MOD_VERSION = "0.7.273-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -8129,6 +8129,12 @@ end)
 -- Starting Boons
 -- ============================================================
 
+-- Pure policy seam for #556: only talent templates are suppressed by an existing
+-- same-name power-up. Non-talents retain the historical starting-boon behavior.
+function mod._ct_starting_talent_is_duplicate(template, name, existing_names)
+    return template and template.talent == true and existing_names[name] == true
+end
+
 -- Starting-boons hook. Vanilla `_add_initial_power_ups` adds talent power-ups + event
 -- boons after run setup; we append toggled starting boons after that (hook_safe = post-call).
 --
@@ -8145,12 +8151,25 @@ end)
 -- fires per player-add at run start + on late joiner / bot add), NOT a user-typed operational
 -- toggle. Per PROJECT_STANDARDS § 3.6 "Chat-echo policy" that means log-only, never chat.
 -- Demoted from `mod:echo` to `mod:info("[ct:starting_boons] ...")` below.
-mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer_id, local_player_id, profile_index, career_index)
+mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer_id, local_player_id, profile_index, career_index, initial_talents_for_career)
     local run_state = self._run_state
     if not run_state or not run_state:is_server() then return end  -- host-only
     if not DeusPowerUpsArray or not DeusPowerUpUtils then return end
 
+    -- Vanilla has already materialized `initial_talents_for_career` into generic
+    -- `talent_<tier>_<column>` power-ups before this hook_safe callback runs
+    -- (deus_run_controller.lua:471-495).  Keep that post-call list as the canonical
+    -- identity set: a configured starting talent that is already selected must not
+    -- be appended a second time.  The fifth argument is named above as a signature
+    -- lock even though the post-call list is more robust than rebuilding its mapping.
+    local existing = run_state:get_player_power_ups(peer_id, local_player_id, profile_index, career_index)
+    local existing_names = {}
+    for _, power_up in ipairs(existing or {}) do
+        if power_up and power_up.name then existing_names[power_up.name] = true end
+    end
+
     local extra = {}
+    local selected_talents_skipped = 0
     for _, entry in ipairs(DeusPowerUpsArray) do
         local name = entry.name
         if name and mod:get("start_boon_" .. name) then
@@ -8160,7 +8179,10 @@ mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer
             -- decode) and CTDs any non-ct peer. Vanilla starting boons are untouched.
             -- Fail-safe direction: an unconfirmed peer (e.g. a just-joined client whose
             -- beacon ack is still in flight) suppresses the MODDED grant for this event.
-            if mod._ct_is_modded_power_up and mod._ct_is_modded_power_up(name)
+            local template = rawget(_G, "DeusPowerUpTemplates") and rawget(DeusPowerUpTemplates, name)
+            if mod._ct_starting_talent_is_duplicate(template, name, existing_names) then
+                selected_talents_skipped = selected_talents_skipped + 1
+            elseif mod._ct_is_modded_power_up and mod._ct_is_modded_power_up(name)
                 and not (mod._ct_wire_safe and mod._ct_wire_safe()) then
                 pcall(printf, "[ct:426] starting boon %s skipped: peer parity not confirmed (modded boon would CTD a non-ct peer)", tostring(name))
             else
@@ -8169,14 +8191,17 @@ mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer
         end
     end
 
+    if selected_talents_skipped > 0 then
+        pcall(printf, "[ct:556] starting talents: skipped=%d already selected for profile=%s career=%s",
+            selected_talents_skipped, tostring(profile_index), tostring(career_index))
+    end
+
     if #extra == 0 then return end
 
-    -- CLARIFY: Re-fetching existing power-ups inside the hook (rather than capturing pre-call) is
-    -- correct: the original func has already added talent + event boons by the time this fires
-    -- (hook_safe = post-call). table.clone with skip_metatable keeps the array shape without
-    -- copying any inherited methods.
+    -- The post-call `existing` snapshot already includes vanilla's talent + event
+    -- boons. table.clone with skip_metatable keeps the array shape without copying
+    -- any inherited methods.
     local skip_metatable = true
-    local existing = run_state:get_player_power_ups(peer_id, local_player_id, profile_index, career_index)
     local new_power_ups = table.clone(existing, skip_metatable)
     table.append(new_power_ups, extra)
     run_state:set_player_power_ups(peer_id, local_player_id, profile_index, career_index, new_power_ups)
@@ -8291,6 +8316,33 @@ function mod._ct_preparing_cw_expedition()
     return (ok and res) or false
 end
 
+-- Resolve the same career-specific identity vanilla uses for a talent power-up.
+-- Generic talent templates intentionally have no display_name/icon of their own;
+-- vanilla routes them through these helpers (deus_power_up_utils.lua:298-322).
+-- Kept on `mod` so the runtime regression suite can exercise the real resolver.
+function mod._ct_start_boon_identity(name, rarity, profile_index, career_index)
+    local templates = rawget(_G, "DeusPowerUpTemplates")
+    local template = type(templates) == "table" and rawget(templates, name) or nil
+    local display = mod._ct_boon_display_name(name)
+    local icon = template and template.icon or nil
+
+    if template and template.talent and profile_index and career_index then
+        local utils = rawget(_G, "DeusPowerUpUtils")
+        if utils and type(utils.get_power_up_name_text) == "function" then
+            local ok, resolved = pcall(utils.get_power_up_name_text, name,
+                template.talent_index, template.talent_tier, profile_index, career_index)
+            if ok and type(resolved) == "string" and resolved ~= "" then display = resolved end
+        end
+        if utils and type(utils.get_power_up_icon) == "function" then
+            local ok, resolved = pcall(utils.get_power_up_icon,
+                { name = name, rarity = rarity }, profile_index, career_index)
+            if ok and type(resolved) == "string" and resolved ~= "" then icon = resolved end
+        end
+    end
+
+    return display, icon
+end
+
 -- Ordered, de-duplicated list of the starting boons the run will grant, host-effective.
 -- Each entry: { name, rarity, display, icon, modded }. On `mod` (not a file-local) per
 -- the Lua 5.1 200-locals cap; shared by the Tab panel + `/ct_preview_boons`.
@@ -8298,20 +8350,29 @@ function mod._ct_collect_start_boons()
     local out = {}
     local arr = rawget(_G, "DeusPowerUpsArray")
     if type(arr) ~= "table" then return out end
-    local tpl = rawget(_G, "DeusPowerUpTemplates")
     local eff = mod._ct_effective_setting or function(k) return mod:get(k) end
     local is_modded = mod._ct_is_modded_power_up
+    local profile_index, career_index
+    local player_manager = Managers and Managers.player
+    local player = player_manager and player_manager:local_player()
+    if player then
+        local ok, profile, career = pcall(function()
+            return player:profile_index(), player:career_index()
+        end)
+        if ok then profile_index, career_index = profile, career end
+    end
     local seen = {}
     for _, entry in ipairs(arr) do
         local name = entry and entry.name
         if name and not seen[name] and eff("start_boon_" .. name) then
             seen[name] = true
-            local t = tpl and tpl[name]
+            local display, icon = mod._ct_start_boon_identity(
+                name, entry.rarity, profile_index, career_index)
             out[#out + 1] = {
                 name = name,
                 rarity = entry.rarity,
-                display = mod._ct_boon_display_name(name),
-                icon = t and t.icon or nil,
+                display = display,
+                icon = icon,
                 modded = (is_modded and is_modded(name)) or false,
             }
         end
@@ -8534,6 +8595,52 @@ _rt_register("issue461_boon_preview_wired", function()
         if sample[i].scenegraph_id == "reward_item" then
             return "#461 REGRESSION: preview widget anchored on sizeless reward_item node (off-screen bug class)"
         end
+    end
+end)
+
+-- #556 regression: lock both halves of the talent-specific contract. The pure
+-- duplicate policy must reject only an already-present talent, while the live
+-- identity resolver must use the current career's native name/icon when one is
+-- available in the keep.
+_rt_register("issue556_starting_talent_identity", function()
+    if type(mod._ct_starting_talent_is_duplicate) ~= "function" then
+        return "#556 REGRESSION: duplicate-selected-talent policy missing"
+    end
+    if not mod._ct_starting_talent_is_duplicate(
+        { talent = true }, "talent_2_2", { talent_2_2 = true }) then
+        return "#556 REGRESSION: selected talent_2_2 would be appended twice"
+    end
+    if mod._ct_starting_talent_is_duplicate(
+        { talent = true }, "talent_2_2", { talent_2_1 = true }) then
+        return "#556 REGRESSION: a different talent was incorrectly suppressed"
+    end
+    if mod._ct_starting_talent_is_duplicate(
+        { talent = false }, "attack_speed", { attack_speed = true }) then
+        return "#556 REGRESSION: non-talent starting-boon behavior changed"
+    end
+    if type(mod._ct_start_boon_identity) ~= "function" then
+        return "#556 REGRESSION: career-specific preview identity resolver missing"
+    end
+
+    local manager = Managers and Managers.player
+    local player = manager and manager:local_player()
+    if not player then return "skip: local player unavailable for talent identity" end
+    local ok, profile_index, career_index = pcall(function()
+        return player:profile_index(), player:career_index()
+    end)
+    if not ok then return "skip: local profile/career unavailable" end
+    local rarity
+    for _, entry in ipairs(rawget(_G, "DeusPowerUpsArray") or {}) do
+        if entry.name == "talent_2_2" then rarity = entry.rarity break end
+    end
+    if not rarity then return "#556 REGRESSION: vanilla talent_2_2 power-up absent" end
+    local display, icon = mod._ct_start_boon_identity(
+        "talent_2_2", rarity, profile_index, career_index)
+    if type(display) ~= "string" or display == "" or display == "talent_2_2" then
+        return "#556 REGRESSION: talent preview retained generic identity " .. tostring(display)
+    end
+    if type(icon) ~= "string" or icon == "" then
+        return "#556 REGRESSION: talent preview did not resolve a career icon"
     end
 end)
 

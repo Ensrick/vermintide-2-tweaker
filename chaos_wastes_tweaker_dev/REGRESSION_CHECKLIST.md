@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+### starting-talent-career-identity - issue #556
+
+| Field | Value |
+|---|---|
+| Symptom | A configured talent starting boon appears as an internal `talent_2_2`-style id without its career icon, and a talent already selected in the loadout is appended again. |
+| Root cause | CT read static fields absent from generic talent templates and appended after vanilla's selected-talent pass without consulting the resulting run-state identities. |
+| Fix version(s) | ct_dev 0.7.273-dev (not deployed) |
+| Category | SOLO / UI / RUN STATE |
+| Repro | Configure the career's selected row-2 talent plus a different row-2 talent as Starting Boons, queue a CW expedition, inspect the Tab preview, then begin the run. |
+| Expected post-fix | Preview rows use the current career's native talent names/icons. The already-selected talent occurs once; the different configured talent is added. Non-talents are unchanged. |
+| Detection | Offline `test_ct_starting_talent_identity.lua`; `/ct_regression_test`: `issue556_starting_talent_identity`; bounded `[ct:556]` skip count. |
+
 ### adventure-collectible-host-conversion - issue #351
 
 | Field | Value |

@@ -200,6 +200,12 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 
 ## Domain: Careers / Talents / DLC gating
 
+- Chaos Wastes initial talents are stored as generic `talent_<tier>_<column>`
+  power-ups; `_add_initial_power_ups` materializes the selected tier/column rows
+  before event boons, while `DeusPowerUpUtils` resolves each generic identity to
+  the current career's talent name and icon through `TalentTrees`/`TalentIDLookup`.
+  [src: scripts/managers/game_mode/mechanisms/deus_run_controller.lua:471-495; scripts/helpers/deus_power_up_utils.lua:259-322]
+
 - Closing either vanilla talent picker unconditionally writes the selected rows,
   calls `TalentExtension:talents_changed()`, and reapplies ammo buffs, even when
   no row changed; `talents_changed()` then reaches `apply_buffs_from_talents`,

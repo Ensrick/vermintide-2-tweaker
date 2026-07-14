@@ -91,6 +91,7 @@ local suites = {
     "test_ct_chest_count_audit",
     "test_ct_collectible_conversion",
     "test_ct_parry_cooldown_contract",
+    "test_ct_starting_talent_identity",
     "test_cos_offhand_preload_lifecycle",
     "test_cos_dual_offhands",
     "test_cos_la_shield_parity",
