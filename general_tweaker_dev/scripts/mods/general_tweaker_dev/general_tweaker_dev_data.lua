@@ -1005,6 +1005,20 @@ local _data = {
                         default_value = false,
                         tooltip       = "gt_keep_dummy_no_collision_tooltip",
                     },
+                    -- "Offline Twitch Mode" (#333). Category controls use the
+                    -- native Twitch candidate whitelist.
+                    {
+                        setting_id    = "gt_offline_twitch_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_offline_twitch_enabled_tooltip",
+                        sub_widgets   = {
+                            { setting_id = "gt_offline_twitch_allow_buffs", type = "checkbox", default_value = true, tooltip = "gt_offline_twitch_allow_buffs_tooltip" },
+                            { setting_id = "gt_offline_twitch_allow_items", type = "checkbox", default_value = true, tooltip = "gt_offline_twitch_allow_items_tooltip" },
+                            { setting_id = "gt_offline_twitch_allow_mutators", type = "checkbox", default_value = true, tooltip = "gt_offline_twitch_allow_mutators_tooltip" },
+                            { setting_id = "gt_offline_twitch_allow_spawns", type = "checkbox", default_value = true, tooltip = "gt_offline_twitch_allow_spawns_tooltip" },
+                        },
+                    },
                     -- "Prioritize Specials (Tagging, Deepwood and Soulstealer)" --
                     -- master toggle. The 3 context sub-toggles default ON; the
                     -- master gates all of them (_gt_prioritize_specials.lua).

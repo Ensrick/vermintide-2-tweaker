@@ -1,5 +1,16 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.235-dev (2026-07-14) -- #333 offline Twitch mode and event allow-list [verify-fix-coop]
+
+- Added a default-off **Offline Twitch Mode** that lets the host run ordinary Twitch votes without an account, channel, or stream. It reuses Fatshark's native Twitch game-mode object, timers, random tie resolution, effects, vote UI, game objects, and RPCs.
+- Added default-on category controls for buffs/effects, item giveaways, mutators, and enemy spawns. They compose with vanilla's game-mode whitelist at its single candidate gate and also apply when a real Twitch account is connected.
+- Synthetic connectivity is scoped to the mission lifecycle, ignores irrelevant IRC disconnect notifications, and is cleared after vanilla destroys vote state.
+- Added pure classifier/allow-list coverage, runtime regression check `issue333_offline_twitch_policy`, and vanilla-client verification notes in `OFFLINE_TWITCH.md`.
+
+### Co-op verify
+
+Enable **Offline Twitch Mode** on the host without linking Twitch, load a supported mission with a second player, and confirm normal vote UI, local random resolution, and effects remain synchronized. Disable each category in turn and confirm its events stop appearing. Repeat with a client that does not run GT. Run `/gt_regression_test` and confirm `issue333_offline_twitch_policy` passes.
+
 ## v0.2.234-dev (2026-07-14) -- #72 failed-join popup ownership hardening [verify-fix]
 
 - Closed the remaining F4 regression gap around the enriched failed-join popup. The live `StateLoading.create_popup` hook now routes successful takeover through one injectable ownership boundary that queues into GT's private pending registry without assigning `StateLoading._popup_id`.

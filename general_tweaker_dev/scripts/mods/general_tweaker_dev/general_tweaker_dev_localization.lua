@@ -466,6 +466,17 @@ return {
     gt_adventure_save_trait_chance = { en = "[untested] Healer's Touch, Home Brewer, Grenadier %% Chance" },
     gt_adventure_save_trait_chance_tooltip = { en = "Vanilla gives these three Adventure charm traits a 25%% save chance each; raise it up to 75 to make them more worthwhile. Each player sets their own." },
 
+    gt_offline_twitch_enabled = { en = "[verify-fix] Offline Twitch Mode" },
+    gt_offline_twitch_enabled_tooltip = { en = "Runs Twitch votes locally for the host without an account or stream, using the normal vote UI and a locally chosen winner. The filters below also apply when Twitch is linked. Takes effect on the next mission; vanilla clients receive normal Twitch vote messages." },
+    gt_offline_twitch_allow_buffs = { en = "Allow buffs and effects" },
+    gt_offline_twitch_allow_buffs_tooltip = { en = "Allows ordinary positive and negative Twitch effects. Unknown future vote types are grouped here." },
+    gt_offline_twitch_allow_items = { en = "Allow item giveaways" },
+    gt_offline_twitch_allow_items_tooltip = { en = "Allows Twitch votes that give potions, bombs, ammunition, or other items." },
+    gt_offline_twitch_allow_mutators = { en = "Allow mutators" },
+    gt_offline_twitch_allow_mutators_tooltip = { en = "Allows temporary Twitch mutators and curses." },
+    gt_offline_twitch_allow_spawns = { en = "Allow enemy spawns" },
+    gt_offline_twitch_allow_spawns_tooltip = { en = "Allows Twitch votes that spawn hordes, specials, monsters, or other enemies." },
+
     -- (gt_prio_specials_group became a master toggle gt_prio_specials_enabled 2026-06-30.)
     gt_prio_specials_enabled = { en = "[untested] Prioritize Specials (Tagging, Deepwood and Soulstealer)" },
     gt_prio_specials_enabled_tooltip = { en = "Biases your aim toward Special enemies, with three sub-toggles to choose where it applies: crosshair tagging, the Deepwood Staff bolt, and the Soulstealer Staff soul. Only affects your own targeting." },

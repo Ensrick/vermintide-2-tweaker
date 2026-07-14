@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.234-dev"
+local MOD_VERSION = "0.2.235-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -3543,6 +3543,9 @@ mod._gt_teleport_loop_policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_fixes")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_prioritize_specials")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_weave_unlock")
+-- Offline Twitch mode + native candidate allow-list controls (#333). Reuses
+-- vanilla vote timing, random resolution, UI and RPCs; host authoritative.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_offline_twitch")
 -- Improved Bot Combat: non-conflicting combat improvements migrated from the
 -- "Bot Improvements - Combat Returns" Workshop mod, folded into one toggle.
 -- Distinct methods from _gt_bot_fixes (no duplicate-hook collision).
