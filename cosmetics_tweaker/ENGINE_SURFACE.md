@@ -210,6 +210,11 @@ axes above exist. Load order: LA must be enabled AFTER cosmetics in the F4 launc
 so the embedded prefix-patch installs its VMFMod de-dupe first
 (`_la_prefix_embedded.lua` header).
 
+LA shield availability is data-driven by `_la_shield_parity.lua`. Its single Kruber
+catalogue fans every armoury key out to the four native and three current CWV shield
+item types; `_la_bridge.lua` still resolves and carries the variant-authored
+`new_units[1]` mesh. This adds no engine hook or per-weapon apply branch.
+
 ### MaterialSettingsTemplates / glow (owner: `GLOW_SYSTEM.md`)
 
 Weapon glow is applied at spawn: `GearUtils.spawn_inventory_unit` calls

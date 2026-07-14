@@ -9,6 +9,20 @@ Last updated: 2026-07-13.
 ---
 ## Diagnostics / Regression Suite
 
+### la-kruber-shield-catalogue-parity -- identical native and CWV availability
+
+| Field | Value |
+|-------|-------|
+| Symptom | LA shield illusions appeared only on the Kruber shield mesh family named by each variant's icon metadata; all three CWV shield weapons had no LA row. |
+| Root cause | Availability was inferred per variant from Empire/Breton icon families even though the apply path already swaps to the variant's authored `new_units[1]` mesh before painting. |
+| Mod(s) | cosmetics_tweaker + Loremaster's Armoury; character_weapon_variants for CWV rows |
+| Fix version(s) | cosmetics_tweaker v0.9.98-dev |
+| Category | INTEGRATION / MULTIPLAYER |
+| Repro | Compare the LA offhand row on Kruber Sword and Shield, Mace and Shield, Bretonnian Sword and Shield, Spear and Shield, and CWV Axe/Longsword/Warrior-Priest Hammer shield weapons. |
+| Expected post-fix | All seven item types expose the identical LA armoury-key set. Applying any entry uses its authored mesh and texture through the shared hand-based path; no weapon-specific render branch exists. |
+| Detection | `/cos_regression_test` passes `la_kruber_shield_catalogue_parity_266`; offline `test_cos_la_shield_parity.lua` locks the single complete, unique catalogue and identical Empire/Breton expansion. Coop verifies preview, local 1P/3P, transition, and remote husk rendering. |
+| Tracking | GitHub issue #266. |
+
 ### la-offhand-wielded-weapon-identity -- shield paint cannot wrap another weapon
 
 | Field | Value |

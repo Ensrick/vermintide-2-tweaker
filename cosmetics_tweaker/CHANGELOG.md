@@ -1,5 +1,13 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.98-dev - 2026-07-13 - #266 Kruber LA shield availability parity [verify-fix-coop]
+
+- Every Loremaster's Armour shield illusion is now offered on the same seven Kruber shield item types: Sword and Shield, Mace and Shield, Bretonnian Sword and Shield, Spear and Shield, and CWV Axe, Longsword, and Warrior-Priest Hammer shield variants.
+- Replaced Kruber's Empire/Breton availability split with one shared catalogue. The existing generic apply path still swaps to each option's LA-authored shield mesh before painting, preserving its intended UV layout without per-weapon render exceptions.
+- Added offline parity coverage for catalogue completeness, uniqueness, identical Empire/Breton expansion, CWV coverage, and non-Kruber isolation.
+
+- **Verify (coop):** with Loremaster's Armour, Cosmetics Tweaker v0.9.98-dev, and CWV enabled on both peers, inspect all seven Kruber shield weapon families. Each offhand row must offer the identical LA armoury-key set. Equip representative Empire-, Breton-, and custom-mesh shields on native and CWV weapons; verify preview, local 1P/3P, weapon swapping, keep-to-mission transition, and the other peer's husk retain the selected authored mesh and texture.
+
 ## 0.9.97-dev - 2026-07-13 - #583 independent native/CWV dual offhands [verify-fix-coop]
 
 - The normal illusion row now owns the main/right hand for dual weapons and Cosmetics adds one independent left/offhand row. Its default `Follow Main Illusion` entry carries no mesh override, so changing the main illusion still changes the pair until the user explicitly chooses an offhand.

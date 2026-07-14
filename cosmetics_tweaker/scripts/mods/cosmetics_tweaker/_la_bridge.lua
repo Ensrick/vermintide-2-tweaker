@@ -33,6 +33,8 @@ local function _plog(fmt, ...)
 end
 
 local M = {}
+local SHIELD_PARITY = mod:dofile("scripts/mods/cosmetics_tweaker/_la_shield_parity")
+M.kruber_shield_item_types = SHIELD_PARITY.KRUBER_SHIELD_ITEM_TYPES
 
 M.registered            = false
 M.backend_to_armoury    = {}  -- our backend_id -> LA Armoury_key
@@ -310,6 +312,9 @@ local _LA_EXTRA_WEAPON_TYPES = {
 }
 
 -- v0.8.57-dev: per-character shield item_type pool, split by mesh family.
+-- #266 supersedes this split for Kruber availability via SHIELD_PARITY below;
+-- the family map remains the authored-shield detector and the policy for the
+-- other characters.
 --
 -- Every LA shield variant whose la_key starts with a character prefix is
 -- automatically added to other shield-bearing item_types for that character
@@ -370,6 +375,9 @@ end
 -- isn't enough to distinguish them.
 local _ALL_SHIELD_TYPES = {}
 for wt, _ in pairs(_SHIELD_TYPE_TO_FAMILY) do
+    _ALL_SHIELD_TYPES[wt] = true
+end
+for _, wt in ipairs(SHIELD_PARITY.KRUBER_SHIELD_ITEM_TYPES) do
     _ALL_SHIELD_TYPES[wt] = true
 end
 
@@ -467,7 +475,12 @@ local function build_offhand_options()
                     --                    incorrectly (Bret texture on
                     --                    Empire mesh visible as warped
                     --                    artwork).
-                    if variant.kind == "unit" then
+                    -- #266: all Kruber LA shields use one catalogue. Each
+                    -- option retains its authored intended_unit, so parity
+                    -- does not stretch one shield family's UVs onto another.
+                    if SHIELD_PARITY.add_character_parity(character, weapon_types) then
+                        -- Complete catalogue added by the shared policy.
+                    elseif variant.kind == "unit" then
                         local char_pool = _LA_CHARACTER_ALL_SHIELDS[character]
                         if char_pool then
                             for _, wt in ipairs(char_pool) do

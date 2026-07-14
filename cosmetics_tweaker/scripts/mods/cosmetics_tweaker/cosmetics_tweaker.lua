@@ -57,7 +57,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.97-dev"
+local MOD_VERSION = "0.9.98-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -10754,6 +10754,43 @@ _rt_register("offhand_preload_async_bounded_565", function()
     if probe:complete("rt_shared_async_package", token) ~= false
             or probe.stats.late_callbacks_ignored ~= 1 then
         return "callback after release was not rejected exactly once"
+    end
+end)
+
+_rt_register("la_kruber_shield_catalogue_parity_266", function()
+    if not LA_BRIDGE.registered then return nil end
+    if type(LA_BRIDGE.kruber_shield_item_types) ~= "table"
+            or #LA_BRIDGE.kruber_shield_item_types ~= 7 then
+        return "Kruber LA shield catalogue is missing or has unexpected cardinality"
+    end
+    local reference
+    for _, item_type in ipairs(LA_BRIDGE.kruber_shield_item_types or {}) do
+        local per_hand = LA_BRIDGE.la_offhand_options_by_weapon_type[item_type]
+        local options = per_hand and per_hand.left_hand_unit
+        if type(options) ~= "table" or #options == 0 then
+            return "missing LA shield pool for Kruber item_type " .. tostring(item_type)
+        end
+        local keys = {}
+        for _, option in ipairs(options) do
+            if not option.armoury_key then
+                return "LA shield option without armoury_key on " .. tostring(item_type)
+            end
+            keys[option.armoury_key] = true
+        end
+        if not reference then
+            reference = keys
+        else
+            for key in pairs(reference) do
+                if not keys[key] then
+                    return string.format("Kruber LA parity missing %s on %s", key, item_type)
+                end
+            end
+            for key in pairs(keys) do
+                if not reference[key] then
+                    return string.format("Kruber LA parity has extra %s on %s", key, item_type)
+                end
+            end
+        end
     end
 end)
 

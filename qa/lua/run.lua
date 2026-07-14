@@ -76,6 +76,7 @@ local suites = {
     "test_ct_parry_cooldown_contract",
     "test_cos_offhand_preload_lifecycle",
     "test_cos_dual_offhands",
+    "test_cos_la_shield_parity",
     "test_gt_disconnect_grace",
 }
 
