@@ -482,6 +482,13 @@ per-portrait content. The `mercenary_hat_0001` (Estalia) HUD and small
 files are good reference sources to copy alpha from when authoring new
 portraits.
 
+The HUD and small `.material` files must use
+`gui_gradient:DIFFUSE_MAP:MASKED`. A transparent source PNG alone is not
+sufficient for a standalone Gui material: the ordinary `gui:DIFFUSE_MAP`
+path can draw the full rectangular quad on `create_portrait_frame`. Medium
+portraits intentionally retain the ordinary shader because the medium frame
+has an opaque surround over the full-bleed image.
+
 **(#526) The HUD mask must conform to the VANILLA silhouette, not a
 content-derived cutout.** Pre-0.1.20-dev the hud-size mask was derived
 from portrait content: it was wider than the vanilla window (446 opaque

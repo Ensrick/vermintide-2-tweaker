@@ -29,6 +29,20 @@ Last updated: 2026-05-22.
 
 ## Localization / UI
 
+### dcp-portrait-material-alpha -- cutout alpha survives Gui compilation
+
+| Field | Value |
+|-------|-------|
+| Symptom | A custom mission-completion portrait draws as an opaque rectangle whose corners extend outside the octagonal frame, while adjacent vanilla portraits clip correctly. |
+| Root cause | Correct source-PNG transparency was compiled behind ordinary `gui:DIFFUSE_MAP`; the standalone cutout material did not request the explicit masked Gui shader. |
+| Mod(s) | dynamic_cosmetic_portraits |
+| Fix version(s) | dynamic_cosmetic_portraits v0.1.22-dev |
+| Category | INTEGRATION / ASSET |
+| Repro | Equip a tracked Kruber Mercenary cosmetic, finish a mission, and inspect the Kruber portrait tile. |
+| Expected post-fix | The 86x108 custom portrait is visible only inside its authored alpha silhouette; no rectangular corner extends beyond the frame. HUD and Tab portraits remain visible. |
+| Detection | Offline `test_dcp_portrait_materials.lua` checks all 24 HUD/small materials plus the generator policy. `/dcp_regression_test` passes `portrait_cutout_materials_use_masked_shader_526`. Final evidence is one solo score-screen visual check. |
+| Tracking | GitHub issue #526. |
+
 ### vmf-dropdown-options-mutated — Multi-angle-bracket cascades from shared options table
 
 | Field | Value |

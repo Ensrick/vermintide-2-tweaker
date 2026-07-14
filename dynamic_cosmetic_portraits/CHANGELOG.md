@@ -1,5 +1,13 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.22-dev (2026-07-13) -- #526 preserve portrait alpha in the Gui material [verify-fix]
+
+- The v0.1.20 PNG remask was necessary but insufficient: the mission-completion screenshot still shows the custom 86x108 texture's rectangular corners outside `UIWidgets.create_portrait_frame`, while adjacent vanilla portraits clip correctly. The source PNGs have transparent corners; the remaining difference is the standalone material shader.
+- All 12 HUD and 12 small portrait materials now use `gui_gradient:DIFFUSE_MAP:MASKED`, the repository's established explicit alpha-mask Gui shader. Medium portraits retain `gui:DIFFUSE_MAP` because their frame has an opaque surround and they are intentionally full-bleed.
+- `add_portrait.ps1` now selects the shader by generated size. Added offline coverage for all 24 cutout materials and the generator policy, plus `/dcp_regression_test` check `portrait_cutout_materials_use_masked_shader_526`.
+
+- **Verify (solo):** restart the game after installing v0.1.22-dev, equip a tracked Kruber Mercenary cosmetic, finish any mission, and inspect Kruber's score tile. No rectangular image corner may appear beyond the octagonal frame. Also confirm the HUD and Tab portraits remain visible and clipped. One tester is sufficient; co-op is optional for comparing the custom tile beside vanilla peers.
+
 ## 0.1.21-dev (2026-07-13) -- #427 _dbg_alert log-only via engine printf [untested]
 
 - `_dbg_alert` rerouted mod:info + mod:echo -> pcall-guarded engine printf (the echo half posted to chat, the info half is invisible with mod logging OFF; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). `dynamic_cosmetic_portraits.lua` only; `_dbg` (mod:info) untouched.

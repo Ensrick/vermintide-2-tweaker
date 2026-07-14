@@ -149,6 +149,13 @@ $source.Dispose()
 foreach ($prefix in @("", "medium_", "small_")) {
     $texName = "$($prefix)portrait_$HatKey"
     $texPath = "gui/1080p/single_textures/custom_portraits/$texName"
+    # HUD/small need the explicit MASKED shader so their authored alpha clips
+    # the create_portrait_frame quad (#526). Medium is intentionally full-bleed.
+    $shader = if ($prefix -eq "medium_") {
+        "gui:DIFFUSE_MAP"
+    } else {
+        "gui_gradient:DIFFUSE_MAP:MASKED"
+    }
 
     $textureContent = @"
 common = {
@@ -179,7 +186,7 @@ $texName = {
 		surface_material = ""
 	}
 
-	shader = "gui:DIFFUSE_MAP"
+	shader = "$shader"
 
 	textures = {
 		diffuse_map = "$texPath"
