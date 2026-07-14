@@ -9,6 +9,20 @@ Last updated: 2026-07-13.
 ---
 ## Diagnostics / Regression Suite
 
+### la-offhand-wielded-weapon-identity -- shield paint cannot wrap another weapon
+
+| Field | Value |
+|-------|-------|
+| Symptom | A Loremaster shield pick stored on Grail Knight's secondary Bretonnian Sword and Shield wraps its texture around the mace of the currently wielded CWV Sword and Mace at mission spawn. |
+| Root cause | The identity guard read `inventory.wielded_slot`, which is present on the husk inventory but absent on the local-owner inventory. The local wielded item resolved to nil and the old conditional fell through permissively, painting whichever left-hand unit was active. |
+| Mod(s) | cosmetics_tweaker + character_weapon_variants + Loremaster's Armoury |
+| Fix version(s) | cosmetics_tweaker v0.9.85-dev; user verified on v0.9.87-dev |
+| Category | INTEGRATION |
+| Repro | As Grail Knight, equip CWV Sword and Mace in the primary melee slot and a Bretonnian Sword and Shield with an LA shield pick in the secondary slot, then enter a mission spawning with Sword and Mace wielded. |
+| Expected post-fix | Sword and Mace remains unpainted; wielding the Bretonnian Sword and Shield applies the stored LA paint only to its shield. An unresolved or different wielded identity fails closed and retries on the matching weapon's next wield. |
+| Detection | `/cos_regression_test` passes `cos_la_weapon_identity_gate_local_wearer`. The wrong-weapon spawn replay logs one bounded `[la-state] APPLY SKIP wrong-weapon` identifying the stored shield template and wielded Sword and Mace template. User verification log `console-2026-07-13-19.20.26-40f91837-d631-41e8-8743-340abd87907c.log` contains both signals. |
+| Tracking | GitHub issue #514. |
+
 ### issue483-cwv-sword-mace-individualized-cosmetics -- independent hands and peer replay
 
 | Field | Value |

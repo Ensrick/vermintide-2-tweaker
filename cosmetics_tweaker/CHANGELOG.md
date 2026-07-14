@@ -1,5 +1,10 @@
 # Cosmetics Tweaker — Changelog
 
+## Post-fix audit - 2026-07-13 - #514 verified complete
+
+- User solo verification confirmed that a Loremaster shield pick stored on Grail Knight's secondary Bretonnian Sword and Shield no longer wraps onto CWV Sword and Mace's mace at spawn. The uploaded v0.9.87-dev log records the exact restrictive gate (`entry key=one_handed_sword_shield_template_2`, `wielded template=sword_and_mace_template`) and `/cos_regression_test` passes `cos_la_weapon_identity_gate_local_wearer`.
+- Audited the shared local/husk resolver and both offhand/illusion call sites. They read `equipment.wielded_slot`, fail closed when the wielded item is unresolved or different, and preserve retry-on-next-wield behavior. The existing runtime regression locks local-owner, own-template, cosmetic-slot, and unresolved-item shapes. This is an instance of the existing owner/husk separate-root bug class, so no new catalog class was needed. No gameplay behavior, mod version, or Workshop deployment changed.
+
 ## 0.9.96-dev - 2026-07-13 - #565 reject async preload callbacks after unload [not deployed]
 
 - The shipped async conversion balanced every observed session (100 unique loads and 100 releases), but vanilla retains callbacks on a shared in-flight package when one reference unloads and another owner remains (`package_manager.lua:41-48`, `:196-237`). Cosmetics' old callback could therefore run after mod unload and recreate a `ready` entry in the registry that unload had just cleared.

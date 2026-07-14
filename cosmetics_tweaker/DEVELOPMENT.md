@@ -147,6 +147,10 @@ Any stored `_offhand_selection` whose mesh no longer matches the rendered shield
 - `/offhand_debug` — dumps the picker pool and current `_offhand_selection`.
 - `[LA paint]` lines in `Console.log` — shows where the paint flow stopped (gate / variant lookup / paint call).
 
+### Weapon identity before LA paint
+
+Every offhand or weapon-illusion replay must prove that the stored entry belongs to the currently wielded item before touching a hand unit. Resolve the active slot from `inventory._equipment.wielded_slot`; `inventory.wielded_slot` is only a compatibility fallback for the husk extension and is absent on the local-owner extension. Match offhand entries by the wielded item's template/name/key/item type. Only the illusion path may additionally match a cosmetic slot key. An unresolved or different wielded item is a restrictive skip, never permission to paint: the pending queue or next-wield reconcile retries the matching weapon. `/cos_regression_test` check `cos_la_weapon_identity_gate_local_wearer` locks this #514 invariant.
+
 ## Known limitations
 - LA `kind="unit"` variants (custom-mesh Empire basic shields, the elf `_mesh` variants, etc.) are not exposed — needs LA-package-load integration to register their meshes for on-demand spawning.
 - The `_equip_skin_by_item` map is per-previewer with weak keys; if a previewer is reused across different equipped items without `equip_item` being called for each slot, has_skin may report stale data. Hasn't reproduced in practice.
