@@ -722,3 +722,19 @@ _rt_register("issue472_focused_spirit_contract", function()
         return "Focused Spirit vanilla proc was not routed through crt wrapper"
     end
 end)
+
+_rt_register("issue283_talent_menu_noop_guard", function()
+    local selection = mod._crt and mod._crt.talent_selection
+    if mod._crt.talent_menu_guard_installed ~= true then
+        return "talent-menu no-op guard did not install"
+    end
+    if type(selection) ~= "table" or type(selection.equal) ~= "function"
+       or type(selection.snapshot) ~= "function" then
+        return "talent-selection policy missing"
+    end
+    local opened = selection.snapshot({ 1, 2, 3, 1, 2, 3 })
+    if not selection.equal(opened, { 1, 2, 3, 1, 2, 3 })
+       or selection.equal(opened, { 1, 1, 3, 1, 2, 3 }) then
+        return "talent-selection no-op/change boundary drifted"
+    end
+end)

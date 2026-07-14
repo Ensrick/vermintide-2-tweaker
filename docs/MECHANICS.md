@@ -200,6 +200,11 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 
 ## Domain: Careers / Talents / DLC gating
 
+- Closing either vanilla talent picker unconditionally writes the selected rows,
+  calls `TalentExtension:talents_changed()`, and reapplies ammo buffs, even when
+  no row changed; `talents_changed()` then reaches `apply_buffs_from_talents`,
+  which clears all prior talent buffs before rebuilding them. [src: scripts/ui/views/hero_view/windows/hero_window_talents.lua:53-74; scripts/ui/views/hero_view/windows/hero_window_talents_console.lua:67-88; scripts/unit_extensions/default_player_unit/talents/talent_extension.lua:48-101]
+
 - The DLC id for gated content lives on the master entry's `required_dlc` field;
   the vanilla gate is `Managers.unlock:is_dlc_unlocked(required_dlc)`, pre-checked
   with `dlc_exists` to avoid the fassert at `unlock_manager.lua:527`. [src: scripts/settings/dlc_settings.lua:274]

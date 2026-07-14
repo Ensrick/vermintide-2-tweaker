@@ -9,6 +9,15 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-13.
 
 ---
+## No-op talent-menu close preserves live buffs (#283)
+
+| Field | Value |
+|-------|-------|
+| Symptom | Opening and closing Talents without changing a row rebuilds every talent buff and erases accumulated stacks such as Bounty Hunter's Job Well Done. |
+| Expected | Identical desktop/controller selections skip persistence and talent/ammo reapply; changing any row delegates to vanilla unchanged. |
+| Detection | Offline `test_crt_talent_selection.lua`; runtime `/crt_regression_test` check `issue283_talent_menu_noop_guard`; solo in-game check in CHANGELOG 0.3.66-dev. |
+
+---
 ## Handmaiden Focused Spirit (#472)
 
 | Field | Value |

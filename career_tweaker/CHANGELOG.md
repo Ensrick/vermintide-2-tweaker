@@ -1,5 +1,12 @@
 # Career Tweaker Changelog
 
+## 0.3.66-dev - 2026-07-13 - #283 preserve accumulated buffs when merely viewing talents [not deployed]
+
+- Source audit corrected the suspected cause: both vanilla talent windows unconditionally call `TalentExtension:talents_changed()` on close (`hero_window_talents.lua:53-74`; controller equivalent `hero_window_talents_console.lua:67-88`). That method calls `apply_buffs_from_talents`, which clears every prior talent buff before rebuilding it (`talent_extension.lua:48-62,78-101`), so opening and closing the menu erases accumulated state even when no talent changed.
+- Desktop and controller talent windows now snapshot the selected talent rows on entry. If the rows are identical on exit, crt performs only vanilla's animator teardown and skips the no-op backend write, talent rebuild/sync, and ammo-buff reapply. Any actual row change delegates to the complete vanilla path unchanged.
+- Offline tests lock exact, changed, sparse, and invalid selection comparisons. `/crt_regression_test` adds `issue283_talent_menu_noop_guard` to prove the guard installed and its runtime decision boundary is live.
+- **Solo verify after deployment:** as Bounty Hunter with Job Well Done, build several stacks, open and close Talents without selecting anything, and confirm the stacks remain. Reopen, change one talent, close, and confirm the normal talent reapply still occurs.
+
 ## 0.3.65-dev - 2026-07-13 - #472 Handmaiden Focused Spirit exclusions and stacking rework [not deployed]
 
 - Added a default-ON Focused Spirit exemption for the same source-verified chip classes used by #334: generic `dot_debuff`, poison/warpfire/AOE damage types, self `wounded_dot`, plus Ratling projectile sources (`skaven_ratling_gunner` / `vs_ratling_gunner`). Ordinary enemy hits still reset the talent. The full `damage_source_name` is captured in the existing `PlayerUnitHealthExtension.add_damage` hook because the vanilla Focused Spirit proc receives only attacker, amount, and damage type.
