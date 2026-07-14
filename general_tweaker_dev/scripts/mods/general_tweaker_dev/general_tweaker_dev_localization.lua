@@ -46,8 +46,8 @@ return {
     -- data file), not A->Z. Tags: [working] where the CHANGELOG records an
     -- in-game confirmation of the wrapped fix, [untested] otherwise; the
     -- greedy-pickup item is brand-new (#297 item 8).
-    gt_bot_behavior_improvements = { en = "[verify-fix] [Issue 139, 142 & 469] Bot Behavior Improvements" },
-    gt_bot_behavior_improvements_tooltip = { en = "Master switch for the bot fixes listed underneath; while it is on, each fix can be toggled individually below. Covers Necromancer potion handoff, keeping the mission alive while a bot still stands, ledge recovery, ladder unstick, instant and greedy item pickup, smarter self-healing, revive and rescue priority, reviving during the Ironbreaker ult, and ignoring mutator and hazard AOE damage. Works only when you are the host." },
+    gt_bot_behavior_improvements = { en = "[verify-fix] [Issue 139, 142, 469 & 488] Bot Behavior Improvements" },
+    gt_bot_behavior_improvements_tooltip = { en = "Master switch for the bot fixes listed underneath; while it is on, each fix can be toggled individually below. Covers Necromancer potion handoff, keeping the mission alive while a bot still stands, ledge recovery, ladder unstick, instant and greedy item pickup, smarter self-healing, revive and rescue priority, reviving during the Ironbreaker ult, curated AOE immunity, and short-lived gas/warpfire resistance. Works only when you are the host." },
 
     gt_bot_necro_potion_handoff = { en = "[working] Necromancer bots hand off potions" },
     gt_bot_necro_potion_handoff_tooltip = { en = "A Necromancer bot brings a real potion forward over its skull item, so it can drink it or pass it to a teammate, which the skull otherwise blocks." },
@@ -119,6 +119,9 @@ return {
     -- around. Host-side, bots only, humans never affected.
     gt_bot_aoe_immunity = { en = "[verify-fix] [Issue 469] Bots ignore mutator and hazard AOE damage" },
     gt_bot_aoe_immunity_tooltip = { en = "Bots take no damage from a hand-picked set of area hazards they cannot reliably path around: Weaves and Twitch lightning strikes, the Chaos Wastes Khorne skull curse and Tzeentch bolt-of-change curse, and oil-barrel ground fire. Only bots are affected, never human players, and only while you are the host. Boss slams, warpfire, gas, and thrown bombs are left alone on purpose so bots still react to them." },
+
+    gt_bot_hazard_resistance = { en = "[verify-fix] [Issue 488] Bots build gas and warpfire resistance" },
+    gt_bot_hazard_resistance_tooltip = { en = "When a host-owned bot takes gas or warpfire damage, it gains one matching resistance stack for 2 seconds. Each active stack reduces subsequent damage of that type by 20%%, up to 5 stacks. Gas and warpfire stacks are independent; human players and other damage types are unchanged." },
 
     -- issue 448 (FIX 11): downed bot must not project the Morr's Protection aura.
     gt_bot_no_downed_morrs_grant = { en = "[working] Downed bots don't grant Morr's Protection" },
@@ -613,13 +616,9 @@ return {
     -- Code-referenced strings with no widget (rendered by the mod at runtime).
     -- Kept even though they don't map 1:1 to a menu entry.
     -- ============================================================
-    -- MOTD popup title + the MOTD text buffer. MOTD text is set via chat
-    -- (/lobby_motd_set <text>) and read with mod:get, not localized -- so the
-    -- gt_lobby_motd_text label + tooltip below are SUSPECTED ORPHANS left over
-    -- from the removed text-input widget (kept per audit policy; not deleted).
+    -- MOTD popup title. The command-authored text buffer is a persisted setting,
+    -- not a localized/menu-facing value.
     gt_lobby_motd_popup_topic = { en = "Message of the Day" },
-    gt_lobby_motd_text = { en = "MOTD text (use \\n for line breaks)" },
-    gt_lobby_motd_text_tooltip = { en = "The message players receive when they join. Type a backslash and n where you want a line break." },
 
     -- Failed-join manifest reveal (rendered text; _gt_lobby_failed_join_reveal.lua).
     gt_lobby_failnotify_title              = { en = "Cannot join: modded host" },

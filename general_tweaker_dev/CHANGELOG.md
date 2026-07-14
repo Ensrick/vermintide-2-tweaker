@@ -1,5 +1,17 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.238-dev (2026-07-14) -- #219 remove confirmed orphan MOTD localization
+
+- Removed only the unused `gt_lobby_motd_text` title and tooltip localization records left by the retired invalid text-input widget. The command-authored persisted setting and every MOTD send/read path remain intact.
+- This is the General Tweaker portion of the cross-mod orphan-localization cleanup; runtime behavior is unchanged.
+
+## v0.2.237-dev (2026-07-14) -- #488 bounded bot hazard fix and Ratling-shield diagnostics [not deployed]
+
+- Added a default-on child beneath the default-off Bot Behavior Improvements master. Host-owned bots keep independent gas and warpfire ledgers: each positive hit adds one two-second stack after resolving, and each active prior stack reduces the next matching hit by 20%, capped at five. Human players, other damage types, and the first hit remain vanilla.
+- Composed at GT's existing singleton `DamageUtils.apply_buffs_to_damage` hook after vanilla mitigation. The implementation adds no buff template, lookup row, RPC, shared breed mutation, or per-frame update; weak unit keys release replaced bots and milestone logging caps at 16 rows.
+- Kept shield-blocking Ratling fire diagnostic-only. The existing `_in_line_of_fire` owner records up to 12 distinct live state shapes: wielded/melee shield capability, blocking, projectile-hit attribution, cover state, victim identity, and input-extension readiness. It never suppresses cover or requests an action.
+- Added pure stack/classifier tests, structural singleton-hook coverage, runtime `issue488_bot_improvement_families`, and `BOT_IMPROVEMENTS_488.md`. Hazard resistance is ready for solo bot verification; shield blocking remains diagnostics-armed.
+
 ## v0.2.236-dev (2026-07-14) -- #242 complete enemy-spawn suppression [verify-fix]
 
 - Regression-locked the existing two-layer spawn block: both `ConflictDirector` spawn entry points refuse future units while the native `script_data` gates stop patrol, monster, horde, roaming, special, and critter producers before they queue work.

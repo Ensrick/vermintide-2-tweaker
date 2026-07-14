@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-14 - Bot hazard resistance and Ratling-shield diagnostics
+
+Tweaker: General DEV v0.2.237-dev / issue #488 implements the bounded hazard family: host-owned bots gain independent two-second gas and warpfire resistance stacks, with each active prior stack reducing the next matching hit by 20% up to five. It composes through GT's existing final-damage hook without buffs or networking. The separate shield-versus-Ratling request remains mutation-free diagnostics on the existing cover hook, capped at 12 distinct live state shapes, because avoiding cover does not itself prove the BT can wield and sustain block. No deployment is part of this commit.
+
 ## 2026-07-14 - Enemy-modifier transitive and live readiness diagnostics
 
 Tweaker: Enemies v0.7.49-dev / issue #453 now proves the full bounded child-buff and named-function contract behind its 15 native modifiers, then reuses the singleton AI post-spawn seam to sample live prerequisite readiness for two distinct breeds per Special, Elite, Boss, and Lord category. The eight-row session cap reports extensions, navigation/state, native breed bans, existing enhancements, and eligible/rejected counts without applying buffs or changing gameplay. Solo diagnostics are armed; implementation remains co-op verification work. No deployment is part of this commit.

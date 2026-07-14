@@ -40,6 +40,7 @@ local Unit = Unit
 local Vector3 = Vector3
 local ScriptUnit = ScriptUnit
 local Managers = Managers
+local _printf = rawget(_G, "printf") or function() end
 local policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_improved_bot_combat_policy")
 mod._gt_ibc_policy = policy
 
@@ -261,6 +262,65 @@ local LOF_WIDTH_STICKY = 6.0
 local LOF_LENGTH = 40.0
 local _lof_scratch = {}
 
+-- #488 shield-vs-Ratling is not implemented yet: suppressing cover does not
+-- itself make the BT wield melee and hold block. Capture the exact live state
+-- needed to choose the safe authority seam. Twelve distinct state shapes max.
+local _shield_probe_seen = {}
+local _shield_probe_count = 0
+local SHIELD_PROBE_CAP = 12
+mod._GT_488_RATLING_SHIELD_PROBE_CAP = SHIELD_PROBE_CAP
+
+local function _item_template(inventory, slot_name)
+    if not inventory or not slot_name then return nil end
+    local slot = inventory:get_slot_data(slot_name)
+    return slot and inventory:get_item_template(slot) or nil
+end
+
+local function _probe_ratling_shield(self, self_unit, take_cover_targets, taking_cover_from)
+    if _shield_probe_count >= SHIELD_PROBE_CAP then return end
+    local bb = self and self._blackboard
+    local inventory = bb and bb.inventory_extension
+    if not inventory then return end
+    local equipment = inventory:equipment()
+    local wielded_slot = equipment and equipment.wielded_slot
+    local wielded = _item_template(inventory, wielded_slot)
+    local melee = _item_template(inventory, "slot_melee")
+    local status = bb.status_extension
+    local blocking = false
+    if status and type(status.is_blocking) == "function" then
+        local ok, value = pcall(status.is_blocking, status)
+        blocking = ok and value and true or false
+    end
+
+    for attacker, victim in pairs(take_cover_targets or {}) do
+        local attacker_bb = BLACKBOARDS[attacker]
+        local breed = attacker_bb and attacker_bb.breed
+        if breed and breed.name == "skaven_ratling_gunner" then
+            local projectile_hits = bb.hit_by_projectile
+            local hit = type(projectile_hits) == "table"
+                and projectile_hits[attacker] ~= nil or false
+            local signature = table.concat({
+                tostring(wielded_slot), tostring(wielded and wielded.shield_block == true),
+                tostring(melee and melee.shield_block == true), tostring(blocking),
+                tostring(hit), tostring(victim == self_unit),
+            }, "|")
+            if not _shield_probe_seen[signature] then
+                _shield_probe_seen[signature] = true
+                _shield_probe_count = _shield_probe_count + 1
+                pcall(_printf,
+                    "[gt:488] ratling-shield state=%d/%d wielded=%s wielded_template=%s wielded_shield=%s melee_template=%s melee_shield=%s blocking=%s projectile_hit=%s victim_self=%s taking_cover=%s input=%s mutation=0",
+                    _shield_probe_count, SHIELD_PROBE_CAP, tostring(wielded_slot),
+                    tostring(wielded and wielded.name),
+                    tostring(wielded and wielded.shield_block == true),
+                    tostring(melee and melee.name), tostring(melee and melee.shield_block == true),
+                    tostring(blocking), tostring(hit), tostring(victim == self_unit),
+                    tostring(taking_cover_from and taking_cover_from[attacker] ~= nil),
+                    tostring(bb.input_extension ~= nil))
+            end
+        end
+    end
+end
+
 local function _point_in_lane(from, to, p, width, length)
     if not (from and to and p) then return false end
     local dir = to - from
@@ -275,6 +335,9 @@ local function _point_in_lane(from, to, p, width, length)
 end
 
 mod:hook("PlayerBotBase", "_in_line_of_fire", function(func, self, self_unit, self_pos, take_cover_targets, taking_cover_from)
+    -- Observation runs before the feature gate so ordinary play can arm #488
+    -- diagnostics without changing the current cover policy.
+    pcall(_probe_ratling_shield, self, self_unit, take_cover_targets, taking_cover_from)
     if not _feature_on("gt_ibc_ignore_distant_gunners") then
         return func(self, self_unit, self_pos, take_cover_targets, taking_cover_from)
     end

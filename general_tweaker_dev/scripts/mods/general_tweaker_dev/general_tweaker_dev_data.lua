@@ -291,6 +291,15 @@ local _data = {
                                 default_value = false,
                                 tooltip       = "gt_bot_aoe_immunity_tooltip",
                             },
+                            -- #488: short-lived type-specific mitigation for
+                            -- repeated gas/warpfire hits. The parent master is
+                            -- default OFF; this child defaults ON within it.
+                            {
+                                setting_id    = "gt_bot_hazard_resistance",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_hazard_resistance_tooltip",
+                            },
                         },
                     },
                     -- Bot follow mode (v0.2.152-dev) -- single dropdown

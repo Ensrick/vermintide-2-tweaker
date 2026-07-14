@@ -41,10 +41,19 @@ Last updated: 2026-07-14.
 - [ ] Census work is capped to the active side roster and cached for 0.5 seconds; no RPC or replacement consume action exists.
 - Detection: offline `test_gt_bot_ale_policy.lua`; `/gt_regression_test` check `issue365_smart_bot_ale_policy`.
 
+## Additional bot improvement families (#488)
+
+- [ ] With Bot Behavior Improvements and its new child enabled, the first gas hit on a bot is unchanged; repeated hits within two seconds step through 20%, 40%, 60%, 80%, then 100% matching resistance.
+- [ ] Gas and warpfire stacks remain independent; stacks expire individually at two seconds; humans, ordinary fire, friendly bombs, melee, and other damage are unchanged.
+- [ ] `[gt:488] bot-hazard` logs only first/full milestones and never exceeds 16 rows.
+- [ ] A shield bot facing a Ratling emits bounded `[gt:488] ratling-shield` rows showing melee/wielded capability, projectile-hit attribution, cover, and blocking state. Diagnostics do not change cover or request block.
+- [ ] `/gt_regression_test` passes `issue488_bot_improvement_families`.
+- Detection: offline `test_gt_bot_hazard_resistance`; source/runtime notes in `BOT_IMPROVEMENTS_488.md`. Hazard verification is solo; any later shield behavior is co-op.
+
 ## Localization lifecycle sync (#345)
 
 - [ ] Closed issue references #65, #255, #261, #293, #295, #297, #448, #468, #492, #515, and #529 do not appear in General Tweaker's visible setting labels.
-- [ ] Bot Behavior Improvements shows only `[verify-fix] [Issue 139, 142 & 469]`; Follow snap-back distance shows only `[verify-fix] [Issue 139]` and no stale diagnostic marker.
+- [ ] Bot Behavior Improvements shows only `[verify-fix] [Issue 139, 142, 469 & 488]`; Follow snap-back distance shows only `[verify-fix] [Issue 139]` and no stale diagnostic marker.
 - [ ] AOE immunity (#469), all heal-allies controls (#523), Improved Bot Combat (#298), and keep-dummy collision (#304) show `[verify-fix]` with their issue number.
 - [ ] `qa/check_issue_tag_sync.ps1` reports no findings for the corrected General Tweaker keys.
 - [ ] `/gt_regression_test` passes `issue345_gt_loc_status_sync`.

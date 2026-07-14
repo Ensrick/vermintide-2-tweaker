@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.236-dev"
+local MOD_VERSION = "0.2.238-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -866,11 +866,17 @@ mod._GT_549_GODMODE_POWER_MARKER = "gt-549-godmode-power-and-ammo"
 -- func returns [src: scripts/helpers/damage_utils.lua:2134-2450]. Both damage
 -- funnels consume that return before the authoritative health write [src:
 -- damage_utils.lua:1783-1831, 1916-1987], making this the narrow shared seam.
+mod._gt_bot_hazard_policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_hazard_resistance_policy")
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_hazard_resistance")
 mod:hook("DamageUtils", "apply_buffs_to_damage", function(func, current_damage,
         attacked_unit, attacker_unit, damage_source, victim_units, damage_type,
         buff_attack_type, first_hit, source_attacker_unit)
     local damage = func(current_damage, attacked_unit, attacker_unit, damage_source,
         victim_units, damage_type, buff_attack_type, first_hit, source_attacker_unit)
+    -- #488: host-owned bots gain independent gas/warpfire resistance stacks.
+    -- Consolidated here because this is GT's singleton final-damage hook.
+    damage = mod._gt488_scale_bot_hazard_damage(
+        damage, attacked_unit, damage_source, damage_type)
     local source_active = source_attacker_unit
         and _gt_godmode_strike_damage_active(source_attacker_unit) or false
     local attacker_active = _gt_godmode_strike_damage_active(attacker_unit)
@@ -1512,12 +1518,13 @@ _rt_register("issue345_gt_loc_status_sync", function()
     -- issue state. Exercise the same localization path used by VMF.
     local expectations = {
         { "gt_bots_in_keep", "[working]", nil, "Issue 65" },
-        { "gt_bot_behavior_improvements", "[verify-fix] [Issue 139, 142 & 469]", nil, "Issue 297" },
+        { "gt_bot_behavior_improvements", "[verify-fix] [Issue 139, 142, 469 & 488]", nil, "Issue 297" },
         { "gt_bot_smart_self_heal", "[working]", nil, "Issue 468" },
         { "gt_bot_heal_allies", "[verify-fix] [Issue 523]" },
         { "gt_bot_aid_priority", "[working]", nil, "Issue 492" },
         { "gt_bot_ignore_backward_gate", "[working]", nil, "Issue 515" },
         { "gt_bot_aoe_immunity", "[verify-fix] [Issue 469]" },
+        { "gt_bot_hazard_resistance", "[verify-fix] [Issue 488]" },
         { "gt_bot_no_downed_morrs_grant", "[working]", nil, "Issue 448" },
         { "gt_bot_follow_mode", "[working]", nil, "Issue 261" },
         { "gt_bot_follow_distance_m", "[verify-fix] [Issue 139]", "[diag]", "Issue 261" },
@@ -2361,6 +2368,25 @@ _rt_register("issue298_improved_bot_combat_controls", function()
     end
     if policy.distance_sq(7.1, 1) ~= 7.1 * 7.1 then
         return "distance control no longer compares squared engine distances"
+    end
+end)
+
+_rt_register("issue488_bot_improvement_families", function()
+    local policy = mod._gt_bot_hazard_policy
+    if type(policy) ~= "table" or policy.MAX_STACKS ~= 5
+        or policy.STACK_LIFETIME ~= 2 or policy.RESISTANCE_PER_STACK ~= 0.20 then
+        return "bot hazard resistance policy constants drifted"
+    end
+    if policy.classify("skaven_poison_wind_globadier", "damage_over_time") ~= "gas"
+        or policy.classify("skaven_warpfire_thrower", "warpfire_ground") ~= "warpfire" then
+        return "bot hazard source classifier drifted"
+    end
+    if type(mod._gt488_scale_bot_hazard_damage) ~= "function"
+        or mod._GT_488_HAZARD_MARKER ~= "gt-488-bot-hazard-resistance-v1" then
+        return "bot hazard final-damage integration missing"
+    end
+    if mod._GT_488_RATLING_SHIELD_PROBE_CAP ~= 12 then
+        return "ratling shield diagnostic cap missing"
     end
 end)
 
