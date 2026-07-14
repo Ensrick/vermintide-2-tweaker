@@ -182,7 +182,8 @@ subsystem note 3. The two class/RPC seams:
 
 | Class.method (kind) | Vanilla behavior | Why gt hooks it | Trap / invariant |
 |---|---|---|---|
-| `gt_ai_toggle_request` [rpc] `_gt_ai_takeover.lua:281` | - | Client requests the host hand its character to a bot (or reclaim it); the swap composes `profile_synchronizer:unassign_profiles_of_peer` + `game_mode:_add_bot_to_party` + `locomotion_system:set_override_player` | Schema-tagged (`mod.GT_AI_RPC_SCHEMA`), first positional arg, drops on mismatch (an older no-schema build lands its payload in `schema` and is logged via engine `printf`); the destructive swap is currently DISABLED (`_gt_ai_takeover_disabled`, keep-slot redesign pending) - every entry point bails before anything destructive |
+| `gt_ai_toggle_request` / `gt_ai_toggle_result` [rpc] `_gt_ai_takeover.lua` | - | A client asks the host to enter/reclaim keep-slot takeover; the authenticated host replies with its actual active state | Schema v2; sender peer is authoritative and a mismatched payload peer/local id is rejected. Result receiver accepts only the current host. Reason strings cap at 120 bytes and repeated requests are idempotent. |
+| `GameModeBase._add_bot_to_party` / mode `_remove_bot` / `force_respawn` [direct composition] `_gt_ai_takeover.lua` | Add/remove a real host bot and drive the native player spawn state [src: `scripts/managers/game_mode/game_modes/game_mode_base.lua:79-135`; Adventure `force_respawn`: `game_mode_adventure.lua:283-292`; Deus `:440-449`; Weave `game_mode_weave.lua:276-285`] | Reserve the human Player/profile/party slot, let one ordinary bot yield its slot when vanilla filled the party, place one temporary same-profile bot there, enter observer, then restore/reclaim | Exact modes are Adventure/Deus/Weave. A four-human party, dead/missing humans, absent APIs, and unsupported modes fail before despawn. Another takeover bot is never displaced. No `remove_player`, human party/profile reassignment, locomotion override, custom lookup, or per-frame transport. |
 
 ### Surface 4a - Godmode + enemy-spawn control (owner: `docs/engine/10`, `/07`; `general_tweaker_dev.lua`)
 
@@ -415,9 +416,10 @@ Distilled from the module headers and `docs/BUG_CLASSES.md` - do not re-discover
 - **The AI-takeover convert-in-place swap is a dead end.** Converting a human to
   a bot in place produced owner-less units (client kept controlling a unit the
   host orphaned), ownership desync, and a string of despawn-race crashes
-  (v0.2.113-.115). It is DISABLED pending an engine-native keep-slot redesign
-  (despawn only the unit, client enters the vanilla observer flow, a real host
-  bot fills a FREE slot). The despawn-race nil-guards it exposed
+  (v0.2.113-.115). #247 replaces it with an engine-native keep-slot flow:
+  despawn only the unit, enter the vanilla observer flow, let a real host bot
+  fill one yielded/free slot, and reclaim by native force-respawn. The safety guards
+  exposed by the retired approach
   (`AICommanderExtension._update_units`, `PlayerWhereaboutsExtension.update`,
   `RoundStartedSystem._players_left_start_area`) stay live regardless.
 - **`Breeds.chaos_exalted_sorcerer_drachenfels` cannot fight outside `dlc_castle`

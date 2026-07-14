@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.238-dev"
+local MOD_VERSION = "0.2.239-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -31,9 +31,10 @@ mod.GT_LOBBY_RPC_SCHEMA = 1
 -- fails the match and the host drops the request gracefully -- no swap, no
 -- crash. Defined here (mirroring GT_LOBBY_RPC_SCHEMA) so the module reads it at
 -- call time and the /gt_regression_test check below can assert it cross-module.
--- Bump ONLY when the `gt_ai_toggle_request` payload shape changes. Initial
--- value is 1; never define lower.
-mod.GT_AI_RPC_SCHEMA = 1
+-- v2 adds the authenticated host result/acknowledgement message and makes the
+-- request sender authoritative; old v1 peers fail closed instead of entering
+-- a half-swapped state.
+mod.GT_AI_RPC_SCHEMA = 2
 
 -- Shared-debug-draw RPC schema versioning (VMF_RECIPES.md § 10, issue 534).
 -- The `gt_draw_leash` broadcast (host -> gt peers; sender + receiver both in
@@ -161,15 +162,6 @@ local CT_GT_PICKUP_LOOKUP_RAWGET_MARKER_v0_2_48 = "gt-pickup-lookup-rawget-harde
 -- three call-sites in the function body via the file source.
 local CT_GT_AI_CLIENT_SEND_MARKER_v0_2_52 = "gt-ai-client-send-vmf-rehandshake"
 
--- v0.2.73-dev marker (Issue #60): host self-toggle of AI Takeover crashes the
--- next frame in LocomotionSystem.update_animation_lods because vanilla
--- `self._override_player or Managers.player:local_player()` resolves to nil
--- after pm:remove_player destroys the host's local Player. Fix mirrors the
--- vanilla benchmark path (`benchmark_handler.lua:423`): set_override_player
--- on the bot after the swap, clear it on toggle-back. Marker pins both halves
--- so a refactor that drops either call gets caught at /gt_regression_test.
-local CT_GT_AI_LOCOMOTION_OVERRIDE_MARKER_v0_2_73 = "gt-ai-locomotion-override-on-host-swap"
-
 local _godmode = mod:get("godmode_enabled") or false
 -- Forward declaration: _apply_godmode is defined further down (in the Godmode
 -- section) but on_setting_changed (defined before it) needs to reference it.
@@ -259,12 +251,12 @@ mod._gt_ai_suppress_setting_callback = false
 mod._gt_ai_saved_state               = {}
 -- mod._gt_ai_handle_toggle_change is assigned by _gt_ai_takeover.lua.
 
--- v0.2.116-dev: convert-in-place takeover disabled pending the keep-slot
--- redesign (research wkcu0v4as). EVERY takeover entry point bails before
--- anything destructive runs; the Group-F nil-guards and the position-keepalive
--- stay active and untouched. on_setting_changed (a dispatcher) reads this, so
--- it's a mod._gt_ai_* field resolved at call time.
-mod._gt_ai_takeover_disabled         = true
+-- #247 v0.2.239-dev: the owner-destructive conversion is retired.  The active
+-- implementation keeps the human Player and party slot, uses native observer /
+-- force-respawn boundaries, and gives a temporary real bot the required free
+-- slot.  This emergency field remains callable by dispatchers and can be set
+-- true at runtime if in-game verification uncovers an engine regression.
+mod._gt_ai_takeover_disabled         = false
 
 -- AFK-to-AI-takeover state (gt_ai_afk_takeover). The on_game_state_changed
 -- dispatcher clears these at the mission boundary, so they're mod._gt_ai_afk_*
@@ -628,8 +620,8 @@ mod.on_setting_changed = function(setting_id)
             mod._gt_ai_suppress_setting_callback = true
             mod:set("ai_takeover_enabled", not want_bot)
             mod._gt_ai_suppress_setting_callback = false
-            -- v0.2.116-dev: when the takeover is disabled, mod._gt_ai_handle_toggle_change
-            -- already echoed the rebuild message; don't stack the generic line.
+            -- The emergency gate already emits its specific refusal; do not
+            -- stack the generic line in that case.
             if not mod._gt_ai_takeover_disabled then
                 mod:echo("AI toggle: " .. err)
             end
@@ -2947,34 +2939,19 @@ _rt_register("bt_health_conditions_nilguarded_marker_present", function()
     end
 end)
 
-_rt_register("ai_locomotion_override_marker_present", function()
-    -- Issue #60 (2026-05-27): host self-toggle AI Takeover crashed in
-    -- LocomotionSystem.update_animation_lods one frame after pm:remove_player
-    -- destroyed the host's local Player. Vanilla reads
-    -- `self._override_player or Managers.player:local_player()` for the
-    -- viewport name — both are nil after the swap. Fix mirrors
-    -- benchmark_handler.lua:423: set_override_player(bot_player) on swap,
-    -- clear it on swap-back. If the marker disappears or a refactor drops
-    -- the calls, host AI Takeover will crash the next frame again.
-    if CT_GT_AI_LOCOMOTION_OVERRIDE_MARKER_v0_2_73 ~= "gt-ai-locomotion-override-on-host-swap" then
-        return "AI locomotion override marker absent — was the v0.2.73-dev fix reverted?"
+_rt_register("issue247_keep_slot_takeover_wired", function()
+    -- The retired implementation removed/recreated Player objects and needed a
+    -- locomotion override as crash mitigation.  #247 keeps the human Player and
+    -- slot, so the stronger invariant is the keep-slot marker plus an exposed
+    -- entry point and an enabled emergency gate.
+    if mod._GT_247_KEEP_SLOT_MARKER ~= "gt-247-keep-slot-v1" then
+        return "#247 keep-slot takeover marker missing"
     end
-end)
-
-_rt_register("ai_locomotion_override_set_and_cleared", function()
-    -- Guard for both halves of the v0.2.73-dev fix: the host swap path calls
-    -- locomotion_system:set_override_player(bot_player) AND the swap-back path
-    -- calls set_override_player(nil). Catches a partial revert that keeps the
-    -- marker but drops one of the two calls.
-    -- #511 (v0.2.202-dev): the source-grep (io.open over _gt_ai_takeover.lua) was
-    -- removed -- io is nil in the VMF sandbox, so it threw and reported FAIL on
-    -- healthy code. Runtime residual: the swap entry point is exposed (the AI-
-    -- takeover module loaded). The "both set_override_player calls present" partial-
-    -- revert invariant is a STATIC source-text check and belongs in a repo QA gate
-    -- (PROJECT_STANDARDS 2.2b tier a); the companion ai_locomotion_override_marker_present
-    -- still asserts the fix marker at runtime.
     if type(mod._gt_ai_swap_human_to_bot) ~= "function" then
-        return "mod._gt_ai_swap_human_to_bot not exposed -- the AI-takeover host-swap path is missing"
+        return "#247 takeover entry point missing"
+    end
+    if mod._gt_ai_takeover_disabled then
+        return "#247 emergency gate is still disabling takeover"
     end
 end)
 

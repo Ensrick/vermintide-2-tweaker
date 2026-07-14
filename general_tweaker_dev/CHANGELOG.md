@@ -1,5 +1,13 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.239-dev (2026-07-14) -- #247 keep-slot bot takeover [verify-fix-coop]
+
+- Replaced the hard-disabled owner-destructive swap with a source-backed keep-slot transaction for Adventure, Chaos Wastes, and Weaves. The human `Player`, peer/profile assignment, and party slot remain authoritative while one temporary same-profile bot uses a free slot or safely replaces one remembered native bot.
+- Reclaim removes only the recorded takeover bot, restores the displaced bot to its exact profile/career/slot, and returns the human through native `force_respawn`; the retired `remove_player`, human party/profile reassignment, and locomotion-override path is absent.
+- Bumped the AI RPC schema to v2, authenticated requests to the VMF sender, rejected claimed peer/local-id mismatches, and added host-only bounded result acknowledgements so client settings converge after rejection.
+- Added exact admission/authentication policy coverage, displacement/rollback structural tests, runtime `issue247_keep_slot_takeover_wired`, `AI_TAKEOVER_247.md`, and co-op verification steps. Four-human parties and unsupported modes fail before despawn.
+- Adversarial follow-up rejects non-boolean takeover intents and malformed host acknowledgements, keeps the live camera intact when human despawn fails, native-respawns after observer setup failure, and verifies reclaim APIs before removing the temporary bot.
+
 ## v0.2.238-dev (2026-07-14) -- #219 remove confirmed orphan MOTD localization
 
 - Removed only the unused `gt_lobby_motd_text` title and tooltip localization records left by the retired invalid text-input widget. The command-authored persisted setting and every MOTD send/read path remain intact.

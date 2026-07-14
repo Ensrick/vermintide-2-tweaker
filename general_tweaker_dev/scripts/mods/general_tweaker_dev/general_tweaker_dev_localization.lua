@@ -21,8 +21,8 @@ return {
     gt_bot_options_group = { en = "[working] Bots" },
 
     -- Loose bot options (A->Z by display label; status tags ignored).
-    gt_ai_afk_takeover = { en = "[Issue 247] AFK Bot Takeover" },
-    gt_ai_afk_takeover_tooltip = { en = "If you give no input for 20 seconds, a bot takes over your character, and you resume control the moment you press anything. Affects only your own character and works during missions only, not in Versus or the keep." },
+    gt_ai_afk_takeover = { en = "[verify-fix-coop] [Issue 247] AFK Bot Takeover" },
+    gt_ai_afk_takeover_tooltip = { en = "After 20 seconds without input, a temporary bot drives your hero while you observe; any input requests your native respawn. A normal bot yields its slot if needed. Supports Adventure, Chaos Wastes, and Weaves, but not a four-human party, Versus, or the keep." },
 
     gt_bots_in_keep = { en = "[working] Allow Bots in Keep" },
     gt_bots_in_keep_tooltip = { en = "While in the keep, allows bots so you can preview loadouts and have a full lobby. Works only when you are the host, and the bots are removed when you turn it off." },
@@ -136,8 +136,8 @@ return {
     gt_bot_follow_mode_follow_host = { en = "Follow Host" },
     gt_bot_follow_mode_split       = { en = "Split" },
 
-    ai_takeover_enabled = { en = "[Issue 247] Bot Takeover" },
-    ai_takeover_enabled_tooltip = { en = "Step away or test while bot AI drives your character, and take control back by turning it off. Not available in Versus or the keep, and your consumables and ammo are not kept when control changes." },
+    ai_takeover_enabled = { en = "[verify-fix-coop] [Issue 247] Bot Takeover" },
+    ai_takeover_enabled_tooltip = { en = "Let a temporary bot drive your hero while your player identity and party slot remain reserved; turn this off to return through the native respawn flow. A normal bot yields its slot if needed. Supports Adventure, Chaos Wastes, and Weaves, but not a four-human party." },
 
     -- Replicant Bots ports (v0.2.131-dev). All host-side, default OFF, ported
     -- from the "Replicant Bots - Different Bots Experimental Branch" mod.

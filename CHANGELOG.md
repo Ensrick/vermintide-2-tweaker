@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-14 - Keep-slot bot takeover
+
+Tweaker: General DEV v0.2.239-dev / issue #247 replaces the disabled owner-destructive AI swap with a bounded keep-slot transaction across Adventure, Chaos Wastes, and Weaves. The human Player/profile/party slot remains authoritative; one normal bot safely yields and regains its exact slot when vanilla filled the party; observer and reclaim use native camera/force-respawn flows; and schema-v2 request/result messages authenticate the sender and converge rejected client settings. Two-player verification remains required; no deployment is part of this change.
+
 ## 2026-07-14 - Bot hazard resistance and Ratling-shield diagnostics
 
 Tweaker: General DEV v0.2.237-dev / issue #488 implements the bounded hazard family: host-owned bots gain independent two-second gas and warpfire resistance stacks, with each active prior stack reducing the next matching hit by 20% up to five. It composes through GT's existing final-damage hook without buffs or networking. The separate shield-versus-Ratling request remains mutation-free diagnostics on the existing cover hook, capped at 12 distinct live state shapes, because avoiding cover does not itself prove the BT can wield and sustain block. No deployment is part of this commit.

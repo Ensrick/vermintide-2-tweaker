@@ -6,6 +6,16 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+## Keep-slot bot takeover (#247)
+
+- [ ] Bot Takeover works in ordinary bot-filled Adventure, Chaos Wastes, and Weave parties: one native bot yields its slot and is restored on reclaim. An already free slot needs no displacement.
+- [ ] The owner enters the vanilla observer camera; disabling takeover removes only the temporary bot and returns the human through native `force_respawn`.
+- [ ] A four-human party, dead/missing owner unit, keep, Versus, tutorial, or absent native API rejects before the human unit is despawned and restores the checkbox.
+- [ ] A client cannot claim another peer or local-player id. Host result acknowledgements converge the client checkbox to the host's actual active state; reason strings are bounded and retries remain idempotent.
+- [ ] AFK takeover fires after 20 seconds, input requests reclaim, and manual takeover is not cancelled by incidental input.
+- [ ] `/gt_regression_test` passes `issue247_keep_slot_takeover_wired` and the client-send queue checks.
+- Detection: offline `test_gt_ai_takeover.lua`; source rationale and two-player matrix in `AI_TAKEOVER_247.md`. Overall verification is co-op because the authenticated request/result path must be exercised.
+
 ## Failed-join popup ownership hardening (#72)
 
 - [ ] `/gt_regression_test` passes `issue72_lobby_failnotify_never_hands_popup_to_vanilla` and the four existing `gt_lobby_failnotify_*` checks.

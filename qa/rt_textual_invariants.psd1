@@ -115,9 +115,10 @@
     #    be reintroduced in the entry file.
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua'; needle='mod:hook("IngameUI", "handle_menu_hotkeys"'; literal=$true; polarity='absent'; issueRef='#62'; note='the IngameUI handle_menu_hotkeys hook must never come back (mid-mission hotkey CTD).' }
 
-    # -- item 15: #73 AI-takeover swaps locomotion override to the bot and back.
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_ai_takeover.lua'; needle='locomotion_system:set_override_player(bot_player)'; literal=$true; polarity='present'; issueRef='#73'; note='swap-to-bot path sets the locomotion override player.' }
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_ai_takeover.lua'; needle='locomotion_system:set_override_player(nil)'; literal=$true; polarity='present'; issueRef='#73'; note='swap-back path clears the locomotion override player.' }
+    # -- item 15: #247 supersedes #73 by retaining the human Player.  The old
+    #    locomotion override and identity-destructive operations must stay gone.
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_ai_takeover.lua'; needle='gt-247-keep-slot-v1'; literal=$true; polarity='present'; issueRef='#247'; note='keep-slot takeover marker remains present.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_ai_takeover.lua'; needle='remove_peer_from_party|unassign_profiles_of_peer|set_override_player'; literal=$false; polarity='absent'; issueRef='#247'; note='retired owner-destructive takeover operations remain absent.' }
 
     # ============================ wt ============================
     # #218: the CW trait widget groups were removed in a7012f3. Keep the stale
