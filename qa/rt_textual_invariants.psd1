@@ -156,6 +156,13 @@
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_inventory.lua'; needle='[gut:530] in-mission tab strip suspended'; literal=$true; polarity='present'; issueRef='#530'; note='deus suspend evidence line: on_enter must bail before un-gating the strip in a CW run.' }
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_inventory.lua'; needle='if mech == "deus" then'; literal=$true; polarity='present'; issueRef='#530'; note='mechanism gate ahead of the is_in_inn flip (Holseher''s Map opens hero_view natively).' }
 
+    # -- #575: pure tests lock geometry; both live presentations must retain
+    #    click-to-nearest-measured-boundary wiring and native scaled metrics.
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions.lua'; needle='pcall(UIFontByResolution, value_style)'; literal=$true; polarity='present'; issueRef='#575'; note='numeric caret measures with the native resolution-scaled font contract.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions.lua'; needle='scaled_size, value_style.font_type'; literal=$true; polarity='present'; issueRef='#575'; note='UIRenderer.text_size receives the authored font identity; material-only proxy widths drift.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua'; needle='pcall(defs.numeric_caret_index'; literal=$true; polarity='present'; minCount=2; issueRef='#575'; note='standalone presentation wires measured placement at initial and active-field clicks.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state.lua'; needle='pcall(defs.numeric_caret_index'; literal=$true; polarity='present'; minCount=2; issueRef='#575'; note='state presentation wires measured placement at initial and active-field clicks.' }
+
     # ============================ cim_dev ============================
     # Source: crafting_in_modded_dev/CHANGELOG.md 0.8.57-dev (issue 511). The two
     # hook-registration checks whose source-text needles skip in retail.

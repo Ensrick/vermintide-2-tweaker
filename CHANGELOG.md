@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - Post-fix audit for #575
+
+User verification confirms Tweaker: GUI v0.2.240-dev aligns the Mod Tweaker numeric caret across clicks, navigation, signs, decimals, and UI scaling. The shipped native-metric implementation and its runtime/offline geometry tests satisfy the behavior contract. Post-fix hardening adds tier-a source invariants for native scaled-font measurement and both live Mod Tweaker presentation call sites, plus an owning regression checklist and BUG_CLASSES entry for renderer-metric drift.
+
 ## 2026-07-13 - blocking headless ship preflight
 
 Issue #591 makes the canonical ship path run fast repository QA, offline Lua 5.1 unit tests, and target-mod lint before VMBLauncher can build, deploy, or upload. The ship self-test locks that ordering so a later refactor cannot silently move validation behind Workshop publication. Engine lifecycle, rendering, and multiplayer behavior remain in the in-game verification tier; deterministic transforms and capacity/resource bounds belong in host-runnable tests.

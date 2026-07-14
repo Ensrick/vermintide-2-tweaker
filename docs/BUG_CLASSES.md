@@ -1532,3 +1532,28 @@ end
 
 ### Related Issues / commits
 - cosmetics_tweaker v0.9.95-dev (#513), pure resolver `_cos_score_identity.lua`, runtime check `cos_la_score_screen_apply_wired`.
+
+## 39. Text caret geometry uses proxy font metrics
+
+**First seen:** 2026-07-13 (gui_tweaker_dev issue #575; fixed v0.2.240-dev)
+**Canonical Issue:** [#575](https://github.com/Ensrick/vermintide-2-tweaker/issues/575)
+**Lives in:** custom text inputs/carets layered onto VMF or vanilla widgets, especially centered numeric fields.
+
+### Symptoms
+- The caret appears about one character left or right of the intended insertion point.
+- A guessed pixel correction works for one value but fails for minus signs, decimals, proportional digits, UI scale, or resolution.
+- Keyboard movement changes the logical index correctly while the drawn bar remains visually displaced.
+
+### Diagnosis pattern
+1. Compare the text style's material, `font_type`, size, alignment, and renderer scale with the measurement call. A material path is not a substitute for the font identity.
+2. Trace the native text pass: `UIFontByResolution` resolves scaled material/size; `UIRenderer.text_size` returns width and glyph origin; centered alignment subtracts that origin.
+3. Measure every prefix boundary. Character count or average glyph width cannot place clicks in proportional text.
+
+### Fix template
+- Use the exact rendered style with `UIFontByResolution(style)` and pass `style.font_type` to `UIRenderer.text_size`.
+- Compute centered text-left as `box_x + (box_w - full_width) / 2 - origin_x`; caret X adds the measured prefix width.
+- For mouse placement, choose the nearest boundary from measured widths of `""`, first character, through the full string. Keep logical edit/navigation/commit state independent from drawing geometry.
+- Lock the pure geometry with proportional synthetic advances and source-gate every live presentation call site.
+
+### Related Issues / commits
+- gui_tweaker_dev v0.2.240-dev (#575), runtime `mod_tweaker_numeric_caret_geometry`, offline `test_mod_tweaker_numeric_editor.lua`.
