@@ -313,11 +313,11 @@ _crt_ensure_wire_safe_funcs()
 -- The setting_id key must match a checkbox in career_tweaker_data.lua.
 --
 -- Structure:
---   patches = { { buff = "buff_template_name", field = "field_name", value = new_value }, ... }
+--   patches = { { buff = "buff_template_name", sub_index = 1, field = "field_name", value = new_value }, ... }
 --   custom_apply(originals)   — optional, for changes beyond simple field patches
 --   custom_restore(originals) — optional, paired with custom_apply
 --
--- Patches mutate BuffTemplates[buff].buffs[1][field] at runtime.
+-- Patches mutate BuffTemplates[buff].buffs[sub_index or 1][field] at runtime.
 -- Changes take effect next time TalentExtension.apply_buffs_from_talents() runs
 -- (i.e. next mission load or talent change).
 --
@@ -427,6 +427,22 @@ local BALANCE_MODS = {
     -- Ranger Veteran's row-2 +5% attack speed talent
     -- (bardin_ranger_attack_speed, multiplier 0.05). Career-specific.
     rework_dr_ranger_attack_speed_5_to_10 = _build_stat_buff_rework("bardin_ranger_attack_speed", "multiplier", 0.10),
+    -- Ranger Veteran ale (#366): vanilla gives both the damage-reduction and
+    -- attack-speed sub-buffs `refresh_durations = true`. BuffExtension then
+    -- rewrites every existing stack's start/end time before adding a new stack
+    -- (buff_extension.lua:520-533), making all stacks expire together. False
+    -- leaves each application on its own authored 300-second clock.
+    rework_dr_ranger_ale_independent_decay = {
+        character = "bardin",
+        career = "dr_ranger",
+        patches = {
+            { buff = "bardin_survival_ale_buff", sub_index = 1, field = "refresh_durations", value = false },
+            { buff = "bardin_survival_ale_buff", sub_index = 2, field = "refresh_durations", value = false },
+        },
+        custom_apply = function()
+            pcall(printf, "[crt:366] applied independent 300-second timers to 2 Ranger ale sub-buffs")
+        end,
+    },
     -- Ranger Veteran's base HP pool: vanilla 100 → 125 (+25). Patches
     -- `CareerSettings.dr_ranger.attributes.max_hp`, the table that
     -- `PlayerUnitHealthExtension._get_base_max_health` reads via
@@ -4127,8 +4143,9 @@ local function apply_balance_mods()
     for setting_id, saved in pairs(_originals) do
         for _, entry in ipairs(saved) do
             local template = BuffTemplates[entry.buff]
-            if template and template.buffs and template.buffs[1] then
-                template.buffs[1][entry.field] = entry.old_value
+            local sub_buff = template and template.buffs and template.buffs[entry.sub_index or 1]
+            if sub_buff then
+                sub_buff[entry.field] = entry.old_value
             end
         end
         local def = BALANCE_MODS[setting_id]
@@ -4157,13 +4174,16 @@ local function apply_balance_mods()
                 local saved = {}
                 for _, patch in ipairs(def.patches) do
                     local template = BuffTemplates[patch.buff]
-                    if template and template.buffs and template.buffs[1] then
+                    local sub_index = patch.sub_index or 1
+                    local sub_buff = template and template.buffs and template.buffs[sub_index]
+                    if sub_buff then
                         saved[#saved + 1] = {
                             buff      = patch.buff,
+                            sub_index = sub_index,
                             field     = patch.field,
-                            old_value = template.buffs[1][patch.field],
+                            old_value = sub_buff[patch.field],
                         }
-                        template.buffs[1][patch.field] = patch.value
+                        sub_buff[patch.field] = patch.value
                     end
                 end
                 if def.custom_apply then
@@ -4191,8 +4211,9 @@ local function restore_all_balance_mods()
         end
         for _, entry in ipairs(saved) do
             local template = BuffTemplates[entry.buff]
-            if template and template.buffs and template.buffs[1] then
-                template.buffs[1][entry.field] = entry.old_value
+            local sub_buff = template and template.buffs and template.buffs[entry.sub_index or 1]
+            if sub_buff then
+                sub_buff[entry.field] = entry.old_value
             end
         end
     end

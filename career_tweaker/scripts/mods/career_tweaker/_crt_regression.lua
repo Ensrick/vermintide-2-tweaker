@@ -738,3 +738,29 @@ _rt_register("issue283_talent_menu_noop_guard", function()
         return "talent-selection no-op/change boundary drifted"
     end
 end)
+
+_rt_register("issue366_ale_independent_stack_decay", function()
+    local defs = balance and balance.BALANCE_MODS
+    local rework = defs and defs.rework_dr_ranger_ale_independent_decay
+    if type(rework) ~= "table" or type(rework.patches) ~= "table" or #rework.patches ~= 2 then
+        return "Ranger ale independent-decay patch pair missing"
+    end
+    for i = 1, 2 do
+        local patch = rework.patches[i]
+        if patch.buff ~= "bardin_survival_ale_buff"
+           or patch.sub_index ~= i
+           or patch.field ~= "refresh_durations"
+           or patch.value ~= false then
+            return "Ranger ale sub-buff patch contract drifted at index " .. tostring(i)
+        end
+    end
+    if mod:get("rework_dr_ranger_ale_independent_decay") then
+        local template = BuffTemplates and BuffTemplates.bardin_survival_ale_buff
+        local buffs = template and template.buffs
+        if not buffs or not buffs[1] or not buffs[2]
+           or buffs[1].refresh_durations ~= false
+           or buffs[2].refresh_durations ~= false then
+            return "enabled Ranger ale rework did not reach both live sub-buffs"
+        end
+    end
+end)

@@ -143,6 +143,8 @@ return {
     -- Bardin
     rework_dr_group                         = { en = "[working] Bardin" },
     rework_dr_ranger_group                  = { en = "[working] Ranger Veteran" },
+    rework_dr_ranger_ale_independent_decay             = { en = "[verify-fix] Ranger Veteran: Ale stacks expire independently" },
+    rework_dr_ranger_ale_independent_decay_description = { en = "Each ale stack keeps its own five-minute duration. Drinking another ale no longer refreshes earlier stacks, so stacks expire one at a time in the order they were gained." },
     rework_dr_ranger_attack_speed_5_to_10              = { en = "[working] Ranger Veteran: +5%% AS talent to +10%%" },
     rework_dr_ranger_attack_speed_5_to_10_description  = { en = "Doubles Ranger Veteran's flat attack speed talent from +5%% to +10%%. The in-game talent tooltip updates to match." },
     rework_dr_ranger_base_hp_plus_25                   = { en = "[working] Ranger Veteran: +25 base HP" },

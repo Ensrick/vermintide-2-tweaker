@@ -1,5 +1,12 @@
 # Career Tweaker Changelog
 
+## 0.3.67-dev - 2026-07-14 - #366 stagger Ranger Veteran ale expiry [verify-fix]
+
+- Added an opt-in Ranger Veteran rework that gives both ale effects independent per-stack lifetimes. Vanilla sets `refresh_durations = true` on the damage-reduction and attack-speed sub-buffs (`buff_templates.lua:5323-5343`), and `BuffExtension._add_stacking_buff` consequently refreshes every existing stack before adding the next (`buff_extension.lua:520-533`). The rework sets that field false on both sub-buffs, preserving each drink's own authored 300-second clock.
+- Extended the reversible balance patch engine with `sub_index` (default 1), so multi-sub-buff templates can be targeted without custom mutation code; all existing patches retain their original index-1 behavior.
+- Added runtime check `issue366_ale_independent_stack_decay` plus offline coverage for the two-index contract and all apply/restore paths.
+- **Solo verify after deployment:** enable **Ranger Veteran: Ale stacks expire independently**, collect three ales at visibly staggered times, and confirm the HUD drops from three stacks to two to one at those same staggered five-minute expiry points. Later ales must not make the earlier stacks expire together.
+
 ## 0.3.66-dev - 2026-07-13 - #283 preserve accumulated buffs when merely viewing talents [not deployed]
 
 - Source audit corrected the suspected cause: both vanilla talent windows unconditionally call `TalentExtension:talents_changed()` on close (`hero_window_talents.lua:53-74`; controller equivalent `hero_window_talents_console.lua:67-88`). That method calls `apply_buffs_from_talents`, which clears every prior talent buff before rebuilding it (`talent_extension.lua:48-62,78-101`), so opening and closing the menu erases accumulated state even when no talent changed.

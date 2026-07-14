@@ -613,6 +613,7 @@ return {
                                 setting_id  = "rework_dr_ranger_group",
                                 type        = "group",
                                 sub_widgets = {
+                                    { setting_id = "rework_dr_ranger_ale_independent_decay", type = "checkbox", default_value = false },
                                     { setting_id = "rework_dr_ranger_attack_speed_5_to_10",  type = "checkbox", default_value = false },
                                     { setting_id = "rework_dr_ranger_base_hp_plus_25",       type = "checkbox", default_value = false },
                                     { setting_id = "rework_dr_ranger_exuberance_stacking_dr", type = "checkbox", default_value = false },

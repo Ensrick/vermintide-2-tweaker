@@ -40,6 +40,7 @@ end
 
 local suites = {
     "test_attack_labeler",
+    "test_crt_ale_decay",
     "test_mod_tweaker_transaction",
     "test_mod_tweaker_profiles",
     "test_mod_tweaker_tab_labels",

@@ -69,6 +69,8 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
    file-local in the entry right after the talent dofile (mirror the existing
    `apply_talent_swaps` capture).
 2. **A new rework / balance tweak** → `career_tweaker_balance.lua` (BALANCE_MODS).
+   Declarative `patches` target `BuffTemplates[name].buffs[sub_index or 1]`;
+   specify `sub_index` when a parent template contains multiple sub-buffs (#366).
    If it reaches a vanilla NETWORKED buff path, it MUST route through a
    `crt_wire_safe_*` wrapper and carry `network_unsafe = true`, and its buff
    names go in the alphabetically-sorted `_CRT_BUFF_NAMES` (the sort assigns the

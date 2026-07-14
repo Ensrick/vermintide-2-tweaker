@@ -411,6 +411,22 @@ Last updated: 2026-07-13.
 
 ---
 
+### crt-ranger-ale-independent-decay — Multi-sub-buff patch indexing
+
+| Field | Value |
+|-------|-------|
+| Symptom | Ranger Veteran's three ale stacks all expire together after the newest drink refreshes every stack. |
+| Root cause | Both vanilla ale sub-buffs set `refresh_durations = true`; `BuffExtension._add_stacking_buff` consequently rewrites every existing stack's start/end time. |
+| Mod(s) | career_tweaker |
+| Fix version(s) | 0.3.67-dev (#366) |
+| Category | AUTO + MANUAL |
+| Repro | Enable the rework and collect three ales at staggered times. |
+| Expected post-fix | Damage-reduction and attack-speed stacks retain matching independent 300-second clocks and expire 3 to 2 to 1 in collection order. |
+| Detection | Lua test `test_crt_ale_decay`; runtime `/crt_regression_test` check `issue366_ale_independent_stack_decay`; solo HUD observation. |
+
+
+---
+
 ## Slugs
 
 - feedback-deploy-vs-upload-distinction
@@ -421,6 +437,7 @@ Last updated: 2026-07-13.
 - feedback-vmf-hook-safe-no-chain
 - feedback-workshop-upload-verify
 - feedback-workshop-upload-without-deploy
+- crt-ranger-ale-independent-decay
 - gated-registration-divergence
 - lua-forward-reference
 - ps5-getcontent-utf8
