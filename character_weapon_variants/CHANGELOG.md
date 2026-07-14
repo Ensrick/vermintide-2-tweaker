@@ -1,5 +1,9 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.399-dev - 2026-07-13 - #458 transition-safe shared peer parity [not deployed]
+
+- The shared parity beacon preserves a positive same-peer acknowledgement across a bounded 15-second PlayerManager roster absence during level transitions and delays missing-peer chat for 10 seconds. New, expired, or never-confirmed peers remain fail-closed immediately; this removes the observed false disable/re-enable chat cycle without relaxing wire safety.
+
 ## 0.1.399-dev - 2026-07-13 - #474 Old Musket presentation state [diagnostics-armed]
 
 - Replaced the remote husk's hard-coded ranged pose with explicit Old Musket mode state. Toggle and wield transitions publish one owner/slot/backend-id record; mission entry and hot join use one query/reply replay. Receivers cache the mode and reapply it immediately or on the next husk reconstruction, with no per-frame traffic.

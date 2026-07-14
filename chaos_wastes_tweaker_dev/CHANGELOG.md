@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.266-dev (2026-07-13) - #458 co-op start-shrine ordering crash contained [not deployed]
+
+- Rain's paired client log proved `DeusShopView.start` received the host's SHOP state while `DeusShopSettings.shop_types["dlc_morris_map"]` was still nil. CT had registered that synthetic entry only after `GameModeMapDeus.local_player_game_starts` returned, but vanilla performs `full_sync()` inside that call and can open the view first on a client.
+- Every peer now builds and validates the synthetic config before vanilla startup/full-sync. The host publishes SHOP only after positive validation. A final `DeusShopView.start` guard rebuilds before vanilla's unchecked `blessings`/`power_up_count` dereference and otherwise restores MAP_DECISION without calling vanilla; diagnostics are capped at four rows per process.
+- `/ct_regression_test` locks the complete-config contract, pre-vanilla preparation marker, and view-start containment hook. Co-op verification remains required: both peers enable the feature, enter a fresh run, confirm the shop opens on both, buy/Ready back to MAP_DECISION, and confirm no nil-config guard row or crash.
+- The shared peer-parity beacon also retains a positive VMF acknowledgement across a bounded 15-second PlayerManager roster gap during level transitions. New/unconfirmed/expired peers still disable gated features immediately; only stale transition callbacks/chat are avoided. Missing-peer chat now waits 10 seconds, longer than the observed 8.7-second normal handshake.
+
 ## 0.7.265-dev (2026-07-13) - #590 duplicate pool aliases no longer exhaust network level keys [verify-fix]
 
 - Crash GUID `9bd4c67f-8633-4b29-b4e3-7e306bd82feb` failed in `network_constants.lua:56` before the keep loaded: `NetworkLookup.level_keys` had grown past the fixed `weight_array.max_size`. The log captured CT's vanilla prefix at 582, while CT's 35 adventure missions add 210 theme permutations and the user's one-mission pool floor minted 39 duplicate aliases. The old six network permutations per alias produced `582 + 210 + 234 = 1,026`, two above the engine's 1,024-entry limit.

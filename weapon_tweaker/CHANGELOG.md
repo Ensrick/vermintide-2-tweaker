@@ -1,5 +1,9 @@
 # Weapon Tweaker Changelog
 
+## 0.12.231-dev (2026-07-13) - #458 transition-safe shared peer parity [not deployed]
+
+- The shared parity beacon preserves a positive same-peer acknowledgement across a bounded 15-second PlayerManager roster absence during level transitions and delays missing-peer chat for 10 seconds. New, expired, or never-confirmed peers remain fail-closed immediately; this removes the observed false disable/re-enable chat cycle without relaxing wire safety.
+
 ## 0.12.230-dev (2026-07-13) - #290 Kruber Billhook bake preserves receiver-facing remaps [diagnostics-armed]
 
 - **Root cause:** the complete v0.12.102 `two_handed_billhooks_template.es_` safety map was created first, then the v0.12.203 baked-picks block replaced it wholesale with five rows. Those five keys are Billhook 1P `anim_event` names, but vanilla sends `anim_event_3p or anim_event` to the 3P body (`weapon_unit_extension.lua:512`). Every action with an authored `anim_event_3p` therefore bypassed the replacement table, explaining the reported loss of essentially all Kruber Billhook swings.

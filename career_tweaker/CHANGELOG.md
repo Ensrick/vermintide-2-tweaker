@@ -1,5 +1,9 @@
 # Career Tweaker Changelog
 
+## 0.3.63-dev - 2026-07-13 - #458 transition-safe shared peer parity [not deployed]
+
+- The shared parity beacon preserves a positive same-peer acknowledgement across a bounded 15-second PlayerManager roster absence during level transitions and delays missing-peer chat for 10 seconds. New, expired, or never-confirmed peers remain fail-closed immediately; this removes the observed false disable/re-enable chat cycle without relaxing wire safety.
+
 ## 0.3.62-dev - 2026-07-13 - #427 _dbg_alert log-only via engine printf [untested]
 
 - `_dbg_alert` rerouted mod:warning -> pcall-guarded engine printf (VMF warning channel posts to chat under default settings; printf survives mod-logging-OFF, never chat; enemy_tweaker issue 240 template). `career_tweaker.lua` only; `mod._crt.dbg_alert` export unchanged.

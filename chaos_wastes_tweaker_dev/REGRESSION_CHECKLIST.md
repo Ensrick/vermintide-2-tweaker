@@ -6,6 +6,19 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+### start-shrine-client-config-ordering - client receives SHOP before synthetic config
+
+| Field | Value |
+|---|---|
+| Symptom | Co-op client crashes in `DeusShopView.start` when Buy Starting Boons opens on the `dlc_morris_map` start node; `_shop_config` is nil at vanilla lines 182-184. |
+| Root cause | CT built the synthetic shop entry only after `GameModeMapDeus.local_player_game_starts` returned, but vanilla calls `full_sync()` inside that function and the client could consume the host's SHOP state first. |
+| Mod(s) | chaos_wastes_tweaker_dev + shared peer-parity consumers |
+| Fix version(s) | ct_dev 0.7.266-dev; parity copies crt 0.3.63-dev, cwv 0.1.399-dev, et 0.4.31-dev, wt 0.12.231-dev |
+| Category | COOP |
+| Repro | Host enables Buy Starting Boons, Rain joins with matching dev mods, start a new CW run and enter `dlc_morris_map`. |
+| Expected post-fix | Both peers open the same start shrine, can buy and Ready back to MAP_DECISION, and neither log contains `_shop_config` nil. No four-mod parity disable/re-enable chat cycle occurs during the transition. |
+| Detection | `/ct_regression_test` passes `issue458_start_shrine_config`; guard diagnostics `[ct:458] start shrine view blocked` are bounded to 4 and indicate fail-closed containment, not a successful verification. Offline Lua tests prove the 15-second same-peer ack retention boundary and that new/expired peers remain disabled. |
+
 ---
 ## Startup and network lookup bounds
 

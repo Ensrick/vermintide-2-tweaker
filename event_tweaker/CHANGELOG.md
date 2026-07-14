@@ -1,5 +1,9 @@
 # Tweaker: Events — Changelog
 
+## 0.4.31-dev (2026-07-13) - #458 transition-safe shared peer parity [not deployed]
+
+- The shared parity beacon preserves a positive same-peer acknowledgement across a bounded 15-second PlayerManager roster absence during level transitions and delays missing-peer chat for 10 seconds. New, expired, or never-confirmed peers remain fail-closed immediately; this removes the observed false disable/re-enable chat cycle without relaxing wire safety.
+
 ## 0.4.30-dev (2026-07-12) - issue #532: preview active mutators on the Tab-hold panel [untested]
 
 ### Why

@@ -78,7 +78,8 @@ local function new_peer_parity(mod, opts)
     local ECHO_PREFIX     = opts.echo_prefix        or "[mod]"
     local POLL_INTERVAL   = opts.poll_interval      or 0.5      -- seconds between roster evaluations
     local SETTLE_ENABLE   = opts.settle_enable      or 2.0      -- seconds an all-present state must hold before re-enabling
-    local NOTIFY_GRACE    = opts.notify_grace       or 4.0      -- seconds a missing peer must persist before we notify
+    local NOTIFY_GRACE    = opts.notify_grace       or 10.0     -- longer than observed normal join handshakes; safety still disables immediately
+    local ABSENCE_GRACE   = opts.absence_grace      or 15.0     -- retain a positive ack across bounded PlayerManager level-transition gaps
     local ANNOUNCE_EVERY  = opts.announce_interval  or 10.0     -- heal-broadcast cadence
 
     local api = {}   -- the instance; methods below take an implicit `self` == api
@@ -88,6 +89,7 @@ local function new_peer_parity(mod, opts)
     local _feature_order  = {}          -- deterministic apply order
     local _acked          = {}          -- peer_id -> true (peer proven to run this mod)
     local _seen           = {}          -- peer_id -> true (last polled roster, for diffing)
+    local _absent_since   = {}          -- acked peer temporarily absent from PlayerManager roster -> monotonic time
     local _applied        = "disabled"  -- fail-safe default; NEVER auto-starts enabled
     local _installed      = false
     local _clock          = 0
@@ -172,6 +174,18 @@ local function new_peer_parity(mod, opts)
         return true
     end
     api.__classify = _classify
+
+    -- Pure retention policy exposed for regression tests. A positive VMF ack is
+    -- process/session evidence; PlayerManager temporarily drops the same Steam
+    -- peer id while changing levels. Retain only for a bounded window so a real
+    -- later rejoin still has to answer a fresh beacon.
+    local function _retain_ack(was_acked, absent_for)
+        return was_acked == true and type(absent_for) == "number"
+            and absent_for >= 0 and absent_for < ABSENCE_GRACE
+    end
+    api.__retain_ack = _retain_ack
+    api.ABSENCE_GRACE = ABSENCE_GRACE
+    api.NOTIFY_GRACE = NOTIFY_GRACE
 
     function api:all_peers_have()
         local ok, res = pcall(function()
@@ -311,14 +325,25 @@ local function new_peer_parity(mod, opts)
 
         local peers = _other_human_peers()
 
-        -- Roster diff: detect arrivals (to (re)announce) and departures (to drop
-        -- their ack so a re-used peer id can't carry a stale confirmation).
+        -- Roster diff: detect arrivals and bounded transition absences. The game
+        -- removes still-connected humans from PlayerManager while changing
+        -- levels; their VMF ack remains positive evidence for the same peer id.
+        -- A long absence expires it, so a later rejoin must handshake again.
         local new_peer = false
         for pid in pairs(peers) do
             if not _seen[pid] then new_peer = true end
+            _absent_since[pid] = nil
         end
         for pid in pairs(_seen) do
-            if not peers[pid] then _acked[pid] = nil end
+            if not peers[pid] and _absent_since[pid] == nil then
+                _absent_since[pid] = _clock
+            end
+        end
+        for pid, since in pairs(_absent_since) do
+            if not peers[pid] and not _retain_ack(_acked[pid], _clock - since) then
+                _acked[pid] = nil
+                _absent_since[pid] = nil
+            end
         end
         _seen = peers
 

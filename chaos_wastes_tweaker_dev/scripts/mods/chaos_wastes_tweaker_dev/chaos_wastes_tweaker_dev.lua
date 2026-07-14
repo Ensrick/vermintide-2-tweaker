@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.265-dev"
+local MOD_VERSION = "0.7.266-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -8813,27 +8813,88 @@ do
         cfg.blessings = mod._ct_build_start_shrine_blessings(blessings_seed)
         return cfg
     end
+
+    -- Vanilla DeusShopView.start dereferences both fields without checking them
+    -- (deus_shop_view_v2.lua:182-184).  Keep the validation contract explicit so
+    -- both the publisher and every receiving peer use the same fail-closed gate.
+    function mod._ct_start_shrine_config_valid(cfg)
+        return type(cfg) == "table"
+            and type(cfg.power_up_count) == "number"
+            and cfg.power_up_count >= 0
+            and type(cfg.blessings) == "table"
+    end
+
+    function mod._ct_prepare_start_shrine(drc)
+        if not drc or type(drc.get_current_node) ~= "function" then return nil end
+        local node = drc:get_current_node()
+        if type(node) ~= "table" or node.level ~= "dlc_morris_map" then return nil end
+        local bseed = node.system_seeds and node.system_seeds.blessings or 0
+        local cfg = mod._ct_build_start_shrine_config(bseed)
+        if not mod._ct_start_shrine_config_valid(cfg) then return nil end
+        return cfg
+    end
 end
+
+-- Final containment at the exact vanilla dereference. Normally the earlier
+-- local_player_game_starts preparation has already installed the config. If a
+-- future load-order change bypasses it, rebuild here before vanilla mutates view
+-- state; if that still fails, do not call vanilla and request MAP_DECISION locally.
+-- The host also restores its authoritative state. Diagnostic output is bounded.
+local _ct458_view_guard_reports = 0
+mod:hook("DeusShopView", "start", function(func, self, params)
+    local drc = self and self._deus_run_controller
+    local node_ok, node = pcall(function()
+        return drc and drc.get_current_node and drc:get_current_node()
+    end)
+    if not node_ok then node = nil end
+    if type(node) == "table" and node.level == "dlc_morris_map" then
+        local prepared, cfg = pcall(mod._ct_prepare_start_shrine, drc)
+        if not prepared then cfg = nil end
+        if not mod._ct_start_shrine_config_valid(cfg) then
+            local ss = self._shared_state
+            if ss and ss.get_key then
+                local state_key = ss:get_key("state")
+                if self._is_server and ss.set_server then ss:set_server(state_key, 1) end
+                if ss.set_own then ss:set_own(state_key, 1) end
+            end
+            if _ct458_view_guard_reports < 4 then
+                _ct458_view_guard_reports = _ct458_view_guard_reports + 1
+                pcall(printf, "[ct:458] start shrine view blocked: config unavailable; restored MAP_DECISION (peer=%s report=%d/4)",
+                    self._is_server and "host" or "client", _ct458_view_guard_reports)
+            end
+            return
+        end
+    end
+    return func(self, params)
+end)
+mod._ct_start_shrine_view_guard_installed = true
 
 -- Trigger + config registration at run start. VMF singleton-hook rule: this is ct_dev's
 -- ONLY (GameModeMapDeus, local_player_game_starts) hook (ct's other start hook is on
 -- GameModeDeus, a different class). Full mod:hook so we can override the shared state
 -- vanilla just set. Marker: _ct_start_shrine_trigger_hook.
 mod:hook("GameModeMapDeus", "local_player_game_starts", function(func, self, player, loading_context)
+    -- Prepare on EVERY peer before vanilla full_sync can expose a host-published
+    -- SHOP state to the client. This ordering is the #458 crash fix.
+    local drc = self._deus_run_controller
+    local start_ok, at_start = pcall(function()
+        return drc and drc.get_current_node_key and drc:get_current_node_key() == "start"
+    end)
+    if not start_ok then at_start = false end
+    local prepared, cfg = true, nil
+    if at_start then prepared, cfg = pcall(mod._ct_prepare_start_shrine, drc) end
+    if not prepared then cfg = nil end
     func(self, player, loading_context)
     local ok, err = pcall(function()
-        local drc = self._deus_run_controller
-        if not drc or not drc.get_current_node_key then return end
-        if drc:get_current_node_key() ~= "start" then return end -- run start only (not later map returns)
-        -- Register the shrine config on EVERY peer (host + clients) so the shop view
-        -- resolves it if the host forces SHOP; harmless when the shrine never opens.
-        local node = drc.get_current_node and drc:get_current_node()
-        local bseed = node and node.system_seeds and node.system_seeds.blessings or 0
-        local cfg = mod._ct_build_start_shrine_config(bseed)
+        if not at_start then return end -- run start only (not later map returns)
         -- Host-authoritative trigger: only the host writes shared server state; clients
         -- follow via the existing GameModeMapDeus shared-state sync.
         if not self._is_server then return end
         if not mod:get("ct_buy_starting_boons") then return end
+        if not mod._ct_start_shrine_config_valid(cfg) then
+            pcall(printf, "[ct:458] start shrine not published: host config validation failed; staying in MAP_DECISION")
+            return
+        end
         local run_id = drc.get_run_id and drc:get_run_id()
         if run_id ~= nil and mod._ct_start_shrine_fired == run_id then return end -- once per run
         local ss = self._shared_state
@@ -8848,6 +8909,7 @@ mod:hook("GameModeMapDeus", "local_player_game_starts", function(func, self, pla
         pcall(printf, "[ct:458] start-shrine trigger errored (%s); vanilla map decision unaffected", tostring(err))
     end
 end)
+mod._ct_start_shrine_prepared_before_vanilla = true
 
 -- /verify_<feature> per PROJECT_STANDARDS s5.1a: live state vs the toggles that gate it.
 mod:command("ct_verify_start_shrine", "Report the #458 Buy Starting Boons config (toggle, counts, miracle pool, registered shop config)", function()
@@ -8887,6 +8949,20 @@ _rt_register("issue458_start_shrine_config", function()
     end
     if type(mod._ct_build_start_shrine_blessings(12345)) ~= "table" then
         return "#458 REGRESSION: _ct_build_start_shrine_blessings must return a table"
+    end
+    if type(mod._ct_start_shrine_config_valid) ~= "function" then
+        return "#458 REGRESSION: start-shrine config validator missing"
+    end
+    if mod._ct_start_shrine_config_valid(nil)
+            or mod._ct_start_shrine_config_valid({ power_up_count = 4 })
+            or not mod._ct_start_shrine_config_valid({ power_up_count = 4, blessings = {} }) then
+        return "#458 REGRESSION: config validation must reject nil/partial and accept complete configs"
+    end
+    if mod._ct_start_shrine_prepared_before_vanilla ~= true then
+        return "#458 REGRESSION: peer config is not marked prepared before vanilla full_sync"
+    end
+    if mod._ct_start_shrine_view_guard_installed ~= true then
+        return "#458 REGRESSION: DeusShopView.start fail-closed guard missing"
     end
 end)
 
