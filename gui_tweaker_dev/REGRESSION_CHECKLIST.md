@@ -4,6 +4,22 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md
 
 Last updated: 2026-07-13.
 
+## Native options
+
+### issue292-video-profiles-native-apply — saved graphics presets bypass engine apply
+
+| Field | Value |
+|-------|-------|
+| Symptom | Rebuilding a screenshot/performance configuration requires manually changing every Video option. |
+| Root cause | The native menu has one pending-settings transaction but no reusable local snapshots. Direct `Application.set_user_setting` writes would bypass its reload/restart and timed-revert lifecycle. |
+| Fix version(s) | gui_tweaker_dev v0.2.244-dev (#292) |
+| Category | UNIT / UI INTEGRATION / PERSISTENCE |
+| Repro | Save two visibly different Video profiles, switch slots, Apply, keep/revert, reopen, restart, rename, and delete. Include a resolution unavailable to a second display or a capability-specific option when possible. |
+| Expected post-fix | Selection replays native widget callbacks into `changed_user_settings` / `changed_render_settings`; native Apply activates the profile. Unsupported values skip safely. Five flat VMF-persisted slots survive restart. |
+| Detection | Offline `test_gut_video_profiles.lua`; `/gut_regression_test`: `issue292_native_video_profile_pipeline`; bounded `[gut:292]` save/stage/delete lines. |
+
+---
+
 ## Mod Tweaker
 
 ### issue318-disabled-integrations-in-place — disabled mod escapes or disappears

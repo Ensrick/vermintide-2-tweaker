@@ -12,6 +12,24 @@ return {
         en = "Mod Tweaker",
     },
 
+    gut_video_profiles_header = { en = "Graphics Profiles" },
+    gut_video_profile_selector = { en = "Active Profile" },
+    gut_video_profile_selector_tooltip = {
+        en = "Select a saved graphics profile. A saved profile is staged into the normal Video settings; click Apply to activate it.",
+    },
+    gut_video_profile_action = { en = "Profile Action" },
+    gut_video_profile_action_tooltip = {
+        en = "Save the displayed Video settings to the active profile, or delete that profile. Choose an empty profile first to save as a new profile.",
+    },
+    gut_video_profile_action_none = { en = "Choose Action" },
+    gut_video_profile_action_save = { en = "Save Current" },
+    gut_video_profile_action_delete = { en = "Delete Selected" },
+    gut_video_profile_delete_title = { en = "Delete Graphics Profile" },
+    gut_video_profile_delete_body = {
+        en = "Delete the selected graphics profile? This cannot be undone.",
+    },
+    gut_video_profile_delete_confirm = { en = "Delete" },
+
     -- ============================================================
     -- 3rd-Person Camera (migrated from general_tweaker 2026-06-29, #191)
     -- ============================================================

@@ -5,6 +5,14 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.245-dev (2026-07-13) -- #292 native Video settings profiles [verify-fix]
+
+- Added five persistent graphics-profile slots at the top of the native Video options page. Selecting a saved slot stages its values; the game's existing Apply button remains the only activation path and therefore keeps its save, renderer reload/restart, and 15-second revert-confirmation behavior.
+- Save Current snapshots the concrete values of the Video widgets available on this machine. Delete Selected uses a confirmation popup. Selecting an empty slot before saving is the Save As flow. `/gut_video_profile_name <1-5> <name>` gives a slot a durable custom name.
+- Profiles are keyed by native callback identity, not a hand-maintained setting list. Unsupported hardware rows and monitor resolutions are skipped safely on replay; the load summary reports the applied/skipped counts.
+- Added engine-free capture/replay coverage and runtime check `issue292_native_video_profile_pipeline`.
+- **Verify:** save visibly different profiles (including resolution/fullscreen, quality, gamma, and a hardware-specific option when present), switch between them, click Apply, accept/reject the native timed confirmation, reopen Video options, restart once, and delete one profile. Values must persist and no unsupported row may be forced.
+
 ## 0.2.244-dev (2026-07-13) -- #318 disabled integrations remain in place [not deployed]
 
 - Replaced v0.2.194-dev's hide-disabled behavior with the revised acceptance contract. Mod Tweaker now enumerates installed Tweaker mods regardless of VMF enabled state, then folds Equipment membership by presence. A VMF-disabled CWV therefore remains under `Equipment > Weapons > Career Weapon Variants` when WT is present instead of disappearing or escaping as a blacked-out top-level tab.

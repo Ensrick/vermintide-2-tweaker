@@ -68,8 +68,9 @@ gut_loadout_status,            -- dump the modded loadout store state to chat + 
 scrub_official_loadouts,       -- repair modded/dangling weapon+frame ids in OFFICIAL loadouts (#402; 'apply' to write, default report-only)
 gut_regression_test, gut_lua_mem,
 export_settings,                -- dump a TOML settings snapshot to the log (#517; no retail read-back)
+gut_video_profile_name,         -- name one of the five native Video profile slots (#292)
 ```
-*(partial gut audit added 2026-06-24 alongside the in-mission inventory migration; refreshed 2026-07-13 for #517. The retired `/reload_config` command is intentionally absent because retail exposes no file-read channel.)*
+*(partial gut audit added 2026-06-24 alongside the in-mission inventory migration; refreshed 2026-07-13 for #517/#292. The retired `/reload_config` command is intentionally absent because retail exposes no file-read channel.)*
 
 ### `ct` (chaos_wastes_tweaker)
 ```

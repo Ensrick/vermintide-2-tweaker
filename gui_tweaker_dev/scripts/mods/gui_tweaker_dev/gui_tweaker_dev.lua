@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.244-dev"
+local MOD_VERSION = "0.2.245-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -3159,6 +3159,14 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_career_swap")
 -- Dev probe: capture the live vanilla OptionsView so /dump_options can dump
 -- its real scroll/mask/scrollbar layout - ground-truth for the Mod Tweaker
 -- scrollbar. See _gut_diag_optionsview.lua (renamed from _gut_options_probe; #499).
+do
+    local ok_profiles, profiles = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_video_profiles")
+    if ok_profiles and type(profiles) == "table" and type(profiles.rt_checks) == "table" then
+        for _, c in ipairs(profiles.rt_checks) do _rt_register(c.name, c.fn) end
+    elseif not ok_profiles then
+        printf("[gut:292] Video profile module failed to load: %s", tostring(profiles))
+    end
+end
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_diag_optionsview")
 
 -- (#313) Crosshair Kill Confirmation options-menu bridge. When the CKC mod
