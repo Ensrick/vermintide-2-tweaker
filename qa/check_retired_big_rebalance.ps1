@@ -14,7 +14,10 @@ function Active-Lua([string]$relativePath) {
     # retired widget catalogs intentionally remain in long comments as migration
     # history; only executable source is part of this gate.
     $text = [regex]::Replace($text, '(?s)--\[(=*)\[.*?\]\1\]', '')
-    return [regex]::Replace($text, '(?m)--[^\r\n]*$', '')
+    # Consume an optional CR before the multiline end anchor. Without it,
+    # CRLF files retain every full-line comment and can false-positive on a
+    # historical commented-out require.
+    return [regex]::Replace($text, '(?m)--[^\r\n]*\r?$', '')
 }
 
 $widgetFiles = @(
