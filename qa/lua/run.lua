@@ -59,6 +59,7 @@ local suites = {
     "test_wt_overcharge_presentation",
     "test_wt_bolt_staff_overcharge",
     "test_wt_longbow_zoom_probe",
+    "test_wt_flamestorm_fx",
     "test_wt_cwv_ownership",
     "test_wt_native_ownership",
     "test_cwv_remote_audio",

@@ -1,6 +1,6 @@
 # Weapon Tweaker Changelog
 
-## 0.12.238-dev (2026-07-14) - #388 Deepwood cross-career overcharge presentation [verify-fix-coop]
+## 0.12.239-dev (2026-07-14) - #388 Deepwood cross-career overcharge presentation [verify-fix-coop]
 
 - Corrected the issue's original mechanism: Deepwood Staff uses `overcharge_system`, not Moonfire's `energy_system`. Vanilla binds its green HUD palette, thorn screen particles, warning sounds, decay, and non-exploding policy to `OverchargeData.we_thornsister` when the player extension is created, so a Kruber port receives generic defaults before equipment is considered.
 - Added a reversible owner-side profile while `we_life_staff` occupies the ranged slot on a non-Sister career. It projects the native Sister values into the existing extension, clears stale screen particles on each ownership transition, and restores every captured field/sound when the staff leaves or WT is disabled. Existing owner-authoritative overcharge replication remains unchanged; no RPC, NetworkLookup value, or remote-husk mutation was added.
@@ -10,6 +10,13 @@
 ### Co-op verify
 
 Both players run this build. Player A equips Deepwood Staff on a Kruber career, generates low/medium/high overcharge, then swaps to another ranged weapon and back while Player B observes and briefly spectates A. The owner and spectator bars must use the native Sister green palette; A must hear the life-staff warning progression and see thorn screen effects; the staff must decay and lock out without a generic overcharge explosion. After removal, a Sienna staff and Moonfire Bow must retain their own presentation. Repeat with B as owner. Expect one bounded profile apply/restore line per equipment transition and no RPC/desync errors.
+
+## 0.12.239-dev (2026-07-14) - #400 cross-career Flamestorm 3P aim [verify-fix-coop]
+
+- Corrected the observer-side Flamestorm Staff flame stream on non-Sienna careers. The particle still begins at the authored 3P staff-tip `fx_muzzle`, but its orientation now follows the wearer's replicated `aim_direction` instead of the receiver-native substitute pose.
+- Vanilla splits the surfaces: the owner action uses the universal first-person rig for both its local particle and damage direction (`action_flamethrower.lua:64-89,226-228`), while `WeaponSystem` creates and repositions the replicated 3P particle from the weapon muzzle rotation (`weapon_system.lua:470-487,744-774`). WT changes only that replicated observer surface; damage, the owner-local first-person stream, native Sienna careers, Drakegun, and weapon transforms remain untouched.
+- Both replicated creation and continuous update seams use the same correction helper. A one-time `[wt:400] applied` line confirms each observed wielder without per-frame logging. Offline policy/wiring tests and `/wt_regression_test` lock target scope, both hooks, and the replicated-aim contract.
+- `[verify-fix-coop]`: one player equips Flamestorm Staff on Kruber, Kerillian, or Saltzpyre and aims horizontally, upward, and downward while firing; a second player confirms the 3P stream begins at the staff tip and follows the crosshair direction. Repeat once on Sienna as the unchanged native control.
 
 ## 0.12.237-dev (2026-07-13) - #341 Bolt Staff primary overcharge option [not deployed]
 

@@ -110,7 +110,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.238-dev"
+local MOD_VERSION = "0.12.239-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -403,6 +403,8 @@ local _unit_career_name            = mod._wt.unit_career_name
 local _unit_state                  = mod._wt.unit_state
 local _suffix_career_map           = mod._wt.suffix_career_map
 local _3p_template_remaps          = mod._wt.three_p_template_remaps
+mod._wt.flamestorm_fx_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_flamestorm_fx_policy")
+mod:dofile("scripts/mods/weapon_tweaker/_wt_flamestorm_fx")
 local _WT316_ZOOM_PROBE            = mod:dofile("scripts/mods/weapon_tweaker/_wt_longbow_zoom_probe")
 local _wt316_zoom_probe            = _WT316_ZOOM_PROBE.new()
 local _wt316_zoom_records          = setmetatable({}, { __mode = "k" })

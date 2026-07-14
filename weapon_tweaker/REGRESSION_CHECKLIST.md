@@ -12,6 +12,17 @@
 
 ---
 
+## #400 - Cross-career Flamestorm observer FX aim
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.238-dev (not deployed) |
+| Automated | Offline `test_wt_flamestorm_fx` locks exact template/career policy and the single creation/update hook pair. `/wt_regression_test`: `issue400_cross_career_flamestorm_fx_uses_replicated_aim`. |
+| Co-op visual | Player A equips Flamestorm Staff on a non-Sienna career and fires while aiming horizontally, upward, and downward. Player B confirms the flame begins at the 3P staff tip and follows Player A's aim. |
+| Native control | Repeat on Sienna: her authored muzzle presentation remains unchanged. Drakegun and all other flamethrower-template users remain outside the exact-template policy. |
+| Log evidence | One `[wt:400] applied career=<career> template=staff_flamethrower_template source=replicated_aim` row per observed wielder, with no per-frame repeats. |
+| Authority | Visual-only observer correction on each peer. Damage remains owner/server authoritative; co-op is required because the corrected surface is the synchronized 3P particle. |
+
 ## #341 - Bolt Staff primary overcharge reduction
 
 | Field | Check |
