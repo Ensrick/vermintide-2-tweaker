@@ -8,6 +8,18 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 
 ---
 
+## Retired features
+
+### Big Rebalance consumers remain hidden and unloaded — issue #321
+
+**[STATIC + SOLO UI]**
+
+- Run `qa/check_retired_big_rebalance.ps1`; it must pass for WT/WT-dev, CT/CT-dev, ET, and CRT.
+- Open each consumer in Mod Tweaker. No Big Rebalance, `br_*`, or `cbr_*` group may render.
+- Existing saved legacy values are ignored, not erased. No BR mechanics apply after restart.
+- Workshop descriptions must not advertise the retired integration.
+- Reactivation requires a new reviewed owner/parity/source design; removing the old `bt` gate alone is forbidden.
+
 ## Multiplayer / Network Sync
 
 ### gated-registration-divergence — Toggle-gated mod-load registration produces different network indices across peers

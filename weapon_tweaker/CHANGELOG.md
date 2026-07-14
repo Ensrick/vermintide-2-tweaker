@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.234-dev (2026-07-13) - #321 retire stale Big Rebalance product surface [verify-fix]
+
+- Big Rebalance remains intentionally unloaded and its `br_*` option catalog remains hidden. Removing the old `bt` gate would be unsafe without a registration owner, recovered source, and peer-parity design.
+- Removed the retired feature from the Workshop description. Old saved `br_*` values remain reserved and ignored; no migration deletes user settings.
+- Added the repository-wide blocking `qa/check_retired_big_rebalance.ps1` contract. Verify solo that no Big Rebalance group appears in Mod Tweaker.
+
 ## 0.12.233-dev (2026-07-13) - #316 Kruber Longbow zoom probe [not deployed]
 
 - Source review separates the owner camera from the body animation: vanilla `ActionAim` starts camera zoom after the Empire Longbow's authored 0.22-second delay on every career, while WT's existing v0.12.192 `draw_bow -> to_zoom` mapping affects only third-person presentation on Mercenary, Foot Knight, and Grail Knight. Huntsman remains native.

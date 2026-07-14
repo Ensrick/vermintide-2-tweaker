@@ -1,5 +1,10 @@
 # Weapon Tweaker Changelog
 
+## 0.12.138-dev (2026-07-13) - #321 retire stale Big Rebalance product surface [not deployed]
+
+- Big Rebalance remains intentionally unloaded and its `br_*` options remain hidden; the Workshop description no longer advertises the retired `bt` integration.
+- Saved legacy values remain ignored and reserved. The repository-wide retired-BR gate prevents an active widget/module load from returning accidentally. Tag `[verify-fix]`.
+
 ## 0.12.137-dev (2026-06-28) — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
 
 ## 0.12.132-dev (2026-06-19) — CRITICAL multiplayer fix: anim-event RPC feedback loop (every player's 3P stuck on endless repeat)

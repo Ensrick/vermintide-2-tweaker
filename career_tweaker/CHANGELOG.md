@@ -1,5 +1,11 @@
 # Career Tweaker Changelog
 
+## 0.3.64-dev - 2026-07-13 - #321 retire stale Big Rebalance product surface [not deployed]
+
+- Confirmed the professional retirement path: the BR module stays replaced by its no-op lifecycle stub and the `cbr_*` widget/localization catalogs stay hidden. Reactivation is rejected while 27 archived bodies remain unimplemented and no shared registration owner exists.
+- Removed obsolete Big Rebalance claims from the Workshop description. Existing saved `cbr_*` values are intentionally preserved but never read, avoiding destructive migration and identifier reuse.
+- Added a blocking cross-mod QA contract and migration/ownership documentation. Tag `[verify-fix]`; verify solo that the Big Rebalance group is absent.
+
 ## 0.3.63-dev - 2026-07-13 - #458 transition-safe shared peer parity [not deployed]
 
 - The shared parity beacon preserves a positive same-peer acknowledgement across a bounded 15-second PlayerManager roster absence during level transitions and delays missing-peer chat for 10 seconds. New, expired, or never-confirmed peers remain fail-closed immediately; this removes the observed false disable/re-enable chat cycle without relaxing wire safety.

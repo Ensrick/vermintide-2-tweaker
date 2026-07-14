@@ -1,5 +1,11 @@
 # Enemy Tweaker Changelog
 
+## 0.7.40-dev (2026-07-13): #321 retire stale Big Rebalance product surface [not deployed]
+
+- Kept the BR damage/stagger module unloaded and the `br_*` widgets hidden. Reactivation is not mechanically justified: its former registration owner is retired and its peer-local damage rewrites need a new parity contract.
+- Removed obsolete Big Rebalance claims from the Workshop description. Saved legacy values remain ignored and reserved; no destructive settings cleanup runs.
+- The new blocking retired-BR QA check locks the hidden/unloaded contract. Tag `[verify-fix]`; solo menu verification is sufficient.
+
 ## 0.7.39-dev (2026-07-13): #479 quarantine malformed main-path event loops [untested]
 
 The latest session produced 1,173 `ConflictDirector.update` failures from

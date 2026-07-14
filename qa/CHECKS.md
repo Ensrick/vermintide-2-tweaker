@@ -12,6 +12,12 @@ Run all checks with: `qa\run_all.ps1`. CI (`.github/workflows/qa.yml`) runs the
 same `run_all.ps1` full gate (the policy engine below decides what blocks) plus a
 blocking all-mods `lint-mod.ps1` step on every push + PR (issue #429).
 
+Issue #321's retired-feature contract is enforced by
+`check_retired_big_rebalance.ps1`: active `br_*`/`cbr_*` widgets, executable
+consumer module loads, or Workshop descriptions advertising Big Rebalance are
+blocking errors. Historical implementations and saved setting identifiers stay
+reserved and inert for migration/forensic purposes.
+
 The canonical `tools/ship/ship.ps1` path runs `run_all.ps1 -Quick -SkipLua`
 (including offline Lua 5.1 unit tests) plus target-mod lint before any build,
 deploy, or upload. This is the release red gate from issue #591; in-game
