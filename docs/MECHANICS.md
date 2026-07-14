@@ -192,6 +192,12 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   etc.) install an `__index` metamethod that raises a crashify exception on a
   missing key; read via `rawget` to bypass it. [bugclass: §4]
 
+## Domain: Store / progression UI
+
+- The Emporium panel calls `_sync_player_wallet` during its native update, but rebuilds wallet widget text and geometry only when a `get_chips` value differs from its cached `_currencies` entry. [src: scripts/ui/views/hero_view/windows/store/store_window_panel.lua:169-176,601-652]
+- The Emporium item preview treats a changed product-version id as a force-refresh; `_sync_presentation_item` then recalculates `can_afford` through the parent store state's wallet read before setting the purchase-button state. [src: scripts/ui/views/hero_view/windows/store/store_window_item_preview.lua:401-443,872-993]
+- `BackendUtils.get_fake_currency_item` clones the selected `Currencies` entry and returns that clone plus its item key and reward-description localization key, so per-call presentation metadata can be changed without mutating the global currency catalog. [src: scripts/managers/backend/backend_utils.lua:326-348]
+
 ## Domain: Careers / Talents / DLC gating
 
 - The DLC id for gated content lives on the master entry's `required_dlc` field;

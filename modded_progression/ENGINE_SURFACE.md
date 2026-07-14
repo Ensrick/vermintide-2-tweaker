@@ -25,7 +25,8 @@ the remaining `BackendInterface*Playfab` routes in `PLAN.md` are not yet wired.
 
 ## Hook table
 
-25 registration sites, all `mod:hook` (full wrapper), all string-form. `[hook]` =
+32 registration sites, all `mod:hook` (full wrapper); two are table-form on
+`_G.Localize` / `BackendUtils.get_fake_currency_item`. `[hook]` =
 full wrapper (can rewrite args/returns). Eight route through the shared
 `_with_eac_off` wrapper, one (`IngameUI.not_in_modded`) is a flat return-true
 override, and the remainder own local progression/read/claim boundaries. There are no
@@ -50,6 +51,14 @@ out below and shared by all eight of its callers.
 | `StoreLoginRewardsPopup._create_ui_elements` / `_claim_rewards` + `BackendInterfacePeddlerPlayFab.claim_login_rewards` [hooks] | Popup construction disables the button in modded play; `_claim_rewards` otherwise enters claiming state and calls the peddler method; that method enqueues authenticated `claimStoreRewards` [src: `store_login_rewards_popup.lua:41-59,181-216`; `backend_interface_peddler_playfab.lua:811-828`] | #589 fail-closed boundary: retain/reinforce the disabled UI, intercept direct activation, and reject every modded backend caller before enqueue; official realm is unchanged | Local mixed item/currency transaction is not armed; two runtime checks cover UI + request policy, and textual QA locks both hooks |
 | `HeroWindowItemCustomization._enable_craft_button` [hook] `:449` / `_update_state_craft_button` [hook] `:450` | Vanilla keep crafting bench: `_enable_craft_button` flips the `enable` arg false in modded (`:1878`); `_update_state_craft_button` sets the button-hotspot disable flag (`:1928`) [src: `scripts/ui/views/hero_view/windows/hero_window_item_customization.lua` per PLAN.md] | Re-enable the keep bench craft button so vanilla-cost crafting works (`:449`) | `_with_eac_off`; cim owns the Athanor sandbox, mp owns the keep bench (`docs/CROSS_MOD_ARCHITECTURE.md` Mod 4) |
 | `IngameUI.not_in_modded` [hook] `:454` | Returns `not script_data["eac-untrusted"]` - a generic "is this a trusted UI surface" query [src: `scripts/ui/views/ingame_ui.lua:381-382` verified] | Force-return true so generic UI surfaces treat the session as trusted (`:454`) | The ONLY hook that is a flat override, not an `_with_eac_off` bracket - it does not touch the global flag, so no commit-suppression exposure |
+
+### Local Silver Shilling presentation and refresh (issue 578; owner docs: `docs/engine/09`, `docs/engine/11`)
+
+| Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
+|---|---|---|---|
+| `StoreWindowPanel._sync_player_wallet` [hook] | Called by panel update; compares each `get_chips` result with `_currencies`, then rebuilds all wallet widgets only on a changed cached amount [src: `store_window_panel.lua:169-176,601-652`] | Invalidate cached SM on ledger revision/realm edges and label the rebuilt number `[Local]` | Uses the native update call, not a new poll; unchanged frames compare scalars and allocate nothing; official transition forces a clean native rebuild even if both balances are numerically equal |
+| `StoreWindowItemPreview._sync_products_version` / `_set_price` [hooks] | Product-version changes force `_sync_presentation_item`, which recalculates affordability; `_set_price` populates the purchase widget [src: `store_window_item_preview.lua:401-443,872-993,1281-1321,1637-1661`] | Merge the local ledger revision into native product invalidation and label the SM action `Buy with Local Shillings` | Official/non-SM title is restored; no purchase boundary changes (issue #577 remains separate) |
+| `_G.Localize` / `BackendUtils.get_fake_currency_item` [hook,tbl] | Vanilla fake-currency helper returns a fresh clone, item key, and claim-description key consumed by challenge rows/reward popup [src: `backend_utils.lua:326-348`; `hero_view_state_achievements.lua:769-779,1580-1696`] | Supply realm-scoped local SM names/descriptions for reward and tooltip surfaces | Exact keys and `SM` only; official realm delegates unchanged; VMF mod localization is private, so the global hook is required for vanilla `Localize` consumers |
 
 ### Achievement progress tracking (row-of-concern) (owner doc: `docs/engine/11`)
 

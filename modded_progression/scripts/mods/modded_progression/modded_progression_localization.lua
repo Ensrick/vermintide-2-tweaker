@@ -3,6 +3,16 @@ local function en(s) return { en = s } end
 return {
     mod_description = en("Re-enables the normal Vermintide 2 progression systems while you play in the modded realm, so XP, shillings, loot chests, Okri's Challenges, Lohner's Emporium, and the crafting bench all work again. Your progress is saved locally on your PC and your real account is never changed."),
 
+    -- Local Silver Shilling UI (#578). The claimed string deliberately stores
+    -- %%d: VMF consumes the first percent during mod:localize, leaving %d for
+    -- vanilla's outer string.format in the reward popup.
+    mp_local_wallet_prefix = en("[Local]"),
+    mp_local_purchase_button = en("Buy with Local Shillings"),
+    mp_local_shillings_name = en("Local Silver Shillings"),
+    mp_local_shillings_description = en("Silver Shillings stored only by Modded Progression on this PC."),
+    mp_local_shillings_obtain = en("Earned and spent only in Modded Progression."),
+    mp_local_shillings_claimed = en("%%d Local Silver Shillings added to your modded balance."),
+
     -- ============================================================
     -- Starting state
     -- ============================================================

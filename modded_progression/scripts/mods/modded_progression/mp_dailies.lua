@@ -17,6 +17,9 @@ M.SCHEMA = 2
 
 local DAY_SECONDS = 86400
 local ROSTER_SIZE = 3
+local _ui_serial = 0
+local _ui_state_revision
+local _ui_state_balance
 local DAILY_TEMPLATES = {
     "daily_collect_grimoires",
     "daily_collect_loot_die",
@@ -137,9 +140,26 @@ local function read_state()
     return type(state) == "table" and state or nil
 end
 
+-- Issue #578: UI consumers need a cheap, monotonic invalidation edge. The
+-- persisted revision can restart after reset/migration, so expose a runtime
+-- serial that advances whenever the observed revision or balance changes.
+-- Store views compare this scalar inside their native sync methods; no extra
+-- timer, polling loop, or per-frame table allocation is introduced.
+local function publish_ui_state(state)
+    local revision = type(state) == "table" and tonumber(state.revision) or nil
+    local balance = type(state) == "table" and type(state.ledger) == "table"
+        and tonumber(state.ledger.balance) or 0
+    if revision ~= _ui_state_revision or balance ~= _ui_state_balance then
+        _ui_state_revision = revision
+        _ui_state_balance = balance
+        _ui_serial = _ui_serial + 1
+    end
+end
+
 local function write_state(state)
     local ok, err = pcall(mod.set, mod, M.STATE_KEY, state, false)
     if not ok then return nil, err end
+    publish_ui_state(state)
     return true
 end
 
@@ -187,6 +207,7 @@ function M.ensure(now)
     end
 
     register_templates(state)
+    publish_ui_state(state)
     return state
 end
 
@@ -349,6 +370,10 @@ function M.balance()
     return M.ensure().ledger.balance
 end
 
+function M.ui_revision()
+    return _ui_serial
+end
+
 local function ledger_adjust(amount, kind)
     amount = math.floor(tonumber(amount) or 0)
     local state = M.ensure()
@@ -390,7 +415,10 @@ function M.seconds_until_reset(now)
 end
 
 function M.reset()
-    mod:set(M.STATE_KEY, {}, false)
+    local ok, err = pcall(mod.set, mod, M.STATE_KEY, {}, false)
+    if not ok then return nil, err end
+    publish_ui_state(nil)
+    return true
 end
 
 -- Pure test seams used by the in-game regression command.

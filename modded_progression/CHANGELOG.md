@@ -1,5 +1,15 @@
 # Modded Progression — Changelog
 
+## 0.2.23-dev (2026-07-13) - #578 label and refresh local shillings [not deployed]
+
+- The Emporium wallet now renders its modded Silver Shilling balance as `[Local] N`, and its SM tooltip identifies the balance as PC-local Modded Progression state. SM item previews say `Buy with Local Shillings`; daily reward rows and claim popups say `Local Silver Shillings`. Exact-key global localization overrides exist only while MP owns the modded realm, so official play retains every vanilla label.
+- Added a monotonic runtime UI revision to the #573 ledger. Claim, credit, debit, reset, and schema-generated writes advance the revision. The Emporium merges it into vanilla's existing wallet invalidation and product-version sync seams, forcing balance, affordability, and zero/insufficient controls to rebuild without adding a timer, polling loop, or per-frame table allocation.
+- Added offline policy and ledger-revision coverage plus `/mp_regression_test` check `mp578_local_shilling_ui_lifecycle`.
+
+**Source audit:** `store_window_panel.lua:169-176,601-652` calls `_sync_player_wallet` from the native panel update and rebuilds wallet widgets only when a cached currency differs. `store_window_item_preview.lua:401-443,872-993` uses `_sync_products_version` to force `_sync_presentation_item`, which re-runs `HeroViewStateStore.can_afford_item`; `hero_view_state_store.lua:1266-1297` reads affordability through `peddler:get_chips`. `backend_utils.lua:326-348` returns a fresh cloned fake-currency item plus the reward-description key, providing an isolated label seam for daily rows and claim presentation.
+
+**Test:** In modded play, open Lohner's Emporium and confirm the wallet says `[Local]`, its tooltip says `Local Silver Shillings`, and an SM item says `Buy with Local Shillings`. Claim a completed MP daily while the relevant UI is open/revisited and confirm the number and affordability state update without restarting. Use `/mp_reset` and verify zero/insufficient state. Run `/mp_regression_test` and expect `mp578_local_shilling_ui_lifecycle`. Then enter official play and confirm no local label remains and the official balance is unchanged.
+
 ## 0.2.22-dev (2026-07-13) - #573 isolate the complete modded quest surface [not deployed]
 
 - Fixed official weekly/event rows leaking into the Modded Progression challenge surface. The old hook replaced only `quests.daily`, so an official row such as `weekly_collect_dice_2` remained visible but was correctly rejected by the local claim boundary. Modded play now returns exactly three slices: MP-owned local dailies, an empty weekly slice, and an empty event slice. Official play returns the original backend table unchanged.
