@@ -1,5 +1,18 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.220-dev (2026-07-13) -- #304 keep dummy player collision toggle [not deployed]
+
+- Added an off-by-default Gameplay toggle that lets the local player walk through training dummies in keep-type levels.
+- Source tracing showed that player blocking comes from `Breeds.training_dummy.player_locomotion_constrain_radius = 0.7`, copied onto authoritative and husk AI extensions and consumed by `PlayerUnitLocomotionExtension`; it does not require disabling the dummy's collision actors.
+- The implementation clears only that per-unit locomotion constraint while enabled in an inn level. It snapshots and restores the native value on toggle-off, level-scope changes, and mod disable, leaving hit-zone actors, targeting, visibility, and damage behavior untouched.
+- Added pure Lua policy coverage and `/gt_regression_test` check `gt304_keep_dummy_constraint_scope`.
+
+### Test method
+1. In the keep, leave Gameplay > No Player Collision with Keep Dummies off and confirm a training dummy blocks movement normally.
+2. Turn it on and confirm you can walk through the dummy while melee/ranged hits still register and its damage readout still works.
+3. Turn it off and confirm blocking returns immediately. Enter a mission and confirm ordinary enemies still constrain movement normally.
+4. Run `/gt_regression_test` and confirm `gt304_keep_dummy_constraint_scope` passes.
+
 ## v0.2.219-dev (2026-07-13) -- #302 invoke local wireframes from active HUD seam [verify-fix]
 
 - The `0.2.216-dev` verification log proved every Debug Highlights toggle was persisted `true` and the `IngameUI.update` hook installed, but the callback never emitted its master-state or draw breadcrumb. The screen projection code therefore never ran.

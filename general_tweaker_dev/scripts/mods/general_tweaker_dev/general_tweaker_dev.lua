@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.219-dev"
+local MOD_VERSION = "0.2.220-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -526,6 +526,12 @@ mod.on_game_state_changed = function(status, state_name)
     if mod._gt_cs_on_game_state_changed then
         mod._gt_cs_on_game_state_changed(status, state_name)
     end
+    -- #304: state transitions can flip DamageUtils.is_in_inn and rebuild every
+    -- AI extension. Reconcile tracked dummies after either edge; the module's
+    -- exact keep gate restores vanilla radius outside an inn level.
+    if mod._gt_apply_keep_dummy_collision then
+        mod._gt_apply_keep_dummy_collision(mod:get("gt_keep_dummy_no_collision"))
+    end
 end
 
 -- ============================================================
@@ -572,6 +578,10 @@ mod.on_setting_changed = function(setting_id)
         -- mod._gt_apply_no_bots body lives in _gt_bots_keep.lua; table-field
         -- ref resolves at call time.
         if mod._gt_apply_no_bots then mod._gt_apply_no_bots(mod:get("gt_no_bots")) end
+    elseif setting_id == "gt_keep_dummy_no_collision" then
+        if mod._gt_apply_keep_dummy_collision then
+            mod._gt_apply_keep_dummy_collision(mod:get("gt_keep_dummy_no_collision"))
+        end
     elseif setting_id == "gt_adventure_save_trait_chance" then
         -- table-field ref resolves at call time, so it's fine that the body is
         -- assigned further down the file.
@@ -644,6 +654,9 @@ mod.on_disabled = function()
     -- Replicant Bots port: restore the snapshotted vanilla bot reaction-time
     -- table (the source mod's on_disabled was author-flagged broken).
     if mod._gt_restore_fast_reactions then mod._gt_restore_fast_reactions() end
+    -- Unlike the older broad global mutations documented below, #304 owns a
+    -- bounded per-extension snapshot and can unwind immediately.
+    if mod._gt_restore_keep_dummy_collision then mod._gt_restore_keep_dummy_collision() end
     -- Issue #15: the mod is is_togglable=true but only the camera offset is
     -- snapshot-and-restored above. Many global mutations persist after
     -- disable: script_data flags (ai_*, intro dialogue,
@@ -2129,6 +2142,29 @@ _rt_register("gt_dh_no_position_lookup_reads", function()
     end
 end)
 
+_rt_register("gt304_keep_dummy_constraint_scope", function()
+    local policy = mod._gt_dummy_collision_policy
+    if type(policy) ~= "table" or type(policy.should_remove_player_constraint) ~= "function" then
+        return "keep-dummy collision policy/module did not load"
+    end
+    if mod._gt_dummy_collision_hook_count ~= 2 then
+        return "keep-dummy authoritative+husk init seams are not both wired"
+    end
+    local dummy = { name = "training_dummy" }
+    if policy.should_remove_player_constraint(false, true, dummy) then
+        return "default-off state incorrectly removes the dummy constraint"
+    end
+    if policy.should_remove_player_constraint(true, false, dummy) then
+        return "non-inn level incorrectly removes the dummy constraint"
+    end
+    if not policy.should_remove_player_constraint(true, true, dummy) then
+        return "enabled keep training dummy does not remove the constraint"
+    end
+    if policy.should_remove_player_constraint(true, true, { name = "skaven_slave" }) then
+        return "non-dummy AI incorrectly loses its movement constraint"
+    end
+end)
+
 _rt_register("gt_dh_hud_update_invocation_302", function()
     if mod._gt_dh_hud_update_wired ~= true then
         return "Debug Highlights is not wired to the consolidated IngameHud.update draw seam"
@@ -3213,6 +3249,12 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_solo_qol")
 --     (hook_safe UnitFrameUI.set_total_health_percentage + .update).
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_melee_warning")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_hp_smoothing")
+
+-- Keep dummy no-collision (#304): removes only the per-unit player locomotion
+-- constrain radius while enabled in an inn level. The dummy's actors/hitzones
+-- remain intact. Owns the distinct AISimpleExtension.init and
+-- AiHuskBaseExtension.init post-hooks; no networking.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_dummy_collision")
 
 -- Saved Positions (dev tool, #306): /save_position_1..10 + /recall_position_1..10.
 -- Command-only, no hooks. Captures the LOCAL player unit position + look rotation

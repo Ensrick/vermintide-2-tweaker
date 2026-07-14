@@ -918,6 +918,14 @@ local _data = {
                         decimals_number = 0,
                         tooltip         = "gt_adventure_save_trait_chance_tooltip",
                     },
+                    -- "No Player Collision with Keep Dummies" (#304). Local
+                    -- player movement only; hit actors and damage stay intact.
+                    {
+                        setting_id    = "gt_keep_dummy_no_collision",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_keep_dummy_no_collision_tooltip",
+                    },
                     -- "Prioritize Specials (Tagging, Deepwood and Soulstealer)" --
                     -- master toggle. The 3 context sub-toggles default ON; the
                     -- master gates all of them (_gt_prioritize_specials.lua).

@@ -6,6 +6,13 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+## Keep dummy player collision (#304)
+
+- [ ] With the toggle off (default), a keep training dummy blocks the local player as vanilla does.
+- [ ] With the toggle on, the local player walks through the dummy while hit markers/damage readout and all authored hit zones still work.
+- [ ] Turning the toggle off restores blocking immediately; enemies outside keep-type levels are unaffected.
+- [ ] `/gt_regression_test` passes `gt304_keep_dummy_constraint_scope`.
+
 ## Debug Highlights local renderer (#302)
 
 - [ ] With Debug Highlights + Interactables enabled in the keep, `[gt:302] invocation=IngameHud.update active` appears and yellow projected wireframes render locally.

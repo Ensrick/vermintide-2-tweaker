@@ -154,6 +154,9 @@ return {
     gt_no_bots = { en = "[untested] Disable Bots" },
     gt_no_bots_tooltip = { en = "Keeps bots from filling empty party slots and instantly removes any already present, for true solo runs. Works only when you are the host and stays in effect across missions until you turn it off." },
 
+    gt_keep_dummy_no_collision = { en = "[untested] [Issue 304] No Player Collision with Keep Dummies" },
+    gt_keep_dummy_no_collision_tooltip = { en = "Lets your character walk through training dummies while you are in the keep. Dummies remain visible, targetable, and damageable. Local to your player and off by default." },
+
     gt_bot_fast_reactions = { en = "[untested] Faster bot reactions (Replicant)" },
     gt_bot_fast_reactions_tooltip = { en = "Cuts bot reaction time to threats down to a fraction of a second. Works only when you are the host." },
 

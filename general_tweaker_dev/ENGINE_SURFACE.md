@@ -14,7 +14,7 @@ line; the remaining `[src:]` citations are carried from the cited `gt_dev`
 module comments, which cite the decompile in turn).
 
 **Dev/stable relationship.** This documents `general_tweaker_dev` (`gt_dev`,
-MOD_VERSION `0.2.217-dev`, friends-only Workshop 3733367409), the ACTIVE working
+MOD_VERSION `0.2.220-dev`, friends-only Workshop 3733367409), the ACTIVE working
 stream. `general_tweaker/` (`gt`, public Workshop 3713619122) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gt_dev`
@@ -32,7 +32,7 @@ damage/movement/camera path - each with its own subsystem note below.
 
 ## Hook table
 
-~110 registration sites across ~30 modules, grouped below into rows-of-concern.
+~112 registration sites across ~31 modules, grouped below into rows-of-concern.
 `[hook]` = full wrapper (`mod:hook`, can rewrite args/returns); `[safe]` =
 `mod:hook_safe` (post-callback, no override, chains across mods); `[tbl]` =
 table-form hook against a plain-table / data-table target (nil-guarded); `[rpc]`
@@ -196,6 +196,7 @@ body-movement/camera-adjacent feature still in gt_dev.
 | Class.method (kind) | Vanilla behavior | Why gt hooks it | Trap / invariant |
 |---|---|---|---|
 | `PlayerUnitLocomotionExtension.update_script_driven_no_mover_movement` [hook] `_gt_noclip.lua:112` | Applies whatever `velocity_wanted` the state machine wrote, teleporting the unit without touching the mover (the chaos-grab state) | Commandeer this state for the local noclip player: compute WASD/Space/Ctrl velocity projected through `first_person_system:current_rotation()` and write `velocity_*` + `Unit.set_local_position` | Per-frame heartbeat re-asserts `loco.state = "script_driven_no_mover"` (ledge/ladder transitions call `enable_script_driven_movement` and hand control back to the wall-respecting mover); on OFF, `Mover.set_position` before re-enabling or the next `Mover.move` yanks the player back |
+| `AISimpleExtension.init` [safe] / `AiHuskBaseExtension.init` [safe] `_gt_dummy_collision.lua` | Copy `breed.player_locomotion_constrain_radius` to each authoritative/husk AI extension; local player movement later reads it in `PlayerUnitLocomotionExtension` (`player_unit_locomotion_extension.lua:463-534`) | #304 snapshots the training dummy's native 0.7 radius and clears only the per-unit value while the local toggle is enabled in an inn level | Exact `breed.name == "training_dummy"` + `DamageUtils.is_in_inn == true` scope; both authority views are needed because avoidance is local; never disables actors/hitzones and sends no RPC; restore on OFF/state change/mod disable |
 | `CharacterStateHelper.is_ledge_hanging` [hook] `_gt_noclip.lua:185` / `will_be_ledge_hanging` [hook] `:192` / `HealthSystem.suicide` [hook] `:199` | Ledge-grab tests (both `Falling` and `Catapulted` call sites) / host-side out-of-world (`z<-240`) instant death | Return false / suppress out-of-bounds suicide for the local noclip unit so flying past the world edge does not force a grab or death (#241) | One table hook covers both ledge call sites; `suicide` block is latched so the per-frame z<-240 re-fire does not spam; a CLIENT's OOB death routes through `rpc_suicide` to the host and is out of reach (known limitation) |
 | `AICommanderExtension._update_units` [hook] `general_tweaker_dev.lua:531` / `PlayerWhereaboutsExtension.update` [hook] `_gt_hacks.lua:507` / `RoundStartedSystem._players_left_start_area` [hook] `_gt_hacks.lua:523` | Read `POSITION_LOOKUP[unit]` then feed nav queries / commander pos math | AI-takeover despawn-race guards: a human->bot swap leaves a unit without a `POSITION_LOOKUP` entry for a tick -> `nil + Vector3` or a nil arg to `GwNavQueries.triangle_from_position` fatals; skip the tick until the position exists | Always-on host-side guards; `_update_units` is `rawget`-guarded; `_players_left_start_area` returns `false` ("round not started") if ANY tracked unit lacks a position |
 | `VolumetricsFlowCallbacks.unregister_fog_volume` [hook,tbl] `_gt_hacks.lua:485` / `Unit.get_data` [hook,tbl] `:491` | Unregister a fog volume by `params.unit` / read unit data | Nil-guards: bail on a dead/nil `unit` to suppress engine-error spam during mid-cleanup | `Unit.get_data` DISTINCT from the spawner's `Unit.create_actor` (per-method) |

@@ -62,6 +62,7 @@ local suites = {
     "test_cim_skin_persistence",
     "test_cos_score_identity",
     "test_gut_native_loadout_policy",
+    "test_gt_dummy_collision_policy",
     "test_cos_glow_lifecycle",
     "test_peer_parity_transition",
     "test_ct_boon_catalog",
