@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.267-dev (2026-07-13) - #406 Modded Boons discoverability contract [verify-fix]
+
+- The latest log proves `ct_kill_heal` itself is registered and `start_boon_ct_kill_heal` exists in the loaded 0.7.266 settings. The remaining failure was navigation: the shared `mod_boons` branch still rendered as **New Scaling Boons**, a stale v0.7.30 label that does not describe Khaine's Communion or the trait-as-boon entries now catalogued there.
+- Kept the stable `start_boon_mod_boons_group` / `disable_boon_mod_boons_group` setting ids and the single canonical boon row, but renamed both player-facing routes to **Modded Boons**. Khaine's Communion now carries the open crash/verify-fix issue tags and its tooltip names the exact `Starting Boons > Modded Boons` path.
+- Extended `/ct_regression_test` beyond invisible widget ancestry: it now requires the realized category labels and the player-facing Khaine's Communion name. Added an offline Lua 5.1 suite that executes the actual data/localization builders, proves one widget per surface under the correct immediate parent, rejects the stale `New Scaling Boons` label, and locks the canonical power-up/server-heal path.
+- **Verify:** in Mod Tweaker open Tweaker: Chaos Wastes > Starting Boons > Modded Boons and select Khaine's Communion. Launch a run and confirm it is granted. Coop crash verification remains: a client holding it gets a kill without `Only server can heal`.
+
 ## 0.7.266-dev (2026-07-13) - #458 co-op start-shrine ordering crash contained [not deployed]
 
 - Rain's paired client log proved `DeusShopView.start` received the host's SHOP state while `DeusShopSettings.shop_types["dlc_morris_map"]` was still nil. CT had registered that synthetic entry only after `GameModeMapDeus.local_player_game_starts` returned, but vanilla performs `full_sync()` inside that call and can open the view first on a client.

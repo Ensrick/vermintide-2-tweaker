@@ -379,9 +379,12 @@ local loc = {
     -- ============================================================
     -- Mod Boons (ct-injected: Cascades + Trait-as-Boon variants)
     -- ============================================================
-    -- Mod Boons (v0.7.30) — 4 ct-injected per-boon scaling boons (model: Lileath's Favour)
-    disable_boon_mod_boons_group = { en = "[working] Disable Boons: (Mod Boon) New Scaling Boons" },
-    start_boon_mod_boons_group   = { en = "[working] Starting Boons: (Mod Boon) New Scaling Boons" },
+    -- #406 follow-up: this category now contains every CT-authored power-up,
+    -- including Khaine's Communion and trait-as-boon entries; it is not merely
+    -- the original scaling-boon set. Keep the stable setting ids, but name the
+    -- navigation surface exactly for what users are looking for.
+    disable_boon_mod_boons_group = { en = "[Issue 406] Disable Boons: Modded Boons" },
+    start_boon_mod_boons_group   = { en = "[Issue 406] Starting Boons: Modded Boons" },
     disable_boon_ct_meta_stagger  = { en = "[working] Disable Boon: (Mod Boon) Reactive Bulwark" },
     start_boon_ct_meta_stagger    = { en = "[working] Starting Boon: (Mod Boon) Reactive Bulwark" },
     disable_boon_ct_meta_stagger_tooltip = { en = "(Mod Boon) Per active boon, gain +1%% stagger power and +1%% melee cleave. Works like Lileath's Favour, but boosts impact and cleave instead of damage and attack speed." },
@@ -422,11 +425,12 @@ local loc = {
     description_ct_meta_ammo  = { en = "+5%% total ammo per active boon. Per-shot cost saturates at 75%% off; never free." },
     -- v0.7.32: green HP per kill mod boon. v0.7.240-dev (#406): re-enabled (was disabled
     -- v0.7.98-dev) so the user can select it as a starting boon and verify the issue-406
-    -- client heal fix; [untested] until that in-game verify (LOCALIZATION_STANDARD s13).
-    disable_boon_ct_kill_heal = { en = "[untested] [Issue 406] Disable Boon: (Mod Boon) Khaine's Communion" },
-    start_boon_ct_kill_heal   = { en = "[untested] [Issue 406] Starting Boon: (Mod Boon) Khaine's Communion" },
-    disable_boon_ct_kill_heal_tooltip = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Listed under Mod Boons. Toggle this off to remove it from the boon pool." },
-    start_boon_ct_kill_heal_tooltip   = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Listed under Mod Boons. Enable it here to receive it through Starting Boons, including Single Mission Loader runs." },
+    -- client heal fix. The open crash + verify-fix tags remain until that co-op
+    -- kill test is confirmed (LOCALIZATION_STANDARD section 13).
+    disable_boon_ct_kill_heal = { en = "[crash] [verify-fix] [Issue 406] Disable Boon: (Mod Boon) Khaine's Communion" },
+    start_boon_ct_kill_heal   = { en = "[crash] [verify-fix] [Issue 406] Starting Boon: (Mod Boon) Khaine's Communion" },
+    disable_boon_ct_kill_heal_tooltip = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Listed under Modded Boons. Toggle this off to remove it from the boon pool." },
+    start_boon_ct_kill_heal_tooltip   = { en = "(Mod Boon) Killing an enemy heals you for 0.25 permanent (green) health. Exotic rarity. Open Starting Boons > Modded Boons and enable it to receive it through Starting Boons, including Single Mission Loader runs." },
     display_name_ct_kill_heal = { en = "Khaine's Communion" },
     description_ct_kill_heal  = { en = "Killing an enemy heals you for 0.25 permanent (green) health." },
     -- v0.7.240-dev (#426): label for the peer-parity chat notice ("Peer-parity:

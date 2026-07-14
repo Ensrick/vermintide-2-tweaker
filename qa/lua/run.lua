@@ -58,6 +58,7 @@ local suites = {
     "test_gut_native_loadout_policy",
     "test_cos_glow_lifecycle",
     "test_peer_parity_transition",
+    "test_ct_boon_catalog",
 }
 
 for _, suite in ipairs(suites) do

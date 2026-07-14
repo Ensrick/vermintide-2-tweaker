@@ -45,14 +45,14 @@ Last updated: 2026-07-13.
 
 | Field | Value |
 |-------|-------|
-| Symptom | Khaine's Communion cannot be found under Mod Boons when configuring Starting Boons for Single Mission Loader. |
-| Root cause | The restored `ct_kill_heal` BOON_TREE row was placed under the vanilla Defensive Boons > Health family even though the power-up is authored entirely by CT. |
+| Symptom | Khaine's Communion cannot be found under Modded Boons when configuring Starting Boons for Single Mission Loader, despite the log reporting `start_boon_ct_kill_heal get=0`. |
+| Root cause | v0.7.264 corrected the invisible BOON_TREE ancestry from Defensive > Health to `mod_boons`, but that category's player-facing label remained the obsolete **New Scaling Boons** name from v0.7.30. Khaine's Communion is not a scaling boon, so structural presence did not make its navigation route discoverable. |
 | Mod(s) | chaos_wastes_tweaker_dev |
-| Fix version(s) | ct_dev v0.7.264-dev (#406) |
+| Fix version(s) | ct_dev v0.7.264-dev (catalog ancestry); v0.7.267-dev (realized navigation contract) |
 | Category | INTEGRATION / MENU CATALOG |
-| Repro | In the Pilgrimage Chamber, open CT options and inspect Starting Boons > Mod Boons before launching Single Mission Loader. |
-| Expected post-fix | `(Mod Boon) Khaine's Communion` appears exactly once under Mod Boons on both Disabled Boons and Starting Boons surfaces, and nowhere under a vanilla family. Selecting it grants the existing `ct_kill_heal` power-up; no duplicate definition exists. |
-| Detection | `/ct_regression_test`: `issue406_kill_heal_mod_boon_catalog` passes, then a client kill with the boon does not crash with `Only server can heal`. |
+| Repro | In the Pilgrimage Chamber, open Mod Tweaker > Tweaker: Chaos Wastes > Starting Boons > Modded Boons before launching Single Mission Loader. |
+| Expected post-fix | `(Mod Boon) Khaine's Communion` appears exactly once under the visibly named Modded Boons category on both Disabled Boons and Starting Boons surfaces, and nowhere under a vanilla family. Selecting it grants the existing `ct_kill_heal` power-up; no duplicate definition exists. |
+| Detection | `/ct_regression_test`: `issue406_kill_heal_mod_boon_catalog` checks realized labels plus ancestry. Offline `test_ct_boon_catalog` executes both builders. Then a client kill with the boon must not crash with `Only server can heal`. |
 
 ### cw-tab-collectible-safe-reflow - Injected DEUS counters cross the Tab overlay edge
 

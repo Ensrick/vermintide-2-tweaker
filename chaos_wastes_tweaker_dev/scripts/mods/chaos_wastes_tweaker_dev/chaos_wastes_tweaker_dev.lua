@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.266-dev"
+local MOD_VERSION = "0.7.267-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -13930,6 +13930,22 @@ _rt_register("issue406_kill_heal_mod_boon_catalog", function()
             return string.format("%s catalogued under %s, expected Mod Boons parent %s",
                 setting_id, tostring(parents[1]), expected_parent)
         end
+    end
+    -- #406 follow-up: structural presence was already correct in v0.7.264, but
+    -- the realized category still called itself "New Scaling Boons". That is a
+    -- discoverability failure for a non-scaling heal boon. Lock the actual
+    -- player-facing route, not only the invisible setting-id ancestry.
+    local start_group = mod:localize("start_boon_mod_boons_group")
+    local disable_group = mod:localize("disable_boon_mod_boons_group")
+    local start_item = mod:localize("start_boon_ct_kill_heal")
+    if not tostring(start_group):find("Starting Boons: Modded Boons", 1, true) then
+        return "#406 start category is not player-visible as Starting Boons: Modded Boons"
+    end
+    if not tostring(disable_group):find("Disable Boons: Modded Boons", 1, true) then
+        return "#406 disable category is not player-visible as Disable Boons: Modded Boons"
+    end
+    if not tostring(start_item):find("Khaine's Communion", 1, true) then
+        return "#406 starting widget lost the player-facing Khaine's Communion name"
     end
 end)
 
