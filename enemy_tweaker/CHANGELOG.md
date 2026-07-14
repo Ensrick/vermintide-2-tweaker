@@ -1,5 +1,12 @@
 # Enemy Tweaker Changelog
 
+## 0.7.41-dev (2026-07-13): #369 per-difficulty enemy health multipliers [not deployed]
+
+- Added a 0.1x-5.0x health slider, defaulting to vanilla 1.0x, to every Recruit-through-Cataclysm-3 difficulty block.
+- The host scales the final health passed into `GenericHealthExtension`; shared breed arrays are not mutated, so spawn modifiers and boss-balance settings compose safely. Regular enemies, specials, monsters, and lords are included; player units, critters, and friendly necromancer skeletons are excluded.
+- Changing the active difficulty's slider rescales living tracked enemies once at the bounded settings-transaction boundary and preserves each enemy's current health percentage. Vanilla max-health and damage replication keeps clients synchronized.
+- Added engine-free boundary/policy/rescale tests plus static wiring coverage. Tag `[verify-fix-coop]`: host and one client should verify a regular enemy and monster at 0.5x/2.0x, including one live slider change.
+
 ## 0.7.40-dev (2026-07-13): #321 retire stale Big Rebalance product surface [not deployed]
 
 - Kept the BR damage/stagger module unloaded and the `br_*` widgets hidden. Reactivation is not mechanically justified: its former registration owner is retired and its peer-local damage rewrites need a new parity contract.

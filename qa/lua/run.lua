@@ -48,6 +48,7 @@ local suites = {
     "test_gut_video_profiles",
     "test_gut_cutscene_probe",
     "test_et_settings_queue",
+    "test_et_health_multiplier",
     "test_mod_tweaker_search",
     "test_mod_tweaker_numeric_editor",
     "test_mp_dailies",

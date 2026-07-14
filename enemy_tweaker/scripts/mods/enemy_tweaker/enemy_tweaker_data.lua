@@ -124,6 +124,14 @@ local function _build_difficulty_block(diff)
                 default_value = diff.max_same,
             },
             {
+                setting_id     = B.setting_key(diff.key, "health_multiplier"),
+                type           = "numeric",
+                tooltip        = B.setting_key(diff.key, "health_multiplier") .. "_tooltip",
+                range          = { 0.1, 5.0 },
+                default_value  = 1.0,
+                decimals_number = 1,
+            },
+            {
                 setting_id  = B.setting_key(diff.key, "weights_group"),
                 type        = "group",
                 sub_widgets = _build_diff_weights(diff.key),

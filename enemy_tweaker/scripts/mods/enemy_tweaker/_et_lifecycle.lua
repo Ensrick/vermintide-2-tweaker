@@ -91,6 +91,11 @@ local function _apply_setting_changes(setting_ids, latest_setting_id)
     if mod._et_apply_boss_balance then
         _safe("on_setting_changed:boss_balance", mod._et_apply_boss_balance)
     end
+    -- #369: one live rescale per queued settings transaction. This runs after
+    -- boss-balance data restoration so current and future enemies agree.
+    if mod._et_apply_health_multipliers then
+        _safe("on_setting_changed:health_multiplier", mod._et_apply_health_multipliers)
+    end
     -- Champion elite-pool retune — outside the compositions guard (independent of
     -- composition backup state; idempotent, only writes on a toggle-state change).
     _safe("on_setting_changed:champion", _apply_champion_breed_overrides)
@@ -156,6 +161,9 @@ mod.on_disabled = function()
     if mod._et_apply_boss_balance then
         _safe("on_disabled:boss_balance", mod._et_apply_boss_balance)
     end
+    if mod._et_apply_health_multipliers then
+        _safe("on_disabled:health_multiplier", mod._et_apply_health_multipliers)
+    end
     _safe("on_disabled:BR", BR.on_disabled)
     mod:echo("Enemy Tweaker disabled — compositions restored")
 end
@@ -191,6 +199,9 @@ mod.on_enabled = function()
     -- #450: re-assert boss balance toggles per their saved state on re-enable.
     if mod._et_apply_boss_balance then
         _safe("on_enabled:boss_balance", mod._et_apply_boss_balance)
+    end
+    if mod._et_apply_health_multipliers then
+        _safe("on_enabled:health_multiplier", mod._et_apply_health_multipliers)
     end
     _safe("on_enabled:BR", BR.on_enabled)
 end

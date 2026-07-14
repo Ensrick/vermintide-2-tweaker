@@ -373,6 +373,10 @@ for _, diff in ipairs(B.DIFFICULTIES) do
     loc[B.setting_key(k, "max_same_tooltip")]   = {
         en = string.format("The most specials of the same type that can be alive at once on %s (normally %d).", diff.label, diff.max_same),
     }
+    loc[B.setting_key(k, "health_multiplier")] = { en = "[Issue 369] Enemy health multiplier" }
+    loc[B.setting_key(k, "health_multiplier") .. "_tooltip"] = {
+        en = string.format("Scales hostile AI health on %s from 0.1x to 5.0x. Includes regular enemies, specials, monsters, and lords. The host applies changes to living enemies while preserving their current health percentage. 1.0 is vanilla.", diff.label),
+    }
 
     for _, breed in ipairs(SPECIALS) do
         local label = B.breed_label(breed)

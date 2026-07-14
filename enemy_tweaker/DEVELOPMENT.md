@@ -37,7 +37,7 @@ Shipped features (as of v0.5.5-dev):
 
 ## Module map (v0.7.31-dev OOP split)
 
-`enemy_tweaker.lua` is an 83-line entry: MOD_VERSION, ET_RPC_SCHEMA, the load
+`enemy_tweaker.lua` is a compact entry: MOD_VERSION, ET_RPC_SCHEMA, the load
 banner, and the dofile manifest. Every `_et_*` module is dofile'd EXACTLY ONCE,
 in manifest order (VMF `mod:dofile` is NOT a singleton - each call re-executes
 the file - so modules never dofile each other; shared helpers publish into
@@ -50,6 +50,7 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_protect` | `_safe`/`_hook_wrap`/`_make_tick_guard` (#479: skip tick on inner error, NEVER re-run vanilla) + `_call_with_override` + multiplier math |
 | `_et_fingerprint` | BR + settings fingerprints, `et_br_fingerprint` RPC, dormant-BR stub |
 | `_et_settings_queue` | Engine-free next-frame coalescer for VMF/Mod Tweaker setting bursts (#560) |
+| `_et_health_multiplier_core` | Engine-free bounds, hostile-breed policy, and health-percentage rescale math (#369) |
 | `_et_horde_presets` | horde preset catalog + composition backup/apply + CHS horde size |
 | `_et_swaps` | breed/faction substitution + HordeSpawner hooks |
 | `_et_mimic` | per-system difficulty mimic |
@@ -62,6 +63,7 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_banner` | beastman banner toggles |
 | `_et_patrol` | patrol formation size |
 | `_et_specials` | per-difficulty special spawns |
+| `_et_health_multiplier` | #369 host-authoritative final-spawn health scaling + bounded live rescale/replication |
 | `_et_lifecycle` | queued on_setting_changed / batch completion / update drain + on_enabled / on_disabled + BR bootstrap |
 | `_et_commands` | chat commands (`/et_status`, `/verify_*`, dumps, `/et_reset`) |
 | `_et_boss_tweaks`, `_et_nurgloth_probe` | pre-existing modules (fly-disable duration; issue 275 probe) |

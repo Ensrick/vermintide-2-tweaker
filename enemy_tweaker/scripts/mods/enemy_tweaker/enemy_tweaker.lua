@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.40-dev"
+local MOD_VERSION = "0.7.41-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -57,6 +57,7 @@ mod:dofile("scripts/mods/enemy_tweaker/_et_log")                  -- logging hel
 mod:dofile("scripts/mods/enemy_tweaker/_et_protect")              -- protective wrappers (_safe/_hook_wrap/tick guard #479) + multiplier math
 mod:dofile("scripts/mods/enemy_tweaker/_et_fingerprint")          -- BR + settings fingerprints, et_br_fingerprint RPC, dormant-BR stub
 mod._et.SettingsQueue = mod:dofile("scripts/mods/enemy_tweaker/_et_settings_queue") -- #560 bounded setting-change transactions
+mod._et.HealthMultiplierCore = mod:dofile("scripts/mods/enemy_tweaker/_et_health_multiplier_core") -- #369 engine-free bounds/policy
 
 -- Startup marker: unconditional mod:info (the "applied" log marker pattern).
 -- Prefix changed v0.5.14 from [et:br] -> [et] to match the universal convention
@@ -83,6 +84,7 @@ mod:dofile("scripts/mods/enemy_tweaker/_et_pacing")               -- spawn pacin
 mod:dofile("scripts/mods/enemy_tweaker/_et_banner")               -- beastman banner toggles
 mod:dofile("scripts/mods/enemy_tweaker/_et_patrol")               -- patrol formation size
 mod:dofile("scripts/mods/enemy_tweaker/_et_specials")             -- per-difficulty special spawns
+mod:dofile("scripts/mods/enemy_tweaker/_et_health_multiplier")    -- #369 host-authoritative per-difficulty enemy health
 mod:dofile("scripts/mods/enemy_tweaker/_et_lifecycle")            -- on_setting_changed / on_enabled / on_disabled + BR bootstrap
 mod:dofile("scripts/mods/enemy_tweaker/_et_commands")             -- chat commands (/et_status, /verify_*, dumps, /et_reset)
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_tweaks")          -- boss mechanic tweaks (fly-disable duration; pre-existing module)

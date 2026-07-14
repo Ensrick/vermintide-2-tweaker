@@ -7,6 +7,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-13.
 
 ---
+## Per-difficulty enemy health multiplier (#369)
+
+| Field | Detail |
+|---|---|
+| Scope | Hostile AI only, including specials, monsters, and lords; excludes heroes, critters, and friendly necromancer skeletons. |
+| Bounds/default | Every difficulty exposes 0.1x-5.0x with 1.0x as vanilla. Runtime sanitization repeats those bounds. |
+| Spawn path | Host wraps `GenericHealthExtension.init` and scales its final `extension_init_data.health`; never mutates shared `Breeds.max_health`. |
+| Live apply | A queued settings transaction rescales tracked living enemies once, preserving damage percentage and using vanilla max-health/damage replication. |
+| Offline | `test_et_health_multiplier` passes boundary, target-policy, percentage, and single-hook wiring checks. |
+| In-game | `[verify-fix-coop]` Host at 0.5x and 2.0x; verify a regular enemy and monster on both peers, then move the slider while one is damaged and confirm its health percentage is unchanged. |
+
+---
 ## ConflictDirector tick fault containment (#479)
 
 | Field | Value |
