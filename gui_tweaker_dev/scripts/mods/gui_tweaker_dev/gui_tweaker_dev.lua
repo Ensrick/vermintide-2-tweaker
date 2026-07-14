@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.250-dev"
+local MOD_VERSION = "0.2.251-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1115,6 +1115,27 @@ _rt_register("hud_confine_delta_clamps", function()
     -- Element wider than the area on x: that axis is left unclamped (never trap it off-screen).
     local wide = Customizer.confine_delta(0, 100, 3000, 50, 0, 0, 500, 0, b)
     if wide ~= 500 then return string.format("oversize-axis passthrough: expected 500, got %s", tostring(wide)) end
+end)
+
+-- (#547) Vanilla draws/hit-tests a drag node independently from the root node
+-- it mutates. Keep that two-node contract for pivot-based widgets.
+_rt_register("hud_drag_geometry_uses_render_bounds", function()
+    if type(Customizer.drag_geometry) ~= "function" then
+        return "Customizer.drag_geometry missing (#547 regressed)"
+    end
+    local entry = Customizer.REGISTRY_BY_ID and Customizer.REGISTRY_BY_ID.equipment_ui
+    if not entry or entry.drag_scenegraph_node_id ~= "background_panel" then
+        return "equipment_ui drag bounds must use background_panel"
+    end
+    local move = { world_position = { 10, 20, 1 }, size = { 0, 0 } }
+    local bounds = { world_position = { 300, 400, 1 }, size = { 624, 66 } }
+    local node, size = Customizer.drag_geometry({ pivot = move, background_panel = bounds }, entry)
+    if node ~= bounds or size ~= bounds.size then
+        return "drag geometry did not resolve live rendered bounds"
+    end
+    if entry.scenegraph_node_id ~= "pivot" then
+        return "#547 changed equipment movement target instead of only drag bounds"
+    end
 end)
 
 -- (#310) HUD edit mode suspends local gameplay input (mouse drives the editor, not the

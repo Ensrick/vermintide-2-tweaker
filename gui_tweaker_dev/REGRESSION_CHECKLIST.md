@@ -4,6 +4,14 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md
 
 Last updated: 2026-07-13.
 
+## HUD edit drag geometry (#547)
+
+- [ ] Enter HUD edit mode and inspect all ten registered HUD elements at the current resolution.
+- [ ] Each overlay rectangle sits on its visible element and hover starts only inside that rectangle.
+- [ ] Drag pivot-based equipment, buffs, boss health, duties, books, and news-feed elements; the rectangle follows the moved element without an offset.
+- [ ] Edge confinement still uses the visible rectangle, and offsets survive closing/reopening the HUD.
+- [ ] `/gut_regression_test` passes `hud_drag_geometry_uses_render_bounds`.
+
 ## Mod Tweaker settings-tree ordering (#557)
 
 - [ ] Open tabs with mixed top-level groups and loose settings; groups appear first and each partition is alphabetical by localized label.

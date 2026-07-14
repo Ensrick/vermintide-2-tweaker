@@ -5,6 +5,16 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.251-dev (2026-07-13) -- #547 HUD edit drag-box alignment [verify-fix]
+
+- Restored vanilla's two-node HUD-customizer contract: offsets still write to each registered movement node, while hit testing, confinement, and overlay drawing now use the element's separate positive-size render-bounds node.
+- Source-mapped the pivot-based widgets to their actual bounds (`background_panel`, `pivot_dragger`, `quest`, `background`, and the first news-feed row). Missing dynamic bounds fail safely to the existing movement-node/nominal-size behavior.
+- Added Lua 5.1 and `/gut_regression_test` coverage proving the bounds remap does not change persisted movement targets.
+
+### Verify
+
+Enter HUD edit mode and inspect/drag all ten registered elements. Each blue box must sit on the visible element before, during, and after dragging; the cursor must grab only inside that box; edge confinement and saved offsets must still work after reopening the HUD.
+
 ## 0.2.250-dev (2026-07-13) -- #557 tree-preserving Mod Tweaker layout [not deployed]
 
 - Every unordered sibling level now displays collapsible groups first and loose settings second; both partitions sort case-insensitively by localized display label.

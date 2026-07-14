@@ -18,21 +18,30 @@ end
 -- max(absolute_floor, vanilla_size * 0.5) so future resize work has a sane bound.
 local ABS_MIN_W, ABS_MIN_H = 20, 18
 
--- Each entry: scenegraph mutation target for one HUD widget. nominal_size is the
--- on-screen draggable region; for pivot nodes (size 0x0) we use the listed value
--- so the overlay rectangle is grabbable. definitions_file is documentation only.
+-- Each entry keeps the scenegraph mutation target separate from the node whose
+-- world-space rectangle is rendered and hit-tested. This mirrors vanilla
+-- HudCustomizer.run's root_scenegraph_id / drag_scenegraph_id contract
+-- (scripts/ui/hud_ui/hud_customizer.lua:43-47, 110-122). nominal_size is only a
+-- fallback for a missing/zero-sized drag node. definitions_file is documentation.
 local REGISTRY = {
-    { id = "ability_ui",          class_name = "AbilityUI",          scenegraph_node_id = "ability_root",     definitions_file = "scripts/ui/hud_ui/ability_ui_definitions.lua",          vanilla_position = {   0,    0, 10 }, vanilla_size = { 624,  66 }, nominal_size = { 624,  66 }, can_resize_axes = { x = true,  y = false } },
-    { id = "equipment_ui",        class_name = "EquipmentUI",        scenegraph_node_id = "pivot",            definitions_file = "scripts/ui/hud_ui/equipment_ui_definitions.lua",        vanilla_position = {   0,   69,  4 }, vanilla_size = { 300,  60 }, nominal_size = { 300,  60 }, can_resize_axes = { x = false, y = false } },
+    { id = "ability_ui",          class_name = "AbilityUI",          scenegraph_node_id = "ability_root",      drag_scenegraph_node_id = "ability_root",    definitions_file = "scripts/ui/hud_ui/ability_ui_definitions.lua",          vanilla_position = {   0,    0, 10 }, vanilla_size = { 624,  66 }, nominal_size = { 624,  66 }, can_resize_axes = { x = true,  y = false } },
+    { id = "equipment_ui",        class_name = "EquipmentUI",        scenegraph_node_id = "pivot",             drag_scenegraph_node_id = "background_panel",definitions_file = "scripts/ui/hud_ui/equipment_ui_definitions.lua",        vanilla_position = {   0,   69,  4 }, vanilla_size = { 300,  60 }, nominal_size = { 300,  60 }, can_resize_axes = { x = false, y = false } },
     { id = "overcharge_bar",      class_name = "OverchargeBarUI",    scenegraph_node_id = "charge_bar",       definitions_file = "scripts/ui/hud_ui/overcharge_bar_ui_definitions.lua",    vanilla_position = {   0, -220,  1 }, vanilla_size = { 250,  16 }, nominal_size = { 250,  16 }, can_resize_axes = { x = true,  y = false } },
     { id = "career_ability_bar",  class_name = "CareerAbilityBarUI", scenegraph_node_id = "ability_bar",      definitions_file = "scripts/ui/hud_ui/career_ability_bar_ui_definitions.lua",vanilla_position = {   0, -200,  1 }, vanilla_size = { 250,  16 }, nominal_size = { 250,  16 }, can_resize_axes = { x = true,  y = false } },
     { id = "energy_bar",          class_name = "EnergyBarUI",        scenegraph_node_id = "charge_bar",       definitions_file = "scripts/ui/hud_ui/energy_bar_ui_definitions.lua",        vanilla_position = {   0, -220,  1 }, vanilla_size = { 250,  16 }, nominal_size = { 250,  16 }, can_resize_axes = { x = true,  y = false } },
-    { id = "buff_ui",             class_name = "BuffUI",             scenegraph_node_id = "pivot_root",       definitions_file = "scripts/ui/hud_ui/buff_ui_definitions.lua",              vanilla_position = { 150,   18,  1 }, vanilla_size = { 300,  66 }, nominal_size = { 300,  66 }, can_resize_axes = { x = false, y = false } },
-    { id = "boss_health",         class_name = "BossHealthUI",       scenegraph_node_id = "pivot_parent",     definitions_file = "scripts/ui/hud_ui/boss_health_ui_definitions.lua",       vanilla_position = {   0,  -72,  0 }, vanilla_size = { 500,  70 }, nominal_size = { 500,  70 }, can_resize_axes = { x = false, y = false } },
-    { id = "challenge_tracker",   class_name = "ChallengeTrackerUI", scenegraph_node_id = "pivot",            definitions_file = "scripts/ui/hud_ui/challenge_tracker_ui_definitions.lua", vanilla_position = {   1,  155,  0 }, vanilla_size = { 260,  75 }, nominal_size = { 260,  75 }, can_resize_axes = { x = false, y = false } },
-    { id = "loot_objective",      class_name = "LootObjectiveUI",    scenegraph_node_id = "background_parent",definitions_file = "scripts/ui/hud_ui/loot_objective_ui_definitions.lua",    vanilla_position = {-200, -100,  1 }, vanilla_size = { 383,  86 }, nominal_size = { 383,  86 }, can_resize_axes = { x = false, y = false } },
-    { id = "news_feed",           class_name = "NewsFeedUI",         scenegraph_node_id = "pivot",            definitions_file = "scripts/ui/hud_ui/news_feed_ui_definitions.lua",         vanilla_position = { -20, -300,  1 }, vanilla_size = { 420, 120 }, nominal_size = { 420, 120 }, can_resize_axes = { x = false, y = false } },
+    { id = "buff_ui",             class_name = "BuffUI",             scenegraph_node_id = "pivot_root",        drag_scenegraph_node_id = "pivot_dragger",   definitions_file = "scripts/ui/hud_ui/buff_ui_definitions.lua",              vanilla_position = { 150,   18,  1 }, vanilla_size = { 300,  66 }, nominal_size = { 300,  66 }, can_resize_axes = { x = false, y = false } },
+    { id = "boss_health",         class_name = "BossHealthUI",       scenegraph_node_id = "pivot_parent",      drag_scenegraph_node_id = "pivot_dragger",   definitions_file = "scripts/ui/hud_ui/boss_health_ui_definitions.lua",       vanilla_position = {   0,  -72,  0 }, vanilla_size = { 500,  70 }, nominal_size = { 500,  70 }, can_resize_axes = { x = false, y = false } },
+    { id = "challenge_tracker",   class_name = "ChallengeTrackerUI", scenegraph_node_id = "pivot",             drag_scenegraph_node_id = "quest",           definitions_file = "scripts/ui/hud_ui/challenge_tracker_ui_definitions.lua", vanilla_position = {   1,  155,  0 }, vanilla_size = { 260,  75 }, nominal_size = { 260,  75 }, can_resize_axes = { x = false, y = false } },
+    { id = "loot_objective",      class_name = "LootObjectiveUI",    scenegraph_node_id = "background_parent", drag_scenegraph_node_id = "background",      definitions_file = "scripts/ui/hud_ui/loot_objective_ui_definitions.lua",    vanilla_position = {-200, -100,  1 }, vanilla_size = { 383,  86 }, nominal_size = { 383,  86 }, can_resize_axes = { x = false, y = false } },
+    { id = "news_feed",           class_name = "NewsFeedUI",         scenegraph_node_id = "pivot",             drag_scenegraph_node_id = "news_pivot_1",    definitions_file = "scripts/ui/hud_ui/news_feed_ui_definitions.lua",         vanilla_position = { -20, -300,  1 }, vanilla_size = { 420, 120 }, nominal_size = { 420, 120 }, can_resize_axes = { x = false, y = false } },
 }
+
+-- Bars already mutate their rendered, positive-size node, so make that identity
+-- explicit too; callers never need to guess based on node size.
+for i = 1, #REGISTRY do
+    local entry = REGISTRY[i]
+    entry.drag_scenegraph_node_id = entry.drag_scenegraph_node_id or entry.scenegraph_node_id
+end
 
 -- Compute min_size per entry from the absolute floor + 50% of vanilla_size, so
 -- future resize work has a per-widget bound; v0.2.0 never actually reads this.
@@ -81,6 +90,22 @@ end
 local REGISTRY_BY_ID = {}
 for i = 1, #REGISTRY do REGISTRY_BY_ID[REGISTRY[i].id] = REGISTRY[i] end
 CustomizerModule.REGISTRY_BY_ID = REGISTRY_BY_ID
+
+-- Resolve the rectangle used by hit testing, confinement, and overlay drawing.
+-- The movement node remains entry.scenegraph_node_id. Missing dynamic nodes (for
+-- example an empty news feed) fall back safely to the movement node + nominal size.
+-- Exported as an engine-free seam for issue #547 regression coverage.
+function CustomizerModule.drag_geometry(scenegraph, entry)
+    if type(scenegraph) ~= "table" or type(entry) ~= "table" then return nil end
+    local drag_id = entry.drag_scenegraph_node_id or entry.scenegraph_node_id
+    local node = scenegraph[drag_id] or scenegraph[entry.scenegraph_node_id]
+    if not node or not node.world_position then return nil end
+    local size = node.size
+    if not (size and size[1] and size[1] > 0 and size[2] and size[2] > 0) then
+        size = entry.nominal_size or { 0, 0 }
+    end
+    return node, size, drag_id
+end
 
 -- internal state
 local _edit_mode_sticky = false
@@ -343,10 +368,8 @@ function CustomizerModule.tick_drag()
             -- UI Tweaks and are left to HB's own layout, so this path is gut-native only.
             local entry = REGISTRY_BY_ID[_drag_active]
             local view  = entry and _live_views[entry.class_name]
-            local node  = view and view.ui_scenegraph and view.ui_scenegraph[entry.scenegraph_node_id]
+            local node, size = CustomizerModule.drag_geometry(view and view.ui_scenegraph, entry)
             if node and node.world_position then
-                local size = (node.size and node.size[1] and node.size[1] > 0 and node.size)
-                    or (entry and entry.nominal_size) or { 0, 0 }
                 local adx, ady = _get_widget_offset(_drag_active)
                 local ok_c, cdx, cdy = pcall(CustomizerModule.confine_delta,
                     node.world_position[1], node.world_position[2], size[1], size[2],
@@ -380,10 +403,9 @@ function CustomizerModule.tick_drag()
     for i = 1, #REGISTRY do
         local entry = REGISTRY[i]
         local view = _live_views[entry.class_name]
-        local node = view and view.ui_scenegraph and view.ui_scenegraph[entry.scenegraph_node_id]
+        local node, size = CustomizerModule.drag_geometry(view and view.ui_scenegraph, entry)
         if node and node.world_position then
             local pos = Vector3(node.world_position[1], node.world_position[2], 999)
-            local size = (node.size and node.size[1] and node.size[1] > 0 and node.size) or entry.nominal_size
             local hit = false
             pcall(function() hit = math.point_is_inside_2d_box(cursor, pos, size) end)
             if hit then
@@ -436,10 +458,9 @@ function CustomizerModule.draw_overlay(ui_renderer)
     for i = 1, #REGISTRY do
         local entry = REGISTRY[i]
         local view = _live_views[entry.class_name]
-        local node = view and view.ui_scenegraph and view.ui_scenegraph[entry.scenegraph_node_id]
+        local node, size = CustomizerModule.drag_geometry(view and view.ui_scenegraph, entry)
         if node and node.world_position then
             local pos = Vector3(node.world_position[1], node.world_position[2], 999)
-            local size = (node.size and node.size[1] and node.size[1] > 0 and node.size) or entry.nominal_size
             local color = default_color
             if _drag_active == entry.id then
                 color = active_color
