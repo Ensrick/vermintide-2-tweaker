@@ -1,5 +1,14 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.270-dev (2026-07-13) - #350 optional early Chest of Trials reward [not deployed]
+
+- Added **Open Chest at Trial Start**, an opt-in host-controlled checkbox under Chest of Trials. Once vanilla's authoritative replicated state reaches `RUNNING`, every peer opens that chest's presentation once and may claim its boon while the enemies are still alive.
+- Kept completion entirely vanilla. CT never writes the chest network state: the server still starts `cursed_chest_prototype`, and only the disappearance of that terror event moves `RUNNING -> OPEN`. Therefore purification counters, the completion jingle, `player_cleansed_deus_cursed_chest`, telemetry success, and **Revive Team on Chest Completion** still happen after the enemies are defeated, not when the early reward opens.
+- Reused vanilla's OPEN interaction path while state is RUNNING: zero-length reward interaction, `deus_cursed_chest_get_reward_hud_desc`, the native `deus_cursed_chest` view, and pickup-drop handling. Reward availability is false while WAITING, after collection, and once actual OPEN is reached.
+- Presentation state is bounded per chest extension. The early `state_OPEN` flow fires once after vanilla has completed the RUNNING transition. If that peer claimed early, actual completion clears vanilla's newly-created objective marker through the extension's own cleanup and restores `state_LOOTED` once; the completion lifecycle itself is untouched.
+- Added `test_ct_cot_early_reward.lua`, engine-free policy coverage, `/ct_regression_test` check `issue350_cot_early_reward_policy`, and bounded `[ct:350]` lines for the two presentation transitions. No RPC, NetworkLookup entry, network-state write, polling table, or completion-hook modification was added.
+- **Verify after deployment:** solo host, enable the toggle, start a Chest of Trials, claim the boon before killing the wave, and confirm it works during combat. Finish the wave and confirm the completion jingle/counter and optional team revive happen only then, with no objective marker left after an early claim. Disable the toggle and confirm vanilla behavior. Coop verification must repeat with a client claiming early from the host-controlled setting.
+
 ## 0.7.269-dev (2026-07-13) - #342 parry cooldown deferred call fixed [verify-fix]
 
 - **Root cause.** The boon-roll hook called `_ct128_strip_parry_cooldowns` as a bare global, but extraction left the function local to `_ct_combat_hooks.lua`. `pcall(nil)` swallowed the scope error, so `static_blade` and `boon_skulls_03` retained their vanilla cooldown fields.

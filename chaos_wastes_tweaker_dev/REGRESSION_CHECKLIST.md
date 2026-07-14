@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+### chest-of-trials-early-reward - issue #350
+
+| Field | Value |
+|---|---|
+| Symptom | Chest rewards cannot be claimed until the trial is complete, so the boon cannot help with that trial. |
+| Root cause | Vanilla uses one OPEN state for both completion side effects and reward availability. Writing OPEN early would falsely record purification, play completion audio, trigger team revive, and stop the RUNNING completion check. |
+| Fix version(s) | ct_dev 0.7.270-dev (not deployed) |
+| Category | COOP / UI / HOST AUTHORITY |
+| Repro | Enable Open Chest at Trial Start as host, start a Chest of Trials, and interact before killing the wave. Repeat with a client. |
+| Expected post-fix | Replicated RUNNING starts the trial and opens reward presentation once. The native boon view is available during combat, while network state and every completion-only effect remain vanilla until the terror event ends. Early claimants finish visually looted with no stale marker. Toggle off is byte-for-byte vanilla behavior. |
+| Detection | Offline `test_ct_cot_early_reward.lua`; `/ct_regression_test`: `issue350_cot_early_reward_policy`; bounded `[ct:350]` transition lines; solo plus two-player verification required. |
+
 ### parry-cooldown-deferred-contract - issue #342
 
 | Field | Value |

@@ -337,6 +337,8 @@ local loc = {
     altar_reuse_cost_mult_tooltip = { en = "1.0 keeps the coin cost flat, 2.0 doubles it each use (1x, 2x, 4x), and 0.5 halves it each use. Host-only." },
     cot_enemy_multiplier = { en = "[diag] [Issue 471] Chest of Trials enemy multiplier" },
     cot_enemy_multiplier_tooltip = { en = "1.0 = vanilla, 2.0 = double, 5.0 = huge horde, scaling the enemies in a Chest of Trials wave. Only affects trial waves, not normal mission spawns. Host-only." },
+    cot_open_at_trial_start = { en = "[untested] [Issue 350] Open Chest at Trial Start" },
+    cot_open_at_trial_start_tooltip = { en = "Open the Chest of Trials reward as soon as the trial starts, so its boon can help during the fight. The trial still completes normally, and completion-only effects wait for the enemies to be defeated. Host-controlled." },
     shrine_boon_count = { en = "Shrines: Number of Available Boons" },
     chest_boon_count = { en = "Chests: Number of Available Boons" },
     chest_upgrade_count = { en = "[working] Upgrade Altars" },

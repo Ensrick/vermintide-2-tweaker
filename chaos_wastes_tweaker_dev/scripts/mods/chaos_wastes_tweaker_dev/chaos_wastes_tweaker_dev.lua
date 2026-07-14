@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.269-dev"
+local MOD_VERSION = "0.7.270-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -7757,6 +7757,13 @@ local pending_chest_respawn = {}
 -- main-chunk local (this file sits at the Lua 5.1 200-locals cap) -- a mod field so
 -- both the hook and the tick reach it without adding to the chunk's local count.
 mod._ct_pending_team_teleport = mod._ct_pending_team_teleport or {}
+
+-- #350 early reward access is presentation-only while vanilla remains RUNNING;
+-- register its hooks and runtime policy check before the completion-only OPEN hook.
+do
+    local feature = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_cot_early_reward")
+    for _, c in ipairs(feature.rt_checks or {}) do _rt_register(c.name, c.fn) end
+end
 
 mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
     if state ~= CURSED_CHEST_STATE_OPEN then
