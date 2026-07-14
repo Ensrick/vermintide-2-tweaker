@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.236-dev (2026-07-13) - #269 receiver-local holstered staff fallback [not deployed]
+
+- Extended the existing `GearUtils.link_units` guard at its single universal boundary. When a receiver body lacks an `a_unwielded_*` source but does author `j_hips`, WT now passes a copied link using `j_hips`; other missing source/target links remain dropped.
+- This fixes the Deepwood Staff disappearing while holstered in a Kruber ranged slot without mutating the shared staff template. Native Kerillian/Sienna bodies keep their authored mount because a present source remains a zero-copy no-op.
+- Vanilla provenance: `GearUtils.link` dispatches the flat phase array to `GearUtils.link_units`, which immediately resolves both nodes with `Unit.node` (`gear_utils.lua:286-308`); the staff linking tables author `a_unwielded_staff` only in `third_person.unwielded` (`attachment_node_linking.lua:2938-2957`, with sibling staff rows at `:2974-2993` and `:3010-3029`).
+- Regression coverage proves the Kruber-style missing node becomes `j_hips`, the original table is not mutated, and a native authored `a_unwielded_staff` link remains untouched. Solo verification: equip Deepwood Staff in a Kruber ranged slot, wield the primary weapon, and confirm the staff renders holstered at the hip in both the inventory preview and a mission.
+
 ## 0.12.235-dev (2026-07-13) - #2 split template remap data from the event-hot funnel [not deployed]
 
 - Extracted the 1,900-line declarative `_3p_template_remaps` catalog into `_wt_anim_remap_data.lua`; `_wt_anim_remap.lua` now contains the redirect logic, state, hooks, commands, and resolvers and is below the 2,500-line hard limit.

@@ -58,7 +58,7 @@ the wrapper named in the trap column (`_safe_hook.lua`, issue 26).
 |---|---|---|---|
 | `GearUtils.create_equipment` [hook via `traced_hook`] `weapon_tweaker.lua` | Builds the owner/bot in-world equipment record and spawns 1p/3p units for a slot; passes `career_name` down to `spawn_inventory_unit` [src: `gear_utils.lua:7`] | Recover a dropped `career_name`, pre-resolve per-career `*_hand_unit_override` meshes, apply baked transforms, and register durable position + narrowly scoped #569 rotation roots | Read career from `inventory_system._career_name`, NOT `Managers.player:owner`, at mission-spawn timing. Durable position boxes canonical before the one-shot delta; #569 independently boxes/writes rotation. `two_handed_melee_weapon.third_person.wielded` is body `j_rightweaponattach` -> weapon node 0 [src: `attachment_node_linking.lua:2836-2864`, `gear_utils.lua:150-185`]. Never touch `*_unit_1p` or shared linking tables |
 | `GearUtils.spawn_inventory_unit` [hook via `traced_hook`] `:5315` | Spawns one hand's inventory unit from `item_template`+`item_units`; returns `(weapon_3p, ammo_3p, weapon_1p, ammo_1p)` with the two `ammo_*` nil for melee [src: `gear_utils.lua:155`, returns at `:273`] | Cross-character 3P MESH swap dispatch: after vanilla spawns, swap the 3P unit to the receiver-native model (brace->repeating handgun, longbow/Moonfire->crossbow, Skullsplitter+tome->1H Skullsplitter) inside a pcall so equip never fails (`:5315`; Moonfire #580) | The canonical 4-return / 2-nil-hole tuple that broke `safe_hook` v0.12.78 - `select("#", ...)` + explicit-`j` `unpack` is load-bearing (`_safe_hook.lua`, `docs/VMF_RECIPES.md` §2a); swapped 3P unit must be force-loaded first (see residency row); returned 1P units remain vanilla |
-| `GearUtils.link_units` [hook,tbl] `:4698` | Attaches source->target units by `attachment_node_linking` via `Unit.node` per link; called from `GearUtils.link` [src: `gear_utils.lua:293`, dispatched at `:290`] | UNIVERSAL choke point: drop only the links whose source/target node is genuinely absent on the non-native receiver body, which `Unit.node` would otherwise engine-fatal (`mod._wt_link_filter`, `:4698`) | `Unit.node` on a missing node bypasses `pcall` (engine fatal, not a Lua error - CLAUDE.md Lua quirks); purely subtractive so it can NOT regress visibility (unlike the reverted v0.12.112/.113 global template mutation that made elf bows invisible); table-form (`GearUtils` is a plain table) |
+| `GearUtils.link_units` [hook,tbl] `:4698` | Attaches source->target units by `attachment_node_linking` via `Unit.node` per link; called from `GearUtils.link` [src: `gear_utils.lua:293`, dispatched at `:290`] | UNIVERSAL choke point: receiver-locally copy a missing `a_unwielded_*` body source to `j_hips` so cross-character holsters remain visible (#269), and drop every other link whose source/target is absent (`mod._wt_link_filter`) | Never mutate shared linking tables: valid/native links are zero-copy; the hip fallback is created only after `Unit.has_node(source, "j_hips")`, while missing targets and non-holster sources remain subtractive. `Unit.node` on a missing node bypasses `pcall`; table-form (`GearUtils` is a plain table) |
 
 ### Previewers + end-of-mission UI (owner docs: `docs/engine/09`, `/06`, `/01`)
 
@@ -241,9 +241,10 @@ root), and the shared anim dead-ends in
 - **Global template mutation to dodge a missing node breaks the native
   wielder.** Rewriting a template's `attachment_node_linking` source nodes at
   boot to fix a non-native body ALSO rewrote the native body's grip (elf bows
-  went invisible, v0.12.112/.113). The durable fix is the per-spawn subtractive
-  `link_units` filter (`:4698`) that only drops links the receiver genuinely
-  lacks - it never mutates valid data.
+  went invisible, v0.12.112/.113). The durable fix is the receiver-local
+  `link_units` sanitizer: it copies missing `a_unwielded_*` sources to an
+  actually-present `j_hips` (#269), drops other invalid links, and never mutates
+  valid data.
 
 ## Doc maintenance
 

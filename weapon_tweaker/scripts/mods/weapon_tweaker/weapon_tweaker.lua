@@ -110,7 +110,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.235-dev"
+local MOD_VERSION = "0.12.236-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -2040,26 +2040,45 @@ end
 -- covers the weapon's own .third_person linking; a sub-attachment carries its OWN flat
 -- linking table that never passes through that hook. This is the UNIVERSAL choke point:
 -- GearUtils.link calls GearUtils.link_units via the table (gear_utils.lua:290), so a
--- table hook here intercepts EVERY spawn path (preview AND in-mission). Purely
--- subtractive -- only links whose node is genuinely absent (which would fatal anyway)
--- are dropped; valid links are untouched, so it can NOT regress visibility (cf. the
--- v0.12.112/.113 global-mutation bug that broke elf bows -- this never mutates valid data).
+-- table hook here intercepts EVERY spawn path (preview AND in-mission). Missing
+-- `a_unwielded_*` BODY sources get a receiver-local `j_hips` fallback so a holstered
+-- cross-character weapon remains visible; all other missing links are dropped. Valid
+-- links are untouched, so native wielders keep their authored mount (cf. the
+-- v0.12.112/.113 global-mutation bug that broke elf bows -- this never mutates live data).
 -- WT_LINK_UNITS_NODE_GUARD_MARKER
 
--- Pure, engine-free filter (unit-testable): drop links whose source/target node is
--- absent. src_has(name)/tgt_has(name) are node-presence predicates. Returns
--- (linking, dropped): the ORIGINAL table when nothing drops (zero-copy fast path),
--- else a filtered contiguous copy. On `mod` (not a new file-scope local) so the
--- end-of-file regression test can reach it without tripping the 200-locals cap.
+-- Pure, engine-free sanitizer (unit-testable). A missing `a_unwielded_*` source is
+-- copied with `j_hips` only when that receiver body actually has `j_hips`; other
+-- missing source/target links are dropped. Returns (linking, dropped, substituted):
+-- the ORIGINAL table when unchanged (zero-copy fast path), else a contiguous copy.
+-- On `mod` so the end-of-file regression tests can reach it without tripping the
+-- 200-locals cap.
 mod._wt_link_filter = function(linking, src_has, tgt_has)
-    local safe, dropped = nil, 0
+    local safe, dropped, substituted = nil, 0, 0
     local n = #linking
     for i = 1, n do
         local e = linking[i]
-        local ok = (type(e.source) ~= "string" or src_has(e.source))
-               and (type(e.target) ~= "string" or tgt_has(e.target))
-        if ok then
-            if safe then safe[#safe + 1] = e end
+        local source = e.source
+        local source_ok = type(source) ~= "string" or src_has(source)
+        local target_ok = type(e.target) ~= "string" or tgt_has(e.target)
+        local hip_fallback = not source_ok
+            and type(source) == "string"
+            and source:sub(1, 12) == "a_unwielded_"
+            and src_has("j_hips")
+        if target_ok and (source_ok or hip_fallback) then
+            if hip_fallback then
+                if not safe then
+                    safe = {}
+                    for j = 1, i - 1 do safe[j] = linking[j] end
+                end
+                local copy = {}
+                for key, value in pairs(e) do copy[key] = value end
+                copy.source = "j_hips"
+                safe[#safe + 1] = copy
+                substituted = substituted + 1
+            elseif safe then
+                safe[#safe + 1] = e
+            end
         else
             if not safe then
                 safe = {}
@@ -2068,18 +2087,18 @@ mod._wt_link_filter = function(linking, src_has, tgt_has)
             dropped = dropped + 1
         end
     end
-    return (safe or linking), dropped
+    return (safe or linking), dropped, substituted
 end
 
 if GearUtils and GearUtils.link_units and Unit and Unit.has_node then
     mod:hook(GearUtils, "link_units", function(func, world, attachment_node_linking, link_table, source, target)
         if type(attachment_node_linking) == "table" and source and target then
-            local filtered, dropped = mod._wt_link_filter(
+            local filtered, dropped, substituted = mod._wt_link_filter(
                 attachment_node_linking,
                 function(name) return Unit.has_node(source, name) end,
                 function(name) return Unit.has_node(target, name) end)
-            if dropped > 0 then
-                _dbg("[wt:link_guard] dropped %d attachment link(s) with a missing source/target node (would engine-fatal)", dropped)
+            if dropped > 0 or substituted > 0 then
+                _dbg("[wt:link_guard] sanitized attachment links: dropped=%d hip_fallback=%d", dropped, substituted)
                 return func(world, filtered, link_table, source, target)
             end
         end
@@ -4539,6 +4558,34 @@ _rt_register("link_units_node_guard", function()
     local same = { { source = "j_hips", target = "j_page_nr1_01" } }
     local out2, d2 = mod._wt_link_filter(same, function() return true end, function() return true end)
     if d2 ~= 0 or out2 ~= same then return "LINK-GUARD: all-present case must return the original table unchanged" end
+end)
+
+-- #269: a staff holstered on a Kruber body reaches this flat-array boundary with
+-- source=a_unwielded_staff. Kruber does not author that source, so the old guard
+-- dropped the sole link and made the staff disappear. The receiver-local fallback
+-- must preserve the input table and must not rewrite a native body's valid source.
+_rt_register("issue269_unwielded_staff_hip_fallback", function()
+    local staff_link = { source = "a_unwielded_staff", target = 0 }
+    local linking = { staff_link }
+    local out, dropped, substituted = mod._wt_link_filter(linking,
+        function(n) return n == "j_hips" end,
+        function() return true end)
+    if dropped ~= 0 or substituted ~= 1 then
+        return string.format("#269: expected drop=0/substitute=1, got %s/%s",
+            tostring(dropped), tostring(substituted))
+    end
+    if out == linking or out[1] == staff_link then
+        return "#269: fallback must copy rather than mutate the live linking table"
+    end
+    if out[1].source ~= "j_hips" or staff_link.source ~= "a_unwielded_staff" then
+        return "#269: fallback source/result mutation contract broken"
+    end
+    local native, native_dropped, native_substituted = mod._wt_link_filter(linking,
+        function(n) return n == "a_unwielded_staff" or n == "j_hips" end,
+        function() return true end)
+    if native ~= linking or native_dropped ~= 0 or native_substituted ~= 0 then
+        return "#269: native authored staff node must remain a zero-copy no-op"
+    end
 end)
 
 _rt_register("wt_itemmasterlist_uses_rawget", function()
