@@ -110,6 +110,10 @@ WS5), follow the template proven on event_tweaker v0.4.26-dev:
    omissions, and guard drift; verify every new file landed in the bundle
    (murmur64-hash the resource paths against the bundle listing — a raw byte
    scan cannot see hashed entries).
+   Custom weapon resources additionally follow
+   [`docs/CUSTOM_WEAPON_MODEL_PIPELINE.md`](docs/CUSTOM_WEAPON_MODEL_PIPELINE.md):
+   compile success is not residency, preview discovery, or ProfileSynchronizer
+   wire safety, and all three require independent evidence.
 9. **Docs in the same commit:** the mod's DEVELOPMENT.md gets a "Module
    contracts" section (per file: responsibility, public surface, manifest
    position) + a "Where new code goes" placement recipe, so the monolith does

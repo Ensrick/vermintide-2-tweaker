@@ -1,5 +1,25 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.411-dev - 2026-07-14 - #597 Greataxe ProfileSynchronizer package crash [verify-fix-coop]
+
+- Fixed the remaining post-craft crash after `0.1.410-dev`: `ProfileSynchronizer` used `WeaponUtils.get_weapon_packages` and queued a resident custom Greataxe unit path as a standalone package, causing `Resource ... was not found` in `PackageManager._pop_queue`.
+- Package collection now substitutes the vanilla Bardin Greataxe 1P/3P package identities. Backend item units, skins, and spawn paths remain custom, so this changes residency bookkeeping without replacing the rendered model.
+- Added exact-boundary regression coverage for all custom models, unrelated packages, and preservation of authored render-unit paths.
+
+### Co-op verification
+
+Craft a Greataxe through CIM with automatic equip enabled. Confirm no crash during the following loadout resync, then swap weapons, enter a mission, and have a second player inspect the model. The newest log must show `[cwv:LOAD] v0.1.411-dev` and must not queue `units/cwv_es_greataxe/...` through `PackageManager` under `ProfileSynchronizer`.
+
+## 0.1.411-dev - 2026-07-14 - #602 Dawi Mace family [verify-fix-coop]
+
+- Added `Dawi Mace`, `Dawi Mace and Shield`, and `Dawi Dual Maces` as craftable CWV families using safe resident vanilla placeholder models while downloaded custom-model licensing remains under review.
+- The single and shield variants use Kruber mace behavior; the dual variant uses CWV's isolated Dual Maces behavior. Bardin's source-backed default careers are enabled, while Weapon Tweaker exposes default-off controls for every other career.
+- Cosmetics supports independent dual-hand selection, shield-owned illusion/icon selection, and the canonical CIM skin contracts. The default-on #599 mace identity balance composes once through the shared templates.
+
+### Co-op verification
+
+Craft all three variants through CIM. Verify attacks, inventory preview, first person, local third person, score view, mission transitions, and a second player's view. Customize both Dual Mace hands independently and change the shield separately; confirm the primary owns the dual icon and the shield owns the shield-family icon.
+
 ## 0.1.410-dev - 2026-07-14 - #597 Greataxe craft/equip wire crash [verify-fix-coop]
 
 - Fixed the second Greataxe crash boundary exposed after Athanor preview residency was repaired. Crafting and auto-equipping succeeded, but `ProfileSynchronizer` then attempted to serialize the custom `_3p` unit through strict `NetworkLookup.inventory_packages` and crashed.

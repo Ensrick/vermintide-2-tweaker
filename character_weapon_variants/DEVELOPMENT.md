@@ -135,6 +135,7 @@ short index pointing back into this file's reference content.
 | What does each rarity tier mean? | This file — Rarity |
 | When is `rarity = "default"` correct? | This file — Blacksmith Template Pattern |
 | How do skins, illusions, and `display_unit` fit together? | This file — Skin System |
+| How do we import, package, preview, network, and verify custom weapon models? | [`../docs/CUSTOM_WEAPON_MODEL_PIPELINE.md`](../docs/CUSTOM_WEAPON_MODEL_PIPELINE.md) — canonical pipeline and #597 post-mortem |
 | What goes in `inventory_icon` vs `hud_icon`? | This file — Icon Systems |
 | Which traits and properties are valid? | This file — Properties and Traits |
 | When does mod registration actually run? | This file — Registration Timing |
@@ -1605,6 +1606,14 @@ flag is still required for any item-name-keyed override
 (offset/tint/LA-paint on the GearUtils path).
 
 ### Mod-shipped custom mesh paths cannot be `Application.resource_package` discovery targets
+
+> **Current rule:** this section explains the global-discovery limitation, but
+> its old blanket conclusion that the item must retain a vanilla unit path is
+> superseded by the proven Greataxe bridge. New work must follow
+> [`../docs/CUSTOM_WEAPON_MODEL_PIPELINE.md`](../docs/CUSTOM_WEAPON_MODEL_PIPELINE.md):
+> flatten custom resources into an explicit master root, borrow a vanilla
+> package only for preview lifetime tracking, and forward-alias both custom
+> package names for ProfileSynchronizer without changing reverse lookup.
 
 VT2 modding does **NOT** support shipping new resource paths that
 are loadable via `Application.resource_package(path)`. **Custom

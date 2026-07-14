@@ -1,5 +1,22 @@
 # Weapon Tweaker Changelog
 
+## 0.12.254-dev (2026-07-14) - #602 Dawi Mace family availability [verify-fix-coop]
+
+- Added all three CWV Dawi Mace variants to WT's bounded career catalog. Their source-backed Bardin careers keep the CWV defaults; every other career is exposed as an independent default-off option.
+- Catalog tests now derive their bounds from the declared rows and verify every authored/default/conditional career split rather than relying on stale hard-coded totals.
+
+### Co-op verification
+
+With CWV `0.1.411-dev`, confirm all three Dawi variants appear for their default Bardin careers and that WT can independently disable those defaults or enable another career. Verify a second player sees the same equipped variant after transitions.
+
+## 0.12.254-dev (2026-07-14) - #603 Ranger Veteran dual-hammer inventory idle [diagnostics-armed]
+
+- Added a bounded diagnostic at the existing inventory-preview wield boundary. For Ranger Veteran Dual Hammers and Dual Axes it records the resolved wield event and whether the preview body contains that event plus the two distinct vanilla family events, without changing the pose.
+
+### Diagnostic capture
+
+Open Ranger Veteran's inventory preview with Dual Hammers, then Dual Axes. The newest log should contain one `[wt:603]` row per distinct weapon/event; attach those rows to #603 so the correct native idle can be selected without guessing.
+
 ## 0.12.253-dev (2026-07-14) - #597 #576 Greataxe availability and Axe+Shield Heavy 3 [verify-fix-coop]
 
 - Replaced the retired CWV Poleaxe row with the Kruber Greataxe. All four Kruber careers default on; every other supported career is an independent default-off WT opt-in. Disable/removal restores only CWV's authored owners.

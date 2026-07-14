@@ -42,7 +42,7 @@ return function(H, repo_root)
     end)
 
     H.test("issue368 CWV clone catalog is bounded and marker-gated", function()
-        H.equal(#catalog, 30)
+        H.equal(#catalog, 33)
         local seen = {}
         for _, row in ipairs(catalog) do
             H.equal(seen[row.key], nil, row.key)
@@ -56,7 +56,7 @@ return function(H, repo_root)
 
     H.test("issue391 builds one compatible master and exact career toggles per CWV item", function()
         local rows = policy.build_widgets(catalog)
-        H.equal(#rows, 30)
+        H.equal(#rows, #catalog)
         local seen = {}
         local child_count = 0
         for index, row in ipairs(rows) do
@@ -71,13 +71,8 @@ return function(H, repo_root)
                 H.equal(child.setting_id, expected)
                 H.equal(child.type, "checkbox")
                 local expected_default = true
-                if variant.key == "cwv_es_infantry_spear" then
-                    expected_default = career == "es_mercenary"
-                        or career == "es_huntsman" or career == "es_knight"
-                elseif variant.key == "cwv_es_greataxe" then
-                    expected_default = career == "es_mercenary"
-                        or career == "es_huntsman" or career == "es_knight"
-                        or career == "es_questingknight"
+                if variant.default_careers then
+                    expected_default = contains(variant.default_careers, career)
                 end
                 H.equal(child.default_value, expected_default)
                 H.equal(seen[expected], nil, expected)
@@ -85,7 +80,11 @@ return function(H, repo_root)
                 child_count = child_count + 1
             end
         end
-        H.equal(child_count, 158)
+        local expected_children = 0
+        for _, variant in ipairs(catalog) do
+            expected_children = expected_children + #variant.careers
+        end
+        H.equal(child_count, expected_children)
     end)
 
     H.test("CWV #596 Infantry Spear controls default to three Kruber careers", function()

@@ -15,6 +15,20 @@ function M.install(policy)
 	if mod._cwv_mod_unit_preview_installed then return end
 	mod._cwv_mod_unit_preview_installed = true
 
+	-- ProfileSynchronizer calls this collector before loading its inventory
+	-- package maps. Custom Greataxe units are resident through CWV's master
+	-- bundle but are not standalone global packages, so substitute only the
+	-- collector's package identities. The item/spawn unit data stays custom.
+	assert(WeaponUtils and type(WeaponUtils.get_weapon_packages) == "function",
+		"CWV Greataxe package bridge requires WeaponUtils.get_weapon_packages")
+	mod:hook(WeaponUtils, "get_weapon_packages", function(func, ...)
+		local package_names = func(...)
+		if policy and policy.alias_collected_packages then
+			policy.alias_collected_packages(package_names)
+		end
+		return package_names
+	end)
+
 	local function alias_for(name)
 		return policy and policy.preview_package_alias
 			and policy.preview_package_alias(name) or nil

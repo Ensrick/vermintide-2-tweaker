@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.253-dev"
+local MOD_VERSION = "0.12.254-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -3876,6 +3876,26 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
             -- get_wield_anim: wield_anim_career_3p[career] -> base wield_anim).
             local wac3p = item_template.wield_anim_career_3p
             local fired = (wac3p and wac3p[preview_career]) or item_template.wield_anim
+            -- #603: Ranger Veteran's Dual Hammers preview was reported using
+            -- the wrong idle. Vanilla's previewer fires this exact resolved
+            -- event directly, while the dwarf body may author both subtly
+            -- different dual-wield stances. Record the actual choice and body
+            -- capabilities once per weapon/event without adding another hook
+            -- or changing the pose before the runtime evidence is known.
+            if preview_career == "dr_ranger"
+                    and (weapon_key == "dr_dual_wield_hammers"
+                        or weapon_key == "dr_dual_wield_axes") then
+                mod._wt603_preview_diag_seen = mod._wt603_preview_diag_seen or {}
+                local diag_key = tostring(weapon_key) .. "\0" .. tostring(fired)
+                if not mod._wt603_preview_diag_seen[diag_key] then
+                    mod._wt603_preview_diag_seen[diag_key] = true
+                    mod:info("[wt:603] Ranger preview weapon=%s fired=%s has_fired=%s has_dual_axes=%s has_dual_hammers=%s",
+                        tostring(weapon_key), tostring(fired),
+                        tostring(fired and _safe_has_anim(preview_body, fired) or false),
+                        tostring(_safe_has_anim(preview_body, "to_dual_axes")),
+                        tostring(_safe_has_anim(preview_body, "to_dual_hammers")))
+                end
+            end
             if fired then
                 local resolved = _resolve_preview_wield_event(preview_body, fired, preview_career)
                 -- Only correct when the redirect resolves to a DIFFERENT,

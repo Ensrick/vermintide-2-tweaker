@@ -1746,6 +1746,13 @@ for shipped examples.
 
 ## Custom-mesh add-on — LA-style pattern (recommended)
 
+> **2026-07-14 canonical update:** use
+> [`../docs/CUSTOM_WEAPON_MODEL_PIPELINE.md`](../docs/CUSTOM_WEAPON_MODEL_PIPELINE.md)
+> for new assets. The older recipes below preserve historical Old Musket
+> context, but any advice that treats sibling/forwarding packages as proof of
+> runtime residency is superseded by issue #597's explicit-master-root,
+> preview-alias, and forward-only wire-alias requirements.
+
 **Canon:** `cwv_es_musket` v0.1.286+ (LA pattern after the
 World.spawn_unit overlay in v0.1.277–285 had un-fixable FP-rendering
 issues — shadow in FP, draws on top of hand).

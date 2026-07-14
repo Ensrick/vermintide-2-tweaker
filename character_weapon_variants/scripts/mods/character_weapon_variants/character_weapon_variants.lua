@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.410-dev"
+local MOD_VERSION = "0.1.411-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -54,6 +54,7 @@ local _om = {}
 _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear")
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
 _om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe")
+_om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_maces")
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
 _om.mod_unit_preview.install(_om.greataxe)
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
@@ -1199,6 +1200,57 @@ local _variant_definitions = {
 		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
 		-- See cwv_es_dual_maces above for the item_type / display rig rationale.
 		item_type       = "cwv_wh_dual_maces",
+	},
+	-- Issue #602: Dawi models with mace gameplay identities. The Bardin hammer
+	-- meshes are resident placeholders only; the moveset/template is canonical.
+	-- Reusing #599's existing mace template keys makes its modifier template-
+	-- scoped and therefore impossible to compound across these three items.
+	{
+		item_key        = "cwv_dr_dawi_mace",
+		base_weapon     = "es_1h_mace",
+		template        = "one_handed_hammer_template_1",
+		display_name    = "Dawi Mace",
+		description     = "A compact Dawi striking weapon, balanced for forceful mace blows.",
+		character       = "dwarf_ranger",
+		careers         = _om.dawi_maces.NATIVE_ONE_HANDED,
+		right_hand_unit = _om.dawi_maces.PLACEHOLDER_MACE,
+		inventory_icon  = "icon_wpn_dw_hammer_01_t1",
+		hud_icon        = "weapon_generic_icon_mace",
+		skin_display_name = "Dawi Mace",
+		rarity          = "exotic",
+		item_type       = "cwv_dr_dawi_mace",
+	},
+	{
+		item_key        = "cwv_dr_dawi_mace_shield",
+		base_weapon     = "es_mace_shield",
+		template        = "one_handed_hammer_shield_template_1",
+		display_name    = "Dawi Mace and Shield",
+		description     = "A Dawi mace paired with a broad shield for holding the line.",
+		character       = "dwarf_ranger",
+		careers         = _om.dawi_maces.NATIVE_SHIELD,
+		right_hand_unit = _om.dawi_maces.PLACEHOLDER_MACE,
+		left_hand_unit  = _om.dawi_maces.PLACEHOLDER_SHIELD,
+		inventory_icon  = "icon_wpn_dw_shield_01_hammer",
+		hud_icon        = "weapon_generic_icon_hammer_and_sheild",
+		skin_display_name = "Dawi Mace and Shield",
+		rarity          = "exotic",
+		item_type       = "cwv_dr_dawi_mace_shield",
+	},
+	{
+		item_key        = "cwv_dr_dawi_dual_maces",
+		base_weapon     = "dr_dual_wield_hammers",
+		template        = "cwv_dual_maces_template",
+		display_name    = "Dawi Dual Maces",
+		description     = "A matched pair of Dawi maces for an unbroken rhythm of crushing blows.",
+		character       = "dwarf_ranger",
+		careers         = _om.dawi_maces.NATIVE_ONE_HANDED,
+		right_hand_unit = _om.dawi_maces.PLACEHOLDER_MACE,
+		left_hand_unit  = _om.dawi_maces.PLACEHOLDER_MACE,
+		inventory_icon  = "icon_dr_dual_wield_hammers_01",
+		hud_icon        = "weapon_generic_icon_mace",
+		skin_display_name = "Dawi Dual Maces",
+		rarity          = "exotic",
+		item_type       = "cwv_dr_dawi_dual_maces",
 	},
 	{
 		-- Dual Warrior-Priest Hammers — paired clone of cwv_es_warpriest_hammer
@@ -8118,6 +8170,8 @@ local function _register_variant_skins()
 			-- skins in `weapon_skins_bless.lua:395` use display_dual_hammers.
 			cwv_es_dual_maces             = "units/weapons/weapon_display/display_dual_hammers",
 			cwv_wh_dual_maces             = "units/weapons/weapon_display/display_dual_hammers",
+			cwv_dr_dawi_dual_maces        = "units/weapons/weapon_display/display_dual_hammers",
+			cwv_dr_dawi_mace_shield       = "units/weapons/weapon_display/display_shield_hammer",
 			-- Identical-mesh wh_1h_hammer Skullsplitters dual-wielded; vanilla
 			-- precedent: wh_dual_hammer in `dual_wield_hammers_priest.lua:1720`
 			-- sets the same rig on the priest dual-hammers weapon template,
@@ -8278,6 +8332,9 @@ local function _register_cwv_skin_combinations()
 		cwv_wh_dual_axes               = "cwv_wh_dual_axes_skins",
 		cwv_es_dual_maces              = "cwv_es_dual_maces_skins",
 		cwv_wh_dual_maces              = "cwv_wh_dual_maces_skins",
+		cwv_dr_dawi_mace               = "cwv_dr_dawi_mace_skins",
+		cwv_dr_dawi_mace_shield        = "cwv_dr_dawi_mace_shield_skins",
+		cwv_dr_dawi_dual_maces         = "cwv_dr_dawi_dual_maces_skins",
 		cwv_es_sword_and_mace          = "cwv_es_sword_and_mace_skins",
 		cwv_es_warpriest_hammer        = "cwv_es_warpriest_hammer_skins",
 		cwv_es_dual_warpriest_hammers  = "cwv_es_dual_warpriest_hammers_skins",
@@ -10052,6 +10109,9 @@ local function _build_entry(def, backend_id)
 		cwv_wh_dual_axes               = "cwv_wh_dual_axes_skins",
 		cwv_es_dual_maces              = "cwv_es_dual_maces_skins",
 		cwv_wh_dual_maces              = "cwv_wh_dual_maces_skins",
+		cwv_dr_dawi_mace               = "cwv_dr_dawi_mace_skins",
+		cwv_dr_dawi_mace_shield        = "cwv_dr_dawi_mace_shield_skins",
+		cwv_dr_dawi_dual_maces         = "cwv_dr_dawi_dual_maces_skins",
 		cwv_es_sword_and_mace          = "cwv_es_sword_and_mace_skins",
 		cwv_es_warpriest_hammer        = "cwv_es_warpriest_hammer_skins",
 		cwv_es_dual_warpriest_hammers  = "cwv_es_dual_warpriest_hammers_skins",

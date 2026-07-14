@@ -46,6 +46,15 @@ local loc = {
 	enable_cwv_mace_hammer_identity_tooltip = { en = "On by default. One-handed maces, mace and shield, and Dual Maces attack 5%% faster. One-handed hammers, hammer and shield, and Dual Hammers deal 12.5%% more direct damage but have 25%% less cleave. Stagger, ordinary pushes, blocks, wield actions, two-handed hammers, Hammer and Tome, Maul, and mixed Mace and Sword weapons are unchanged." },
 	cwv_es_crossbow_name           = { en = "Crossbow" },
 	cwv_es_crossbow_description    = { en = "An imperial-issue crossbow taken up by Reikland state troopers, the same Witch Hunter pattern weapon shouldered like a standard handgun." },
+	cwv_dr_dawi_mace = { en = "Dawi Mace" },
+	cwv_dr_dawi_mace_name = { en = "Dawi Mace" },
+	cwv_dr_dawi_mace_description = { en = "A compact Dawi striking weapon, balanced for forceful mace blows." },
+	cwv_dr_dawi_mace_shield = { en = "Dawi Mace and Shield" },
+	cwv_dr_dawi_mace_shield_name = { en = "Dawi Mace and Shield" },
+	cwv_dr_dawi_mace_shield_description = { en = "A Dawi mace paired with a broad shield for holding the line." },
+	cwv_dr_dawi_dual_maces = { en = "Dawi Dual Maces" },
+	cwv_dr_dawi_dual_maces_name = { en = "Dawi Dual Maces" },
+	cwv_dr_dawi_dual_maces_description = { en = "A matched pair of Dawi maces for an unbroken rhythm of crushing blows." },
 
 	-- On-ice `cwv_es_musket` variant item_type display name. The variant def is
 	-- commented out (kept as a backup idea — the live musket is

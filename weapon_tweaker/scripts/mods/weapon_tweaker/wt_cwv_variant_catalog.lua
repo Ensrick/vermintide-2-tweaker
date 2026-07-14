@@ -40,6 +40,22 @@ local GREATAXE_CONDITIONAL = {
     "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
     "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
 }
+local DAWI_ONE_HANDED_DEFAULT = { "dr_ranger", "dr_ironbreaker", "dr_slayer" }
+local DAWI_SHIELD_DEFAULT = { "dr_ranger", "dr_ironbreaker" }
+local DAWI_ONE_HANDED_CONDITIONAL = {
+    "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+    "dr_engineer",
+    "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
+    "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
+    "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
+}
+local DAWI_SHIELD_CONDITIONAL = {
+    "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+    "dr_slayer", "dr_engineer",
+    "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
+    "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
+    "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
+}
 
 return {
     -- #593 follow-up: when CWV owns the Axe+Shield family, WT exposes its
@@ -86,6 +102,20 @@ return {
     { key = "cwv_wh_dual_axes", careers = WH },
     { key = "cwv_es_dual_maces", careers = ES },
     { key = "cwv_wh_dual_maces", careers = WH },
+    -- #602: CWV authors source-backed Bardin defaults. WT deliberately owns
+    -- every other career as a default-off choice through the shared schema.
+    { key = "cwv_dr_dawi_mace", careers = GREATAXE_ALL,
+      default_careers = DAWI_ONE_HANDED_DEFAULT,
+      authored_careers = DAWI_ONE_HANDED_DEFAULT,
+      conditional_careers = DAWI_ONE_HANDED_CONDITIONAL },
+    { key = "cwv_dr_dawi_mace_shield", careers = GREATAXE_ALL,
+      default_careers = DAWI_SHIELD_DEFAULT,
+      authored_careers = DAWI_SHIELD_DEFAULT,
+      conditional_careers = DAWI_SHIELD_CONDITIONAL },
+    { key = "cwv_dr_dawi_dual_maces", careers = GREATAXE_ALL,
+      default_careers = DAWI_ONE_HANDED_DEFAULT,
+      authored_careers = DAWI_ONE_HANDED_DEFAULT,
+      conditional_careers = DAWI_ONE_HANDED_CONDITIONAL },
     { key = "cwv_es_dual_warpriest_hammers", careers = ES },
     { key = "cwv_es_warpriest_hammer_shield", careers = ES },
 }

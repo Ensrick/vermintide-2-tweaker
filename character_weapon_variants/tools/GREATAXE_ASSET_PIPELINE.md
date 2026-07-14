@@ -1,5 +1,11 @@
 # Greataxe Asset Pipeline
 
+This asset-specific recipe implements the repository-wide
+[`../../docs/CUSTOM_WEAPON_MODEL_PIPELINE.md`](../../docs/CUSTOM_WEAPON_MODEL_PIPELINE.md).
+The canonical guide owns licensing, runtime-root, preview, wire-safety, surface,
+and verification requirements; this file records Greataxe inputs and conversion
+parameters only.
+
 Issue #597 replaces CWV's Poleaxe with a Kruber Greataxe and five temporary
 illusion names. This pipeline converts the user's licensed Sketchfab downloads
 without committing the original archives or source-authoring files.

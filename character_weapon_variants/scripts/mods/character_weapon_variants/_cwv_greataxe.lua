@@ -144,6 +144,37 @@ function M.preview_package_alias(package_name)
 	return nil
 end
 
+-- WeaponUtils.get_weapon_packages is a package-residency collector, not a
+-- render-unit resolver. ProfileSynchronizer feeds its return values directly
+-- to PackageManager, where a resident mod-bundle unit path is not itself a
+-- loadable package name. Borrow the matching vanilla 1P/3P package identity at
+-- this boundary only; BackendUtils.get_item_units and all spawn paths retain
+-- the custom model unit.
+function M.collected_package_alias(package_name)
+	if type(package_name) ~= "string" then return nil end
+	for _, model in ipairs(M.MODELS) do
+		local unit = model.right_hand_unit
+		if type(unit) == "string" then
+			if package_name == unit then return M.NETWORK_PACKAGE_ALIAS_1P end
+			if package_name == unit .. "_3p" then return M.NETWORK_PACKAGE_ALIAS_3P end
+		end
+	end
+	return nil
+end
+
+function M.alias_collected_packages(package_names)
+	if type(package_names) ~= "table" then return package_names, 0 end
+	local replaced = 0
+	for index = 1, #package_names do
+		local alias = M.collected_package_alias(package_names[index])
+		if alias then
+			package_names[index] = alias
+			replaced = replaced + 1
+		end
+	end
+	return package_names, replaced
+end
+
 -- ProfileSynchronizer serializes inventory package maps through the vanilla
 -- NetworkLookup. Custom Workshop unit paths must therefore borrow a stable
 -- vanilla index on the forward (name -> index) side only. The reverse mapping

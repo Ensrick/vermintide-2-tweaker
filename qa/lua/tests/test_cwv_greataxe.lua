@@ -136,6 +136,30 @@ return function(H, repo_root)
 		H.equal(lookup[202], three_p)
 	end)
 
+	H.test("CWV #597 ProfileSynchronizer collection borrows vanilla packages only", function()
+		local model = policy.MODELS[1]
+		local custom_1p = model.right_hand_unit
+		local custom_3p = custom_1p .. "_3p"
+		local control = "units/weapons/player/control/control_3p"
+		local packages = { custom_1p, control, custom_3p }
+
+		local result, replaced = policy.alias_collected_packages(packages)
+		H.equal(result, packages)
+		H.equal(replaced, 2)
+		H.equal(packages[1], policy.NETWORK_PACKAGE_ALIAS_1P)
+		H.equal(packages[2], control)
+		H.equal(packages[3], policy.NETWORK_PACKAGE_ALIAS_3P)
+
+		-- Package collection must never rewrite the authored render unit.
+		H.equal(model.right_hand_unit, custom_1p)
+		H.equal(policy.collected_package_alias(control), nil)
+
+		local bridge = read(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_mod_unit_preview.lua")
+		H.truthy(bridge:find('mod:hook(WeaponUtils, "get_weapon_packages"', 1, true))
+		H.truthy(bridge:find("policy.alias_collected_packages(package_names)", 1, true))
+	end)
+
 	H.test("CWV #597 Greataxe wire aliases fail closed without vanilla indices", function()
 		local lookup = setmetatable({}, {
 			__index = function(_, key) error("strict lookup: " .. tostring(key)) end,

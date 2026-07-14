@@ -20,6 +20,12 @@ The shared primitive and incremental consumer cutover boundary are tracked in
 `WEAPON_APPEARANCE_EXTRACTION_420.md`. The copied library landing alone does not
 mean a consumer has retired its legacy apply path.
 
+For imported FBX/GLB/OBJ/DAE geometry, package residency, preview package
+translation, and multiplayer serialization are governed by the canonical
+[Custom Weapon Model Import Pipeline](CUSTOM_WEAPON_MODEL_PIPELINE.md). A
+correct appearance recipe cannot compensate for an unreachable or wire-unsafe
+resource.
+
 ---
 
 ## §1 The four render paths
