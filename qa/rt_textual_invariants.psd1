@@ -33,6 +33,10 @@
     # the 15-item residual-static list. Needle literals recovered from the
     # pre-conversion rt-check bodies (commit 7e6661a) and re-verified live.
 
+    # Issue #72 / F4-half: GT is the sole consumer of its enriched failed-join
+    # popup. Assigning that id to StateLoading revives the consume-once race.
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_lobby_failed_join_reveal.lua'; needle='(?m)^(?!\s*--).*\b(?:self|state_loading_self)\._popup_id\s*='; literal=$false; polarity='absent'; issueRef='#72'; note='enriched popup id must stay in GT pending registry; StateLoading ownership creates a double-consume hang.' }
+
     # -- item 1: _gt_debug_highlights.lua must not read POSITION_LOOKUP (dead for
     #    the local player in mod.update; issue 337 class) nor call bare
     #    :local_player() (asserts pre-game; issue 508). Both use a comment-excluding

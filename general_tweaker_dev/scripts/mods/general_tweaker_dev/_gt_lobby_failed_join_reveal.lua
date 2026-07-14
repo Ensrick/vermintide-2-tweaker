@@ -338,6 +338,16 @@ local function _update_consumer(_dt)
     _consume_results(popup_mgr)
 end
 
+-- v0.2.234-dev (Issue #72, F4-half): one explicit takeover boundary owns the
+-- enriched popup without ever handing its consume-once id to StateLoading.
+-- Keeping the live hook on this injectable helper lets /gt_regression_test
+-- execute the shipped decision against a write-trapping synthetic state. The
+-- complementary tier-a absence invariant rejects any direct _popup_id write in
+-- this module, including one added outside this helper later.
+local function _take_over_enriched_popup(state_loading_self, body, diff, queue_fn)
+    return queue_fn(state_loading_self, body, diff) == true
+end
+
 if type(mod._gt_register_update) == "function" then
     mod._gt_register_update("gt_lobby_failed_join_reveal_poller", _update_consumer)
 end
@@ -399,7 +409,9 @@ mod:hook("StateLoading", "create_popup", function(func, self, error_key, header,
         mod:warning("[gt:lobby] enriched popup intercept while popup already up -- skipping enrichment, deferring to vanilla")
         return vanilla()
     end
-    if not _queue_enriched_popup(self, body, diff) then return vanilla() end
+    if not _take_over_enriched_popup(self, body, diff, _queue_enriched_popup) then
+        return vanilla()
+    end
     -- Suppress vanilla popup; we've taken over.
 end)
 
@@ -615,6 +627,7 @@ mod._gt_failnotify_drive_teardown = _drive_restart_as_server_teardown
 mod._gt_failnotify_consume_results = _consume_results
 mod._gt_failnotify_pending_popups = _pending_popups
 mod._gt_failnotify_should_defer = M._should_defer_for_existing_popup
+mod._gt_failnotify_take_over = _take_over_enriched_popup
 
 -- Issue #378 join-watchdog exports (see /gt_regression_test). `_wd_reroute_to_menu`
 -- is the load-bearing invariant this fix adds over the reveal: a hung join must be

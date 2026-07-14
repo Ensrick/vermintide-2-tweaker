@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.233-dev"
+local MOD_VERSION = "0.2.234-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1682,6 +1682,36 @@ _rt_register("gt_lobby_failnotify_teardown_driver", function()
     local ok2, err2 = pcall(drive, nil)
     if not ok2 then
         return "teardown driver raised on nil sl: " .. tostring(err2)
+    end
+end)
+
+_rt_register("issue72_lobby_failnotify_never_hands_popup_to_vanilla", function()
+    -- F4's other half: the enriched popup is consumed exclusively by GT's
+    -- pending registry. StateLoading._popup_id must remain untouched or vanilla
+    -- and GT race to consume the same one-shot result. Drive the exact helper
+    -- used by the live create_popup hook against a state that traps that write.
+    local take_over = mod._gt_failnotify_take_over
+    if type(take_over) ~= "function" then
+        return "failed-join popup takeover helper missing (Issue #72)"
+    end
+    local wrote_popup_id = false
+    local fake_sl = setmetatable({}, {
+        __newindex = function(t, key, value)
+            if key == "_popup_id" then wrote_popup_id = true end
+            rawset(t, key, value)
+        end,
+    })
+    local queue_called = false
+    local ok, owned = pcall(take_over, fake_sl, "body", {}, function(sl, body, diff)
+        queue_called = sl == fake_sl and body == "body" and type(diff) == "table"
+        return true
+    end)
+    if not ok then return "popup takeover helper raised: " .. tostring(owned) end
+    if owned ~= true or not queue_called then
+        return "popup takeover did not retain GT ownership"
+    end
+    if wrote_popup_id or rawget(fake_sl, "_popup_id") ~= nil then
+        return "enriched popup id handed to StateLoading (double-consume race restored)"
     end
 end)
 

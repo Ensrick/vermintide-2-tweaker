@@ -1,5 +1,16 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.234-dev (2026-07-14) -- #72 failed-join popup ownership hardening [verify-fix]
+
+- Closed the remaining F4 regression gap around the enriched failed-join popup. The live `StateLoading.create_popup` hook now routes successful takeover through one injectable ownership boundary that queues into GT's private pending registry without assigning `StateLoading._popup_id`.
+- Added `/gt_regression_test` check `issue72_lobby_failnotify_never_hands_popup_to_vanilla`, which drives that exact boundary against a write-trapping synthetic state. Added a blocking tier-a absence invariant so a future direct `_popup_id` assignment anywhere in the module fails repo QA even if it bypasses the helper.
+- Corrected `_gt_debug_probes.lua`'s legacy `mod.update(self, dt)` wrapper to VMF's real `mod.update(dt)` callback contract. Forwarding remains behavior-identical, but no longer relies on Lua discarding the accidentally shifted second argument.
+- Added engine-free coverage for ownership wiring, absence of StateLoading handoff, runtime regression wiring, and the dt-only update wrapper.
+
+### Solo verify
+
+Run `/gt_regression_test` and confirm `issue72_lobby_failnotify_never_hands_popup_to_vanilla`, `gt_lobby_failnotify_teardown_driver`, `gt_lobby_failnotify_unknown_result_drives_teardown`, `gt_lobby_failnotify_popup_up_soft_defers`, and `gt_lobby_failnotify_unpack_preserves_leading_nils` all pass. The popup itself requires a real failed lobby join to exercise, but the remaining fix changes no user-facing branch.
+
 ## v0.2.233-dev (2026-07-14) -- #359 host bot command wheel [verify-fix]
 
 - Added a default-off **Bot command wheel** option for the host. It inserts the existing Versus **Attack Now**, **Group Up**, **Cover Me**, and **Wait** commands as the second page of the ordinary mission social wheel.

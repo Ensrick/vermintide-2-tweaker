@@ -914,8 +914,12 @@ do
     -- enter — Managers.player and Managers.mechanism are guaranteed
     -- ready by then.
     local prev_update = mod.update
-    mod.update = function(self, dt)
-        if prev_update then prev_update(self, dt) end
+    -- v0.2.234-dev (#72): VMF calls mod.update(dt), with no object/self
+    -- prepend. The old `(self, dt)` wrapper happened to work only because it
+    -- forwarded two arguments into the one-argument registry and Lua discarded
+    -- the second. Match the real callback contract explicitly.
+    mod.update = function(dt)
+        if prev_update then prev_update(dt) end
         if _pending_after_ingame then
             _pending_after_ingame = false
             _gt_dump_ai_now("state_ingame_enter")

@@ -6,6 +6,15 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+## Failed-join popup ownership hardening (#72)
+
+- [ ] `/gt_regression_test` passes `issue72_lobby_failnotify_never_hands_popup_to_vanilla` and the four existing `gt_lobby_failnotify_*` checks.
+- [ ] The enriched popup id exists only in GT's private pending registry; `StateLoading._popup_id` remains nil throughout takeover, preventing vanilla and GT from racing to consume the same one-shot result.
+- [ ] Initial queue failure still delegates to vanilla, and known, unknown, and Workshop actions still drive teardown exactly once.
+- [ ] `qa/check_rt_textual_invariants.ps1` passes the #72 forbidden-assignment rule for `_gt_lobby_failed_join_reveal.lua`.
+- [ ] `_gt_debug_probes.lua` wraps VMF's `mod.update(dt)` using a single `dt` argument and forwards that exact value to the central registry.
+- Detection: offline `test_gt_lobby_failnotify_hardening.lua`; runtime check `issue72_lobby_failnotify_never_hands_popup_to_vanilla`; tier-a #72 absence invariant.
+
 ## Host bot command wheel (#359)
 
 - [ ] The option defaults off; only the host sees the extra second wheel page, and disabling it removes that page on the next open.
