@@ -1,15 +1,5 @@
 # Chaos Wastes Tweaker Changelog
 
-## 0.7.265-dev (2026-07-13) - #458/#487 graph-label floor and fail-closed start shrine [untested]
-
-Failed verification on `journey_ruin` exposed the actual pre-solver crash: CT reported four TRAVEL and four SIGNATURE entries (`dup=3`), but the baked CW graphs contain numbered labels up to 6. Vanilla resolves a labeled node with `shuffled_levels_for_labels[node_type][node_label]` and immediately indexes that pool entry; label 5/6 therefore became nil before backtracking could recover, leaving `_path_graph` nil and stalling the run.
-
-- Raised the duplicate pool floor from 4 to 6. One enabled mission now receives five stable aliases, satisfying both vanilla's maximum baked label and its branch-sibling distinctness constraint.
-- Added `AdventurePool.validate_graph_pools(base_graph, config)` immediately before vanilla `deus_populate_graph`. It derives the selected graph's per-type maximum labels, validates live pool size/shape, and restores any unsafe pool wholesale from the pristine journey snapshot. The customized availability choice fails closed for that run instead of passing an invalid graph to vanilla.
-- The #458 starting shrine now opens only after the graph guard succeeded and the current start node is the expected `dlc_morris_map`; missing graph/node/config leaves the normal map decision untouched and logs a bounded `[ct:458] ... fail-closed` breadcrumb.
-- Strengthened `pool_floor_underflow_duplicates_487`: threshold must be at least 6, the graph guard must exist, and a synthetic label-6 graph must report a six-entry requirement.
-- Verify solo and coop: enable Buy Starting Boons and leave exactly one TRAVEL/SIGNATURE mission enabled. Start each journey. Expect `GRAPH-SOLVE end ... graph=N nodes`, no vanilla nil / `_path_graph` recovery error, and the shrine opens at the valid start node. A defensive fallback logs `[ct:458] GRAPH-GUARD restored vanilla pool...`. Run `/ct_regression_test`; expect `PASS: pool_floor_underflow_duplicates_487` and `PASS: issue458_start_shrine_config`.
-
 ## 0.7.264-dev (2026-07-13) - #406 Khaine's Communion catalogued under Mod Boons [untested]
 
 - Identified the selectable boon as CT's single canonical `DeusPowerUpTemplates.ct_kill_heal` entry, displayed as **Khaine's Communion**. Vanilla `deus_power_up_settings.lua` contains no such key and supplies no menu-category metadata; CT's `BOON_TREE` is the sole catalog used to generate both Disabled Boons and Starting Boons.

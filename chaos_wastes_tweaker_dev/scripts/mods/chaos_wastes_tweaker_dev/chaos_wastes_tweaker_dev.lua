@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.265-dev"
+local MOD_VERSION = "0.7.264-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -527,14 +527,9 @@ _rt_register("pool_floor_underflow_duplicates_487", function()
         return "1 enabled must be 'duplicate' (repeat enabled), got " .. tostring(cpf(1))
     end
     local thr = AdventurePool.POOL_SAFETY_THRESHOLD
-    if type(thr) ~= "number" or thr < 6 then
-        return "POOL_SAFETY_THRESHOLD must be a number >= 6 (baked graph label bound), got " .. tostring(thr)
+    if type(thr) ~= "number" or thr < 4 then
+        return "POOL_SAFETY_THRESHOLD must be a number >= 4 (prevent_same_level_choice bound), got " .. tostring(thr)
     end
-    if type(AdventurePool.validate_graph_pools) ~= "function" then
-        return "validate_graph_pools missing (pre-solve vanilla fallback not exposed)"
-    end
-    local req = AdventurePool.graph_pool_requirements({ a = { type = "TRAVEL", label = 6 } })
-    if req.TRAVEL ~= 6 then return "graph label requirement did not preserve label 6" end
     if cpf(thr - 1) ~= "duplicate" then return "threshold-1 must still be 'duplicate'" end
     if cpf(thr) ~= "ok" then return "threshold enabled must be 'ok' (no over-duplication)" end
     return nil
@@ -2661,14 +2656,7 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
         mod._ct_freeze487.begin_generate(args[3], is_server_d)
     end
 
-    -- #458: never inherit a successful graph flag from the preceding run. The
-    -- populate hook proves the live pool shape; only the completed vanilla call below
-    -- can prove that setup_run actually retained a non-empty path graph.
-    mod._ct_start_shrine_graph_ready = false
-    mod._ct_start_shrine_pool_guard_ready = false
     local ret_a, ret_b = func(self, unpack(args, 1, n))
-    mod._ct_start_shrine_graph_ready = mod._ct_start_shrine_pool_guard_ready == true
-        and type(self._path_graph) == "table" and next(self._path_graph) ~= nil
 
     if mod._ct_freeze487 then
         mod._ct_freeze487.finish_generate(args[3], self._path_graph)
@@ -6756,23 +6744,6 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     -- ordering), effective_setting falls back to defaults that match
     -- vanilla behavior (no mutation) — same safety as the v0.7.20 gate.
 
-    -- #458 failed verification / #487 pool safety: validate the selected baked graph
-    -- against the live filtered pools BEFORE vanilla indexes labeled levels. If the
-    -- customized shape is unsafe, AdventurePool restores the affected pool from its
-    -- pristine vanilla snapshot. This also guarantees setup_run receives a real graph
-    -- before the start-node shrine is allowed to open.
-    local pools_ok, pool_fallback = AdventurePool.validate_graph_pools(base_graph, config)
-    if not pools_ok then
-        pcall(printf, "[ct:458] GRAPH-GUARD could not prove a valid pool (%s); leaving starting shrine closed",
-            tostring(pool_fallback))
-        mod._ct_start_shrine_pool_guard_ready = false
-    else
-        mod._ct_start_shrine_pool_guard_ready = true
-        if pool_fallback and pool_fallback ~= "" then
-            pcall(printf, "[ct:458] GRAPH-GUARD restored vanilla pool before solve: %s", pool_fallback)
-        end
-    end
-
     -- Override the curse hotspot count if the user has set `cursed_mission_count`.
     -- Vanilla `spread_curse` (deus_populate_graph.lua:681) does:
     --   hot_spot_count = random(CURSES_HOT_SPOTS_MIN_COUNT, CURSES_HOT_SPOTS_MAX_COUNT)
@@ -8842,19 +8813,12 @@ mod:hook("GameModeMapDeus", "local_player_game_starts", function(func, self, pla
         -- Register the shrine config on EVERY peer (host + clients) so the shop view
         -- resolves it if the host forces SHOP; harmless when the shrine never opens.
         local node = drc.get_current_node and drc:get_current_node()
-        if mod._ct_start_shrine_graph_ready ~= true or type(node) ~= "table"
-                or node.level ~= "dlc_morris_map" then
-            if self._is_server and mod:get("ct_buy_starting_boons") then
-                pcall(printf, "[ct:458] Buy Starting Boons fail-closed: start graph/node was not proven valid")
-            end
-            return
-        end
         local bseed = node and node.system_seeds and node.system_seeds.blessings or 0
         local cfg = mod._ct_build_start_shrine_config(bseed)
         -- Host-authoritative trigger: only the host writes shared server state; clients
         -- follow via the existing GameModeMapDeus shared-state sync.
         if not self._is_server then return end
-        if not mod:get("ct_buy_starting_boons") or type(cfg) ~= "table" then return end
+        if not mod:get("ct_buy_starting_boons") then return end
         local run_id = drc.get_run_id and drc:get_run_id()
         if run_id ~= nil and mod._ct_start_shrine_fired == run_id then return end -- once per run
         local ss = self._shared_state

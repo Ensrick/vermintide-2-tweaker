@@ -540,7 +540,7 @@ end
 -- Pool mutation
 -- =====================================================================
 
-local POOL_SAFETY_THRESHOLD = 6  -- Distinct entries needed per (journey × pool_type)
+local POOL_SAFETY_THRESHOLD = 4  -- Distinct entries needed per (journey × pool_type)
                                   -- before duplicate-injection kicks in. The only wired
                                   -- solver constraint for TRAVEL/SIGNATURE is
                                   -- prevent_same_level_choice (branch-sibling width;
@@ -551,13 +551,8 @@ local POOL_SAFETY_THRESHOLD = 6  -- Distinct entries needed per (journey × pool
                                   -- (3) parents, each with <= MAX_CONNECTIONS_PER_NODE (2)
                                   -- children, so <= 3 same-type siblings + itself = 4
                                   -- distinct keys (deus_map_base_gen_settings.lua:6-8). 4 is
-                                  -- The baked graphs also use numbered labels to pin a
-                                  -- level across branches. Those labels reach 6; vanilla
-                                  -- indexes shuffled_levels_for_labels[type][label]
-                                  -- directly, so a four-entry pool can nil-index before
-                                  -- placement validation even begins (#458 verification).
-                                  -- Six therefore satisfies BOTH the label contract and
-                                  -- the branch-sibling constraint. The user's alternate
+                                  -- therefore PROVABLY sufficient AND matches the user's
+                                  -- "fewer than 4" trigger (issue 487). His alternate
                                   -- "however many non-arena/non-shrine mission nodes the
                                   -- expedition has" framing over-counts: levels MAY repeat
                                   -- across non-sibling nodes down a path (that path-wide
@@ -626,69 +621,6 @@ local function reset_to_snapshot()
             end
         end
     end
-end
-
--- Return the largest numbered label required for each level-pool type in a baked
--- base graph. Vanilla assigns labeled nodes by direct array index before its normal
--- placement/backtracking checks, so every corresponding pool must contain at least
--- this many complete entries.
-function _M.graph_pool_requirements(base_graph)
-    local required = {}
-    if type(base_graph) ~= "table" then return required end
-    for _, node in pairs(base_graph) do
-        if type(node) == "table" and type(node.type) == "string" then
-            local label = tonumber(node.label)
-            if label and label > 0 then
-                required[node.type] = math.max(required[node.type] or 0, math.floor(label))
-            end
-        end
-    end
-    return required
-end
-
--- Last gate before vanilla deus_populate_graph. If a live filtered pool cannot
--- satisfy the selected baked graph (too few entries, or a malformed entry), restore
--- that pool wholesale from the pristine per-journey snapshot. This is deliberately
--- fail-closed: user filtering is sacrificed for this run rather than passing a shape
--- that vanilla will nil-index and leave DeusRunController._path_graph unset.
-function _M.validate_graph_pools(base_graph, config)
-    if type(config) ~= "table" or type(config.LEVEL_AVAILABILITY) ~= "table" then
-        return false, "missing LEVEL_AVAILABILITY"
-    end
-
-    local journey_name
-    for name, candidate in pairs(DEUS_MAP_POPULATE_SETTINGS or {}) do
-        if candidate == config then journey_name = name break end
-    end
-    local snap = journey_name and _snapshot and _snapshot[journey_name]
-    local restored = {}
-
-    for pool_type, minimum in pairs(_M.graph_pool_requirements(base_graph)) do
-        local pool = config.LEVEL_AVAILABILITY[pool_type]
-        local count, malformed = 0, false
-        if type(pool) == "table" then
-            for _, entry in pairs(pool) do
-                count = count + 1
-                if type(entry) ~= "table" or type(entry.paths) ~= "table" then
-                    malformed = true
-                end
-            end
-        end
-
-        if type(pool) ~= "table" or count < minimum or malformed then
-            local vanilla_pool = snap and snap[pool_type]
-            if type(pool) ~= "table" or type(vanilla_pool) ~= "table" then
-                return false, string.format("%s invalid (count=%d required=%d malformed=%s), no vanilla snapshot",
-                    tostring(pool_type), count, minimum, tostring(malformed))
-            end
-            for key in pairs(pool) do pool[key] = nil end
-            for key, entry in pairs(vanilla_pool) do pool[key] = entry end
-            restored[#restored + 1] = string.format("%s(count=%d required=%d malformed=%s)",
-                pool_type, count, minimum, tostring(malformed))
-        end
-    end
-
-    return true, table.concat(restored, ",")
 end
 
 -- Remove disabled CW scenarios from every journey's LEVEL_AVAILABILITY[TRAVEL/SIGNATURE].
