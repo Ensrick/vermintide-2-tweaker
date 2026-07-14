@@ -7065,10 +7065,10 @@ local _CW_BLOCKING_PICKUP_NAMES = {
 -- use, so it's converted too. Ravaged Art is `painting_scrap`; its guaranteed
 -- level spawners bypass the spread-count replacement, so it must use this same
 -- identity conversion rather than relying on pickup-settings counts.
-local _ct_collectible_policy = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_collectible_policy")
-local _CW_COLLECTIBLE_TO_COIN = _ct_collectible_policy.CONVERT_TO_COIN
+mod._ct_collectible_policy = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_collectible_policy")
+local _CW_COLLECTIBLE_TO_COIN = mod._ct_collectible_policy.CONVERT_TO_COIN
 mod._ct_collectible_to_coin = _CW_COLLECTIBLE_TO_COIN  -- exposed for regression guard
-mod._ct351_rewrite_network_spawn = _ct_collectible_policy.rewrite_network_spawn
+mod._ct351_rewrite_network_spawn = mod._ct_collectible_policy.rewrite_network_spawn
 
 do
     local emitted = {}
@@ -7196,7 +7196,7 @@ mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_
     end
 
     local original_name = pickup_name
-    local routed_name, converted = _ct_collectible_policy.route_name(
+    local routed_name, converted = mod._ct_collectible_policy.route_name(
         pickup_name, on_adv, self.is_server == true)
     if converted then
         pickup_name = routed_name
@@ -7266,7 +7266,7 @@ mod:hook("UnitSpawner", "spawn_network_unit", function(func, self, unit_name,
     if candidate then
         local coin_settings = AllPickups and AllPickups.deus_soft_currency
         local rewritten_unit, rewritten_template, rewritten_init, converted, original_name =
-            _ct_collectible_policy.rewrite_network_spawn(unit_name, unit_template_name,
+            mod._ct_collectible_policy.rewrite_network_spawn(unit_name, unit_template_name,
                 extension_init_data, coin_settings, on_injected_adventure_level(),
                 self.is_server == true)
         if converted then
