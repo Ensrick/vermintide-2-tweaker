@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.248-dev"
+local MOD_VERSION = "0.2.249-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -3108,7 +3108,12 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_freecam")
 -- cutscene (#106). PRE-FLIGHT: gut has no other CutsceneSystem / ShowCursorStack.pop
 -- hook (it only CALLS ShowCursorStack.show/.hide). Dofile'd AFTER _hide_ui.lua so its
 -- mod.update chain captures the hide-ui update as prev. See _gut_cutscenes.lua.
-pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_cutscenes")
+do
+    local ok, cutscenes = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_cutscenes")
+    if ok and type(cutscenes) == "table" then
+        for _, c in ipairs(cutscenes.rt_checks or {}) do _rt_register(c.name, c.fn) end
+    end
+end
 
 -- Disable Loading-Screen Monologues (MIGRATED from general_tweaker 2026-06-29, #192):
 -- the REMAINDER of gt's old "Cutscenes & Monologues" group after the cutscene-skip

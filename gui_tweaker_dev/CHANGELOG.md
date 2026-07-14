@@ -5,6 +5,14 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.249-dev (2026-07-13) -- #257 Well of Dreams cutscene trace [not deployed]
+
+- Source-audited The Well of Dreams as `dlc_termite_3` (`level_settings_termite_part_3.lua`), the native `CutsceneSystem` callbacks, and the user-confirmed #140 Parting of the Waves post-skip suppression. The decompiled Lua does not contain the mission's authored level-flow graph, and no available log contains a clean `dlc_termite_3` cutscene trace, so its exact activation/skip event identity and fade ordering are not yet proven.
+- Added automatic `[gut:257]` evidence on `dlc_termite_3` only. It records the exact activation/skip event names, camera/logic/effect ordering, fade durations, auto-skip state, one-shot flag, post-skip guard, and the predicted production disposition (`swallow_one_shot`, `swallow_post_skip`, or `pass_fade`). It changes no cutscene behavior.
+- The trace is hard-capped at 32 callback records plus one cap marker per CutsceneSystem instance and emits nothing on every other level. The existing #106/#140 hooks remain singletons; no new engine hook was added.
+- Added offline policy/boundary coverage in `test_gut_cutscene_probe.lua` and `/gut_regression_test` check `issue257_well_of_dreams_cutscene_probe`.
+- **Evidence pass after deployment:** enable Skip Cutscenes and Auto-skip, run The Well of Dreams once with no standalone cutscene-skip mod, and attach the `[gut:257]` lines. A visible fade paired with `disposition=pass_fade` identifies the uncovered callback order; swallowed dispositions show the current generic #140 paths already handled that fade.
+
 ## 0.2.248-dev (2026-07-13) -- #525 Progression tab label [not deployed]
 
 - Source-audited both Mod Tweaker presentations. They derive top-tab chrome from each VMF mod's readable name and truncate it to 16 characters, so `Modded Progression` could not render as the requested exact `Progression` label.

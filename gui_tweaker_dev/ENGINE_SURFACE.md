@@ -16,7 +16,7 @@ line by line, as were `IngameUI.setup_views` / the DLC `ui_views` seam and
 grep-verified when written).
 
 **Dev/stable relationship.** This documents `gui_tweaker_dev` (`gut_dev`,
-MOD_VERSION `0.2.248-dev`, friends-only Workshop 3751024698), the ACTIVE working
+MOD_VERSION `0.2.249-dev`, friends-only Workshop 3751024698), the ACTIVE working
 stream. `gui_tweaker/` (`gut`, public-alpha Workshop 3732144878) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gut_dev`
@@ -76,7 +76,7 @@ Migrated from `gt` (#106 skip 2026-06-25, #192 monologue 2026-06-29). All `Cutsc
 | Class.method (kind) | Vanilla behavior | Why gut hooks it | Trap / invariant |
 |---|---|---|---|
 | `CutsceneSystem.skip_pressed` [hook,tbl] `_gut_cutscenes.lua:322` | ESC/Space skip, gated behind `script_data.skippable_cutscenes` [src: `cutscene_system.lua:98`] | Scope-unlock the skip ONLY around this call, ONLY for a cutscene carrying a wired `event_on_skip` flow event (#275 policy) | Never latch the unlock globally - a boss/phase cinematic with `event_on_skip=nil` (Nurgloth on `dlc_castle`) must play out or the fight desyncs into a ~66%-health softlock (memory `reference_vt2_cutscene_wired_on_skip_policy`) |
-| `CutsceneSystem.flow_cb_cutscene_effect` [hook,tbl] `_gut_cutscenes.lua:244` | Fires a named cutscene flow effect incl. `fx_fade` | Swallow `fx_fade` while the #106 post-skip guard is armed (Parting of the Waves = `dlc_dwarf_whaling` fade-in, #140) | CONSOLIDATED: the #140 round-2 guard-swallow lives in this SAME body (VMF drops a 2nd hook); a fade can PRECEDE its own camera node, so the one-shot arm alone cannot catch it |
+| `CutsceneSystem.flow_cb_cutscene_effect` [hook,tbl] `_gut_cutscenes.lua:244` | Fires a named cutscene flow effect incl. `fx_fade` | Swallow `fx_fade` while the #106 post-skip guard is armed (Parting of the Waves = `dlc_dwarf_whaling` fade-in, #140); automatically classify/log Well of Dreams (`dlc_termite_3`) fade ordering for #257 | CONSOLIDATED: the #140 guard and #257 observation live in this SAME body (VMF drops a 2nd hook). `_gut_cutscene_probe257.lua` is behavior-free, target-only, and caps at 32 records plus one cap marker per system. `level_settings_termite_part_3.lua` proves the level key, but the authored flow graph/event identity is absent from the Lua decompile, so #257 remains diagnostic pending runtime evidence |
 | `CutsceneSystem.flow_cb_activate_cutscene_logic` [hook,tbl] `:269` / `flow_cb_activate_cutscene_camera` [hook,tbl] `:397` / `flow_cb_deactivate_cutscene_cameras` [safe,tbl] `:432` | Activate cutscene logic / activate a cutscene camera / deactivate all cutscene cameras | Deferred auto-skip + fade-arm at the camera node (#140 round 1) + post-skip guard + lifecycle logs | Fade-arm at the camera node gated on "will this actually skip" so a locked boss cinematic keeps its fade; deactivate hook is log-only |
 | `ShowCursorStack.pop` [hook,tbl] `_gut_cutscenes.lua:515` | Pops one cursor-show stack reason | Cutscene-flow cursor bookkeeping | gut only CALLS `ShowCursorStack.show`/`.hide` elsewhere; this is the sole `.pop` hook |
 

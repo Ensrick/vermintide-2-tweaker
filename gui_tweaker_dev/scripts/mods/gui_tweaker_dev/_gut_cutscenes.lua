@@ -116,6 +116,8 @@ local mod = get_mod("gut_dev")
 -- and on the deferred tick — NOT every frame.
 
 local _printf = rawget(_G, "printf") or function(fmt, ...) print(string.format(fmt, ...)) end
+local _probe257 = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_cutscene_probe257")
+local _probe257_state = _probe257.new()
 
 local function _level_key()
     local lvl = "?"
@@ -136,6 +138,21 @@ local function _cs_snapshot(self)
         tostring(self.ingame_hud_enabled), tostring(self._should_hide_loading_icon),
         tostring(self.event_on_skip), tostring(self.ui_event_queue ~= nil),
         tostring(script_data and script_data.skippable_cutscenes))
+end
+
+-- Automatic #257 evidence, silent outside The Well of Dreams and hard-capped at
+-- 32 callback records plus one cap marker per CutsceneSystem instance. This records
+-- authored flow identity/order only; it does not alter any cutscene decision.
+local function _trace257(self, phase, fields)
+    local level = _level_key()
+    local e = _probe257.record(_probe257_state, level, self, phase, fields)
+    if not e then return end
+    _printf("[gut:257] seq=%s phase=%s level=%s disposition=%s skip_next=%s guard=%s active_camera=%s on_activate=%s on_skip=%s hud=%s letterbox=%s fade_in=%s hold=%s fade_out=%s auto=%s capped=%s",
+        tostring(e.seq), tostring(e.phase), level, tostring(e.disposition),
+        tostring(e.skip_next), tostring(e.guard), tostring(e.active_camera),
+        tostring(e.on_activate), tostring(e.on_skip), tostring(e.hud),
+        tostring(e.letterbox), tostring(e.fade_in), tostring(e.hold),
+        tostring(e.fade_out), tostring(e.auto), tostring(e.capped))
 end
 
 -- ============================================================
@@ -271,7 +288,19 @@ end
 mod._gut_cutscene_has_wired_skip = _gut_cutscene_has_wired_skip
 
 if CutsceneSystem then
-    mod:hook(CutsceneSystem, "flow_cb_cutscene_effect", function(func, self, name, ...)
+    mod:hook(CutsceneSystem, "flow_cb_cutscene_effect", function(func, self, name, flow_params, ...)
+        _trace257(self, "effect", {
+            disposition = _probe257.fade_disposition(name, _skip_next_fade,
+                _skipped_cutscene_system == self),
+            skip_next = _skip_next_fade,
+            guard = _skipped_cutscene_system == self,
+            active_camera = self.active_camera ~= nil,
+            on_skip = self.event_on_skip,
+            fade_in = flow_params and flow_params.fade_in_time,
+            hold = flow_params and flow_params.hold_time,
+            fade_out = flow_params and flow_params.fade_out_time,
+            auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
+        })
         -- DIAGNOSTIC (#106): every fade/text effect the cutscene queues. The stuck
         -- dlc_castle bars are an fx_fade that never gets a matching disable.
         _printf("[gut:cutscene] effect | name=%s skip_next_fade=%s level=%s",
@@ -293,10 +322,18 @@ if CutsceneSystem then
             _printf("[gut:cutscene] fx_fade swallowed (post-skip guard) | level=%s", _level_key())
             return
         end
-        return func(self, name, ...)
+        return func(self, name, flow_params, ...)
     end)
 
     mod:hook(CutsceneSystem, "flow_cb_activate_cutscene_logic", function(func, self, player_input_enabled, event_on_activate, event_on_skip)
+        _trace257(self, "logic_activate", {
+            disposition = event_on_skip ~= nil and "wired_skip" or "locked_no_skip",
+            guard = _skipped_cutscene_system == self,
+            active_camera = self.active_camera ~= nil,
+            on_activate = event_on_activate,
+            on_skip = event_on_skip,
+            auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
+        })
         -- #106 bastion fix: a genuinely NEW cutscene is starting — clear the post-skip
         -- camera guard BEFORE the auto-skip evaluation below, so this cutscene's camera
         -- activates normally and, if auto-skip fires, the skip re-arms the guard itself.
@@ -350,6 +387,14 @@ if CutsceneSystem then
     -- the call so vanilla's `if self.active_camera and script_data.skippable_cutscenes`
     -- branch fires regardless of the level's own author intent.
     mod:hook(CutsceneSystem, "skip_pressed", function(func, self, ...)
+        _trace257(self, "skip_before", {
+            disposition = _gut_cutscene_has_wired_skip(self) and "wired_skip" or "locked_no_skip",
+            skip_next = _skip_next_fade,
+            guard = _skipped_cutscene_system == self,
+            active_camera = self.active_camera ~= nil,
+            on_skip = self.event_on_skip,
+            auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
+        })
         -- DIAGNOSTIC (#106): the KEY instrument. Log the readable teardown state
         -- BEFORE and AFTER the vanilla skip_pressed, plus the cursor stack depth, so
         -- we can see which teardown step never fires on the stuck dlc_castle cutscene.
@@ -370,6 +415,14 @@ if CutsceneSystem then
         local function _arm_post_skip_guard()
             if had_camera and self.active_camera == nil then
                 _skipped_cutscene_system = self
+                _trace257(self, "guard_armed", {
+                    disposition = "post_skip_guard",
+                    skip_next = _skip_next_fade,
+                    guard = true,
+                    active_camera = false,
+                    on_skip = self.event_on_skip,
+                    auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
+                })
                 _printf("[gut:cutscene] post-skip camera guard ARMED | level=%s", _level_key())
             end
         end
@@ -425,6 +478,16 @@ if CutsceneSystem then
     -- client's entire 7-mission log), so this camera-level line is what closes the
     -- client instrumentation blind spot.
     mod:hook(CutsceneSystem, "flow_cb_activate_cutscene_camera", function(func, self, camera_unit, transition_data, ingame_hud_enabled, letterbox_enabled)
+        _trace257(self, "camera_activate", {
+            disposition = _skipped_cutscene_system == self and "suppress_post_skip" or "pass_camera",
+            skip_next = _skip_next_fade,
+            guard = _skipped_cutscene_system == self,
+            active_camera = self.active_camera ~= nil,
+            on_skip = self.event_on_skip,
+            hud = ingame_hud_enabled,
+            letterbox = letterbox_enabled,
+            auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
+        })
         -- #140 round 1 (Parting of the Waves = dlc_dwarf_whaling, NOT dlc_portals -
         -- earlier docs had the level key wrong): the map's native
         -- fade-in effect fires around THIS earlier camera node, before
@@ -460,6 +523,14 @@ if CutsceneSystem then
     -- (skip_pressed -> :107) and the natural flow-driven end, host and client alike.
     -- PRE-FLIGHT dup check 2026-07-01: no other gut hook on this method.
     mod:hook_safe(CutsceneSystem, "flow_cb_deactivate_cutscene_cameras", function(self)
+        _trace257(self, "camera_deactivate", {
+            disposition = "observed",
+            skip_next = _skip_next_fade,
+            guard = _skipped_cutscene_system == self,
+            active_camera = self.active_camera ~= nil,
+            on_skip = self.event_on_skip,
+            auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
+        })
         _printf("[gut:cutscene] CAMERA-DEACTIVATE | level=%s | %s", _level_key(), _cs_snapshot(self))
     end)
 end
@@ -576,4 +647,4 @@ end)
 mod:info("[gut] Skip Cutscenes installed (migrated from gt, issue #106; [gut:cutscene] printf diagnostic active; toggle: %s, auto: %s)",
     tostring(mod:get("gut_skip_cutscenes_enabled")), tostring(mod:get("gut_skip_cutscenes_auto")))
 
-return {}
+return { rt_checks = _probe257.rt_checks }

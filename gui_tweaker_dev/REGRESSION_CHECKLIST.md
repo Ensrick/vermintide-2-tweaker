@@ -4,6 +4,15 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md
 
 Last updated: 2026-07-13.
 
+## Well of Dreams cutscene trace (#257)
+
+- [ ] Enable GUT Skip Cutscenes and Auto-skip; disable any standalone cutscene-skip mod.
+- [ ] Run The Well of Dreams (`dlc_termite_3`) once and record whether any fade remains visible.
+- [ ] Attach all `[gut:257]` lines. Confirm they include activation/skip event names, fade durations, callback order, and a fade disposition.
+- [ ] Confirm no `[gut:257]` lines appear on another mission.
+- [ ] Confirm the trace stops after at most 32 callback records and one `phase=cap` marker for one CutsceneSystem instance.
+- [ ] `/gut_regression_test` passes `issue257_well_of_dreams_cutscene_probe`.
+
 ## Simple UI compatibility (#314)
 
 - [ ] With Simple UI and UI Tweaks enabled, drag fitted windows through every screen edge; each remains wholly visible.
