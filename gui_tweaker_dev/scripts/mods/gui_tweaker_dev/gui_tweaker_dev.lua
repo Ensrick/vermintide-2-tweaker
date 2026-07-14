@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.245-dev"
+local MOD_VERSION = "0.2.246-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -355,6 +355,28 @@ _rt_register("all_languages_defer_340", function()
         if txt and txt:find("arial%[1%]%s*=%s*arial" .. "_unicode_path") then
             return "#340 regression: _gut_all_languages.lua reintroduced the Fonts[1] swap from the source mod (gut ships no atlas -> broken render)"
         end
+    end
+end)
+
+_rt_register("issue314_simple_ui_window_confinement", function()
+    local compat = mod._gut_simple_ui_compat
+    local policy = mod._gut_simple_ui_bounds_policy
+    if type(compat) ~= "table" or compat.source_workshop_id ~= "1389872347" then
+        return "#314 Simple UI compatibility module/source identity is missing"
+    end
+    if compat.phase ~= 1 or type(compat.tick) ~= "function" then
+        return "#314 bounded phase-1 window recovery tick is not wired"
+    end
+    if type(policy) ~= "table" or type(policy.confine) ~= "function" then
+        return "#314 pure window-confinement policy is missing"
+    end
+    local fit = policy.confine({ -10, 1000 }, { 400, 300 }, 1920, 1080)
+    if not fit or fit.x ~= 0 or fit.y ~= 780 then
+        return "#314 fitted-window clamp no longer confines both axes"
+    end
+    local oversized = policy.confine({ 50, 50 }, { 2200, 1400 }, 1920, 1080)
+    if not oversized or oversized.x ~= 0 or oversized.y + 1400 ~= 1080 then
+        return "#314 oversized window no longer retains a reachable top/title edge"
     end
 end)
 
@@ -3187,6 +3209,11 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_ckc_bridge")
 -- it records the case-2 finding + a defer guard and printf-logs whether the
 -- standalone mod is present. Resolution is documentation + recommend 3232229691.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_all_languages")
+
+-- (#314) Clean compatibility phase for the external sanctioned-but-unlicensed
+-- Simple UI mod. Confines its public live window records to the current screen;
+-- no upstream code/assets are copied and no external function is replaced.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_simple_ui_compat")
 
 -- Bestiary & Armory (absorbed): merged weapon (Armory) + enemy (Bestiary)
 -- compendium with a PURE-DYNAMIC data layer — weapons enumerated live from

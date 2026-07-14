@@ -4,6 +4,14 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md
 
 Last updated: 2026-07-13.
 
+## Simple UI compatibility (#314)
+
+- [ ] With Simple UI and UI Tweaks enabled, drag fitted windows through every screen edge; each remains wholly visible.
+- [ ] Resize a window larger than the viewport; its left edge and top title/drag handle remain reachable.
+- [ ] Change resolution/UI scale; existing windows recover into the new bounds without replacing their position tables.
+- [ ] Without Simple UI installed/enabled, GUT behavior and logs are unchanged.
+- [ ] `/gut_regression_test` passes `issue314_simple_ui_window_confinement`.
+
 ## Native options
 
 ### issue292-video-profiles-native-apply — saved graphics presets bypass engine apply

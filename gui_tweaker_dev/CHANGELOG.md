@@ -5,6 +5,17 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.246-dev (2026-07-13) -- #314 Simple UI compatibility phase 1 [not deployed]
+
+- Audited sanctioned Workshop Simple UI 2.1.2 and its public Grasmann-Mods source. The repository provides source/resources but no redistribution license, so GUT does not copy or absorb them without explicit permission.
+- Added a clean compatibility tick for an installed Simple UI. It confines every public live window record to the current resolution; fitted windows remain wholly visible, while oversized windows retain a reachable left edge and top title/drag handle.
+- The compatibility path replaces no external function, installs no engine hook, mutates existing position tables in place, emits at most one raw-console recovery line per window/resolution, and is a no-op when Simple UI is absent.
+- Added pure Lua 5.1 coverage, `/gut_regression_test` check `issue314_simple_ui_window_confinement`, and `SIMPLE_UI_INTEGRATION_PLAN.md` with source-backed dropdown, buff-preview, native-theme, and licensing phases.
+
+### Verify
+
+Install Simple UI plus UI Tweaks, drag its windows through all screen edges, resize one beyond the viewport, then change resolution. Fitted windows must remain wholly visible; oversized windows must retain their left edge and top title handle. Run `/gut_regression_test` and confirm the #314 check passes.
+
 ## 0.2.245-dev (2026-07-13) -- #292 native Video settings profiles [verify-fix]
 
 - Added five persistent graphics-profile slots at the top of the native Video options page. Selecting a saved slot stages its values; the game's existing Apply button remains the only activation path and therefore keeps its save, renderer reload/restart, and 15-second revert-confirmation behavior.

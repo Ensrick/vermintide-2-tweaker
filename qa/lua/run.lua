@@ -63,6 +63,7 @@ local suites = {
     "test_cos_score_identity",
     "test_gut_native_loadout_policy",
     "test_gt_dummy_collision_policy",
+    "test_gut_simple_ui_bounds",
     "test_cos_glow_lifecycle",
     "test_peer_parity_transition",
     "test_ct_boon_catalog",
