@@ -167,6 +167,14 @@
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua'; needle='pcall(defs.numeric_caret_index'; literal=$true; polarity='present'; minCount=2; issueRef='#575'; note='standalone presentation wires measured placement at initial and active-field clicks.' }
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state.lua'; needle='pcall(defs.numeric_caret_index'; literal=$true; polarity='present'; minCount=2; issueRef='#575'; note='state presentation wires measured placement at initial and active-field clicks.' }
 
+    # -- #574: exact variant persistence plus bounded hot-join convergence.
+    #    Behavioral runtime checks exercise matching; these source gates retain
+    #    the durable identity and no-network-retry lifecycle at ship time.
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua'; needle='return string.format("backend:%s|skin:%s", tostring(backend_id), tostring(skin or ""))'; literal=$true; polarity='present'; issueRef='#574'; note='per-item glow identity cannot collapse distinct inventory instances or illusions.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua'; needle='if not GlowPicker._open or not GlowPicker._dirty then return false end'; literal=$true; polarity='present'; issueRef='#574'; note='Apply remains the sole dirty transaction and repeated Apply stays a no-op.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='state_pull = "piggyback_cos_la_state_req"'; literal=$true; polarity='present'; issueRef='#574'; note='join recovery reuses the acknowledged post-ingame state pull.' }
+    @{ mod='cosmetics_tweaker'; file='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'; needle='retry_network = false'; literal=$true; polarity='present'; issueRef='#574'; note='the bounded join retry repaints locally and cannot create an RPC stream.' }
+
     # ============================ cim_dev ============================
     # Source: crafting_in_modded_dev/CHANGELOG.md 0.8.57-dev (issue 511). The two
     # hook-registration checks whose source-text needles skip in retail.

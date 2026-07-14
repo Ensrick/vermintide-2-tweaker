@@ -52,6 +52,7 @@ local suites = {
     "test_cim_skin_persistence",
     "test_cos_score_identity",
     "test_gut_native_loadout_policy",
+    "test_cos_glow_lifecycle",
 }
 
 for _, suite in ipairs(suites) do

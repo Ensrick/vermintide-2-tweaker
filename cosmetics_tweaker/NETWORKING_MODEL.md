@@ -1,6 +1,6 @@
 # Cosmetics Tweaker — Host / client networking model
 
-How vanilla VT2 syncs cosmetic state across peers, where our LA bridge sits in that model, and what we need to add for the per-instance-glow feature (issue #48). Written 2026-05-28 against vanilla source + 2026-05-26 host-log evidence + the existing `cos_la_apply` implementation.
+How vanilla VT2 syncs cosmetic state across peers, where our LA and per-instance-glow bridges sit in that model. Updated 2026-07-13 after co-op verification of issue #574.
 
 ---
 
@@ -68,7 +68,8 @@ Where each piece of cosmetic state lives at runtime:
 | LA equips (persisted) | VMF setting `la_persisted_equips.careers[career_name]` | Across restarts | `(career_name, slot_name)` | Owning peer's local writes |
 | LA illusions (persisted) | VMF setting `la_persisted_equips.illusions[backend_id]` | Across restarts | `backend_id` | Owning peer's local writes |
 | Glow override (per-toggle) | VMF setting `glow_override_*` | Across restarts | (global) | Owning peer |
-| **Custom glow blob (per-weapon, planned)** | **CIM `_forged_weapons[bid].custom_glow`** | **Across restarts** | **`backend_id`** | **Owning peer's local writes** |
+| Custom glow (durable) | VMF `glow_per_item` | Across restarts | `(backend_id, illusion)` | Owning peer's explicit Apply |
+| Custom glow (peer cache) | `_glow_by_peer[peer]` active payload | Session/transition | `(wearer_peer, slot, illusion)` | Host-authoritative owner emit |
 | Material settings on unit (live) | Engine-internal | Per-spawn | Unit ID | Whichever peer last called `apply_material_settings` on that unit |
 
 Cache invalidation:
@@ -93,7 +94,7 @@ Walk through a vanilla illusion swap on a connected peer:
 
 ---
 
-## 5. Why LA needs `cos_la_apply` — and where the per-instance glow needs the same pattern
+## 5. Why LA and per-instance glow need explicit bridges
 
 LA cosmetics break step 5: there is no `WeaponSkins.skins[la_armoury_key]` entry on remote peers, so vanilla's lookup arrives at `nil` and nothing applies. We bridge by:
 
@@ -102,27 +103,21 @@ LA cosmetics break step 5: there is no `WeaponSkins.skins[la_armoury_key]` entry
 3. On every peer, the recv handler writes to `_la_equips_by_peer[A][slot_hat]` and calls `_apply_la_on_unit(A.player_unit, "slot_hat", ...)` to attach the LA mesh.
 4. On every subsequent unit spawn for A (career swap, mission start, hot-join), the spawn-monitor walks `_la_equips_by_peer[A]` and re-applies.
 
-**Per-instance glow (issue #48) needs the SAME pattern with a different payload:**
+**Per-instance glow (#574) ships the same pattern with a different payload:**
 
-| | LA cosmetics (`cos_la_apply`) | Per-instance glow (planned `cos_glow_apply`) |
+| | LA cosmetics (`cos_la_apply`) | Per-instance glow (`cos_glow_apply`) |
 |---|---|---|
-| Trigger | Local apply of LA hat/body/illusion | Local apply of custom glow blob in popup |
-| Payload | `(peer, slot_name, kind, armoury_key, vanilla_key)` | `(peer, backend_id, glow_blob)` |
-| Recv cache | `_la_equips_by_peer[peer][slot]` | `_custom_glow_by_peer[peer][backend_id]` |
-| Local apply | `_apply_la_on_unit` → attach mesh | `_apply_custom_glow_on_unit` → register synthetic `_cosmetics_tweaker_glow_<bid>` template + `apply_material_settings` |
-| Persistence | VMF setting per-career + per-backend_id | CIM `_forged_weapons[bid].custom_glow` (substrate ready) |
-| Hot-join replay | On peer-join, host re-sends every cached LA emit | On peer-join, host re-sends every cached glow blob |
+| Trigger | Local apply of LA hat/body/illusion | Explicit Apply of the active custom glow |
+| Payload | `(peer, slot_name, kind, armoury_key, vanilla_key)` | `(wearer, slot, illusion context, glow component table)`; backend ID stays local |
+| Recv cache | `_la_equips_by_peer[peer][slot]` | `_glow_by_peer[peer].active_per_item_glow` |
+| Local apply | `_apply_la_on_unit` → attach mesh | Bind spawned/wielded unit identity, exact-match slot+illusion, write shader vectors |
+| Persistence | VMF setting per-career + per-backend_id | Owner-only VMF `glow_per_item`, keyed by backend item plus illusion |
+| Hot-join replay | Host state replay | Targeted replay plus acknowledged `cos_la_state_req` pull; bounded local-only repaint until equipment exists |
 
-The glow blob shape is constrained by `MaterialSettingsTemplates.weaves` (5 vector3 fields = 5 × 3 floats = 15 floats per blob). Fits comfortably under the 500-char RPC string cap if we ship as a compact `"%.4g,%.4g,%.4g;%.4g,...;%.4g,%.4g,%.4g"` packed string. Or use VMF binary RPCs and skip serialization.
-
-### Synthetic template registration
-
-`Material.apply_material_settings` reads from the GLOBAL `MaterialSettingsTemplates` table. For per-instance glows, we need a stable name string to pass to it. Two paths:
-
-- **Path A — one template per backend_id.** Register `MaterialSettingsTemplates["_ct_glow_" .. backend_id]` on every peer's recv. Pollutes the global table but is simple. Cleanup needs disconnect-purge hooks.
-- **Path B — single shared mutable template.** Maintain one `MaterialSettingsTemplates._ct_glow_active` and overwrite it just before each `apply_material_settings` call. Cleaner table state but races if two units want different glows in the same frame.
-
-Path A is the recommended starting point — race-free, predictable cleanup, easy to scale. Add to `_la_equips_by_peer`-style purge on peer disconnect.
+The renderer does not register synthetic global templates. It applies the
+validated component values directly to the bound unit's material variables.
+This avoids global-template lifetime and cross-item races. Remote matching
+fails closed when slot or illusion identity is incomplete or different.
 
 ---
 
@@ -139,28 +134,21 @@ For per-instance glow, bots inherit the same model. The host's local custom_glow
 
 ---
 
-## 7. Where the gaps are right now
+## 7. Current status
 
 What works:
 - LA hat / body / illusion sync across peers (cos_la_apply).
 - Vanilla glow propagation (free — skin keys are the only thing needed).
 - Per-career LA persistence across restarts (`_la_persistence.lua`).
 - Per-backend_id LA illusion persistence (`la_persisted_equips.illusions`).
-- Global glow-override toggle (`glow_override_enable` + per-channel sliders) — **NOT per-instance**, applies to whatever weapon the user wields.
+- Per-item, per-illusion glow Apply/persistence and host-authoritative peer sync.
+- Equipment spawn, local wield, hero/inventory preview, remote husk wield, initial join, and hot-join repaint paths.
 - Bot LA hat self-heal on cross-skeleton mismatch.
 
-What's planned for issue #48:
-- Per-instance glow blob storage (CIM `custom_glow` field — substrate exists per `crafting_in_modded.lua`).
-- `cos_glow_apply` RPC for cross-peer sync of the blob.
-- Synthetic per-backend_id MaterialSettingsTemplates registration on recv.
-- Hot-join replay (host re-sends every active glow on peer-join).
-- UI popup on the customizer (data probe v0.9.30+ captures the surface).
-- Hide weavebound by default in the picker (v0.9.29 ✓).
-
-What we still need to learn from in-game runtime:
-- The full `HeroWindowItemCustomization` state machine — `_state_*` methods, transitions, click-callback wiring. v0.9.30 dump captures snapshot.
-- The current-skin selection state (`_selected_illusion_index`) behavior across re-opens.
-- What CIM passes through on weapon spawn vs what gets dropped (CIM's `_forge_load` is the apply point).
+Verified for #574 on 2026-07-13: peer sync after weapon swaps, exact-instance
+persistence across game exit, inventory preview consistency, and client
+leave/rejoin reconstruction. The join fallback is material-only, one job per
+wearer, and capped at 40 attempts/10 seconds; it does not retry network sends.
 
 ---
 
@@ -180,5 +168,6 @@ What we still need to learn from in-game runtime:
 - Vanilla `apply_material_settings` hook target: `scripts/helpers/cosmetic_utils.lua` (`CosmeticUtils.apply_material_settings` global wrapper)
 - `MaterialSettingsTemplates.weaves`: `scripts/settings/equipment/weapon_material_settings_templates.lua:52`
 - LA bridge implementation: `cosmetics_tweaker.lua` lines 4703-5800 (search `cos_la_apply` / `_la_equips_by_peer` / `_apply_la_on_unit`)
-- Per-instance glow CIM substrate: `crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua` (`_forge_save` / `_forge_load` / `_cim_set_custom_glow`)
+- Per-instance glow owner store/UI: `_glow_picker.lua` (`GlowPicker.apply`, `restore_runtime_for`, `glow_per_item`)
+- Per-instance glow transport/render: `cosmetics_tweaker.lua` (`cos_glow_apply_req`, `cos_glow_apply`, `_cos574_glow_rehydrate_tick`) and `_cos_glow.lua`
 - v0.9.28 cache self-heal: `cosmetics_tweaker.lua:_purge_stale_peer_slot` + `_la_spawn_monitor` mismatch handler

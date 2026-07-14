@@ -175,7 +175,7 @@ the committed baseline always matches CI regardless of the local checkout.
 | 40 | Cross-character LA hat applied to wrong skeleton (j_spine1 / j_spine2 crash) | ATTACHMENT_STORAGE_AUDIT.md | Cosmetics agent group | HANDED OFF |
 | 41 | Same-character LA hat with incompatible attachment_node_linking (j_spine2 v2 — e6fc17e2 crash) | (new this session) | Cosmetics agent group | HANDED OFF |
 | 42 | Vanilla offhand picks don't sync across peers | HOST_CLIENT_AUDIT.md | Cosmetics agent group | HANDED OFF |
-| 43 | Per-peer glow RPC unimplemented | HOST_CLIENT_AUDIT.md | Cosmetics agent group | HANDED OFF |
+| 43 | Per-peer glow RPC unimplemented | HOST_CLIENT_AUDIT.md | `glow_picker_render_fanout_574`, `test_cos_glow_lifecycle.lua`; #574 user co-op verified 2026-07-13 | (PATCHED) |
 | 44 | LA armor apply leaks icons into vanilla inventory | HOST_CLIENT_AUDIT.md | Cosmetics agent group | HANDED OFF |
 | 45 | `_apply_la_on_unit` offhand respawn pending-queue fragile | HOST_CLIENT_AUDIT.md | Cosmetics agent group | HANDED OFF |
 | 46 | CWV ammo weapons need full skin field mirroring | `feedback_cwv_ammo_unit_required.md` | PRE-SHIP review (covered by CWV DoD gate) | PRE-SHIP |

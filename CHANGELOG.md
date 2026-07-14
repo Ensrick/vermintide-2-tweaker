@@ -4,6 +4,10 @@
 
 Tweaker: GUI v0.2.243-dev / issue #572 scales the native padded inventory magnifier tile to 7/8 (112x112), positions its approximately 28px visible glyph wholly inside Mod Tweaker's 30px search field, and hides only that passive texture while the unchanged full-field hotspot is focused. Text origin and all search transactions remain unchanged. Offline and runtime contracts cover geometry, focus visibility, view wiring, and hotspot preservation. In-game visual confirmation remains under `verify-fix`; no Workshop deployment is part of this commit.
 
+## 2026-07-13 - Post-fix audit for #574
+
+User co-op verification confirms Cosmetics Tweaker v0.9.94-dev preserves exact-instance glow choices across game exit, keeps inventory preview and wielded models consistent, synchronizes peers after weapon swaps, and reconstructs state when a client leaves and rejoins. The shipped explicit-Apply transaction, owner persistence, host-authoritative payload, render fan-out, and bounded local-only join repaint satisfy the issue contract. Post-fix hardening adds host-runnable lifecycle coverage, tier-a source invariants, corrects the stale networking reference, and records the reusable durable-owner/ephemeral-render-state bug class. No gameplay code or Workshop deployment changed.
+
 ## 2026-07-13 - Post-fix audit for #582, #584, and #585
 
 User verification closes the WT/CWV native Dual Axes ownership boundary and the Moonfire equipped-slot resource lifecycle fixes. The audit confirms runtime and offline regression coverage, documents native-versus-variant ownership and persistent player-resource rules, corrects the generated name-map owner after Cosmetics extraction, and regenerates the deterministic catalog without forbidden native Dual Axes rows.

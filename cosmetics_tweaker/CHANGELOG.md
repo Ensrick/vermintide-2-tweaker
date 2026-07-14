@@ -1,5 +1,10 @@
 # Cosmetics Tweaker — Changelog
 
+## Post-fix audit - 2026-07-13 - #574 verified complete
+
+- User co-op verification confirms peer glow sync after weapon swaps, exact per-instance persistence across game exit, inventory-preview parity, and automatic reconstruction after a client leaves and rejoins.
+- Audited the shipped v0.9.92-dev through v0.9.94-dev transaction, identity, persistence, preview/equipment/husk fan-out, host-authoritative RPC, and bounded join replay. Added offline lifecycle coverage plus tier-a source gates and corrected stale architecture documentation. No gameplay behavior, mod version, or Workshop deployment changed.
+
 ## 0.9.95-dev - 2026-07-13 - #513 isolate score-lineup wearer identity [verify-fix-coop]
 
 - The 0.9.93 client log proved that exact profile/career matching was still insufficient by itself: vanilla score rows for Sienna and Warrior Priest carried the host's `peer_id`, so the resolver opened the host's human-only LA store and explicitly swapped both bot helmets to Grail Knight's Loremaster mesh. Vanilla `ScoreboardHelper` records `is_player_controlled` beside that shared network-owner peer.

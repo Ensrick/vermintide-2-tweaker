@@ -1597,3 +1597,34 @@ Related coverage: WT `issue584_moonfire_stowed_native_regen_contract`, `issue585
 
 ### Related Issues / commits
 - weapon_tweaker v0.12.230-dev (#290), runtime `issue290_billhook_kruber_effective_3p_complete`, diagnostic `[wt:290]`.
+
+## 43. Durable owner customization is confused with ephemeral render state
+
+**First seen:** 2026-07-13 (cosmetics_tweaker issue #574; fixed v0.9.92-dev through v0.9.94-dev)
+**Canonical Issue:** [#574](https://github.com/Ensrick/vermintide-2-tweaker/issues/574)
+
+A live material preview, durable owner preference, and remote peer render cache
+have different identities and lifetimes. Saving a mutable preview on close can
+commit canceled edits; keying only by weapon type merges inventory instances or
+illusions; assuming one spawn callback reaches every surface leaves previews,
+husks, swaps, or hot joins at vanilla state.
+
+Use an explicit transaction: clone committed state into preview state, mark dirty
+on edits, persist and emit only on Apply, make repeated Apply a no-op, and restore
+the committed snapshot on close. Persist owner state by exact backend item plus
+illusion. The wire payload must omit owner-local backend IDs and instead carry a
+wearer, active slot, illusion context, and validated glow components. Receivers
+cache by wearer and fail closed unless the spawned unit matches that context.
+
+Treat equipment creation, local wield, asynchronous hero preview, remote husk
+wield, initial join, and hot join as separate render consumers. Reuse an
+acknowledged post-ingame state pull for convergence, then retry only local paint
+while equipment is unavailable. Bound retries by both cadence and deadline; do
+not create a network retry loop. Do not synchronously purge peer caches on
+`PlayerManager.remove_player`, which also fires during level transitions (bug
+class 24).
+
+Related coverage: Cosmetics runtime `glow_picker_apply_transaction_574` and
+`glow_picker_render_fanout_574`; offline `test_cos_glow_lifecycle.lua`; tier-a
+source invariants for exact identity, explicit Apply, acknowledged state pull,
+and no-network-retry convergence.

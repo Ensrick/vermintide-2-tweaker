@@ -1,13 +1,13 @@
 # Glow System — cosmetics_tweaker
 
-State as of v0.9.93-dev (2026-07-13).
+State as of v0.9.94-dev (2026-07-13), verified in co-op.
 
 This is the canonical reference for how the glow customization system is
 wired today: which shader variables drive what visually, how the popup UI
 talks to them, how persistence works, what the current limitations are,
 and where to extend.
 
-## 1. What's working today (v0.9.93-dev)
+## 1. What's working today (v0.9.94-dev)
 
 | Surface | Status |
 | --- | --- |
@@ -88,7 +88,7 @@ component group to the global per-channel-color VMF dropdown.
   `equip_item` hooks captured (v0.9.7 fix)
 
 `mod._per_item_glow_runtime` (cosmetics_tweaker.lua, runtime) —
-in-memory `{ [backend_id] = { rune = {r,g,b,intensity} } }`. Set by:
+in-memory `{ [backend_id] = { rune/lower/upper/dots = {r,g,b,intensity} } }`. Set by:
 * `GlowPicker.open_for(backend_id, slot_data)` — loads persisted state
   from `glow_per_item` VMF setting
 * Slider drag `on_change` callbacks — write live to this map
@@ -193,29 +193,18 @@ no per-item customizations still see the global preset behavior.
 
 ## 7. Known limitations & quirks
 
-### a. Magic family not yet wired (M3)
+### a. Context and command access coexist
 
-`_apply_glow_to_unit` only handles `pi.rune`. For magic family weapons
-(`_magic_01` / `_magic_02`), the per-item path skips and falls through
-to global preset. The user perceives this as "the popup does nothing for
-Weavebound weapons" because the rune block doesn't apply and there's no
-magic-family equivalent yet.
+Selecting a glow-capable illusion opens the picker contextually. The
+`/glow_picker` command remains available as a diagnostic/manual entry point.
 
-### b. Popup is global, not contextual
+### b. Toggle off
 
-Today `/glow_picker` is a chat command. User has to manually invoke it
-after equipping the item they want to customize. M3 will auto-open the
-popup when entering a cosmetic screen with a glow-capable weapon, AND
-hide the popup when the item doesn't support glow.
+The picker exposes an explicit per-item disabled state. The renderer writes
+zero emissive values for that item and does not fall through to the legacy
+global override.
 
-### c. Toggle off is implicit
-
-There's no "Glow disabled" state. Intensity = 0 effectively disables
-because the apply early-returns when intensity ≤ 0, falling through to
-the global path. But there's no UI affordance for "I want no glow at
-all, no matter what."
-
-### d. Cross-slot inheritance
+### c. Cross-slot inheritance
 
 When you customize the main weapon's rune glow, the shield in the offhand
 slot DOES NOT receive the same glow automatically. They're separately
