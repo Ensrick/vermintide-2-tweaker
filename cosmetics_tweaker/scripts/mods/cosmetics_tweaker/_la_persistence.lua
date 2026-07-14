@@ -250,6 +250,33 @@ M.get_saved_offhands = function()
     return _state.offhands or {}
 end
 
+M.get_saved_offhands_for = function(backend_id)
+    if not backend_id then return nil end
+    if not _state then _load() end
+    return _state.offhands and _state.offhands[backend_id] or nil
+end
+
+-- Official-realm items may be salvaged/deleted after an LA override was
+-- saved. Drop only exact-item sections whose caller positively reports the
+-- backend id missing; nil means the backend is not authoritative yet.
+M.prune_missing_items = function(exists)
+    if type(exists) ~= "function" then return 0 end
+    if not _state then _load() end
+    local ids = {}
+    for backend_id in pairs(_state.illusions or {}) do ids[backend_id] = true end
+    for backend_id in pairs(_state.offhands or {}) do ids[backend_id] = true end
+    local removed = 0
+    for backend_id in pairs(ids) do
+        if exists(backend_id) == false then
+            _state.illusions[backend_id] = nil
+            _state.offhands[backend_id] = nil
+            removed = removed + 1
+        end
+    end
+    if removed > 0 then _persist() end
+    return removed
+end
+
 -- ============================================================
 -- Restore
 -- ============================================================

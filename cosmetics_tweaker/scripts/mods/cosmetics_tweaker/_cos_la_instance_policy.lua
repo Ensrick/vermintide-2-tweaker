@@ -1,0 +1,47 @@
+-- Pure exact-item policy for Loremaster's Armoury inventory presentation.
+-- Kept engine-free so offline tests can lock identity and fail-closed rules.
+
+local M = {}
+
+local function _backend_id(item)
+    return type(item) == "table" and (item.backend_id or item.ItemInstanceId) or nil
+end
+
+local function _icon_for(armoury_key, vanilla_skin, skin_list)
+    local variant = type(skin_list) == "table" and skin_list[armoury_key] or nil
+    local icons = type(variant) == "table" and variant.icons or nil
+    if type(icons) ~= "table" or type(vanilla_skin) ~= "string" then return nil end
+    local icon = icons[vanilla_skin]
+    return type(icon) == "string" and icon ~= "" and icon or nil
+end
+
+function M.resolve_inventory_icon(item, saved_illusion, saved_offhands,
+        backend_to_armoury, backend_to_vanilla, skin_list)
+    if type(item) ~= "table" or not _backend_id(item) then return nil end
+
+    -- Row-one illusion wins: it describes the whole exact weapon instance.
+    if type(saved_illusion) == "string" then
+        local armoury_key = type(backend_to_armoury) == "table"
+            and backend_to_armoury[saved_illusion] or nil
+        local vanilla_skin = item.skin or (type(backend_to_vanilla) == "table"
+            and backend_to_vanilla[saved_illusion])
+        local icon = _icon_for(armoury_key, vanilla_skin, skin_list)
+        if icon then return icon end
+    end
+
+    -- Offhand-only choices use LA's authored icon for that variant/base-skin
+    -- pair. Fixed hand order makes asymmetric records deterministic.
+    if type(saved_offhands) == "table" then
+        for _, hand in ipairs({ "right_hand_unit", "left_hand_unit" }) do
+            local record = saved_offhands[hand]
+            if type(record) == "table" and record.armoury_key then
+                local icon = _icon_for(record.armoury_key,
+                    record.vanilla_key or item.skin, skin_list)
+                if icon then return icon end
+            end
+        end
+    end
+    return nil
+end
+
+return M

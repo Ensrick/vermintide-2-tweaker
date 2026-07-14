@@ -1,5 +1,13 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.99-dev - 2026-07-14 - #376 exact-item LA persistence and icons [verify-fix]
+
+- Inventory/loadout grids now show Loremaster's Armoury's authored icon only for the exact backend item carrying the persisted LA illusion or offhand choice. The resolver uses `SKIN_LIST[armoury_key].icons[vanilla_skin]`, preserves the other three vanilla UI-information returns, and never mutates shared `WeaponSkins` or `ItemMasterList` icon fields.
+- Added a delayed backend-mirror reconciliation that removes illusion/offhand overrides when their exact item no longer exists, while retaining CIM-forged records during local-mirror restoration. Existing hat/armor, main-illusion, and per-hand save/restore paths are unchanged.
+- Added pure offline identity/fail-closed coverage and runtime `la_exact_instance_inventory_icon_376` coverage.
+
+- **Verify (solo):** apply different LA cosmetics to two same-type weapons, restart the game, and open the loadout inventory. Only the modified instance must show the matching LA icon and render that illusion; the other instance keeps its vanilla icon. Salvage/delete the modified item, wait 10 seconds after returning to the keep, and confirm `[la-state] INSTANCE-PRUNE 1 missing item override(s) removed` without changing another item.
+
 ## 0.9.98-dev - 2026-07-13 - #266 Kruber LA shield availability parity [verify-fix-coop]
 
 - Every Loremaster's Armour shield illusion is now offered on the same seven Kruber shield item types: Sword and Shield, Mace and Shield, Bretonnian Sword and Shield, Spear and Shield, and CWV Axe, Longsword, and Warrior-Priest Hammer shield variants.

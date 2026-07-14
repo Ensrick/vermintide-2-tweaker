@@ -37,6 +37,7 @@ local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
 local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
+mod._la_instance_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_instance_policy")
 -- v0.9.49-dev (issue #186): disable Loremaster's Armoury's Okri's-Challenges /
 -- achievement-book entries (main_quest + 12 sub-quests) — display, tracking and
 -- completion pop-ups — behind the `la_disable_okri_challenges` toggle (default
@@ -57,7 +58,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.98-dev"
+local MOD_VERSION = "0.9.99-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2401,13 +2402,29 @@ mod._la_restore_offhand_selections = function()
         n, miss) end
 end
 
--- v0.9.9.1 REVERT: removed v0.9.9.0 UIUtils.get_ui_information_from_item
--- hook that overrode the weapon-slot icon when an LA shield was equipped.
--- User reported "the latest has the wrong icons for everything" — the
--- icon lookup chain (_offhand_selection[bid].icon, sourced from
--- WeaponSkins.skins[la_armoury_key].inventory_icon in _la_bridge.lua) was
--- returning wrong paths, breaking icons globally. LA's actual icon
--- storage shape needs proper diagnostic before re-attempting.
+-- #376 exact-instance icon seam. Vanilla passes the full backend item into
+-- UIUtils and resolves the first return from item.skin / WeaponSkins
+-- (ui_utils.lua:219-260). LA's real authored icon lives instead at
+-- SKIN_LIST[armoury_key].icons[vanilla_skin] (LA funcs.lua:103-110). Override
+-- only that first return for a backend id with a persisted LA choice; never
+-- mutate shared WeaponSkins/ItemMasterList tables (the v0.9.9.0 failure).
+if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
+    mod:hook(UIUtils, "get_ui_information_from_item", function(func, item)
+        local inventory_icon, display_name, description, store_icon = func(item)
+        local backend_id = item and (item.backend_id or item.ItemInstanceId)
+        if backend_id and mod._la_instance_policy and LA_PERSIST then
+            local la = get_mod("Loremasters-Armoury")
+            local icon = mod._la_instance_policy.resolve_inventory_icon(item,
+                LA_PERSIST.get_saved_illusion(backend_id),
+                LA_PERSIST.get_saved_offhands_for(backend_id),
+                LA_BRIDGE and LA_BRIDGE.backend_to_armoury,
+                LA_BRIDGE and LA_BRIDGE.backend_to_vanilla,
+                la and la.SKIN_LIST)
+            if icon then inventory_icon = icon end
+        end
+        return inventory_icon, display_name, description, store_icon
+    end)
+end
 
 local function _get_offhand_options(item_key)
     if mod._ensure_independent_dual_pool then
@@ -8607,6 +8624,35 @@ mod.update = function(dt)
     -- meshes, which is enough for non-LA picks. Function is idempotent.
     if _force_load_all_offhand_packages then _force_load_all_offhand_packages() end
     if _la_bridge_init_done then _install_skin_loadout_safety() end
+    -- #376: wait until all local-backend injectors have had time to restore,
+    -- then retire exact-item overrides whose item no longer exists. Vanilla's
+    -- item interface is a direct backend-mirror lookup
+    -- (backend_interface_item_playfab.lua:384-389). CIM's persisted registry
+    -- is an additional authority during its mirror-rebuild window.
+    if _la_bridge_init_done and not mod._la_persist_prune_done and LA_PERSIST
+            and LA_PERSIST.prune_missing_items then
+        mod._la_persist_prune_at = mod._la_persist_prune_at or (os.clock() + 10)
+        if os.clock() >= mod._la_persist_prune_at then
+            local backend_items = Managers and Managers.backend
+                and Managers.backend:get_interface("items")
+            if backend_items and backend_items.get_item_from_id then
+                local removed = LA_PERSIST.prune_missing_items(function(backend_id)
+                    local ok, item = pcall(backend_items.get_item_from_id,
+                        backend_items, backend_id)
+                    if ok and item then return true end
+                    for _, mod_name in ipairs({ "crafting_in_modded", "crafting_in_modded_dev" }) do
+                        local cim = get_mod(mod_name)
+                        local forged = cim and cim:get("forged_weapons")
+                        if type(forged) == "table" and forged[backend_id] then return true end
+                    end
+                    if not ok then return nil end
+                    return false
+                end)
+                mod._la_persist_prune_done = true
+                if printf then printf("[la-state] INSTANCE-PRUNE %d missing item override(s) removed", removed) end
+            end
+        end
+    end
     if mod._glow_scan_tick then mod._glow_scan_tick(dt) end
     if mod._la_shield_probe_tick then mod._la_shield_probe_tick(dt) end
     -- v0.9.49-dev (#186): deferred one-time scrub of LA's Okri's-Challenge
@@ -9924,14 +9970,15 @@ _rt_register("tpe_wield_hook_installed", function()
     if type(cls.wield) ~= "function" then return "wield method missing" end
 end)
 
-_rt_register("uiutils_hook_NOT_installed_pending", function()
-    -- v0.9.9.0 regression marker: get_ui_information_from_item was hooked,
-    -- breaking offhand icon rendering. v0.9.9.1 REVERTED. We don't have
-    -- portable hook introspection so this check is a pending stub — the
-    -- inverse of installing it. Embedded marker confirms the revert text is
-    -- in the bundle.
-    local _REVERT_MARKER = "v0.9.9.1 REVERT: removed v0.9.9.0 UIUtils.get_ui_information_from_item"
-    if #_REVERT_MARKER == 0 then return "revert marker missing" end
+_rt_register("la_exact_instance_inventory_icon_376", function()
+    if not (mod._la_instance_policy and mod._la_instance_policy.resolve_inventory_icon) then
+        return "exact-instance icon policy missing"
+    end
+    local got = mod._la_instance_policy.resolve_inventory_icon(
+        { backend_id = "rt_bid", skin = "rt_vanilla" }, "rt_clone", nil,
+        { rt_clone = "rt_armoury" }, { rt_clone = "rt_vanilla" },
+        { rt_armoury = { icons = { rt_vanilla = "rt_icon" } } })
+    if got ~= "rt_icon" then return "authored LA icon did not resolve by exact item" end
 end)
 
 _rt_register("offhand_options_have_no_icon", function()

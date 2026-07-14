@@ -9,6 +9,21 @@ Last updated: 2026-07-13.
 ---
 ## Diagnostics / Regression Suite
 
+### la-exact-instance-persistence-icons -- no shared icon mutation
+
+| Field | Value |
+|-------|-------|
+| Symptom | LA illusions survived only in session and inventory icons were either vanilla or leaked onto unrelated same-type weapons. |
+| Root cause | LA's authored icon is keyed by `(armoury_key, vanilla_skin)` in `SKIN_LIST[*].icons`; the reverted v0.9.9.0 attempt read `WeaponSkins.skins[armoury_key]` and mutated shared icon tables. Persisted exact-item records also outlived deleted official items. |
+| Mod(s) | cosmetics_tweaker + Loremaster's Armoury |
+| Fix version(s) | cosmetics_tweaker v0.9.99-dev |
+| Category | INTEGRATION / SOLO |
+| Repro | Apply different LA choices to two same-type backend items, restart, inspect both inventory icons/renders, then delete one modified item and return to the keep. |
+| Expected post-fix | Each surviving backend item restores and displays only its own authored icon/illusion. Unmodified instances retain vanilla icons. Missing metadata fails closed; deleted-item overrides are pruned after the backend-ready delay. |
+| Detection | Offline `test_cos_la_instance_policy.lua` passes; `/cos_regression_test` passes `la_exact_instance_inventory_icon_376`; console prints one bounded `[la-state] INSTANCE-PRUNE N...` summary. |
+
+---
+
 ### la-kruber-shield-catalogue-parity -- identical native and CWV availability
 
 | Field | Value |

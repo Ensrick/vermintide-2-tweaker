@@ -90,6 +90,7 @@ local suites = {
     "test_cos_offhand_preload_lifecycle",
     "test_cos_dual_offhands",
     "test_cos_la_shield_parity",
+    "test_cos_la_instance_policy",
     "test_gt_disconnect_grace",
     "test_gt_noclip_boundary_policy",
     "test_gt_stable_world_liveness",
