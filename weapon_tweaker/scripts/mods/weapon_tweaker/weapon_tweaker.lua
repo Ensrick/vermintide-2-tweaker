@@ -14,7 +14,8 @@ Major sections (search by name to jump):
 
   Phase 2 OOP split (v0.12.210-dev) — the 3P anim-remap core → _wt_anim_remap.lua:
   * _anim_redirect / _career_anim_redirect / _suffix_career_map — the three redirect layers
-  * _3p_remap_* / _3p_template_remaps / _3p_key_remaps + resolvers — per-weapon remap tables
+  * _3p_remap_* / _3p_key_remaps + resolvers — per-weapon remap dispatch tables
+  * _wt_anim_remap_data.lua — declarative per-template 3P remap catalog
   * _unit_state / _state_for — weak-keyed per-unit remap state + the two wield hooks
   * Unit.animation_event funnel hook + /info /animlog /force3p /force1p commands
   * _resolve_preview_wield_event — keep-previewer 3P wield-pose correction
@@ -109,7 +110,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.234-dev"
+local MOD_VERSION = "0.12.235-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -382,6 +383,7 @@ mod._wt.feature_enabled   = feature_enabled
 mod._wt.local_career_name = _local_career_name
 mod._wt.dbg               = _dbg
 mod._wt.dev_anim_picker   = _wt_dev_anim_picker
+mod._wt.build_3p_template_remaps = mod:dofile("scripts/mods/weapon_tweaker/_wt_anim_remap_data")
 mod:dofile("scripts/mods/weapon_tweaker/_wt_anim_remap")
 -- #536: reload ownership differs from attack remapping, so keep its local-3P
 -- replay and receiver-native volley contract in a separate, reload-only module.

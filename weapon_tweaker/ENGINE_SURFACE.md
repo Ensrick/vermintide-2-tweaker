@@ -122,8 +122,10 @@ wt cannot change per-career behavior in `anim_event_3p` on a shared template
 (that would break the native wielder too - the memory-class shared-template
 mutation trap). The one per-career lever the engine exposes is the FIRING call
 itself, so wt hooks `Unit.animation_event` and rewrites the event string in
-flight. The funnel + all its tables live in `_wt_anim_remap.lua` (extracted from
-the entry in v0.12.210-dev Phase 2). Resolution order in the funnel:
+flight. The funnel and runtime tables live in `_wt_anim_remap.lua` (extracted
+from the entry in v0.12.210-dev Phase 2); its declarative per-template catalog
+is built once from `_wt_anim_remap_data.lua` (v0.12.235-dev). Resolution order
+in the funnel:
 
 1. **Per-unit `state.remap` table** - a weapon-specific substitution
    map (`_3p_remap_spear_to_billhook`, etc.) selected at wield time via

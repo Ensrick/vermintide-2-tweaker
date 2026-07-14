@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.235-dev (2026-07-13) - #2 split template remap data from the event-hot funnel [not deployed]
+
+- Extracted the 1,900-line declarative `_3p_template_remaps` catalog into `_wt_anim_remap_data.lua`; `_wt_anim_remap.lua` now contains the redirect logic, state, hooks, commands, and resolvers and is below the 2,500-line hard limit.
+- The sibling is a one-time builder loaded from the entry manifest immediately before `_wt_anim_remap.lua`. It receives the three pre-existing remap dependencies, returns the same mutable table object, and adds no hook, command, runtime lookup, or per-event allocation. The entry's port patchers and `/wt_regression_test` continue to share that returned table by reference.
+- Updated the #290 textual invariant to follow its moved Billhook merge and added a #2 invariant locking the single builder load seam. Full verification is `qa/run_all.ps1`; in-game smoke verification remains required because this is a load-order-sensitive Lua module split.
+
 ## 0.12.234-dev (2026-07-13) - #321 retire stale Big Rebalance product surface [verify-fix]
 
 - Big Rebalance remains intentionally unloaded and its `br_*` option catalog remains hidden. Removing the old `bt` gate would be unsafe without a registration owner, recovered source, and peer-parity design.
