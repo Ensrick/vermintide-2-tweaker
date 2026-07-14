@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.242-dev"
+local MOD_VERSION = "0.2.243-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1802,8 +1802,15 @@ _rt_register("issue572_mod_tweaker_native_search_icon", function()
     end
     local contract = defs.search_icon_contract
     if type(contract) ~= "table" or contract.texture ~= "search_filters_icon"
-        or contract.source ~= "HeroWindowCraftingInventoryConsole" then
+        or contract.source ~= "HeroWindowCraftingInventoryConsole"
+        or contract.native_size ~= 128 or contract.size ~= 112
+        or contract.scale ~= 0.875 or contract.icon_x ~= -70 or contract.icon_y ~= 0 then
         return "inventory magnifier material/source contract drifted"
+    end
+    if type(defs.search_icon_visible) ~= "function"
+        or not defs.search_icon_visible({ search_focused = false })
+        or defs.search_icon_visible({ search_focused = true }) then
+        return "search magnifier focus visibility contract drifted"
     end
     local built, widget = pcall(defs.create_search_box)
     if not built or type(widget) ~= "table" then
@@ -1811,6 +1818,9 @@ _rt_register("issue572_mod_tweaker_native_search_icon", function()
     end
     if not widget.content or widget.content.search_icon ~= contract.texture then
         return "search widget does not bind the native inventory texture"
+    end
+    if widget.content.search_focused ~= false then
+        return "search widget does not default to unfocused icon visibility"
     end
     local icon = widget.style and widget.style.search_icon
     local text = widget.style and widget.style.text
@@ -1822,7 +1832,10 @@ _rt_register("issue572_mod_tweaker_native_search_icon", function()
     if not text or not text.offset or text.offset[1] < contract.text_x then
         return "search text can overlap the magnifier"
     end
-    if not widget.content.hotspot or not widget.style.hotspot then
+    local hotspot = widget.style and widget.style.hotspot
+    if not widget.content.hotspot or not hotspot or not hotspot.size
+        or hotspot.size[1] ~= contract.hotspot_w or hotspot.size[2] ~= contract.hotspot_h
+        or not hotspot.offset or hotspot.offset[1] ~= 0 or hotspot.offset[2] ~= 0 then
         return "search focus hotspot changed while adding passive icon"
     end
 end)

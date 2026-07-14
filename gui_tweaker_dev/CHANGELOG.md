@@ -5,6 +5,13 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.243-dev (2026-07-13) -- #572 in-field magnifier focus correction [verify-fix]
+
+- Followed the user's in-game correction: the magnifier is an empty-field affordance inside Mod Tweaker's 30px search box, not a permanent decoration beside the text. It now hides whenever clicking the unchanged full-field hotspot focuses search, and returns after focus leaves. Query, caret, placeholder, filtering, Enter, Escape, and neutral-click behavior are unchanged.
+- Rendered the native padded `search_filters_icon` tile at 112x112 (7/8 of 128, a 12.5% reduction) with scaled x=-70 and field-centered y=0 geometry. The visible glyph is approximately 28px, fully inside the 30px field; the established x=47 text origin remains unchanged with clearance.
+- Expanded offline and `/gut_regression_test` contracts to lock native material identity, 112/128 scale, in-field offsets, focus visibility, focus-state wiring, text clearance, and the unchanged hotspot.
+- **Verify:** in Keep and mission Mod Tweaker, confirm the unfocused/empty field shows the smaller magnifier wholly inside its border. Click anywhere in the field: the icon must disappear immediately without moving the text or changing the clickable area. Drop focus with Enter, a result, or outside click and confirm it returns where appropriate. Repeat at a non-default UI scale. Issue remains `verify-fix` until this visual/focus pass is confirmed in game.
+
 ## 0.2.242-dev (2026-07-13) -- #572 native atlas geometry correction [verify-fix]
 
 - Corrected the magnifier after in-game verification showed the glyph at roughly one quarter of its intended size. `search_filters_icon` is a padded 128x128 atlas tile; scaling the tile to 22px also scaled down the artwork inside its transparent padding.

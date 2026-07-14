@@ -3688,6 +3688,9 @@ function ModTweakerView:_draw(dt, input_service)
         local sty = self._search.style
         local q = self._search_str or ""
         local focused = self._search_focused
+        -- #572: the magnifier is an empty-field affordance. Keep the full-field
+        -- hotspot unchanged, but suppress only its passive texture while focused.
+        sc.search_focused = focused
         self._search_caret_t = (self._search_caret_t or 0) + (dt or 0)
         if q == "" and not focused then
             sc.text = "Search this tab... (click, then type to filter)"

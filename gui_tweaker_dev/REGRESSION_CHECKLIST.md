@@ -6,6 +6,18 @@ Last updated: 2026-07-13.
 
 ## Mod Tweaker
 
+### issue572-search-magnifier-focus-geometry — icon crowds text or remains while typing
+
+| Field | Value |
+|-------|-------|
+| Symptom | The native magnifier appears too large for Mod Tweaker's 30px field and remains visible after the user clicks into the field to type. |
+| Root cause | Vanilla's padded 128px atlas tile geometry was copied from a taller inventory control without a Mod Tweaker focus-visibility contract. |
+| Fix version(s) | gui_tweaker_dev v0.2.243-dev (#572) |
+| Category | UNIT / UI INTEGRATION |
+| Repro | Open Mod Tweaker in Keep and mission, inspect the empty field, click anywhere in it, type, then leave focus; repeat at a non-default UI scale. |
+| Expected post-fix | An approximately 28px glyph sits wholly inside the unfocused 30px field, disappears while focused, and returns after focus leaves. Text begins at x=47 and the full-field hotspot and search transactions do not change. |
+| Detection | Offline `test_mod_tweaker_search.lua`; `/gut_regression_test`: `issue572_mod_tweaker_native_search_icon`; in-game visual/focus confirmation while issue #572 carries `verify-fix`. |
+
 ### issue575-numeric-caret-native-metrics — caret follows proportional glyph boundaries
 
 | Field | Value |

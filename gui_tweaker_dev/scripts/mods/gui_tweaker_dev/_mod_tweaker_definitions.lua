@@ -2012,13 +2012,20 @@ scenegraph_definition.mt_search = {
 -- focus emphasis. #572 reuses the exact atlas-backed inventory search material from
 -- HeroWindowCraftingInventoryConsole (`search_filters_icon`, gui_menus_atlas), so no
 -- custom asset/package is introduced. The icon is a passive texture pass: the existing
--- full-field hotspot remains the only focus/click target.
+-- full-field hotspot remains the only focus/click target. #572 follow-up: Mod Tweaker's
+-- field is only 30px tall, so render the padded native tile at 7/8 scale (the visible
+-- glyph becomes about 28px), keep that glyph inside the field, and hide it while typing.
+local function search_icon_visible(content)
+    return not content.search_focused
+end
+
 local function create_search_box()
     local W, H, PAD = ROW_W, SEARCH_BOX_H, 14
     -- The atlas entry is a padded 128x128 tile. Vanilla intentionally renders the
     -- full tile at x=-80 so the visible magnifier ends at x=48; shrinking the tile
-    -- itself also shrinks the glyph hidden inside its transparent padding.
-    local ICON_TEXTURE, ICON_SIZE, ICON_X, ICON_Y = "search_filters_icon", 128, -80, -4
+    -- itself also shrinks the glyph hidden inside its transparent padding. Seven-eighths
+    -- preserves the padded-atlas geometry while reducing the visible 32px glyph by 12.5%.
+    local ICON_TEXTURE, ICON_SIZE, ICON_X, ICON_Y = "search_filters_icon", 112, -70, 0
     local TEXT_X = 47
     return UIWidget.init({
         scenegraph_id = "mt_search",
@@ -2026,12 +2033,13 @@ local function create_search_box()
             passes = {
                 { pass_type = "rect", style_id = "bg_outer" },
                 { pass_type = "rect", style_id = "bg_inner" },
-                { pass_type = "texture", style_id = "search_icon", texture_id = "search_icon" },
+                { pass_type = "texture", style_id = "search_icon", texture_id = "search_icon",
+                  content_check_function = search_icon_visible },
                 { pass_type = "hotspot", content_id = "hotspot", style_id = "hotspot" },
                 { pass_type = "text", style_id = "text", text_id = "text" },
             },
         },
-        content = { hotspot = {}, text = "", search_icon = ICON_TEXTURE },
+        content = { hotspot = {}, text = "", search_icon = ICON_TEXTURE, search_focused = false },
         style = {
             bg_outer = { offset = { 0, 0, 1 }, size = { W, H }, color = { 220, 0, 0, 0 } },
             bg_inner = { offset = { 2, 2, 2 }, size = { W - 4, H - 4 }, color = { 255, 14, 14, 14 } },
@@ -2076,9 +2084,13 @@ return {
     create_search_box = create_search_box,
     search_sg = "mt_search",
     search_icon_contract = {
-        texture = "search_filters_icon", size = 128, icon_x = -80, icon_y = -4,
-        text_x = 47, source = "HeroWindowCraftingInventoryConsole",
+        texture = "search_filters_icon", native_size = 128, size = 112,
+        scale = 0.875, icon_x = -70, icon_y = 0, text_x = 47,
+        hotspot_w = ROW_W, hotspot_h = SEARCH_BOX_H,
+        focus_content_key = "search_focused",
+        source = "HeroWindowCraftingInventoryConsole",
     },
+    search_icon_visible = search_icon_visible,
     create_checkbox = create_checkbox,
     create_slider = create_slider,
     create_stepper = create_stepper,
