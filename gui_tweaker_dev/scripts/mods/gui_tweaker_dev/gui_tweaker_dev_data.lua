@@ -254,6 +254,12 @@ local options_data = {
                         tooltip       = "gut_hud_mode_tooltip",
                     },
                     {
+                        setting_id    = "gut_preserve_disconnected_scoreboard",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = "gut_preserve_disconnected_scoreboard_tooltip",
+                    },
+                    {
                         setting_id      = "gut_hud_cycle_hotkey",
                         type            = "keybind",
                         keybind_trigger = "pressed",

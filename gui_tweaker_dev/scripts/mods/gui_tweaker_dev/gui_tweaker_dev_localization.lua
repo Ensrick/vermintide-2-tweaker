@@ -128,6 +128,12 @@ return {
     gut_hud_mode_tooltip = {
         en = "Controls how much of the HUD is hidden: Off shows everything, Partial hides most UI but keeps prompts and subtitles, Complete hides everything for screenshots, and Camera also hides your first-person arms and weapon.",
     },
+    gut_preserve_disconnected_scoreboard = {
+        en = "[verify-fix] [Issue 437] Preserve Disconnected Player Scores",
+    },
+    gut_preserve_disconnected_scoreboard_tooltip = {
+        en = "When hosting an Adventure mission, retains a disconnected player's current scoreboard results and restores them if that same player rejoins before the mission ends. Data is discarded when the mission ends.",
+    },
     -- Dropdown option labels for gut_hud_mode (VMF localizes each option's text).
     gut_hud_mode_opt_off      = { en = "Off" },
     gut_hud_mode_opt_partial  = { en = "Partial" },

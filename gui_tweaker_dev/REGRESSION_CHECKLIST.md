@@ -1,5 +1,30 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Career-themed HUD holders (#442)
+
+- [ ] Startup emits exactly two `[gut:442]` lines: 20 careers, two dedicated holders, eighteen fallbacks, zero malformed entries.
+- [ ] Dedicated careers are exactly `dr_engineer` and `wh_priest`; their texture ids remain distinct.
+- [ ] `/gut_regression_test` passes `issue442_career_hud_holder_capability`; offline holder-policy tests pass.
+- [ ] Before implementation, every new atlas asset satisfies the size, transparency, clear-zone, resolution, gamepad, and package-lifetime contract in `CAREER_HUD_HOLDER_RESEARCH_442.md`.
+
+## Adventure disconnect scoreboard retention (#437)
+
+- [ ] Host an Adventure mission; a client earns nonzero scoreboard statistics, disconnects, rejoins, and keeps the pre-disconnect totals at mission end.
+- [ ] Post-rejoin progress adds normally and no statistic is doubled.
+- [ ] `[gut:437]` reports one bounded capture and restore for the same `stats_id`; output never exceeds 16 records.
+- [ ] Disabling the option restores vanilla behavior, and changing/ending the mission clears retained data.
+- [ ] Chaos Wastes, Weaves, Versus, clients, backend/progression statistics, and network traffic are untouched.
+- [ ] `/gut_regression_test` passes `issue437_adventure_scoreboard_retention`; offline scoreboard tests pass.
+
+## Scoreboard capability inventory (#272)
+
+- [ ] On load, `[gut:272]` reports 11 topics, 11 grouped references, and zero malformed, duplicate, or unresolved entries.
+- [ ] Hot-join classification reports ten covered topics and only `damage_dealt_bosses` as a gap.
+- [ ] In an Adventure mission, the automatic probe or `/gut_scoreboard_probe` reports a ready snapshot with numeric scores and no malformed player rows.
+- [ ] The loaded-state flag for external Tab Scoreboard matches the active mod list; GUT neither requires nor mutates that mod.
+- [ ] Probe output remains capped at four records per process and never logs per frame.
+- [ ] `/gut_regression_test` passes `issue272_scoreboard_inventory_diagnostics`; offline `test_gut_scoreboard_diagnostics.lua` passes.
+
 ## On Yer Feet revive attribution (#438)
 
 - [ ] Mercenary with `markus_mercenary_activated_ability_revive` revives one downed bot by Morale Boost and gains exactly one scoreboard revive.

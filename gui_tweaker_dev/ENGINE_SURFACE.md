@@ -179,6 +179,16 @@ The HUD is a set of element classes (`AbilityUI`, `EquipmentUI`, `BuffUI`, `Boss
 
 Issue #310 adds one required normalization at this boundary: `CareerAbilityBarUI` stores its graph in `_ui_scenegraph` [src: `scripts/ui/hud_ui/career_ability_bar_ui.lua:101`], unlike the public `ui_scenegraph` spelling used by `EnergyBarUI` [src: `scripts/ui/hud_ui/energy_bar_ui.lua:49`] and `OverchargeBarUI` [src: `scripts/ui/hud_ui/overcharge_bar_ui.lua:145`]. All editor paths use `scenegraph_for_view` so the private spelling cannot silently remove that element. On each deliberate edit-mode entry, a bounded ten-row `[gut:310] HUD coverage` snapshot classifies live view, graph, movement-node, drag-bounds, and size readiness; it does not run per frame.
 
+#442's career-themed holder is the existing `EquipmentUI.background_panel`, not a
+new health-frame view. Vanilla selects `UISettings.hud_inventory_panel_data[career]
+or .default` and writes both texture id and authored texture size every update
+[src: `equipment_ui.lua:350-359`]. `_gut_diagnostics.lua` therefore inventories
+that data seam without adding an engine hook: two capped `[gut:442]` lines prove
+Engineer and Priest are the only dedicated entries and identify the eighteen art
+gaps. Runtime atlas registration is intentionally deferred until the unique
+transparent assets described in `CAREER_HUD_HOLDER_RESEARCH_442.md` exist; a Lua
+texture id cannot create an uncompiled Stingray UI resource.
+
 #314's Simple UI compatibility is a separate generic-window surface. `_gut_simple_ui_compat.lua` installs no engine or external-mod hook: its chained `mod.update` tick reads the installed mod's public `SimpleUI.windows.list`, applies the pure viewport policy, and mutates each existing `window.position` table in place. A fitted window is clamped wholly inside `UIResolution()`; an oversized window is pinned so its left edge and top title/drag edge remain reachable. It is inert when Simple UI is absent and does not overlap the scenegraph-node HUD Customizer. Direct source/resource absorption remains barred until the upstream repository supplies a redistribution license; see `SIMPLE_UI_INTEGRATION_PLAN.md`.
 
 ### 4. The HideBuffs fork boot chain (owner: `docs/engine/09`)
@@ -214,6 +224,27 @@ native text pass: `UIFontByResolution` resolves scaled material/size, `UIRendere
 advance [src: `scripts/ui/ui_passes.lua:1964-1990,2177-2181`; `scripts/ui/ui_renderer.lua:1254-1260`].
 Clicks choose the nearest measured insertion boundary rather than estimating by character count, so signs,
 decimal points, proportional digits, and UI scale share one contract. Two ESC-menu surfaces sit here: the button LABEL is supplied as backend-localization DATA (not a `Localize` hook - the global is rawset-replaced on init and the button localizes through the sibling `simple_lookup`), and the modern keep menu's button column (`HeroWindowIngameView._update_presentation` [src: `hero_window_ingame_view.lua:490-515`]) is compacted because gut's own Mod Tweaker button pushes it to overflow. The keep also hosts the injected Bestiary/Armory compendium via HeroView sub-states and the in-mission keep-inventory console windows (`docs/engine/06` owns the inventory/preview seams).
+
+#272's scoreboard inventory is currently observation-only. `_gut_diagnostics.lua`
+chains the existing VMF lifecycle callbacks (no engine hook), inventories
+`ScoreboardHelper.scoreboard_topic_stats`, and takes at most one delayed live
+snapshot after `StateIngame` becomes ready. It calls the same
+`get_grouped_topic_statistics` source used by the end screen [src:
+`scripts/helpers/scoreboard_helper.lua:344-436`] and caps the process at four
+records. It neither intercepts Tab input nor adds a network channel; the phased
+UI and custom-stat ownership decisions live in `SCOREBOARD_RESEARCH_272.md`.
+
+#437 adds the missing Adventure disconnect lifecycle without changing scoreboard
+rendering or transport. On the server only, `_gut_scoreboard_retention.lua` wraps
+`StatisticsDatabase.unregister` to read ScoreboardHelper's exact leaf paths before
+vanilla deletes `statistics[id]` [src: `statistics_database.lua:164-174`], then
+post-hooks `register` to restore those non-persistent values after vanilla creates
+the empty row [src: `:150-162`]. This mirrors Deus' explicit
+`save_persisted_score` / `restore_persisted_score` boundary [src:
+`game_mode_deus.lua:50,205,216-219`; `deus_run_controller.lua:779-806`] but is
+gated to an active Adventure `StateIngame` host. Storage is mission-local, keyed
+by the same stable `stats_id`, capped at 8 players x 64 paths, cleared on exit,
+and adds no RPC; progression/backend statistics are never copied.
 
 ## What the engine will NOT let us do (dead ends, already paid for)
 

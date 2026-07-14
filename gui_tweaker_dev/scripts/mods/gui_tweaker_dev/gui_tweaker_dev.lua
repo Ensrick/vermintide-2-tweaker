@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.259-dev"
+local MOD_VERSION = "0.2.262-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -3379,6 +3379,38 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_ba_compendium")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/hb_data")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/hide_elements")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/hb/level_loading_screen")
+
+-- Scoreboard feature inventory (#272). This is the central home for GUT's
+-- open-issue probes, not a one-off hook module. It inventories the vanilla
+-- eleven-topic scoreboard, takes one bounded live mission snapshot through
+-- ScoreboardHelper, and records which requested fields require new accumulation.
+-- It adds no UI or network transport and does not copy the unlicensed external
+-- Tab Scoreboard implementation. See SCOREBOARD_RESEARCH_272.md.
+do
+    local ok, diagnostics = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_diagnostics")
+    if ok and type(diagnostics) == "table" then
+        for _, check in ipairs(diagnostics.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        printf("[gut:272] diagnostics module failed: %s", tostring(diagnostics))
+    end
+end
+
+-- Adventure disconnect/rejoin scoreboard retention (#437). This reuses the
+-- #272 catalog policy, copies only scoreboard leaf paths, and owns no RPC.
+do
+    local ok, retention = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_scoreboard_retention")
+    if ok and type(retention) == "table" then
+        for _, check in ipairs(retention.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        printf("[gut:437] scoreboard retention module failed: %s", tostring(retention))
+    end
+end
 
 -- (#281) Confirm the absorbed UI Tweaks (HideBuffs) fork actually booted: it used to
 -- abort at load on a missing Penlight resource (hb_data.lua required a pl.* module

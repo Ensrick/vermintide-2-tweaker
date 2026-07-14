@@ -1,5 +1,38 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.262-dev (2026-07-14) -- #442 career-themed HUD holder capability [diagnostics-armed]
+
+- Located the exact vanilla ownership seam: `EquipmentUI` selects its health/inventory holder through `UISettings.hud_inventory_panel_data[career_name]`, with no additional HUD hook required.
+- Added a bounded `[gut:442]` census proving that only Outcast Engineer and Warrior Priest have dedicated holder art; the other eighteen hero careers use the generic fallback.
+- Added a pure catalog validator, offline malformed/fallback coverage, and runtime regression `issue442_career_hud_holder_capability` so a game update cannot silently invalidate the implementation plan.
+- Added `CAREER_HUD_HOLDER_RESEARCH_442.md` with the exact texture sizes, resource boundary, clear-zone requirements, package lifetime, reversible settings plan, and screen/input verification matrix. Unique themed art remains an explicit asset-production requirement rather than being substituted with generic recolors.
+
+### Diagnose
+
+Attach both `[gut:442]` lines from startup and run `/gut_regression_test`. The expected current result is 20 hero careers, two dedicated holders (`dr_engineer`, `wh_priest`), eighteen fallbacks, and zero malformed entries. Asset production can proceed against the contract in `CAREER_HUD_HOLDER_RESEARCH_442.md`.
+
+## 0.2.261-dev (2026-07-14) -- #437 preserve Adventure scores across reconnect [verify-fix-coop]
+
+- Confirmed the ownership gap in vanilla source: `StatisticsDatabase.unregister` deletes the departing player's row, and Adventure has no counterpart to Chaos Wastes' `save_persisted_score` / `restore_persisted_score` lifecycle.
+- Added an on-by-default host option that captures only the exact statistic leaf paths consumed by `ScoreboardHelper`, immediately before Adventure unregisters a player, then restores those values when the same `stats_id` is registered on rejoin.
+- Kept the repair mission-local and bounded to eight disconnected players, 64 statistic paths per player, and 16 `[gut:437]` evidence records. It creates no RPC and never copies backend/progression statistics.
+- Added offline coverage for path deduplication, numeric-only detached snapshots, exact restoration and caps, plus runtime regression `issue437_adventure_scoreboard_retention`.
+
+### Verify (two players)
+
+Host an Adventure mission with **Preserve Disconnected Player Scores** enabled. Have the client earn visible kills/damage, disconnect, and rejoin the same mission; finish it and confirm the restored player retains the pre-disconnect totals plus new post-rejoin progress. Attach the bounded `[gut:437] captured` and `restored` lines and run `/gut_regression_test`.
+
+## 0.2.260-dev (2026-07-14) -- #272 scoreboard capability inventory [diagnostics-armed]
+
+- Re-derived the scoreboard architecture from Fatshark's current decompile rather than copying the installed external Tab Scoreboard bundle, which exposes no redistribution license or source tree.
+- Added a bounded `[gut:272]` capability probe. It inventories vanilla's eleven scoreboard topics, checks group references, `num_stats_per_player`, and per-topic hot-join coverage, detects the external Tab Scoreboard when loaded, and takes one live mission snapshot through `ScoreboardHelper.get_grouped_topic_statistics`.
+- Classified the requested expansion: ten native topics can reuse vanilla's hot-join transport, but boss damage cannot because `damage_dealt_per_breed` lacks `sync_on_hot_join`. Friendly-fire damage, healing amount, and melee/ranged damage splits require new custom accumulation. `aidings` and `times_revived` already exist as hot-join stats, while `times_friend_healed` is a persistent count rather than a session healing amount.
+- Added `/gut_scoreboard_probe`, the runtime regression `issue272_scoreboard_inventory_diagnostics`, offline malformed-catalog/snapshot coverage, and `SCOREBOARD_RESEARCH_272.md` as the implementation boundary for later UI phases.
+
+### Diagnose
+
+Enter one Adventure mission, hold Tab once, and run `/gut_scoreboard_probe`. Attach every `[gut:272]` line and confirm the live snapshot reports four or fewer players, eleven scores per represented player, zero malformed players, and zero nonnumeric scores. Run `/gut_regression_test` and confirm `issue272_scoreboard_inventory_diagnostics` passes.
+
 ## 0.2.259-dev (2026-07-14) -- #345 localization lifecycle sync [verify-fix]
 
 - Re-derived the GUT status-tag slice from current GitHub state instead of applying the stale July 5 audit literally. Third-Person Camera (#209) and the in-mission crafting bench (#80) now show `[verify-fix]`; the generic menu tag also correctly represents #287's `verify-fix-coop` lifecycle.
