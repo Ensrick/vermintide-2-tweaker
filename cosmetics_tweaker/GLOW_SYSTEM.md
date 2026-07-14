@@ -1,7 +1,7 @@
 # Glow System — cosmetics_tweaker
 
-State as of v0.9.100-dev (2026-07-14); glow sync verified in co-op and the
-in-view auto-open preference is awaiting solo verification.
+State as of v0.9.103-dev (2026-07-14); glow sync is verified in co-op and the
+manual editor control plus committed-state badges await solo verification.
 
 This is the canonical reference for how the glow customization system is
 wired today: which shader variables drive what visually, how the popup UI
@@ -23,8 +23,9 @@ and where to extend.
 | Repaints inventory/hero preview rebuilds | ✅ |
 | Per-item RGB takes precedence over global override toggle | ✅ |
 | Magic-family multi-component sliders (lower / upper / dots) | ✅ |
-| Contextual popup on glow-capable illusion selection | ✅ |
-| In-view persistent auto-open toggle | ✅ (v0.9.100-dev) |
+| Selection and wield never auto-open the editor | ✅ (v0.9.103-dev) |
+| Persistent in-view manual editor button | ✅ (v0.9.103-dev) |
+| Committed exact-item + illusion badges in inventory/illusion grids | ✅ (v0.9.103-dev) |
 | Toggle the per-item glow off entirely | ❌ (M3) |
 | Hide vanilla glow-cousin items from cosmetic menu | ❌ (M3) |
 | Cross-slot inheritance (main weapon glow → compatible shield) | ❌ (M3) |
@@ -197,12 +198,15 @@ no per-item customizations still see the global preset behavior.
 
 ### a. Context and command access coexist
 
-Selecting a glow-capable illusion opens the picker contextually. The
-middle-left square button in `HeroWindowItemCustomization` controls this automatic
-opening. It defaults ON, persists per user as `glow_picker_auto_popup_enabled`,
-lights while ON, and greys out when the previewed illusion has no glow family.
-The same preference gates the once-per-keep wield auto-open. `/glow_picker` remains
-available as the explicit manual entry point while automatic opening is OFF.
+Selecting or wielding a glow-capable illusion never opens the picker. A persistent
+button beside the picker's bottom-right corner is the contextual open/close action;
+it greys out when the previewed illusion has no glow family. `/glow_picker` remains
+available as a diagnostic manual entry point.
+
+Inventory and illusion-grid badges read only the durable exact-item + skin state
+written by Apply. Rune badges use the committed RGB; magic badges use a stable
+intensity-weighted blend of lower, upper, and dots. Dirty slider previews do not
+change badges, and Apply refreshes each live grid once.
 
 ### b. Toggle off
 

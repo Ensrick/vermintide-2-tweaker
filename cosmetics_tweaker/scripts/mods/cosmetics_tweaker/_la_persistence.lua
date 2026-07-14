@@ -216,7 +216,7 @@ end
 -- once the LA bridge has built its option pools (the restore entry point
 -- lives in cosmetics_tweaker.lua, `mod._la_restore_offhand_selections`).
 
-M.save_offhand = function(backend_id, hand_field, armoury_key, vanilla_key, unit_path)
+M.save_offhand = function(backend_id, hand_field, armoury_key, vanilla_key, unit_path, inventory_icon)
     if not (backend_id and hand_field) then return end
     if not armoury_key and (type(unit_path) ~= "string" or unit_path == "") then return end
     if not _state then _load() end
@@ -224,9 +224,10 @@ M.save_offhand = function(backend_id, hand_field, armoury_key, vanilla_key, unit
     _state.offhands[backend_id] = _state.offhands[backend_id] or {}
     local cur = _state.offhands[backend_id][hand_field]
     if cur and cur.armoury_key == armoury_key and cur.vanilla_key == vanilla_key
-        and cur.unit_path == unit_path then return end
+        and cur.unit_path == unit_path and cur.inventory_icon == inventory_icon then return end
     _state.offhands[backend_id][hand_field] = {
         armoury_key = armoury_key, vanilla_key = vanilla_key, unit_path = unit_path,
+        inventory_icon = inventory_icon,
     }
     _persist()
     mod:info("[la-persist] save offhand %s/%s = %s", tostring(backend_id),

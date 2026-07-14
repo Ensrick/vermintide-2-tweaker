@@ -47,6 +47,7 @@ GlowPicker._current_identity      = nil
 GlowPicker._committed_glow_state  = nil
 GlowPicker._dirty                 = false
 GlowPicker._built                 = false     -- scenegraph + widgets allocated once
+GlowPicker._commit_revision       = 0
 
 local function _clone(value)
     if type(value) ~= "table" then return value end
@@ -866,6 +867,22 @@ local function _persisted_state_for(backend_id, slot_data)
     return type(state) == "table" and _clone(state) or nil, identity
 end
 
+-- Read-only presentation seam for #377. Inventory/illusion badges consume the
+-- durable Apply transaction, never the mutable live-preview table.
+function GlowPicker.committed_state_for(backend_id, slot_data)
+    local state, identity = _persisted_state_for(backend_id, slot_data)
+    return state, identity
+end
+
+function GlowPicker.commit_revision()
+    return GlowPicker._commit_revision
+end
+
+function GlowPicker.is_open_for(backend_id, slot_data)
+    return GlowPicker._open
+        and GlowPicker._current_identity == _identity_key(backend_id, slot_data)
+end
+
 -- Called by the equipment spawn path so an applied value is restored after a
 -- restart before the picker is opened again.
 function GlowPicker.restore_runtime_for(backend_id, slot_data)
@@ -1074,6 +1091,11 @@ function GlowPicker.apply()
     mod._active_per_item_glow_item_template = item_data and item_data.template or nil
     if mod._reapply_glow_on_wielded then pcall(mod._reapply_glow_on_wielded) end
     if mod._emit_per_item_glow then pcall(mod._emit_per_item_glow) end
+    GlowPicker._commit_revision = GlowPicker._commit_revision + 1
+    if mod._cos_glow_badges_refresh then
+        pcall(mod._cos_glow_badges_refresh, backend_id,
+            GlowPicker._current_slot_data, GlowPicker._commit_revision)
+    end
     _update_apply_widget()
     _apply_log_only("[glow_picker:apply] committed identity=%s family=%s emit=1", identity, tostring(GlowPicker._current_family))
     return true

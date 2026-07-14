@@ -7,6 +7,19 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-14.
 
 ---
+## Manual glow editor and committed badges (#377)
+
+| Field | Value |
+|---|---|
+| Scope | Hero-view inventory and illusion grids; exact backend item plus skin identity. |
+| Open policy | Selection and wield never open the editor. The persistent in-view button is the only contextual open/close action. |
+| Commit boundary | Badge state reads durable Apply data only. Dirty live previews never alter a badge. |
+| Color | Rune uses committed RGB. Magic uses the deterministic intensity-weighted lower/upper/dots blend. |
+| Refresh | One Apply callback refreshes weakly tracked live grids/windows once; no per-frame decode or RPC traffic. |
+| Asset safety | Authored PNG is packaged unchanged and runtime tinted. Missing atlas/material fails closed with one bounded warning. |
+| Detection | Offline `test_cos_glow_badge_policy.lua` and `test_cos_glow_lifecycle.lua`; `/cos_regression_test` passes `glow_manual_editor_button_377`. |
+
+---
 ## Authored heroic weapon poses (#485)
 
 | Field | Value |
@@ -45,7 +58,7 @@ Last updated: 2026-07-14.
 | Fix version(s) | cosmetics_tweaker v0.9.99-dev |
 | Category | INTEGRATION / SOLO |
 | Repro | Apply different LA choices to two same-type backend items, restart, inspect both inventory icons/renders, then delete one modified item and return to the keep. |
-| Expected post-fix | Each surviving backend item restores and displays only its own authored icon/illusion. Unmodified instances retain vanilla icons. Missing metadata fails closed; deleted-item overrides are pruned after the backend-ready delay. |
+| Expected post-fix | Each surviving backend item restores and displays only its own authored icon/illusion. Duals keep the row-1/main-right icon regardless of their saved left override; shields follow the selected left-hand shield, including LA's authored variant/base-skin icon. Unmodified instances retain vanilla icons. Missing metadata fails closed; deleted-item overrides are pruned after the backend-ready delay. |
 | Detection | Offline `test_cos_la_instance_policy.lua` passes; `/cos_regression_test` passes `la_exact_instance_inventory_icon_376`; console prints one bounded `[la-state] INSTANCE-PRUNE N...` summary. |
 
 ---
@@ -88,7 +101,7 @@ Last updated: 2026-07-14.
 | Fix version(s) | cosmetics_tweaker v0.9.97-dev |
 | Category | INTEGRATION / MULTIPLAYER |
 | Repro | Customize native Dual Skullsplitters or any CWV dual family, choose a row-1 main illusion and a distinct offhand, Apply, restart/transition, and observe from another peer. |
-| Expected post-fix | Row 1 owns main/right; one added row owns left/offhand; Follow Main clears only the offhand override. Choices persist by backend item and hand, render in preview/1P/local3P/remote husk, and converge on transition/hot join. Invalid stored or received units fail closed to the main illusion. |
+| Expected post-fix | Row 1 owns main/right and the inventory icon; one added row owns left/offhand visuals only; Follow Main clears only the offhand override. Choices persist by backend item and hand, render in preview/1P/local3P/remote husk, and converge on transition/hot join. Invalid stored or received units fail closed to the main illusion. |
 | Detection | `/cos_regression_test` passes `independent_dual_offhands_583`, `cos_la_offhand_persistence_roundtrip`, and `issue483_cwv_sword_mace_individualized_cosmetics`. Direct peer replay remains one last-choice queue entry per `(backend_id, hand)`, uses the existing RPC schema, and is replayed by the bounded acknowledged state pull. |
 | Tracking | GitHub issue #583. |
 

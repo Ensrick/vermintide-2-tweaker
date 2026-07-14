@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.103-dev - 2026-07-14 - #377 manual glow editor and committed badges [verify-fix]
+
+- Removed both illusion-selection and wield-triggered glow-editor auto-opening. A persistent authored icon at the picker boundary is now the sole contextual open/close control and disables itself for non-glow skins.
+- Added exact backend-item + illusion glow badges to inventory and illusion grids. Badges consume committed Apply state only, tint rune RGB directly, and use a deterministic intensity-weighted blend for magic components; dirty previews do not change them.
+- Packaged the authored `glow.png` unchanged as a DXT5 hero-view texture/material and tint it at runtime. Missing material/atlas registration fails closed with one bounded warning. Apply performs one bounded refresh across weakly tracked live surfaces; no per-frame persistence decoding or network traffic was added.
+- Preserved the concurrent #376/#583 exact icon-ownership changes: dual/main-right and shield/offhand inventory icon rules are unchanged.
+
+- **Verify (solo):** open weapon customization and select/wield several glow-capable and ordinary skins; nothing should auto-open. Use the bottom-right glow control to open/close the editor. Change RGB without Apply and confirm no badge changes, then Apply and confirm only that exact item+skin gains the tinted badge in both inventory and illusion grids. Verify rune RGB, a multi-component magic blend, restart persistence, and no badge on an unmodified same-type item. Run `/cos_regression_test` and confirm `glow_manual_editor_button_377` passes.
+
 ## 0.9.102-dev - 2026-07-14 - #504 OOP Phase 4a wire boundary [verify-fix-coop]
 
 - Extracted the complete #421 custom weapon-skin wire boundary from the entry monolith into `_cos_wire.lua`: the null/restore helper and all three vanilla `rpc_add_equipment` sender hooks now have one owner and one load-bearing manifest edge after custom illusion registration.

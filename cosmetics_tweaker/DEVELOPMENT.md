@@ -2,7 +2,7 @@
 
 Detailed technical reference for the `cosmetics_tweaker` mod. Read alongside `CHANGELOG.md` (version-by-version history) and `TODO.md` (open work).
 
-## Module map (v0.9.102-dev Phase 4a OOP split)
+## Module map (v0.9.103-dev Phase 4a OOP split)
 
 `cosmetics_tweaker.lua` is still the primary file (~10,480 lines) — this is an
 IN-PROGRESS decomposition (OOP_REFACTOR_PLAN WS5), not a finished one. Phase 1
@@ -39,12 +39,13 @@ exactly once from the manifest.
 
 | Module | Owns / public surface (on `mod._cos` unless noted) |
 |---|---|
-| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest (`_la_prefix_embedded`, `_material_hijack_embedded`, `_moreitemslibrary_embedded`, `_cosmetic_unlocks`=`U`, `_la_bridge`, `_tpe`, `_glow_picker`, `_la_persistence`, `_la_okri`, `_ui_dump`, `_cos_diag_lasync`), the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks (`on_game_state_changed`/`on_setting_changed`/`on_disabled`/`on_unload`), and everything not yet extracted: the render-path HOOKS (`create_equipment` / `_spawn_item_post` / `spawn_units`; their scale/grip apply helpers moved to `_cos_render` in Phase 2 and their glow apply/owner-peer helpers to `_cos_glow` in Phase 3), the per-peer glow broadcast RPC layer + `/glow_status`+`/glow_trace` commands (the glow APPLY pipeline moved to `_cos_glow`), LA-bridge integration + husk, offhand picker + customization UI, the #282 MH release lifecycle, and the `/cos_regression_test` suite. |
+| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest (`_la_prefix_embedded`, `_material_hijack_embedded`, `_moreitemslibrary_embedded`, `_cosmetic_unlocks`=`U`, `_la_bridge`, `_tpe`, `_glow_picker`, `_cos_glow_badge_policy`, `_la_persistence`, `_la_okri`, `_ui_dump`, `_cos_diag_lasync`), the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks (`on_game_state_changed`/`on_setting_changed`/`on_disabled`/`on_unload`), and everything not yet extracted: the render-path HOOKS (`create_equipment` / `_spawn_item_post` / `spawn_units`; their scale/grip apply helpers moved to `_cos_render` in Phase 2 and their glow apply/owner-peer helpers to `_cos_glow` in Phase 3), the per-peer glow broadcast RPC layer + `/glow_status`+`/glow_trace` commands (the glow APPLY pipeline moved to `_cos_glow`), LA-bridge integration + husk, offhand picker + customization UI, the #377 manual glow editor/badge presentation, the #282 MH release lifecycle, and the `/cos_regression_test` suite. |
 | `_cos_diagnostics.lua` | Read-only dump/probe chat commands (`/flush_log`, `/dump_glows`, `/dump_skin_rarities`, `/dump_all_names`, `/check_vmf`, `/probe_hat`, `/probe_cosmetics`). Reads `mod._cos.flush_log`; no exports. |
 | `_cos_illusions.lua` | Custom weapon-illusion + LA shield skin injection into `ItemMasterList`/`WeaponSkins`/`NetworkLookup` (`_custom_illusions`, `_la_shield_skin_specs`), the `get_unlocked_weapon_skins` unlock hook, the `_G.Localize` display-name hook. Populates `mod._cos.custom_skin_keys`; exports `mod._cos.custom_illusions`. |
 | `_cos_unlocks.lua` | Per-career cosmetic unlocks (`apply_cosmetic_unlocks` + `_CHARACTER_CAREERS`), Unlock-All portrait frames, vanilla-unobtainable cosmetic grants, the two `PlayFabMirrorAdventure` hooks, `/frames_status` + `/cosmetics_status`. Exports `mod._cos.apply_cosmetic_unlocks`. |
 | `_cos_render.lua` | Render-path weapon scale/grip apply layer (v0.9.78-dev Phase 2): the two visual-override data tables (`_unit_path_scale_overrides` + `_breton_sword_thiccc`, empty `_weapon_grip_offsets`) and the resolve/apply helpers (`_resolve_for_career`, `_resolve_render_unit_path`, `_resolve_factor`, `_apply_unit_path_scale_hand`, `_scale_units`, `_offset_units`), plus the `_is_unit` liveness primitive. Exports `mod._cos.{is_unit, scale_units, offset_units, apply_unit_path_scale_hand}`; reads nothing off `mod._cos`. The render HOOKS that drive these stay in the entry. |
 | `_cos_glow.lua` | Weapon glow APPLY subsystem (v0.9.79-dev Phase 3): the `_COLOR_PRESETS` table, the shader-variable brightness/group maps (`_GLOW_VAR_BRIGHTNESS` + `_GLOW_GROUP_COLOR_SETTING`), the per-peer glow read helpers (`_glow_get` family), `_glow_owner_peer_for_unit`, `_apply_glow_to_unit` / `_apply_glow_override`, `mod._reapply_glow_on_wielded`, the template-mutation apply hook (`_hook_apply_with_template_mutation` on `GearUtils`/`CosmeticUtils`/`_G.apply_material_settings`) + `mod._try_install_flow_glow_hook`, the `_cosmetics_tweaker_glow` `MaterialSettingsTemplate` + its `GearUtils.spawn_inventory_unit` injection hook. Captures `mod._cos.is_unit`; inits `mod._glow_by_peer` + `mod._unit_to_backend_id`; reads `mod._per_item_glow_runtime` (owned by `_glow_picker`). Exports `mod._cos.{apply_glow_override, glow_owner_peer_for_unit}`. The three render HOOKS that drive the paint, the per-peer glow broadcast RPC layer, and `/glow_status`+`/glow_trace` stay in the entry. |
+| `_cos_glow_badge_policy.lua` | Pure #377 presentation policy: active committed-state classification, clamped rune RGB, deterministic intensity-weighted magic blend, and family-scoped manual-button availability. No engine globals, persistence writes, hooks, or networking. |
 | `_cos_wire.lua` | Phase 4a #421 weapon-skin wire boundary. Captures `mod._cos.custom_skin_keys` after `_cos_illusions`, exports the established `mod._cos_wire_null_custom_skins` helper and `mod._cos_skin_wire_surfaces` registry, and owns the three vanilla `rpc_add_equipment` sender hooks (`SimpleInventoryExtension.game_object_initialized`, `SimpleInventoryExtension._spawn_resynced_loadout`, `GearUtils.hot_join_sync`). The custom-key null is unconditional, scoped to the vanilla continuation, and restores local slot state afterward. |
 | `_cos_offhand_preload_lifecycle.lua` | Pure generation-scoped ownership/readiness ledger for #565 async offhand packages. It has no engine or mod dependencies so shared-handle callbacks retained after unload can be reproduced offline. The entry owns all PackageManager calls and bounded diagnostics. |
 | `_cos_weapon_pose_policy.lua` / `_cos_weapon_poses.lua` | #485 pure authored-pose catalog plus the local modded-realm SocialWheelUI adapter. Replaces only the gathered pose rows; never grants backend ownership or mutates ItemMasterList. Missing-parent fallback is bounded diagnostics pending compatibility proof. |
@@ -101,6 +102,14 @@ main/right hand. Cosmetics adds one left/offhand row sourced from that family's
 exact hand column; `Follow Main Illusion` stores no override. Native definitions
 are available at Cosmetics load, while CWV's seven generated dual families are
 built lazily after CWV registers its string-keyed skins.
+
+Inventory icons follow the same ownership boundary. A dual weapon always keeps
+the icon of vanilla row 1 / the main-right illusion; a saved left-hand override
+cannot replace it. A shield weapon instead follows its selected left-hand shield.
+Vanilla shield options persist the exact authored inventory icon beside the mesh,
+while LA shields resolve `SKIN_LIST[armoury_key].icons[vanilla_skin]`. This is a
+per-backend presentation override only and does not participate in DLC ownership
+or unlock filtering.
 
 The native reference is `scripts/settings/dlcs/bless/weapon_skins_bless.lua`:
 the `wh_dual_hammer_skin_*` records carry both hand fields and

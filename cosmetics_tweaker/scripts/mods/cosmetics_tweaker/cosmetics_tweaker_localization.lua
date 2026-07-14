@@ -48,11 +48,11 @@ local loc = {
     -- v0.9.38-dev: hide_weavebound_skins / hide_shyish_skins / their tooltips
     -- and glow_picker_auto_popup_enabled / its tooltip loc keys REMOVED along
     -- with their VMF toggle widgets. Hiding the weavebound + shyish glow
-    -- families remains implicit. Issue #377 reuses the auto-popup setting id
-    -- behind a purpose-built button in the customization view.
+    -- families remains implicit. Issue #377 uses a purpose-built manual editor
+    -- button in the customization view; no automatic-open preference remains.
 
-    glow_picker_auto_button = {
-        en = "AUTO\nGLOW",
+    glow_picker_editor_button = {
+        en = "EDIT\nGLOW",
     },
 
     loremasters_armoury_group = {

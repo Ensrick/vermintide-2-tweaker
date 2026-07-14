@@ -9,3 +9,11 @@ package = [
 lua = [
 	"scripts/mods/cosmetics_tweaker/*"
 ]
+
+material = [
+	"materials/ui/cos_glow_badge"
+]
+
+texture = [
+	"gui/1080p/single_textures/cosmetics_tweaker/cos_glow_badge"
+]

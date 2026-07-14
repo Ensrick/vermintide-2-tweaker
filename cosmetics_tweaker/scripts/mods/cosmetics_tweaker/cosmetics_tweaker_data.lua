@@ -159,4 +159,11 @@ return {
     is_togglable = true,
 
     options = { widgets = widgets },
+
+    custom_gui_textures = {
+        textures = { "cos_glow_badge" },
+        ui_renderer_injections = {
+            { "hero_view", "materials/ui/cos_glow_badge" },
+        },
+    },
 }

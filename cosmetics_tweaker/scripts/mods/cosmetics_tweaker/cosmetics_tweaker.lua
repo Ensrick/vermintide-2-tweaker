@@ -36,6 +36,7 @@ local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
+local GLOW_BADGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_badge_policy")
 local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
 mod._la_instance_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_instance_policy")
 -- v0.9.49-dev (issue #186): disable Loremaster's Armoury's Okri's-Challenges /
@@ -60,7 +61,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.102-dev"
+local MOD_VERSION = "0.9.103-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -561,11 +562,7 @@ mod.on_game_state_changed = function(status, state_name)
         mod._la_dump_mission_state("game_state_change")
     end
 
-    -- v0.9.9.3-dev: reset glow-picker auto-popup gate on every state
-    -- transition. Keep→mission and mission→keep both wipe the per-session
-    -- "already shown" set so re-entering the keep can re-trigger the popup
-    -- for a glowing weapon.
-    mod._glow_auto_popup_shown = {}
+    -- Glow state restores on equipment spawn; editor opening is manual.
 end
 mod.on_setting_changed = function(setting_id)
     if setting_id and setting_id:sub(1, 11) == "cos_unlock_" then
@@ -676,66 +673,66 @@ end
 
 local _fake_skin_backend_ids = {}
 
--- Issue #377: keep the picker contextual while controlling automatic opening
--- from the customization view instead of the VMF settings menu. Reusing the
--- pre-v0.9.38 setting id preserves this per-user choice without exposing a
--- duplicate checkbox. Nil deliberately means ON (the default/current behavior).
-local _GLOW_AUTO_POPUP_SETTING = "glow_picker_auto_popup_enabled"
+-- Issue #377: selecting or wielding a glow-capable skin must never open an
+-- editor. One persistent control beside the editor's bottom-right corner is
+-- the sole contextual open/close action.
+mod._glow_editor_button_policy_377 = GLOW_BADGE.button
 
-local function _glow_auto_popup_policy(stored_value, family)
-    local enabled = stored_value ~= false
-    local available = family ~= nil
-    return available, enabled, available and enabled
-end
-mod._glow_auto_popup_policy_377 = _glow_auto_popup_policy
-
-local function _glow_auto_popup_enabled()
-    return mod:get(_GLOW_AUTO_POPUP_SETTING) ~= false
-end
-
-local function _refresh_glow_auto_button(self, skin_key)
-    local widget = self and self._ct_glow_auto_widget
+local function _refresh_glow_editor_button(self, skin_key)
+    local widget = self and self._ct_glow_editor_widget
     if not widget then return nil end
 
     local family = skin_key and GlowPicker.classify({ skin = skin_key }) or nil
-    local available, enabled = _glow_auto_popup_policy(
-        mod:get(_GLOW_AUTO_POPUP_SETTING), family)
+    local backend_id = self._item_backend_id
+    local policy = GLOW_BADGE.button(family,
+        GlowPicker.is_open_for(backend_id, { skin = skin_key }))
+    if backend_id == nil then
+        policy.available = false
+        policy.selected = false
+    end
     local content = widget.content
     local hotspot = content and content.button_hotspot
     if not content or not hotspot then return family end
 
     content.glow_family = family
     content.glow_skin = skin_key
-    content.equipped = available and enabled
-    hotspot.disable_button = not available
-    hotspot.is_selected = available and enabled
+    content.glow_backend_id = backend_id
+    content.equipped = policy.selected
+    hotspot.disable_button = not policy.available
+    hotspot.is_selected = policy.selected
 
     local icon_style = widget.style and widget.style.icon_texture
     if icon_style then
-        icon_style.color = available
-            and { 255, 255, 255, 255 }
+        local state = GlowPicker.committed_state_for(backend_id, { skin = skin_key })
+        icon_style.color = policy.available
+            and (GLOW_BADGE.color(state) or { 255, 255, 255, 255 })
             or { 110, 128, 128, 128 }
     end
-    local label_style = widget.style and widget.style.glow_auto_label
+    local label_style = widget.style and widget.style.glow_editor_label
     if label_style then
-        label_style.text_color = available
+        label_style.text_color = policy.available
             and { 255, 255, 255, 255 }
             or { 110, 128, 128, 128 }
     end
     return family
 end
 
-local function _create_glow_auto_button()
+local function _create_glow_editor_button()
+    if not (UIAtlasHelper and UIAtlasHelper.has_texture_by_name
+        and UIAtlasHelper.has_texture_by_name("cos_glow_badge")) then
+        return nil
+    end
     local definitions = local_require(
         "scripts/ui/views/hero_view/windows/definitions/hero_window_item_customization_definitions")
     local definition = definitions.create_illusion_button()
     definition.element.passes[#definition.element.passes + 1] = {
         pass_type = "text",
-        text_id = "glow_auto_label",
-        style_id = "glow_auto_label",
+        text_id = "glow_editor_label",
+        style_id = "glow_editor_label",
     }
-    definition.content.glow_auto_label = mod:localize("glow_picker_auto_button")
-    definition.style.glow_auto_label = {
+    definition.content.glow_editor_label = mod:localize("glow_picker_editor_button")
+    definition.style.glow_editor_label = {
+        size = { 45, 45 },
         font_size = 13,
         font_type = "hell_shark",
         horizontal_alignment = "center",
@@ -743,14 +740,176 @@ local function _create_glow_auto_button()
         text_color = { 255, 255, 255, 255 },
         offset = { 0, 0, 3 },
     }
+    definition.scenegraph_id = "screen"
     local widget = UIWidget.init(definition)
-    widget.content.icon_texture = "button_illusion_default"
+    widget.content.icon_texture = "cos_glow_badge"
     widget.content.locked = false
     widget.content.equipped = false
-    -- `illusions_root` is bottom-centre. This offset places the square control
-    -- at middle-left without mutating vanilla's shared scenegraph definition.
-    widget.offset = { -700, 355, 20 }
+    widget.style.icon_texture.size = { 45, 45 }
+    widget.style.icon_texture.texture_size = { 45, 45 }
+    widget.style.icon_texture.offset = { 0, 0, 1 }
+    -- The picker occupies x=660..1260 and ends at y=380 in the shared 1920x1080
+    -- logical space. Keep the control immediately outside that bottom-right
+    -- corner so it remains visible/clickable while the popup draws above it.
+    widget.offset = { 1272, 380, 20 }
     return widget
+end
+
+-- #377 committed glow badges. The authored 80x80 texture is a transparent
+-- overlay whose mark already sits in the bottom-right corner; matching the
+-- vanilla item-icon rectangle keeps its placement stable across grids.
+local _GLOW_BADGE_TEXTURE = "cos_glow_badge"
+local _glow_badge_texture_missing_logged = false
+local _glow_badge_grids = setmetatable({}, { __mode = "k" })
+local _glow_badge_customization_windows = setmetatable({}, { __mode = "k" })
+
+local function _glow_badge_texture_available()
+    local available = UIAtlasHelper and UIAtlasHelper.has_texture_by_name
+        and UIAtlasHelper.has_texture_by_name(_GLOW_BADGE_TEXTURE)
+    if not available and not _glow_badge_texture_missing_logged then
+        _glow_badge_texture_missing_logged = true
+        mod:warning("[glow-badge] authored texture unavailable; badges disabled")
+    end
+    return available == true
+end
+
+local function _copy_vec(values, fallback)
+    values = values or fallback
+    return { values[1], values[2], values[3] }
+end
+
+local function _item_skin_for_glow_badge(item)
+    if type(item) ~= "table" then return nil end
+    local skin = item.skin
+    local bid = item.backend_id
+    if (not skin or skin == "") and bid and Managers and Managers.backend then
+        local iface = Managers.backend:get_interface("items")
+        if iface and iface.get_skin then skin = iface:get_skin(bid) end
+    end
+    local item_key = item.key or (item.data and (item.data.name or item.data.key))
+    if (not skin or skin == "") and item_key and WeaponSkins and WeaponSkins.default_skins then
+        skin = WeaponSkins.default_skins[item_key]
+    end
+    return skin
+end
+
+local function _committed_glow_badge_color(backend_id, skin)
+    if not backend_id or not skin then return nil end
+    return GLOW_BADGE.color(GlowPicker.committed_state_for(backend_id, { skin = skin }))
+end
+
+local function _enrich_illusion_glow_badge(widget)
+    if not widget or widget._ct_glow_badge_enriched or not _glow_badge_texture_available() then return end
+    local passes = widget.element and widget.element.passes
+    local icon_style = widget.style and widget.style.icon_texture
+    if type(passes) ~= "table" or type(icon_style) ~= "table" then return end
+    widget._ct_glow_badge_enriched = true
+    passes[#passes + 1] = {
+        pass_type = "texture",
+        texture_id = "ct_glow_badge",
+        style_id = "ct_glow_badge",
+        content_check_function = function(content) return content.ct_glow_badge ~= nil end,
+    }
+    widget.content.ct_glow_badge = nil
+    widget.style.ct_glow_badge = {
+        size = _copy_vec(icon_style.size, { 45, 45 }),
+        texture_size = _copy_vec(icon_style.texture_size, { 45, 45 }),
+        offset = _copy_vec(icon_style.offset, { 0, 0, 1 }),
+        color = { 255, 255, 255, 255 },
+    }
+    widget.style.ct_glow_badge.offset[3] = (widget.style.ct_glow_badge.offset[3] or 0) + 8
+end
+
+local function _refresh_illusion_glow_badges(self)
+    if not self or not self._illusion_widgets then return end
+    _glow_badge_customization_windows[self] = true
+    for _, widget in ipairs(self._illusion_widgets) do
+        _enrich_illusion_glow_badge(widget)
+        local skin = widget.content and widget.content.skin_key
+        local color = _committed_glow_badge_color(self._item_backend_id, skin)
+        if widget.content then widget.content.ct_glow_badge = color and _GLOW_BADGE_TEXTURE or nil end
+        if color and widget.style and widget.style.ct_glow_badge then
+            widget.style.ct_glow_badge.color = color
+        end
+    end
+end
+
+local function _enrich_item_grid_glow_badges(self)
+    local widget = self and self._widget
+    if not widget or widget._ct_glow_badges_enriched or not _glow_badge_texture_available() then return end
+    local passes = widget.element and widget.element.passes
+    local content, style = widget.content, widget.style
+    if type(passes) ~= "table" or type(content) ~= "table" or type(style) ~= "table" then return end
+    widget._ct_glow_badges_enriched = true
+    for row = 1, content.rows or 0 do
+        for column = 1, content.columns or 0 do
+            local suffix = "_" .. row .. "_" .. column
+            local badge_name = "ct_glow_badge" .. suffix
+            local icon_style = style["item_icon" .. suffix]
+            if icon_style then
+                passes[#passes + 1] = {
+                    pass_type = "texture",
+                    texture_id = badge_name,
+                    style_id = badge_name,
+                    content_check_function = function(pass_content)
+                        return pass_content[badge_name] ~= nil
+                    end,
+                }
+                content[badge_name] = nil
+                style[badge_name] = {
+                    size = _copy_vec(icon_style.size, { 80, 80 }),
+                    offset = _copy_vec(icon_style.offset, { 0, 0, 2 }),
+                    color = { 255, 255, 255, 255 },
+                }
+                style[badge_name].offset[3] = (style[badge_name].offset[3] or 0) + 8
+            end
+        end
+    end
+    _glow_badge_grids[self] = true
+end
+
+local function _refresh_item_grid_glow_badges(self)
+    _enrich_item_grid_glow_badges(self)
+    local widget = self and self._widget
+    local content, style = widget and widget.content, widget and widget.style
+    if not content or not style then return end
+    for row = 1, content.rows or 0 do
+        for column = 1, content.columns or 0 do
+            local suffix = "_" .. row .. "_" .. column
+            local badge_name = "ct_glow_badge" .. suffix
+            if style[badge_name] then
+                local item = content["item" .. suffix]
+                local color = item and _committed_glow_badge_color(item.backend_id,
+                    _item_skin_for_glow_badge(item)) or nil
+                content[badge_name] = color and _GLOW_BADGE_TEXTURE or nil
+                if color then style[badge_name].color = color end
+            end
+        end
+    end
+end
+
+mod:hook_safe("ItemGridUI", "init", function(self)
+    _enrich_item_grid_glow_badges(self)
+end)
+mod:hook_safe("ItemGridUI", "add_item_to_slot_index", function(self)
+    _refresh_item_grid_glow_badges(self)
+end)
+mod:hook_safe("ItemGridUI", "_populate_inventory_page", function(self)
+    _refresh_item_grid_glow_badges(self)
+end)
+
+-- Apply is the only transaction that changes badge state. Refresh each live
+-- inventory/customization surface once; sliders and dirty previews never call
+-- this seam, so there is no per-frame persistence decode or UI churn.
+mod._cos_glow_badges_refresh = function(backend_id, slot_data, revision)
+    for grid in pairs(_glow_badge_grids) do _refresh_item_grid_glow_badges(grid) end
+    for window in pairs(_glow_badge_customization_windows) do
+        _refresh_illusion_glow_badges(window)
+        _refresh_glow_editor_button(window,
+            window._ct_glow_editor_widget and window._ct_glow_editor_widget.content.glow_skin)
+    end
+    mod:info("[glow-badge] committed refresh bid=%s skin=%s revision=%s",
+        tostring(backend_id), tostring(slot_data and slot_data.skin), tostring(revision))
 end
 
 -- cim coexistence: when cim is loaded, it owns the modded-realm illusion swap.
@@ -812,8 +971,18 @@ mod:hook("HeroWindowItemCustomization", "_enable_craft_button", function(func, s
 end)
 
 mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(func, self, index, ignore_item_spawn, mark_as_equipped)
-    if _cim_owns_illusion_swap() then return func(self, index, ignore_item_spawn, mark_as_equipped) end
     local widget = self._illusion_widgets and self._illusion_widgets[index]
+    if _cim_owns_illusion_swap() then
+        local picked_skin = widget and widget.content and widget.content.skin_key
+        if picked_skin then
+            if GlowPicker.is_open() and not GlowPicker.is_open_for(
+                self._item_backend_id, { skin = picked_skin }) then
+                GlowPicker.close()
+            end
+            _refresh_glow_editor_button(self, picked_skin)
+        end
+        return func(self, index, ignore_item_spawn, mark_as_equipped)
+    end
     -- v0.9.43-dev INPUT trace: row-1 illusion-grid PRESS. ignore_item_spawn=true
     -- means a non-spawning re-select (select-by-key / mark-as-equipped); a
     -- false/nil ignore_item_spawn means this press WILL respawn the preview
@@ -867,30 +1036,18 @@ mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(f
         end
     end
 
-    -- v0.9.34 (release gate, GLOW_SYSTEM M3 item 7): auto-open the glow picker
-    -- when the user SELECTS an illusion that has a glow variant. Selection is
-    -- explicit intent, so no once-per-keep gate (unlike the wield-triggered
-    -- path below). We're inside HeroWindowItemCustomization, whose _draw hook
-    -- already renders the overlay, so it appears immediately. Runs BEFORE the
-    -- vanilla call so the tail-call's multi-returns stay untouched; the picker
-    -- keys per-item state off the ITEM backend_id, so ordering vs vanilla's
-    -- internal handling doesn't matter.
+    -- #377: selection only changes the preview. It must never open the editor.
+    -- A dirty editor belongs to its exact item+skin identity; close it before
+    -- moving to another identity so the picker's rollback semantics remain
+    -- deterministic and no uncommitted preview leaks into the next badge.
     do
         local picked_skin = widget and widget.content and widget.content.skin_key
         if picked_skin then
-            local family = _refresh_glow_auto_button(self, picked_skin)
             local bid = self._item_backend_id
-            local _, _, should_open = _glow_auto_popup_policy(
-                mod:get(_GLOW_AUTO_POPUP_SETTING), family)
-            if should_open and bid then
-                GlowPicker.open_for(bid, { skin = picked_skin })
-                mod:info("[glow_picker:auto] opened on illusion select bid=%s skin=%s family=%s",
-                    tostring(bid), tostring(picked_skin), tostring(family))
-            elseif not family and GlowPicker.is_open() then
-                -- Selected a non-glow illusion while the picker was up for this
-                -- item — the panel no longer applies; close it.
+            if GlowPicker.is_open() and not GlowPicker.is_open_for(bid, { skin = picked_skin }) then
                 GlowPicker.close()
             end
+            _refresh_glow_editor_button(self, picked_skin)
         end
     end
 
@@ -1349,6 +1506,61 @@ local _SHIELD_POOLS_BY_ITEM_TYPE = {
     },
 }
 
+-- Inventory-icon ownership follows the independently customized shield for
+-- these exact item types. Keep this presentation policy separate from the
+-- DLC/unlock filters used while building the selectable pools.
+local _SHIELD_ICON_OWNER_ITEM_TYPES = {
+    we_1h_spears_shield = true,
+    dr_1h_axe_shield = true,
+    dr_1h_hammer_shield = true,
+    wh_flail_shield = true,
+    wh_hammer_shield = true,
+}
+for _, item_type in ipairs(LA_BRIDGE.kruber_shield_item_types or {}) do
+    _SHIELD_ICON_OWNER_ITEM_TYPES[item_type] = true
+end
+
+local function _inventory_icon_for_offhand_unit(unit_path, preferred_template)
+    if type(unit_path) ~= "string" or unit_path == "" then return nil end
+    local candidates = {}
+    local seen = {}
+    local function consider(key, data)
+        if type(data) ~= "table" or data.left_hand_unit ~= unit_path
+                or type(data.inventory_icon) ~= "string"
+                or data.inventory_icon == "" then return end
+        local stable_key = tostring(key or data.name or data.inventory_icon)
+        local dedupe = stable_key .. "\0" .. data.inventory_icon
+        if seen[dedupe] then return end
+        seen[dedupe] = true
+        candidates[#candidates + 1] = {
+            key = stable_key,
+            icon = data.inventory_icon,
+            template = data.template,
+        }
+    end
+    if WeaponSkins and type(WeaponSkins.skins) == "table" then
+        for key, skin in pairs(WeaponSkins.skins) do
+            local data = type(skin) == "table" and (skin.data or skin) or nil
+            consider(type(key) == "string" and key or (skin and skin.name), data)
+        end
+    end
+    if type(ItemMasterList) == "table" then
+        for key, data in pairs(ItemMasterList) do
+            if type(data) == "table" and data.item_type == "weapon_skin" then
+                consider(key, data)
+            end
+        end
+    end
+    table.sort(candidates, function(a, b)
+        local a_preferred = preferred_template and a.template == preferred_template or false
+        local b_preferred = preferred_template and b.template == preferred_template or false
+        if a_preferred ~= b_preferred then return a_preferred end
+        if a.key ~= b.key then return a.key < b.key end
+        return a.icon < b.icon
+    end)
+    return candidates[1] and candidates[1].icon or nil
+end
+
 local function _shallow_copy(t)
     local out = {}
     for i = 1, #t do out[i] = t[i] end
@@ -1581,6 +1793,8 @@ local function _build_offhand_options_from_skin_table(skin_table_name, unit_fiel
                         name   = name,
                         unit   = unit_path,
                         rarity = s.rarity or rarity,
+                        skin_key = skin_key,
+                        inventory_icon = s.inventory_icon,
                     }
                 end
             end
@@ -1641,6 +1855,8 @@ do
                     name = name,
                     unit = unit_path,
                     rarity = entry.rarity,
+                    skin_key = candidate.skin_key,
+                    inventory_icon = entry.inventory_icon,
                 }
             end
         end
@@ -2136,7 +2352,7 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
                     if entry.backend_id and LA_PERSIST then
                         if entry.offhand_unit ~= "" and LA_PERSIST.save_offhand then
                             LA_PERSIST.save_offhand(entry.backend_id, entry.hand_field,
-                                nil, nil, entry.offhand_unit)
+                                nil, entry.skin_key, entry.offhand_unit, entry.inventory_icon)
                         elseif LA_PERSIST.clear_offhand then
                             LA_PERSIST.clear_offhand(entry.backend_id, entry.hand_field)
                         end
@@ -2497,12 +2713,40 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
         local backend_id = item and (item.backend_id or item.ItemInstanceId)
         if backend_id and mod._la_instance_policy and LA_PERSIST then
             local la = get_mod("Loremasters-Armoury")
+            local item_data = item.data or (item.key and ItemMasterList
+                and rawget(ItemMasterList, item.key))
+            local item_type = item_data and item_data.item_type
+            local ownership
+            if mod._independent_dual_item_types
+                    and mod._independent_dual_item_types[item_type] then
+                ownership = "dual"
+            elseif _SHIELD_ICON_OWNER_ITEM_TYPES[item_type] then
+                ownership = "shield"
+            end
+            local saved_offhands = LA_PERSIST.get_saved_offhands_for(backend_id)
+            local saved_left = saved_offhands and saved_offhands.left_hand_unit
+            -- Records authored before icon ownership was introduced only
+            -- persisted the exact mesh path. Derive presentation metadata on
+            -- read without mutating the persistence module's read-only table.
+            if ownership == "shield" and type(saved_left) == "table"
+                    and not saved_left.armoury_key and not saved_left.inventory_icon
+                    and saved_left.unit_path then
+                local recovered_icon = _inventory_icon_for_offhand_unit(
+                    saved_left.unit_path, item_data and item_data.template)
+                if recovered_icon then
+                    local recovered_left = {}
+                    for key, value in pairs(saved_left) do recovered_left[key] = value end
+                    recovered_left.inventory_icon = recovered_icon
+                    saved_offhands = { left_hand_unit = recovered_left }
+                end
+            end
             local icon = mod._la_instance_policy.resolve_inventory_icon(item,
                 LA_PERSIST.get_saved_illusion(backend_id),
-                LA_PERSIST.get_saved_offhands_for(backend_id),
+                saved_offhands,
                 LA_BRIDGE and LA_BRIDGE.backend_to_armoury,
                 LA_BRIDGE and LA_BRIDGE.backend_to_vanilla,
-                la and la.SKIN_LIST)
+                la and la.SKIN_LIST,
+                ownership)
             if icon then inventory_icon = icon end
         end
         return inventory_icon, display_name, description, store_icon
@@ -2792,7 +3036,7 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
 
     -- #377: one persistent, in-view square toggle. Recreate it with the
     -- customization screen's widgets so no stale hotspot survives a rebuild.
-    self._ct_glow_auto_widget = _create_glow_auto_button()
+    self._ct_glow_editor_widget = _create_glow_editor_button()
 
     local initial_skin = item and item.skin
     if (not initial_skin or initial_skin == "") and item and item.backend_id
@@ -2805,7 +3049,8 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
     if not initial_skin and item and item.key and WeaponSkins and WeaponSkins.default_skins then
         initial_skin = WeaponSkins.default_skins[item.key]
     end
-    _refresh_glow_auto_button(self, initial_skin)
+    _refresh_glow_editor_button(self, initial_skin)
+    _refresh_illusion_glow_badges(self)
 
     _dbg("[offhand] _setup_illusions called, item=%s", tostring(item and item.key))
 
@@ -3048,9 +3293,9 @@ end)
 mod:hook("HeroWindowItemCustomization", "_state_draw_overview", function(func, self, ui_renderer, dt)
     func(self, ui_renderer, dt)
 
-    -- #377: draw and consume the contextual auto-open toggle before the
+    -- #377: draw and consume the contextual editor toggle before the
     -- offhand-row early return below, so ordinary one-handed weapons get it.
-    local glow_widget = self._ct_glow_auto_widget
+    local glow_widget = self._ct_glow_editor_widget
     local sg = ui_renderer and ui_renderer.ui_scenegraph
     if glow_widget and sg and sg[glow_widget.scenegraph_id] then
         UIRenderer.draw_widget(ui_renderer, glow_widget)
@@ -3058,13 +3303,20 @@ mod:hook("HeroWindowItemCustomization", "_state_draw_overview", function(func, s
         -- Consume the release edge even while disabled so it cannot become a
         -- stale click if the user next previews a glow-capable illusion.
         local pressed = self:_is_button_pressed(glow_widget)
-        if family and pressed then
-            local enabled = not _glow_auto_popup_enabled()
-            mod:set(_GLOW_AUTO_POPUP_SETTING, enabled)
-            _refresh_glow_auto_button(self, glow_widget.content.glow_skin)
+        if pressed and family then
+            local bid = glow_widget.content.glow_backend_id
+            local skin = glow_widget.content.glow_skin
+            if GlowPicker.is_open_for(bid, { skin = skin }) then
+                GlowPicker.close()
+            else
+                if GlowPicker.is_open() then GlowPicker.close() end
+                GlowPicker.open_for(bid, { skin = skin })
+            end
+            _refresh_glow_editor_button(self, skin)
             self:_play_sound("play_gui_equipment_inventory_select")
-            mod:info("[glow_picker:auto] in-view toggle enabled=%s family=%s",
-                tostring(enabled), tostring(family))
+            mod:info("[glow_picker] manual toggle bid=%s skin=%s family=%s open=%s",
+                tostring(bid), tostring(skin), tostring(family),
+                tostring(GlowPicker.is_open_for(bid, { skin = skin })))
         end
     end
 
@@ -3370,9 +3622,16 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
                     template_key_v = item_v and item_v.data and item_v.data.template
                 end
                 local vkey2 = (self._item_backend_id or "__no_backend__") .. "|" .. tostring(hand_field)
+                local selected_inventory_icon = opt.inventory_icon
+                if not selected_inventory_icon and _SHIELD_ICON_OWNER_ITEM_TYPES[weapon_key] then
+                    selected_inventory_icon = _inventory_icon_for_offhand_unit(
+                        opt.unit or opt.intended_unit, template_key_v)
+                end
                 mod._pending_la_emit_on_exit = mod._pending_la_emit_on_exit or {}
                 mod._pending_la_emit_on_exit[vkey2] = {
                     offhand_unit = (opt.unit or opt.intended_unit) or "",
+                    skin_key     = opt.skin_key,
+                    inventory_icon = selected_inventory_icon,
                     player_unit  = player_unit_v,
                     weapon_key   = weapon_key or "slot_unknown",
                     template_key = template_key_v,
@@ -9439,8 +9698,7 @@ end)
 -- Manual entry point for M1 testing: `/glow_picker` chat command opens the
 -- popup from anywhere (no cosmetic-screen requirement). Useful for verifying
 -- the popup renders before we land the cosmetic-screen button injection.
--- In M2 the popup will auto-open when the user clicks a glow-eligible weapon
--- in the cosmetic screen; this command stays as a debug fallback.
+-- The popup otherwise opens only from the in-view editor button.
 mod:command("glow_picker", "Open the glow customizer popup (M1 scaffold; debug-only entry point)", function()
     mod:echo("[glow_picker] command fired. v=%s open_before=%s",
         MOD_VERSION, tostring(GlowPicker.is_open()))
@@ -9477,49 +9735,6 @@ mod:command("glow_picker", "Open the glow customizer popup (M1 scaffold; debug-o
     mod:echo("[glow_picker] open_after=%s built=%s. If you're NOT on a cosmetic menu, popup won't render — go to the cosmetic loadout screen. Then run /glow_picker_hooks to see which hook fires.",
         tostring(GlowPicker.is_open()), tostring(GlowPicker._built))
 end)
-
--- v0.9.9.3-dev: auto-popup the glow picker on wield when the new weapon
--- already has an active per-item glow override.
-mod._glow_auto_popup_shown = mod._glow_auto_popup_shown or {}
-
-local function _glow_state_is_active(pi)
-    if type(pi) ~= "table" then return false end
-    if pi.disabled then return false end
-    if pi.rune  and (pi.rune.intensity  or 0) > 0 then return true end
-    if pi.lower and (pi.lower.intensity or 0) > 0 then return true end
-    if pi.upper and (pi.upper.intensity or 0) > 0 then return true end
-    if pi.dots  and (pi.dots.intensity  or 0) > 0 then return true end
-    return false
-end
-
-local function _glow_auto_popup_for_local()
-    -- #377: the in-view toggle governs selection-triggered and once-per-keep
-    -- wield-triggered automatic opening alike.
-    if not _glow_auto_popup_enabled() then return end
-    if GlowPicker.is_open() then return end
-    local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
-    if not in_keep then return end
-    if type(mod._per_item_glow_runtime) ~= "table" then return end
-    if type(mod._unit_to_backend_id) ~= "table" then return end
-
-    local units, slot_data = _wielded_units_for_probe()
-    if not units or #units == 0 then return end
-
-    local bid
-    for _, u in ipairs(units) do
-        local candidate = mod._unit_to_backend_id[u.unit]
-        if candidate then bid = candidate; break end
-    end
-    if not bid then return end
-    if mod._glow_auto_popup_shown[bid] then return end
-
-    local pi = mod._per_item_glow_runtime[bid]
-    if not _glow_state_is_active(pi) then return end
-
-    mod._glow_auto_popup_shown[bid] = true
-    GlowPicker.open_for(bid, slot_data)
-    mod:info("[glow_picker:auto] opened for backend_id=%s", tostring(bid))
-end
 
 -- v0.9.9.4-dev: switched from SimpleInventoryExtension.wield to _wield_slot.
 -- _tpe.lua already hooks .wield, and VMF silently drops a second hook_safe on
@@ -9661,7 +9876,6 @@ mod:hook_safe("SimpleInventoryExtension", "_wield_slot", function(self, equipmen
         end
     end
 
-    pcall(_glow_auto_popup_for_local)
 end)
 
 -- ============================================================
@@ -9969,20 +10183,24 @@ _rt_register("unit_to_backend_id_populated", function()
     end
 end)
 
-_rt_register("glow_auto_open_in_view_toggle_377", function()
-    local policy = mod._glow_auto_popup_policy_377
-    if type(policy) ~= "function" then return "auto-open policy missing" end
-    local available, enabled, should_open = policy(nil, "rune")
-    if not (available and enabled and should_open) then
-        return "unset preference did not default ON for glow family"
+_rt_register("glow_manual_editor_button_377", function()
+    local policy = mod._glow_editor_button_policy_377
+    if type(policy) ~= "function" then return "manual editor policy missing" end
+    local available = policy("rune", false)
+    if not available.available or available.selected then
+        return "rune editor button was not available and closed"
     end
-    available, enabled, should_open = policy(false, "magic")
-    if not (available and not enabled and not should_open) then
-        return "stored OFF preference did not suppress auto-open"
+    local selected = policy("magic", true)
+    if not selected.available or not selected.selected then
+        return "open magic editor was not selected"
     end
-    available, enabled, should_open = policy(true, nil)
-    if available or not enabled or should_open then
-        return "non-glow preview did not disable the contextual control"
+    local absent = policy(nil, false)
+    if absent.available or absent.selected then
+        return "non-glow preview did not disable the manual control"
+    end
+    if type(GlowPicker.committed_state_for) ~= "function"
+        or type(GlowPicker.is_open_for) ~= "function" then
+        return "committed/manual picker API incomplete"
     end
 end)
 
@@ -10022,11 +10240,33 @@ _rt_register("la_exact_instance_inventory_icon_376", function()
     if not (mod._la_instance_policy and mod._la_instance_policy.resolve_inventory_icon) then
         return "exact-instance icon policy missing"
     end
+    for _, item_type in ipairs({ "es_1h_sword_shield", "cwv_es_axe_shield",
+            "cwv_es_longsword_shield", "cwv_es_warpriest_hammer_shield" }) do
+        if not _SHIELD_ICON_OWNER_ITEM_TYPES[item_type] then
+            return "shield icon owner missing item type " .. item_type
+        end
+    end
     local got = mod._la_instance_policy.resolve_inventory_icon(
         { backend_id = "rt_bid", skin = "rt_vanilla" }, "rt_clone", nil,
         { rt_clone = "rt_armoury" }, { rt_clone = "rt_vanilla" },
         { rt_armoury = { icons = { rt_vanilla = "rt_icon" } } })
     if got ~= "rt_icon" then return "authored LA icon did not resolve by exact item" end
+    local lists = {
+        rt_main = { icons = { rt_vanilla = "rt_main_icon" } },
+        rt_shield = { icons = { rt_shield_skin = "rt_shield_icon" } },
+    }
+    local hands = { left_hand_unit = {
+        armoury_key = "rt_shield", vanilla_key = "rt_shield_skin",
+        inventory_icon = "rt_stale_icon",
+    } }
+    got = mod._la_instance_policy.resolve_inventory_icon(
+        { backend_id = "rt_dual", skin = "rt_vanilla" }, "rt_clone", hands,
+        { rt_clone = "rt_main" }, { rt_clone = "rt_vanilla" }, lists, "dual")
+    if got ~= "rt_main_icon" then return "dual icon lost main/right-hand ownership" end
+    got = mod._la_instance_policy.resolve_inventory_icon(
+        { backend_id = "rt_shield", skin = "rt_vanilla" }, "rt_clone", hands,
+        { rt_clone = "rt_main" }, { rt_clone = "rt_vanilla" }, lists, "shield")
+    if got ~= "rt_shield_icon" then return "shield icon did not follow LA offhand" end
 end)
 
 _rt_register("offhand_options_have_no_icon", function()

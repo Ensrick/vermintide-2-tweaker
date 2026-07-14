@@ -1,0 +1,14 @@
+cos_glow_badge = {
+	material_contexts = {
+		surface_material = ""
+	}
+
+	shader = "gui:DIFFUSE_MAP"
+
+	textures = {
+		diffuse_map = "gui/1080p/single_textures/cosmetics_tweaker/cos_glow_badge"
+	}
+
+	variables = {
+	}
+}
