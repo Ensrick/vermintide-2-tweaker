@@ -12,6 +12,12 @@ Run all checks with: `qa\run_all.ps1`. CI (`.github/workflows/qa.yml`) runs the
 same `run_all.ps1` full gate (the policy engine below decides what blocks) plus a
 blocking all-mods `lint-mod.ps1` step on every push + PR (issue #429).
 
+The canonical `tools/ship/ship.ps1` path runs `run_all.ps1 -Quick -SkipLua`
+(including offline Lua 5.1 unit tests) plus target-mod lint before any build,
+deploy, or upload. This is the release red gate from issue #591; in-game
+regression commands remain for engine lifecycle, rendering, and peer behavior
+that cannot be faithfully exercised by the host runtime.
+
 ## Gate semantics (run_all exit codes)
 
 Individual checks follow a **0 / 1 / 2 convention**: `0` = clean, `1` = advisory

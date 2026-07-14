@@ -266,6 +266,17 @@ function Invoke-ShipSelfTest {
     Assert ($pubTxt -match '(?m)^\s*\[string\[\]\]\$Mods\b') "publish-release.ps1 declares [string[]]`$Mods (issues #436/#493)"
     Assert (-not ($pubTxt -cmatch '(?m)^\s*\$mods\s*=')) "publish-release.ps1 never assigns lowercase `$mods (param-stomp guard, 2026-07-13)"
 
+    # Issue #591: this is an ordering invariant, not merely a documentation
+    # promise. Both offline gates must execute before the launcher can perform
+    # its first build/deploy/upload action.
+    $selfTxt = [System.IO.File]::ReadAllText($PSCommandPath, [System.Text.Encoding]::UTF8)
+    $quickPos = $selfTxt.IndexOf('& $quickGate -Quick -SkipLua -Quiet')
+    $lintPos = $selfTxt.IndexOf('& $modLint $Mod -Quiet')
+    $launcherPos = $selfTxt.IndexOf('& $launcher @launcherArgs')
+    Assert ($quickPos -ge 0) "ship source invokes the fast headless QA gate (issue #591)"
+    Assert ($lintPos -ge 0) "ship source invokes target-mod lint (issue #591)"
+    Assert ($launcherPos -ge 0 -and $quickPos -lt $launcherPos -and $lintPos -lt $launcherPos) "both headless gates precede launcher build/deploy/upload"
+
     Write-Host ""
     if ($script:__stpass) {
         Write-Host "[ship.ps1 -SelfTest] OK -- step-6 labeling logic intact." -ForegroundColor Green
@@ -344,6 +355,44 @@ if (($stableSplitDirs -contains $Mod) -and (Test-Path $promoGate)) {
 $launcher = Join-Path $repoRoot 'tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe'
 if (-not (Test-Path $launcher)) {
     Fail "VMBLauncher not found at $launcher. Build it first: tools\vmb-launcher\publish.ps1 -SkipOpen"
+}
+
+# ---------------------------------------------------------------------------
+# Headless red gate (issues #590/#591): exercise the same fast, host-runnable
+# QA tier used by local development before the launcher is allowed to build,
+# deploy, or upload anything.  Previously most QA ran only at commit/CI time,
+# so a direct ship could put a statically-invalid build on Workshop first.
+#
+# -Quick includes pure Lua 5.1 unit tests; -SkipLua skips only the slow advisory
+# luacheck pass.  Target lint keeps its established severity ladder: duplicate
+# hook errors block, heuristic warnings remain visible but non-blocking.
+# ---------------------------------------------------------------------------
+$quickGate = Join-Path $repoRoot 'qa\run_all.ps1'
+if (-not (Test-Path $quickGate)) {
+    Fail "Headless QA gate not found: $quickGate"
+}
+
+Write-Host ""
+Write-Host "==> Headless preflight (fast QA + Lua 5.1 units)" -ForegroundColor Cyan
+& $quickGate -Quick -SkipLua -Quiet
+if ($LASTEXITCODE -ne 0) {
+    Fail "Headless QA FAILED -- no build, deploy, or upload was attempted (issue #591)."
+}
+
+$modLint = Join-Path $repoRoot 'tools\mod-lint\lint-mod.ps1'
+if (-not (Test-Path $modLint)) {
+    Fail "Target-mod lint gate not found: $modLint"
+}
+
+Write-Host ""
+Write-Host "==> Target-mod preflight lint ($Mod)" -ForegroundColor Cyan
+& $modLint $Mod -Quiet
+$modLintExit = $LASTEXITCODE
+if ($modLintExit -ge 2) {
+    Fail "Target-mod lint FAILED -- no build, deploy, or upload was attempted (issue #591)."
+}
+if ($modLintExit -eq 1) {
+    Write-Host "Target-mod lint reported advisory warnings; shipping may continue." -ForegroundColor Yellow
 }
 
 $workshopRoot = 'C:\Program Files (x86)\Steam\steamapps\workshop\content\552500'

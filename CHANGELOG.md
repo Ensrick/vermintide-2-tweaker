@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-13 - blocking headless ship preflight
+
+Issue #591 makes the canonical ship path run fast repository QA, offline Lua 5.1 unit tests, and target-mod lint before VMBLauncher can build, deploy, or upload. The ship self-test locks that ordering so a later refactor cannot silently move validation behind Workshop publication. Engine lifecycle, rendering, and multiplayer behavior remain in the in-game verification tier; deterministic transforms and capacity/resource bounds belong in host-runnable tests.
+
 ## 2026-07-13 - `cosmetics_tweaker` score-lineup identity isolation
 
 Repo-aggregate entry for Cosmetics Tweaker v0.9.95-dev / issue #513. End-screen LA cosmetics now resolve only from an exact player-controlled profile+career score row with a complete peer/local-player tuple. Bot rows may share their host's network-owner peer but can neither inherit that host's helmet/skin nor purge the host's valid colour state when their skeleton differs. Added offline and runtime regression fixtures for the observed Grail Knight/Sienna/Warrior Priest lineup. CWV score-screen weapon rendering is unchanged. No Workshop deployment.
