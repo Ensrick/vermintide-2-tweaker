@@ -58,6 +58,10 @@ out below and shared by all eight of its callers.
 |---|---|---|---|
 | `StoreWindowPanel._sync_player_wallet` [hook] | Called by panel update; compares each `get_chips` result with `_currencies`, then rebuilds all wallet widgets only on a changed cached amount [src: `store_window_panel.lua:169-176,601-652`] | Invalidate cached SM on ledger revision/realm edges and label the rebuilt number `[Local]` | Uses the native update call, not a new poll; unchanged frames compare scalars and allocate nothing; official transition forces a clean native rebuild even if both balances are numerically equal |
 | `StoreWindowItemPreview._sync_products_version` / `_set_price` [hooks] | Product-version changes force `_sync_presentation_item`, which recalculates affordability; `_set_price` populates the purchase widget [src: `store_window_item_preview.lua:401-443,872-993,1281-1321,1637-1661`] | Merge the local ledger revision into native product invalidation and label the SM action `Buy with Local Shillings` | Official/non-SM title is restored; the actual SM transaction is owned by the #577 boundary below |
+
+Both refresh hooks emit one `[mp:578]` INFO record only when the same scalar
+realm/revision policy requests invalidation. These automatic diagnostics are
+transaction/transition-bounded and never run as a separate update loop.
 | `_G.Localize` / `BackendUtils.get_fake_currency_item` [hook,tbl] | Vanilla fake-currency helper returns a fresh clone, item key, and claim-description key consumed by challenge rows/reward popup [src: `backend_utils.lua:326-348`; `hero_view_state_achievements.lua:769-779,1580-1696`] | Supply realm-scoped local SM names/descriptions for reward and tooltip surfaces | Exact keys and `SM` only; official realm delegates unchanged; VMF mod localization is private, so the global hook is required for vanilla `Localize` consumers |
 
 ### Backend-free Emporium purchase (issue 577; owner docs: `docs/engine/11`)

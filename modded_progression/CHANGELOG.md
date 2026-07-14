@@ -1,5 +1,13 @@
 # Modded Progression — Changelog
 
+## 0.2.25-dev (2026-07-14) - #578 automatic shilling refresh evidence [verify-fix]
+
+- Added sparse `[mp:578] wallet_refresh` and `affordability_refresh` evidence at the existing realm/revision invalidation edges. A normal Emporium test now proves the local label, visible revision, realm, and product refresh in the console log without running a command.
+- Logging occurs only when `ShillingUI.needs_refresh` is true: initial view ownership, a local ledger transaction/reset, or a realm transition. It adds no poll, per-frame allocation, backend call, or chat output.
+- Extended offline coverage to lock both log sites behind the bounded refresh branch and prevent accidental duplicate instrumentation.
+
+**Test:** Open the Emporium in modded play, credit/debit/reset local shillings, then enter official play. The log should show one wallet and affordability line per observed revision/realm edge, with no repeating line on unchanged frames. Existing labels and `/mp_regression_test` must remain correct.
+
 ## 0.2.24-dev (2026-07-13) - #577 backend-free Emporium purchases [not deployed]
 
 - Silver Shilling purchases in the modded realm now resolve the selected native stock row, validate its current SM price, availability, DLC ownership, existing ownership, and the local ledger balance, then persist the debit, exact item grant, unlock, and transaction markers in one VMF setting write. No `PurchaseItem`, `storePurchaseMade`, or other PlayFab request is issued.

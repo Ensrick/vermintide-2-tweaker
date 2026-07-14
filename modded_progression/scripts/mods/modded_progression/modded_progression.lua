@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.24-dev"
+local MOD_VERSION = "0.2.25-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -707,6 +707,11 @@ mod:hook("StoreWindowPanel", "_sync_player_wallet", function(func, self, ...)
     end
     self._mp578_wallet_realm = is_modded
     self._mp578_wallet_revision = visible_revision
+    if refresh then
+        mod:info("[mp:578] wallet_refresh realm=%s revision=%s local_label=%s",
+            is_modded and "modded" or "official", tostring(visible_revision),
+            tostring(content and content.currency_text or "unavailable"))
+    end
     return unpack(results, 1, n)
 end)
 
@@ -733,6 +738,11 @@ mod:hook("StoreWindowItemPreview", "_sync_products_version", function(func, self
         is_modded, Dailies.ui_revision())
     self._mp578_preview_realm = is_modded
     self._mp578_preview_revision = visible_revision
+    if refresh then
+        mod:info("[mp:578] affordability_refresh realm=%s revision=%s product_changed=%s",
+            is_modded and "modded" or "official", tostring(visible_revision),
+            tostring(product_changed == true))
+    end
     return product_changed or refresh
 end)
 
