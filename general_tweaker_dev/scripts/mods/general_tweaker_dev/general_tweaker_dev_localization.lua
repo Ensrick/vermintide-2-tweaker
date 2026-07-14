@@ -189,7 +189,11 @@ return {
     disable_enemy_spawns_tooltip = { en = "No new enemies appear at all: hordes, specials, bosses, patrols, and ambient critters. Enemies already present are left alone, and turning it off resumes normal spawning." },
 
     godmode_enabled = { en = "[verify-fix] [Issue 529] Godmode" },
-    godmode_enabled_tooltip = { en = "Makes you invincible: you take no damage, cannot be grabbed or pinned by disablers, and enemies stop noticing you. Enemy hits no longer drain your stamina or break your block; your own pushes and dodges still cost stamina. Your third-person body fades out while it is on; your own view stays normal." },
+    godmode_enabled_tooltip = { en = "Makes you invincible: you take no damage, cannot be grabbed or pinned by disablers, and enemies stop noticing you. Enemy hits no longer drain your stamina or break your block; your own pushes and dodges still cost stamina. Optional child toggles can make your strikes deal 9999 damage or give you unlimited ammo while Godmode is active. Your third-person body fades out while it is on; your own view stays normal." },
+    gt_godmode_strike_damage = { en = "[verify-fix] [Issue 549] 9999 Damage Per Strike" },
+    gt_godmode_strike_damage_tooltip = { en = "While Godmode is active, every damaging hit you deal to an enemy is raised to 9999 damage. This follows your Godmode state when you are a client, so the host applies it authoritatively." },
+    gt_godmode_unlimited_ammo = { en = "[verify-fix] [Issue 549] Unlimited Ammo" },
+    gt_godmode_unlimited_ammo_tooltip = { en = "While Godmode is active, your ranged ammo and overcharge are not consumed. This affects only you and does not change the separate /infinite_ammo cheat." },
 
     noclip_enabled = { en = "[Issue 241] Noclip" },
     noclip_enabled_tooltip = { en = "Fly freely through walls and terrain: WASD moves you where you look, Space and Ctrl go up and down, and holding Shift speeds you up. Turning it off while airborne drops you to the ground." },

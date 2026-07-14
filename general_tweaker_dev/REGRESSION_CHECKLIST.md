@@ -6,6 +6,16 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+## Godmode outgoing damage and ammo (#549, supersedes #382)
+
+- [ ] **[MULTIPLAYER]** Host and joining client each enable Godmode + 9999 Damage Per Strike; each positive enemy hit resolves as 9999 on the authoritative host.
+- [ ] Friendly fire, self damage, immune zero-damage results, bots, and peers without the child toggle never receive the override.
+- [ ] Godmode + Unlimited Ammo suppresses only the owner's ammo/overcharge consumption; disabling Godmode restores consumption even when the hidden child remains checked.
+- [ ] `/infinite_ammo` retains its host-wide scope and composes by ownership: turning either source off does not remove the buff while the other remains active.
+- [ ] `/gt_regression_test` passes `issue549_godmode_power_and_ammo`.
+
+---
+
 ## Close-range no-path teleport retry bound (#385)
 
 - [ ] With a 15 m follow distance, a bot at a path-failure/no-return seam may execute one `vanilla_no_path` or `backward_no_path` unstick.

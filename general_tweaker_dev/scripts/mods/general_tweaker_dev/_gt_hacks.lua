@@ -245,6 +245,12 @@ mod:command("ultreset", "Reset your ultimate (set cooldown to 0)", function() mo
 
 local _gt_infinite_ammo_active = false
 local _gt_infinite_ammo_refresh_t = 0
+local _gt_infinite_ammo_owned_ids = setmetatable({}, { __mode = "k" })
+
+local function _gt_godmode_unlimited_ammo_active()
+    return mod:get("godmode_enabled") == true
+        and mod:get("gt_godmode_unlimited_ammo") == true
+end
 
 local function _gt_apply_infinite_ammo_buff(unit)
     if not (unit and Unit.alive(unit)) then return end
@@ -257,44 +263,61 @@ local function _gt_apply_infinite_ammo_buff(unit)
     else
         buff_ext:add_buff("twitch_no_overcharge_no_ammo_reloads")
     end
+    local buff = buff_ext:get_non_stacking_buff("twitch_no_overcharge_no_ammo_reloads")
+    if buff then _gt_infinite_ammo_owned_ids[unit] = buff.id end
 end
 
 local function _gt_remove_infinite_ammo_buff(unit)
     if not (unit and Unit.alive(unit)) then return end
+    local owned_id = _gt_infinite_ammo_owned_ids[unit]
+    _gt_infinite_ammo_owned_ids[unit] = nil
+    if not owned_id then return end
     local buff_ext = ScriptUnit.has_extension(unit, "buff_system")
     if not buff_ext then return end
     if not buff_ext:has_buff_type("twitch_no_overcharge_no_ammo_reloads") then return end
     local buff = buff_ext:get_non_stacking_buff("twitch_no_overcharge_no_ammo_reloads")
-    if buff then buff_ext:remove_buff(buff.id) end
+    if buff and buff.id == owned_id then buff_ext:remove_buff(buff.id) end
 end
 
-local function _gt_refresh_infinite_ammo()
+-- Reconcile two independent owners of the same vanilla buff. The standalone
+-- /infinite_ammo cheat retains its historical all-player host scope; #549 adds
+-- only the local owner while BOTH its child toggle and Godmode are active.
+-- Turning either source off must not strip the buff while the other still owns
+-- it. Reload reserve consumption checks this exact buff on the owning machine
+-- [src: scripts/unit_extensions/generic/generic_ammo_user_extension.lua:160-176].
+local function _gt_reconcile_infinite_ammo()
     local lp = Managers.player and Managers.player:local_player()
-    if lp and lp.player_unit then _gt_apply_infinite_ammo_buff(lp.player_unit) end
+    local local_unit = lp and lp.player_unit
+    local local_should_have = _gt_infinite_ammo_active
+        or _gt_godmode_unlimited_ammo_active()
+    if local_unit then
+        if local_should_have then
+            _gt_apply_infinite_ammo_buff(local_unit)
+        else
+            _gt_remove_infinite_ammo_buff(local_unit)
+        end
+    end
     if Managers.player and Managers.player.is_server then
         for _, p in pairs(Managers.player:human_and_bot_players() or {}) do
-            _gt_apply_infinite_ammo_buff(p.player_unit)
+            local unit = p.player_unit
+            if unit and unit ~= local_unit then
+                if _gt_infinite_ammo_active then
+                    _gt_apply_infinite_ammo_buff(unit)
+                else
+                    _gt_remove_infinite_ammo_buff(unit)
+                end
+            end
         end
     end
 end
-
-local function _gt_clear_infinite_ammo()
-    local lp = Managers.player and Managers.player:local_player()
-    if lp and lp.player_unit then _gt_remove_infinite_ammo_buff(lp.player_unit) end
-    if Managers.player and Managers.player.is_server then
-        for _, p in pairs(Managers.player:human_and_bot_players() or {}) do
-            _gt_remove_infinite_ammo_buff(p.player_unit)
-        end
-    end
-end
+mod._gt_reconcile_infinite_ammo = _gt_reconcile_infinite_ammo
 
 mod.gt_infinite_ammo_toggle = function()
     _gt_infinite_ammo_active = not _gt_infinite_ammo_active
+    _gt_reconcile_infinite_ammo()
     if _gt_infinite_ammo_active then
-        _gt_refresh_infinite_ammo()
         mod:echo("Infinite ammo & heat: ON.")
     else
-        _gt_clear_infinite_ammo()
         mod:echo("Infinite ammo & heat: OFF.")
     end
 end
@@ -512,11 +535,11 @@ mod.gt_apply_fall_damage()
 -- the main chunk (registered there as `ai_pending`). The two halves share no
 -- state, so splitting the consumer is behavior-neutral.
 mod._gt_register_update("infinite_ammo", function(dt)
-    if _gt_infinite_ammo_active then
+    if _gt_infinite_ammo_active or _gt_godmode_unlimited_ammo_active() then
         _gt_infinite_ammo_refresh_t = _gt_infinite_ammo_refresh_t + (dt or 0)
         if _gt_infinite_ammo_refresh_t >= 1.0 then
             _gt_infinite_ammo_refresh_t = 0
-            _gt_refresh_infinite_ammo()
+            _gt_reconcile_infinite_ammo()
         end
     end
 end)

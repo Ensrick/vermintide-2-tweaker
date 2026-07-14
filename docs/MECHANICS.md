@@ -132,6 +132,15 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   resolve the host peer_id explicitly (e.g. `Managers.account:peer_id_of_host()`). [bugclass: §15]
 - RPC payload shape changes across mod versions corrupt receivers parsing by
   position; gate every RPC on a per-mod `<MOD>_RPC_SCHEMA` first positional arg. [bugclass: §9]
+- Player-weapon damage is calculated and buff-adjusted before the server writes
+  it to each target health extension; damage above `NetworkConstants.damage.max`
+  is split into bounded chunks before `add_damage`, so a fixed 9999 result must
+  be produced on the authoritative machine rather than widening the network cap.
+  [src: scripts/helpers/damage_utils.lua:1916-1987]
+- `GenericAmmoUserExtension` checks the owner's buff extension while reloading;
+  `twitch_no_overcharge_no_ammo_reloads` prevents reserve-ammo subtraction, and
+  `PlayerUnitOverchargeExtension` independently returns before adding heat when
+  that same buff is present. [src: scripts/unit_extensions/generic/generic_ammo_user_extension.lua:160-176; scripts/unit_extensions/default_player_unit/charge/player_unit_overcharge_extension.lua:343-368]
 - VMF RPC string payloads are capped at 500 chars by a Stingray hardcap; chunk
   longer payloads. [memory: reference_vmf_rpc_string_cap]
 

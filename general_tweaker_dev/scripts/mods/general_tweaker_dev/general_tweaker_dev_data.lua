@@ -460,6 +460,20 @@ local _data = {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "godmode_enabled_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_godmode_strike_damage",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_godmode_strike_damage_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_godmode_unlimited_ammo",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_godmode_unlimited_ammo_tooltip",
+                            },
+                        },
                     },
                     -- Noclip master toggle -- speed + boost fine-tunes nest under
                     -- it (code reads them only inside the active movement hook,

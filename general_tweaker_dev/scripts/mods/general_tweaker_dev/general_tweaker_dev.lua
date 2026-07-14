@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.226-dev"
+local MOD_VERSION = "0.2.227-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -194,6 +194,8 @@ local _apply_godmode
 -- local fast path) -- no regression. Schema arg per VMF_RECIPES.md §10.
 mod._gt_godmode_peers = mod._gt_godmode_peers or {}
 local _gt_godmode_peers = mod._gt_godmode_peers
+mod._gt_godmode_damage_peers = mod._gt_godmode_damage_peers or {}
+local _gt_godmode_damage_peers = mod._gt_godmode_damage_peers
 local _GT_GODMODE_RPC = "gt_godmode_state"
 local _GT_GODMODE_RPC_SCHEMA = 1
 local _gt_godmode_resync_t = 0  -- self-heal countdown for the MP godmode rebroadcast (see mod.update)
@@ -211,9 +213,16 @@ local function _gt_godmode_broadcast(on)
     local ok, peer = pcall(function() return Network and Network.peer_id and Network.peer_id() end)
     if not (ok and peer) then return end
     _gt_godmode_peers[peer] = on and _gt_net_clock or nil
+    local strike_damage_on = on and mod:get("gt_godmode_strike_damage") == true
+    _gt_godmode_damage_peers[peer] = strike_damage_on and _gt_net_clock or nil
     local vmf = get_mod("VMF")
     if vmf and vmf.ping_vmf_users then pcall(vmf.ping_vmf_users) end
-    pcall(function() mod:network_send(_GT_GODMODE_RPC, "others", _GT_GODMODE_RPC_SCHEMA, on and true or false) end)
+    -- Optional trailing flag preserves the schema-1 base contract: older peers
+    -- ignore it, while a new host can authoritatively apply #549 for its client.
+    pcall(function()
+        mod:network_send(_GT_GODMODE_RPC, "others", _GT_GODMODE_RPC_SCHEMA,
+            on and true or false, strike_damage_on)
+    end)
 end
 
 -- AI Takeover client-side send queue.
@@ -567,6 +576,14 @@ mod.on_setting_changed = function(setting_id)
     -- (3rd-Person Camera tp_* branches MIGRATED to gui_tweaker / gut 2026-06-29, #191.)
     if setting_id == "godmode_enabled" then
         _apply_godmode(mod:get("godmode_enabled") or false)
+    elseif setting_id == "gt_godmode_strike_damage" then
+        -- The host needs the client's child-toggle state at the same damage
+        -- authority seam as base godmode. Refresh immediately; heartbeat heals
+        -- a cold VMF handshake exactly like the parent state.
+        _gt_godmode_broadcast(_godmode)
+    elseif setting_id == "gt_godmode_unlimited_ammo" then
+        -- Ammo is consumed on the owning machine; no child-state RPC is needed.
+        if mod._gt_reconcile_infinite_ammo then mod._gt_reconcile_infinite_ammo() end
     elseif setting_id == "noclip_enabled" then
         -- _gt_apply_noclip is a table field on `mod` (extracted to _gt_noclip.lua),
         -- resolved at call time — safe to reference even though the module
@@ -727,17 +744,20 @@ _apply_godmode = function(on)
     -- lobby still converges, and turning it off expires on the host even if the
     -- "off" send is lost.
     _gt_godmode_broadcast(_godmode)
+    if mod._gt_reconcile_infinite_ammo then mod._gt_reconcile_infinite_ammo() end
 end
 
 -- Receive other peers' godmode state (see _gt_godmode_peers rationale near the
 -- top of the file). Validates the schema arg per VMF_RECIPES.md §10.
-mod:network_register(_GT_GODMODE_RPC, function(sender_peer_id, schema, on)
+mod:network_register(_GT_GODMODE_RPC, function(sender_peer_id, schema, on, strike_damage_on)
     if sender_peer_id == nil or schema ~= _GT_GODMODE_RPC_SCHEMA then
         return
     end
     -- Store the local clock at receipt; _gt_godmode_active expires the entry if
     -- the sender stops heartbeating (clean godmode-off even if its send dropped).
     _gt_godmode_peers[sender_peer_id] = (on == true) and _gt_net_clock or nil
+    _gt_godmode_damage_peers[sender_peer_id] =
+        (on == true and strike_damage_on == true) and _gt_net_clock or nil
 end)
 
 mod:command("god", "Toggle godmode (invincibility + invisibility to enemies)", function()
@@ -806,6 +826,59 @@ end
 -- closure reads the live _godmode / _gt_godmode_peers upvalues, so the export
 -- stays current without re-assignment. Consumers must nil-check (dofile order).
 mod._gt_godmode_active = _gt_godmode_active
+
+-- Issue #549: outgoing damage is host-authoritative for a joining client's
+-- weapon hit, so the child toggle rides the existing heartbeat and is resolved
+-- against the attacking HUMAN's peer here. Bots are excluded for the same
+-- host-peer ownership reason as base godmode.
+local function _gt_godmode_strike_damage_active(unit)
+    if not unit then return false end
+    local pm = Managers.player
+    if not pm then return false end
+    if _godmode and mod:get("gt_godmode_strike_damage") == true then
+        local lp = pm:local_player()
+        if lp and lp.player_unit == unit then return true end
+    end
+    if not next(_gt_godmode_damage_peers) then return false end
+    local owner = pm.owner and pm:owner(unit)
+    if not owner or not owner.is_player_controlled or not owner:is_player_controlled() then
+        return false
+    end
+    local seen = _gt_godmode_damage_peers[owner.peer_id]
+    return seen ~= nil and (_gt_net_clock - seen) < _GT_GODMODE_TIMEOUT
+end
+mod._gt_godmode_strike_damage_active = _gt_godmode_strike_damage_active
+
+-- Pure truth table shared by the live hook and /gt_regression_test. Requiring a
+-- positive vanilla result preserves immune/invalid hits at zero; enemy scope
+-- prevents the cheat from turning friendly fire or self damage into 9999.
+mod._gt549_should_override_outgoing = function(damage, is_enemy, attacker_active, source_active)
+    return type(damage) == "number" and damage > 0 and is_enemy == true
+        and (attacker_active == true or source_active == true)
+end
+mod._GT_549_GODMODE_POWER_MARKER = "gt-549-godmode-power-and-ammo"
+
+-- PRE-FLIGHT: this is gt's only DamageUtils.apply_buffs_to_damage hook. Vanilla
+-- has already populated victim_units and applied target mitigation by the time
+-- func returns [src: scripts/helpers/damage_utils.lua:2134-2450]. Both damage
+-- funnels consume that return before the authoritative health write [src:
+-- damage_utils.lua:1783-1831, 1916-1987], making this the narrow shared seam.
+mod:hook("DamageUtils", "apply_buffs_to_damage", function(func, current_damage,
+        attacked_unit, attacker_unit, damage_source, victim_units, damage_type,
+        buff_attack_type, first_hit, source_attacker_unit)
+    local damage = func(current_damage, attacked_unit, attacker_unit, damage_source,
+        victim_units, damage_type, buff_attack_type, first_hit, source_attacker_unit)
+    local source_active = source_attacker_unit
+        and _gt_godmode_strike_damage_active(source_attacker_unit) or false
+    local attacker_active = _gt_godmode_strike_damage_active(attacker_unit)
+    local actual_attacker = source_active and source_attacker_unit or attacker_unit
+    local is_enemy = actual_attacker and attacked_unit
+        and DamageUtils.is_enemy(actual_attacker, attacked_unit) or false
+    if mod._gt549_should_override_outgoing(damage, is_enemy, attacker_active, source_active) then
+        return 9999
+    end
+    return damage
+end)
 
 -- Issue #548: damage immunity alone does not suppress the separate player
 -- stagger funnel. Boss hits calculate damage and then call stagger_player, so
@@ -3122,6 +3195,25 @@ _rt_register("issue548_godmode_stagger_and_debuff_probe", function()
     if mod._gt548_buff_probe_wired ~= true then
         return "bounded godmode buff observer is not wired"
     end
+end)
+
+_rt_register("issue549_godmode_power_and_ammo", function()
+    if mod._GT_549_GODMODE_POWER_MARKER ~= "gt-549-godmode-power-and-ammo" then
+        return "#549 structural marker absent"
+    end
+    if type(mod._gt_godmode_strike_damage_active) ~= "function" then
+        return "#549 synced strike-damage predicate absent"
+    end
+    if type(mod._gt_reconcile_infinite_ammo) ~= "function" then
+        return "#549 ammo reconciler absent"
+    end
+    local policy = mod._gt549_should_override_outgoing
+    if type(policy) ~= "function" then return "#549 outgoing policy absent" end
+    if policy(10, true, false, false) then return "disabled strike damage overrode a hit" end
+    if policy(10, false, true, false) then return "friendly/non-enemy hit was overridden" end
+    if policy(0, true, true, false) then return "immune zero-damage hit was overridden" end
+    if not policy(10, true, true, false) then return "direct attacker state did not override" end
+    if not policy(10, true, false, true) then return "source-attacker state did not override" end
 end)
 
 _rt_register("issue241_noclip_boundary_routes", function()

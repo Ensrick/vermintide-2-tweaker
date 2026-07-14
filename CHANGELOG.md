@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-14 - Godmode outgoing power and ammo children
+
+Tweaker: General v0.2.227-dev / issue #549 adds default-off 9999-damage and unlimited-ammo children beneath Godmode. Client strike state follows the existing heartbeat to the authoritative host; positive enemy damage is overridden only after vanilla mitigation side effects, while ammo uses an owner-local consumption buff that composes with the independent `/infinite_ammo` command. This also supersedes duplicate request #382. Two-player verification remains required; no deployment is part of this commit.
+
 ## 2026-07-14 - Cosmetics exact-item LA persistence and icons
 
 Tweaker: Cosmetics v0.9.99-dev / issue #376 resolves Loremaster-authored inventory icons from the persisted backend item instead of mutating global skin tables. Same-type item instances remain visually independent, missing metadata fails closed to vanilla, and a delayed backend reconciliation drops overrides for deleted items while preserving CIM-forged records during mirror restoration. Solo in-game verification remains required; no deployment is part of this commit.

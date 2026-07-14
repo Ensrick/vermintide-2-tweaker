@@ -1,5 +1,20 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.227-dev (2026-07-14) -- #549 Godmode power and ammo children [verify-fix-coop]
+
+- Added two default-off child toggles beneath Godmode: **9999 Damage Per Strike** and **Unlimited Ammo**. Both are inert while the Godmode parent is off.
+- Outgoing damage uses the existing `gt_godmode_state` heartbeat's optional trailing flag so a client's setting reaches the authoritative host. The single new `DamageUtils.apply_buffs_to_damage` hook calls vanilla first, preserves its victim/mitigation side effects, then raises only positive enemy damage from the opted-in human to 9999. Friendly fire, self damage, immune zero-damage results, bots, and players without the child toggle stay vanilla.
+- Unlimited Ammo reconciles the existing vanilla `twitch_no_overcharge_no_ammo_reloads` buff on the owning player only. It composes with the independent `/infinite_ammo` command: disabling either source cannot strip the buff while the other still owns it, and the command retains its host-wide behavior.
+- This fully supersedes duplicate request #382's narrower dev-only fixed-damage cheat: #549 supplies the same fixed high-damage behavior, enemy-only scope, and host-authoritative client state as a Godmode child.
+- Added `/gt_regression_test` check `issue549_godmode_power_and_ammo` for the settings, synced predicate, ammo reconciler, positive/enemy-only damage policy, and direct/source-attacker paths.
+
+### Test method (two players)
+
+1. Host enables Godmode and both children. Hit an enemy and fire/reload a ranged or heat weapon; the hit should deal 9999 and ammo/overcharge should not be consumed. Disable Godmode while leaving both children checked; ordinary damage and resource consumption must return.
+2. Joining client repeats the same test. The host must apply 9999 to the client's enemy hit, while the ammo effect remains confined to that client.
+3. With 9999 Damage enabled, hit an invulnerable/immune enemy result and (where difficulty permits) a teammate; zero immunity and normal friendly-fire behavior must remain, never 9999.
+4. Toggle `/infinite_ammo` on, enable the Godmode ammo child, then toggle the command off; the local Godmode child must remain effective. Turn Godmode off and confirm the buff clears. Run `/gt_regression_test` and confirm `issue549_godmode_power_and_ammo` passes.
+
 ## v0.2.226-dev (2026-07-14) -- #385 bound close-range no-path teleport retries [verify-fix]
 
 - Source audit identified the formerly `unknown` trigger: vanilla's bot tree has a second `BTBotTeleportToAllyAction` node named `teleport_no_path`, driven by `BTConditions.cant_reach_ally` after sustained path failures and without the 40 m leash distance floor.
