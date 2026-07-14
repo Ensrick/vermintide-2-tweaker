@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.10-dev"
+local MOD_VERSION = "0.1.11-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -123,17 +123,19 @@ local function _rt_src_read(path)
 	return t
 end
 mod:command("woc_regression_test", "Run WOC regression smoke checks for past bugs", function()
-	local pass, fail = 0, 0
+	local pass, fail, skip = 0, 0, 0
 	mod:echo("=== WOC regression_test (v%s) ===", MOD_VERSION)
 	for _, c in ipairs(_RT_CHECKS) do
 		local ok, err = pcall(c.fn)
 		if ok and err == nil then
 			mod:echo("  PASS: %s", c.name); pass = pass + 1
+		elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
+			mod:echo("  SKIP: %s -- %s", c.name, err:sub(7)); skip = skip + 1
 		else
 			mod:echo("  FAIL: %s -- %s", c.name, tostring(err)); fail = fail + 1
 		end
 	end
-	mod:echo("=== %d passed, %d failed ===", pass, fail)
+	mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)
 end)
 
 -- ============================================================
@@ -144,6 +146,7 @@ local ITEM_KEY    = "woc_blightreaper"
 local BACKEND_ID  = ITEM_KEY .. "_001"
 local BASE_WEAPON = "es_1h_sword"                       -- Kruber 1H sword (clone source)
 local TEMPLATE    = "one_handed_swords_template_1"      -- 1H sword moveset / hit detection
+local _wire_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_wire_policy")
 
 -- Held mesh (INTERIM). Base es_1h_sword right_hand_unit
 -- (item_master_list_exported.lua:6548) — always resident with the player
@@ -329,24 +332,18 @@ end)
 -- woc_ key is the exact non-WOC-peer CTD this hook exists to prevent (issue 278).
 -- The live item is never mutated (the shadow is a shallow copy).
 local function _wire_safe_item(item)
-	local key = item and item.key
-	if type(key) ~= "string" or key:sub(1, 4) ~= "woc_" then
-		return item                                       -- non-WOC: untouched passthrough
-	end
-	if rawget(ItemMasterList, BASE_WEAPON)
-			and NetworkLookup and NetworkLookup.item_names
-			and rawget(NetworkLookup.item_names, BASE_WEAPON) then
-		local shadow = {}
-		for k, v in pairs(item) do shadow[k] = v end
-		shadow.key = BASE_WEAPON
-		shadow.ItemId = BASE_WEAPON
-		return shadow
-	end
-	return nil                                            -- base unresolvable: caller skips (fail-safe)
+	local base_resolvable = rawget(ItemMasterList, BASE_WEAPON)
+		and NetworkLookup and NetworkLookup.item_names
+		and rawget(NetworkLookup.item_names, BASE_WEAPON)
+	return _wire_policy.safe_item(item, BASE_WEAPON, base_resolvable)
 end
 
+local _blightreaper_sync_seen = false
 if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 	mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
+		if item and (item.backend_id == BACKEND_ID or item.ItemInstanceId == BACKEND_ID) then
+			_blightreaper_sync_seen = true
+		end
 		local send_item = _wire_safe_item(item)
 		if send_item == nil then
 			-- Only a woc_ item with an unresolvable base reaches here. Skipping the
@@ -376,17 +373,54 @@ _rt_register("wire_woc_never_leaves_woc_key", function()
 	end
 	local fake = { key = "woc_test", ItemId = "woc_test", power_level = 300 }
 	local out = _wire_safe_item(fake)
-	-- out is a base-keyed shadow (base resolvable) or nil (skip). Both are crash-safe.
-	if out ~= nil then
-		if type(out.key) == "string" and out.key:sub(1, 4) == "woc_" then
-			return "substitution left a woc_ key on the outgoing item"
-		end
-		if type(out.ItemId) == "string" and out.ItemId:sub(1, 4) == "woc_" then
-			return "substitution left a woc_ ItemId on the outgoing item"
-		end
+	-- The native base + lookup are boot data, so a live game must produce the
+	-- exact vanilla-keyed shadow. nil remains reserved for a genuinely broken
+	-- base lookup and may not masquerade as passing verification.
+	if out == nil then
+		return "base sword is not wire-resolvable -- WOC sync would be skipped"
+	end
+	if out.key ~= BASE_WEAPON or out.ItemId ~= BASE_WEAPON then
+		return string.format("expected exact base identity %s, got key=%s ItemId=%s",
+			BASE_WEAPON, tostring(out.key), tostring(out.ItemId))
 	end
 	if fake.key ~= "woc_test" or fake.ItemId ~= "woc_test" then
 		return "live item was mutated -- shadow must be a copy"
+	end
+end)
+
+_rt_register("issue509_registered_blightreaper_wire_contract", function()
+	if not mod:get("enable_blightreaper") then
+		return "skip: Blightreaper setting is disabled"
+	end
+	if not _registered then
+		return "Blightreaper did not register -- check MoreItemsLibrary load order"
+	end
+
+	local entry = rawget(ItemMasterList, ITEM_KEY)
+	if not entry then return "registered WOC ItemMasterList row is missing" end
+	if entry.key ~= BASE_WEAPON or entry.name ~= BASE_WEAPON then
+		return string.format("registered clone lost inherited base identity: key=%s name=%s",
+			tostring(entry.key), tostring(entry.name))
+	end
+
+	local names = NetworkLookup and NetworkLookup.item_names
+	local woc_id = names and rawget(names, ITEM_KEY)
+	if type(woc_id) ~= "number" or rawget(names, woc_id) ~= ITEM_KEY then
+		return "WOC NetworkLookup.item_names pair is not symmetric"
+	end
+
+	local items = Managers.backend and Managers.backend:get_interface("items")
+	local live = items and items:get_item_from_id(BACKEND_ID)
+	if not live then return "registered Blightreaper backend item is missing" end
+	if live.key ~= BASE_WEAPON or live.ItemId ~= BASE_WEAPON then
+		return string.format("backend item is not vanilla-wire keyed: key=%s ItemId=%s",
+			tostring(live.key), tostring(live.ItemId))
+	end
+	if _wire_safe_item(live) ~= live then
+		return "vanilla-keyed live Blightreaper was unnecessarily rewritten"
+	end
+	if not _blightreaper_sync_seen then
+		return "skip: equip Blightreaper once, then rerun for live hook evidence"
 	end
 end)
 
@@ -396,9 +430,14 @@ end)
 _rt_register("issue422_wire_safety_unconditional_singleton", function()
 	-- The sender-side wire-safety hook on (LoadoutUtils, sync_loadout_slot) must
 	-- be UNCONDITIONAL (never toggle-gated) and SINGLE (VMF silently drops a 2nd
-	-- hook on the same Class.method). Source-pattern guard on THIS file (path via
+	-- hook on the same Class.method). Prefix classification is runtime-testable
+	-- even in retail; the singleton remains a source-pattern guard on THIS file (path via
 	-- debug.getinfo on the file-local _rt_register); needles split so this check
 	-- never self-matches; no-op when source is unreadable (deploy/bundle paths).
+	if not _wire_policy.is_woc_key("woc_future_weapon")
+		or _wire_policy.is_woc_key(BASE_WEAPON) then
+		return "issue 422 regression: unconditional woc_ prefix classification changed"
+	end
 	local ok, info = pcall(debug.getinfo, _rt_register, "S")
 	if not ok or type(info) ~= "table" or not info.source then return end
 	local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
@@ -417,12 +456,6 @@ _rt_register("issue422_wire_safety_unconditional_singleton", function()
 	end
 	if count > 1 then
 		return "issue 422 regression: duplicate (LoadoutUtils, sync_loadout_slot) hook -- VMF drops the 2nd silently"
-	end
-	-- Unconditional coverage: substitution keys off a plain woc_ prefix match, not
-	-- a mod:get setting, so every present/future woc_ item is crash-safe.
-	local prefix_needle = "key:sub(1, 4) ~= " .. '"woc_"'
-	if not txt:find(prefix_needle, 1, true) then
-		return "issue 422 regression: the unconditional woc_ prefix wire guard is missing"
 	end
 end)
 

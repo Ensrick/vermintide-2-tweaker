@@ -7,9 +7,10 @@ skaven cleavers, beastmen axes, and the named keep trophy weapons such as
 from a player base weapon template, with its held mesh swapped to an enemy
 weapon's `.unit`.
 
-> **Status:** blank-slate scaffold. No weapons registered yet. This doc is the
-> research foundation — where enemy weapon meshes live, the keep trophy paths,
-> and the recommended duplicate approach + first gotchas.
+> **Status:** early implementation with one registered item, Blightreaper. Its
+> interim held mesh is the resident Empire sword because the intended trophy
+> prop cannot be loaded safely. This doc remains the research foundation for
+> enemy meshes, trophy paths, and the duplicate-item constraints.
 
 All paths/line citations below are against the decompiled source at
 `C:/Users/danjo/source/repos/Vermintide-2-Source-Code` (referred to as `src/`).

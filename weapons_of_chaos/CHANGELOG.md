@@ -1,5 +1,25 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.11-dev (2026-07-14) - #509 live wire-contract evidence [verify-fix] [not deployed]
+
+### Why
+The existing backfill could pass in retail without proving the registered Blightreaper was present or wire-safe. Its WOC substitution check accepted `nil` as success, the singleton check source-soft-skipped when `io` was unavailable, and the instruction to equip Blightreaper did not feed any assertion.
+
+Source audit also clarified the two identity layers. Native `parse_item_master_list` stamps the base row with `key/name = es_1h_sword` (`item_master_list.lua:109-112`); MoreItemsLibrary preserves that inherited key on the actual backend item (`MoreItemsLibrary.lua:343-344`). Therefore today's Blightreaper already traverses `LoadoutUtils.sync_loadout_slot` as the boot-stable vanilla sword. The `woc_` substitution remains mandatory defense-in-depth for any future explicit WOC-keyed item.
+
+### Changed
+- Extracted pure `_woc_wire_policy.lua`: vanilla items pass by identity, explicit `woc_` items get a shallow `es_1h_sword` shadow, and an unresolvable base fails closed.
+- Hardened `wire_woc_never_leaves_woc_key`: with the native base tables present, `nil` is now a failure and the exact outgoing key and `ItemId` must both equal `es_1h_sword`.
+- Added `issue509_registered_blightreaper_wire_contract`: asserts the WOC master-list row, symmetric lookup pair, actual MIL backend item, inherited vanilla wire identity, and live traversal of WOC's sync hook after the exact backend item is equipped.
+- The WOC runner now reports standards-compliant `SKIP` results. The live traversal check skips with an explicit instruction until Blightreaper is equipped; disabled-feature state also skips rather than generating a false failure.
+- Added engine-free policy coverage in `test_woc_wire_policy.lua`.
+
+### Test method
+1. Enter the keep with More Items Library and WOC enabled; confirm `[WOC] v0.1.11-dev loaded`.
+2. Equip Blightreaper once after entering the keep.
+3. Run `/woc_regression_test`. Require `issue509_registered_blightreaper_wire_contract` PASS and zero failures; it must not be SKIP after the equip.
+4. Unequip/re-equip a vanilla weapon and confirm ordinary loadout sync remains unchanged.
+
 ## 0.1.10-dev (2026-07-12) - #511 io-safe regression checks: source-reads no longer throw in the retail sandbox [untested]
 
 ### Why

@@ -14,7 +14,7 @@ vanilla behavior, and links out. Decompile paths are relative to
 `WOC` lets player characters wield ENEMY weapons and named keep-trophy artifacts
 via the duplicate-item approach modeled on `character_weapon_variants`: it clones
 a player base weapon template into a new MoreItemsLibrary item and swaps the held
-mesh to a different `.unit`. As of v0.1.8-dev there is ONE item - the Blightreaper
+mesh to a different `.unit`. As of v0.1.11-dev there is ONE item - the Blightreaper
 (Kruber 1H sword, all careers), rendered on an interim base-Empire-sword mesh
 because the intended keep-trophy prop is not runtime-loadable (see dead ends). Its
 engine contact is small: a display-name `Localize` hook, a registration-timing
@@ -45,7 +45,7 @@ registration itself is NOT a hook - it is direct `rawset`/assignment inside the
 
 | Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
 |---|---|---|---|
-| `LoadoutUtils.sync_loadout_slot` [hook,tbl] `:328` | Encodes an equipped item onto `rpc_sync_loadout_slot`: `item_id = NetworkLookup.item_names[item_key]` [src: `scripts/helpers/loadout_utils.lua:25`; decode at `:72`] | Substitute a shadow item keyed to the vanilla `BASE_WEAPON` before the RPC encodes, so a `woc_` local-append id never reaches a peer that lacks it (`:328`) | ROW-OF-CONCERN. `WOC` appends `ITEM_KEY` into `NetworkLookup.item_names` as a per-peer index; a peer WITHOUT `WOC` cold-decodes that id at `loadout_utils.lua:72` and the strict `__index` metamethod fatals [src: `network_lookup.lua:2362` verified] -> non-WOC peer CTD. Wire safety is unconditional, never toggle-gated (memory `reference_vt2_wire_safety_never_toggle_gated`). `LoadoutUtils` is a plain table -> table-form hook, nil-guarded. A raw `woc_` key must NEVER be structurally reachable on the wire: if the base index is unresolvable the hook SKIPS the send (fail-safe), never falls through to send the `woc_` key. Live item is never mutated (shadow is a shallow copy). Byte-identical to CWV's issue-278 fix (`character_weapon_variants.lua:10166`) |
+| `LoadoutUtils.sync_loadout_slot` [hook,tbl] | Encodes `item.key` as `NetworkLookup.item_names[item_key]` for direct, host-broadcast, client-to-server, and hot-join sync [src: `scripts/helpers/loadout_utils.lua:12-53`; decode at `:69-83`] | Observe the exact Blightreaper backend item for live #509 evidence; preserve its inherited vanilla identity, while `_woc_wire_policy.lua` substitutes any future explicit `woc_` key with a vanilla `BASE_WEAPON` shadow | ROW-OF-CONCERN. Native parsing stamps the cloned base entry `key/name = es_1h_sword` [src: `scripts/settings/equipment/item_master_list.lua:109-112`], and MIL uses `item.key` for backend `ItemId/key`, so the current item already sends a boot-stable identity. WOC still appends `ITEM_KEY` locally for explicit-key consumers; any future `woc_` item must never emit that order-dependent id. The policy is unconditional, shallow-copy/non-mutating, and fails closed if the base index is unavailable. |
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for WOC's cases)
 
@@ -67,6 +67,16 @@ and strips `required_dlc = nil` (a new mod item reusing base-package meshes; the
 per-career DLC gate is enforced by the game's own equip check - same intentional
 strip as CWV `_build_entry`).
 
+Native `parse_item_master_list` has already stamped that base row with both
+`key` and `name` equal to `es_1h_sword` [src:
+`scripts/settings/equipment/item_master_list.lua:109-112`]. MoreItemsLibrary's
+backend conversion then selects `mod_data.key or item.key or default_item_name`
+for both `ItemId` and `key` (`MoreItemsLibrary.lua:343-344`). WOC does not
+override those `mod_data` fields, so the actual Blightreaper backend row is
+vanilla-keyed even though its backend instance id and presentation are WOC-owned.
+Runtime check `issue509_registered_blightreaper_wire_contract` asserts this
+against the live backend mirror rather than relying only on static source.
+
 ### NetworkLookup append + the wire-safety consequence (owner: `docs/engine/03`)
 
 Registration also appends `ITEM_KEY` into `NetworkLookup.item_names` as a local
@@ -75,12 +85,11 @@ index (`#tbl + 1`, `:264`), via `rawset` because the table has an error-throwing
 `woc_` key gets is not stable across peers - a host with WOC and a client without
 it disagree, and the client's decode hits the strict `__index`
 [src: `network_lookup.lua:2362`] -> CTD (issue 278 class). The `sync_loadout_slot`
-hook (table above) is the fix: substitute a `BASE_WEAPON` shadow (a boot-stable
-index every peer has) before the encode. `WOC` cloned CWV's item registration but
-NOT its net-safe hook, which is exactly how issue 422 slipped in - the lesson is
-that a duplicate-item mod must copy the wire-safety layer, not just the item
-layer. `WOC` applies no skin and rarity `"default"` (a vanilla index), so unlike
-CWV there is no skin/rarity axis to substitute, only the item-name axis
+hook (table above) is the defense-in-depth boundary: current MIL-created
+Blightreaper rows pass through by identity because they inherit `es_1h_sword`;
+any explicit present/future `woc_` row is substituted with a `BASE_WEAPON`
+shadow before encode. `WOC` applies no skin and rarity `"default"` (a vanilla
+index), so unlike CWV there is no skin/rarity axis to substitute, only the item-name axis
 (`docs/engine/03` §31; project `project_vt2_cross_peer_wire_safety`).
 
 ### Held-mesh derivation (owner: `docs/engine/06`)
