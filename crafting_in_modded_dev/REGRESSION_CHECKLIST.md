@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+### athanor-tooltip-slot-anchor - issue #521
+
+| Field | Value |
+|---|---|
+| Symptom | The secondary weapon's one remaining tooltip appears over the primary weapon panel. |
+| Root cause | CIM used one tooltip parented to the center panel without composing the hovered weapon viewport's authored x offset. |
+| Fix version(s) | cim_dev 0.8.71-dev |
+| Category | SOLO |
+| Repro | Hover primary, then secondary, in the Athanor overview. |
+| Expected post-fix | One tooltip follows the hovered panel: melee x=-535, ranged x=555; mouse-out clears it. |
+| Detection | `/cim_regression_test` passes `forge_tooltip_no_equipped_compare` and `issue521_tooltip_follows_hovered_weapon`. |
+
 ---
 
 ## Hold-Tab Loadout Preview

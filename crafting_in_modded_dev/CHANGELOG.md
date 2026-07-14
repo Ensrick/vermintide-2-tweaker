@@ -1,5 +1,12 @@
 # Crafting in Modded Changelog
 
+## 0.8.71-dev (2026-07-13): #521 hover tooltip follows weapon panel [verify-fix]
+
+- The first #521 fix removed vanilla's extra equipped-comparison card, but CIM still parented its one shared tooltip to the center viewport for both weapon slots. The ranged card therefore appeared over the primary panel position.
+- The tooltip now composes the exact vanilla scenegraph offsets: panel 1 is `-545`, panel 3 is `+545`, with CIM's existing 10px inset. Hovering melee uses `-535`; hovering ranged uses `+555`. Item identity and the one-popup guard are unchanged.
+- Runtime regression `issue521_tooltip_follows_hovered_weapon` locks both anchors, their 1090px separation, and any live applied position.
+- **Verify:** hover primary and secondary weapon viewports in the Athanor overview. Exactly one card should appear beside the matching hovered viewport and clear on mouse-out. No co-op player is required.
+
 ## 0.8.70-dev (2026-07-13): #246 Hold-Tab exact illusion icon [verify-fix-coop] [not deployed]
 
 - Source audit confirmed that Hold-Tab renders `Managers.player:player_loadouts()`, but vanilla `rpc_sync_loadout_slot` omits weapon-skin identity and reconstructs only the base item. The separately synchronized live inventory equipment does retain the exact `skin` key from `rpc_add_equipment`.

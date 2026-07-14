@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.70-dev"
+local MOD_VERSION = "0.8.71-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -3158,6 +3158,15 @@ local function _forge_apply_ui_polish(forge_state)
         end
 
         if hovered_vp then
+            -- #521 follow-up: the tooltip is parented to the center panel, while
+            -- the weapon viewports are authored at -545 / +545 from center.
+            -- Move the one shared tooltip with the hovered viewport so the
+            -- ranged card cannot appear over the melee panel (or vice versa).
+            local tooltip = overview._cim_tooltip_widget
+            if tooltip and tooltip.offset then
+                tooltip.offset[1] = ((hovered_vp - 2) * 545) + 10
+                mod._cim_tooltip_anchor_x = tooltip.offset[1]
+            end
             local slot_name = (hovered_vp == 1) and "slot_melee" or "slot_ranged"
             local items_backend = Managers.backend and Managers.backend:get_interface("items")
             local player = Managers.player and Managers.player:local_player()
@@ -6691,6 +6700,21 @@ _rt_register("forge_tooltip_no_equipped_compare", function()
     local needle = 'tt.content.no_equipped_item' .. ' = true'
     if not txt:find(needle, 1, true) then
         return "issue 521 regression: forge tooltip widget no longer sets no_equipped_item = true (double popup returns)"
+    end
+end)
+
+_rt_register("issue521_tooltip_follows_hovered_weapon", function()
+    -- Vanilla scenegraph: viewport panels 1/2/3 sit at x=-545/0/+545.
+    -- CIM's tooltip is parented to panel 2 with a 10px inset, so the exact
+    -- melee/ranged anchors must be -535/+555.
+    local melee_x = ((1 - 2) * 545) + 10
+    local ranged_x = ((3 - 2) * 545) + 10
+    if melee_x ~= -535 or ranged_x ~= 555 or ranged_x - melee_x ~= 1090 then
+        return "#521 tooltip weapon-panel anchors drifted"
+    end
+    local live_x = mod._cim_tooltip_anchor_x
+    if live_x ~= nil and live_x ~= melee_x and live_x ~= ranged_x then
+        return "#521 live tooltip anchor is not a weapon viewport: " .. tostring(live_x)
     end
 end)
 
