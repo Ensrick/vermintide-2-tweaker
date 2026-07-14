@@ -184,6 +184,24 @@ return {
 
     gt_improved_bot_combat = { en = "[Issue 298] Improved Bot Combat" },
     gt_improved_bot_combat_tooltip = { en = "Bot teammates make smarter attack choices, ping the elite hitting them, stop chasing distant specials, ignore far-off gunners, do not over-focus bosses, and time abilities better for several careers. Works only when you are the host." },
+    gt_ibc_smarter_attacks = { en = "Smarter attack choices" },
+    gt_ibc_smarter_attacks_tooltip = { en = "Prefer faster single-target attacks when safe and wider or penetrating attacks against crowds and armour." },
+    gt_ibc_ping_attackers = { en = "Ping attacking elites" },
+    gt_ibc_ping_attackers_tooltip = { en = "Bots ping a visible elite that is actively targeting them, with a bounded cooldown." },
+    gt_ibc_limit_special_chase = { en = "Limit special chasing" },
+    gt_ibc_limit_special_chase_tooltip = { en = "Stops bots committing to paths toward enemies beyond the configured chase distance." },
+    gt_ibc_special_chase_distance = { en = "Special chase distance (meters)" },
+    gt_ibc_special_chase_distance_tooltip = { en = "Maximum distance at which improved combat permits a bot to commit to chasing an enemy. The previous bundled value was approximately 7.1 meters." },
+    gt_ibc_ignore_distant_gunners = { en = "Ignore distant gunners" },
+    gt_ibc_ignore_distant_gunners_tooltip = { en = "Only makes bots take cover when a ranged attacker and its target are within the configured distance." },
+    gt_ibc_gunner_cover_distance = { en = "Gunner cover distance (meters)" },
+    gt_ibc_gunner_cover_distance_tooltip = { en = "Maximum attacker-to-target distance for the improved line-of-fire cover response. The previous bundled value was approximately 11.8 meters." },
+    gt_ibc_limit_boss_focus = { en = "Limit boss over-focus" },
+    gt_ibc_limit_boss_focus_tooltip = { en = "Keeps non-boss urgent targets ahead of monsters and only adds a nearby boss when the bot is not occupied by a crowd." },
+    gt_ibc_boss_engage_distance = { en = "Boss engage distance (meters)" },
+    gt_ibc_boss_engage_distance_tooltip = { en = "Maximum distance at which improved combat adds a boss as an urgent target. The previous bundled value was 15 meters." },
+    gt_ibc_ability_timing = { en = "Smarter career ability timing" },
+    gt_ibc_ability_timing_tooltip = { en = "Uses the existing improved timing heuristics for Mercenary, Huntsman, Handmaiden, Shade, Witch Hunter Captain, and Unchained bots." },
 
     -- ============================================================
     -- Cheats and Debug

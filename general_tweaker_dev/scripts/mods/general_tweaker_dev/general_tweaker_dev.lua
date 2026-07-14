@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.228-dev"
+local MOD_VERSION = "0.2.229-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -2253,6 +2253,22 @@ _rt_register("gt_bot261_leash_conflict_invariants", function()
     -- repo QA gate.
     if GT_BOT_GREEDY_PICKUP_MARKER_v0_2_182 ~= "gt-bot-greedy-pickup-mule-health-postpass" then
         return "greedy-pickup marker absent -- FIX 10 follow-range gate net broken"
+    end
+end)
+
+_rt_register("issue298_improved_bot_combat_controls", function()
+    local policy = mod._gt_ibc_policy
+    if type(policy) ~= "table" or type(policy.feature_enabled) ~= "function"
+            or type(policy.distance_sq) ~= "function" then
+        return "improved-combat control policy not loaded"
+    end
+    if policy.feature_enabled(true, false) ~= false
+            or policy.feature_enabled(true, nil) ~= true
+            or policy.feature_enabled(false, true) ~= false then
+        return "master/child fallback contract drifted"
+    end
+    if policy.distance_sq(7.1, 1) ~= 7.1 * 7.1 then
+        return "distance control no longer compares squared engine distances"
     end
 end)
 

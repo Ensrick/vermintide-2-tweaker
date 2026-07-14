@@ -1,5 +1,16 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.229-dev (2026-07-14) -- #298 Improved Bot Combat advanced controls [verify-fix]
+
+- Converted **Improved Bot Combat** into a VMF master checkbox with live child controls for smarter attacks, pinging attacking elites, special chasing, distant-gunner cover behavior, boss focus, and six-career ability timing.
+- Added distance sliders for special chasing (7.1 m), gunner cover response (11.8 m), and boss engagement (15 m). These reproduce the previous hard-coded squared-distance thresholds, so untouched child defaults preserve existing behavior.
+- Every child delegates only its hook family back to vanilla when disabled. The existing host-side master remains default-off, and the nil-weapon crash guard remains ungated.
+- Added offline policy coverage and `/gt_regression_test` check `issue298_improved_bot_combat_controls`.
+
+### Solo verify
+
+Host with bots, enable Improved Bot Combat, and toggle each child independently. Confirm the other families remain active, the three distance boundaries respond to their sliders, disabling the master restores vanilla decisions, and transient weapon swaps remain crash-free.
+
 ## v0.2.228-dev (2026-07-14) -- #523 configurable bot healing of allies [verify-fix]
 
 - Expanded Medical Supplies heal-allies with separate non-wounded and wounded permanent-health thresholds. Non-wounded defaults to 15%; 0 effectively disables ordinary top-offs. Wounded defaults to 100%, preserving immediate eligibility after a wound while allowing the host to delay it.

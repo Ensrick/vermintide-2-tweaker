@@ -62,6 +62,13 @@ OFF except the two ungated crash fixes.
 
 ### Surface 1b - Bot follow / pickup distribution + combat (owner: `docs/engine/07`; `_gt_bot_fixes.lua`, `_gt_improved_bot_combat.lua`)
 
+Issue #298 control contract: `gt_improved_bot_combat` remains the host-side
+master. Six default-on child gates independently own attack choice, elite ping,
+special chase, gunner cover, boss focus, and career-ability timing. Chase,
+gunner, and boss distances are configured in meters and squared exactly once at
+the existing `Vector3.distance_squared` comparison boundaries. The nil-weapon
+melee-action crash guard remains ungated.
+
 | Class.method (kind) | Vanilla behavior | Why gt hooks it | Trap / invariant |
 |---|---|---|---|
 | `AIBotGroupSystem._assign_destination_points` [safe] `_gt_bot_fixes.lua:1990` | Points EVERY bot's `follow_unit` at ONE selected human per side; the candidate build drops disabled players from the follow set unless EVERY player is down [src: `scripts/entity_system/systems/ai/ai_bot_group_system.lua:695-719`, per-bot write `:1119-1120`] | FIX 9: split bots round-robin among humans / follow-host mode + issue 383 fan-point recompute; also the lab's D2 follow-tracker dispatch | `hook_safe` (post) so it composes; the lab CANNOT re-hook this pair (VMF drop) so its dispatch is merged here; D2 runs at the TOP so it logs the pre-override target |

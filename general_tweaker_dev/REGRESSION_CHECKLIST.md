@@ -6,6 +6,14 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+## Improved Bot Combat advanced controls (#298)
+
+- [ ] Master remains default-off; all children default-on and reproduce the former bundled behavior.
+- [ ] Disabling a child delegates only its attack, ping, chase, gunner, boss, or ability hook family to vanilla.
+- [ ] Meter sliders are squared exactly once: 7.1 m chase, 11.8 m gunner cover, and 15 m boss engagement by default.
+- [ ] `BTBotMeleeAction.run` nil-weapon crash guard remains ungated.
+- Detection: offline `test_gt_improved_bot_combat_controls`; `/gt_regression_test` check `issue298_improved_bot_combat_controls`.
+
 ## Bot heal-allies policy (#523)
 
 - [ ] With the feature on, a bot carrying Medical Supplies selects a non-wounded human at 15% permanent health, but not just above it; setting the slider to 0 prevents ordinary top-off heals.
