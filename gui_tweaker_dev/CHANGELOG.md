@@ -1,5 +1,9 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.252-dev (2026-07-13) — Slider registry twin parity (#389)
+
+- Mirrored the existing 25-point CIM/CT foreign-slider registry into the keep sub-state so both Mod Tweaker presentations resolve identical increments.
+
 > **Dev fork created 2026-06-24** from `gui_tweaker` v0.2.82-dev (mod id `gut` → `gut_dev`,
 > directory `gui_tweaker/` → `gui_tweaker_dev/`, separate Workshop item — no `published_id`
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now

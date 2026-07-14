@@ -74,6 +74,7 @@ local suites = {
     "test_gt_dummy_collision_policy",
     "test_gut_simple_ui_bounds",
     "test_gut_hud_drag_geometry",
+    "test_mod_tweaker_slider_steps",
     "test_gt_chest_pickup_probe",
     "test_cos_glow_lifecycle",
     "test_peer_parity_transition",

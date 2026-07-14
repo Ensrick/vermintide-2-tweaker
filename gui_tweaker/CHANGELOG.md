@@ -1,5 +1,10 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.120 (2026-07-13) — Fixed 25-point weapon-power steps (#389)
+
+- Promoted Mod Tweaker's foreign-slider registry to stable. CIM's Base Power Level and CT's Starting Coins use fixed 25-point increments for both registered stable/dev mod ids.
+- Mirrored the registry into both UI presentations; explicit authored steps still win and ordinary numeric settings keep their natural increment.
+
 ## 0.2.119 (2026-07-13) — Tree-preserving Mod Tweaker layout (#557) [not deployed]
 
 - Every unordered sibling level now displays collapsible groups first and loose settings second; both partitions sort case-insensitively by localized display label.

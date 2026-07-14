@@ -87,6 +87,21 @@ local function _nf(node, key)  -- defensive node-field read
     return v
 end
 
+-- (#389) Stable keep-substate twin of the Mod Tweaker foreign-slider registry.
+local STEP_OVERRIDES = {
+    cim = { base_power_level = 25 }, cim_dev = { base_power_level = 25 },
+    ct = { starting_coins = 25 }, ct_dev = { starting_coins = 25 },
+}
+
+local function _resolve_step(node, mod_id, setting_id, dec)
+    local field = _nf(node, "step")
+    if type(field) == "number" and field > 0 then return field end
+    local by_mod = mod_id and STEP_OVERRIDES[mod_id]
+    local fixed = by_mod and setting_id and by_mod[setting_id]
+    if type(fixed) == "number" and fixed > 0 then return fixed end
+    return (dec and dec > 0) and (10 ^ -dec) or 1
+end
+
 local function _vmf_label(node, mod_obj)
     local t = _nf(node, "title") or _nf(node, "text") or _nf(node, "setting_id") or "?"
     -- title may be a raw loc key or already display text; localize and keep the
@@ -550,8 +565,7 @@ function HeroViewStateModTweaker:_build_node_row(w, category, base_offset, depth
             -- increment. The track gives fine/continuous control; after a commit we
             -- re-read the value so any mod-side snapping (ct rounds starting_coins to
             -- 25 in its on_setting_changed) is reflected — matching VMF's own slider.
-            local step = math.max((dec > 0) and (10 ^ -dec) or 1, (max > min) and ((max - min) / 40) or 0)
-            if dec == 0 then step = math.max(1, math.floor(step + 0.5)) end
+            local step = _resolve_step(w, category and category.mod_id, setting_id, dec)
             row.content.step = step
             mod:debug("[mt:num] '%s' bounds=%s..%s dec=%s step=%s val=%s",
                 tostring(setting_id), tostring(min), tostring(max), tostring(dec), tostring(step), tostring(val))
