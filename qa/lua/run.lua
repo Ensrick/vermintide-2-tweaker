@@ -46,6 +46,7 @@ local suites = {
     "test_mod_tweaker_search",
     "test_mod_tweaker_numeric_editor",
     "test_mp_dailies",
+    "test_mp_quest_boundary",
     "test_wt_passive_charge",
     "test_wt_cwv_ownership",
     "test_wt_native_ownership",

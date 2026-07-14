@@ -6,11 +6,24 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 - [ ] #581: startup/keep challenge-board polling never reads an `mp_daily_v2_*` key from `StatisticsDatabase`; `/mp_regression_test` passes `mp581_owned_daily_bypasses_statistics_db`.
 - [ ] #589: the modded login-reward button remains disabled and no caller reaches `claimStoreRewards`; `/mp_regression_test` passes both `mp589_store_login_claim_*` checks. Official-realm claim remains vanilla.
+- [ ] #573: modded `get_quests` exposes only MP-owned daily rows with empty weekly/event slices, and modded refresh never calls backend `update_quests`; official read/refresh delegates unchanged.
 
 Last updated: 2026-07-13.
 
 ---
 ## Backend isolation
+
+### mp-quest-surface-owned - official rows and refresh requests cannot enter modded play
+
+| Field | Value |
+|-------|-------|
+| Symptom | An official weekly/event quest appears in the modded challenge board, but claiming it is rejected as non-MP; refreshing the surface may still enqueue backend `getQuests`. |
+| Root cause | The first #573 hook replaced only `quests.daily` and retained vanilla weekly/event slices. Vanilla `update_quests` independently polls all three official timer families before issuing CloudScript refresh. |
+| Fix version(s) | mp v0.2.22-dev |
+| Category | INTEGRATION / CRITICAL |
+| Repro | Open Okri's Challenges in modded play with an active official weekly/event quest, then refresh or reopen the surface and attempt its claim. |
+| Expected post-fix | The modded surface contains only three MP-owned dailies; weekly/event are empty; refresh rotates locally without `getQuests`; local claims cannot reach `generateQuestRewards`. Official play remains native. |
+| Detection | `/mp_regression_test` passes `mp573_quest_surface_is_owned_and_backend_free`; offline `test_mp_quest_boundary.lua` proves slice filtering, zero vanilla calls, local refresh, and exact official pass-through. Log contains no official quest id, `getQuests`, `generateQuestRewards`, backend 511, or `-1` from this path. |
 
 ### mp-store-login-reward-fail-closed - login reward must not enqueue PlayFab
 

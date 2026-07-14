@@ -1,5 +1,18 @@
 # Modded Progression — Changelog
 
+## 0.2.22-dev (2026-07-13) - #573 isolate the complete modded quest surface [not deployed]
+
+- Fixed official weekly/event rows leaking into the Modded Progression challenge surface. The old hook replaced only `quests.daily`, so an official row such as `weekly_collect_dice_2` remained visible but was correctly rejected by the local claim boundary. Modded play now returns exactly three slices: MP-owned local dailies, an empty weekly slice, and an empty event slice. Official play returns the original backend table unchanged.
+- Closed the corresponding refresh leak. Vanilla `BackendInterfaceQuestsPlayfab.update_quests` polls daily, weekly, and event backend timers and can enqueue CloudScript `getQuests`; the modded route now rotates the local UTC roster and invokes `QuestManager`'s update callback without calling the backend method. Official refresh remains native.
+- Official quest-key lookup, quest-by-key lookup, and reward-poll fallback now fail closed in modded play. Only current MP-owned identities and locally created reward poll ids are resolved; defense-in-depth claim hooks remain unchanged.
+- Added pure realm-routing coverage for zero official reads in modded play, empty weekly/event slices, exact official pass-through, local callback refresh, and native official refresh. Added runtime check `mp573_quest_surface_is_owned_and_backend_free`.
+
+**Source audit:** `backend_interface_quests_playfab.lua:25-44` builds daily, weekly, and event slices from the backend mirror; `:60-100` shows `update_quests` can enqueue `FunctionName = "getQuests"` from any expired official timer; `quest_manager.lua:36-50` dispatches all three returned slices into progress evaluation, and `:599-615` builds event mappings from the returned event slice. Empty tables preserve those source contracts without exposing official identities.
+
+**Log evidence:** `console-2026-07-14-00.01.43-0cdea076-5ef6-46e0-a122-c344f0c93c0c.log` recorded `blocked non-MP quest claim id=weekly_collect_dice_2 backend=none`, proving the official weekly row reached the modded UI while the backend-free claim guard correctly refused it.
+
+**Test:** In modded play, open Okri's Challenges and refresh/reopen it. Only three `mp_daily_v2_*` daily rows may appear; no official daily, weekly, or event quest may be visible. Claim a completed local row and run `/mp_regression_test`; expect `mp573_quest_surface_is_owned_and_backend_free` to pass and no `getQuests`, `generateQuestRewards`, EAC challenge, backend 511, `-1`, or forced exit. In official play, confirm native daily/weekly/event rows and claims remain unchanged.
+
 ## 0.2.21-dev (2026-07-13) - #589 block store login reward PlayFab claims [verify-fix]
 
 - Fixed the critical modded-realm exit caused by the daily login reward popup. The native path is `StoreLoginRewardsPopup._claim_rewards` -> `BackendInterfacePeddlerPlayFab.claim_login_rewards` -> authenticated `claimStoreRewards`; the request triggers an EAC challenge, backend 511, and the fatal `-1` popup.

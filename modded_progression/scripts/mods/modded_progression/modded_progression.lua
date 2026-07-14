@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.21-dev"
+local MOD_VERSION = "0.2.22-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -267,12 +267,6 @@ end
 local Dailies = mod:dofile("scripts/mods/modded_progression/mp_dailies")
 local _local_quest_rewards = {}
 local _local_poll_serial = 0
-
-local function _shallow_copy(source)
-    local copy = {}
-    for key, value in pairs(source or {}) do copy[key] = value end
-    return copy
-end
 
 local function _find_daily_entry(id)
     return Dailies.find_by_id(id)
@@ -590,30 +584,38 @@ _rt_register("simulated_daily_realm_boundary", function()
     if (mod._mp_modded_depth or 0) ~= 0 then return "modded realm depth leaked" end
 end)
 
--- Replace only the daily slice. Weekly/event quests retain their vanilla read
--- surface, but are never locally claimed; official realm remains byte-for-byte
--- vanilla. The returned daily ids are all MP namespaced and locally owned.
-mod:hook("BackendInterfaceQuestsPlayfab", "get_quests", function(func, self, ...)
-    local quests = func(self, ...)
-    if not _is_mp_realm() or type(quests) ~= "table" then return quests end
+local QuestBoundary = mod:dofile("scripts/mods/modded_progression/_mp_quest_boundary")
 
-    local local_quests = _shallow_copy(quests)
-    local_quests.daily = Dailies.quest_slice()
-    return local_quests
+-- #573 follow-up: the challenge surface is one realm-owned transaction. The
+-- old hook replaced only `daily`, leaving official weekly/event rows visible;
+-- the local claim boundary then rejected those rows as non-MP. In modded play
+-- do not call vanilla get_quests at all: return the three source-required
+-- slices with only MP-owned dailies populated. Official play delegates exactly.
+mod:hook("BackendInterfaceQuestsPlayfab", "get_quests", function(func, self, ...)
+    return QuestBoundary.surface(_is_mp_realm(), Dailies.quest_slice,
+        function() return func(self) end)
+end)
+
+-- Vanilla update_quests polls daily, weekly, and event backend timers and can
+-- enqueue CloudScript `getQuests` even though our visible daily timer is local.
+-- Rotate/ensure the local roster and run QuestManager's refresh callback
+-- immediately instead. This is the zero-PlayFab half of the same boundary.
+mod:hook("BackendInterfaceQuestsPlayfab", "update_quests", function(func, self, quests_updated_cb, ...)
+    return QuestBoundary.refresh(_is_mp_realm(), Dailies.ensure, quests_updated_cb,
+        function(cb) return func(self, cb) end)
 end)
 
 mod:hook("BackendInterfaceQuestsPlayfab", "get_quest_key", function(func, self, quest_id, ...)
     if _is_mp_realm() then
         local entry = _find_daily_entry(quest_id)
-        if entry then return entry.key end
+        return entry and entry.key or nil
     end
     return func(self, quest_id, ...)
 end)
 
 mod:hook("BackendInterfaceQuestsPlayfab", "get_quest_by_key", function(func, self, key, ...)
     if _is_mp_realm() then
-        local quest = Dailies.quest_by_key(key)
-        if quest then return quest end
+        return Dailies.quest_by_key(key)
     end
     return func(self, key, ...)
 end)
@@ -659,6 +661,11 @@ mod:hook("BackendInterfaceQuestsPlayfab", "get_daily_quest_update_time", functio
     return func(self, ...)
 end)
 
+mod:hook("BackendInterfaceQuestsPlayfab", "get_weekly_quest_update_time", function(func, self, ...)
+    if _is_mp_realm() then return nil end
+    return func(self, ...)
+end)
+
 -- Every native Silver Shilling read used by the Emporium passes this method.
 -- Returning the local ledger makes the visible number realm-correct without
 -- ever copying or merging self._chips.SM. Purchases remain blocked below until
@@ -694,9 +701,9 @@ end)
 -- Native reward presentation asks the quest interface for the completed poll's
 -- loot. Synthetic ids exist only in this in-memory map and never enter PlayFab.
 mod:hook("BackendInterfaceQuestsPlayfab", "get_quest_rewards", function(func, self, id, ...)
-    local rewards = _local_quest_rewards[id]
-    if rewards then
-        _local_quest_rewards[id] = nil
+    if _is_mp_realm() then
+        local rewards = _local_quest_rewards[id]
+        if rewards then _local_quest_rewards[id] = nil end
         return rewards
     end
     return func(self, id, ...)
@@ -753,6 +760,28 @@ _rt_register("simulated_daily_backend_boundary", function()
     -- and suppression diagnostics; local claims resolve to mp_local poll ids.
     local before = _local_poll_serial
     if before < 0 then return "invalid local poll serial" end
+end)
+
+_rt_register("mp573_quest_surface_is_owned_and_backend_free", function()
+    local vanilla_calls = 0
+    local surface = QuestBoundary.surface(true, function()
+        return { slot_1 = { name = "mp_daily_v2_probe", type = "daily" } }
+    end, function()
+        vanilla_calls = vanilla_calls + 1
+        return { daily = {}, weekly = { leaked = true }, event = { leaked = true } }
+    end)
+    if vanilla_calls ~= 0 then return "modded quest surface called vanilla get_quests" end
+    if next(surface.weekly) or next(surface.event) then return "official weekly/event slice leaked into modded surface" end
+    for _, quest in pairs(surface.daily) do
+        if not Dailies.is_owned_id(quest.name) then return "non-MP daily leaked into modded surface" end
+    end
+    local ensured, updated, backend_refreshes = 0, 0, 0
+    QuestBoundary.refresh(true, function() ensured = ensured + 1 end,
+        function() updated = updated + 1 end,
+        function() backend_refreshes = backend_refreshes + 1 end)
+    if ensured ~= 1 or updated ~= 1 or backend_refreshes ~= 0 then
+        return "modded quest refresh did not stay local and complete its callback"
+    end
 end)
 
 _rt_register("daily_rotation_is_deterministic_and_clock_monotonic", function()
