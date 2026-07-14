@@ -26,7 +26,7 @@ wt_dev_hp_apply, wt_dev_hp_reset, wt_dump_hold_pose  -- hold-pose tuner
 *(wt section refreshed 2026-06-11 — added the 7 commands landed since the 2026-05-25 snapshot.)*
 
 ### `gt` (general_tweaker_dev)
-*(2026-07-01: the `gt_` prefix was stripped from ALL gt commands to simplify. The ONLY exception is `gt_regression_test`, kept prefixed because bare `regression_test` collides with gui_tweaker's. `lobby_*` names keep their `lobby_` prefix — only `gt_` was removed.)*
+*(2026-07-13: ordinary commands omit the `gt_` prefix. `gt_regression_test` remains prefixed because bare `regression_test` collides with gui_tweaker's, and bounded issue-specific diagnostics such as `gt_chest_pickup_probe` keep the prefix for log clarity. `lobby_*` names retain their subsystem prefix.)*
 ```
 -- Cheats / player-state:
 god, no_enemies, clear_enemies, freezeai, unstuck, cloak, unkillable, inndmg, noclip, ai,
@@ -48,7 +48,8 @@ save_position_1 .. save_position_10, recall_position_1 .. recall_position_10,
 dump_settings, dump_level, dump_glossary, dump_cosmetics, dump_items_by_slot,
 dump_hero_view, dump_ai, dump_menu, ai_slotdump, bot_loadout_dump, fire_probe,
 gt_disconnect_grace_probe, -- arm one bounded host disconnect lifecycle trace (#309)
-gt_regression_test,   -- ONLY command still carrying the gt_ prefix
+gt_chest_pickup_probe,      -- arm one bounded closed-chest pickup trace (#347)
+gt_regression_test,         -- issue diagnostic + regression commands retain gt_ prefix
 -- Host-side lobby controls (absorbed from lobby_tweaker; still lobby_-prefixed):
 lobby_reserve, lobby_unreserve, lobby_reservations,
 lobby_ignore, lobby_ignore_persist, lobby_unignore, lobby_ignored, lobby_ignore_last,

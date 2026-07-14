@@ -64,6 +64,7 @@ local suites = {
     "test_gut_native_loadout_policy",
     "test_gt_dummy_collision_policy",
     "test_gut_simple_ui_bounds",
+    "test_gt_chest_pickup_probe",
     "test_cos_glow_lifecycle",
     "test_peer_parity_transition",
     "test_ct_boon_catalog",

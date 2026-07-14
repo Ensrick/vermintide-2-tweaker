@@ -6,6 +6,15 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+## Closed-chest bot pickup probe (#347)
+
+- [ ] As solo host with one bot, arm `/gt_chest_pickup_probe` beside one ordinary closed chest, wait, open it normally, and attach all `[gt:347]` records.
+- [ ] The probe never opens the chest, assigns a pickup, or mutates a bot blackboard; the trace stops at 32 classifications or 16 phase-deduplicated records.
+- [ ] Compare the availability census before/after opening, then use `assigned`, `nav_result`, `can_loot`, and `pickup_stop` to locate the first missing phase.
+- [ ] `/gt_regression_test` passes `issue347_closed_chest_pickup_diagnostics`.
+
+---
+
 ## Awaiting-rescue bot leash policy (#300)
 
 - [ ] Parent toggle off: vanilla behavior remains unchanged and bots do not select awaiting-respawn allies through gt.

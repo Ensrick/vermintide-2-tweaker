@@ -1,5 +1,17 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.223-dev (2026-07-13) -- #347 trace closed-chest bot pickups [diagnostics-armed]
+
+- Source audit found that human interaction explicitly rejects pickups behind `filter_interactable_in_chest`, while bots use an exclusive-interaction path that bypasses that check. GT's Instant Pickup already forces any pickup that the bot group assigns, so source alone cannot establish whether a closed chest's authored level flow has registered its contents, assignment failed, navigation failed, or pickup consumption failed.
+- Added the host-only `/gt_chest_pickup_probe` command. It observes the vanilla availability, chest-raycast, navmesh, `can_loot`, chest-stop, and pickup-stop seams without opening a chest or changing any bot blackboard/pickup state. One explicit arm is capped at 32 classifications and 16 phase-deduplicated `[gt:347]` records.
+- Added pure Lua regression coverage and `/gt_regression_test` check `issue347_closed_chest_pickup_diagnostics` for the bounded probe contract.
+
+### Test method (solo host with one bot)
+1. Enable Bot Behavior Improvements, Instant Pickup, and Greedy Pickup, then approach a known ordinary closed chest with a bot.
+2. Run `/gt_chest_pickup_probe`, wait about five seconds with the chest closed, open it normally, then wait another five seconds.
+3. Attach every `[gt:347]` line. A census that changes only after opening identifies dormant/unregistered contents; `available_inside_chest assigned=false` identifies assignment; an assignment without a successful nav/`can_loot` phase identifies dispatch; `can_loot=true` without `pickup_stop` identifies interaction/consumption.
+4. Run `/gt_regression_test` and confirm `issue347_closed_chest_pickup_diagnostics` passes.
+
 ## v0.2.222-dev (2026-07-13) -- #300 bound awaiting-rescue bot pursuit [verify-fix]
 
 - Added nested controls under `gt_bot_rescue_awaiting`: `Ignore follow leash for awaiting rescues` remains on by default to preserve the existing unlimited pursuit, while turning it off bounds bot selection to the current `gt_bot_follow_distance_m` leash. An off-by-default custom-range toggle can instead use a dedicated 40 m default slider with a 10-100 m range.

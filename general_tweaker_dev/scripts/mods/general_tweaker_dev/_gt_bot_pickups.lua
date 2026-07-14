@@ -1,4 +1,7 @@
 local mod = get_mod("gt_dev")
+local _gt347_core = mod:dofile("scripts/mods/general_tweaker_dev/_gt_chest_pickup_probe_core")
+local _gt347_state = _gt347_core.new()
+local _gt347_tracked = setmetatable({}, { __mode = "k" })
 
 -- Focused owner for the two AIBotGroupSystem pickup hooks. Extracted from
 -- _gt_bot_fixes.lua so that module remains below the repository file-size gate.
@@ -92,6 +95,169 @@ local function _gt_greedy_pickup_on()
     return mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_greedy_pickup")
 end
 
+-- Issue #347 diagnostic: ordinary chest contents live on the pickup path, but
+-- vanilla's human interactor explicitly rejects a pickup when
+-- GenericUnitInteractorExtension._check_if_interactable_in_chest raycasts a
+-- `filter_interactable_in_chest` collision. Bots use the exclusive-interaction
+-- path, which bypasses that human check. We therefore need runtime evidence to
+-- distinguish four different failures: absent from AIBotGroupSystem's available
+-- set, no navmesh approach, false can_loot, or failed consumption. One explicit
+-- host command arms at most 32 classification raycasts and 16 deduplicated log
+-- records. No blackboard, interaction, pickup, or chest state is mutated.
+local function _gt347_record(identity, phase, fmt, ...)
+    local stored, capped = _gt347_core.record(_gt347_state, identity, phase, {})
+    if stored then
+        pcall(printf, "[gt:347] phase=%s " .. fmt, tostring(phase), ...)
+    end
+    if capped then
+        pcall(printf, "[gt:347] trace complete records=%d classifications=%d",
+            _gt347_state.count, _gt347_state.classifications)
+    end
+end
+
+local function _gt347_pickup_name(pickup_unit)
+    local ext = pickup_unit and Unit.alive(pickup_unit)
+        and ScriptUnit.has_extension(pickup_unit, "pickup_system")
+    return ext and ext.pickup_name or "?"
+end
+
+local function _gt347_is_inside_chest(bot_unit, blackboard, pickup_unit)
+    local identity = tostring(pickup_unit)
+    if not _gt347_core.take_classification(_gt347_state, identity) then
+        return false
+    end
+
+    local interactor = blackboard and blackboard.interaction_extension
+    local bot_pos = bot_unit and POSITION_LOOKUP[bot_unit]
+    if not (interactor and bot_pos
+            and type(interactor._check_if_interactable_in_chest) == "function") then
+        return false
+    end
+
+    local ok, inside = pcall(interactor._check_if_interactable_in_chest,
+        interactor, pickup_unit, bot_pos)
+    return ok and inside == true
+end
+
+local function _gt347_probe_available(self, category, available_by_side)
+    if not _gt347_state.armed then
+        return
+    end
+
+    local total = 0
+    for _, side_available in pairs(available_by_side or {}) do
+        if category == "mule" then
+            for _, pickups in pairs(side_available or {}) do
+                for _ in pairs(pickups or {}) do total = total + 1 end
+            end
+        else
+            for _ in pairs(side_available or {}) do total = total + 1 end
+        end
+    end
+    _gt347_record("census", category .. "_census_" .. total,
+        "category=%s available=%d", category, total)
+
+    local bot_ai_data = self and self._bot_ai_data
+    for side_id, side_available in pairs(available_by_side or {}) do
+        local side_bots = bot_ai_data and bot_ai_data[side_id]
+        if side_bots then
+            for bot_unit, data in pairs(side_bots) do
+                local blackboard = data and data.blackboard
+                local function inspect(pickup_unit)
+                    if pickup_unit and Unit.alive(pickup_unit)
+                            and _gt347_is_inside_chest(bot_unit, blackboard, pickup_unit) then
+                        _gt347_tracked[pickup_unit] = true
+                        local assigned = category == "mule"
+                            and blackboard.mule_pickup == pickup_unit
+                            or category == "health" and blackboard.health_pickup == pickup_unit
+                        local pickup_pos = POSITION_LOOKUP[pickup_unit]
+                        local bot_pos = POSITION_LOOKUP[bot_unit]
+                        local dist = pickup_pos and bot_pos and Vector3.distance(bot_pos, pickup_pos) or -1
+                        _gt347_record(tostring(pickup_unit), "available_inside_chest",
+                            "category=%s pickup=%s assigned=%s dist=%.2f",
+                            category, tostring(_gt347_pickup_name(pickup_unit)),
+                            tostring(assigned), dist)
+                    end
+                end
+
+                if category == "mule" then
+                    for _, pickups in pairs(side_available or {}) do
+                        for pickup_unit in pairs(pickups or {}) do inspect(pickup_unit) end
+                    end
+                else
+                    for pickup_unit in pairs(side_available or {}) do inspect(pickup_unit) end
+                end
+                break -- one bot perspective is sufficient for the chest raycast
+            end
+        end
+    end
+end
+
+mod:command("gt_chest_pickup_probe", "Arm one bounded closed-chest bot-pickup trace", function()
+    if not (Managers.player and Managers.player.is_server) then
+        mod:echo("[gt] Closed-chest pickup probe must be armed by the host.")
+        return
+    end
+    _gt347_core.arm(_gt347_state)
+    _gt347_tracked = setmetatable({}, { __mode = "k" })
+    mod:echo("[gt] Closed-chest pickup trace armed. Approach one closed chest with a bot, wait, then open it.")
+    pcall(printf, "[gt:347] ARMED max_records=%d max_classifications=%d instant_pickup=%s greedy_pickup=%s",
+        _gt347_core.MAX_RECORDS, _gt347_core.MAX_CLASSIFICATIONS,
+        tostring(mod:get("gt_bot_instant_pickup")), tostring(mod:get("gt_bot_greedy_pickup")))
+end)
+
+-- Duplicate-hook preflight: no existing gt hook targets either pair. The first
+-- wrapper observes the nav result; the second observes vanilla's boolean and
+-- returns it unchanged.
+mod:hook("PlayerBotBase", "_find_pickup_position_on_navmesh", function(func, self, nav_world, self_pos, pickup_unit, pickup_attempt)
+    local result = func(self, nav_world, self_pos, pickup_unit, pickup_attempt)
+    if _gt347_state.armed and _gt347_tracked[pickup_unit] then
+        _gt347_record(tostring(pickup_unit), "nav_result",
+            "pickup=%s result=%s blacklist=%s path_failed=%s",
+            tostring(_gt347_pickup_name(pickup_unit)), tostring(result ~= nil),
+            tostring(pickup_attempt and pickup_attempt.blacklist),
+            tostring(pickup_attempt and pickup_attempt.path_failed))
+    end
+    return result
+end)
+
+mod:hook(BTConditions, "can_loot", function(func, blackboard)
+    local result = func(blackboard)
+    local pickup_unit = blackboard and blackboard.interaction_unit
+    if _gt347_state.armed and _gt347_tracked[pickup_unit] then
+        _gt347_record(tostring(pickup_unit), "can_loot",
+            "pickup=%s result=%s forced=%s health=%s mule=%s ammo=%s",
+            tostring(_gt347_pickup_name(pickup_unit)), tostring(result),
+            tostring(blackboard.forced_pickup_unit == pickup_unit),
+            tostring(blackboard.health_pickup == pickup_unit),
+            tostring(blackboard.mule_pickup == pickup_unit),
+            tostring(blackboard.ammo_pickup == pickup_unit))
+    end
+    return result
+end)
+
+mod:hook_safe(InteractionDefinitions.pickup_object.server, "stop", function(world, interactor_unit, interactable_unit, data, config, t, result)
+    if _gt347_state.armed and _gt347_tracked[interactable_unit] then
+        _gt347_record(tostring(interactable_unit), "pickup_stop",
+            "pickup=%s result=%s", tostring(_gt347_pickup_name(interactable_unit)),
+            tostring(InteractionResult[result] or result))
+    end
+end)
+
+mod:hook_safe(InteractionDefinitions.chest.server, "stop", function(world, interactor_unit, interactable_unit, data, config, t, result)
+    if _gt347_state.armed then
+        _gt347_record(tostring(interactable_unit), "chest_stop",
+            "result=%s", tostring(InteractionResult[result] or result))
+    end
+end)
+
+mod._gt_rt_register("issue347_closed_chest_pickup_diagnostics", function()
+    local ok = _gt347_core.MAX_RECORDS == 16
+        and _gt347_core.MAX_CLASSIFICATIONS == 32
+        and type(_gt347_probe_available) == "function"
+    return ok, ok and "bounded availability/nav/loot/consume trace wired" or "closed-chest trace wiring incomplete"
+end)
+
 local function _gt_clear_reserved_mule_claims(bot_ai_data)
     if not bot_ai_data then
         return
@@ -123,6 +289,8 @@ mod:hook_safe("AIBotGroupSystem", "_update_mule_pickups", function (self, dt, t)
     -- Reservation is unconditional: vanilla can assign mule pickups when no
     -- human has an empty matching slot, even when gt's greedy option is off.
     _gt_clear_reserved_mule_claims(bot_ai_data)
+
+    _gt347_probe_available(self, "mule", self._available_mule_pickups)
 
     if not _gt_greedy_pickup_on() then
         return
@@ -208,6 +376,7 @@ mod:hook_safe("AIBotGroupSystem", "_update_mule_pickups", function (self, dt, t)
 end)
 
 mod:hook_safe("AIBotGroupSystem", "_update_health_pickups", function (self, dt, t)
+    _gt347_probe_available(self, "health", self._available_health_pickups)
     if not _gt_greedy_pickup_on() then
         return
     end
