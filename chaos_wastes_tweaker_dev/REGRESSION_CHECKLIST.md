@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+### anath-raema-registry-retry - issue #288
+
+| Field | Value |
+|---|---|
+| Symptom | Permanent-reload rework remains the vanilla ammo-pickup event or has no active reload stat. |
+| Root cause | Startup mutation could see only one Morris registry, mark the work complete, and never patch the later runtime `BuffTemplates` registry; both saved originals also collided under one key. |
+| Fix version(s) | ct_dev 0.7.268-dev |
+| Category | SOLO |
+| Repro | Enable the rework, wield an Anath Raema ranged weapon, and reload without collecting ammo. |
+| Expected post-fix | The equipped trait instantiates `deus_ammo_pickup_reload_speed_permanent` with `reload_speed=-0.5`; reload hold time is approximately half the toggle-off baseline. |
+| Detection | `/ct_verify_anath_raema` reports the permanent template and one active parent; `[ct:288]` confirms exact-boundary enforcement. `/ct_regression_test` passes `anath_raema_registry_retry_288`. |
+
 ### start-shrine-client-config-ordering - client receives SHOP before synthetic config
 
 | Field | Value |

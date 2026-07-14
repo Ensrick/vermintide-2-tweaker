@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.267-dev"
+local MOD_VERSION = "0.7.268-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -11229,16 +11229,17 @@ sync_shard_strike()
 -- registry the trait system reads at apply time) AND `BuffTemplates.deus_ammo_pickup_reload_speed`
 -- (the global runtime buff lookup). Save-and-restore so the toggle is reversible.
 local anath_raema_originals = nil
+CT_ANATH_RAEMA_RETRY_MARKER = "anath_raema:enforce_at_add_buff_v0.7.268"
 
 local function _anath_raema_buff_entries()
     local out = {}
     local wt = rawget(_G, "WeaponTraits")
     if wt and wt.buff_templates and wt.buff_templates.deus_ammo_pickup_reload_speed then
-        out[#out + 1] = { tbl = wt.buff_templates, key = "deus_ammo_pickup_reload_speed" }
+        out[#out + 1] = { id = "weapon_traits", tbl = wt.buff_templates, key = "deus_ammo_pickup_reload_speed" }
     end
     local bt = rawget(_G, "BuffTemplates")
     if bt and bt.deus_ammo_pickup_reload_speed then
-        out[#out + 1] = { tbl = bt, key = "deus_ammo_pickup_reload_speed" }
+        out[#out + 1] = { id = "buff_templates", tbl = bt, key = "deus_ammo_pickup_reload_speed" }
     end
     return out
 end
@@ -11246,7 +11247,7 @@ end
 local function revert_anath_raema_permanent_tweak()
     if not anath_raema_originals then return end
     for _, e in ipairs(_anath_raema_buff_entries()) do
-        e.tbl[e.key] = anath_raema_originals.templates[e.key] or e.tbl[e.key]
+        e.tbl[e.key] = anath_raema_originals.templates[e.id] or e.tbl[e.key]
     end
     anath_raema_originals = nil
 end
@@ -11257,12 +11258,11 @@ local function apply_anath_raema_permanent_tweak()
         _dbg("[anath-raema] templates not loaded yet; will retry on settings sync")
         return
     end
-    if anath_raema_originals then return end
-    local saved = {}
-    for _, e in ipairs(entries) do
-        saved[e.key] = e.tbl[e.key]
+    -- The two registries can become available on different frames. Preserve each
+    -- independently and enforce every currently available entry on every retry.
+    if not anath_raema_originals then
+        anath_raema_originals = { templates = {} }
     end
-    anath_raema_originals = { templates = saved }
 
     -- Replacement template: single permanent stat_buff. multiplier = -0.5 matches the
     -- vanilla on-pickup multiplier MorrisBuffTweakData.deus_ammo_pickup_reload_speed_buff.multiplier
@@ -11271,17 +11271,33 @@ local function apply_anath_raema_permanent_tweak()
     -- buff_extension.lua:1431-1432), so it is an INVERSE stat: a NEGATIVE multiplier shortens the
     -- hold time = FASTER reload. Every vanilla faster-reload buff is negative (Bounty Hunter passive
     -- -0.2, Huntsman ability -0.4). A prior +0.5 here multiplied hold time by 1.5 = 50% SLOWER (#464).
-    local replacement = {
-        buffs = {
-            {
-                name        = "deus_ammo_pickup_reload_speed_permanent",
-                stat_buff   = "reload_speed",
-                multiplier  = -0.5,
-                max_stacks  = 1,
+    local replacement = anath_raema_originals.replacement
+    if not replacement then
+        replacement = {
+            buffs = {
+                {
+                    name        = "deus_ammo_pickup_reload_speed_permanent",
+                    stat_buff   = "reload_speed",
+                    multiplier  = -0.5,
+                    max_stacks  = 1,
+                },
             },
-        },
-    }
+        }
+        anath_raema_originals.replacement = replacement
+    end
     for _, e in ipairs(entries) do
+        if not anath_raema_originals.templates[e.id] then
+            local original = e.tbl[e.key]
+            -- A later registry may have been assembled from the earlier one after
+            -- CT patched it. Never preserve our replacement as the "vanilla" value.
+            if original == replacement then
+                original = anath_raema_originals.templates.weapon_traits
+                    or anath_raema_originals.templates.buff_templates
+            end
+            if original and original ~= replacement then
+                anath_raema_originals.templates[e.id] = original
+            end
+        end
         e.tbl[e.key] = replacement
     end
 end
@@ -11295,6 +11311,36 @@ local function sync_anath_raema_permanent()
 end
 
 sync_anath_raema_permanent()
+
+mod:command("ct_verify_anath_raema", "Report #288 template and active reload-buff state (wield the trait weapon first)", function()
+    local bt = rawget(_G, "BuffTemplates")
+    local tpl = bt and bt.deus_ammo_pickup_reload_speed
+    local sb = tpl and tpl.buffs and tpl.buffs[1]
+    mod:echo("=== ct #288 Anath Raema (v%s) ===", MOD_VERSION)
+    mod:echo("setting=%s template_child=%s stat=%s multiplier=%s event=%s",
+        tostring(effective_setting("tweak_anath_raema_permanent")),
+        tostring(sb and sb.name), tostring(sb and sb.stat_buff),
+        tostring(sb and sb.multiplier), tostring(sb and sb.event))
+
+    local pl = Managers.player and Managers.player:local_player()
+    local unit = pl and pl.player_unit
+    local be = unit and Unit.alive(unit) and ScriptUnit.has_extension(unit, "buff_system")
+    if not be then
+        mod:echo("active=unavailable (enter the keep/mission and wield the trait weapon)")
+        return
+    end
+    local active = 0
+    for _, buff in pairs(be._buffs or {}) do
+        if buff.buff_template_name == "deus_ammo_pickup_reload_speed" then
+            active = active + 1
+            mod:echo("active[%d] child=%s stat=%s multiplier=%s event=%s",
+                active, tostring(buff.buff_type), tostring(buff.template and buff.template.stat_buff),
+                tostring(buff.multiplier), tostring(buff.template and buff.template.event))
+        end
+    end
+    mod:echo("active_count=%d total_reload_time_scale=%s expected_trait_scale=0.5",
+        active, tostring(be:apply_buffs_to_value(1, "reload_speed")))
+end)
 
 -- ============================================================
 -- Defeat Recovery: soft wipe recovery with penalty (v0.7.39-alpha)
@@ -13949,6 +13995,30 @@ _rt_register("issue406_kill_heal_mod_boon_catalog", function()
     end
 end)
 
+_rt_register("anath_raema_registry_retry_288", function()
+    if CT_ANATH_RAEMA_RETRY_MARKER ~= "anath_raema:enforce_at_add_buff_v0.7.268" then
+        return "exact add-boundary retry marker missing"
+    end
+    if not effective_setting("tweak_anath_raema_permanent") then
+        return nil -- behavior assertions apply only when the rework is intentionally enabled
+    end
+    apply_anath_raema_permanent_tweak()
+    local entries = _anath_raema_buff_entries()
+    if #entries ~= 2 then return "expected both WeaponTraits and BuffTemplates registries in keep" end
+    if not (anath_raema_originals and anath_raema_originals.templates.weapon_traits
+            and anath_raema_originals.templates.buff_templates) then
+        return "two registries must preserve independent originals"
+    end
+    for _, e in ipairs(entries) do
+        local sb = e.tbl[e.key] and e.tbl[e.key].buffs and e.tbl[e.key].buffs[1]
+        if not sb or sb.name ~= "deus_ammo_pickup_reload_speed_permanent"
+                or sb.stat_buff ~= "reload_speed" or sb.multiplier ~= -0.5 or sb.event ~= nil then
+            return e.id .. " did not resolve to the permanent -0.5 reload template"
+        end
+    end
+    return nil
+end)
+
 -- #464 follow-up: Anath Raema's Swiftness trait-as-boon must (a) be registered as a
 -- power-up, (b) carry the PERMANENT reload template with a NEGATIVE reload_speed
 -- multiplier (inverse stat - the #464 sign-error class), and (c) be exposed in BOTH
@@ -14018,6 +14088,19 @@ local HOME_BREWER_BREWED_TEMPLATES = {
 CT_HOME_BREWER_MULTIRETURN_MARKER = "home_brewer_add_buff:capture_returns_unpack_v0.7.203"
 
 mod:hook("BuffExtension", "add_buff", function(func, self, template_name, params)
+    -- Issue #288: mod load can precede one or both Morris registries. Enforce at
+    -- the exact native lookup boundary so startup timing cannot retain the event buff.
+    if template_name == "deus_ammo_pickup_reload_speed" and effective_setting("tweak_anath_raema_permanent") then
+        apply_anath_raema_permanent_tweak()
+        CT_ANATH_RAEMA_ADD_DIAG_COUNT = (CT_ANATH_RAEMA_ADD_DIAG_COUNT or 0) + 1
+        if CT_ANATH_RAEMA_ADD_DIAG_COUNT <= 8 then
+            local bt = rawget(_G, "BuffTemplates")
+            local sb = bt and bt[template_name] and bt[template_name].buffs and bt[template_name].buffs[1]
+            pcall(printf, "[ct:288] add parent=%s child=%s stat=%s mult=%s event=%s n=%d",
+                tostring(template_name), tostring(sb and sb.name), tostring(sb and sb.stat_buff),
+                tostring(sb and sb.multiplier), tostring(sb and sb.event), CT_ANATH_RAEMA_ADD_DIAG_COUNT)
+        end
+    end
     if not effective_setting("tweak_home_brewer_potency") then
         return func(self, template_name, params)
     end

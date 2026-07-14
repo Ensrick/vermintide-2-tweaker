@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.268-dev (2026-07-13) - #288 Anath Raema registry-load race fixed [not deployed]
+
+- **Source-backed root cause.** `GearUtils.get_property_and_trait_buffs` carries only the trait buff name; `SimpleInventoryExtension.apply_buffs` and `BuffExtension.add_buff` resolve `BuffTemplates` when the weapon buff is instantiated. CT's startup sync could run before one or both Morris registries existed, then considered the first registry patched "done" and never guaranteed a retry for the later `BuffTemplates` table. The original save map also keyed both registries by the same buff name, so one original overwrote the other.
+- **Bounded fix.** The mutation now saves/restores the two registries independently and incrementally enforces every registry that exists. CT's existing consolidated `BuffExtension.add_buff` hook enforces the rework at the exact native lookup boundary for this one parent buff. No new hook, polling, frame callback, RPC, or NetworkLookup entry. The first eight matching applications emit `[ct:288]` with child/stat/multiplier/event.
+- **Verification.** Enable the rework, wield a ranged weapon with Anath Raema, and run `/ct_verify_anath_raema`. Require `template_child=deus_ammo_pickup_reload_speed_permanent`, `stat=reload_speed`, `multiplier=-0.5`, `event=nil`, `active_count=1`, and an active child with the same values. Reload time should be approximately half the toggle-off baseline without collecting ammo. This is solo-verifiable; co-op is not required because item trait buffs and reload scaling are local.
+- **Files.** `chaos_wastes_tweaker_dev.lua` (`0.7.267-dev` -> `0.7.268-dev`, incremental dual-registry save/restore, add-boundary enforcement, bounded probe, verifier, regression check), localization status tag, changelog/checklist. Tag `[verify-fix]`. Not shipped.
+
 ## 0.7.267-dev (2026-07-13) - #406 Modded Boons discoverability contract [verify-fix]
 
 - The latest log proves `ct_kill_heal` itself is registered and `start_boon_ct_kill_heal` exists in the loaded 0.7.266 settings. The remaining failure was navigation: the shared `mod_boons` branch still rendered as **New Scaling Boons**, a stale v0.7.30 label that does not describe Khaine's Communion or the trait-as-boon entries now catalogued there.

@@ -240,7 +240,7 @@ local loc = {
     enable_boon_asuryan_wrath_tooltip = { en = "A melee kill has a 50%% chance to deal killing-blow damage to a nearby enemy, added as a Unique boon that stacks with the trait. Requires a new Chaos Wastes run." },
     enable_boon_anath_raema_swiftness = { en = "[untested] Rework: Anath Raema's Swiftness as Boon (Unique)" },
     enable_boon_anath_raema_swiftness_tooltip = { en = "Adds Anath Raema's Swiftness as a Unique boon: reload time is permanently halved (the permanent form, not the on-ammo-pickup trait proc). Stacks with the trait. Requires a new CW run. Listed under Offensive: Ranged in the Disabled and Starting Boons menus." },
-    tweak_anath_raema_permanent = { en = "[Issue 288] Rework: Anath Raema's Swiftness, permanent reload speed" },
+    tweak_anath_raema_permanent = { en = "[verify-fix] [Issue 288] Rework: Anath Raema's Swiftness, permanent reload speed" },
     tweak_anath_raema_permanent_tooltip = { en = "No ammo pickup needed: the trait's +50%% reload speed stays active as a permanent passive while its weapon is wielded." },
     tweak_defeat_recovery = { en = "[untested] Rework: Defeat Recovery (soft wipe rescue)" },
     tweak_defeat_recovery_tooltip = { en = "On a team wipe, everyone respawns, but you lose all your coins and 5 random boons. Works once per mission; wiping again ends the run normally. Each player only takes the penalty if they have this turned on." },
