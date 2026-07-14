@@ -14,7 +14,7 @@ line; the remaining `[src:]` citations are carried from the cited `gt_dev`
 module comments, which cite the decompile in turn).
 
 **Dev/stable relationship.** This documents `general_tweaker_dev` (`gt_dev`,
-MOD_VERSION `0.2.223-dev`, friends-only Workshop 3733367409), the ACTIVE working
+MOD_VERSION `0.2.224-dev`, friends-only Workshop 3733367409), the ACTIVE working
 stream. `general_tweaker/` (`gt`, public Workshop 3713619122) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gt_dev`

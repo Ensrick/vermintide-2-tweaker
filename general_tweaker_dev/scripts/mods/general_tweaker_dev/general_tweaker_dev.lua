@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.223-dev"
+local MOD_VERSION = "0.2.224-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -806,6 +806,39 @@ end
 -- closure reads the live _godmode / _gt_godmode_peers upvalues, so the export
 -- stays current without re-assignment. Consumers must nil-check (dofile order).
 mod._gt_godmode_active = _gt_godmode_active
+
+-- Issue #548: damage immunity alone does not suppress the separate player
+-- stagger funnel. Boss hits calculate damage and then call stagger_player, so
+-- returning zero from add_damage_network still allowed launches. Drop only the
+-- stagger application for a godmode human; no persistent status flag is
+-- written, so toggling godmode cannot clobber another immunity source.
+mod:hook("DamageUtils", "stagger_player", function(func, unit, ...)
+    if _gt_godmode_active(unit) then
+        return
+    end
+    return func(unit, ...)
+end)
+mod._gt548_stagger_gate_wired = true
+
+-- Debuffs use a separate buff funnel and the report does not identify their
+-- authored template names. Capture each unique template automatically while
+-- godmode is active so an ordinary reproduction supplies the exact deny-list
+-- evidence. Observation-only and session-capped to prevent log spam.
+local _gt548_seen_buffs = {}
+local _gt548_seen_count = 0
+local _GT548_MAX_BUFF_RECORDS = 24
+mod:hook("BuffExtension", "add_buff", function(func, self, template_name, ...)
+    local unit = self and self._unit
+    if unit and _gt_godmode_active(unit) and _gt548_seen_count < _GT548_MAX_BUFF_RECORDS
+       and not _gt548_seen_buffs[template_name] then
+        _gt548_seen_buffs[template_name] = true
+        _gt548_seen_count = _gt548_seen_count + 1
+        pcall(printf, "[gt:548] godmode buff observed template=%s count=%d/%d",
+            tostring(template_name), _gt548_seen_count, _GT548_MAX_BUFF_RECORDS)
+    end
+    return func(self, template_name, ...)
+end)
+mod._gt548_buff_probe_wired = true
 
 -- Block fall damage at the source on the local player when godmode is on.
 -- The server-side `add_damage_network` hook below covers the host-self case,
@@ -3055,6 +3088,15 @@ _rt_register("gt529_godmode_stamina_gate_wired", function()
     end
     for _, t in ipairs({ "blocked_attack", "blocked_slam", "ogre_shove", "complete" }) do
         if self_types[t] then return t .. " wrongly allowlisted as a self action" end
+    end
+end)
+
+_rt_register("issue548_godmode_stagger_and_debuff_probe", function()
+    if mod._gt548_stagger_gate_wired ~= true then
+        return "godmode stagger gate is not wired"
+    end
+    if mod._gt548_buff_probe_wired ~= true then
+        return "bounded godmode buff observer is not wired"
     end
 end)
 

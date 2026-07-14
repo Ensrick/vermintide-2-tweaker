@@ -1,5 +1,15 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.224-dev (2026-07-13) -- #548 godmode stagger gate and debuff trace [diagnostics-armed]
+
+- Source audit confirmed that boss launches bypass the HP-damage result through the separate `DamageUtils.stagger_player` funnel. Godmode now drops that stagger call for the protected human without writing a persistent status flag or changing ordinary stagger behavior.
+- Added an automatic, observation-only `BuffExtension.add_buff` trace while godmode is active. It records each unique template as `[gt:548]` and stops after 24 session records, allowing Troll Bile and other reported debuffs to be identified from the next normal reproduction without a manual command or speculative blanket buff removal.
+- Added `/gt_regression_test` check `issue548_godmode_stagger_and_debuff_probe`. Damage, disabler, stamina, and multiplayer godmode behavior remain on their existing gates.
+
+### Test method
+
+Enable godmode, take a direct monster/boss launch hit, then stand in Troll Bile and reproduce any other debuff. The player must not be launched. Attach the latest log containing `[gt:548]` template records for any effects that still apply, and confirm the #548 regression check passes.
+
 ## v0.2.223-dev (2026-07-13) -- #347 trace closed-chest bot pickups [diagnostics-armed]
 
 - Source audit found that human interaction explicitly rejects pickups behind `filter_interactable_in_chest`, while bots use an exclusive-interaction path that bypasses that check. GT's Instant Pickup already forces any pickup that the bot group assigns, so source alone cannot establish whether a closed chest's authored level flow has registered its contents, assignment failed, navigation failed, or pickup consumption failed.

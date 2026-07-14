@@ -6,6 +6,15 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-13.
 
+## Godmode stagger and debuff trace (#548)
+
+- [ ] With godmode enabled, direct boss/monster hits no longer launch the protected player.
+- [ ] Troll Bile and any remaining debuff reproduction emits unique `[gt:548]` template names automatically, capped at 24 records for the session.
+- [ ] With godmode disabled, ordinary hit stagger and buff application remain vanilla.
+- [ ] `/gt_regression_test` passes `issue548_godmode_stagger_and_debuff_probe`.
+
+---
+
 ## Closed-chest bot pickup probe (#347)
 
 - [ ] As solo host with one bot, arm `/gt_chest_pickup_probe` beside one ordinary closed chest, wait, open it normally, and attach all `[gt:347]` records.
