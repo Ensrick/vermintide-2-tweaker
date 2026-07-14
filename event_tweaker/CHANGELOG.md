@@ -1,5 +1,11 @@
 # Tweaker: Events — Changelog
 
+## 0.4.32-dev (2026-07-14) - issue #393 settled high-intensity diagnostics [not deployed]
+
+- Moved the issue-393 snapshot from the ambiguous `ConflictDirector.init` post-hook to the first `Pacing.update`, after all cross-mod init wrappers have returned. The bounded probe emits one log-only line per mission and now classifies the result as `intact` or `settings_stomp`, including both live globals and the director's cached horde/special/mini-patrol thresholds.
+- Added a pure `_evt_issue393_probe.lua` classifier and in-game regression coverage for intact settings, a stomped intensity field, and a stale/stomped director cache. The probe makes no gameplay changes while evidence is still outstanding.
+- Source audit clarified vanilla behavior: `high_intensity` indirectly changes pacing through decay, damage gain, and delay thresholds; `GenericStatusExtension` caps player pacing intensity at 100, so the mutator's `max_intensity=200` write does not raise the observable ceiling. A settled `intact` result therefore rules out hook ordering and points to the vanilla mutator's indirect/subtle semantics rather than a failed injection.
+
 ## 0.4.31-dev (2026-07-13) - #458 transition-safe shared peer parity [not deployed]
 
 - The shared parity beacon preserves a positive same-peer acknowledgement across a bounded 15-second PlayerManager roster absence during level transitions and delays missing-peer chat for 10 seconds. New, expired, or never-confirmed peers remain fail-closed immediately; this removes the observed false disable/re-enable chat cycle without relaxing wire safety.

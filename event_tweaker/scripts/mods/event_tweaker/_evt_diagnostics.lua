@@ -4,7 +4,7 @@ local mod = get_mod("event_tweaker")
 --
 -- Read-only surfaces for verifying what the mod is (or would be) injecting:
 -- /event_probe, /event_active, /event_clear, and the issue 393
--- diagnostics-armed ConflictDirector.init post-init snapshot. No behavior
+-- diagnostics-armed first-Pacing-update settled snapshot. No behavior
 -- changes live here; everything is echo/printf output plus the /event_clear
 -- checkbox reset.
 --
@@ -19,6 +19,7 @@ local Catalog         = require("scripts/mods/event_tweaker/event_tweaker_catalo
 local MUTATOR_CATALOG = Catalog.CATEGORIES
 local Curses          = require("scripts/mods/event_tweaker/event_tweaker_curses")
 local MANAGED_CURSES  = Curses.MANAGED_CURSES
+local Issue393        = require("scripts/mods/event_tweaker/_evt_issue393_probe")
 
 local gather_mutators                = ET.gather_mutators
 local suppress_live_event            = ET.suppress_live_event
@@ -114,8 +115,11 @@ end)
 -- intensity_add_per_percent_dmg_taken=0.1, and the three delay_*_threat_value=200)
 -- AFTER they land but before they take effect.
 --
--- This hook_safe fires AFTER ConflictDirector.init COMPLETES and prints ONE line
--- snapshotting the FINAL resolved state: the four CurrentIntensitySettings fields
+-- A ConflictDirector.init post-hook is not a reliable "final" boundary when
+-- another mod wraps init and mutates settings after its inner call returns.
+-- Instead, sample after the first Pacing.update: every init wrapper has returned
+-- by then and the mission is consuming the resolved state. Print ONE line per
+-- Pacing instance, snapshotting the four CurrentIntensitySettings fields
 -- the mutator writes, the three CurrentPacing.delay_*_threat_value fields
 -- (post-#386 sanitizer these are per-difficulty tables, summarized as
 -- table:normal=<v>), and the converted self.delay_horde_threat_value the director
@@ -132,9 +136,18 @@ end)
 --     -> the writes SURVIVED intact, so the "little effect" report is not a
 --     stomped-settings problem and the search moves to how the pacing/intensity
 --     values are consumed (or to a difficulty-scaling / perception issue).
--- printf only (user logs OFF); guarded; one cheap line per mission init, always
--- on in dev per the diagnostics doctrine. No behavior change.
-mod:hook_safe("ConflictDirector", "init", function(self)
+-- The classifier explicitly reports `settings_stomp` vs `intact`; an intact
+-- result is evidence that the remaining report is about vanilla semantics, not
+-- hook ordering. Source audit: GenericStatusExtension hard-caps player pacing
+-- intensity at 100, so the mutator's max_intensity=200 cannot itself raise the
+-- observed intensity ceiling; its effect is indirect (decay/damage gain and the
+-- director delay thresholds).
+-- printf only (user logs OFF); guarded; one cheap line per mission, always on in
+-- dev per the diagnostics doctrine. No behavior change.
+local _issue393_seen = setmetatable({}, { __mode = "k" })
+mod:hook_safe("Pacing", "update", function(self)
+    if _issue393_seen[self] then return end
+    _issue393_seen[self] = true
     pcall(function()
         local cis = rawget(_G, "CurrentIntensitySettings")
         local cp  = rawget(_G, "CurrentPacing")
@@ -145,8 +158,17 @@ mod:hook_safe("ConflictDirector", "init", function(self)
             return tostring(v)
         end
         local injected = gather_mutators()
+        local cd = rawget(_G, "Managers") and Managers.state and Managers.state.conflict
+        local cached = {
+            delay_horde_threat_value = cd and cd.delay_horde_threat_value,
+            delay_specials_threat_value = cd and cd.delay_specials_threat_value,
+            delay_mini_patrol_threat_value = cd and cd.delay_mini_patrol_threat_value,
+        }
+        local verdict, evidence = Issue393.classify(injected, cis, cp, cached)
+        if verdict == "not_injected" then return end
         local inj_str = (injected and #injected > 0) and table.concat(injected, ",") or "none"
-        printf("[event-inject:393] post-init snapshot | injected=[%s] max_intensity=%s decay_per_second=%s decay_delay=%s add_per_pct_dmg=%s delay_horde=%s delay_specials=%s delay_mini_patrol=%s (self.delay_horde=%s)",
+        printf("[event-inject:393] settled verdict=%s evidence=%s | injected=[%s] max_intensity=%s decay_per_second=%s decay_delay=%s add_per_pct_dmg=%s delay_horde=%s delay_specials=%s delay_mini_patrol=%s cached_horde=%s cached_specials=%s cached_mini_patrol=%s",
+            tostring(verdict), tostring(evidence),
             inj_str,
             tostring(cis and cis.max_intensity),
             tostring(cis and cis.decay_per_second),
@@ -155,6 +177,35 @@ mod:hook_safe("ConflictDirector", "init", function(self)
             _pac(cp and cp.delay_horde_threat_value),
             _pac(cp and cp.delay_specials_threat_value),
             _pac(cp and cp.delay_mini_patrol_threat_value),
-            tostring(self and self.delay_horde_threat_value))
+            tostring(cached.delay_horde_threat_value),
+            tostring(cached.delay_specials_threat_value),
+            tostring(cached.delay_mini_patrol_threat_value))
     end)
+end)
+
+ET.rt_register("issue393_high_intensity_settled_classifier", function()
+    local injected = { "high_intensity" }
+    local cis = {
+        max_intensity = 200, decay_per_second = 10, decay_delay = 0.5,
+        intensity_add_per_percent_dmg_taken = 0.1,
+    }
+    local cp = {
+        delay_horde_threat_value = { normal = 200 },
+        delay_specials_threat_value = { normal = 200 },
+        delay_mini_patrol_threat_value = { normal = 200 },
+    }
+    local cached = {
+        delay_horde_threat_value = 200,
+        delay_specials_threat_value = 200,
+        delay_mini_patrol_threat_value = 200,
+    }
+    local verdict = Issue393.classify(injected, cis, cp, cached)
+    if verdict ~= "intact" then return "canonical mutator state did not classify intact" end
+    cis.max_intensity = 100
+    verdict = Issue393.classify(injected, cis, cp, cached)
+    if verdict ~= "settings_stomp" then return "intensity overwrite was not detected" end
+    cis.max_intensity = 200
+    cached.delay_horde_threat_value = 75
+    verdict = Issue393.classify(injected, cis, cp, cached)
+    if verdict ~= "settings_stomp" then return "cached director overwrite was not detected" end
 end)
