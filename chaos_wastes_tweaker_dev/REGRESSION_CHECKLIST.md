@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+### adventure-collectible-host-conversion - issue #351
+
+| Field | Value |
+|---|---|
+| Symptom | Ravaged Art and bonus Loot Dice appear on CT-injected Adventure missions but have no useful Chaos Wastes progression effect. |
+| Root cause | `painting_scrap` was omitted from CT's identity conversion, and chest bonus dice bypass `PickupSystem` by calling `UnitSpawner.spawn_network_unit` directly. |
+| Fix version(s) | ct_dev 0.7.272-dev (not deployed) |
+| Category | COOP / HOST AUTHORITY / PICKUP IDENTITY |
+| Repro | Host a CT-injected Adventure mission containing Ravaged Art with one client; open ordinary chests until a bonus die would spawn. |
+| Expected post-fix | Host rewrites both identities to `deus_soft_currency` before network creation; both peers see and collect Pilgrim's Coins. Stock Adventure remains vanilla. |
+| Detection | Offline `test_ct_collectible_conversion.lua`; `/ct_regression_test`: `cw_collectible_and_big_casket`; bounded host `[ct:351]` rows distinguish `source=pickup_system` art from `source=unit_spawner` chest dice. Client has no authority conversion row. |
+
 ### mission-of-mercy-chest-count-audit - issue #349
 
 | Field | Value |

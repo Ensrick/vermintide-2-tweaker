@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.271-dev"
+local MOD_VERSION = "0.7.272-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -1882,10 +1882,13 @@ end)
 _rt_register("cw_collectible_and_big_casket", function()
     local set = mod._ct_collectible_to_coin
     if type(set) ~= "table" then return "mod._ct_collectible_to_coin missing" end
-    -- loot_die (incl. DLC ale/chalice reskins) and lorebook_page must convert to
-    -- coin; painting_scrap is handled by the spawner-eligibility mapping instead.
+    -- Every dead Adventure collectible must share the same exact identity policy.
     if not set.loot_die then return "loot_die not in collectible->coin set" end
     if not set.lorebook_page then return "lorebook_page not in collectible->coin set" end
+    if not set.painting_scrap then return "painting_scrap not in collectible->coin set" end
+    if type(mod._ct351_rewrite_network_spawn) ~= "function" then
+        return "#351 direct network-spawn rewrite missing (chest loot dice bypass PickupSystem)"
+    end
     -- The big-casket 3x payout rides GameModeDeus._get_coins_amount_and_type; the
     -- class must exist and expose that method for our hook to have bound.
     if rawget(_G, "GameModeDeus") and type(GameModeDeus._get_coins_amount_and_type) ~= "function" then
@@ -7028,9 +7031,11 @@ end)
 -- time, and consolidating populate_pickups hooks into one avoids the VMF
 -- "Attempting to rehook active hook" warning.
 
--- Hook on PickupSystem._spawn_pickup — the lowest-level spawn function that ALL
--- paths route through (public spawn_pickup, spawn_pickup_async, buff_spawn_pickup,
--- _spawn_guaranteed_pickup, _spawn_spread_pickups). Used for two purposes:
+-- Hook on PickupSystem._spawn_pickup — the lowest-level spawn function for the
+-- PickupSystem-owned paths (public spawn_pickup, spawn_pickup_async,
+-- buff_spawn_pickup, _spawn_guaranteed_pickup, _spawn_spread_pickups). Chest
+-- bonus dice bypass this class and are covered at UnitSpawner below (#351).
+-- Used for two purposes:
 --
 -- 1. Substitute loot_die → deus_soft_currency on injected adventure levels.
 --    The Bogenhafen loot-die system has no CW analogue. Catches:
@@ -7057,19 +7062,31 @@ local _CW_BLOCKING_PICKUP_NAMES = {
 -- Blightreaper Rugbrodder ale, Enchanter's Lair poison-feast chalice -- all
 -- loot_die-tagged spawners of the same bonus-dice system). lorebook_page (the
 -- lore-page collectible) is the only other map collectible type and has no CW
--- use, so it's converted too. painting_scrap (collectible art, all maps) is
--- already handled by the _can_spawn spawner mapping further below.
-local _CW_COLLECTIBLE_TO_COIN = { loot_die = true, lorebook_page = true }
+-- use, so it's converted too. Ravaged Art is `painting_scrap`; its guaranteed
+-- level spawners bypass the spread-count replacement, so it must use this same
+-- identity conversion rather than relying on pickup-settings counts.
+local _ct_collectible_policy = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_collectible_policy")
+local _CW_COLLECTIBLE_TO_COIN = _ct_collectible_policy.CONVERT_TO_COIN
 mod._ct_collectible_to_coin = _CW_COLLECTIBLE_TO_COIN  -- exposed for regression guard
+mod._ct351_rewrite_network_spawn = _ct_collectible_policy.rewrite_network_spawn
 
--- #134 DIAGNOSTIC (Ravaged Art + Loot Dice not converting to Pilgrim's Coin on CW
--- adventure maps). Logs each collectible (loot_die / lorebook_page / painting_scrap)
--- that reaches the actual spawn, WITH the on_injected_adventure_level() gate broken
--- down (in a deus run? level recognised as an adventure base?), plus the spawn_type
--- (how it was spawned). So we can tell whether they bypass conversion because the GATE
--- is false (most likely) or via a spawn path the conversion hooks miss. Raw printf
--- survives mod-logging-off; bounded 80 lines/session; pcall-guarded; changes NO
--- conversion logic. (#134)
+do
+    local emitted = {}
+    function mod._ct351_log_conversion(source, original_name)
+        local key = tostring(source) .. ":" .. tostring(original_name)
+        local count = emitted[key] or 0
+        if count >= 2 then return end
+        emitted[key] = count + 1
+        pcall(printf, "[ct:351] collectible_conversion source=%s original=%s final=deus_soft_currency authority=host count=%d",
+            tostring(source), tostring(original_name), count + 1)
+    end
+end
+
+-- #134/#351 verification receipt. Logs each collectible that reaches the
+-- PickupSystem path with the injected-level gate breakdown. Chest-generated
+-- Loot Dice bypass this function entirely and use the bounded [ct:351]
+-- UnitSpawner receipt below. Raw printf survives mod-logging-off; bounded 80
+-- lines/session; pcall-guarded.
 do
     local _n = 0
     function mod._ct134_log(name, spawn_type)
@@ -7172,15 +7189,19 @@ end
 mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
     local on_adv = on_injected_adventure_level()
 
-    -- #134 DIAGNOSTIC: a collectible arriving here means it is being spawned; log it +
-    -- the gate breakdown so we see why it isn't converting. DIAGNOSTIC ONLY.
+    -- #134/#351: a collectible arriving here means it used PickupSystem; log
+    -- its gate before the host-authoritative identity rewrite.
     if pickup_name == "loot_die" or pickup_name == "lorebook_page" or pickup_name == "painting_scrap" then
         mod._ct134_log(pickup_name, spawn_type)
     end
 
-    if on_adv and _CW_COLLECTIBLE_TO_COIN[pickup_name] then
-        pickup_name = "deus_soft_currency"
+    local original_name = pickup_name
+    local routed_name, converted = _ct_collectible_policy.route_name(
+        pickup_name, on_adv, self.is_server == true)
+    if converted then
+        pickup_name = routed_name
         settings = (AllPickups and AllPickups.deus_soft_currency) or settings
+        mod._ct351_log_conversion("pickup_system", original_name)
     end
 
     -- #294 (crash): guard the spawn chokepoint against a NON-RESIDENT pickup unit.
@@ -7229,6 +7250,34 @@ end)
 -- exact 2-value capture/return SHAPE is a source invariant flagged for a repo QA
 -- gate (PROJECT_STANDARDS 2.2b tier a).
 CT_SPAWN_PICKUP322_MARKER = "spawn_pickup322:two_value_capture_and_return_v0.7.245"
+
+-- Loot dice rolled from an opened chest do not call PickupSystem at all:
+-- InteractionDefinitions.chest.server.stop builds pickup init data and calls
+-- UnitSpawner.spawn_network_unit directly [src: interactions.lua:2112-2138].
+-- Rewrite that exact pickup identity at the authoritative owner-spawn seam;
+-- UnitSpawner then serializes the coin identity into the game object and clients
+-- create only the replicated coin husk [src: unit_spawner.lua:336-352,470-490].
+-- Stock Adventure, clients, and every non-collectible network unit pass through.
+mod:hook("UnitSpawner", "spawn_network_unit", function(func, self, unit_name,
+        unit_template_name, extension_init_data, position, rotation, material, ...)
+    local pickup_data = type(extension_init_data) == "table" and extension_init_data.pickup_system
+    local candidate = type(pickup_data) == "table"
+        and _CW_COLLECTIBLE_TO_COIN[pickup_data.pickup_name]
+    if candidate then
+        local coin_settings = AllPickups and AllPickups.deus_soft_currency
+        local rewritten_unit, rewritten_template, rewritten_init, converted, original_name =
+            _ct_collectible_policy.rewrite_network_spawn(unit_name, unit_template_name,
+                extension_init_data, coin_settings, on_injected_adventure_level(),
+                self.is_server == true)
+        if converted then
+            mod._ct351_log_conversion("unit_spawner", original_name)
+            return func(self, rewritten_unit, rewritten_template, rewritten_init,
+                position, rotation, material, ...)
+        end
+    end
+    return func(self, unit_name, unit_template_name, extension_init_data,
+        position, rotation, material, ...)
+end)
 -- Note: previous versions attempted to make altars/chests walk-through by mutating
 -- their actor collision filter / scene_query / collision_enabled flags. This
 -- ALWAYS regressed interaction (v0.6.28 scene_query disable broke chest open;

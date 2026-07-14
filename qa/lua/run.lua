@@ -84,6 +84,7 @@ local suites = {
     "test_ct_boon_catalog",
     "test_ct_cot_early_reward",
     "test_ct_chest_count_audit",
+    "test_ct_collectible_conversion",
     "test_ct_parry_cooldown_contract",
     "test_cos_offhand_preload_lifecycle",
     "test_cos_dual_offhands",
