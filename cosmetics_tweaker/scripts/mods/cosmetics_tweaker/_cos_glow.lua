@@ -144,7 +144,7 @@ local _glow_by_peer = mod._glow_by_peer
 
 local function _glow_local_peer_id()
     local pm = Managers and Managers.player
-    local lp = pm and pm.local_player and pm:local_player()
+    local lp = mod._local_player_safe and mod._local_player_safe(pm)
     return lp and lp.peer_id
 end
 
@@ -420,8 +420,7 @@ end
 -- callback during slider drag. Best-effort; failures silent.
 mod._reapply_glow_on_wielded = function()
     local pm = Managers and Managers.player
-    local lp_ok, lp = pcall(function() return pm and pm:local_player() end)
-    if not lp_ok then return end
+    local lp = mod._local_player_safe and mod._local_player_safe(pm)
     local pu = lp and lp.player_unit
     if not (pu and Unit.alive(pu) and ScriptUnit and ScriptUnit.has_extension) then return end
     local ext = ScriptUnit.has_extension(pu, "inventory_system")

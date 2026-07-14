@@ -7,6 +7,16 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-14.
 
 ---
+## Network teardown player lookup (#609)
+
+| Field | Value |
+|---|---|
+| Invariant | Every Cosmetics local-player lookup uses the shared `local_player_safe` gate; no update, state callback, hook, or diagnostic calls bare `local_player()`. |
+| Title/teardown | No live network game returns nil without touching `Network.peer_id()`; queued lifecycle work remains bounded and retries only after a player is safe. |
+| In-game | A live game returns the same player and preserves cosmetic, glow, persistence, and TPE behavior. |
+| Detection | Offline `test_cos_glow_lifecycle.lua`; `/cos_regression_test` passes `local_player_safe_network_lifecycle_609`; title transition yields zero Cosmetics `Network backend has not been set` stacks. |
+
+---
 ## Manual glow editor and committed badges (#377)
 
 | Field | Value |

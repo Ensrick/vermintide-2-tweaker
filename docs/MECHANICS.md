@@ -232,6 +232,13 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   `get_all_backend_items`. [memory: reference_vt2_versus_items_hidden_in_adventure]
 - `DeusPowerUp` rarities are limited to event/rare/exotic/unique only. [memory: reference_vt2_deus_power_up_rarities]
 
+## Domain: Network / session lifecycle
+
+- `PlayerManager.local_player()` calls `Network.peer_id()` without a network-state
+  guard; `local_player_safe()` first requires `Managers.state.network` and a live
+  `network_manager:game()`, returning nil during title/teardown states.
+  [src: scripts/managers/player/player_manager.lua:580-596]
+
 ## Domain: VMF framework
 
 - VMF silently DROPS the second `mod:hook` / `mod:hook_safe` on the same

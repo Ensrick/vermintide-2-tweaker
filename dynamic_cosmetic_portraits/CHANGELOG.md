@@ -1,5 +1,12 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.25-dev (2026-07-14) -- #609 safe network-teardown lifecycle [verify-fix]
+
+- Routed both local hat/skin portrait lookups through vanilla's `PlayerManager.local_player_safe()`. DCP's title-screen state callback now keeps its last known/backend fallback behavior without calling `Network.peer_id()` after teardown.
+- Added runtime check `local_player_safe_network_lifecycle_609` for absent-network and live-game transitions, plus offline coverage rejecting bare local-player calls.
+
+**Verify:** Enter the keep, then return to the title screen normally. The newest console log must contain no DCP `Network backend has not been set` callstack. Run `/dcp_regression_test`; `local_player_safe_network_lifecycle_609` must pass.
+
 ## 0.1.24-dev (2026-07-14) -- #526 restore visible custom portraits [diagnostics-armed]
 
 - Reverted the incompatible `gui_gradient:DIFFUSE_MAP:MASKED` experiment on all 24 HUD/small materials. The newest host log proves DCP found the material and swapped Kruber to `portrait_kruber_mercenary_hat_0004`, yet the portrait rendered blank after that shader-only deployment.

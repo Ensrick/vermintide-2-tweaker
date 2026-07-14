@@ -1588,7 +1588,7 @@ function M.force_apply(armoury_key)
     local target_unit_name = LA.SKIN_LIST[armoury_key].new_units and LA.SKIN_LIST[armoury_key].new_units[1]
     mod:echo("[la_force] looking for unit with unit_name=" .. tostring(target_unit_name))
 
-    local p = Managers.player and Managers.player:local_player()
+    local p = mod._local_player_safe and mod._local_player_safe(Managers.player)
     local pu = p and p.player_unit
     if not pu then mod:echo("[la_force] no player_unit"); return end
 
@@ -1621,7 +1621,7 @@ end
 
 -- Diagnostic: walk player and dump every attachment with its unit_name/skin/hand
 function M.dump_player_attachments()
-    local p = Managers.player and Managers.player:local_player()
+    local p = mod._local_player_safe and mod._local_player_safe(Managers.player)
     local pu = p and p.player_unit
     if not pu then mod:echo("no player_unit"); return end
     mod:echo("[dump] player attachments (see log):")

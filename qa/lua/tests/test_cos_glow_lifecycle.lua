@@ -9,6 +9,23 @@ return function(H, repo_root)
     local picker = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua")
     local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
 
+    H.test("Cosmetics local-player lookups are safe across network teardown", function()
+        local lifecycle_sources = table.concat({
+            entry,
+            read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow.lua"),
+            read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_diagnostics.lua"),
+            read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua"),
+            read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_tpe.lua"),
+        }, "\n")
+        local executable = lifecycle_sources:gsub("%-%-[^\n]*", "")
+        H.truthy(entry:find('local function _local_player_safe(player_manager)', 1, true))
+        H.truthy(entry:find('pm.local_player_safe', 1, true))
+        H.truthy(entry:find('_rt_register("local_player_safe_network_lifecycle_609"', 1, true))
+        H.truthy(entry:find('title state must yield nil', 1, true))
+        H.truthy(entry:find('ingame state lost player', 1, true))
+        H.equal(executable:find(':local_player%(%s*%)'), nil)
+    end)
+
     H.test("Cosmetics glow persistence is exact-item plus illusion and explicit-Apply", function()
         H.truthy(picker:find('return string.format("backend:%s|skin:%s", tostring(backend_id), tostring(skin or ""))', 1, true))
         H.truthy(picker:find("if not GlowPicker._open or not GlowPicker._dirty then return false end", 1, true))

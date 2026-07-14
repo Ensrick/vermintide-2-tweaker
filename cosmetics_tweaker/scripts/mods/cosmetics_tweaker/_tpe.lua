@@ -411,7 +411,7 @@ local function set_equipment_visibility(unit, hide)
 
     -- For the local player in first-person, hide every holstered mesh
     -- because they're inside the camera and clip badly.
-    local player = Managers.player and Managers.player:local_player()
+    local player = mod._local_player_safe and mod._local_player_safe(Managers.player)
     if player and player.player_unit and unit == player.player_unit then
         if hide == nil and current.firstperson then
             hide = true

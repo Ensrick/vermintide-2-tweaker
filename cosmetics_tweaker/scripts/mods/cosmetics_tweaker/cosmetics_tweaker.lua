@@ -1,4 +1,15 @@
 local mod = get_mod("cosmetics_tweaker")
+
+-- #609: PlayerManager.local_player() calls Network.peer_id() directly and
+-- faults once the network backend has been torn down. Vanilla's guarded API
+-- returns nil unless a live network game exists (player_manager.lua:580-596).
+-- Keep this above every dofile so lifecycle-reachable modules share one gate.
+local function _local_player_safe(player_manager)
+    local pm = player_manager or (Managers and Managers.player)
+    if not (pm and type(pm.local_player_safe) == "function") then return nil end
+    return pm:local_player_safe()
+end
+mod._local_player_safe = _local_player_safe
 -- v0.9.3.1: LA Prefix Patch embedded. MUST load before anything that touches
 -- LA hooks (the dedup filter wraps VMFMod's prototype methods, and LA's mod
 -- script needs to load AFTER us in the F4 launcher for the wrap to catch
@@ -62,7 +73,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.108-dev"
+local MOD_VERSION = "0.9.109-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -221,6 +232,23 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
+
+_rt_register("local_player_safe_network_lifecycle_609", function()
+    local current_player = nil
+    local safe_calls = 0
+    local fake_pm = {
+        local_player = function() error("unsafe local_player called") end,
+        local_player_safe = function()
+            safe_calls = safe_calls + 1
+            return current_player
+        end,
+    }
+    if _local_player_safe(fake_pm) ~= nil then return "title state must yield nil" end
+    local live_player = {}
+    current_player = live_player
+    if _local_player_safe(fake_pm) ~= live_player then return "ingame state lost player" end
+    if safe_calls ~= 2 then return "safe accessor was not used for both transitions" end
+end)
 mod:command("cos_regression_test", "Run regression smoke checks for past bugs", function()
     local pass, fail = 0, 0
     mod:echo("=== cosmetics_tweaker regression_test (v%s) ===", MOD_VERSION)
@@ -242,7 +270,7 @@ mod:info("[regression-test-command] registered as /cos_regression_test")
 -- v0.9.12-dev: persistence inspection + manual replay commands.
 mod:command("cos_persist_dump", "Dump saved LA cosmetic + illusion entries", function()
     local pm = Managers and Managers.player
-    local lp = pm and pm:local_player()
+    local lp = _local_player_safe(pm)
     local career = lp and LA_PERSIST and LA_PERSIST._career_name_for_player(lp)
     mod:echo("=== la_persistence (current career: %s) ===", tostring(career))
     local careers_state = mod:get("la_persisted_equips") or {}
@@ -264,7 +292,7 @@ mod:command("cos_persist_dump", "Dump saved LA cosmetic + illusion entries", fun
 end)
 mod:command("cos_persist_replay", "Re-apply saved LA hat + armor for local player's current career", function()
     local pm = Managers and Managers.player
-    local lp = pm and pm:local_player()
+    local lp = _local_player_safe(pm)
     if not lp then mod:echo("no local player"); return end
     local n = LA_PERSIST and LA_PERSIST.restore_for_player(lp) or 0
     mod:echo("replayed %d saved LA cosmetic(s) for current career", n)
@@ -2460,10 +2488,7 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
             -- Guard against keep-context where local_player isn't fully
             -- wired (player_unit nil, inventory_system extension missing).
             local pm = Managers and Managers.player
-            -- v0.9.5.1: pcall pm:local_player() — defense against
-            -- "Network backend has not been set" assert.
-            local lp_ok, lp = pcall(function() return pm and pm:local_player() end)
-            if not lp_ok then lp = nil end
+            local lp = _local_player_safe(pm)
             local pu = lp and lp.player_unit
             -- v0.9.4: per-guard diagnostic. v0.9.3.8 silently bailed in keep
             -- context with zero log output; need to know WHICH guard failed.
@@ -3584,7 +3609,7 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
     --     30th fires).
     if opt and opt.la_armoury_key then
         local pm = Managers and Managers.player
-        local local_player = pm and pm:local_player()
+        local local_player = _local_player_safe(pm)
         local player_unit = local_player and local_player.player_unit
         if player_unit and Unit.alive(player_unit) then
             local template_key = nil
@@ -3650,8 +3675,8 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
         -- Apply gate still drops the whole queue on an un-Applied browse.
         do
             local pm_v = Managers and Managers.player
-            local lp_ok_v, lp_v = pcall(function() return pm_v and pm_v:local_player() end)
-            local player_unit_v = lp_ok_v and lp_v and lp_v.player_unit
+            local lp_v = _local_player_safe(pm_v)
+            local player_unit_v = lp_v and lp_v.player_unit
             if player_unit_v and Unit.alive(player_unit_v) then
                 local template_key_v = nil
                 if self._item_backend_id and Managers and Managers.backend then
@@ -4395,7 +4420,7 @@ end)
 local function _local_career_name()
     local pm = Managers.player
     if not pm then return nil end
-    local pl = pm:local_player()
+    local pl = _local_player_safe(pm)
     if not pl then return nil end
     local ok, name = pcall(pl.career_name, pl)
     return ok and name or nil
@@ -4881,7 +4906,7 @@ mod:hook("TeamPreviewer", "_spawn_hero", function(func, self, hero_previewer, he
             local peer_slots = peer and mod._la_equips_by_peer and mod._la_equips_by_peer[peer]
             local local_peer
             local pm = Managers and Managers.player
-            local lp = pm and pm.local_player and pm:local_player()
+            local lp = _local_player_safe(pm)
             local_peer = lp and lp.peer_id
             if not local_peer and Network and Network.peer_id then
                 local okn, value = pcall(Network.peer_id)
@@ -5651,8 +5676,8 @@ if CosmeticUtils then
             -- the synced store from an earlier session/persistence restore).
             do
                 local pm_r = Managers and Managers.player
-                local lp_ok_r, lp_r = pcall(function() return pm_r and pm_r:local_player() end)
-                if lp_ok_r and lp_r and player == lp_r and mod._send_la_revert then
+                local lp_r = _local_player_safe(pm_r)
+                if lp_r and player == lp_r and mod._send_la_revert then
                     local had_synced = lp_r.peer_id and _la_equips_by_peer[lp_r.peer_id]
                         and _la_equips_by_peer[lp_r.peer_id][slot] ~= nil
                     if had_local_la or had_synced then
@@ -5850,7 +5875,7 @@ end
 
 local function _local_peer_id_quick()
     local pm = Managers and Managers.player
-    local lp = pm and pm.local_player and pm:local_player()
+    local lp = _local_player_safe(pm)
     return lp and lp.peer_id or nil
 end
 
@@ -5906,7 +5931,7 @@ end
 
 local function _local_player_peer_id()
     local pm = Managers and Managers.player
-    local lp = pm and pm:local_player()
+    local lp = _local_player_safe(pm)
     return lp and lp.peer_id
 end
 
@@ -8653,7 +8678,7 @@ if AttachmentUtils then
             -- Offhand: replay the local player's CURRENTLY-wielded weapon
             -- backend if it has an LA offhand selection.
             local pm = Managers and Managers.player
-            local local_player = pm and pm:local_player()
+            local local_player = _local_player_safe(pm)
             local local_unit = local_player and local_player.player_unit
             if local_unit == unit then
                 local inv = ScriptUnit.has_extension(unit, "inventory_system")
@@ -8728,11 +8753,7 @@ mod.update = function(dt)
     -- state changes multiple times rapidly.
     if mod._la_self_rebroadcast_pending and _send_la_apply then
         local pm = Managers and Managers.player
-        -- v0.9.5.1: pcall pm:local_player() — C peer_id() asserts
-        -- "Network backend has not been set" if network not ready. Was
-        -- producing 1181 cascading errors per session per the audit.
-        local lp_ok, lp = pcall(function() return pm and pm:local_player() end)
-        if not lp_ok then lp = nil end
+        local lp = _local_player_safe(pm)
         local pu = lp and lp.player_unit
         if pu and Unit.alive(pu) then
             local n = 0
@@ -8840,13 +8861,11 @@ mod.update = function(dt)
             end
             mod._la_reapply_remote_until = nil
         else
-            -- pcall local_player() -- the C peer_id() path asserts if the network
-            -- backend isn't set yet on the first post-load frames (same guard the
-            -- self-rebroadcast drain uses). Skip this frame if unresolved; the window
-            -- persists and retries next frame.
+            -- Skip frames without a live network game; the bounded window persists
+            -- and retries once vanilla's safe player lookup becomes available.
             local pm = Managers and Managers.player
-            local lp_ok, lp = pcall(function() return pm and pm:local_player() end)
-            local local_peer = lp_ok and lp and lp.peer_id or nil
+            local lp = _local_player_safe(pm)
+            local local_peer = lp and lp.peer_id or nil
             if local_peer and _la_equips_by_peer then
                 local st = mod._la_reapply_stats
                 if not st then
@@ -9160,7 +9179,7 @@ local _GLOW_PROBE_CANDIDATES = {
 
 local function _wielded_units_for_probe()
     local pm = Managers and Managers.player
-    local pl = pm and pm:local_player()
+    local pl = _local_player_safe(pm)
     local pu = pl and pl.player_unit
     if not (pu and ScriptUnit and ScriptUnit.has_extension and ScriptUnit.has_extension(pu, "inventory_system")) then
         return nil, nil
@@ -9822,8 +9841,8 @@ end)
 -- logged a unit where it meant the slot name). Corrected here.
 mod:hook_safe("SimpleInventoryExtension", "_wield_slot", function(self, equipment, slot_data, unit_1p, unit_3p, buff_extension)
     local pm = Managers and Managers.player
-    local lp_ok, lp = pcall(function() return pm and pm:local_player() end)
-    if not lp_ok or not lp then return end
+    local lp = _local_player_safe(pm)
+    if not lp then return end
     if self._unit ~= lp.player_unit then return end
     local wielded_slot = (slot_data and slot_data.id)
         or (self._equipment and self._equipment.wielded_slot)

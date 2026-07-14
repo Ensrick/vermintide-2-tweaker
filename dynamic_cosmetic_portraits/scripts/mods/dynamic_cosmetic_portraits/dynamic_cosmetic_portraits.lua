@@ -1,11 +1,19 @@
 local mod = get_mod("dynamic_cosmetic_portraits")
+
+-- #609: local_player() calls Network.peer_id() and faults after teardown.
+-- Vanilla's safe accessor returns nil unless a live network game exists.
+local function _local_player_safe(player_manager)
+    local pm = player_manager or (Managers and Managers.player)
+    if not (pm and type(pm.local_player_safe) == "function") then return nil end
+    return pm:local_player_safe()
+end
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- File-local (was a bare _G global pre-0.1.17-dev; issue 510 / issue 434 audit
 -- F7): read only at the bottom of this same chunk, so no _G or cross-file
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.24-dev"
+local MOD_VERSION = "0.1.25-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -88,6 +96,23 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
+
+_rt_register("local_player_safe_network_lifecycle_609", function()
+    local current_player = nil
+    local safe_calls = 0
+    local fake_pm = {
+        local_player = function() error("unsafe local_player called") end,
+        local_player_safe = function()
+            safe_calls = safe_calls + 1
+            return current_player
+        end,
+    }
+    if _local_player_safe(fake_pm) ~= nil then return "title state must yield nil" end
+    local live_player = {}
+    current_player = live_player
+    if _local_player_safe(fake_pm) ~= live_player then return "ingame state lost player" end
+    if safe_calls ~= 2 then return "safe accessor was not used for both transitions" end
+end)
 
 -- (#511) io-safe source reader. The VMF retail Stingray VM registers no `io`
 -- library (mods are loadstring'd into the game's shared _G; the engine registers
@@ -413,7 +438,7 @@ local function _get_kruber_merc_hat_key()
         -- pm:players() scan took the FIRST es_mercenary it found, so a remote
         -- player (or bot) on the same career could key the local override off
         -- THEIR hat instead of ours.
-        local player = pm:local_player()
+        local player = _local_player_safe(pm)
         if player and _player_career_name(player) == "es_mercenary" then
             local ok, hat_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_hat")
             if ok and hat_data and hat_data.item_name then
@@ -443,7 +468,7 @@ local function _get_kruber_merc_skin_key()
 
     if CosmeticUtils and CosmeticUtils.get_cosmetic_slot then
         -- (#435) LOCAL player ONLY -- see _get_kruber_merc_hat_key above.
-        local player = pm:local_player()
+        local player = _local_player_safe(pm)
         if player and _player_career_name(player) == "es_mercenary" then
             local ok, skin_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_skin")
             if ok and skin_data and skin_data.item_name then

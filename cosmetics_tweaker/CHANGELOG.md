@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.109-dev - 2026-07-14 - #609 safe network-teardown lifecycle [verify-fix]
+
+- Routed every Cosmetics local-player lookup, including the per-frame deferred peer-purge path, through vanilla's `PlayerManager.local_player_safe()`. Title-screen and disconnect teardown now yield no player instead of calling `Network.peer_id()` after the backend is gone; live in-game behavior is unchanged.
+- Added runtime check `local_player_safe_network_lifecycle_609` plus offline coverage that rejects lifecycle-reachable bare `:local_player()` calls across the entry point, glow, diagnostics, Loremaster bridge, and third-person equipment modules.
+
+### Solo verification
+
+Enter the keep, then return to the title screen normally. In the newest console log, Cosmetics must contribute zero `Network backend has not been set` callstacks. Run `/cos_regression_test`; `local_player_safe_network_lifecycle_609` must pass.
+
 ## 0.9.108-dev - 2026-07-14 - #604 Crowbill cosmetic identity [verify-fix-coop]
 
 - Registered the Imperial and Dawi Crowbill families with the shared exact-instance cosmetic contract. Primary illusion identity remains stable across pick/hammer mode changes without overwriting a player's selected model.

@@ -6,6 +6,13 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+## Network teardown player lookup (#609)
+
+- [ ] Hat and skin resolution call the shared `local_player_safe` gate, never bare `local_player()`.
+- [ ] Title/teardown state returns nil without querying `Network.peer_id()`; last-known/backend portrait fallback remains available.
+- [ ] A live in-game state still resolves the local Mercenary and applies the selected portrait.
+- [ ] `/dcp_regression_test` passes `local_player_safe_network_lifecycle_609`; offline `test_dcp_player_scope_probe.lua` passes.
+
 ## Player-scoped portrait resolution (#435)
 
 - [ ] Remote Mercenary HUD and Tab portraits resolve from that player's synced cosmetic, never the local loadout.

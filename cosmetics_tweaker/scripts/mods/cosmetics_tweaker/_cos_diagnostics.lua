@@ -327,7 +327,7 @@ end)
 mod:command("probe_hat", "Dump materials of player's equipped hat", function()
     mod:echo("[probe_hat] starting")
     mod:info("[probe_hat] starting")
-    local pm = Managers.player; local p = pm and pm:local_player()
+    local pm = Managers.player; local p = mod._local_player_safe and mod._local_player_safe(pm)
     local pu = p and p.player_unit
     if not pu then mod:echo("[probe_hat] no player_unit"); return end
 
