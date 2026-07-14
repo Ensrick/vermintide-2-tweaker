@@ -1,5 +1,16 @@
 # Regression Checklist — weapon_tweaker
 
+## #597 - CWV Greataxe availability
+
+| Field | Check |
+|---|---|
+| Automated | Offline `test_cwv_greataxe.lua` locks four authored defaults, 16 conditional careers, and 20 total controls. |
+| Default owners | Mercenary, Huntsman, Foot Knight, and Grail Knight retain Greataxe while their exact children remain enabled. |
+| Expansion | Every non-Kruber career is default-off and receives the CWV Greataxe only through its exact child toggle. |
+| Retirement | `cwv_es_poleaxe` has no WT catalog/localization row and cannot appear as an unlock option. |
+
+---
+
 ## #596 - Infantry Spear availability
 
 | Field | Check |

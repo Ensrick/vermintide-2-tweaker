@@ -53,3 +53,47 @@ In short, you are free to share and adapt this asset for any purpose, including
 commercially, provided you give appropriate credit, provide a link to the
 license, and indicate if changes were made. This file fulfills those
 obligations for the redistribution of the asset within this mod.
+
+## Greataxe illusion 3D models
+
+Issue #597 uses five independently licensed Sketchfab models as placeholder
+illusions for the CWV Kruber Greataxe. The original download archives and
+source-authoring files are not redistributed in this repository. The derived
+FBX geometry and processed textures are shipped under these paths:
+
+- `units/cwv_es_greataxe/axe_01/*` and `textures/cwv_es_greataxe/axe_01/*`
+- `units/cwv_es_greataxe/axe_02/*` and `textures/cwv_es_greataxe/axe_02/*`
+- `units/cwv_es_greataxe/axe_03/*` and `textures/cwv_es_greataxe/axe_03/*`
+- `units/cwv_es_greataxe/axe_04/*` and `textures/cwv_es_greataxe/axe_04/*`
+- `units/cwv_es_greataxe/axe_05/*` and `textures/cwv_es_greataxe/axe_05/*`
+
+| Asset | Title | Author | Author profile | Source |
+|-------|-------|--------|----------------|--------|
+| `axe_01` | Battle Axe | Vlasov Daniil | https://sketchfab.com/dan741vlasov | https://sketchfab.com/3d-models/battle-axe-a6d3f8a9816e427d95648dfafe77714f |
+| `axe_02` | Viking War Axe | Daniel Rodriguez | https://sketchfab.com/derodriguez | https://sketchfab.com/3d-models/viking-war-axe-220e559cd70a4cb9b73e4e19df23377e |
+| `axe_03` | Viking Axe | wilhelmvonc | https://sketchfab.com/wilhelmvonc | https://sketchfab.com/3d-models/viking-axe-54992b8b04bd41d29476fe77bd2b6a8c |
+| `axe_04` | Viking Axe | abbyrobb1417 | https://sketchfab.com/abbyrobb1417 | https://sketchfab.com/3d-models/viking-axe-5e2c48044a9045a2b24014fa59db3d8b |
+| `axe_05` | Axe | Taylor | https://sketchfab.com/r.taylor | https://sketchfab.com/3d-models/axe-ae71823d5dc8451c96c7ca0f56d83a07 |
+
+Each model is licensed under Creative Commons Attribution 4.0 International
+(CC-BY 4.0): https://creativecommons.org/licenses/by/4.0/. Sketchfab's API
+reported that exact license for each model UID on 2026-07-14.
+
+### Changes made to the originals
+
+- Source FBX, OBJ, or Collada geometry was imported and re-exported as FBX with
+  Blender 4.4.
+- Multi-object geometry was joined, all material slots were collapsed to the
+  short Stingray-safe name `axe_mat`, the longest dimension was normalized to
+  two Blender units, and the inferred handle butt was placed at the origin with
+  the handle directed along positive X.
+- Identical 1P and `_3p` FBX copies were emitted. Perspective-specific
+  rotations, offsets, and scale remain user-tuned CWV/WT data rather than mesh
+  edits.
+- Source texture maps were converted to PNG and capped at 2048 pixels. Legacy
+  gloss maps were inverted into roughness; legacy specular maps were converted
+  to grayscale metallic approximations; absent AO maps use a neutral white
+  fallback. No new artistic texture content was added.
+
+The reproducible conversion scripts and source manifest live in
+`tools/GREATAXE_ASSET_PIPELINE.md` and `tools/convert_greataxe_assets.ps1`.

@@ -657,7 +657,15 @@ local _anim_event_remap_count = 0
 -- Unit.has_animation_event nor a successful C-call acknowledges visible clip
 -- playback, so success is deliberately labelled UNVERIFIED. One record per
 -- distinct transition tuple keeps repeated frames/swings silent (max 256).
-local _WT576_KEYS = { bw_ghost_scythe = true, we_spear = true }
+local _WT576_KEYS = {
+    bw_ghost_scythe = true,
+    we_spear = true,
+    -- Axe+Shield variants share one template/remap but can retain either the
+    -- vanilla donor key or their canonical CWV identity in per-unit state.
+    dr_shield_axe = true,
+    cwv_es_axe_shield = true,
+    cwv_es_axe_shield_veteran = true,
+}
 local _WT576_SOURCE = {
     bw_ghost_scythe = {
         attack_push=true, attack_swing_charge_left=true, attack_swing_charge_left_diagonal=true,
@@ -674,11 +682,37 @@ local _WT576_SOURCE = {
         attack_swing_heavy_right=true, attack_swing_right=true,
         parry_pose=true, push_stab=true,
     },
+    dr_shield_axe = {
+        attack_swing_charge=true, attack_swing_heavy=true,
+        attack_swing_charge_right_pose=true, attack_swing_heavy_right=true,
+        attack_swing_charge_left_diagonal_pose=true, attack_swing_heavy_down=true,
+    },
+    cwv_es_axe_shield = {
+        attack_swing_charge=true, attack_swing_heavy=true,
+        attack_swing_charge_right_pose=true, attack_swing_heavy_right=true,
+        attack_swing_charge_left_diagonal_pose=true, attack_swing_heavy_down=true,
+    },
+    cwv_es_axe_shield_veteran = {
+        attack_swing_charge=true, attack_swing_heavy=true,
+        attack_swing_charge_right_pose=true, attack_swing_heavy_right=true,
+        attack_swing_charge_left_diagonal_pose=true, attack_swing_heavy_down=true,
+    },
 }
 local _wt576_seen, _wt576_count = {}, 0
 
 local function _wt576_phases(key, source)
-    if key == "we_spear" and source == "attack_swing_charge_right" then
+    if key == "dr_shield_axe" or key == "cwv_es_axe_shield"
+        or key == "cwv_es_axe_shield_veteran" then
+        local phase = {
+            attack_swing_charge = "action_one.h1_charge",
+            attack_swing_heavy = "action_one.h1_committed_attack",
+            attack_swing_charge_right_pose = "action_one.h2_charge",
+            attack_swing_heavy_right = "action_one.h2_committed_attack",
+            attack_swing_charge_left_diagonal_pose = "action_one.h3_charge",
+            attack_swing_heavy_down = "action_one.h3_committed_attack",
+        }
+        return { phase[source] or "action_transition" }
+    elseif key == "we_spear" and source == "attack_swing_charge_right" then
         return { "action_one.h1_charge_start", "action_one.h1_charge_loop" }
     elseif key == "we_spear" and source == "attack_swing_heavy_right" then
         return { "action_one.h1_charge_release", "action_one.h1_committed_attack" }

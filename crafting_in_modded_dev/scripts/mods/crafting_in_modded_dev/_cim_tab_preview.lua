@@ -33,14 +33,18 @@ local function _apply_player_weapon_icons(self)
             for _, slot_name in ipairs(WEAPON_SLOTS) do
                 local item = loadout[slot_name]
                 local authoritative, skin, icon, reason = Core.resolve(
-                    item, equipment, slot_name, weapon_skins)
+                    item, equipment, slot_name, weapon_skins, function(texture)
+                        return UIAtlasHelper and UIAtlasHelper.has_texture_by_name
+                            and UIAtlasHelper.has_texture_by_name(texture) == true
+                    end)
                 if authoritative then
                     item.skin = skin
                     if icon then
                         content[slot_name] = icon
                         corrected = corrected + 1
                     end
-                elseif reason == "skin_icon_unavailable" and skin
+                elseif (reason == "skin_icon_unavailable"
+                        or reason == "skin_icon_resource_unavailable") and skin
                         and not reported_unknown_skins[skin] then
                     reported_unknown_skins[skin] = true
                     pcall(printf, "[cim:246] exact equipment skin has no registered inventory icon: skin=%s slot=%s",

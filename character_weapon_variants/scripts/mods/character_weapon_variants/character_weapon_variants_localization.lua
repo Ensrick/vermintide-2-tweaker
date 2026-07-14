@@ -36,6 +36,8 @@ local loc = {
 	-- ============================================================
 	enable_cwv_es_crossbow         = { en = "[working] Kruber: Crossbow (Saltzpyre's, rifle anims)" },
 	enable_cwv_es_crossbow_tooltip = { en = "When on, adds a version of Saltzpyre's crossbow that Kruber can wield, animated like his handgun in the third-person view. It is on by default." },
+	enable_cwv_mace_hammer_identity = { en = "[verify-fix] Distinguish Maces and Hammers" },
+	enable_cwv_mace_hammer_identity_tooltip = { en = "On by default. One-handed maces, mace and shield, and Dual Maces attack 5%% faster. One-handed hammers, hammer and shield, and Dual Hammers deal 12.5%% more direct damage but have 25%% less cleave. Stagger, ordinary pushes, blocks, wield actions, two-handed hammers, Hammer and Tome, Maul, and mixed Mace and Sword weapons are unchanged." },
 	cwv_es_crossbow_name           = { en = "Crossbow" },
 	cwv_es_crossbow_description    = { en = "An imperial-issue crossbow taken up by Reikland state troopers, the same Witch Hunter pattern weapon shouldered like a standard handgun." },
 

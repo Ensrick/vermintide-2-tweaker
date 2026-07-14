@@ -35,6 +35,7 @@ end
 local M = {}
 local SHIELD_PARITY = mod:dofile("scripts/mods/cosmetics_tweaker/_la_shield_parity")
 M.kruber_shield_item_types = SHIELD_PARITY.KRUBER_SHIELD_ITEM_TYPES
+M.kruber_shield_families = SHIELD_PARITY.KRUBER_SHIELD_FAMILIES
 
 M.registered            = false
 M.backend_to_armoury    = {}  -- our backend_id -> LA Armoury_key
@@ -475,11 +476,13 @@ local function build_offhand_options()
                     --                    incorrectly (Bret texture on
                     --                    Empire mesh visible as warped
                     --                    artwork).
-                    -- #266: all Kruber LA shields use one catalogue. Each
-                    -- option retains its authored intended_unit, so parity
-                    -- does not stretch one shield family's UVs onto another.
-                    if SHIELD_PARITY.add_character_parity(character, weapon_types) then
-                        -- Complete catalogue added by the shared policy.
+                    -- Kruber custom-unit variants carry an authored mesh and
+                    -- can span his complete catalogue. Texture variants must
+                    -- stay inside their authored UV family; several Bretonnian
+                    -- variants are pure paint and have no replacement unit.
+                    if SHIELD_PARITY.add_compatible_targets(
+                            character, variant.kind, authored_family, weapon_types) then
+                        -- Compatible targets added by the shared policy.
                     elseif variant.kind == "unit" then
                         local char_pool = _LA_CHARACTER_ALL_SHIELDS[character]
                         if char_pool then
@@ -530,6 +533,8 @@ local function build_offhand_options()
                         armoury_key   = la_key,
                         vanilla_skin  = vanilla_skin_key,
                         intended_unit = intended_unit,
+                        authored_family = authored_family,
+                        variant_kind  = variant.kind,
                     }
                     -- v0.9.9.4-dev: nest under hand_field. LA only ships
                     -- swap_hand="left_hand_unit" today, so the outer hand

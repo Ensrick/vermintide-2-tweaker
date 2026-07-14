@@ -26,6 +26,20 @@ local INFANTRY_SPEAR_CONDITIONAL = {
     "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
     "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
 }
+local GREATAXE_DEFAULT = { "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }
+local GREATAXE_ALL = {
+    "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+    "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer",
+    "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
+    "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
+    "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
+}
+local GREATAXE_CONDITIONAL = {
+    "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer",
+    "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
+    "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
+    "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
+}
 
 return {
     -- #593 follow-up: when CWV owns the Axe+Shield family, WT exposes its
@@ -57,7 +71,12 @@ return {
     { key = "cwv_es_priest_greathammer", careers = ES },
     { key = "cwv_es_warpriest_hammer", careers = ES },
     { key = "cwv_es_maul", careers = ES },
-    { key = "cwv_es_poleaxe", careers = ES },
+    -- #597: four authored Kruber owners are default-on. WT exposes every
+    -- additional career as an explicit default-off opt-in.
+    { key = "cwv_es_greataxe", careers = GREATAXE_ALL,
+      default_careers = GREATAXE_DEFAULT,
+      authored_careers = GREATAXE_DEFAULT,
+      conditional_careers = GREATAXE_CONDITIONAL },
     { key = "cwv_es_rapier", careers = ES },
     { key = "cwv_es_dual_swords", careers = ES },
     { key = "cwv_es_sword_and_mace", careers = ES },

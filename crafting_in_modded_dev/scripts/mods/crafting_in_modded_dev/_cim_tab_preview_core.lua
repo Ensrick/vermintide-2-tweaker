@@ -3,7 +3,7 @@
 
 local Core = {}
 
-Core.resolve = function(item, equipment, slot_name, weapon_skins)
+Core.resolve = function(item, equipment, slot_name, weapon_skins, local_resource_available)
     if type(item) ~= "table" or type(equipment) ~= "table"
             or type(equipment.slots) ~= "table" then
         return false, nil, nil, "equipment_unavailable"
@@ -27,8 +27,23 @@ Core.resolve = function(item, equipment, slot_name, weapon_skins)
     if type(icon) ~= "string" or icon == "" then
         return false, skin, nil, "skin_icon_unavailable"
     end
+    -- #598: a synchronized skin name is identity, not proof that this peer
+    -- owns the icon's atlas/package. Only the renderer's local registry may
+    -- authorize a custom resource. Failure retains the vanilla-safe wire icon.
+    if type(local_resource_available) == "function"
+            and local_resource_available(icon, skin_data) ~= true then
+        return false, skin, nil, "skin_icon_resource_unavailable"
+    end
 
     return true, skin, icon, "exact_skin"
+end
+
+-- Safe presentation metadata is independent from resource identity. The
+-- vanilla loadout RPC always carries `unique`; a same-schema CIM side-channel
+-- may locally restore the frame without sending an atlas/material name.
+Core.resolve_rarity = function(wire_rarity, cim_metadata_capable, is_modded)
+    if cim_metadata_capable == true and is_modded == true then return "modded" end
+    return wire_rarity
 end
 
 return Core

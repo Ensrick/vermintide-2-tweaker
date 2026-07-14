@@ -1,0 +1,141 @@
+-- _cwv_greataxe.lua - Kruber Greataxe behavior and model-manifest policy.
+--
+-- This engine-free module is the single source of truth for the replacement
+-- of the retired Poleaxe family. Runtime registration lives in
+-- character_weapon_variants.lua; converted model assets only populate MODELS
+-- below. Incomplete model rows are ignored instead of exposing a broken unit.
+--
+-- Owned by: character_weapon_variants.lua entry point. Consumed via: mod:dofile.
+local M = {}
+
+M.ITEM_KEY = "cwv_es_greataxe"
+M.TEMPLATE_KEY = "cwv_greataxe_template"
+M.BASE_WEAPON = "dr_2h_axe"
+M.ITEM_TYPE = "cwv_es_greataxe"
+M.SKIN_COMBINATION = "cwv_es_greataxe_skins"
+
+M.DEFAULT_CAREERS = {
+	"es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+}
+M.ALL_CAREERS = {
+	"es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+	"dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer",
+	"we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
+	"wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
+	"bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
+}
+
+-- Exact action redirects used by WT for `dr_2h_axe` on Kruber. The source
+-- template already wields through `to_2h_hammer`; only events absent from the
+-- receiver graph are substituted.
+M.ANIM_REMAP_3P = {
+	attack_swing_up = "attack_swing_left",
+	attack_swing_heavy_left_diagonal = "attack_swing_heavy",
+	attack_swing_heavy_right_diagonal = "attack_swing_heavy_right",
+}
+
+-- Asset hand-off seam. Add only converted models that load successfully.
+-- The first complete row is the base illusion; later rows are picker options.
+-- Canonical shape:
+-- {
+--   key = "cwv_es_greataxe_skin_01",
+--   display_name = "Greataxe Model 01",
+--   right_hand_unit = "units/cwv_es_greataxe/axe_01/axe_01",
+--   display_unit = "units/weapons/weapon_display/display_2h_axes",
+--   inventory_icon = "icon_wpn_dw_2h_axe_01",
+--   hud_icon = "weapon_generic_icon_axe2h",
+--   rarity = "exotic",
+-- }
+M.MODELS = {
+	{
+		key = "cwv_es_greataxe_skin_01",
+		display_name = "Greataxe Model 01",
+		description = "A Greataxe model awaiting final review and naming.",
+		right_hand_unit = "units/cwv_es_greataxe/axe_01/axe_01",
+		display_unit = "units/weapons/weapon_display/display_2h_axes",
+		inventory_icon = "icon_wpn_dw_2h_axe_01_t1",
+		hud_icon = "weapon_generic_icon_axe2h",
+		rarity = "exotic",
+	},
+	{
+		key = "cwv_es_greataxe_skin_02",
+		display_name = "Greataxe Model 02",
+		description = "A Greataxe model awaiting final review and naming.",
+		right_hand_unit = "units/cwv_es_greataxe/axe_02/axe_02",
+		display_unit = "units/weapons/weapon_display/display_2h_axes",
+		inventory_icon = "icon_wpn_dw_2h_axe_01_t1",
+		hud_icon = "weapon_generic_icon_axe2h",
+		rarity = "exotic",
+	},
+	{
+		key = "cwv_es_greataxe_skin_03",
+		display_name = "Greataxe Model 03",
+		description = "A Greataxe model awaiting final review and naming.",
+		right_hand_unit = "units/cwv_es_greataxe/axe_03/axe_03",
+		display_unit = "units/weapons/weapon_display/display_2h_axes",
+		inventory_icon = "icon_wpn_dw_2h_axe_01_t1",
+		hud_icon = "weapon_generic_icon_axe2h",
+		rarity = "exotic",
+	},
+	{
+		key = "cwv_es_greataxe_skin_04",
+		display_name = "Greataxe Model 04",
+		description = "A Greataxe model awaiting final review and naming.",
+		right_hand_unit = "units/cwv_es_greataxe/axe_04/axe_04",
+		display_unit = "units/weapons/weapon_display/display_2h_axes",
+		inventory_icon = "icon_wpn_dw_2h_axe_01_t1",
+		hud_icon = "weapon_generic_icon_axe2h",
+		rarity = "exotic",
+	},
+	{
+		key = "cwv_es_greataxe_skin_05",
+		display_name = "Greataxe Model 05",
+		description = "A Greataxe model awaiting final review and naming.",
+		right_hand_unit = "units/cwv_es_greataxe/axe_05/axe_05",
+		display_unit = "units/weapons/weapon_display/display_2h_axes",
+		inventory_icon = "icon_wpn_dw_2h_axe_01_t1",
+		hud_icon = "weapon_generic_icon_axe2h",
+		rarity = "exotic",
+	},
+}
+
+function M.is_usable_model(model)
+	return type(model) == "table"
+		and type(model.key) == "string" and model.key ~= ""
+		and type(model.display_name) == "string" and model.display_name ~= ""
+		and type(model.right_hand_unit) == "string" and model.right_hand_unit ~= ""
+end
+
+function M.usable_models()
+	local result = {}
+	for _, model in ipairs(M.MODELS) do
+		if M.is_usable_model(model) then
+			result[#result + 1] = model
+		end
+	end
+	return result
+end
+
+function M.default_model()
+	for _, model in ipairs(M.MODELS) do
+		if M.is_usable_model(model) then return model end
+	end
+	return nil
+end
+
+function M.default_career_set()
+	local result = {}
+	for _, career in ipairs(M.DEFAULT_CAREERS) do result[career] = true end
+	return result
+end
+
+function M.conditional_careers()
+	local authored = M.default_career_set()
+	local result = {}
+	for _, career in ipairs(M.ALL_CAREERS) do
+		if not authored[career] then result[#result + 1] = career end
+	end
+	return result
+end
+
+return M

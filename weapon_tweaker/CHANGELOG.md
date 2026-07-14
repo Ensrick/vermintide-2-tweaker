@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.253-dev (2026-07-14) - #597 #576 Greataxe availability and Axe+Shield Heavy 3 [verify-fix-coop]
+
+- Replaced the retired CWV Poleaxe row with the Kruber Greataxe. All four Kruber careers default on; every other supported career is an independent default-off WT opt-in. Disable/removal restores only CWV's authored owners.
+- Corrected Axe+Shield's three-heavy donor chain over Saltzpyre's two-heavy Axe+Falchion vocabulary: H1 maps to target H1, H2 to target H2, and H3 commits through the target-H1 cycle restart. Diagnostics now distinguish Heavy 3 wind-up from the committed release, so a charge-only false positive cannot pass.
+
+### Co-op verification
+
+Confirm Greataxe career toggles and per-model transform tuning. On Axe+Shield, perform H1, H2, and H3 repeatedly while a second player observes; both owner 3P and remote husk must show every charge and release. With the dev picker enabled, require separate `[wt:576]` phases for `h3_charge` and `h3_committed_attack`. Run `/wt_regression_test`.
+
 ## 0.12.252-dev (2026-07-14) - #596 Infantry Spear availability [verify-fix-coop]
 
 - Added CWV Infantry Spear to WT's bounded availability catalog. Mercenary, Huntsman, and Foot Knight are default-on and independently disableable; Grail Knight and all other careers are exposed default-off.

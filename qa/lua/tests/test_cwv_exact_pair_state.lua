@@ -88,7 +88,7 @@ return function(H, repo_root)
             '_exact_pair_publish_local("hot_join_sync")',
             '_exact_pair_query("gameplay_enter")',
             '_exact_pair_on_husk_wield(self, slot_name)',
-            'WeaponSkins.skins[effective_skin]',
+            '_om.exact_appearance.resolve({',
         }) do
             H.truthy(source:find(marker, 1, true), "missing integration marker: " .. marker)
         end

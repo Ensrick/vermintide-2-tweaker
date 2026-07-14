@@ -1,0 +1,15 @@
+materials = {
+	axe_mat = "units/cwv_es_greataxe/axe_03/axe_03"
+}
+
+renderables = {
+	axe_03 = {
+		always_keep = false
+		culling = "bounding_volume"
+		generate_uv_unwrap = false
+		occluder = false
+		shadow_caster = false
+		surface_queries = false
+		viewport_visible = true
+	}
+}

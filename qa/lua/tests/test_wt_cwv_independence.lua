@@ -74,6 +74,10 @@ return function(H, repo_root)
                 if variant.key == "cwv_es_infantry_spear" then
                     expected_default = career == "es_mercenary"
                         or career == "es_huntsman" or career == "es_knight"
+                elseif variant.key == "cwv_es_greataxe" then
+                    expected_default = career == "es_mercenary"
+                        or career == "es_huntsman" or career == "es_knight"
+                        or career == "es_questingknight"
                 end
                 H.equal(child.default_value, expected_default)
                 H.equal(seen[expected], nil, expected)
@@ -81,7 +85,7 @@ return function(H, repo_root)
                 child_count = child_count + 1
             end
         end
-        H.equal(child_count, 142)
+        H.equal(child_count, 158)
     end)
 
     H.test("CWV #596 Infantry Spear controls default to three Kruber careers", function()

@@ -63,19 +63,19 @@ Last updated: 2026-07-14.
 
 ---
 
-### la-kruber-shield-catalogue-parity -- identical native and CWV availability
+### la-kruber-shield-catalogue-compatibility -- native and CWV pools preserve mesh provenance
 
 | Field | Value |
 |-------|-------|
-| Symptom | LA shield illusions appeared only on the Kruber shield mesh family named by each variant's icon metadata; all three CWV shield weapons had no LA row. |
-| Root cause | Availability was inferred per variant from Empire/Breton icon families even though the apply path already swaps to the variant's authored `new_units[1]` mesh before painting. |
+| Symptom | CWV Axe and Shield showed only Loremaster Bretonnian choices and no vanilla shields; selecting a Bretonnian choice wrapped heater-shield textures around an Imperial shield mesh. |
+| Root cause | The LA merge created a new CWV pool without first seeding the vanilla Empire shields. The old parity rule also spread every pure-paint Bretonnian variant to every Kruber shield even though those entries declare no replacement unit and require Bretonnian UVs. |
 | Mod(s) | cosmetics_tweaker + Loremaster's Armoury; character_weapon_variants for CWV rows |
-| Fix version(s) | cosmetics_tweaker v0.9.98-dev |
+| Fix version(s) | pending release |
 | Category | INTEGRATION / MULTIPLAYER |
 | Repro | Compare the LA offhand row on Kruber Sword and Shield, Mace and Shield, Bretonnian Sword and Shield, Spear and Shield, and CWV Axe/Longsword/Warrior-Priest Hammer shield weapons. |
-| Expected post-fix | All seven item types expose the identical LA armoury-key set. Applying any entry uses its authored mesh and texture through the shared hand-based path; no weapon-specific render branch exists. |
-| Detection | `/cos_regression_test` passes `la_kruber_shield_catalogue_parity_266`; offline `test_cos_la_shield_parity.lua` locks the single complete, unique catalogue and identical Empire/Breton expansion. Coop verifies preview, local 1P/3P, transition, and remote husk rendering. |
-| Tracking | GitHub issue #266. |
+| Expected post-fix | CWV Empire-family weapons expose the complete vanilla Empire pool plus Empire-compatible LA choices. Pure Bretonnian paint stays on the Bretonnian family; a custom-unit LA option may span families because it carries its authored mesh. Whenever an LA entry declares `new_units`, paint occurs only on that exact 1P/3P unit. |
+| Detection | `/cos_regression_test` passes `la_kruber_shield_catalogue_compatibility_204`; offline `test_cos_la_shield_parity.lua` locks the complete item catalogue, Empire/Breton isolation, CWV vanilla seeding, and declared-unit paint gate. Coop verifies customization preview, local 1P/3P, inventory hero preview, transition, and remote husk rendering. |
+| Tracking | GitHub issues #204 and #266. |
 
 ### la-offhand-wielded-weapon-identity -- shield paint cannot wrap another weapon
 

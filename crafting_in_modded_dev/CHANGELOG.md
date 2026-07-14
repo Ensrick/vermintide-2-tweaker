@@ -1,5 +1,15 @@
 # Crafting in Modded Changelog
 
+## 0.8.75-dev (2026-07-14): #598 safe modded TAB frames [verify-fix-coop]
+
+- Restored CIM's modded rarity frame/background in the hold-TAB equipment preview through a same-mod, schema-gated boolean presentation side channel. Vanilla loadout RPCs continue to transmit the safe `unique` rarity.
+- Custom icons render only when the receiving peer's local atlas confirms the texture. No custom icon, model, material, package, or skin resource identifier is added to the wire; peers missing CIM or the owning appearance mod retain a vanilla-safe fallback.
+- Added bounded payload, schema mismatch, missing-package, hot-join, and local frame regression coverage.
+
+### Co-op verification
+
+Verify the intended modded frame in hold-TAB with two CIM-capable peers, then repeat with one peer missing CIM or the appearance-owning mod. No peer may crash or resolve an unknown custom resource, and the capable peer must retain its local appearance. Exercise host/client reversal, hot join, and mission transition, then run `/cim_regression_test`.
+
 ## 0.8.74-dev (2026-07-14): #244 literal Athanor property values [verify-fix] [not deployed]
 
 - Fixed the Athanor writing its absolute Weave bubble fraction directly into an ordinary item's normalized Adventure property field. Three of five Attack Speed bubbles previously stored `0.6`; vanilla then interpolated that across the 3%-5% Adventure range and displayed/applied 4.2% instead of the forged 3%.

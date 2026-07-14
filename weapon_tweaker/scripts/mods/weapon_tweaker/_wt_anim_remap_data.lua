@@ -1178,17 +1178,29 @@ do
         attack_swing_up_left                   = "attack_swing_heavy_left",
         parry_pose                             = "parry_pose",
     }
-    -- v0.12.213-dev (#519): dr_shield_axe on Saltzpyre -> Dual Axe & Falchion.
+    -- #576: dr_shield_axe / CWV Empire Axe+Shield on Saltzpyre ->
+    -- Dual Axe & Falchion.  Preserve the receiver SM's native two-heavy
+    -- cadence across the donor's three-heavy chain:
+    --
+    --   donor H1 shield slam -> receiver H1 overhead
+    --   donor H2 right sweep -> receiver H2 left sweep
+    --   donor H3 overhead    -> receiver H1 overhead (cycle restart)
+    --
+    -- The previous table sent both H1 and H2 to the receiver H1 event.  That
+    -- left the body in the wrong chain state; H3's charge could play, but its
+    -- release had no reachable transition.  Charges and releases below are
+    -- deliberately paired -- do not validate this chain from event presence
+    -- alone.
     R.one_hand_axe_shield_template_1.wh_ = {
         attack_push                            = "attack_push",
         attack_swing_charge                    = "attack_swing_charge_down",
-        attack_swing_charge_left_diagonal_pose = "attack_swing_charge_left",
+        attack_swing_charge_left_diagonal_pose = "attack_swing_charge_down",
         attack_swing_charge_left_pose          = "attack_swing_charge_left",
-        attack_swing_charge_right_pose         = "attack_swing_charge_down",
+        attack_swing_charge_right_pose         = "attack_swing_charge_left",
         attack_swing_down                      = "attack_swing_down_left",
         attack_swing_heavy                     = "attack_swing_heavy_down",
-        attack_swing_heavy_down                = "attack_swing_heavy_left",
-        attack_swing_heavy_right               = "attack_swing_heavy_down",
+        attack_swing_heavy_down                = "attack_swing_heavy_down",
+        attack_swing_heavy_right               = "attack_swing_heavy_left",
         attack_swing_left_diagonal             = "attack_swing_down_left",
         attack_swing_right_diagonal            = "attack_swing_right",
         attack_swing_up_left                   = "attack_swing_right",

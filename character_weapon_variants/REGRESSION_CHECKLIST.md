@@ -18,6 +18,17 @@ Last updated: 2026-07-14.
 
 ---
 
+## #597 Greataxe replaces Poleaxe
+
+- [ ] Poleaxe is absent from CIM, inventory, and WT; Greataxe is present for all four Kruber careers by default.
+- [ ] Every confirmed manifest model appears once, uses its provisional name, and renders in inventory, illusion preview, first person, local third person, and on a remote husk.
+- [ ] Attack speed, damage, stagger, cleave, dodge, block, and stamina match Bardin's Greataxe; no former Poleaxe multipliers remain.
+- [ ] Kruber's light/heavy/charge/push chains play through the same `to_2h_hammer` and action redirects WT uses for `dr_2h_axe`.
+- [ ] `/cwv_regression_test` passes `issue597_greataxe_replaces_poleaxe`; offline `test_cwv_greataxe.lua` passes.
+- [ ] With WT, all four Kruber careers can be disabled independently and all 16 non-Kruber careers remain default-off opt-ins.
+
+---
+
 ## Smoke Bomb preflight (#343)
 
 - [ ] Enter a keep or mission and attach the automatically emitted `[cwv:343]` record; `/cwv_smoke_bomb_probe` can explicitly record a later recheck.
@@ -1042,3 +1053,17 @@ Last updated: 2026-07-14.
 - vt2-no-tpose-default-stance
 - vt2-quaternion-vector3-box-for-storage
 - vt2-unit-node-not-pcall-safe
+## One-handed mace and hammer identity (Issue #599)
+
+- [ ] Default ON: single maces, mace and shield, and both CWV Dual Maces feel
+  5% faster; no hammer receives that speed change.
+- [ ] Default ON: Bardin Hammer/Hammer and Shield/Dual Hammers and Saltzpyre
+  Skull-Splitter/Skull-Splitter and Shield/Dual Skull-Splitters deal 12.5%
+  more direct damage and have 25% less cleave; CWV Warrior-Priest equivalents
+  match them.
+- [ ] Ordinary push, stagger magnitude, charge threshold, block, wield, Hammer
+  and Tome, Maul, mixed Mace and Sword, and every 2H hammer remain unchanged.
+- [ ] Toggle OFF restores exact vanilla/CWV timing and direct profile names;
+  repeated ON/OFF/ON changes do not compound any multiplier.
+- [ ] Host/client with the same CWV build agree on hit damage and cleave; a
+  generated `cwv_mhi_*` profile is present in `NetworkLookup.damage_profiles`.

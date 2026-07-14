@@ -25,7 +25,8 @@ return {
 	},
 	options = {
 		-- Loose variant toggles sorted A->Z by display label: Bomb Slot
-		-- (Tuskgor Javelin), Kruber Crossbow, Mace and Sword.
+		-- (Tuskgor Javelin), Kruber Crossbow, Mace and Hammer Identity,
+		-- Mace and Sword.
 		widgets = {
 			{
 				setting_id = "cwv_dev_options",
@@ -59,6 +60,12 @@ return {
 				type          = "checkbox",
 				default_value = true,
 				tooltip       = "enable_cwv_es_crossbow_tooltip",
+			},
+			{
+				setting_id    = "enable_cwv_mace_hammer_identity",
+				type          = "checkbox",
+				default_value = true,
+				tooltip       = "enable_cwv_mace_hammer_identity_tooltip",
 			},
 			{
 				setting_id    = "mace_sword_tweak",

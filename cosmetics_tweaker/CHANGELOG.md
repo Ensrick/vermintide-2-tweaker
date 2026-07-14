@@ -1,5 +1,15 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.104-dev - 2026-07-14 - #204 CWV Axe+Shield pool and shield-family parity [verify-fix-coop]
+
+- Seeded CWV Empire Axe+Shield with its complete vanilla Empire shield pool before merging Loremaster options, fixing the LA-only picker.
+- Restricted texture-only Loremaster variants to their authored Empire/Bretonnian UV family. Cross-family options are allowed only when they carry their own replacement unit; any declared replacement mesh must match the spawned 1P/3P unit before paint. Bretonnian textures can no longer wrap onto Imperial geometry.
+- Preserved family/kind provenance through merge, persistence, local preview, and remote reapplication, with regression coverage for pool composition and atomic unit/material pairing.
+
+### Co-op verification
+
+On CWV Empire Axe+Shield, confirm vanilla Empire shields and compatible Loremaster options both appear. Select several Empire texture variants and custom-unit variants; each must swap/render its authored unit and material in customization, inventory preview, mission, swaps, and on a second player's remote husk. Bretonnian texture-only variants must not appear for or paint an Imperial shield. Run `/cos_regression_test` and require `la_kruber_shield_catalogue_compatibility_204` to pass.
+
 ## 0.9.103-dev - 2026-07-14 - #377 manual glow editor and committed badges [verify-fix]
 
 - Removed both illusion-selection and wield-triggered glow-editor auto-opening. A persistent authored icon at the picker boundary is now the sole contextual open/close control and disables itself for non-glow skins.

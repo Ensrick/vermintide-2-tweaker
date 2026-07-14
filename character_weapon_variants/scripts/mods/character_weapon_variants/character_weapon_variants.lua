@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.407-dev"
+local MOD_VERSION = "0.1.408-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -52,6 +52,10 @@ local _cwv_wield_hook_registration_count = 0
 -- refactor is a pure `_om.` prefix with no behavior change.
 local _om = {}
 _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear")
+_om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
+_om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe")
+_om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
+_om.mace_hammer_identity = _om.mace_hammer_identity_policy.new()
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_pair_state").install(mod, _om)
 
 -- Single source of truth for the husk override-unit package ref (issue #418).
@@ -909,38 +913,27 @@ local _variant_definitions = {
 		-- Scale lives at type level: _type_transforms.cwv_es_maul.
 	},
 	{
-		-- Poleaxe: Bardin's dr_2h_axe (Greataxe) template cloned for
-		-- Kruber. Default mesh: Kruber's halberd. Type-level scale
-		-- (1, 1, 0.65) shortens the halberd's Z-length so it reads as
-		-- a polearm, not a full halberd.
-		--
-		-- Source template: two_handed_axes_template_1. Already wields
-		-- to to_2h_hammer (Kruber's greathammer SM is native), so no
-		-- wield_anim_3p patch needed. Per-action remap covers a few
-		-- greataxe events (heavy_*_diagonal, swing_up) not in
-		-- two_handed_hammers_template_1's vocabulary.
-		--
-		-- No fire damage (verified — heavy_slashing_axe_linesman /
-		-- medium_slashing_smiter_2h / medium_slashing_axe_linesman
-		-- have no _burn_ references).
-		item_key        = "cwv_es_poleaxe",
-		base_weapon     = "dr_2h_axe",
-		display_name    = "Poleaxe",
-		description     = "A reikland poleaxe — axe-head, hammer-back, and a piercing spike on the crown. Cuts cavalry, breaks armour, and reaches further than a soldier's blade.",
+		-- #597: exact Bardin Greataxe behavior on Kruber, rendered through
+		-- converted third-party models declared in `_cwv_greataxe.lua`.
+		-- The first usable manifest row owns the default mesh. Until one is
+		-- present the cloned Bardin mesh is retained as a safe fallback.
+		-- Keep this key literal so the repository name-map generator can ingest
+		-- the runtime registration without evaluating Lua module constants.
+		item_key        = "cwv_es_greataxe",
+		base_weapon     = _om.greataxe.BASE_WEAPON,
+		display_name    = "Greataxe",
+		description     = "A heavy two-handed axe built for breaking shield walls and hewing through packed ranks.",
 		character       = "empire_soldier",
-		careers         = _es_all_careers,
-		right_hand_unit = "units/weapons/player/wpn_wh_halberd_01/wpn_wh_halberd_01",
-		-- TODO icon: placeholder uses vanilla halberd icon. Variant is NOT
-		-- complete until proper inventory_icon + hud_icon are authored.
-		inventory_icon  = "icon_wpn_wh_halberd_01",
-		hud_icon        = "weapon_generic_icon_staff_3",
-		skin_display_name = "Poleaxe",
+		careers         = _om.greataxe.DEFAULT_CAREERS,
+		right_hand_unit = (_om.greataxe.default_model() or {}).right_hand_unit,
+		inventory_icon  = (_om.greataxe.default_model() or {}).inventory_icon or "icon_wpn_dw_2h_axe_01_t1",
+		hud_icon        = (_om.greataxe.default_model() or {}).hud_icon or "weapon_generic_icon_axe2h",
+		skin_display_name = (_om.greataxe.default_model() or {}).display_name or "Greataxe Model 01",
 		rarity          = "exotic",
-		template        = "poleaxe_template",
+		template        = _om.greataxe.TEMPLATE_KEY,
 		traits          = { "melee_attack_speed_on_crit" },
 		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
-		item_type       = "cwv_es_poleaxe",
-		-- Scale lives at type level: _type_transforms.cwv_es_poleaxe.
+		item_type       = _om.greataxe.ITEM_TYPE,
 	},
 	{
 		-- Rapier: Saltzpyre's `wh_fencing_sword` template cloned for
@@ -1174,6 +1167,7 @@ local _variant_definitions = {
 		hud_icon        = "weapon_generic_icon_mace",
 		skin_display_name = "Dual Maces",
 		rarity          = "exotic",
+		template        = "cwv_dual_maces_template",
 		traits          = { "melee_attack_speed_on_crit" },
 		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
 		-- item_type carries its own cwv-only skin_combination_table so vanilla
@@ -1196,6 +1190,7 @@ local _variant_definitions = {
 		hud_icon        = "weapon_generic_icon_mace",
 		skin_display_name = "Dual Maces",
 		rarity          = "exotic",
+		template        = "cwv_dual_maces_template",
 		traits          = { "melee_attack_speed_on_crit" },
 		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
 		-- See cwv_es_dual_maces above for the item_type / display rig rationale.
@@ -1277,6 +1272,47 @@ local _variant_definitions = {
 		right_hand_offset = { 0, 0, 0.15 },
 	},
 }
+
+-- Issue #599: default-on mace/hammer identity. CWV Dual Maces need an independent clone
+-- because their source moveset is Bardin's Dual Hammers; changing that shared
+-- template for speed would otherwise make the hammer family faster as well.
+-- Native semantic families are explicit in `_cwv_mace_hammer_identity.lua`;
+-- no name-pattern scan can accidentally catch a two-handed hammer.
+do
+	local policy = _om.mace_hammer_identity_policy
+	local state = _om.mace_hammer_identity
+	local function deep_clone(value)
+		return table.clone(value, true)
+	end
+	local ok, err = state:ensure_cwv_dual_mace_template(Weapons, deep_clone)
+	if not ok then
+		mod:warning("[cwv:599] Dual Maces clone unavailable: %s", tostring(err))
+	end
+
+	local function register_damage_profile(profile_name)
+		local lookup = NetworkLookup and NetworkLookup.damage_profiles
+		if type(profile_name) ~= "string" or not lookup or rawget(lookup, profile_name) then return end
+		local index = #lookup + 1
+		rawset(lookup, index, profile_name)
+		rawset(lookup, profile_name, index)
+	end
+
+	_om._apply_mace_hammer_identity = function(enabled)
+		state:apply(enabled, Weapons, DamageProfileTemplates, PowerLevelTemplates,
+			deep_clone, _om._record_cwv_dp_source, register_damage_profile)
+		mod:info("[cwv:599] enabled=%s mace_speed=%.3f hammer_damage=%.3f hammer_cleave=%.3f",
+			tostring(not not enabled), policy.MACE_SPEED_MULT,
+			policy.HAMMER_DAMAGE_MULT, policy.HAMMER_CLEAVE_MULT)
+	end
+
+	_om._apply_mace_hammer_identity(mod:get(policy.SETTING_ID) ~= false)
+
+	function mod.on_setting_changed(setting_id)
+		if setting_id == policy.SETTING_ID then
+			_om._apply_mace_hammer_identity(mod:get(policy.SETTING_ID) ~= false)
+		end
+	end
+end
 
 -- ============================================================
 -- Cross-character access: extend can_wield on vanilla dual-wield items
@@ -1567,6 +1603,12 @@ local _kruber_axe_falchion_remap = {
 -- new cross-access weapons are introduced. Career names must be exact (career
 -- prefix matching could be added later if needed).
 local _cross_access_action_remap = {
+	cwv_es_greataxe = {
+		es_mercenary      = _om.greataxe.ANIM_REMAP_3P,
+		es_huntsman       = _om.greataxe.ANIM_REMAP_3P,
+		es_knight         = _om.greataxe.ANIM_REMAP_3P,
+		es_questingknight = _om.greataxe.ANIM_REMAP_3P,
+	},
 	cwv_es_infantry_spear = {
 		es_mercenary      = _om._kruber_infantry_spear_remap,
 		es_huntsman       = _om._kruber_infantry_spear_remap,
@@ -2764,86 +2806,40 @@ _create_maul_template()
 end  -- #284: end maul do-block
 
 -- ============================================================
--- Poleaxe template (modified two_handed_axes_template_1)
--- Bardin's Greataxe moveset cloned for Kruber. Source template already
--- wields to to_2h_hammer (Kruber's greathammer SM is native), so no
--- wield_anim_3p patch needed. Per-action 3P remap covers a few
--- greataxe events (heavy_*_diagonal, attack_swing_up) not in
--- two_handed_hammers_template_1's vocabulary.
---
--- Stats (v0.1.171): speed × 1.2 (faster than the greataxe baseline —
--- poleaxe is a lighter polearm than a 2H greataxe), power × 0.85 (less
--- damage and stagger than a full greataxe). Per user.
---
--- No fire damage in the source (verified — all damage profiles use
--- _slashing_axe_linesman / _slashing_smiter_2h shapes, no _burn_).
---
--- ANIM ADDENDUM: 3P-only. 1P universal — see top-of-file ANIMATION
--- ARCHITECTURE.
+-- #597 Greataxe template (exact Bardin behavior, Kruber 3P redirects)
 -- ============================================================
+do
+	local greataxe = _om.greataxe
+	local function _create_greataxe_template()
+		if not Weapons or not Weapons.two_handed_axes_template_1 then
+			mod:warning("two_handed_axes_template_1 not found - Greataxe unavailable")
+			return
+		end
+		if Weapons[greataxe.TEMPLATE_KEY] then return end
 
-do  -- #284: scope poleaxe template locals off the top-level chunk (>200-local limit)
-local _POLEAXE_SPEED_MULT = 1.20
-local _POLEAXE_POWER_MULT = 0.85
-
--- 3P remap — source (two_handed_axes_template_1) → target
--- (two_handed_hammers_template_1). Source events already in target
--- vocab (charge, charge_right, down_left, down_right, left, push,
--- parry_pose) need no entry.
-local _POLEAXE_ANIM_REMAP_3P = {
-	-- Heavy releases: source has _diagonal suffix; target has heavy_right
-	-- and plain heavy (no heavy_left). Pick closest-direction substitute.
-	attack_swing_heavy_right_diagonal = "attack_swing_heavy_right",
-	attack_swing_heavy_left_diagonal  = "attack_swing_heavy",
-	-- Light: source attack_swing_up (overhead) → target's heavy is the
-	-- closest overhead-feel clip (greathammer template authors no _up
-	-- light variant).
-	attack_swing_up                   = "attack_swing_heavy",
-}
-
-local function _create_poleaxe_template()
-	if not Weapons or not Weapons.two_handed_axes_template_1 then
-		mod:warning("two_handed_axes_template_1 not found — Poleaxe template unavailable")
-		return
-	end
-	if Weapons.poleaxe_template then return end
-
-	local template = table.clone(Weapons.two_handed_axes_template_1, true)
-
-	if template.actions then
-		for _, action_group in pairs(template.actions) do
-			if type(action_group) == "table" then
-				for _, sub_action in pairs(action_group) do
-					if type(sub_action) == "table" then
-						if sub_action.anim_time_scale then
-							sub_action.anim_time_scale = sub_action.anim_time_scale * _POLEAXE_SPEED_MULT
-						end
-						if sub_action.damage_profile then
-							sub_action.damage_profile = _clone_damage_profile(sub_action.damage_profile, "cwv_poleaxe_", {
-								damage = _POLEAXE_POWER_MULT, stagger = _POLEAXE_POWER_MULT,
-							})
-						end
-						if sub_action.anim_event and _POLEAXE_ANIM_REMAP_3P[sub_action.anim_event] then
-							sub_action.anim_event_3p = _POLEAXE_ANIM_REMAP_3P[sub_action.anim_event]
-						end
-					end
-				end
+		-- No timing or damage-profile edits: #597 requires an exact gameplay
+		-- analogue of Bardin's Greataxe. Only receiver-local 3P fields differ.
+		local template = table.clone(Weapons.two_handed_axes_template_1, true)
+		template.wield_anim_career_3p = template.wield_anim_career_3p or {}
+		for _, career in ipairs(greataxe.DEFAULT_CAREERS) do
+			template.wield_anim_career_3p[career] = "to_2h_hammer"
+			local settings = CareerSettings and CareerSettings[career]
+			local ability = settings and settings.activated_ability
+			ability = ability and ability[1]
+			local action_name = ability and ability.action_name
+			local action = action_name and ActionTemplates and ActionTemplates[action_name]
+			if action_name and action and not template.actions[action_name] then
+				template.actions[action_name] = action
 			end
 		end
+
+		Weapons[greataxe.TEMPLATE_KEY] = template
+		mod:info("Created %s (exact dr_2h_axe stats/moveset; Kruber wield=to_2h_hammer)",
+			greataxe.TEMPLATE_KEY)
 	end
 
-	-- No wield_anim_3p change — source already wields to to_2h_hammer.
-	-- No base-template patch — same reason; previewer's wield read of the
-	-- base resolves to the same SM Kruber's body uses natively.
-
-	Weapons.poleaxe_template = template
-
-	mod:info("Created poleaxe_template (spd=%.0f%% power=%.0f%%, 3p anim remap: %d entries, native wield to_2h_hammer)",
-		_POLEAXE_SPEED_MULT * 100, _POLEAXE_POWER_MULT * 100, 3)
+	_create_greataxe_template()
 end
-
-_create_poleaxe_template()
-end  -- #284: end poleaxe do-block
 
 -- ============================================================
 -- Outrider Grenade Launcher template (modified dr_deus_01_template_1)
@@ -4901,7 +4897,7 @@ end
 -- Fix (v0.1.367-dev): DATA-DRIVEN residency. Instead of a hand-maintained key
 -- list (which covered only 5 of the 27 variants whose override differs from
 -- its base — 22 latent invisible-husk gaps, e.g. every dual-wield, the maul,
--- poleaxe, greathammers, cudgel, shortsword, we_sword_shield, javelin boar
+-- greataxe, greathammers, cudgel, shortsword, we_sword_shield, javelin boar
 -- spear, outrider blunderbuss), walk EVERY def and force-load any
 -- right_hand_unit / left_hand_unit (+ its `_3p` form) that DIFFERS from the
 -- base weapon's same-field unit. New variants are covered automatically. Reads
@@ -7848,6 +7844,14 @@ for _, def in ipairs(_variant_definitions) do
 	end
 end
 
+-- #597 model names are intentionally provisional while the converted axes are
+-- reviewed in-game. Keep them in the same global localization surface used by
+-- generated variant skins so the picker never shows raw manifest keys.
+for _, model in ipairs(_om.greataxe.usable_models()) do
+	_display_names[model.key .. "_name"] = model.display_name
+	_display_names[model.key .. "_description"] = model.description or "A Greataxe model awaiting final review and naming."
+end
+
 -- Pickup HUD popup strings. Vanilla pickup interaction code calls Localize()
 -- on `pickup_settings.hud_description` (interactions.lua:1572 →
 -- interaction_ui.lua:684). VMF's per-mod _localization.lua strings are
@@ -8223,7 +8227,7 @@ local function _register_cwv_skin_combinations()
 		cwv_es_warpriest_hammer_shield = "cwv_es_warpriest_hammer_shield_skins",
 		cwv_es_priest_greathammer      = "cwv_es_priest_greathammer_skins",
 		cwv_es_maul                    = "cwv_es_maul_skins",
-		cwv_es_poleaxe                 = "cwv_es_poleaxe_skins",
+		cwv_es_greataxe                = "cwv_es_greataxe_skins",
 		cwv_es_rapier                  = "cwv_es_rapier_skins",
 		cwv_es_outrider_grenade_launcher = "cwv_es_outrider_grenade_launcher_skins",
 		cwv_es_musket                    = "cwv_es_musket_skins",
@@ -9161,101 +9165,71 @@ end
 _register_macesword_mace_maul_illusions()
 
 -- ============================================================
--- Empire halberd cosmetics → cwv_es_poleaxe illusions (single-handed
--- harvest: each es_halberd_skin_* registered as an illusion option on
--- the Poleaxe variant).
+-- #597 converted Greataxe model manifest -> curated illusions
 -- ============================================================
 
-local function _register_halberd_poleaxe_illusions()
+local function _register_greataxe_model_illusions()
 	if not ItemMasterList or not WeaponSkins then return end
-
-	local source_keys = {}
-	for skin_key, entry in pairs(ItemMasterList) do
-		if type(entry) == "table"
-				and entry.item_type == "weapon_skin"
-				and entry.matching_item_key == "es_halberd" then
-			source_keys[#source_keys + 1] = skin_key
-		end
-	end
-	table.sort(source_keys)
-
+	local models = _om.greataxe.usable_models()
+	local combos = WeaponSkins.skin_combinations[_om.greataxe.SKIN_COMBINATION]
 	local registered = 0
-	for _, source_key in ipairs(source_keys) do
-		local new_key = "cwv_es_poleaxe_" .. source_key
-		if _custom_skin_keys[new_key] then goto continue end
 
-		local source = WeaponSkins.skins[source_key]
-		if not source or not source.right_hand_unit then goto continue end
+	-- Model 1 is already represented by the variant's generated base skin.
+	-- Register only the remaining confirmed rows so the picker has no duplicate.
+	for index = 2, #models do
+		local model = models[index]
+		local key = model.key
+		if _custom_skin_keys[key] then goto continue end
+		local rarity = model.rarity or "exotic"
+		local display_unit = model.display_unit or "units/weapons/weapon_display/display_2h_axes"
+		local inventory_icon = model.inventory_icon or "icon_wpn_dw_2h_axe_01_t1"
+		local hud_icon = model.hud_icon or "weapon_generic_icon_axe2h"
 
-		local iml_entry = {
-			key               = new_key,
-			name              = new_key,
-			item_type         = "weapon_skin",
-			slot_type         = "weapon_skin",
-			matching_item_key = "cwv_es_poleaxe",
-			rarity            = source.rarity,
-			display_name      = source.display_name,
-			description       = source.description,
-			display_unit      = source.display_unit,
-			hud_icon          = source.hud_icon,
-			inventory_icon    = source.inventory_icon,
-			information_text  = "information_weapon_skin",
-			right_hand_unit   = source.right_hand_unit,
-			template          = source.template,
-			can_wield         = _es_all_careers,
+		ItemMasterList[key] = {
+			key = key,
+			name = key,
+			item_type = "weapon_skin",
+			slot_type = "weapon_skin",
+			matching_item_key = _om.greataxe.BASE_WEAPON,
+			rarity = rarity,
+			display_name = key .. "_name",
+			description = key .. "_description",
+			display_unit = display_unit,
+			hud_icon = hud_icon,
+			inventory_icon = inventory_icon,
+			information_text = "information_weapon_skin",
+			right_hand_unit = model.right_hand_unit,
+			can_wield = _om.greataxe.DEFAULT_CAREERS,
 		}
-		if source.material_settings_name then
-			iml_entry.material_settings_name = source.material_settings_name
-		end
-		ItemMasterList[new_key] = iml_entry
-
-		local ws_entry = {
-			description     = source.description,
-			display_name    = source.display_name,
-			display_unit    = source.display_unit,
-			hud_icon        = source.hud_icon,
-			inventory_icon  = source.inventory_icon,
-			rarity          = source.rarity,
-			right_hand_unit = source.right_hand_unit,
-			template        = source.template,
+		WeaponSkins.skins[key] = {
+			description = key .. "_description",
+			display_name = key .. "_name",
+			display_unit = display_unit,
+			hud_icon = hud_icon,
+			inventory_icon = inventory_icon,
+			rarity = rarity,
+			right_hand_unit = model.right_hand_unit,
 		}
-		if source.material_settings_name then
-			ws_entry.material_settings_name = source.material_settings_name
-		end
-		WeaponSkins.skins[new_key] = ws_entry
 
-		local combos = WeaponSkins.skin_combinations.cwv_es_poleaxe_skins
-		if combos then
-			local rarity = source.rarity or "exotic"
-			local tier = combos[rarity]
-			if tier then
-				tier[#tier + 1] = new_key
+		local tier = combos and combos[rarity]
+		if tier then tier[#tier + 1] = key end
+		for _, lookup_name in ipairs({ "weapon_skins", "item_names" }) do
+			local lookup = NetworkLookup and NetworkLookup[lookup_name]
+			if lookup and not rawget(lookup, key) then
+				local lookup_index = #lookup + 1
+				rawset(lookup, lookup_index, key)
+				rawset(lookup, key, lookup_index)
 			end
 		end
-
-		if NetworkLookup and NetworkLookup.weapon_skins and not rawget(NetworkLookup.weapon_skins, new_key) then
-			local tbl = NetworkLookup.weapon_skins
-			local idx = #tbl + 1
-			rawset(tbl, idx, new_key)
-			rawset(tbl, new_key, idx)
-		end
-
-		if NetworkLookup and NetworkLookup.item_names and not rawget(NetworkLookup.item_names, new_key) then
-			local tbl = NetworkLookup.item_names
-			local idx = #tbl + 1
-			rawset(tbl, idx, new_key)
-			rawset(tbl, new_key, idx)
-		end
-
-		_custom_skin_keys[new_key] = true
+		_custom_skin_keys[key] = true
 		registered = registered + 1
 		::continue::
 	end
 
-	mod:info("Registered %d empire halberd cosmetics as cwv_es_poleaxe illusions", registered)
+	mod:info("Registered %d additional converted Greataxe model illusions", registered)
 end
 
-_register_halberd_poleaxe_illusions()
+_register_greataxe_model_illusions()
 
 -- ============================================================
 -- Saltzpyre fencing-sword cosmetics → cwv_es_rapier illusions
@@ -9861,7 +9835,7 @@ local _registered_keys = {}
 --   2. item_data.cwv_key -- the field _build_entry stamps on the IML clone.
 --      Covers instances whose backend_id is NOT cwv-shaped: cim's Athanor
 --      mints Application.guid() UUIDs (crafting_in_modded_dev.lua:4644), which
---      rung 1 can never match (the #482 crafted-Poleaxe transform loss).
+--      rung 1 can never match (the #482 crafted-CWV transform loss).
 --   3. backend items lookup by bid -> item.data.cwv_key -- for callers that
 --      only carry the bid (the previewer's _item_info_by_slot holds just
 --      {name, backend_id, skin_name, ...}, world_hero_previewer.lua:776).
@@ -9929,7 +9903,7 @@ local function _build_entry(def, backend_id)
 	-- guaranteed on every instance -- cim's Athanor mints Application.guid()
 	-- backend_ids (crafting_in_modded_dev.lua:4644), a UUID that carries no
 	-- key. Every pattern-keyed resolver silently skipped such crafted
-	-- instances, so a crafted Poleaxe rendered without its type-level
+	-- instances, so a crafted CWV weapon rendered without its type-level
 	-- scale/grip on the owner + preview paths. The clone carrying its own
 	-- variant key gives resolvers a bid-shape-independent positive signal;
 	-- it survives the table.clone in BackendUtils.get_item_from_masterlist
@@ -10027,7 +10001,7 @@ local function _build_entry(def, backend_id)
 		cwv_es_warpriest_hammer_shield = "cwv_es_warpriest_hammer_shield_skins",
 		cwv_es_priest_greathammer      = "cwv_es_priest_greathammer_skins",
 		cwv_es_maul                    = "cwv_es_maul_skins",
-		cwv_es_poleaxe                 = "cwv_es_poleaxe_skins",
+		cwv_es_greataxe                = "cwv_es_greataxe_skins",
 		cwv_es_rapier                  = "cwv_es_rapier_skins",
 		cwv_es_outrider_grenade_launcher = "cwv_es_outrider_grenade_launcher_skins",
 		cwv_es_musket                    = "cwv_es_musket_skins",
@@ -10194,44 +10168,35 @@ _om._cwv_preview_meshswap_apply = function(item_name, backend_id, skin, info)
 	if (type(effective_skin) ~= "string" or effective_skin == "") and type(info) == "table" then
 		effective_skin = info.skin_name
 	end
-	if type(effective_skin) == "string" and effective_skin ~= "" then
-		-- #567: MenuWorldPreviewer can retain the selected skin name while its
-		-- already-built spawn recipe still contains the base Mace+Sword hands.
-		-- Rebuild that recipe from the authoritative generated-skin row. This is
-		-- deliberately limited to the exact Sword+Mace family; every other
-		-- selected illusion continues to own vanilla's recipe unchanged.
-		if _om._exact_pair_skin_predicate
-				and _om._exact_pair_skin_predicate(effective_skin) then
-			local selected = WeaponSkins and WeaponSkins.skins
-				and WeaponSkins.skins[effective_skin]
-			if type(selected) == "table" then
-				local swapped = 0
-				for _, entry in ipairs(info.spawn_data) do
-					if not entry.is_ammo_unit then
-						local base = entry.right_hand and selected.right_hand_unit
-							or (entry.left_hand and selected.left_hand_unit)
-						local want = base and _om._resident_override_3p(base)
-						if want and entry.unit_name ~= want then
-							entry.unit_name = want
-							swapped = swapped + 1
-						end
-					end
-				end
-				if swapped > 0 then
-					printf("[cwv:567] preview exact-pair skin=%s swapped=%d R=%s L=%s",
-						effective_skin, swapped, tostring(selected.right_hand_unit),
-						tostring(selected.left_hand_unit))
-				end
-			end
+	local cwv_key = _om._cwv_key_for_item(backend_id, nil)
+	local def = cwv_key and _find_def(cwv_key) or nil
+	local appearance = def and _om.exact_appearance.resolve({
+		explicit_skin = effective_skin,
+		backend_id = backend_id,
+		weapon_skins = WeaponSkins and WeaponSkins.skins,
+		skin_from_backend = function(bid)
+			local backend = Managers and Managers.backend
+			local iface = backend and backend:get_interface("items")
+			return iface and iface.get_skin and iface:get_skin(bid)
+		end,
+	})
+	if appearance then
+		local swapped = _om.exact_appearance.apply_spawn_data(
+			appearance, info and info.spawn_data, _om._resident_override_3p, def)
+		if swapped > 0 then
+			printf("[cwv:579] preview exact-skin=%s swapped=%d R=%s L=%s",
+				appearance.skin, swapped, tostring(appearance.right_hand_unit),
+				tostring(appearance.left_hand_unit))
 		end
 		return
 	end
+	-- A named skin that is not locally resolvable must never fall through to
+	-- the variant default and erase its identity. Leave vanilla's recipe intact.
+	if type(effective_skin) == "string" and effective_skin ~= "" then return end
 	-- #482: shared ladder instead of the bare bid pattern -- an Athanor-crafted
 	-- instance (UUID bid) resolves via the backend item's stamped cwv_key, so
 	-- the inventory preview swaps to the variant mesh for crafted copies too.
-	local cwv_key = _om._cwv_key_for_item(backend_id, nil)
 	if not cwv_key then return end
-	local def = _find_def(cwv_key)
 	if not def then return end
 
 	-- Vanilla player mesh only, non-sentinel, resident-gated -- else World.spawn_unit
@@ -10289,11 +10254,26 @@ mod._cwv_preview_meshswap_apply = _om._cwv_preview_meshswap_apply  -- exposed fo
 -- (idempotent vs the get_item_units hook — no double-handling).
 _om._cwv_browser_meshswap_apply = function(item, spawn_data)
 	if not item or type(spawn_data) ~= "table" then return end
-	local skin = item.skin
-	if type(skin) == "string" and skin ~= "" then return end
+	local skin = item.skin or (item.data and item.data.mod_data and item.data.mod_data.skin)
 	local cwv_key = _om._cwv_key_for_item(item.backend_id, item.data)
+	local def = cwv_key and _find_def(cwv_key) or nil
+	local appearance = def and _om.exact_appearance.resolve({
+		explicit_skin = skin,
+		backend_id = item.backend_id,
+		weapon_skins = WeaponSkins and WeaponSkins.skins,
+		skin_from_backend = function(bid)
+			local backend = Managers and Managers.backend
+			local iface = backend and backend:get_interface("items")
+			return iface and iface.get_skin and iface:get_skin(bid)
+		end,
+	})
+	if appearance then
+		_om.exact_appearance.apply_spawn_data(appearance, spawn_data,
+			_om._resident_override_3p, def)
+		return
+	end
+	if type(skin) == "string" and skin ~= "" then return end
 	if not cwv_key then return end
-	local def = _find_def(cwv_key)
 	if not def then return end
 	local base = ItemMasterList and rawget(ItemMasterList, def.base_weapon)
 	if not base then return end
@@ -10668,13 +10648,6 @@ local _type_transforms = {
 		-- a more moderate drop.
 		right_hand_offset = { 0, 0, 0.2 },
 	},
-	-- Poleaxe: shrink Kruber's halberd Z so it reads as a shorter
-	-- polearm instead of a full halberd. Grip offset Z+0.5 lowers the
-	-- haft so Kruber's hand sits at the proper grip point — vanilla
-	-- halberd grip rides too high after the Z-shrink (per
-	-- `feedback_grip_offset_sign.md`, +Z lowers grip). Type-level so the
-	-- default mesh + every es_halberd_skin_* illusion in
-	-- cwv_es_poleaxe_skins inherits.
 	-- Rapier: lightly broaden the fencing-sword mesh — X +5%, Y +15%,
 	-- Z native. Tuning history:
 	--   v0.1.187 {1.1, 1.25, 1.0} initial basket-hilt feel
@@ -10686,10 +10659,6 @@ local _type_transforms = {
 	-- illusion in cwv_es_rapier_skins inherits.
 	cwv_es_rapier = {
 		right_hand_scale = { 1.05, 1.15, 1.0 },
-	},
-	cwv_es_poleaxe = {
-		right_hand_scale  = { 0.9, 0.9, 0.65 },
-		right_hand_offset = { 0, 0, 0.5 },
 	},
 	-- Musket: stretch Kruber's rifle 1.35x along Y (length axis) and
 	-- thin X/Z (barrel/cross-section). v0.1.250 dropped X/Z another 0.1
@@ -11526,6 +11495,25 @@ if BackendUtils then
 	mod:hook(BackendUtils, "get_item_units", function(func, item_data, backend_id, skin, career_name)
 		local result = func(item_data, backend_id, skin, career_name)
 		if not result then return result end
+		-- #579: every unit-table consumer (owner 3P, remote husk and the
+		-- previewers before their spawn recipe is built) consumes the same exact
+		-- per-hand WeaponSkins row. Cosmetics may subsequently replace the saved
+		-- offhand for this exact instance; CWV owns the selected primary skin.
+		local exact = _om.exact_appearance.resolve({
+			explicit_skin = result.skin or skin,
+			backend_id = backend_id or (item_data and item_data.backend_id),
+			weapon_skins = WeaponSkins and WeaponSkins.skins,
+			skin_from_backend = function(bid)
+				local backend = Managers and Managers.backend
+				local iface = backend and backend:get_interface("items")
+				return iface and iface.get_skin and iface:get_skin(bid)
+			end,
+		})
+		if exact then
+			-- Fill structural gaps only. Another chained mod may already have
+			-- composed an exact per-instance offhand onto this canonical skin.
+			_om.exact_appearance.apply_item_units(exact, result, true)
+		end
 
 		-- HISTORICAL: this hook used to mirror right_hand_unit → left_hand_unit
 		-- for `_kruber_1h_dual_skin_keys` skins. The mirror was needed back when
@@ -13095,13 +13083,20 @@ end
 -- them idempotent because VMF may call on_disabled before on_unload.
 mod.on_enabled = function()
     _om._acquire_dual_weapon_fp_residency("mod_enabled")
+	-- #599: compose gameplay-profile ownership into the canonical lifecycle
+	-- callback. Defining an earlier callback is ineffective because this owner
+	-- assignment is the final VMF callback value.
+	_om._apply_mace_hammer_identity(
+		mod:get(_om.mace_hammer_identity_policy.SETTING_ID) ~= false)
 end
 
 mod.on_disabled = function()
+	_om._apply_mace_hammer_identity(false)
     _om._release_dual_weapon_fp_residency("mod_disabled")
 end
 
 mod.on_unload = function()
+	_om._apply_mace_hammer_identity(false)
     _om._release_dual_weapon_fp_residency("mod_unload")
 end
 
@@ -13750,10 +13745,10 @@ _rt_register("cwv_key_resolution_uuid_safe", function()
     if type(ladder) ~= "function" then
         return "_om._cwv_key_for_item missing (#482 resolver ladder gone)"
     end
-    if ladder("cwv_es_poleaxe_001", nil) ~= "cwv_es_poleaxe" then
+    if ladder("cwv_es_greataxe_001", nil) ~= "cwv_es_greataxe" then
         return "#482 ladder rung 1 broken: cwv_<key>_NNN bid no longer resolves"
     end
-    if ladder("a9f48814-0000-4000-8000-000000000000", { cwv_key = "cwv_es_poleaxe" }) ~= "cwv_es_poleaxe" then
+    if ladder("a9f48814-0000-4000-8000-000000000000", { cwv_key = "cwv_es_greataxe" }) ~= "cwv_es_greataxe" then
         return "#482 ladder rung 2 broken: item_data.cwv_key stamp not consulted for UUID bid"
     end
     if ladder("not-a-registered-bid-482", { name = "dr_2h_axe" }) ~= nil then
@@ -14234,6 +14229,43 @@ _rt_register("cwv_unit_bearing_variants_registered", function()
     if #missing > 0 then
         return "unit-bearing variants NOT in _transform_map (#417 reg-gate fork): " .. table.concat(missing, ", ")
     end
+end)
+
+_rt_register("issue597_greataxe_replaces_poleaxe", function()
+	local greataxe = _om.greataxe
+	if _find_def("cwv_es_poleaxe") then return "retired Poleaxe definition still registered" end
+	local def = _find_def(greataxe.ITEM_KEY)
+	if not def or def.base_weapon ~= greataxe.BASE_WEAPON then
+		return "Greataxe definition/base contract missing"
+	end
+	if #(def.careers or {}) ~= 4 then return "Greataxe must default to four Kruber careers" end
+	local source = Weapons and Weapons.two_handed_axes_template_1
+	local clone = Weapons and Weapons[greataxe.TEMPLATE_KEY]
+	if not source or not clone then return "Greataxe source/clone template missing" end
+	local walked = 0
+	for action_name, source_group in pairs(source.actions or {}) do
+		local clone_group = clone.actions and clone.actions[action_name]
+		if type(source_group) == "table" and type(clone_group) == "table" then
+			for sub_name, source_action in pairs(source_group) do
+				local clone_action = clone_group[sub_name]
+				if type(source_action) == "table" and type(clone_action) == "table" then
+					walked = walked + 1
+					if clone_action.damage_profile ~= source_action.damage_profile
+							or clone_action.anim_time_scale ~= source_action.anim_time_scale then
+						return string.format("Greataxe gameplay drift at %s.%s", action_name, sub_name)
+					end
+				end
+			end
+		end
+	end
+	if walked == 0 then return "Greataxe gameplay comparison was vacuous" end
+	for source_event, target_event in pairs(greataxe.ANIM_REMAP_3P) do
+		for _, career in ipairs(greataxe.DEFAULT_CAREERS) do
+			if _om._cross_access_target_event(greataxe.ITEM_KEY, career, source_event) ~= target_event then
+				return string.format("Greataxe 3P remap drift: %s/%s", career, source_event)
+			end
+		end
+	end
 end)
 
 _rt_register("cwv_issue596_infantry_spear_contract", function()
@@ -14942,7 +14974,7 @@ _rt_register("browser_meshswap_guards", function()
     apply({ backend_id = "es_sword_shield_rt419", data = { name = "es_sword_shield" } }, sd)
     if sd[1].unit_name ~= UNTOUCHED then return "#419 guard: non-cwv item must not rewrite" end
     sd = { { unit_name = UNTOUCHED } }
-    apply({ backend_id = "cwv_es_poleaxe_001", skin = "some_skin", data = nil }, sd)
+    apply({ backend_id = "cwv_es_greataxe_001", skin = "some_skin", data = nil }, sd)
     if sd[1].unit_name ~= UNTOUCHED then return "#419 guard: applied illusion (skin) must win, no rewrite" end
 end)
 

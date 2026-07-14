@@ -464,7 +464,7 @@ live in `character_weapon_variants/RECIPES.md`. Animation fixes use
 | `cwv_es_dual_maces` | Dual-wield (identical) | `dr_dual_wield_hammers` | Kruber (all) | Routed via `_cross_access_template_wield_3p[dual_wield_hammers_template] → to_dual_hammer_sword_es` | `display_dual_hammers` rig forced |
 | `cwv_wh_dual_maces` | Dual-wield (identical) | `dr_dual_wield_hammers` | Saltzpyre (all) | `wh_priest → to_dual_hammers_priest`, others `→ to_dual_hammers` | `display_dual_hammers` rig forced |
 | `cwv_es_maul` | 2H melee (stat + fire scrub) | `bw_1h_mace` | Kruber (all) | **Remap** + `wield_anim_3p = "to_2h_hammer"` (`maul_template`); base-template wield patch for previewer | Type-level scale `{1.4, 1.4, 2.0}`. Single-entry damage-profile swap removes burn from H1 heavy. Curated illusions: every `es_1h_mace_skin_*`. **TODO custom icons (placeholder).** |
-| `cwv_es_poleaxe` | 2H melee (stat) | `dr_2h_axe` | Kruber (all) | **Remap** only — source template already wields to `to_2h_hammer` natively (`poleaxe_template`) | Type-level scale `{1.0, 1.0, 0.65}` (Z-shortened halberd). Curated illusions: every `es_halberd_skin_*`. **TODO custom icons (placeholder).** |
+| `cwv_es_greataxe` | 2H melee | `dr_2h_axe` | Kruber (all) | Exact Bardin Greataxe behavior; Kruber uses WT's `to_2h_hammer` receiver redirects (`cwv_greataxe_template`) | Converted free-model illusions are declared in `_cwv_greataxe.lua`; names remain provisional pending in-game review. |
 
 ### Cross-access (no new item, just expanded `can_wield`)
 

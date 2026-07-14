@@ -30,4 +30,19 @@ return function(H, repo_root)
         H.equal(icon, nil)
         H.equal(reason, "skin_icon_unavailable")
     end)
+
+    H.test("CIM #598 keeps safe rarity metadata separate from custom resources", function()
+        H.equal(core.resolve_rarity("unique", false, true), "unique")
+        H.equal(core.resolve_rarity("unique", true, true), "modded")
+        H.equal(core.resolve_rarity("unique", true, false), "unique")
+
+        local ok, skin, icon, reason = core.resolve({},
+            { slots = { slot_melee = { skin = "custom_skin" } } }, "slot_melee",
+            { custom_skin = { inventory_icon = "package_local_icon" } },
+            function() return false end)
+        H.equal(ok, false)
+        H.equal(skin, "custom_skin")
+        H.equal(icon, nil)
+        H.equal(reason, "skin_icon_resource_unavailable")
+    end)
 end

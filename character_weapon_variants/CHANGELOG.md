@@ -1,5 +1,24 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.408-dev - 2026-07-14 - #597 #579 Greataxe and exact paired appearance [verify-fix-coop]
+
+- Replaced the retired Poleaxe with a Bardin-parity Kruber Greataxe. Five deduplicated CC BY 4.0 models ship as provisional illusions through the proven custom-FBX pipeline, with complete attribution and reproducible conversion tooling. All four Kruber careers are authored owners; WT controls every optional receiver.
+- Added one exact-instance appearance resolver for Dual Axes and other paired variants. Inventory mannequin, customization preview, owner 3P, score preview, and remote reconstruction now consume the same saved right/offhand plan instead of rebuilding Dual Axes from the base recipe.
+- Added bounded retirement, package, attribution, exact-appearance, and lifecycle regression coverage. Full live verification still requires two players for custom model residency and paired cosmetics.
+
+### Co-op verification
+
+Craft the Greataxe through CIM and inspect all five placeholder illusions in first person, inventory/customization preview, owner 3P, and from a second player's view; tune model transforms through WT as needed. Confirm Poleaxe is absent. On Dual Axes, save distinct right/offhand illusions and verify both survive preview, mission spawn, swaps, score view, restart, and remote rendering. Run `/cwv_regression_test` and require the #597/#579 checks to pass.
+
+## 0.1.408-dev - 2026-07-14 - #599 mace/hammer identity [verify-fix]
+
+- Added the default-on mace/hammer identity toggle: supported mace attacks are 5% faster; supported one-handed hammer families gain 12.5% direct damage and lose 25% cleave. Two-handed hammers, pushes, blocks, stagger, shield slams, and mixed Mace+Sword families remain unchanged.
+- Dual Maces use an isolated template; hammer damage/cleave profiles and power rows are cloned, reversible, network-registered, and never mutate vanilla sources. One canonical lifecycle owner applies live changes and restores exact originals on disable/unload.
+
+### Solo verification
+
+Toggle mace/hammer identity off/on and compare a single, shielded, and dual representative from each family. Confirm the exact included families change, excluded two-handed/mixed weapons do not, and repeated toggles never compound. Run `/cwv_regression_test` and require every #599 check to pass.
+
 ## 0.1.407-dev - 2026-07-14 - #596 Infantry Spear [verify-fix-coop]
 
 - Added **Infantry Spear** for Mercenary, Huntsman, and Foot Knight, using Kerillian's two-handed Spear moveset and only the spear half of Kruber's native Chaos Wastes Spear+Shield models. Grail Knight is excluded from CWV's authored defaults.

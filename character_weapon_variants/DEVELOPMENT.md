@@ -1184,7 +1184,7 @@ variant has a scale/offset (def- or type-level) and how it resolves on the husk.
 | cwv_es_priest_greathammer | wh_2h_hammer | DIFFERS (R) | force-loaded | - | none |
 | cwv_es_warpriest_hammer | wh_1h_hammer | DIFFERS (R) | force-loaded | - | none |
 | cwv_es_maul | bw_1h_mace | DIFFERS (R) | force-loaded | - | type; resolves w/ skin |
-| cwv_es_poleaxe | dr_2h_axe | DIFFERS (R) | force-loaded | - | type; resolves w/ skin |
+| cwv_es_greataxe | dr_2h_axe | DIFFERS (R; custom manifest) | force-loaded | - | manifest model; resolves w/ skin |
 | cwv_es_rapier | wh_fencing_sword | same (R) | none needed (base loads) | - | type; SCALE needs skin (skinless = native scale) |
 | cwv_es_crossbow | wh_crossbow | no override | none needed (base loads) | - | none |
 | cwv_es_dual_swords | we_dual_wield_swords | DIFFERS (R+L) | force-loaded | - | def; resolves w/ skin |
@@ -1225,7 +1225,7 @@ identity lives in `item_data.backend_id`, formatted as
 — **but only for CWV's own instances and cim standard-forge crafts.**
 A cim **Athanor** craft mints `Application.guid()` (a UUID) as the
 backend_id, which no pattern match can decode (issue 482: crafted
-Poleaxe lost its scale/grip on every owner-side path).
+the former Poleaxe lost its scale/grip on every owner-side path).
 
 **Always resolve through the shared ladder, never a bare regex:**
 ```lua
@@ -1740,3 +1740,32 @@ Full catalog: see `ITEM_LIST.md` in the repo root.
 `cwv_es_infantry_spear` is the canonical independently-scaled melee clone. Its behavior source is `two_handed_spears_elf_template_1`; its model source is the right-hand spear field of `es_deus_01` and that owner's seven skins [src: `spears_wood_elf.lua:1-4,1559`; `item_master_list_morris.lua:137-159`; `weapon_skins_morris.lua:144-267`]. `ActionUtils.get_action_time_scale` starts from `anim_time_scale or 1`, while action completion, chain windows, and sweep hit windows divide by that scale [src: `action_utils.lua:538-563`; `weapon_unit_extension.lua:477-490,930-936`; `action_sweep.lua:153-156,455-459`]. Accordingly, the helper scales only `melee_start` and `sweep`; it does not rewrite individual timestamps or unrelated block/push actions.
 
 Damage, impact, and cleave remain separate `_clone_damage_profile` multipliers. Never scale the generic `damage_profile_inner`/`damage_profile_outer` push rows when a spec asks for weapon-hit tuning only.
+
+## #597 Greataxe model-manifest implementation
+
+`cwv_es_greataxe` replaces the retired Poleaxe family. Its gameplay template is a deep clone of `two_handed_axes_template_1` with no timing or damage-profile changes, preserving Bardin's Greataxe behavior exactly [src: `item_master_list_exported.lua:7298-7317`; `2h_axes.lua:1-1181`]. Kruber's four careers explicitly wield through `to_2h_hammer`; the action substitutions are copied from WT's `two_handed_axes_template_1` receiver map, not independently guessed [src: `weapon_tweaker/_wt_anim_remap_data.lua:31-38`; `weapon_tweaker/wt_wield_patches.lua:226`].
+
+Converted third-party assets have one code-side seam: `_cwv_greataxe.lua` `MODELS`. A row is eligible only when `key`, provisional `display_name`, and `right_hand_unit` are non-empty. The first eligible row owns the generated base illusion; subsequent rows register as curated picker illusions. Keep license/source attribution with the converted asset metadata, and never add a row until its unit loads successfully.
+## One-handed mace and hammer identity toggle (Issue #599)
+
+`enable_cwv_mace_hammer_identity` is a default-on, hot-reversible gameplay
+toggle. Its scope is an explicit semantic allowlist in
+`_cwv_mace_hammer_identity.lua`; it never scans template names. Maces use
+`anim_time_scale * 1.05` on attack-start, sweep, and shield-slam actions.
+Hammers swap direct `kind = "sweep"` attacks to CWV-owned cloned
+profiles with `power_distribution.attack * 1.125` and cleave attack/impact
+capacity `* 0.75`. Impact power (stagger magnitude), ordinary push profiles,
+charge actions, block, wield, and the original damage/power rows are untouched.
+
+The mace family is `one_handed_hammer_template_1`,
+`one_handed_hammer_wizard_template_1`,
+`one_handed_hammer_shield_template_1`, and CWV's isolated
+`cwv_dual_maces_template`. The hammer family is
+`one_handed_hammer_template_2`, `one_handed_hammer_priest_template`, both
+ordinary/priest hammer-and-shield templates, and both ordinary/priest Dual
+Hammer templates. CWV's Warrior-Priest Hammer, Dual Warrior-Priest Hammers,
+and Warrior-Priest Hammer and Shield inherit those hammer templates. All 2H
+hammers, Maul, Hammer and Tome, and mixed Mace and Sword are deliberate
+exclusions. Source provenance: VT2
+`scripts/settings/equipment/item_master_list_exported.lua:6571,6673,7073,7350,7394`
+and `item_master_list_carousel.lua:2057,2129,2199`.

@@ -1,8 +1,8 @@
 {
   "_banner": "GENERATED — do not edit; run tools/gen-name-map/gen-name-map.ps1",
-  "_generated": "2026-07-13",
+  "_generated": "2026-07-14",
   "_source": "vanilla decompile + mod definition tables (see gen-name-map.ps1 header for provenance)",
-  "_entry_count": 3975,
+  "_entry_count": 3976,
   "_name_dump": {
     "found": false,
     "note": "no in-game name dump found; vanilla strings stay unresolved"
@@ -52,9 +52,7 @@
       "item_type": "cwv_es_axe_shield",
       "slot_type": "",
       "careers": [
-        "es_mercenary",
-        "es_huntsman",
-        "es_knight"
+        null
       ],
       "source": "character_weapon_variants",
       "required_dlc": "",
@@ -70,9 +68,7 @@
       "item_type": "cwv_es_axe_shield",
       "slot_type": "",
       "careers": [
-        "es_mercenary",
-        "es_huntsman",
-        "es_knight"
+        null
       ],
       "source": "character_weapon_variants",
       "required_dlc": "",
@@ -166,6 +162,38 @@
       "display_name_source": "literal",
       "loc_key": "cwv_es_dual_warpriest_hammers_name",
       "item_type": "cwv_es_dual_warpriest_hammers",
+      "slot_type": "",
+      "careers": [
+        null
+      ],
+      "source": "character_weapon_variants",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "cwv_es_greataxe",
+      "kind": "cwv_variant",
+      "display_name": "Greataxe",
+      "display_name_source": "literal",
+      "loc_key": "cwv_es_greataxe_name",
+      "item_type": "",
+      "slot_type": "",
+      "careers": [
+        null
+      ],
+      "source": "character_weapon_variants",
+      "required_dlc": "",
+      "unresolved": false,
+      "reason": ""
+    },
+    {
+      "key": "cwv_es_infantry_spear",
+      "kind": "cwv_variant",
+      "display_name": "Infantry Spear",
+      "display_name_source": "literal",
+      "loc_key": "cwv_es_infantry_spear_name",
+      "item_type": "cwv_es_infantry_spear",
       "slot_type": "",
       "careers": [
         null
@@ -278,22 +306,6 @@
       "display_name_source": "literal",
       "loc_key": "cwv_es_outrider_grenade_launcher_name",
       "item_type": "cwv_es_outrider_grenade_launcher",
-      "slot_type": "",
-      "careers": [
-        null
-      ],
-      "source": "character_weapon_variants",
-      "required_dlc": "",
-      "unresolved": false,
-      "reason": ""
-    },
-    {
-      "key": "cwv_es_poleaxe",
-      "kind": "cwv_variant",
-      "display_name": "Poleaxe",
-      "display_name_source": "literal",
-      "loc_key": "cwv_es_poleaxe_name",
-      "item_type": "cwv_es_poleaxe",
       "slot_type": "",
       "careers": [
         null
@@ -63465,8 +63477,8 @@
     {
       "key": "wh_bountyhunter::dr_shield_hammer",
       "kind": "wt_unlock",
-      "display_name": "Bardin: Hammer and Shield",
-      "display_name_source": "mod_loc",
+      "display_name": null,
+      "display_name_source": "",
       "loc_key": "unlock_wh_bountyhunter_dr_shield_hammer",
       "item_type": "weapon_access",
       "slot_type": "",
@@ -63475,8 +63487,8 @@
       ],
       "source": "weapon_tweaker",
       "required_dlc": "",
-      "unresolved": false,
-      "reason": ""
+      "unresolved": true,
+      "reason": "no unlock_<career>_<weapon> loc entry in weapon_tweaker_localization.lua"
     },
     {
       "key": "wh_bountyhunter::dr_steam_pistol",
@@ -64585,8 +64597,8 @@
     {
       "key": "wh_captain::dr_shield_hammer",
       "kind": "wt_unlock",
-      "display_name": "Bardin: Hammer and Shield",
-      "display_name_source": "mod_loc",
+      "display_name": null,
+      "display_name_source": "",
       "loc_key": "unlock_wh_captain_dr_shield_hammer",
       "item_type": "weapon_access",
       "slot_type": "",
@@ -64595,8 +64607,8 @@
       ],
       "source": "weapon_tweaker",
       "required_dlc": "",
-      "unresolved": false,
-      "reason": ""
+      "unresolved": true,
+      "reason": "no unlock_<career>_<weapon> loc entry in weapon_tweaker_localization.lua"
     },
     {
       "key": "wh_captain::dr_steam_pistol",
@@ -65817,8 +65829,8 @@
     {
       "key": "wh_zealot::dr_shield_hammer",
       "kind": "wt_unlock",
-      "display_name": "Bardin: Hammer and Shield",
-      "display_name_source": "mod_loc",
+      "display_name": null,
+      "display_name_source": "",
       "loc_key": "unlock_wh_zealot_dr_shield_hammer",
       "item_type": "weapon_access",
       "slot_type": "",
@@ -65827,8 +65839,8 @@
       ],
       "source": "weapon_tweaker",
       "required_dlc": "",
-      "unresolved": false,
-      "reason": ""
+      "unresolved": true,
+      "reason": "no unlock_<career>_<weapon> loc entry in weapon_tweaker_localization.lua"
     },
     {
       "key": "wh_zealot::dr_steam_pistol",

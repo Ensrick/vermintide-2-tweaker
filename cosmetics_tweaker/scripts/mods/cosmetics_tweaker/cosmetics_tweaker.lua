@@ -61,7 +61,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.103-dev"
+local MOD_VERSION = "0.9.104-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -1582,6 +1582,15 @@ end
 _offhand_options.es_1h_mace_shield          = { left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.es_1h_sword_shield) }
 _offhand_options.es_1h_sword_shield_breton  = { left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.es_1h_sword_shield) }
 _offhand_options.es_deus_01                 = { left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.es_1h_sword_shield) }
+-- CWV Kruber shield weapons are Empire-family receivers. Seed their vanilla
+-- row before the LA merge; otherwise the merge creates an LA-only pool.
+for _, item_type in ipairs(LA_BRIDGE.kruber_shield_item_types or {}) do
+    if item_type ~= "es_1h_sword_shield_breton" and not _offhand_options[item_type] then
+        _offhand_options[item_type] = {
+            left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.es_1h_sword_shield),
+        }
+    end
+end
 _offhand_options.dr_1h_hammer_shield        = { left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.dr_1h_axe_shield) }
 _offhand_options.wh_hammer_shield           = { left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.wh_flail_shield) }
 
@@ -2591,6 +2600,8 @@ local function _merge_la_offhand_options()
                         -- shield shape. nil for pure-paint variants, in which case
                         -- the user's existing shield mesh is preserved.
                         intended_unit   = la_opt.intended_unit,
+                        authored_family = la_opt.authored_family,
+                        variant_kind    = la_opt.variant_kind,
                         rarity          = "promo",
                         -- v0.9.9.1 REVERT: dropped la_opt.icon passthrough.
                     }
@@ -2678,6 +2689,8 @@ mod._la_restore_offhand_selections = function()
                     la_armoury_key  = la_opt.armoury_key,
                     vanilla_skin    = la_opt.vanilla_skin,
                     intended_unit   = la_opt.intended_unit,
+                    authored_family = la_opt.authored_family,
+                    variant_kind    = la_opt.variant_kind,
                     rarity          = "promo",
                 }
                 if la_opt.intended_unit then _preload_offhand_package(la_opt.intended_unit) end
@@ -4358,16 +4371,17 @@ end
 -- paint is gated to skinned items only, mirroring the BackendUtils.get_item_units
 -- override gate. Painting the base weapon template would surprise users
 -- ("base template can't have illusions applied").
--- v0.9.45-dev (BUG 1/2): is it safe to paint kind="unit" LA heraldry onto unit
--- `u`? Only when `u`'s authored mesh (`unit_name`) IS the variant's custom mesh
--- (new_units[1] 1P or new_units[2] 3P). kind="texture" variants paint the base
--- mesh by design and are never gated; units whose mesh can't be read fall
--- through to the legacy (paint) behavior so the working cases never regress.
+-- Is it safe to paint this LA heraldry onto unit `u`? Whenever the variant
+-- declares `new_units`, the spawned unit's authored mesh must be that exact 1P
+-- or 3P member. This applies to both custom-unit variants and texture variants
+-- which select a particular vanilla mesh. Pure-paint texture variants have no
+-- declared unit and are kept safe by the authored-family pool policy.
+-- Units whose mesh cannot be read retain the legacy permissive behavior.
 -- Reuses _unit_mesh_name (pcall-safe). Called only on the "ingame" path.
 local function _offhand_paint_mesh_ok(u, armoury_key)
     local la = get_mod("Loremasters-Armoury")
     local variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
-    if not (variant and variant.kind == "unit" and variant.new_units) then return true end
+    if not (variant and variant.new_units) then return true end
     local actual = _unit_mesh_name(u)
     if actual == "<no-unit_name>" or actual == "<not-unit>" then return true end
     return actual == tostring(variant.new_units[1])
@@ -11092,40 +11106,41 @@ _rt_register("offhand_preload_async_bounded_565", function()
     end
 end)
 
-_rt_register("la_kruber_shield_catalogue_parity_266", function()
+_rt_register("la_kruber_shield_catalogue_compatibility_204", function()
     if not LA_BRIDGE.registered then return nil end
     if type(LA_BRIDGE.kruber_shield_item_types) ~= "table"
             or #LA_BRIDGE.kruber_shield_item_types ~= 7 then
         return "Kruber LA shield catalogue is missing or has unexpected cardinality"
     end
-    local reference
+    local item_family = {}
+    for family, item_types in pairs(LA_BRIDGE.kruber_shield_families or {}) do
+        for _, item_type in ipairs(item_types) do item_family[item_type] = family end
+    end
     for _, item_type in ipairs(LA_BRIDGE.kruber_shield_item_types or {}) do
         local per_hand = LA_BRIDGE.la_offhand_options_by_weapon_type[item_type]
         local options = per_hand and per_hand.left_hand_unit
         if type(options) ~= "table" or #options == 0 then
             return "missing LA shield pool for Kruber item_type " .. tostring(item_type)
         end
-        local keys = {}
         for _, option in ipairs(options) do
             if not option.armoury_key then
                 return "LA shield option without armoury_key on " .. tostring(item_type)
             end
-            keys[option.armoury_key] = true
-        end
-        if not reference then
-            reference = keys
-        else
-            for key in pairs(reference) do
-                if not keys[key] then
-                    return string.format("Kruber LA parity missing %s on %s", key, item_type)
-                end
-            end
-            for key in pairs(keys) do
-                if not reference[key] then
-                    return string.format("Kruber LA parity has extra %s on %s", key, item_type)
-                end
+            if option.variant_kind ~= "unit"
+                    and option.authored_family ~= item_family[item_type] then
+                return string.format("LA texture family mismatch key=%s authored=%s receiver=%s",
+                    tostring(option.armoury_key), tostring(option.authored_family), tostring(item_type))
             end
         end
+    end
+    local cwv_pool = _offhand_options.cwv_es_axe_shield
+        and _offhand_options.cwv_es_axe_shield.left_hand_unit
+    local vanilla = 0
+    for _, option in ipairs(cwv_pool or {}) do
+        if option.unit and not option.la_armoury_key then vanilla = vanilla + 1 end
+    end
+    if vanilla < #_SHIELD_POOLS_BY_ITEM_TYPE.es_1h_sword_shield then
+        return "CWV Axe and Shield missing vanilla Empire shield options"
     end
 end)
 

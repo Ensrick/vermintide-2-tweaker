@@ -8,9 +8,25 @@ material = [
 ]
 
 unit = [
-	"units/*"
+	"units/cwv_es_musket_custom/*"
 ]
 
 texture = [
-	"textures/*"
+	"textures/character_weapon_variants/*"
+	"textures/cwv_es_musket_custom/*"
+]
+
+// Issue #597: each custom Greataxe mesh has the sibling package names that
+// inventory previews and GearUtils derive from its right_hand_unit path.
+package = [
+	"units/cwv_es_greataxe/axe_01/axe_01"
+	"units/cwv_es_greataxe/axe_01/axe_01_3p"
+	"units/cwv_es_greataxe/axe_02/axe_02"
+	"units/cwv_es_greataxe/axe_02/axe_02_3p"
+	"units/cwv_es_greataxe/axe_03/axe_03"
+	"units/cwv_es_greataxe/axe_03/axe_03_3p"
+	"units/cwv_es_greataxe/axe_04/axe_04"
+	"units/cwv_es_greataxe/axe_04/axe_04_3p"
+	"units/cwv_es_greataxe/axe_05/axe_05"
+	"units/cwv_es_greataxe/axe_05/axe_05_3p"
 ]

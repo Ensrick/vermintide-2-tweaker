@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.74-dev"
+local MOD_VERSION = "0.8.75-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -806,11 +806,12 @@ if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
         -- side-channel stays gated.
         local is_modded = item and item.rarity == "modded" or false
 
-        -- Persistence-only concern: the cim<->cim `cim_modded_slot` side-channel that
-        -- restores "modded" chrome on cim CLIENTS. Vanilla clients have no handler and
-        -- drop it; it contributes nothing to wire safety. Keep it gated so persist-OFF is
-        -- a clean vanilla pass-through APART FROM the mandatory rarity coercion.
-        if _persist_loadouts_enabled() then
+        -- #598: safe PRESENTATION metadata is not loadout persistence. VMF delivers
+        -- this mod channel only to a peer advertising the same CIM handler; the
+        -- schema-gated payload contains a boolean and no icon/model/material name.
+        -- Send unconditionally so CIM peers can restore the local modded frame while
+        -- non-CIM peers retain the vanilla-safe `unique` wire rarity.
+        do
             local peer_id = player:network_id()
             local local_player_id = player:local_player_id()
             -- Send even is_modded=false so equipping a non-modded item clears any stale
@@ -862,7 +863,9 @@ local function _rpc_cim_modded_slot(sender_peer_id, schema_version, peer_id, loc
     if loadouts and loadouts[uid] then
         local stored = loadouts[uid][slot_name]
         if stored then
-            stored.rarity = is_modded and "modded" or stored.rarity
+            stored.rarity = mod._cim246_tab_preview_core
+                and mod._cim246_tab_preview_core.resolve_rarity(stored.rarity, true, is_modded)
+                or (is_modded and "modded" or stored.rarity)
         end
     end
 end
@@ -917,19 +920,19 @@ mod:hook("PlayerManager", "rpc_sync_loadout_slot", function(func, self, channel_
     -- (send_rpc_clients at player_manager.lua:83 re-sends them).
     func(self, channel_id, peer_id, local_player_id, slot_id, item_id, rarity_id, power_level, buff_ids, buff_value_type_ids, buff_values)
 
-    -- v0.8.15-dev master gate: when loadout persistence is OFF (default), cim
-    -- does not patch any received-slot rarity. (`_cim_modded_slot_state` stays
-    -- empty because the sender-side `sync_loadout_slot` hook never fired the
-    -- side-channel, so this would no-op anyway — but bail explicitly to keep the
-    -- receive path a clean vanilla pass-through.)
-    if not _persist_loadouts_enabled() then return end
+    -- #598: this is same-schema presentation metadata, independent of retired
+    -- loadout persistence. Resource identities remain absent from this payload.
     local uid = _cim_unique_id(peer_id, local_player_id)
     local slot_state = _cim_modded_slot_state[uid]
     if not slot_state then return end
     local slot_name = NL and NL.equipment_slots and NL.equipment_slots[slot_id]
     if not slot_name or not slot_state[slot_name] then return end
     local stored = self._player_loadouts and self._player_loadouts[uid] and self._player_loadouts[uid][slot_name]
-    if stored then stored.rarity = "modded" end
+    if stored then
+        stored.rarity = mod._cim246_tab_preview_core
+            and mod._cim246_tab_preview_core.resolve_rarity(stored.rarity, true, true)
+            or "modded"
+    end
 end)
 mod._cim_rpc_loadout_guard_installed = true
 

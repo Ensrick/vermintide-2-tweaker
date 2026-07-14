@@ -1,7 +1,7 @@
 <!-- GENERATED — do not edit; run tools/gen-name-map/gen-name-map.ps1 -->
 # Authoritative Name Map (key -> in-game display name)
 
-**Generated:** 2026-07-13 &nbsp;|&nbsp; **Entries:** 3975
+**Generated:** 2026-07-14 &nbsp;|&nbsp; **Entries:** 3976
 
 > This file is REGENERATED from ground truth (vanilla decompile + each mod's own
 > definition tables). **Grep this instead of trusting the legacy hand-maintained**
@@ -25,19 +25,21 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 |-----|--------------|-----------|---------|------------|
 | `cwv_es_longsword_nordland` | Helmgart Watchsword | cwv_imperial_longsword |  | literal |
 
-### kind: cwv_variant (28 entries, 0 unresolved)
+### kind: cwv_variant (29 entries, 0 unresolved)
 
 | key | display name | item_type | careers | provenance |
 |-----|--------------|-----------|---------|------------|
 | `cwv_dr_priest_greathammer` | Sigmarite Greathammer | wh_2h_hammer | dr_ranger, dr_ironbreaker, dr_slayer, dr_engineer | literal |
-| `cwv_es_axe_shield` | Axe and Shield | cwv_es_axe_shield | es_mercenary, es_huntsman, es_knight | literal |
-| `cwv_es_axe_shield_veteran` | Imperial Axe and Shield | cwv_es_axe_shield | es_mercenary, es_huntsman, es_knight | literal |
+| `cwv_es_axe_shield` | Axe and Shield | cwv_es_axe_shield |  | literal |
+| `cwv_es_axe_shield_veteran` | Imperial Axe and Shield | cwv_es_axe_shield |  | literal |
 | `cwv_es_crossbow` | Crossbow | cwv_es_crossbow |  | literal |
 | `cwv_es_cudgel` | Cudgel | es_1h_mace |  | literal |
 | `cwv_es_dual_axes` | Dual Axes | cwv_es_dual_axes |  | literal |
 | `cwv_es_dual_maces` | Dual Maces | cwv_es_dual_maces |  | literal |
 | `cwv_es_dual_swords` | Imperial Dual Swords | cwv_es_dual_swords |  | literal |
 | `cwv_es_dual_warpriest_hammers` | Dual Warrior-Priest Hammers | cwv_es_dual_warpriest_hammers |  | literal |
+| `cwv_es_greataxe` | Greataxe |  |  | literal |
+| `cwv_es_infantry_spear` | Infantry Spear | cwv_es_infantry_spear |  | literal |
 | `cwv_es_javelin` | Tuskgor Javelin | we_javelin |  | literal |
 | `cwv_es_longsword` | Imperial Longsword | cwv_imperial_longsword |  | literal |
 | `cwv_es_longsword_blackguard` | Black Guard Blade | cwv_imperial_longsword |  | literal |
@@ -45,7 +47,6 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `cwv_es_maul` | Maul | cwv_es_maul |  | literal |
 | `cwv_es_musket_old` | Old Musket | cwv_es_musket_old |  | literal |
 | `cwv_es_outrider_grenade_launcher` | Outrider Grenade Launcher | cwv_es_outrider_grenade_launcher |  | literal |
-| `cwv_es_poleaxe` | Poleaxe | cwv_es_poleaxe |  | literal |
 | `cwv_es_priest_greathammer` | Sigmarite Greathammer | cwv_es_priest_greathammer |  | literal |
 | `cwv_es_rapier` | Rapier | cwv_es_rapier |  | literal |
 | `cwv_es_shortsword` | Shortsword | bw_dagger |  | literal |
@@ -3188,7 +3189,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 
 ## source: weapon_tweaker
 
-### kind: wt_unlock (932 entries, 0 unresolved)
+### kind: wt_unlock (932 entries, 3 unresolved)
 
 | key | display name | item_type | careers | provenance |
 |-----|--------------|-----------|---------|------------|
@@ -3929,7 +3930,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `wh_bountyhunter::dr_drakegun` | Bardin: Drakegun | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::dr_rakegun` | Bardin: Grudge-Raker | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::dr_shield_axe` | Bardin: Axe and Shield | weapon_access | wh_bountyhunter | mod_loc |
-| `wh_bountyhunter::dr_shield_hammer` | Bardin: Hammer and Shield | weapon_access | wh_bountyhunter | mod_loc |
+| `wh_bountyhunter::dr_shield_hammer` | _(unresolved: unlock_wh_bountyhunter_dr_shield_hammer)_ | weapon_access | wh_bountyhunter | unresolved |
 | `wh_bountyhunter::dr_steam_pistol` | Bardin: Masterwork Pistol | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::es_1h_flail` | Saltzpyre: Flail | weapon_access | wh_bountyhunter | mod_loc |
 | `wh_bountyhunter::es_1h_mace` | Kruber: Mace | weapon_access | wh_bountyhunter | mod_loc |
@@ -3999,7 +4000,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `wh_captain::dr_drakegun` | Bardin: Drakegun | weapon_access | wh_captain | mod_loc |
 | `wh_captain::dr_rakegun` | Bardin: Grudge-Raker | weapon_access | wh_captain | mod_loc |
 | `wh_captain::dr_shield_axe` | Bardin: Axe and Shield | weapon_access | wh_captain | mod_loc |
-| `wh_captain::dr_shield_hammer` | Bardin: Hammer and Shield | weapon_access | wh_captain | mod_loc |
+| `wh_captain::dr_shield_hammer` | _(unresolved: unlock_wh_captain_dr_shield_hammer)_ | weapon_access | wh_captain | unresolved |
 | `wh_captain::dr_steam_pistol` | Bardin: Masterwork Pistol | weapon_access | wh_captain | mod_loc |
 | `wh_captain::es_1h_flail` | Saltzpyre: Flail | weapon_access | wh_captain | mod_loc |
 | `wh_captain::es_1h_mace` | Kruber: Mace | weapon_access | wh_captain | mod_loc |
@@ -4076,7 +4077,7 @@ Display-name provenance: **literal** = mod hard-coded the English string;
 | `wh_zealot::dr_drakegun` | Bardin: Drakegun | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::dr_rakegun` | Bardin: Grudge-Raker | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::dr_shield_axe` | Bardin: Axe and Shield | weapon_access | wh_zealot | mod_loc |
-| `wh_zealot::dr_shield_hammer` | Bardin: Hammer and Shield | weapon_access | wh_zealot | mod_loc |
+| `wh_zealot::dr_shield_hammer` | _(unresolved: unlock_wh_zealot_dr_shield_hammer)_ | weapon_access | wh_zealot | unresolved |
 | `wh_zealot::dr_steam_pistol` | Bardin: Masterwork Pistol | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::es_1h_flail` | Saltzpyre: Flail | weapon_access | wh_zealot | mod_loc |
 | `wh_zealot::es_1h_mace` | Kruber: Mace | weapon_access | wh_zealot | mod_loc |
