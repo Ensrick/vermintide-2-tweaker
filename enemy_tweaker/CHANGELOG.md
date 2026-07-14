@@ -1,5 +1,19 @@
 # Enemy Tweaker Changelog
 
+## 0.7.44-dev (2026-07-14): #453 enemy-modifier catalog diagnostics [not deployed]
+
+- Resolved the requested catalog to 15 native templates: 13 standard Chaos Wastes grudge marks, Geheimnisnacht Repulse (`shockwave` / `grudge_mark_shockwave_attacks`), and Devious Delvings Berserk (`termite_base` / `grudge_mark_termite_boss_raging`).
+- Added a bounded template/wire/enhancement/category census. Startup writes one readiness line; `/et_modifier_audit` writes the 15 detail rows to the log and only one summary to chat. No modifier is applied yet.
+- Preserved the one-hook invariant: `_et_boss_grudge.lua` already owns `ConflictDirector._post_spawn_unit`, so the later host-side category/rate implementation must consolidate there instead of registering a duplicate hook.
+- Added pure catalog/category tests, runtime regression `issue453_modifier_catalog_wire_ready`, and `ENEMY_MODIFIERS_FEASIBILITY.md`. Lifecycle: `[diagnostics-armed]` for solo census; future behavior requires `[verify-fix-coop]`.
+
+## 0.7.43-dev (2026-07-14): #452 premium-skin special feasibility diagnostics [not deployed]
+
+- Confirmed all five requested appearances are Versus player cosmetics, not spawn-ready AI breed units. Their `skin_1001` definitions link attachment meshes onto dark-pact player bases; directly substituting those mesh paths as AI `base_unit` values would omit the enemy actor/extension/hit-zone contract.
+- Added a bounded read-only census: one `[et:452]` summary plus five candidate lines at mod load. It checks each ordinary base breed/action set, premium item/cosmetic row, exact third-person attachment, and current unit residency. No hook, spawn, buff, setting, or shared game table is changed.
+- Added `issue452_special_variant_assets_classified` to `/et_regression_test`, engine-free census tests, and `SPECIAL_VARIANTS_FEASIBILITY.md` with the common clone/attachment/peer-parity foundation and staged behavior slices.
+- Lifecycle: `[diagnostics-armed]` for the solo asset census. Any eventual implementation must move to `[verify-fix-coop]` because new breeds and their cosmetics are rendered across peers.
+
 ## 0.7.42-dev (2026-07-14): #451 boss-idea feasibility diagnostics [not deployed]
 
 - Added a bounded, automatic runtime audit for all six proposed boss concepts. It writes one summary and six detail lines to the engine console log, so it remains visible with VMF logging disabled and requires no command or gameplay repro.

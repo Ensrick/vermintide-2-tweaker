@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.42-dev"
+local MOD_VERSION = "0.7.44-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -58,6 +58,8 @@ mod:dofile("scripts/mods/enemy_tweaker/_et_protect")              -- protective 
 mod:dofile("scripts/mods/enemy_tweaker/_et_fingerprint")          -- BR + settings fingerprints, et_br_fingerprint RPC, dormant-BR stub
 mod._et.SettingsQueue = mod:dofile("scripts/mods/enemy_tweaker/_et_settings_queue") -- #560 bounded setting-change transactions
 mod._et.HealthMultiplierCore = mod:dofile("scripts/mods/enemy_tweaker/_et_health_multiplier_core") -- #369 engine-free bounds/policy
+mod._et.SpecialVariantsCore = mod:dofile("scripts/mods/enemy_tweaker/_et_special_variants_core") -- #452 engine-free asset census
+mod._et.EnemyModifiersCore = mod:dofile("scripts/mods/enemy_tweaker/_et_enemy_modifiers_core") -- #453 engine-free modifier census
 
 -- Startup marker: unconditional mod:info (the "applied" log marker pattern).
 -- Prefix changed v0.5.14 from [et:br] -> [et] to match the universal convention
@@ -91,5 +93,7 @@ mod:dofile("scripts/mods/enemy_tweaker/_et_boss_tweaks")          -- boss mechan
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_balance")         -- #450 per-boss balance toggles (health/armor/warp-lightning data mutations)
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_grudge")          -- #531 grudge-mark behavioral knobs (Skarrik Berserk / Bodvarr Crippling, Cata+)
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_ideas")           -- #451 bounded source/runtime feasibility audit; no unsafe arena-breed injection
+mod:dofile("scripts/mods/enemy_tweaker/_et_special_variants")     -- #452 bounded premium-special asset audit; no breed/spawn mutation
+mod:dofile("scripts/mods/enemy_tweaker/_et_enemy_modifiers")      -- #453 bounded modifier/template/category audit; no application yet
 
 mod:info("[mem-probe] et boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _mem_probe_t0) / 1024)
