@@ -6,7 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 > **Suite location (v0.3.57-dev):** the `/crt_regression_test` harness and all check bodies moved from `career_tweaker.lua` into `scripts/mods/career_tweaker/_crt_regression.lua` (Phase 1 OOP split). Check names + registration order are unchanged. The talent-swap and diagnostics concerns the checks reference now live in `_crt_talent_swap.lua` / `_crt_diagnostics.lua` (see `DEVELOPMENT.md` module map).
 
-Last updated: 2026-07-13.
+Last updated: 2026-07-14.
+
+---
+## Bardin disabler dodge investigation (#440)
+
+| Field | Value |
+|-------|-------|
+| Symptom | Bardin is anecdotally less consistent at dodging Packmasters, Lifeleeches, or Gutter Runners. |
+| Source boundary | All profiles clone one dodge table. Packmaster/Lifeleech use common dodge status; Gutter uses root+0.2 trajectory, 1m trigger overlap, and `j_neck` tracking. Compiled player trigger geometry remains unverified. |
+| Fix version(s) | 0.3.68-dev (diagnostics only; not deployed) |
+| Expected | No speculative gameplay change. Automatic bounded `[crt:440]` rows distinguish live dodge timing/displacement from disabler tracking and profile geometry proxies. |
+| Detection | Offline `test_crt_bardin_disabler_probe.lua`; runtime `/crt_regression_test` check `issue440_bardin_disabler_probe`; compare Bardin and a non-Bardin in one co-op log. |
 
 ---
 ## No-op talent-menu close preserves live buffs (#283)

@@ -764,3 +764,14 @@ _rt_register("issue366_ale_independent_stack_decay", function()
         end
     end
 end)
+
+_rt_register("issue440_bardin_disabler_probe", function()
+    local probe = mod._crt and mod._crt.bardin_disabler_probe
+    if type(probe) ~= "table" or type(probe.regression_check) ~= "function" then
+        return "Bardin disabler probe module missing"
+    end
+    if probe.hook_count ~= 5 or type(mod._crt_bardin_disabler_tick) ~= "function" then
+        return "Bardin disabler probe hook/tick wiring drifted"
+    end
+    return probe.regression_check()
+end)

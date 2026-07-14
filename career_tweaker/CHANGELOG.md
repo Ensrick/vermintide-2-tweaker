@@ -1,5 +1,14 @@
 # Career Tweaker Changelog
 
+## 0.3.68-dev - 2026-07-14 - #440 Bardin disabler dodge investigation [diagnostics-armed; coop-required]
+
+- **Finding, not a balance fix.** The decompiled Lua provides one shared dodge movement/status path for all five heroes. Packmaster and Lifeleech consume that same dodge status without a profile branch. Bardin's shorter first-person height is camera presentation data and is never read by those paths. No evidence supports changing Bardin's dodge distance or timing.
+- **Remaining uncertainty.** Gutter Runner pounces are spatial rather than status-gated: root plus a fixed 0.2m trajectory target, a one-metre player-trigger overlap, then `j_neck` tracking. Character-specific trigger/neck geometry lives in compiled unit assets and cannot be proved equal from the Lua dump.
+- **Automatic diagnostics.** Added a read-only probe that records one settings/geometry summary per profile, at most 16 completed local dodges made within 25m of a disabler, and at most 16 outcome rows per disabler. `[crt:440]` rows correlate profile, outcome, live dodge phase/elapsed time/displacement/distance-left, attacker distance, neck height, actor count, and disabler-specific tracking state. Client-local dodge rows align with host-authoritative outcome rows by timestamp without adding RPC traffic. It requires no chat command and changes no gameplay value.
+- **Regression/documentation.** Added `BARDIN_DISABLER_AUDIT.md`, offline `test_crt_bardin_disabler_probe.lua`, and runtime `issue440_bardin_disabler_probe`.
+
+**Verify after deployment (two players recommended):** test Bardin and a non-Bardin control with comparable weapons, side-dodge direction and latency against repeated Packmaster hooks, Lifeleech grabs and Gutter Runner pounces. Attach the log containing `[crt:440]` rows. A Gutter-only separation with comparable dodge timing points toward compiled trigger/neck geometry; missing/late dodge status points toward timing/network input. Do not infer a balance fix from one attempt.
+
 ## 0.3.67-dev - 2026-07-14 - #366 stagger Ranger Veteran ale expiry [verify-fix]
 
 - Added an opt-in Ranger Veteran rework that gives both ale effects independent per-stack lifetimes. Vanilla sets `refresh_durations = true` on the damage-reduction and attack-speed sub-buffs (`buff_templates.lua:5323-5343`), and `BuffExtension._add_stacking_buff` consequently refreshes every existing stack before adding the next (`buff_extension.lua:520-533`). The rework sets that field false on both sub-buffs, preserving each drink's own authored 300-second clock.

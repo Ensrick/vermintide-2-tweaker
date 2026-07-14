@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.3.67-dev"
+local MOD_VERSION = "0.3.68-dev"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
@@ -187,6 +187,13 @@ local refresh_talent_ui    = mod._crt.refresh_talent_ui or function() end
 -- their call sites, so load order relative to the lifecycle callbacks is free).
 local ok_dg, _dg = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/_crt_diagnostics")
 if not ok_dg then mod:error("Failed to load diagnostics module: %s", tostring(_dg)) end
+
+-- #440 automatic, bounded Bardin-vs-control dodge/disabler instrumentation.
+-- Observation-only: five hooks record timing/geometry/outcomes without changing
+-- any target, status, return value, or gameplay setting.
+local ok_bdp, _bdp = pcall(mod.dofile, mod,
+    "scripts/mods/career_tweaker/_crt_bardin_disabler_probe")
+if not ok_bdp then mod:error("Failed to load Bardin disabler probe: %s", tostring(_bdp)) end
 
 -- Demo cluster: Bounty Hunter passive choice. The vanilla BH passive
 -- ("Job Well Done" — ammo on special kill) has two competing reworks:
@@ -600,6 +607,8 @@ mod.update = function(dt)
     if mod._crt_focused_spirit_tick then mod._crt_focused_spirit_tick(dt) end
     -- Auto-dump retry pump for reworked careers (no-op unless armed at StateIngame).
     if mod._crt_dump_retry_tick then mod._crt_dump_retry_tick(dt) end
+    -- #440 automatic profile summaries; self-throttled to once per second.
+    if mod._crt_bardin_disabler_tick then pcall(mod._crt_bardin_disabler_tick, dt) end
 end
 
 -- ============================================================
