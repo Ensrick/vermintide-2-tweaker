@@ -25,7 +25,9 @@ Mercenary (`SPProfiles[5].careers[1]`).
 
 ## Hook table
 
-1 registration site. `[safe]` = `mod:hook_safe` (post-callback, no override). The
+The primary player-scoped path has four registration sites: the materials-ready
+draw tick plus HUD, Tab-list, and score-screen resolution seams. `[safe]` =
+`mod:hook_safe` (post-callback, no override). The
 career_settings swap and the material injection are NOT hooks (a plain-table
 mutation and a VMF data API respectively) and are covered in the subsystem notes.
 
@@ -115,13 +117,12 @@ these.
   (extra `name = {}` blocks are ignored), and standalone single-textures bypass
   the atlas entirely (the UI falls through to `Gui.bitmap` on the material name),
   so no `UIAtlasHelper` registration is needed or effective.
-- **The override is career-scoped, not player-scoped (issue 435).** `dcp` writes
-  into the SHARED `career_settings` table keyed by career, with no per-player
-  keying, so two players on the same career in one lobby would both show whichever
-  player's cosmetics were processed last. Accepted for the solo/friends use case;
-  CONFIRM INTENDED BEHAVIOR before "fixing" - the durable fix keys overrides by
-  peer_id+career and resolves at draw time (issue 435, `OOP_REFACTOR_PLAN.md`
-  WS7).
+- **Issue 435 player scope.** The local source swap still writes the shared
+  `career_settings` entry, but other-player HUD, Tab, and score consumers resolve
+  at their per-player draw/build seams from synced cosmetics, falling back to
+  vanilla rather than the local override. Automatic `[dcp:435]` evidence is
+  exact-result deduplicated and capped at 24 records per session. Secondary
+  transient surfaces remain enumerated beside the hook implementation.
 
 ## Doc maintenance
 

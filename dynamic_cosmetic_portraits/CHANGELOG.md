@@ -1,5 +1,13 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.23-dev (2026-07-14) -- #435 bounded player-scoped portrait evidence [verify-fix-coop]
+
+- Added automatic `[dcp:435]` INFO evidence at the primary per-player HUD, Tab-list, and score-screen seams. Records identify subject class, custom/vanilla resolution, and portrait without peer/account identifiers.
+- Evidence is exact-result deduplicated and hard-capped at 24 records per session. It does not poll, send RPCs, or write to chat.
+- Added offline coverage for deduplication, cap enforcement, all three seams, and log-only output. Shipped portrait behavior is unchanged.
+
+**Verify:** Exercise HUD, Tab, and score views with a remote Mercenary or bot. Each surface should log its independent resolution once; remote custom portraits must reflect their synced cosmetic, while unresolved/bot score rows report vanilla.
+
 ## 0.1.22-dev (2026-07-13) -- #526 preserve portrait alpha in the Gui material [verify-fix]
 
 - The v0.1.20 PNG remask was necessary but insufficient: the mission-completion screenshot still shows the custom 86x108 texture's rectangular corners outside `UIWidgets.create_portrait_frame`, while adjacent vanilla portraits clip correctly. The source PNGs have transparent corners; the remaining difference is the standalone material shader.

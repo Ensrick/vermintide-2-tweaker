@@ -5,7 +5,7 @@ local mod = get_mod("dynamic_cosmetic_portraits")
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.22-dev"
+local MOD_VERSION = "0.1.23-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -501,6 +501,28 @@ local function _resolve_portrait_set_for_player(player)
         return _hat_portrait_map[hat_data.item_name]
     end
     return nil
+end
+
+-- #435 verification is normally co-op and visual. Emit one bounded record per
+-- unique surface/subject/result so an ordinary session proves which per-player
+-- branch rendered without chat spam or a manual command.
+local _scope_probe = mod:dofile("scripts/mods/dynamic_cosmetic_portraits/_dcp_player_scope_probe")
+local _scope_probe_state = _scope_probe.new(24)
+local function _scope_subject(player)
+    if not player then return "unknown" end
+    local kind = player.local_player and "local" or (player.bot_player and "bot" or "remote")
+    local local_id = nil
+    pcall(function() local_id = player:local_player_id() end)
+    return kind .. ":" .. tostring(local_id or "?")
+end
+local function _scope_evidence(surface, player, portrait, custom)
+    local subject = _scope_subject(player)
+    local resolution = custom and "custom" or "vanilla"
+    if _scope_probe.accept(_scope_probe_state, surface, subject, portrait, resolution) then
+        mod:info("[dcp:435] surface=%s subject=%s resolution=%s portrait=%s record=%d/%d",
+            tostring(surface), subject, resolution, tostring(portrait),
+            _scope_probe_state.count, _scope_probe_state.cap)
+    end
 end
 
 local function _restore_portrait_settings()
@@ -1003,6 +1025,7 @@ mod:hook("UnitFramesHandler", "_sync_player_stats", function(func, self, unit_fr
     end
     local set = _resolve_portrait_set_for_player(player)
     local resolved = (set and set.hud) or _original_portrait_image or career.portrait_image
+    _scope_evidence("hud", player, resolved, set ~= nil)
     local saved = career.portrait_image
     career.portrait_image = resolved
     func(self, unit_frame, ...)
@@ -1028,6 +1051,7 @@ mod:hook_safe("IngamePlayerListUI", "_update_player_information", function(self,
                 and _player_career_name(player) == "es_mercenary" then
             local set = _resolve_portrait_set_for_player(player)
             local resolved = (set and set.hud) or _original_portrait_image
+            _scope_evidence("tab", player, resolved, set ~= nil)
             if resolved and widget.content.portrait ~= resolved then
                 widget.content.portrait = resolved
             end
@@ -1064,6 +1088,7 @@ mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, player
                 end
                 local set = that_player and _resolve_portrait_set_for_player(that_player)
                 local resolved = (set and set.hud) or _original_portrait_image
+                _scope_evidence("score", that_player, resolved, set ~= nil)
                 if content.portrait ~= resolved then
                     content.portrait = resolved
                 end

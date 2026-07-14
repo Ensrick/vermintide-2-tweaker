@@ -4,7 +4,14 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-07-14.
+
+## Player-scoped portrait resolution (#435)
+
+- [ ] Remote Mercenary HUD and Tab portraits resolve from that player's synced cosmetic, never the local loadout.
+- [ ] Score rows use the remote human resolution; ambiguous bot/departed rows use vanilla.
+- [ ] `[dcp:435]` emits once per unique surface/subject/result and never exceeds 24 records per session.
+- [ ] `/dcp_regression_test` passes `portrait_override_player_scoped`; offline `test_dcp_player_scope_probe` passes.
 
 ---
 ## Multiplayer / Network Sync
