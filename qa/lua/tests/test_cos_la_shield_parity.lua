@@ -47,13 +47,36 @@ return function(Harness, repo_root)
         Harness.equal(bardin.es_1h_sword_shield, nil)
     end)
 
+    Harness.test("cos LA magic shield receivers are exact and family-safe (#373)", function()
+        local bret_magic = "units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01_magic_01"
+        local bret_base = "units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01"
+        local empire_magic = "units/weapons/player/wpn_empire_shield_04/wpn_emp_shield_04_magic_01"
+        local empire_base = "units/weapons/player/wpn_empire_shield_04/wpn_emp_shield_04"
+        local spear_magic = "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02_magic"
+        local spear_base = "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02"
+
+        Harness.equal(policy.magic_texture_receiver("breton", bret_magic), bret_base)
+        Harness.equal(policy.magic_texture_receiver("empire", empire_magic), empire_base)
+        Harness.equal(policy.magic_texture_receiver("empire", spear_magic), spear_base)
+        Harness.equal(policy.magic_texture_receiver("empire", bret_magic), nil,
+            "Breton magic mesh must never receive an Empire texture")
+        Harness.equal(policy.magic_texture_receiver("breton", empire_magic), nil,
+            "Empire magic mesh must never receive a Breton texture")
+        Harness.equal(policy.magic_texture_receiver("breton", bret_base), nil,
+            "ordinary paintable shields must not be replaced")
+        Harness.equal(policy.magic_texture_receiver("breton", "units/unknown_magic"), nil,
+            "receiver policy must not guess from a generic magic suffix")
+    end)
+
     Harness.test("CWV Axe+Shield receives vanilla Empire pool before LA merge", function()
         local f = assert(io.open(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua", "rb"))
         local source = f:read("*a"); f:close()
         Harness.truthy(source:find('item_type ~= "es_1h_sword_shield_breton"', 1, true))
         Harness.truthy(source:find('left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.es_1h_sword_shield)', 1, true))
-        Harness.truthy(source:find('if not (variant and variant.new_units) then return true end', 1, true),
+        Harness.truthy(source:find('if not variant.new_units then', 1, true),
+            "pure texture variants must pass through the magic-receiver gate")
+        Harness.truthy(source:find('return actual == tostring(variant.new_units[1])', 1, true),
             "declared LA mesh must gate texture paint as well as unit variants")
         Harness.truthy(source:find('authored_family = la_opt.authored_family', 1, true),
             "selection must retain pool provenance")

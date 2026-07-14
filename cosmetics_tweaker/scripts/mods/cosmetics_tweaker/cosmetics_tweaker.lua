@@ -62,7 +62,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.105-dev"
+local MOD_VERSION = "0.9.106-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -3983,9 +3983,24 @@ if BackendUtils then
                         mod:echo("[cosmetics_tweaker] LA variant '%s' missing from your local LA install. Peer's cosmetic won't render. Enable Loremaster's Armoury in launcher + restart, or update LA.",
                             tostring(entry.armoury_key))
                     end
+                elseif variant.kind == "texture" then
+                    -- #373: Weavebound/Shyish shields use dedicated magic
+                    -- material units that do not expose LA's diffuse slot.
+                    -- Swap only an exact, same-family magic unit to its vanilla
+                    -- paint receiver before the husk spawns it; ordinary texture
+                    -- variants still remain paint-only.
+                    local hand_field = entry.hand_field or "left_hand_unit"
+                    local prev = result[hand_field]
+                    local receiver = LA_BRIDGE.resolve_texture_receiver(
+                        entry.armoury_key, prev, entry.authored_family)
+                    if receiver and _override_package_ready(receiver) then
+                        result[hand_field] = receiver
+                        _dbg("[husk-mesh-swap] MAGIC-RECEIVER wearer=%s hand=%s %s -> %s (armoury=%s)",
+                            tostring(_current_husk_wield.wearer_peer), tostring(hand_field),
+                            tostring(prev), tostring(receiver), tostring(entry.armoury_key))
+                    end
                 elseif variant.kind ~= "unit" then
-                    _dbg("[husk-mesh-swap] skip: variant %s is kind=%s (only unit gets mesh-swapped here; texture handled via re-paint)",
-                        tostring(entry.armoury_key), tostring(variant.kind))
+                    _dbg("[husk-mesh-swap] skip: variant %s is kind=%s", tostring(entry.armoury_key), tostring(variant.kind))
                 elseif not (variant.new_units and variant.new_units[1]) then
                     _dbg("[husk-mesh-swap] miss: variant %s has no new_units[1]", tostring(entry.armoury_key))
                 else
@@ -4226,8 +4241,18 @@ if BackendUtils then
                         if la_1p then
                             resolved_unit, resolved_ready = la_1p, la_ready
                         else
-                            resolved_unit = override_unit
+                            -- #373: pure-paint LA variants have no intended
+                            -- unit. If the selected vanilla illusion is a known
+                            -- magic shield, use its exact same-family paintable
+                            -- counterpart instead of silently painting a shader
+                            -- with no diffuse slot.
+                            resolved_unit = LA_BRIDGE.resolve_texture_receiver(
+                                opt.la_armoury_key, result[hand_field], opt.authored_family)
+                                or override_unit
                             resolved_ready = (override_unit and _override_package_ready(override_unit)) or false
+                            if resolved_unit and resolved_unit ~= override_unit then
+                                resolved_ready = _override_package_ready(resolved_unit)
+                            end
                         end
                     else
                         resolved_unit = override_unit
@@ -4400,9 +4425,15 @@ end
 local function _offhand_paint_mesh_ok(u, armoury_key)
     local la = get_mod("Loremasters-Armoury")
     local variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
-    if not (variant and variant.new_units) then return true end
+    if not variant then return true end
     local actual = _unit_mesh_name(u)
     if actual == "<no-unit_name>" or actual == "<not-unit>" then return true end
+    -- #373: an exact magic->base receiver mapping means this live magic unit
+    -- cannot accept LA's diffuse paint. Refuse the no-op paint until the bounded
+    -- wield pulse respawns the same-family receiver.
+    if not variant.new_units then
+        return LA_BRIDGE.resolve_texture_receiver(armoury_key, actual) == nil
+    end
     return actual == tostring(variant.new_units[1])
         or (variant.new_units[2] ~= nil and actual == tostring(variant.new_units[2]))
 end
@@ -6947,17 +6978,11 @@ local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
     if _offhand_reswap_active then return end
     if not (owner_unit and armoury_key and Unit.alive(owner_unit)) then return end
     hand_field = hand_field or "left_hand_unit"
-    -- kind="unit" only: texture variants paint onto the base mesh (no swap needed).
     local la = get_mod("Loremasters-Armoury")
     local variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
-    if not (variant and variant.kind == "unit" and variant.new_units and variant.new_units[1]) then
+    if not variant then
         return
     end
-    -- Package residency: only pulse if the LA mesh is loadable NOW. If not, bail --
-    -- the pulse's get_item_units would skip the swap anyway; the _la_pending_apply
-    -- retry re-attempts once LA's package finishes loading.
-    local la_unit, _la3p, mesh_ready = _resolve_la_unit_mesh(armoury_key)
-    if not (la_unit and mesh_ready) then return end
     local inv = ScriptUnit and ScriptUnit.has_extension and ScriptUnit.has_extension(owner_unit, "inventory_system")
     local equipment = inv and inv._equipment
     if not (equipment and equipment.slots and inv.wield) then return end
@@ -6968,6 +6993,18 @@ local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
     if live and Unit.alive(live) and _offhand_paint_mesh_ok(live, armoury_key) then
         return
     end
+    -- Package residency: custom-unit variants use the shared LA resolver;
+    -- texture variants pulse only when the live mesh is one of #373's exact
+    -- magic units, targeting its same-family vanilla receiver.
+    local la_unit, mesh_ready
+    if variant.kind == "unit" and variant.new_units and variant.new_units[1] then
+        local _la3p
+        la_unit, _la3p, mesh_ready = _resolve_la_unit_mesh(armoury_key)
+    elseif variant.kind == "texture" and live and Unit.alive(live) then
+        la_unit = LA_BRIDGE.resolve_texture_receiver(armoury_key, _unit_mesh_name(live))
+        mesh_ready = la_unit and _override_package_ready(la_unit) or false
+    end
+    if not (la_unit and mesh_ready) then return end
     -- Per-owner cooldown + hard try-cap so a per-frame caller can't pulse-storm and a
     -- non-converging mesh can't flicker forever.
     local st = _offhand_reswap_state[owner_unit]

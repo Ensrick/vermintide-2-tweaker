@@ -150,7 +150,7 @@ For LA options, the target mesh comes from `variant.new_units[1]` in LA's SKIN_L
 | variant kind | `new_units` | `is_vanilla_unit` | Action |
 |--------------|-------------|-------------------|--------|
 | `texture` | set | `true` | Use `new_units[1]` as `intended_unit`. Vanilla mesh + LA texture paint. |
-| `texture` | nil | n/a | `intended_unit = nil`. Don't override mesh; LA's diffuse paints onto whichever shield the user's current illusion provides. (Bret/GK pure-texture variants.) |
+| `texture` | nil | n/a | Normally `intended_unit = nil` and LA paints the current same-family shield. Exception: Weavebound/Shyish magic shields do not expose LA's diffuse slot, so the exact known magic unit is replaced by its geometrically identical non-magic receiver before paint. The receiver table is family-scoped; never infer one from a generic `_magic` suffix. |
 | `unit` | set | n/a | **Filtered out** of the picker. Points to LA's custom-authored mesh files (e.g. `units/empire_shield/...`) with no standalone package; spawning crashes `world.spawn_unit`. Restoring requires hooking LA's package-load bootstrap. |
 
 ### Package preload (critical — was the recurring crash source)

@@ -31,6 +31,30 @@ M.KRUBER_SHIELD_FAMILIES = {
     },
 }
 
+-- Weavebound and Shyish shield skins use dedicated magic units whose shader
+-- does not expose Loremasters' normal diffuse slot.  When a texture-only LA
+-- heraldry is selected, route that magic unit to the geometrically identical
+-- non-magic receiver in the SAME UV family.  Keep this an exact allow-list:
+-- guessing from a generic `_magic` suffix risks painting Bretonnian heraldry
+-- onto an Empire mesh (the #204/#266 regression).
+local MAGIC_TEXTURE_RECEIVERS = {
+    breton = {
+        ["units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01_magic_01"] =
+            "units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01",
+    },
+    empire = {
+        ["units/weapons/player/wpn_empire_shield_04/wpn_emp_shield_04_magic_01"] =
+            "units/weapons/player/wpn_empire_shield_04/wpn_emp_shield_04",
+        ["units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02_magic"] =
+            "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02",
+    },
+}
+
+function M.magic_texture_receiver(authored_family, unit_path)
+    local family = MAGIC_TEXTURE_RECEIVERS[authored_family]
+    return family and family[unit_path] or nil
+end
+
 function M.add_compatible_targets(character, variant_kind, authored_family, weapon_types)
     if character ~= "Kruber" then return false end
     local targets = variant_kind == "unit"

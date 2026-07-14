@@ -55,6 +55,19 @@ M.localization          = {}  -- display_name_key -> human-readable string
 --   { es_1h_mace_shield = { left_hand_unit = { {name=..., armoury_key=..., vanilla_skin=...}, ... } }, ... }
 M.la_offhand_options_by_weapon_type = {}
 
+-- Return a paintable vanilla receiver for the handful of Weavebound/Shyish
+-- shield units whose magic material cannot accept LA's diffuse texture.  The
+-- shared policy uses an exact, family-scoped allow-list; nil means the live
+-- unit should be left alone.
+function M.resolve_texture_receiver(armoury_key, unit_path, authored_family)
+    local la_mod = get_mod("Loremasters-Armoury")
+    local variant = la_mod and la_mod.SKIN_LIST and la_mod.SKIN_LIST[armoury_key]
+    if not (variant and variant.kind == "texture" and unit_path) then return nil end
+    local resolution = M._la_offhand_resolution and M._la_offhand_resolution[armoury_key]
+    local family = authored_family or (resolution and resolution.authored_family)
+    return SHIELD_PARITY.magic_texture_receiver(family, unit_path)
+end
+
 local function la()  return get_mod("Loremasters-Armoury") end
 local function mil() return get_mod("MoreItemsLibrary") end
 
@@ -515,6 +528,7 @@ local function build_offhand_options()
                     M._la_offhand_resolution[la_key] = {
                         intended_unit = intended_unit,
                         source        = source,
+                        authored_family = authored_family,
                         texture_path  = (variant.textures and variant.textures[1]) or nil,
                         icon_keys     = sorted_icons,
                         weapon_types  = weapon_types,

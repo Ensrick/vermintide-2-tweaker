@@ -421,6 +421,22 @@ Last updated: 2026-07-14.
 
 ---
 
+### la-magic-shield-paint-receiver — LA heraldry invisible on Weavebound/Shyish shields
+
+| Field | Value |
+|-------|-------|
+| Symptom | Loremasters shield options are selectable on a Weavebound or Shyish shield, but every option still looks like the original magic shield. |
+| Root cause | The dedicated magic shield unit does not expose LA's standard diffuse slot; the texture API reports success without changing visible pixels. |
+| Mod(s) | cosmetics_tweaker, Loremasters-Armoury |
+| Fix version(s) | pending (#373) |
+| Category | INTEGRATION |
+| Repro | Equip an Empire, Bretonnian, or Spear+Shield Weavebound/Shyish illusion, select a same-family LA texture shield, and leave the customization screen. |
+| Expected post-fix | The magic unit is replaced once with its exact same-family non-magic paint receiver, then LA heraldry is visible on owner preview/body and remote husk. Breton and Empire textures never cross families. |
+| Detection | `qa/lua/tests/test_cos_la_shield_parity.lua` locks the exact receiver allow-list and cross-family rejection; verify visually with two players. |
+
+
+---
+
 ### la-icon-key-vs-item-type — LA icon prefix mismatch with game item_type → empty picker pool
 
 | Field | Value |

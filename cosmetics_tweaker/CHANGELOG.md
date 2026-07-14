@@ -1,5 +1,15 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.106-dev - 2026-07-14 - #373 Loremaster textures on Weavebound/Shyish shields [verify-fix-coop]
+
+- Fixed compatible Weavebound/Shyish magic shield units rejecting Loremaster texture painting because those units do not expose the diffuse slot used by LA.
+- Added exact, UV-family-safe magic-to-base paint receivers for Bretonnian, Empire sword/mace shield, and Empire spear/shield families. The selected magic model remains equipped while its same-family base receiver supplies the paintable material boundary.
+- Wired owner previews, local equipment, remote husks, and the existing bounded re-wield convergence. Exact allow-lists preserve #204/#266 protections against cross-family texture wrapping.
+
+### Co-op verification
+
+On each supported shield family, select a Weavebound/Shyish illusion and apply several Loremaster textures. Inspect customization/inventory preview, owner first/third person, and a second player's remote view before and after a weapon swap and mission transition. The magic model must remain selected, the texture must be visible, and no Bretonnian texture may wrap onto an Imperial shield or vice versa.
+
 ## 0.9.105-dev - 2026-07-14 - #421 wire-safety installer startup failure [verify-fix-coop]
 
 - Fixed `_cos_wire.lua` reading a nonexistent file-global `mod`, which caused a startup error before its three custom-skin network sender guards could install.
