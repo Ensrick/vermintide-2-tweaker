@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.270-dev"
+local MOD_VERSION = "0.7.271-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -4669,6 +4669,9 @@ do
         _level, _injected, _adv_base, _difficulty = level_key, injected, adv_base, difficulty
         _armed = true
         _elapsed = 0
+        if mod._ct_chest132 and mod._ct_chest132.begin then
+            mod._ct_chest132.begin(level_key)
+        end
     end
 
     mod._ct_tally_count = function(pickup_name, spawned_unit)
@@ -4697,6 +4700,16 @@ do
                 tostring(_level), tostring(_injected), tostring(_adv_base), tostring(_difficulty),
                 _total, tostring(_total == 0), cursed, weapon, altar, coins, potions,
                 table.concat(parts, " "))
+            -- #349: classify the extension-level ground truth only after this
+            -- delayed pickup census has settled. extensions_ready itself fires
+            -- synchronously before _spawn_pickup returns, so comparing there is
+            -- inherently one chest early and cannot prove a bypass.
+            if mod._ct_chest132 and mod._ct_chest132.finalize then
+                local cap = mod._ct_effective_setting and mod._ct_effective_setting("cursed_chest_count")
+                cap = (cap == -1 or cap == nil) and 1 or cap
+                local is_server = Managers and Managers.player and Managers.player.is_server and true or false
+                mod._ct_chest132.finalize(_level, cap, cursed, is_server)
+            end
         end)
         if not ok then pcall(printf, "[ct-spawn-tally] level=%s emit failed (total=%d)", tostring(_level), _total) end
     end
@@ -15423,6 +15436,12 @@ end)
 _rt_register("diag_132_134_136_present", function()
     if type(mod._ct_chest132) ~= "table" or type(mod._ct_chest132.chest_appeared) ~= "function" then
         return "#132 chest-of-trials probe missing (mod._ct_chest132.chest_appeared) - extensions_ready ground-truth stripped"
+    end
+    if type(mod._ct_chest132.finalize) ~= "function" then
+        return "#349 settled chest-count audit missing - extension count cannot be compared after census completion"
+    end
+    if type(mod._ct_chest132.begin) ~= "function" then
+        return "#349 chest-count audit reset missing - zero-chest missions cannot be classified"
     end
     if type(mod._ct_tally_cursed_count) ~= "function" then
         return "#132 census cross-check missing (mod._ct_tally_cursed_count) - extensions_ready vs census diff can't be computed"

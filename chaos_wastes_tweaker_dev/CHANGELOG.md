@@ -1,5 +1,13 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.271-dev (2026-07-14) - #349 Mission of Mercy chest-count audit [diagnostics armed; not deployed]
+
+- Issue #349 reports a possible excess of physical Chests of Trials on Mission of Mercy (`dlc_dwarf_interior`), not an overflow in the reward-choice UI. The source-visible path already sends the map's five tome/grimoire spawners through CT's shared host-side `cursed_chest_count` budget. Compiled level-unit data is absent from the source dump, so it cannot establish whether Mission of Mercy also carries a raw cursed-chest unit or a differently flagged guaranteed spawner; suppressing a guessed unit would risk removing an in-budget chest.
+- Corrected the diagnostic boundary used by #132. `DeusCursedChestExtension.extensions_ready` is the spawn-path-independent ground truth, but it runs synchronously during network-unit creation, before CT's `_spawn_pickup` post-hook increments the pickup census. Its per-chest `census=` value is therefore provisional and cannot identify a bypass by itself.
+- The existing bounded eight-second spawn-census emit now performs one settled comparison per mission. `[ct:349] chest_count_audit` records level, Mission-of-Mercy match, actual extension count, configured host cap, final pickup-path census, classification, and authority. `over_cap_raw_level_units` proves a compiled/baked bypass; `over_cap_pickup_path` proves the shared budget leaked; `within_cap_*` disproves the reported overflow for that run. No spawn, unit, setting, RPC, or network state is changed.
+- Added engine-free classification coverage for healthy, raw-level-unit, pickup-budget, ordering-mismatch, and malformed cases; source wiring locks finalization after the delayed census.
+- **Verify after deployment (solo host is decisive):** enable Mission of Mercy, choose a distinctive cap such as 2, load `dlc_dwarf_interior` through Single Mission Loader, wait at least eight seconds after mission entry, and retain the one `[ct:349]` line plus the visible chest count. Repeat with cap 0 or 3 if the first result is an ordering mismatch. Coop is optional corroboration only; the host owns pickup population and the client cannot determine the spawn cause more accurately.
+
 ## 0.7.270-dev (2026-07-13) - #350 optional early Chest of Trials reward [not deployed]
 
 - Added **Open Chest at Trial Start**, an opt-in host-controlled checkbox under Chest of Trials. Once vanilla's authoritative replicated state reaches `RUNNING`, every peer opens that chest's presentation once and may claim its boon while the enemies are still alive.

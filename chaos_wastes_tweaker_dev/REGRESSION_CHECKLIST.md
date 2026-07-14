@@ -4,7 +4,19 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-13.
+Last updated: 2026-07-14.
+
+### mission-of-mercy-chest-count-audit - issue #349
+
+| Field | Value |
+|---|---|
+| Symptom | Mission of Mercy may contain more physical Chests of Trials than the host's per-mission setting. |
+| Root cause | Unconfirmed. The visible Lua path budgets all five book conversions, while compiled level-unit flags are absent from the source dump. The old extension/census comparison occurred before `_spawn_pickup` returned and was not decisive. |
+| Fix version(s) | ct_dev 0.7.271-dev (diagnostics only; not deployed) |
+| Category | SOLO / HOST AUTHORITY / DIAGNOSTIC |
+| Repro | As host, set Chests of Trials per Mission to 2, load Mission of Mercy (`dlc_dwarf_interior`) through Single Mission Loader, and wait eight seconds after mission entry. |
+| Expected post-fix | No behavior change. One settled `[ct:349] chest_count_audit` line reports actual extension count, host cap, final pickup census, and a cause classification. |
+| Detection | `over_cap_raw_level_units` identifies a compiled level-unit bypass; `over_cap_pickup_path` identifies a shared-budget leak; any `within_cap_*` classification disproves over-spawn for that run. Solo host evidence is decisive; coop is optional. |
 
 ### chest-of-trials-early-reward - issue #350
 
