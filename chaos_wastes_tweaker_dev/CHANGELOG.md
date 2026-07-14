@@ -1,5 +1,14 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.287-dev (2026-07-14) - #141 save/resume readiness [diagnostics-armed]
+
+- Added an observation-only inventory of the native rejoin surfaces needed for expedition save/resume: seven run-configuration getters, four progress getters, shared-state full sync, and per-player power-up/currency/loadout read-write families.
+- `/ct_resume_audit` captures at most twice per session and separates missing methods from values unavailable at the current lifecycle point. It performs no persistence, state writes, graph changes, RPCs, or mission transitions.
+
+### Solo diagnostic
+
+During a Chaos Wastes expedition run `/ct_resume_audit` and retain the `[ct:141]` line. A Phase 1-ready map state should show `config=7/7`, `progress=4/4`, all player read/write fields true, and `mutation=false`.
+
 ## 0.7.286-dev (2026-07-14) - #323 progressive elite modifiers [diagnostics-armed; coop-required; not deployed]
 
 - Clarified that the requested 0/5/10/15/20 mission progression is an elite-enhancement chance, not a new difficulty tier. Added an exact bounded policy derived from completed Chaos Wastes levels.

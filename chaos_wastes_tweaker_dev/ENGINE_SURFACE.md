@@ -34,6 +34,10 @@ economy, the boon/power-up pool, curses/mutators, altars/chests, weapon
 generation, and injects vanilla Adventure missions into the CW graph. Its engine
 contact clusters into the five surfaces below, each with its own subsystem note.
 
+Issue #141 adds no engine mutation. `_ct_resume_audit.lua` reads the live
+`DeusRunController`/`DeusRunState` rejoin surface through protected, bounded
+getters and reports readiness; it does not invoke setters or `SharedState.full_sync`.
+
 ## Hook table
 
 **103 hook sites** (`mod:hook`/`mod:hook_safe`) + **6 VMF RPC channels**

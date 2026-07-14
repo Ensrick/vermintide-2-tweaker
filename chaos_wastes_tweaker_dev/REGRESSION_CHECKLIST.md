@@ -6,6 +6,16 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+### expedition save/resume readiness - issue #141
+
+| Field | Value |
+|---|---|
+| Scope | Observation only; no save blob, state write, graph mutation, RPC, or transition. |
+| Inventory | 7 run-config getters, 4 progress getters, SharedState full sync, and power-up/currency/loadout read-write families. |
+| Runtime evidence | At most two `[ct:141]` lines per session; `/ct_resume_audit` captures the current lifecycle point. |
+| Detection | Offline `test_ct_resume_policy.lua`; `/ct_regression_test`: `issue141_resume_surface_inventory`. |
+| Lifecycle | `diagnostics-armed` solo. Any actual restore becomes `verify-fix-coop`. |
+
 ### Chest of Trials activation cost - issue #63
 
 | Field | Value |
