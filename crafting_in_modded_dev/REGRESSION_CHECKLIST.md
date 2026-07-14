@@ -8,6 +8,20 @@ Last updated: 2026-07-13.
 
 ---
 
+## Hold-Tab Loadout Preview
+
+### issue246-tab-preview-exact-skin - Remote weapon icon follows the equipped illusion
+
+| Field | Value |
+|-------|-------|
+| Scope | Hold-Tab player list melee/ranged icons and their existing hover tooltips. |
+| Source boundary | Vanilla loadout RPC omits skin; live `inventory_system:equipment().slots[slot].skin` is exact because `rpc_add_equipment` carries `weapon_skin_id`. |
+| Repro | Two players equip distinct non-default melee and ranged illusions, then inspect each other while holding Tab. Swap one illusion and return another to default. |
+| Expected post-fix | Icons and hover tooltips match the live equipped skins in both host-to-client directions, update after swaps, and clear to the base icon for default skin. |
+| Detection | Run the offline Lua suite and `/cim_regression_test`; require `issue246_tab_preview_exact_skin_icon` PASS. Unknown registered identity emits one bounded `[cim:246]` line. |
+
+---
+
 ## Custom Rarity UI
 
 ### issue263-modded-upgrade-copy - Customization Upgrade text is never blank

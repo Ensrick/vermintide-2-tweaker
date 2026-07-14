@@ -10,7 +10,7 @@ the named `crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/*.lua`
 module. `§N` = a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue.
 
 **Dev/stable relationship.** This documents `crafting_in_modded_dev` (`cim_dev`,
-MOD_VERSION `0.8.69-dev`, friends-only Workshop 3733366851), the ACTIVE working
+MOD_VERSION `0.8.70-dev`, friends-only Workshop 3733366851), the ACTIVE working
 stream. `crafting_in_modded/` (`cim`, public Workshop 3721038774) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action (`tools/promote/promote.ps1`), so
@@ -50,7 +50,7 @@ surfaces below.
 
 ## Hook table
 
-**107 hook sites** (`mod:hook`/`mod:hook_safe`) + **1 VMF RPC channel**
+**108 hook sites** (`mod:hook`/`mod:hook_safe`) + **1 VMF RPC channel**
 (`mod:network_register("cim_modded_slot")`) + a set of engine-**table** contacts
 (rarity registration, template-cache injection - see Surface 1/5 notes). Grouped
 below into rows-of-concern. `[hook]` = full wrapper (`mod:hook`, can rewrite
@@ -155,6 +155,12 @@ IDs clear this separate vanilla map because their craft record is authoritative.
 | `HeroWindowItemCustomization._state_setup_upgrade` [safe] `modded_rarities.lua` | Creates the detailed upgrade widgets, then returns before populating them for every rarity outside the four vanilla upgrade branches [src: `hero_window_item_customization.lua:2348-2390`] | For a current `modded` item only, copy the same description into the detailed-state widget after vanilla setup | Text-only: no recipe, lock, cost, craft-button, or rarity-transition write (#263) |
 | `HeroWindowLoadoutInventory.on_enter` [safe] `modded_rarities.lua:177` / `HeroWindowInventory.on_enter` [safe] `:204` | Enter the loadout/forge inventory grid; the category header reads a LITERAL "Jewellery" string, not a loc key [src: `hero_window_loadout_definitions.lua:602`] | Rewrite `self._categories[*].display_name` "Jewellery" -> "Accessories" (Localize can't catch a literal) | SINGLE `HeroWindowLoadoutInventory.on_enter` hook_safe in cim - a duplicate in `cim_debug.lua` produced a rehook warning and dropped one (§1); the autodump probe is invoked from THIS body |
 | **Table contact (NOT hooks):** `modded_rarities.lua` writes `Colors.color_definitions`, `UISettings.item_rarity_order/_rarities/_textures`, `RaritySettings`, `RarityIndex`, `ORDER_RARITY`, `NetworkLookup.rarities` (append) | Rarity chrome + the strict `NetworkLookup.rarities` reverse-lookup on equip sync | Register the "modded" rarity so the grid renderer's `RaritySettings[item.rarity].order` and the equip-sync lookup don't crash | `NetworkLookup.rarities` is an APPEND (`#t+1`), so vanilla ids 1..N are unchanged - which is exactly what makes the "modded"->"unique" wire coercion above safe for every client |
+
+### Surface 6 - Hold-Tab weapon presentation (owner: `docs/engine/03`, `/06`, `/09`; `_cim_tab_preview.lua`)
+
+| Hook / table touched | Vanilla behavior | cim substitution | Guard / trap |
+|---|---|---|---|
+| `IngamePlayerListUI._update_dynamic_widget_information` [safe] `_cim_tab_preview.lua` | Hold-Tab renders `Managers.player:player_loadouts()` and calls `UIUtils.get_ui_information_from_item(item)`; remote items were reconstructed by `rpc_sync_loadout_slot`, whose payload has no skin id [src: `ingame_player_list_ui_v2.lua:1444-1539`, `loadout_utils.lua:4-42,72-91`] | After vanilla refresh, copy only melee/ranged skin identity and icon from the same player's live `inventory_system:equipment().slots[slot]`; `rpc_add_equipment` already synchronized the exact `weapon_skin_id` into `slot.skin` [src: `simple_inventory_extension.lua:252-266`, `simple_husk_inventory_extension.lua:181-221`] | No new RPC/network value. Missing equipment/slot/skin registry fails closed; unknown exact skin logs once per key. The loadout item receives `skin` so vanilla's existing hover tooltip resolves the same illusion (#246). |
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for cim's cases)
 

@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.69-dev"
+local MOD_VERSION = "0.8.70-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -302,6 +302,8 @@ local _ok_mfs, _err_mfs = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modde
 if not _ok_mfs then mod:error("Failed to load _cim_mission_forge_safety: %s", tostring(_err_mfs)) end
 local _ok_dumpc, _err_dumpc = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/_cim_dump_commands")
 if not _ok_dumpc then mod:error("Failed to load _cim_dump_commands: %s", tostring(_err_dumpc)) end
+local _ok_tab, _err_tab = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/_cim_tab_preview")
+if not _ok_tab then mod:error("Failed to load _cim_tab_preview: %s", tostring(_err_tab)) end
 -- Entry alias for the mid-mission keep detector (published by _cim_mission_forge_safety
 -- above). The inline HDR regression checks (hdr_bloom / hdr_upgrade) that stay in this
 -- file call _is_in_keep(); the alias lets those bodies register byte-identically.
@@ -5756,6 +5758,31 @@ _rt_register("issue277_bulk_cleanup_exact_owner_transaction", function()
     end
     if core.signature({ "b", "a" }) ~= core.signature({ "a", "b" }) then
         return "confirmation signature changed with iteration order"
+    end
+end)
+
+_rt_register("issue246_tab_preview_exact_skin_icon", function()
+    local core = mod._cim246_tab_preview_core
+    if type(core) ~= "table" or type(core.resolve) ~= "function"
+            or type(mod._cim246_apply_player_weapon_icons) ~= "function" then
+        return "#246 Tab-preview policy/runtime wiring missing"
+    end
+
+    local authoritative, skin, icon = core.resolve({}, {
+        slots = { slot_melee = { skin = "issue246_test_skin" } },
+    }, "slot_melee", {
+        issue246_test_skin = { inventory_icon = "issue246_test_icon" },
+    })
+    if not authoritative or skin ~= "issue246_test_skin"
+            or icon ~= "issue246_test_icon" then
+        return "exact live-equipment skin did not win over base loadout identity"
+    end
+
+    authoritative, skin, icon = core.resolve({}, {
+        slots = { slot_melee = { skin = "n/a" } },
+    }, "slot_melee", {})
+    if not authoritative or skin ~= nil or icon ~= nil then
+        return "default skin did not clear stale preview identity"
     end
 end)
 

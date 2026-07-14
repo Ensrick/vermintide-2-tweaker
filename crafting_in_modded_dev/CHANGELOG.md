@@ -1,5 +1,18 @@
 # Crafting in Modded Changelog
 
+## 0.8.70-dev (2026-07-13): #246 Hold-Tab exact illusion icon [verify-fix-coop] [not deployed]
+
+- Source audit confirmed that Hold-Tab renders `Managers.player:player_loadouts()`, but vanilla `rpc_sync_loadout_slot` omits weapon-skin identity and reconstructs only the base item. The separately synchronized live inventory equipment does retain the exact `skin` key from `rpc_add_equipment`.
+- After the player-list refresh, CIM now reconciles only the melee and ranged icons from each live inventory slot's exact registered skin. The same item receives that skin for the existing tooltip path. Default skins clear stale preview state; missing slots or unregistered icons fail closed.
+- No new RPC, network value, package load, backend read, or per-frame allocation is introduced. An unknown synchronized skin emits at most one raw-console `[cim:246]` line per key.
+- Added pure resolver coverage in `test_cim_tab_preview.lua` and runtime check `issue246_tab_preview_exact_skin_icon`.
+
+### Test method
+1. With two CIM users, equip a visibly non-default melee illusion on one player and a different non-default ranged illusion on the other.
+2. Have each player hold Tab and verify both remote weapon icons and hover tooltips match the visibly equipped illusions.
+3. Swap one illusion to another and one weapon back to its default skin; hold Tab again and verify both changes appear without stale icons.
+4. Repeat once as host viewing client and once as client viewing host. Run `/cim_regression_test` and require `issue246_tab_preview_exact_skin_icon` PASS.
+
 ## 0.8.69-dev (2026-07-13): #263 modded-rarity upgrade copy [verify-fix] [not deployed]
 
 - Added the missing global `upgrade_description_text_modded` string used by vanilla's customization option card, replacing the blank subtitle with one sentence explaining the Modded rarity.
