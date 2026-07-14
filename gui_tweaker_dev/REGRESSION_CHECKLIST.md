@@ -4,6 +4,16 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md
 
 Last updated: 2026-07-13.
 
+## WT cross-character loadout lifecycle trace (#354)
+
+- [ ] Equip an enabled WT cross-character weapon into the active modded loadout; one `[gut:354] phase=capture ... result=stored` record names the exact backend ID and item key.
+- [ ] Exit and relaunch; the selected row emits one deduplicated `phase=apply` outcome with the same ID or an explicit fallback result.
+- [ ] Capture both a persisting and a dropping cycle, attaching all `[gut:354]` lines from the pre-exit and post-launch logs.
+- [ ] Ordinary resolved weapons, inactive WT unlocks, non-selected rows, and non-weapon slots emit no #354 records. A missing selected weapon ID may emit `<unresolved>` while WT is installed; total records never exceed 24 per process.
+- [ ] `/gut_regression_test` passes `issue354_wt_loadout_lifecycle_trace`.
+
+---
+
 ## CKC native Options checkbox (#528 follow-up)
 
 - [ ] With CKC installed and togglable, Options > Gameplay renders Crosshair Kill Confirmation as one native checkbox, never an On/Off dropdown.
@@ -11,6 +21,8 @@ Last updated: 2026-07-13.
 - [ ] The cog remains visible beside the checkbox, clears the scrollbar, and focuses Mod Tweaker > Interface > HUD > Crosshair Kill Confirmation.
 - [ ] With CKC absent or non-togglable, the untouched stock multi-option dropdown renders.
 - [ ] `/gut_regression_test` passes `ckc_bridge_uses_native_checkbox`.
+
+---
 
 ## HUD edit drag geometry (#547)
 

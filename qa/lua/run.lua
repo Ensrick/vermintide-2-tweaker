@@ -72,6 +72,7 @@ local suites = {
     "test_dcp_portrait_materials",
     "test_cos_score_identity",
     "test_gut_native_loadout_policy",
+    "test_gut_wt_loadout_trace",
     "test_gt_dummy_collision_policy",
     "test_gut_simple_ui_bounds",
     "test_gut_hud_drag_geometry",

@@ -1,8 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
-## 0.2.252-dev (2026-07-13) — Slider registry twin parity (#389)
+## 0.2.254-dev (2026-07-13) -- #354 trace WT cross-character loadout persistence [diagnostics-armed]
 
-- Mirrored the existing 25-point CIM/CT foreign-slider registry into the keep sub-state so both Mod Tweaker presentations resolve identical increments.
+- Source audit established that GUT has no exit-time save transaction. It persists the exact backend ID immediately at `BackendUtils.set_loadout_item`; WT then intercepts the lower item-interface write and retains a separate session-only cache. On launch, GUT serves the persisted row while WT independently reapplies `ItemMasterList.can_wield`.
+- Added an automatic `[gut:354]` lifecycle trace for enabled WT cross-character weapon/career pairs. It records the selected row's `capture` and `apply` backend ID, item key, live WT `can_wield` state, and whether GUT stored, served, or temporarily fell back from that ID.
+- The trace is filtered to weapon slots whose matching WT unlock setting is enabled. If the stored backend ID is already absent at launch—the state where its item key cannot be recovered—it emits an explicit `<unresolved>` record while WT is installed. Outcomes are deduplicated and capped at 24 records per process. Raw backend table reads avoid the recursive interface-resolution path that previously exhausted the Lua heap.
+- Added Lua 5.1 coverage and `/gut_regression_test` check `issue354_wt_loadout_lifecycle_trace`.
+
+### Test method
+
+Equip the WT-unlocked Tuskgor Spear on Kerillian in the active modded loadout, exit normally, then relaunch. Attach every `[gut:354]` line from both logs. `capture ... result=stored` proves the persisted write landed; the next launch's `apply` record distinguishes a missing item (`official-fallback-resolve-no`) from WT ordering (`wt_can_wield=false`) or a successfully served ID (`served-store-yes`). Repeat until one failing and one successful cycle are captured.
 
 > **Dev fork created 2026-06-24** from `gui_tweaker` v0.2.82-dev (mod id `gut` → `gut_dev`,
 > directory `gui_tweaker/` → `gui_tweaker_dev/`, separate Workshop item — no `published_id`
@@ -19,6 +26,10 @@
 ### Verify
 
 With Crosshair Kill Confirmation installed and togglable, open Options > Gameplay. Crosshair Kill Confirmation must render as one native checkbox with a working cog, not an On/Off dropdown. Toggle it both ways and confirm CKC responds live. Open the cog and confirm it still focuses Interface > HUD > Crosshair Kill Confirmation. Disable/uninstall CKC and confirm the stock multi-option dropdown returns.
+
+## 0.2.252-dev (2026-07-13) — Slider registry twin parity (#389)
+
+- Mirrored the existing 25-point CIM/CT foreign-slider registry into the keep sub-state so both Mod Tweaker presentations resolve identical increments.
 
 ## 0.2.251-dev (2026-07-13) -- #547 HUD edit drag-box alignment [verify-fix]
 

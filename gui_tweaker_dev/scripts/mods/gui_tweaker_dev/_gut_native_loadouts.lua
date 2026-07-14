@@ -51,6 +51,7 @@
 
 local mod = get_mod("gut_dev")
 local Policy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_native_loadout_policy")
+local WTTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_wt_loadout_trace_core")
 
 local MARKER = "native_loadouts_v1"
 
@@ -99,6 +100,66 @@ local COSMETIC_SLOT_SET = { slot_skin = true, slot_hat = true, slot_frame = true
 local ADVENTURE_DATA_KEY = "characters_data"
 
 local M = { MARKER = MARKER }
+
+-- Issue #354: an enabled WT cross-character weapon was reported to disappear from
+-- the active modded loadout intermittently across a process restart. There is no
+-- exit-save transaction: GUT captures at BackendUtils.set_loadout_item and persists
+-- immediately, while WT's lower interface hook keeps a separate session-only cache.
+-- Trace only enabled WT weapon/career pairs, only the selected row, and deduplicate
+-- each lifecycle outcome under a hard cap so normal inventory refreshes stay quiet.
+local _wt_trace = WTTraceCore.new(24)
+
+local function _wt_trace_context(career_name, backend_id)
+    local backend = Managers and Managers.backend
+    local iface = backend and backend._interfaces and backend._interfaces.items
+    local mirror = iface and iface._backend_mirror
+    local item = (iface and iface._items and iface._items[backend_id])
+        or (mirror and mirror._inventory_items and mirror._inventory_items[backend_id])
+    local data = item and (item.data or item)
+    local item_key = item and (item.key or (data and data.key))
+    local wt_dev = get_mod("wt_dev")
+    local wt = get_mod("wt")
+    if not item_key then
+        -- The most important failure outcome is precisely that the stored backend ID
+        -- is absent during launch. The item key cannot be recovered in that state, so
+        -- retain one explicit unresolved record when either WT build is installed.
+        return (wt_dev or wt) and "<unresolved>" or nil, "unknown"
+    end
+
+    local setting_id = "unlock_" .. tostring(career_name) .. "_" .. tostring(item_key)
+    local owner = wt_dev and wt_dev:get(setting_id) == true and wt_dev
+        or wt and wt:get(setting_id) == true and wt
+    if not owner then return nil end
+
+    local master = ItemMasterList and rawget(ItemMasterList, item_key)
+    local can_wield = master and master.can_wield or (data and data.can_wield)
+    local active = false
+    if type(can_wield) == "table" then
+        for i = 1, #can_wield do
+            if can_wield[i] == career_name then active = true; break end
+        end
+    end
+    return item_key, active
+end
+
+local function _trace_wt_loadout(phase, career_name, slot_name, idx, backend_id, result)
+    if not WEAPON_SLOT_SET[slot_name] or not backend_id then return end
+    local item_key, can_wield = _wt_trace_context(career_name, backend_id)
+    if not item_key then return end
+    local fields = {
+        phase = phase, career = career_name, slot = slot_name, index = idx,
+        backend_id = backend_id, item_key = item_key,
+        can_wield = can_wield, result = result,
+    }
+    if WTTraceCore.take(_wt_trace, fields) then
+        printf("[gut:354] phase=%s career=%s slot=%s idx=%s backend_id=%s item=%s wt_can_wield=%s result=%s trace=%d/24",
+            tostring(phase), tostring(career_name), tostring(slot_name), tostring(idx),
+            tostring(backend_id), tostring(item_key), tostring(can_wield), tostring(result),
+            _wt_trace.count)
+    end
+end
+
+M._issue354_trace_wired = true
 
 -- ------------------------------------------------------------------
 -- Store: VMF setting `native_loadouts`, kept in an in-memory working copy so the
@@ -512,6 +573,7 @@ local function _install_bu_capture()
             entry.loadouts[idx] = entry.loadouts[idx] or {}
             entry.loadouts[idx][slot_name] = backend_id
             _persist()
+            _trace_wt_loadout("capture", career_name, slot_name, idx, backend_id, "stored")
             printf("[gut_dev:NATIVE_LOADOUTS] BU equip capture career=%s idx=%s slot=%s -> store",
                 tostring(career_name), tostring(idx), tostring(slot_name))
         end
@@ -580,6 +642,9 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
         -- "official" there would bleed official gear into modded loadouts at boot.
         local rstate = _resolve_item_raw(value)
         if rstate == RESOLVE_NO then
+            if idx == entry.selected_index then
+                _trace_wt_loadout("apply", career_name, key, idx, value, "official-fallback-resolve-no")
+            end
             _trace_gear_read(career_name, key, idx, value, "official-fallback-resolve-no")  -- issue #387
             return _official_gear_fallback(func, self, career_name, key, idx)
         end
@@ -590,6 +655,10 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
         -- the grid kept loadout-6's melee while the ranged slot updated normally). YES means
         -- the raw registry holds it right now; UNKNOWN means we could not inspect the registry.
         _trace_gear_read(career_name, key, idx, value, rstate == RESOLVE_YES and "store-yes" or "store-unknown")  -- issue #387
+        if idx == entry.selected_index then
+            _trace_wt_loadout("apply", career_name, key, idx, value,
+                rstate == RESOLVE_YES and "served-store-yes" or "served-store-unknown")
+        end
     end
     return value
 end)
@@ -1209,6 +1278,12 @@ M.HOOK_TARGETS = {
 }
 
 M.rt_checks = {
+    { name = "issue354_wt_loadout_lifecycle_trace", fn = function()
+        if M._issue354_trace_wired ~= true then return "WT loadout lifecycle trace is not wired" end
+        if type(WTTraceCore) ~= "table" or type(WTTraceCore.take) ~= "function" then
+            return "bounded WT trace core missing"
+        end
+    end },
     { name = "native_loadouts_installed", fn = function()
         if M.MARKER ~= MARKER then return "marker mismatch" end
         if type(_in_modded_realm) ~= "function" then return "realm detector missing" end
