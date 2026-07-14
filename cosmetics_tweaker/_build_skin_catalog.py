@@ -15,6 +15,7 @@ import re
 import sys
 import os
 import glob
+import csv
 from pathlib import Path
 
 REPO = Path(r"C:\Users\danjo\source\repos\vermintide-2-tweaker")
@@ -24,6 +25,10 @@ SKIN_DIR_GLOBS = [
     SRC / "scripts" / "settings" / "dlcs",
 ]
 OUT = REPO / "cosmetics_tweaker" / "VETERAN_SKIN_CATALOG.md"
+ICON_EXTRACT_DIR = REPO.parent / "_vt2_item_icons_extract"
+ICON_DIR = ICON_EXTRACT_DIR / "icons"
+ICON_REFERENCE_OUT = ICON_EXTRACT_DIR / "WEAPON_ICON_MODEL_REFERENCE.csv"
+ICON_REFERENCE_GUIDE_OUT = ICON_EXTRACT_DIR / "WEAPON_ICON_MODEL_REFERENCE.md"
 
 # Dump sources. The script also auto-scans the latest console_logs file for any
 # [DUMP:names] / [DUMP:glows] / [DUMP:rarity] lines, so simply running the dump
@@ -173,6 +178,119 @@ def parse_dump_names(dump_files: list[Path]) -> dict[str, dict]:
     return out
 
 
+def parse_existing_catalog_names(path: Path) -> dict[str, dict]:
+    """Keep previously resolved names when old transient dump files disappear."""
+    out: dict[str, dict] = {}
+    if not path.exists():
+        return out
+    row_re = re.compile(r"^\|\s*(.*?)\s*\|\s*`([\w_]+)`\s*\|")
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        match = row_re.match(line)
+        if not match:
+            continue
+        name, key = match.groups()
+        if name and not name.startswith("_(name unresolved"):
+            out[key] = {"name": name}
+    return out
+
+
+def weapon_family(skin_key: str) -> str:
+    """Return the stable weapon-family portion of a skin key."""
+    return re.sub(r"_skin_.*$", "", skin_key)
+
+
+def write_icon_reference(skins: list[dict]) -> None:
+    """Emit the source-of-truth skin -> icon -> hand-unit cross-reference."""
+    ICON_EXTRACT_DIR.mkdir(parents=True, exist_ok=True)
+    columns = [
+        "weapon_family",
+        "skin_key",
+        "display_name",
+        "display_name_loc_key",
+        "inventory_icon",
+        "png_filename",
+        "png_present",
+        "right_hand_unit",
+        "left_hand_unit",
+        "rarity",
+        "material_settings_name",
+        "source_file",
+    ]
+    rows = []
+    for s in sorted(skins, key=lambda item: (weapon_family(item["_skin_key"]), item["_skin_key"])):
+        icon = s.get("inventory_icon", "")
+        png = f"{icon}.png" if icon else ""
+        rows.append({
+            "weapon_family": weapon_family(s["_skin_key"]),
+            "skin_key": s["_skin_key"],
+            "display_name": s.get("_localized_name", ""),
+            "display_name_loc_key": s.get("display_name", ""),
+            "inventory_icon": icon,
+            "png_filename": png,
+            "png_present": "yes" if png and (ICON_DIR / png).is_file() else "no",
+            "right_hand_unit": s.get("right_hand_unit", ""),
+            "left_hand_unit": s.get("left_hand_unit", ""),
+            "rarity": s.get("rarity", ""),
+            "material_settings_name": s.get("material_settings_name", ""),
+            "source_file": s["_source_file"],
+        })
+
+    with ICON_REFERENCE_OUT.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    dual_axes = [row for row in rows if row["weapon_family"] == "dw_dual_axe"]
+    missing = [row for row in rows if row["inventory_icon"] and row["png_present"] == "no"]
+    lines = [
+        "# Weapon Icon / Model Reference",
+        "",
+        "Generated from the decompiled game's `weapon_skins*.lua` definitions by",
+        "`vermintide-2-tweaker/cosmetics_tweaker/_build_skin_catalog.py`.",
+        "",
+        "Open `WEAPON_ICON_MODEL_REFERENCE.csv` in Excel and filter any column. The useful lookup chain is:",
+        "",
+        "`weapon family / skin key -> inventory icon PNG -> right-hand model + left-hand model -> glow/material -> source file`",
+        "",
+        "Notes:",
+        "",
+        "- An inventory icon represents the complete item. Dual weapons still have separate left/right unit fields.",
+        "- Multiple skins may intentionally reuse one inventory icon, particularly glow variants whose appearance comes from the model/material.",
+        "- `png_present = no` identifies a source reference that is not currently in the extracted `icons` folder.",
+        "- `display_name_loc_key` is the game's localization key; `display_name` is the resolved English name when captured from an in-game dump.",
+        "",
+        f"Catalog totals: **{len(rows)} skins**, **{len(dual_axes)} Dual Axes entries**, **{len(missing)} referenced icons currently absent**.",
+        "",
+        "## Dual Axes quick reference",
+        "",
+        "| Display name | Skin key | PNG | Right model | Left model | Glow/material |",
+        "|---|---|---|---|---|---|",
+    ]
+    for row in dual_axes:
+        name = row["display_name"] or "_(unresolved)_"
+        right = Path(row["right_hand_unit"]).name if row["right_hand_unit"] else "-"
+        left = Path(row["left_hand_unit"]).name if row["left_hand_unit"] else "-"
+        material = row["material_settings_name"] or "-"
+        lines.append(
+            f'| {name} | `{row["skin_key"]}` | `{row["png_filename"]}` | `{right}` | `{left}` | `{material}` |'
+        )
+    lines.extend([
+        "",
+        "## Saltzpyre hatchet-related search terms",
+        "",
+        "Filter the CSV for `axe_hatchet` in either hand-unit column. Important base icon names include:",
+        "",
+        "- `icon_wpn_axe_hatchet_t1.png` - one-handed axe/hatchet model family.",
+        "- `icon_wpn_axe_hatchet_t2.png` - alternate hatchet used by Axe and Falchion.",
+        "- `icon_wh_dual_wield_axe_falchion_01.png` - combined Axe and Falchion inventory icon.",
+        "- `icon_axe_hatchet_t2_magic_01.png` - Weave/Shyish-style hatchet model icon.",
+        "",
+    ])
+    ICON_REFERENCE_GUIDE_OUT.write_text("\n".join(lines), encoding="utf-8")
+    print(f"Wrote {ICON_REFERENCE_OUT} ({len(rows)} rows)")
+    print(f"Wrote {ICON_REFERENCE_GUIDE_OUT}")
+
+
 def main():
     # Gather every weapon_skins*.lua under the source tree.
     paths: list[Path] = []
@@ -191,7 +309,12 @@ def main():
     # AND the most recent console logs (where /dump_all_names output lands).
     sources = list(DUMP_FILES) + find_recent_logs(5)
     print(f"Scanning {len(sources)} dump sources for English names...")
-    dump_names = parse_dump_names(sources)
+    # The Markdown catalog is durable; log/tool dumps are transient. Start with
+    # names from the previous catalog, then let current dumps add or update them.
+    dump_names = parse_existing_catalog_names(OUT)
+    current_dump_names = parse_dump_names(sources)
+    for key, values in current_dump_names.items():
+        dump_names.setdefault(key, {}).update(values)
     resolved = 0
     for s in skins:
         nm = dump_names.get(s["_skin_key"])
@@ -345,6 +468,7 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("\n".join(lines), encoding="utf-8")
     print(f"Wrote {OUT} ({len(lines)} lines)")
+    write_icon_reference(skins)
 
 
 if __name__ == "__main__":

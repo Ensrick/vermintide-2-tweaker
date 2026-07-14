@@ -1,7 +1,7 @@
 # Veteran Weapon Skin Catalog
 
 Auto-generated from VT2 decompiled source + in-game `/dump_glows` and `/dump_skin_rarities` output.
-Regenerate via `py cosmetics_tweaker\_build_skin_catalog.py`. Last build parsed 20 files / 891 skins / resolved 829 English names.
+Regenerate via `py cosmetics_tweaker\_build_skin_catalog.py`. Last build parsed 23 files / 911 skins / resolved 829 English names.
 
 Cross-reference: `memory/reference_vt2_weapon_glow_system.md` for system architecture.
 
@@ -31,7 +31,7 @@ Applied at spawn via `GearUtils.apply_material_settings` → `MaterialSettingsTe
 | `plentiful` | Plentiful | 54 |
 | `promo` | (unloc) | 16 |
 | `rare` | Rare | 84 |
-| `unique` | **Veteran** | 442 |
+| `unique` | **Veteran** | 462 |
 
 ---
 
@@ -121,7 +121,7 @@ Applied at spawn via `GearUtils.apply_material_settings` → `MaterialSettingsTe
 | Zakiaz Drekmaraz | `dw_crossbow_skin_04_runed_02` | `dw_crossbow_skin_04_runed_02_name` | `—` | `units/weapons/player/wpn_dw_xbow_02_t2/wpn_dw_xbow_02_t2_runed_01` | `weapon_skins.lua` |
 | Zondreugi | `dw_2h_hammer_skin_04_runed_02` | `dw_2h_hammer_skin_04_runed_02_name` | `units/weapons/player/wpn_dw_2h_hammer_02_t2/wpn_dw_2h_hammer_02_t2_runed_01` | `—` | `weapon_skins.lua` |
 
-## Veteran skins with `golden_glow` template (25 items)
+## Veteran skins with `golden_glow` template (30 items)
 
 | Display name | Skin key | Description loc-key | Right unit | Left unit | Source file |
 |---|---|---|---|---|---|
@@ -150,8 +150,13 @@ Applied at spawn via `GearUtils.apply_material_settings` → `MaterialSettingsTe
 | Myrmidia’s Repeating Pistol of the Dawn | `wh_repeating_pistol_skin_02_runed_03` | `wh_repeating_pistol_skin_02_runed_03_name` | `units/weapons/player/wpn_empire_pistol_repeater/wpn_empire_pistol_repeater_t2_runed_01` | `—` | `weapon_skins_geheimnisnacht_2021.lua` |
 | Myrmidia’s Sword of the Dawn | `es_1h_sword_skin_02_runed_03` | `es_1h_sword_skin_02_runed_03_name` | `units/weapons/player/wpn_emp_sword_02_t2/wpn_emp_sword_02_t2_runed_01` | `—` | `weapon_skins_geheimnisnacht_2025.lua` |
 | Myrmidia’s War Pick of the Dawn | `dw_2h_pick_skin_04_runed_03` | `dw_2h_pick_skin_04_runed_03_name` | `units/weapons/player/wpn_dw_pick_01_t4/wpn_dw_pick_01_t4_runed_01` | `—` | `weapon_skins_geheimnisnacht_2025.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `bw_1h_sword_skin_02_runed_03` | `bw_1h_sword_skin_02_runed_03_name` | `units/weapons/player/wpn_brw_sword_01_t2/wpn_brw_sword_01_t2_runed_01` | `—` | `weapon_skins_geheimnisnacht_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `dw_drake_pistol_skin_04_runed_03` | `dw_drake_pistol_skin_04_runed_03_name` | `units/weapons/player/wpn_dw_drake_pistol_02_t2/wpn_dw_drake_pistol_02_t2_runed_01` | `units/weapons/player/wpn_dw_drake_pistol_02_t2/wpn_dw_drake_pistol_02_t2_runed_01` | `weapon_skins_geheimnisnacht_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `es_longbow_skin_05_runed_03` | `es_longbow_skin_05_runed_03_name` | `—` | `units/weapons/player/wpn_emp_bow_05/wpn_emp_bow_05_runed_01` | `weapon_skins_geheimnisnacht_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `we_dual_sword_skin_05_runed_03` | `we_dual_sword_skin_05_runed_03_name` | `units/weapons/player/wpn_we_sword_02_t2/wpn_we_sword_02_t2_runed_01` | `units/weapons/player/wpn_we_sword_02_t2/wpn_we_sword_02_t2_runed_01` | `weapon_skins_geheimnisnacht_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `wh_brace_of_pistols_skin_05_runed_03` | `wh_brace_of_pistols_skin_05_runed_03_name` | `units/weapons/player/wpn_emp_pistol_03_t2/wpn_emp_pistol_03_t2_runed_01` | `units/weapons/player/wpn_emp_pistol_03_t2/wpn_emp_pistol_03_t2_runed_01` | `weapon_skins_geheimnisnacht_2026.lua` |
 
-## Veteran skins with `deep_crimson` template (15 items)
+## Veteran skins with `deep_crimson` template (20 items)
 
 | Display name | Skin key | Description loc-key | Right unit | Left unit | Source file |
 |---|---|---|---|---|---|
@@ -170,8 +175,13 @@ Applied at spawn via `GearUtils.apply_material_settings` → `MaterialSettingsTe
 | Crimson Swift Bow | `we_shortbow_skin_04_runed_04` | `we_shortbow_skin_04_runed_04_name` | `—` | `units/weapons/player/wpn_we_bow_short_04/wpn_we_bow_short_04_runed_01` | `weapon_skins_skulls_2023.lua` |
 | Crimson Volley Crossbow | `wh_repeating_crossbow_skin_03_runed_04` | `wh_repeating_crossbow_skin_03_runed_04_name` | `—` | `units/weapons/player/wpn_wh_repeater_crossbow_t3/wpn_wh_repeater_crossbow_t3_runed_01` | `weapon_skins_skulls_2025.lua` |
 | Zanthrund | `dw_handgun_skin_02_runed_04` | `dw_handgun_skin_02_runed_04_name` | `units/weapons/player/wpn_dw_handgun_02_t3/wpn_dw_handgun_02_t3_runed_01` | `—` | `weapon_skins_skulls_2023.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `bw_dagger_skin_05_runed_04` | `bw_dagger_skin_05_runed_04_name` | `units/weapons/player/wpn_brw_dagger_05/wpn_brw_dagger_05_runed_01` | `—` | `weapon_skins_skulls_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `dw_crossbow_skin_02_runed_04` | `dw_crossbow_skin_02_runed_04_name` | `—` | `units/weapons/player/wpn_dw_xbow_01_t2/wpn_dw_xbow_01_t2_runed_01` | `weapon_skins_skulls_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `es_1h_flail_skin_05_runed_04` | `es_1h_flail_skin_05_runed_04_name` | `units/weapons/player/wpn_emp_flail_05_t1/wpn_emp_flail_05_t1_runed_01` | `—` | `weapon_skins_skulls_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `es_blunderbuss_skin_04_runed_04` | `es_blunderbuss_skin_04_runed_04_name` | `units/weapons/player/wpn_empire_blunderbuss_t2/wpn_empire_blunderbuss_t2_runed_01` | `—` | `weapon_skins_skulls_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `we_longbow_skin_05_runed_04` | `we_longbow_skin_05_runed_04_name` | `—` | `units/weapons/player/wpn_we_bow_03_t1/wpn_we_bow_03_t1_runed_01` | `weapon_skins_skulls_2026.lua` |
 
-## Veteran skins with `life_green` template (30 items)
+## Veteran skins with `life_green` template (40 items)
 
 | Display name | Skin key | Description loc-key | Right unit | Left unit | Source file |
 |---|---|---|---|---|---|
@@ -205,6 +215,16 @@ Applied at spawn via `GearUtils.apply_material_settings` → `MaterialSettingsTe
 | Eternos-Ichor Sword | `we_sword_skin_05_runed_05` | `we_sword_skin_05_runed_05_name` | `units/weapons/player/wpn_we_sword_02_t2/wpn_we_sword_02_t2_runed_01` | `—` | `weapon_skins_gotwf_2025.lua` |
 | Eternos-Ichor Trollhammer Torpedo | `dr_deus_01_skin_03_runed_05` | `dr_deus_01_skin_03_runed_05_name` | `—` | `units/weapons/player/wpn_dr_deus_03/wpn_dr_deus_03_runed` | `weapon_skins_gotwf_2025.lua` |
 | Eternos-Ichor Trusty Companions | `es_dual_wield_hammer_sword_skin_02_runed_05` | `es_dual_wield_hammer_sword_skin_02_runed_05_name` | `units/weapons/player/wpn_emp_mace_05_t2/wpn_emp_mace_05_t2_runed_01` | `units/weapons/player/wpn_emp_sword_06_t2/wpn_emp_sword_06_t2_runed_01` | `weapon_skins_gotwf.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `bw_1h_flail_flaming_skin_01_runed_05` | `bw_1h_flail_flaming_skin_01_runed_05_name` | `units/weapons/player/wpn_brw_flaming_flail_01/wpn_brw_flaming_flail_01_runed_01` | `—` | `weapon_skins_gotwf_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `bw_spear_staff_skin_02_runed_05` | `bw_spear_staff_skin_02_runed_05_name` | `units/weapons/player/wpn_brw_spear_staff_02/wpn_brw_spear_staff_02_runed_01` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins_gotwf_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `dr_1h_throwing_axes_skin_01_runed_05` | `dr_1h_throwing_axes_skin_01_runed_05_name` | `units/weapons/player/wpn_invisible_weapon` | `—` | `weapon_skins_gotwf_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `dw_2h_axe_skin_06_runed_05` | `dw_2h_axe_skin_06_runed_05_name` | `units/weapons/player/wpn_dw_2h_axe_03_t2/wpn_dw_2h_axe_03_t2_runed_01` | `—` | `weapon_skins_gotwf_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `es_1h_mace_shield_skin_03_runed_05` | `es_1h_mace_shield_skin_03_runed_05_name` | `units/weapons/player/wpn_emp_mace_02_t2/wpn_emp_mace_02_t2_runed_01` | `units/weapons/player/wpn_empire_shield_03/wpn_emp_shield_03_runed_01` | `weapon_skins_gotwf_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `es_sword_shield_breton_skin_03_runed_05` | `es_sword_shield_breton_skin_03_runed_05_name` | `units/weapons/player/wpn_emp_gk_sword_02_t1/wpn_emp_gk_sword_02_t1_runed_01` | `units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02_runed_01` | `weapon_skins_gotwf_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `we_1h_spears_shield_skin_01_runed_05` | `we_1h_spears_shield_skin_01_runed_05_name` | `units/weapons/player/wpn_we_spear_03/wpn_we_spear_03_runed_01` | `units/weapons/player/wpn_we_shield_01/wpn_we_shield_01_runed_01` | `weapon_skins_gotwf_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `we_hagbane_skin_04_runed_05` | `we_hagbane_skin_04_runed_05_name` | `—` | `units/weapons/player/wpn_we_bow_short_04/wpn_we_bow_short_04_runed_01` | `weapon_skins_gotwf_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `wh_flail_shield_skin_02_runed_05` | `wh_flail_shield_skin_02_runed_05_name` | `units/weapons/player/wpn_emp_flail_05_t1/wpn_emp_flail_05_t1_runed_01` | `units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_runed` | `weapon_skins_gotwf_2026.lua` |
+| _(name unresolved — re-run /dump_glows)_ | `wh_repeating_crossbow_skin_03_runed_05` | `wh_repeating_crossbow_skin_03_runed_05_name` | `—` | `units/weapons/player/wpn_wh_repeater_crossbow_t3/wpn_wh_repeater_crossbow_t3_runed_01` | `weapon_skins_gotwf_2026.lua` |
 
 ## Veteran skins with `lileath` template (54 items)
 
@@ -359,166 +379,13 @@ Applied at spawn via `GearUtils.apply_material_settings` → `MaterialSettingsTe
 |---|---|---|---|---|---|
 | Nornaz | `deus_dw_1h_axe_skin_06_runed_02_white` | `dw_1h_axe_skin_06_runed_02_name` | `units/weapons/player/wpn_dw_axe_03_t2/wpn_dw_axe_03_t2_runed_01` | `—` | `weapon_skins_morris.lua` |
 
-## Veteran skins with NO glow template — "Stylish" colloquial (153 items)
+## Veteran skins with NO glow template — "Stylish" colloquial (0 items)
 
 These items have `rarity = "unique"` but no `material_settings_name`. Visual = baked unit emission only.
 Each typically pairs with a `_runed_02` sibling (same unit, `purple_glow` template, different display name).
 
 | Display name | Skin key | Right unit | Left unit | Source file |
 |---|---|---|---|---|
-| Absolver | `wh_1h_axe_skin_04_runed_01` | `units/weapons/player/wpn_axe_03_t2/wpn_axe_03_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Alabrin Stragaz | `dw_1h_axe_skin_07_runed_01` | `units/weapons/player/wpn_dw_axe_04_t1/wpn_dw_axe_04_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Aqshy's Generous Servant | `bw_flamethrower_staff_skin_02_runed_01` | `units/weapons/player/wpn_brw_flame_staff_02/wpn_brw_flame_staff_02_runed_01` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins.lua` |
-| Aqshy's Lament | `bw_deus_01_skin_02_runed` | `units/weapons/player/wpn_bw_deus_02/wpn_bw_deus_02_runed` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins_morris.lua` |
-| Araflane's Daughters | `we_dual_sword_dagger_skin_04_runed_01` | `units/weapons/player/wpn_we_sword_02_t1/wpn_we_sword_02_t1_runed_01` | `units/weapons/player/wpn_we_dagger_01_t1/wpn_we_dagger_01_t1_runed_01` | `weapon_skins.lua` |
-| Ariel's Breath | `we_hagbane_skin_04_runed_01` | `—` | `units/weapons/player/wpn_we_bow_short_04/wpn_we_bow_short_04_runed_01` | `weapon_skins.lua` |
-| Azamarkarinaz | `dw_1h_axe_shield_skin_05_runed_01` | `units/weapons/player/wpn_dw_axe_03_t2/wpn_dw_axe_03_t2_runed_01` | `units/weapons/player/wpn_dw_shield_05_t1/wpn_dw_shield_05_runed_01` | `weapon_skins.lua` |
-| Baron Brech's Beauty | `es_2h_sword_skin_02_runed_01` | `units/weapons/player/wpn_empire_2h_sword_01_t2/wpn_2h_sword_01_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Baron Shrak's Pride | `wh_brace_of_pistols_skin_03_runed_01` | `units/weapons/player/wpn_emp_pistol_02_t2/wpn_emp_pistol_02_t2_runed_01` | `units/weapons/player/wpn_emp_pistol_02_t2/wpn_emp_pistol_02_t2_runed_01` | `weapon_skins.lua` |
-| Bitterbreath | `we_crossbow_skin_02_runed_01` | `—` | `units/weapons/player/wpn_we_repeater_crossbow_t2/wpn_we_repeater_crossbow_t2_runed_01` | `weapon_skins.lua` |
-| Blackbrook Blade | `es_1h_sword_skin_01_runed_01` | `units/weapons/player/wpn_emp_sword_02_t1/wpn_emp_sword_02_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Blaze Reaper | `bw_ghost_scythe_skin_02_runed_01` | `units/weapons/player/wpn_bw_ghost_scythe_02/wpn_bw_ghost_scythe_02_runed_01` | `—` | `weapon_skins_shovel.lua` |
-| Bleakhollow Locus | `bw_necromancy_staff_skin_02_runed_01` | `units/weapons/player/wpn_bw_necromancy_staff_02/wpn_bw_necromancy_staff_02_runed_01` | `units/weapons/player/wpn_invisible_weapon` | `weapon_skins_shovel.lua` |
-| Bleakwood Kindrathi | `we_javelin_skin_02_runed_01` | `units/weapons/player/wpn_invisible_weapon` | `units/weapons/player/wpn_we_javelin_02/wpn_we_javelin_02_runed` | `weapon_skins_woods.lua` |
-| Bleakwood Sariothi | `we_life_staff_skin_02_runed_01` | `—` | `units/weapons/player/wpn_we_life_staff_02/wpn_we_life_staff_02_runed` | `weapon_skins_woods.lua` |
-| Bloodreaper | `we_crossbow_skin_03_runed_01` | `—` | `units/weapons/player/wpn_we_repeater_crossbow_t3/wpn_we_repeater_crossbow_t3_runed_01` | `weapon_skins.lua` |
-| Boppity Stick | `bw_1h_mace_skin_01_runed_01` | `units/weapons/player/wpn_brw_mace_01/wpn_brw_mace_01_runed_01` | `—` | `weapon_skins.lua` |
-| Bozdokaz Az-Dreugi | `dw_2h_axe_skin_06_runed_01` | `units/weapons/player/wpn_dw_2h_axe_03_t2/wpn_dw_2h_axe_03_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Bugritbok | `dr_deus_01_skin_02_runed` | `—` | `units/weapons/player/wpn_dr_deus_02/wpn_dr_deus_02_runed` | `weapon_skins_morris.lua` |
-| Bugritbok | `dr_deus_01_skin_03_runed` | `—` | `units/weapons/player/wpn_dr_deus_03/wpn_dr_deus_03_runed` | `weapon_skins_morris.lua` |
-| Cadai-galand | `we_deus_01_skin_02_runed` | `—` | `units/weapons/player/wpn_we_deus_02/wpn_we_deus_02_runed` | `weapon_skins_morris.lua` |
-| Callach's Cursed Blades | `we_dual_sword_dagger_skin_02_runed_01` | `units/weapons/player/wpn_we_sword_01_t2/wpn_we_sword_01_t2_runed_01` | `units/weapons/player/wpn_we_dagger_01_t2/wpn_we_dagger_01_t2_runed_01` | `weapon_skins.lua` |
-| Chain of Office | `es_1h_flail_skin_05_runed_01` | `units/weapons/player/wpn_emp_flail_05_t1/wpn_emp_flail_05_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Champion's Longbow | `es_longbow_skin_05_runed_01` | `—` | `units/weapons/player/wpn_emp_bow_05/wpn_emp_bow_05_runed_01` | `weapon_skins.lua` |
-| Count Schmidt's Mauler | `es_1h_mace_skin_02_runed_01` | `units/weapons/player/wpn_emp_mace_02_t2/wpn_emp_mace_02_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Counterfeit Ghal Maraz | `es_2h_hammer_skin_06_runed_01` | `units/weapons/player/wpn_empire_2h_hammer_03_t2/wpn_2h_hammer_03_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Dagger of Aqshy | `bw_dagger_skin_03_runed_01` | `units/weapons/player/wpn_brw_dagger_03/wpn_brw_dagger_03_runed_01` | `—` | `weapon_skins.lua` |
-| Dantov's Guard | `es_deus_01_skin_02_runed` | `units/weapons/player/wpn_es_deus_spear_02/wpn_es_deus_spear_02_runed` | `units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02_runed` | `weapon_skins_morris.lua` |
-| Daraz Karagmaraz | `dw_2h_pick_skin_04_runed_01` | `units/weapons/player/wpn_dw_pick_01_t4/wpn_dw_pick_01_t4_runed_01` | `—` | `weapon_skins.lua` |
-| Deathbringer | `wh_repeating_pistol_skin_02_runed_01` | `units/weapons/player/wpn_empire_pistol_repeater/wpn_empire_pistol_repeater_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Defender of the Reik | `wh_2h_sword_skin_02_runed_01` | `units/weapons/player/wpn_empire_2h_sword_02_t2/wpn_2h_sword_02_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Defiance and Destiny | `es_dual_wield_hammer_sword_skin_02_runed_01` | `units/weapons/player/wpn_emp_mace_05_t2/wpn_emp_mace_05_t2_runed_01` | `units/weapons/player/wpn_emp_sword_06_t2/wpn_emp_sword_06_t2_runed_01` | `weapon_skins_paperweight.lua` |
-| Dire-Weave | `we_hagbane_skin_01_runed_01` | `—` | `units/weapons/player/wpn_we_bow_short_01/wpn_we_bow_short_01_runed_01` | `weapon_skins.lua` |
-| Dokcoggrund | `dr_2h_cog_hammer_skin_01_runed_01` | `units/weapons/player/wpn_dw_coghammer_01_t1/wpn_dw_coghammer_01_t1_runed` | `—` | `weapon_skins_cog.lua` |
-| Dorkdrengi Tukaz | `dw_dual_axe_skin_07_runed_01` | `units/weapons/player/wpn_dw_axe_04_t1/wpn_dw_axe_04_t1_runed_01` | `units/weapons/player/wpn_dw_axe_04_t1/wpn_dw_axe_04_t1_runed_01` | `weapon_skins.lua` |
-| Drakkdrengi Tukaz | `dw_dual_axe_skin_06_runed_01` | `units/weapons/player/wpn_dw_axe_03_t2/wpn_dw_axe_03_t2_runed_01` | `units/weapons/player/wpn_dw_axe_03_t2/wpn_dw_axe_03_t2_runed_01` | `weapon_skins.lua` |
-| Dream and Nightmare | `we_dual_sword_skin_05_runed_01` | `units/weapons/player/wpn_we_sword_02_t2/wpn_we_sword_02_t2_runed_01` | `units/weapons/player/wpn_we_sword_02_t2/wpn_we_sword_02_t2_runed_01` | `weapon_skins.lua` |
-| Dronak Ginit-Barag | `dw_grudge_raker_skin_02_runed_01` | `units/weapons/player/wpn_dw_rakegun_t2/wpn_dw_rakegun_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Drungirorkaz | `dw_grudge_raker_skin_01_runed_01` | `units/weapons/player/wpn_dw_rakegun_t1/wpn_dw_rakegun_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Edrael's Will | `we_shortbow_skin_01_runed_01` | `—` | `units/weapons/player/wpn_we_bow_short_01/wpn_we_bow_short_01_runed_01` | `weapon_skins.lua` |
-| Effinghast's Striker | `es_1h_mace_shield_skin_03_runed_01` | `units/weapons/player/wpn_emp_mace_02_t2/wpn_emp_mace_02_t2_runed_01` | `units/weapons/player/wpn_empire_shield_03/wpn_emp_shield_03_runed_01` | `weapon_skins.lua` |
-| Eldritch Reaper | `bw_ghost_scythe_skin_01_runed_01` | `units/weapons/player/wpn_bw_ghost_scythe_01/wpn_bw_ghost_scythe_01_runed_01` | `—` | `weapon_skins_shovel.lua` |
-| Elector's Burden | `es_1h_flail_skin_02_runed_01` | `units/weapons/player/wpn_emp_flail_02_t1/wpn_emp_flail_02_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Elgimarazok | `dw_crossbow_skin_04_runed_01` | `—` | `units/weapons/player/wpn_dw_xbow_02_t2/wpn_dw_xbow_02_t2_runed_01` | `weapon_skins.lua` |
-| Elvarin's Rod of Destruction | `bw_deus_01_skin_01_runed` | `units/weapons/player/wpn_bw_deus_01/wpn_bw_deus_01_runed` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins_morris.lua` |
-| Endbringer | `we_2h_axe_skin_05_runed_01` | `units/weapons/player/wpn_we_2h_axe_03_t1/wpn_we_2h_axe_03_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Evergreen Reaver | `we_1h_axe_skin_02_runed_01` | `units/weapons/player/wpn_we_axe_03_t1/wpn_we_axe_03_t1_runed_01` | `—` | `weapon_skins_paperweight.lua` |
-| Feuerbach's Last Word | `bw_fireball_staff_skin_01_runed_01` | `units/weapons/player/wpn_brw_staff_02/wpn_brw_staff_02_runed_01` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins.lua` |
-| Feuerbach's Rapper | `bw_1h_mace_skin_05_runed_01` | `units/weapons/player/wpn_brw_mace_05/wpn_brw_mace_05_runed_01` | `—` | `weapon_skins.lua` |
-| Flamesword of the Elder Fleissman | `bw_1h_flaming_sword_skin_01_runed_01` | `units/weapons/player/wpn_brw_sword_01_t1/wpn_brw_flaming_sword_01_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Flamesword of the Younger Fleissman | `bw_1h_flaming_sword_skin_02_runed_01` | `units/weapons/player/wpn_brw_sword_01_t2/wpn_brw_flaming_sword_01_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Flammen's Retort | `bw_1h_crowbill_skin_02_runed_01` | `units/weapons/player/wpn_brw_crowbill_02/wpn_brw_crowbill_02_runed_01` | `—` | `weapon_skins_paperweight.lua` |
-| Frostfiend | `we_deus_01_skin_03_runed` | `—` | `units/weapons/player/wpn_we_deus_03/wpn_we_deus_03_runed` | `weapon_skins_morris.lua` |
-| Furisome Flame-Stave | `bw_flamethrower_staff_skin_05_runed_01` | `units/weapons/player/wpn_brw_flame_staff_05/wpn_brw_flame_staff_05_runed_01` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins.lua` |
-| Ghullaz Az-Dreugi | `dw_2h_axe_skin_05_runed_01` | `units/weapons/player/wpn_dw_2h_axe_03_t1/wpn_dw_2h_axe_03_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Gilded Glory | `es_halberd_skin_04_runed_01` | `units/weapons/player/wpn_wh_halberd_04/wpn_wh_halberd_04_runed_01` | `—` | `weapon_skins.lua` |
-| Glam's Laughing Blades | `we_dual_sword_skin_04_runed_01` | `units/weapons/player/wpn_we_sword_02_t1/wpn_we_sword_02_t1_runed_01` | `units/weapons/player/wpn_we_sword_02_t1/wpn_we_sword_02_t1_runed_01` | `weapon_skins.lua` |
-| Goldgather | `es_2h_sword_skin_04_runed_01` | `units/weapons/player/wpn_empire_2h_sword_03_t2/wpn_2h_sword_03_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Grauber's Arms | `es_deus_01_skin_01_runed` | `units/weapons/player/wpn_es_deus_spear_01/wpn_es_deus_spear_01_runed` | `units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02_runed_01` | `weapon_skins_morris.lua` |
-| Grimm's Hand-Taker | `wh_1h_falchion_skin_01_runed_01` | `units/weapons/player/wpn_emp_sword_04_t1/wpn_emp_sword_04_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Grobbok | `dr_deus_01_skin_01_runed` | `—` | `units/weapons/player/wpn_dr_deus_01/wpn_dr_deus_01_runed` | `weapon_skins_morris.lua` |
-| Grundalaz Karaz-Skaud | `dw_1h_hammer_shield_skin_04_runed_01` | `units/weapons/player/wpn_dw_hammer_02_t2/wpn_dw_hammer_02_t2_runed_01` | `units/weapons/player/wpn_dw_shield_05_t1/wpn_dw_shield_05_runed_01` | `weapon_skins.lua` |
-| Grungni's Vengeance | `dr_dual_wield_hammers_skin_02_runed_01` | `units/weapons/player/wpn_dw_hammer_01_t2/wpn_dw_hammer_01_t2_runed_01` | `units/weapons/player/wpn_dw_hammer_01_t2/wpn_dw_hammer_01_t2_runed_01` | `weapon_skins_paperweight.lua` |
-| Grungron Grund | `dw_1h_hammer_skin_02_runed_01` | `units/weapons/player/wpn_dw_hammer_01_t2/wpn_dw_hammer_01_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Gustgleam | `bw_1h_sword_skin_02_runed_01` | `units/weapons/player/wpn_brw_sword_01_t2/wpn_brw_sword_01_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Harmony and Discord | `we_dual_sword_dagger_skin_05_runed_01` | `units/weapons/player/wpn_we_sword_02_t2/wpn_we_sword_02_t2_runed_01` | `units/weapons/player/wpn_we_dagger_01_t2/wpn_we_dagger_01_t2_runed_01` | `weapon_skins.lua` |
-| Hazkhalaz Skrundaz | `dw_2h_pick_skin_03_runed_01` | `units/weapons/player/wpn_dw_pick_01_t3/wpn_dw_pick_01_t3_runed_01` | `—` | `weapon_skins.lua` |
-| Helmgart's Roar | `es_blunderbuss_skin_04_runed_01` | `units/weapons/player/wpn_empire_blunderbuss_t2/wpn_empire_blunderbuss_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Infused Immolator of Itza | `bw_beam_staff_skin_04_runed_01` | `units/weapons/player/wpn_brw_beam_staff_04/wpn_brw_beam_staff_04_runed_01` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins.lua` |
-| Initiate’s Flail & Shield | `wh_flail_shield_skin_01_runed_01` | `units/weapons/player/wpn_emp_flail_02_t1/wpn_emp_flail_02_t1_runed_01` | `units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_runed` | `weapon_skins_bless.lua` |
-| Initiate’s Reckoner | `wh_2h_hammer_skin_01_runed_01` | `units/weapons/player/wpn_wh_2h_hammer_01/wpn_wh_2h_hammer_01_runed` | `—` | `weapon_skins_bless.lua` |
-| Initiate’s Skull-Splitter | `wh_1h_hammer_skin_01_runed_01` | `units/weapons/player/wpn_wh_1h_hammer_01/wpn_wh_1h_hammer_01_runed` | `—` | `weapon_skins_bless.lua` |
-| Innovator's Coggrund | `dr_2h_cog_hammer_skin_02_runed_01` | `units/weapons/player/wpn_dw_coghammer_01_t2/wpn_dw_coghammer_01_t2_runed` | `—` | `weapon_skins_cog.lua` |
-| Innovator's Thrundtak | `dr_steam_pistol_skin_02_runed_01` | `units/weapons/player/wpn_dw_steam_pistol_01_t2/wpn_dw_steam_pistol_01_t2_runed_01` | `—` | `weapon_skins_cog.lua` |
-| Kaia's Stormsword | `we_sword_skin_04_runed_01` | `units/weapons/player/wpn_we_sword_02_t1/wpn_we_sword_02_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Karaz Gift | `es_bastard_sword_skin_03_runed_01` | `units/weapons/player/wpn_emp_gk_sword_02_t1/wpn_emp_gk_sword_02_t1_runed_01` | `—` | `weapon_skins_lake.lua` |
-| Karugromthiaz Karinaz | `dw_1h_axe_shield_skin_02_runed_01` | `units/weapons/player/wpn_dw_axe_03_t2/wpn_dw_axe_03_t2_runed_01` | `units/weapons/player/wpn_dw_shield_02_t1/wpn_dw_shield_02_runed_01` | `weapon_skins.lua` |
-| Katalhuyk | `dw_drakegun_skin_01_runed_01` | `units/weapons/player/wpn_dw_iron_drake_01/wpn_dw_iron_drake_01_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Katha's Funeral Swords | `we_dual_sword_skin_02_runed_01` | `units/weapons/player/wpn_we_sword_01_t2/wpn_we_sword_01_t2_runed_01` | `units/weapons/player/wpn_we_sword_01_t2/wpn_we_sword_01_t2_runed_01` | `weapon_skins.lua` |
-| Kell's Vanguard | `es_1h_mace_shield_skin_02_runed_01` | `units/weapons/player/wpn_emp_mace_02_t2/wpn_emp_mace_02_t2_runed_01` | `units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02_runed_01` | `weapon_skins.lua` |
-| Kellerman's Arms | `es_deus_01_skin_03_runed` | `units/weapons/player/wpn_es_deus_spear_03/wpn_es_deus_spear_03_runed` | `units/weapons/player/wpn_es_deus_shield_03/wpn_es_deus_shield_03_runed` | `weapon_skins_morris.lua` |
-| Lamenter's Kindrathi | `we_javelin_skin_01_runed_01` | `units/weapons/player/wpn_invisible_weapon` | `units/weapons/player/wpn_we_javelin_01/wpn_we_javelin_01_runed` | `weapon_skins_woods.lua` |
-| Lamenter's Sariothi | `we_life_staff_skin_01_runed_01` | `—` | `units/weapons/player/wpn_we_life_staff_01/wpn_we_life_staff_01_runed` | `weapon_skins_woods.lua` |
-| Leopold's Favourite | `es_1h_sword_shield_skin_02_runed_01` | `units/weapons/player/wpn_emp_sword_02_t2/wpn_emp_sword_02_t2_runed_01` | `units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02_runed_01` | `weapon_skins.lua` |
-| Lhunegal Alabrinaz | `dw_1h_axe_skin_06_runed_01` | `units/weapons/player/wpn_dw_axe_03_t2/wpn_dw_axe_03_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Lothlann's Woebringer | `we_2h_axe_skin_07_runed_01` | `units/weapons/player/wpn_we_2h_axe_04_t1/wpn_we_2h_axe_04_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Luthor Flamestrike's Letter Opener | `bw_dagger_skin_05_runed_01` | `units/weapons/player/wpn_brw_dagger_05/wpn_brw_dagger_05_runed_01` | `—` | `weapon_skins.lua` |
-| Madman's Conduit | `bw_deus_01_skin_03_runed` | `units/weapons/player/wpn_bw_deus_03/wpn_bw_deus_03_runed` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins_morris.lua` |
-| Marietta's Molten Massacre | `bw_beam_staff_skin_05_runed_01` | `units/weapons/player/wpn_brw_beam_staff_05/wpn_brw_beam_staff_05_runed_01` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins.lua` |
-| Mercy and Carnage | `we_dual_dagger_skin_02_runed_01` | `units/weapons/player/wpn_we_dagger_01_t2/wpn_we_dagger_01_t2_runed_01` | `units/weapons/player/wpn_we_dagger_01_t2/wpn_we_dagger_01_t2_runed_01` | `weapon_skins.lua` |
-| Nornak Drakktuk | `dw_drake_pistol_skin_04_runed_01` | `units/weapons/player/wpn_dw_drake_pistol_02_t2/wpn_dw_drake_pistol_02_t2_runed_01` | `units/weapons/player/wpn_dw_drake_pistol_02_t2/wpn_dw_drake_pistol_02_t2_runed_01` | `weapon_skins.lua` |
-| Oblivion | `we_2h_sword_skin_06_runed_01` | `units/weapons/player/wpn_we_2h_sword_03_t2/wpn_we_2h_sword_03_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Old (Mostly) Faithful | `es_blunderbuss_skin_02_runed_01` | `units/weapons/player/wpn_empire_blunderbuss_02_t2/wpn_empire_blunderbuss_02_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Otto Hieder's Never-Miss Mechanism | `es_handgun_skin_02_runed_01` | `units/weapons/player/wpn_empire_handgun_02_t2/wpn_empire_handgun_02_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Ravensblade | `wh_1h_falchion_skin_02_runed_01` | `units/weapons/player/wpn_emp_sword_04_t2/wpn_emp_sword_04_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Rhuni Drakktuk | `dw_drake_pistol_skin_03_runed_01` | `units/weapons/player/wpn_dw_drake_pistol_02_t1/wpn_dw_drake_pistol_02_t1_runed_01` | `units/weapons/player/wpn_dw_drake_pistol_02_t1/wpn_dw_drake_pistol_02_t1_runed_01` | `weapon_skins.lua` |
-| Rhunkiaz Grund | `dw_1h_hammer_skin_04_runed_01` | `units/weapons/player/wpn_dw_hammer_02_t2/wpn_dw_hammer_02_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Rikaz Grundreugi | `dw_2h_hammer_skin_01_runed_01` | `units/weapons/player/wpn_dw_2h_hammer_01_t1/wpn_dw_2h_hammer_01_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Rinnaz Grundreugi | `dw_2h_hammer_skin_04_runed_01` | `units/weapons/player/wpn_dw_2h_hammer_02_t2/wpn_dw_2h_hammer_02_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Rod of Resplendent Ruin | `bw_conflagration_staff_skin_02_runed_01` | `units/weapons/player/wpn_brw_staff_04/wpn_brw_staff_04_runed_01` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins.lua` |
-| Sable Shield of Parandot | `es_sword_shield_breton_skin_03_runed_01` | `units/weapons/player/wpn_emp_gk_sword_02_t1/wpn_emp_gk_sword_02_t1_runed_01` | `units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02_runed_01` | `weapon_skins_lake.lua` |
-| Scarloc's Longbow | `we_longbow_skin_06_runed_01` | `—` | `units/weapons/player/wpn_we_bow_03_t2/wpn_we_bow_03_t2_runed_01` | `weapon_skins.lua` |
-| Sceolan's Eye-Thieves | `we_dual_dagger_skin_01_runed_01` | `units/weapons/player/wpn_we_dagger_01_t1/wpn_we_dagger_01_t1_runed_01` | `units/weapons/player/wpn_we_dagger_01_t1/wpn_we_dagger_01_t1_runed_01` | `weapon_skins.lua` |
-| Scuttlestaff | `bw_necromancy_staff_skin_01_runed_01` | `units/weapons/player/wpn_bw_necromancy_staff_01/wpn_bw_necromancy_staff_01_runed_01` | `units/weapons/player/wpn_invisible_weapon` | `weapon_skins_shovel.lua` |
-| Sheenstrike | `bw_dagger_skin_04_runed_01` | `units/weapons/player/wpn_brw_dagger_04/wpn_brw_dagger_04_runed_01` | `—` | `weapon_skins.lua` |
-| Spear of the Everglades | `we_spear_skin_03_runed_01` | `units/weapons/player/wpn_we_spear_03/wpn_we_spear_03_runed_01` | `—` | `weapon_skins.lua` |
-| Spear of Tirsyth | `we_spear_skin_04_runed_01` | `units/weapons/player/wpn_we_spear_04/wpn_we_spear_04_runed_01` | `—` | `weapon_skins.lua` |
-| Spite-Tongue | `we_shortbow_skin_04_runed_01` | `—` | `units/weapons/player/wpn_we_bow_short_04/wpn_we_bow_short_04_runed_01` | `weapon_skins.lua` |
-| Sword of the Forsaken Hero | `we_2h_sword_skin_05_runed_01` | `units/weapons/player/wpn_we_2h_sword_03_t1/wpn_we_2h_sword_03_t1_runed_01` | `—` | `weapon_skins.lua` |
-| The Bastion | `es_1h_sword_shield_skin_03_runed_01` | `units/weapons/player/wpn_emp_sword_02_t2/wpn_emp_sword_02_t2_runed_01` | `units/weapons/player/wpn_empire_shield_03/wpn_emp_shield_03_runed_01` | `weapon_skins.lua` |
-| The Bögenhafen Banger | `es_handgun_skin_01_runed_01` | `units/weapons/player/wpn_empire_handgun_02_t1/wpn_empire_handgun_02_t1_runed_01` | `—` | `weapon_skins.lua` |
-| The Carroburg Honour-Blade | `es_2h_sword_exe_skin_04_runed_01` | `units/weapons/player/wpn_emp_sword_exe_04_t1/wpn_emp_sword_exe_04_t1_runed_01` | `—` | `weapon_skins.lua` |
-| The Doom of Anmyr | `we_sword_skin_05_runed_01` | `units/weapons/player/wpn_we_sword_02_t2/wpn_we_sword_02_t2_runed_01` | `—` | `weapon_skins.lua` |
-| The Griffon's Roar | `es_repeating_handgun_skin_03_runed_01` | `units/weapons/player/wpn_emp_handgun_repeater_t3/wpn_emp_handgun_repeater_t3_runed_01` | `—` | `weapon_skins.lua` |
-| The Judge's Mark | `wh_repeating_crossbow_skin_03_runed_01` | `—` | `units/weapons/player/wpn_wh_repeater_crossbow_t3/wpn_wh_repeater_crossbow_t3_runed_01` | `weapon_skins.lua` |
-| The Reiksmarshal's Great Leveller | `es_2h_hammer_skin_04_runed_01` | `units/weapons/player/wpn_empire_2h_hammer_02_t2/wpn_2h_hammer_02_t2_runed_01` | `—` | `weapon_skins.lua` |
-| The Runic Ruinator | `bw_spear_staff_skin_04_runed_01` | `units/weapons/player/wpn_brw_spear_staff_04/wpn_brw_spear_staff_04_runed_01` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins.lua` |
-| The Vanquisher | `wh_crossbow_skin_04_runed_01` | `—` | `units/weapons/player/wpn_emp_crossbow_03_t2/wpn_emp_crossbow_03_t2_runed_01` | `weapon_skins.lua` |
-| The Voice of Lileath | `we_deus_01_skin_01_runed` | `—` | `units/weapons/player/wpn_we_deus_01/wpn_we_deus_01_runed` | `weapon_skins_morris.lua` |
-| Theogonist’s Reckoner | `wh_2h_hammer_skin_02_runed_01` | `units/weapons/player/wpn_wh_2h_hammer_02/wpn_wh_2h_hammer_02_runed` | `—` | `weapon_skins_bless.lua` |
-| Theogonist’s Skull-Splitter | `wh_1h_hammer_skin_02_runed_01` | `units/weapons/player/wpn_wh_1h_hammer_02/wpn_wh_1h_hammer_02_runed` | `—` | `weapon_skins_bless.lua` |
-| Theogonist’s Skull-Splitter & Shield | `wh_hammer_shield_skin_02_runed_01` | `units/weapons/player/wpn_wh_1h_hammer_02/wpn_wh_1h_hammer_02_runed` | `units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_runed` | `weapon_skins_bless.lua` |
-| Throngdrengiaz Karingrund | `dw_1h_hammer_shield_skin_02_runed_01` | `units/weapons/player/wpn_dw_hammer_01_t2/wpn_dw_hammer_01_t2_runed_01` | `units/weapons/player/wpn_dw_shield_02_t1/wpn_dw_shield_02_runed_01` | `weapon_skins.lua` |
-| Thrynthrag | `dw_handgun_skin_02_runed_01` | `units/weapons/player/wpn_dw_handgun_01_t2/wpn_dw_handgun_01_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Urbarthrundtak | `dr_steam_pistol_skin_01_runed_01` | `units/weapons/player/wpn_dw_steam_pistol_01_t1/wpn_dw_steam_pistol_01_t1_runed_01` | `—` | `weapon_skins_cog.lua` |
-| Van Hal's Executioner | `wh_2h_sword_skin_05_runed_01` | `units/weapons/player/wpn_empire_2h_sword_05_t1/wpn_2h_sword_05_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Vengrynaz Drekmaraz | `dw_crossbow_skin_02_runed_01` | `—` | `units/weapons/player/wpn_dw_xbow_01_t2/wpn_dw_xbow_01_t2_runed_01` | `weapon_skins.lua` |
-| Vinereaver | `we_sword_skin_02_runed_01` | `units/weapons/player/wpn_we_sword_01_t2/wpn_we_sword_01_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Volans' Failed Experiment | `bw_spear_staff_skin_02_runed_01` | `units/weapons/player/wpn_brw_spear_staff_02/wpn_brw_spear_staff_02_runed_01` | `units/weapons/player/wpn_fireball/wpn_fireball` | `weapon_skins.lua` |
-| Von Kraddock's Judge | `wh_1h_axe_skin_02_runed_01` | `units/weapons/player/wpn_axe_02_t2/wpn_axe_02_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Von Mecklenburg's Revenge | `es_2h_sword_exe_skin_05_runed_01` | `units/weapons/player/wpn_emp_sword_exe_05_t1/wpn_emp_sword_exe_05_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Von Meinkopt's Whirligig of Death | `es_repeating_handgun_skin_02_runed_01` | `units/weapons/player/wpn_emp_handgun_repeater_t2/wpn_emp_handgun_repeater_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Von Tarnus' Last Gift | `bw_1h_sword_skin_01_runed_01` | `units/weapons/player/wpn_brw_sword_01_t1/wpn_brw_sword_01_t1_runed_01` | `—` | `weapon_skins.lua` |
-| Weave-bound Kindrathi | `we_javelin_skin_02_magic_01` | `units/weapons/player/wpn_invisible_weapon` | `units/weapons/player/wpn_we_javelin_02/wpn_we_javelin_02_magic` | `weapon_skins_woods.lua` |
-| Weave-bound Sariothi | `we_life_staff_skin_02_magic_01` | `—` | `units/weapons/player/wpn_we_life_staff_02/wpn_we_life_staff_02_magic` | `weapon_skins_woods.lua` |
-| Weave-Reign Blades | `we_dual_sword_dagger_skin_01_runed_01` | `units/weapons/player/wpn_we_sword_02_t2/wpn_we_sword_02_t2_runed_01` | `units/weapons/player/wpn_we_dagger_01_t1/wpn_we_dagger_01_t1_runed_01` | `weapon_skins.lua` |
-| Wernigoth's Arming Sword | `es_1h_sword_skin_02_runed_01` | `units/weapons/player/wpn_emp_sword_02_t2/wpn_emp_sword_02_t2_runed_01` | `—` | `weapon_skins.lua` |
-| Zarazaz Kantuzthrag | `dw_handgun_skin_05_runed_01` | `units/weapons/player/wpn_dw_handgun_02_t3/wpn_dw_handgun_02_t3_runed_01` | `—` | `weapon_skins.lua` |
-| Zharrstromez | `dw_drakegun_skin_03_runed_01` | `units/weapons/player/wpn_dw_iron_drake_03/wpn_dw_iron_drake_03_runed_01` | `—` | `weapon_skins.lua` |
-| _(name unresolved)_ | `wh_brace_of_pistols_skin_05_runed_01` | `units/weapons/player/wpn_emp_pistol_03_t2/wpn_emp_pistol_03_t2_runed_01` | `units/weapons/player/wpn_emp_pistol_03_t2/wpn_emp_pistol_03_t2_runed_01` | `weapon_skins.lua` |
-| _(name unresolved)_ | `wh_crossbow_skin_02_runed_01` | `—` | `units/weapons/player/wpn_emp_crossbow_02_t2/wpn_emp_crossbow_02_t2_runed_01` | `weapon_skins.lua` |
-| _(name unresolved)_ | `wh_deus_01_skin_01_runed` | `units/weapons/player/wpn_wh_deus_01/wpn_wh_deus_01_runed` | `units/weapons/player/wpn_wh_deus_01/wpn_wh_deus_01_runed` | `weapon_skins_morris.lua` |
-| _(name unresolved)_ | `wh_deus_01_skin_02_runed` | `units/weapons/player/wpn_wh_deus_02/wpn_wh_deus_02_runed` | `units/weapons/player/wpn_wh_deus_02/wpn_wh_deus_02_runed` | `weapon_skins_morris.lua` |
-| _(name unresolved)_ | `wh_deus_01_skin_03_runed` | `units/weapons/player/wpn_wh_deus_03/wpn_wh_deus_03_runed` | `units/weapons/player/wpn_wh_deus_03/wpn_wh_deus_03_runed` | `weapon_skins_morris.lua` |
-| _(name unresolved)_ | `wh_dual_hammer_skin_01_runed_01` | `units/weapons/player/wpn_wh_1h_hammer_01/wpn_wh_1h_hammer_01_runed` | `units/weapons/player/wpn_wh_1h_hammer_01/wpn_wh_1h_hammer_01_runed` | `weapon_skins_bless.lua` |
-| _(name unresolved)_ | `wh_dual_hammer_skin_02_runed_01` | `units/weapons/player/wpn_wh_1h_hammer_02/wpn_wh_1h_hammer_02_runed` | `units/weapons/player/wpn_wh_1h_hammer_02/wpn_wh_1h_hammer_02_runed` | `weapon_skins_bless.lua` |
-| _(name unresolved)_ | `wh_dual_wield_axe_falchion_skin_02_runed_01` | `units/weapons/player/wpn_axe_03_t2/wpn_axe_03_t2_runed_01` | `units/weapons/player/wpn_emp_sword_04_t2/wpn_emp_sword_04_t2_runed_01` | `weapon_skins_paperweight.lua` |
-| _(name unresolved)_ | `wh_fencing_sword_skin_01_runed_01` | `units/weapons/player/wpn_fencingsword_01_t1/wpn_fencingsword_01_t1_runed_01` | `units/weapons/player/wpn_emp_pistol_02_t2/wpn_emp_pistol_02_t2_runed_01` | `weapon_skins.lua` |
-| _(name unresolved)_ | `wh_flail_shield_skin_02_runed_01` | `units/weapons/player/wpn_emp_flail_05_t1/wpn_emp_flail_05_t1_runed_01` | `units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_runed` | `weapon_skins_bless.lua` |
-| _(name unresolved)_ | `wh_hammer_book_skin_01_runed_01` | `units/weapons/player/wpn_wh_book_02/wpn_wh_book_02_runed` | `units/weapons/player/wpn_wh_1h_hammer_01/wpn_wh_1h_hammer_01_runed` | `weapon_skins_bless.lua` |
-| _(name unresolved)_ | `wh_hammer_book_skin_02_runed_01` | `units/weapons/player/wpn_wh_book_02/wpn_wh_book_02_runed` | `units/weapons/player/wpn_wh_1h_hammer_02/wpn_wh_1h_hammer_02_runed` | `weapon_skins_bless.lua` |
-| _(name unresolved)_ | `wh_hammer_shield_skin_01_runed_01` | `units/weapons/player/wpn_wh_1h_hammer_01/wpn_wh_1h_hammer_01_runed` | `units/weapons/player/wpn_wh_shield_01/wpn_wh_shield_01_t1_runed` | `weapon_skins_bless.lua` |
-| _(name unresolved)_ | `wh_repeating_pistol_skin_04_runed_01` | `units/weapons/player/wpn_empire_pistol_repeater_02/wpn_empire_pistol_repeater_02_t1_runed_01` | `—` | `weapon_skins.lua` |
 
 ---
 
@@ -996,7 +863,7 @@ These rarities never have `material_settings_name` set. Listed compactly for com
 | Huntsman's Spear | `es_2h_heavy_spear_skin_01` | `units/weapons/player/wpn_emp_boar_spear_01/wpn_emp_boar_spear_01` | `—` | `weapon_skins_anvil.lua` |
 | Krelgar's Redeemer | `wh_2h_billhook_skin_02` | `units/weapons/player/wpn_wh_billhook_02/wpn_wh_billhook_02` | `—` | `weapon_skins_anvil.lua` |
 | Longbeard's Azdrek | `dr_1h_throwing_axes_skin_02` | `units/weapons/player/wpn_invisible_weapon` | `—` | `weapon_skins_anvil.lua` |
-| Princess's Glamour-Shield | `we_1h_spears_shield_skin_01_runed_01` | `units/weapons/player/wpn_we_spear_03/wpn_we_spear_03` | `units/weapons/player/wpn_we_shield_01/wpn_we_shield_01_runed_01` | `weapon_skins_anvil.lua` |
+| Princess's Glamour-Shield | `we_1h_spears_shield_skin_01_runed_01` | `units/weapons/player/wpn_we_spear_03/wpn_we_spear_03_runed_01` | `units/weapons/player/wpn_we_shield_01/wpn_we_shield_01_runed_01` | `weapon_skins_anvil.lua` |
 | Sea Guard's Drannach-Isalt | `we_1h_spears_shield_skin_02` | `units/weapons/player/wpn_we_spear_02/wpn_we_spear_02` | `units/weapons/player/wpn_we_shield_02/wpn_we_shield_02` | `weapon_skins_anvil.lua` |
 | Templar's Spear | `es_2h_heavy_spear_skin_02` | `units/weapons/player/wpn_emp_boar_spear_02/wpn_emp_boar_spear_02` | `—` | `weapon_skins_anvil.lua` |
 | The Boegarmund Blade | `wh_2h_billhook_skin_01_runed_01` | `units/weapons/player/wpn_wh_billhook_01/wpn_wh_billhook_01_runed_01` | `—` | `weapon_skins_anvil.lua` |
