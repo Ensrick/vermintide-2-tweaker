@@ -8,6 +8,19 @@ Last updated: 2026-07-13.
 
 ---
 
+## Custom Rarity UI
+
+### issue263-modded-upgrade-copy - Customization Upgrade text is never blank
+
+| Field | Value |
+|-------|-------|
+| Scope | Gear-icon item customization Upgrade option and detailed Upgrade state. |
+| Repro | Open the customization viewer first for an upgradeable vanilla-rarity weapon, then for a Modded-rarity weapon. |
+| Expected post-fix | Vanilla upgrade copy and behavior remain unchanged. The Modded option and detailed state show one sentence explaining Modded rarity; no recipe, cost, lock, or transition changes. |
+| Detection | Run `/cim_regression_test`; require `issue263_modded_upgrade_copy` PASS. |
+
+---
+
 ## Bulk Cleanup
 
 ### issue277-exact-cim-weapon-cleanup - Destructive cleanup fails closed

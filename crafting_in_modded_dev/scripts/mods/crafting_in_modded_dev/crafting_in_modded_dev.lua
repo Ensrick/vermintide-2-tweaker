@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.68-dev"
+local MOD_VERSION = "0.8.69-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -201,6 +201,7 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
+mod._cim_rt_register = _rt_register
 
 -- (#511) io-safe source reader. The VMF retail Stingray VM registers no `io`
 -- library (mods are loadstring'd into the game's shared _G; the engine registers

@@ -1,5 +1,16 @@
 # Crafting in Modded Changelog
 
+## 0.8.69-dev (2026-07-13): #263 modded-rarity upgrade copy [verify-fix] [not deployed]
+
+- Added the missing global `upgrade_description_text_modded` string used by vanilla's customization option card, replacing the blank subtitle with one sentence explaining the Modded rarity.
+- Filled the same copy into the detailed Upgrade state after vanilla returns early for custom rarities. The patch does not change recipes, costs, button locks, or rarity transitions, and leaves vanilla-rarity copy untouched.
+- Added runtime check `issue263_modded_upgrade_copy` for the global localization, modded detailed-state fallback, and vanilla-rarity no-op boundary.
+
+### Test method
+1. Open a weapon that can still be upgraded in the gear-icon customization viewer; verify its existing vanilla Upgrade text and behavior are unchanged.
+2. Open a Modded-rarity weapon; verify the Upgrade option and its detailed view show the one-sentence Modded-rarity description rather than a blank label.
+3. Run `/cim_regression_test` and require `issue263_modded_upgrade_copy` PASS.
+
 ## 0.8.68-dev (2026-07-13): #277 exact-owner bulk weapon cleanup [verify-fix] [not deployed]
 
 - Added `/forge_delete_all` as a two-step destructive workflow: the first call previews and snapshots the exact candidate set; `/forge_delete_all CONFIRM` proceeds only if that set is unchanged.

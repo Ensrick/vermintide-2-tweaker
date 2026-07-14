@@ -144,6 +144,7 @@ end
 -- 2026-05-24 for the cim main forge menu.
 local _CIM_LOC_OVERRIDES = {
     rarity_display_name_modded                            = "Modded",
+    upgrade_description_text_modded                       = "Modded rarity unlocks full property, trait, illusion, and upgrade customization for this item.",
     crafting_recipe_craft_jewellery                       = "Craft Accessories",
     description_crafting_recipe_craft_jewellery           = "Craft a new accessory (necklace, charm, or trinket) for your current career.",
     crafting_recipe_jewellery_reroll_properties           = "Reroll Accessory Properties",
@@ -154,6 +155,50 @@ mod:hook(_G, "Localize", function(func, key, ...)
     local override = _CIM_LOC_OVERRIDES[key]
     if override then return override end
     return func(key, ...)
+end)
+
+-- Vanilla builds the upgrade option subtitle from
+-- `upgrade_description_text_<current rarity>`, so registering a rarity without
+-- the matching global key leaves the option card blank. The detailed upgrade
+-- state also returns before populating its widgets for every non-vanilla rarity;
+-- fill only its copy after vanilla setup. This changes no recipe, button lock,
+-- cost, or rarity transition.
+local function _apply_modded_upgrade_copy(rarity, widgets_by_name)
+    if rarity ~= "modded" or type(widgets_by_name) ~= "table" then return false end
+    local widget = widgets_by_name.upgrade_description_text
+    if not widget or type(widget.content) ~= "table" then return false end
+    widget.content.text = _CIM_LOC_OVERRIDES.upgrade_description_text_modded
+    return true
+end
+
+mod._cim263_apply_modded_upgrade_copy = _apply_modded_upgrade_copy
+
+mod:hook_safe("HeroWindowItemCustomization", "_state_setup_upgrade", function(self)
+    local item = self._get_item and self:_get_item(self._item_backend_id)
+    if type(item) ~= "table" then return end
+    local item_data = item.data
+    local rarity = item.rarity or (type(item_data) == "table" and item_data.rarity)
+    _apply_modded_upgrade_copy(rarity, self._upgrade_widgets_by_name)
+end)
+
+mod._cim_rt_register("issue263_modded_upgrade_copy", function()
+    local expected = _CIM_LOC_OVERRIDES.upgrade_description_text_modded
+    local localized = Localize("upgrade_description_text_modded")
+    if localized ~= expected then
+        return string.format("modded upgrade localization mismatch: %q", tostring(localized))
+    end
+
+    local widgets = { upgrade_description_text = { content = { text = "sentinel" } } }
+    if _apply_modded_upgrade_copy("exotic", widgets) then return "vanilla rarity was modified" end
+    if widgets.upgrade_description_text.content.text ~= "sentinel" then
+        return "vanilla upgrade copy changed"
+    end
+    if not _apply_modded_upgrade_copy("modded", widgets) then
+        return "modded upgrade copy was not applied"
+    end
+    if widgets.upgrade_description_text.content.text ~= expected then
+        return "modded detailed-state copy mismatch"
+    end
 end)
 
 -- The loadout inventory grid's category header reads `category.display_name`
