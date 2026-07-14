@@ -1,5 +1,10 @@
 # General Tweaker Changelog
 
+## v0.2.176 (2026-07-13) -- Stable world-liveness hardening (#490)
+
+- Ported the #459 native-world safety class to stable: cached debug draw handles are never dispatched through a destroyed/replaced world, all level-world lookups use `has_world`, and screen GUI creation uses resident `materials/fonts/gw_fonts` rather than the text-only Arial material.
+- The boss-sphere debug path now fails closed while `level_world` is unavailable during transitions.
+
 ## v0.2.175 (2026-07-03) -- Promotion refresh: Bot Teleport Lab settings removed before the public release
 
 Refresh of the (not-yet-uploaded) v0.2.173 promotion, syncing the dev line at v0.2.175-dev. Absorbs dev v0.2.174-dev (#222 tooltip re-sweep round 2: action-hotkey and enable/disable tooltip bodies) and dev v0.2.175-dev:

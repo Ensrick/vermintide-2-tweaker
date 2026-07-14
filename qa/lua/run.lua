@@ -89,6 +89,7 @@ local suites = {
     "test_cos_la_shield_parity",
     "test_gt_disconnect_grace",
     "test_gt_noclip_boundary_policy",
+    "test_gt_stable_world_liveness",
 }
 
 for _, suite in ipairs(suites) do

@@ -847,12 +847,19 @@ end
 -- ============================================================================
 local FONT      = "arial"
 local FONT_MTRL = "materials/fonts/arial"
+-- (#490/#459) create_screen_gui requires a resident GUI package material.
+-- `materials/fonts/arial` is only the Gui.text font material and is C-fatal here.
+local GUI_MTRL  = "materials/fonts/gw_fonts"
 
 -- release cached draw resources + clear any lingering lines.
 local function _clear_and_null()
     local lo = mod._gt_btlab_line_object
     local w  = mod._gt_btlab_line_world
-    if lo and w then
+    local wm = Managers.world
+    local live = wm and wm:has_world("level_world") and wm:world("level_world")
+    -- World handles are native pointers. Never dispatch through a cached handle
+    -- once the named world has disappeared or been replaced during transition.
+    if lo and w and w == live then
         pcall(function()
             LineObject.reset(lo)
             LineObject.dispatch(w, lo)
@@ -865,7 +872,8 @@ local function _clear_and_null()
 end
 
 local function _do_draw(want_hud, want_lines)
-    local world = Managers.world and Managers.world:world("level_world")
+    local wm = Managers.world
+    local world = wm and wm:has_world("level_world") and wm:world("level_world")
     if not world then
         _clear_and_null()
         return
@@ -894,7 +902,7 @@ local function _do_draw(want_hud, want_lines)
             mod._gt_btlab_gui_world = world
         end
         if not mod._gt_btlab_gui then
-            mod._gt_btlab_gui = World.create_screen_gui(world, "material", FONT_MTRL, "immediate")
+            mod._gt_btlab_gui = World.create_screen_gui(world, "material", GUI_MTRL, "immediate")
         end
         gui = mod._gt_btlab_gui
     end

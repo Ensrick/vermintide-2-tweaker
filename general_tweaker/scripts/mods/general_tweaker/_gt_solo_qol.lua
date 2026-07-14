@@ -323,7 +323,13 @@ mod:hook("EnemyRecycler", "update", function (func, self, t, dt, player_position
         end
 
         if mod:get("gt_solo_draw_boss_spheres") and self.main_path_events then
-            local world = Managers.world:world("level_world")
+            local wm = Managers.world
+            local world = wm and wm:has_world("level_world") and wm:world("level_world")
+            if not world then
+                mod._gt_solo_line_object = nil
+                mod._gt_solo_line_world = nil
+                return
+            end
             if mod._gt_solo_line_world ~= world then
                 mod._gt_solo_line_object = nil
                 mod._gt_solo_line_world = world
