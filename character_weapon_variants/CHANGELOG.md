@@ -1,5 +1,16 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.405-dev - 2026-07-14 - #420 shared WeaponAppearance consumer [verify-fix]
+
+- Replaced CWV's private transform implementation with its bundled, byte-identical copy of the repository `WeaponAppearance` library. Existing CWV callers, all four render-path resolvers, legacy thin wrappers, and the `mod._cwv_weapon_appearance` compatibility handle remain unchanged.
+- Preserved absolute scale/position/rotation, position-over-offset precedence, and the per-unit weak-key guard that prevents additive offsets from compounding when a preview spawn fires twice. The shared primitive adds fail-closed validation and protected engine writes without inferring identity, hand, perspective, career, or residency.
+- Added the shared unit-local texture primitive for later migration, but did not change CWV's two live musket texture sites in this cutover. The banned `Material.set_texture` debt remains tracked by #420 and must not be considered fixed yet.
+- Added offline regression coverage for transform composition, offset idempotency, position precedence, Euler normalization, unit-local texture writes, malformed/dead-unit handling, exact consumer copies, and CWV loader/compatibility wiring.
+
+### Solo verify
+
+Equip a transformed CWV weapon such as Old Musket and inspect first person, local third person, inventory hero preview, and the illusion browser. Scale, position, and rotation must match v0.1.404-dev, and repeatedly reopening the preview must not compound its offset. Run `/cwv_regression_test`; `weapon_appearance_module_present` must pass. Remote-husk parity is unchanged by this consumer-only cutover.
+
 ## 0.1.404-dev - 2026-07-14 - #343 Smoke Bomb source preflight [diagnostics-armed]
 
 - Audited the requested throwable against the actual Ranger Veteran and frag-grenade paths. Ranger smoke is not an explosion-applied invisibility effect: `ActionCareerDRRanger` adds `bardin_ranger_activated_ability`; that buff spawns a shared 8 m `buff_aoe_unit`, whose native enter/leave logic adds and removes synchronized invisibility. `BuffExtension.add_buff` already accepts `params.buff_area_position`, providing a source-native landing-position seam (`action_career_dr_ranger.lua:35-64`, `talent_settings_bardin.lua:1038-1072`, `buff_extension.lua:362-382`).

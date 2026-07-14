@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.404-dev"
+local MOD_VERSION = "0.1.405-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -10648,15 +10648,16 @@ end
 local function _is_unit(v) return type(v) == "userdata" and pcall(Unit.alive, v) end
 
 -- ============================================================
--- WeaponAppearance (WA) — the single weapon-appearance geometry module
+-- WeaponAppearance (WA) — copied shared appearance primitive (#420)
 -- ============================================================
--- ONE place that owns the scale / offset / position / rotation math for a
--- weapon unit, called by EVERY render path so no path re-implements the math:
+-- The byte-identical bundled library owns scale / offset / position / rotation
+-- math for a weapon unit, called by EVERY render path:
 --   1. in-world owner/bot  — GearUtils.create_equipment
 --   2. husk (remote)       — GearUtils.spawn_inventory_unit (owner_unit_1p==nil)
 --   3. inventory preview    — MenuWorldPreviewer/_spawn_item -> _cwv_spawn_item_post
 --   4. illusion browser     — LootItemUnitPreviewer.spawn_units
--- Full contract: docs/WEAPON_APPEARANCE_STANDARD.md (Phase 4).
+-- Full contract: docs/WEAPON_APPEARANCE_STANDARD.md. Identity, hand,
+-- perspective, residency, and render-path resolution remain CWV-owned.
 --
 -- Conventions (DO NOT reintroduce per-site copies of this math):
 --   * scale    — ABSOLUTE set. Idempotent by nature.
@@ -10672,70 +10673,14 @@ local function _is_unit(v) return type(v) == "userdata" and pcall(Unit.alive, v)
 --                tunable standard: Quaternion.from_euler_angles_xyz takes degrees,
 --                memory reference_vt2_euler_angles_degrees) OR a QuaternionBox /
 --                raw Quaternion for hand-authored non-principal-axis poses.
---   * 1P and 3P are applied to SEPARATE units BY THE CALLER; this module never
+--   * 1P and 3P are applied to SEPARATE units BY THE CALLER; the library never
 --     infers perspective, so a 3P change can never touch the 1P grip (and vice
 --     versa). Callers resolve `<field>_1p` / `<field>_3p` / unified via
 --     `_resolve_field` and hand WA the already-resolved value.
-local WA = {}
-
-function WA.apply_scale(unit, scale_tbl)
-	if not scale_tbl or not unit or not _is_unit(unit) then return end
-	pcall(Unit.set_local_scale, unit, 0, Vector3(scale_tbl[1], scale_tbl[2], scale_tbl[3]))
-end
-
--- Additive offset with per-unit idempotency (see conventions above).
-local _offset_applied = setmetatable({}, { __mode = "k" })
-
-function WA.apply_offset(unit, offset_tbl)
-	if not offset_tbl or not unit or not _is_unit(unit) then return end
-	if not Unit.alive(unit) then return end
-	if _offset_applied[unit] then return end
-	_offset_applied[unit] = true
-	local current = Unit.local_position(unit, 0)
-	local cx, cy, cz = Vector3.to_elements(current)
-	Unit.set_local_position(unit, 0, Vector3(cx + offset_tbl[1], cy + offset_tbl[2], cz + offset_tbl[3]))
-end
-
-function WA.apply_position(unit, pos_tbl)
-	if not pos_tbl or not unit or not _is_unit(unit) then return end
-	pcall(Unit.set_local_position, unit, 0, Vector3(pos_tbl[1], pos_tbl[2], pos_tbl[3]))
-end
-
--- Normalize a rotation spec to a raw Quaternion. Accepts {x,y,z} euler DEGREES,
--- a QuaternionBox (has :unbox()), or a raw Quaternion. Returns nil on unusable
--- input so callers no-op instead of crashing.
-local function _wa_to_quaternion(rot)
-	if rot == nil then return nil end
-	if type(rot) == "table" and type(rot[1]) == "number" then
-		-- {x,y,z} euler degrees (the authoring standard)
-		local ok, q = pcall(Quaternion.from_euler_angles_xyz, rot[1], rot[2], rot[3])
-		return ok and q or nil
-	end
-	-- QuaternionBox (:unbox()) or raw Quaternion userdata.
-	local ok, q = pcall(function() return rot.unbox and rot:unbox() or rot end)
-	return ok and q or nil
-end
-
-function WA.apply_rotation(unit, rot)
-	if rot == nil or not unit or not _is_unit(unit) then return end
-	local q = _wa_to_quaternion(rot)
-	if q == nil then return end
-	pcall(Unit.set_local_rotation, unit, 0, q)
-end
-mod._wa_to_quaternion_for_rt = _wa_to_quaternion  -- exposed for /cwv regression
-
--- Single dispatch used by every render path. spec = { scale=, offset=,
--- position=, rotation= }; any field may be nil (that aspect is left native).
-function WA.apply(unit, spec)
-	if not spec or not unit or not _is_unit(unit) then return end
-	if spec.scale then WA.apply_scale(unit, spec.scale) end
-	if spec.position then
-		WA.apply_position(unit, spec.position)
-	elseif spec.offset then
-		WA.apply_offset(unit, spec.offset)
-	end
-	if spec.rotation then WA.apply_rotation(unit, spec.rotation) end
-end
+local _WA_LIBRARY = mod:dofile(
+	"scripts/mods/character_weapon_variants/_lib_weapon_appearance")
+local WA = _WA_LIBRARY.new()
+mod._wa_to_quaternion_for_rt = WA.to_quaternion -- compatibility: /cwv regression
 mod._cwv_weapon_appearance = WA  -- cross-file / cross-mod handle (Phase 2+)
 
 -- Legacy thin wrappers so existing call sites read unchanged; `_transform_unit`

@@ -16,5 +16,13 @@
                 "general_tweaker_dev/scripts/mods/general_tweaker_dev/_lib_debug.lua"
             )
         }
+        @{
+            Source = "_lib_weapon_appearance.lua"
+            Consumers = @(
+                "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_weapon_appearance.lua"
+                "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_weapon_appearance.lua"
+                "weapon_tweaker/scripts/mods/weapon_tweaker/_lib_weapon_appearance.lua"
+            )
+        }
     )
 }

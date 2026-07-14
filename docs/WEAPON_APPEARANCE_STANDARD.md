@@ -16,6 +16,10 @@ The rule the whole document enforces:
 Applies to `character_weapon_variants` (CWV), `cosmetics_tweaker`, and
 `weapon_tweaker` — any mod that overrides how a weapon looks.
 
+The shared primitive and incremental consumer cutover boundary are tracked in
+`WEAPON_APPEARANCE_EXTRACTION_420.md`. The copied library landing alone does not
+mean a consumer has retired its legacy apply path.
+
 ---
 
 ## §1 The four render paths
