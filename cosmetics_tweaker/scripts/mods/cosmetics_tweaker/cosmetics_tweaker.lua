@@ -46,6 +46,8 @@ mod._la_instance_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_ins
 local LA_OKRI = mod:dofile("scripts/mods/cosmetics_tweaker/_la_okri")
 local SCORE_IDENTITY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_score_identity")
 local OFFHAND_PRELOAD_LIFECYCLE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_preload_lifecycle")
+mod._cos_weapon_pose_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_weapon_pose_policy")
+local WEAPON_POSES = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_weapon_poses")
 -- v0.9.24-dev: UI diagnostic dump harness. No-op at runtime unless the
 -- enable_debug_logging VMF toggle is on. See _ui_dump.lua header for
 -- what gets dumped per window class.
@@ -58,7 +60,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.100-dev"
+local MOD_VERSION = "0.9.101-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -10088,6 +10090,30 @@ _rt_register("glow_auto_open_in_view_toggle_377", function()
     available, enabled, should_open = policy(true, nil)
     if available or not enabled or should_open then
         return "non-glow preview did not disable the contextual control"
+    end
+end)
+
+_rt_register("issue485_authored_weapon_poses_local_only", function()
+    if not WEAPON_POSES or WEAPON_POSES.marker ~= "social_wheel_authored_catalog_485" then
+        return "weapon-pose module marker missing"
+    end
+    local policy = WEAPON_POSES.policy
+    if not policy or type(policy.build_catalog) ~= "function" or type(policy.for_parent) ~= "function" then
+        return "weapon-pose catalog policy incomplete"
+    end
+    local widgets = require("scripts/mods/cosmetics_tweaker/cosmetics_tweaker_data").options.widgets
+    local found = false
+    local function walk(rows)
+        for _, row in ipairs(rows or {}) do
+            if row.setting_id == "cos_unlock_weapon_poses" then found = true end
+            if row.sub_widgets then walk(row.sub_widgets) end
+        end
+    end
+    walk(widgets)
+    if not found then return "cos_unlock_weapon_poses setting missing" end
+    local cls = rawget(_G, "SocialWheelUI")
+    if not cls or type(cls._gather_weapon_poses_by_parent_item) ~= "function" then
+        return "SocialWheelUI pose gather seam missing"
     end
 end)
 

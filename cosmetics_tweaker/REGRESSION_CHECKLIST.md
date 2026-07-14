@@ -4,7 +4,20 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-13.
+Last updated: 2026-07-14.
+
+---
+## Authored heroic weapon poses (#485)
+
+| Field | Value |
+|---|---|
+| Scope | Default-off, local presentation only, and active only when `script_data["eac-untrusted"]` identifies the modded realm. |
+| Catalog | Include only valid `ItemMasterList` rows with `item_type="weapon_pose"`, exact `parent`, numeric `pose_index`, and an authored animation event; sort deterministically. |
+| Backend boundary | Do not write `unlocked_weapon_poses`, fake inventory, equipped pose skins, or PlayFab read-only data. |
+| Live refresh | Changing the option makes `SocialWheelUI._is_dirty` rebuild the current weapon's page once. |
+| Missing catalog | Preserve vanilla behavior and emit one `[cos:485]` record per missing parent. Do not borrow another weapon's package yet. |
+| Detection | Offline `test_cos_weapon_pose_policy.lua`; `/cos_regression_test` passes `issue485_authored_weapon_poses_local_only`. |
+| Lifecycle | `diagnostics-armed` until at least one no-catalog weapon establishes a safe donor-animation and icon-package policy. |
 
 ---
 ## Diagnostics / Regression Suite

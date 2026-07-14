@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.101-dev - 2026-07-14 - #485 authored heroic weapon poses [diagnostics-armed]
+
+- Added a default-off **Unlock Heroic Weapon Poses** option. In the modded realm, the social wheel now receives every valid `weapon_pose` item authored for the currently wielded weapon, sorted by pose index, without writing backend ownership or mutating `ItemMasterList`.
+- Reused vanilla's pose-package loading, icon material creation, and local-only emote execution. Toggling the option invalidates the live social-wheel page so the current weapon rebuilds without a restart.
+- Weapons with no authored pose catalog remain on vanilla behavior and emit one bounded `[cos:485] ... fallback=deferred` line. Borrowing another weapon's pose package remains diagnostics-armed until its animation and icon compatibility can be proven.
+- Added engine-free catalog tests and `/cos_regression_test` check `issue485_authored_weapon_poses_local_only`.
+
+- **Verify (solo):** in the modded realm, enable the option, wield a weapon with authored poses, and open the social wheel. All authored poses for that exact weapon should appear and play. Disable the option and confirm the wheel returns to the officially unlocked set. Repeat with a weapon lacking a catalog and attach the bounded `[cos:485]` line; no borrowed or blank-icon entries should appear.
+
 ## 0.9.100-dev - 2026-07-14 - #377 in-view glow auto-open toggle [verify-fix]
 
 - Added one square toggle at middle-left of the weapon customization view. It uses vanilla's illusion-button widget and existing scenegraph, lights when automatic glow-picker opening is ON, and greys/disables itself for non-glow illusions.

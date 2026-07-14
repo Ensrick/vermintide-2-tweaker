@@ -76,6 +76,12 @@ local loc = {
     cos_moonfire_cosmetic_puff_tooltip = {
         en = "Adds the small blue moonfire burst to every hit from the Moonfire Bow. It is purely visual and deals no damage.",
     },
+    cos_unlock_weapon_poses = {
+        en = "[diagnostics-armed] [Issue 485] Unlock Heroic Weapon Poses",
+    },
+    cos_unlock_weapon_poses_tooltip = {
+        en = "Shows every authored heroic pose for the weapon you are holding on the social wheel in the modded realm. This does not grant or alter official backend ownership. Weapons without their own authored pose icons remain unchanged while compatibility diagnostics are collected.",
+    },
 
     -- v0.9.37-dev: the "Weapon Glow Override" VMF menu loc keys
     -- (glow_override_*, glow_preset_*, glow_advanced_group, glow_mult_*,

@@ -131,6 +131,12 @@ local widgets = {
                 default_value = false,
                 tooltip       = "cos_moonfire_cosmetic_puff_tooltip",
             },
+            {
+                setting_id    = "cos_unlock_weapon_poses",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "cos_unlock_weapon_poses_tooltip",
+            },
             -- v0.9.37-dev: the VMF "Weapon Glow Override" menu was REMOVED here;
             -- glow is now driven by the in-context Glow Picker popup
             -- (_glow_picker.lua). The old global-override apply paths go inert
