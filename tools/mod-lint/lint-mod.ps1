@@ -134,21 +134,15 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 # `lobby_tweaker` / `material_hijack_patched` and OMITTED all four `*_dev`
 # clones (so a duplicate-hook in a dev tree went unscanned). Now sourced from
 # the shared .psd1 so mod-lint, publish-release, and check_cfg can't diverge.
-# Falls back to a hardcoded list only if the .psd1 is missing.
+# Missing inventory is fatal: a fallback list recreates the drift this file was
+# introduced to eliminate.
 $inventoryPath = Join-Path $repoRoot 'tools\mod-inventory.psd1'
 if (Test-Path $inventoryPath) {
     $inventory = Import-PowerShellDataFile -Path $inventoryPath
     $KnownMods = @($inventory.Mods | ForEach-Object { $_.Dir })
 } else {
-    Write-Warning "mod-inventory.psd1 not found at $inventoryPath; using built-in fallback list (dev clones may be missing)."
-    $KnownMods = @(
-        'weapon_tweaker', 'chaos_wastes_tweaker', 'chaos_wastes_tweaker_dev',
-        'general_tweaker', 'general_tweaker_dev', 'gui_tweaker', 'cosmetics_tweaker',
-        'dynamic_cosmetic_portraits', 'career_tweaker', 'enemy_tweaker',
-        'character_weapon_variants', 'crafting_in_modded', 'crafting_in_modded_dev',
-        'event_tweaker', 'modded_progression', 'buff_tweaker',
-        'verminious_dreams_lighting', 'verminious_dreams_lighting_dev'
-    )
+    Write-Host "[lint-mod] ERROR - canonical tools/mod-inventory.psd1 is missing." -ForegroundColor Red
+    exit 2
 }
 
 function Read-LuaText {

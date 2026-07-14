@@ -3,21 +3,16 @@ name: QA
 on:
   push:
     branches: [master, main]
-    paths:
-      - "**/*.lua"
-      - "**/itemV2.cfg"
-      - "**/CHANGELOG.md"
-      - "**/*.md"
-      - ".luacheckrc"
-      - "qa/**"
-      - "tools/mod-lint/**"
-      - "tools/mod-inventory.psd1"
-      - "tools/shared_lib/**"
-      - "tools/ship/**"
-      - ".github/workflows/qa.yml"
   pull_request:
     branches: [master, main]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qa-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 # CI is the SAME gate as local: it runs qa/run_all.ps1 (the full Standard /
 # Blocking / Advisory policy engine documented in qa/CHECKS.md), not a
@@ -35,12 +30,21 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           # Full history so check_dev_only_edits can diff a PR against its base
           # (origin/$GITHUB_BASE_REF). Best-effort — the check degrades to a
           # no-op, never a false block, if the base ref is unavailable.
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Windows PowerShell 5.1 - promotion self-test
+        shell: powershell
+        run: ./qa/check_promotion.ps1 -SelfTest
+
+      - name: Windows PowerShell 5.1 - release pipeline self-test
+        shell: powershell
+        run: ./tools/ship/ship.ps1 -SelfTest
 
       - name: run_all.ps1 (full QA gate — the policy engine decides)
         shell: pwsh

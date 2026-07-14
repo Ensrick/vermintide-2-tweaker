@@ -21,4 +21,6 @@ return {
     plain_setting = { en = "Just a plain label" },      -- no leading bracket
     angle_setting = { en = "<gut_key> marker" },        -- gut angle marker, not a square bracket
     mutex_label   = { en = "[working]     (A) Aegis" }, -- tag + mutex-cluster label (single tag = fine)
+    nav_group     = { en = "[working] Navigation" },    -- invalid only when data declares type=group
+    master_toggle = { en = "[working] Master Toggle" }, -- behavioral checkbox with children remains tagged
 }

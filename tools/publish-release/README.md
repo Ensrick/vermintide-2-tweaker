@@ -244,8 +244,11 @@ The mod list lives in `tools/mod-inventory.psd1` (single source of truth, shared
 `tools/mod-lint/lint-mod.ps1` + `qa/check_cfg.ps1`). When you add a new published mod to the
 repo, append it there.
 
-Mods with no `published_id` in their `itemV2.cfg` are auto-skipped, as are inventory entries
-whose folder is missing (e.g. the archived `buff_tweaker`).
+Inventory entries are required to have a live folder and matching `itemV2.cfg`; every active
+root mod with an `itemV2.cfg` must be present. `qa/check_mod_inventory.ps1` blocks missing,
+retired, duplicate, or cfg/README-drifted records before release selection. The frozen
+`tweaker` monolith and stale `weapon_tweaker_dev` experiment are explicit non-pipeline
+exceptions, not silent missing-folder skips.
 
 Script-internal gotcha: the inventory variable in the .ps1 is named `$releaseSet`, NOT `$mods` —
 PowerShell variable names are case-insensitive, so `$mods` silently overwrites the `$Mods`

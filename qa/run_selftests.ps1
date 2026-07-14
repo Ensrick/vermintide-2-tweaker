@@ -9,7 +9,7 @@
 #
 # DISCOVERY: any qa/check_*.ps1 whose param block declares `[switch]$SelfTest`
 # is picked up automatically - a new check with a self-test needs no wiring
-# here. tools/ship/ship.ps1 is added explicitly (lives outside qa/).
+# here. Out-of-tree release/GitHub policy tools are added explicitly.
 #
 # Self-tests are OFFLINE by convention (no gh/network) so this runner is safe
 # in CI and never flakes on connectivity.
@@ -38,6 +38,8 @@ $targets = @(
 )
 $shipPs1 = Join-Path $repoRoot 'tools\ship\ship.ps1'
 if (Test-Path $shipPs1) { $targets += $shipPs1 }
+$protectMasterPs1 = Join-Path $repoRoot 'tools\github\protect-master.ps1'
+if (Test-Path $protectMasterPs1) { $targets += $protectMasterPs1 }
 
 $failed = @()
 foreach ($t in $targets) {

@@ -618,7 +618,7 @@ Memory: `reference_vmf_localize_before_registration`, `feedback_use_documented_l
 Origin: GitHub issue #301 ("New Doctrine on Issues/Localization!"). **Dev builds** carry
 a short status tag as a PREFIX of each option's `en` title string so the user can see,
 right in the in-game VMF options panel, which features still need testing, which have open
-issues, and which are presumed working. Tags are a live-status surface, not decoration —
+issues, and which are confirmed working. Tags are a live-status surface, not decoration —
 they get rewritten in the same pass whenever an issue is opened/closed, diagnostics are
 armed/removed, or a feature is added/overhauled.
 
@@ -633,9 +633,9 @@ grep/QA tooling can find them. Never invent a new tag.
 
 | Tag | Meaning | Removed / replaced when |
 |---|---|---|
-| `[untested]` | Brand new (or significantly overhauled) feature not yet confirmed working in-game. | The user confirms it works (→ `[working]`), or an issue emerges (→ `[Issue N]`). |
+| `[untested]` | Feature not yet confirmed working in-game, including an older feature with no recoverable verification evidence. | The user confirms it works (→ `[working]`), or an issue emerges (→ `[Issue N]`). |
 | `[Issue N]` | An open issue relates to the feature (bug or not). E.g. `[Issue 491]`. | The issue closes (tags updated in the SAME session). |
-| `[working]` | No open issues; presumed working. | The feature changes significantly (→ `[untested]`) or an issue touching it opens (→ `[Issue N]`). |
+| `[working]` | User-confirmed working, either directly or through a closed issue whose resolution records in-game verification. Absence of an open issue is not evidence. | The feature changes significantly (→ `[untested]`) or an issue touching it opens (→ `[Issue N]`). |
 | `[diag]` | Diagnostic logging is in place for the feature (almost always paired with an open issue). | The diagnostics are removed. |
 | `[crash]` | Feature has open issue(s) investigating a crash it may have caused. | No such open crash issue remains. |
 | `[verify-fix]` | A potential fix is in place and must be verified in-game. Co-occurs with the `[Issue N]` of the issue being verified. | The fix is confirmed (→ `[working]`) or fails (stays `[Issue N]`). |
@@ -647,7 +647,7 @@ The last two rows are `weapon_tweaker`-only extensions; see § 13.8 for the runt
 that owns them. `qa/check_loc_tags.ps1` accepts all nine forms.
 
 **Mutually exclusive:** `[crash]`, `[working]`, `[untested]` are mutually exclusive — a
-feature is exactly one of "presumed working", "brand-new/untested", or "under crash
+feature is exactly one of "confirmed working", "unconfirmed/untested", or "under crash
 investigation" at a time. Never combine two of these three.
 
 ### 13.2 — Multiple tags and multiple issue numbers
@@ -671,15 +671,19 @@ investigation" at a time. Never combine two of these three.
   ```
 
   This matches the existing convention in `general_tweaker_dev`.
-- **Tag ONLY option TITLE strings** — entries whose loc key matches a widget `setting_id`
-  in the mod's `_data.lua`, INCLUDING group / master-toggle widget titles. Never tag:
+- **Tag ONLY behavioral option TITLE strings** — entries whose loc key matches a widget
+  `setting_id` in the mod's `_data.lua. A checkbox master toggle with `sub_widgets` is a
+  feature and is tagged normally. A pure `type = "group"` navigation container has no
+  behavior and MUST remain untagged, regardless of its children's status. Never tag:
   tooltip / description bodies (`*_tooltip`, `*_description`), dropdown value labels, chat /
   log / popup message strings, or pure text entries with no backing widget.
 - **Tags live only in the localization DATA file**, as raw authored strings — never
   pre-localized (§ 12.2), no em dashes, `%` escaped as `%%` (§ 1). All existing repo loc
   rules still apply.
-- **Every feature / menu option in a dev build should carry a tag.** New or overhauled
-  feature ⇒ `[untested]`; otherwise `[working]` (or the relevant issue/diag/crash tag).
+- **Every behavioral feature / menu option in a dev build should carry a tag.** New,
+  overhauled, or never-confirmed feature ⇒ `[untested]`; `[working]` requires direct user
+  confirmation or a closed issue recording verification (otherwise use the relevant
+  issue/diag/crash tag).
   Two exemptions (§ 13.8): pure navigation container groups, and known issue clusters with
   no menu widget to hang a tag on. Inert blocks take their tracking `[Issue N]` (§ 13.8).
 
@@ -690,8 +694,8 @@ update happens in the SAME session/commit as the triggering change, never batche
 
 - **Opening an issue** that touches a feature ⇒ add `[Issue N]` (and drop `[working]`).
 - **Closing an issue** ⇒ remove its number from the feature's `[Issue ...]` tag and re-tag
-  appropriately (`[working]`, or `[untested]` if still unverified). This repo already has a
-  "test every closed issue" rule — updating the tag is part of closing.
+  appropriately (`[working]` only when the closure records verification; `[untested]`
+  otherwise). Updating the tag is part of closing.
 - **Arming / removing diagnostics** ⇒ add / drop `[diag]`.
 - **Landing a candidate fix** ⇒ add `[verify-fix]` (keep `[Issue N]`); on in-game
   confirmation, drop both for `[working]`.
@@ -738,6 +742,11 @@ A warning-only, non-blocking scan (`qa/CHECKS.md` row 19e) that walks every
   `[Big Rebalance]`, `[WARNING]`) are treated as legitimate display-name prefixes and left
   alone; `gut`'s `<...>` angle markers are not brackets and are ignored.
 - **Mutex violation** — `[crash]`, `[working]`, `[untested]` combined on one option.
+- **Tagged navigation group** — any status tag on a loc key whose `_data.lua` widget is
+  `type = "group"`. This mechanically enforces the §13.3/13.8 exemption. Run with
+  `-EvidenceAudit` to additionally inventory non-group `[working]` entries that require
+  confirmation evidence during the #335 retro-audit; add `-SummaryOnly` for counts without
+  the intentionally large per-entry inventory.
 
 It never fails the gate (see § 13.5 for the leak it is designed to surface). Run it after any
 loc tag edit. It accepts the § 13.1 vocabulary plus the § 13.8 `weapon_tweaker` extensions.

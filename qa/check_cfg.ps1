@@ -18,24 +18,16 @@ $errors = @()
 $warnings = @()
 
 # Per-mod expected visibility. Single source of truth: tools/mod-inventory.psd1
-# (shared with tools/mod-lint + tools/publish-release). Anything not listed
-# there defaults to friends_only. Falls back to an inline map if the .psd1 is
-# missing.
+# (shared with tools/mod-lint + tools/publish-release). A missing inventory is
+# a hard repository error; never fall back to a second list that can drift.
 $inventoryPath = Join-Path $repoRoot "tools\mod-inventory.psd1"
 $expectedVisibility = @{}
 if (Test-Path $inventoryPath) {
     $inventory = Import-PowerShellDataFile -Path $inventoryPath
     foreach ($m in $inventory.Mods) { $expectedVisibility[$m.Dir] = $m.Visibility }
 } else {
-    Write-Warning "mod-inventory.psd1 not found at $inventoryPath; using inline visibility fallback."
-    $expectedVisibility = @{
-        "chaos_wastes_tweaker"        = "public"
-        "crafting_in_modded"          = "public"
-        "general_tweaker"             = "public"
-        "verminious_dreams_lighting"  = "public"
-        "modded_progression"          = "private"
-        # everything else: friends_only
-    }
+    Write-Host "[check_cfg] ERROR - canonical tools/mod-inventory.psd1 is missing." -ForegroundColor Red
+    exit 2
 }
 
 $bmcSvg = "buy-me-coffee-icon.svg"

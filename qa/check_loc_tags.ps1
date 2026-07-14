@@ -28,6 +28,14 @@
 #   (c) MUTEX VIOLATION — `[crash]`, `[working]`, `[untested]` are mutually
 #       exclusive (§ 13.1); 2+ of them on one option is a contradiction.
 #
+#   (d) TAGGED NAVIGATION GROUP — a `_data.lua` widget with `type = "group"`
+#       is a pure container and must carry no status tag (§ 13.3/13.8, #335).
+#
+# With -EvidenceAudit, also inventory every non-group `[working]` entry whose
+# user/closed-issue evidence must be reviewed during #335. This is deliberately
+# opt-in because the initial inventory is large; a candidate is not itself proof
+# that the tag is wrong.
+#
 # HEURISTIC (documented so future edits stay conservative — issue #301 asked
 # for a deliberately low false-positive design):
 #
@@ -67,7 +75,7 @@
 #
 # Exit codes:
 #   0 - clean (no tag issues)
-#   1 - one or more advisory WARNINGS (leak / unknown vocab / mutex) — NEVER
+#   1 - one or more advisory WARNINGS (leak / unknown / mutex / group / evidence) — NEVER
 #       blocks the gate (wired into run_all.ps1 under -Policy 'Advisory').
 #   2 - hard error (a file failed to read). Also non-blocking under Advisory,
 #       but distinguishes a broken check from findings.
@@ -80,6 +88,8 @@
 param(
     [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
     [switch]$Quiet,
+    [switch]$EvidenceAudit,
+    [switch]$SummaryOnly,
     [switch]$SelfTest
 )
 
@@ -221,11 +231,45 @@ function Get-ModDirName([string]$filePath) {
     return (Split-Path $dir -Leaf)
 }
 
+function Get-ModRoot([string]$filePath) {
+    $dir = Split-Path $filePath -Parent
+    for ($i = 0; $i -lt 3; $i++) { $dir = Split-Path $dir -Parent }
+    return $dir
+}
+
+# Extract literal group widget ids from the mod's data files. Widget tables in
+# this repo declare `setting_id` before `type`; allow four lines for aligned and
+# one-line forms, but stop on another type or a table close. Computed ids are
+# deliberately ignored rather than guessed.
+function Get-NavigationGroupIds([string]$modRoot) {
+    $ids = @{}
+    $dataFiles = @(Get-ChildItem -Path $modRoot -Filter "*data.lua" -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -notlike "*\bundleV2\*" -and $_.FullName -notlike "*\_archive\*" })
+    foreach ($file in $dataFiles) {
+        $lines = (Read-FileUtf8 $file.FullName) -split "`r?`n"
+        $pending = $null; $pendingLine = -99
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            $line = $lines[$i]
+            $sid = [regex]::Match($line, 'setting_id\s*=\s*"([^"]+)"')
+            if ($sid.Success) { $pending = $sid.Groups[1].Value; $pendingLine = $i }
+            if (-not $pending -or ($i - $pendingLine) -gt 4) { $pending = $null; continue }
+            $type = [regex]::Match($line, '\btype\s*=\s*"([^"]+)"')
+            if ($type.Success) {
+                if ($type.Groups[1].Value -eq 'group') { $ids[$pending] = $true }
+                $pending = $null
+            } elseif (($i - $pendingLine) -gt 0 -and $line -match '^\s*\}') {
+                $pending = $null
+            }
+        }
+    }
+    return $ids
+}
+
 # ---- per-text scan ----
 # Returns an array of finding rows: @{ Kind; Line; Key; Value; Detail }.
-# Kind in { leak, unknown, mutex }. $IsStable drives the leak check.
+# Kind in { leak, unknown, mutex, group, evidence }. $IsStable drives the leak check.
 function Scan-Text {
-    param([string]$Text, [bool]$IsStable)
+    param([string]$Text, [bool]$IsStable, [hashtable]$NavigationGroupIds = @{}, [bool]$AuditEvidence = $false)
     $rows = @()
     $lines = $Text -split "`r?`n"
     $pendingKey = $null   # multi-line table form: key seen, awaiting its `en =` line
@@ -291,14 +335,28 @@ function Scan-Text {
                 Detail = "mutually-exclusive tags combined: [" + ($mx -join '] [') + "]"
             }
         }
+
+        # (d) Pure group containers are navigation only and must not imply that
+        # their children share a single status.
+        if ($NavigationGroupIds.ContainsKey($key) -and ($known.Count -gt 0 -or $unknown.Count -gt 0)) {
+            $rows += [pscustomobject]@{
+                Kind = 'group'; Line = $i + 1; Key = $key; Value = $val
+                Detail = "status tag on pure type=group navigation container (strip every status tag)"
+            }
+        } elseif ($AuditEvidence -and ($known -ccontains 'working')) {
+            $rows += [pscustomobject]@{
+                Kind = 'evidence'; Line = $i + 1; Key = $key; Value = $val
+                Detail = "[working] requires direct user confirmation or a verified closed issue (#335 evidence review)"
+            }
+        }
     }
     return ,$rows
 }
 
 function Scan-File {
-    param([string]$Path, [bool]$IsStable)
+    param([string]$Path, [bool]$IsStable, [hashtable]$NavigationGroupIds = @{}, [bool]$AuditEvidence = $false)
     $text = Read-FileUtf8 $Path
-    return (Scan-Text -Text $text -IsStable $IsStable)
+    return (Scan-Text -Text $text -IsStable $IsStable -NavigationGroupIds $NavigationGroupIds -AuditEvidence $AuditEvidence)
 }
 
 # ---- self-test ----
@@ -311,11 +369,11 @@ function Invoke-SelfTest {
 
     # Each case: fixture + IsStable + expected finding counts per Kind.
     $cases = @(
-        @{ Path = "loc_tags_dev_ok.lua";     IsStable = $false; Leak = 0; Unknown = 0; Mutex = 0;
+        @{ Path = "loc_tags_dev_ok.lua";     IsStable = $false; Leak = 0; Unknown = 0; Mutex = 0; Group = 1; Evidence = 3;
            Desc = "dev build, all-valid tags + uppercase prefix + angle marker" },
-        @{ Path = "loc_tags_dev_ok.lua";     IsStable = $true;  Leak = 12; Unknown = 0; Mutex = 0;
+        @{ Path = "loc_tags_dev_ok.lua";     IsStable = $true;  Leak = 14; Unknown = 0; Mutex = 0; Group = 1; Evidence = 3;
            Desc = "same file scanned as STABLE -> every sanctioned-tag entry (incl. wt-only + [Issue 321]) is a leak" },
-        @{ Path = "loc_tags_unknown.lua";    IsStable = $false; Leak = 0; Unknown = 4; Mutex = 2;
+        @{ Path = "loc_tags_unknown.lua";    IsStable = $false; Leak = 0; Unknown = 4; Mutex = 2; Group = 0; Evidence = 1;
            Desc = "dev build, unknown-vocab typos + mutex combos; uppercase prefixes ignored" }
     )
 
@@ -326,15 +384,18 @@ function Invoke-SelfTest {
             Write-Host "  X $($c.Path): missing fixture file" -ForegroundColor Red
             $allPass = $false; continue
         }
-        $rows = @(Scan-File -Path $f -IsStable $c.IsStable)
+        $groups = @{ nav_group = $true }
+        $rows = @(Scan-File -Path $f -IsStable $c.IsStable -NavigationGroupIds $groups -AuditEvidence $true)
         $leak    = @($rows | Where-Object { $_.Kind -eq 'leak' }).Count
         $unknown = @($rows | Where-Object { $_.Kind -eq 'unknown' }).Count
         $mutex   = @($rows | Where-Object { $_.Kind -eq 'mutex' }).Count
-        $ok = ($leak -eq $c.Leak) -and ($unknown -eq $c.Unknown) -and ($mutex -eq $c.Mutex)
+        $group    = @($rows | Where-Object { $_.Kind -eq 'group' }).Count
+        $evidence = @($rows | Where-Object { $_.Kind -eq 'evidence' }).Count
+        $ok = ($leak -eq $c.Leak) -and ($unknown -eq $c.Unknown) -and ($mutex -eq $c.Mutex) -and ($group -eq $c.Group) -and ($evidence -eq $c.Evidence)
         $verdict = if ($ok) { "PASS" } else { "FAIL" }
         $colour = if ($ok) { "Green" } else { "Red" }
         Write-Host ("  [{0}] {1} (stable={2}) -- {3}" -f $verdict, $c.Path, $c.IsStable, $c.Desc) -ForegroundColor $colour
-        Write-Host ("        leak={0}/{1} unknown={2}/{3} mutex={4}/{5}" -f $leak, $c.Leak, $unknown, $c.Unknown, $mutex, $c.Mutex) -ForegroundColor DarkGray
+        Write-Host ("        leak={0}/{1} unknown={2}/{3} mutex={4}/{5} group={6}/{7} evidence={8}/{9}" -f $leak, $c.Leak, $unknown, $c.Unknown, $mutex, $c.Mutex, $group, $c.Group, $evidence, $c.Evidence) -ForegroundColor DarkGray
         if (-not $ok) { $allPass = $false }
     }
 
@@ -362,13 +423,14 @@ $files = @(Get-ScanFiles -Root $repoRoot)
 foreach ($f in $files) {
     $rel = $f.FullName.Substring($repoRoot.Length).TrimStart('\', '/')
     $modName = Get-ModDirName $f.FullName
+    $groupIds = Get-NavigationGroupIds (Get-ModRoot $f.FullName)
     $isStable = $StableSet.ContainsKey($modName)
     if (-not $Quiet) {
         $tag = if ($isStable) { "STABLE" } else { "dev" }
         Write-Host "Checking $modName ($tag) — $rel" -ForegroundColor DarkGray
     }
     try {
-        $rows = @(Scan-File -Path $f.FullName -IsStable $isStable)
+        $rows = @(Scan-File -Path $f.FullName -IsStable $isStable -NavigationGroupIds $groupIds -AuditEvidence $EvidenceAudit)
     } catch {
         Write-Host ("  X {0}: {1}" -f $rel, $_) -ForegroundColor Red
         $hardError = $true
@@ -394,9 +456,13 @@ if ($allRows.Count -eq 0) {
 $leaks    = @($allRows | Where-Object { $_.Kind -eq 'leak' })
 $unknowns = @($allRows | Where-Object { $_.Kind -eq 'unknown' })
 $mutexes  = @($allRows | Where-Object { $_.Kind -eq 'mutex' })
+$groups   = @($allRows | Where-Object { $_.Kind -eq 'group' })
+$evidence = @($allRows | Where-Object { $_.Kind -eq 'evidence' })
 
-Write-Host ("[check_loc_tags] WARNINGS: {0} (stable leak: {1}, unknown vocab: {2}, mutex: {3}) -- advisory, non-blocking." `
-    -f $allRows.Count, $leaks.Count, $unknowns.Count, $mutexes.Count) -ForegroundColor Yellow
+Write-Host ("[check_loc_tags] WARNINGS: {0} (stable leak: {1}, unknown vocab: {2}, mutex: {3}, tagged group: {4}, evidence review: {5}) -- advisory, non-blocking." `
+    -f $allRows.Count, $leaks.Count, $unknowns.Count, $mutexes.Count, $groups.Count, $evidence.Count) -ForegroundColor Yellow
+
+if ($SummaryOnly) { exit 1 }
 
 if ($leaks.Count -gt 0) {
     Write-Host "  -- STABLE LEAK (tags must be stripped at promotion; LOCALIZATION_STANDARD.md § 13.5):" -ForegroundColor Yellow
@@ -414,6 +480,18 @@ if ($mutexes.Count -gt 0) {
     Write-Host "  -- MUTEX (crash/working/untested are mutually exclusive; § 13.1):" -ForegroundColor Yellow
     foreach ($r in $mutexes) {
         Write-Host ("  ! {0}:{1}  {2}  {3}" -f $r.Rel, $r.Line, $r.Key, $r.Detail) -ForegroundColor Yellow
+    }
+}
+if ($groups.Count -gt 0) {
+    Write-Host "  -- TAGGED NAVIGATION GROUP (pure type=group containers are untagged; § 13.3/13.8):" -ForegroundColor Yellow
+    foreach ($r in $groups) {
+        Write-Host ("  ! {0}:{1}  {2}  {3}" -f $r.Rel, $r.Line, $r.Key, $r.Detail) -ForegroundColor Yellow
+    }
+}
+if ($evidence.Count -gt 0) {
+    Write-Host "  -- WORKING EVIDENCE REVIEW (#335; candidate inventory, not an assertion of failure):" -ForegroundColor Yellow
+    foreach ($r in $evidence) {
+        Write-Host ("  ? {0}:{1}  {2}  {3}" -f $r.Rel, $r.Line, $r.Key, $r.Detail) -ForegroundColor Yellow
     }
 }
 exit 1
