@@ -1,5 +1,12 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.290-dev (2026-07-14) - #533 native held-Tab collectible layout capture [diagnostics-armed]
+
+- Added automatic, observation-only capture when the native Chaos Wastes held-Tab view opens. It records the native collectible widgets, content/style, scenegraph parents, alignments, offsets, sizes, world/final screen bounds, resolution, UI scale, safe rect, controller, and provider needed to replace the current guessed injected layout.
+- Capture is log-only, exact-result deduplicated, and hard-capped at 24 rows per session. It requires no command and does not mutate the native view or collectible data.
+
+**Solo diagnostic:** enter a normal native Chaos Wastes mission and hold Tab once. Attach the bounded `[ct:533]` rows from the newest log; they should contain the native layout census without repeated per-frame spam.
+
 ## 0.7.289-dev (2026-07-14) - #221 menu umbrella masters [verify-fix]
 
 - Added five nested owner controls for the historical menu-consolidation families: altar reuse, listed curses, grudge marks, weapon traits, and boon reworks.

@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.289-dev"
+local MOD_VERSION = "0.7.290-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -8998,6 +8998,12 @@ mod:hook_safe("IngamePlayerListUI", "_setup_deed_reward_data", function(self)
     end
 end)
 
+-- #533 diagnostics follow-up: arm on native Tab-overlay activation and sample from
+-- this existing singleton draw seam after vanilla has resolved final scenegraph bounds.
+-- Kept in a side module to avoid growing this near-limit main chunk.
+mod._ct_diag_tab_native533 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_tab_native533")
+mod._ct_diag_tab_native533.install()
+
 -- Draw point: our OWN begin_pass/end_pass layered on top of vanilla's, each draw_widget
 -- pcall-guarded so a non-resident texture can never crash the panel render.
 -- hook_safe = runs after vanilla's _draw closed its pass (ingame_player_list_ui_v2.lua:1755).
@@ -9005,6 +9011,9 @@ end)
 -- registration on the same pair. This one body draws BOTH ct overlays: the #461 keep
 -- boon preview AND the #533 deus collectible counters. Each concern bails independently.
 mod:hook_safe("IngamePlayerListUI", "_draw", function(self, dt)
+    -- Automatic, bounded, log-only native CW census. This runs before the overlay
+    -- early-return so diagnostics do not depend on either CT widget being present.
+    pcall(mod._ct_diag_tab_native533.capture, self)
     local widgets = self._ct_boon_preview_widgets
     local has_boons = widgets and #widgets > 0
     local cw = self._ct_deus_collectibles
@@ -9383,6 +9392,8 @@ _rt_register("issue533_cw_tab_collectibles_wired", function()
         return "#533 REGRESSION: value reader contract broken (expected nil outside a deus run or {chests=n, coins=n} inside one)"
     end
 end)
+
+_rt_register("issue533_native_tab_diagnostics_armed", mod._ct_diag_tab_native533.regression)
 
 _rt_register("issue571_cw_tab_collectibles_safe_reflow", _ct_tab_layout_571.regression)
 
