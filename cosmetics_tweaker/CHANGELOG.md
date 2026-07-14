@@ -1,5 +1,16 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.105-dev - 2026-07-14 - #421 wire-safety installer startup failure [verify-fix-coop]
+
+- Fixed `_cos_wire.lua` reading a nonexistent file-global `mod`, which caused a startup error before its three custom-skin network sender guards could install.
+- Converted the module to an explicit, dependency-validated `install(owner)` contract. Installation is idempotent for hot reload, fails loudly if required state is missing, and preserves the existing frozen helper and regression surfaces.
+- Added coverage that loads the module without a global `mod`, validates failure behavior, proves all three sender hooks install exactly once, and preserves null-on-wire/restoration behavior.
+- Added the appearance ownership contract for #602's Dawi Mace family: the dual weapon keeps independently selectable hands with a primary-owned icon, while Mace and Shield uses the shield illusion and icon.
+
+### Co-op verification
+
+Start with Cosmetics enabled and confirm the newest log has no `_cos_wire.lua` error. Join a second player, equip and swap custom illusions, then transition into and out of a mission. Both peers should remain connected and see only wire-safe identities until Cosmetics replays the exact appearance. Run `/cos_regression_test` and require the wire-safety checks to pass.
+
 ## 0.9.104-dev - 2026-07-14 - #204 CWV Axe+Shield pool and shield-family parity [verify-fix-coop]
 
 - Seeded CWV Empire Axe+Shield with its complete vanilla Empire shield pool before merging Loremaster options, fixing the LA-only picker.

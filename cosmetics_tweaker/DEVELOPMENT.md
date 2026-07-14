@@ -111,6 +111,16 @@ while LA shields resolve `SKIN_LIST[armoury_key].icons[vanilla_skin]`. This is a
 per-backend presentation override only and does not participate in DLC ownership
 or unlock filtering.
 
+CWV's Dawi Mace family declares that boundary in
+`_cos_cwv_family_contract.lua`. `cwv_dr_dawi_mace` and
+`cwv_dr_dawi_dual_maces` keep primary-mace icon ownership. Dual Maces exposes
+two independently persisted hand choices sourced from Bardin's canonical
+`dr_1h_hammer` cosmetic family. `cwv_dr_dawi_mace_shield` keeps vanilla row 1
+as its primary-mace selector, borrows the Bardin shield pool from
+`dr_1h_axe_shield`, and gives the shield ownership of the inventory icon. The
+contract registers data with the existing exact-hand picker, persistence, and
+peer replay; it adds no Dawi-specific render or network hook.
+
 The native reference is `scripts/settings/dlcs/bless/weapon_skins_bless.lua`:
 the `wh_dual_hammer_skin_*` records carry both hand fields and
 `wh_dual_hammer_skins` supplies the rarity buckets. The owning item type is

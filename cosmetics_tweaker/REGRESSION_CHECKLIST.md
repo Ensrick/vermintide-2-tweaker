@@ -105,6 +105,15 @@ Last updated: 2026-07-14.
 | Detection | `/cos_regression_test` passes `independent_dual_offhands_583`, `cos_la_offhand_persistence_roundtrip`, and `issue483_cwv_sword_mace_individualized_cosmetics`. Direct peer replay remains one last-choice queue entry per `(backend_id, hand)`, uses the existing RPC schema, and is replayed by the bounded acknowledged state pull. |
 | Tracking | GitHub issue #583. |
 
+### cwv-dawi-mace-appearance-contract -- primary, dual, and shield ownership
+
+| Field | Value |
+|-------|-------|
+| Repro | Craft each Dawi Mace family weapon through CIM. Change the single mace illusion; give Dual Maces visibly different primary/offhand illusions; give Mace and Shield visibly different mace/shield illusions. Restart, transition, and observe from another peer. |
+| Expected post-fix | Single Mace and Dual Maces use the primary mace for their inventory icon. Dual Maces retain the exact offhand independently. Mace and Shield uses the selected Bardin shield for its icon and retains mace/shield choices independently. Preview, 1P, local 3P, remote husk, and hot join converge through the existing exact-hand paths. |
+| Detection | Offline `test_cos_cwv_dawi_mace_contract` passes and confirms all three canonical item/skin-table keys, hand ownership, Bardin source pools, and absence of a bespoke Dawi RPC/hook. |
+| Tracking | Dawi Mace family implementation. |
+
 ### issue483-cwv-sword-mace-individualized-cosmetics -- independent hands and peer replay
 
 | Field | Value |

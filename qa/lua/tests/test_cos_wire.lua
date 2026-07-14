@@ -17,10 +17,15 @@ return function(H, repo_root)
 
         local chunk = assert(loadfile(repo_root
             .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_wire.lua"))
-        local env = setmetatable({ mod = mock_mod, printf = function() end }, { __index = _G })
+        -- Match VMF dofile: no injected file-global `mod`. The returned module
+        -- must receive its owner explicitly from the entry point.
+        local env = setmetatable({ printf = function() end }, { __index = _G })
         setfenv(chunk, env)
-        chunk()
-        return mock_mod, hooks
+        local wire = chunk()
+        H.equal(type(wire), "table")
+        H.equal(type(wire.install), "function")
+        H.truthy(wire.install(mock_mod))
+        return mock_mod, hooks, wire
     end
 
     H.test("Cosmetics wire module is manifest-ordered after illusion registration", function()
@@ -28,17 +33,35 @@ return function(H, repo_root)
         local illusions = assert(entry:find('mod:dofile("scripts/mods/cosmetics_tweaker/_cos_illusions")', 1, true))
         local wire = assert(entry:find('mod:dofile("scripts/mods/cosmetics_tweaker/_cos_wire")', 1, true))
         H.truthy(illusions < wire)
+        H.truthy(entry:find('_cos_wire.install(mod)', wire, true))
+        H.truthy(entry:find('assert(_cos_wire.install(mod) == true', wire, true))
         H.equal(entry:find('local function _wire_null_custom_skins', 1, true), nil)
     end)
 
+    H.test("Cosmetics wire installer rejects missing dependencies", function()
+        local chunk = assert(loadfile(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_wire.lua"))
+        setfenv(chunk, setmetatable({}, { __index = _G }))
+        local wire = chunk()
+        H.equal(pcall(wire.install, {}), false)
+        H.equal(pcall(wire.install, { _cos = {} }), false)
+        H.equal(pcall(wire.install, { _cos = { custom_skin_keys = {} } }), false)
+    end)
+
     H.test("Cosmetics wire module registers every rpc_add_equipment sender", function()
-        local mock_mod, hooks = load_wire()
+        local mock_mod, hooks, wire = load_wire()
         H.truthy(hooks["SimpleInventoryExtension:game_object_initialized"])
         H.truthy(hooks["SimpleInventoryExtension:_spawn_resynced_loadout"])
         H.truthy(hooks["GearUtils:hot_join_sync"])
         H.truthy(mock_mod._cos_skin_wire_surfaces.game_object_initialized)
         H.truthy(mock_mod._cos_skin_wire_surfaces.spawn_resynced_loadout)
         H.truthy(mock_mod._cos_skin_wire_surfaces.hot_join_sync)
+
+        -- Reinstall is safe during VMF hot reload and does not stack hooks.
+        H.truthy(wire.install(mock_mod))
+        local count = 0
+        for _ in pairs(hooks) do count = count + 1 end
+        H.equal(count, 3)
     end)
 
     H.test("Cosmetics wire wrapper nulls only custom skins and restores all state", function()

@@ -34,6 +34,7 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_moreitemslibrary_embedded")
 
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
+local CWV_FAMILY_CONTRACT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_family_contract")
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
 local GLOW_BADGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_badge_policy")
@@ -61,7 +62,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.104-dev"
+local MOD_VERSION = "0.9.105-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -361,7 +362,10 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_illusions")
 -- _cos_wire consumes the custom_skin_keys table populated by _cos_illusions,
 -- so this manifest edge is load-bearing. It owns all three rpc_add_equipment
 -- sender hooks and their frozen regression surface.
-mod:dofile("scripts/mods/cosmetics_tweaker/_cos_wire")
+local _cos_wire = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_wire")
+assert(type(_cos_wire) == "table" and type(_cos_wire.install) == "function",
+    "_cos_wire must return an installer")
+assert(_cos_wire.install(mod) == true, "_cos_wire safety hooks failed to install")
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_unlocks")
 -- _cos_render has no load-time reads of other modules' exports and its own
 -- exports (scale_units/offset_units/apply_unit_path_scale_hand/is_unit) are
@@ -1519,6 +1523,11 @@ local _SHIELD_ICON_OWNER_ITEM_TYPES = {
 for _, item_type in ipairs(LA_BRIDGE.kruber_shield_item_types or {}) do
     _SHIELD_ICON_OWNER_ITEM_TYPES[item_type] = true
 end
+for item_type, family in pairs(CWV_FAMILY_CONTRACT.families) do
+    if family.icon_owner == "left_hand_unit" then
+        _SHIELD_ICON_OWNER_ITEM_TYPES[item_type] = true
+    end
+end
 
 local function _inventory_icon_for_offhand_unit(unit_path, preferred_template)
     if type(unit_path) ~= "string" or unit_path == "" then return nil end
@@ -1593,6 +1602,13 @@ for _, item_type in ipairs(LA_BRIDGE.kruber_shield_item_types or {}) do
 end
 _offhand_options.dr_1h_hammer_shield        = { left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.dr_1h_axe_shield) }
 _offhand_options.wh_hammer_shield           = { left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.wh_flail_shield) }
+for item_type in pairs(CWV_FAMILY_CONTRACT.families) do
+    local pool_source = CWV_FAMILY_CONTRACT.shield_pool_source(item_type)
+    local pool = pool_source and _SHIELD_POOLS_BY_ITEM_TYPE[pool_source]
+    if pool then
+        _offhand_options[item_type] = { left_hand_unit = _shallow_copy(pool) }
+    end
+end
 
 -- v0.9.9.4-dev: item_types with hand-qualified cosmetic pools. #583 makes
 -- dual weapons follow the native ownership model: vanilla row 1 owns the
@@ -1905,6 +1921,9 @@ do
             left_hand_unit  = { skin_table = "cwv_es_dual_warpriest_hammers_skins", unit_field = "left_hand_unit" },
         },
     }
+    for item_type, per_hand in pairs(CWV_FAMILY_CONTRACT.dual_sources()) do
+        cwv_dual_sources[item_type] = per_hand
+    end
     mod._cwv_dual_offhand_contract = cwv_dual_sources
     mod._independent_dual_item_types = mod._independent_dual_item_types or {}
     for item_type in pairs(_DUAL_WIELD_POOLS) do
