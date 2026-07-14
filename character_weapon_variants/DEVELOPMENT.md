@@ -988,6 +988,16 @@ The musket variant has TWO templates registered on `Weapons.*`:
 
 Pressing the special key (action_three) swaps the player's wielded weapon between the two templates. Vanilla doesn't natively support stance toggling, so we implement it by **destroying and re-creating the slot's equipment** with a different template returned from a `BackendUtils.get_item_template` hook.
 
+The idle root scan can start `action_three`, but it is not consulted while a
+weapon action owns the extension. `_cwv_old_musket_interrupt` therefore installs
+one `{action/input = "action_three", sub_action = "default", start_time = 0,
+clear_buffer = true}` entry in every non-toggle Old Musket sub-action. This is
+the native Rapier/career-interrupt pattern: `WeaponUnitExtension:start_action`
+finishes the same-hand action with `new_interupting_action` before starting the
+dummy toggle. Preserve all existing chains, make installation idempotent, and
+do not use `clear_input` (the helper reads `clear_buffer`). The action itself is
+excluded to prevent a buffered special from self-chaining during teardown.
+
 ### Components
 
 1. **Per-item stance flag** at `item_data.mod_data.cwv_<variant>_stance` ("ranged" / "melee"). Stored on the IML entry's `mod_data` (a CWV convention used by `_build_entry`); persists across wield/unwield because the IML entry isn't recreated.

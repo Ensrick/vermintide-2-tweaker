@@ -40,6 +40,16 @@ Last updated: 2026-07-13.
 | Expected post-fix | Owned item remains Imperial Longsword; illusion remains Helmgart Watchsword. The same-mod owner marker resolves only against `es_bastard_sword`, while vanilla skin data supplies the exact remote mesh. Native control is untouched. |
 | Detection | `/cwv_regression_test`: `issue396_imperial_longsword_identity_and_remote_husk`; bounded `[cwv:396] item identity sent/received` lines, followed by husk wield with `cwv_es_longsword_nordland_skin`. |
 
+### issue412-old-musket-universal-special-interrupt — Special swap ignored during actions
+
+| Field | Detail |
+|---|---|
+| Symptom | Old Musket special swaps only from idle; attack, aim, reload, block, sweep, and recovery swallow the input. |
+| Root cause | Active weapon state considers only the current sub-action's `allowed_chain_actions`; the cloned handgun and Tuskgor-spear actions did not author `action_three`. |
+| Repro | In Primary and Secondary, press special during every ranged/bayonet action phase, including empty reload and active melee sweeps; repeat as host/client while an observer watches. |
+| Expected post-fix | Every press chains immediately and exactly once, finishes the old action canonically, preserves ammo without reload gain, leaves no damage/animation residue, and publishes the resulting stance normally. |
+| Detection | `/cwv_regression_test`: `issue412_old_musket_universal_special_interrupt`; offline policy tests cover all sub-actions, native-chain preservation, dedupe, and both production builders. |
+
 ### issue474-old-musket-remote-continuity — Hot join loses cross-slot identity and custom mesh has no remote report
 
 | Field | Value |

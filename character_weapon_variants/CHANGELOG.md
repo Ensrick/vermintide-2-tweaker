@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.402-dev - 2026-07-14 - #412 Old Musket universal special interrupt [verify-fix-coop]
+
+- Made the Old Musket's special stance swap reachable from frame zero of every running ranged and melee sub-action. A pure, idempotent template policy appends one native `allowed_chain_actions` edge to attack startup/release, firing/recovery, reload, aim, block, push, sweep, and all other cloned handgun/Tuskgor-spear actions while preserving their authored chains.
+- Used the source-recognized `clear_buffer` field rather than the issue draft's inert `clear_input` field. `WeaponUnitExtension:start_action` performs the canonical `new_interupting_action` finish before entering `action_three`; the existing owner-side destroy/re-add path retains exact chamber/reserve/reload state, and the existing bounded mode channel publishes only the resulting stance edge. No RPC or `NetworkLookup` shape changed.
+- Added ranged/melee parity for the toggle's `attack_finished` cleanup, plus host tests for universal coverage, native-chain preservation, canonical deduplication, and production wiring. `/cwv_regression_test` now includes `issue412_old_musket_universal_special_interrupt`.
+
+**Co-op verify:** both peers run v0.1.402-dev. As host and then client, equip Old Musket in Primary and Secondary and press special during hip fire, ADS/charge, shot recovery, empty/full reload, every bayonet light/heavy startup and active swing, block, push, and recovery. Each press must swap exactly once immediately, preserve chamber/reserve counts, cancel an interrupted reload without granting ammunition, leave no stuck attack/block pose or damage window, and show the matching stance to the observer. Reverse owner/observer roles and require the runtime check to pass on both peers with no disconnect, duplicate report, or repeated mode event.
+
+**DoD:** Universal walked. Trait gates: G-CROSS-SLOT, G-NETWORK, G-APPEARANCE, owner action/ammo state, remote stance continuity. Deferral: the two-player Primary/Secondary and host/client reversal matrix above remains for live verification.
+
 ## 0.1.401-dev - 2026-07-13 - #567 exact Sword+Mace transition state [diagnostics-armed]
 
 - Paired logs prove the reported skin was accepted and rendered exactly in the Keep; the later mission transition withheld the modded skin while parity was unknown, then the bounded vanilla replay expired before the replacement peer acknowledgement. This was transition fallback, not another vanilla configuration rejection.

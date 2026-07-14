@@ -65,6 +65,7 @@ local suites = {
     "test_cwv_remote_audio",
     "test_cwv_remote_identity",
     "test_cwv_old_musket_presentation",
+    "test_cwv_old_musket_interrupt",
     "test_cwv_acquisition",
     "test_cwv_javelin_pickup",
     "test_cwv_exact_pair_state",

@@ -1,9 +1,10 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.401-dev"
+local MOD_VERSION = "0.1.402-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
+mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
 -- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
@@ -3787,6 +3788,10 @@ local function _create_old_musket_template()
 			allowed_chain_actions = {},
 		},
 	}
+	-- #412: the idle action scan cannot see action_three while another action
+	-- owns the weapon extension. Add the same explicit chain edge used by
+	-- vanilla Rapier specials to every cloned handgun sub-action.
+	mod._cwv_old_musket_interrupt.install(template, "action_three")
 
 	-- Attach lookup_data on every sub_action (else lookup crashes on first
 	-- touch — see _create_musket_template for the rationale).
@@ -3962,6 +3967,10 @@ local function _create_old_musket_template_melee()
 	template.actions.action_three = {
 		default = {
 			kind = "dummy",
+			anim_end_event = "attack_finished",
+			anim_end_event_condition_func = function (unit, end_reason)
+				return end_reason ~= "new_interupting_action"
+			end,
 			total_time = 0.4,
 			enter_function = function (attacker_unit, input_extension)
 				_toggle_musket_stance_and_rewield(attacker_unit)
@@ -3969,6 +3978,9 @@ local function _create_old_musket_template_melee()
 			allowed_chain_actions = {},
 		},
 	}
+	-- #412: cover attack starts/releases, active sweeps, recovery, block/push,
+	-- and every other live Tuskgor-spear sub-action from frame zero.
+	mod._cwv_old_musket_interrupt.install(template, "action_three")
 
 	-- lookup_data attach.
 	for action_name, sub_actions in pairs(template.actions) do
@@ -13296,6 +13308,22 @@ _rt_register("issue416_483_transition_generated_skin_replay", function()
     if p ~= nil or sent ~= 1 or calls ~= 1 then
         return "deferred generated-skin replay did not send exactly once after parity recovery"
     end
+end)
+
+_rt_register("issue412_old_musket_universal_special_interrupt", function()
+	local audit = mod._cwv_old_musket_interrupt and mod._cwv_old_musket_interrupt.audit
+	if type(audit) ~= "function" then return "interrupt policy missing" end
+	for _, template_name in ipairs({ "old_musket_template", "old_musket_template_melee" }) do
+		local ok, detail = audit(Weapons and Weapons[template_name], "action_three")
+		if not ok then return template_name .. ": " .. tostring(detail) end
+	end
+	local melee = Weapons and Weapons.old_musket_template_melee
+	local toggle = melee and melee.actions and melee.actions.action_three
+	toggle = toggle and toggle.default
+	if not toggle or toggle.anim_end_event ~= "attack_finished"
+			or type(toggle.anim_end_event_condition_func) ~= "function" then
+		return "melee toggle interruption animation cleanup missing"
+	end
 end)
 
 _rt_register("issue474_old_musket_hot_join_identity_and_remote_fire", function()
