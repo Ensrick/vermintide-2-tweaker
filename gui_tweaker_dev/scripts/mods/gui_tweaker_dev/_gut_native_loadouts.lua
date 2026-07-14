@@ -539,12 +539,58 @@ M.official_gear_fallback = _official_gear_fallback   -- exported for the /gut_re
 -- it the same way - see crafting_in_modded_dev.lua:1495 comment block. Capture at the
 -- stable OUTER entry point the hero view calls (hero_view_state_overview.lua:1108),
 -- TABLE-form per the repo Hooking rule, installed deferred once the backend answers
--- (cim/cosmetics timing). GEAR slots only: the interface layer rewrites cosmetic ids
--- (override_id/ItemId, backend_interface_item_playfab.lua set_loadout_item) before the
--- mirror write, so cosmetic captures stay at the mirror hook, which the real cosmetic
--- flow does reach (pose captures in the same friend logs prove it).
+-- (cim/cosmetics timing). Issue #353 extends this seam to COSMETIC slots too: LA cosmetic
+-- dispatch can bypass the concrete mirror hook just like LA gear dispatch. BackendUtils
+-- still carries the transient backend id, so resolve the item through the SAME selected
+-- loadout interface and translate it exactly as vanilla does (`override_id or ItemId`,
+-- backend_interface_item_playfab.lua:656-663) before writing the modded store/overlay.
 -- ------------------------------------------------------------------
 local _bu_capture_installed = false
+local _bu_unresolved_seen = {}
+
+local function _bu_canonical_value(backend_id, slot_name)
+    if not Policy.is_cosmetic_slot(slot_name) then
+        return Policy.canonical_equip_value(slot_name, backend_id, nil)
+    end
+    local ok_iface, iface = pcall(function()
+        return Managers.backend:get_loadout_interface_by_slot(slot_name)
+    end)
+    if not ok_iface or not iface or type(iface.get_all_backend_items) ~= "function" then
+        return nil, "loadout_interface_unavailable"
+    end
+    -- Safe here: this is the outer menu-equip hook, not a mirror read hook. Calling this
+    -- from get_character_data would recurse through _refresh and exhaust the Lua heap.
+    local ok_items, all_items = pcall(iface.get_all_backend_items, iface)
+    local item = ok_items and type(all_items) == "table" and all_items[backend_id] or nil
+    return Policy.canonical_equip_value(slot_name, backend_id, item)
+end
+
+local function _capture_bu_equip(mode, mirror, career_name, slot_name, value, source)
+    if mode == MODE_READONLY then
+        if Policy.readonly_action(slot_name, value) ~= "preserve" then return end
+        local idx = _overlay_set(mirror, career_name, slot_name, value, nil)
+        _dirtify()
+        printf("[gut_dev:NATIVE_LOADOUTS] BU equip capture career=%s idx=%s slot=%s source=%s -> readonly overlay",
+            tostring(career_name), tostring(idx), tostring(slot_name), tostring(source))
+        return
+    end
+    if mode ~= MODE_STORE then return end
+    -- issue #375: seed the official snapshot BEFORE we can create a store entry.
+    _ensure_seeded(mirror, career_name)
+    local store = _store()
+    local entry = store[career_name]
+    -- Fallback bare entry only if seeding could not run yet (official data not ready).
+    -- NOT flagged _seeded, so _ensure_seeded repairs it once data lands.
+    if not entry then entry = { selected_index = 1, bot_index = nil, loadouts = {} }; store[career_name] = entry end
+    local idx = entry.selected_index
+    entry.loadouts[idx] = entry.loadouts[idx] or {}
+    entry.loadouts[idx][slot_name] = value
+    _persist()
+    _trace_wt_loadout("capture", career_name, slot_name, idx, value, "stored")
+    printf("[gut_dev:NATIVE_LOADOUTS] BU equip capture career=%s idx=%s slot=%s source=%s -> store",
+        tostring(career_name), tostring(idx), tostring(slot_name), tostring(source))
+end
+
 local function _install_bu_capture()
     if _bu_capture_installed then return end
     local BU = rawget(_G, "BackendUtils")
@@ -554,28 +600,23 @@ local function _install_bu_capture()
     _bu_capture_installed = true
     mod:hook(BU, "set_loadout_item", function(func, backend_id, career_name, slot_name)
         -- 3-arg entry point, always the SELECTED loadout (no index arg by design).
-        -- READONLY mode: no capture; the call passes through and the mirror-level write
-        -- blocks make the equip snap back to the official loadout on the next refresh.
-        if _adventure_mode() == MODE_STORE and career_name and backend_id and GEAR_SLOT_SET[slot_name] then
-            -- issue #375: seed the official snapshot BEFORE we can create a store entry.
-            -- An equip that lands before the first mirror-read must NOT leave a bare
-            -- `{loadouts={}}` entry -- that used to permanently block _ensure_seeded and
-            -- was the root cause of "official loadouts only partially import". Resolve the
-            -- mirror the same way _adventure_mode does (raw field, no interface method).
+        local mode = _adventure_mode()
+        local is_loadout_slot = GEAR_SLOT_SET[slot_name] or COSMETIC_SLOT_SET[slot_name]
+        if mode ~= MODE_OFF and career_name and backend_id and is_loadout_slot then
             local ok_m, mirror = pcall(function() return Managers.backend:get_interface("items")._backend_mirror end)
-            if ok_m and mirror then _ensure_seeded(mirror, career_name) end
-            local store = _store()
-            local entry = store[career_name]
-            -- Fallback bare entry only if seeding could not run yet (official data not
-            -- ready). NOT flagged _seeded, so _ensure_seeded repairs it once data lands.
-            if not entry then entry = { selected_index = 1, bot_index = nil, loadouts = {} }; store[career_name] = entry end
-            local idx = entry.selected_index
-            entry.loadouts[idx] = entry.loadouts[idx] or {}
-            entry.loadouts[idx][slot_name] = backend_id
-            _persist()
-            _trace_wt_loadout("capture", career_name, slot_name, idx, backend_id, "stored")
-            printf("[gut_dev:NATIVE_LOADOUTS] BU equip capture career=%s idx=%s slot=%s -> store",
-                tostring(career_name), tostring(idx), tostring(slot_name))
+            local value, source = _bu_canonical_value(backend_id, slot_name)
+            if ok_m and mirror and value ~= nil then
+                _capture_bu_equip(mode, mirror, career_name, slot_name, value, source)
+            elseif COSMETIC_SLOT_SET[slot_name] then
+                -- Bounded evidence for an unexpected LA/item-registry timing miss. Never
+                -- persist the transient backend id into a cosmetic slot as a guess.
+                local token = tostring(slot_name) .. "\0" .. tostring(backend_id) .. "\0" .. tostring(source)
+                if not _bu_unresolved_seen[token] then
+                    _bu_unresolved_seen[token] = true
+                    printf("[gut_dev:NATIVE_LOADOUTS] BU cosmetic capture SKIP career=%s slot=%s bid=%s reason=%s mirror=%s",
+                        tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(source), tostring(ok_m and mirror ~= nil))
+                end
+            end
         end
         return func(backend_id, career_name, slot_name)
     end)
@@ -1336,6 +1377,25 @@ M.rt_checks = {
             return "official melee instance editable in readonly"
         end
         if M.readonly_slot_editable("talents") then return "talents editable in readonly" end
+    end },
+    { name = "native_loadouts_la_cosmetic_outer_capture", fn = function()
+        -- issue #353: LA-cloned dispatch can miss the concrete mirror hook. The stable
+        -- BackendUtils seam must canonicalize all visual slots before store/overlay capture.
+        if type(_bu_canonical_value) ~= "function" or type(_capture_bu_equip) ~= "function" then
+            return "LA outer capture helpers missing"
+        end
+        local cases = {
+            { "slot_skin", "skin_override", { override_id = "skin_override", ItemId = "skin_item" } },
+            { "slot_hat", "hat_item", { ItemId = "hat_item" } },
+            { "slot_frame", "frame_item", { ItemId = "frame_item" } },
+            { "slot_pose", "pose_item", { ItemId = "pose_item" } },
+        }
+        for _, c in ipairs(cases) do
+            local value = Policy.canonical_equip_value(c[1], "transient_bid", c[3])
+            if value ~= c[2] then return c[1] .. " canonicalized to " .. tostring(value) end
+        end
+        local value = Policy.canonical_equip_value("slot_hat", "transient_bid", nil)
+        if value ~= nil then return "unresolved cosmetic retained transient backend id" end
     end },
     { name = "native_loadouts_no_hardcoded_6", fn = function()
         local expected = InventorySettings and InventorySettings.MAX_NUM_CUSTOM_LOADOUTS

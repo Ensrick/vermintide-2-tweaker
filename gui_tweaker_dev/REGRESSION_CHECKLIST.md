@@ -14,6 +14,14 @@ Last updated: 2026-07-13.
 
 ---
 
+## LA cosmetics in native saved loadouts (#353)
+
+- [ ] In the modded realm with LA enabled, save different LA cosmetics in two native loadout rows and switch between them.
+- [ ] Weapon illusion, hat, frame, and pose each restore after switching rows, reopening hero view, and restarting the game.
+- [ ] With **Use non-modded loadouts** enabled, official gameplay gear remains read-only while LA cosmetics persist in GUT's modded overlay.
+- [ ] Re-enter the official realm and confirm its loadout rows were not changed by the modded test.
+- [ ] `/gut_regression_test` passes `native_loadouts_la_cosmetic_outer_capture`; the log contains no `BU cosmetic capture SKIP` for successfully equipped LA cosmetics.
+
 ## CKC native Options checkbox (#528 follow-up)
 
 - [ ] With CKC installed and togglable, Options > Gameplay renders Crosshair Kill Confirmation as one native checkbox, never an On/Off dropdown.

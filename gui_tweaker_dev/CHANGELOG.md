@@ -1,5 +1,16 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.255-dev (2026-07-13) -- #353 LA cosmetics in native loadouts [verify-fix]
+
+- Extended GUT's post-Loremaster's Armoury `BackendUtils.set_loadout_item` capture from gear to all cosmetic loadout slots, covering LA-cloned dispatch that can bypass the concrete PlayFab mirror hooks.
+- Canonicalizes the transient inventory ID to the same `override_id or ItemId` identity vanilla persists before writing GUT's full modded store or readonly cosmetic overlay. An unresolved item is skipped with one bounded diagnostic per distinct slot/ID/reason instead of corrupting the loadout with a guess.
+- Preserved official-cloud isolation: the outer capture writes only GUT's VMF store/overlay, while the existing mirror write chokepoints remain blocked in the modded realm.
+- Added Lua 5.1 and `/gut_regression_test` coverage for skin, hat, frame, pose, override precedence, unresolved-item failure, and unchanged raw gear IDs.
+
+### Verify
+
+In the modded realm with Loremaster's Armoury enabled, equip a distinct LA weapon illusion, hat, frame, and pose into at least two native saved-loadout rows. Switch rows, leave/re-enter the hero view, restart the game, and confirm each row restores its own cosmetics. Repeat once with **Use non-modded loadouts** enabled; gameplay gear must remain official/read-only while the LA cosmetics persist modded-side. Official-realm loadouts must remain unchanged.
+
 ## 0.2.254-dev (2026-07-13) -- #354 trace WT cross-character loadout persistence [diagnostics-armed]
 
 - Source audit established that GUT has no exit-time save transaction. It persists the exact backend ID immediately at `BackendUtils.set_loadout_item`; WT then intercepts the lower item-interface write and retains a separate session-only cache. On launch, GUT serves the persisted row while WT independently reapplies `ItemMasterList.can_wield`.
