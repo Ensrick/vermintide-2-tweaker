@@ -5,6 +5,12 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.250-dev (2026-07-13) -- #557 tree-preserving Mod Tweaker layout [not deployed]
+
+- Every unordered sibling level now displays collapsible groups first and loose settings second; both partitions sort case-insensitively by localized display label.
+- Sorting reconstructs the depth tree and emits whole subtrees, so a group never separates from its descendants. Authored headers and explicit order/dependency metadata preserve their sibling sequence.
+- The deliberately synthesized Equipment layout opts out completely. Both the standalone and keep-sub-state presentations use the same pure ordering policy, with offline recursive/subtree regression coverage.
+
 ## 0.2.249-dev (2026-07-13) -- #257 Well of Dreams cutscene trace [not deployed]
 
 - Source-audited The Well of Dreams as `dlc_termite_3` (`level_settings_termite_part_3.lua`), the native `CutsceneSystem` callbacks, and the user-confirmed #140 Parting of the Waves post-skip suppression. The decompiled Lua does not contain the mission's authored level-flow graph, and no available log contains a clean `dlc_termite_3` cutscene trace, so its exact activation/skip event identity and fade ordering are not yet proven.

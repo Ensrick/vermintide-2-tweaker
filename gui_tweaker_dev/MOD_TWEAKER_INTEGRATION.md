@@ -228,6 +228,21 @@ Restoration stages through the ordinary owner buffers and calls the #560 bounded
 transaction path. Keybinds are excluded because they are device-global and need
 VMF's separate binding-registration lifecycle.
 
+## Settings-tree ordering (#557)
+
+Mod Tweaker orders each unordered sibling list as two alphabetical partitions:
+collapsible `group` nodes first, then loose settings. Labels are the localized
+display strings users see. The implementation rebuilds the tree from VMF's flat
+node/depth arrays before sorting, so descendants always travel with their parent.
+
+Authored organization is fail-closed. A sibling list containing an authored
+`header`, `mod_tweaker_preserve_order = true`, `mod_tweaker_order`,
+`mod_tweaker_before`, `mod_tweaker_after`, `depends_on`, or `dependency` retains
+its original order. VMF's generated, non-rendered per-mod header stays anchored
+but does not block sorting of the actual rows. Use the namespaced fields for new
+Tweaker integrations; dependency fields are recognized for compatibility. The
+synthetic Equipment tab opts out because its sections have a deliberate sequence.
+
 ## Regression guard
 
 `_mod_tweaker_view.lua` / the gut regression suite must assert: no third-party (non-author)

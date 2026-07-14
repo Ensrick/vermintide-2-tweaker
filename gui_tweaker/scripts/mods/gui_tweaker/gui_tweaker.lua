@@ -1,7 +1,7 @@
 ﻿local mod = get_mod("gut")
 _MEM_PROBE_T0_GUT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.2.118"
+local MOD_VERSION = "0.2.119"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF logging (mod:debug / mod:warning); gated by VMF

@@ -4,6 +4,15 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md
 
 Last updated: 2026-07-13.
 
+## Mod Tweaker settings-tree ordering (#557)
+
+- [ ] Open tabs with mixed top-level groups and loose settings; groups appear first and each partition is alphabetical by localized label.
+- [ ] Expand groups with mixed nested children; the same rule applies at each sibling level and no descendant moves outside its parent.
+- [ ] Confirm authored header sections retain their sequence.
+- [ ] Confirm Equipment remains Cosmetics, Crafting, Weapons, then nested CWV rather than being alphabetized.
+- [ ] Exercise both keep and in-mission Mod Tweaker presentations.
+- [ ] `pwsh -NoProfile -File qa/check_lua_unit_tests.ps1` passes the ordering suite.
+
 ## Well of Dreams cutscene trace (#257)
 
 - [ ] Enable GUT Skip Cutscenes and Auto-skip; disable any standalone cutscene-skip mod.

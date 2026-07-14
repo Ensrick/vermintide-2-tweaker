@@ -23,6 +23,7 @@
 -- service, exit via parent:close_menu, no self-made input service / cursor push).
 
 local defs = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_definitions")
+local ordering = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_ordering")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -628,6 +629,23 @@ function HeroViewStateModTweaker:_append_row(row, err, wtype, category, setting_
     end
 end
 
+local function _order_category_nodes(category, nodes, depths)
+    return ordering.order_flat(nodes, depths, {
+        preserve_all = category.mod_id == "gut_equipment",
+        get_type = function(node) return _nf(node, "type") end,
+        is_generated_header = function(node) return _nf(node, "mod_name") ~= nil end,
+        get_label = function(node) return _vmf_label(node, category.mod_obj) end,
+        has_explicit_order = function(node)
+            return _nf(node, "mod_tweaker_preserve_order") == true
+                or _nf(node, "mod_tweaker_order") ~= nil
+                or _nf(node, "mod_tweaker_before") ~= nil
+                or _nf(node, "mod_tweaker_after") ~= nil
+                or _nf(node, "depends_on") ~= nil
+                or _nf(node, "dependency") ~= nil
+        end,
+    })
+end
+
 function HeroViewStateModTweaker:_build_rows(category)
     self._rows = {}
     -- Any in-progress type-edit is abandoned on a rebuild (tab switch / drill / collapse):
@@ -652,6 +670,7 @@ function HeroViewStateModTweaker:_build_rows(category)
     else
         for i = 1, #category.widgets do _walk_nested(category.widgets[i], nodes, depths, 0) end
     end
+    nodes, depths = _order_category_nodes(category, nodes, depths)
 
     local base_offset = { 0, -10, 0 }
 

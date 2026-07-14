@@ -16,6 +16,7 @@ local Search = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_search")
 local profiles = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profiles")
 local disabled_sections = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_disabled_sections")
 local tab_labels = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_tab_labels")
+local ordering = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_ordering")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -1541,6 +1542,26 @@ function ModTweakerView:_search_pointer_over_chrome()
     return false
 end
 
+local function _order_category_nodes(category, nodes, depths)
+    return ordering.order_flat(nodes, depths, {
+        preserve_all = category.mod_id == "gut_equipment",
+        get_type = function(node) return _nf(node, "type") end,
+        is_generated_header = function(node) return _nf(node, "mod_name") ~= nil end,
+        get_label = function(node)
+            local owner = _owner(category, _nf(node, "setting_id"))
+            return _vmf_label(node, owner or category.mod_obj)
+        end,
+        has_explicit_order = function(node)
+            return _nf(node, "mod_tweaker_preserve_order") == true
+                or _nf(node, "mod_tweaker_order") ~= nil
+                or _nf(node, "mod_tweaker_before") ~= nil
+                or _nf(node, "mod_tweaker_after") ~= nil
+                or _nf(node, "depends_on") ~= nil
+                or _nf(node, "dependency") ~= nil
+        end,
+    })
+end
+
 function ModTweakerView:_build_rows(category)
     self._rows = {}
     -- Any in-progress type-edit is abandoned on a rebuild (tab switch / drill / collapse):
@@ -1593,6 +1614,7 @@ function ModTweakerView:_build_rows(category)
     else
         for i = 1, #category.widgets do _walk_nested(category.widgets[i], nodes, depths, 0) end
     end
+    nodes, depths = _order_category_nodes(category, nodes, depths)
     -- (#163) Keep the flat node/depth arrays for the auto-collapse handler — sibling + descendant
     -- detection needs the tree shape; the group toggle in _handle_input reads these.
     self._build_nodes, self._build_depths, self._build_category = nodes, depths, category

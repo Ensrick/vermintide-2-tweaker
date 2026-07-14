@@ -1,5 +1,11 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.119 (2026-07-13) — Tree-preserving Mod Tweaker layout (#557) [not deployed]
+
+- Every unordered sibling level now displays collapsible groups first and loose settings second; both partitions sort case-insensitively by localized display label.
+- Sorting reconstructs the depth tree and emits whole subtrees, so a group never separates from its descendants. Authored headers and explicit order/dependency metadata preserve their sibling sequence.
+- The deliberately synthesized Equipment layout opts out completely. Both the standalone and keep-sub-state presentations use the same pure ordering policy, with offline recursive/subtree regression coverage.
+
 ## 0.2.118 (2026-06-30) — Removed the absorbed "UI Tweaks (absorbed)" HideBuffs Phase-1 feature set (hide-UI-elements + hide-active-buffs groups, Hide-HUD hotkey, loading-screen hides) from the public alpha; it remains in gut_dev. Compatibility shims (buff-bar end-time crash fix, baked-in Temporal Fix) and the native "Hide UI (3 modes)" feature are unaffected. (#94)
 
 ## 0.2.117 (2026-06-28) — Removed per-mod debug toggle; diagnostics now route through VMF logging (mod:debug / mod:warning), gated by VMF output_mode_debug / output_mode_warning. (#169)
