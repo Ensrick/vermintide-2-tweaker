@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.257-dev (2026-07-14) -- #438 On Yer Feet revive scoreboard credit [verify-fix]
+
+- Vanilla's ordinary interaction revive and Warrior Priest's Comet's Gift both call `StatisticsUtil.register_revive`; Mercenary's `rpc_request_revive` server handler revives the target and emits telemetry but omits that statistics transaction.
+- Added one server-side wrapper on that exact handler. It credits `StatisticsUtil.register_revive` only when the reviver has `markus_mercenary_activated_ability_revive`, the target was career-revivable before vanilla ran, and the reviver's count is still unchanged afterward. If vanilla or another hook already credited the revive, GUT does nothing, preventing double credit.
+- Added capped `[gut:438] credited` evidence, pure Lua policy coverage, and runtime regression `issue438_on_yer_feet_revive_credit`.
+
+### Verify
+
+Start an Adventure mission as Mercenary with **On Yer Feet, Mates!** and at least one bot. Let the bot become downed, revive it with Morale Boost, then finish the mission. Kruber's scoreboard Revives count must increase by exactly one for that ability revive. The log should contain one `[gut:438] credited` line. Run `/gut_regression_test` and confirm `issue438_on_yer_feet_revive_credit` passes.
+
 ## 0.2.256-dev (2026-07-14) -- #352 original temporary-health talent names [verify-fix]
 
 - Added a default-off **Original Temporary Health Names** toggle that restores the distinct, career-specific names for all 60 vanilla level-five temporary-health talents.

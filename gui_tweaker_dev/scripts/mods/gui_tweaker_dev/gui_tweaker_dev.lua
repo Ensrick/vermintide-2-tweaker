@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.256-dev"
+local MOD_VERSION = "0.2.257-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -3267,6 +3267,22 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_ckc_bridge")
 -- it records the case-2 finding + a defer guard and printf-logs whether the
 -- standalone mod is present. Resolution is documentation + recommend 3232229691.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_all_languages")
+
+-- On Yer Feet, Mates! revive scoreboard attribution (#438). Vanilla's
+-- server-side rpc_request_revive omits the StatisticsUtil call used by ordinary
+-- revives and Comet's Gift. Repair only an unchanged revive count, so an
+-- upstream or parallel credit wins without duplication.
+do
+    local ok, api = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_revive_scoreboard")
+    if ok and type(api) == "table" then
+        for _, check in ipairs(api.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        printf("[gut:438] revive-scoreboard module failed: %s", tostring(api))
+    end
+end
 
 -- Original per-career names for the three level-five temporary-health talents
 -- (#352). This mutates only each canonical talent record's presentation key.

@@ -1,5 +1,12 @@
 # Regression Checklist — gui_tweaker_dev
 
+## On Yer Feet revive attribution (#438)
+
+- [ ] Mercenary with `markus_mercenary_activated_ability_revive` revives one downed bot by Morale Boost and gains exactly one scoreboard revive.
+- [ ] An ordinary manual revive still gains exactly one, not two.
+- [ ] `[gut:438] credited` emits once for the repaired ability revive and remains capped at 16 records per process.
+- [ ] `/gut_regression_test` passes `issue438_on_yer_feet_revive_credit`.
+
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md) for Tweaker: GUI dev.
 
 Last updated: 2026-07-14.
