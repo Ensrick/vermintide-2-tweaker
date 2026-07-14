@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+### manann-tempest-owner-cooldown-display - issue #358
+
+| Field | Value |
+|---|---|
+| Symptom | The optional eight-second Manann's Tempest gate has no visible ready-time feedback. |
+| Root cause | The host-side chain-lightning timestamp buckets had no owner-targeted presentation path. |
+| Fix version(s) | ct_dev 0.7.275-dev (not deployed) |
+| Category | COOP / OWNER UI / HOST AUTHORITY / VMF RPC |
+| Repro | Enable the tweak and proc the mod boon and weapon trait separately, then stagger both sources on one owner. |
+| Expected post-fix | Each allowed source shows its own native-icon eight-second timer only to the owner. Rejected/ineligible procs do not refresh it; toggle off shows nothing. |
+| Detection | Offline `test_ct_manann_cooldown_display.lua`; `/ct_regression_test`: `issue358_manann_tempest_cooldown_display`; `[ct:cooldown-display]` owner/drop rows. |
+
 ### bomb-bubble-owner-cooldown-display - issue #357
 
 | Field | Value |

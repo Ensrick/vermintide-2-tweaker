@@ -1,5 +1,16 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.275-dev (2026-07-14) - #358 Manann's Tempest cooldown HUD timers [verify-fix-coop; not deployed]
+
+- **Fix.** When the existing `tweak_manann_tempest_cooldown` gate allows a real critical-hit chain, the proc owner now sees the native Manann's Tempest trait icon count down for the exact eight-second cooldown. With the toggle off, ineligible damage, or a rejected proc, no display is created and vanilla behavior is unchanged.
+- **Independent sources.** The mod-boon and weapon-trait variants already own separate timestamp buckets and can become ready at different times. They therefore use two distinct client-local timer templates with the same native icon; one source cannot refresh or replace the other's timer.
+- **Wire/gameplay safety.** Reused #357's owner-targeted VMF display channel without changing its payload shape or schema. The two new source ids are allowlisted, schema/host validation remains mandatory, and no vanilla `NetworkLookup` entry is added. Notification occurs after the existing timestamp stamp and before the unchanged vanilla proc call; it never drives gate timing.
+- **Regression.** Added offline `test_ct_manann_cooldown_display.lua` coverage for exact icon, independent template identity, allowed-branch ordering, toggle/eligibility/rejection precedence, local-only registration, and runtime check `issue358_manann_tempest_cooldown_display`.
+
+**Source audit:** the native trait icon is `deus_icon_trait_crit_chain_lightning` (`weapon_traits_morris.lua:562-569`). The trait buff is server-authoritative and calls `chain_lightning` (`morris_buff_settings.lua:7040-7053`); the proc itself validates alive units, first hit, and critical strike (`morris_buff_settings.lua:2563-2584`).
+
+**Verify after deployment (two players):** enable the cooldown and test the weapon trait on one peer and the mod boon on the other. A successful eligible chain must show an eight-second native-icon timer only to its owner; rejected crits during the gate must not refresh it. On one player with both sources, stagger their procs and confirm two independently progressing icons. Disable the toggle and confirm neither gating nor timers. Require `issue358_manann_tempest_cooldown_display` to pass in `/ct_regression_test`.
+
 ## 0.7.274-dev (2026-07-14) - #357 bomb-bubble cooldown HUD timer [verify-fix-coop; not deployed]
 
 - **Fix.** When the existing host-authoritative `grenade_explode_buff_area` gate allows one of the concentration, critical-chance, healing, or speed bomb bubbles, CT now shows that boon's native icon as a cooldown timer on the affected player's buff bar for exactly the configured interval. An interval of zero remains vanilla and creates no display.

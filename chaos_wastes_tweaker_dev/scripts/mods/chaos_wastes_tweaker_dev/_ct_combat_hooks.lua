@@ -118,6 +118,15 @@ if ProcFunctions and ProcFunctions.chain_lightning then
             return
         end
         bucket[key] = t + MANANN_TEMPEST_COOLDOWN_S
+        -- #358 presentation only. The host targets the proc owner through the
+        -- same schema/host-validated VMF display channel as #357. Separate boon
+        -- and trait template names preserve these independent timestamp buckets.
+        local display = mod._ct_bomb_cooldown_display
+        if display and display.notify_allowed then
+            display.notify_allowed(owner_unit,
+                is_boon and "manann_boon" or "manann_trait",
+                MANANN_TEMPEST_COOLDOWN_S)
+        end
         return func(owner_unit, buff, params, world, param_order)
     end)
 end

@@ -1,4 +1,4 @@
--- Issue #357: owner-only HUD timers for the four bomb-bubble boon cooldowns.
+-- Issues #357/#358: owner-only HUD timers for host-authoritative cooldowns.
 --
 -- These templates are deliberately client-local. They are never appended to
 -- NetworkLookup.buff_templates and never sent through vanilla rpc_add_buff; the
@@ -29,6 +29,25 @@ local BOONS = {
         icon = "deus_icon_supportbomb_speed_01",
     },
 }
+
+-- #358: boon and trait gates have independent timestamp buckets, so they need
+-- independent local templates as well. Both use the native weapon-trait icon;
+-- sharing one max-stack template would let one source refresh the other's HUD
+-- timer and falsely imply that both cooldowns have the same ready time.
+local MANANN_SOURCES = {
+    manann_boon = {
+        template = "ct_manann_cooldown_display_boon",
+        icon = "deus_icon_trait_crit_chain_lightning",
+    },
+    manann_trait = {
+        template = "ct_manann_cooldown_display_trait",
+        icon = "deus_icon_trait_crit_chain_lightning",
+    },
+}
+
+local function _spec(display_name)
+    return BOONS[display_name] or MANANN_SOURCES[display_name]
+end
 
 local function _valid_interval(value)
     return type(value) == "number"
@@ -70,11 +89,25 @@ local function _install_templates()
             },
         }
     end
+    for _, spec in pairs(MANANN_SOURCES) do
+        registry[spec.template] = {
+            buffs = {
+                {
+                    duration = 1,
+                    icon = spec.icon,
+                    is_cooldown = true,
+                    max_stacks = 1,
+                    name = spec.template,
+                    refresh_durations = true,
+                },
+            },
+        }
+    end
     return true
 end
 
 local function _apply_local(owner_unit, boon_name, interval)
-    local spec = BOONS[boon_name]
+    local spec = _spec(boon_name)
     if not spec or not _valid_interval(interval) or not owner_unit then return false end
 
     local buff_extension = ScriptUnit and ScriptUnit.has_extension
@@ -85,7 +118,7 @@ local function _apply_local(owner_unit, boon_name, interval)
         external_optional_duration = interval,
     })
     if ok then
-        pcall(printf, "[ct:357] owner cooldown display boon=%s duration=%.1fs",
+        pcall(printf, "[ct:cooldown-display] name=%s duration=%.1fs",
             boon_name, interval)
     end
     return ok
@@ -98,18 +131,18 @@ function M.install(schema_version)
     M._schema_version = schema_version
     mod:network_register(CHANNEL, function(sender_peer_id, received_schema, boon_name, interval)
         if received_schema ~= M._schema_version then
-            pcall(printf, "[ct:357] dropped cooldown display: schema=%s expected=%s sender=%s",
+            pcall(printf, "[ct:cooldown-display] dropped: schema=%s expected=%s sender=%s",
                 tostring(received_schema), tostring(M._schema_version), tostring(sender_peer_id))
             return
         end
         local host_peer_id = _expected_host_peer_id()
         if not host_peer_id or sender_peer_id ~= host_peer_id then
-            pcall(printf, "[ct:357] dropped cooldown display: non-host sender=%s expected=%s",
+            pcall(printf, "[ct:cooldown-display] dropped: non-host sender=%s expected=%s",
                 tostring(sender_peer_id), tostring(host_peer_id))
             return
         end
-        if not BOONS[boon_name] or not _valid_interval(interval) then
-            pcall(printf, "[ct:357] dropped cooldown display: invalid payload boon=%s interval=%s",
+        if not _spec(boon_name) or not _valid_interval(interval) then
+            pcall(printf, "[ct:cooldown-display] dropped: invalid payload name=%s interval=%s",
                 tostring(boon_name), tostring(interval))
             return
         end
@@ -126,7 +159,7 @@ end
 -- authority check so a client-side invocation can never forge a HUD cooldown.
 function M.notify_allowed(owner_unit, boon_name, interval)
     if not (Managers and Managers.player and Managers.player.is_server) then return false end
-    if not BOONS[boon_name] or not _valid_interval(interval) then return false end
+    if not _spec(boon_name) or not _valid_interval(interval) then return false end
 
     local owner = Managers.player:owner(owner_unit)
     if not owner or owner.bot_player then return false end
@@ -144,7 +177,7 @@ function M.notify_allowed(owner_unit, boon_name, interval)
 end
 
 function M.valid_payload(boon_name, interval)
-    return BOONS[boon_name] ~= nil and _valid_interval(interval)
+    return _spec(boon_name) ~= nil and _valid_interval(interval)
 end
 
 function M.regression_check(schema_version)
@@ -165,7 +198,31 @@ function M.regression_check(schema_version)
     return nil
 end
 
+function M.regression_check_manann(schema_version)
+    if not M._installed or M._schema_version ~= schema_version then
+        return "display module not installed with current schema"
+    end
+    local registry = rawget(_G, "BuffTemplates")
+    local names = {}
+    for source_name, spec in pairs(MANANN_SOURCES) do
+        local buff = registry and registry[spec.template]
+        local sub = buff and buff.buffs and buff.buffs[1]
+        if not sub or sub.icon ~= "deus_icon_trait_crit_chain_lightning"
+            or sub.is_cooldown ~= true then
+            return "invalid Manann display template for " .. source_name
+        end
+        if names[spec.template] then return "Manann sources share one timer template" end
+        names[spec.template] = true
+    end
+    if not M.valid_payload("manann_boon", 8)
+        or not M.valid_payload("manann_trait", 8) then
+        return "Manann payload vocabulary missing"
+    end
+    return nil
+end
+
 M.channel = CHANNEL
 M.boons = BOONS
+M.manann_sources = MANANN_SOURCES
 
 return M
