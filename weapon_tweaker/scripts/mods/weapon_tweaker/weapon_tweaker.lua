@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.250-dev"
+local MOD_VERSION = "0.12.251-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -573,6 +573,36 @@ local _weapon_grip_offsets = {
     -- Full rationale + the preview-OK/in-game-wrong post-mortem: OFFSETS.md.
 }
 
+-- Baked local-Euler corrections for cross-character 3P weapon roots. These
+-- are deltas over each spawned unit's captured canonical rotation, never
+-- absolute poses. The three Kruber shield families below use Saltzpyre's
+-- Axe+Falchion body vocabulary on WHC/BH/Zealot, so they share the user's
+-- tuned seating correction. Spear & Shield (`es_deus_01`) is intentionally
+-- absent. CWV's Empire Axe+Shield currently inherits `.name = dr_shield_axe`
+-- from its donor; retain both public variant keys for a future identity fix
+-- and the donor alias for the live clone-name boundary.
+local _SALTZ_KRUBER_SHIELD_ROTATION = { 25, -17.5, -15 }
+local _weapon_rotation_overrides = {
+    es_mace_shield           = { wh_ = _SALTZ_KRUBER_SHIELD_ROTATION },
+    es_sword_shield          = { wh_ = _SALTZ_KRUBER_SHIELD_ROTATION },
+    es_sword_shield_breton   = { wh_ = _SALTZ_KRUBER_SHIELD_ROTATION },
+    dr_shield_axe            = { wh_ = _SALTZ_KRUBER_SHIELD_ROTATION },
+    cwv_es_axe_shield        = { wh_ = _SALTZ_KRUBER_SHIELD_ROTATION },
+    cwv_es_axe_shield_veteran = { wh_ = _SALTZ_KRUBER_SHIELD_ROTATION },
+}
+
+local function _resolve_rotation_override(weapon_key, career_name)
+    if not weapon_key or not career_name then return nil end
+    local overrides = _weapon_rotation_overrides[weapon_key]
+    if not overrides then return nil end
+    for prefix, rotation in pairs(overrides) do
+        if career_name:sub(1, #prefix) == prefix then
+            return rotation
+        end
+    end
+    return nil
+end
+
 -- ===========================================================================
 -- DURABLE (per-frame re-applied) 3P grip offsets.    [OFFSETS.md]
 -- ===========================================================================
@@ -700,6 +730,7 @@ mod._wt587_baked_transform_plan = function(weapon_key, career_name)
     return {
         scale = _resolve_scale_factor(weapon_key, career_name),
         offset = _resolve_grip_offset(weapon_key, career_name),
+        rotation = _resolve_rotation_override(weapon_key, career_name),
         durable = _DURABLE_GRIP_OFFSETS[weapon_key] == true,
     }
 end
@@ -799,6 +830,7 @@ local _wt569_tracked_3p_units = setmetatable({}, { __mode = "k" })
 
 mod._wt569_should_rotate_3p = function(weapon_key, career_name, item_template)
     if not _WT569_STANDARD_SALTZ_CAREERS[career_name] then return false end
+    if _resolve_rotation_override(weapon_key, career_name) then return true end
     if weapon_key == _WT569_NATIVE_WP_HAMMER_KEY then return false end
     local by_career = item_template and item_template.wield_anim_career_3p
     return type(by_career) == "table"
@@ -810,10 +842,22 @@ mod._wt569_orientation_contract = {
     degrees = _WT569_DEGREES,
     remap_event = _WT569_REMAP_EVENT,
     native_exempt_key = _WT569_NATIVE_WP_HAMMER_KEY,
+    baked_shield_euler = _SALTZ_KRUBER_SHIELD_ROTATION,
+    baked_shield_scope = "standard_saltzpyre_3p",
+    spear_shield_exempt_key = "es_deus_01",
 }
+
+local function _wt569_rotation_delta(row)
+    local euler = row and row.euler
+    if euler then
+        return Quaternion.from_euler_angles_xyz(euler[1], euler[2], euler[3])
+    end
+    return Quaternion.axis_angle(Vector3(0, 0, 1), math.pi)
+end
 
 local function _wt569_track_3p_units(slot_data, weapon_key, career_name, item_template, owner_3p, slot_name, preview_wielded)
     if not mod._wt569_should_rotate_3p(weapon_key, career_name, item_template) then return end
+    local baked_euler = _resolve_rotation_override(weapon_key, career_name)
     for _, field in ipairs({ "right_unit_3p", "left_unit_3p" }) do
         local unit = slot_data and slot_data[field]
         if unit and not _wt569_tracked_3p_units[unit] then
@@ -828,11 +872,20 @@ local function _wt569_track_3p_units(slot_data, weapon_key, career_name, item_te
                     weapon_key = weapon_key,
                     career_name = career_name,
                     hand = field == "right_unit_3p" and "right" or "left",
+                    euler = baked_euler and { baked_euler[1], baked_euler[2], baked_euler[3] } or nil,
                 }
-                pcall(printf,
-                    "[wt:569] tracked career=%s weapon=%s hand=%s remap=%s axis=local_z degrees=180 first_person=untouched",
-                    tostring(career_name), tostring(weapon_key),
-                    field == "right_unit_3p" and "right" or "left", _WT569_REMAP_EVENT)
+                if baked_euler then
+                    pcall(printf,
+                        "[wt:112] tracked shield rotation career=%s weapon=%s hand=%s euler={%.1f,%.1f,%.1f} first_person=untouched",
+                        tostring(career_name), tostring(weapon_key),
+                        field == "right_unit_3p" and "right" or "left",
+                        baked_euler[1], baked_euler[2], baked_euler[3])
+                else
+                    pcall(printf,
+                        "[wt:569] tracked career=%s weapon=%s hand=%s remap=%s axis=local_z degrees=180 first_person=untouched",
+                        tostring(career_name), tostring(weapon_key),
+                        field == "right_unit_3p" and "right" or "left", _WT569_REMAP_EVENT)
+                end
             end
         end
     end
@@ -868,15 +921,15 @@ function mod._wt569_reapply_3p_orientation()
             local desired = base
             local corrected = _wt569_is_wielded(row)
             if corrected then
-                local half_turn = Quaternion.axis_angle(Vector3(0, 0, 1), math.pi)
-                desired = Quaternion.multiply(base, half_turn)
+                desired = Quaternion.multiply(base, _wt569_rotation_delta(row))
             end
             pcall(Unit.set_local_rotation, unit, 0, desired)
             if row.last_corrected ~= corrected then
                 row.last_corrected = corrected
-                pcall(printf, "[wt:569] applied=%s career=%s weapon=%s hand=%s slot=%s",
+                pcall(printf, "[wt:569] applied=%s career=%s weapon=%s hand=%s slot=%s mode=%s",
                     tostring(corrected), tostring(row.career_name), tostring(row.weapon_key),
-                    tostring(row.hand), tostring(row.slot_name or "preview"))
+                    tostring(row.hand), tostring(row.slot_name or "preview"),
+                    row.euler and "baked_euler" or "wp_half_turn")
             end
         end
     end
@@ -889,8 +942,7 @@ function mod._wt569_desired_rotation_for_unit(unit)
     if not row then return nil end
     local base = row.base:unbox()
     if not _wt569_is_wielded(row) then return base end
-    local half_turn = Quaternion.axis_angle(Vector3(0, 0, 1), math.pi)
-    return Quaternion.multiply(base, half_turn)
+    return Quaternion.multiply(base, _wt569_rotation_delta(row))
 end
 
 -- CW crash on ghost scythe 3P spawn (crashify://77917479-d053-4d34-b6b9-629878a7e6ec).
@@ -4376,6 +4428,42 @@ _rt_register("issue112_saltzpyre_handgun_baked_offset", function()
     local control = plan("wh_crossbow", "wh_captain")
     assert(control.offset == nil and control.durable == false,
         "unmodified Saltzpyre ranged control must remain untouched")
+end)
+
+_rt_register("issue112_saltzpyre_kruber_shield_baked_rotation", function()
+    local plan = mod._wt587_baked_transform_plan
+    local contract = mod._wt569_orientation_contract
+    assert(type(plan) == "function" and type(contract) == "table",
+        "baked shield rotation resolver missing")
+    local expected = contract.baked_shield_euler
+    assert(expected and expected[1] == 25 and expected[2] == -17.5 and expected[3] == -15,
+        "Saltzpyre shield Euler correction drifted")
+    local shield_keys = {
+        "es_mace_shield", "es_sword_shield", "es_sword_shield_breton",
+        -- CWV clone-name compatibility plus the intended public identities.
+        "dr_shield_axe", "cwv_es_axe_shield", "cwv_es_axe_shield_veteran",
+    }
+    for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+        for _, weapon_key in ipairs(shield_keys) do
+            local row = plan(weapon_key, career)
+            assert(row.rotation
+                and row.rotation[1] == 25
+                and row.rotation[2] == -17.5
+                and row.rotation[3] == -15,
+                string.format("shield rotation missing key=%s career=%s", weapon_key, career))
+        end
+        assert(plan("es_deus_01", career).rotation == nil,
+            "Kruber Spear & Shield must remain excluded on " .. career)
+    end
+    for _, weapon_key in ipairs(shield_keys) do
+        assert(plan(weapon_key, "es_knight").rotation == nil,
+            "native Kruber shield rotation changed: " .. weapon_key)
+        assert(plan(weapon_key, "wh_priest").rotation == nil,
+            "Warrior Priest must remain outside standard-Saltzpyre shield tuning: " .. weapon_key)
+    end
+    assert(contract.baked_shield_scope == "standard_saltzpyre_3p"
+        and contract.spear_shield_exempt_key == "es_deus_01",
+        "shield rotation ownership/exemption contract drifted")
 end)
 
 _rt_register("wt_safe_hook_installed", function()

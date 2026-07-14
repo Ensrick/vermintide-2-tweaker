@@ -25,6 +25,22 @@ otherwise disabling CWV would leave Saltzpyre ability actions on the variant's
 shared template, while a default-on variant with the donor fallback disabled
 would never receive those actions in the first place.
 
+## Baked shield rotations
+
+Receiver-specific rotation belongs to the durable 3P transform owner, not a
+shared attachment-linking template. Issue #112 seats Kruber-derived shield
+ports on standard Saltzpyre bodies with local Euler `{25, -17.5, -15}` while
+they use the Axe+Falchion animation vocabulary. The catalog includes
+`es_mace_shield`, `es_sword_shield`, `es_sword_shield_breton`, both CWV Empire
+Axe+Shield identities, and the live CWV donor-name alias `dr_shield_axe`.
+`es_deus_01` (Spear & Shield) is deliberately excluded.
+
+The orientation tracker boxes canonical rotation at spawn and rebuilds
+`canonical * delta` while wielded for owner, bot, husk, and inventory-preview
+3P units. Do not multiply the live rotation or mutate shared templates: either
+would accumulate or affect native Kruber. First-person units and network state
+remain outside this path.
+
 Architecture, gotchas, and conventions for `weapon_tweaker`. Read alongside
 `CHANGELOG.md` (history), `CODE_REVIEW.md` (current health), `REGRESSION_CHECKLIST.md`
 (pre-release gates), and `CROSS_CHARACTER_PORT_RECIPE.md` (the seven-step procedure

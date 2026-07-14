@@ -78,4 +78,19 @@ return function(H, repo_root)
         H.truthy(source:find("es_handgun                 = true", 1, true))
         H.truthy(source:find('issue112_saltzpyre_handgun_baked_offset', 1, true))
     end)
+
+    H.test("WT #112 Saltzpyre Kruber shields retain the shared baked rotation", function()
+        local file = assert(io.open(root .. "weapon_tweaker.lua", "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.truthy(source:find("local _SALTZ_KRUBER_SHIELD_ROTATION = { 25, -17.5, -15 }", 1, true))
+        for _, key in ipairs({
+            "es_mace_shield", "es_sword_shield", "es_sword_shield_breton",
+            "dr_shield_axe", "cwv_es_axe_shield", "cwv_es_axe_shield_veteran",
+        }) do
+            H.truthy(source:find(key, 1, true), key .. " missing from shield rotation contract")
+        end
+        H.truthy(source:find('spear_shield_exempt_key = "es_deus_01"', 1, true))
+        H.truthy(source:find('issue112_saltzpyre_kruber_shield_baked_rotation', 1, true))
+    end)
 end

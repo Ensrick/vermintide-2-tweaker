@@ -1,5 +1,17 @@
 # Regression Checklist — weapon_tweaker
 
+## #112 - Saltzpyre Kruber shield rotation
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.251-dev |
+| Automated | Offline `test_wt_saltzpyre_coverage` locks the exact `{25, -17.5, -15}` catalog and Spear & Shield exclusion. `/wt_regression_test`: `issue112_saltzpyre_kruber_shield_baked_rotation` covers all three careers, CWV clone-name compatibility, native controls, and ownership scope. |
+| Solo visual | On WHC/BH/Zealot, inspect Empire Mace & Shield, both Empire Sword & Shield families, and CWV Empire Axe & Shield through wield, block, attack, swap, and inventory preview. All use the shared corrected seating. |
+| Exclusions | Kruber Spear & Shield is unchanged. Native Kruber and Warrior Priest receive no correction. First person remains unchanged. |
+| Renderer contract | The same baked delta is reconstructed from canonical rotation for owner, bot, remote husk, and preview. There is no transform RPC and no accumulation. Remote parity remains protected by #587's co-op regression. |
+
+---
+
 ## #593 - conditional Axe+Shield ownership on Saltzpyre
 
 | Field | Check |
