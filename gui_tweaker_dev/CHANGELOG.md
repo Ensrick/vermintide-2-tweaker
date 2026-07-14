@@ -5,7 +5,17 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
-## 0.2.246-dev (2026-07-13) -- #314 Simple UI compatibility phase 1 [not deployed]
+## 0.2.247-dev (2026-07-13) -- #522 inventory backdrop resolver [verify-fix]
+
+- Fixed the first implementation's incorrect assumption that the engine's `local_require` cache is always mirrored in Lua's `package.loaded`. Vanilla loads the character-preview definitions with `local_require`; when no `package.loaded` entry existed, GUT found the preview class but silently left its viewport unchanged, matching the user's no-change report.
+- The hook now resolves the exact definitions table through vanilla's own `local_require` loader, with the old cache lookup retained as a fast path. Package availability, async loading, readiness gating, symmetric unload, and vanilla fallback remain unchanged.
+- Extended `inventory_backdrop_swap_522` to prevent the loader boundary from regressing. Opening inventory automatically logs either the selected swap or the precise resolution/package blocker; no manual command is needed to collect that evidence.
+
+### Verify
+
+Choose each Inventory > Character Preview Backdrop value and reopen inventory. The two alternate scenes must visibly replace the vanilla stage; returning to Vanilla must restore it. Confirm `/gut_regression_test` passes `inventory_backdrop_swap_522`.
+
+## 0.2.246-dev (2026-07-13) -- #314 Simple UI compatibility phase 1 [verify-fix]
 
 - Audited sanctioned Workshop Simple UI 2.1.2 and its public Grasmann-Mods source. The repository provides source/resources but no redistribution license, so GUT does not copy or absorb them without explicit permission.
 - Added a clean compatibility tick for an installed Simple UI. It confines every public live window record to the current resolution; fitted windows remain wholly visible, while oversized windows retain a reachable left edge and top title/drag handle.

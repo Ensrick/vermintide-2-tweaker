@@ -1,6 +1,6 @@
 # Simple UI integration audit (#314)
 
-Status: phase 1 implemented locally in `gui_tweaker_dev` 0.2.246-dev; not deployed.
+Status: phase 1 deployed in `gui_tweaker_dev` 0.2.246-dev; awaiting verification.
 
 ## Provenance and redistribution boundary
 

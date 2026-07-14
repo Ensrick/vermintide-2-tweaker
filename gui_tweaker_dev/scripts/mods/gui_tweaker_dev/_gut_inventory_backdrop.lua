@@ -128,6 +128,17 @@ mod._gut_inv_backdrops = BACKDROPS   -- consumed by /gut_regression_test
 local function _viewport_style()
     local loaded = package and package.loaded
     local defs = loaded and loaded[DEFS_PATH]
+    -- Vanilla loads this module with local_require, whose cache is not
+    -- guaranteed to be mirrored into Lua's package.loaded table.
+    if type(defs) ~= "table" then
+        local loader = rawget(_G, "local_require")
+        if type(loader) == "function" then
+            local ok, resolved = pcall(loader, DEFS_PATH)
+            if ok and type(resolved) == "table" then
+                defs = resolved
+            end
+        end
+    end
     local vp_widget = defs and defs.viewport_widget
     return vp_widget and vp_widget.style and vp_widget.style.viewport
 end
@@ -194,7 +205,7 @@ mod:hook("HeroWindowCharacterPreview", "create_ui_elements", function(func, self
     local vp = _viewport_style()
     if not vp then
         if bd then
-            _pf("[gut_dev:invbd] defs module not in package.loaded (path=%s) -> vanilla backdrop this open", DEFS_PATH)
+            _pf("[gut_dev:invbd] viewport definitions unresolved through package.loaded and local_require (path=%s) -> vanilla backdrop this open", DEFS_PATH)
         end
         return func(self, ...)
     end
@@ -280,6 +291,9 @@ M.rt_checks[#M.rt_checks + 1] = {
         if not txt then return end
         if not txt:find('can_get, "pack' .. 'age"', 1, true) then
             return "issue 522 regression: the can_get('package') existence gate is gone (a removed package would hit PackageManager.load unchecked)"
+        end
+        if not txt:find('rawget(_G, "local_' .. 'require")', 1, true) then
+            return "issue 522 regression: viewport definitions no longer resolve through vanilla local_require"
         end
         if not txt:find("vp.level_package" .. "_name  = bd.package", 1, true) then
             return "issue 522 regression: the def swap no longer routes the package through vanilla's load/has_loaded gate"
