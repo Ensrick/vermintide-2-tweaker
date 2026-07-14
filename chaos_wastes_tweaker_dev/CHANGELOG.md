@@ -1,5 +1,13 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.282-dev (2026-07-14) - #345 CT localization status reconciliation [verify-fix; not deployed]
+
+- Re-derived the affected Chaos Wastes option titles from the live GitHub issue state instead of applying #345's July 5 snapshot mechanically. Removed closed #156/#131 references and the orphaned `[verify-fix]`/`[diag]` tags they had supplied; retained open diagnostics for #52/#251/#249 and verification for #256/#299.
+- Moved #144 from the navigation-only `starting_boons_group` header to the two behavioral Vaul's Anvil rows that own registration and starting acquisition. The live issue has `verify-fix` but no `diagnostics-armed` label, so both rows use `[verify-fix] [Issue 144]` without `[diag]`.
+- Preserved already-current rows: progressive difficulty remains `[untested]` after closed #291, and Finale God remains `[diag] [Issue 135]` after closed #145. Added offline exact-row coverage and runtime check `issue345_ct_localization_status_sync`.
+
+**Verification:** run `/ct_regression_test` and require `PASS: issue345_ct_localization_status_sync`. The offline Lua suite and `qa/check_issue_tag_sync.ps1` must report no #345 CT-row stale or label-missing findings. No gameplay behavior changes.
+
 ## 0.7.281-dev (2026-07-14) - #361 Rotten Miasma customization [verify-fix-coop; not deployed]
 
 - Added a Rotten Miasma subgroup under Curses with an opt-in permanent purifying-torch carrier, a 2-30 metre safe-area radius slider (vanilla 8), and a 0.1-5 second stack-interval slider (vanilla 1.3).

@@ -18,7 +18,7 @@ local loc = {
     campaign_scenarios_group     = { en = "[working] Campaign Scenarios" },
     event_missions_group         = { en = "[working] Event Missions" },
     no_book_locations_tooltip    = { en = "No tome/grimoire spawners on this mission, so no Chests of Trials. Other CW pickups still spawn." },
-    inject_adventure_maps        = { en = "[verify-fix] [diag] [Issue 156, 52 & 251] Inject Adventure Missions into CW Map Pool" },
+    inject_adventure_maps        = { en = "[diag] [Issue 52 & 251] Inject Adventure Missions into CW Map Pool" },
     inject_adventure_maps_tooltip = { en = "Experimental. Injected missions carry Chaos Wastes pickups and altars, and their tome and grimoire spots become Chests of Trials. Finale arenas, the Citadel of Eternity, and Belakor's Temple are never replaced.\n\nHost-only. Requires game restart." },
     -- #457: shared tooltips for the mission-group master toggles. Master + advanced
     -- per-mission list; the pool floor makes a "disable everything" config safe.
@@ -244,7 +244,7 @@ local loc = {
     tweak_shard_strike_duration = { en = "[working] Rework: Shard Strike duration (sec)" },
     tweak_shard_strike_duration_tooltip = { en = "Stagger aura on Shard Strike (Armor Breaker) lasts this long. Vanilla 16 seconds; range 1-16." },
     -- v0.7.34: Trait-as-Boon. Each toggle enables the corresponding trait's effect as a Unique-rarity boon.
-    enable_boon_vauls_anvil = { en = "[working] Rework: Vaul's Anvil as Boon (Unique)" },
+    enable_boon_vauls_anvil = { en = "[verify-fix] [Issue 144] Rework: Vaul's Anvil as Boon (Unique)" },
     enable_boon_vauls_anvil_tooltip = { en = "Passive block while your melee weapon is wielded, with a 10s lockout when your block breaks; added as a Unique boon. Requires a new CW run." },
     enable_boon_manann_tempest = { en = "[working] Rework: Manann's Tempest as Boon (Unique)" },
     enable_boon_manann_tempest_tooltip = { en = "Crits trigger chain lightning, added as a Unique boon that stacks with the trait. Requires a new Chaos Wastes run." },
@@ -376,7 +376,7 @@ local loc = {
     ["9"] = { en = "9" },
     ["10"] = { en = "10" },
     cursed_chest_count = { en = "[diag] [Issue 132 & 60] Chests of Trials per Mission" },
-    respawn_on_chest_complete = { en = "[verify-fix] [diag] [Issue 299] Revive Team on Chest Completion" },
+    respawn_on_chest_complete = { en = "[verify-fix] [Issue 299] Revive Team on Chest Completion" },
     respawn_on_chest_complete_tooltip = { en = "When a Chest of Trials is completed, revive knocked-down players and respawn dead players with a wound and 50%% temporary health. Host-only." },
 
     -- ============================================================
@@ -435,8 +435,8 @@ local loc = {
     description_ct_meta_movespeed  = { en = "+1%% movement speed per active boon." },
     -- v0.7.43: Quiver Cascade (+5% ammo per boon, ranged-secondary required for any effect)
     -- v0.7.72: also extends max overheat (Sienna staves, Bardin drakefire) and Moonfire Bow energy capacity.
-    disable_boon_ct_meta_ammo = { en = "[verify-fix] [diag] [Issue 256, 249 & 131] Disable Boon: (Mod Boon) Quiver Cascade" },
-    start_boon_ct_meta_ammo   = { en = "[verify-fix] [diag] [Issue 256, 249 & 131] Starting Boon: (Mod Boon) Quiver Cascade" },
+    disable_boon_ct_meta_ammo = { en = "[verify-fix] [diag] [Issue 256 & 249] Disable Boon: (Mod Boon) Quiver Cascade" },
+    start_boon_ct_meta_ammo   = { en = "[verify-fix] [diag] [Issue 256 & 249] Starting Boon: (Mod Boon) Quiver Cascade" },
     disable_boon_ct_meta_ammo_tooltip = { en = "(Mod Boon) Per active boon: +5%% total ammo, -5%% overheat per cast (Sienna staves, Bardin drakefire), +5%% Moonfire Bow energy. Exotic. Inert without a ranged weapon." },
     start_boon_ct_meta_ammo_tooltip   = { en = "(Mod Boon) Per active boon: +5%% total ammo, -5%% overheat per cast, +5%% Moonfire energy. Exotic." },
     display_name_ct_meta_ammo = { en = "Quiver Cascade" },
@@ -455,7 +455,7 @@ local loc = {
     -- disabled <label>..."). Not a menu option title, so no status tag.
     ct_gated_modded_boons = { en = "Modded Boons and Miracles" },
     disable_boon_ct_boon_vauls_anvil = { en = "[working] Disable Boon: (Mod Boon) Vaul's Anvil" },
-    start_boon_ct_boon_vauls_anvil   = { en = "[working] Starting Boon: (Mod Boon) Vaul's Anvil" },
+    start_boon_ct_boon_vauls_anvil   = { en = "[verify-fix] [Issue 144] Starting Boon: (Mod Boon) Vaul's Anvil" },
     disable_boon_ct_boon_vauls_anvil_tooltip = { en = "(Mod Boon) Boon variant with the same effect as the trait. Requires the matching Rework toggle." },
     start_boon_ct_boon_vauls_anvil_tooltip   = { en = "(Mod Boon) Start with this boon. Requires the matching Rework toggle." },
     disable_boon_ct_boon_manann_tempest = { en = "[working] Disable Boon: (Mod Boon) Manann's Tempest" },
@@ -484,7 +484,7 @@ local loc = {
     disable_boon_bombs_group = { en = "[working] Disable Boons: Bomb Boons" },
     start_boon_bombs_group = { en = "[working] Starting Boons: Bomb Boons" },
     disabled_boons_group = { en = "Disabled Boons" },
-    starting_boons_group = { en = "[Issue 144] Starting Boons" },
+    starting_boons_group = { en = "Starting Boons" },
     -- v0.7.27c parent group display names
     disable_boon_defensive_boons_group = { en = "[working] Disable Boons: Defensive" },
     start_boon_defensive_boons_group = { en = "[working] Starting Boons: Defensive" },

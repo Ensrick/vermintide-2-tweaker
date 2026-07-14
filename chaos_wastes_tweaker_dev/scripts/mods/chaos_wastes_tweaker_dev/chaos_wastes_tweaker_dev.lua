@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.281-dev"
+local MOD_VERSION = "0.7.282-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -352,6 +352,31 @@ mod:command("ct_regression_test", "Run regression smoke checks for past bugs", f
     mod:echo("=== %d passed, %d failed ===", pass, fail)
 end)
 pcall(printf, "[regression-test-command] registered as /ct_regression_test")
+
+-- #345: keep the CT dev option-title status surface aligned with the live
+-- issue labels. This runtime contract complements the offline source test:
+-- VMF must actually resolve the authored rows to the expected visible prefix.
+_rt_register("issue345_ct_localization_status_sync", function()
+    local expected = {
+        inject_adventure_maps = "[diag] [Issue 52 & 251] ",
+        progressive_difficulty = "[untested] ",
+        finale_dominant_god = "[diag] [Issue 135] ",
+        respawn_on_chest_complete = "[verify-fix] [Issue 299] ",
+        disable_boon_ct_meta_ammo = "[verify-fix] [diag] [Issue 256 & 249] ",
+        start_boon_ct_meta_ammo = "[verify-fix] [diag] [Issue 256 & 249] ",
+        enable_boon_vauls_anvil = "[verify-fix] [Issue 144] ",
+        start_boon_ct_boon_vauls_anvil = "[verify-fix] [Issue 144] ",
+    }
+    for key, prefix in pairs(expected) do
+        local text = mod:localize(key)
+        if type(text) ~= "string" or text:sub(1, #prefix) ~= prefix then
+            return string.format("#345 status drift: %s resolved to %s", key, tostring(text))
+        end
+    end
+    if mod:localize("starting_boons_group") ~= "Starting Boons" then
+        return "#345 status drift: navigation-only starting_boons_group is tagged"
+    end
+end)
 
 -- Mutex cluster framework (v0.7.85 — replaces the Miracle of Isha dropdown
 -- with a (A)/(B) checkbox cluster). See chaos_wastes_tweaker_mutex.lua's

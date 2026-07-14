@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+### dev-localization-status-sync - issue #345
+
+| Field | Value |
+|---|---|
+| Symptom | CT dev option titles retained closed issue numbers or status tags no longer backed by the live GitHub labels. |
+| Root cause | The July 5 audit snapshot was not reconciled as related issues closed, changed labels, or gained a more precise behavioral option row. |
+| Fix version(s) | ct_dev 0.7.282-dev (not deployed) |
+| Category | LOCALIZATION / QA / ISSUE-LIFECYCLE |
+| Repro | Compare the affected title prefixes to the current state/labels of #52, #135, #144, #249, #251, #256 and #299. |
+| Expected post-fix | Only open issue numbers remain; `[verify-fix]` and `[diag]` exactly follow their paired live labels; the Starting Boons navigation group is untagged. |
+| Detection | Offline `test_ct_issue345_loc_status.lua`; `/ct_regression_test`: `issue345_ct_localization_status_sync`; advisory `qa/check_issue_tag_sync.ps1`. |
+
 ### manann-tempest-owner-cooldown-display - issue #358
 
 | Field | Value |
