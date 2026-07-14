@@ -68,7 +68,7 @@ Mission ends
 | Claim achievements (batch) | (same) | `claim_multiple_achievement_rewards_request_cb` (loot_playfab.lua:678) |
 | Claim quest/daily (single) | `generateQuestRewards` | `BackendInterfaceQuestsPlayfab.claim_quest_rewards` (`backend_interface_quests_playfab.lua:285`) |
 | Claim quests/dailies (batch) | `generateQuestRewards` | `BackendInterfaceQuestsPlayfab.claim_multiple_quest_rewards` (`backend_interface_quests_playfab.lua:500`) |
-| Lohner's purchase | `PurchaseItem` + `storePurchaseMade` | `_exchange_chips_success_cb` (peddler_playfab.lua:676), `_store_purchase_made_cb` (peddler_playfab.lua:723) |
+| Lohner's purchase | `PurchaseItem` + `storePurchaseMade` | `_exchange_chips_success_cb` (peddler_playfab.lua:676), `_store_purchase_made_cb` (peddler_playfab.lua:723). **Implemented for SM offers in #577:** exact local offer validation + one durable debit/grant transaction + native mirror overlay; official/non-SM delegate unchanged. |
 | Daily login rewards | `claimStoreRewards` | `_claim_store_rewards_cb` (peddler_playfab.lua:830). **Current #589 safety boundary:** popup remains disabled and both UI/backend claim methods fail closed in the modded realm; do not re-enable until this mixed item/currency callback has a durable local transaction. |
 | Forge / salvage / re-roll / upgrade | `BackendInterfaceCraftingPlayfab.*` | (open research — item #1) |
 
@@ -249,7 +249,7 @@ Single intercept point covers all five craft pages.
 3. **End-of-mission rewards** — intercept `generate_end_of_level_loot`, build local loot table, call mirror mutators. Verify XP credit, shillings credit, chest enters inventory.
 4. **Loot chest opening** — intercept `open_loot_chest`. Verify items grant and chest decrements.
 5. **Okri's Challenges** — un-gate tracking; intercept `claim_achievement_rewards` / `claim_multiple_achievement_rewards`. Verify claim popup grants items.
-6. **Lohner's Emporium** — intercept `exchange_chips` / `_store_purchase_made_cb` / `claim_login_rewards`.
+6. **Lohner's Emporium** — SM `exchange_chips` purchase path implemented in #577. Versus/event currency purchases remain future work; `claim_login_rewards` remains fail-closed under #589 until its mixed reward transaction exists.
 7. **Crafting bench** — intercept the single `BackendInterfaceCraftingPlayfab:craft` method. Branch on recipe name; local roll; mutate item via mirror. Requires the runtime-dumped `crafting_recipes` + `CraftingData` tables first.
 8. **Starting-state seeder** — first-run seed for the three options, one-shot flag.
 9. **Sibling API** — expose `mp.is_unlocked` / `mp.grant_item` / `mp.spend` / `mp.credit`. CWV + cosmetics_tweaker gating hooks land in those mods.

@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.23-dev"
+local MOD_VERSION = "0.2.24-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -266,6 +266,7 @@ end
 -- ============================================================
 local Dailies = mod:dofile("scripts/mods/modded_progression/mp_dailies")
 local ShillingUI = mod:dofile("scripts/mods/modded_progression/_mp_shilling_ui_policy")
+local Emporium = mod:dofile("scripts/mods/modded_progression/_mp_emporium_policy")
 local _local_quest_rewards = {}
 local _local_poll_serial = 0
 
@@ -343,7 +344,7 @@ end
 
 mod.is_unlocked = function(item_key)
     if not is_seeded() then return true end  -- pre-seed: don't gate anything
-    return get_unlock_store()[item_key] == true
+    return get_unlock_store()[item_key] == true or Dailies.emporium_unlocked(item_key)
 end
 
 mod.mark_unlocked = function(item_key)
@@ -517,6 +518,122 @@ end)
 -- look like official realm and leak the vanilla daily list back into MP.
 local function _is_mp_realm()
     return script_data["eac-untrusted"] == true or (mod._mp_modded_depth or 0) > 0
+end
+
+-- #577: persisted Emporium grants are overlaid onto the native mirror only in
+-- the modded realm. The durable transaction lives in mp_daily_v2; this table
+-- tracks reversible presentation mutations for the current mirror instance.
+local _mp577_runtime = { applied = {} }
+
+local function _mp577_mirror_ready(mirror)
+    if not mirror then return false end
+    if type(mirror.ready) ~= "function" then return true end
+    local ok, ready = pcall(mirror.ready, mirror)
+    return ok and ready == true
+end
+
+local function _mp577_copy(value, seen)
+    if type(value) ~= "table" then return value end
+    seen = seen or {}
+    if seen[value] then return seen[value] end
+    local copy = {}
+    seen[value] = copy
+    for key, child in pairs(value) do copy[_mp577_copy(key, seen)] = _mp577_copy(child, seen) end
+    return copy
+end
+
+local function _mp577_apply_item(mirror, item)
+    if type(mirror) ~= "table" or type(item) ~= "table" then return nil, "mirror_or_item_missing" end
+    local key, backend_id = item.ItemId, item.ItemInstanceId
+    local data = ItemMasterList and rawget(ItemMasterList, key)
+    if type(key) ~= "string" or type(backend_id) ~= "string" or type(data) ~= "table" then
+        return nil, "item_definition_missing"
+    end
+    local actual_id, kind
+    if WeaponSkins and WeaponSkins.skins and WeaponSkins.skins[key] then
+        local ids = mirror:add_unlocked_weapon_skin(key, backend_id)
+        actual_id, kind = ids and ids[1], "weapon_skin"
+    elseif CosmeticUtils and CosmeticUtils.is_cosmetic_item(data.slot_type) then
+        actual_id, kind = mirror:add_unlocked_cosmetic(key, backend_id), "cosmetic"
+    elseif CosmeticUtils and CosmeticUtils.is_weapon_pose(data) then
+        actual_id, kind = mirror:add_unlocked_weapon_pose(key, backend_id), "weapon_pose"
+    else
+        mirror:add_item(backend_id, _mp577_copy(item), true, true)
+        actual_id, kind = backend_id, "item"
+    end
+    if not actual_id then return nil, "mirror_grant_failed" end
+    _mp577_runtime.applied[backend_id] = {
+        actual_id = actual_id, item_key = key, kind = kind, parent = data.parent,
+    }
+    return actual_id
+end
+
+local function _mp577_cleanup_overlay()
+    local mirror = _mp577_runtime.mirror
+    if type(mirror) == "table" then
+        for _, record in pairs(_mp577_runtime.applied) do
+            local id, key = record.actual_id, record.item_key
+            if mirror._inventory_items then mirror._inventory_items[id] = nil end
+            if mirror._fake_inventory_items then mirror._fake_inventory_items[id] = nil end
+            if record.kind == "weapon_skin" and mirror._unlocked_weapon_skins then
+                mirror._unlocked_weapon_skins[key] = nil
+            elseif record.kind == "cosmetic" and mirror._unlocked_cosmetics then
+                mirror._unlocked_cosmetics[key] = nil
+            elseif record.kind == "weapon_pose" and mirror._unlocked_weapon_poses then
+                local poses = mirror._unlocked_weapon_poses[record.parent]
+                if poses then poses[key] = nil end
+            end
+        end
+    end
+    _mp577_runtime.applied = {}
+    _mp577_runtime.mirror = nil
+    _mp577_runtime.revision = nil
+end
+
+local function _mp577_sync_overlay(peddler)
+    if not _is_mp_realm() then
+        if _mp577_runtime.mirror then _mp577_cleanup_overlay() end
+        return false, "official_realm"
+    end
+    if not peddler then
+        local backend = Managers and Managers.backend
+        local ok, interface = backend and pcall(backend.get_interface, backend, "peddler")
+        peddler = ok and interface
+    end
+    local mirror = peddler and peddler._backend_mirror
+    if not _mp577_mirror_ready(mirror) then return false, "mirror_not_ready" end
+    if _mp577_runtime.mirror ~= mirror then
+        _mp577_cleanup_overlay()
+        _mp577_runtime.mirror = mirror
+    end
+    local revision = Dailies.ui_revision()
+    if _mp577_runtime.revision == revision then return true end
+    for backend_id, item in pairs(Dailies.emporium_inventory()) do
+        if not _mp577_runtime.applied[backend_id] then
+            local applied, reason = _mp577_apply_item(mirror, item)
+            if not applied then return false, reason end
+        end
+    end
+    _mp577_runtime.revision = revision
+    return true
+end
+
+local function _mp577_owned(item_key, offer)
+    if offer and offer.owned or Dailies.emporium_unlocked(item_key)
+            or get_unlock_store()[item_key] == true then return true end
+    local inventory = get_inventory_store()
+    for _, item in pairs(inventory) do
+        if type(item) == "table" and item.ItemId == item_key then return true end
+    end
+    local backend = Managers and Managers.backend
+    local ok_interface, items = backend and pcall(backend.get_interface, backend, "items")
+    items = ok_interface and items
+    if items then
+        local ok_item, has_item = pcall(items.has_item, items, item_key)
+        local ok_skin, has_skin = pcall(items.has_weapon_illusion, items, item_key)
+        if ok_item and has_item or ok_skin and has_skin then return true end
+    end
+    return false
 end
 
 -- Issue #578: the local SM ledger must never masquerade as Fatshark's account
@@ -788,11 +905,68 @@ end)
 
 mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips", function(func, self, item_id, chip_type, price, callback_fn, ...)
     if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then
-        _dbg_alert("blocked official SM purchase item=%s price=%s; local item grant not armed", tostring(item_id), tostring(price))
-        if callback_fn then callback_fn(false) end
+        local offer = Emporium.find_offer(self._peddler_stock, item_id)
+        local data = offer and offer.data
+        local dlc_owned = true
+        if data and data.required_dlc then
+            local unlock = Managers and Managers.unlock
+            local ok, owned = unlock and pcall(unlock.is_dlc_unlocked, unlock, data.required_dlc)
+            dlc_owned = ok and owned == true
+        end
+        local mirror = self._backend_mirror
+        local mirror_ready = _mp577_mirror_ready(mirror)
+        local plan, reason = Emporium.validate({
+            offer = offer,
+            currency = chip_type,
+            expected_price = price,
+            balance = Dailies.balance(),
+            owned = offer and _mp577_owned(item_id, offer),
+            available = mirror_ready and offer ~= nil,
+            dlc_owned = dlc_owned,
+        })
+        if not plan then
+            pcall(printf, "[mp:577] purchase_rejected item=%s reason=%s backend=none",
+                tostring(item_id), tostring(reason))
+            if callback_fn then callback_fn(false) end
+            return
+        end
+        local granted, balance_or_reason = Dailies.purchase(plan)
+        if not granted then
+            pcall(printf, "[mp:577] purchase_rejected item=%s reason=%s backend=none",
+                tostring(item_id), tostring(balance_or_reason))
+            if callback_fn then callback_fn(false) end
+            return
+        end
+        offer.owned = true
+        local overlaid, overlay_reason = _mp577_sync_overlay(self)
+        mod._mp577_last_purchase = {
+            item_key = item_id,
+            backend_id = granted.ItemInstanceId,
+            balance = balance_or_reason,
+            overlaid = overlaid == true,
+        }
+        pcall(printf, "[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none",
+            tostring(item_id), plan.price, balance_or_reason, overlaid and "ready" or tostring(overlay_reason))
+        if callback_fn then callback_fn(true, { granted }) end
         return
     end
     return func(self, item_id, chip_type, price, callback_fn, ...)
+end)
+
+_rt_register("mp577_backend_free_emporium_purchase", function()
+    if type(Emporium.validate) ~= "function" or type(Dailies.purchase) ~= "function" then
+        return "local Emporium transaction boundary missing"
+    end
+    local offer = {
+        key = "mp577_rt_hat",
+        data = { slot_type = "hat" },
+        regular_prices = { SM = 10 }, current_prices = { SM = 10 },
+    }
+    local plan = Emporium.validate({ offer = offer, currency = "SM", expected_price = 10,
+        balance = 10, owned = false, available = true, dlc_owned = true })
+    if not plan or plan.item.ItemId ~= offer.key or plan.price ~= 10 then
+        return "local offer did not produce a complete exact grant plan"
+    end
 end)
 
 -- Defense in depth for #589. The UI hook below is the normal interception,
@@ -1004,7 +1178,11 @@ if get_schema_version() < SCHEMA_VERSION then
 end
 
 -- Boot-time overlay is gated on backend readiness — defer.
--- TODO step 1.b: wire to Managers.backend:ready() or PlayFabMirrorBase init completion.
--- apply_mirror_overlay() will fire from that hook once available.
+-- #577 owns the first durable mirror slice. Its runtime sync is scalar-gated by
+-- the ledger UI revision and reverses exact local additions on official-realm
+-- transition; unchanged frames allocate nothing.
+function mod.update(dt)
+    _mp577_sync_overlay()
+end
 
 mod:info("[mem-probe] mp boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_MP) / 1024)

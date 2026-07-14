@@ -4,6 +4,8 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
+- [ ] #577: one modded SM purchase debits local shillings once, grants/owns the exact item immediately and after restart, and never enqueues `PurchaseItem` or `storePurchaseMade`.
+- [ ] #577: repeat/double activation, stale price, owned item, insufficient funds, unavailable/DLC/platform/bundle offer, and failed persistence cannot double-spend or partially grant; official purchase remains vanilla.
 - [ ] #578: modded Emporium wallet, tooltip, SM purchase action, daily reward row, and claim popup say local/Modded Progression; official play has no local label.
 - [ ] #578: claim, credit, debit, `/mp_reset`, and realm transition invalidate wallet/preview affordability; `/mp_regression_test` passes `mp578_local_shilling_ui_lifecycle`.
 - [ ] #581: startup/keep challenge-board polling never reads an `mp_daily_v2_*` key from `StatisticsDatabase`; `/mp_regression_test` passes `mp581_owned_daily_bypasses_statistics_db`.
@@ -14,6 +16,18 @@ Last updated: 2026-07-13.
 
 ---
 ## Backend isolation
+
+### mp-emporium-purchase-local — SM purchase must be one durable backend-free transaction
+
+| Field | Value |
+|-------|-------|
+| Symptom | The Emporium buy UI is enabled in modded play, but purchase either calls PlayFab or cannot debit the isolated ledger and grant the selected item. |
+| Root cause | Vanilla `exchange_chips` enqueues `PurchaseItem`, then performs mirror mutation, chip debit, and `storePurchaseMade` in separate authenticated callbacks. |
+| Fix version(s) | mp v0.2.24-dev |
+| Category | INTEGRATION / CRITICAL |
+| Repro | With enough local SM, buy an unowned Silver Shilling cosmetic in modded play; repeat activation, reopen the store, and restart. |
+| Expected post-fix | Debit, exact grant, unlock, and transaction markers persist together once; native inventory/store sees the mirror overlay; no PlayFab request occurs. Official play remains native. |
+| Detection | `/mp_regression_test` passes `mp577_backend_free_emporium_purchase`; offline `test_mp_emporium_purchase.lua` covers validation, duplicates, and persistence failure. Log has one bounded `[mp:577] purchase_committed ... backend=none` line and no `PurchaseItem`/`storePurchaseMade` request. |
 
 ### mp-quest-surface-owned - official rows and refresh requests cannot enter modded play
 

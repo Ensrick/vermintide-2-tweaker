@@ -1,5 +1,17 @@
 # Modded Progression — Changelog
 
+## 0.2.24-dev (2026-07-13) - #577 backend-free Emporium purchases [not deployed]
+
+- Silver Shilling purchases in the modded realm now resolve the selected native stock row, validate its current SM price, availability, DLC ownership, existing ownership, and the local ledger balance, then persist the debit, exact item grant, unlock, and transaction markers in one VMF setting write. No `PurchaseItem`, `storePurchaseMade`, or other PlayFab request is issued.
+- Purchase identity and item instance ids are deterministic. A repeated callback, double-click, stale popup price, already-owned item, or restart replay cannot spend or grant twice. A failed persistence write leaves the prior ledger and inventory state unchanged.
+- Durable local grants are applied through the same backend-mirror item/cosmetic/weapon-skin/weapon-pose mutators used by the vanilla success callback, so native inventory and store ownership refresh without fabricating a PlayFab response. The overlay is revision-gated, retried if the mirror is not ready, and removed on transition to official play.
+- Cash/platform, non-SM, DLC-unowned, and bundle offers remain outside this bounded slice. Official-realm purchases delegate to vanilla unchanged; daily login rewards remain fail-closed under #589.
+- Added pure offer-policy and persistence failure-injection coverage plus `/mp_regression_test` check `mp577_backend_free_emporium_purchase`.
+
+**Source audit:** `backend_interface_peddler_playfab.lua:661-707` enqueues `PurchaseItem`, then adds returned items, debits chips, and enqueues `storePurchaseMade`; `:145-205` builds each stock row from `ItemMasterList`, `VirtualCurrencyPrices`, availability, and ownership. `store_item_purchase_popup.lua:1557-1585` passes that row's item key, currency, and price to `exchange_chips`. `playfab_mirror_base.lua:2494-2544` classifies returned items into normal inventory, cosmetics, weapon skins, and weapon poses; the local overlay follows those same branches.
+
+**Test:** In modded play with enough local Silver Shillings, buy one unowned SM cosmetic. Confirm the local balance falls exactly once, the item is immediately owned/equippable, and both survive reopening the store and restarting. Double-click or try to buy it again and confirm there is no second debit or grant. Run `/mp_regression_test` and expect `mp577_backend_free_emporium_purchase`. Enter official play and confirm its inventory, store behavior, and Silver Shilling balance remain native and unchanged by the local purchase.
+
 ## 0.2.23-dev (2026-07-13) - #578 label and refresh local shillings [not deployed]
 
 - The Emporium wallet now renders its modded Silver Shilling balance as `[Local] N`, and its SM tooltip identifies the balance as PC-local Modded Progression state. SM item previews say `Buy with Local Shillings`; daily reward rows and claim popups say `Local Silver Shillings`. Exact-key global localization overrides exist only while MP owns the modded realm, so official play retains every vanilla label.

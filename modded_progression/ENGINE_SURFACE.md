@@ -19,9 +19,9 @@ is NOT one master gate: the PlayFab commit-suppression sites keep the real
 account safe and must stay live, while a separate set of UI sites merely grey out
 buttons and skip reward popups. `mp` therefore flips the flag to nil only inside
 a bracketed window around each vanilla UI/progression call, restores it on every
-exit path, and leaves the commit-suppression gate untouched. As of v0.2.18-dev,
-simulated daily exposure and claim are the first fully local backend interception;
-the remaining `BackendInterface*Playfab` routes in `PLAN.md` are not yet wired.
+exit path, and leaves the commit-suppression gate untouched. As of v0.2.24-dev,
+simulated daily claims and Silver Shilling Emporium purchases have fully local
+backend interceptions; the remaining routes in `PLAN.md` are not yet wired.
 
 ## Hook table
 
@@ -57,8 +57,15 @@ out below and shared by all eight of its callers.
 | Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
 |---|---|---|---|
 | `StoreWindowPanel._sync_player_wallet` [hook] | Called by panel update; compares each `get_chips` result with `_currencies`, then rebuilds all wallet widgets only on a changed cached amount [src: `store_window_panel.lua:169-176,601-652`] | Invalidate cached SM on ledger revision/realm edges and label the rebuilt number `[Local]` | Uses the native update call, not a new poll; unchanged frames compare scalars and allocate nothing; official transition forces a clean native rebuild even if both balances are numerically equal |
-| `StoreWindowItemPreview._sync_products_version` / `_set_price` [hooks] | Product-version changes force `_sync_presentation_item`, which recalculates affordability; `_set_price` populates the purchase widget [src: `store_window_item_preview.lua:401-443,872-993,1281-1321,1637-1661`] | Merge the local ledger revision into native product invalidation and label the SM action `Buy with Local Shillings` | Official/non-SM title is restored; no purchase boundary changes (issue #577 remains separate) |
+| `StoreWindowItemPreview._sync_products_version` / `_set_price` [hooks] | Product-version changes force `_sync_presentation_item`, which recalculates affordability; `_set_price` populates the purchase widget [src: `store_window_item_preview.lua:401-443,872-993,1281-1321,1637-1661`] | Merge the local ledger revision into native product invalidation and label the SM action `Buy with Local Shillings` | Official/non-SM title is restored; the actual SM transaction is owned by the #577 boundary below |
 | `_G.Localize` / `BackendUtils.get_fake_currency_item` [hook,tbl] | Vanilla fake-currency helper returns a fresh clone, item key, and claim-description key consumed by challenge rows/reward popup [src: `backend_utils.lua:326-348`; `hero_view_state_achievements.lua:769-779,1580-1696`] | Supply realm-scoped local SM names/descriptions for reward and tooltip surfaces | Exact keys and `SM` only; official realm delegates unchanged; VMF mod localization is private, so the global hook is required for vanilla `Localize` consumers |
+
+### Backend-free Emporium purchase (issue 577; owner docs: `docs/engine/11`)
+
+| Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
+|---|---|---|---|
+| `BackendInterfacePeddlerPlayFab.exchange_chips` [hook] | Enqueues `PurchaseItem`; its success callback adds returned items to the mirror, debits chips, then enqueues `storePurchaseMade` [src: `backend_interface_peddler_playfab.lua:661-707`] | For a modded-realm SM offer, validate the live stock row and atomically persist the local debit, exact item, unlock, and duplicate markers before calling the native callback contract | No PlayFab call is made; deterministic transaction/item ids make duplicate callbacks idempotent; official and non-SM calls delegate unchanged |
+| `mod.update` (revision-gated overlay, not a hook) | Vanilla callbacks classify returned item data through the mirror's normal item/cosmetic/weapon-skin/weapon-pose mutators [src: `playfab_mirror_base.lua:2494-2544`] | Reapply persisted MP grants when the mirror becomes ready or its local revision changes, so existing store/inventory consumers see native-shaped records | Unchanged frames compare one scalar and allocate no tables; a failed overlay retries, and official transition removes only tracked MP instance ids |
 
 ### Achievement progress tracking (row-of-concern) (owner doc: `docs/engine/11`)
 
@@ -98,16 +105,13 @@ global, so it carries no suppression exposure.
 
 ### Backend mirror as the single source of truth (owner: `docs/engine/11`)
 
-The design (not yet wired, PLAN.md "Interception map") is that the in-memory
-`backend_mirror` is what every UI screen, `can_wield` check, and currency display
-reads. The planned interceptions catch each `BackendInterface*Playfab.*` method
-before it queues a cloud-script call, roll the data locally, and call the same
-`backend_mirror:*` mutator the success callback would have - so the rest of the
-game cannot tell the difference. Persistence is a re-serialize of the modded
-mirror slice back to VMF settings on every mutation, re-applied over the fresh
-real-account mirror at boot (PLAN.md "Local persistence model"). Until those land,
-the currency/unlock/inventory stores (`:195`-`:349`) and the sibling API are
-backed directly by VMF settings.
+The in-memory `backend_mirror` is what inventory, ownership, and equipment
+consumers read. Issue #577 wires the first durable inventory slice: the local
+transaction is committed to VMF settings first, then its exact item record is
+classified through the same mirror mutator family as vanilla. The overlay is
+re-applied over a fresh mirror after boot and removed on official transition.
+Other progression slices remain backed directly by the currency/unlock/inventory
+stores (`:195`-`:349`) until their planned interceptions land.
 
 ### Sibling API surface (owner: `docs/engine/11`; detail: `docs/CROSS_MOD_ARCHITECTURE.md` Mod 4)
 

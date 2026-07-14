@@ -116,6 +116,14 @@ local function normalized_ledger(ledger)
     return ledger
 end
 
+local function normalized_emporium(emporium)
+    emporium = type(emporium) == "table" and deep_copy(emporium) or {}
+    emporium.inventory = type(emporium.inventory) == "table" and emporium.inventory or {}
+    emporium.unlocks = type(emporium.unlocks) == "table" and emporium.unlocks or {}
+    emporium.transactions = type(emporium.transactions) == "table" and emporium.transactions or {}
+    return emporium
+end
+
 local function new_state(period, previous, reason)
     local revision = type(previous) == "table" and tonumber(previous.revision) or 0
     return {
@@ -127,6 +135,7 @@ local function new_state(period, previous, reason)
         last_wall_time = os.time(),
         entries = build_roster(period),
         ledger = normalized_ledger(previous and previous.ledger),
+        emporium = normalized_emporium(previous and previous.emporium),
         migration = {
             legacy_simulated_dailies_retired = true,
             legacy_currency_not_imported = true,
@@ -407,6 +416,71 @@ end
 function M.spend(amount)
     amount = math.max(0, math.floor(tonumber(amount) or 0))
     return ledger_adjust(-amount, "local_spend")
+end
+
+function M.purchase(plan)
+    if type(plan) ~= "table" or type(plan.tx_id) ~= "string"
+            or type(plan.item_key) ~= "string" or type(plan.backend_id) ~= "string"
+            or type(plan.item) ~= "table" then
+        return nil, "invalid_purchase_plan"
+    end
+    local price = math.floor(tonumber(plan.price) or -1)
+    if price < 0 then return nil, "invalid_purchase_price" end
+
+    local state = M.ensure()
+    state.emporium = normalized_emporium(state.emporium)
+    if state.emporium.transactions[plan.tx_id] or state.emporium.unlocks[plan.item_key] then
+        return nil, "already_purchased"
+    end
+    if state.ledger.balance < price then return nil, "insufficient_funds" end
+
+    local next_state = deep_copy(state)
+    next_state.ledger.balance = next_state.ledger.balance - price
+    next_state.revision = (tonumber(next_state.revision) or 0) + 1
+    next_state.emporium.inventory[plan.backend_id] = deep_copy(plan.item)
+    next_state.emporium.unlocks[plan.item_key] = true
+    next_state.emporium.transactions[plan.tx_id] = {
+        kind = "emporium_purchase",
+        item_key = plan.item_key,
+        backend_id = plan.backend_id,
+        currency = plan.currency,
+        amount = -price,
+        period = next_state.period,
+    }
+    next_state.ledger.transactions[plan.tx_id] = {
+        kind = "emporium_purchase",
+        item_key = plan.item_key,
+        amount = -price,
+        period = next_state.period,
+    }
+
+    local wrote, write_error = write_state(next_state)
+    if not wrote then return nil, "purchase_write_failed:" .. tostring(write_error) end
+    local verified = read_state()
+    local emporium = verified and verified.emporium
+    if not verified or not verified.ledger
+            or verified.ledger.balance ~= next_state.ledger.balance
+            or not verified.ledger.transactions[plan.tx_id]
+            or not emporium or not emporium.transactions[plan.tx_id]
+            or not emporium.unlocks[plan.item_key]
+            or not emporium.inventory[plan.backend_id] then
+        return nil, "purchase_verify_failed"
+    end
+    log("emporium_purchase item=%s price=%d balance=%d revision=%d",
+        plan.item_key, price, verified.ledger.balance, verified.revision)
+    return deep_copy(emporium.inventory[plan.backend_id]), verified.ledger.balance
+end
+
+function M.emporium_inventory()
+    local state = M.ensure()
+    return normalized_emporium(state.emporium).inventory
+end
+
+function M.emporium_unlocked(item_key)
+    local state = M.ensure()
+    local emporium = state.emporium
+    return type(emporium) == "table" and type(emporium.unlocks) == "table"
+        and emporium.unlocks[item_key] == true
 end
 
 function M.seconds_until_reset(now)
