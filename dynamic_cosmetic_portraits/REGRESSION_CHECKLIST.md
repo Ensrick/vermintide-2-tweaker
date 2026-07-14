@@ -40,14 +40,14 @@ Last updated: 2026-07-14.
 
 | Field | Value |
 |-------|-------|
-| Symptom | A custom mission-completion portrait draws as an opaque rectangle whose corners extend outside the octagonal frame, while adjacent vanilla portraits clip correctly. |
-| Root cause | Correct source-PNG transparency was compiled behind ordinary `gui:DIFFUSE_MAP`; the standalone cutout material did not request the explicit masked Gui shader. |
+| Symptom | The masked-gradient #526 follow-up made Kruber's custom portrait fully transparent. Before that experiment, mission-completion corners could extend outside the octagonal frame. |
+| Root cause | `gui_gradient:DIFFUSE_MAP:MASKED` was assumed compatible from another atlas material, but DCP's standalone portrait draw rendered it invisible even though material readiness succeeded. |
 | Mod(s) | dynamic_cosmetic_portraits |
 | Fix version(s) | dynamic_cosmetic_portraits v0.1.22-dev |
 | Category | INTEGRATION / ASSET |
 | Repro | Equip a tracked Kruber Mercenary cosmetic, finish a mission, and inspect the Kruber portrait tile. |
-| Expected post-fix | The 86x108 custom portrait is visible only inside its authored alpha silhouette; no rectangular corner extends beyond the frame. HUD and Tab portraits remain visible. |
-| Detection | Offline `test_dcp_portrait_materials.lua` checks all 24 HUD/small materials plus the generator policy. `/dcp_regression_test` passes `portrait_cutout_materials_use_masked_shader_526`. Final evidence is one solo score-screen visual check. |
+| Expected post-fix | Custom portraits remain visible on HUD, Tab, and score surfaces. The PNG alpha remains conformant; the remaining score-frame clipping investigation must not replace the material with the incompatible masked-gradient shader. |
+| Detection | Offline `test_dcp_portrait_materials.lua` checks all 36 materials plus the generator policy. `/dcp_regression_test` passes `portrait_materials_use_visible_shader_526`. Final evidence is one solo HUD/Tab/score visual check. |
 | Tracking | GitHub issue #526. |
 
 ### vmf-dropdown-options-mutated — Multi-angle-bracket cascades from shared options table

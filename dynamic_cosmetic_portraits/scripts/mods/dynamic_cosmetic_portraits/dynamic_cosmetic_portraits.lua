@@ -5,7 +5,7 @@ local mod = get_mod("dynamic_cosmetic_portraits")
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.23-dev"
+local MOD_VERSION = "0.1.24-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -703,9 +703,11 @@ _rt_register("hud_alpha_mask_conformance_pipeline", function()
     end
 end)
 
-_rt_register("portrait_cutout_materials_use_masked_shader_526", function()
-    -- Source PNG alpha can conform while the compiled Gui material still
-    -- draws an opaque rectangle. Every HUD/small material explicitly masks.
+_rt_register("portrait_materials_use_visible_shader_526", function()
+    -- The masked-gradient experiment compiled but rendered the custom
+    -- portraits fully transparent. Every standalone material stays on the
+    -- previously proven visible Gui shader while #526's clipping investigation
+    -- continues at the widget/material-contract boundary.
     local ok, info = pcall(debug.getinfo, _rt_register, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
@@ -714,10 +716,10 @@ _rt_register("portrait_cutout_materials_use_masked_shader_526", function()
     if n == 0 then return end
     for _, material_path in ipairs(_PORTRAIT_MATERIALS) do
         local name = material_path:match("([^/]+)$")
-        if name and not name:match("^medium_") then
+        if name then
             local txt = _rt_src_read(root .. "materials/ui/" .. name .. ".material")
-            if txt and not txt:find('shader = "gui_gradient:DIFFUSE_MAP:MASKED"', 1, true) then
-                return name .. " does not use the alpha-respecting MASKED Gui shader"
+            if txt and not txt:find('shader = "gui:DIFFUSE_MAP"', 1, true) then
+                return name .. " does not use the proven visible Gui shader"
             end
         end
     end

@@ -1,5 +1,11 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.24-dev (2026-07-14) -- #526 restore visible custom portraits [diagnostics-armed]
+
+- Reverted the incompatible `gui_gradient:DIFFUSE_MAP:MASKED` experiment on all 24 HUD/small materials. The newest host log proves DCP found the material and swapped Kruber to `portrait_kruber_mercenary_hat_0004`, yet the portrait rendered blank after that shader-only deployment.
+- Kept the corrected vanilla-conformant PNG alpha masks. All 36 portrait materials and the generator now use the previously visible `gui:DIFFUSE_MAP` path; offline/runtime regression coverage rejects reintroducing the blank-material shader.
+- The original score-screen corner clipping in #526 remains open for a different solution. Portrait visibility takes precedence over that cosmetic overflow.
+
 ## 0.1.23-dev (2026-07-14) -- #435 bounded player-scoped portrait evidence [verify-fix-coop]
 
 - Added automatic `[dcp:435]` INFO evidence at the primary per-player HUD, Tab-list, and score-screen seams. Records identify subject class, custom/vanilla resolution, and portrait without peer/account identifiers.

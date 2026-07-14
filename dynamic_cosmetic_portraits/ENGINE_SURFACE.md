@@ -75,10 +75,11 @@ The end-of-round score creates each row with `UIWidgets.create_portrait_frame`
 and passes `career_settings.portrait_image` directly [src:
 `scripts/ui/views/level_end/states/end_view_state_score.lua:479-516`]. The
 widget draws that material as an 86x108 texture pass [src:
-`scripts/ui/ui_widgets_honduras.lua:13766-13869`]. DCP's HUD and small
-standalone materials therefore use `gui_gradient:DIFFUSE_MAP:MASKED`; this is
-the resource-side alpha-cutout contract and adds no Lua hook. Medium portraits
-remain full-bleed under their opaque surround.
+`scripts/ui/ui_widgets_honduras.lua:13766-13869`]. DCP's standalone materials
+use the proven visible `gui:DIFFUSE_MAP` shader. The attempted
+`gui_gradient:DIFFUSE_MAP:MASKED` resource correction made the compiled custom
+portrait fully transparent even though `Gui.material` returned it, so #526's
+remaining score-frame clipping cannot be solved by that shader substitution.
 
 The custom portrait materials are registered through VMF's `custom_gui_textures`
 in `_data.lua` (a data API, not a hook). VMF's `inject_materials` reads the
