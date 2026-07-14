@@ -71,6 +71,19 @@ local function _mimic_dropdown(setting_id, tooltip_id)
     }
 end
 
+local function _personal_difficulty_options()
+    return {
+        { text = "personal_difficulty_auto",        value = "off" },
+        { text = "mimic_opt_normal",                value = "normal" },
+        { text = "mimic_opt_hard",                  value = "hard" },
+        { text = "mimic_opt_harder",                value = "harder" },
+        { text = "mimic_opt_hardest",               value = "hardest" },
+        { text = "mimic_opt_cataclysm",             value = "cataclysm" },
+        { text = "mimic_opt_cataclysm_2",           value = "cataclysm_2" },
+        { text = "mimic_opt_cataclysm_3",           value = "cataclysm_3" },
+    }
+end
+
 -- ============================================================
 -- Per-difficulty Specials widget builders
 -- ============================================================
@@ -342,6 +355,13 @@ return {
                 setting_id  = "enemy_spawns_group",
                 type        = "group",
                 sub_widgets = {
+                    {
+                        setting_id    = "personal_difficulty",
+                        type          = "dropdown",
+                        default_value = "off",
+                        tooltip       = "personal_difficulty_tooltip",
+                        options       = _personal_difficulty_options(),
+                    },
                     -- Difficulty Mimic: override the difficulty key used to
                     -- patch each Current* settings table independently of the
                     -- player's actual difficulty. Lets you play on Champion

@@ -4,7 +4,7 @@ return function(H, repo_root)
 
     local function complete_env()
         local env = {
-            buff_templates = {}, network_buffs = {}, enhancements = {},
+            buff_templates = {}, network_buffs = {}, enhancements = {}, functions = {},
             breeds = {
                 special = { special = true },
                 monster = { boss = true },
@@ -43,10 +43,70 @@ return function(H, repo_root)
         H.equal(summary.template_missing, 0)
         H.equal(summary.wire_missing, 0)
         H.equal(summary.enhancement_missing, 0)
+        H.equal(summary.dependency_missing, 0)
+        H.equal(summary.dependency_wire_missing, 0)
+        H.equal(summary.function_missing, 0)
         H.equal(summary.categories.special, 1)
         H.equal(summary.categories.boss, 1)
         H.equal(summary.categories.elite, 1)
         H.equal(summary.categories.lord, 1)
+    end)
+
+    H.test("ET #453 chain audit follows child buffs and named functions", function()
+        local env = complete_env()
+        local cfg = core.MODIFIERS[1]
+        env.buff_templates[cfg.buff].buffs = {
+            { update_func = "known_update", buff_to_add = "child_buff" },
+        }
+        env.functions.known_update = function() end
+        env.buff_templates.child_buff = { buffs = {} }
+        env.network_buffs.child_buff = 100
+        env.network_buffs[100] = "child_buff"
+        local chain = core.inspect_chain(cfg.buff, env)
+        H.equal(chain.templates, 2)
+        H.equal(chain.functions, 1)
+        H.equal(chain.template_missing, 0)
+        H.equal(chain.wire_missing, 0)
+        H.equal(chain.function_missing, 0)
+
+        env.functions.known_update = nil
+        env.network_buffs[100] = "wrong"
+        chain = core.inspect_chain(cfg.buff, env)
+        H.equal(chain.function_missing, 1)
+        H.equal(chain.wire_missing, 1)
+    end)
+
+    H.test("ET #453 chain traversal is hard capped", function()
+        local env = { buff_templates = {}, network_buffs = {}, functions = {} }
+        for i = 1, 35 do
+            local name = "chain_" .. i
+            local next_name = "chain_" .. (i + 1)
+            env.buff_templates[name] = {
+                buffs = i < 35 and { { buff_to_add = next_name } } or {},
+            }
+            env.network_buffs[name] = i
+            env.network_buffs[i] = name
+        end
+        local chain = core.inspect_chain("chain_1", env)
+        H.equal(chain.templates, 32)
+        H.equal(chain.capped, true)
+    end)
+
+    H.test("ET #453 runtime plan honors capabilities and vanilla breed bans", function()
+        local full = {
+            buff = true, health = true, blackboard = true, nav = true,
+            position = true, side = true, race = true, go_id = true,
+        }
+        local plan = core.runtime_plan("chaos_troll", full, { periodic_shield = true })
+        H.equal(#plan.eligible, 14)
+        H.equal(plan.rejected.banned, 1)
+        H.equal(plan.rejected.prerequisite, 0)
+
+        full.nav = false
+        full.go_id = false
+        plan = core.runtime_plan("elite", full, {})
+        H.equal(plan.rejected.prerequisite, 3)
+        H.equal(#plan.eligible, 12)
     end)
 
     H.test("ET #453 census detects asymmetric wire and authored-row drift", function()
@@ -76,7 +136,12 @@ return function(H, repo_root)
         f:close()
         H.truthy(source:find("issue453_modifier_catalog_wire_ready", 1, true))
         H.truthy(source:find("et_modifier_audit", 1, true))
+        H.truthy(source:find("issue453_live_prerequisite_probe_bounded", 1, true))
+        H.truthy(source:find("observe_enemy_modifier_spawn", 1, true))
         H.equal(source:find("mod:hook", 1, true), nil)
         H.equal(source:find("network_send", 1, true), nil)
+        H.equal(source:find("buff_system:add_buff", 1, true), nil)
+        H.equal(source:find("ai_system:set_attribute", 1, true), nil)
+        H.equal(source:find("start_terror_event", 1, true), nil)
     end)
 end

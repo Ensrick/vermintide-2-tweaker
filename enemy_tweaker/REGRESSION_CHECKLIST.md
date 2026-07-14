@@ -7,14 +7,52 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-14.
 
 ---
+## Personal difficulty combat handicap (#61)
+
+| Field | Detail |
+|---|---|
+| Authority | Client sends only its preset; host keys by authenticated `sender_peer_id` and applies damage. Wrong schema or non-host receiver is inert. |
+| Scope | Direct hostile-AI incoming/outgoing damage only. Friendly fire, environment/self damage, bots, pets, healing, spawns, AI, and enemy health remain vanilla. |
+| Bounds | Auto or target <= host is 1.0x/1.0x; one rank is 1.08x incoming/0.95x outgoing; two or more ranks cap at 1.25x/0.85x. |
+| Offline | `test_et_personal_handicap` covers policy bounds, damage math, authenticated RPC/static authority, hostile-AI gate, settings, and no lookup/buff registration. |
+| Runtime | `/et_regression_test`: `issue61_personal_handicap_authoritative` passes. |
+| Lifecycle | `verify-fix-coop` only. Host Champion, client Cataclysm; verify both damage directions, then Auto, friendly fire, barrel/fall, bot, and pet controls. |
+
+---
 ## Boss idea portability audit (#451)
 
 | Field | Detail |
 |---|---|
 | Safety boundary | Never put `skaven_stormfiend_boss`, `skaven_grey_seer`, `chaos_exalted_sorcerer`, or `chaos_troll_chief` directly into the ordinary monster pool. Their vanilla action sets are arena-coupled. |
-| Automatic diagnostic | On mod load, exactly seven log-only `[et:451]` lines report candidate presence and the four runtime action-shape risks. No user command is required. |
-| Runtime check | `/et_regression_test`: `issue451_boss_ideas_safely_decomposed` reports PASS with six candidates, all source/model breeds present, and four arena-risk markers detected. |
+| Automatic diagnostic | On mod load, exactly seven log-only `[et:451]` lines report breed/model, actions, behavior, inventory, wire, residency, and arena-risk state. |
+| Optional mission census | Run `/et_boss_idea_audit` once in a representative mission. Compare boot/mission `model_resident`; the command adds only one chat summary and never spawns a boss. |
+| Offline | `test_et_boss_ideas` covers catalog bounds, complete structure, package residency separation, and absent-global failure. |
+| Runtime check | `/et_regression_test`: `issue451_boss_ideas_safely_decomposed` reports PASS with six complete source contracts and four arena-risk markers detected. |
 | Lifecycle | `diagnostics-armed`. Convert to `verify-fix-coop` only after one portable clone has an explicit spawn option and peer-safe asset/package coverage. |
+
+---
+## Premium-skin special variants (#452)
+
+| Field | Detail |
+|---|---|
+| Safety boundary | The five Versus appearances are full player cosmetic attachments, not AI `base_unit` replacements. Diagnostics must not spawn/link them or mutate ordinary breeds. |
+| Automatic structure audit | Exactly six boot `[et:452]` rows cover breed/actions, behavior tree, inventory, network lookup, item/cosmetic, package residency, and attachment owner/source-node count. |
+| Natural-spawn audit | The existing `_post_spawn_unit` hook calls a read-only observer. Each target ordinary special logs once per session, with all owner/source nodes counted and at most eight missing names sampled; five rows maximum. |
+| Offline | `test_et_special_variants` covers five-candidate uniqueness, structure readiness, behavior/inventory/wire/node failure, owner-node de-duplication, and absence of spawn/network mutation. |
+| Runtime | `/et_regression_test`: `issue452_special_variant_assets_classified` and `issue452_live_probe_bounded` pass. Normal play should eventually report `compatible=true` for encountered targets. |
+| Lifecycle | `diagnostics-armed` (solo). Do not move to a gameplay fix until owner-node compatibility is known; any rendered appearance or replacement then requires `verify-fix-coop`. |
+
+---
+## Enemy special modifiers (#453)
+
+| Field | Detail |
+|---|---|
+| Catalog | 13 standard BossGrudgeMarks plus Geheimnisnacht Repulse (`shockwave`) and Devious Delvings Berserk (`termite_base`). |
+| Structure audit | `/et_modifier_audit` checks root enhancement/buff/wire identity, recursively follows at most 32 `buff_to_add*` templates, and resolves every named buff callback. |
+| Natural-spawn audit | The singleton `_post_spawn_unit` hook samples two distinct breeds per requested category (eight rows maximum). Rows report required extensions/state, vanilla breed bans, existing enhancements, and eligible/rejected modifier counts without applying anything. |
+| Offline | `test_et_enemy_modifiers` covers catalog, wire/enhancement drift, child/function chains, category precedence, capability rejection, breed bans, and hook ownership. |
+| Runtime | `/et_regression_test`: `issue453_modifier_catalog_wire_ready` and `issue453_live_prerequisite_probe_bounded` pass. Capture representative `[et:453] live` rows. |
+| Lifecycle | `diagnostics-armed` (solo). Actual modifier application changes combat and replication and must move to `verify-fix-coop`. |
 
 ---
 ## Per-difficulty enemy health multiplier (#369)

@@ -109,6 +109,12 @@ local loc = {
     -- ============================================================
     enemy_spawns_group   = { en = "[working] Enemy Spawns" },
 
+    personal_difficulty = { en = "[verify-fix] [Issue 61] Personal difficulty" },
+    personal_difficulty_auto = { en = "Auto (host difficulty)" },
+    personal_difficulty_tooltip = {
+        en = "Choose a difficulty above the host's to apply a personal combat handicap: enemies deal more damage to you and you deal less damage to enemies. The host must run the same Enemy Tweaker version. This does not change spawns, enemy health or AI, healing, wounds, environmental damage, or friendly fire. A choice at or below the host difficulty has no effect.",
+    },
+
     -- Difficulty Mimic — override the difficulty key used by
     -- patch_settings_with_difficulty for individual spawn-side subsystems.
     -- Player/enemy stats stay on the real difficulty; only spawn frequency,

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-14 - Enemy-modifier transitive and live readiness diagnostics
+
+Tweaker: Enemies v0.7.49-dev / issue #453 now proves the full bounded child-buff and named-function contract behind its 15 native modifiers, then reuses the singleton AI post-spawn seam to sample live prerequisite readiness for two distinct breeds per Special, Elite, Boss, and Lord category. The eight-row session cap reports extensions, navigation/state, native breed bans, existing enhancements, and eligible/rejected counts without applying buffs or changing gameplay. Solo diagnostics are armed; implementation remains co-op verification work. No deployment is part of this commit.
+
+## 2026-07-14 - Premium-special AI skeleton compatibility diagnostics
+
+Tweaker: Enemies v0.7.48-dev / issue #452 upgrades the five-skin asset census into an actionable, mutation-free compatibility gate. The structural audit now covers ordinary breed behavior, inventory, wire lookup, base units, and premium attachment node maps. The already-owned post-spawn hook observes each matching ordinary special at most once per session and reports whether its real AI skeleton supplies every owner/source node required by the Versus player mesh, with an eight-node missing sample and five-line session cap. It never spawns, links, or replicates a cosmetic. Solo diagnostics are armed; eventual appearance and peer parity remain co-op work. No deployment is part of this commit.
+
 ## 2026-07-14 - Godmode outgoing power and ammo children
 
 Tweaker: General v0.2.227-dev / issue #549 adds default-off 9999-damage and unlimited-ammo children beneath Godmode. Client strike state follows the existing heartbeat to the authoritative host; positive enemy damage is overridden only after vanilla mitigation side effects, while ammo uses an owner-local consumption buff that composes with the independent `/infinite_ammo` command. This also supersedes duplicate request #382. Two-player verification remains required; no deployment is part of this commit.

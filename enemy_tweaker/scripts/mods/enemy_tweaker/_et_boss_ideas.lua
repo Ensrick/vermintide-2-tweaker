@@ -1,139 +1,111 @@
 local mod = get_mod("enemy_tweaker")
 
--- _et_boss_ideas.lua -- #451 source-backed feasibility diagnostics
---
--- The requested boss concepts reuse lord assets whose vanilla breeds are tied
--- to scripted arenas.  This module deliberately does not place those breeds in
--- the ordinary monster pool.  It records the runtime structures that a safe,
--- portable implementation must replace, and prints a bounded one-shot audit to
--- the engine log (visible even when VMF logging is disabled).
-
+-- #451 source-backed, bounded feasibility diagnostics. No spawn mutation.
 local ET = mod._et
-local rt_register = ET.rt_register
+local Core = ET.BossIdeasCore
+local CAP, captures = 2, 0
 
-local CANDIDATES = {
-    {
-        id = "chosen_shield",
-        source_breed = "chaos_raider",
-        model_breed = "chaos_exalted_champion_warcamp",
-        status = "prototype_required",
-        blocker = "needs a new regular-AI breed plus compatible shield/sword inventory; do not reuse Bodvarr AI",
-    },
-    {
-        id = "chosen_greataxe",
-        source_breed = "chaos_raider",
-        model_breed = "chaos_exalted_champion_warcamp",
-        status = "prototype_required",
-        blocker = "needs a new regular-AI breed and a model/inventory compatibility probe; do not reuse Bodvarr AI",
-    },
-    {
-        id = "stormfiend_ratlings",
-        source_breed = "skaven_stormfiend_boss",
-        status = "arena_coupled",
-        blocker = "Deathrattler behavior owns mount and intro states; clone assets onto portable monster AI",
-        risk = function()
-            local actions = rawget(_G, "BreedActions")
-            local a = actions and actions.skaven_stormfiend_boss
-            return a and (a.mount_unit ~= nil or a.dual_shoot_intro ~= nil)
-        end,
-    },
-    {
-        id = "skaven_warlock",
-        source_breed = "skaven_grey_seer",
-        status = "arena_coupled",
-        blocker = "Rasknitt behavior owns mount and scripted-spawner states; a portable behavior tree is required",
-        risk = function()
-            local actions = rawget(_G, "BreedActions")
-            local a = actions and actions.skaven_grey_seer
-            return a and (a.mount_unit ~= nil or a.spawn_allies ~= nil)
-        end,
-    },
-    {
-        id = "chaos_sorcerer",
-        source_breed = "chaos_exalted_sorcerer",
-        status = "arena_coupled",
-        blocker = "Halescourge actions query named arena spawners; a portable teleport/spawn policy is required",
-        risk = function()
-            local actions = rawget(_G, "BreedActions")
-            local a = actions and actions.chaos_exalted_sorcerer
-            return a and (a.spawn_boss_vortex ~= nil or a.defensive_mode ~= nil or a.intro_idle ~= nil)
-        end,
-    },
-    {
-        id = "troll_chieftain",
-        source_breed = "chaos_troll_chief",
-        status = "arena_coupled",
-        blocker = "phase events spawn oil sockets/sorcerers, disable objectives, and fire arena flow events; strip them in a cloned action set",
-        risk = function()
-            local actions = rawget(_G, "BreedActions")
-            local downed = actions and actions.chaos_troll_chief and actions.chaos_troll_chief.downed
-            return downed and (downed.downed_chunk_events ~= nil or downed.upped_chunk_events ~= nil)
-        end,
-    },
+local BLOCKERS = {
+    chosen_shield = "clone regular Chaos Warrior AI; validate shield inventory and shield event vocabulary",
+    chosen_greataxe = "first prototype: regular Chaos Warrior AI plus boss model/inventory contract",
+    stormfiend_ratlings = "strip Deathrattler mount and intro state before portable use",
+    skaven_warlock = "replace Rasknitt mount and named-spawner dependencies",
+    chaos_sorcerer = "replace Halescourge arena teleport/spawner queries",
+    troll_chieftain = "strip oil sockets, objective writes, phase spawners, and arena flow events",
 }
 
-local function audit()
-    local breeds = rawget(_G, "Breeds")
-    local rows = {}
-    local missing = 0
-    local risk_confirmed = 0
-
-    for i = 1, #CANDIDATES do
-        local c = CANDIDATES[i]
-        local source_present = breeds and breeds[c.source_breed] ~= nil or false
-        local model_present = not c.model_breed or breeds and breeds[c.model_breed] ~= nil or false
-        local risk_present = c.risk and c.risk() and true or false
-
-        if not source_present or not model_present then
-            missing = missing + 1
-        end
-        if risk_present then
-            risk_confirmed = risk_confirmed + 1
-        end
-
-        rows[#rows + 1] = {
-            id = c.id,
-            status = c.status,
-            source_present = source_present,
-            model_present = model_present,
-            risk_present = risk_present,
-            blocker = c.blocker,
-        }
+local function _risk(id)
+    local actions = rawget(_G, "BreedActions") or {}
+    if id == "stormfiend_ratlings" then
+        local row = actions.skaven_stormfiend_boss
+        return row and (row.mount_unit ~= nil or row.dual_shoot_intro ~= nil) or false
+    elseif id == "skaven_warlock" then
+        local row = actions.skaven_grey_seer
+        return row and (row.mount_unit ~= nil or row.spawn_allies ~= nil) or false
+    elseif id == "chaos_sorcerer" then
+        local row = actions.chaos_exalted_sorcerer
+        return row and (row.spawn_boss_vortex ~= nil or row.defensive_mode ~= nil
+            or row.intro_idle ~= nil) or false
+    elseif id == "troll_chieftain" then
+        local downed = actions.chaos_troll_chief and actions.chaos_troll_chief.downed
+        return downed and (downed.downed_chunk_events ~= nil
+            or downed.upped_chunk_events ~= nil) or false
     end
-
-    return rows, missing, risk_confirmed
+    return false
 end
 
-local function print_audit(reason)
-    local rows, missing, risk_confirmed = audit()
-    pcall(printf, "[et:451] boss-ideas audit reason=%s candidates=%d missing=%d arena_risks_confirmed=%d behavior_changes=0",
-        tostring(reason), #rows, missing, risk_confirmed)
-    for i = 1, #rows do
-        local row = rows[i]
-        pcall(printf, "[et:451] %s status=%s source=%s model=%s risk=%s blocker=%s",
+local function _resident(unit_name)
+    local app = rawget(_G, "Application")
+    if not app or type(app.can_get) ~= "function" then return false end
+    local ok, value = pcall(app.can_get, "unit", unit_name)
+    return ok and value and true or false
+end
+
+local function _audit()
+    local lookup = rawget(_G, "NetworkLookup")
+    local result = Core.inspect({
+        breeds = rawget(_G, "Breeds"),
+        actions = rawget(_G, "BreedActions"),
+        behaviors = rawget(_G, "BreedBehaviors"),
+        inventories = rawget(_G, "InventoryConfigurations"),
+        breed_lookup = lookup and lookup.breeds,
+        unit_resident = _resident,
+    })
+    result.arena_risks = 0
+    for _, row in ipairs(result.rows) do
+        row.risk_present = _risk(row.id) and true or false
+        row.blocker = BLOCKERS[row.id]
+        if row.risk_present then result.arena_risks = result.arena_risks + 1 end
+    end
+    return result
+end
+
+local function _print_audit(reason)
+    if captures >= CAP then return end
+    captures = captures + 1
+    local result = _audit()
+    pcall(printf, "[et:451] audit=%d/%d reason=%s candidates=%d missing_breeds=%d structure_ready=%d resident_models=%d arena_risks=%d behavior_changes=0",
+        captures, CAP, tostring(reason), #result.rows, result.missing_breeds,
+        result.structure_ready, result.resident_models, result.arena_risks)
+    for _, row in ipairs(result.rows) do
+        pcall(printf, "[et:451] id=%s status=%s source=%s model=%s actions=%s behavior=%s inventory=%s wire=%s source_resident=%s model_resident=%s risk=%s blocker=%s",
             row.id, row.status, tostring(row.source_present), tostring(row.model_present),
+            tostring(row.actions_present), tostring(row.behavior_present),
+            tostring(row.inventory_present), tostring(row.wire_present),
+            tostring(row.source_resident), tostring(row.model_resident),
             tostring(row.risk_present), row.blocker)
     end
+    return result
 end
 
-ET.BOSS_IDEA_CANDIDATES = CANDIDATES
-ET.boss_ideas_audit = audit
+ET.BOSS_IDEA_CANDIDATES = Core.CANDIDATES
+ET.boss_ideas_audit = _audit
 
--- Automatic, bounded diagnostics: seven log-only lines once per mod load.
-print_audit("mod_load")
+_print_audit("mod_load")
 
-rt_register("issue451_boss_ideas_safely_decomposed", function()
-    local rows, missing, risk_confirmed = audit()
-    if #rows ~= 6 then
-        return string.format("candidate count drifted: got %d, expected 6", #rows)
+mod:command("et_boss_idea_audit", "Recheck boss prototype assets (#451)", function()
+    local result = _print_audit("command")
+    if result then
+        mod:echo("[et:451] %d/6 structural contracts, %d/6 models resident; details in log",
+            result.structure_ready, result.resident_models)
+    else
+        mod:echo("[et:451] audit capture limit reached; use the existing log rows")
     end
-    if missing > 0 then
-        return string.format("%d source/model breed keys missing", missing)
+end)
+
+ET.rt_register("issue451_boss_ideas_safely_decomposed", function()
+    local result = _audit()
+    if #result.rows ~= 6 then
+        return string.format("candidate count drifted: got %d, expected 6", #result.rows)
     end
-    -- Four vanilla lord breeds are intentionally rejected as portable inputs.
-    -- If their risky action shapes disappear after a game update, re-audit the
-    -- source before changing this threshold or enabling a spawn path.
-    if risk_confirmed < 4 then
-        return string.format("only %d/4 arena-coupling markers remain; source re-audit required", risk_confirmed)
+    if result.missing_breeds > 0 then
+        return string.format("%d source/model breed keys missing", result.missing_breeds)
+    end
+    if result.structure_ready ~= 6 then
+        return string.format("only %d/6 source contracts structurally ready", result.structure_ready)
+    end
+    if result.arena_risks < 4 then
+        return string.format("only %d/4 arena-coupling markers remain; source re-audit required",
+            result.arena_risks)
     end
 end)

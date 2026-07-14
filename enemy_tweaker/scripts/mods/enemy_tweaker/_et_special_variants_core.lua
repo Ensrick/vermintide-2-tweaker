@@ -6,6 +6,25 @@
 
 local M = {}
 
+-- AttachmentNodeLinking rows are an ordered list of { source, target } node
+-- pairs. AttachmentUtils.link treats `source` as the owner unit and `target`
+-- as the spawned attachment. Return a de-duplicated owner-node list so runtime
+-- diagnostics can compare the premium mesh contract with a naturally spawned AI unit
+-- without linking or spawning anything.
+function M.owner_nodes(linking)
+    local result, seen = {}, {}
+    if type(linking) ~= "table" then return result end
+    for i = 1, #linking do
+        local row = linking[i]
+        local source = type(row) == "table" and row.source or nil
+        if type(source) == "string" and source ~= "" and not seen[source] then
+            seen[source] = true
+            result[#result + 1] = source
+        end
+    end
+    return result
+end
+
 M.CANDIDATES = {
     {
         id = "bile_blight_globadier",
@@ -53,14 +72,32 @@ function M.audit(env)
         local cosmetic = type(env.cosmetics) == "table" and env.cosmetics[c.skin] or nil
         local attachment = cosmetic and cosmetic.third_person_attachment
         local unit = type(attachment) == "table" and attachment.unit or nil
+        local linking = type(attachment) == "table" and attachment.attachment_node_linking or nil
+        local owner_nodes = M.owner_nodes(linking)
+        local behavior = type(breed) == "table" and breed.behavior or nil
+        local inventory = type(breed) == "table" and breed.default_inventory_template or nil
+        local base_unit = type(breed) == "table" and breed.base_unit or nil
+        local behavior_present = type(behavior) == "string"
+            and type(env.behaviors) == "table" and env.behaviors[behavior] ~= nil or false
+        local inventory_present = type(inventory) == "string"
+            and type(env.inventories) == "table" and env.inventories[inventory] ~= nil or false
+        local wire_present = type(env.breed_lookup) == "table"
+            and rawget(env.breed_lookup, c.base_breed) ~= nil or false
         local unit_resident
         if type(unit) == "string" and type(env.can_get_unit) == "function" then
             local ok, result = pcall(env.can_get_unit, unit)
             unit_resident = ok and result and true or false
         end
 
+        local base_unit_resident
+        if type(base_unit) == "string" and type(env.can_get_unit) == "function" then
+            local ok, result = pcall(env.can_get_unit, base_unit)
+            base_unit_resident = ok and result and true or false
+        end
+
         local structure_ready = breed ~= nil and actions ~= nil and item ~= nil
-            and cosmetic ~= nil and type(unit) == "string"
+            and cosmetic ~= nil and type(unit) == "string" and #owner_nodes > 0
+            and behavior_present and inventory_present and wire_present
         if not structure_ready then missing = missing + 1 end
         if unit_resident then resident = resident + 1 end
 
@@ -74,6 +111,16 @@ function M.audit(env)
             cosmetic_present = cosmetic ~= nil,
             attachment_unit = unit,
             unit_resident = unit_resident,
+            base_unit = base_unit,
+            base_unit_resident = base_unit_resident,
+            behavior = behavior,
+            behavior_present = behavior_present,
+            inventory = inventory,
+            inventory_present = inventory_present,
+            wire_present = wire_present,
+            linking_present = type(linking) == "table",
+            owner_nodes = owner_nodes,
+            owner_node_count = #owner_nodes,
             structure_ready = structure_ready,
             player_attachment = type(unit) == "string"
                 and unit:find("/dark_pact_skins/", 1, true) ~= nil or false,

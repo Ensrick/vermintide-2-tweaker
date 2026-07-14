@@ -17,9 +17,23 @@ The Troll Chieftain is globally registered (`breeds.lua:56`) but dynamically loa
 
 ## Diagnostics contract
 
-`_et_boss_ideas.lua` performs a read-only audit once at mod load. It checks that all source/model breeds exist and that the four arena-coupled action shapes are still present. Output is bounded to seven engine-log lines under `[et:451]`; no setting, hook, spawn, or shared game table is changed.
+`_et_boss_ideas.lua` performs a read-only audit once at mod load. It checks each
+source/model breed, action table, behavior tree, AI inventory, breed wire id,
+base-unit path, and current unit residency, plus the four arena-coupled action
+shapes. Output is bounded to seven engine-log lines under `[et:451]`; no setting,
+hook, spawn, or shared game table is changed.
 
-`/et_regression_test` locks the six-candidate list and forces a new source audit if a game update removes one of the known arena-risk markers. The diagnostic itself needs no manual command.
+`/et_boss_idea_audit` permits one second capture after entering a representative
+mission. Comparing `model_resident` between boot and mission identifies which
+level-specific lord packages are available without trying to spawn them. A false
+`actions`, `behavior`, `inventory`, or `wire` field is a structural blocker;
+residency alone is a package/preload task. The command prints only one summary to
+chat and leaves the six detail rows in the log.
+
+`/et_regression_test` locks the six-candidate list, requires all six source
+contracts, and forces a new source audit if a game update removes one of the
+known arena-risk markers. Run `/et_boss_idea_audit` in a mission to collect the
+optional residency evidence.
 
 ## Recommended implementation order
 

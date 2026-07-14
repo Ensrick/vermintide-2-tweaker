@@ -160,6 +160,19 @@ end
 -- ----------------------------------------------------------------------------
 mod:hook_safe("ConflictDirector", "_post_spawn_unit", function(self, ai_unit, go_id, breed, spawn_pos, spawn_category, spawn_animation, optional_data, spawn_type, spawn_queue_id)
     if type(breed) ~= "table" then return end
+    -- #452 shares this already-owned post-spawn seam. The callback is installed
+    -- later in the manifest and only inspects each of five naturally spawned
+    -- special skeletons once; it never spawns or links the premium attachment.
+    if type(ET.observe_special_variant_spawn) == "function" then
+        _safe("special_variant_nodes:" .. tostring(breed.name),
+            ET.observe_special_variant_spawn, ai_unit, breed)
+    end
+    -- #453 shares the same singleton seam for a bounded, mutation-free
+    -- category/prerequisite census (two distinct breeds per category).
+    if type(ET.observe_enemy_modifier_spawn) == "function" then
+        _safe("enemy_modifier_prereqs:" .. tostring(breed.name),
+            ET.observe_enemy_modifier_spawn, ai_unit, breed, optional_data)
+    end
     local cfg = _BY_BREED[breed.name]
     if not cfg then return end
     _safe("boss_grudge:" .. breed.name, _maybe_apply_grudge, ai_unit, optional_data, cfg)

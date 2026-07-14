@@ -95,6 +95,9 @@ local function _apply_setting_changes(setting_ids, latest_setting_id)
     if mod._et_apply_health_multipliers then
         _safe("on_setting_changed:health_multiplier", mod._et_apply_health_multipliers)
     end
+    if ET.personal_handicap_setting_changed then
+        _safe("on_setting_changed:personal_handicap", ET.personal_handicap_setting_changed)
+    end
     -- Champion elite-pool retune — outside the compositions guard (independent of
     -- composition backup state; idempotent, only writes on a toggle-state change).
     _safe("on_setting_changed:champion", _apply_champion_breed_overrides)
@@ -122,6 +125,7 @@ local _previous_update = mod.update
 mod.update = function(dt)
     if _previous_update then _previous_update(dt) end
     _settings_queue.drain()
+    if ET.personal_handicap_update then ET.personal_handicap_update() end
 end
 
 ET.rt_register("issue560_settings_reapply_coalesced", function()
@@ -135,6 +139,7 @@ end)
 
 mod.on_disabled = function()
     _settings_queue.clear()
+    if ET.personal_handicap_clear then ET.personal_handicap_clear() end
     _safe("on_disabled:restore_compositions",      _restore_compositions)
     _safe("on_disabled:restore_size_of_interest",  _restore_size_of_interest_point)
     -- v0.7.2-dev: explicitly restore vanilla bearer stagger-immunity if we
@@ -163,6 +168,7 @@ mod.on_disabled = function()
 end
 
 mod.on_enabled = function()
+    if ET.personal_handicap_setting_changed then ET.personal_handicap_setting_changed() end
     if not _original_compositions_pacing_ref() then
         _dbg_alert("on_enabled: _original_compositions_pacing nil — mod loaded but ConflictDirector.init hasn't fired yet; will apply on next mission load")
     else

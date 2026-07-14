@@ -3,14 +3,31 @@ return function(H, repo_root)
         .. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_special_variants_core.lua")
 
     local function complete_env(resident)
-        local env = { breeds = {}, actions = {}, items = {}, cosmetics = {} }
+        local env = {
+            breeds = {}, actions = {}, items = {}, cosmetics = {}, behaviors = {},
+            inventories = {}, breed_lookup = {},
+        }
         for _, c in ipairs(core.CANDIDATES) do
-            env.breeds[c.base_breed] = { name = c.base_breed }
+            local behavior = c.base_breed .. "_behavior"
+            local inventory = c.base_breed .. "_inventory"
+            env.breeds[c.base_breed] = {
+                name = c.base_breed,
+                behavior = behavior,
+                default_inventory_template = inventory,
+                base_unit = "units/beings/enemies/" .. c.base_breed .. "/base",
+            }
             env.actions[c.base_breed] = { idle = {} }
+            env.behaviors[behavior] = { tree = {} }
+            env.inventories[inventory] = { items = {} }
+            env.breed_lookup[c.base_breed] = 1
             env.items[c.skin] = { name = c.skin }
             env.cosmetics[c.skin] = {
                 third_person_attachment = {
                     unit = "units/beings/player/dark_pact_skins/" .. c.id .. "/skin_1001/third_person/mesh",
+                    attachment_node_linking = {
+                        { source = "root_point", target = "root_point" },
+                        { source = "j_spine", target = "j_spine" },
+                    },
                 },
             }
         end
@@ -40,8 +57,38 @@ return function(H, repo_root)
             H.equal(row.structure_ready, true)
             H.equal(row.player_attachment, true)
             H.equal(row.unit_resident, true)
+            H.equal(row.owner_node_count, 2)
+            H.equal(row.behavior_present, true)
+            H.equal(row.inventory_present, true)
+            H.equal(row.wire_present, true)
         end
         H.equal(env.cosmetics[core.CANDIDATES[1].skin].third_person_attachment.unit, before)
+    end)
+
+    H.test("ET #452 owner-node extraction is ordered, unique, and fail closed", function()
+        local nodes = core.owner_nodes({
+            { source = "root", target = "a" },
+            { source = "spine", target = "b" },
+            { source = "root", target = "c" },
+            { target = "d" },
+        })
+        H.equal(#nodes, 2)
+        H.equal(nodes[1], "root")
+        H.equal(nodes[2], "spine")
+        H.equal(#core.owner_nodes(nil), 0)
+    end)
+
+    H.test("ET #452 census fails closed on behavior inventory wire or node drift", function()
+        local env = complete_env(true)
+        local c = core.CANDIDATES[1]
+        env.behaviors[env.breeds[c.base_breed].behavior] = nil
+        env.breed_lookup[core.CANDIDATES[2].base_breed] = nil
+        env.cosmetics[core.CANDIDATES[3].skin].third_person_attachment.attachment_node_linking = {}
+        local rows, summary = core.audit(env)
+        H.equal(summary.missing, 3)
+        H.equal(rows[1].behavior_present, false)
+        H.equal(rows[2].wire_present, false)
+        H.equal(rows[3].owner_node_count, 0)
     end)
 
     H.test("ET #452 census exposes missing structure and nonresident assets", function()
@@ -65,5 +112,6 @@ return function(H, repo_root)
         H.equal(source:find("mod:hook", 1, true), nil)
         H.equal(source:find("network_register", 1, true), nil)
         H.equal(source:find("World.spawn_unit", 1, true), nil)
+        H.truthy(source:find("unit_api.has_node", 1, true))
     end)
 end

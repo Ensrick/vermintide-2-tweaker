@@ -1,5 +1,34 @@
 # Enemy Tweaker Changelog
 
+## 0.7.49-dev (2026-07-14): #453 transitive and live modifier readiness [not deployed]
+
+- Upgraded the 15-modifier audit from root identifiers to each bounded child-buff chain and every named apply/update/event/remove callback. Missing child templates, asymmetric child wire ids, missing functions, and a 32-template traversal cap now fail closed.
+- Reused the single existing `ConflictDirector._post_spawn_unit` hook for mutation-free live evidence. It samples at most two distinct breeds per Special/Elite/Boss/Lord category and reports extensions, blackboard/navigation, position, side, race, game-object id, existing enhancements, native breed bans, and eligible/rejected modifier counts.
+- Added source-derived prerequisite and vanilla-ban policy tests plus runtime `issue453_live_prerequisite_probe_bounded`. No modifier, attribute, terror event, setting, RPC, or shared table is changed.
+- Lifecycle: `[diagnostics-armed]` for solo evidence. Any actual modifier application requires `[verify-fix-coop]`.
+
+## 0.7.48-dev (2026-07-14): #452 live AI skeleton compatibility census [not deployed]
+
+- Extended the five-skin structure audit to cover the ordinary breed's behavior tree, inventory template, network lookup, base unit, and the premium attachment's complete owner/source-node map.
+- Reused the single existing `ConflictDirector._post_spawn_unit` hook to observe naturally spawned target specials without spawning or attaching anything. Each breed logs once per session, reporting exact node totals and at most eight missing node names; total live output is capped at five rows.
+- Added pure owner-node contract extraction and failure tests plus runtime `issue452_live_probe_bounded`. The source boundary remains diagnostics-only: no new breed, setting, buff, RPC, package request, cosmetic link, or gameplay mutation.
+- Lifecycle: `[diagnostics-armed]` for the solo structure/live-node census. A later rendered appearance and breed-replacement slice must use `[verify-fix-coop]`.
+
+## 0.7.47-dev (2026-07-14): #451 actionable boss portability census [not deployed]
+
+- Upgraded the existing read-only six-boss audit from breed-presence checks to a complete source contract: breed/model rows, action data, behavior tree, AI inventory, breed wire id, and source/model unit residency.
+- Added `/et_boss_idea_audit` for a second bounded capture after entering a representative mission. It writes six detailed engine-log rows and only one summary to chat, making missing level-specific packages distinguishable from missing behavior or network registration.
+- Kept all behavior unchanged. The two Chosen prototypes still use regular `chaos_raider` AI as their safe starting point; Deathrattler, Rasknitt, Halescourge, and the Troll Chieftain remain blocked on their detected arena contracts.
+- Added an engine-free catalog/census core, four offline tests, stronger runtime regression `issue451_boss_ideas_safely_decomposed`, and refreshed feasibility/engine/regression documentation.
+- Lifecycle: `[diagnostics-armed]`; the asset census is solo, but any spawnable prototype must move to `[verify-fix-coop]` for package, model, behavior, and network verification.
+
+## 0.7.46-dev (2026-07-14): #61 host-authoritative personal combat handicap [not deployed]
+
+- Added a per-human Personal difficulty dropdown from Auto through Cataclysm 3. A selection above the host difficulty increases hostile-AI damage to that player and reduces that player's damage to hostile AI; Auto and selections at/below the host remain vanilla.
+- Kept authority on the host. Clients send only their preset, the host keys it by VMF's authenticated sender peer, schema-gates it, and applies the bounded base factor once at `DamageUtils.apply_buffs_to_damage` before vanilla buff/proc handling. There is no custom buff, lookup mutation, per-hit RPC, or client-side simulation claim.
+- Explicitly excluded spawns, enemy health/AI, healing, friendly fire, self/environment damage, bots, pets, and scoreboard adjustment from this first slice. Added engine-free policy/authority tests, runtime regression `issue61_personal_handicap_authoritative`, and `PERSONAL_DIFFICULTY.md`.
+- Lifecycle: `[verify-fix-coop]`; host plus one client must verify both damage directions and the vanilla exclusions.
+
 ## 0.7.45-dev (2026-07-14): #433 remove dead Big Rebalance payload [not deployed]
 
 - Deleted the unreachable 77,622-byte Big Rebalance implementation after #321 resolved its registration/parity design in favor of retirement. Removed the dormant lifecycle API stub, all no-op apply/restore calls, the BR-only peer fingerprint RPC, and the obsolete regression check for dead lookup code.

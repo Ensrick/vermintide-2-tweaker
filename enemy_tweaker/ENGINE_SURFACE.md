@@ -22,7 +22,7 @@ the global `table.clone` shim.
 
 ## Hook table
 
-25 LIVE registration sites, grouped into 7 rows-of-concern. Almost all route
+26 LIVE registration sites, grouped into 7 rows-of-concern. Almost all route
 through the mod's own protective factories in `_et_protect.lua`:
 `_hook_wrap` = `mod:hook` body wrapped in pcall with a vanilla-fallback on inner
 error; `_hook_wrap_table` = the same for a plain dispatcher table (table-form);
@@ -69,6 +69,12 @@ part of the count or table.
 | `SpecialsPacing.setup_functions["specials_by_slots"]` [wrap,tbl] `_et_specials.lua:71` | The setup-time slot method; reads `CurrentSpecialsSettings.breeds` / `.max_specials` [src: `scripts/managers/conflict_director/specials_pacing.lua:75` (the `setup_functions` table)] | Override `max_specials` and filter `breeds` by the per-difficulty per-special disable toggles for the call, then restore (`:71`) | Table-form on the `setup_functions` DISPATCHER table (a plain method table). On inner error, restore settings and fall through to vanilla (never rethrow - a stack trace kicks the session, § 4.1) |
 | `SpecialsPacing.select_breed_functions["get_random_breed"]` [wrap,tbl] `_et_specials.lua:105` | The per-pick breed selector [src: `specials_pacing.lua:122` (the `select_breed_functions` table)] | Weighted selection + per-breed disable over the enabled pool; preserve vanilla's coordinated-attack `override_breed_name` (`:105`) | Table-form. Must pass through when `state_data.override_breed_name` is set, or coordinated attacks break |
 
+### Completed AI spawn observation (#452/#531)
+
+| Class.method (kind) | Vanilla behavior | Why et hooks it | Trap / invariant |
+|---|---|---|---|
+| `ConflictDirector._post_spawn_unit` [safe] `_et_boss_grudge.lua` | Completes one AI spawn after unit, breed, and game-object setup [src: `scripts/managers/conflict_director/conflict_director.lua:2029`] | One host-authoritative branch applies enabled Cata+ boss grudge buffs. A read-only branch observes each of five ordinary special breeds for #452 skeleton compatibility. Another samples at most two distinct breeds in each modifier category for #453 extension/state/banned-modifier readiness. | This is the single owner of the `(ConflictDirector, _post_spawn_unit)` pair. Both diagnostic callbacks remain mutation-free: no attachment/buff/attribute/spawn/RPC. #452 caps at five rows/eight missing nodes; #453 caps at eight rows. |
+
 ### Roaming density + patrol + the global clone shim (owner docs: `docs/engine/07`, `docs/engine/01`)
 
 | Class.method (kind) | Vanilla behavior | Why et hooks it | Trap / invariant |
@@ -89,6 +95,7 @@ part of the count or table.
 | `BreedFreezer.try_mark_unit_for_freeze` [wrap] `_et_pacing.lua:305` | Queues a unit for deferred freeze; the actual freeze is deferred to `commit_freezes` [src: `scripts/managers/conflict_director/breed_freezer.lua:232`; vanilla error `:253`] | Issue 213 guard: with et's raised `max_grunts`, `deactivate_area -> destroy_unit` can re-mark the same unit same-frame, and vanilla prints "freeze unit twice" AND falls through to a conflicting `mark_for_deletion`. Replicate vanilla's own dup-check first and return true to suppress (`:305`) | ROW OF CONCERN (`docs/engine/04`). Reads vanilla's own `units_to_freeze[breed]` - the exact state vanilla checks, same lifecycle - so no frame/pool guesswork. Fail-open: any missing state falls through to vanilla |
 | `BeastmenStandardHealthExtension.add_damage` [wrap] `_et_banner.lua:128` | Beastmen banner health; `can_damage_banner` gate REJECTS ranged before reaching `super.add_damage` [src: `scripts/unit_extensions/health/beastmen_standard_health_extension.lua:38`] | "Banner breakable by ranged": when on, relay ranged attack types straight to `GenericHealthExtension.add_damage` (what vanilla does for accepted attacks) instead of vanilla's reject (`:128`) | Full 18-param signature verbatim. Off = pure passthrough (no behavior change); on, non-ranged still defers to vanilla to preserve the suicide path + whitelist |
 | `GenericHealthExtension.init` [wrap] `_et_health_multiplier.lua` | ConflictDirector has already selected rank-indexed breed health and any spawn modifier before health-extension init | #369 host scales the final hostile-AI health by the active difficulty slider, then tags the extension for bounded live rescaling | Host only; 1.0 is passthrough. Uses vanilla `set_max_health` / `set_server_damage_taken` replication. Includes bosses/lords; excludes pets, critters, and heroes. Shared breed arrays are untouched. |
+| `DamageUtils.apply_buffs_to_damage` [hook,tbl] `_et_personal_handicap.lua` | Server-only buff/proc damage chokepoint before network quantization [src: `scripts/helpers/damage_utils.lua:2134`; caller `:1790`] | #61 host adjusts the authenticated human peer's bounded incoming/outgoing base damage, then delegates once so vanilla buffs, conversions, callbacks, and procs observe the same value | Host only. Requires an actual hostile-AI breed on the other side; excludes friendly fire, self/environment damage, bots, and pets. Client sends preset only on context change with three handshake retries; no per-hit RPC, buff, lookup, or shared-table mutation. |
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for et's cases)
 
@@ -179,6 +186,17 @@ Pulled from `DEVELOPMENT.md` and `docs/BUG_CLASSES.md` - do not re-discover thes
   engine `printf`, reserving `mod:warning` for genuine failure paths (§ chat spam, issue 240).
 
 ## Doc maintenance
+
+#451 remains observation-only. `_et_boss_ideas_core.lua` classifies the six
+proposals without engine globals; `_et_boss_ideas.lua` reads `Breeds`,
+`BreedActions`, `BreedBehaviors`, `InventoryConfigurations`,
+`NetworkLookup.breeds`, and `Application.can_get("unit", ...)`. It adds one
+bounded command but no hook, breed, spawn, package load, or lookup write. Breed
+ids are serialized through `NetworkLookup.breeds` [src:
+`network_lookup.lua:267-270`; `game_object_initializers_extractors.lua:178-179`].
+The four lord sources remain `level_specific` package entries [src:
+`enemy_package_loader_settings.lua:38-48`], so unit residency is evidence for a
+future preload plan, never permission to spawn arena AI directly.
 
 Follows `docs/engine/README.md` maintenance rules: if an et hook moves, a guard is
 added, or a cited vanilla line drifts after a game patch, edit the affected row in
