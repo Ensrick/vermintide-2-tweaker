@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.230-dev (2026-07-13) - #290 Kruber Billhook bake preserves receiver-facing remaps [diagnostics-armed]
+
+- **Root cause:** the complete v0.12.102 `two_handed_billhooks_template.es_` safety map was created first, then the v0.12.203 baked-picks block replaced it wholesale with five rows. Those five keys are Billhook 1P `anim_event` names, but vanilla sends `anim_event_3p or anim_event` to the 3P body (`weapon_unit_extension.lua:512`). Every action with an authored `anim_event_3p` therefore bypassed the replacement table, explaining the reported loss of essentially all Kruber Billhook swings.
+- **Systemic fix:** the five preserved tester picks now merge into the complete Billhook-to-polearm map instead of replacing it. The effective Billhook 3P vocabulary is source-derived from `2h_billhooks.lua`; safe native passthroughs are source-derived from `halberds.lua`. `/wt_regression_test` now proves every effective event is either remapped or native on Kruber's polearm body and specifically locks the four receiver-facing rows the old bake deleted.
+- **Automatic evidence:** the next actual Kruber `wh_2h_billhook` attack emits bounded `[wt:290]` rows without a command or picker toggle (one per source/target/outcome, maximum 48). The prior log only selected Billhook; its attack trace was `we_spear`, so it could not verify this path.
+- **Verify after deployment:** on any Kruber career, equip Saltzpyre's Billhook and perform the full light chain, both charged heavies, push, and special hook. Confirm visible 3P body motion and `[wt:290] weapon=wh_2h_billhook ... origin=template:two_handed_billhooks_template` with mapped targets (or documented polearm-native passthrough), no `source_event_has_no_remap_target` for a non-native event.
+
 ## 0.12.229-dev (2026-07-13) - #587 baked weapon transforms on remote husks [verify-fix-coop]
 
 - Vanilla remote wield is a separate renderer: `SimpleHuskInventoryExtension._wield_slot` resolves the replicated base item/career and calls `GearUtils.spawn_inventory_unit` directly, never `GearUtils.create_equipment` (`simple_husk_inventory_extension.lua:641-782`). WT now applies the same shipped scale/grip tables to those populated 3P husk units at wield time.

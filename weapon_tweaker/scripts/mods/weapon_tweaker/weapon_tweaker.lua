@@ -109,7 +109,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.229-dev"
+local MOD_VERSION = "0.12.230-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4142,16 +4142,18 @@ _rt_register("wh_priest_no_bows", function()
     if #found > 0 then return "bows on wh_priest: " .. table.concat(found, ", ") end
 end)
 
-_rt_register("billhook_anim_remap_present", function()
-    -- v0.12.64: 3P remap fallback for the unconditional weapon-change block.
-    -- Verify the _suffix_career_map covers wh_priest billhook remap entry that
-    -- redirects to_2h_billhook.
-    if type(_suffix_career_map) ~= "table" then
-        return "_suffix_career_map missing"
+_rt_register("issue290_billhook_kruber_effective_3p_complete", function()
+    -- Host-runnable source contract: 2h_billhooks.lua fires anim_event_3p when present,
+    -- otherwise anim_event. Every resulting event must either map explicitly or already
+    -- exist in halberds.lua's Kruber polearm vocabulary.
+    if not mod._wt.billhook_kruber_contract then return "billhook contract helper missing" end
+    local missing, map = mod._wt.billhook_kruber_contract()
+    if type(map) ~= "table" then return "two_handed_billhooks_template.es_ missing" end
+    if #missing > 0 then return "effective 3P events uncovered: " .. table.concat(missing, ", ") end
+    for _, emitted in ipairs({ "attack_swing_stab_charge", "attack_swing_charge_left_diagonal",
+                               "attack_swing_heavy_left_diagonal", "attack_swing_left_diagonal" }) do
+        if not map[emitted] then return "receiver-facing event lost after bake merge: " .. emitted end
     end
-    -- Embedded constant marker for the fix:
-    local _MARKER = "_2h_billhook"
-    if #_MARKER == 0 then return "marker missing" end
 end)
 
 _rt_register("saltz_batch2_wh_remaps_baked", function()

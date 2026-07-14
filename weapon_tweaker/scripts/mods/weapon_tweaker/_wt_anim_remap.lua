@@ -317,6 +317,23 @@ local _3p_remap_billhook_to_polearm = {
     attack_swing_left                = "attack_swing_down_left",
 }
 
+-- Source-derived effective 3P vocabulary. For each Billhook action the engine fires
+-- `anim_event_3p or anim_event` (weapon_unit_extension.lua:512). The Kruber polearm
+-- vocabulary comes from halberds.lua. A Billhook event is complete when it is explicitly
+-- remapped or is already native on the polearm body.
+local _billhook_effective_3p_events = {
+    "attack_swing_stab_charge", "attack_swing_charge_left_diagonal",
+    "attack_swing_heavy_left_diagonal", "attack_swing_heavy_stab",
+    "attack_swing_stab", "attack_swing_left_diagonal", "attack_swing_down",
+    "attack_push", "parry_pose",
+}
+local _polearm_native_3p_events = {
+    attack_swing_charge_left=true, attack_swing_charge_right=true,
+    attack_swing_down_left=true, attack_swing_down_right=true,
+    attack_swing_heavy_right=true, attack_swing_heavy=true,
+    attack_swing_right=true, attack_push=true, parry_pose=true,
+}
+
 local _3p_remap_spear_shield_to_deus = {
     attack_swing_stab_lh             = "attack_swing_stab",
 }
@@ -2069,13 +2086,27 @@ do
     }
     R.two_handed_billhooks_template = R.two_handed_billhooks_template or {}
     R.two_handed_billhooks_template.wh_ = R.two_handed_billhooks_template.wh_ or false
-    R.two_handed_billhooks_template.es_ = {
+    -- #290: MERGE the five tester picks into the complete v0.12.102 safety map.
+    -- Assignment here used to replace that map wholesale. Worse, these keys are the
+    -- Billhook's 1P `anim_event` names while the 3P body receives `anim_event_3p or
+    -- anim_event`; the five actions with authored anim_event_3p therefore missed every
+    -- replacement row. Preserve the receiver-facing safety rows and overlay the picks.
+    local billhook_es_picks = {
         attack_swing_charge_down = "attack_swing_charge_left_diagonal",
         attack_swing_charge_stab = "attack_swing_stab_charge",
         attack_swing_heavy_down  = "attack_swing_heavy_left_diagonal",
         attack_swing_heavy_left  = "attack_swing_left_diagonal",
         attack_swing_stab_02     = "attack_swing_stab",
     }
+    local billhook_es = R.two_handed_billhooks_template.es_
+    if type(billhook_es) ~= "table" then billhook_es = {} end
+    for source, target in pairs(_3p_remap_billhook_to_polearm) do
+        if billhook_es[source] == nil then billhook_es[source] = target end
+    end
+    for source, target in pairs(billhook_es_picks) do
+        billhook_es[source] = target
+    end
+    R.two_handed_billhooks_template.es_ = billhook_es
     -- v0.12.205: Kerillian billhook picks RESTORED (#319 audit; residual of the
     -- #290 two-namespace bug). The tester's 5 Kerillian billhook picks live in
     -- the TEMPLATE-QUALIFIED namespace (user_settings(4).config 2026-07-03),
@@ -2577,6 +2608,23 @@ local function _wt576_phases(key, source)
     return { "action_transition" }
 end
 
+-- #290 automatic evidence: the report's first trace attacked we_spear after merely
+-- selecting Billhook in inventory. Capture the next ACTUAL local Kruber+Billhook attack
+-- without a command or picker toggle. One row per distinct source/target/outcome, max 48.
+local _wt290_seen, _wt290_count = {}, 0
+local function _wt290_diag(state, career, source, target, outcome, detail)
+    if not state or state.key ~= "wh_2h_billhook" or not career or career:sub(1, 3) ~= "es_" then return end
+    local token = table.concat({ tostring(career), tostring(source), tostring(target),
+        tostring(state.remap_origin), tostring(outcome) }, "|")
+    if _wt290_seen[token] or _wt290_count >= 48 then return end
+    _wt290_seen[token] = true
+    _wt290_count = _wt290_count + 1
+    printf("[wt:290] weapon=wh_2h_billhook template=%s career=%s source=%s target=%s origin=%s outcome=%s detail=%s evidence=%d/48 chat=false",
+        tostring(state.template), tostring(career), tostring(source), tostring(target),
+        tostring(state.remap_origin or "none"), tostring(outcome), tostring(detail or "none"),
+        _wt290_count)
+end
+
 local function _wt576_diag(state, career, source, target, outcome, detail)
     if not state or not _WT576_KEYS[state.key] or not mod:get("enable_dev_anim_picker") then return end
     if not (_WT576_SOURCE[state.key] and _WT576_SOURCE[state.key][source]) then return end
@@ -2879,8 +2927,12 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
                 _wt576_diag(state, career, event_name, target,
                     "accepted_unverified_no_observable_state_transition",
                     "pcall_ok;has_event_is_capability_not_playback_ack")
+                _wt290_diag(state, career, event_name, target,
+                    "accepted_unverified", "pcall_ok;has_event_is_capability_not_playback_ack")
             else
                 _wt576_diag(state, career, event_name, target,
+                    "animation_event_call_error", tostring(err))
+                _wt290_diag(state, career, event_name, target,
                     "animation_event_call_error", tostring(err))
             end
             return
@@ -2888,9 +2940,13 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
         if target and not target_capability then
             _wt576_diag(state, career, event_name, target, "target_missing",
                 "Unit.has_animation_event=false")
+            _wt290_diag(state, career, event_name, target, "target_missing",
+                "Unit.has_animation_event=false")
         elseif not target then
             _wt576_diag(state, career, event_name, nil, "unmapped_source",
                 "source_event_has_no_remap_target")
+            _wt290_diag(state, career, event_name, nil, "native_passthrough_or_unmapped",
+                _polearm_native_3p_events[event_name] and "source_is_native_on_polearm" or "source_event_has_no_remap_target")
         end
         -- Force-fire path for SM-corrupting events (see
         -- feedback_animation_remap_rules). Adding `attack_swing_stab_02 ->
@@ -3117,3 +3173,14 @@ WT.unit_career_name            = _unit_career_name
 WT.unit_state                  = _unit_state
 WT.suffix_career_map           = _suffix_career_map
 WT.three_p_template_remaps     = _3p_template_remaps
+WT.billhook_kruber_contract = function()
+    local map = _3p_template_remaps.two_handed_billhooks_template
+    map = map and map.es_
+    local missing = {}
+    for _, event in ipairs(_billhook_effective_3p_events) do
+        if not ((map and map[event]) or _polearm_native_3p_events[event]) then
+            missing[#missing + 1] = event
+        end
+    end
+    return missing, map
+end

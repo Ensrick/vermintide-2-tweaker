@@ -1578,3 +1578,22 @@ Related coverage: WT `issue582_native_dual_axes_cwv_ownership_boundary`; CWV `is
 A career-owned resource extension outlives the weapon instance. Detecting only the wielded item stops passive recharge while melee is active and can leave a stale HUD bar after replacement. Use one owner-local planner that reads the owning equipped slot and selects exactly one action: recharge, neutralize stale state after removal, or no-op. Exclude native owners and test wielded/stowed parity, replacement, re-equip, repeated swaps, and bounded slot reads.
 
 Related coverage: WT `issue584_moonfire_stowed_native_regen_contract`, `issue585_moonfire_energy_hud_loadout_lifecycle`, and `qa/lua/tests/test_wt_passive_charge.lua`.
+## 42. Generated animation picks replace the receiver safety map instead of merging
+
+**First seen:** 2026-07-14 (weapon_tweaker issue #290; fixed in source v0.12.230-dev)
+**Canonical Issue:** [#290](https://github.com/Ensrick/vermintide-2-tweaker/issues/290)
+**Lives in:** cross-character animation systems that combine a hand-authored receiver map with generated or user-baked event picks.
+
+### Symptoms
+- A foreign weapon equips in the correct stance, but most/all 3P attacks silently retain the prior pose.
+- Inventory evidence proves the weapon was selected, while the later trace may belong to another weapon and cannot verify the report.
+- A baked table looks populated, yet its keys are 1P `anim_event` names and the 3P body receives distinct `anim_event_3p` values.
+
+### Fix template
+- Derive the donor's effective body vocabulary as `anim_event_3p or anim_event` per action from source.
+- Merge baked picks into the complete receiver safety map; never assign a partial generated table over it.
+- Derive the receiver-native passthrough vocabulary from source and assert every effective donor event is either explicitly remapped or native.
+- Arm bounded, weapon-identity-gated diagnostics for the next actual attack; selecting a weapon in inventory is not proof that the recorded attack used it.
+
+### Related Issues / commits
+- weapon_tweaker v0.12.230-dev (#290), runtime `issue290_billhook_kruber_effective_3p_complete`, diagnostic `[wt:290]`.

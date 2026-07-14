@@ -91,7 +91,7 @@ entries; longbow has zoom toggles).
 | we_1h_spears_shield | Elf Spear & Shield | ✅ | Suffix `_1h_spear_shield→_es_deus_01` route |
 | we_1h_sword | Elf Sword | ✅ | Key remap + scale |
 | we_longbow | Elf Longbow | ✅ | Redirect `to_longbow→to_es_longbow` ("looks better than elf anims") |
-| wh_2h_billhook | Saltzpyre: Billhook | ✅ | Patcher + billhook→polearm remap (v0.12.102 fix) |
+| wh_2h_billhook | Saltzpyre: Billhook | 🧪 | Patcher + billhook→polearm remap; v0.12.230 merges baked 1P-key picks without deleting receiver-facing `anim_event_3p` rows (#290, diagnostics armed) |
 | wh_1h_axe | Saltzpyre: 1H Axe | ✅ | Native `to_1h_axe` vocab — confirmed (DECISIONS:148) |
 | es_1h_flail | Empire Flail | 🔁 | native |
 | bw_1h_crowbill | Sienna: Crowbill | 🧊 | Remap wired + scale, but **Kruber heavy-attack regression** — user to retest (DECISIONS:35) |

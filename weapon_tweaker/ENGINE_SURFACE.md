@@ -151,6 +151,13 @@ fires those values. Owner docs: `weapon_tweaker/DEVELOPMENT.md` ("Three-layer
 remap system", "Remap-table gotchas") and `ANIMATION_COVERAGE.md` (the release
 walk list).
 
+Generated/baked picks are an overlay, not a replacement map. The Billhook burn in #290
+showed why: its five saved rows are keyed by 1P `anim_event`, while the body actually receives
+the authored `anim_event_3p` for those actions. Replacing the receiver safety map deleted the
+only rows keyed by those effective events. Bakes must merge into the receiver map and a runtime
+contract must enumerate `anim_event_3p or anim_event` for every donor action against either an
+explicit remap or the receiver template's native vocabulary.
+
 ### `wield_anim_career_3p` is the render lever + the cross-character port pipeline
 
 The in-mission wield STANCE and the keep-previewer stance both read

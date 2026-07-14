@@ -718,6 +718,22 @@ Last updated: 2026-07-13.
 
 ---
 
+### issue290-billhook-bake-merge — saved picks cannot delete receiver-facing events
+
+| Field | Value |
+|-------|-------|
+| Symptom | Kruber equips Saltzpyre's Billhook but most or all 3P attacks have no visible body animation. |
+| Root cause | The v0.12.203 bake assigned a five-row `es_` table over the complete Billhook-to-polearm map. Its keys were 1P `anim_event` names, while five actions emit their distinct `anim_event_3p` values to the body, so the replacement matched neither those actions nor the safety rows it deleted. |
+| Mod(s) | weapon_tweaker |
+| Fix version(s) | wt v0.12.230-dev (#290) |
+| Category | STATIC / DIAGNOSTIC |
+| Repro | On Kruber, equip `wh_2h_billhook`; perform full lights, both heavies, push, and special hook while watching 3P. |
+| Expected post-fix | Baked picks overlay the complete receiver map. Every effective Billhook 3P event is remapped or native on the polearm body; 1P and native Saltzpyre remain untouched. |
+| Detection | `/wt_regression_test` passes `issue290_billhook_kruber_effective_3p_complete`; bounded `[wt:290]` rows identify the next actual Billhook attack without a command. |
+
+
+---
+
 ### wt-cim-widget-strip-removed - Dead CIM widget filtering stays removed
 
 | Field | Value |
@@ -753,6 +769,7 @@ Last updated: 2026-07-13.
 - feedback-workshop-upload-without-deploy
 - gated-registration-divergence
 - inventory-preview-hook-menuworldpreviewer
+- issue290-billhook-bake-merge
 - issue587-baked-transform-husk-fanout
 - wt-cim-widget-strip-removed
 - lua-forward-reference

@@ -123,6 +123,8 @@
     @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua'; needle='enable_weapon_backend_hooks ='; literal=$true; polarity='present'; issueRef='#218'; note='hidden default-true backend hook flag still has a label; it is runtime-read despite having no widget.' }
     @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua'; needle='enable_weapon_ui_hooks ='; literal=$true; polarity='present'; issueRef='#218'; note='hidden default-true UI hook flag still has a label; it is runtime-read despite having no widget.' }
     @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua'; needle='enable_weapon_animation_redirects ='; literal=$true; polarity='present'; issueRef='#218'; note='hidden default-true animation redirect flag still has a label; it is runtime-read despite having no widget.' }
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap.lua'; needle='for source, target in pairs(_3p_remap_billhook_to_polearm) do'; literal=$true; polarity='present'; issueRef='#290'; note='Billhook bake merges the complete receiver safety map before overlaying picks.' }
+    @{ mod='wt'; file='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap.lua'; needle='[wt:290] weapon=wh_2h_billhook'; literal=$true; polarity='present'; issueRef='#290'; note='bounded automatic diagnostic identifies the next actual Kruber Billhook attack.' }
 
     # ============================ ct_dev ============================
     # Source: chaos_wastes_tweaker_dev/CHANGELOG.md 0.7.245-dev (issue 511 item).
