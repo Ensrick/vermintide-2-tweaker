@@ -301,6 +301,7 @@ local weapon_unlock_map = _wt_unlock_data.weapon_unlock_map
 -- owns the can_wield strip/add); the entry no longer reads _cwv_managed itself.
 mod._wt.weapon_unlock_map = weapon_unlock_map
 mod._wt.cwv_managed        = _wt_unlock_data.cwv_managed
+mod._wt.cwv_conditional_managed = _wt_unlock_data.cwv_conditional_managed
 
 -- Availability control surface (can_wield strip/add + career-ability action
 -- injection) and CW trait-pool filtering, extracted v0.12.209-dev. Both are
@@ -5265,6 +5266,56 @@ _rt_register("issue582_native_dual_axes_cwv_ownership_boundary", function()
         for _, career in ipairs(native.can_wield) do
             if career:sub(1, 3) == "es_" or career:sub(1, 3) == "wh_" then
                 return "native Dual Axes can_wield ownership leak: " .. career
+            end
+        end
+    end
+end)
+
+_rt_register("issue593_conditional_cwv_axe_shield_ownership", function()
+    local policy = mod._wt.cwv_ownership
+    if type(policy) ~= "table" then return "#593 conditional ownership policy missing" end
+    local careers = { "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }
+    for _, career in ipairs(careers) do
+        local managed = mod._wt.cwv_conditional_managed[career]
+        if not managed or managed.dr_shield_axe ~= true then
+            return "#593 CWV handoff map missing " .. career
+        end
+        if not policy.should_yield_native(career, "dr_shield_axe", true, mod._wt.cwv_conditional_managed)
+            or policy.should_yield_native(career, "dr_shield_axe", false, mod._wt.cwv_conditional_managed) then
+            return "#593 conditional policy failed " .. career
+        end
+    end
+
+    -- Keep the four WT controls/localization rows: they preserve the user's
+    -- preference while CWV owns the slot and become live again on disable.
+    local data = mod:dofile("scripts/mods/weapon_tweaker/weapon_tweaker_data")
+    local wanted = {}
+    for _, career in ipairs(careers) do wanted["unlock_" .. career .. "_dr_shield_axe"] = false end
+    local function walk(widgets)
+        for _, widget in ipairs(widgets or {}) do
+            if wanted[widget.setting_id] ~= nil then wanted[widget.setting_id] = true end
+            walk(widget.sub_widgets)
+        end
+    end
+    walk(data and data.options and data.options.widgets)
+    for setting_id, found in pairs(wanted) do
+        if not found then return "#593 restorable WT widget missing: " .. setting_id end
+        if type(mod._wt_loc_raw) == "table" and mod._wt_loc_raw[setting_id] == nil then
+            return "#593 restorable WT localization missing: " .. setting_id
+        end
+    end
+
+    local active = policy.cwv_is_active(get_mod("character_weapon_variants"))
+    local native = rawget(_G, "ItemMasterList") and rawget(ItemMasterList, "dr_shield_axe")
+    if native and type(native.can_wield) == "table" then
+        local present = {}
+        for _, career in ipairs(native.can_wield) do present[career] = true end
+        for _, career in ipairs(careers) do
+            local enabled = mod:get("unlock_" .. career .. "_dr_shield_axe") == true
+            local expected = enabled and not active
+            if present[career] ~= expected then
+                return string.format("#593 runtime mismatch %s active=%s enabled=%s present=%s",
+                    career, tostring(active), tostring(enabled), tostring(present[career]))
             end
         end
     end

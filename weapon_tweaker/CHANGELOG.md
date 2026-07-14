@@ -7,6 +7,14 @@
 - **Automatic evidence:** the next actual Kruber `wh_2h_billhook` attack emits bounded `[wt:290]` rows without a command or picker toggle (one per source/target/outcome, maximum 48). The prior log only selected Billhook; its attack trace was `we_spear`, so it could not verify this path.
 - **Verify after deployment:** on any Kruber career, equip Saltzpyre's Billhook and perform the full light chain, both charged heavies, push, and special hook. Confirm visible 3P body motion and `[wt:290] weapon=wh_2h_billhook ... origin=template:two_handed_billhooks_template` with mapped targets (or documented polearm-native passthrough), no `source_event_has_no_remap_target` for a non-native event.
 
+## 0.12.230-dev (2026-07-13) - #593 conditional CWV Axe+Shield ownership [untested]
+
+- WT still offers Bardin's native `dr_shield_axe` controls to all four Kruber careers when CWV is absent or disabled. When CWV is active, WT yields only that native pair to the canonical CWV variants.
+- Added a dedicated `cwv_conditional_managed` policy beside the legacy overlap map. Its `can_wield` mutations are always stripped before a non-yielded enabled pair is restored, making enable, disable, removal, and hot-reload transitions idempotent without changing unrelated CWV overlap policy.
+- Backend ownership checks use the same live policy and prune stale cached native loadouts on the exact CWV active-state transition. WT controls/localization remain so saved preferences become live again when CWV is disabled.
+- Added host and runtime coverage for WT-only, WT+CWV, disable/removal, re-enable, UI persistence, and runtime `can_wield` parity.
+- **Verify:** enable one Kruber `Bardin: Axe and Shield` WT toggle. With CWV disabled, native Axe+Shield must equip. Enable CWV: the native item must stop resolving and both CWV variants must remain. Disable CWV without restarting: the native WT option must return. Re-enable CWV and repeat; no duplicate item, stale loadout, or restart requirement.
+
 ## 0.12.229-dev (2026-07-13) - #587 baked weapon transforms on remote husks [verify-fix-coop]
 
 - Vanilla remote wield is a separate renderer: `SimpleHuskInventoryExtension._wield_slot` resolves the replicated base item/career and calls `GearUtils.spawn_inventory_unit` directly, never `GearUtils.create_equipment` (`simple_husk_inventory_extension.lua:641-782`). WT now applies the same shipped scale/grip tables to those populated 3P husk units at wield time.

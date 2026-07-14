@@ -25,6 +25,14 @@ end
 -- legacy code paths or future use. Could be dropped from the signature.
 function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
     mod.loadout_cache = mod.loadout_cache or {}
+    local cwv_ownership = mod._wt and mod._wt.cwv_ownership
+    local cwv_managed = mod._wt and mod._wt.cwv_conditional_managed or {}
+    local function cwv_active()
+        return cwv_ownership
+            and cwv_ownership.cwv_is_active(get_mod("character_weapon_variants"))
+            or false
+    end
+    M._last_cwv_active = cwv_active()
 
     -- Passive overcharge-vent / energy-regen restore for cross-character
     -- overcharge weapons (Sienna staves) + the Moonfire Bow on careers that
@@ -44,6 +52,11 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
             return false
         end
 
+        if cwv_ownership and cwv_ownership.should_yield_native(
+                career_name, weapon_key, cwv_active(), cwv_managed) then
+            return false
+        end
+
         for _, unlocked_key in ipairs(career_weapons) do
             if unlocked_key == weapon_key and mod:get("unlock_" .. career_name .. "_" .. weapon_key) then
                 return true
@@ -60,7 +73,8 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
     M._filter_dirty = false
 
     function M.refresh_on_setting_change(mod)
-        if Managers.backend and Managers.backend._interfaces["items"] then
+        if Managers.backend and Managers.backend._interfaces
+                and Managers.backend._interfaces["items"] then
             local items_interface = Managers.backend:get_interface("items")
             for career_name, slots in pairs(mod.loadout_cache) do
                 for slot_name, backend_id in pairs(slots) do
@@ -134,12 +148,25 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
             pcall(mod._wt569_reapply_3p_orientation)
         end
 
+        -- #593: CWV may be enabled/disabled or hot-reloaded without a game
+        -- state transition. Reconcile exactly once per ownership transition:
+        -- can_wield is strip/rebuilt and stale WT loadout-cache rows are pruned.
+        local owns_axe_shield = cwv_active()
+        if owns_axe_shield ~= M._last_cwv_active then
+            M._last_cwv_active = owns_axe_shield
+            apply_weapon_unlocks()
+            M.refresh_on_setting_change(mod)
+            mod:info("[wt:593] CWV ownership transition active=%s; native Kruber Axe+Shield reconciled",
+                tostring(owns_axe_shield))
+        end
+
         if not mod._applied_unlocks and ItemMasterList then
             mod._applied_unlocks = true
             apply_weapon_unlocks()
         end
 
-        if not mod.done_hooking_backend and Managers.backend and Managers.backend._interfaces["items"] then
+        if not mod.done_hooking_backend and Managers.backend and Managers.backend._interfaces
+                and Managers.backend._interfaces["items"] then
             mod.done_hooking_backend = true
             local items_interface = Managers.backend:get_interface("items")
 

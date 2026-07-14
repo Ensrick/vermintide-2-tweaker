@@ -24,6 +24,13 @@ local mod = get_mod("wt")
 local WT = mod._wt
 local weapon_unlock_map = WT.weapon_unlock_map
 local _cwv_managed       = WT.cwv_managed
+local _cwv_conditional   = WT.cwv_conditional_managed
+local _cwv_ownership     = mod:dofile("scripts/mods/weapon_tweaker/_wt_cwv_ownership")
+WT.cwv_ownership         = _cwv_ownership
+
+local function _cwv_active()
+    return _cwv_ownership.cwv_is_active(get_mod("character_weapon_variants"))
+end
 
 -- Pairs removed from `weapon_unlock_map`. Users who had the
 -- corresponding `unlock_es_*_<weapon>` toggle = true before the removal will
@@ -78,13 +85,16 @@ local function apply_weapon_unlocks()
     -- since the last release. Idempotent — runs every init + on_setting_changed.
     _strip_removed_unlocks()
 
-    local has_cwv = get_mod("character_weapon_variants") ~= nil
+    local has_cwv = _cwv_active()
 
     -- Strip all mod-managed careers from can_wield
     for career, weapons in pairs(weapon_unlock_map) do
-        local cwv_skip = has_cwv and _cwv_managed[career]
         for _, weapon_key in ipairs(weapons) do
-            if not (cwv_skip and cwv_skip[weapon_key]) then
+            local legacy_skip = _cwv_ownership.should_yield_native(
+                career, weapon_key, has_cwv, _cwv_managed)
+            local conditional_yield = _cwv_ownership.should_yield_native(
+                career, weapon_key, has_cwv, _cwv_conditional)
+            if not legacy_skip or conditional_yield then
                 local item = rawget(ItemMasterList, weapon_key)
                 if item and item.can_wield then
                     for i = #item.can_wield, 1, -1 do
@@ -99,9 +109,12 @@ local function apply_weapon_unlocks()
 
     -- Add back only enabled ones
     for career, weapons in pairs(weapon_unlock_map) do
-        local cwv_skip = has_cwv and _cwv_managed[career]
         for _, weapon_key in ipairs(weapons) do
-            if not (cwv_skip and cwv_skip[weapon_key]) then
+            local legacy_skip = _cwv_ownership.should_yield_native(
+                career, weapon_key, has_cwv, _cwv_managed)
+            local conditional_yield = _cwv_ownership.should_yield_native(
+                career, weapon_key, has_cwv, _cwv_conditional)
+            if not legacy_skip and not conditional_yield then
                 if mod:get("unlock_" .. career .. "_" .. weapon_key) then
                     local item = rawget(ItemMasterList, weapon_key)
                     if item then

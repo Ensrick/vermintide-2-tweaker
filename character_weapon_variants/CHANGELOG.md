@@ -1,5 +1,11 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.398-dev - 2026-07-13 - #593 canonical Kruber Axe+Shield ownership [untested]
+
+- Both `cwv_es_axe_shield` definitions now use the complete four-career Kruber receiver set, including Grail Knight, so WT can yield Bardin's native donor without leaving one Kruber career without the canonical equivalent.
+- Variant keys, Bardin donor base, Empire model units, shared cosmetic family, and skin pools are unchanged. Added runtime coverage for the exact receiver/base/cosmetic contract.
+- Verify alongside WT 0.12.230-dev using issue #593's enable/disable/hot-reload matrix.
+
 ## 0.1.397-dev - 2026-07-13 - #592 registration is not acquisition [untested]
 
 - CWV now registers one definition-only `ItemMasterList` owner and network name per non-skin-only variant. It no longer adds owned items to MoreItemsLibrary's local backend, and `/cwv_give` directs players to CIM.

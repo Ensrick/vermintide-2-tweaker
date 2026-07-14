@@ -1,5 +1,18 @@
 # Weapon Tweaker — Development Notes
 
+## Conditional CWV ownership
+
+WT fallback ports remain real features when their dedicated CWV equivalent is
+absent. A row in `cwv_conditional_managed` is a live ownership handoff, not a
+permanent tombstone: WT suppresses the donor-native pair only while CWV is
+loaded and enabled, then restores the user's WT toggle when CWV is disabled or
+removed. Legacy `cwv_managed` rows keep their existing behavior.
+
+Use `_wt_cwv_ownership.lua` on both the `can_wield` writer and backend cache
+reader. Reconcile only on active-state transitions. Keep settings widgets and
+localization intact so suppressed preferences return without a restart; never
+suppress the donor's native careers.
+
 Architecture, gotchas, and conventions for `weapon_tweaker`. Read alongside
 `CHANGELOG.md` (history), `CODE_REVIEW.md` (current health), `REGRESSION_CHECKLIST.md`
 (pre-release gates), and `CROSS_CHARACTER_PORT_RECIPE.md` (the seven-step procedure

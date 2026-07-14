@@ -159,6 +159,16 @@ local DATA = {
         es_knight         = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
         es_questingknight = { wh_1h_falchion = true, wh_dual_wield_axe_falchion = true },
     },
+
+    -- #593: unlike legacy cwv_managed rows, these are reversible live
+    -- handoffs. WT owns the fallback while CWV is inactive and strips it on
+    -- an active transition, then restores the saved WT preference on disable.
+    cwv_conditional_managed = {
+        es_mercenary      = { dr_shield_axe = true },
+        es_huntsman       = { dr_shield_axe = true },
+        es_knight         = { dr_shield_axe = true },
+        es_questingknight = { dr_shield_axe = true },
+    },
 }
 
 -- #576/user correction: Saltzpyre receives Kruber's Empire Greathammer

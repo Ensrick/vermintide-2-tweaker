@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.397-dev"
+local MOD_VERSION = "0.1.398-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
@@ -320,7 +320,7 @@ local _variant_definitions = {
 		display_name    = "Axe and Shield",
 		description     = "A one-handed axe paired with a sturdy imperial shield.",
 		character       = "empire_soldier",
-		careers         = { "es_mercenary", "es_huntsman", "es_knight" },
+		careers         = _es_all_careers,
 		right_hand_unit = "units/weapons/player/wpn_axe_02_t1/wpn_axe_02_t1",
 		left_hand_unit  = "units/weapons/player/wpn_empire_shield_02/wpn_emp_shield_02",
 		inventory_icon  = "icon_wpn_dw_shield_01_axe",
@@ -336,7 +336,7 @@ local _variant_definitions = {
 		display_name    = "Imperial Axe and Shield",
 		description     = "A battle-hardened hatchet paired with a sturdy imperial shield. Reforged for Kruber's arsenal.",
 		character       = "empire_soldier",
-		careers         = { "es_mercenary", "es_huntsman", "es_knight" },
+		careers         = _es_all_careers,
 		right_hand_unit = "units/weapons/player/wpn_axe_hatchet_t2/wpn_axe_hatchet_t2_magic_01",
 		left_hand_unit  = "units/weapons/player/wpn_es_deus_shield_02/wpn_es_deus_shield_02_magic",
 		inventory_icon  = "icon_wpn_dw_shield_01_axe",
@@ -12901,6 +12901,28 @@ _rt_register("issue582_dual_axes_native_variant_ownership_boundary", function()
         if career:sub(1, 3) == "es_" or career:sub(1, 3) == "wh_" then
             return "native Bardin Dual Axes leaked to dedicated CWV receiver: " .. career
         end
+    end
+end)
+
+_rt_register("issue593_kruber_axe_shield_canonical_ownership", function()
+    local expected = {
+        es_mercenary = true, es_huntsman = true,
+        es_knight = true, es_questingknight = true,
+    }
+    for _, item_key in ipairs({ "cwv_es_axe_shield", "cwv_es_axe_shield_veteran" }) do
+        local def = _find_def(item_key)
+        if not def or def.base_weapon ~= "dr_shield_axe" then
+            return "#593 canonical CWV definition missing: " .. item_key
+        end
+        local seen = {}
+        for _, career in ipairs(def.careers or {}) do seen[career] = true end
+        for career in pairs(expected) do
+            if not seen[career] then return item_key .. " missing " .. career end
+            seen[career] = nil
+        end
+        if next(seen) then return item_key .. " has non-Kruber receiver" end
+        local skin_table = def.item_type == "cwv_es_axe_shield"
+        if not skin_table then return item_key .. " cosmetic family changed" end
     end
 end)
 

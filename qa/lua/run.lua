@@ -47,6 +47,7 @@ local suites = {
     "test_mod_tweaker_numeric_editor",
     "test_mp_dailies",
     "test_wt_passive_charge",
+    "test_wt_cwv_ownership",
     "test_cwv_remote_audio",
     "test_cwv_acquisition",
     "test_cim_skin_persistence",
