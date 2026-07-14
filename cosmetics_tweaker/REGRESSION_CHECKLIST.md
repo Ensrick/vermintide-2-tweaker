@@ -22,6 +22,19 @@ Last updated: 2026-07-14.
 ---
 ## Diagnostics / Regression Suite
 
+### oop-phase4a-wire-boundary -- custom skins never enter vanilla lookups
+
+| Field | Value |
+|-------|-------|
+| Scope | Structural extraction of the three vanilla `rpc_add_equipment` sender guards; no wire or gameplay behavior change. |
+| Invariant | Every custom illusion skin is temporarily nil only while vanilla encodes/sends it, then restored locally. The boundary is unconditional and covers initial spawn, resynced equip, and hot join. |
+| Module | `_cos_wire.lua`, manifest-ordered after `_cos_illusions.lua`. |
+| Detection | Offline `test_cos_wire.lua`; `/cos_regression_test` passes `wire_skin_null_ungated` and `wire_skin_null_all_senders`. |
+| Verification | Co-op exercise initial spawn, mid-session re-equip, and hot join with a `ct_*` illusion; owner retains the local illusion and no peer crashes. |
+| Tracking | GitHub issue #504 Phase 4a; issue #421 wire-safety invariant. |
+
+---
+
 ### la-exact-instance-persistence-icons -- no shared icon mutation
 
 | Field | Value |

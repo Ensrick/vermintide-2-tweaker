@@ -1,5 +1,13 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.102-dev - 2026-07-14 - #504 OOP Phase 4a wire boundary [verify-fix-coop]
+
+- Extracted the complete #421 custom weapon-skin wire boundary from the entry monolith into `_cos_wire.lua`: the null/restore helper and all three vanilla `rpc_add_equipment` sender hooks now have one owner and one load-bearing manifest edge after custom illusion registration.
+- Preserved the established `mod._cos_wire_null_custom_skins` and `mod._cos_skin_wire_surfaces` regression surfaces, hook targets, diagnostics, return arity, and unconditional never-crash policy. No setting, RPC, payload, or gameplay behavior changed.
+- Added engine-free coverage for manifest order, all three sender registrations, custom-only nulling, local-state restoration, and four-value continuation forwarding. Existing `/cos_regression_test` checks `wire_skin_null_ungated` and `wire_skin_null_all_senders` remain the in-game assertions.
+
+- **Verify (coop):** with both peers running the same dev build, equip a `ct_*` custom illusion before mission start, change/re-equip it mid-session, and have the second peer hot-join. The owner must retain the illusion locally; the other peer must not crash on any path. Run `/cos_regression_test` and confirm `wire_skin_null_ungated` plus `wire_skin_null_all_senders` pass. The console should show bounded `[cos:421] wire skin null` lines for `game_object_initialized`, `spawn_resynced_loadout`, and `hot_join_sync` as those paths are exercised.
+
 ## 0.9.101-dev - 2026-07-14 - #485 authored heroic weapon poses [diagnostics-armed]
 
 - Added a default-off **Unlock Heroic Weapon Poses** option. In the modded realm, the social wheel now receives every valid `weapon_pose` item authored for the currently wielded weapon, sorted by pose index, without writing backend ownership or mutating `ItemMasterList`.

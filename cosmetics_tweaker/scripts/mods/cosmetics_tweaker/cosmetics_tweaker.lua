@@ -60,7 +60,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.101-dev"
+local MOD_VERSION = "0.9.102-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -342,6 +342,7 @@ end
 --   _cos_unlocks     : per-career unlocks + portrait frames + unobtainable-cosmetic grants
 --   _cos_render      : weapon scale/grip apply helpers + shared _is_unit (v0.9.78-dev Phase 2)
 --   _cos_glow        : weapon glow apply pipeline + MaterialSettingsTemplates routing (v0.9.79-dev Phase 3)
+--   _cos_wire        : #421 custom-skin wire null/restore senders (v0.9.102-dev Phase 4a)
 mod._cos = mod._cos or {}
 mod._cos.U = U
 mod._cos.LA_BRIDGE = LA_BRIDGE
@@ -349,12 +350,17 @@ mod._cos.flush_log = _flush_log
 mod._cos.skin_requires_unowned_dlc = _skin_requires_unowned_dlc
 -- custom_skin_keys: the illusions module fills it at registration; the wire-safety
 -- null-and-restore senders (_wire_null_custom_skins) and the regression suite read
--- it. Keep an entry-local alias so those load-bearing references stay byte-unchanged.
+-- it. Keep an entry-local alias for the regression suite; `_cos_wire` captures the
+-- same namespace table after `_cos_illusions` populates it.
 mod._cos.custom_skin_keys = mod._cos.custom_skin_keys or {}
 local _custom_skin_keys = mod._cos.custom_skin_keys
 
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diagnostics")
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_illusions")
+-- _cos_wire consumes the custom_skin_keys table populated by _cos_illusions,
+-- so this manifest edge is load-bearing. It owns all three rpc_add_equipment
+-- sender hooks and their frozen regression surface.
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_wire")
 mod:dofile("scripts/mods/cosmetics_tweaker/_cos_unlocks")
 -- _cos_render has no load-time reads of other modules' exports and its own
 -- exports (scale_units/offset_units/apply_unit_path_scale_hand/is_unit) are
@@ -5395,119 +5401,6 @@ if LoadoutUtils then
         return func(player, slot_name, item, sync_to_specific_peer_id)
     end)
 end
-
--- v0.9.74-dev: FOURTH sync surface — the weapon SKIN axis (issue 421 / issue 371).
--- The surfaces above cover the item/attachment NAME. Custom weapon illusions
--- (_custom_skin_keys — the ct_* illusions plus any LA weapon-skin key) instead write a
--- modded key into slot_data.skin; vanilla SimpleInventoryExtension.game_object_initialized
--- encodes weapon_skin_id = NetworkLookup.weapon_skins[slot_data.skin or "n/a"] and
--- broadcasts rpc_add_equipment to EVERY peer (simple_inventory_extension.lua:258-264). A
--- peer WITHOUT cosmetics_tweaker cold-decodes the appended index at inventory_system.lua:300
--- -> the strict __index metamethod fatals (network_lookup.lua:2362). Same crash mode as the
--- shipped fa479a72 GUID. Null any custom skin key on the WIRE (encodes as the universal
--- vanilla "n/a" index), then restore the slot's real skin immediately after the send so the
--- LOCAL owner still spawns the custom illusion (this function only SENDS the RPC; the owner's
--- unit spawn reads the restored value elsewhere). Remote peers render the base skin either
--- way. Sole cosmetics hook on this method (grep-verified; the LA name path hooks
--- PlayerUnitAttachmentExtension.game_object_initialized, a different extension class).
--- v0.9.75-dev: the null-and-restore is extracted to a pure helper so the
--- /cos_regression_test `wire_skin_null_ungated` check can drive the EXACT shipped path
--- (BUG_CLASSES 31 mandates a wire_*_ungated assertion on every sender-side substitution;
--- the v0.9.74 skin axis was the one uncovered surface). `slots` is the equipment slot
--- table; `send_fn` is the vanilla continuation that encodes weapon_skin_id + broadcasts
--- rpc_add_equipment. Every _custom_skin_keys skin is nulled on the WIRE, the send runs,
--- then each real skin is restored so the LOCAL owner still spawns the custom illusion.
--- The null takes NO toggle argument by construction, so it can never be gated behind a
--- mod:get() -- the coercion is UNCONDITIONAL (class-31 never-crash mandate). Preserves up
--- to four vanilla returns (game_object_initialized's arity, unchanged from the pre-
--- extraction inline body).
--- v0.9.76-dev (#421): optional `context` names the sender surface in the
--- [cos:421] diagnostic line (solo-verifiable: equip a ct_* illusion, grep the
--- console log for the null on the expected surface). Behavior unchanged.
-local function _wire_null_custom_skins(slots, send_fn, context)
-    local saved
-    for _, slot_data in pairs(slots) do
-        local skin = slot_data and slot_data.skin
-        if skin and _custom_skin_keys[skin] then
-            saved = saved or {}
-            saved[slot_data] = skin
-            slot_data.skin = nil
-            pcall(printf, "[cos:421] wire skin null (%s): %s -> n/a",
-                tostring(context or "?"), tostring(skin))
-        end
-    end
-    local r1, r2, r3, r4 = send_fn()
-    if saved then
-        for slot_data, skin in pairs(saved) do
-            slot_data.skin = skin
-        end
-    end
-    return r1, r2, r3, r4
-end
-mod._cos_wire_null_custom_skins = _wire_null_custom_skins
--- v0.9.76-dev (#421): every rpc_add_equipment sender that encodes weapon_skin_id
--- from live slot data flags itself here at hook-registration time; the
--- wire_skin_null_all_senders regression check asserts all three are present.
-mod._cos_skin_wire_surfaces = {}
-
-mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
-    local slots = self and self._equipment and self._equipment.slots
-    if not slots then
-        return func(self, unit, unit_go_id)
-    end
-    return _wire_null_custom_skins(slots, function()
-        return func(self, unit, unit_go_id)
-    end, "game_object_initialized")
-end)
-mod._cos_skin_wire_surfaces.game_object_initialized = true
-
--- v0.9.76-dev (#421): the v0.9.74 null-and-restore covered ONLY the initial-spawn
--- sender above. Vanilla has TWO more senders that encode
--- weapon_skin_id = NetworkLookup.weapon_skins[<live slot skin> or "n/a"] and
--- broadcast rpc_add_equipment:
---
---   1. SimpleInventoryExtension._spawn_resynced_loadout
---      (simple_inventory_extension.lua:1443-1457, encode at :1451) - fires on
---      EVERY mid-session (re)equip: applying an illusion in the hero view,
---      weapon swap, career-skill-weapon respawn. This is the "on equip" leak
---      the issue title describes: with a ct_* skin in equipment_to_spawn.skin
---      the modded index went to every peer. Local visuals are unaffected by
---      the null: vanilla re-derives the slot skin inside GearUtils.create_
---      equipment via the backend (simple_inventory_extension.lua:874), not
---      from the nulled wire field (which is discarded after the call).
---
---   2. GearUtils.hot_join_sync (gear_utils.lua:462-488, encode at :484) - the
---      host replays every worn slot to each newly-joined peer; a non-mod
---      joiner cold-decodes the modded index and fatals before finishing load.
---
--- Same never-crash rule as the goi hook (issue 371 / BUG_CLASSES 31): the null
--- is UNCONDITIONAL, never behind a mod:get() toggle. Sole cosmetics hooks on
--- both methods (grep-verified 2026-07-11: no prior mod:hook/hook_safe on
--- SimpleInventoryExtension._spawn_resynced_loadout or GearUtils.hot_join_sync;
--- the AttachmentUtils.hot_join_sync hook at ~line 8500 is a different table).
-mod:hook("SimpleInventoryExtension", "_spawn_resynced_loadout", function(func, self, equipment_to_spawn, skip_wield)
-    if not (equipment_to_spawn and equipment_to_spawn.skin) then
-        return func(self, equipment_to_spawn, skip_wield)
-    end
-    -- equipment_to_spawn is a single slot-shaped table ({slot_id, item_data,
-    -- skin, ammo_percent}); wrap it in a one-element array so the shared
-    -- helper's pairs() walk applies. Per-equip event, not per-frame.
-    return _wire_null_custom_skins({ equipment_to_spawn }, function()
-        return func(self, equipment_to_spawn, skip_wield)
-    end, "spawn_resynced_loadout")
-end)
-mod._cos_skin_wire_surfaces.spawn_resynced_loadout = true
-
-mod:hook("GearUtils", "hot_join_sync", function(func, peer_id, unit, equipment, additional_items)
-    local slots = equipment and equipment.slots
-    if not slots then
-        return func(peer_id, unit, equipment, additional_items)
-    end
-    return _wire_null_custom_skins(slots, function()
-        return func(peer_id, unit, equipment, additional_items)
-    end, "hot_join_sync")
-end)
-mod._cos_skin_wire_surfaces.hot_join_sync = true
 
 -- v0.8.61-dev: THIRD sync surface — attachment-RPC paths that read
 -- `NetworkLookup.item_names[slot_data.item_data.name]` (or `slot_data.name`)
