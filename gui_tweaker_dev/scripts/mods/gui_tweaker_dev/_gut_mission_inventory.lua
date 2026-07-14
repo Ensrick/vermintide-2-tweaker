@@ -161,6 +161,11 @@ local function _gut_customize_allowed()
     return in_keep or (get_mod("cosmetics_tweaker") ~= nil)
 end
 
+-- #89 close-proof surface: the requested Cosmetics-only capability is owned at
+-- the entry mod that opens the mid-mission view. Expose the exact live policy so
+-- /gut_regression_test can assert it without source I/O (unavailable in retail).
+mod._gut89_customize_allowed = _gut_customize_allowed
+
 mod:hook("HeroWindowLoadoutConsole", "_customize_item", function(func, self, item)
     local d = item and item.data
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
@@ -237,6 +242,8 @@ local function _gut_mount_fix_active()
     -- double-apply the mount fix alongside cim_dev's own. cim/cim_dev present -> gut passes through.
     return (not in_keep) and (not _gut_cim_present())
 end
+mod._gut89_mount_fix_active = _gut_mount_fix_active
+mod._gut89_mount_surfaces = {}
 
 mod:hook("HeroWindowItemCustomization", "_create_item_preview_widget_definition", function(func, self)
     if not _gut_mount_fix_active() then return func(self) end
@@ -270,6 +277,7 @@ mod:hook("HeroWindowItemCustomization", "_create_item_preview_widget_definition"
         scenegraph_id = "item_preview",
     }
 end)
+mod._gut89_mount_surfaces.create_item_preview_widget_definition = true
 
 mod:hook("HeroWindowItemCustomization", "_register_object_sets", function(func, self, viewport_widget, viewport_definition)
     if not _gut_mount_fix_active() then return func(self, viewport_widget, viewport_definition) end
@@ -289,6 +297,7 @@ mod:hook("HeroWindowItemCustomization", "_register_object_sets", function(func, 
     }
     self:_show_object_set(nil, true)
 end)
+mod._gut89_mount_surfaces.register_object_sets = true
 
 -- ============================================================
 -- (#539) Mid-mission Customize crash: normalize a nil ItemId on the resolved item

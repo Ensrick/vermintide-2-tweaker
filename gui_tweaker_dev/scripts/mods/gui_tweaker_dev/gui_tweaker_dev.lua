@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.262-dev"
+local MOD_VERSION = "0.2.263-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2479,6 +2479,39 @@ _rt_register("cosmetics_split_tab_ungated_gear_gated", function()
     local gate_needle = 'return in_keep or (get_mod("cosmetics' .. '_tweaker") ~= nil)'
     if not txt:find(gate_needle, 1, true) then
         return "#172 regression: the gear-icon customize gate is no longer keyed on cosmetics_tweaker specifically"
+    end
+end)
+
+_rt_register("issue89_cosmetics_only_customize_mount", function()
+    -- #89's original implementation plan said Cosmetics had to copy CIM's two
+    -- mount hooks before GUT could permit the gear icon. #84 superseded that
+    -- architecture: GUT owns the only mid-mission entry and now owns the two
+    -- level-free mount hooks itself, while Cosmetics owns the render/apply path.
+    -- Assert the live cross-mod contract directly; no retail source I/O.
+    if type(mod._gut89_customize_allowed) ~= "function" then
+        return "#89 customize policy missing"
+    end
+    if type(mod._gut89_mount_fix_active) ~= "function" then
+        return "#89 mount policy missing"
+    end
+    local surfaces = mod._gut89_mount_surfaces
+    if type(surfaces) ~= "table"
+        or surfaces.create_item_preview_widget_definition ~= true
+        or surfaces.register_object_sets ~= true
+    then
+        return "#89 level-free mount sender surfaces incomplete"
+    end
+
+    local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
+    if not in_keep then
+        local has_cosmetics = get_mod("cosmetics_tweaker") ~= nil
+        if has_cosmetics and mod._gut89_customize_allowed() ~= true then
+            return "#89 Cosmetics present but in-mission gear icon remains blocked"
+        end
+        local has_cim = get_mod("cim_dev") ~= nil or get_mod("cim") ~= nil
+        if not has_cim and mod._gut89_mount_fix_active() ~= true then
+            return "#89 no-CIM mission path did not activate GUT's level-free mount"
+        end
     end
 end)
 

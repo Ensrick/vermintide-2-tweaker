@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.263-dev (2026-07-14) -- #89 Cosmetics-only mission customize close-proof [verify-fix]
+
+- Audited the deferred #89 implementation plan against the shipped #84/#87/#172 architecture. The requested capability is already complete: GUT owns the only mid-mission entry and its two CIM-derived level-free mount hooks, while Cosmetics owns the mission-aware preview lighting, illusion rendering, and apply path. Moving duplicate mount hooks into Cosmetics now would add a second owner without changing capability and would complicate CIM coexistence.
+- Exported the live gear-icon and no-CIM mount policies plus a two-surface registration ledger. Added `/gut_regression_test` check `issue89_cosmetics_only_customize_mount`, which verifies both mount hooks exist and, when run in a mission, Cosmetics permits the gear icon and the no-CIM path selects GUT's level-free mount.
+- Added engine-free cross-mod coverage for the Cosmetics-only gate, both keep-level bypass surfaces, the empty object-set contract, and Cosmetics' mission-aware preview render companion. No hook, viewport, tab, or gameplay behavior changed.
+
+### Solo verify
+
+Load Tweaker: GUI and Tweaker: Cosmetics without CIM, enter an Adventure mission, open inventory, and use the weapon gear icon. The customization view must mount without a `LevelResource.object_set_names("levels/ui_store_preview/world")` crash, render the weapon, and allow an illusion change. Run `/gut_regression_test` in the mission and confirm `issue89_cosmetics_only_customize_mount` passes. This behavior was already user-verified under #84; this version makes the cross-mod ownership contract regression-visible.
+
 ## 0.2.262-dev (2026-07-14) -- #442 career-themed HUD holder capability [diagnostics-armed]
 
 - Located the exact vanilla ownership seam: `EquipmentUI` selects its health/inventory holder through `UISettings.hud_inventory_panel_data[career_name]`, with no additional HUD hook required.

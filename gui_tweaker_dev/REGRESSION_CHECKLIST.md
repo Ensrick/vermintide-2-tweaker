@@ -36,6 +36,15 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md
 
 Last updated: 2026-07-14.
 
+## Cosmetics-only in-mission customization mount (#89)
+
+- [ ] With Cosmetics installed and CIM absent, the Adventure in-mission gear icon is enabled and opens `HeroWindowItemCustomization`.
+- [ ] GUT's `_create_item_preview_widget_definition` substitute contains no keep-only `level_name`/`object_sets`, and `_register_object_sets` seeds an empty object-set ledger.
+- [ ] The keep path delegates unchanged; CIM/CIM-dev paths delegate to CIM's existing mount owner.
+- [ ] Cosmetics' `_create_preview_widget` mission hook repoints the level-free preview to the resident store-preview shading environment, so the weapon is rendered rather than black/blank.
+- [ ] `/gut_regression_test` passes `issue89_cosmetics_only_customize_mount`; offline `test_gut_cosmetics_mission_mount.lua` passes.
+- Lifecycle: close-ready as the #84 implementation superseded #89's proposed ownership location without reducing the requested capability.
+
 ## Localization lifecycle sync (#345)
 
 - [ ] Third-Person Camera (#209) and Allow crafting bench in mission (#80) display `[verify-fix]` with their issue number.
