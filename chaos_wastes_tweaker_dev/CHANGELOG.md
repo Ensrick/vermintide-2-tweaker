@@ -1,5 +1,16 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.289-dev (2026-07-14) - #221 menu umbrella masters [verify-fix]
+
+- Added five nested owner controls for the historical menu-consolidation families: altar reuse, listed curses, grudge marks, weapon traits, and boon reworks.
+- Preserved existing installs and defaults: altar reuse and boon-rework masters default on; the three bulk-disable/ban masters default off. Individual child settings remain unchanged and continue to compose with their owner.
+- Gated behavior at the existing owner entry points rather than rewriting child values. Bulk bans are logical overrides, while disabling altar reuse or boon reworks restores vanilla behavior without erasing saved child choices.
+- Adversarial hardening closes the weapon-trait escape paths: the final generated-item boundary now removes banned traits from unique archetypes and from the legacy all-candidates-banned safety fallback. Ban-all yields a valid traitless item rather than silently restoring a banned pool.
+- Kept individually configurable curse, grudge-mark, and trait bans visible while their default-off bulk masters are off. VMF hides checkbox `sub_widgets` when unchecked, so these masters are first-row siblings inside the existing collapsible groups rather than parents that make their leaves inaccessible.
+- Added a bounded, observation-only `[ct:221]` startup summary and `/ct_umbrella_audit`, plus pure policy, realized-menu, family-count, and production-consumer regression coverage.
+
+**Solo verify:** confirm each master appears directly above its nested settings. Toggle an owner and run `/ct_umbrella_audit`; require its explicit `<family>_master=` field, the documented bounded family count, and `mutation=false`. With **Ban all weapon traits** on, generate both an ordinary orange/red weapon and a unique-archetype weapon and confirm both are traitless; turn it off and confirm the saved individual bans resume. Disable the other owners again and confirm their saved child choices return.
+
 ## 0.7.288-dev (2026-07-14) - #219 orphan localization cleanup [verify-fix]
 
 - Removed twelve pre-v0.7.90 boon-group labels whose category ids no longer exist in `BOON_TREE`. Current property, talent, set, orb, gamble, misc, and dormant headers remain intact.

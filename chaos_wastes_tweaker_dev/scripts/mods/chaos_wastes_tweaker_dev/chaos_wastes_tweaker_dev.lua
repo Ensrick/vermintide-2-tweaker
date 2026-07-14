@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.288-dev"
+local MOD_VERSION = "0.7.289-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -82,6 +82,11 @@ pcall(printf, "[ct:rpc] schema_version=%d", CT_RPC_SCHEMA)
 mod._ct_bomb_cooldown_display = mod:dofile(
     "scripts/mods/chaos_wastes_tweaker_dev/_ct_bomb_cooldown_display")
 mod._ct_bomb_cooldown_display.install(CT_RPC_SCHEMA)
+
+-- #221: attach instead of introducing another file-chunk local; this main file
+-- is already at Lua 5.1's 200-local limit.
+mod._ct_umbrella_policy = mod:dofile(
+    "scripts/mods/chaos_wastes_tweaker_dev/_ct_umbrella_policy")
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- `_dbg` is for confirmation / expected behavior — mod:debug (file only,
@@ -1136,7 +1141,9 @@ end
 local function _altar_max_uses(chest_type)
     local key = _altar_key_for(chest_type)
     if not key then return 1 end
-    local v = effective_setting("altar_reuse_count_" .. key)
+    local v = mod._ct_umbrella_policy.value(
+        effective_setting("enable_altar_reuse"),
+        effective_setting("altar_reuse_count_" .. key), 1)
     if type(v) ~= "number" or v < 1 then return 1 end
     return math.floor(v)
 end
@@ -1144,7 +1151,9 @@ end
 local function _altar_cost_mult(chest_type)
     local key = _altar_key_for(chest_type)
     if not key then return 1 end
-    local v = effective_setting("altar_reuse_cost_mult_" .. key)
+    local v = mod._ct_umbrella_policy.value(
+        effective_setting("enable_altar_reuse"),
+        effective_setting("altar_reuse_cost_mult_" .. key), 1)
     if type(v) ~= "number" or v <= 0 then return 1 end
     return v
 end
@@ -2647,6 +2656,60 @@ end
 -- main-chunk local (keeps us under the Lua 5.1 200-locals-per-function cap).
 mod._ct_effective_setting = effective_setting
 
+-- #221: one bounded, observation-only summary of the five CT umbrella owners.
+-- Uses the realized synced setting inventory, so generated/additional leaves are
+-- counted without another hand-maintained list.
+mod._ct_umbrella_audit = function(echo_result)
+    local totals = { curses = 0, grudges = 0, traits = 0, boons = 0 }
+    local active = { curses = 0, grudges = 0, traits = 0, boons = 0 }
+    local policy = mod._ct_umbrella_policy
+    for _, id in ipairs(SYNCED_SETTING_NAMES) do
+        local family
+        local master
+        if id:find("^disable_curse_") then
+            family, master = "curses", "disable_all_listed_curses"
+        elseif id:find("^ban_grudge_mark_") then
+            family, master = "grudges", "ban_all_grudge_marks"
+        elseif id:find("^ban_trait_") and not id:find("_group$") then
+            family, master = "traits", "ban_all_traits"
+        elseif id:find("^enable_boon_") and id ~= "enable_boon_reworks" then
+            family, master = "boons", "enable_boon_reworks"
+        end
+        if family then
+            totals[family] = totals[family] + 1
+            local on
+            if family == "boons" then
+                on = policy.enabled(effective_setting(master), effective_setting(id))
+            else
+                on = policy.banned(effective_setting(master), effective_setting(id))
+            end
+            if on then active[family] = active[family] + 1 end
+        end
+    end
+    local line = string.format(
+        "[ct:221] altar_master=%s curses_master=%s curses=%d/%d " ..
+        "grudges_master=%s grudges=%d/%d traits_master=%s traits=%d/%d " ..
+        "boons_master=%s boons=%d/%d mutation=false",
+        tostring(effective_setting("enable_altar_reuse") ~= false),
+        tostring(effective_setting("disable_all_listed_curses") == true),
+        active.curses, totals.curses,
+        tostring(effective_setting("ban_all_grudge_marks") == true),
+        active.grudges, totals.grudges,
+        tostring(effective_setting("ban_all_traits") == true),
+        active.traits, totals.traits,
+        tostring(effective_setting("enable_boon_reworks") ~= false),
+        active.boons, totals.boons)
+    pcall(printf, "%s", line)
+    if echo_result then mod:echo("[ct:221] umbrella audit written to log") end
+    return { totals = totals, active = active, line = line }
+end
+
+mod._ct_umbrella_audit(false)
+
+mod:command("ct_umbrella_audit", "Log issue #221 umbrella-master state", function()
+    mod._ct_umbrella_audit(true)
+end)
+
 -- ============================================================
 -- UNCONDITIONAL settings dump (Issue: host-config visibility for triage).
 -- ============================================================
@@ -2723,7 +2786,8 @@ is_curse_disabled = function(curse_name)
         return false
     end
     local key = "disable_curse_" .. curse_name:gsub("^curse_", "")
-    return effective_setting(key) == true
+    return mod._ct_umbrella_policy.banned(
+        effective_setting("disable_all_listed_curses"), effective_setting(key))
 end
 
 -- v0.7.95: starting_coins is now a SETTER, not an adder.
@@ -4398,7 +4462,9 @@ local function apply_weapon_trait_filter()
             for _, combo in ipairs(base) do
                 local keep = true
                 for _, trait in ipairs(combo) do
-                    if effective_setting("ban_trait_" .. trait) then
+                    if mod._ct_umbrella_policy.banned(
+                        effective_setting("ban_all_traits"),
+                        effective_setting("ban_trait_" .. trait)) then
                         keep = false
                         break
                     end
@@ -4551,7 +4617,9 @@ local function get_tier_filtered_combos(item_key, rarity)
         local filtered = {}
         for trait in pairs(class_pool) do
             local rp = TRAIT_RARITY_POOL[trait]
-            if rp and rp[rarity] and not effective_setting("ban_trait_" .. trait) then
+            if rp and rp[rarity] and not mod._ct_umbrella_policy.banned(
+                effective_setting("ban_all_traits"),
+                effective_setting("ban_trait_" .. trait)) then
                 filtered[#filtered + 1] = { trait }
             end
         end
@@ -4645,6 +4713,21 @@ local function override_traits_in_result(result, rarity)
     return result
 end
 
+-- #221 adversarial completion: baked-pool filtering cannot cover vanilla unique
+-- archetypes, and its intentional empty-pool fallback permits a trait when every
+-- candidate is banned. Strip only the detached generated result after every
+-- generation/upgrade path (and after tier override), which vanilla serialization
+-- safely supports as an empty trait list.
+function mod._ct_strip_banned_traits_from_result(result)
+    if type(result) ~= "table" then return result end
+    local traits, removed = mod._ct_umbrella_policy.filter_traits(
+        effective_setting("ban_all_traits"), result.traits, function(trait)
+            return effective_setting("ban_trait_" .. tostring(trait))
+        end)
+    if removed > 0 then result.traits = traits end
+    return result
+end
+
 -- CLARIFY: Three trait-filter wrap points cover the three vanilla call sites that read
 -- baked_trait_combinations: initial weapon roll, slot-specific roll (Belakor temple?), and altar
 -- upgrade. Same save/restore pattern as the boon hooks above.
@@ -4698,7 +4781,8 @@ local function _filtered_weapon_gen(label, func, gen_rarity, n, args)
         end
         error(result, 2)  -- re-raise; baked_trait_combinations is now restored
     end
-    return override_traits_in_result(result, gen_rarity)
+    result = override_traits_in_result(result, gen_rarity)
+    return mod._ct_strip_banned_traits_from_result(result)
 end
 
 mod:hook("DeusWeaponGeneration", "generate_weapon", function(func, difficulty, run_progress, rarity, ...)
@@ -7024,11 +7108,10 @@ local function filter_available_curses(config)
                 if type(curse_list) == "table" and #curse_list > 0 then
                     local filtered = {}
                     for _, curse in ipairs(curse_list) do
-                        local key = "disable_curse_" .. curse:gsub("^curse_", "")
                         -- v0.7.42: use effective_setting so client mirrors host's disable
                         -- choices. Otherwise the deus_populate_graph filtering diverges
                         -- across peers → wrong-curse-on-node visible to one player only.
-                        if not effective_setting(key) then
+                        if not is_curse_disabled(curse) then
                             filtered[#filtered + 1] = curse
                         end
                     end
@@ -10876,7 +10959,8 @@ local function sync_grudge_marks()
     local banned = {}
     for _, name in ipairs(BOSS_GRUDGE_MARK_NAMES) do
         local sid = "ban_grudge_mark_" .. name
-        if effective_setting(sid) then
+        if mod._ct_umbrella_policy.banned(
+            effective_setting("ban_all_grudge_marks"), effective_setting(sid)) then
             bgm[name] = nil
             banned[#banned + 1] = name
         end
@@ -10933,7 +11017,9 @@ if rawget(_G, "TerrorEventUtils") then
                 for i = 1, #enh do
                     local e = enh[i]
                     local nm = (type(e) == "table" and e.name) or (type(e) == "string" and e) or nil
-                    if type(nm) == "string" and effective_setting("ban_grudge_mark_" .. nm) == true then
+                    if type(nm) == "string" and mod._ct_umbrella_policy.banned(
+                        effective_setting("ban_all_grudge_marks"),
+                        effective_setting("ban_grudge_mark_" .. nm)) then
                         removed[#removed + 1] = nm
                     else
                         kept[#kept + 1] = e
@@ -10973,7 +11059,9 @@ mod:command("dump_grudge_marks", "Dump the live BossGrudgeMarks set and each ent
     pcall(printf, "[DUMP:grudge_marks] === live BossGrudgeMarks: %d entries ===", (function() local n = 0 for _ in pairs(bgm) do n = n + 1 end return n end)())
     pcall(printf, "[DUMP:grudge_marks] name\ttoggle_on\tlive_present\tdisplay_name_key")
     for _, name in ipairs(BOSS_GRUDGE_MARK_NAMES) do
-        local toggle_on = effective_setting("ban_grudge_mark_" .. name) == true
+        local toggle_on = mod._ct_umbrella_policy.banned(
+            effective_setting("ban_all_grudge_marks"),
+            effective_setting("ban_grudge_mark_" .. name))
         local live_present = bgm[name] ~= nil
         local entry = be and be[name]
         local dn_key = entry and entry.display_name or ("display_name_" .. name)
@@ -10996,7 +11084,9 @@ mod:command("verify_grudge_marks", "Verify each Boss Grudge Mark toggle vs live 
     end
     local pass, fail = 0, 0
     for _, name in ipairs(BOSS_GRUDGE_MARK_NAMES) do
-        local toggle_on  = effective_setting("ban_grudge_mark_" .. name) == true
+        local toggle_on = mod._ct_umbrella_policy.banned(
+            effective_setting("ban_all_grudge_marks"),
+            effective_setting("ban_grudge_mark_" .. name))
         local live_present = bgm[name] ~= nil
         local expected_present = not toggle_on
         local ok = (live_present == expected_present)
@@ -14112,7 +14202,11 @@ local function register_trait_boon(spec)
     -- now happens unconditionally in pre_register_trait_boon_lookups. This
     -- function is only responsible for the toggle-gated pool insert, which
     -- determines whether the user actually rolls the boon.
-    if not effective_setting(spec.toggle) then return end
+    if not mod._ct_umbrella_policy.enabled(
+        effective_setting("enable_boon_reworks"), effective_setting(spec.toggle)) then
+        _remove_dormant_from_pool(spec.name, spec.rarity)
+        return
+    end
     _add_dormant_to_pool(spec.name, spec.rarity)
     _dbg("[trait-boon] enabled " .. spec.name .. " at rarity " .. spec.rarity)
 end
@@ -15093,13 +15187,15 @@ mod.on_setting_changed = function(setting_id)
     -- comment them out to make the disable explicit (re-enable alongside data.lua + loc).
     -- elseif type(setting_id) == "string" and setting_id:find("^activate_dormant_") == 1 then
     --     sync_dormant_boons()
-    elseif type(setting_id) == "string" and setting_id:find("^ban_grudge_mark_") == 1 then
+    elseif setting_id == "ban_all_grudge_marks"
+        or (type(setting_id) == "string" and setting_id:find("^ban_grudge_mark_") == 1) then
         sync_grudge_marks()
     -- elseif setting_id == "enable_skulls_event_boons" then
     --     sync_skulls_event_boons()
-    elseif type(setting_id) == "string" and setting_id:find("^enable_boon_") == 1 then
+    elseif setting_id == "enable_boon_reworks"
+        or (type(setting_id) == "string" and setting_id:find("^enable_boon_") == 1) then
         for _, spec in ipairs(CT_TRAIT_BOONS) do
-            register_trait_boon(spec)  -- idempotent; injects only if toggle on and not yet injected
+            register_trait_boon(spec)  -- idempotent; also ejects when either gate is off
         end
     elseif is_pool_setting(setting_id) then
         -- inject_pool() is idempotent: takes a one-time snapshot, resets to it on

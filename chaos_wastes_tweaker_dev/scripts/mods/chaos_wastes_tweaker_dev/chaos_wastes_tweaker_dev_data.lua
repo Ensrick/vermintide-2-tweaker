@@ -549,6 +549,7 @@ local data = {
                 -- Sub-groups A->Z: "Chaos Wastes Weapon Traits" before "Vanilla Weapon
                 -- Traits". Per-trait boxes A->Z by display (trait) label.
                 sub_widgets = {
+                    { setting_id = "ban_all_traits", type = "checkbox", default_value = false, tooltip = "ban_all_traits_tooltip" },
                     {
                         setting_id = "ban_trait_chaos_wastes_group",
                         type = "group",
@@ -612,6 +613,7 @@ local data = {
                         type = "group",
                         -- A->Z by "Ban: <Mark>" display label (matches setting_id order here).
                         sub_widgets = {
+                            { setting_id = "ban_all_grudge_marks", type = "checkbox", default_value = false, tooltip = "ban_all_grudge_marks_tooltip" },
                             { setting_id = "ban_grudge_mark_commander",       type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_commander_tooltip" },
                             { setting_id = "ban_grudge_mark_crippling",       type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_crippling_tooltip" },
                             { setting_id = "ban_grudge_mark_crushing",        type = "checkbox", default_value = false, tooltip = "ban_grudge_mark_crushing_tooltip" },
@@ -643,6 +645,7 @@ local data = {
                         -- curse, matching vanilla deus_map_populate_settings.lua `all_curses`
                         -- and the "Disable: <God>: <Curse>" loc labels.
                         sub_widgets = {
+                            { setting_id = "disable_all_listed_curses", type = "checkbox", default_value = false, tooltip = "disable_all_listed_curses_tooltip" },
                             { setting_id = "disable_curse_belakor_totems", type = "checkbox", default_value = false },        -- Belakor
                             { setting_id = "disable_curse_shadow_homing_skulls", type = "checkbox", default_value = false },  -- Belakor
                             { setting_id = "disable_curse_blood_storm", type = "checkbox", default_value = false },           -- Khorne
@@ -766,6 +769,10 @@ local data = {
                                 setting_id = "reworks_boons_new_group",
                                 type = "group",
                                 sub_widgets = {
+                                    {
+                                        setting_id = "enable_boon_reworks", type = "checkbox", default_value = true,
+                                        tooltip = "enable_boon_reworks_tooltip",
+                                        sub_widgets = {
                                     -- #464 follow-up: 5th trait-as-boon (Anath Raema's Swiftness,
                                     -- permanent reload variant). A->Z: anath < asuryan.
                                     { setting_id = "enable_boon_anath_raema_swiftness", type = "checkbox", default_value = false, tooltip = "enable_boon_anath_raema_swiftness_tooltip" },
@@ -773,6 +780,8 @@ local data = {
                                     { setting_id = "enable_boon_manann_tempest",      type = "checkbox", default_value = false, tooltip = "enable_boon_manann_tempest_tooltip" },
                                     { setting_id = "enable_boon_taal_twinned_arrow",  type = "checkbox", default_value = false, tooltip = "enable_boon_taal_twinned_arrow_tooltip" },
                                     { setting_id = "enable_boon_vauls_anvil",         type = "checkbox", default_value = false, tooltip = "enable_boon_vauls_anvil_tooltip" },
+                                        },
+                                    },
                                 },
                             },
                         },
@@ -815,6 +824,10 @@ local data = {
                         setting_id = "altar_reuse_group",
                         type = "group",
                         sub_widgets = {
+                            {
+                                setting_id = "enable_altar_reuse", type = "checkbox", default_value = true,
+                                tooltip = "enable_altar_reuse_tooltip",
+                                sub_widgets = {
                             { setting_id = "altar_reuse_count_power_up",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
                             { setting_id = "altar_reuse_cost_mult_power_up", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
                             { setting_id = "altar_reuse_count_swap_melee",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_tooltip" },
@@ -823,6 +836,8 @@ local data = {
                             { setting_id = "altar_reuse_cost_mult_swap_ranged", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
                             { setting_id = "altar_reuse_count_upgrade",     type = "numeric", default_value = 1,   range = { 1, 20 },  decimals_number = 0, tooltip = "altar_reuse_count_upgrade_tooltip" },
                             { setting_id = "altar_reuse_cost_mult_upgrade", type = "numeric", default_value = 1.0, range = { 0.1, 10 }, decimals_number = 1, tooltip = "altar_reuse_cost_mult_tooltip" },
+                                },
+                            },
                         },
                     },
                     {

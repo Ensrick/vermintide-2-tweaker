@@ -1,5 +1,14 @@
 # Career Tweaker Changelog
 
+## 0.3.74-dev - 2026-07-14 - #221 historical subgroup-master audit [diagnostics-armed; not deployed]
+
+- Confirmed that #445 already fulfills the safe whole-family Ensrick and Tourney controls requested by the historical menu-consolidation plan.
+- Added one bounded, observation-only `[crt:221]` startup census and `/crt_umbrella_audit`. It reports exact whole-family totals plus the Unchained rework/runtime, Outcast Engineer rework, and armor subgroup counts currently crossing separate lifecycle owners.
+- Deliberately did not add incomplete subgroup checkboxes. A per-cluster master must gate every hook, template mutation, and restoration owner before it can honestly promise vanilla behavior when off.
+- Added pure catalog/count/format coverage and a source/menu drift check. The diagnostic performs no setting writes, template mutations, hooks, RPCs, or lookup registration.
+
+**Diagnostics:** run `/crt_umbrella_audit` and retain the single `[crt:221]` line. Require `whole_family=present`, nonzero totals for the reported live clusters, `cluster_gates=0/4`, and `mutation=false`. The zero gate count is an explicit deferred-boundary signal, not a runtime failure.
+
 ## 0.3.73-dev - 2026-07-14 - #367 one-second Ranger ale drink [verify-fix; not deployed]
 
 - Added a default-off **Ranger Veteran: One-second ale drinking** rework. Vanilla's ale action has `total_time = 1.9`; the rework sets its native `anim_time_scale` to 1.9, so `WeaponUnitExtension` resolves both action completion and first-person/third-person playback to one second through the same source-verified scale.

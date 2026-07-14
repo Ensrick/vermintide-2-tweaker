@@ -68,6 +68,8 @@ local loc = {
     -- Banned Weapon Traits
     -- ============================================================
     banned_traits_group = { en = "[working] Banned Weapon Traits" },
+    ban_all_traits = { en = "Ban all listed weapon traits" },
+    ban_all_traits_tooltip = { en = "When enabled, every listed vanilla and Chaos Wastes weapon trait is excluded. Individual selections are preserved and become active again when this master is disabled." },
     ban_trait_vanilla_group = { en = "[working] Vanilla Weapon Traits" },
     ban_trait_chaos_wastes_group = { en = "[working] Chaos Wastes Weapon Traits" },
     ban_trait_always_blocking = { en = "[untested] Vaul's Anvil (Always Blocking)" },
@@ -144,6 +146,10 @@ local loc = {
     -- ============================================================
     curses_group = { en = "[working] Curses" },
     disabled_curses_group = { en = "[working] Disabled Curses" },
+    disable_all_listed_curses = { en = "Disable all listed curses" },
+    disable_all_listed_curses_tooltip = { en = "Disables every curse listed below without overwriting the individual selections. Turning this off restores the individual ban configuration." },
+    ban_all_grudge_marks = { en = "Ban all Boss Grudge Marks" },
+    ban_all_grudge_marks_tooltip = { en = "Removes every listed Boss Grudge Mark from random rolls and the universal enhancement application boundary. Individual bans remain saved underneath." },
     miasma_group = { en = "[verify-fix] Rotten Miasma" },
     miasma_permanent_carrier = { en = "[verify-fix] Permanent Purifying Torch Carrier" },
     miasma_permanent_carrier_tooltip = { en = "After a player picks up the purifying torch, its safe area follows that living player even when the torch is dropped. A later player who picks it up becomes the new carrier. Host's setting applies to the lobby." },
@@ -262,6 +268,8 @@ local loc = {
     tweak_defeat_recovery_tooltip = { en = "On a team wipe, everyone respawns, but you lose all your coins and 5 random boons. Works once per mission; wiping again ends the run normally. Each player only takes the penalty if they have this turned on." },
     reworks_group = { en = "[working] Reworks" },
     reworks_boons_group = { en = "[working] Reworks: Boons" },
+    enable_boon_reworks = { en = "Enable new boon reworks" },
+    enable_boon_reworks_tooltip = { en = "Master switch for the new trait-as-boon additions below. Enabled by default to preserve existing configurations; disabling it removes those additions from the roll pools without clearing their individual choices." },
     -- v0.7.159-dev Task 1: nested sub-groups inside Reworks: Boons.
     reworks_boons_existing_group = { en = "[untested] Reworks: Existing Boons" },
     reworks_boons_new_group = { en = "[untested] Reworks: New Boons (Added)" },
@@ -337,6 +345,8 @@ local loc = {
     -- duplicate-career vote chips are now an IMPLICIT always-on feature (no toggle,
     -- no "Map Screen" menu group). See _ct_dup_vote_chips.lua.
     altar_reuse_group = { en = "[working] Altar Reroll Options" },
+    enable_altar_reuse = { en = "Enable altar reuse settings" },
+    enable_altar_reuse_tooltip = { en = "Master switch for the altar reuse counts and cost multipliers below. Enabled by default to preserve existing configurations; disabling it restores vanilla one-use, flat-cost behavior without clearing the saved values." },
     altar_chest_counts_group = { en = "[working] Altars & Chests per Mission" },
     boons_offered_group = { en = "[working] Boons Offered" },
     chest_of_trials_group = { en = "[working] Chest of Trials" },

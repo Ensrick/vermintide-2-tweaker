@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.3.73-dev"
+local MOD_VERSION = "0.3.74-dev"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
@@ -148,6 +148,29 @@ else
 end
 
 local _rework_master_batch = false
+
+-- #221 historical menu-consolidation audit. #445 already owns the safe
+-- whole-family controls. The older per-cluster proposal spans independent
+-- hook/template owners, so expose one bounded observation-only census instead
+-- of adding checkboxes that cannot yet guarantee complete reversible gating.
+local ok_umbrella, umbrella_audit = pcall(mod.dofile, mod,
+    "scripts/mods/career_tweaker/_crt_umbrella_audit_policy")
+if ok_umbrella and type(umbrella_audit) == "table" then
+    mod._crt.umbrella_audit = function()
+        local snapshot = umbrella_audit.snapshot(
+            rework_master_policy.ensrick_ids,
+            rework_master_policy.tourney_ids,
+            function(id) return mod:get(id) and true or false end)
+        pcall(printf, "%s", umbrella_audit.format(snapshot))
+        return snapshot
+    end
+    mod._crt.umbrella_audit()
+    mod:command("crt_umbrella_audit", "Log issue #221 umbrella-owner census", function()
+        mod._crt.umbrella_audit()
+    end)
+else
+    mod:error("Failed to load umbrella audit policy: %s", tostring(umbrella_audit))
+end
 
 local function _rework_master_snapshot()
     local state = {}
