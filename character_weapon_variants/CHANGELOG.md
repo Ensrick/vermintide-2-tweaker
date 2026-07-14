@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.410-dev - 2026-07-14 - #597 Greataxe craft/equip wire crash [verify-fix-coop]
+
+- Fixed the second Greataxe crash boundary exposed after Athanor preview residency was repaired. Crafting and auto-equipping succeeded, but `ProfileSynchronizer` then attempted to serialize the custom `_3p` unit through strict `NetworkLookup.inventory_packages` and crashed.
+- All five models' first- and third-person custom paths now borrow the corresponding vanilla Bardin Greataxe indices on the forward name-to-index side only. Reverse decoding remains vanilla, while CWV-capable peers restore the exact custom appearance through the existing bounded appearance channel.
+- Added regression coverage for all ten paths, strict missing-index behavior, and preservation of the vanilla reverse map.
+
+### Co-op verification
+
+Craft each Greataxe model through CIM with automatic equip enabled. Confirm crafting, loadout resync, weapon swaps, mission entry, and a second player's view do not crash; both peers should see the selected custom model where supported. Run `/cwv_regression_test` and require all #597 checks to pass.
+
 ## 0.1.409-dev - 2026-07-14 - #597 Greataxe Athanor resource crash [verify-fix-coop]
 
 - Flattened all five Greataxe models' first- and third-person units, materials, and textures into CWV's mod-scoped master package. The prior forwarding bundles existed on disk but were not runtime load roots, causing Athanor to crash on `f4c81c97baad78f8` when selecting Model 01.

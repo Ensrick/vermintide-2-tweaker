@@ -19,6 +19,9 @@ M.SKIN_COMBINATION = "cwv_es_greataxe_skins"
 -- Greataxe package as a lifetime/reference anchor instead.
 M.PREVIEW_PACKAGE_ALIAS =
 	"units/weapons/player/wpn_dw_2h_axe_01_t1/wpn_dw_2h_axe_01_t1_3p"
+M.NETWORK_PACKAGE_ALIAS_1P =
+	"units/weapons/player/wpn_dw_2h_axe_01_t1/wpn_dw_2h_axe_01_t1"
+M.NETWORK_PACKAGE_ALIAS_3P = M.PREVIEW_PACKAGE_ALIAS
 
 M.DEFAULT_CAREERS = {
 	"es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
@@ -139,6 +142,34 @@ function M.preview_package_alias(package_name)
 		end
 	end
 	return nil
+end
+
+-- ProfileSynchronizer serializes inventory package maps through the vanilla
+-- NetworkLookup. Custom Workshop unit paths must therefore borrow a stable
+-- vanilla index on the forward (name -> index) side only. The reverse mapping
+-- remains vanilla, so decoding never asks an unmodded peer to load our unit.
+function M.network_package_aliases()
+	local result = {}
+	for _, model in ipairs(M.MODELS) do
+		if M.is_usable_model(model) then
+			result[model.right_hand_unit] = M.NETWORK_PACKAGE_ALIAS_1P
+			result[model.right_hand_unit .. "_3p"] = M.NETWORK_PACKAGE_ALIAS_3P
+		end
+	end
+	return result
+end
+
+function M.install_network_package_aliases(inventory_lookup)
+	if type(inventory_lookup) ~= "table" then return 0 end
+	local installed = 0
+	for custom_path, vanilla_path in pairs(M.network_package_aliases()) do
+		local vanilla_index = rawget(inventory_lookup, vanilla_path)
+		if type(vanilla_index) == "number" then
+			inventory_lookup[custom_path] = vanilla_index
+			installed = installed + 1
+		end
+	end
+	return installed
 end
 
 function M.default_career_set()

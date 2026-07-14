@@ -113,4 +113,36 @@ return function(H, repo_root)
 		H.truthy(source:find("Application.can_get, \"unit\"", 1, true))
 		H.truthy(source:find("apply_loot_fallbacks", 1, true))
 	end)
+
+	H.test("CWV #597 Greataxe package names encode as vanilla wire identities", function()
+		local one_p = policy.NETWORK_PACKAGE_ALIAS_1P
+		local three_p = policy.NETWORK_PACKAGE_ALIAS_3P
+		local lookup = {
+			[one_p] = 101,
+			[three_p] = 202,
+			[101] = one_p,
+			[202] = three_p,
+		}
+		local aliases = policy.network_package_aliases()
+		H.equal(policy.install_network_package_aliases(lookup), 10)
+		for _, model in ipairs(policy.MODELS) do
+			H.equal(aliases[model.right_hand_unit], one_p)
+			H.equal(aliases[model.right_hand_unit .. "_3p"], three_p)
+			H.equal(lookup[model.right_hand_unit], 101)
+			H.equal(lookup[model.right_hand_unit .. "_3p"], 202)
+		end
+		-- Never hijack reverse decode: peers receive resident vanilla packages.
+		H.equal(lookup[101], one_p)
+		H.equal(lookup[202], three_p)
+	end)
+
+	H.test("CWV #597 Greataxe wire aliases fail closed without vanilla indices", function()
+		local lookup = setmetatable({}, {
+			__index = function(_, key) error("strict lookup: " .. tostring(key)) end,
+		})
+		H.equal(policy.install_network_package_aliases(lookup), 0)
+		for custom_path in pairs(policy.network_package_aliases()) do
+			H.equal(rawget(lookup, custom_path), nil)
+		end
+	end)
 end

@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.409-dev"
+local MOD_VERSION = "0.1.410-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -5727,6 +5727,14 @@ do
 		end
 		if vanilla_3p_idx then
 			nl_inventory["units/cwv_es_musket_custom/cwv_es_musket_custom_3p"] = vanilla_3p_idx
+		end
+		-- Issue #597: Greataxe model units live in CWV's resident bundle, but
+		-- ProfileSynchronizer still serializes their 1P/3P package names through
+		-- the vanilla inventory lookup. Forward-alias every custom name to the
+		-- matching Bardin Greataxe index; keep index -> vanilla name untouched.
+		local installed = _om.greataxe.install_network_package_aliases(nl_inventory)
+		if installed > 0 then
+			mod:info("[cwv:597] installed %d Greataxe inventory-package wire aliases", installed)
 		end
 	end
 end
