@@ -1595,9 +1595,9 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   Reserved for HUMAN in-game verification — see the scope rule below.
 - `verify-fix-coop` — a code fix shipped whose verification needs **2+ people**
   (cross-peer wire safety, host/client desync, hot-join races). REPLACES
-  `verify-fix`, never coexists with it. ship.ps1's auto-labeler only applies plain
-  `verify-fix`; swap by hand after shipping a coop-verify issue (user rule 2026-07-11):
-  `gh issue edit N --remove-label verify-fix --add-label verify-fix-coop`.
+  `verify-fix`, never coexists with it. Mark the shipped CHANGELOG header
+  `[verify-fix-coop]`; ship.ps1 then applies it directly and removes every
+  competing lifecycle label in the same issue edit (user rule 2026-07-11).
   **The tester count in the test-method comment DECIDES the label** (user rule
   2026-07-12, caught on issues 280/278): a comment that says "needs 2 players" /
   "host + client" / "a non-mod peer" on an issue labeled plain `verify-fix` is a
@@ -1605,8 +1605,12 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   the same pass. Also sanity-check the test itself: a crash class that only
   exists with a remote peer (send-queue overflow, husk resolution) cannot have
   a solo test method (issue 205 correction). ship.ps1 prints a `COOP?` warning
-  when a shipped entry smells cross-peer.
+  when a shipped entry smells cross-peer but lacks the explicit marker.
 - `diagnostics-armed` — a diagnostic/probe shipped; repro in-game to capture data.
+  If collection needs 2+ players, keep this as the sole lifecycle label and add
+  the orthogonal `coop-required` qualifier. Mark the CHANGELOG header
+  `[coop-required]` so ship.ps1 creates/applies the qualifier. Do not invent a
+  `diagnostics-armed-coop` lifecycle label.
 - `Fixed` — the fix is **verified** (in-game confirmation by the user OR the
   designated playtester, GitHub user RainReligion — his issue comments are
   first-class verification input, user rule 2026-07-12).
@@ -1661,8 +1665,12 @@ into `enemy` + `event`: the single `et` label was ambiguous between the two
 `*_tweaker` mods — its GitHub description said event_tweaker while a 2026-07-03
 merge had repurposed it onto enemy_tweaker issues. Do NOT recreate `et`.)
 
-**Optional modifiers (informational, never a substitute for a type):** `regression`
-(a fix that broke a working feature), `audit`, `refactor`, `blocked`, `deferred`.
+**Optional modifiers (informational, never a substitute for a type or lifecycle):**
+`regression` (a fix that broke a working feature), `audit`, `refactor`, `blocked`,
+`deferred`, `coop-required`. The last is a tester-routing qualifier primarily for
+`diagnostics-armed` (and optionally `not-started` when a known future repro needs
+2+ players). `verify-fix-coop` already conveys that requirement, so it does not
+also carry `coop-required`.
 
 When you ship a fix or a diagnostic for an issue, add the matching status label (and
 remove `not-started`) in the **same pass** as the CHANGELOG entry (rule #5 territory).
@@ -1673,9 +1681,16 @@ for a real status label only once you have actually shipped work.
 automatically on every dev-stream ship: it parses the `#N` refs out of the CHANGELOG entry
 being shipped and runs `gh issue edit N --add-label` — `diagnostics-armed` when the entry
 header carries a `[diag]`/diagnostic/probe/instrument marker (instrumentation-only ship),
-`verify-fix` otherwise. Every decision is printed so a mixed entry (fix + probe in one) can
+`verify-fix-coop` when it carries `[verify-fix-coop]`, and `verify-fix` otherwise.
+`[coop-required]` adds the non-lifecycle qualifier to `diagnostics-armed`; the script
+idempotently creates that label if needed. Each issue edit chooses one effective lifecycle
+(`Fixed` and an existing coop verification are never downgraded), removes all competing
+lifecycle labels, and removes stale `coop-required` outside armed diagnostics. Every
+decision is printed so a mixed entry (fix + probe in one) can
 be corrected by hand; loc-sweep entries, closed issues, and non-existent numbers are
-skipped. Two advisory QA guards back it up: `qa/check_issue_status_labels.ps1` (top
+skipped. Explicit `[docs]` / `[tooling]` entries are also skipped because their issues
+are verified and closed autonomously. Two advisory QA guards back it up:
+`qa/check_issue_status_labels.ps1` (top
 CHANGELOG entry vs labels) and `qa/check_issue_tag_sync.ps1` (whole loc-tag surface vs
 labels, both directions — see `qa/CHECKS.md` rows 19f/19g).
 

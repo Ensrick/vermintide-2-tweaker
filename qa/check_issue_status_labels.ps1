@@ -215,6 +215,7 @@ function Invoke-SelfTest {
     Assert ($null -eq (Get-TopEntry $noHdr)) "a changelog with no ## header returns null (no crash)"
 
     Assert ((Get-LifecycleStateCount @('bug', 'not-started', 'tooling')) -eq 1) "one lifecycle label is valid (issue #498)"
+    Assert ((Get-LifecycleStateCount @('bug', 'diagnostics-armed', 'coop-required')) -eq 1) "coop-required is orthogonal, not a second lifecycle label"
     Assert ((Get-LifecycleStateCount @('bug', 'tooling')) -eq 0) "zero lifecycle labels is detected"
     Assert ((Get-LifecycleStateCount @('bug', 'not-started', 'verify-fix')) -eq 2) "multiple lifecycle labels are detected"
     Assert ((Get-LifecycleStateCount @('tooling')) -eq 0) "tooling issue without not-started is lifecycle drift"
