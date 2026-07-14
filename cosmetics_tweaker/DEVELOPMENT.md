@@ -86,6 +86,23 @@ their internals alone.
 
 The two-row picker on the weapon customization screen lets the user pick a shield independent of the weapon illusion. Vanilla shield options have `unit` set; LA (Loremaster's Armoury) options have `la_armoury_key`, `vanilla_skin`, and `intended_unit`.
 
+### Dual-weapon ownership contract (#583)
+
+Dual weapons reuse the same per-backend/per-hand substrate without pretending
+the offhand is a shield. Vanilla's normal illusion row is the sole owner of the
+main/right hand. Cosmetics adds one left/offhand row sourced from that family's
+exact hand column; `Follow Main Illusion` stores no override. Native definitions
+are available at Cosmetics load, while CWV's seven generated dual families are
+built lazily after CWV registers its string-keyed skins.
+
+Committed direct meshes persist as `offhands[backend_id][left_hand_unit].unit_path`.
+Restore and remote husk application accept the path only when it remains in the
+current item type's compatible left-hand pool. A salvaged item, removed variant,
+wrong hand, missing package, or mismatched family yields to the normal paired
+illusion. Network commits reuse `cos_la_apply`'s additive `offhand_unit` field:
+one last-choice queue entry per backend item and hand, host-authoritative cache,
+transition rebroadcast, and the existing acknowledged/bounded hot-join pull.
+
 ### Render paths
 LA paint and mesh override must apply on three independent render paths:
 

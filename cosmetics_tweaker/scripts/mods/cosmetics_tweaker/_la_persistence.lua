@@ -11,6 +11,7 @@
 --     schema = 1,
 --     careers   = { [career_name] = { slot_hat = la_item, slot_skin = la_item } },
 --     illusions = { [backend_id] = la_skin_name },
+--     offhands  = { [backend_id] = { [hand_field] = { armoury_key... | unit_path... } } },
 --   }
 --
 -- Save tap points (v0.9.83-dev, #520): the AUTHORITATIVE hat/armor save and
@@ -32,6 +33,7 @@
 --   M.get_saved_illusion(backend_id)          -> la_skin_name or nil
 --   M.restore_for_player(player)              -- re-emit saved hat/armor
 --   M.is_known_backend_id(backend_id)         -- has any saved illusion?
+--   M.save_offhand / clear_offhand / get_saved_offhands
 --
 -- Career name resolution: player.career_name or
 -- SPProfiles[player.profile_index].careers[player.career_index].name.
@@ -65,7 +67,8 @@ local function _load()
         illusions = (type(data.illusions) == "table") and data.illusions or {},
         -- v0.9.71-dev: offhand (shield) picks per weapon instance. Additive
         -- section, same schema number - older builds ignore unknown keys.
-        -- Shape: offhands[backend_id][hand_field] = { armoury_key, vanilla_key }
+        -- Shape: offhands[backend_id][hand_field] =
+        --   { armoury_key, vanilla_key } OR { unit_path }.
         offhands = (type(data.offhands) == "table") and data.offhands or {},
     }
 end
@@ -213,19 +216,21 @@ end
 -- once the LA bridge has built its option pools (the restore entry point
 -- lives in cosmetics_tweaker.lua, `mod._la_restore_offhand_selections`).
 
-M.save_offhand = function(backend_id, hand_field, armoury_key, vanilla_key)
-    if not (backend_id and hand_field and armoury_key) then return end
+M.save_offhand = function(backend_id, hand_field, armoury_key, vanilla_key, unit_path)
+    if not (backend_id and hand_field) then return end
+    if not armoury_key and (type(unit_path) ~= "string" or unit_path == "") then return end
     if not _state then _load() end
     _state.offhands = _state.offhands or {}
     _state.offhands[backend_id] = _state.offhands[backend_id] or {}
     local cur = _state.offhands[backend_id][hand_field]
-    if cur and cur.armoury_key == armoury_key then return end
+    if cur and cur.armoury_key == armoury_key and cur.vanilla_key == vanilla_key
+        and cur.unit_path == unit_path then return end
     _state.offhands[backend_id][hand_field] = {
-        armoury_key = armoury_key, vanilla_key = vanilla_key,
+        armoury_key = armoury_key, vanilla_key = vanilla_key, unit_path = unit_path,
     }
     _persist()
     mod:info("[la-persist] save offhand %s/%s = %s", tostring(backend_id),
-        tostring(hand_field), tostring(armoury_key))
+        tostring(hand_field), tostring(armoury_key or unit_path))
 end
 
 M.clear_offhand = function(backend_id, hand_field)

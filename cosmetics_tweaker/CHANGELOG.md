@@ -1,5 +1,15 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.97-dev - 2026-07-13 - #583 independent native/CWV dual offhands [verify-fix-coop]
+
+- The normal illusion row now owns the main/right hand for dual weapons and Cosmetics adds one independent left/offhand row. Its default `Follow Main Illusion` entry carries no mesh override, so changing the main illusion still changes the pair until the user explicitly chooses an offhand.
+- Added the missing native Warrior Priest Dual Skullsplitters (`wh_dual_hammer`) from vanilla's dedicated `wh_dual_hammer_skins` table and lazy exact-hand pools for all seven current CWV dual families: Imperial Dual Swords, Sword and Mace, Kruber/Saltzpyre Dual Axes, Kruber/Saltzpyre Dual Maces, and Dual Warrior-Priest Hammers.
+- Direct hand choices now persist under the existing owner-only `offhands[backend_id][hand]` store. Restore accepts a unit only when it still belongs to that exact item type's compatible hand pool; missing items, removed variants, wrong hands, and stale paths fall back to the main illusion.
+- Reused the existing last-choice-per-hand Apply queue, host-authoritative direct-unit channel, equipment/preview `get_item_units` override, remote-husk store, transition rebroadcast, and acknowledged hot-join state pull. Transition replay no longer depends on Loremaster's Armoury being installed. No RPC, schema, or hook was added.
+- Added `independent_dual_offhands_583` plus expanded persistence and Sword-and-Mace regressions.
+
+- **Verify (coop):** with Cosmetics v0.9.97-dev on both peers, customize native Warrior Priest Dual Skullsplitters and at least one CWV dual weapon. Row 1 must change the main hand; the added row must change only the offhand. Apply, swap weapons, reopen the preview, restart, transition keep-to-mission, and leave/rejoin. Local 1P, local 3P, preview, and the other peer's husk must retain the same independent pair. `Follow Main Illusion` must clear only the offhand override.
+
 ## Post-fix audit - 2026-07-13 - #514 verified complete
 
 - User solo verification confirmed that a Loremaster shield pick stored on Grail Knight's secondary Bretonnian Sword and Shield no longer wraps onto CWV Sword and Mace's mace at spawn. The uploaded v0.9.87-dev log records the exact restrictive gate (`entry key=one_handed_sword_shield_template_2`, `wielded template=sword_and_mace_template`) and `/cos_regression_test` passes `cos_la_weapon_identity_gate_local_wearer`.

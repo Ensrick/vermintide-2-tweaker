@@ -57,7 +57,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.96-dev"
+local MOD_VERSION = "0.9.97-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -1289,10 +1289,10 @@ _offhand_options.es_deus_01                 = { left_hand_unit = _shallow_copy(_
 _offhand_options.dr_1h_hammer_shield        = { left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.dr_1h_axe_shield) }
 _offhand_options.wh_hammer_shield           = { left_hand_unit = _shallow_copy(_SHIELD_POOLS_BY_ITEM_TYPE.wh_flail_shield) }
 
--- v0.9.9.4-dev: item_types that get a SECOND (right-hand) picker row in
--- addition to the existing left-hand row. Two pickers stacked vertically;
--- the user picks independently per mount. Excluded: wh_dual_hammer (pool
--- size 1) per recon doc. Sword+shield weapons stay single-row.
+-- v0.9.9.4-dev: item_types with hand-qualified cosmetic pools. #583 makes
+-- dual weapons follow the native ownership model: vanilla row 1 owns the
+-- main/right hand and Cosmetics adds only the left/offhand row. The right pool
+-- remains registered for compatibility auditing and old in-memory selections.
 local _MULTI_MOUNT_ITEM_TYPES = {
     wh_fencing_sword           = true,  -- rapier (R) + pistol (L)
     wh_brace_of_pisols         = true,  -- pistol pair (matched)
@@ -1306,6 +1306,7 @@ local _MULTI_MOUNT_ITEM_TYPES = {
     es_dual_wield_hammer_sword = true,  -- mace (R) + sword (L)
     cwv_es_sword_and_mace      = true,  -- sword (R) + mace (L), CWV #483
     wh_dual_wield_axe_falchion = true,  -- axe (R) + falchion (L)
+    wh_dual_hammer             = true,  -- Warrior Priest matched hammer pair
 }
 
 -- ============================================================
@@ -1390,10 +1391,13 @@ local _DUAL_WIELD_POOLS = {
     --     No dedicated skin tables in vanilla, but the symmetric units
     --     ship on the base template; we expose the same pool for both
     --     hands so the user can mix barrels.
-    -- wh_dual_hammer omitted: the base unit (wpn_wh_1h_hammer_01) has no
-    -- skin variants and no 1h-hammer skin table exists, so the pool would
-    -- be a single-element no-op (per recon doc — excluded from
-    -- _MULTI_MOUNT_ITEM_TYPES too).
+    -- Warrior Priest Dual Skullsplitters ship a dedicated Bless skin table
+    -- with common/rare/unique/magic variants. The old exclusion predated that
+    -- source audit and is the native #583 reproduction.
+    wh_dual_hammer = {
+        right_hand_unit = { skin_table = "wh_dual_hammer_skins", unit_field = "right_hand_unit" },
+        left_hand_unit  = { skin_table = "wh_dual_hammer_skins", unit_field = "left_hand_unit" },
+    },
     dr_dual_wield_hammers = {
         right_hand_unit = { skin_table = "dr_1h_hammer_skins", unit_field = "right_hand_unit" },
         left_hand_unit  = { skin_table = "dr_1h_hammer_skins", unit_field = "right_hand_unit" },
@@ -1451,6 +1455,13 @@ local function _build_offhand_options_from_skin_table(skin_table_name, unit_fiel
     if WeaponSkins.skins then
         for _, s in ipairs(WeaponSkins.skins) do
             if s.name and s.data then skin_by_name[s.name] = s.data end
+        end
+        -- CWV registers generated skins by string key; those entries are not
+        -- guaranteed to be present in the array portion used by vanilla.
+        for skin_key, s in pairs(WeaponSkins.skins) do
+            if type(skin_key) == "string" and type(s) == "table" then
+                skin_by_name[skin_key] = s.data or s
+            end
         end
     end
 
@@ -1552,7 +1563,50 @@ do
         return out
     end
 
-    for item_type, per_hand in pairs(_DUAL_WIELD_POOLS) do
+    -- #583: CWV skin-combination tables are created by the sibling mod and may
+    -- not exist yet when Cosmetics loads. Keep the exact source declaration
+    -- here, then build lazily from the picker/update paths once CWV is ready.
+    local cwv_dual_sources = {
+        cwv_es_dual_swords = {
+            right_hand_unit = { skin_table = "cwv_es_dual_swords_skins", unit_field = "right_hand_unit" },
+            left_hand_unit  = { skin_table = "cwv_es_dual_swords_skins", unit_field = "left_hand_unit" },
+        },
+        cwv_es_sword_and_mace = {
+            right_hand_unit = { matching_item_key = "es_1h_sword", unit_field = "right_hand_unit" },
+            left_hand_unit  = { matching_item_key = "es_1h_mace", unit_field = "right_hand_unit" },
+        },
+        cwv_es_dual_axes = {
+            right_hand_unit = { skin_table = "cwv_es_dual_axes_skins", unit_field = "right_hand_unit" },
+            left_hand_unit  = { skin_table = "cwv_es_dual_axes_skins", unit_field = "left_hand_unit" },
+        },
+        cwv_wh_dual_axes = {
+            right_hand_unit = { skin_table = "cwv_wh_dual_axes_skins", unit_field = "right_hand_unit" },
+            left_hand_unit  = { skin_table = "cwv_wh_dual_axes_skins", unit_field = "left_hand_unit" },
+        },
+        cwv_es_dual_maces = {
+            right_hand_unit = { skin_table = "cwv_es_dual_maces_skins", unit_field = "right_hand_unit" },
+            left_hand_unit  = { skin_table = "cwv_es_dual_maces_skins", unit_field = "left_hand_unit" },
+        },
+        cwv_wh_dual_maces = {
+            right_hand_unit = { skin_table = "cwv_wh_dual_maces_skins", unit_field = "right_hand_unit" },
+            left_hand_unit  = { skin_table = "cwv_wh_dual_maces_skins", unit_field = "left_hand_unit" },
+        },
+        cwv_es_dual_warpriest_hammers = {
+            right_hand_unit = { skin_table = "cwv_es_dual_warpriest_hammers_skins", unit_field = "right_hand_unit" },
+            left_hand_unit  = { skin_table = "cwv_es_dual_warpriest_hammers_skins", unit_field = "left_hand_unit" },
+        },
+    }
+    mod._cwv_dual_offhand_contract = cwv_dual_sources
+    mod._independent_dual_item_types = mod._independent_dual_item_types or {}
+    for item_type in pairs(_DUAL_WIELD_POOLS) do
+        mod._independent_dual_item_types[item_type] = true
+    end
+    for item_type in pairs(cwv_dual_sources) do
+        mod._independent_dual_item_types[item_type] = true
+        _MULTI_MOUNT_ITEM_TYPES[item_type] = true
+    end
+
+    local function _build_dual_pool(item_type, per_hand)
         _offhand_options[item_type] = _offhand_options[item_type] or {}
         for hand_field, spec in pairs(per_hand) do
             if not _offhand_options[item_type][hand_field] then
@@ -1574,6 +1628,44 @@ do
                 end
             end
         end
+        local left = _offhand_options[item_type].left_hand_unit
+        if type(left) == "table" and #left > 0
+                and not (left[1] and left[1].follow_main) then
+            table.insert(left, 1, {
+                name = "Follow Main Illusion",
+                unit = "",
+                rarity = "default",
+                follow_main = true,
+            })
+        end
+        local right = _offhand_options[item_type].right_hand_unit
+        return type(right) == "table" and #right > 0
+            and type(left) == "table" and #left > 1
+    end
+
+    for item_type, per_hand in pairs(_DUAL_WIELD_POOLS) do
+        _build_dual_pool(item_type, per_hand)
+    end
+
+    mod._ensure_independent_dual_pool = function(item_type)
+        if not mod._independent_dual_item_types[item_type] then
+            return _offhand_options[item_type]
+        end
+        local sources = cwv_dual_sources[item_type] or _DUAL_WIELD_POOLS[item_type]
+        if sources then _build_dual_pool(item_type, sources) end
+        return _offhand_options[item_type]
+    end
+
+    mod._discover_cwv_dual_offhand_pools = function()
+        local built = 0
+        for item_type in pairs(cwv_dual_sources) do
+            local pools = mod._ensure_independent_dual_pool(item_type)
+            if pools and pools.right_hand_unit and pools.left_hand_unit
+                    and #pools.right_hand_unit > 0 and #pools.left_hand_unit > 1 then
+                built = built + 1
+            end
+        end
+        return built
     end
 end
 
@@ -1954,10 +2046,16 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
                                 entry.hand_field, entry.offhand_unit)
                         end
                     end
-                    -- A committed vanilla offhand supersedes any persisted LA pick for
-                    -- this hand (matches the old #265 revert's on-disk clear).
-                    if entry.backend_id and LA_PERSIST and LA_PERSIST.clear_offhand then
-                        LA_PERSIST.clear_offhand(entry.backend_id, entry.hand_field)
+                    -- #583: direct native/CWV hand meshes use the same exact
+                    -- backend-id + hand persistence section as LA picks. The
+                    -- empty Follow Main sentinel clears only this hand.
+                    if entry.backend_id and LA_PERSIST then
+                        if entry.offhand_unit ~= "" and LA_PERSIST.save_offhand then
+                            LA_PERSIST.save_offhand(entry.backend_id, entry.hand_field,
+                                nil, nil, entry.offhand_unit)
+                        elseif LA_PERSIST.clear_offhand then
+                            LA_PERSIST.clear_offhand(entry.backend_id, entry.hand_field)
+                        end
                     end
                     n = n + 1
                 elseif entry.revert then
@@ -2215,16 +2313,33 @@ end
 -- peers learn the restored picks through the normal emit flow.
 mod._la_restore_offhand_selections = function()
     if mod._la_offhand_restore_done then return end
-    if not (LA_BRIDGE and LA_BRIDGE.registered) then return end
-    if type(LA_BRIDGE.la_offhand_options_by_weapon_type) ~= "table" then return end
     if not (LA_PERSIST and LA_PERSIST.get_saved_offhands) then return end
-    mod._la_offhand_restore_done = true
     local saved = LA_PERSIST.get_saved_offhands()
-    if not next(saved) then return end
+    if not next(saved) then mod._la_offhand_restore_done = true return end
+    local la_pools = LA_BRIDGE and LA_BRIDGE.registered
+        and LA_BRIDGE.la_offhand_options_by_weapon_type or nil
+    local needs_la, needs_mesh = false, false
+    for _, hands in pairs(saved) do
+        for _, rec in pairs(hands) do
+            if rec and rec.armoury_key then needs_la = true end
+            if rec and type(rec.unit_path) == "string" and rec.unit_path ~= "" then
+                needs_mesh = true
+            end
+        end
+    end
+    if needs_la and type(la_pools) ~= "table" then return end
+    local backend_items = Managers and Managers.backend
+        and Managers.backend:get_interface("items")
+    if needs_mesh and not (backend_items and backend_items.get_item_from_id) then return end
+    if get_mod("character_weapon_variants") and mod._discover_cwv_dual_offhand_pools
+            and mod._discover_cwv_dual_offhand_pools() < 7 then
+        return
+    end
+    mod._la_offhand_restore_done = true
     -- armoury_key -> bridge option record (first hit wins; records for the
     -- same key are identical across weapon types/hands).
     local by_key = {}
-    for _, hand_pools in pairs(LA_BRIDGE.la_offhand_options_by_weapon_type) do
+    for _, hand_pools in pairs(la_pools or {}) do
         for _, pool in pairs(hand_pools) do
             for _, la_opt in ipairs(pool) do
                 if la_opt.armoury_key and not by_key[la_opt.armoury_key] then
@@ -2237,6 +2352,25 @@ mod._la_restore_offhand_selections = function()
     for backend_id, hands in pairs(saved) do
         for hand_field, rec in pairs(hands) do
             local la_opt = rec and rec.armoury_key and by_key[rec.armoury_key]
+            local mesh_opt = nil
+            if rec and type(rec.unit_path) == "string" and rec.unit_path ~= "" then
+                -- Backend records can outlive salvaged items or removed CWV
+                -- variants. Resolve defensively and accept only a unit still in
+                -- this exact item's compatible hand pool.
+                local ok_item, item = pcall(backend_items.get_item_from_id,
+                    backend_items, backend_id)
+                if ok_item and item then
+                    local data = item.data or (item.key and ItemMasterList
+                        and rawget(ItemMasterList, item.key))
+                    local item_type = data and data.item_type
+                    local pools = item_type and mod._ensure_independent_dual_pool
+                        and mod._ensure_independent_dual_pool(item_type)
+                    local pool = pools and pools[hand_field]
+                    for _, candidate in ipairs(pool or {}) do
+                        if candidate.unit == rec.unit_path then mesh_opt = candidate break end
+                    end
+                end
+            end
             if la_opt then
                 _offhand_selection[backend_id] = _offhand_selection[backend_id] or {}
                 _offhand_selection[backend_id][hand_field] = {
@@ -2248,6 +2382,11 @@ mod._la_restore_offhand_selections = function()
                 }
                 if la_opt.intended_unit then _preload_offhand_package(la_opt.intended_unit) end
                 n = n + 1
+            elseif mesh_opt then
+                _offhand_selection[backend_id] = _offhand_selection[backend_id] or {}
+                _offhand_selection[backend_id][hand_field] = mesh_opt
+                _preload_offhand_for_option(mesh_opt)
+                n = n + 1
             else
                 miss = miss + 1
             end
@@ -2258,7 +2397,7 @@ mod._la_restore_offhand_selections = function()
         -- (it reads _offhand_selection for equipped backend_ids).
         mod._la_self_rebroadcast_pending = true
     end
-    if printf then printf("[la-state] OFFHAND-RESTORE %d pick(s) restored from disk, %d unresolvable (LA variant missing)",
+    if printf then printf("[la-state] OFFHAND-RESTORE %d pick(s) restored from disk, %d unresolvable (safe native fallback)",
         n, miss) end
 end
 
@@ -2271,7 +2410,28 @@ end
 -- storage shape needs proper diagnostic before re-attempting.
 
 local function _get_offhand_options(item_key)
+    if mod._ensure_independent_dual_pool then
+        mod._ensure_independent_dual_pool(item_key)
+    end
     return _offhand_options[item_key]
+end
+
+-- Receiver-side compatibility boundary for #583. A stale or malformed direct
+-- mesh payload may only override a registered dual hand when that exact unit is
+-- still present in that item type's compatible pool. Unknown/non-dual types
+-- retain the older shield/LA behavior.
+mod._dual_offhand_unit_allowed = function(item_type, hand_field, unit_path)
+    if not (mod._independent_dual_item_types
+            and mod._independent_dual_item_types[item_type]) then
+        return true
+    end
+    if hand_field ~= "left_hand_unit" then return false end
+    local pools = mod._ensure_independent_dual_pool(item_type)
+    local pool = pools and pools[hand_field]
+    for _, opt in ipairs(pool or {}) do
+        if opt.unit == unit_path and unit_path ~= "" then return true end
+    end
+    return false
 end
 
 mod:command("la_offhand_dump", "Dump LA offhand variant -> intended_unit resolution", function()
@@ -2335,6 +2495,14 @@ local _force_loaded_all_offhand_done = false
 _force_load_all_offhand_packages = function()
     if _force_loaded_all_offhand_done then return end
     if not Managers or not Managers.package then return end
+    -- CWV registers its generated skin tables after Cosmetics may have loaded.
+    -- If CWV is present, wait until all seven dual families are discoverable so
+    -- remote peers preload the same compatible units before any hand payload.
+    if get_mod("character_weapon_variants")
+            and mod._discover_cwv_dual_offhand_pools
+            and mod._discover_cwv_dual_offhand_pools() < 7 then
+        return
+    end
     local count = 0
     -- A. Vanilla-mesh + cross-character pools (_offhand_options).
     -- v0.9.9.4: per-hand structure — outer = item_type, middle = hand_field,
@@ -2542,15 +2710,17 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
         _dbg("[offhand] no options for key=%s, bailing", tostring(weapon_key)); return
     end
 
-    -- v0.9.9.4-dev: build row sequence in display order. Right hand renders
-    -- ABOVE left when both pools exist (multi-mount). Single-mount weapons
-    -- (sword+shield family) only have `left_hand_unit` populated, so they
-    -- render as a single row at the legacy offset.
+    -- #583: dual weapons use vanilla row 1 as the main/right-hand owner and
+    -- add exactly one left/offhand row. Legacy non-dual multi-mount surfaces
+    -- retain their previous right+left custom rows.
     local is_multi_mount = _MULTI_MOUNT_ITEM_TYPES[weapon_key] == true
+    local is_independent_dual = mod._independent_dual_item_types
+        and mod._independent_dual_item_types[weapon_key] == true
     local hand_rows = {}
     -- Order: right first (top row), left second (bottom row). For single-
     -- mount weapons only left exists; matches legacy single-row layout.
-    if is_multi_mount and type(hand_pools.right_hand_unit) == "table"
+    if is_multi_mount and not is_independent_dual
+            and type(hand_pools.right_hand_unit) == "table"
             and #hand_pools.right_hand_unit > 0 then
         hand_rows[#hand_rows + 1] = { hand = "right_hand_unit", pool = hand_pools.right_hand_unit }
     end
@@ -2651,6 +2821,18 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
         local pool = row.pool
         local current_sel = per_hand_sel and per_hand_sel[hand_field]
         local current_unit = current_units_by_hand[hand_field]
+
+        -- No explicit offhand choice means the offhand follows whatever row 1
+        -- currently previews/applies. Do not auto-convert the current paired
+        -- mesh into an override merely because it is present in the pool.
+        if is_independent_dual and not current_sel
+                and pool[1] and pool[1].follow_main then
+            if current_backend_id then
+                _offhand_selection[current_backend_id] = _offhand_selection[current_backend_id] or {}
+                _offhand_selection[current_backend_id][hand_field] = pool[1]
+            end
+            current_sel = pool[1]
+        end
 
         if not current_sel and current_unit then
             for _, opt in ipairs(pool) do
@@ -3454,8 +3636,16 @@ if BackendUtils then
                 local applied_any = false
                 for hand_field, unit_path in pairs(vhands) do
                     if type(unit_path) == "string" and unit_path ~= "" then
-                        local ready = _override_package_ready(unit_path)
-                        if ready then
+                        local recv_item_type = item_data and item_data.item_type
+                        if recv_item_type == "weapon_skin" and item_data.matching_item_key
+                                and ItemMasterList then
+                            local base = rawget(ItemMasterList, item_data.matching_item_key)
+                            recv_item_type = base and base.item_type or recv_item_type
+                        end
+                        local compatible = mod._dual_offhand_unit_allowed(
+                            recv_item_type, hand_field, unit_path)
+                        local ready = compatible and _override_package_ready(unit_path)
+                        if compatible and ready then
                             local prev = result[hand_field]
                             result[hand_field] = unit_path
                             applied_any = true
@@ -3471,7 +3661,9 @@ if BackendUtils then
                                 string.format("peer=husk wearer=%s template=%s hand=%s unit=%s decision=%s",
                                     tostring(_current_husk_wield.wearer_peer), tostring(template),
                                     tostring(hand_field), tostring(unit_path),
-                                    ready and "APPLIED-vanilla-mesh" or "SKIP(package-not-resident)"))
+                                    (compatible and ready) and "APPLIED-vanilla-mesh"
+                                        or (compatible and "SKIP(package-not-resident)"
+                                            or "SKIP(incompatible-hand-mesh)")))
                         end
                     end
                 end
@@ -8124,6 +8316,10 @@ if AttachmentUtils then
                         if type(sel) == "table" and sel.la_armoury_key then
                             _send_la_apply(unit, replay_key, "offhand",
                                 sel.la_armoury_key, sel.vanilla_skin, hand_field)
+                        elseif type(sel) == "table" and type(sel.unit) == "string"
+                                and sel.unit ~= "" and mod._send_offhand_mesh then
+                            mod._send_offhand_mesh(unit, replay_key,
+                                hand_field, sel.unit)
                         end
                     end
                 end
@@ -8179,7 +8375,7 @@ mod.update = function(dt)
         local lp_ok, lp = pcall(function() return pm and pm:local_player() end)
         if not lp_ok then lp = nil end
         local pu = lp and lp.player_unit
-        if pu and Unit.alive(pu) and LA_BRIDGE then
+        if pu and Unit.alive(pu) then
             local n = 0
             -- (A) Hats / armor via _local_la_equips (populated by
             -- CosmeticUtils.update_cosmetic_slot hook).
@@ -8191,8 +8387,10 @@ mod.update = function(dt)
                         if slot == "slot_hat"  then kind = "hat"
                         elseif slot == "slot_skin" then kind = "armor"
                         else kind = "illusion" end
-                        local armoury_key = LA_BRIDGE.backend_to_armoury and LA_BRIDGE.backend_to_armoury[item_name]
-                        local vanilla_key = LA_BRIDGE.backend_to_vanilla and LA_BRIDGE.backend_to_vanilla[item_name]
+                        local armoury_key = LA_BRIDGE and LA_BRIDGE.backend_to_armoury
+                            and LA_BRIDGE.backend_to_armoury[item_name]
+                        local vanilla_key = LA_BRIDGE and LA_BRIDGE.backend_to_vanilla
+                            and LA_BRIDGE.backend_to_vanilla[item_name]
                         if armoury_key then
                             _send_la_apply(pu, slot, kind, armoury_key, vanilla_key)
                             n = n + 1
@@ -8220,12 +8418,18 @@ mod.update = function(dt)
                         local per_hand_sel = sd_bid and _offhand_selection[sd_bid]
                         if type(per_hand_sel) == "table" then
                             local template_key = sd_item.template or sd_item.name or "slot_unknown"
-                            -- v0.9.9.4-dev: walk every hand with an LA pick;
-                            -- multi-mount weapons may have both hands set.
+                            -- #583: replay each committed hand through its
+                            -- existing transport. One equipped item contributes
+                            -- at most one direct dual-offhand mesh.
                             for hand_field, opt in pairs(per_hand_sel) do
                                 if type(opt) == "table" and opt.la_armoury_key then
                                     _send_la_apply(pu, template_key, "offhand",
                                         opt.la_armoury_key, opt.vanilla_skin, hand_field)
+                                    n = n + 1
+                                elseif type(opt) == "table" and type(opt.unit) == "string"
+                                        and opt.unit ~= "" and mod._send_offhand_mesh then
+                                    mod._send_offhand_mesh(pu, template_key,
+                                        hand_field, opt.unit)
                                     n = n + 1
                                 end
                             end
@@ -8387,6 +8591,12 @@ mod.update = function(dt)
             if mod._la_restore_offhand_selections then mod._la_restore_offhand_selections() end
             _la_bridge_init_done = true
         end
+    end
+    -- Native/CWV hand persistence is independent of LA. Retry until backend
+    -- items and (when installed) CWV's generated pools are available.
+    if not mod._la_offhand_restore_done and ItemMasterList
+            and mod._la_restore_offhand_selections then
+        mod._la_restore_offhand_selections()
     end
     -- v0.9.0.4-hotfix: bulk-preload every offhand-pool + custom-illusion unit
     -- on this peer so cross-character shield equips (host's "GK Shield Blue"
@@ -9602,6 +9812,16 @@ _rt_register("cos_la_offhand_persistence_roundtrip", function()
     LA_PERSIST.clear_offhand(bid, hand)
     saved = LA_PERSIST.get_saved_offhands()
     if saved and saved[bid] then return "cleared offhand still present" end
+
+    LA_PERSIST.save_offhand(bid, hand, nil, nil, "units/rt/dual_left")
+    saved = LA_PERSIST.get_saved_offhands()
+    rec = saved and saved[bid] and saved[bid][hand]
+    if not (rec and rec.unit_path == "units/rt/dual_left"
+            and rec.armoury_key == nil) then
+        LA_PERSIST.clear_offhand(bid, hand)
+        return "saved native/CWV hand mesh did not read back"
+    end
+    LA_PERSIST.clear_offhand(bid, hand)
 end)
 
 -- #520: hat/outfit persistence module roundtrip (save/read/clear). The
@@ -10108,13 +10328,96 @@ _rt_register("issue483_cwv_sword_mace_individualized_cosmetics", function()
         end
     end
     for _, option in ipairs(left) do
-        if not expected.es_1h_mace[option.unit] then
+        if not option.follow_main and not expected.es_1h_mace[option.unit] then
             return "non-mace mesh in left pool: " .. tostring(option.unit)
         end
     end
     if type(mod._send_offhand_mesh) ~= "function" then return "direct-unit sender missing" end
     if type(mod._store_offhand_mesh_recv) ~= "function" then return "direct-unit receiver missing" end
     if type(mod._offhand_mesh_by_peer) ~= "table" then return "hot-join mesh store missing" end
+end)
+
+_rt_register("independent_dual_offhands_583", function()
+    if type(mod._ensure_independent_dual_pool) ~= "function" then
+        return "dual-pool lazy builder missing"
+    end
+    if type(mod._dual_offhand_unit_allowed) ~= "function" then
+        return "receiver compatibility boundary missing"
+    end
+    if not (mod._independent_dual_item_types
+            and mod._independent_dual_item_types.wh_dual_hammer) then
+        return "native Warrior Priest Dual Skullsplitters not registered"
+    end
+
+    local native = mod._ensure_independent_dual_pool("wh_dual_hammer")
+    local native_right = native and native.right_hand_unit
+    local native_left = native and native.left_hand_unit
+    if type(native_right) ~= "table" or #native_right < 2 then
+        return "Dual Skullsplitters main-hand source pool missing"
+    end
+    if type(native_left) ~= "table" or #native_left < 3 then
+        return "Dual Skullsplitters offhand source pool missing"
+    end
+    if not (native_left[1].follow_main and native_left[1].unit == "") then
+        return "native dual offhand lacks Follow Main safe fallback"
+    end
+    local sample = native_left[2] and native_left[2].unit
+    if not sample or not mod._dual_offhand_unit_allowed(
+            "wh_dual_hammer", "left_hand_unit", sample) then
+        return "compatible native left-hand mesh rejected"
+    end
+    if mod._dual_offhand_unit_allowed(
+            "wh_dual_hammer", "right_hand_unit", sample) then
+        return "offhand payload escaped into main-hand ownership"
+    end
+    if mod._dual_offhand_unit_allowed(
+            "wh_dual_hammer", "left_hand_unit", "units/not/in/pool") then
+        return "stale incompatible offhand payload did not fail closed"
+    end
+
+    for item_type in pairs(_DUAL_WIELD_POOLS) do
+        local pools = mod._ensure_independent_dual_pool(item_type)
+        local right = pools and pools.right_hand_unit
+        local left = pools and pools.left_hand_unit
+        if type(right) ~= "table" or #right == 0
+                or type(left) ~= "table" or #left < 2 then
+            return "native dual family lacks per-hand sources: " .. item_type
+        end
+        if not (left[1].follow_main and left[1].unit == "") then
+            return "native dual family lacks Follow Main: " .. item_type
+        end
+    end
+
+    local expected_cwv = {
+        "cwv_es_dual_swords", "cwv_es_sword_and_mace",
+        "cwv_es_dual_axes", "cwv_wh_dual_axes",
+        "cwv_es_dual_maces", "cwv_wh_dual_maces",
+        "cwv_es_dual_warpriest_hammers",
+    }
+    for _, item_type in ipairs(expected_cwv) do
+        if not mod._cwv_dual_offhand_contract[item_type] then
+            return "CWV dual family missing from contract: " .. item_type
+        end
+    end
+    if get_mod("character_weapon_variants") then
+        if mod._discover_cwv_dual_offhand_pools() ~= #expected_cwv then
+            return "not every installed CWV dual family produced per-hand pools"
+        end
+        for _, item_type in ipairs(expected_cwv) do
+            local pools = mod._ensure_independent_dual_pool(item_type)
+            if not (pools and pools.right_hand_unit and #pools.right_hand_unit > 0
+                    and pools.left_hand_unit and #pools.left_hand_unit > 1
+                    and pools.left_hand_unit[1].follow_main) then
+                return "incomplete installed CWV dual pool: " .. item_type
+            end
+        end
+    end
+
+    if type(mod._send_offhand_mesh) ~= "function"
+            or type(mod._store_offhand_mesh_recv) ~= "function"
+            or type(mod._offhand_mesh_by_peer) ~= "table" then
+        return "bounded direct-unit peer replay path incomplete"
+    end
 end)
 
 _rt_register("dbg_helpers_two_channel", function()

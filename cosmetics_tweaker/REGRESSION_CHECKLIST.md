@@ -23,6 +23,20 @@ Last updated: 2026-07-13.
 | Detection | `/cos_regression_test` passes `cos_la_weapon_identity_gate_local_wearer`. The wrong-weapon spawn replay logs one bounded `[la-state] APPLY SKIP wrong-weapon` identifying the stored shield template and wielded Sword and Mace template. User verification log `console-2026-07-13-19.20.26-40f91837-d631-41e8-8743-340abd87907c.log` contains both signals. |
 | Tracking | GitHub issue #514. |
 
+### independent-dual-offhands -- native and CWV per-instance hand ownership
+
+| Field | Value |
+|-------|-------|
+| Symptom | Warrior Priest Dual Skullsplitters and CWV dual weapons could not retain an offhand cosmetic independently from the paired main illusion. |
+| Root cause | The native registry excluded `wh_dual_hammer`, CWV's generated skin tables were unavailable at Cosmetics load order, direct unit choices had no durable record, and the UI treated both custom rows as hand owners instead of leaving main-hand ownership with vanilla row 1. |
+| Mod(s) | cosmetics_tweaker; character_weapon_variants when installed |
+| Fix version(s) | cosmetics_tweaker v0.9.97-dev |
+| Category | INTEGRATION / MULTIPLAYER |
+| Repro | Customize native Dual Skullsplitters or any CWV dual family, choose a row-1 main illusion and a distinct offhand, Apply, restart/transition, and observe from another peer. |
+| Expected post-fix | Row 1 owns main/right; one added row owns left/offhand; Follow Main clears only the offhand override. Choices persist by backend item and hand, render in preview/1P/local3P/remote husk, and converge on transition/hot join. Invalid stored or received units fail closed to the main illusion. |
+| Detection | `/cos_regression_test` passes `independent_dual_offhands_583`, `cos_la_offhand_persistence_roundtrip`, and `issue483_cwv_sword_mace_individualized_cosmetics`. Direct peer replay remains one last-choice queue entry per `(backend_id, hand)`, uses the existing RPC schema, and is replayed by the bounded acknowledged state pull. |
+| Tracking | GitHub issue #583. |
+
 ### issue483-cwv-sword-mace-individualized-cosmetics -- independent hands and peer replay
 
 | Field | Value |
@@ -33,7 +47,7 @@ Last updated: 2026-07-13.
 | Fix version(s) | cosmetics_tweaker v0.9.95-dev |
 | Category | INTEGRATION / MULTIPLAYER |
 | Repro | Equip CWV Sword and Mace, open customization, and inspect or change each hand's cosmetic locally and from a second peer. |
-| Expected post-fix | Two rows appear; the right row contains only `es_1h_sword` meshes and the left row only `es_1h_mace` meshes. Applying one hand does not overwrite the other, and the chosen pair survives wield swaps plus initial/hot join on both viewers. |
+| Expected post-fix | Vanilla row 1 owns the sword/right hand and the added offhand row contains only `es_1h_mace` meshes plus Follow Main. Applying one hand does not overwrite the other, and the chosen pair survives wield swaps plus initial/hot join on both viewers. |
 | Detection | `/cos_regression_test` passes `issue483_cwv_sword_mace_individualized_cosmetics`; it validates both exact source families and the existing direct-unit sender, receiver, and hot-join store. Coop verification covers visible per-hand independence and state replay. |
 | Tracking | GitHub issue #483. |
 
