@@ -110,7 +110,7 @@ function mod._wt_tf_is_extra_shot(i, num_projectiles, num_extra_shots)
     return extra_shots_idx <= i
 end
 
-local MOD_VERSION = "0.12.236-dev"
+local MOD_VERSION = "0.12.237-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -323,6 +323,15 @@ local revert_trait_pools  = mod._wt.revert_trait_pools
 -- Read-only diagnostic dump/probe chat commands + the wield-time weapon-data
 -- dump hook (leaf consumers of game globals only; no entry-state dependency).
 mod:dofile("scripts/mods/weapon_tweaker/_wt_diagnostics")
+
+-- #341: Bolt Staff's two rapid primary actions exclusively use the `spark`
+-- overcharge key. This small module owns the snapshot/apply/revert transaction;
+-- no hook and no shared weapon-template mutation are required.
+local _wt_bolt_staff_overcharge = mod:dofile(
+    "scripts/mods/weapon_tweaker/_wt_bolt_staff_overcharge")
+local _wt_bolt_staff_overcharge_runtime =
+    _wt_bolt_staff_overcharge.new_runtime(mod)
+_wt_bolt_staff_overcharge_runtime.apply()
 
 -- Weapon-availability control surface (can_wield strip/add, kruber-removed-pair
 -- cleanup, career-ability action injection + on_disabled reverts) moved to
@@ -3967,6 +3976,7 @@ mod.on_game_state_changed = function(status, state_name)
     apply_weapon_unlocks()
     patch_career_actions_on_weapons()
     apply_trait_filters()
+    _wt_bolt_staff_overcharge_runtime.apply()
     -- Re-attempt the Necromancer FX force-load (idempotent). DLC ownership can be
     -- unresolved at mod-init even for owners; by any state transition it's resolved,
     -- so this guarantees bw_necromancer's soul_rip particles are resident before the
@@ -4011,6 +4021,7 @@ end
 -- _wt_availability.lua in the v0.12.209-dev OOP split; on_disabled below calls
 -- them via the entry's file-local aliases from the manifest.
 mod.on_disabled = function()
+    _wt_bolt_staff_overcharge_runtime.revert()
     clear_weapon_unlocks()
     clear_career_action_injections()
     revert_trait_pools()
@@ -4038,6 +4049,8 @@ mod.on_setting_changed = function(setting_id)
         if mod.wt_apply_priest_punch_buff then mod.wt_apply_priest_punch_buff() end
     elseif setting_id == "wt_brett_sword_shield_buff" then
         if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
+    elseif setting_id == _wt_bolt_staff_overcharge.SETTING_ID then
+        _wt_bolt_staff_overcharge_runtime.apply()
     end
     -- wt_dev_hp_* settings are read by the hold-pose tuner's per-frame hook
     -- via mod:get directly, no dispatcher branch needed.
@@ -4165,6 +4178,34 @@ mod:hook("TeamPreviewer", "cb_hero_unit_spawned_skin_preview", function(func, se
         end
     end
     return func(self, hero_previewer, hero_data)
+end)
+
+_rt_register("issue341_bolt_staff_primary_overcharge_contract", function()
+    if _wt_bolt_staff_overcharge.MULTIPLIER ~= 0.6 then
+        return "#341: primary overcharge multiplier must remain 0.6"
+    end
+    local status = rawget(_G, "PlayerUnitStatusSettings")
+    local values = status and status.overcharge_values
+    local baseline = _wt_bolt_staff_overcharge_runtime.baseline()
+    if type(values) ~= "table" or type(baseline) ~= "number" then
+        return "skip: PlayerUnitStatusSettings overcharge table not loaded"
+    end
+    local expected = _wt_bolt_staff_overcharge.desired_value(
+        baseline, mod:get(_wt_bolt_staff_overcharge.SETTING_ID) == true)
+    if values.spark ~= expected then
+        return string.format("#341: spark overcharge expected %.3f, got %s",
+            expected, tostring(values.spark))
+    end
+    local weapons = rawget(_G, "Weapons")
+    local tpl = weapons and rawget(weapons, "staff_spark_spear_template_1")
+    local action_one = tpl and tpl.actions and tpl.actions.action_one
+    if not (action_one and action_one.default and action_one.rapid_left) then
+        return "skip: Bolt Staff action table not loaded"
+    end
+    if action_one.default.overcharge_type ~= "spark"
+            or action_one.rapid_left.overcharge_type ~= "spark" then
+        return "#341: Bolt Staff primary actions no longer share the spark key"
+    end
 end)
 
 -- ============================================================

@@ -1,5 +1,15 @@
 # Regression Checklist — weapon_tweaker
 
+## #341 - Bolt Staff primary overcharge reduction
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.237-dev (not deployed) |
+| Automated | Offline `test_wt_bolt_staff_overcharge` covers exact 40% scaling, live toggle/revert, unrelated-key isolation, and unavailable-table failure. `/wt_regression_test`: `issue341_bolt_staff_primary_overcharge_contract` locks the live scalar and both primary sub-actions' unique `spark` key. |
+| Solo comparison | From zero overcharge, fire ten uncharged Bolt Staff primary bolts with the option off, vent to zero, enable it, and repeat. Enabled heat should be about 60% of the off result. |
+| Negative control | Fire charged bolts before and after enabling the option. Their overcharge, damage, projectile behavior, and cadence remain vanilla. |
+| Authority | Owner-local scalar consumed at projectile fire; no RPC, custom lookup, or co-op verification required. |
+
 ## #316 - Kruber Longbow zoom on non-Huntsman careers
 
 | Field | Check |

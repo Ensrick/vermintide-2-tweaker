@@ -20,7 +20,7 @@ for adding a new cross-character weapon port).
 
 ---
 
-## Module map (v0.12.235-dev)
+## Module map (v0.12.237-dev)
 
 `weapon_tweaker.lua` is still the primary file (~5,320 lines) — this is an
 IN-PROGRESS decomposition (OOP_REFACTOR_PLAN WS5, PROJECT_STANDARDS §2.2a), not a
@@ -35,7 +35,8 @@ mesh-swap `spawn_inventory_unit` path, force-loads, previewer hooks — they REA
 the anim redirect data the core owns but are their own concern), the per-frame
 grip offsets, the P0 crash guards (`link_units` filter, `create_equipment`
 compensations), the `anim_event_with_variable_float` crash guard, the
-weapon-behavior features (Authentic Brace, WP punch, Moonfire), and the on-ice
+weapon-behavior features (Authentic Brace, WP punch, Moonfire; Bolt Staff's
+scalar transaction is extracted), and the on-ice
 Big-Rebalance module.
 
 **Shared namespace `mod._wt`** (the event_tweaker `mod._evt` / cosmetics `mod._cos`
@@ -62,6 +63,7 @@ SEPARATE key from the established flat `mod._wt_*` fields (`mod._wt_link_filter`
 | `_wt_trait_pools.lua` | CW weapon-trait pool filtering (`_trait_pool_sources`, snapshot, `apply_trait_filters` / `revert_trait_pools`). Currently a retired no-op stub (menu removed 2026-06-29) kept so nothing dangles. Reads `WeaponTraits`; exports `mod._wt.apply_trait_filters` / `.revert_trait_pools` + the legacy flat `mod._apply_trait_filters` / `mod._revert_trait_pools`. |
 | `_wt_diagnostics.lua` | Read-only diagnostic dump/probe commands (`/sm_probe`, `/dump`, `/dump_actions`, `/dump_weapons`, `/wt_dump_wielded`) + the wield-time weapon-data dump and its sole `SimpleInventoryExtension._wield_slot` hook_safe. Reads engine globals only; no exports; leaf. |
 | `_wt_longbow_zoom_probe.lua` | Pure, engine-free bounded lifecycle for #316's automatically armed owner-side Empire Longbow zoom probe. Owns exact career/template targeting, due-time observation, one-shot finish, and the three-attempt cap; the entry owns the three `ActionAim` hooks and raw-console formatting. Returns its module table directly and has no `mod` or engine dependency. |
+| `_wt_bolt_staff_overcharge.lua` | Issue #341's hook-free Bolt Staff primary-overcharge transaction. Owns the 0.6 planner plus snapshot/apply/revert runtime for the unique `PlayerUnitStatusSettings.overcharge_values.spark` scalar. Returns its module table directly; the entry wires init, lifecycle, setting-change, disable, and runtime regression surfaces. |
 
 Pre-existing `_*.lua` / `wt_*.lua` modules (`_safe_hook`, `_wt_brett_sword_shield_buff`,
 `_wt_passive_charge`, `wt_dev_anim_picker`, `wt_dev_hold_pose`, `wt_unlock_data`,
@@ -74,6 +76,7 @@ Pre-existing `_*.lua` / `wt_*.lua` modules (`_safe_hook`, `_wt_brett_sword_shiel
 - **New (career, weapon) unlock or can_wield / career-ability behavior** → `_wt_availability.lua`; the (career, weapon) pair itself goes in `wt_unlock_data.lua`.
 - **New regression check** → `_rt_register("name", fn)` inline in the entry next to the code it probes (the alias is live); the harness itself is frozen.
 - **New per-template 3P remap catalog row** → `_wt_anim_remap_data.lua`; keep the returned table declarative and engine-free.
+- **New bounded weapon-behavior scalar** → a pure `_wt_<feature>.lua` planner/runtime module, wired into the entry lifecycle like `_wt_bolt_staff_overcharge.lua`; snapshot and restore the exact pre-WT value.
 - **New 3P redirect / shared remap table / resolver, or a change to the `Unit.animation_event` funnel or the wield-state hooks** → `_wt_anim_remap.lua` (keep its hot tables file-local upvalues; export via `mod._wt` only for non-hot-path cross-module reads).
 - **Anything touching the port pipeline / `wield_anim_career_3p` template patchers, the grip offsets, the previewer hooks, or a P0 guard** → stays in `weapon_tweaker.lua` until a later phase; grep ALL files for an existing hook on the `(Class, method)` before adding one (VMF drops the second — NON-NEGOTIABLE 8).
 - **New cross-module value** → export onto `mod._wt` in the owning module (earlier in the manifest than its consumers) and localize it at the consumer's top.

@@ -1293,6 +1293,7 @@ local data = {
                 -- Leaves sorted A->Z by display label (repo standing sort rule).
                 sub_widgets = {
                     { setting_id = "authentic_brace_of_pistols", type = "checkbox", default_value = false },
+                    { setting_id = "wt_bolt_staff_primary_overcharge_reduction", type = "checkbox", default_value = false },
                     -- Explicit tooltip: the loc key ends in _tooltip, which VMF does NOT
                     -- auto-resolve (auto path only tries <setting_id>_description).
                     { setting_id = "wt_brett_sword_shield_buff", type = "checkbox", default_value = false, tooltip = "wt_brett_sword_shield_buff_tooltip" },
