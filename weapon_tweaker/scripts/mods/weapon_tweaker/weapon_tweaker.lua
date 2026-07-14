@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.255-dev"
+local MOD_VERSION = "0.12.256-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -5663,8 +5663,9 @@ _rt_register("issue593_conditional_cwv_axe_shield_ownership", function()
         if not managed or managed.dr_shield_axe ~= true then
             return "#593 CWV handoff map missing " .. career
         end
-        if not policy.should_yield_native(career, "dr_shield_axe", true, mod._wt.cwv_conditional_managed)
-            or policy.should_yield_native(career, "dr_shield_axe", false, mod._wt.cwv_conditional_managed) then
+        if not policy.should_yield_native(career, "dr_shield_axe", true,
+                mod._wt.cwv_conditional_managed, true)
+            or policy.should_yield_native(career, "dr_shield_axe", false, mod._wt.cwv_conditional_managed, true) then
             return "#593 conditional policy failed " .. career
         end
     end
@@ -5689,13 +5690,14 @@ _rt_register("issue593_conditional_cwv_axe_shield_ownership", function()
     end
 
     local active = policy.cwv_is_active(get_mod("character_weapon_variants"))
+    local ready = policy.replacement_ready(ItemMasterList, "dr_shield_axe")
     local native = rawget(_G, "ItemMasterList") and rawget(ItemMasterList, "dr_shield_axe")
     if native and type(native.can_wield) == "table" then
         local present = {}
         for _, career in ipairs(native.can_wield) do present[career] = true end
         for _, career in ipairs(careers) do
             local enabled = mod:get("unlock_" .. career .. "_dr_shield_axe") == true
-            local expected = enabled and not active
+            local expected = enabled and not (active and ready)
             if present[career] ~= expected then
                 return string.format("#593 runtime mismatch %s active=%s enabled=%s present=%s",
                     career, tostring(active), tostring(enabled), tostring(present[career]))
@@ -5735,6 +5737,44 @@ _rt_register("issue593_conditional_cwv_axe_shield_ownership", function()
                     end
                 end
             end
+        end
+    end
+end)
+
+_rt_register("issue597_conditional_cwv_greataxe_ownership", function()
+    local policy = mod._wt.cwv_ownership
+    local careers = {
+        "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+        "wh_captain", "wh_bountyhunter", "wh_zealot",
+    }
+    for _, career in ipairs(careers) do
+        local managed = mod._wt.cwv_conditional_managed[career]
+        if not managed or managed.dr_2h_axe ~= true then
+            return "#597 Greataxe handoff map missing " .. career
+        end
+        if not policy.should_yield_native(career, "dr_2h_axe", true,
+                mod._wt.cwv_conditional_managed, true)
+            or policy.should_yield_native(career, "dr_2h_axe", true,
+                mod._wt.cwv_conditional_managed, false) then
+            return "#597 active/readiness ownership boundary failed " .. career
+        end
+    end
+    local active = policy.cwv_is_active(get_mod("character_weapon_variants"))
+    local ready = policy.replacement_ready(ItemMasterList, "dr_2h_axe")
+    local native = ItemMasterList and rawget(ItemMasterList, "dr_2h_axe")
+    local cwv = ItemMasterList and rawget(ItemMasterList, "cwv_es_greataxe")
+    local native_present, cwv_present = {}, {}
+    for _, career in ipairs(native and native.can_wield or {}) do native_present[career] = true end
+    for _, career in ipairs(cwv and cwv.can_wield or {}) do cwv_present[career] = true end
+    for _, career in ipairs(careers) do
+        local native_enabled = mod:get("unlock_" .. career .. "_dr_2h_axe") == true
+        local cwv_enabled = mod._wt.cwv_availability_policy.is_enabled(
+            function(setting_id) return mod:get(setting_id) end, "cwv_es_greataxe", career)
+        if native_present[career] ~= (native_enabled and not (active and ready)) then
+            return "#597 native Greataxe ownership mismatch " .. career
+        end
+        if active and ready and cwv_present[career] ~= cwv_enabled then
+            return "#597 CWV Greataxe ownership mismatch " .. career
         end
     end
 end)

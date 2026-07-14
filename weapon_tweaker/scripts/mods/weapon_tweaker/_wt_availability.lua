@@ -35,6 +35,10 @@ local function _cwv_active()
     return _cwv_ownership.cwv_is_active(get_mod("character_weapon_variants"))
 end
 
+local function _cwv_replacement_ready(weapon_key)
+    return _cwv_ownership.replacement_ready(ItemMasterList, weapon_key)
+end
+
 local function _get_setting(setting_id)
     return mod:get(setting_id)
 end
@@ -153,7 +157,8 @@ local function apply_weapon_unlocks()
     for career, weapons in pairs(weapon_unlock_map) do
         for _, weapon_key in ipairs(weapons) do
             local conditional_yield = _cwv_ownership.should_yield_native(
-                career, weapon_key, has_cwv, _cwv_conditional)
+                career, weapon_key, has_cwv, _cwv_conditional,
+                _cwv_replacement_ready(weapon_key))
             if not conditional_yield then
                 if mod:get("unlock_" .. career .. "_" .. weapon_key) then
                     local item = rawget(ItemMasterList, weapon_key)
@@ -197,6 +202,7 @@ local function patch_career_actions_on_weapons()
         end
     end
     _career_action_injections = {}
+    local has_cwv = _cwv_active()
 
     for career, weapons in pairs(weapon_unlock_map) do
         local cs = CareerSettings[career]
@@ -207,7 +213,10 @@ local function patch_career_actions_on_weapons()
             local action_template = action_name and ActionTemplates[action_name]
             if action_template then
                 for _, weapon_key in ipairs(weapons) do
-                    if mod:get("unlock_" .. career .. "_" .. weapon_key) then
+                    local yields_to_cwv = _cwv_ownership.should_yield_native(
+                        career, weapon_key, has_cwv, _cwv_conditional,
+                        _cwv_replacement_ready(weapon_key))
+                    if not yields_to_cwv and mod:get("unlock_" .. career .. "_" .. weapon_key) then
                         local item = rawget(ItemMasterList, weapon_key)
                         local tmpl_key = item and item.template
                         local tmpl = tmpl_key and Weapons[tmpl_key]

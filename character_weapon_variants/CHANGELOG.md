@@ -1,5 +1,16 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.413-dev - 2026-07-14 - #604 Imperial and Dawi Crowbill family [verify-fix-coop]
+
+- Added CIM-crafted Imperial Crowbills for Kruber and Saltzpyre and a Dawi Crowbill for Bardin, using Sienna's Crowbill moveset. Six approved CC BY 4.0 models ship as placeholder illusions through a reproducible, hash-gated conversion pipeline; the excluded Italian Free Standard model is not distributed.
+- Weapon Special switches an exact weapon instance between pick and hammer faces. Hammer mode rotates the model exactly 180 degrees around its haft, adds 60% attack and impact cleave, reduces direct damage by 15%, and removes armor piercing from light attacks without changing timing or moveset. Vanilla Sienna Crowbill participation is an independent default-off option.
+- Mode persistence and bounded peer synchronization cover owner 1P/3P, bots, remote husks, inventory character preview, lobby, score/team, and item/customization previews. Unknown or mismatched peers fail closed without receiving custom identifiers.
+- Added complete attribution, import documentation, runtime/presentation regression coverage, package reachability checks, and texture-bound checks. CWV still grants no automatic inventory instances; CIM remains the acquisition path and WT owns optional career access.
+
+### Co-op verification
+
+Craft each family through CIM. Toggle Weapon Special repeatedly in the Keep and a mission, then verify the face, stats, persistence, inventory character preview, lobby, score screen, hot join, and both players' remote views. Repeat with one unmodified Crowbill as a control and confirm no accumulating rotation or RPC/log spam.
+
 ## 0.1.412-dev - 2026-07-14 - #273 preserve CWV identities in Chaos Wastes [verify-fix-coop]
 
 - Added one dedicated Chaos Wastes/Deus item row per concrete CWV weapon. Property and trait generation are borrowed from the authored vanilla base, while the CWV template, item type, skin family, and render identity remain individualized through run setup, serialization, upgrades, transitions, and reconstruction.

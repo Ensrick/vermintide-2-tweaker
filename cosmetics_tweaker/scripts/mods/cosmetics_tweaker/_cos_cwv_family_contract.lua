@@ -7,6 +7,18 @@
 local M = {}
 
 M.families = {
+    cwv_es_imperial_crowbill = {
+        item_type = "cwv_es_imperial_crowbill",
+        skin_table = "cwv_es_imperial_crowbill_skins",
+        icon_owner = "right_hand_unit",
+        primary_source = "bw_1h_crowbill",
+    },
+    cwv_dr_dawi_crowbill = {
+        item_type = "cwv_dr_dawi_crowbill",
+        skin_table = "cwv_dr_dawi_crowbill_skins",
+        icon_owner = "right_hand_unit",
+        primary_source = "bw_1h_crowbill",
+    },
     cwv_dr_dawi_mace = {
         item_type = "cwv_dr_dawi_mace",
         skin_table = "cwv_dr_dawi_mace_skins",

@@ -10,6 +10,12 @@ material = [
 	"units/cwv_es_greataxe/axe_03/axe_03"
 	"units/cwv_es_greataxe/axe_04/axe_04"
 	"units/cwv_es_greataxe/axe_05/axe_05"
+	"units/cwv_crowbill/dawi_01/dawi_01"
+	"units/cwv_crowbill/imperial_01/imperial_01"
+	"units/cwv_crowbill/imperial_02/imperial_02"
+	"units/cwv_crowbill/imperial_03/imperial_03"
+	"units/cwv_crowbill/imperial_04/imperial_04"
+	"units/cwv_crowbill/imperial_05/imperial_05"
 ]
 
 unit = [
@@ -24,6 +30,18 @@ unit = [
 	"units/cwv_es_greataxe/axe_04/axe_04_3p"
 	"units/cwv_es_greataxe/axe_05/axe_05"
 	"units/cwv_es_greataxe/axe_05/axe_05_3p"
+	"units/cwv_crowbill/dawi_01/dawi_01"
+	"units/cwv_crowbill/dawi_01/dawi_01_3p"
+	"units/cwv_crowbill/imperial_01/imperial_01"
+	"units/cwv_crowbill/imperial_01/imperial_01_3p"
+	"units/cwv_crowbill/imperial_02/imperial_02"
+	"units/cwv_crowbill/imperial_02/imperial_02_3p"
+	"units/cwv_crowbill/imperial_03/imperial_03"
+	"units/cwv_crowbill/imperial_03/imperial_03_3p"
+	"units/cwv_crowbill/imperial_04/imperial_04"
+	"units/cwv_crowbill/imperial_04/imperial_04_3p"
+	"units/cwv_crowbill/imperial_05/imperial_05"
+	"units/cwv_crowbill/imperial_05/imperial_05_3p"
 ]
 
 texture = [
@@ -34,4 +52,10 @@ texture = [
 	"textures/cwv_es_greataxe/axe_03/*"
 	"textures/cwv_es_greataxe/axe_04/*"
 	"textures/cwv_es_greataxe/axe_05/*"
+	"textures/cwv_crowbill/dawi_01/*"
+	"textures/cwv_crowbill/imperial_01/*"
+	"textures/cwv_crowbill/imperial_02/*"
+	"textures/cwv_crowbill/imperial_03/*"
+	"textures/cwv_crowbill/imperial_04/*"
+	"textures/cwv_crowbill/imperial_05/*"
 ]

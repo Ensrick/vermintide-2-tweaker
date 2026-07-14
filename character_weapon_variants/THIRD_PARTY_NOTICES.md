@@ -97,3 +97,44 @@ reported that exact license for each model UID on 2026-07-14.
 
 The reproducible conversion scripts and source manifest live in
 `tools/GREATAXE_ASSET_PIPELINE.md` and `tools/convert_greataxe_assets.ps1`.
+
+## Crowbill family 3D models
+
+Issue #604 uses six CC-BY 4.0 Sketchfab models for the Dawi and Imperial
+Crowbill identities. Original archives and source-authoring files are not
+redistributed in this repository. Derived resources are shipped beneath:
+
+- `units/cwv_crowbill/dawi_01/*` and `textures/cwv_crowbill/dawi_01/*`
+- `units/cwv_crowbill/imperial_01/*` through `imperial_05/*`, with matching
+  `textures/cwv_crowbill/imperial_01/*` through `imperial_05/*`
+
+| Asset | Title | Author | Author profile | Source | License |
+|---|---|---|---|---|---|
+| `dawi_01` | Medieval War Hammer | Parelaxel | https://sketchfab.com/parelaxel | https://sketchfab.com/3d-models/medieval-war-hammer-665734b41cce4a49abeb757c3bda7705 | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `imperial_01` | War Hammer | soidev | https://sketchfab.com/soidev | https://sketchfab.com/3d-models/war-hammer-97ffc67970b54bebb35aa08f4723753e | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `imperial_02` | war_hammer | Loqual | https://sketchfab.com/pionck8824 | https://sketchfab.com/3d-models/war-hammer-cf9ad0c7fa8e4cecb323ecfadc787bea | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `imperial_03` | Medieval Steel Warhammer | Peter Nox | https://sketchfab.com/Peter.Nox | https://sketchfab.com/3d-models/medieval-steel-warhammer-85caa1dc806c46fb9d256572fcd5854a | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `imperial_04` | Warhammer - [ Diablo II ] | Ole Gunnar Isager | https://sketchfab.com/FrenchBaguette | https://sketchfab.com/3d-models/warhammer-diablo-ii-6d9963339387410c9127811b72307e8f | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `imperial_05` | Steel Warhammer | Peter Nox | https://sketchfab.com/Peter.Nox | https://sketchfab.com/3d-models/steel-warhammer-ae48855265ee4fa4b7c80218f16a3c56 | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+
+### Changes made to the originals
+
+- Source FBX geometry was imported and re-exported with Blender 4.4.0.
+- Mesh objects and inherited transforms were joined/applied; the longest
+  dimension was normalized to two Blender units; the inferred handle butt was
+  placed at the origin with the haft along positive X.
+- Material slots were collapsed to the short Stingray-safe name
+  `crowbill_mat`. The Imperial model's separate head and handle UV/material
+  spaces were remapped into a horizontal atlas before that collapse.
+- Matching 1P and `_3p` FBX/unit siblings were emitted with
+  perspective-appropriate shadow settings.
+- Source albedo, normal, roughness, and metallic maps were converted to PNG and
+  capped at 2048 pixels. Both absent AO maps use neutral white. No new artistic
+  texture detail was added.
+
+The exact archive hashes, selected source files, pinned conversion commands,
+and runtime integration requirements are recorded in
+`tools/CROWBILL_ASSET_PIPELINE.md`.
+
+The downloaded Italian War Hammer by pepe (`pepetos`) is licensed under
+Sketchfab Free Standard and is deliberately not incorporated or redistributed.

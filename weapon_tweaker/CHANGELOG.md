@@ -1,5 +1,15 @@
 # Weapon Tweaker Changelog
 
+## 0.12.256-dev (2026-07-14) - #604 Crowbill catalog and #597 Greataxe ownership [verify-fix-coop]
+
+- Added the CWV Imperial and Dawi Crowbill families to WT's bounded career catalog so their authored owners remain default-on and every optional receiver remains independently controllable.
+- With CWV active and its replacement ready, Kruber and Saltzpyre use CWV's Kruber Greataxe instead of Bardin's native Greataxe. WT preserves saved native values but cedes menu, runtime, cache, and final-write ownership; the Bardin fallback returns when CWV is absent or not ready.
+- Hardened the existing Axe+Shield handoff so WT yields the native fallback only after both exact CWV replacements are registered, preventing load-order gaps.
+
+### Co-op verification
+
+With CWV active, confirm Kruber and Saltzpyre receive the CWV Kruber Greataxe and never Bardin's Greataxe; Bardin remains unchanged. Confirm the Crowbill career controls, then have both peers inspect the selected models and mode. Disable CWV and confirm WT restores native fallback availability without losing saved settings.
+
 ## 0.12.255-dev (2026-07-14) - #603 Ranger Veteran Dual Axes inventory idle [verify-fix]
 
 - The native diagnostic proved Ranger Veteran Dual Axes selected the correct `to_dual_axes` event, but the inventory-screen character preview lost that pose after unit spawn/link.

@@ -1740,6 +1740,16 @@ if _cwv_present then
         unlock_wh_captain_dr_shield_axe = true,
         unlock_wh_bountyhunter_dr_shield_axe = true,
         unlock_wh_zealot_dr_shield_axe = true,
+        -- #597: the CWV Greataxe is the canonical Kruber/Saltzpyre family.
+        -- Keep persisted native values, but do not render duplicate Bardin
+        -- fallback rows while the CWV provider is active.
+        unlock_es_mercenary_dr_2h_axe = true,
+        unlock_es_huntsman_dr_2h_axe = true,
+        unlock_es_knight_dr_2h_axe = true,
+        unlock_es_questingknight_dr_2h_axe = true,
+        unlock_wh_captain_dr_2h_axe = true,
+        unlock_wh_bountyhunter_dr_2h_axe = true,
+        unlock_wh_zealot_dr_2h_axe = true,
     }
     local function strip(nodes)
         if type(nodes) ~= "table" then return end

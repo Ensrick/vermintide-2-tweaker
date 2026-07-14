@@ -42,7 +42,7 @@ return function(H, repo_root)
     end)
 
     H.test("issue368 CWV clone catalog is bounded and marker-gated", function()
-        H.equal(#catalog, 33)
+        H.equal(#catalog, 35)
         local seen = {}
         for _, row in ipairs(catalog) do
             H.equal(seen[row.key], nil, row.key)
@@ -128,6 +128,26 @@ return function(H, repo_root)
         }) do
             H.truthy(data:find(id .. " = true", 1, true), id)
         end
+    end)
+
+    H.test("issue597 CWV Greataxe replaces native Kruber and Saltz fallbacks", function()
+        local row, rows = nil, 0
+        for _, candidate in ipairs(catalog) do
+            if candidate.key == "cwv_es_greataxe" then row, rows = candidate, rows + 1 end
+        end
+        H.truthy(row)
+        H.equal(rows, 1)
+        H.equal(#row.default_careers, 7)
+        H.equal(#row.conditional_careers, 16)
+        for _, career in ipairs({
+            "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+            "wh_captain", "wh_bountyhunter", "wh_zealot",
+        }) do
+            H.equal(contains(row.default_careers, career), true, career)
+            H.equal(unlocks.cwv_conditional_managed[career].dr_2h_axe, true, career)
+            H.truthy(data:find("unlock_" .. career .. "_dr_2h_axe = true", 1, true), career)
+        end
+        H.truthy(availability:find("_cwv_replacement_ready(weapon_key)", 1, true))
     end)
 
     H.test("issue391 policy composes legacy item master with exact career choice", function()

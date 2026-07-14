@@ -1,0 +1,15 @@
+materials = {
+	crowbill_mat = "units/cwv_crowbill/imperial_04/imperial_04"
+}
+
+renderables = {
+	imperial_04 = {
+		always_keep = false
+		culling = "bounding_volume"
+		generate_uv_unwrap = false
+		occluder = false
+		shadow_caster = false
+		surface_queries = false
+		viewport_visible = true
+	}
+}

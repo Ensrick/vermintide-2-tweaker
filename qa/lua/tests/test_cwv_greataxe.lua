@@ -44,9 +44,16 @@ return function(H, repo_root)
         end
         H.truthy(row)
         H.equal(#row.careers, 20)
-        H.equal(#row.default_careers, 4)
+        H.equal(#row.default_careers, 7)
         H.equal(#row.authored_careers, 4)
         H.equal(#row.conditional_careers, 16)
+        for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+            local found = false
+            for _, value in ipairs(row.default_careers) do
+                if value == career then found = true; break end
+            end
+            H.equal(found, true, "WT Greataxe default missing " .. career)
+        end
     end)
 
     H.test("CWV #597 packages five exact licensed model rows", function()

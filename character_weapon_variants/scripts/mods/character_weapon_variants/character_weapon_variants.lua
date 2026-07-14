@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.412-dev"
+local MOD_VERSION = "0.1.413-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -10,8 +10,9 @@ mod._cwv_smoke_bomb_probe = mod:dofile("scripts/mods/character_weapon_variants/_
 mod._cwv_smoke_bomb_probe.install(mod)
 
 -- RPC schema for cwv's own VMF mod-to-mod channels (VMF_RECIPES section 10).
--- Currently only the peer-parity beacon (_lib_peer_parity). Bump ONLY when a
--- cwv network_send payload shape changes. Kept on `mod` (a table field, not a
+-- The peer-parity beacon and feature-owned channels (including #604 Crowbill
+-- mode) each validate their own fixed schema. Bump ONLY when a shared cwv
+-- network_send payload shape changes. Kept on `mod` (a table field, not a
 -- file-scope local) because this chunk sits at the Lua 5.1 200-local ceiling
 -- (see the `_om` note below) -- a new top-level local could overflow it.
 mod.CWV_RPC_SCHEMA = 1
@@ -55,9 +56,17 @@ _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inf
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
 _om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe")
 _om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_maces")
+_om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_family")
+_om.crowbill_hammer_mode = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_hammer_mode")
+_om.crowbill_presentation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_presentation")
+_om.crowbill_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_runtime")
+mod._cwv_crowbill_family = _om.crowbill_family
+mod._cwv_crowbill_hammer_mode = _om.crowbill_hammer_mode
+mod._cwv_crowbill_presentation = _om.crowbill_presentation
+mod._cwv_crowbill_runtime = _om.crowbill_runtime
 _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus_identity")
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
-_om.mod_unit_preview.install(_om.greataxe)
+_om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family })
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
 _om.mace_hammer_identity = _om.mace_hammer_identity_policy.new()
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_pair_state").install(mod, _om)
@@ -1251,6 +1260,47 @@ local _variant_definitions = {
 		rarity          = "exotic",
 		item_type       = "cwv_dr_dawi_dual_maces",
 	},
+	-- Crowbill family: registration-only definitions use Sienna's resident
+	-- vanilla Crowbill as a licence-safe placeholder. CIM owns acquisition;
+	-- the isolated hammer-mode module consumes `crowbill_mode_family`.
+	{
+		item_key        = "cwv_es_imperial_crowbill",
+		base_weapon     = _om.crowbill_family.SOURCE_ITEM,
+		template        = _om.crowbill_family.SOURCE_TEMPLATE,
+		display_name    = "Imperial Crowbill",
+		description     = "An Imperial crowbill with a hooked face for armour and a hammer face for crushing blows.",
+		character       = "empire_soldier",
+		careers         = _om.crowbill_family.IMPERIAL_DEFAULTS,
+		right_hand_unit = (_om.crowbill_family.model_for_variant("cwv_es_imperial_crowbill") or {}).right_hand_unit
+			or _om.crowbill_family.PLACEHOLDER_UNIT,
+		inventory_icon  = (_om.crowbill_family.model_for_variant("cwv_es_imperial_crowbill") or {}).inventory_icon
+			or _om.crowbill_family.PLACEHOLDER_ICON,
+		hud_icon        = (_om.crowbill_family.model_for_variant("cwv_es_imperial_crowbill") or {}).hud_icon
+			or "weapon_generic_icon_falken",
+		skin_display_name = (_om.crowbill_family.model_for_variant("cwv_es_imperial_crowbill") or {}).display_name
+			or "Imperial Crowbill",
+		item_type       = "cwv_es_imperial_crowbill",
+		crowbill_mode_family = _om.crowbill_family.HAMMER_MODE_FAMILY,
+	},
+	{
+		item_key        = "cwv_dr_dawi_crowbill",
+		base_weapon     = _om.crowbill_family.SOURCE_ITEM,
+		template        = _om.crowbill_family.SOURCE_TEMPLATE,
+		display_name    = "Dawi Crowbill",
+		description     = "A Dawi crowbill built to pierce plate or turn its hammer face against shield and bone.",
+		character       = "dwarf_ranger",
+		careers         = _om.crowbill_family.DAWI_DEFAULTS,
+		right_hand_unit = (_om.crowbill_family.model_for_variant("cwv_dr_dawi_crowbill") or {}).right_hand_unit
+			or _om.crowbill_family.PLACEHOLDER_UNIT,
+		inventory_icon  = (_om.crowbill_family.model_for_variant("cwv_dr_dawi_crowbill") or {}).inventory_icon
+			or _om.crowbill_family.PLACEHOLDER_ICON,
+		hud_icon        = (_om.crowbill_family.model_for_variant("cwv_dr_dawi_crowbill") or {}).hud_icon
+			or "weapon_generic_icon_falken",
+		skin_display_name = (_om.crowbill_family.model_for_variant("cwv_dr_dawi_crowbill") or {}).display_name
+			or "Dawi Crowbill",
+		item_type       = "cwv_dr_dawi_crowbill",
+		crowbill_mode_family = _om.crowbill_family.HAMMER_MODE_FAMILY,
+	},
 	{
 		-- Dual Warrior-Priest Hammers — paired clone of cwv_es_warpriest_hammer
 		-- (which is itself a clone of Saltzpyre's wh_1h_hammer Skullsplitter).
@@ -1366,6 +1416,18 @@ do
 		if setting_id == policy.SETTING_ID then
 			_om._apply_mace_hammer_identity(mod:get(policy.SETTING_ID) ~= false)
 		end
+		if _om.crowbill_runtime and _om.crowbill_runtime.on_setting_changed then
+			_om.crowbill_runtime.on_setting_changed(setting_id)
+		end
+	end
+end
+
+-- #604: gameplay and transport owner. This builds a separate hammer template
+-- from the exact Crowbill donor and installs one transition-only state channel.
+do
+	local ok, err = _om.crowbill_runtime.install(mod, _om)
+	if not ok then
+		mod:warning("[cwv:604] Crowbill hammer runtime unavailable: %s", tostring(err))
 	end
 end
 
@@ -1751,6 +1813,9 @@ mod:hook_safe("SimpleInventoryExtension", "wield", function(self, slot_name)
 		if _om._old_musket_record_and_publish then
 			_om._old_musket_record_and_publish(self.owner_unit, slot_name, item_data,
 				item_data.mod_data and item_data.mod_data.cwv_musket_stance or "ranged", "wield")
+		end
+		if _om.crowbill_runtime and _om.crowbill_runtime.on_local_wield then
+			_om.crowbill_runtime.on_local_wield(self, slot_name, item_data)
 		end
 	end
 
@@ -4295,6 +4360,12 @@ end
 mod:hook("BackendUtils", "get_item_template", function(func, item_data, backend_id)
 	local template = func(item_data, backend_id)
 	if not item_data then return template end
+	-- #604: local owner selects one of two pre-registered Crowbill templates.
+	-- Remote equipment remains the vanilla source template on the wire.
+	if _om.crowbill_runtime and _om.crowbill_runtime.resolve_template then
+		local crowbill_template = _om.crowbill_runtime.resolve_template(item_data, backend_id)
+		if crowbill_template then return crowbill_template end
+	end
 
 	-- v0.1.301: identify variant family — cwv_es_musket vs cwv_es_musket_old.
 	-- Both use mod_data.cwv_musket_stance as the per-item stance flag (it's
@@ -5116,6 +5187,9 @@ mod:hook_safe("SimpleHuskInventoryExtension", "_wield_slot", function(self, worl
 	if _om._exact_pair_on_husk_wield then
 		_om._exact_pair_on_husk_wield(self, slot_name)
 	end
+	if _om.crowbill_runtime and _om.crowbill_runtime.on_husk_wield then
+		_om.crowbill_runtime.on_husk_wield(self, slot_name)
+	end
 end)
 _cwv_husk_wield_diag_installed = true
 
@@ -5741,6 +5815,10 @@ do
 		local installed = _om.greataxe.install_network_package_aliases(nl_inventory)
 		if installed > 0 then
 			mod:info("[cwv:597] installed %d Greataxe inventory-package wire aliases", installed)
+		end
+		local crowbill_aliases = _om.crowbill_family.install_network_package_aliases(nl_inventory)
+		if crowbill_aliases > 0 then
+			mod:info("[cwv:604] installed %d Crowbill inventory-package wire aliases", crowbill_aliases)
 		end
 	end
 end
@@ -7916,6 +7994,11 @@ for _, model in ipairs(_om.greataxe.usable_models()) do
 	_display_names[model.key .. "_name"] = model.display_name
 	_display_names[model.key .. "_description"] = model.description or "A Greataxe model awaiting final review and naming."
 end
+for _, model in ipairs(_om.crowbill_family.usable_models()) do
+	_display_names[model.key .. "_name"] = model.display_name
+	_display_names[model.key .. "_description"] = model.description
+		or "A Crowbill model awaiting final review and naming."
+end
 
 -- Pickup HUD popup strings. Vanilla pickup interaction code calls Localize()
 -- on `pickup_settings.hud_description` (interactions.lua:1572 →
@@ -8291,6 +8374,8 @@ local function _register_cwv_skin_combinations()
 		cwv_dr_dawi_mace               = "cwv_dr_dawi_mace_skins",
 		cwv_dr_dawi_mace_shield        = "cwv_dr_dawi_mace_shield_skins",
 		cwv_dr_dawi_dual_maces         = "cwv_dr_dawi_dual_maces_skins",
+		cwv_es_imperial_crowbill       = "cwv_es_imperial_crowbill_skins",
+		cwv_dr_dawi_crowbill           = "cwv_dr_dawi_crowbill_skins",
 		cwv_es_sword_and_mace          = "cwv_es_sword_and_mace_skins",
 		cwv_es_warpriest_hammer        = "cwv_es_warpriest_hammer_skins",
 		cwv_es_dual_warpriest_hammers  = "cwv_es_dual_warpriest_hammers_skins",
@@ -9297,6 +9382,63 @@ local function _register_greataxe_model_illusions()
 	end
 
 	mod:info("Registered %d additional converted Greataxe model illusions", registered)
+
+	-- Issue #604: the first Imperial and sole Dawi rows are the generated base
+	-- skins. Additional Imperial rows are real curated illusions in the same
+	-- custom skin table; no Free Standard/unknown model can enter this manifest.
+	local crowbill_registered = 0
+	for _, model in ipairs(_om.crowbill_family.usable_models()) do
+		if model.key == model.variant_key .. "_skin" or _custom_skin_keys[model.key] then
+			goto continue_crowbill_model
+		end
+		local rarity = model.rarity or "exotic"
+		local display_unit = model.display_unit or "units/weapons/weapon_display/display_1h_crowbills"
+		local careers = model.variant_key == "cwv_dr_dawi_crowbill"
+			and _om.crowbill_family.DAWI_DEFAULTS or _om.crowbill_family.IMPERIAL_DEFAULTS
+		ItemMasterList[model.key] = {
+			key = model.key,
+			name = model.key,
+			item_type = "weapon_skin",
+			slot_type = "weapon_skin",
+			matching_item_key = _om.crowbill_family.SOURCE_ITEM,
+			rarity = rarity,
+			display_name = model.key .. "_name",
+			description = model.key .. "_description",
+			display_unit = display_unit,
+			hud_icon = model.hud_icon,
+			inventory_icon = model.inventory_icon,
+			information_text = "information_weapon_skin",
+			right_hand_unit = model.right_hand_unit,
+			can_wield = careers,
+		}
+		WeaponSkins.skins[model.key] = {
+			description = model.key .. "_description",
+			display_name = model.key .. "_name",
+			display_unit = display_unit,
+			hud_icon = model.hud_icon,
+			inventory_icon = model.inventory_icon,
+			rarity = rarity,
+			right_hand_unit = model.right_hand_unit,
+		}
+		local crowbill_combos = WeaponSkins.skin_combinations[model.variant_key .. "_skins"]
+		local tier = crowbill_combos and crowbill_combos[rarity]
+		if tier then tier[#tier + 1] = model.key end
+		for _, lookup_name in ipairs({ "weapon_skins", "item_names" }) do
+			local lookup = NetworkLookup and NetworkLookup[lookup_name]
+			if lookup and not rawget(lookup, model.key) then
+				local lookup_index = #lookup + 1
+				rawset(lookup, lookup_index, model.key)
+				rawset(lookup, model.key, lookup_index)
+			end
+		end
+		_om._skin_keys = _om._skin_keys or {}
+		_om._skin_keys[model.key] = true
+		_custom_skin_keys[model.key] = true
+		crowbill_registered = crowbill_registered + 1
+		::continue_crowbill_model::
+	end
+	mod:info("[cwv:604] Registered %d additional licensed Imperial Crowbill model illusions",
+		crowbill_registered)
 end
 
 _register_greataxe_model_illusions()
@@ -9979,6 +10121,12 @@ local function _build_entry(def, backend_id)
 	-- it survives the table.clone in BackendUtils.get_item_from_masterlist
 	-- (backend_utils.lua:68) that produces the item_data create_equipment sees.
 	entry.cwv_key = def.item_key
+	-- Crowbill Weapon-Special state is owned by the isolated hammer-mode
+	-- module. Persist the stable family marker on definition rows and every
+	-- CIM-built clone; do not infer membership from a display name or mesh.
+	if def.crowbill_mode_family then
+		entry.crowbill_mode_family = def.crowbill_mode_family
+	end
 
 	entry.display_name = def.item_key .. "_name"
 	entry.description = def.item_key .. "_description"
@@ -10068,6 +10216,8 @@ local function _build_entry(def, backend_id)
 		cwv_dr_dawi_mace               = "cwv_dr_dawi_mace_skins",
 		cwv_dr_dawi_mace_shield        = "cwv_dr_dawi_mace_shield_skins",
 		cwv_dr_dawi_dual_maces         = "cwv_dr_dawi_dual_maces_skins",
+		cwv_es_imperial_crowbill       = "cwv_es_imperial_crowbill_skins",
+		cwv_dr_dawi_crowbill           = "cwv_dr_dawi_crowbill_skins",
 		cwv_es_sword_and_mace          = "cwv_es_sword_and_mace_skins",
 		cwv_es_warpriest_hammer        = "cwv_es_warpriest_hammer_skins",
 		cwv_es_dual_warpriest_hammers  = "cwv_es_dual_warpriest_hammers_skins",
@@ -10983,6 +11133,70 @@ local WA = _WA_LIBRARY.new()
 mod._wa_to_quaternion_for_rt = WA.to_quaternion -- compatibility: /cwv regression
 mod._cwv_weapon_appearance = WA  -- cross-file / cross-mod handle (Phase 2+)
 
+-- #604 Crowbill pick/hammer presentation.  One owner composes the authored
+-- base rotation with the mode-local 180-degree Z flip for every render path.
+-- The owner weak-tracks spawned units so a Weapon Special/network transition
+-- reapplies once; it never runs from update and never derives from a previously
+-- flipped unit pose.
+_om.crowbill_mode_state = _om.crowbill_mode_state or _om.crowbill_hammer_mode.new()
+_om.crowbill_presentation_owner = _om.crowbill_presentation.new({
+	alive = function(unit) return unit and Unit.alive(unit) end,
+	mode_for = function(identity) return _om.crowbill_mode_state:mode(identity) end,
+	-- Raw Stingray quaternions are frame-temporary. Persist only QuaternionBox
+	-- values in the presentation record and unbox immediately before compose.
+	retain_rotation = function(rotation) return rotation and QuaternionBox(rotation) or nil end,
+	resolve_rotation = function(rotation)
+		return rotation and rotation.unbox and rotation:unbox() or rotation
+	end,
+	rotation_ops = {
+		identity = function() return Quaternion.identity() end,
+		axis_angle = function(axis, degrees)
+			return Quaternion.axis_angle(Vector3(axis[1], axis[2], axis[3]), math.rad(degrees))
+		end,
+		-- base * delta applies the delta in the weapon model's local space.
+		multiply = function(base, delta) return Quaternion.multiply(base, delta) end,
+	},
+	write_rotation = function(unit, rotation)
+		return pcall(Unit.set_local_rotation, unit, 0, rotation)
+	end,
+})
+
+_om._crowbill_render_identity = function(item_data, def, fallback)
+	local bid = item_data and (item_data.backend_id
+		or (item_data.mod_data and item_data.mod_data.backend_id))
+	if type(bid) == "string" and bid ~= "" then return bid end
+	if type(fallback) == "string" and fallback ~= "" then return fallback end
+	return def and def.item_key or nil
+end
+
+_om._apply_crowbill_presentation = function(unit, def, identity, surface, base_rotation, explicit_mode)
+	if not (def and def.crowbill_mode_family == _om.crowbill_family.HAMMER_MODE_FAMILY)
+			or not (unit and Unit.alive(unit)) then return false end
+	local base = WA.to_quaternion(base_rotation)
+	if not base then
+		local ok, current = pcall(Unit.local_rotation, unit, 0)
+		if ok then base = current end
+	end
+	return _om.crowbill_presentation_owner:apply(unit, identity, surface, base, explicit_mode)
+end
+
+-- Live-state seam used by the Weapon Special/RPC owner.  The returned payload
+-- is the hammer-mode module's bounded transition envelope; callers send it once
+-- on a real transition and use `_cwv_crowbill_apply_remote_mode` on receipt.
+mod._cwv_crowbill_set_mode = function(identity, mode)
+	local changed, payload, err = _om.crowbill_mode_state:set_mode(identity, mode)
+	if changed then _om.crowbill_presentation_owner:reapply(identity, mode) end
+	return changed, payload, err
+end
+mod._cwv_crowbill_apply_remote_mode = function(payload)
+	local changed, err = _om.crowbill_mode_state:apply_remote(payload)
+	if changed then
+		_om.crowbill_presentation_owner:reapply(payload.identity, payload.mode)
+	end
+	return changed, err
+end
+mod._cwv_crowbill_apply_presentation = _om._apply_crowbill_presentation
+
 -- Legacy thin wrappers so existing call sites read unchanged; `_transform_unit`
 -- now also carries rotation. New code should call WA.apply directly.
 local function _apply_scale(unit, scale_tbl)  WA.apply_scale(unit, scale_tbl) end
@@ -11548,6 +11762,17 @@ do
 			printf("[cwv husk-transform] applied hand=%s def=%s scale=%s offset=%s -- issues 397/394",
 				tostring(hand), tostring(def.item_key or def.item_type),
 				scale and "y" or "n", offset and "y" or "n")
+		end
+		-- #604 remote husks consume the same absolute presentation resolver as
+		-- owners and previews.  The render identity is bounded owner+slot state;
+		-- a network transition can target it once without per-frame pose traffic.
+		if def.crowbill_mode_family and _om._apply_crowbill_presentation then
+			local identity = _om.crowbill_runtime and _om.crowbill_runtime.remote_identity
+				and _om.crowbill_runtime.remote_identity(owner_unit_3p, slot_name, def.item_key)
+				or _om._crowbill_render_identity(item_data, def,
+					(def.item_key or "cwv_crowbill") .. ":" .. tostring(slot_name))
+			_om._apply_crowbill_presentation(weapon_unit_3p, def, identity,
+				"remote_husk", rotation)
 		end
 		-- (#474) Old Musket husk display parity. Its look is NOT generic def
 		-- fields: custom mesh + bespoke ABSOLUTE 3P pose + runtime-bound
@@ -12321,6 +12546,18 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
 	_transform_unit(result.right_unit_3p, right_scale_3p, right_offset_3p, right_rot_3p)
 	_transform_unit(result.left_unit_3p,  left_scale_3p,  left_offset_3p,  left_rot_3p)
 
+	-- #604: same absolute pick/hammer face on held 1P and owner/bot 3P.
+	-- Presentation composes from the authored rotation captured here; the weak
+	-- record prevents the 180-degree delta accumulating on lifecycle replays.
+	if def.crowbill_mode_family and _om._apply_crowbill_presentation then
+		local crowbill_identity = _om._crowbill_render_identity(item_data, def,
+			def.item_key .. ":" .. tostring(slot_name))
+		_om._apply_crowbill_presentation(result.right_unit_1p, def, crowbill_identity,
+			"owner_1p", right_rot_1p)
+		_om._apply_crowbill_presentation(result.right_unit_3p, def, crowbill_identity,
+			is_bot and "bot" or "owner_3p", right_rot_3p)
+	end
+
 	return result
 end)
 
@@ -12409,6 +12646,49 @@ local function _cwv_spawn_item_post(self, item_name)
 			_resolve_field(def, "left_hand_offset_3p")   or _resolve_field(def, "left_hand_offset"),
 			_resolve_field(def, "left_hand_rotation_3p") or _resolve_field(def, "left_hand_rotation"))
 	end
+	-- #604: MenuWorldPreviewer/HeroPreviewer is the shared reconstruction
+	-- seam for inventory mannequin, keep/lobby, and score/team presentations.
+	-- Applying here therefore covers all three consumers without surface-specific
+	-- copies.  The mode cache is keyed by the real backend instance when present.
+	if slot.right and _is_unit(slot.right) and def.crowbill_mode_family
+			and _om._apply_crowbill_presentation then
+		local preview_rotation = _resolve_field(def, "right_hand_rotation_3p")
+			or _resolve_field(def, "right_hand_rotation")
+		local team_peer = self._cwv_crowbill_wearer_peer or self._cos_wearer_peer
+		local team_identity = team_peer and _om.crowbill_runtime
+			and _om.crowbill_runtime.identity_for_peer
+			and _om.crowbill_runtime.identity_for_peer(team_peer, "slot_melee", def.item_key)
+		local preview_identity = team_identity
+			or _om._crowbill_render_identity(info and info.item_data, def,
+				info and info.backend_id or def.item_key .. ":preview:" .. tostring(slot_index))
+		local preview_surface = "inventory_preview"
+		if self._cwv_crowbill_team_preview then
+			preview_surface = self._cwv_crowbill_peer_source == "score_snapshot"
+				and "score_preview" or "lobby_preview"
+		end
+		_om._apply_crowbill_presentation(slot.right, def, preview_identity,
+			preview_surface, preview_rotation)
+		-- Source audit: TeamPreviewer receives profile/career, while
+		-- LevelEndView drops peer_id. The hook below restores the exact human
+		-- peer from the immutable score snapshot (or live profile sync). If an
+		-- unfamiliar TeamPreviewer producer lacks both, log once per row rather
+		-- than silently claiming remote mode parity.
+		if self._cwv_crowbill_team_preview and not team_peer then
+			_om.crowbill_preview_diag_seen = _om.crowbill_preview_diag_seen or {}
+			_om.crowbill_preview_diag_count = _om.crowbill_preview_diag_count or 0
+			local token = tostring(self._cwv_crowbill_profile_index) .. ":"
+				.. tostring(self._cwv_crowbill_career_index) .. ":" .. tostring(def.item_key)
+			if not _om.crowbill_preview_diag_seen[token]
+					and _om.crowbill_preview_diag_count < 16 then
+				_om.crowbill_preview_diag_seen[token] = true
+				_om.crowbill_preview_diag_count = _om.crowbill_preview_diag_count + 1
+				pcall(printf, "[cwv:604] TEAM-PREVIEW identity unresolved profile=%s career=%s family=%s evidence=%d/16 chat=false",
+					tostring(self._cwv_crowbill_profile_index),
+					tostring(self._cwv_crowbill_career_index), tostring(def.item_key),
+					_om.crowbill_preview_diag_count)
+			end
+		end
+	end
 
 	-- v0.1.293: bind cwv_es_musket_old textures + track for live tuning in the
 	-- character-preview UI. v0.1.318: pass the stance mode so 3P-MELEE
@@ -12489,6 +12769,50 @@ local function _cwv_spawn_item_post(self, item_name)
 			tostring(slot and slot.right), tostring(slot and slot.right and _is_unit(slot.right)))
 	end
 end
+
+-- #604 TeamPreviewer identity bridge. Score rows preserve the peer in
+-- context.players_session_score even though LevelEndView._get_hero_from_score
+-- drops it from hero_data. Bots share their owner's peer, so only an exact
+-- player-controlled profile+career row may cross this boundary. Non-score
+-- lobby/parading users fall back to live ProfileSynchronizer identity.
+_om._crowbill_team_peer = function(profile_index, career_index, context)
+	if profile_index == nil or career_index == nil then return nil, "missing_profile" end
+	local scores = context and context.players_session_score
+	if type(scores) == "table" then
+		return _om.crowbill_presentation.resolve_score_peer(profile_index, career_index, scores)
+	end
+	local pm = Managers and Managers.player
+	local psync = context and context.profile_synchronizer
+	if not psync then
+		local network = Managers.state and Managers.state.network
+		psync = network and network.profile_synchronizer
+	end
+	local ok, players = pm and pm.human_players and pcall(pm.human_players, pm)
+	if not ok or type(players) ~= "table" then return nil, "live_unavailable" end
+	for _, player in pairs(players) do
+		local local_id_ok, local_id = pcall(player.local_player_id, player)
+		local sync_ok, pi, ci = psync and psync.profile_by_peer
+			and pcall(psync.profile_by_peer, psync, player.peer_id,
+				local_id_ok and local_id or 1)
+		if sync_ok and pi == profile_index and ci == career_index then
+			return player.peer_id, "live_profile"
+		end
+	end
+	return nil, "live_miss"
+end
+
+mod:hook("TeamPreviewer", "_spawn_hero", function(func, self, hero_previewer, hero_data)
+	if hero_previewer and type(hero_data) == "table" then
+		local ok, peer, source = pcall(_om._crowbill_team_peer,
+			hero_data.profile_index, hero_data.career_index, self._context)
+		hero_previewer._cwv_crowbill_team_preview = true
+		hero_previewer._cwv_crowbill_profile_index = hero_data.profile_index
+		hero_previewer._cwv_crowbill_career_index = hero_data.career_index
+		hero_previewer._cwv_crowbill_wearer_peer = ok and peer or nil
+		hero_previewer._cwv_crowbill_peer_source = ok and source or "resolver_error"
+	end
+	return func(self, hero_previewer, hero_data)
+end)
 
 -- ============================================================
 -- Cosmetic picker filter — strip vanilla skins from cwv variants
@@ -12642,6 +12966,16 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	if scale or offset or rotation then
 		for _, unit in ipairs(units) do
 			_transform_unit(unit, scale, offset, rotation)
+		end
+	end
+	-- #604: LootItemUnitPreviewer backs the item browser/customization pane.
+	-- It uses the same committed base*local-flip resolver as world equipment.
+	if def.crowbill_mode_family and _om._apply_crowbill_presentation then
+		local browser_identity = _om._crowbill_render_identity(item_data, def,
+			item.backend_id or def.item_key .. ":item_browser")
+		for _, unit in ipairs(units) do
+			_om._apply_crowbill_presentation(unit, def, browser_identity,
+				"item_browser", rotation)
 		end
 	end
 
@@ -13158,6 +13492,9 @@ mod.on_game_state_changed = function(status, state_name)
 	if _om._old_musket_request_states then
 		_om._old_musket_request_states("game_state_enter:" .. tostring(state_name))
 	end
+	if _om.crowbill_runtime and _om.crowbill_runtime.request_states then
+		_om.crowbill_runtime.request_states("game_state_enter:" .. tostring(state_name))
+	end
 
     -- `Managers.player:local_player()` internally calls `peer_id()`, which
     -- THROWS "Network backend has not been set" on early state-enters
@@ -13206,6 +13543,9 @@ end
 -- them idempotent because VMF may call on_disabled before on_unload.
 mod.on_enabled = function()
     _om._acquire_dual_weapon_fp_residency("mod_enabled")
+	if _om.crowbill_runtime and _om.crowbill_runtime.set_enabled then
+		_om.crowbill_runtime.set_enabled(true)
+	end
 	-- #599: compose gameplay-profile ownership into the canonical lifecycle
 	-- callback. Defining an earlier callback is ineffective because this owner
 	-- assignment is the final VMF callback value.
@@ -13214,11 +13554,17 @@ mod.on_enabled = function()
 end
 
 mod.on_disabled = function()
+	if _om.crowbill_runtime and _om.crowbill_runtime.set_enabled then
+		_om.crowbill_runtime.set_enabled(false)
+	end
 	_om._apply_mace_hammer_identity(false)
     _om._release_dual_weapon_fp_residency("mod_disabled")
 end
 
 mod.on_unload = function()
+	if _om.crowbill_runtime and _om.crowbill_runtime.set_enabled then
+		_om.crowbill_runtime.set_enabled(false)
+	end
 	_om._apply_mace_hammer_identity(false)
     _om._release_dual_weapon_fp_residency("mod_unload")
 end
@@ -15178,6 +15524,85 @@ _rt_register("issue592_registration_not_acquisition", function()
 				return "#592 definition acquired backend identity: " .. tostring(def.item_key)
 			end
 		end
+	end
+end)
+
+_rt_register("cwv_crowbill_family_registration_contract", function()
+	local family = mod._cwv_crowbill_family
+	local hammer = mod._cwv_crowbill_hammer_mode
+	if type(family) ~= "table" or type(hammer) ~= "table" then
+		return "Crowbill family or hammer-mode policy missing"
+	end
+	if hammer.SOURCE_TEMPLATE_KEY ~= family.SOURCE_TEMPLATE
+			or hammer.HAMMER_CLEAVE_MULT ~= family.HAMMER_MODE.attack_cleave_multiplier
+			or hammer.HAMMER_DAMAGE_MULT ~= family.HAMMER_MODE.direct_damage_multiplier
+			or hammer.MODEL_FLIP_DEGREES ~= family.HAMMER_MODE.rotation_degrees then
+		return "Crowbill registration and hammer-mode constants drifted"
+	end
+	for _, variant in ipairs(family.VARIANTS) do
+		local entry = ItemMasterList and rawget(ItemMasterList, variant.key)
+		if type(entry) ~= "table" or entry.cwv_variant ~= true
+				or entry.cwv_definition ~= true or entry.mod_data ~= nil then
+			return variant.key .. " is not a registration-only CIM definition"
+		end
+		if entry.template ~= family.SOURCE_TEMPLATE
+				or entry.item_type ~= variant.key
+				or entry.skin_combination_table ~= variant.key .. "_skins"
+				or entry.crowbill_mode_family ~= family.HAMMER_MODE_FAMILY then
+			return variant.key .. " registration contract drifted"
+		end
+	end
+end)
+
+_rt_register("cwv_crowbill_hammer_runtime_contract", function()
+	local runtime = mod._cwv_crowbill_runtime
+	local policy = mod._cwv_crowbill_hammer_mode
+	if type(runtime) ~= "table" or runtime._installed ~= true then
+		return "Crowbill hammer runtime not installed"
+	end
+	local source = Weapons and Weapons[policy.SOURCE_TEMPLATE_KEY]
+	local pick = Weapons and Weapons[runtime.PICK_TEMPLATE_KEY]
+	local hammer = Weapons and Weapons[policy.HAMMER_TEMPLATE_KEY]
+	if type(source) ~= "table" or type(pick) ~= "table" or type(hammer) ~= "table" then
+		return "Crowbill source/pick/hammer templates not all registered"
+	end
+	if source.actions and source.actions.action_three ~= nil then
+		return "vanilla Crowbill source template was mutated with Weapon Special"
+	end
+	local pick_special = pick.actions and pick.actions.action_three
+		and pick.actions.action_three.default
+	local hammer_special = hammer.actions and hammer.actions.action_three
+		and hammer.actions.action_three.default
+	if type(pick_special) ~= "table" or type(hammer_special) ~= "table"
+			or type(pick_special.enter_function) ~= "function"
+			or type(hammer_special.enter_function) ~= "function" then
+		return "Weapon Special toggle missing from one Crowbill mode"
+	end
+	if pick_special.lookup_data.item_template_name ~= runtime.PICK_TEMPLATE_KEY
+			or hammer_special.lookup_data.item_template_name ~= policy.HAMMER_TEMPLATE_KEY then
+		return "Crowbill Weapon Special lookup_data drifted"
+	end
+	for action_name, class in pairs(policy.DIRECT_ACTIONS) do
+		local pick_action = pick.actions.action_one[action_name]
+		local hammer_action = hammer.actions.action_one[action_name]
+		if not pick_action or not hammer_action
+				or pick_action.damage_profile == hammer_action.damage_profile then
+			return "Crowbill mode profile missing: " .. tostring(action_name)
+		end
+		if pick_action.anim_time_scale ~= hammer_action.anim_time_scale
+				or pick_action.total_time ~= hammer_action.total_time then
+			return "Crowbill timing drifted: " .. tostring(action_name) .. "/" .. tostring(class)
+		end
+		if _om._cwv_damage_profile_wire_source[hammer_action.damage_profile]
+				~= pick_action.damage_profile then
+			return "Crowbill mixed-peer damage fallback missing: " .. tostring(action_name)
+		end
+	end
+	if type(runtime.resolve_template) ~= "function"
+			or type(runtime.request_states) ~= "function"
+			or type(runtime.on_local_wield) ~= "function"
+			or type(runtime.on_husk_wield) ~= "function" then
+		return "Crowbill runtime lifecycle surface incomplete"
 	end
 end)
 

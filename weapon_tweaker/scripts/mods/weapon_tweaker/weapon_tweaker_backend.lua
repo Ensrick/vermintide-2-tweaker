@@ -33,14 +33,16 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
             or false
     end
     local function cwv_axe_shield_ready()
-        if not ItemMasterList then return false end
-        local base = rawget(ItemMasterList, "cwv_es_axe_shield")
-        local veteran = rawget(ItemMasterList, "cwv_es_axe_shield_veteran")
-        return base and base.cwv_variant == true
-            and veteran and veteran.cwv_variant == true or false
+        return cwv_ownership
+            and cwv_ownership.replacement_ready(ItemMasterList, "dr_shield_axe") or false
+    end
+    local function cwv_greataxe_ready()
+        return cwv_ownership
+            and cwv_ownership.replacement_ready(ItemMasterList, "dr_2h_axe") or false
     end
     M._last_cwv_active = cwv_active()
     M._last_cwv_axe_shield_ready = cwv_axe_shield_ready()
+    M._last_cwv_greataxe_ready = cwv_greataxe_ready()
 
     -- Passive overcharge-vent / energy-regen restore for cross-character
     -- overcharge weapons (Sienna staves) + the Moonfire Bow on careers that
@@ -63,7 +65,8 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
         end
 
         if cwv_ownership and cwv_ownership.should_yield_native(
-                career_name, weapon_key, cwv_active(), cwv_managed) then
+                career_name, weapon_key, cwv_active(), cwv_managed,
+                cwv_ownership.replacement_ready(ItemMasterList, weapon_key)) then
             return false
         end
 
@@ -169,16 +172,19 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
         -- can_wield is strip/rebuilt and stale WT loadout-cache rows are pruned.
         local owns_axe_shield = cwv_active()
         local axe_shield_ready = cwv_axe_shield_ready()
+        local greataxe_ready = cwv_greataxe_ready()
         if owns_axe_shield ~= M._last_cwv_active
-                or axe_shield_ready ~= M._last_cwv_axe_shield_ready then
+                or axe_shield_ready ~= M._last_cwv_axe_shield_ready
+                or greataxe_ready ~= M._last_cwv_greataxe_ready then
             M._last_cwv_active = owns_axe_shield
             M._last_cwv_axe_shield_ready = axe_shield_ready
+            M._last_cwv_greataxe_ready = greataxe_ready
             apply_weapon_unlocks()
             patch_career_actions_on_weapons()
             if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
             M.refresh_on_setting_change(mod)
-            mod:info("[wt:593] CWV ownership transition active=%s variants_ready=%s; native Axe+Shield reconciled",
-                tostring(owns_axe_shield), tostring(axe_shield_ready))
+            mod:info("[wt:593/597] CWV ownership transition active=%s axe_shield_ready=%s greataxe_ready=%s; native fallbacks reconciled",
+                tostring(owns_axe_shield), tostring(axe_shield_ready), tostring(greataxe_ready))
         end
 
         if not mod._applied_unlocks and ItemMasterList then

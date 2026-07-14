@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.108-dev - 2026-07-14 - #604 Crowbill cosmetic identity [verify-fix-coop]
+
+- Registered the Imperial and Dawi Crowbill families with the shared exact-instance cosmetic contract. Primary illusion identity remains stable across pick/hammer mode changes without overwriting a player's selected model.
+- Added family ownership coverage for local equipment, remote husks, inventory character preview, lobby, score/team, and item/customization previews.
+
+### Co-op verification
+
+Apply different Crowbill illusions on host and client, toggle hammer mode, swap away and back, enter a mission, hot join, and inspect every preview surface. Each exact instance must retain its chosen illusion and both peers must see the same model and active face.
+
 ## 0.9.107-dev - 2026-07-14 - #377 glow editor access regression [verify-fix]
 
 - Decoupled the contextual `EDIT GLOW` control from the optional `cos_glow_badge` texture. When custom texture registration is unavailable, glow-capable CWV and vanilla illusions still expose the editor through a material-free button; badge overlays continue to fail closed independently.

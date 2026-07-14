@@ -14,6 +14,13 @@ function M.install(policy)
 	local mod = get_mod("character_weapon_variants")
 	if mod._cwv_mod_unit_preview_installed then return end
 	mod._cwv_mod_unit_preview_installed = true
+	local policies = type(policy) == "table" and type(policy[1]) == "table"
+		and policy or { policy }
+	local function alias_collected(one_policy, package_names)
+		if one_policy and one_policy.alias_collected_packages then
+			one_policy.alias_collected_packages(package_names)
+		end
+	end
 
 	-- ProfileSynchronizer calls this collector before loading its inventory
 	-- package maps. Custom Greataxe units are resident through CWV's master
@@ -23,15 +30,19 @@ function M.install(policy)
 		"CWV Greataxe package bridge requires WeaponUtils.get_weapon_packages")
 	mod:hook(WeaponUtils, "get_weapon_packages", function(func, ...)
 		local package_names = func(...)
-		if policy and policy.alias_collected_packages then
-			policy.alias_collected_packages(package_names)
+		for _, one_policy in ipairs(policies) do
+			alias_collected(one_policy, package_names)
 		end
 		return package_names
 	end)
 
 	local function alias_for(name)
-		return policy and policy.preview_package_alias
-			and policy.preview_package_alias(name) or nil
+		for _, one_policy in ipairs(policies) do
+			local alias = one_policy and one_policy.preview_package_alias
+				and one_policy.preview_package_alias(name) or nil
+			if alias then return alias end
+		end
+		return nil
 	end
 
 	local function unit_resident(name)

@@ -26,7 +26,10 @@ local INFANTRY_SPEAR_CONDITIONAL = {
     "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
     "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
 }
-local GREATAXE_DEFAULT = { "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }
+local GREATAXE_DEFAULT = {
+    "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+    "wh_captain", "wh_bountyhunter", "wh_zealot",
+}
 local GREATAXE_ALL = {
     "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
     "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer",
@@ -52,6 +55,22 @@ local DAWI_ONE_HANDED_CONDITIONAL = {
 local DAWI_SHIELD_CONDITIONAL = {
     "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
     "dr_slayer", "dr_engineer",
+    "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
+    "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
+    "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
+}
+local IMPERIAL_CROWBILL_DEFAULT = {
+    "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+    "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
+}
+local IMPERIAL_CROWBILL_CONDITIONAL = {
+    "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer",
+    "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
+    "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
+}
+local DAWI_CROWBILL_DEFAULT = { "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer" }
+local DAWI_CROWBILL_CONDITIONAL = {
+    "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
     "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
     "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
     "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
@@ -91,7 +110,7 @@ return {
     -- additional career as an explicit default-off opt-in.
     { key = "cwv_es_greataxe", careers = GREATAXE_ALL,
       default_careers = GREATAXE_DEFAULT,
-      authored_careers = GREATAXE_DEFAULT,
+      authored_careers = ES,
       conditional_careers = GREATAXE_CONDITIONAL },
     { key = "cwv_es_rapier", careers = ES },
     { key = "cwv_es_dual_swords", careers = ES },
@@ -116,6 +135,16 @@ return {
       default_careers = DAWI_ONE_HANDED_DEFAULT,
       authored_careers = DAWI_ONE_HANDED_DEFAULT,
       conditional_careers = DAWI_ONE_HANDED_CONDITIONAL },
+    -- Crowbill family: CWV authors the thematic owner groups; WT owns every
+    -- additional receiver as an independent default-off option.
+    { key = "cwv_es_imperial_crowbill", careers = GREATAXE_ALL,
+      default_careers = IMPERIAL_CROWBILL_DEFAULT,
+      authored_careers = IMPERIAL_CROWBILL_DEFAULT,
+      conditional_careers = IMPERIAL_CROWBILL_CONDITIONAL },
+    { key = "cwv_dr_dawi_crowbill", careers = GREATAXE_ALL,
+      default_careers = DAWI_CROWBILL_DEFAULT,
+      authored_careers = DAWI_CROWBILL_DEFAULT,
+      conditional_careers = DAWI_CROWBILL_CONDITIONAL },
     { key = "cwv_es_dual_warpriest_hammers", careers = ES },
     { key = "cwv_es_warpriest_hammer_shield", careers = ES },
 }
