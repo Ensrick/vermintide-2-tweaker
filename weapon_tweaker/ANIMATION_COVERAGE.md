@@ -91,6 +91,7 @@ entries; longbow has zoom toggles).
 | we_1h_spears_shield | Elf Spear & Shield | ✅ | Suffix `_1h_spear_shield→_es_deus_01` route |
 | we_1h_sword | Elf Sword | ✅ | Key remap + scale |
 | we_longbow | Elf Longbow | ✅ | Redirect `to_longbow→to_es_longbow` ("looks better than elf anims") |
+| we_deus_01 | Moonfire Bow | 📋 | #109 source audit: Kruber wield SET is `to_es_longbow`; per-attack 3P map is not baked, so the live status remains `[needs animations]` |
 | wh_2h_billhook | Saltzpyre: Billhook | 🧪 | Patcher + billhook→polearm remap; v0.12.230 merges baked 1P-key picks without deleting receiver-facing `anim_event_3p` rows (#290, diagnostics armed) |
 | wh_1h_axe | Saltzpyre: 1H Axe | ✅ | Native `to_1h_axe` vocab — confirmed (DECISIONS:148) |
 | es_1h_flail | Empire Flail | 🔁 | native |
@@ -118,7 +119,9 @@ entries; longbow has zoom toggles).
 | wh_flail_shield | WP Flail & Shield | ✅ | **[Working] — BAKED v0.12.156-dev** career-scoped `_3p_template_remaps.one_handed_flail_shield_template.es_` (Empire Mace & Shield); `wh_ = false` keeps Saltzpyre/WP native; removed from picker |
 | wh_hammer_book | WP Skullsplitter & Tome | 📋 | MODEL-SUB queue (hide tome, plain Skullsplitter mesh, native 1H-mace anims); NOT a plain chooser row — separate later pass |
 | wh_crossbow_repeater | Volley Crossbow | 📋 | decided `to_repeating_handgun`; uses REGISTERED `to_repeating_crossbow`/`_noammo` not-loaded wields (no crash, unlike the elf `we_crossbow_repeater`) — decided-not-wired |
+| wh_crossbow | Crossbow | ❓ | #109: present on every Kruber career and attachment-crash hardened, but no explicit 3P target decision is recorded |
 | wh_deus_01 | Griffon-foot | 📋 | decided `to_repeating_handgun` + **repeater-handgun MODEL sub + offhand hide, mirror Brace** (model-sub queue) |
+| wh_dual_wield_axe_falchion | Axe & Falchion | ❓ | #109/#368: independently WT-owned Kruber port; no Kruber 3P target decision is recorded |
 | bw_1h_mace | Sienna: Mace | ✅ | **[Working] — BAKED v0.12.150-dev** career-scoped `_3p_template_remaps.one_handed_hammer_wizard_template_1.es_` (Empire Greathammer); `bw_ = false` keeps Sienna native; removed from picker |
 | bw_dagger | Sienna: Dagger | ✅ | **[Working] — BAKED v0.12.149-dev** career-scoped `_3p_template_remaps.one_handed_daggers_template_1.es_` (Empire 1H Sword); removed from picker |
 | bw_flame_sword | Sienna: Flame Sword | ✅ | **[Working] — BAKED v0.12.149-dev** career-scoped `_3p_template_remaps.flaming_sword_template_1.es_` (Empire 1H Sword); removed from picker |

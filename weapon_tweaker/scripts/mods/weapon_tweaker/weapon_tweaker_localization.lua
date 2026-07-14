@@ -1380,20 +1380,13 @@ for key, entry in pairs(loc) do
     if type(key) == "string" and key:find("^unlock_") and type(entry) == "table" and entry.en then
         local career, weapon_key = _port_status.parse_unlock_id(key, _careers_set)
         if career and weapon_key then
-            local tag  = _port_status.tag(career, weapon_key)
+            local wt_version = mod._wt and mod._wt.MOD_VERSION or ""
+            local is_dev_build = wt_version:find("-dev", 1, true) ~= nil
+            local tag  = _port_status.decorate_tag(career, weapon_key, is_dev_build)
             local base = _strip_leading_tag(entry.en)
-            -- v0.12.142-dev: for a [needs animations] port, fold the redirect
-            -- target INTO the tag ("[needs animations → Greathammer]") so the row
-            -- shows BOTH what it needs AND which weapon's 3P anims it borrows.
-            -- [working] (fully functional) / [needs offsets] / [untested] carry no
-            -- redirect (redirect_target returns nil for them), so they read plainly.
-            -- v0.12.204-dev (#301): tag casing normalized to lowercase doctrine
-            -- forms; this compare + splice matches wt_port_status.M.tag's output.
-            local redirect = _port_status.redirect_target(career, weapon_key)
-            if redirect and tag == "[needs animations]" then
-                -- redirect is "[<Target>]" — splice into the tag's own brackets.
-                tag = "[needs animations → " .. redirect:sub(2, -2) .. "]"
-            end
+            -- #108: decorate_tag appends confirmed/pending 3P redirects and
+            -- shipped model substitutes only when MOD_VERSION carries `-dev`.
+            -- Release builds retain the base status tag byte-for-byte.
             entry.en = tag .. " " .. base
         end
     end

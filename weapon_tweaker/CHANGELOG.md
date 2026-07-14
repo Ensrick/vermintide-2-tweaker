@@ -1,5 +1,26 @@
 # Weapon Tweaker Changelog
 
+## 0.12.244-dev (2026-07-14) - #109 Kruber 3P coverage drift audit [diagnostics-armed]
+
+- Reconciled the tracker against the live unlock source: all four Kruber careers now share 52 cross-character ports, split into 37 working, 13 needing animations, and 2 untested. Since the previous 51-row snapshot, native Bardin Dual Axes was removed while Saltzpyre Crossbow and the independently WT-owned Axe & Falchion became live rows.
+- Documented Moonfire Bow's source-backed Empire Longbow wield target without falsely promoting its unbaked per-attack behavior to working. Known pending targets now remain visible in dev availability labels while unknown decisions stay blank.
+- Added a bounded, read-only startup log summary and `/wt_audit_kruber_3p` detail command. The report calls out all 13 needs-animation rows hidden from the static picker; they are not force-added until matching template/attack vocabularies exist.
+- Added offline coverage for exact career parity, the 52-row/status contract, honest known/unknown targets, and diagnostic wiring.
+
+### Diagnostic capture
+
+Start once with Weapon Tweaker enabled; the log should contain `[wt:109] Kruber 3P ports=52 working=37 needs_anims=13 untested=2 picker=0 hidden_needs_anims=13`. Run `/wt_audit_kruber_3p` for the bounded per-row list. This is a source/coverage diagnostic; do not infer visual success from a target name.
+
+## 0.12.243-dev (2026-07-14) - #108 dev availability labels expose 3P redirects and model substitutes [verify-fix]
+
+- Dev-build Weapon Availability tags now retain the borrowed 3P animation vocabulary after a port becomes confirmed/baked instead of showing only `[working]`. The display-only mirror covers the confirmed Kruber, Kerillian, and Saltzpyre picker-bake batches without changing their status or runtime remap tables.
+- Added the shipped model-substitution labels for Kruber's Brace/Repeating Pistols (`Repeater Handgun`) and Saltzpyre's Kruber/Elf/Moonfire longbows (`Crossbow`). The annotation describes third-person and preview rendering only; first-person models remain unchanged.
+- Centralized composition in pure `wt_port_status.decorate_tag`. A non-dev caller receives the original status tag byte-for-byte, while dev builds can show both concerns together (for example, `[working → Empire Greathammer]` or `[working - 3P model: Repeater Handgun]`).
+
+### Solo verify
+
+Open Weapon Availability in this `-dev` build. On Kruber, Glaive must show `→ Empire Greathammer`, the three Elf duals must show `→ Empire Mace & Sword`, and Brace/Repeating Pistols must show `3P model: Repeater Handgun`. On Saltzpyre, Kruber Longbow, Elf Longbow, and Moonfire Bow must show `3P model: Crossbow`. Ordinary native rows must retain a plain `[working]` tag. Run the standalone Lua policy test and require all #108 cases to pass.
+
 ## 0.12.242-dev (2026-07-14) - #391 per-career CWV availability [not deployed]
 
 - Expanded #368's bounded 29-item CWV availability catalog from one all-careers switch per variant to one backward-compatible item master with four independent authored-career children. Existing `unlock_cwv_variant_<item>` values retain their meaning; a saved false still disables that entire item, while each career now has its own default-on `unlock_cwv_variant_<career>_<item>` choice.

@@ -265,6 +265,135 @@ local _NEEDS_ANIMS = {
     },
 }
 
+-- Issue #109: source-backed wield targets for Kruber ports which have not yet
+-- been promoted into the picker.  This is diagnostic metadata, not an animation
+-- bake: it makes the already-wired/decided SET visible without claiming the
+-- per-attack vocabulary works.  Unknown rows deliberately remain absent.
+local _DIAGNOSTIC_TARGET = {
+    kruber = {
+        dr_1h_throwing_axes = "Empire 1H Mace",
+        dr_drake_pistol = "Repeater Handgun",
+        dr_drakegun = "Empire Blunderbuss",
+        dr_steam_pistol = "Repeater Handgun",
+        dr_deus_01 = "Empire Blunderbuss",
+        we_deus_01 = "Empire Longbow",
+        we_shortbow = "Empire Longbow",
+        we_shortbow_hagbane = "Empire Longbow",
+        we_crossbow_repeater = "Repeater Handgun",
+        wh_crossbow_repeater = "Repeater Handgun",
+        wh_deus_01 = "Repeater Handgun",
+    },
+}
+
+-- Issue #108: display-only mirror of confirmed, career-scoped 3P redirects.
+-- `_CONFIRMED` deliberately remains a boolean status set; keeping presentation
+-- names separate prevents a wording edit from changing availability status.
+-- Pending ports still source their target from `_NEEDS_ANIMS` below.
+local _REDIRECT_DISPLAY = {
+    kruber = {
+        dr_2h_pick = "Empire Greathammer",
+        dr_2h_cog_hammer = "Empire Greathammer",
+        wh_2h_hammer = "Empire Greathammer",
+        we_2h_axe = "Empire Greathammer",
+        bw_1h_mace = "Empire Greathammer",
+        bw_ghost_scythe = "Empire Greathammer",
+        bw_skullstaff_beam = "Empire Greathammer",
+        bw_skullstaff_fireball = "Empire Greathammer",
+        bw_skullstaff_flamethrower = "Empire Greathammer",
+        bw_skullstaff_geiser = "Empire Greathammer",
+        bw_skullstaff_spear = "Empire Greathammer",
+        bw_necromancy_staff = "Empire Greathammer",
+        bw_deus_01 = "Empire Greathammer",
+        we_dual_wield_daggers = "Empire Mace & Sword",
+        we_dual_wield_swords = "Empire Mace & Sword",
+        we_dual_wield_sword_dagger = "Empire Mace & Sword",
+        wh_dual_hammer = "Empire Mace & Sword",
+        wh_flail_shield = "Empire Mace & Shield",
+        bw_dagger = "Empire 1H Sword",
+        bw_flame_sword = "Empire 1H Sword",
+        wh_fencing_sword = "Empire 1H Sword",
+        we_1h_axe = "Witch Hunter 1H Axe",
+        wh_hammer_book = "1H Mace/Skullsplitter",
+    },
+    saltzpyre = {
+        we_2h_axe = "Warrior Priest Greathammer",
+        es_2h_hammer = "Warrior Priest Greathammer",
+        dr_2h_cog_hammer = "Warrior Priest Greathammer",
+        dr_2h_pick = "Warrior Priest Greathammer",
+        bw_1h_mace = "Warrior Priest Greathammer",
+        bw_skullstaff_beam = "Warrior Priest Greathammer",
+        bw_skullstaff_fireball = "Warrior Priest Greathammer",
+        bw_skullstaff_flamethrower = "Warrior Priest Greathammer",
+        bw_skullstaff_geiser = "Warrior Priest Greathammer",
+        bw_skullstaff_spear = "Warrior Priest Greathammer",
+        bw_necromancy_staff = "Warrior Priest Greathammer",
+        bw_deus_01 = "Warrior Priest Greathammer",
+        es_dual_wield_hammer_sword = "Dual Axe & Falchion",
+        we_dual_wield_daggers = "Dual Axe & Falchion",
+        we_dual_wield_swords = "Dual Axe & Falchion",
+        we_dual_wield_sword_dagger = "Dual Axe & Falchion",
+        es_mace_shield = "Dual Axe & Falchion",
+        es_sword_shield = "Dual Axe & Falchion",
+        es_sword_shield_breton = "Dual Axe & Falchion",
+        dr_shield_axe = "Dual Axe & Falchion",
+        bw_dagger = "1H Falchion",
+        bw_flame_sword = "1H Falchion",
+        es_halberd = "Billhook",
+        es_2h_sword_executioner = "Saltzpyre 2H Sword",
+        es_bastard_sword = "Saltzpyre 2H Sword",
+    },
+    kerillian = {
+        es_2h_hammer = "Elf 2H Axe/Glaive",
+        wh_2h_hammer = "Elf 2H Axe/Glaive",
+        dr_2h_cog_hammer = "Elf 2H Axe/Glaive",
+        dr_2h_pick = "Elf 2H Axe/Glaive",
+        bw_ghost_scythe = "Elf 2H Axe/Glaive",
+        bw_skullstaff_beam = "Elf 2H Axe/Glaive",
+        bw_skullstaff_fireball = "Elf 2H Axe/Glaive",
+        bw_skullstaff_flamethrower = "Elf 2H Axe/Glaive",
+        bw_skullstaff_geiser = "Elf 2H Axe/Glaive",
+        bw_skullstaff_spear = "Elf 2H Axe/Glaive",
+        bw_necromancy_staff = "Elf 2H Axe/Glaive",
+        bw_deus_01 = "Elf 2H Axe/Glaive",
+        es_2h_sword_executioner = "Elf 2H Sword",
+        es_bastard_sword = "Elf 2H Sword",
+        wh_fencing_sword = "Elf 1H Sword",
+        bw_1h_flail_flaming = "Elf 1H Sword",
+        bw_dagger = "Elf 1H Sword",
+        bw_flame_sword = "Elf 1H Sword",
+        wh_1h_hammer = "Elf 1H Axe",
+        dr_1h_hammer = "Elf 1H Axe",
+        es_mace_shield = "Elf Spear & Shield",
+        es_sword_shield = "Elf Spear & Shield",
+        es_sword_shield_breton = "Elf Spear & Shield",
+        wh_flail_shield = "Elf Spear & Shield",
+        wh_hammer_book = "Elf Spear & Shield",
+        wh_hammer_shield = "Elf Spear & Shield",
+        dr_shield_axe = "Elf Spear & Shield",
+        wh_dual_hammer = "Dual Swords",
+        dr_dual_wield_axes = "Dual Swords",
+        dr_dual_wield_hammers = "Dual Swords",
+        es_dual_wield_hammer_sword = "Sword & Dagger",
+        wh_dual_wield_axe_falchion = "Sword & Dagger",
+        dr_1h_throwing_axes = "Elf Javelin",
+    },
+}
+
+-- Issue #108: shipped 3P mesh substitutions. These are visual lies applied to
+-- the receiver's third-person/preview model; first-person weapon models remain
+-- the real equipped item. Keep this mirror aligned with the model dispatchers.
+local _MODEL_SUB = {
+    kruber = {
+        wh_brace_of_pistols = "Repeater Handgun",
+        wh_repeating_pistols = "Repeater Handgun",
+    },
+    saltzpyre = {
+        es_longbow = "Crossbow",
+        we_longbow = "Crossbow",
+        we_deus_01 = "Crossbow",
+    },
+}
+
 -- Native owner character of a weapon_key, by 3-char prefix. wh_* family is owned
 -- by Saltzpyre AND natively wieldable by Warrior Priest (shared skeleton family),
 -- so a wh_* weapon on a wh_priest career counts as native.
@@ -317,18 +446,44 @@ function M.tag(career, weapon_key)
     return "[needs animations]"
 end
 
--- Public (v0.12.142-dev): bracketed redirect-target display name for a
+-- Public: bracketed redirect-target display name for a
 -- (career, weapon_key) pair, e.g. "[Greathammer]", or nil when none is on file.
--- Sourced from _NEEDS_ANIMS (the SET= redirect column). Used by the Availability
--- menu to append "→ <target>" onto a [Needs Animations] tag so a row shows BOTH
--- what it needs AND which weapon's 3P animation it borrows. nil for [Working]
--- (no redirect) / [Untested] (no decision) / un-cataloged ports.
+-- Pending ports source `_NEEDS_ANIMS`; confirmed/baked ports source the #108
+-- display mirror so completing a port no longer discards its redirect label.
 function M.redirect_target(career, weapon_key)
     local recv = _char_key_for_career(career)
-    local row = recv and _NEEDS_ANIMS[recv]
-    local target = row and row[weapon_key]
+    local pending = recv and _NEEDS_ANIMS[recv]
+    local confirmed = recv and _REDIRECT_DISPLAY[recv]
+    local diagnostic = recv and _DIAGNOSTIC_TARGET[recv]
+    local target = (pending and pending[weapon_key])
+        or (confirmed and confirmed[weapon_key])
+        or (diagnostic and diagnostic[weapon_key])
     if target then return "[" .. target .. "]" end
     return nil
+end
+
+-- Public (#108): raw display name of a shipped 3P model substitute.
+function M.model_substitute(career, weapon_key)
+    local recv = _char_key_for_career(career)
+    local row = recv and _MODEL_SUB[recv]
+    return row and row[weapon_key] or nil
+end
+
+-- Public (#108): compose the verbose availability tag. Non-dev callers receive
+-- the base status byte-for-byte; redirect/model annotations are dev tooling.
+function M.decorate_tag(career, weapon_key, is_dev_build)
+    local tag = M.tag(career, weapon_key)
+    if not is_dev_build then return tag end
+
+    local redirect = M.redirect_target(career, weapon_key)
+    local model = M.model_substitute(career, weapon_key)
+    if not redirect and not model then return tag end
+
+    local suffix = ""
+    if redirect then suffix = suffix .. " → " .. redirect:sub(2, -2) end
+    if model then suffix = suffix .. " - 3P model: " .. model end
+
+    return tag:sub(1, -2) .. suffix .. "]"
 end
 
 -- Public (v0.12.142-dev): is (career, weapon_key) EXPLICITLY flagged
@@ -342,6 +497,51 @@ function M.needs_anims(career, weapon_key)
     local recv = _char_key_for_career(career)
     local row = recv and _NEEDS_ANIMS[recv]
     return (row and row[weapon_key]) ~= nil
+end
+
+-- Public (#109): bounded, pure inventory audit used by the automatic log probe,
+-- `/wt_audit_kruber_3p`, and offline regression coverage.  It never mutates the
+-- supplied unlock list.  Duplicate keys are ignored so counts describe distinct
+-- cross-character ports rather than career-list implementation details.
+function M.audit_cross_character(career, weapon_keys)
+    local rows, seen = {}, {}
+    local counts = {
+        total = 0,
+        working = 0,
+        needs_animations = 0,
+        needs_offsets = 0,
+        untested = 0,
+        picker_visible = 0,
+        hidden_needs_animations = 0,
+    }
+
+    for _, weapon_key in ipairs(type(weapon_keys) == "table" and weapon_keys or {}) do
+        if type(weapon_key) == "string"
+                and not seen[weapon_key]
+                and not _is_native(career, weapon_key) then
+            seen[weapon_key] = true
+            local tag = M.tag(career, weapon_key)
+            local state = tag:sub(2, -2):gsub(" ", "_")
+            local picker_visible = M.needs_anims(career, weapon_key)
+            local row = {
+                weapon_key = weapon_key,
+                status = tag,
+                redirect = M.redirect_target(career, weapon_key),
+                model_substitute = M.model_substitute(career, weapon_key),
+                picker_visible = picker_visible,
+            }
+            rows[#rows + 1] = row
+            counts.total = counts.total + 1
+            counts[state] = (counts[state] or 0) + 1
+            if picker_visible then counts.picker_visible = counts.picker_visible + 1 end
+            if tag == "[needs animations]" and not picker_visible then
+                counts.hidden_needs_animations = counts.hidden_needs_animations + 1
+            end
+        end
+    end
+
+    table.sort(rows, function(a, b) return a.weapon_key < b.weapon_key end)
+    return rows, counts
 end
 
 -- Public: split a `unlock_<career>_<weapon_key>` setting_id into (career, weapon_key).

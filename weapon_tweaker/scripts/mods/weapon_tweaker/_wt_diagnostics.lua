@@ -11,10 +11,51 @@
 -- in the entry -- they read the entry's hot anim-remap file-locals.
 --
 -- Owned by: weapon_tweaker.lua entry point. Consumed via: mod:dofile.
--- Shared state: none (leaf). No exports. Registers the sole
+-- Shared state: reads mod._wt.weapon_unlock_map + mod._wt.port_status for #109;
+-- no writes and no exports. Registers the sole
 -- (SimpleInventoryExtension, _wield_slot) hook repo-wide.
 
 local mod = get_mod("wt")
+
+-- #109: audit the live Kruber unlock source rather than maintaining another
+-- hand-counted tracker.  This runs once at module load, writes only to the log,
+-- and is also callable on demand.  "Hidden" means the port is correctly tagged
+-- [needs animations] but lacks the static picker tables required to tune it.
+local function _audit_kruber_3p(log_rows)
+    local wt = mod._wt or {}
+    local status = wt.port_status
+    local unlocks = wt.weapon_unlock_map and wt.weapon_unlock_map.es_mercenary
+    if not status or type(status.audit_cross_character) ~= "function" or not unlocks then
+        mod:warning("[wt:109] Kruber 3P audit unavailable (status/unlock source missing)")
+        return nil
+    end
+
+    local rows, counts = status.audit_cross_character("es_mercenary", unlocks)
+    mod:info("[wt:109] Kruber 3P ports=%d working=%d needs_anims=%d untested=%d picker=%d hidden_needs_anims=%d",
+        counts.total, counts.working, counts.needs_animations, counts.untested,
+        counts.picker_visible, counts.hidden_needs_animations)
+    if log_rows then
+        for _, row in ipairs(rows) do
+            if row.status ~= "[working]" then
+                mod:info("[wt:109] key=%s status=%s target=%s picker=%s",
+                    row.weapon_key, row.status, tostring(row.redirect),
+                    tostring(row.picker_visible))
+            end
+        end
+    end
+    return counts
+end
+
+_audit_kruber_3p(false)
+
+mod:command("wt_audit_kruber_3p",
+    "Log the complete Kruber cross-character 3P coverage audit", function()
+        local counts = _audit_kruber_3p(true)
+        if counts then
+            mod:echo("[wt:109] audited %d Kruber ports; %d need animations and %d are untested (see log)",
+                counts.total, counts.needs_animations, counts.untested)
+        end
+    end)
 
 -- Keys are profile/character names. Warrior Priest (wh_priest career) shares
 -- the witch_hunter profile but uses a distinct 3P skeleton, so it's listed

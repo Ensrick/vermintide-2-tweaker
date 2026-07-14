@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.242-dev"
+local MOD_VERSION = "0.12.244-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -266,6 +266,7 @@ local _rt_register = mod._wt.rt_register
 -- _data.lua before main wt.lua finishes — load order is a VMF invariant.)
 local _wt_unlock_data   = mod:dofile("scripts/mods/weapon_tweaker/wt_unlock_data")
 local weapon_unlock_map = _wt_unlock_data.weapon_unlock_map
+mod._wt.port_status = mod:dofile("scripts/mods/weapon_tweaker/wt_port_status")
 
 -- CLARIFY: career_weapon_variants ("CWV") publishes its own custom items for
 -- these (career, weapon) pairs. When CWV is installed, weapon_tweaker SKIPS
