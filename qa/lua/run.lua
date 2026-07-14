@@ -42,6 +42,7 @@ local suites = {
     "test_attack_labeler",
     "test_mod_tweaker_transaction",
     "test_mod_tweaker_profiles",
+    "test_mod_tweaker_disabled_sections",
     "test_et_settings_queue",
     "test_mod_tweaker_search",
     "test_mod_tweaker_numeric_editor",

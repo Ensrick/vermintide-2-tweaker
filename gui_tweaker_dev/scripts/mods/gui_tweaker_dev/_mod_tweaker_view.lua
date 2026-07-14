@@ -14,6 +14,7 @@ local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
 local transactions = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction")
 local Search = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_search")
 local profiles = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profiles")
+local disabled_sections = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_disabled_sections")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -470,7 +471,8 @@ local function _play_close() _play_event("Play_hud_button_close") end
 
 -- ---------------------------------------------------------------
 -- (#208) EQUIPMENT MERGE. The four inventory-management mods get folded into ONE
--- collapsible "Equipment" tab when 2+ are active (present AND enabled). Roles:
+-- collapsible "Equipment" tab when 2+ are installed. Disabled members retain their
+-- normal section header with no editable rows and a "Disabled in VMF" tooltip. Roles:
 --   cosmetics_tweaker -> Cosmetics ; cim/cim_dev -> Crafting ; wt -> Weapons ;
 --   character_weapon_variants -> Career Weapon Variants.
 -- Sections render top-level (Cosmetics, Crafting, Weapons); CWV nests UNDER Weapons
@@ -500,14 +502,7 @@ end
 
 -- Post-process the _vmf_categories() output (called just before its final sort).
 local function _synthesize_equipment(cats)
-    -- Active (enabled) members by role; dedupe Crafting (cim vs cim_dev -> first seen).
-    local members = {}
-    for _, c in ipairs(cats) do
-        local role = _EQUIP_ROLE[c.mod_id]
-        if role and c.enabled and not members[role] then members[role] = c end
-    end
-    local n = 0
-    for _ in pairs(members) do n = n + 1 end
+    local members, n = disabled_sections.select_members(cats, _EQUIP_ROLE)
     if n == 0 then return cats end
 
     if n == 1 then
@@ -528,14 +523,18 @@ local function _synthesize_equipment(cats)
         if not owner_seen[mid] then owner_seen[mid] = true; owner_ids[#owner_ids + 1] = mid end
     end
     -- One synthetic collapsible group header at `header_depth` (owns no setting).
-    local function _add_header(setting_id, label, header_depth)
-        widgets[#widgets + 1] = { setting_id = setting_id, type = "group", title = label }
+    local function _add_header(setting_id, label, header_depth, enabled)
+        widgets[#widgets + 1] = enabled == false
+            and disabled_sections.disabled_header(setting_id, label, header_depth,
+                _equip_loc("gut_disabled_in_vmf", disabled_sections.REASON))
+            or { setting_id = setting_id, type = "group", title = label }
         depths[#depths + 1] = header_depth
     end
     -- A member's setting nodes (skipping its synthesized VMF header at [1]), rebased so the
     -- member's SHALLOWEST node renders at `target_top_depth` (one level under its section
     -- header), with internal nesting preserved. Records each node's owner.
     local function _add_member(member, target_top_depth)
+        if not member or member.enabled == false then return end
         local src = member and member.widgets
         if type(src) ~= "table" then return end
         -- VMF mods' top content usually sits at NATURAL depth 1 (not 0), so blindly adding a
@@ -563,24 +562,31 @@ local function _synthesize_equipment(cats)
 
     -- Section order: Cosmetics -> Crafting -> Weapons (deliberate-order exception).
     if members.cosmetics then
-        _add_header("__equip_cosmetics", _equip_loc("gut_equip_cosmetics", "Cosmetics"), 0)
+        _add_header("__equip_cosmetics", _equip_loc("gut_equip_cosmetics", "Cosmetics"), 0,
+            members.cosmetics.enabled)
         _add_member(members.cosmetics, 1)
     end
     if members.crafting then
-        _add_header("__equip_crafting", _equip_loc("gut_equip_crafting", "Crafting"), 0)
+        _add_header("__equip_crafting", _equip_loc("gut_equip_crafting", "Crafting"), 0,
+            members.crafting.enabled)
         _add_member(members.crafting, 1)
     end
     if members.weapons then
-        _add_header("__equip_weapons", _equip_loc("gut_equip_weapons", "Weapons"), 0)
+        local weapons_header_enabled = members.weapons.enabled ~= false
+            or (members.cwv and members.cwv.enabled ~= false)
+        _add_header("__equip_weapons", _equip_loc("gut_equip_weapons", "Weapons"), 0,
+            weapons_header_enabled)
         _add_member(members.weapons, 1)
         if members.cwv then
             -- CWV nested UNDER Weapons (header depth 1, its settings depth 2+).
-            _add_header("__equip_cwv", _equip_loc("gut_equip_cwv", "Career Weapon Variants"), 1)
+            _add_header("__equip_cwv", _equip_loc("gut_equip_cwv", "Career Weapon Variants"), 1,
+                members.cwv.enabled)
             _add_member(members.cwv, 2)
         end
     elseif members.cwv then
         -- No wt: CWV sits at the TOP LEVEL of Equipment (no Weapons wrapper).
-        _add_header("__equip_cwv", _equip_loc("gut_equip_cwv", "Career Weapon Variants"), 0)
+        _add_header("__equip_cwv", _equip_loc("gut_equip_cwv", "Career Weapon Variants"), 0,
+            members.cwv.enabled)
         _add_member(members.cwv, 1)
     end
 
@@ -705,7 +711,18 @@ local function _bridge_uitweaks_to_stock(out)
     if not HB then return end                          -- stock UI Tweaks absent: gut owns its copies
     if type(HB.is_enabled) == "function" then
         local ok_en, en = pcall(HB.is_enabled, HB)
-        if ok_en and en == false then return end       -- disabled: don't route to a dormant mod
+        if ok_en and en == false then
+            local gut_cat
+            for _, c in ipairs(out) do
+                if c.mod_id == "gut" or c.mod_id == "gut_dev" then gut_cat = c; break end
+            end
+            if gut_cat then
+                gut_cat.widgets = disabled_sections.disable_group_subtree(gut_cat.widgets,
+                    "hb_group",
+                    _equip_loc("gut_disabled_in_vmf", disabled_sections.REASON))
+            end
+            return                                    -- present but disabled: explained header only
+        end
     end
     local names = HB.SETTING_NAMES
     if type(names) ~= "table" then return end
@@ -802,18 +819,13 @@ local function _vmf_categories()
                 local ok_en, en = pcall(mod_obj.is_enabled, mod_obj)
                 if ok_en then enabled = en and true or false end
             end
-            -- #318: a VMF-DISABLED mod must NOT get a Mod Tweaker tab at all. The
-            -- old behavior added it and greyed the tab out (dead-code paths below at
-            -- the tab builder), which the user rejected. Skip it entirely so only
-            -- enabled whitelisted mods become tabs. `enabled` stays true when
-            -- is_enabled is absent/errors, so an indeterminate mod still shows
-            -- rather than silently vanishing.
-            if enabled then
-                out[#out + 1] = {
-                    mod_id = mod_name, label = label, widgets = list,
-                    mod_obj = mod_obj, enabled = enabled, _flat = true,
-                }
-            end
+            -- #318 revised contract: retain installed disabled mods so synthesis can
+            -- place an explained grey header in the normal merged section. An
+            -- unsynthesized single-mod category retains the established disabled tab.
+            out[#out + 1] = {
+                mod_id = mod_name, label = label, widgets = list,
+                mod_obj = mod_obj, enabled = enabled, _flat = true,
+            }
         end
     end
     -- (#339) Fold Crosshair Kill Confirmation into gut's Interface tab under HUD (NOT a
@@ -1367,6 +1379,12 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth, display
     end
 
     if row then
+        if _nf(w, "disabled") == true then
+            row._readonly = true
+            row._disabled_in_vmf = true
+            local color = row.style and row.style.label and row.style.label.text_color
+            if color then color[1], color[2], color[3], color[4] = 128, 128, 128, 128 end
+        end
         row._mod_id = category.mod_id
         row._setting_id = setting_id
         row._wtype = wtype

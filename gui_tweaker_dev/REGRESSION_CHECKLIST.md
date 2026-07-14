@@ -6,6 +6,18 @@ Last updated: 2026-07-13.
 
 ## Mod Tweaker
 
+### issue318-disabled-integrations-in-place — disabled mod escapes or disappears
+
+| Field | Value |
+|-------|-------|
+| Symptom | VMF-disabled CWV appears as a blacked-out top-level tab or disappears instead of remaining in its normal Equipment > Weapons section. |
+| Root cause | Category enumeration first hid disabled mods, while the earlier merge counted only enabled members; neither preserved installed layout identity separately from edit authority. |
+| Fix version(s) | gui_tweaker_dev v0.2.244-dev (not deployed) |
+| Category | UNIT / UI INTEGRATION |
+| Repro | Install WT and CWV, disable CWV in VMF, then open Mod Tweaker in Keep and mission. Repeat with stock UI Tweaks disabled. |
+| Expected post-fix | CWV and UI Tweaks retain their normal grey section header with `Disabled in VMF` on hover. Disabled sections do not expand, expose rows, stage values, participate in profiles/DEFAULT, or receive Apply writes. Re-enabling restores the same section in place. |
+| Detection | Offline `test_mod_tweaker_disabled_sections.lua`; `/gut_regression_test`: `issue318_disabled_integrations_keep_normal_sections`; solo visual/hover confirmation required after deployment. |
+
 ### issue572-search-magnifier-focus-geometry — icon crowds text or remains while typing
 
 | Field | Value |

@@ -5,6 +5,14 @@
 > assigned yet). The public `gui_tweaker` is becoming a public beta; all in-flight work now
 > happens in this dev fork. See repo `CLAUDE.md` § "Dev/stable split workflow".
 
+## 0.2.244-dev (2026-07-13) -- #318 disabled integrations remain in place [not deployed]
+
+- Replaced v0.2.194-dev's hide-disabled behavior with the revised acceptance contract. Mod Tweaker now enumerates installed Tweaker mods regardless of VMF enabled state, then folds Equipment membership by presence. A VMF-disabled CWV therefore remains under `Equipment > Weapons > Career Weapon Variants` when WT is present instead of disappearing or escaping as a blacked-out top-level tab.
+- Disabled Equipment members contribute one grey, read-only section header with the hover explanation `Disabled in VMF`. Their setting rows are omitted and they are excluded from per-owner staging, Apply, profiles, and DEFAULT routing, so the dormant mod object is never read or written.
+- Applied the same presentation contract to the integrated stock UI Tweaks/HideBuffs section inside Interface: installed-and-disabled keeps only its explained grey header; absent HideBuffs preserves gut's absorbed fallback settings; enabled HideBuffs retains the existing live owner bridge.
+- Added a pure disabled-section policy with offline coverage for presence-based membership, enabled alias preference, immutable subtree removal, and the explanation contract. `/gut_regression_test` adds `issue318_disabled_integrations_keep_normal_sections` and source-locks both Keep and mission Mod Tweaker twins.
+- **Solo verify after deployment:** with WT and CWV installed, disable CWV in VMF and open Mod Tweaker. Under Equipment > Weapons, `Career Weapon Variants` must remain visible in grey; hovering it must show `Disabled in VMF`, it must not expand, and no CWV setting rows may appear. Re-enable CWV and reopen the menu; the same header must become interactive with its settings restored. Repeat the grey-header check for installed-but-disabled UI Tweaks under Interface.
+
 ## 0.2.243-dev (2026-07-13) -- #572 in-field magnifier focus correction [verify-fix]
 
 - Followed the user's in-game correction: the magnifier is an empty-field affordance inside Mod Tweaker's 30px search box, not a permanent decoration beside the text. It now hides whenever clicking the unchanged full-field hotspot focuses search, and returns after focus leaves. Query, caret, placeholder, filtering, Enter, Escape, and neutral-click behavior are unchanged.

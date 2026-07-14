@@ -461,5 +461,8 @@ return {
     gut_equip_cwv = {
         en = "Career Weapon Variants",
     },
+    gut_disabled_in_vmf = {
+        en = "Disabled in VMF",
+    },
 
 }

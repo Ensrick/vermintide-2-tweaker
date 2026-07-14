@@ -55,6 +55,12 @@ also aborts at load on a missing Penlight dep, #281, so the stock mod is the rea
 most setups). **When integrating another mod whose options gut mirrors 1:1, bridge to that
 mod's live settings — never display a private copy.**
 
+When HideBuffs is installed but disabled, keep the `UI Tweaks` group header in its normal
+location, mark it read-only/grey, attach the `Disabled in VMF` hover explanation, and omit
+its children. Do not route a staged owner buffer to the dormant object. Absence remains
+different from disablement: when HideBuffs is not installed, gut's absorbed fallback rows
+remain available.
+
 ## Crosshair Kill Confirmation (#313) — the required shape
 
 CKC's options must appear **inside Interface / HUD**, editable in the Mod Tweaker's own menu,

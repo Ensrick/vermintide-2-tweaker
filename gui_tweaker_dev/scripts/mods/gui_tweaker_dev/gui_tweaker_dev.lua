@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.243-dev"
+local MOD_VERSION = "0.2.244-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2502,6 +2502,51 @@ if _gut_uitweaks_sync and _gut_uitweaks_sync.install then pcall(_gut_uitweaks_sy
 -- (#312) UI Tweaks integration regression tests. Split needles so the source-pattern
 -- checks can never self-match; unreadable source => silent skip (pass).
 local _gut_read_all = _rt_src_read  -- (#511) io-safe; nil in retail sandbox => skip
+
+_rt_register("issue318_disabled_integrations_keep_normal_sections", function()
+    local ok_p, Policy = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_mod_tweaker_disabled_sections")
+    if not ok_p or type(Policy) ~= "table" then
+        return "#318 disabled-section policy unavailable"
+    end
+    local roles = { wt = "weapons", character_weapon_variants = "cwv" }
+    local members, count = Policy.select_members({
+        { mod_id = "wt", enabled = true },
+        { mod_id = "character_weapon_variants", enabled = false },
+    }, roles)
+    if count ~= 2 or not members.cwv or members.cwv.enabled ~= false then
+        return "#318 presence-based Equipment membership dropped disabled CWV"
+    end
+    local filtered, found = Policy.disable_group_subtree({
+        { setting_id = "hb_group", type = "group", depth = 1 },
+        { setting_id = "hide_frames", type = "checkbox", depth = 2 },
+        { setting_id = "after", type = "group", depth = 1 },
+    }, "hb_group")
+    if not found or #filtered ~= 2 or filtered[1].disabled ~= true
+        or filtered[1].tooltip ~= Policy.REASON then
+        return "#318 disabled UI Tweaks subtree is not reduced to an explained header"
+    end
+
+    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local dir = src:match("^(.*[/\\])[^/\\]*$")
+    if not dir then return end
+    for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
+        local txt = _gut_read_all(dir .. fn)
+        if txt then
+            if not txt:find("disabled_sections.select_" .. "members(cats, _EQUIP_ROLE)", 1, true) then
+                return "#318 " .. fn .. " no longer uses presence-based Equipment membership"
+            end
+            if not txt:find("disabled_sections.disable_group_" .. "subtree", 1, true) then
+                return "#318 " .. fn .. " no longer explains disabled UI Tweaks in place"
+            end
+            if not txt:find("row._disabled_in_" .. "vmf = true", 1, true) then
+                return "#318 " .. fn .. " no longer renders disabled headers read-only/grey"
+            end
+        end
+    end
+end)
 
 _rt_register("uitweaks_not_separate_modtweaker_tab", function()
     -- #312 (reworked per user): HideBuffs must NOT be in the _MY_MODS whitelist.
