@@ -56,6 +56,11 @@ end)
 
 mod:hook("DeusCursedChestExtension", "get_interaction_action", function(func, self, ...)
     if _available(self) then return "deus_cursed_chest_get_reward_hud_desc" end
+    local cost_action = mod._ct_cot_cost_action_key
+    if type(cost_action) == "function" then
+        local key = cost_action(self)
+        if key then return key end
+    end
     return func(self, ...)
 end)
 

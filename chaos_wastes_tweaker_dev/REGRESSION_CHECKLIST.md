@@ -6,6 +6,27 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+### Chest of Trials activation cost - issue #63
+
+| Field | Value |
+|---|---|
+| Default/scope | Off is vanilla. Enabled charges only the human who starts WAITING -> RUNNING; completion and rewards remain free. |
+| Authority | Host resolves the actual interactor unit. No buyer id or new RPC comes from the client. Both settings use the existing host-effective broadcast. |
+| Transaction | Reserve exact buyer balance, call vanilla once, commit only if state leaves WAITING; otherwise refund the exact prior balance. Missing authority and insufficient coins fail closed. |
+| Bounds | 25-1000, rounded to the nearest 25; default 100. Prompt displays the effective host cost. |
+| Detection | Offline `test_ct_cot_cost`; `/ct_regression_test`: `issue63_cot_cost_transaction`; bounded `[ct:63]` reject/charge rows. |
+| Lifecycle | `verify-fix-coop` only. Test exact/insufficient balance, activation race, native and injected chests, #350 early reward, and default-off control. |
+
+### weave-wind curse feasibility - issue #253
+
+| Field | Value |
+|---|---|
+| Current scope | Observation-only feasibility; no wind mutator is activated. |
+| Expected catalog | 8 settings, templates and wire entries; 8 context-bound, 2 objective-bound, 6 resource-bound, 0 declared package lists. |
+| Runtime evidence | At most two `[ct:253]` snapshots (two lines each): startup and first `StateIngame`; the latter reports six sampled resource-residency results. |
+| Detection | Offline `test_ct_weave_curse_policy.lua`; `/ct_regression_test`: `issue253_weave_curse_feasibility`. |
+| Future verification | Each implemented wind is `verify-fix-coop`; test host/client, hot join, transition, respawn, stacking and cleanup independently. |
+
 ### dev-localization-status-sync - issue #345
 
 | Field | Value |
@@ -747,6 +768,33 @@ Last updated: 2026-07-14.
 | Expected post-fix | Use `C:/Tools/vt2_bundle_unpacker/target/release/unpacker.exe murmur hash <path>` to find the missing resource. Don't speculate. |
 | Detection | When crash occurs, run hash candidates before authoring a fix. |
 
+
+---
+
+### #323 progressive elite modifier diagnostics
+
+- [ ] Complete one pilgrimage with host and client logs; require `[ct:323]`
+  rates 0/5/10/15/20 at the matching mission depths.
+- [ ] Require `activation=disabled` and catalog counts
+  `15/15/13/2/0` for catalog/templates/boss-only/elite-proven/missing.
+- [ ] Run `/ct_progressive_elite_audit`; confirm the elite/special census is
+  bounded and no ordinary enemy receives an enhancement.
+- [ ] Run `/ct_regression_test`; require
+  `PASS: issue323_progressive_elite_feasibility`.
+
+---
+
+### #289 multiple-modifier composition diagnostics
+
+- [ ] Enter the same Chaos Wastes mission as host and client; confirm one bounded
+  `[ct:289]` `StateIngame` census on each peer.
+- [ ] Run `/ct_modifier_stack_audit` on both peers and compare `effective` and
+  `active` signatures; require exact matches and zero missing template/wire names
+  or duplicates.
+- [ ] Run `/ct_regression_test`; require
+  `PASS: issue289_modifier_stack_feasibility`.
+- [ ] Confirm no extra curse is activated and no graph, package, lookup, or RPC
+  state changes in this diagnostics build.
 
 ---
 

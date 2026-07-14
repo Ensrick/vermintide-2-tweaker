@@ -69,6 +69,7 @@ pair (repo `CLAUDE.md` NON-NEGOTIABLE 8), flagged in the trap column.
 | `DeusChestExtension.update` / `get_purchase_cost` / `_generate_stored_power_up` / `_generate_stored_weapon` / `_generate_upgraded_weapon` / `update_upgrade_chest_color` / `can_be_unlocked` / `extensions_ready` / `purchase` [hook/safe] `:951-8487` | Per-frame chest tick, cost query, stored-reward generation, upgrade-chest recolor, unlock gate, spawn init, purchase | Altar cost/mix tuning, reward-seed mixing, walk-through collision setup at `extensions_ready`, reuse economy | Walk-through uses `Actor.set_collision_filter(actor,"filter_trigger")` NOT `set_scene_query_enabled(false)` (breaks "press E", DEVELOPMENT "Walk-through pattern"); `Unit.actor` is 1-indexed |
 | `DeusCursedChestExtension._set_state` [safe] `:7361` | Cursed-chest state machine (`CURSED_CHEST_STATE_OPEN = 3` server-side; hot-join clients use 4) | Chest-of-Trials revive option + state-driven UI | Hot-join clients see state 4, not 3 (AUDIT_FINDINGS #4) |
 | `DeusCursedChestExtension.update` [safe] / `can_interact`, `get_interaction_length`, `get_interaction_action`, `on_client_interact` [hook] `_ct_cot_early_reward.lua` | Server interaction writes RUNNING; the first RUNNING update starts `cursed_chest_prototype`, procs/sound, and only event completion writes OPEN. OPEN records purification, plays the finish jingle, creates the marker, emits cleanse, and enables the native reward view [src: `deus_cursed_chest_extension.lua:66-151,267-316`] | Optional #350 early reward presentation and native reward access while authoritative state remains RUNNING | Never write OPEN early: that would falsely complete counters/revive and stop the RUNNING completion check. Every peer consumes replicated RUNNING plus the host-broadcast effective setting; per-extension actions are one-shot. An early claimant's marker/visual is restored after real completion without suppressing completion side effects |
+| `DeusCursedChestExtension.on_server_interact` [hook] `_ct_cot_cost.lua` | Sole authoritative WAITING -> RUNNING activation; receives the real interactor unit [src: `deus_cursed_chest_extension.lua:293-302`] | #63 optional per-activator Pilgrim's Coin gate and debit for native and injected Chests of Trials | Host resolves owner from interactor; no buyer RPC. Reserve/refund transaction commits only after state leaves WAITING. Rewards are not charged. Prompt key composes into the existing `get_interaction_action` and single `_G.Localize` hooks, never duplicate-hooks them. |
 | `DeusShopView` / `DeusCursedChestView` `.update` + `._create_ui_elements` / `create_ui_elements` / `_on_button_pressed` [hook/safe] `:2857-8204` / `DeusUpgradeWeaponInteractionUI._populate_widget` [safe] `:1229` | Shrine-shop / cursed-chest / upgrade-altar view build + tick + button | Inject ct boon widgets, NaN arc-offset fix, reroll button | NaN widget-offset fix only needed for the 1-widget case (AUDIT_FINDINGS #6); VMF numeric widget has no `step` (memory `reference_vmf_numeric_widget_no_step`) |
 | `IngamePlayerListUI._setup_mission_data` [hook] / `_setup_deed_reward_data` + `_draw` [safe] `:8320-8790` | Builds Adventure collectible widgets from `loot_objectives` with 2-per-row measured layout (`ingame_player_list_ui_v2.lua:436-513`); updates the fit-height scenegraph at draw time (`ui_scenegraph.lua:210-297`) | #533 replaces impossible Adventure book counters with live DEUS chest/coin counts during a run; #461 adds queued-run boon preview; #571 reflows CT rows against the live right-banner/safe-rectangle bounds | One consolidated `_draw` hook. Layout cannot be finalized in `_setup_mission_data` because scenegraph transforms have not run yet; recompute only on resolution/UI-scale/safe-rect signature change. Stock Adventure calls vanilla unchanged. |
 | `DeusMapDecisionView._update_player_state` [safe] `_ct_dup_vote_chips.lua:255` / `DeusMapScene._clear` [safe] `:421` | CW map-vote screen: places one "token" chip per hero keyed by `profile_index` [src: `deus_map_scene.lua:238-251`, `place_token` `:833-841`] | With gt's `allow_duplicate_careers`, two peers share a `profile_index` and the second `place_token` OVERWRITES the first - spawn a SECOND chip for the extra voter | Post-hook (vanilla runs first, non-duplicate case byte-for-byte vanilla); distinguish by offset+scale, NOT material recolor - token `.unit` tint vars are unverified per-asset and `Material.set_*` silently no-ops on an absent shader var |
@@ -289,6 +290,39 @@ Distilled from `DEVELOPMENT.md`, `AUDIT_FINDINGS.md`, `CODE_REVIEW.md`, and
   it (CODE_REVIEW §4, AUDIT_FINDINGS #9).
 
 ## Doc maintenance
+
+#323 adds one observation-only `hook_safe` on
+`ConflictDirector._post_spawn_unit`. It counts non-boss elites/specials after
+vanilla's enhancement application boundary and never changes `optional_data`,
+so it cannot add a buff. Vanilla calls `apply_breed_enhancements` only when the
+spawn payload already has `enhancements` [src: `conflict_director.lua:2029-2042`].
+The 13 general entries are explicitly `BossGrudgeMarks`, while the only source-
+proven ordinary-elite recipe uses `elite_base` with `shockwave` or
+`ignore_death_aura` [src: `grudge_mark_settings.lua:108-140,191-195`;
+`geheimnisnacht_2021_generic_terror_events.lua:9-22`]. The compatibility and
+progression gate is documented in `PROGRESSIVE_ELITE_FEASIBILITY_323.md`.
+
+#289 is observation-only. `_ct_modifier_stack_audit.lua` reads the live Deus run
+controller, current node, `GameModeDeus.mutators()`, and the mutator handler's
+active map. It records deterministic host/client signatures but adds no hook,
+RPC, lookup, package load, graph mutation, or mutator activation. Vanilla already
+composes a single `node.curse`, list-valued `minor_modifier_group`, theme mutators,
+and list-valued event mutators [src: `deus_mechanism.lua:781-799`;
+`game_mode_deus.lua:667-683`]. The handler initializes/activates the full list and
+hot-join syncs every active entry [src: `mutator_handler.lua:85-111,148-166`].
+The singular graph curse remains unchanged; the curated event-list adapter gate
+is documented in `MODIFIER_STACK_FEASIBILITY_289.md`.
+
+#253 is currently observation-only. `_ct_weave_curse_audit.lua` reads
+`WindSettings`, `MutatorTemplates`, `NetworkLookup.mutator_templates`, and six
+`Application.can_get("unit", ...)` samples at load/first `StateIngame`; it adds no
+hook, lookup, RPC, package reference, graph mutation, or mutator activation. The
+eight candidates are already registered globally [src: `mutator_settings.lua:24-31`],
+but every start path reads `Managers.weave`; Light and Beasts additionally consume
+the active objective's `mutator_item_config` [src: `mutator_light.lua:175-195`;
+`mutator_beasts.lua:116-147`]. Deus preloads only a template's declared `packages`
+[src: `deus_run_state.lua:438-461`], which these templates lack. The staged
+per-level adapter boundary is documented in `WEAVE_CURSE_FEASIBILITY_253.md`.
 
 Follows `docs/engine/README.md` maintenance rules: if a ct hook moves, a guard is
 added, or a cited vanilla line drifts after a game patch, edit the affected row in

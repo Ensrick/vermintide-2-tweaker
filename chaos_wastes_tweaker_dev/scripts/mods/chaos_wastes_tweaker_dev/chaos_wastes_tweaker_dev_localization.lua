@@ -376,6 +376,10 @@ local loc = {
     ["9"] = { en = "9" },
     ["10"] = { en = "10" },
     cursed_chest_count = { en = "[diag] [Issue 132 & 60] Chests of Trials per Mission" },
+    cot_cost_enabled = { en = "[verify-fix] [Issue 63] Charge Coins to Start a Chest of Trials" },
+    cot_cost_enabled_tooltip = { en = "When enabled, the player who activates a Chest of Trials must pay the configured Pilgrim's Coin cost. The host verifies and charges the exact interacting player before the trial starts. Default off preserves vanilla free activation." },
+    cot_cost_amount = { en = "[verify-fix] [Issue 63] Chest of Trials Activation Cost" },
+    cot_cost_amount_tooltip = { en = "Pilgrim's Coins charged to the player who starts the trial. Mod Tweaker moves in 25-coin steps; runtime also rounds to the nearest 25 and clamps from 25 to 1000. The interaction prompt shows the effective host cost." },
     respawn_on_chest_complete = { en = "[verify-fix] [Issue 299] Revive Team on Chest Completion" },
     respawn_on_chest_complete_tooltip = { en = "When a Chest of Trials is completed, revive knocked-down players and respawn dead players with a wound and 50%% temporary health. Host-only." },
 

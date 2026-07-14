@@ -1,5 +1,39 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.286-dev (2026-07-14) - #323 progressive elite modifiers [diagnostics-armed; coop-required; not deployed]
+
+- Clarified that the requested 0/5/10/15/20 mission progression is an elite-enhancement chance, not a new difficulty tier. Added an exact bounded policy derived from completed Chaos Wastes levels.
+- Source-audited 15 candidate enhancements. Vanilla registers 13 for bosses, with compatibility exclusions covering only one troll pair; only Geheimnisnacht's `shockwave` and `ignore_death_aura` have a proven ordinary-elite recipe using `elite_base`.
+- Added a non-mutating `ConflictDirector._post_spawn_unit` census for ordinary elite and optional-special volumes. A deterministic sampler reports how many would be selected at the current mission rate without applying an enhancement or consuming gameplay RNG.
+- Added capped `[ct:323]` summaries, runtime regression `issue323_progressive_elite_feasibility`, four pure policy tests, `PROGRESSIVE_ELITE_FEASIBILITY_323.md`, and engine-surface/regression documentation. No menu setting, buff, spawn payload, lookup, package, or RPC is added.
+
+**Diagnostics:** complete one pilgrimage with host and client logs. Require rates 0/5/10/15/20 by mission depth, `activation=disabled`, and `catalog=15 templates=15 boss_only=13 elite_source_proven=2 missing=0`. Run `/ct_progressive_elite_audit` and `/ct_regression_test`; require `PASS: issue323_progressive_elite_feasibility`.
+
+## 0.7.285-dev (2026-07-14) - #289 multiple-modifier feasibility [diagnostics-armed; coop-required; not deployed]
+
+- Source-mapped the real composition boundary: vanilla already initializes, activates, and hot-join syncs a list of mutators, while an expedition node carries exactly one `curse` plus list-valued minor modifiers. The count is not the engine-handler limitation; the singular graph/UI/reward contract is.
+- Added a bounded, observation-only `[ct:289]` census for host/client role, completed stages, node/minor/event counts, deterministic effective/active signatures, package declarations, duplicate names, and missing template/wire registrations.
+- Defined a non-activating ramp policy for compatibility testing: 1 modifier initially, 2 after two completed levels, and a hard cap of 3 after four. Arbitrary curse stacking remains disabled until curated pairs pass package, lifecycle, UI, hot-join, performance, and peer-parity checks.
+- Added pure policy tests, runtime regression `issue289_modifier_stack_feasibility`, `MODIFIER_STACK_FEASIBILITY_289.md`, and engine-surface/regression documentation. No graph, mutator, package, lookup, RPC, or setting is mutated.
+
+**Diagnostics:** host and client enter the same Chaos Wastes mission, then each runs `/ct_modifier_stack_audit`. Compare the `[ct:289]` `effective` and `active` signatures; both peers must match with `missing_template=0`, `missing_wire=0`, and `duplicates=0`. Run `/ct_regression_test` and require `PASS: issue289_modifier_stack_feasibility`.
+
+## 0.7.284-dev (2026-07-14) - #63 optional Chest of Trials activation cost [verify-fix-coop; not deployed]
+
+- Added default-off host settings for a 25-1000 Pilgrim's Coin cost to start native and CT-injected Chests of Trials. The interaction prompt shows the effective host price; runtime rounds to the nearest 25.
+- The host gates the exact human interactor at vanilla's sole WAITING-to-RUNNING server boundary. It reserves the buyer's existing Deus soft-currency row, calls vanilla once, commits only after the transition, and restores the exact balance on failure. Insufficient or missing authority fails closed.
+- Added no RPC, lookup, or alternate currency ledger. Trial rewards remain free, and the activation cost composes with #350 early reward access without double charging.
+- Added pure policy/transaction/static tests, runtime regression `issue63_cot_cost_transaction`, `CHEST_OF_TRIALS_COST.md`, and engine-surface/regression documentation.
+
+## 0.7.283-dev (2026-07-14) - #253 Weave-wind curse feasibility [diagnostics-armed; not deployed]
+
+- Source-mapped all eight Weave winds to their global mutator templates and existing network lookup entries; no custom RPC or lookup registration is required.
+- Confirmed that direct activation in Chaos Wastes is unsafe: all eight read `Managers.weave`, Light and Beasts require an active Weave objective, six use Weave-specific resources, and none declares packages for Deus' event-mutator preload path.
+- Added a two-capture `[ct:253]` runtime census, six-resource residency sample, pure catalog policy, offline drift tests, runtime regression `issue253_weave_curse_feasibility`, and `WEAVE_CURSE_FEASIBILITY_253.md`.
+- Selected per-level/node curses as the safe activation model and Metal as the first isolated port. No wind is activated or exposed in the menu by this diagnostics build.
+
+**Diagnostics:** capture both `[ct:253]` snapshots (two lines at keep/load and two in one Chaos Wastes mission) and run `/ct_regression_test`. Current source expects 8 settings/templates/wire entries, 8 Weave-context dependencies, 2 objective-bound winds (`beasts,light`), 6 resource-bound winds, and zero declared template package lists.
+
 ## 0.7.282-dev (2026-07-14) - #345 CT localization status reconciliation [verify-fix; not deployed]
 
 - Re-derived the affected Chaos Wastes option titles from the live GitHub issue state instead of applying #345's July 5 snapshot mechanically. Removed closed #156/#131 references and the orphaned `[verify-fix]`/`[diag]` tags they had supplied; retained open diagnostics for #52/#251/#249 and verification for #256/#299.

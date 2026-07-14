@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.282-dev"
+local MOD_VERSION = "0.7.286-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -335,6 +335,10 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
+-- Feature modules loaded near EOF cannot add another main-chunk local (CT sits at
+-- Lua 5.1's 200-local ceiling). Expose the existing registrar without creating a
+-- second registry or callback owner.
+mod._ct_rt_register = _rt_register
 mod:command("ct_regression_test", "Run regression smoke checks for past bugs", function()
     local pass, fail = 0, 0
     mod:echo("=== ct regression_test (v%s) ===", MOD_VERSION)
@@ -5840,6 +5844,9 @@ local MIRACLE_LOC_OVERRIDES = {
 CT_MANANN_TEMPEST_NOTE_MARKER = "manann_tempest:crit_chain_lightning_cooldown_note_v0.7.232"
 mod:hook(_G, "Localize", function(func, key, ...)
     if type(key) == "string" then
+        if key == "ct_cot_cost_action" and mod._ct_cot_cost_action_text then
+            return mod._ct_cot_cost_action_text()
+        end
         local t = ADV_TITLE_OVERRIDES[key]
         if t then return t end
         local d = ADV_DESC_OVERRIDES[key]
@@ -8233,6 +8240,8 @@ mod._ct_pending_team_teleport = mod._ct_pending_team_teleport or {}
 -- #350 early reward access is presentation-only while vanilla remains RUNNING;
 -- register its hooks and runtime policy check before the completion-only OPEN hook.
 do
+    local cost_feature = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_cot_cost")
+    for _, c in ipairs(cost_feature.rt_checks or {}) do _rt_register(c.name, c.fn) end
     local feature = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_cot_early_reward")
     for _, c in ipairs(feature.rt_checks or {}) do _rt_register(c.name, c.fn) end
 end
@@ -17236,5 +17245,22 @@ mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_blessed_bots")
 -- only (no new sync). Hooks DeusMapDecisionView._update_player_state (place extras)
 -- + DeusMapScene._clear (teardown extras — no leak). Sole hooks on those pairs.
 mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_dup_vote_chips")
+
+-- #253 Weave-wind curse feasibility: observation-only catalog/resource audit.
+-- All eight vanilla templates depend on Managers.weave; do not activate them.
+-- Module self-registers through mod._ct_rt_register to preserve the main chunk's
+-- hard 200-local ceiling.
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_weave_curse_audit")
+
+-- #289 multiple-modifier feasibility: observation-only census of vanilla's
+-- singular node curse plus list-valued minor/event/effective/active surfaces.
+-- It does not activate or inject a mutator; host/client signatures are the
+-- compatibility gate before any bounded ramp is exposed.
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_modifier_stack_audit")
+
+-- #323 progressive elite modifiers: observation-only spawn census. The source
+-- proves two elite-safe event enhancements but not the 13 boss grudge marks;
+-- no enhancement payload is injected until the compatibility gate is complete.
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_progressive_elite_audit")
 
 pcall(printf, "[mem-probe] ct boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CT) / 1024)
