@@ -73,6 +73,7 @@ local suites = {
     "test_cim_skin_persistence",
     "test_cim_bulk_cleanup",
     "test_cim_cwv_template_selector",
+    "test_cim_trait_slot_policy",
     "test_cim_tab_preview",
     "test_dcp_portrait_materials",
     "test_cos_score_identity",

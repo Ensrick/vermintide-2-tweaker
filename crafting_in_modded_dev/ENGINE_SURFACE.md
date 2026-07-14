@@ -216,7 +216,11 @@ boon-filtered). The `weave_` bridge in `_forge_apply_to_item` strips the leading
 `weave_` to get the bare adventure key the item actually receives. The v0.8.44-dev
 freedom toggles (`allow_cw_traits`, `allow_any_trait_property`) widen both surfaces,
 read LIVE so `weapon_tweaker`'s runtime `WeaponTraits`/`WeaponProperties` mutation is
-always reflected. Athanor slot occupancy is capped by the distinct-property ceiling
+always reflected. For `allow_cw_traits`, `_cim_trait_slot_policy.lua` maps the exact
+vanilla CW combination families to `melee`/`ranged`; the standard pool receives
+`master.slot_type`, while the Athanor hook receives the selected item's
+`data.slot_type`. Accessories fail closed with no CW extras; traits duplicated by
+vanilla in both families remain universal. Athanor slot occupancy is capped by the distinct-property ceiling
 (`MAX_DISTINCT_PROPERTIES`, raised 2->10 in v0.8.32-dev) + a per-property bubble cap
 (default 5) - NOT array length (memory `reference_cim_weave_slot_occupancy_array_not_display`).
 

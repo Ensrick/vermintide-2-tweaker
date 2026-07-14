@@ -48,10 +48,10 @@ return {
         en = "OFF (default): the movement speed property gives +5%% and fills 1 bubble. ON: it can reach 5 bubbles at +2%% each for up to +10%%, but the full +10%% uses 5 of the trinket's 10 property slots instead of 1.",
     },
     allow_cw_traits = {
-        en = "[untested] Allow Chaos Wastes traits on crafted weapons",
+        en = "[verify-fix] Allow Chaos Wastes traits on crafted weapons",
     },
     allow_cw_traits_description = {
-        en = "OFF (default): the forge hides the Chaos Wastes boon traits (like the extra-shot, shield-splinters and chain-lightning traits) that the normal crafting bench never offers. ON: those boon traits become available to add to weapons you craft. Affects traits only, not properties.",
+        en = "OFF (default): the forge hides the Chaos Wastes boon traits (like the extra-shot, shield-splinters and chain-lightning traits) that the normal crafting bench never offers. ON: slot-eligible boon traits become available to weapons you craft; melee-only and ranged-only traits stay in their vanilla weapon family. Affects traits only, not properties.",
     },
     allow_any_trait_property = {
         en = "[untested] Allow any trait and property on any weapon",

@@ -1,5 +1,18 @@
 # Crafting in Modded Changelog
 
+## 0.8.73-dev (2026-07-14): #414 exact-slot Chaos Wastes trait rerolls [verify-fix] [not deployed]
+
+- Fixed `Allow Chaos Wastes traits` flattening every CW trait category into every weapon. Standard-bench rerolls now add only the three vanilla melee families to melee weapons and only the six vanilla ranged families to ranged weapons.
+- The Athanor picker now derives the selected item's exact `data.slot_type` and applies the same policy. Its accessory view has no selected weapon, so it receives no CW weapon-trait extras. `Allow any trait and property` remains intentionally unrestricted.
+- Shared/universal boons still appear for both weapon slots because vanilla lists those traits in both category families; melee-only and ranged-only traits no longer cross slots.
+- Added pure policy tests plus runtime regression `issue414_cw_traits_preserve_slot_family`.
+
+### Test method
+1. Enable `Allow Chaos Wastes traits`, reroll a melee weapon repeatedly, and confirm no ranged-only boon appears.
+2. Reroll a ranged weapon repeatedly and confirm no melee-only boon appears.
+3. Inspect both weapons in the Athanor picker, then open the accessory view; weapon traits must remain exact-slot and accessories must receive no CW extras.
+4. Run `/cim_regression_test` and require `cw_trait_pool_includes_boons` and `issue414_cw_traits_preserve_slot_family` PASS.
+
 ## 0.8.72-dev (2026-07-13): #524 one bounded CWV acquisition selector [verify-fix] [not deployed]
 
 - Completed the #592 ownership split: CWV registers definition-only `ItemMasterList` rows, while CIM alone creates and persists owned instances. The standard Craft Item grid now runs through one pure acquisition-selector policy instead of an ad hoc key scan.

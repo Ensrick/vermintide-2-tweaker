@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.72-dev"
+local MOD_VERSION = "0.8.73-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -254,6 +254,15 @@ mod:info("[regression-test-command] registered as /cim_regression_test")
 -- anything else loads — sibling modules will create items with this rarity.
 local _ok_rr, _err_rr = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/modded_rarities")
 if not _ok_rr then mod:error("Failed to load modded_rarities: %s", tostring(_err_rr)) end
+
+-- Pure source-backed mapping from the nine vanilla CW trait categories to
+-- their owning weapon slot. Load before standard_forge, which consumes it.
+local _ok_tsp, _trait_slot_policy = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/_cim_trait_slot_policy")
+if _ok_tsp then
+    mod._cim_trait_slot_policy = _trait_slot_policy
+else
+    mod:error("Failed to load _cim_trait_slot_policy: %s", tostring(_trait_slot_policy))
+end
 
 -- Standard Keep crafting — same Athanor pattern: mutations are session-only because
 -- we block PlayFab commits while the forge is open. v0.2.0 crashed because we left
@@ -2366,13 +2375,13 @@ end
 -- Bare adventure keys the toggles want surfaced (from the standard_forge helpers,
 -- read live). Traits: any → every trait; else cw → boon traits. Properties: any
 -- → every property; else none (allow_cw_traits is traits-only).
-local function _cim_wanted_trait_bares()
+local function _cim_wanted_trait_bares(slot_type)
     local out = {}
     local entries
     if mod:get("allow_any_trait_property") then
         entries = mod._cim_all_trait_entries and mod._cim_all_trait_entries()
     elseif mod:get("allow_cw_traits") then
-        entries = mod._cim_cw_trait_entries and mod._cim_cw_trait_entries()
+        entries = mod._cim_cw_trait_entries and mod._cim_cw_trait_entries(slot_type)
     end
     for _, e in ipairs(entries or {}) do
         if e and e[1] then out[#out + 1] = e[1] end
@@ -2460,14 +2469,14 @@ local function _cim_widen_category(kind, categories_tbl, category, wanted_bares,
     categories_tbl[category] = widened
 end
 
-_cim_apply_forge_freedom = function(slots_progression)
+_cim_apply_forge_freedom = function(slots_progression, slot_type)
     if not slots_progression then return end
     local WT = rawget(_G, "WeaveTraits")
     local WP = rawget(_G, "WeaveProperties")
     -- freedom-toggle EXTRAS (empty when both toggles are OFF); _cim_widen_category
     -- also seeds the weapon's own native pool, so the picker is filled even with
     -- no extras (#404). Widen every category in play REGARDLESS of toggle state.
-    local trait_bares = _cim_wanted_trait_bares()
+    local trait_bares = _cim_wanted_trait_bares(slot_type)
     local prop_bares  = _cim_wanted_property_bares()
 
     if WT and WT.categories and slots_progression.traits then
@@ -2521,7 +2530,9 @@ mod:hook("HeroWindowWeaveProperties", "_setup_menu_options", function(func, self
     -- exit). pcall so a malformed stub can never crash the picker — it just falls
     -- back to the un-widened (or seeded) pools.
     if _custom_forge_active then
-        pcall(_cim_apply_forge_freedom, slots_progression)
+        local selected_item = self._selected_item and self:_selected_item()
+        local slot_type = selected_item and selected_item.data and selected_item.data.slot_type
+        pcall(_cim_apply_forge_freedom, slots_progression, slot_type)
     end
     return func(self, career_name, slots_progression)
 end)
@@ -7057,16 +7068,59 @@ _rt_register("cw_trait_pool_includes_boons", function()
     -- crafting_disabled boon (that is exactly what allow_cw_traits surfaces).
     local WT = rawget(_G, "WeaponTraits")
     if not (WT and WT.traits and WT.combinations) then return "skip: WeaponTraits not loaded" end
-    local entries = mod._cim_cw_trait_entries()
-    if type(entries) ~= "table" or #entries == 0 then
-        return "cw trait set is empty (expected the deus/boon traits)"
+    for _, slot_type in ipairs({ "melee", "ranged" }) do
+        local entries = mod._cim_cw_trait_entries(slot_type)
+        if type(entries) ~= "table" or #entries == 0 then
+            return slot_type .. " cw trait set is empty (expected deus/boon traits)"
+        end
+        local found_boon = false
+        for _, e in ipairs(entries) do
+            local k = e and e[1]
+            local td = k and WT.traits[k]
+            if td and td.crafting_disabled then found_boon = true; break end
+        end
+        if not found_boon then
+            return slot_type .. " cw trait set contains no crafting_disabled boon trait"
+        end
     end
-    for _, e in ipairs(entries) do
-        local k = e and e[1]
-        local td = k and WT.traits[k]
-        if td and td.crafting_disabled then return end  -- found a real boon: pass
+end)
+
+_rt_register("issue414_cw_traits_preserve_slot_family", function()
+    local WT = rawget(_G, "WeaponTraits")
+    local policy = mod._cim_trait_slot_policy
+    if not (WT and WT.traits and WT.combinations and policy) then
+        return "skip: WeaponTraits or slot policy not loaded"
     end
-    return "cw trait set contains no crafting_disabled boon trait"
+    local expected = { melee = {}, ranged = {} }
+    for category, pool in pairs(WT.combinations) do
+        local slot_type = policy.category_slot(category)
+        if slot_type and type(pool) == "table" then
+            for _, entry in ipairs(pool) do
+                local key = entry and entry[1]
+                if key and WT.traits[key] then expected[slot_type][key] = true end
+            end
+        end
+    end
+    for _, slot_type in ipairs({ "melee", "ranged" }) do
+        local actual = {}
+        for _, entry in ipairs(mod._cim_cw_trait_entries(slot_type)) do
+            local key = entry and entry[1]
+            if key then
+                if not expected[slot_type][key] then
+                    return slot_type .. " pool leaked cross-slot trait " .. tostring(key)
+                end
+                actual[key] = true
+            end
+        end
+        for key in pairs(expected[slot_type]) do
+            if not actual[key] then
+                return slot_type .. " pool omitted slot-eligible trait " .. tostring(key)
+            end
+        end
+    end
+    if #mod._cim_cw_trait_entries(nil) ~= 0 then
+        return "non-weapon/accessory context received CW traits"
+    end
 end)
 
 _rt_register("default_trait_pool_excludes_boons_when_toggles_off", function()
@@ -7079,7 +7133,7 @@ _rt_register("default_trait_pool_excludes_boons_when_toggles_off", function()
     if not (WT and WT.traits and WT.combinations and WT.combinations.melee) then
         return "skip: WeaponTraits melee pool not loaded"
     end
-    local pool = mod._cim_trait_pool_for({ trait_table_name = "melee" })
+    local pool = mod._cim_trait_pool_for({ trait_table_name = "melee", slot_type = "melee" })
     if type(pool) ~= "table" then return "trait pool for melee was nil" end
     for _, e in ipairs(pool) do
         local k = e and e[1]
@@ -7097,7 +7151,7 @@ _rt_register("trait_twin_stub_has_display_name", function()
     local adv = rawget(_G, "WeaponTraits")
     if not (WT and WT.traits and adv and adv.traits) then return "skip: trait tables not loaded" end
     local bare
-    for _, e in ipairs(mod._cim_cw_trait_entries()) do
+    for _, e in ipairs(mod._cim_cw_trait_entries("melee")) do
         local k = e and e[1]
         if k and adv.traits[k] and adv.traits[k].display_name and not WT.traits["weave_" .. k] then
             bare = k; break
@@ -7120,7 +7174,7 @@ _rt_register("trait_twin_copies_description_pair", function()
     local adv = rawget(_G, "WeaponTraits")
     if not (WT and WT.traits and adv and adv.traits) then return "skip: trait tables not loaded" end
     local bare
-    for _, e in ipairs(mod._cim_cw_trait_entries()) do
+    for _, e in ipairs(mod._cim_cw_trait_entries("melee")) do
         local k = e and e[1]
         if k and adv.traits[k] and adv.traits[k].advanced_description and not WT.traits["weave_" .. k] then
             bare = k; break

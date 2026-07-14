@@ -4,7 +4,21 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-13.
+Last updated: 2026-07-14.
+
+### cw-trait-exact-slot-family - issue #414
+
+| Field | Value |
+|---|---|
+| Symptom | `Allow Chaos Wastes traits` lets ranged-only traits roll on melee weapons and melee-only traits appear on ranged weapons. |
+| Root cause | CIM flattened every `deus_*` combination category instead of preserving the category family vanilla uses as slot identity. |
+| Fix version(s) | cim_dev 0.8.73-dev |
+| Category | SOLO |
+| Repro | Enable the toggle; reroll and inspect both a melee and ranged weapon on the standard bench and in the Athanor. |
+| Expected post-fix | Only exact-slot CW traits appear; shared boons remain on both; the accessory view receives no CW weapon traits. |
+| Detection | Offline `test_cim_trait_slot_policy.lua` passes and `/cim_regression_test` passes `issue414_cw_traits_preserve_slot_family`. |
+
+---
 
 ### cwv-acquisition-selector-bound - issue #524
 

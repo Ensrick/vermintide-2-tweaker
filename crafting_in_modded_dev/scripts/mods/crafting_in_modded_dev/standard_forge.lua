@@ -779,26 +779,27 @@ local function _craftable_trait_pool(pool)
     return out
 end
 
--- Chaos Wastes / deus "boon" trait entries: single-trait combos {trait_key} for
--- every trait the base forge marks crafting_disabled, plus every trait that only
--- lives in a deus/CW combination category (deus_*, *trollhammer*, ranged_energy).
--- Exactly the boon traits the official bench refuses to craft. Built live from
--- WeaponTraits so wt's runtime toggles are reflected.
-local function _cim_cw_trait_entries()
+-- Chaos Wastes / deus "boon" trait entries eligible for one exact weapon slot.
+-- Vanilla encodes eligibility in the owning combination category, not on the
+-- trait row itself. Shared boons remain shared because vanilla lists them in
+-- both a melee and ranged category. Built live so wt mutations are reflected.
+local function _cim_cw_trait_entries(slot_type)
     local WT = rawget(_G, "WeaponTraits")
     local combinations = WT and WT.combinations
     local traits = WT and WT.traits
-    if type(combinations) ~= "table" or type(traits) ~= "table" then return {} end
+    local policy = mod._cim_trait_slot_policy
+    if type(combinations) ~= "table" or type(traits) ~= "table"
+        or type(policy) ~= "table" or type(policy.category_matches_slot) ~= "function" then
+        return {}
+    end
     local seen, out = {}, {}
     for cat, pool in pairs(combinations) do
-        local is_cw_cat = type(cat) == "string"
-            and (cat:find("^deus") or cat:find("trollhammer") or cat:find("ranged_energy"))
-        if type(pool) == "table" then
+        if policy.category_matches_slot(cat, slot_type) and type(pool) == "table" then
             for _, entry in ipairs(pool) do
                 local k = entry and entry[1]
                 if k and not seen[k] then
                     local tdata = traits[k]
-                    if (tdata and tdata.crafting_disabled) or is_cw_cat then
+                    if tdata then
                         seen[k] = true
                         out[#out + 1] = { k }
                     end
@@ -831,7 +832,7 @@ end
 
 -- Trait pool to roll from for `master`, honoring both toggles:
 --   allow_any_trait_property → every trait, any slot type (widest).
---   allow_cw_traits          → the item's own pool + the CW/boon traits.
+--   allow_cw_traits          → own pool + CW traits for the exact slot family.
 --   (neither)                → the item's own pool, boon-filtered (base behavior).
 local function _cim_trait_pool_for(master)
     local WT = rawget(_G, "WeaponTraits")
@@ -855,8 +856,8 @@ local function _cim_trait_pool_for(master)
                 if k and not seen[k] then seen[k] = true; out[#out + 1] = entry end
             end
         end
-        _add(base)                     -- the weapon's own pool (boons kept)
-        _add(_cim_cw_trait_entries())  -- + every CW/boon trait
+        _add(base)                                      -- own pool (boons kept)
+        _add(_cim_cw_trait_entries(master.slot_type))   -- exact-slot CW traits
         return out
     end
 
