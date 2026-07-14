@@ -8,6 +8,14 @@ Last updated: 2026-07-14.
 
 ---
 
+## #604 Crowbill Athanor preview teardown
+
+- [ ] A resident custom Crowbill unit with no standalone package cannot reach vanilla `PackageManager.unload` under its custom path.
+- [ ] A later cross-mod `load_package` wrapper may bypass CWV; teardown then acquires exactly one borrowed vanilla Crowbill lease before translating the key.
+- [ ] Both pending `true` and completed `false` `_packages_to_load` entries reconcile without a duplicate unload.
+- [ ] Multiple custom keys sharing one alias acquire one lease, and repeated teardown is a no-op.
+- [ ] `/cwv_regression_test` passes `issue604_preview_alias_teardown_contract` and `/verify_cwv_preview_bridge` reports zero repair failures.
+
 ## #596 Infantry Spear
 
 - [ ] CIM lists Infantry Spear for Mercenary, Huntsman, and Foot Knight; CWV alone does not offer it to Grail Knight.

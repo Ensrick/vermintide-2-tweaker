@@ -1,5 +1,17 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.414-dev - 2026-07-14 - #604 Crowbill Athanor teardown crash [verify-fix-coop]
+
+- Fixed the current-version Athanor crash after crafting an Imperial Crowbill and leaving the weapon window. Tweaker: Cosmetics can validly recognize the resident custom unit first and short-circuit `LootItemUnitPreviewer.load_package`; CWV now repairs that cross-mod ordering by acquiring one real vanilla Crowbill package lease before translating the custom teardown key.
+- The preview bridge now shares one borrowed alias lease per previewer, handles both pending and completed (`false`) load-state entries, drops an unowned custom unload key if lease repair itself fails, and ignores repeated teardown of the same previewer.
+- Added seven engine-free regressions for the exact wrapper-bypass, false pending state, shared-alias deduplication, acquired-lease reuse, failed repair, double-teardown, and mocked production hook/`PackageManager` lifecycle cases. `/cwv_regression_test` includes `issue604_preview_alias_teardown_contract`; `/verify_cwv_preview_bridge` reports live lease, repair, teardown, repeat, and failure counts.
+
+### Solo crash verification
+
+Confirm the newest log contains `[cwv:LOAD] v0.1.414-dev`. Open CIM's Athanor, select and craft the Imperial Crowbill, then leave the weapon window. The game must remain running; `/verify_cwv_preview_bridge` must report `repair_failures=0` and PASS. The log should contain `[cwv:604-preview] repaired bypassed lease` when Cosmetics owns the resident-unit load shortcut. Full #604 model, mode, persistence, and remote-view verification still requires two players.
+
+**DoD:** Re-walked U-7 forward references, U-8 build hygiene, G-CUSTOM-ILLUSION preview loading, and G-APPEARANCE illusion/Athanor presentation. U-9 and the remaining owner/remote presentation matrix remain deferred to #604's `verify-fix-coop` in-game verification.
+
 ## 0.1.413-dev - 2026-07-14 - #604 Imperial and Dawi Crowbill family [verify-fix-coop]
 
 - Added CIM-crafted Imperial Crowbills for Kruber and Saltzpyre and a Dawi Crowbill for Bardin, using Sienna's Crowbill moveset. Six approved CC BY 4.0 models ship as placeholder illusions through a reproducible, hash-gated conversion pipeline; the excluded Italian Free Standard model is not distributed.

@@ -99,6 +99,7 @@ local suites = {
     "test_cwv_exact_appearance",
     "test_cwv_dual_icons",
     "test_cwv_greataxe",
+	"test_cwv_mod_unit_preview",
     "test_cwv_infantry_spear",
     "test_cwv_mace_hammer_identity",
     "test_cwv_crowbill_hammer_mode",

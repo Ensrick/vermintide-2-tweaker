@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.413-dev"
+local MOD_VERSION = "0.1.414-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -15551,6 +15551,36 @@ _rt_register("cwv_crowbill_family_registration_contract", function()
 				or entry.crowbill_mode_family ~= family.HAMMER_MODE_FAMILY then
 			return variant.key .. " registration contract drifted"
 		end
+	end
+end)
+
+_rt_register("issue604_preview_alias_teardown_contract", function()
+	local bridge = _om.mod_unit_preview
+	local family = _om.crowbill_family
+	if type(bridge) ~= "table" or type(bridge.reconcile_for_unload) ~= "function"
+			or type(bridge.claim_teardown) ~= "function" then
+		return "Crowbill preview teardown policy missing"
+	end
+	local custom = family.MODELS[1].right_hand_unit .. "_3p"
+	local alias = family.PREVIEW_PACKAGE_ALIAS
+	local previewer = {
+		_loaded_packages = { [custom] = true },
+		_packages_to_load = { [custom] = false },
+	}
+	local acquired = 0
+	local report = bridge.reconcile_for_unload(previewer, family.preview_package_alias,
+		function(candidate)
+			acquired = acquired + 1
+			return candidate == alias
+		end)
+	if acquired ~= 1 or report.repaired ~= 1 or report.mapped ~= 1
+			or rawget(previewer._loaded_packages, custom) ~= nil
+			or previewer._loaded_packages[alias] ~= true
+			or previewer._packages_to_load[alias] ~= false then
+		return "Crowbill preview lease repair is not balanced"
+	end
+	if bridge.claim_teardown(previewer) ~= true or bridge.claim_teardown(previewer) ~= false then
+		return "Crowbill preview teardown is not idempotent"
 	end
 end)
 
