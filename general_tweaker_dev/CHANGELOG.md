@@ -1,5 +1,50 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.233-dev (2026-07-14) -- #359 host bot command wheel [verify-fix]
+
+- Added a default-off **Bot command wheel** option for the host. It inserts the existing Versus **Attack Now**, **Group Up**, **Cover Me**, and **Wait** commands as the second page of the ordinary mission social wheel.
+- Reused the four vanilla social-wheel event IDs already present in `NetworkLookup`; no custom RPC, lookup mutation, or per-frame network traffic is introduced. Clients do not receive the command page and cannot issue authoritative bot orders.
+- **Attack Now** promotes the host's last living enemy ping into vanilla's urgent-target table for 10 seconds. **Group Up** and **Cover Me** override the normal follow assignment for 8 and 12 seconds respectively while retaining bot combat/rescue safety. **Wait** uses the wheel's crosshair position and vanilla `AIBotGroupExtension.set_hold_position` to park the nearest bot within 4 m for 15 seconds.
+- Expiry clears only hold state carrying GT's matching token, preventing a stale timer from clearing a newer order. Follow commands compose through the existing singleton `_assign_destination_points` hook instead of registering a duplicate.
+- Added pure event/time/nearest-bot policy coverage and `/gt_regression_test` check `issue359_bot_command_wheel`.
+
+### Solo verify
+
+Host a mission with bots and enable **Bot command wheel**. Hold the social-wheel input and cycle to page two. Ping an enemy, choose **Attack Now**, and confirm bots prioritize it temporarily. Aim at navigable ground and choose **Wait**; confirm the nearest bot holds near that point, then resumes after 15 seconds. Choose **Group Up** and **Cover Me** and confirm bots gather around the host only for their bounded windows. Disable the option and confirm the added page disappears on its next open. Run `/gt_regression_test` and confirm `issue359_bot_command_wheel` passes.
+
+## v0.2.232-dev (2026-07-14) -- #381 persistent Godmode HUD indicator [verify-fix]
+
+- Added a small, persistent **GODMODE** indicator in the upper-right HUD whenever the local `godmode_enabled` setting is exactly on. It is part of the dev stream only and draws no remote-peer status.
+- Reused General Tweaker's existing singleton `IngameHud.update` hook. The indicator owns a separate `hud_scale_fit` scenegraph and draw consumer, while `_gt_melee_warning.lua` remains the only hook registrant and dispatches both visuals.
+- The renderer is acquired only from the live in-game UI context, uses the proven resident Arial HUD font, and fails closed when no renderer exists. Layout clamps measured text width to 600 pixels so the cue remains wholly on the 1920x1080 logical canvas.
+- Added pure layout/visibility coverage and `/gt_regression_test` check `issue381_godmode_hud_indicator`.
+
+### Solo verify
+
+Enter the keep or a mission, enable Godmode, and confirm **GODMODE** appears in the upper-right without opening a menu. Disable Godmode and confirm it disappears on the next HUD frame. If Melee Attack Warning is enabled, trigger its red edge flash and confirm both visuals render together. Run `/gt_regression_test` and confirm `issue381_godmode_hud_indicator` passes.
+
+## v0.2.231-dev (2026-07-14) -- #365 smart bot Ranger ale use [verify-fix]
+
+- Added a default-off **Bots drink surplus Ranger ale** child under Bot Behavior Improvements. The host allows a bot to target the exact `bardin_survival_ale` pickup only when every active teammate has all three `ale_defence` and `ale_attack_speed` stacks and both refreshed durations are strictly above 50%.
+- Kept #364's human reservation as the default. A weak, per-update allow-set exempts only the policy-approved live ale unit, so ordinary greedy and instant pickup cannot consume other ale.
+- Consolidated the behavior into the existing `AIBotGroupSystem._update_mule_pickups` hook. The team census is bounded to `side.PLAYER_AND_BOT_UNITS`, cached for 0.5 seconds per side, and fails closed on missing units, buff extensions, stacks, or duration fields. Vanilla still owns auto-wield and consumption.
+- Added pure offline policy coverage and `/gt_regression_test` check `issue365_smart_bot_ale_policy`.
+
+### Solo verify
+
+Host with bots and enable Bot Behavior Improvements plus Bots drink surplus Ranger ale. Confirm bots leave ale alone when any active teammate has fewer than three stacks, exactly 50% duration, or less. With every teammate at three stacks and above 50%, place an ale within the normal 20 m follow radius and confirm a bot picks it up and drinks it. Disable the child and confirm ale remains human-reserved. Run `/gt_regression_test` and confirm `issue365_smart_bot_ale_policy` passes.
+
+## v0.2.230-dev (2026-07-14) -- #345 localization lifecycle sync [verify-fix]
+
+- Re-derived General Tweaker's visible lifecycle markers from live GitHub labels. Closed, user-confirmed work for #65, #255, #261, #293, #295, #297, #448, #468, #492, #515, and #529 now reads `[working]` instead of retaining stale diagnostic or verification text.
+- Kept the Bot Behavior Improvements master tied only to its open verification work (#139, #142, and #469), and kept Follow snap-back distance tied only to #139.
+- Added missing `[verify-fix]` markers for #469, the #523 heal-allies controls, #298, and #304.
+- Added `/gt_regression_test` coverage (`issue345_gt_loc_status_sync`) so stale lifecycle markers and closed issue references are caught in-game.
+
+### Verification
+
+Open General Tweaker's settings and confirm the corrected labels above, then run `/gt_regression_test` and confirm `issue345_gt_loc_status_sync` passes.
+
 ## v0.2.229-dev (2026-07-14) -- #298 Improved Bot Combat advanced controls [verify-fix]
 
 - Converted **Improved Bot Combat** into a VMF master checkbox with live child controls for smarter attacks, pinging attacking elites, special chasing, distant-gunner cover behavior, boss focus, and six-career ability timing.

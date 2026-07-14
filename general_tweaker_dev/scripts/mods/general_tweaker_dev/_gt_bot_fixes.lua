@@ -2304,6 +2304,15 @@ mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, 
         mod._gt_btlab_track_follow(bot_ai_data)
     end
 
+    -- Issue #359 temporary bot orders share this singleton post-assignment seam.
+    -- Cover/Group Up must run after vanilla writes destinations and before the
+    -- persistent follow-mode options below; a true result gives the explicit,
+    -- time-bounded player order precedence for this tick.
+    if mod._gt359_apply_follow_override
+            and mod._gt359_apply_follow_override(self, bot_ai_data) then
+        return
+    end
+
     local mode = _gt_resolve_follow_mode()
     local follow_host = (mode == "follow_host")
     if mode == "default" then

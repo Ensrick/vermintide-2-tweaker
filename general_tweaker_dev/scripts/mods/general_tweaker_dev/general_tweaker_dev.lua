@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.229-dev"
+local MOD_VERSION = "0.2.233-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -599,6 +599,8 @@ mod.on_setting_changed = function(setting_id)
         if mod._gt_apply_keep_dummy_collision then
             mod._gt_apply_keep_dummy_collision(mod:get("gt_keep_dummy_no_collision"))
         end
+    elseif setting_id == "gt_bot_command_wheel" and not mod:get("gt_bot_command_wheel") then
+        if mod._gt359_clear_commands then mod._gt359_clear_commands() end
     elseif setting_id == "gt_adventure_save_trait_chance" then
         -- table-field ref resolves at call time, so it's fine that the body is
         -- assigned further down the file.
@@ -674,6 +676,7 @@ mod.on_disabled = function()
     -- Unlike the older broad global mutations documented below, #304 owns a
     -- bounded per-extension snapshot and can unwind immediately.
     if mod._gt_restore_keep_dummy_collision then mod._gt_restore_keep_dummy_collision() end
+    if mod._gt359_clear_commands then mod._gt359_clear_commands() end
     -- Issue #15: the mod is is_togglable=true but only the camera offset is
     -- snapshot-and-restored above. Many global mutations persist after
     -- disable: script_data flags (ai_*, intro dialogue,
@@ -1480,6 +1483,45 @@ _rt_register("localization_format_safe", function()
                     "loc key %q has invalid format string (escape literal %% as %%%%): %s",
                     k, tostring(fmt_err))
             end
+        end
+    end
+end)
+
+_rt_register("issue345_gt_loc_status_sync", function()
+    -- #345: lifecycle labels in user-facing localization must match the live
+    -- issue state. Exercise the same localization path used by VMF.
+    local expectations = {
+        { "gt_bots_in_keep", "[working]", nil, "Issue 65" },
+        { "gt_bot_behavior_improvements", "[verify-fix] [Issue 139, 142 & 469]", nil, "Issue 297" },
+        { "gt_bot_smart_self_heal", "[working]", nil, "Issue 468" },
+        { "gt_bot_heal_allies", "[verify-fix] [Issue 523]" },
+        { "gt_bot_aid_priority", "[working]", nil, "Issue 492" },
+        { "gt_bot_ignore_backward_gate", "[working]", nil, "Issue 515" },
+        { "gt_bot_aoe_immunity", "[verify-fix] [Issue 469]" },
+        { "gt_bot_no_downed_morrs_grant", "[working]", nil, "Issue 448" },
+        { "gt_bot_follow_mode", "[working]", nil, "Issue 261" },
+        { "gt_bot_follow_distance_m", "[verify-fix] [Issue 139]", "[diag]", "Issue 261" },
+        { "gt_improved_bot_combat", "[verify-fix] [Issue 298]" },
+        { "gt_keep_dummy_no_collision", "[verify-fix] [Issue 304]" },
+        { "godmode_enabled", "[working]", nil, "Issue 529" },
+        { "gt_devtools_bot_hud", "[working]", "[crash]", "Issue 293" },
+        { "gt_solo_disable_ult_fx", "[working]", "[untested]", "Issue 255" },
+    }
+
+    for i = 1, #expectations do
+        local row = expectations[i]
+        local ok, value = pcall(mod.localize, mod, row[1])
+        if not ok or type(value) ~= "string" then
+            return string.format("localization failed for %s: %s", row[1], tostring(value))
+        end
+        if not string.find(value, row[2], 1, true) then
+            return string.format("%s missing required status %s", row[1], row[2])
+        end
+        if row[3] and string.find(value, row[3], 1, true) then
+            return string.format("%s retains stale marker %s", row[1], row[3])
+        end
+        if row[4] and string.find(value, row[4], 1, true) then
+            return string.format("%s retains stale issue reference %s", row[1], row[4])
         end
     end
 end)
@@ -3475,6 +3517,10 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_weave_unlock")
 -- "Bot Improvements - Combat Returns" Workshop mod, folded into one toggle.
 -- Distinct methods from _gt_bot_fixes (no duplicate-hook collision).
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_improved_bot_combat")
+-- Bot command wheel (#359): adds a host-only second page using vanilla's
+-- already-networked Versus event IDs. Temporary hold/follow/urgent-target state
+-- is bounded and composes through the existing destination-assignment hook.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_command_wheel")
 -- Bot Teleport Lab (diagnostics): observe/probe the "bots teleport away from the
 -- player" bug. Defines mod._gt_btlab_* observer fns that are dispatched from the
 -- EXISTING _gt_bot_fixes.lua hook bodies (should_teleport / .run / update /
@@ -3509,6 +3555,9 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_solo_qol")
 --     AnimationSystem.anim_event + IngameHud.update; rides mod._gt_register_update).
 --   * _gt_hp_smoothing   -- eases the local player's own health-bar drop
 --     (hook_safe UnitFrameUI.set_total_health_percentage + .update).
+-- Godmode indicator (#381) owns no hook; it exports a bounded draw consumer to
+-- the melee-warning module's existing singleton IngameHud.update dispatcher.
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_godmode_indicator")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_melee_warning")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_hp_smoothing")
 

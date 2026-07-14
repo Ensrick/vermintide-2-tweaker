@@ -94,6 +94,12 @@ local _data = {
                         },
                         tooltip       = "gt_bot_guard_break_msg_tooltip",
                     },
+                    {
+                        setting_id    = "gt_bot_command_wheel",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_bot_command_wheel_tooltip",
+                    },
                     -- Bot Behavior Improvements MASTER toggle (#297, v0.2.182-dev).
                     -- v0.2.128-dev bundled the eight former individual bot fixes
                     -- under this one checkbox; #297 re-exposes each fix as a nested
@@ -166,6 +172,12 @@ local _data = {
                                 type          = "checkbox",
                                 default_value = true,
                                 tooltip       = "gt_bot_greedy_pickup_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_smart_ale",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_bot_smart_ale_tooltip",
                             },
                             -- #468: smarter bot SELF-heal decision. Enabler +
                             -- three tuning children kept flat (same pattern as

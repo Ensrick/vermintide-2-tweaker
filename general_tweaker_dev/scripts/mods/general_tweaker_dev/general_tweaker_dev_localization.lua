@@ -24,7 +24,7 @@ return {
     gt_ai_afk_takeover = { en = "[Issue 247] AFK Bot Takeover" },
     gt_ai_afk_takeover_tooltip = { en = "If you give no input for 20 seconds, a bot takes over your character, and you resume control the moment you press anything. Affects only your own character and works during missions only, not in Versus or the keep." },
 
-    gt_bots_in_keep = { en = "[crash] [Issue 65] Allow Bots in Keep" },
+    gt_bots_in_keep = { en = "[working] Allow Bots in Keep" },
     gt_bots_in_keep_tooltip = { en = "While in the keep, allows bots so you can preview loadouts and have a full lobby. Works only when you are the host, and the bots are removed when you turn it off." },
 
     gt_bot_guard_break_msg = { en = "[untested] Announce when a bot's guard breaks (Replicant)" },
@@ -35,6 +35,9 @@ return {
     -- The chat line itself when a bot's guard breaks (code-referenced).
     gt_bot_guard_break_chat = { en = "A bot's guard was broken!" },
 
+    gt_bot_command_wheel = { en = "[verify-fix] [Issue 359] Bot command wheel" },
+    gt_bot_command_wheel_tooltip = { en = "Adds Attack Now, Group Up, Cover Me, and Wait as a second page of the mission social wheel for the host. Attack Now prioritizes the last enemy you pinged for 10 seconds; Group Up and Cover Me temporarily gather bots around you; Wait parks the nearest bot around the aimed point for 15 seconds. Normal safety, combat, and rescue behavior still takes priority where required." },
+
     -- Bot Behavior Improvements master toggle + nested sub-toggles (#297,
     -- v0.2.182-dev). The master gates everything; each fix below is now
     -- individually toggleable while the master is on. Checkbox ids reuse the
@@ -43,7 +46,7 @@ return {
     -- data file), not A->Z. Tags: [working] where the CHANGELOG records an
     -- in-game confirmation of the wrapped fix, [untested] otherwise; the
     -- greedy-pickup item is brand-new (#297 item 8).
-    gt_bot_behavior_improvements = { en = "[Issue 297, 139, 142, 468 & 469] Bot Behavior Improvements" },
+    gt_bot_behavior_improvements = { en = "[verify-fix] [Issue 139, 142 & 469] Bot Behavior Improvements" },
     gt_bot_behavior_improvements_tooltip = { en = "Master switch for the bot fixes listed underneath; while it is on, each fix can be toggled individually below. Covers Necromancer potion handoff, keeping the mission alive while a bot still stands, ledge recovery, ladder unstick, instant and greedy item pickup, smarter self-healing, revive and rescue priority, reviving during the Ironbreaker ult, and ignoring mutator and hazard AOE damage. Works only when you are the host." },
 
     gt_bot_necro_potion_handoff = { en = "[working] Necromancer bots hand off potions" },
@@ -70,40 +73,43 @@ return {
     gt_bot_greedy_pickup = { en = "[verify-fix] [Issue 364] Bots collect items players leave behind" },
     gt_bot_greedy_pickup_tooltip = { en = "Normally bots refuse to take potions, bombs, and healing while a nearby player has a free slot for them; with this on they collect such items anyway, then carry them and hand them over when asked or needed." },
 
+    gt_bot_smart_ale = { en = "[verify-fix] [Issue 365] Bots drink surplus Ranger ale" },
+    gt_bot_smart_ale_tooltip = { en = "Lets bots pick up and drink Bardin's Survival Ale only when every active teammate already has all three ale stacks and strictly more than half of the refreshed duration remains. Otherwise ale stays reserved for human players. Works only when you are the host." },
+
     -- #468: control WHEN a bot spends a heal on ITSELF (self-use timing only).
     -- Making a bot walk up and heal a teammate is the separate #523 heal-allies
     -- option below (which drives the game's own, dormant, heal-other bot action).
-    gt_bot_smart_self_heal = { en = "[untested] [diag] [Issue 468] Smarter bot self-healing" },
+    gt_bot_smart_self_heal = { en = "[working] Smarter bot self-healing" },
     gt_bot_smart_self_heal_tooltip = { en = "Decide for yourself when a bot spends healing on itself instead of the game's fixed rules, which drink a full Draught of Healing at 40 percent health and burn Medical Supplies at 20 percent even when a player could use them better. With this on, the three settings below take over. This only changes self-use timing; to make bots actually walk up and heal a teammate use the heal-allies option below, and carrying or handing items to players is the greedy-pickup option above. Works only when you are the host." },
 
-    gt_bot_self_heal_pct = { en = "[untested] [Issue 468] Bot self-heal health threshold (%%)" },
+    gt_bot_self_heal_pct = { en = "[working] Bot self-heal health threshold (%%)" },
     gt_bot_self_heal_pct_tooltip = { en = "A bot only heals itself once its health drops to this percentage or lower. Lower values make bots hold their healing longer (less waste); higher values make them heal sooner. Applies to both draughts and medical supplies, replacing the game's fixed 40 and 20 percent triggers." },
 
-    gt_bot_reserve_kits_for_players = { en = "[untested] [Issue 468] Bots reserve medical supplies for players" },
+    gt_bot_reserve_kits_for_players = { en = "[working] Bots reserve medical supplies for players" },
     gt_bot_reserve_kits_for_players_tooltip = { en = "Medical Supplies can heal a hurt teammate, so a bot holds onto them instead of using them on itself, unless it is wounded (grey health) or spare healing is lying around anyway. Draughts of Healing, which only heal the drinker, are not affected." },
 
-    gt_bot_ignore_surplus_selfuse = { en = "[untested] [Issue 468] Bots don't top themselves off on spare healing" },
+    gt_bot_ignore_surplus_selfuse = { en = "[working] Bots don't top themselves off on spare healing" },
     gt_bot_ignore_surplus_selfuse_tooltip = { en = "The game tells a bot to drink its healing when more healing items are lying around than players to use them, even at high health. With this on a bot ignores that prompt and keeps its healing until it actually needs it." },
 
-    gt_bot_heal_allies = { en = "[untested] [Issue 523] Bots heal hurt allies with medical supplies" },
+    gt_bot_heal_allies = { en = "[verify-fix] [Issue 523] Bots heal hurt allies with medical supplies" },
     gt_bot_heal_allies_tooltip = { en = "When a bot is carrying Medical Supplies and no one needs reviving, it walks up to the most hurt eligible teammate and heals them, wounded (grey health) players first. It only heals when the coast is clear (no enemies right next to the target), and only humans, never other bots. Pairs with the reserve option above, which stops bots from spending the kit on themselves. Works only when you are the host." },
 
-    gt_bot_heal_allies_pct = { en = "[untested] [Issue 523] Heal allies at or below health (%%)" },
+    gt_bot_heal_allies_pct = { en = "[verify-fix] [Issue 523] Heal allies at or below health (%%)" },
     gt_bot_heal_allies_pct_tooltip = { en = "A non-wounded teammate is eligible once their permanent (white) health reaches this percentage or lower. Set 0 to prevent bots from using kits on non-wounded allies. The wounded threshold below is separate." },
 
-    gt_bot_heal_wounded_allies_pct = { en = "[untested] [Issue 523] Heal wounded allies at or below health (%%)" },
+    gt_bot_heal_wounded_allies_pct = { en = "[verify-fix] [Issue 523] Heal wounded allies at or below health (%%)" },
     gt_bot_heal_wounded_allies_pct_tooltip = { en = "A wounded (grey-health) teammate is eligible once their permanent health reaches this percentage or lower. The default 100 makes every wounded teammate eligible; lower it if bots should wait." },
 
-    gt_bot_heal_allies_exclude_zealot = { en = "[untested] [Issue 523] Do not heal non-wounded Zealots" },
+    gt_bot_heal_allies_exclude_zealot = { en = "[verify-fix] [Issue 523] Do not heal non-wounded Zealots" },
     gt_bot_heal_allies_exclude_zealot_tooltip = { en = "Keep a non-wounded Zealot's permanent health low so the player can build temporary health. Wounded Zealots are controlled separately below." },
 
-    gt_bot_heal_wounded_zealot = { en = "[untested] [Issue 523] Heal Zealot when wounded" },
+    gt_bot_heal_wounded_zealot = { en = "[verify-fix] [Issue 523] Heal Zealot when wounded" },
     gt_bot_heal_wounded_zealot_tooltip = { en = "Allow bots to spend Medical Supplies on a wounded Zealot when the wounded-health threshold is met. On by default because another knockdown would otherwise kill them." },
 
-    gt_bot_aid_priority = { en = "[verify-fix] [Issue 492] Bots prioritize reviving and rescuing" },
+    gt_bot_aid_priority = { en = "[working] Bots prioritize reviving and rescuing" },
     gt_bot_aid_priority_tooltip = { en = "Downed, hooked, and ledge-hanging allies always outrank following and other chores, so a bot commits to the revive or rescue and walks the whole way there." },
 
-    gt_bot_ignore_backward_gate = { en = "[verify-fix] [Issue 515] Bots go back for stragglers and past no-return points" },
+    gt_bot_ignore_backward_gate = { en = "[working] Bots go back for stragglers and past no-return points" },
     gt_bot_ignore_backward_gate_tooltip = { en = "The game normally refuses to teleport or path a bot backward along the level, so a player who drops behind it is left alone until they catch up, and a bot shoved past a point of no return (over a ledge into the next area) stays stuck for the rest of the run. With this on that block is lifted: a lagging follow target still pulls the bot back, a teammate who goes down behind the bot is retried right away, and a bot that cannot walk back to the team teleports to regroup once it is genuinely stuck, and can do so again later in the run. Reviving and rescuing keep priority over merely catching up." },
 
     gt_bot_ironbreaker_revive_in_ult = { en = "[working] Ironbreaker bots revive during their ult" },
@@ -111,17 +117,17 @@ return {
 
     -- #469: bots ignore a curated set of hazard / mutator AOE they cannot path
     -- around. Host-side, bots only, humans never affected.
-    gt_bot_aoe_immunity = { en = "[untested] [Issue 469] Bots ignore mutator and hazard AOE damage" },
+    gt_bot_aoe_immunity = { en = "[verify-fix] [Issue 469] Bots ignore mutator and hazard AOE damage" },
     gt_bot_aoe_immunity_tooltip = { en = "Bots take no damage from a hand-picked set of area hazards they cannot reliably path around: Weaves and Twitch lightning strikes, the Chaos Wastes Khorne skull curse and Tzeentch bolt-of-change curse, and oil-barrel ground fire. Only bots are affected, never human players, and only while you are the host. Boss slams, warpfire, gas, and thrown bombs are left alone on purpose so bots still react to them." },
 
     -- issue 448 (FIX 11): downed bot must not project the Morr's Protection aura.
-    gt_bot_no_downed_morrs_grant = { en = "[untested] [Issue 448] Downed bots don't grant Morr's Protection" },
+    gt_bot_no_downed_morrs_grant = { en = "[working] Downed bots don't grant Morr's Protection" },
     gt_bot_no_downed_morrs_grant_tooltip = { en = "The Chaos Wastes boon Morr's Protection makes downed allies near the carrier invulnerable, and the game keeps that aura running even while the carrier is downed itself. Two bots carrying it that go down near each other protect each other forever: they can't be finished, can't get up, and the run soft-locks. With this on, a bot stops granting the aura while it is knocked down and resumes the moment it is back up. Human carriers and standing bots are untouched. Host-side only." },
 
     -- Bot follow mode dropdown (v0.2.152-dev) -- consolidates the previous
     -- gt_bot_split_among_players + gt_bot_follow_host checkboxes into one
     -- tri-state setting.
-    gt_bot_follow_mode = { en = "[diag] [Issue 261] Bot follow mode" },
+    gt_bot_follow_mode = { en = "[working] Bot follow mode" },
     gt_bot_follow_mode_tooltip = { en = "Three modes: Default (normal behavior), Follow Host (all bots stick to the host), or Split (one bot per human, host first). Bots still break off to revive or rescue an ally, and this only works when you are the host." },
     gt_bot_follow_mode_default     = { en = "Default" },
     gt_bot_follow_mode_follow_host = { en = "Follow Host" },
@@ -172,17 +178,17 @@ return {
     gt_no_bots = { en = "[untested] Disable Bots" },
     gt_no_bots_tooltip = { en = "Keeps bots from filling empty party slots and instantly removes any already present, for true solo runs. Works only when you are the host and stays in effect across missions until you turn it off." },
 
-    gt_keep_dummy_no_collision = { en = "[untested] [Issue 304] No Player Collision with Keep Dummies" },
+    gt_keep_dummy_no_collision = { en = "[verify-fix] [Issue 304] No Player Collision with Keep Dummies" },
     gt_keep_dummy_no_collision_tooltip = { en = "Lets your character walk through training dummies while you are in the keep. Dummies remain visible, targetable, and damageable. Local to your player and off by default." },
 
     gt_bot_fast_reactions = { en = "[untested] Faster bot reactions (Replicant)" },
     gt_bot_fast_reactions_tooltip = { en = "Cuts bot reaction time to threats down to a fraction of a second. Works only when you are the host." },
 
     -- (gt_bot_follow_distance_enabled removed 2026-06-30 -- the slider below is now the sole control; 40 = off.)
-    gt_bot_follow_distance_m = { en = "[diag] [Issue 261 & 139] Follow snap-back distance (meters)" },
+    gt_bot_follow_distance_m = { en = "[verify-fix] [Issue 139] Follow snap-back distance (meters)" },
     gt_bot_follow_distance_m_tooltip = { en = "How far a bot may fall behind before it snaps back to you; 40 (the maximum) does nothing, and lower values keep bots closer, with about 15 to 20 the practical limit. Works only when you are the host." },
 
-    gt_improved_bot_combat = { en = "[Issue 298] Improved Bot Combat" },
+    gt_improved_bot_combat = { en = "[verify-fix] [Issue 298] Improved Bot Combat" },
     gt_improved_bot_combat_tooltip = { en = "Bot teammates make smarter attack choices, ping the elite hitting them, stop chasing distant specials, ignore far-off gunners, do not over-focus bosses, and time abilities better for several careers. Works only when you are the host." },
     gt_ibc_smarter_attacks = { en = "Smarter attack choices" },
     gt_ibc_smarter_attacks_tooltip = { en = "Prefer faster single-target attacks when safe and wider or penetrating attacks against crowds and armour." },
@@ -215,7 +221,7 @@ return {
     disable_enemy_spawns = { en = "[Issue 242] Disable Enemy Spawns" },
     disable_enemy_spawns_tooltip = { en = "No new enemies appear at all: hordes, specials, bosses, patrols, and ambient critters. Enemies already present are left alone, and turning it off resumes normal spawning." },
 
-    godmode_enabled = { en = "[verify-fix] [Issue 529] Godmode" },
+    godmode_enabled = { en = "[working] Godmode" },
     godmode_enabled_tooltip = { en = "Makes you invincible: you take no damage, cannot be grabbed or pinned by disablers, and enemies stop noticing you. Enemy hits no longer drain your stamina or break your block; your own pushes and dodges still cost stamina. Optional child toggles can make your strikes deal 9999 damage or give you unlimited ammo while Godmode is active. Your third-person body fades out while it is on; your own view stays normal." },
     gt_godmode_strike_damage = { en = "[verify-fix] [Issue 549] 9999 Damage Per Strike" },
     gt_godmode_strike_damage_tooltip = { en = "While Godmode is active, every damaging hit you deal to an enemy is raised to 9999 damage. This follows your Godmode state when you are a client, so the host applies it authoritatively." },
@@ -384,7 +390,7 @@ return {
     gt_devtools_freeze_ai_hotkey = { en = "[untested] [Issue 303] Freeze AI" },
     gt_devtools_freeze_ai_hotkey_tooltip = { en = "Halts every enemy in place so you can inspect positioning or set up a scenario: no enemy starts a new attack, move, target, or pathing decision, and new spawns stop while it is held. An enemy already moving settles at its last step; one already mid-attack may finish that swing before going still. Press again to resume. Works only when you are the host. Also available as the /freezeai chat command. Dev build only." },
 
-    gt_devtools_bot_hud = { en = "[crash] [Issue 293 & 295] Bot behavior HUD" },
+    gt_devtools_bot_hud = { en = "[working] Bot behavior HUD" },
     gt_devtools_bot_hud_tooltip = { en = "Draws a column per bot showing its current behavior-tree action, the teammate it follows, distance to that teammate and to you, whether it just teleported, its teleport tally, and the last twenty actions it entered. On-screen, host-only, dev build only." },
 
     gt_devtools_leash_lines = { en = "[untested] Bot leash lines (3D)" },
@@ -555,7 +561,7 @@ return {
     gt_solo_disable_mutator_explosions_tooltip = { en = "Removes the purple burst that enemies leave behind when they die under the Explosive mutator or boon. Works whether you host or join, and only changes what you see." },
     gt_solo_disable_sun_shadows = { en = "[untested] Disable sun shadows" },
     gt_solo_disable_sun_shadows_tooltip = { en = "Sun shadows stop rendering, for clearer visibility and a small performance gain. Purely visual and affects only your own game." },
-    gt_solo_disable_ult_fx = { en = "[untested] [Issue 255] Disable ult screen effects" },
+    gt_solo_disable_ult_fx = { en = "[working] Disable ult screen effects" },
     gt_solo_disable_ult_fx_tooltip = { en = "Removes the fullscreen color and distortion overlay and the swirly screen effects shown when a career ability is used: Slayer, Zealot, Ranger, Shade, Huntsman, and Sister of the Thorn radiance. Visual only, affects only your own game." },
     gt_solo_disable_ult_vo = { en = "[untested] Disable your ult voice line" },
     gt_solo_disable_ult_vo_tooltip = { en = "Silences your own character's voice line when you use your career ultimate." },

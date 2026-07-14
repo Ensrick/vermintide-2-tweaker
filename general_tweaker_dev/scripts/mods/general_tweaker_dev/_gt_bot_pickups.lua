@@ -1,7 +1,9 @@
 local mod = get_mod("gt_dev")
 local _gt347_core = mod:dofile("scripts/mods/general_tweaker_dev/_gt_chest_pickup_probe_core")
+local _gt365_policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_ale_policy")
 local _gt347_state = _gt347_core.new()
 local _gt347_tracked = setmetatable({}, { __mode = "k" })
+local _gt365_smart_claims = setmetatable({}, { __mode = "k" })
 
 -- Focused owner for the two AIBotGroupSystem pickup hooks. Extracted from
 -- _gt_bot_fixes.lua so that module remains below the repository file-size gate.
@@ -20,7 +22,10 @@ local function _gt_bot_pickup_is_reserved(pickup_unit)
     end
 
     local pickup_extension = ScriptUnit.has_extension(pickup_unit, "pickup_system")
-    return pickup_extension and _gt_bot_pickup_name_is_reserved(pickup_extension.pickup_name) or false
+    return pickup_extension
+        and _gt_bot_pickup_name_is_reserved(pickup_extension.pickup_name)
+        and not _gt365_smart_claims[pickup_unit]
+        or false
 end
 mod._gt_bot_pickup_is_reserved = _gt_bot_pickup_is_reserved
 
@@ -94,6 +99,179 @@ GT_BOT_GREEDY_PICKUP_MARKER_v0_2_182 = "gt-bot-greedy-pickup-mule-health-postpas
 local function _gt_greedy_pickup_on()
     return mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_greedy_pickup")
 end
+
+-- Issue #365: an ale may leave the #364 human reservation only while every
+-- active member of this side has all three copies of both ale sub-buffs and
+-- each refreshed stack has strictly more than half of its duration remaining.
+-- The pickup itself auto-wields and invokes action_one/default, so vanilla owns
+-- consumption (pickups.lua:741-758); this code only makes one eligible pickup a
+-- bot's normal mule target. The census is capped at the side roster and cached
+-- for half a second, with every missing/invalid engine surface failing closed.
+local _GT365_MAX_STACKS = 3
+local _GT365_MIN_REMAINING = 0.5
+local _GT365_SCAN_INTERVAL = 0.5
+local _gt365_ready_cache = {}
+
+local function _gt365_enabled()
+    return mod:get("gt_bot_behavior_improvements") and mod:get("gt_bot_smart_ale")
+end
+
+local function _gt365_stack_observation(buff_extension, buff_name, t)
+    local stacks = buff_extension:get_stacking_buff(buff_name)
+    if type(stacks) ~= "table" or #stacks == 0 then
+        return 0, nil
+    end
+
+    -- refresh_durations=true refreshes every existing stack together
+    -- (buff_extension.lua:520-533), so the top stack is representative.
+    local top = stacks[#stacks]
+    local duration = top and tonumber(top.duration)
+    local end_time = top and tonumber(top.end_time)
+    if not end_time and top and duration and tonumber(top.start_time) then
+        end_time = tonumber(top.start_time) + duration
+    end
+    if not duration or duration <= 0 or not end_time then
+        return #stacks, nil
+    end
+
+    return #stacks, (end_time - t) / duration
+end
+
+local function _gt365_observe_team(side, t)
+    local units = side and side.PLAYER_AND_BOT_UNITS
+    if type(units) ~= "table" or #units == 0 then
+        return nil
+    end
+
+    local observations = {}
+    for i = 1, #units do
+        local unit = units[i]
+        if not (unit and Unit.alive(unit)) then
+            return nil
+        end
+        local buff_extension = ScriptUnit.has_extension(unit, "buff_system")
+        if not (buff_extension and type(buff_extension.get_stacking_buff) == "function") then
+            return nil
+        end
+        local defence_stacks, defence_remaining = _gt365_stack_observation(buff_extension, "ale_defence", t)
+        local attack_stacks, attack_remaining = _gt365_stack_observation(buff_extension, "ale_attack_speed", t)
+        observations[#observations + 1] = {
+            defence_stacks = defence_stacks,
+            attack_stacks = attack_stacks,
+            defence_remaining_fraction = defence_remaining,
+            attack_remaining_fraction = attack_remaining,
+        }
+    end
+    return observations
+end
+
+local function _gt365_side_ready(side_id, t)
+    local cached = _gt365_ready_cache[side_id]
+    if cached and t < cached.next_scan then
+        return cached.ready
+    end
+
+    local ready = false
+    local side_manager = Managers.state.side
+    local side = side_manager and side_manager:get_side(side_id)
+    if side then
+        local ok, observations = pcall(_gt365_observe_team, side, t)
+        ready = ok and _gt365_policy.team_ready(
+            observations, _GT365_MAX_STACKS, _GT365_MIN_REMAINING) or false
+    end
+    _gt365_ready_cache[side_id] = { ready = ready, next_scan = t + _GT365_SCAN_INTERVAL }
+    return ready
+end
+
+local function _gt365_pickup_is_ale(pickup_unit)
+    if not (pickup_unit and Unit.alive(pickup_unit)) then
+        return false
+    end
+    local extension = ScriptUnit.has_extension(pickup_unit, "pickup_system")
+    return extension and extension.pickup_name == "bardin_survival_ale" or false
+end
+
+local function _gt_claimed_mule_pickups(side_bot_data)
+    local claimed = {}
+    for _, data in pairs(side_bot_data or {}) do
+        local bb = data.blackboard
+        if bb and bb.mule_pickup then
+            claimed[bb.mule_pickup] = true
+        end
+        if data.pickup_orders then
+            for _, order in pairs(data.pickup_orders) do
+                if order and order.unit then
+                    claimed[order.unit] = true
+                end
+            end
+        end
+    end
+    return claimed
+end
+
+local function _gt365_assign_smart_ale(side_id, side_bot_data, side_available, t, max_pickup_dist_sq)
+    if not (_gt365_enabled() and _gt365_side_ready(side_id, t)) then
+        return
+    end
+
+    local available_ales = side_available and side_available.slot_level_event
+    if not available_ales then
+        return
+    end
+
+    local claimed = _gt_claimed_mule_pickups(side_bot_data)
+    for bot_unit, data in pairs(side_bot_data) do
+        local blackboard = data.blackboard
+        local inventory_extension = blackboard and blackboard.inventory_extension
+        local order = data.pickup_orders and data.pickup_orders.slot_level_event
+        local has_item = inventory_extension and inventory_extension:get_slot_data("slot_level_event")
+        local can_hold_more = inventory_extension and inventory_extension:can_store_additional_item("slot_level_event")
+        if inventory_extension and not blackboard.mule_pickup
+                and (not has_item or can_hold_more) and not order then
+            local best_pickup, best_distance_sq
+            for pickup_unit in pairs(available_ales) do
+                if not claimed[pickup_unit] and _gt365_pickup_is_ale(pickup_unit) then
+                    local pickup_pos = POSITION_LOOKUP[pickup_unit]
+                    local bot_pos = POSITION_LOOKUP[bot_unit]
+                    if pickup_pos and bot_pos then
+                        local bot_distance_sq = Vector3.distance_squared(bot_pos, pickup_pos)
+                        local follow_distance_sq = Vector3.distance_squared(data.follow_position or bot_pos, pickup_pos)
+                        if follow_distance_sq < max_pickup_dist_sq
+                                and (not best_distance_sq or bot_distance_sq < best_distance_sq) then
+                            best_pickup = pickup_unit
+                            best_distance_sq = bot_distance_sq
+                        end
+                    end
+                end
+            end
+            if best_pickup then
+                -- Narrow exception to #364: only this approved live unit stops
+                -- being "reserved" for the instant-pickup consumer this frame.
+                _gt365_smart_claims[best_pickup] = true
+                blackboard.mule_pickup = best_pickup
+                blackboard.mule_pickup_dist_squared = best_distance_sq
+                claimed[best_pickup] = true
+            end
+        end
+    end
+end
+
+mod._gt_rt_register("issue365_smart_bot_ale_policy", function()
+    local ready = {
+        { defence_stacks = 3, attack_stacks = 3,
+          defence_remaining_fraction = 0.51, attack_remaining_fraction = 1 },
+    }
+    if not _gt365_policy.team_ready(ready, 3, 0.5) then
+        return "valid full-stack team rejected"
+    end
+    ready[1].attack_remaining_fraction = 0.5
+    if _gt365_policy.team_ready(ready, 3, 0.5) then
+        return "50-percent boundary was not strict"
+    end
+    if type(_gt365_assign_smart_ale) ~= "function" then
+        return "smart ale assignment missing"
+    end
+end)
 
 -- Issue #347 diagnostic: ordinary chest contents live on the pickup path, but
 -- vanilla's human interactor explicitly rejects a pickup when
@@ -286,15 +464,15 @@ end
 
 mod:hook_safe("AIBotGroupSystem", "_update_mule_pickups", function (self, dt, t)
     local bot_ai_data = self._bot_ai_data
+    -- Revoke last tick's narrow exemptions before clearing any ale claim that
+    -- no longer meets the fresh/cached all-team policy.
+    _gt365_smart_claims = setmetatable({}, { __mode = "k" })
     -- Reservation is unconditional: vanilla can assign mule pickups when no
     -- human has an empty matching slot, even when gt's greedy option is off.
     _gt_clear_reserved_mule_claims(bot_ai_data)
 
     _gt347_probe_available(self, "mule", self._available_mule_pickups)
 
-    if not _gt_greedy_pickup_on() then
-        return
-    end
     local available_mule_pickups = self._available_mule_pickups
     if not (bot_ai_data and available_mule_pickups) then
         return
@@ -308,20 +486,7 @@ mod:hook_safe("AIBotGroupSystem", "_update_mule_pickups", function (self, dt, t)
             -- Rebuild the "already claimed" set (vanilla's ASSIGNED_MULE_PICKUPS_TEMP
             -- :1889 is a file-local we cannot read): every pickup some bot's
             -- blackboard already targets plus every explicit pickup order.
-            local claimed = {}
-            for _, data in pairs(side_bot_data) do
-                local bb = data.blackboard
-                if bb and bb.mule_pickup then
-                    claimed[bb.mule_pickup] = true
-                end
-                if data.pickup_orders then
-                    for _, order in pairs(data.pickup_orders) do
-                        if order and order.unit then
-                            claimed[order.unit] = true
-                        end
-                    end
-                end
-            end
+            local claimed = _gt_claimed_mule_pickups(side_bot_data)
 
             -- Mimic the vanilla assignment loop (:2013-2043) minus the
             -- num_players == 0 gate (:2012). available_pickups was already
@@ -337,7 +502,7 @@ mod:hook_safe("AIBotGroupSystem", "_update_mule_pickups", function (self, dt, t)
                         local can_hold_more = inventory_extension:can_store_additional_item(slot_name)
 
                         -- Same per-bot eligibility as vanilla (:2020).
-                        if not blackboard.mule_pickup and (not has_item or can_hold_more) and not order then
+                        if _gt_greedy_pickup_on() and not blackboard.mule_pickup and (not has_item or can_hold_more) and not order then
                             local best_pickup_dist_sq = math.huge
                             local best_pickup
 
@@ -371,6 +536,11 @@ mod:hook_safe("AIBotGroupSystem", "_update_mule_pickups", function (self, dt, t)
                     end
                 end
             end
+
+            -- Consolidated into this singleton AIBotGroupSystem hook. This path
+            -- is independent of generic greedy pickup but still sits under the
+            -- Bot Behavior Improvements master and its own default-off toggle.
+            _gt365_assign_smart_ale(side_id, side_bot_data, side_available, t, max_pickup_dist_sq)
         end
     end
 end)

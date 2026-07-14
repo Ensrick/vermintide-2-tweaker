@@ -6,6 +6,40 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+## Host bot command wheel (#359)
+
+- [ ] The option defaults off; only the host sees the extra second wheel page, and disabling it removes that page on the next open.
+- [ ] Attack Now uses the host's last living enemy ping for exactly 10 seconds and never adds a custom network event or lookup entry.
+- [ ] Group Up and Cover Me override follow assignment for 8 and 12 seconds, then return to the configured vanilla/GT follow mode.
+- [ ] Wait parks only the nearest bot within 4 m of the crosshair position for 15 seconds; expiry clears only the matching GT-owned hold token.
+- [ ] Revive, rescue, combat safety, scripted holds, and clients' social-wheel events remain authoritative and unmodified.
+- Detection: offline `test_gt_bot_command_policy.lua`; `/gt_regression_test` check `issue359_bot_command_wheel`.
+
+## Godmode HUD indicator (#381)
+
+- [ ] Exact local Godmode ON shows one small `GODMODE` cue in the upper-right; OFF, nil, and non-boolean values draw nothing.
+- [ ] Toggle-off removes the cue on the next HUD frame; no timer, stale latch, network state, or remote-peer state controls visibility.
+- [ ] The indicator and Melee Attack Warning edge flash render together through the one `IngameHud.update` hook.
+- [ ] Missing in-game renderer fails closed; clamped layout stays inside the 1920x1080 `hud_scale_fit` canvas.
+- Detection: offline `test_gt_godmode_indicator.lua`; `/gt_regression_test` check `issue381_godmode_hud_indicator`.
+
+## Smart bot Ranger ale use (#365)
+
+- [ ] The child toggle defaults off and does nothing while Bot Behavior Improvements is off.
+- [ ] Any active teammate below three `ale_defence` or `ale_attack_speed` stacks keeps every Ranger ale reserved for humans.
+- [ ] Exactly 50% remaining is rejected; strictly above 50% for both sub-buffs on every active teammate permits a bot to claim the exact ale pickup.
+- [ ] Ordinary greedy/instant pickup cannot bypass the gate; disabling the child revokes an outstanding smart exception on the next mule update.
+- [ ] Census work is capped to the active side roster and cached for 0.5 seconds; no RPC or replacement consume action exists.
+- Detection: offline `test_gt_bot_ale_policy.lua`; `/gt_regression_test` check `issue365_smart_bot_ale_policy`.
+
+## Localization lifecycle sync (#345)
+
+- [ ] Closed issue references #65, #255, #261, #293, #295, #297, #448, #468, #492, #515, and #529 do not appear in General Tweaker's visible setting labels.
+- [ ] Bot Behavior Improvements shows only `[verify-fix] [Issue 139, 142 & 469]`; Follow snap-back distance shows only `[verify-fix] [Issue 139]` and no stale diagnostic marker.
+- [ ] AOE immunity (#469), all heal-allies controls (#523), Improved Bot Combat (#298), and keep-dummy collision (#304) show `[verify-fix]` with their issue number.
+- [ ] `qa/check_issue_tag_sync.ps1` reports no findings for the corrected General Tweaker keys.
+- [ ] `/gt_regression_test` passes `issue345_gt_loc_status_sync`.
+
 ## Improved Bot Combat advanced controls (#298)
 
 - [ ] Master remains default-off; all children default-on and reproduce the former bundled behavior.

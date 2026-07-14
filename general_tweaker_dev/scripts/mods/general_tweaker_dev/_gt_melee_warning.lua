@@ -373,6 +373,11 @@ mod:hook_safe("IngameHud", "update", function(self, dt, t)
     local draw_debug_highlights = mod._gt_debug_highlights_draw
     if draw_debug_highlights then draw_debug_highlights(dt, t) end
 
+    -- Issue #381 consolidated HUD draw consumer. It owns a separate scenegraph
+    -- but must share this singleton hook or VMF drops one of the registrations.
+    local draw_godmode_indicator = mod._gt_godmode_indicator_draw
+    if draw_godmode_indicator then draw_godmode_indicator(self, dt) end
+
     if not _flash_until then return end
     if not (mod:get("gt_melee_warning") and mod:get("gt_melee_warning_visual")) then
         _flash_until = nil
