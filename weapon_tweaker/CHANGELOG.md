@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.257-dev (2026-07-14) - Crowbill and Ranger preview idles [verify-fix]
+
+- **Crowbill inventory preview:** Added receiver-side `to_1h_sword` wield entries for every Bardin and standard Saltzpyre career, matching the existing Kruber/Kerillian correction. The original Sienna `bw_1h_crowbill` remains independently available in WT and is never yielded to CWV's Imperial/Dawi Crowbill families; its vanilla fire-DoT attack identity is unchanged.
+- **#603 failed verification:** Ranger Veteran Dual Axes now use the known-good non-Slayer `to_dual_hammers` stance only on the inventory-screen character preview. The prior candidate merely re-fired `to_dual_axes`, which the current user check identified as the Slayer-style preview pose. Dual Hammers, Slayer, owner/remote mission 3P, and 1P remain untouched.
+- **Regression:** Added engine-free ownership/preview assertions plus runtime checks for all eleven non-Sienna Crowbill receivers and the exact Ranger/Axes preview correction with Dual Hammers and Slayer controls.
+
+Open Bardin's inventory character preview with Sienna's original Crowbill and confirm the one-handed idle is restored. Separately, preview Dual Axes on Ranger Veteran and confirm the pose matches the subtle non-Slayer dual-wield family rather than Slayer's stance; Dual Hammers must remain unchanged.
+
 ## 0.12.256-dev (2026-07-14) - #604 Crowbill catalog and #597 Greataxe ownership [verify-fix-coop]
 
 - Added the CWV Imperial and Dawi Crowbill families to WT's bounded career catalog so their authored owners remain default-on and every optional receiver remains independently controllable.

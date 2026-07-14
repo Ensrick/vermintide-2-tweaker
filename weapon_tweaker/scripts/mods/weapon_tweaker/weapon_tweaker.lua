@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.256-dev"
+local MOD_VERSION = "0.12.257-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -3823,18 +3823,16 @@ _wt_capture_preview_item_key = function(self, item_key, slot)
     end
 end
 
--- #603: the native previewer chooses the correct `to_dual_axes` event for
--- Ranger Veteran, and the live preview body authors that event, but its first
--- pre-link fire does not leave the body in the Dual Axes idle. Return the
--- vanilla-selected event only for that exact preview tuple so the spawn hook
--- can reassert it after the item has finished linking. This is deliberately a
--- pure selector: Dual Hammers are the known-good control, Slayer stays native,
--- and no in-mission animation surface calls it.
+-- #603: `to_dual_axes` selects the Slayer-style stance on the Ranger preview
+-- body even though the body reports that event as authored. Ranger Veteran's
+-- known-good non-Slayer dual-wield stance is `to_dual_hammers`, so select it
+-- only for this exact inventory-preview tuple. Dual Hammers are the control,
+-- Slayer stays native, and no in-mission animation surface calls this helper.
 local function _wt603_post_spawn_preview_event(weapon_key, career_name, fired_event)
     if weapon_key == "dr_dual_wield_axes"
             and career_name == "dr_ranger"
             and fired_event == "to_dual_axes" then
-        return fired_event
+        return "to_dual_hammers"
     end
     return nil
 end
@@ -3895,10 +3893,10 @@ mod:hook("MenuWorldPreviewer", "_spawn_item_unit", function(func, self, unit, sl
             local wac3p = item_template.wield_anim_career_3p
             local fired = (wac3p and wac3p[preview_career]) or item_template.wield_anim
             -- #603 evidence: Ranger Dual Axes resolves to `to_dual_axes`, and
-            -- the preview body authors BOTH subtly different dual-wield
-            -- stances. The selection is correct; reassert that same native
-            -- event after spawn/link so the preview cannot remain in the
-            -- Dual Hammers idle. This hook is inventory-preview-only.
+            -- the preview body authors both dual-wield events. User verification
+            -- established that `to_dual_axes` is the Slayer-style preview pose;
+            -- the exact Ranger/Axes tuple is corrected to the known-good
+            -- non-Slayer `to_dual_hammers` stance below. Preview-only.
             if preview_career == "dr_ranger"
                     and (weapon_key == "dr_dual_wield_hammers"
                         or weapon_key == "dr_dual_wield_axes") then
@@ -4456,11 +4454,34 @@ end)
 
 _rt_register("issue603_ranger_dual_axes_inventory_preview_pose", function()
     return _wt603_post_spawn_preview_event(
-            "dr_dual_wield_axes", "dr_ranger", "to_dual_axes") == "to_dual_axes"
+            "dr_dual_wield_axes", "dr_ranger", "to_dual_axes") == "to_dual_hammers"
         and _wt603_post_spawn_preview_event(
             "dr_dual_wield_hammers", "dr_ranger", "to_dual_hammers") == nil
         and _wt603_post_spawn_preview_event(
             "dr_dual_wield_axes", "dr_slayer", "to_dual_axes") == nil
+end)
+
+_rt_register("native_fire_crowbill_distinct_and_preview_wired", function()
+    local required = {
+        "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+        "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer",
+        "wh_captain", "wh_bountyhunter", "wh_zealot",
+    }
+    local crowbill_wield = _WIELD_ANIM_CAREER_3P_PATCHES.one_handed_crowbill or {}
+    for _, career in ipairs(required) do
+        local found = false
+        for _, weapon_key in ipairs(weapon_unlock_map[career] or {}) do
+            found = found or weapon_key == "bw_1h_crowbill"
+        end
+        if not found then return "native Crowbill missing from " .. career end
+        if crowbill_wield[career] ~= "to_1h_sword" then
+            return "Crowbill preview wield missing for " .. career
+        end
+        local managed = mod._wt.cwv_conditional_managed[career]
+        if managed and managed.bw_1h_crowbill then
+            return "CWV replacement policy hides native Crowbill for " .. career
+        end
+    end
 end)
 
 _rt_register("issue587_baked_transform_husk_fanout", function()

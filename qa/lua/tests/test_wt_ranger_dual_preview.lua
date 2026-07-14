@@ -6,7 +6,7 @@ return function(H, repo_root)
         return source
     end
 
-    H.test("Ranger Dual Axes preview keeps its vanilla event distinct from Dual Hammers", function()
+    H.test("Ranger Dual Axes preview uses the non-Slayer dual-wield stance", function()
         local patches = dofile(repo_root
             .. "/weapon_tweaker/scripts/mods/weapon_tweaker/wt_wield_patches.lua")
         H.equal(patches.bulk.dual_wield_hammers_template.dr_ranger, nil)
@@ -19,7 +19,7 @@ return function(H, repo_root)
         H.truthy(hammers:find('weapon_template.wield_anim = "to_dual_hammers"', 1, true))
     end)
 
-    H.test("Ranger Dual Axes reasserts the native event only after preview spawn", function()
+    H.test("Ranger Dual Axes corrects only the exact preview tuple", function()
         local main = read(repo_root
             .. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua")
         H.truthy(main:find("[wt:603] Ranger preview weapon=", 1, true))
@@ -27,6 +27,9 @@ return function(H, repo_root)
         H.truthy(main:find('weapon_key == "dr_dual_wield_axes"', 1, true))
         H.truthy(main:find('career_name == "dr_ranger"', 1, true))
         H.truthy(main:find('fired_event == "to_dual_axes"', 1, true))
+        H.truthy(main:find('return "to_dual_hammers"', 1, true))
+        H.truthy(main:find('"dr_dual_wield_hammers", "dr_ranger", "to_dual_hammers") == nil', 1, true))
+        H.truthy(main:find('"dr_dual_wield_axes", "dr_slayer", "to_dual_axes") == nil', 1, true))
         H.truthy(main:find('pcall(Unit.animation_event, preview_body, post_spawn_event)', 1, true))
         H.truthy(main:find('issue603_ranger_dual_axes_inventory_preview_pose', 1, true))
         H.equal(main:find('mod:hook("HeroPreviewer", "_spawn_item_unit"', 1, true), nil)

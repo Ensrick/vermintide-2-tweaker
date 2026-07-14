@@ -12,6 +12,7 @@ return function(H, repo_root)
     local loc = read(root .. "weapon_tweaker_localization.lua")
     local availability = read(root .. "_wt_availability.lua")
     local entry = read(root .. "weapon_tweaker.lua")
+    local wield_patches = dofile(root .. "wt_wield_patches.lua")
     local careers = { "wh_captain", "wh_bountyhunter", "wh_zealot" }
 
     local function contains(values, wanted)
@@ -53,6 +54,24 @@ return function(H, repo_root)
             H.equal(managed.dr_2h_axe, true)
             H.equal(managed.dr_shield_hammer, nil)
             H.equal(managed.dr_dual_wield_axes, nil)
+        end
+    end)
+
+    H.test("Sienna Crowbill remains a distinct cross-character WT weapon", function()
+        local receivers = {
+            "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
+            "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer",
+            "wh_captain", "wh_bountyhunter", "wh_zealot",
+        }
+        local preview = wield_patches.patches.one_handed_crowbill
+        for _, career in ipairs(receivers) do
+            H.equal(contains(unlocks.weapon_unlock_map[career], "bw_1h_crowbill"), true,
+                career .. " lost Sienna Crowbill availability")
+            H.equal(preview[career], "to_1h_sword",
+                career .. " lost Crowbill inventory-preview stance")
+            local managed = unlocks.cwv_conditional_managed[career]
+            H.equal(managed and managed.bw_1h_crowbill or nil, nil,
+                career .. " incorrectly yields Sienna Crowbill to CWV")
         end
     end)
 end

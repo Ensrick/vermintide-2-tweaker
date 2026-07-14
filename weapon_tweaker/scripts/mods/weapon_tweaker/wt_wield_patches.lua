@@ -110,12 +110,21 @@ M.patches = {
         es_questingknight = "to_1h_sword",
     },
     -- (e) Crowbill INVENTORY-MODEL FIX. Bake to_1h_sword so the keep previewer
-    -- resolves the grip natively (fixes the [Inventory Model Error] tag).
+    -- resolves the grip natively on every non-Sienna receiver. The original
+    -- Crowbill remains distinct; these entries alter only its receiver-side
+    -- 3P wield/preview stance.
     one_handed_crowbill = {
         es_mercenary      = "to_1h_sword",
         es_huntsman       = "to_1h_sword",
         es_knight         = "to_1h_sword",
         es_questingknight = "to_1h_sword",
+        dr_ranger         = "to_1h_sword",
+        dr_ironbreaker    = "to_1h_sword",
+        dr_slayer         = "to_1h_sword",
+        dr_engineer       = "to_1h_sword",
+        wh_captain        = "to_1h_sword",
+        wh_bountyhunter   = "to_1h_sword",
+        wh_zealot         = "to_1h_sword",
     },
 }
 
