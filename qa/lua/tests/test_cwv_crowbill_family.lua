@@ -88,6 +88,31 @@ return function(H, repo_root)
         H.equal(lookup[302], family.NETWORK_PACKAGE_ALIAS_3P)
     end)
 
+    H.test("Imperial Crowbill Model 05 owns only its reviewed 3P transform", function()
+        local target = row_for(family.MODELS, "cwv_es_imperial_crowbill_skin_05")
+        H.truthy(target)
+        H.deep_equal(target.right_hand_scale_3p, { 0.45, 0.45, 0.45 })
+        H.deep_equal(target.right_hand_offset_3p, { 0, -0.03, -0.20 })
+        H.deep_equal(target.right_hand_rotation_3p, { -90, -90, -90 })
+        H.equal(target.right_hand_scale, nil)
+        H.equal(target.right_hand_offset, nil)
+        H.equal(target.right_hand_rotation, nil)
+        H.equal(target.right_hand_scale_1p, nil)
+        H.equal(target.right_hand_offset_1p, nil)
+        H.equal(target.right_hand_rotation_1p, nil)
+        for _, control in ipairs(family.MODELS) do
+            if control ~= target then
+                H.equal(control.right_hand_scale_3p, nil)
+                H.equal(control.right_hand_offset_3p, nil)
+                H.equal(control.right_hand_rotation_3p, nil)
+            end
+        end
+        local main = read(repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+        H.truthy(main:find("issue604_imperial_crowbill_model05_transform", 1, true))
+        H.truthy(main:find("for _, model in ipairs(_om.crowbill_family.usable_models()) do", 1, true))
+    end)
+
     H.test("CWV Crowbill hammer-mode seam preserves the authored contract", function()
         local mode = family.HAMMER_MODE
         local policy = dofile(repo_root

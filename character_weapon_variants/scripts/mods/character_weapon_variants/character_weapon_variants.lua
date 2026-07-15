@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.418-dev"
+local MOD_VERSION = "0.1.420-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -10061,6 +10061,42 @@ end)
 
 local _registered_keys = {}
 
+-- #482 legacy-instance compatibility. CIM persists the exact authored
+-- `item_key`, but crafts made before CWV stamped `entry.cwv_key` can re-enter
+-- the backend as a UUID item whose backend object still has `item.key = cwv_*`
+-- while `item.data.cwv_key` is absent. Keep validation definition-backed:
+-- never infer a variant from the inherited vanilla `name` or item_type.
+local function _registered_cwv_key(candidate)
+	if type(candidate) ~= "string" or not _registered_keys[candidate] then return nil end
+	return candidate
+end
+
+-- A preview transition can temporarily make BackendInterfaceItem unavailable
+-- after another surface already proved the UUID's identity. Cache only
+-- positively validated identities; UUID/string keys are bounded by the live
+-- inventory and no per-frame network traffic is introduced.
+local _cwv_identity_by_backend_id = {}
+local _cwv_legacy_identity_diag = {}
+local _cwv_legacy_identity_diag_count = 0
+
+local function _remember_cwv_identity(backend_id, key, evidence)
+	key = _registered_cwv_key(key)
+	if not key then return nil end
+	if type(backend_id) == "string" and backend_id ~= "" then
+		_cwv_identity_by_backend_id[backend_id] = key
+		if evidence and not _cwv_legacy_identity_diag[backend_id]
+				and _cwv_legacy_identity_diag_count < 16 then
+			_cwv_legacy_identity_diag[backend_id] = true
+			_cwv_legacy_identity_diag_count = _cwv_legacy_identity_diag_count + 1
+			pcall(printf,
+				"[cwv:482] legacy identity recovered bid=%s key=%s evidence=%s count=%d/16",
+				tostring(backend_id), tostring(key), tostring(evidence),
+				_cwv_legacy_identity_diag_count)
+		end
+	end
+	return key
+end
+
 -- #482: resolve the variant item_key for ANY backend instance of a cwv item.
 -- Single resolution ladder shared by every bid-keyed resolver so they cannot
 -- drift on what counts as "a cwv instance":
@@ -10079,21 +10115,38 @@ local _registered_keys = {}
 _om._cwv_key_for_item = function(backend_id, item_data)
 	if type(backend_id) == "string" then
 		local key = backend_id:match("^(cwv_.-)_%d%d%d$")
-		if key then return key end
+		if key then return _remember_cwv_identity(backend_id, key) or key end
 	end
 	if item_data and type(item_data.cwv_key) == "string" then
-		return item_data.cwv_key
+		return _remember_cwv_identity(backend_id, item_data.cwv_key)
+	end
+	if item_data then
+		local exact = _registered_cwv_key(item_data.key)
+			or _registered_cwv_key(item_data.ItemId)
+		if exact then
+			return _remember_cwv_identity(backend_id, exact, "item_data_exact_key")
+		end
 	end
 	if type(backend_id) == "string" and backend_id ~= "" then
-		local ok, data = pcall(function()
+		local ok, item = pcall(function()
 			local backend = Managers and Managers.backend
 			local iface = backend and backend:get_interface("items")
-			local item = iface and iface:get_item_from_id(backend_id)
-			return item and item.data
+			return iface and iface:get_item_from_id(backend_id)
 		end)
-		if ok and data and type(data.cwv_key) == "string" then
-			return data.cwv_key
+		if ok and item then
+			local data = item.data
+			if data and type(data.cwv_key) == "string" then
+				return _remember_cwv_identity(backend_id, data.cwv_key)
+			end
+			local exact = _registered_cwv_key(item.key)
+				or _registered_cwv_key(item.ItemId)
+				or (data and (_registered_cwv_key(data.key)
+					or _registered_cwv_key(data.ItemId)))
+			if exact then
+				return _remember_cwv_identity(backend_id, exact, "backend_exact_key")
+			end
 		end
+		return _cwv_identity_by_backend_id[backend_id]
 	end
 	return nil
 end
@@ -11059,6 +11112,21 @@ for index, model in ipairs(_om.greataxe.usable_models()) do
 	if index == 1 then
 		_skin_transform_map[_om.greataxe.ITEM_KEY .. "_skin"] = transform_def
 	end
+end
+
+-- #604 Crowbill transforms are model-specific and 3P-only. Register every
+-- model as an explicit control so a reviewed tune can never leak into a sibling
+-- through the dynamic family-inheritance pass below. These synthetic defs feed
+-- the same shared WeaponAppearance consumers as Greataxe: owner/bot 3P, remote
+-- husks, inventory/lobby/score character previews, and item/Athanor previews.
+-- First-person fields are deliberately absent.
+for _, model in ipairs(_om.crowbill_family.usable_models()) do
+	_skin_transform_map[model.key] = {
+		item_key = model.key,
+		right_hand_scale_3p = model.right_hand_scale_3p,
+		right_hand_offset_3p = model.right_hand_offset_3p,
+		right_hand_rotation_3p = model.right_hand_rotation_3p,
+	}
 end
 
 -- Custom illusions with their own scale/offset fields (e.g. greathammer
@@ -14297,7 +14365,9 @@ _rt_register("cwv_key_resolution_uuid_safe", function()
     if #missing > 0 then
         return "cwv_key stamp missing/wrong on " .. #missing .. " entries: " .. table.concat(missing, ", ")
     end
-    -- (2) Ladder rungs behave: pattern, stamp, and no-signal cases.
+    -- (2) Ladder rungs behave: pattern, stamp, legacy exact-key, transition
+    -- cache, and no-signal cases. The exact-key case models a persisted CIM
+    -- UUID crafted before `cwv_key` existed; it must not require recrafting.
     local ladder = _om._cwv_key_for_item
     if type(ladder) ~= "function" then
         return "_om._cwv_key_for_item missing (#482 resolver ladder gone)"
@@ -14308,6 +14378,14 @@ _rt_register("cwv_key_resolution_uuid_safe", function()
     if ladder("a9f48814-0000-4000-8000-000000000000", { cwv_key = "cwv_es_greataxe" }) ~= "cwv_es_greataxe" then
         return "#482 ladder rung 2 broken: item_data.cwv_key stamp not consulted for UUID bid"
     end
+	local legacy_bid = "48200000-0000-4000-8000-000000000419"
+	if ladder(legacy_bid, { key = "cwv_es_longsword_blackguard", name = "es_bastard_sword" })
+			~= "cwv_es_longsword_blackguard" then
+		return "#482 legacy exact CWV key did not recover persisted Imperial Longsword identity"
+	end
+	if ladder(legacy_bid, nil) ~= "cwv_es_longsword_blackguard" then
+		return "#482 proven UUID identity did not survive a backend-unavailable preview transition"
+	end
     if ladder("not-a-registered-bid-482", { name = "dr_2h_axe" }) ~= nil then
         return "#482 ladder false-positive: non-cwv item resolved a cwv key"
     end
@@ -15664,6 +15742,47 @@ _rt_register("cwv_crowbill_family_registration_contract", function()
 				or entry.skin_combination_table ~= variant.key .. "_skins"
 				or entry.crowbill_mode_family ~= family.HAMMER_MODE_FAMILY then
 			return variant.key .. " registration contract drifted"
+		end
+	end
+end)
+
+_rt_register("issue604_imperial_crowbill_model05_transform", function()
+	local family = mod._cwv_crowbill_family
+	if type(family) ~= "table" or type(family.MODELS) ~= "table" then
+		return "#604 Crowbill model manifest missing"
+	end
+	local function same_triplet(actual, expected)
+		return type(actual) == "table"
+			and actual[1] == expected[1] and actual[2] == expected[2]
+			and actual[3] == expected[3]
+	end
+	local target
+	for _, model in ipairs(family.MODELS) do
+		if model.key == "cwv_es_imperial_crowbill_skin_05" then target = model; break end
+	end
+	if not target
+			or not same_triplet(target.right_hand_scale_3p, { 0.45, 0.45, 0.45 })
+			or not same_triplet(target.right_hand_offset_3p, { 0, -0.03, -0.20 })
+			or not same_triplet(target.right_hand_rotation_3p, { -90, -90, -90 }) then
+		return "#604 Imperial Crowbill Model 05 reviewed transform drifted"
+	end
+	local applied = _skin_transform_map[target.key]
+	if not applied
+			or not same_triplet(applied.right_hand_scale_3p, target.right_hand_scale_3p)
+			or not same_triplet(applied.right_hand_offset_3p, target.right_hand_offset_3p)
+			or not same_triplet(applied.right_hand_rotation_3p, target.right_hand_rotation_3p)
+			or applied.right_hand_scale or applied.right_hand_offset or applied.right_hand_rotation
+			or applied.right_hand_scale_1p or applied.right_hand_offset_1p
+			or applied.right_hand_rotation_1p then
+		return "#604 Model 05 transform is not isolated to the canonical 3P map"
+	end
+	for _, model in ipairs(family.MODELS) do
+		if model.key ~= target.key then
+			local control = _skin_transform_map[model.key]
+			if not control or control.right_hand_scale_3p
+					or control.right_hand_offset_3p or control.right_hand_rotation_3p then
+				return "#604 Model 05 transform leaked to " .. tostring(model.key)
+			end
 		end
 	end
 end)

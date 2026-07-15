@@ -121,6 +121,11 @@ M.MODELS = {
         right_hand_unit = "units/cwv_crowbill/imperial_05/imperial_05",
         inventory_icon = M.PLACEHOLDER_ICON,
         hud_icon = "weapon_generic_icon_falken",
+        -- User-reviewed Hold-Pose tune. 3P/presentation only: owner first
+        -- person retains the authored mesh transform.
+        right_hand_scale_3p = { 0.45, 0.45, 0.45 },
+        right_hand_offset_3p = { 0, -0.03, -0.20 },
+        right_hand_rotation_3p = { -90, -90, -90 },
     },
 }
 

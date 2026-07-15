@@ -1,5 +1,17 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.420-dev - 2026-07-14 - #482 #604 persisted identity and Crowbill tune [verify-fix-coop]
+
+- Symptom: a previously crafted Imperial Longsword/Black Guard Blade could retain its CWV inventory identity and mesh but lose the family's canonical scale and grip after later builds. Recrafting must never be required to receive current authored transforms.
+- Root cause: #482's UUID resolver only recognized the newer `cwv_key` stamp. Legacy CIM records already preserve the exact authored `item_key`, and the reconstructed backend item exposes that as `item.key`, but old instances can lack the newer stamp. Preview reconstruction can also briefly run while the backend interface is unavailable.
+- Fix: the one shared CWV identity resolver now accepts only definition-registered exact CWV keys from item data/backend objects and caches positively proven UUID identities across reconstruction transitions. Because owner/bot equipment, remote husks, inventory/lobby/score previews, and illusion previews already consume this resolver, the repair is shared rather than surface-specific. A bounded `[cwv:482]` engine diagnostic records legacy recovery.
+- Regression: `cwv_key_resolution_uuid_safe` now covers an existing UUID Imperial Longsword with no `cwv_key` stamp, cache reuse while the backend is unavailable, and the vanilla-name false-positive floor.
+- Verification: confirm `[cwv:LOAD] v0.1.420-dev`, equip the already-crafted affected Imperial Longsword without recrafting, then compare its scale/grip in inventory preview and owner 3P. With a second player, also compare the remote husk and lobby/score presentation; all must match the canonical current Imperial Longsword proportions.
+- Baked the user-reviewed Imperial Crowbill Model 05 presentation transform: scale `{0.45, 0.45, 0.45}`, offset `{0, -0.03, -0.20}`, and Euler rotation `{-90, -90, -90}`. It is model-specific and 3P-only, routed through the shared appearance map for owner/bot 3P, remote husks, inventory/lobby/score character previews, and item/Athanor previews; first person and Models 01-04/Dawi 01 remain unchanged.
+- Added offline and runtime `issue604_imperial_crowbill_model05_transform` coverage for exact values, 1P exclusion, every sibling control, and canonical shared-map wiring.
+- Additional #604 verification: select Imperial Crowbill Model 05 and compare inventory character preview, owner 3P, a remote client's view, lobby/score, and Athanor. All 3P/presentation surfaces must share the tuned pose; first person and every other Crowbill model must retain their prior transforms.
+- **DoD:** G-CROSS-CHAR/G-3P-ANIM unchanged; persistence identity and all shared appearance consumers audited; co-op visual verification pending.
+
 ## 0.1.418-dev - 2026-07-15 - #617 Old Musket Athanor textures [verify-fix]
 
 - Fixed the Old Musket appearing as an untextured custom mesh in CIM's Athanor craft preview. The log proves CIM queued and spawned `units/cwv_es_musket_custom/cwv_es_musket_custom_3p`, but CWV's shared `LootItemUnitPreviewer` consumer applied only its transform; the texture binding existed only on owner equipment and the inventory character preview.

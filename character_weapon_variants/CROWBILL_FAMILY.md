@@ -74,6 +74,12 @@ cap PBR maps at 2048px, use neutral white AO where the source has none, and bake
 only accepted in-game scale/offset/rotation values into the canonical family
 definition after all appearance surfaces have been checked.
 
+Imperial Crowbill Model 05 has one accepted presentation tune: scale
+`{0.45, 0.45, 0.45}`, offset `{0, -0.03, -0.20}`, and Euler rotation
+`{-90, -90, -90}`. It applies only to 3P/presentation consumers through the
+shared appearance map. Owner first person and every sibling model remain at
+their authored transforms.
+
 ## Appearance and pose verification
 
 Every replacement model or hammer-mode change must explicitly pass each cell:

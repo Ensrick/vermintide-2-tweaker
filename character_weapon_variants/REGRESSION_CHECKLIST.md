@@ -6,6 +6,26 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-14.
 
+## #604 Imperial Crowbill Model 05 transform isolation
+
+| Field | Check |
+|---|---|
+| Fix version(s) | CWV v0.1.419-dev |
+| Repro | Select Imperial Crowbill Model 05, then inspect owner 3P, inventory character preview, item/Athanor preview, lobby/score, and a remote client's view. Compare Models 01-04 and Dawi 01 plus owner 1P. |
+| Expected post-fix | Every 3P/presentation consumer uses scale `{0.45,0.45,0.45}`, offset `{0,-0.03,-0.20}`, and Euler `{-90,-90,-90}` only for Imperial Model 05. First person and all sibling models remain unchanged. |
+| Detection | Offline `test_cwv_crowbill_family.lua` passes and `/cwv_regression_test` passes `issue604_imperial_crowbill_model05_transform`. |
+
+---
+
+## #482 Persisted UUID variant identity survives legacy records
+
+| Field | Check |
+|---|---|
+| Fix version(s) | CWV v0.1.419-dev |
+| Repro | Load a CIM-crafted CWV Imperial Longsword saved before the `cwv_key` stamp, using its UUID backend id and exact saved `item_key`; do not recraft it. |
+| Expected post-fix | Its canonical family scale/offset applies in inventory preview, owner/bot 3P, remote husk, lobby/score, and illusion preview. Temporary backend-interface unavailability after a proven lookup does not discard identity. |
+| Detection | `/cwv_regression_test` passes `cwv_key_resolution_uuid_safe`; the first legacy recovery emits bounded `[cwv:482] legacy identity recovered` evidence. |
+
 ---
 
 ## #604 Crowbill Athanor preview teardown
