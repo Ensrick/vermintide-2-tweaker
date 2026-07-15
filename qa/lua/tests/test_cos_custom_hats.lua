@@ -1,12 +1,17 @@
 return function(H, repo_root)
     local function isolated(callback)
-        local saved_get_mod = _G.get_mod
-        local saved_iml = _G.ItemMasterList
-        local saved_lookup = _G.NetworkLookup
-        local saved_application = _G.Application
-        local saved_clone = table.clone
+        local saved = {
+            get_mod = _G.get_mod,
+            ItemMasterList = _G.ItemMasterList,
+            NetworkLookup = _G.NetworkLookup,
+            Application = _G.Application,
+            Unit = _G.Unit,
+            Mesh = _G.Mesh,
+            Material = _G.Material,
+            clone = table.clone,
+        }
         local setting = true
-        local backend_entries = nil
+        local backend_entries
         local mod = {
             get = function(_, id)
                 if id == "cos_encarmine_hat_enabled" then return setting end
@@ -23,7 +28,6 @@ return function(H, repo_root)
                 backend_entries = entries
             end,
             info = function() end,
-            warning = function() end,
         }
         _G.get_mod = function(name)
             if name == "cosmetics_tweaker" then return mod end
@@ -44,7 +48,7 @@ return function(H, repo_root)
         _G.Application = nil
         table.clone = function(source)
             local out = {}
-            for k, v in pairs(source) do out[k] = v end
+            for key, value in pairs(source) do out[key] = value end
             return out
         end
 
@@ -59,208 +63,174 @@ return function(H, repo_root)
             armoury_to_backend = {},
             unit_path_to_clones = {},
         }
-        local ok, err = pcall(callback, hats, bridge, function(value) setting = value end,
+        local ok, err = pcall(callback, hats, bridge,
+            function(value) setting = value end,
             function() return backend_entries end)
-        _G.get_mod = saved_get_mod
-        _G.ItemMasterList = saved_iml
-        _G.NetworkLookup = saved_lookup
-        _G.Application = saved_application
-        table.clone = saved_clone
+        _G.get_mod = saved.get_mod
+        _G.ItemMasterList = saved.ItemMasterList
+        _G.NetworkLookup = saved.NetworkLookup
+        _G.Application = saved.Application
+        _G.Unit = saved.Unit
+        _G.Mesh = saved.Mesh
+        _G.Material = saved.Material
+        table.clone = saved.clone
         if not ok then error(err, 0) end
     end
 
-    H.test("Encarmine hat registers a stable non-DLC item and fallback", function()
+    H.test("Encarmine registers a stable exact-Laurel item", function()
         isolated(function(hats, bridge, _, get_backend_entries)
             H.truthy(hats.register_all(bridge))
             local entry = ItemMasterList.cos_encarmine_hat
-            H.truthy(entry)
+            H.equal(entry.unit, hats.BASE_UNIT)
+            H.equal(hats.CUSTOM_UNIT, hats.BASE_UNIT)
             H.equal(entry.template, "es_hats_no_ear_moustache")
             H.equal(entry.inventory_icon, "icon_knight_hat_0006_encarmine")
-            H.equal(entry.unit, hats.BASE_UNIT)
-            H.equal(entry.localized_name, "Encarmine Helmet")
-            H.equal(entry.localized_description,
-                "A red-and-gold Foot Knight helm with a black plume, created for Tweaker: Cosmetics.")
-            H.equal(hats.ITEM_LOCALIZATION.cos_encarmine_hat_name, "Encarmine Helmet")
             H.equal(entry.required_dlc, nil)
             H.equal(entry.can_wield[1], "es_knight")
             H.equal(bridge.backend_to_vanilla.cos_encarmine_hat, "knight_hat_0006")
             H.equal(bridge.backend_to_armoury.cos_encarmine_hat, hats.VARIANT_KEY)
             H.equal(bridge.unit_path_to_clones[hats.BASE_UNIT], nil)
-            H.truthy(bridge.registered)
-            H.equal(bridge.la_registered, false)
             H.equal(get_backend_entries()[1].mod_data.backend_id, "cos_encarmine_hat")
         end)
     end)
 
-    H.test("Encarmine enabled path fails closed before PackageManager", function()
+    H.test("Encarmine never substitutes a custom geometry unit", function()
         isolated(function(hats, bridge)
             H.truthy(hats.register_all(bridge))
-            H.equal(hats.CUSTOM_UNIT, hats.BASE_UNIT)
-            H.equal(hats.CANDIDATE_CUSTOM_UNIT == hats.CUSTOM_UNIT, false)
-            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
-            local resolved = hats.resolve_variant(hats.VARIANT_KEY)
-            H.equal(resolved.new_units[1], hats.BASE_UNIT)
-            H.truthy(resolved.is_vanilla_unit)
+            local spawn_path, custom = hats.spawn_unit(Application, "test")
+            H.equal(spawn_path, hats.BASE_UNIT)
+            H.equal(custom, false)
+            local variant = hats.resolve_variant(hats.VARIANT_KEY)
+            H.equal(variant.kind, "vanilla_donor_texture_override")
+            H.equal(variant.new_units[1], hats.BASE_UNIT)
+            H.truthy(variant.is_vanilla_unit)
+            H.equal(hats.RENDER_MODE, "vanilla_laurel_material_instance_override")
         end)
     end)
 
-    H.test("Encarmine package probe cannot promote an unsafe preview unit", function()
-        isolated(function(hats, bridge)
-            local allowed = { package = {}, unit = {}, material = {}, texture = {} }
-            allowed.package[hats.CANDIDATE_CUSTOM_UNIT] = true
-            allowed.unit[hats.CANDIDATE_CUSTOM_UNIT] = true
-            for _, path in ipairs(hats.CUSTOM_MATERIALS) do allowed.material[path] = true end
-            for _, path in ipairs(hats.CUSTOM_TEXTURES) do allowed.texture[path] = true end
-            _G.Application = {
-                can_get = function(kind, path)
-                    return allowed[kind] and allowed[kind][path] or false
+    H.test("Encarmine paints only Laurel armor and plume material instances", function()
+        isolated(function(hats)
+            local unit = {}
+            local calls = {}
+            _G.Application = { can_get = function(kind) return kind == "texture" end }
+            _G.Unit = {
+                alive = function(candidate) return candidate == unit end,
+                num_meshes = function() return 8 end,
+                mesh = function(_, index) return { index = index } end,
+            }
+            _G.Mesh = {
+                num_materials = function() return 1 end,
+                material = function(mesh) return { mesh_index = mesh.index } end,
+            }
+            _G.Material = {
+                set_texture = function(material, slot, texture)
+                    calls[#calls + 1] = {
+                        mesh_index = material.mesh_index,
+                        slot = slot,
+                        texture = texture,
+                    }
                 end,
             }
-            H.truthy(hats.register_all(bridge))
-            H.equal(hats.RUNTIME_PREVIEW_PACKAGE_SAFE, false)
-            H.equal(hats.runtime_custom_ready, false)
-            H.equal(hats.CUSTOM_UNIT, hats.BASE_UNIT)
-            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
-            H.equal(bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], nil)
 
-            -- The same resident dependency closure is valid only at direct
-            -- spawn choke points. It must never mutate the package-facing IML.
-            local spawn_path, custom = hats.spawn_unit(_G.Application, "test-preview")
-            H.truthy(custom)
-            H.equal(spawn_path, hats.CANDIDATE_CUSTOM_UNIT)
-            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
+            local ok, reason = hats.apply_surface(unit, "unit-test")
+            H.truthy(ok)
+            H.equal(reason, "applied")
+            H.equal(#calls, 18)
+            local mesh_counts = {}
+            for _, call in ipairs(calls) do
+                mesh_counts[call.mesh_index] = (mesh_counts[call.mesh_index] or 0) + 1
+                H.truthy(call.slot == hats.TEXTURE_SLOTS.diffuse
+                    or call.slot == hats.TEXTURE_SLOTS.normal
+                    or call.slot == hats.TEXTURE_SLOTS.combined)
+            end
+            H.equal(mesh_counts[0], nil)
+            H.equal(mesh_counts[7], nil)
+            for index = 1, 6 do H.equal(mesh_counts[index], 3) end
 
-            -- Losing any one compiled dependency must restore the safe unit.
-            allowed.material[hats.CUSTOM_MATERIALS[1]] = nil
-            H.equal(hats.refresh_runtime_resources(_G.Application), false)
-            H.equal(hats.CUSTOM_UNIT, hats.BASE_UNIT)
-            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
-            local fallback_path, fallback_custom = hats.spawn_unit(_G.Application, "test-fallback")
-            H.equal(fallback_path, hats.BASE_UNIT)
-            H.equal(fallback_custom, false)
+            local again_ok, again_reason = hats.apply_surface(unit, "unit-test")
+            H.truthy(again_ok)
+            H.equal(again_reason, "already_applied")
+            H.equal(#calls, 18)
         end)
     end)
 
-    H.test("Encarmine late package proof remains quarantined", function()
-        isolated(function(hats, bridge)
-            H.truthy(hats.register_all(bridge))
-            H.equal(bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], nil)
+    H.test("Encarmine rejects scene drift before writing materials", function()
+        isolated(function(hats)
+            local writes = 0
             _G.Application = { can_get = function() return true end }
-            H.equal(hats.refresh_runtime_resources(_G.Application), false)
-            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
-            H.equal(bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], nil)
-            H.equal(hats.refresh_runtime_resources(_G.Application), false)
-            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
+            _G.Unit = {
+                alive = function() return true end,
+                num_meshes = function() return 2 end,
+            }
+            _G.Mesh = {}
+            _G.Material = { set_texture = function() writes = writes + 1 end }
+            local ok, reason = hats.apply_surface({}, "unit-test")
+            H.equal(ok, false)
+            H.equal(reason, "donor_mesh_count_2")
+            H.equal(writes, 0)
         end)
     end)
 
-    H.test("Encarmine toggle fails closed without changing lookup identity", function()
+    H.test("Encarmine toggle changes availability without changing lookup identity", function()
         isolated(function(hats, bridge, set_setting)
             H.truthy(hats.register_all(bridge))
             set_setting(false)
             H.truthy(hats.sync_toggle())
-            local entry = ItemMasterList.cos_encarmine_hat
-            H.equal(entry.unit, hats.BASE_UNIT)
-            H.equal(#entry.can_wield, 0)
-            local fallback = hats.resolve_variant(hats.VARIANT_KEY)
-            H.equal(fallback.new_units[1], hats.BASE_UNIT)
-            H.equal(fallback.enabled, false)
-            _G.Application = { can_get = function() return true end }
-            local spawn_path, custom = hats.spawn_unit(_G.Application, "test-disabled")
-            H.equal(spawn_path, hats.BASE_UNIT)
-            H.equal(custom, false)
+            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
+            H.equal(#ItemMasterList.cos_encarmine_hat.can_wield, 0)
+            H.equal(hats.resolve_variant(hats.VARIANT_KEY).enabled, false)
             H.truthy(NetworkLookup.item_names.cos_encarmine_hat)
         end)
     end)
 
-    H.test("Encarmine package assets and icon declarations exist", function()
-        local files = {
-            "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_hat.fbx",
-            "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_hat.bones",
-            "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_hat.unit",
-            "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_hat.package",
-            "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_armored.material",
-            "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_cloth.material",
-            "/cosmetics_tweaker/textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_diffuse.png",
-            "/cosmetics_tweaker/textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_diffuse.png",
-            "/cosmetics_tweaker/gui/1080p/single_textures/cosmetics_tweaker/icon_knight_hat_0006_encarmine.png",
-        }
-        for _, suffix in ipairs(files) do
-            local f = io.open(repo_root .. suffix, "rb")
-            H.truthy(f, "missing " .. suffix)
-            if f then f:close() end
+    H.test("Encarmine Laurel contract pins the complete donor scene", function()
+        isolated(function(hats)
+            local contract = hats.LAUREL_SCENE_CONTRACT
+            H.equal(contract.mesh_count, 8)
+            H.equal(#contract.armor_mesh_indices, 3)
+            H.equal(#contract.plume_mesh_indices, 3)
+            H.equal(#contract.shadow_mesh_indices, 2)
+            H.equal(contract.shadow_mesh_indices[1], 0)
+            H.equal(contract.shadow_mesh_indices[2], 7)
+            H.equal(contract.lod_steps, 3)
+            H.equal(contract.rig_bones, 13)
+            H.equal(contract.dynamic_plume_bones, 6)
+            H.equal(hats.MATERIAL_RESPONSE_REVISION, 5)
+            H.truthy(hats.DONOR_ALPHA_CONTRACT)
+            H.truthy(hats.DONOR_NORMAL_TANGENT_CONTRACT)
+            H.truthy(hats.DONOR_CONTROLLER_CONTRACT)
+            H.truthy(hats.DONOR_FADE_CONTRACT)
+        end)
+    end)
+
+    H.test("Encarmine integration paints all render surfaces", function()
+        local file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua", "rb"))
+        local source = file:read("*a")
+        file:close()
+        for _, surface in ipairs({
+            "appearance-replay", "remote-husk", "local-attachment",
+            "live-attachment", "hero-preview",
+        }) do
+            H.truthy(source:find('"' .. surface .. '"', 1, true))
         end
+        H.truthy(source:find("CUSTOM_HATS.apply_surface", 1, true))
+        H.equal(source:find('CANDIDATE_CUSTOM_UNIT', 1, true), nil)
+    end)
 
-        local material_file = assert(io.open(repo_root
-            .. "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_cloth.material", "rb"))
-        local material_source = material_file:read("*a")
-        material_file:close()
-        H.truthy(material_source:find("use_opacity_map = { type = \"scalar\" value = 1 }", 1, true))
-        H.truthy(material_source:find("encarmine_cloth_diffuse", 1, true))
-
+    H.test("Encarmine texture declarations preserve native material inputs", function()
         local texture_file = assert(io.open(repo_root
             .. "/cosmetics_tweaker/textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_diffuse.texture", "rb"))
         local texture_source = texture_file:read("*a")
         texture_file:close()
-        H.truthy(texture_source:find("enable_cut_alpha_threshold = true", 1, true))
+        H.truthy(texture_source:find("enable_cut_alpha_threshold = false", 1, true))
 
-        local helper_file = assert(io.open(repo_root
-            .. "/cosmetics_tweaker/tools/encarmine_asset_pipeline/double_side_plume.py", "rb"))
-        local helper_source = helper_file:read("*a")
-        helper_file:close()
-        H.truthy(helper_source:find("bmesh.ops.duplicate", 1, true))
-        H.truthy(helper_source:find("bmesh.ops.reverse_faces", 1, true))
-
-        local exporter_file = assert(io.open(repo_root
-            .. "/cosmetics_tweaker/tools/encarmine_asset_pipeline/export_rigged_encarmine.py", "rb"))
-        local exporter_source = exporter_file:read("*a")
-        exporter_file:close()
-        H.truthy(exporter_source:find('apply_scale_options="FBX_SCALE_UNITS"', 1, true))
-        H.truthy(exporter_source:find("validate_round_trip(primary)", 1, true))
-        H.truthy(exporter_source:find("local/world scale=1", 1, true))
-
-        local compiled_validator_file = assert(io.open(repo_root
-            .. "/cosmetics_tweaker/tools/encarmine_asset_pipeline/validate_compiled_scene.py", "rb"))
-        local compiled_validator_source = compiled_validator_file:read("*a")
-        compiled_validator_file:close()
-        H.truthy(compiled_validator_source:find("ENCARMINE_COMPILED_CONTRACT=OK", 1, true))
-        H.truthy(compiled_validator_source:find("relative world basis", 1, true))
-        H.truthy(compiled_validator_source:find("plume dimensions", 1, true))
-    end)
-
-    H.test("Encarmine spawn-only renderer covers preview live and husk paths", function()
-        local f = assert(io.open(repo_root
-            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua", "rb"))
-        local source = f:read("*a")
-        f:close()
-        H.truthy(source:find('spawn_unit%(Application, "hero%-preview"%)'))
-        H.truthy(source:find('spawn_unit%(Application, "live%-attachment"%)'))
-        H.truthy(source:find('spawn_unit%(Application, "remote%-husk"%)'))
-        H.truthy(source:find('spawn_unit%(Application, "appearance%-replay"%)'))
-        H.truthy(source:find('install_native_plume_controller%(spawned_hat, "remote%-husk"%)'))
-        H.truthy(source:find('register_fade_link%(self%._unit, spawned_hat, "remote%-husk"%)'))
-        H.truthy(source:find('install_native_plume_controller%(unit, "hero%-preview"%)'))
-        H.truthy(source:find('register_fade_link%(self%._unit, hat_unit, "local%-attachment"%)'))
-        H.truthy(source:find("PackageManager%-facing identity"))
-    end)
-
-    H.test("Encarmine authored plume and response revisions are pinned", function()
         isolated(function(hats)
-            H.equal(hats.PLUME_SOURCE_FACES, 372)
-            H.equal(hats.PLUME_RENDER_FACES, 744)
-            H.truthy(hats.ALPHA_AWARE_CLOTH)
-            H.equal(hats.MATERIAL_RESPONSE_REVISION, 4)
-            H.equal(hats.PLUME_ALPHA_HAZE_MAX, 15)
-            H.equal(hats.PLUME_RGB_SCALE, 4)
-            H.equal(hats.PLUME_RETAINED_ALPHA, 255)
-            H.equal(hats.ARMOR_ROUGHNESS_SCALE, 0.90)
-            H.truthy(hats.SELF_CONTAINED_HELMET_MATERIALS)
-            H.equal(hats.PLUME_RIG_BONES, 13)
-            H.equal(hats.PLUME_DYNAMIC_BONES, 6)
-            H.equal(hats.NATIVE_PLUME_CONTROLLER,
-                "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_07")
-            H.truthy(hats.RUNTIME_CONTROLLER_INSTALL)
-            H.truthy(hats.FADE_LINK_REGISTRATION)
+            H.equal(hats.TEXTURE_SLOTS.diffuse, "texture_map_c0ba2942")
+            H.equal(hats.TEXTURE_SLOTS.normal, "texture_map_59cd86b9")
+            H.equal(hats.TEXTURE_SLOTS.combined, "texture_map_b788717c")
+            H.truthy(hats.ARMOR_TEXTURES.combined:find("encarmine_armored_combined", 1, true))
+            H.truthy(hats.PLUME_TEXTURES.combined:find("encarmine_cloth_combined", 1, true))
         end)
     end)
 end

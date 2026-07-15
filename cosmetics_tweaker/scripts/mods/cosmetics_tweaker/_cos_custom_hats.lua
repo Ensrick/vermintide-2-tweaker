@@ -1,7 +1,6 @@
--- Cosmetics-authored hats that reuse vanilla attachment contracts while
--- carrying their own compiled unit/material resources. Registration is
--- unconditional and deterministic; settings only control availability and
--- rendering, never NetworkLookup membership.
+-- Cosmetics-authored hats which preserve a vanilla donor unit exactly and
+-- change only per-instance texture bindings. Registration is unconditional;
+-- the setting controls availability and painting, never NetworkLookup shape.
 
 local mod = get_mod("cosmetics_tweaker")
 local M = {}
@@ -10,69 +9,53 @@ M.ITEM_KEY = "cos_encarmine_hat"
 M.VARIANT_KEY = "cos_custom_encarmine_hat"
 M.BASE_KEY = "knight_hat_0006"
 M.BASE_UNIT = "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_07"
--- v0.9.110 shipped a unit without a same-path resource package, so preview
--- PackageManager loads fatally missed BD55DCA31255AAEC.package. Keep the
--- candidate quarantined behind a complete package/unit/material/texture probe;
--- any missing resource retains the inventory-package-listed vanilla fallback.
-M.CANDIDATE_CUSTOM_UNIT = "units/cosmetics_tweaker/encarmine_hat/encarmine_hat"
 M.CUSTOM_UNIT = M.BASE_UNIT
--- VMB emits the contents of a sidecar .package as a same-hash mod_bundle,
--- but it does not emit a loadable `<path>.package` resource inside that
--- bundle. `Application.can_get("package", path)` nevertheless reports true,
--- so it is not a sufficient guard for HeroPreviewer's later
--- PackageManager:load(path). That engine call fatals below Lua. Keep the
--- candidate quarantined until the preview path is decoupled from the spawned
--- unit (base package preload + custom resident-unit spawn).
-M.RUNTIME_PREVIEW_PACKAGE_SAFE = false
--- The custom unit is compiled into Cosmetics' already-resident root package,
--- but it is not itself a valid PackageManager package.  Preview/equip data
--- must therefore keep BASE_UNIT (so vanilla loads the listed package), while
--- the final spawn choke points may substitute this resident unit immediately
--- before World.spawn_unit / UnitSpawner.spawn_local_unit.
-M.SPAWN_ONLY_RENDERER = true
--- #612 visual contract. The authored plume is an open alpha-cut surface: its
--- 372 source faces are exported with one reversed counterpart each so the
--- standard backface-culling path renders it from either side. The cloth shader
--- consumes diffuse alpha; response revision 3 retains a fully self-contained
--- standard material graph because the SDK compiler does not ship the vanilla
--- Laurel parent-material sources. The diffuse compiler removes only the <=15
--- alpha haze before applying the native 0.5 cut threshold.
-M.PLUME_SOURCE_FACES = 372
-M.PLUME_RENDER_FACES = 744
-M.ALPHA_AWARE_CLOTH = true
-M.MATERIAL_RESPONSE_REVISION = 4
-M.PLUME_ALPHA_HAZE_MAX = 15
-M.PLUME_RGB_SCALE = 4
-M.PLUME_RETAINED_ALPHA = 255
-M.ARMOR_ROUGHNESS_SCALE = 0.90
-M.SELF_CONTAINED_HELMET_MATERIALS = true
-M.PLUME_RIG_BONES = 13
-M.PLUME_DYNAMIC_BONES = 6
-M.NATIVE_PLUME_CONTROLLER = "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_07"
-M.RUNTIME_CONTROLLER_INSTALL = true
-M.FADE_LINK_REGISTRATION = true
-M.CUSTOM_MATERIALS = {
-    "units/cosmetics_tweaker/encarmine_hat/encarmine_armored",
-    "units/cosmetics_tweaker/encarmine_hat/encarmine_cloth",
+
+-- #612: do not re-export Laurel. The donor's compiled unit is the behavioral
+-- contract: 8 meshes, three LOD steps, its authored normals/tangents, two
+-- shadow proxies, 13-bone plume rig, animation controller, and native fade
+-- registration. Replacing the unit dropped those contracts and caused the
+-- faceted armor, alpha-card haze, missing jiggle, and camera-fade regression.
+M.RENDER_MODE = "vanilla_laurel_material_instance_override"
+M.LAUREL_SCENE_CONTRACT = {
+    mesh_count = 8,
+    armor_mesh_indices = { 1, 2, 3 },
+    plume_mesh_indices = { 4, 5, 6 },
+    shadow_mesh_indices = { 0, 7 },
+    lod_steps = 3,
+    rig_bones = 13,
+    dynamic_plume_bones = 6,
 }
-M.CUSTOM_TEXTURES = {
-    "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_diffuse",
-    "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_normal",
-    "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_metallic",
-    "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_ao",
-    "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_roughness",
-    "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_diffuse",
-    "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_normal",
-    "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_metallic",
-    "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_ao",
-    "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_roughness",
+
+-- These are the exact variable names exposed by both native Laurel materials.
+-- Mesh indices distinguish armor from plume because both materials deliberately
+-- use the same texture-variable names. Material.set_texture receives the
+-- material instance returned by Mesh.material; it does not replace the native
+-- shader graph or mutate ItemMasterList's shared donor resource.
+M.TEXTURE_SLOTS = {
+    diffuse = "texture_map_c0ba2942",
+    normal = "texture_map_59cd86b9",
+    combined = "texture_map_b788717c",
 }
-M.runtime_custom_ready = false
+M.ARMOR_TEXTURES = {
+    diffuse = "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_diffuse",
+    normal = "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_normal",
+    combined = "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_combined",
+}
+M.PLUME_TEXTURES = {
+    diffuse = "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_diffuse",
+    normal = "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_normal",
+    combined = "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_combined",
+}
+M.MATERIAL_RESPONSE_REVISION = 5
+M.DONOR_ALPHA_CONTRACT = true
+M.DONOR_NORMAL_TANGENT_CONTRACT = true
+M.DONOR_CONTROLLER_CONTRACT = true
+M.DONOR_FADE_CONTRACT = true
+
 M.registered = false
-M._probe_elapsed = 0
-M._probe_attempts = 0
-M._probe_limit = 30
-M._spawn_diag_seen = {}
+M._painted_units = setmetatable({}, { __mode = "k" })
+M._paint_diag_seen = {}
 
 local ITEM_LOCALIZATION = {
     cos_encarmine_hat_name = "Encarmine Helmet",
@@ -81,152 +64,112 @@ local ITEM_LOCALIZATION = {
 }
 M.ITEM_LOCALIZATION = ITEM_LOCALIZATION
 
-local function can_get(application, resource_type, path)
-    if not (application and type(application.can_get) == "function") then return false end
-    local ok, result = pcall(application.can_get, resource_type, path)
-    return ok and result == true
-end
-
 local enabled
 
-local function ensure_custom_clone_bridge()
-    local bridge = M.bridge
-    if not (M.runtime_custom_ready and bridge and bridge.unit_path_to_clones) then return end
-    local clones = bridge.unit_path_to_clones[M.CANDIDATE_CUSTOM_UNIT] or {}
-    for _, key in ipairs(clones) do
-        if key == M.ITEM_KEY then return end
+enabled = function()
+    if not mod or type(mod.get) ~= "function" then return true end
+    local ok, value = pcall(mod.get, mod, "cos_encarmine_hat_enabled")
+    return not ok or value ~= false
+end
+
+local function resource_ready(application, resource_type, path)
+    if not (application and type(application.can_get) == "function") then
+        -- Tests and early registration do not expose Application. Painting is
+        -- called only after a live unit exists, when the root package is loaded.
+        return true
     end
-    clones[#clones + 1] = M.ITEM_KEY
-    bridge.unit_path_to_clones[M.CANDIDATE_CUSTOM_UNIT] = clones
+    local ok, value = pcall(application.can_get, resource_type, path)
+    return ok and value == true
 end
 
 function M.runtime_resources_ready(application)
-    if not can_get(application, "package", M.CANDIDATE_CUSTOM_UNIT)
-        or not can_get(application, "unit", M.CANDIDATE_CUSTOM_UNIT) then
-        return false
-    end
-    for _, path in ipairs(M.CUSTOM_MATERIALS) do
-        if not can_get(application, "material", path) then return false end
-    end
-    for _, path in ipairs(M.CUSTOM_TEXTURES) do
-        if not can_get(application, "texture", path) then return false end
+    for _, textures in ipairs({ M.ARMOR_TEXTURES, M.PLUME_TEXTURES }) do
+        for _, path in pairs(textures) do
+            if not resource_ready(application, "texture", path) then return false end
+        end
     end
     return true
 end
 
-function M.spawn_resources_ready(application)
-    if not can_get(application, "unit", M.CANDIDATE_CUSTOM_UNIT) then
-        return false
+local function paint_meshes(unit, indices, textures)
+    for _, mesh_index in ipairs(indices) do
+        local mesh = Unit.mesh(unit, mesh_index)
+        local material_count = Mesh.num_materials(mesh)
+        for material_index = 0, material_count - 1 do
+            local material = Mesh.material(mesh, material_index)
+            Material.set_texture(material, M.TEXTURE_SLOTS.diffuse, textures.diffuse)
+            Material.set_texture(material, M.TEXTURE_SLOTS.normal, textures.normal)
+            Material.set_texture(material, M.TEXTURE_SLOTS.combined, textures.combined)
+        end
     end
-    for _, path in ipairs(M.CUSTOM_MATERIALS) do
-        if not can_get(application, "material", path) then return false end
+end
+
+function M.apply_surface(unit, surface)
+    if not enabled() then return false, "disabled" end
+    if not (unit and Unit and Unit.alive and Unit.alive(unit)) then
+        return false, "dead_unit"
     end
-    for _, path in ipairs(M.CUSTOM_TEXTURES) do
-        if not can_get(application, "texture", path) then return false end
+    if M._painted_units[unit] == M.MATERIAL_RESPONSE_REVISION then
+        return true, "already_applied"
     end
-    return true
+    if not M.runtime_resources_ready(Application) then
+        return false, "textures_unavailable"
+    end
+
+    local mesh_count = Unit.num_meshes(unit)
+    if mesh_count ~= M.LAUREL_SCENE_CONTRACT.mesh_count then
+        return false, "donor_mesh_count_" .. tostring(mesh_count)
+    end
+
+    local ok, err = pcall(function()
+        paint_meshes(unit, M.LAUREL_SCENE_CONTRACT.armor_mesh_indices, M.ARMOR_TEXTURES)
+        paint_meshes(unit, M.LAUREL_SCENE_CONTRACT.plume_mesh_indices, M.PLUME_TEXTURES)
+    end)
+    if not ok then
+        local key = tostring(surface or "unknown") .. "|" .. tostring(err)
+        if not M._paint_diag_seen[key] then
+            M._paint_diag_seen[key] = true
+            mod:info("[cos:612] Laurel material-instance override failed surface=%s err=%s",
+                tostring(surface or "unknown"), tostring(err))
+        end
+        return false, tostring(err)
+    end
+
+    M._painted_units[unit] = M.MATERIAL_RESPONSE_REVISION
+    return true, "applied"
 end
 
 function M.is_custom_identity(item_or_variant_key)
     return item_or_variant_key == M.ITEM_KEY or item_or_variant_key == M.VARIANT_KEY
 end
 
-function M.spawn_unit(application, surface)
-    local custom = enabled() and M.SPAWN_ONLY_RENDERER
-        and M.spawn_resources_ready(application)
-    local resolved = custom and M.CANDIDATE_CUSTOM_UNIT or M.BASE_UNIT
-    surface = tostring(surface or "unknown")
-    local diag_key = surface .. "|" .. resolved
-    if not M._spawn_diag_seen[diag_key] then
-        M._spawn_diag_seen[diag_key] = true
-        if printf then
-            pcall(printf, "[cos:612] spawn-only surface=%s unit=%s custom=%s package_request=false",
-                surface, resolved, tostring(custom))
-        end
-    end
-    return resolved, custom
+-- Compatibility for existing spawn call sites. Returning the donor every time
+-- is intentional: package-facing and rendered identity must be identical.
+function M.spawn_unit(_application, _surface)
+    return M.BASE_UNIT, false
 end
 
--- The SDK can compile a custom `.bones` list from source but cannot compile a
--- reference to the game's Laurel `.state_machine` because that source asset is
--- absent from the Mod Tools. The game does have the compiled controller at
--- runtime (the package-safe Laurel fallback is deliberately preloaded first),
--- so install it once on the freshly spawned custom unit. The imported FBX and
--- same-name `.bones` file use the exact 13-bone Laurel skeleton.
-function M.install_native_plume_controller(unit, surface)
-    if not (unit and Unit and Unit.alive and Unit.alive(unit)) then return false end
-    if Unit.has_animation_state_machine and Unit.has_animation_state_machine(unit) then
-        return true
-    end
-    if not (Unit.has_node and Unit.has_node(unit, "j_feather_01_dynamic")
-            and Unit.has_node(unit, "j_feather_06_dynamic")) then
-        return false
-    end
-    local ok, err = pcall(Unit.set_animation_state_machine, unit, M.NATIVE_PLUME_CONTROLLER)
-    if not ok then
-        mod:error("[cos:612] plume controller install failed surface=%s err=%s",
-            tostring(surface or "unknown"), tostring(err))
-        return false
-    end
-    return true
+-- Compatibility no-ops while callers migrate. The exact donor already owns
+-- its controller and participates in vanilla FadeSystem registration.
+function M.install_native_plume_controller(unit)
+    return unit and Unit and Unit.alive and Unit.alive(unit) or false
 end
 
--- FadeSystem only learns about newly linked inventory units when callers
--- explicitly invoke `new_linked_units`; AttachmentUtils does not do that for
--- hats. Register the custom attachment once after spawn/link so camera
--- intersection fades it with its owning character instead of leaving an
--- opaque helmet floating over a faded body.
-function M.register_fade_link(owner_unit, attachment_unit, surface)
-    if not (owner_unit and attachment_unit and Unit and Unit.alive
-            and Unit.alive(owner_unit) and Unit.alive(attachment_unit)) then
-        return false
-    end
-    local entity = Managers and Managers.state and Managers.state.entity
-    if not entity or type(entity.system) ~= "function" then return false end
-    local ok_system, fade_system = pcall(entity.system, entity, "fade_system")
-    if not ok_system or not fade_system or type(fade_system.new_linked_units) ~= "function" then
-        return false
-    end
-    local ok, err = pcall(fade_system.new_linked_units, fade_system, owner_unit, { attachment_unit })
-    if not ok then
-        mod:error("[cos:612] fade registration failed surface=%s err=%s",
-            tostring(surface or "unknown"), tostring(err))
-        return false
-    end
-    return true
+function M.register_fade_link(owner_unit, attachment_unit)
+    return owner_unit and attachment_unit and Unit and Unit.alive
+        and Unit.alive(owner_unit) and Unit.alive(attachment_unit) or false
 end
 
 function M.refresh_runtime_resources(application)
-    local dependency_ready = M.runtime_resources_ready(application)
-    local ready = M.RUNTIME_PREVIEW_PACKAGE_SAFE and dependency_ready
-    M.runtime_custom_ready = ready
-    M.CUSTOM_UNIT = ready and M.CANDIDATE_CUSTOM_UNIT or M.BASE_UNIT
-    ensure_custom_clone_bridge()
+    M.CUSTOM_UNIT = M.BASE_UNIT
     local entry = ItemMasterList and rawget(ItemMasterList, M.ITEM_KEY)
-    if entry then entry.unit = M.CUSTOM_UNIT end
-    return ready
+    if entry then entry.unit = M.BASE_UNIT end
+    return M.runtime_resources_ready(application)
 end
 
-function M.tick(dt)
-    if not M.RUNTIME_PREVIEW_PACKAGE_SAFE
-        or M.runtime_custom_ready
-        or M._probe_attempts >= M._probe_limit then return end
-    M._probe_elapsed = M._probe_elapsed + (tonumber(dt) or 0)
-    if M._probe_attempts > 0 and M._probe_elapsed < 0.25 then return end
-    M._probe_elapsed = 0
-    M._probe_attempts = M._probe_attempts + 1
-    if M.refresh_runtime_resources(Application) then
-        M.sync_toggle()
-        mod:info("[cos:encarmine] compiled package closure ready after %d probe(s)", M._probe_attempts)
-    elseif M._probe_attempts == M._probe_limit then
-        mod:error("[cos:encarmine] custom package closure unavailable after %d probes; retaining Laurel fallback", M._probe_attempts)
-    end
-end
-
-enabled = function()
-    if not mod or type(mod.get) ~= "function" then return true end
-    local ok, value = pcall(mod.get, mod, "cos_encarmine_hat_enabled")
-    return not ok or value ~= false
+function M.tick(_dt)
+    -- No package probing or controller installation is required. The vanilla
+    -- donor package is loaded through the ordinary hat item path.
 end
 
 function M.is_enabled()
@@ -237,10 +180,10 @@ function M.resolve_variant(key)
     if key ~= M.VARIANT_KEY then return nil end
     local active = enabled()
     return {
-        kind = "custom_unit",
+        kind = "vanilla_donor_texture_override",
         swap_hand = "hat",
-        new_units = { active and M.CUSTOM_UNIT or M.BASE_UNIT },
-        is_vanilla_unit = M.CUSTOM_UNIT == M.BASE_UNIT or not active,
+        new_units = { M.BASE_UNIT },
+        is_vanilla_unit = true,
         cos_authored = true,
         enabled = active,
     }
@@ -257,7 +200,7 @@ local function build_entry()
     entry.localized_name = ITEM_LOCALIZATION.cos_encarmine_hat_name
     entry.localized_description = ITEM_LOCALIZATION.cos_encarmine_hat_description
     entry.inventory_icon = "icon_knight_hat_0006_encarmine"
-    entry.unit = enabled() and M.CUSTOM_UNIT or M.BASE_UNIT
+    entry.unit = M.BASE_UNIT
     entry.rarity = "exotic"
     entry.required_dlc = nil
     entry.can_wield = enabled() and { "es_knight" } or {}
@@ -277,14 +220,13 @@ end
 function M.sync_toggle()
     local entry = ItemMasterList and rawget(ItemMasterList, M.ITEM_KEY)
     if not entry then return false end
-    entry.unit = enabled() and M.CUSTOM_UNIT or M.BASE_UNIT
+    entry.unit = M.BASE_UNIT
     entry.can_wield = enabled() and { "es_knight" } or {}
     return true
 end
 
 function M.register_all(bridge)
     M.bridge = bridge or M.bridge
-    M.refresh_runtime_resources(Application)
     if M.registered then
         M.sync_toggle()
         return true
@@ -304,19 +246,16 @@ function M.register_all(bridge)
         bridge.backend_to_armoury[M.ITEM_KEY] = M.VARIANT_KEY
         bridge.backend_to_vanilla[M.ITEM_KEY] = M.BASE_KEY
         bridge.armoury_to_backend[M.VARIANT_KEY] = M.ITEM_KEY
-        -- Never alias the shared vanilla fallback path as a custom clone: that
-        -- would make ordinary Laurel Helm instances look like this item.
-        ensure_custom_clone_bridge()
+        -- Never alias BASE_UNIT in unit_path_to_clones: ordinary Laurel hats
+        -- share this donor and must remain unpainted.
         bridge.custom_variants = bridge.custom_variants or {}
         bridge.custom_variants[M.VARIANT_KEY] = true
-        -- `registered` means the shared net-safe appearance registry is live.
-        -- LA's own one-time registration is tracked independently.
         bridge.registered = true
     end
 
     M.registered = true
-    mod:info("[cos:encarmine] registered %s -> %s (package_ready=%s enabled=%s)",
-        M.ITEM_KEY, M.CUSTOM_UNIT, tostring(M.runtime_custom_ready), tostring(enabled()))
+    mod:info("[cos:encarmine] registered %s -> exact Laurel donor (enabled=%s)",
+        M.ITEM_KEY, tostring(enabled()))
     return true
 end
 
