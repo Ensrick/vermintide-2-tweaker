@@ -34,6 +34,35 @@ return function(H, repo_root)
 		H.equal(policy.style("cwv_es_infantry_spear"), nil)
 	end)
 
+	H.test("CWV Combat Style input descriptions never exceed the vanilla widget pool", function()
+		local full = {
+			{ input_action = "d_vertical", priority = 1 },
+			{ input_action = "l2_r2", priority = 2 },
+			{ input_action = "right_stick_press", priority = 3 },
+			{ input_action = "show_gamercard", priority = 4 },
+			{ input_action = "refresh", priority = 5 },
+			{ input_action = "confirm", priority = 6 },
+			{ input_action = "back", priority = 7 },
+		}
+		local bounded, mode = policy.bounded_style_actions(full, 7)
+		H.equal(mode, "replaced")
+		H.equal(#bounded, 7)
+		H.equal(bounded[4].input_action, "special_1")
+		H.equal(bounded[4].priority, 4)
+		H.equal(full[4].input_action, "show_gamercard")
+
+		local six = {}
+		for index = 1, 6 do six[index] = full[index] end
+		bounded, mode = policy.bounded_style_actions(six, 7)
+		H.equal(mode, "appended")
+		H.equal(#bounded, 7)
+		H.equal(bounded[7].input_action, "special_1")
+
+		local tiny = policy.bounded_style_actions(full, 3)
+		H.equal(#tiny, 3)
+		H.equal(tiny[3].input_action, "special_1")
+	end)
+
 	H.test("CWV console equipment row exposes a non-overlapping authored style control", function()
 		local runtime = {
 			describe = function(_, item)

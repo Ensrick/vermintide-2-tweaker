@@ -135,6 +135,18 @@ function M.new(deps)
 		return applied
 	end
 
+	-- Attachment linking can restore a weapon unit's root rotation after the
+	-- spawn hook. The durable transform owner first restores every authored base
+	-- pose, then calls this once so hammer-mode deltas remain the final write.
+	-- No network traffic is emitted: this only revisits already-rendered units.
+	function owner:reapply_all()
+		local applied = 0
+		for identity in pairs(units_by_identity) do
+			applied = applied + self:reapply(identity)
+		end
+		return applied
+	end
+
 	function owner:forget(unit)
 		local record = records[unit]
 		if not record then return end

@@ -10,6 +10,7 @@ M.SETTING_KEY = "cwv_combat_style_state"
 M.CHANNEL = "cwv_combat_style_v1"
 M.SCHEMA = 1
 M.MAX_TOKEN = 96
+M.INPUT_DESCRIPTION_CAPACITY = 7
 M.KERILLIAN_TEMPLATE = "cwv_combat_style_kerillian_greatsword"
 M.KERILLIAN_SPEED_MULT = 0.85
 M.KERILLIAN_STAGGER_MULT = 1.15
@@ -21,6 +22,43 @@ M.CONSOLE_STYLE_BUTTON = {
 	cog_shift_y = -27,
 	style_shift_y = 35,
 }
+
+-- HeroWindowLoadoutConsole constructs MenuInputDescriptionUI with exactly
+-- seven widgets. A style-capable customizable row already has seven vanilla
+-- generic actions, so appending `special_1` produces an eighth action and
+-- crashes set_input_description when it indexes a nonexistent widget. Keep the
+-- list bounded and replace the nonessential inventory-layout hint when full;
+-- the underlying show_gamercard input remains handled by vanilla.
+function M.bounded_style_actions(source, capacity)
+	capacity = math.max(0, math.floor(tonumber(capacity) or 0))
+	local list = {}
+	for index, action in ipairs(type(source) == "table" and source or {}) do
+		if index <= capacity then list[index] = action end
+	end
+	if capacity == 0 then return list, "empty" end
+	for _, action in ipairs(list) do
+		if action.input_action == "special_1" then return list, "existing" end
+	end
+	local style_action = {
+		description_text = "cwv_cycle_combat_style_controller",
+		input_action = "special_1",
+	}
+	if #list < capacity then
+		style_action.priority = #list + 1
+		list[#list + 1] = style_action
+		return list, "appended"
+	end
+	local replace_index = capacity
+	for index, action in ipairs(list) do
+		if action.input_action == "show_gamercard" then
+			replace_index = index
+			break
+		end
+	end
+	style_action.priority = list[replace_index] and list[replace_index].priority or replace_index
+	list[replace_index] = style_action
+	return list, "replaced"
+end
 
 M.FAMILIES = {
 	greatsword = {
@@ -830,13 +868,7 @@ function M.install_loadout_ui(mod, runtime)
 				{ "default_no_customization", "cwv_style_no_customization" } }) do
 			local source = actions and actions[pair[1]]
 			if type(source) == "table" then
-				local list = {}
-				for index, action in ipairs(source) do list[index] = action end
-				list[#list + 1] = {
-					description_text = "cwv_cycle_combat_style_controller",
-					input_action = "special_1",
-					priority = #list + 1,
-				}
+				local list = M.bounded_style_actions(source, M.INPUT_DESCRIPTION_CAPACITY)
 				actions[pair[2]] = list
 			end
 		end
@@ -880,7 +912,11 @@ function M.install_loadout_ui(mod, runtime)
 				local wanted = customizable and "cwv_style" or "cwv_style_no_customization"
 				local list = actions and actions[wanted]
 				if list and self._current_input_desc ~= wanted then
-					self._menu_input_description:change_generic_actions(list)
+					local widgets = self._menu_input_description.console_input_description_widgets
+					local capacity = type(widgets) == "table" and #widgets
+						or M.INPUT_DESCRIPTION_CAPACITY
+					local safe_list = M.bounded_style_actions(list, capacity)
+					self._menu_input_description:change_generic_actions(safe_list)
 					self._current_input_desc = wanted
 				end
 			end

@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.427-dev"
+local MOD_VERSION = "0.1.428-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -11491,6 +11491,10 @@ end
 local _crowbill_transform_diag_seen = setmetatable({}, { __mode = "k" })
 local _crowbill_transform_diag_total = 0
 _om._cwv_crowbill_transform_delivery = { counts = {} }
+local _DURABLE_TRANSFORM_LIBRARY = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_durable_transform")
+local _durable_crowbill_first_tick = setmetatable({}, { __mode = "k" })
+local _durable_crowbill_owner
 local function _triplet_text(value)
 	if type(value) ~= "table" then return "nil" end
 	return string.format("%.3f,%.3f,%.3f", value[1] or 0, value[2] or 0, value[3] or 0)
@@ -11505,6 +11509,28 @@ local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, 
 	local rotation = _resolve_field(def, prefix .. "rotation_" .. perspective)
 		or _resolve_field(def, prefix .. "rotation")
 	local applied = _transform_unit(unit, scale, offset, rotation)
+	if def.crowbill_model_key and (scale or offset or rotation) and unit and _is_unit(unit)
+			and _durable_crowbill_owner then
+		-- Offset is authored as native+delta, but durable replay must be absolute
+		-- or it would accumulate every frame. Capture the resolved post-write
+		-- position in a Vector3Box; raw Stingray vectors are frame-temporary.
+		local position_box
+		if offset then
+			local ok, position = pcall(Unit.local_position, unit, 0)
+			if ok and position then position_box = Vector3Box(position) end
+		end
+		_durable_crowbill_owner:track(unit, {
+			def = def,
+			hand = hand,
+			perspective = perspective,
+			surface = surface,
+			unit_name = unit_name,
+			skin = skin,
+			scale = scale,
+			position = position_box,
+			rotation = rotation,
+		})
+	end
 	if def.crowbill_model_key and (scale or offset or rotation) and unit
 			and _is_unit(unit) and _crowbill_transform_diag_total < 64 then
 		local surfaces = _crowbill_transform_diag_seen[unit]
@@ -11529,6 +11555,38 @@ local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, 
 	end
 	return applied
 end
+
+-- The engine's weapon attachment owner can rewrite custom-unit roots after the
+-- one-shot spawn hooks. Restore only tracked, tuned Crowbill units each frame.
+-- Absolute scale/position/rotation make this idempotent; weak keys bound the
+-- registry to live units. Crowbill presentation runs last so hammer mode keeps
+-- its local 180-degree face flip over the restored authored base rotation.
+_durable_crowbill_owner = _DURABLE_TRANSFORM_LIBRARY.new({
+	alive = function(unit) return unit and Unit.alive(unit) end,
+	apply = function(unit, spec)
+		local wrote = false
+		if spec.scale then wrote = WA.apply_scale(unit, spec.scale) or wrote end
+		if spec.position then
+			wrote = WA.apply_position(unit, spec.position:unbox()) or wrote
+		end
+		if spec.rotation then wrote = WA.apply_rotation(unit, spec.rotation) or wrote end
+		if wrote and not _durable_crowbill_first_tick[unit] then
+			_durable_crowbill_first_tick[unit] = true
+			pcall(printf,
+				"[cwv:604] durable transform active surface=%s perspective=%s hand=%s model=%s unit=%s",
+				tostring(spec.surface), tostring(spec.perspective), tostring(spec.hand),
+				tostring(spec.def and spec.def.crowbill_model_key), tostring(spec.unit_name))
+		end
+		return wrote
+	end,
+	after_all = function()
+		if _om.crowbill_presentation_owner
+				and type(_om.crowbill_presentation_owner.reapply_all) == "function" then
+			_om.crowbill_presentation_owner:reapply_all()
+		end
+	end,
+})
+_om._cwv_durable_crowbill_owner = _durable_crowbill_owner
 
 -- Vanilla mace+sword cosmetic tweak (toggleable via "mace_sword_tweak"
 -- setting, default ON). When the toggle is on:
@@ -12924,6 +12982,9 @@ do
 	local previous_update = mod.update
 	mod.update = function(dt)
 		if previous_update then previous_update(dt) end
+		if _om._cwv_durable_crowbill_owner then
+			_om._cwv_durable_crowbill_owner:step()
+		end
 		local pending = _om._cwv_skin_replay_pending
 		if not pending then return end
 		local next_pending, sent, outcome = _om._cwv_skin_replay_pending_step(

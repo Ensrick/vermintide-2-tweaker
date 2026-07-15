@@ -1,5 +1,34 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.428-dev - 2026-07-15 - #604 durable Crowbill transforms [verify-fix-coop]
+
+- **#620 P0 menu crash:** bounded the Combat Style controller legend to the
+  seven widgets allocated by `HeroWindowLoadoutConsole`. A full seven-action
+  vanilla list now replaces only the inventory-layout hint with `special_1`;
+  the six-action no-customization list appends normally. The actual vanilla
+  inputs remain handled, and the live hook rechecks the instantiated widget
+  capacity before calling `change_generic_actions`.
+
+- Fixed the false-positive transform delivery seen in `0.1.426-dev`: the spawn
+  hook resolved the exact Dawi model and `Unit.set_local_*` returned success,
+  but the engine attachment owner restored the unit root afterward, leaving no
+  visible transform despite the success log.
+- Tuned Crowbill units are now weak-tracked and receive an idempotent absolute
+  scale/position/rotation restoration after the attachment update. The
+  Imperial Model 05 offset is captured once as an absolute target so it cannot
+  accumulate; Crowbill hammer-mode presentation runs last so its local
+  180-degree face flip is preserved.
+- Added an engine-free durable-owner regression and a bounded
+  `[cwv:604] durable transform active ...` line. No transform or RPC state is
+  streamed over the network; each peer applies the shipped values to the units
+  it renders.
+
+**Co-op verify:** Confirm `[cwv:LOAD] v0.1.428-dev`. Equip Dawi Crowbill Model
+01 and verify scale `0.5` plus rotation `-90/-90/-90` in owner 1P/3P,
+inventory preview, and on the other peer. Repeat with Imperial Model 05: scale
+`0.45`, offset `0/-0.03/-0.20`, rotation `-90/-90/-90`. The log must contain
+`[cwv:604] durable transform active` for each rendered tuned unit.
+
 ## 0.1.427-dev - 2026-07-15 - #474 canonical Old Musket Athanor preview
 
 - Added the Old Musket to CWV's generic custom-unit preview bridge. Its resident custom unit now borrows one balanced vanilla Handgun package lease instead of depending on an unavailable standalone Workshop package.
