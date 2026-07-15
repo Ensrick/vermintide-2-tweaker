@@ -1785,8 +1785,8 @@ class 27 covers husk identity; issue #420 owns the shared library extraction.
 
 ## 49. Visual-only custom unit drops vanilla behavioral contracts
 
-**First seen:** 2026-07-15 (Encarmine helmet, issue #612; repair pending
-in-game verification).
+**First seen:** 2026-07-15 (Encarmine helmet, issue #612; verified fixed by
+retaining the exact Laurel donor and overriding only per-instance textures).
 **Lives in:** imported or rebuilt hats, outfits, weapons, and props that replace
 a vanilla unit rather than only its textures/materials.
 
@@ -1811,8 +1811,8 @@ a vanilla unit rather than only its textures/materials.
 
 ## 50. Texture conversion preserves haze outside intended alpha
 
-**First seen:** 2026-07-15 (Encarmine plume, issue #612; repair pending in-game
-verification).
+**First seen:** 2026-07-15 (Encarmine plume, issue #612; verified fixed with
+the donor alpha/material graph and semantic armor/plume slot resolution).
 **Lives in:** PNG/DDS/texture conversion with cutout or translucent assets,
 especially mipmapped DXT textures.
 
