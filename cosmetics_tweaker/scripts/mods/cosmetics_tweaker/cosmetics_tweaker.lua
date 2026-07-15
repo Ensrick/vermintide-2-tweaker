@@ -75,7 +75,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.122-dev"
+local MOD_VERSION = "0.9.123-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -5086,14 +5086,7 @@ mod:hook_safe("PlayerUnitCosmeticExtension", "extensions_ready", function(self)
 end)
 
 mod:hook_safe("HeroPreviewer", "post_update", function(self)
-    local loading = self._hero_loading_package_data
-    local skin_data = loading and loading.skin_data
-    if skin_data and skin_data.name == GK_SET.SKIN_ITEM_KEY then
-        local mesh = self.mesh_unit
-        if mesh and Unit.alive(mesh) then
-            GK_SET.apply_variant_to_unit(GK_SET.SKIN_VARIANT_KEY, mesh, "hero_preview")
-        end
-    end
+    GK_SET.apply_armor_to_hero_preview(self)
 end)
 
 local function _spawn_item_post(self, item_name, spawn_data)

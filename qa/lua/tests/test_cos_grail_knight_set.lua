@@ -10,6 +10,29 @@ return function(H, repo_root)
     local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
     local package_file = read("cosmetics_tweaker/resource_packages/cosmetics_tweaker/cosmetics_tweaker.package")
 
+    local function with_loaded_module(callback)
+        local saved = {
+            get_mod = _G.get_mod,
+            Cosmetics = _G.Cosmetics,
+            Application = _G.Application,
+            Unit = _G.Unit,
+            Mesh = _G.Mesh,
+            Material = _G.Material,
+        }
+        _G.get_mod = function() return { get = function() return true end } end
+        local path = repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_grail_knight_set.lua"
+        local set = assert(loadfile(path))()
+        local ok, err = pcall(callback, set)
+        _G.get_mod = saved.get_mod
+        _G.Cosmetics = saved.Cosmetics
+        _G.Application = saved.Application
+        _G.Unit = saved.Unit
+        _G.Mesh = saved.Mesh
+        _G.Material = saved.Material
+        if not ok then error(err, 0) end
+    end
+
     H.test("Grail Knight set reuses exact vanilla geometry", function()
         H.truthy(module:find('M.HAT_BASE_UNIT = "units/beings/player/empire_soldier_breton/headpiece/es_gk_hat_02"', 1, true))
         H.truthy(module:find('M.SKIN_FP_UNIT = "units/beings/player/empire_soldier_breton/first_person_base/chr_first_person_mesh"', 1, true))
@@ -36,7 +59,8 @@ return function(H, repo_root)
         H.truthy(module:find("la_armoury_key = M.SHIELD_VARIANT_KEY", 1, true))
         H.truthy(module:find("intended_unit = M.SHIELD_BASE_UNIT", 1, true))
         H.truthy(module:find("inventory_icon = M.ICONS.shield", 1, true))
-        H.truthy(module:find("new_units = { M.SHIELD_BASE_UNIT, M.SHIELD_BASE_UNIT }", 1, true))
+        H.truthy(module:find('M.SHIELD_BASE_UNIT_3P = M.SHIELD_BASE_UNIT .. "_3p"', 1, true))
+        H.truthy(module:find("new_units = { M.SHIELD_BASE_UNIT, M.SHIELD_BASE_UNIT_3P }", 1, true))
         H.equal(module:find("add_skin_to_combination(M.SHIELD_SKIN_KEY", 1, true), nil)
         H.truthy(entry:find("for _, item_type in ipairs(LA_BRIDGE.kruber_shield_item_types or {})", 1, true))
         H.truthy(entry:find("hands.left_hand_unit[#hands.left_hand_unit + 1] = GK_SET.offhand_option()", 1, true))
@@ -48,6 +72,121 @@ return function(H, repo_root)
         }) do
             H.truthy(entry:find(family, 1, true), "missing Kruber shield family " .. family)
         end
+    end)
+
+    H.test("Grail Knight outfit replays on each inventory hero mesh", function()
+        H.truthy(module:find("function M.apply_armor_to_hero_preview(previewer)", 1, true))
+        H.truthy(module:find("previewer.character_unit_skin_data or (loading and loading.skin_data)", 1, true))
+        H.truthy(module:find("previewer._cos_gk_armor_applied_mesh == mesh", 1, true))
+        H.truthy(module:find("previewer._cos_gk_armor_applied_mesh = mesh", 1, true))
+        H.truthy(entry:find("GK_SET.apply_armor_to_hero_preview(self)", 1, true))
+    end)
+
+    H.test("Grail Knight inventory hero replay is bounded and mesh-aware", function()
+        with_loaded_module(function(set)
+            local custom_skin = {}
+            local mesh_a, mesh_b = {}, {}
+            local writes = 0
+            _G.Cosmetics = { [set.SKIN_ITEM_KEY] = custom_skin }
+            _G.Application = { can_get = function(kind) return kind == "texture" end }
+            _G.Unit = {
+                alive = function(unit) return unit == mesh_a or unit == mesh_b end,
+                has_data = function() return false end,
+                num_meshes = function() return 1 end,
+                mesh = function(unit) return unit end,
+            }
+            _G.Mesh = {
+                has_material = function(_, name)
+                    return name == "mtr_outfit" or name == "mtr_outfit_ds"
+                end,
+                material = function(mesh, name) return { mesh = mesh, name = name } end,
+            }
+            _G.Material = { set_texture = function() writes = writes + 1 end }
+            local previewer = {
+                character_unit_skin_data = custom_skin,
+                mesh_unit = mesh_a,
+            }
+            H.truthy(set.apply_armor_to_hero_preview(previewer))
+            H.equal(writes, 6)
+            H.truthy(set.apply_armor_to_hero_preview(previewer))
+            H.equal(writes, 6, "same preview mesh should not repaint every frame")
+            previewer.mesh_unit = mesh_b
+            H.truthy(set.apply_armor_to_hero_preview(previewer))
+            H.equal(writes, 12, "view/career respawn must repaint its new mesh once")
+        end)
+    end)
+
+    H.test("Grail Knight outfit paints armor materials without touching Markus face", function()
+        with_loaded_module(function(set)
+            local unit = {}
+            local meshes = {
+                { materials = { mtr_skin = true, mtr_eyes = true } },
+                { materials = { mtr_outfit = true, mtr_outfit_ds = true } },
+            }
+            local writes = {}
+            _G.Application = { can_get = function(kind) return kind == "texture" end }
+            _G.Unit = {
+                alive = function(candidate) return candidate == unit end,
+                has_data = function() return false end,
+                num_meshes = function() return #meshes end,
+                mesh = function(_, index) return meshes[index + 1] end,
+            }
+            _G.Mesh = {
+                has_material = function(mesh, name) return mesh.materials[name] == true end,
+                material = function(mesh, name) return { mesh = mesh, name = name } end,
+            }
+            _G.Material = {
+                set_texture = function(material, slot, texture)
+                    writes[#writes + 1] = { material = material.name, slot = slot, texture = texture }
+                end,
+            }
+            H.truthy(set.apply_variant_to_unit(set.SKIN_VARIANT_KEY, unit, "third_person"))
+            H.equal(#writes, 6)
+            for _, write in ipairs(writes) do
+                H.truthy(write.material == "mtr_outfit" or write.material == "mtr_outfit_ds")
+                H.equal(write.material == "mtr_skin" or write.material == "mtr_eyes", false)
+            end
+        end)
+    end)
+
+    H.test("Grail Knight outfit material drift fails closed before any write", function()
+        with_loaded_module(function(set)
+            local unit, writes = {}, 0
+            _G.Application = { can_get = function() return true end }
+            _G.Unit = {
+                alive = function() return true end,
+                has_data = function() return false end,
+                num_meshes = function() return 1 end,
+                mesh = function() return {} end,
+            }
+            _G.Mesh = {
+                has_material = function(_, name) return name == "mtr_outfit" end,
+                material = function(_, name) return { name = name } end,
+            }
+            _G.Material = { set_texture = function() writes = writes + 1 end }
+            H.equal(set.apply_variant_to_unit(set.SKIN_VARIANT_KEY, unit, "third_person"), false)
+            H.equal(writes, 0)
+        end)
+    end)
+
+    H.test("Grail Knight shield descriptor distinguishes 1P and 3P receivers", function()
+        with_loaded_module(function(set)
+            local variant = set.resolve_variant(set.SHIELD_VARIANT_KEY)
+            H.equal(variant.new_units[1], set.SHIELD_BASE_UNIT)
+            H.equal(variant.new_units[2], set.SHIELD_BASE_UNIT .. "_3p")
+        end)
+    end)
+
+    H.test("Grail Knight shield lifecycle covers preview, local body, swap, and husk", function()
+        -- Spawn-time paint handles initial local 1P/3P equipment. The two wield
+        -- hooks consume the same synced descriptor after local swaps and remote
+        -- husk respawns; HeroPreviewer covers inventory reopen/equip.
+        H.truthy(entry:find('GK_SET.apply_variant_to_unit(GK_SET.SHIELD_VARIANT_KEY, target, "create_equipment")', 1, true))
+        H.truthy(entry:find('mod:hook_safe("SimpleInventoryExtension", "_wield_slot"', 1, true))
+        H.truthy(entry:find('mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', 1, true))
+        H.truthy(entry:find('"hero_previewer"', 1, true))
+        H.truthy(entry:find('"network_husk"', 1, true))
+        H.truthy(entry:find("_resolve_authored_offhand_mesh(entry.armoury_key)", 1, true))
     end)
 
     H.test("authored offhand resolver composes canonical model before material", function()

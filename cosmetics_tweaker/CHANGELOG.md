@@ -1,5 +1,31 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.123-dev - 2026-07-15 - #629 Grail Knight render-surface repair
+
+### Fixed
+
+- Corrected the Purpure/Azure Shield of Honour Renewed descriptor to distinguish
+  its exact vanilla first-person unit from the real `_3p` sibling. The shared
+  mesh-safety gate now accepts and paints the shield on the live owner body and
+  remote husks instead of limiting the result to item previews.
+- Replayed the Purpure/Azure outfit on the inventory-screen hero's actual body
+  mesh after HeroPreviewer finishes spawning it. Replay is cached by mesh
+  identity, so view reopen and career respawn each apply once without repainting
+  every frame.
+- Replaced the outfit's unit-wide texture override with an extracted-donor
+  material contract. Only `mtr_outfit` and `mtr_outfit_ds` receive the custom
+  diffuse, combined, and normal maps; Markus's face, skin, eyes, hair, beard,
+  teeth, and their original materials remain untouched. Missing donor materials
+  fail closed before any texture write.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.123-dev`. Equip the Purpure/Azure outfit and
+shield, then verify Markus's face is unchanged and the outfit is recolored on
+the inventory hero and live third person. Verify the shield after mission entry
+and melee/ranged swaps on the owner, then repeat with a second player to confirm
+the remote husk receives the same shield model and textures.
+
 ## 0.9.122-dev - 2026-07-15 - #612 Encarmine donor material ownership
 
 ### Fixed
