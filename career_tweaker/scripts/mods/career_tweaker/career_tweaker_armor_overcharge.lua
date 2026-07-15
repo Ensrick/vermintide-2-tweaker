@@ -210,6 +210,21 @@ end
 mod:hook(DamageUtils, "apply_buffs_to_damage", function(func, current_damage, attacked_unit, attacker_unit,
         damage_source, victim_units, damage_type, buff_attack_type, first_hit, source_attacker_unit)
 
+    -- Issue #619 consolidation: this remains crt's ONE hook on the vanilla
+    -- damage chokepoint.  The Foot Knight concern returns a pure multiplier
+    -- after checking the live item-template capability, selected talent,
+    -- nearby-ally count, and target breed category.  Apply before vanilla so
+    -- all ordinary damage-taken/dealt modifiers still compose normally.
+    local fk = mod._crt and mod._crt.foot_knight
+    if fk and fk.outgoing_damage_multiplier then
+        local attacker_player = Managers.player and Managers.player:owner(attacker_unit)
+        local ok_fk, multiplier = pcall(fk.outgoing_damage_multiplier,
+            attacker_unit, attacker_player, attacked_unit, damage_source)
+        if ok_fk and type(multiplier) == "number" and multiplier ~= 1 then
+            current_damage = current_damage * multiplier
+        end
+    end
+
     -- Fast early-out: if none of the five toggles is on, call straight through.
     if not (mod:get("armor_gromril_ignore_chip")
             or mod:get("armor_specials_dont_break_gromril")

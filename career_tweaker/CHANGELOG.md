@@ -1,5 +1,17 @@
 # Career Tweaker Changelog
 
+## 0.3.75-dev - 2026-07-15 - #619 Foot Knight feature suite [verify-fix-coop]
+
+- Added six independent, default-off Foot Knight controls: uninterruptible heavy attacks; 10m Protective Presence with 20m Rock of Reikland; Rock shield offense; expanded That's Bloody Teamwork! great-weapon offense; Final March; and melee weapons in the secondary slot.
+- Rock shield offense now carries its requested tradeoff: a toggle-wide 10% reduction to effective dodge distance. With Rock selected and any live shield-capable melee template equipped, it grants 15% power and 30% more melee damage to Monsters and Berserkers. The capability policy includes vanilla's exceptional Flail & Shield type and inherited WT/CWV templates.
+- That's Bloody Teamwork! now checks allies at 10m. Its toggle removes only Foot Knight's native 10% damage reduction; aura DR, the talent's existing 5% DR per ally, and Final March remain intact. With a non-polearm great weapon, each of up to three nearby allies also grants 5% power and 10% more melee damage to Armored enemies and Monsters. War Picks count; polearms, glaives, and scythes do not.
+- Final March triggers once per mission only after every other ally is truly dead, not merely downed or disabled. It knocks back a current disabler and grants 50% power plus 50% damage reduction for 60 seconds.
+- Secondary melee reuses the exact native Slayer/Grail Knight `slot_ranged = { "melee", "ranged" }` contract. The live accepted-types array is mutated in place for existing UI/backend consumers; toggle-off removes only CRT's own member and abandons ownership safely if another mod replaces the array.
+- Kept the combat and tradeoff buffs local-only, outside `NetworkLookup`. The server evaluates every player and bot while each client evaluates only its local owner; no custom buff identifier or per-frame RPC was added.
+- Added engine-free capability/damage/slot/Final March coverage, singleton damage-hook coverage, and runtime regression `issue619_foot_knight_contract`. The Lua 5.1 suite passes 616 tests.
+
+**Co-op verify:** with host and client on Foot Knight, exercise each toggle separately. Confirm heavy wind-ups cannot be interrupted; aura edges are 10m/20m; Rock shield damage and 10% shorter dodges apply to native plus WT/CWV shields; Teamwork keeps 5% ally DR but removes only innate DR and grants the great-weapon bonuses within 10m; downed/disabled allies do not trigger Final March but three dead allies do once; and a secondary melee survives inventory reopen, mission entry, weapon swaps, bot use, and a Chaos Wastes transition. Toggle every option back off and confirm vanilla values/slot rules return without deleting inventory items. Require `PASS: issue619_foot_knight_contract` from `/crt_regression_test`.
+
 ## 0.3.74-dev - 2026-07-14 - #221 historical subgroup-master audit [diagnostics-armed; not deployed]
 
 - Confirmed that #445 already fulfills the safe whole-family Ensrick and Tourney controls requested by the historical menu-consolidation plan.

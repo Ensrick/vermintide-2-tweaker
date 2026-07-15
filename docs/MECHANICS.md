@@ -209,6 +209,12 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 
 ## Domain: Careers / Talents / DLC gating
 
+- Foot Knight's passive defense aura is authored at 5m. Its native personal damage-reduction buff contributes `damage_taken = -0.10`; the aura contributes `-0.15`. Rock of Reikland's block-cost driver and the passive-range talent are authored from twice the 5m baseline. [src: scripts/managers/talents/talent_settings_markus.lua:94-110,981-1011,1152-1183]
+- That's Bloody Teamwork! uses a 5m proximity driver capped at three allies and adds one `damage_taken = -0.05` stack for each ally. [src: scripts/managers/talents/talent_settings_markus.lua:1276-1294]
+- The native `uninterruptible_heavy` perk prevents hit interruption only while the current melee sub-action is a heavy attack start. [src: scripts/unit_extensions/default_player_unit/states/player_character_state_helper.lua:1215-1238]
+- Dodge distance modifiers use the generic movement-buff path at `dodging.distance_modifier`; apply multiplies the live value and removal divides by the same multiplier, allowing reversible multiplicative composition. [src: scripts/unit_extensions/default_player_unit/buffs/buff_templates.lua:4850-4861; scripts/unit_extensions/default_player_unit/buffs/buff_function_templates.lua:232-272]
+- Slayer and Grail Knight authorize dual melee by declaring `slot_ranged = { "melee", "ranged" }`. Inventory filtering and backend validation consume the live per-career slot-type map rather than a separate dual-melee flag. [src: scripts/settings/profiles/career_settings.lua:184-191; scripts/settings/dlcs/lake/career_settings_lake.lua:88-95; scripts/ui/views/hero_view/windows/hero_window_loadout_inventory.lua:119-187; scripts/managers/backend_playfab/playfab_mirror_base.lua:1661-1714]
+
 - Chaos Wastes initial talents are stored as generic `talent_<tier>_<column>`
   power-ups; `_add_initial_power_ups` materializes the selected tier/column rows
   before event boons, while `DeusPowerUpUtils` resolves each generic identity to

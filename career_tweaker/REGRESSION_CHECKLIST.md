@@ -6,7 +6,20 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 > **Suite location (v0.3.57-dev):** the `/crt_regression_test` harness and all check bodies moved from `career_tweaker.lua` into `scripts/mods/career_tweaker/_crt_regression.lua` (Phase 1 OOP split). Check names + registration order are unchanged. The talent-swap and diagnostics concerns the checks reference now live in `_crt_talent_swap.lua` / `_crt_diagnostics.lua` (see `DEVELOPMENT.md` module map).
 
-Last updated: 2026-07-14.
+Last updated: 2026-07-15.
+
+---
+## Foot Knight feature suite (#619)
+
+| Field | Value |
+|-------|-------|
+| Scope | Six independent default-off controls: heavy interruption immunity, aura range, Rock shield offense, Teamwork great-weapon offense, Final March, and secondary melee. |
+| Capability boundary | Shield and non-polearm great-weapon checks consume the live weapon template. WT/CWV clones inherit behavior; Flail & Shield is included despite its exceptional `FLAIL_1H` type, while glaives/scythes remain excluded. |
+| Tradeoffs | Rock toggle multiplies only dodge distance by 0.90. Teamwork toggle cancels only the native -0.10 damage-taken passive; aura DR, 5% ally stacks, and Final March DR remain. |
+| Authority/network | Host reconciles humans/bots; client reconciles local owner. Custom templates remain local-only and never enter `NetworkLookup` or a vanilla RPC. |
+| Final March | Requires a nonempty roster of other allies whose exact status is dead. Downed/disabled is false. One mission latch; 60 seconds; disabler stagger is server-only. |
+| Secondary slot | Mutates the live Foot Knight `slot_ranged` accepted-types array in place to `{ "melee", "ranged" }`; removes only its owned insertion and abandons ownership after foreign array replacement. |
+| Detection | Offline `test_crt_foot_knight_policy.lua`; runtime `/crt_regression_test` check `issue619_foot_knight_contract`; co-op walk in CHANGELOG 0.3.75-dev. |
 
 ---
 ## Ranger Veteran ale action speed (#367)

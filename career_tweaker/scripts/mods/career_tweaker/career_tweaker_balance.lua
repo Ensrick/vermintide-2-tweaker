@@ -2460,24 +2460,50 @@ local BALANCE_MODS = {
         end,
     },
 
+    -- Issue #619 runtime-owned Foot Knight mechanics. Empty patch entries keep
+    -- these independent toggles in the rework-master catalog; the bounded
+    -- owner-local/server-bot state lives in _crt_foot_knight.lua.
+    rework_es_knight_innate_uninterruptible_heavies = {
+        character = "markus",
+        career = "es_knight",
+        patches = {},
+    },
+    rework_es_knight_rock_shield_offense = {
+        character = "markus",
+        career = "es_knight",
+        patches = {},
+    },
+    rework_es_knight_teamwork_great_weapon_offense = {
+        character = "markus",
+        career = "es_knight",
+        patches = {},
+    },
+    rework_es_knight_final_march = {
+        character = "markus",
+        career = "es_knight",
+        patches = {},
+    },
+    rework_es_knight_secondary_melee = {
+        character = "markus",
+        career = "es_knight",
+        patches = {},
+    },
+
     -- ============================================================
     -- Foot Knight: Protective Presence 5m → 10m, Rock of the Reickland → 20m
     -- ============================================================
-    -- Vanilla baseline Protective Presence aura range is 5m
-    -- (`markus_knight_passive_defence_aura.buffs[1].range`, merged from
-    -- `buff_tweak_data.markus_knight_passive.range` at boot). Rock of the
-    -- Reickland (talent `markus_knight_passive_block_cost_aura`) adds the
-    -- `markus_knight_passive_range` buff which carries `range = 10`
-    -- (vanilla = baseline × 2, baked in at file-load time). Rework doubles
-    -- the baseline and the talent's range simultaneously: base 5→10, talent
-    -- 10→20. Two field patches via the existing engine — both buff templates
-    -- expose `range` on buffs[1].
+    -- Vanilla baseline Protective Presence range is carried by the
+    -- `markus_knight_passive` proximity driver at 5m. Rock of Reikland adds
+    -- two independently-authored 10m drivers: block-cost aura and replacement
+    -- defense aura. Rework doubles all three exact range owners so both Rock
+    -- effects reach 20m rather than leaving block-cost reduction at 10m.
     rework_es_knight_protective_presence_10m_rock_20m = {
         character = "markus",
         career    = "es_knight",
         patches   = {
-            { buff = "markus_knight_passive_defence_aura", field = "range", value = 10 },
-            { buff = "markus_knight_passive_range",        field = "range", value = 20 },
+            { buff = "markus_knight_passive",                 field = "range", value = 10 },
+            { buff = "markus_knight_passive_block_cost_aura", field = "range", value = 20 },
+            { buff = "markus_knight_passive_range",           field = "range", value = 20 },
         },
     },
 

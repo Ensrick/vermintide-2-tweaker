@@ -842,3 +842,89 @@ _rt_register("issue447_flagellation_contract", function()
         return "live Devotion talent unresolved; inspect automatic [crt:447] census"
     end
 end)
+
+_rt_register("issue619_foot_knight_contract", function()
+    local feature = mod._crt and mod._crt.foot_knight
+    local policy = feature and feature.policy
+    if type(feature) ~= "table" or type(feature.tick) ~= "function"
+       or type(feature.outgoing_damage_multiplier) ~= "function" then
+        return "Foot Knight runtime module missing"
+    end
+    if type(policy) ~= "table"
+       or not policy.is_shield_type("AXE_1H_SHIELD")
+       or not policy.is_non_polearm_great_type("AXE_2H")
+       or policy.is_non_polearm_great_type("SPEAR_2H") then
+        return "Foot Knight weapon capability taxonomy drifted"
+    end
+    local local_names = {
+        "crt_fk_uninterruptible_heavies",
+        "crt_fk_rock_dodge_distance",
+        "crt_fk_rock_shield_power",
+        "crt_fk_teamwork_innate_dr_cancel",
+        "crt_fk_teamwork_great_power",
+        "crt_fk_final_march",
+    }
+    for _, name in ipairs(local_names) do
+        local template = BuffTemplates and rawget(BuffTemplates, name)
+        if type(template) ~= "table" or template._crt_local_only ~= true then
+            return "missing local-only Foot Knight buff " .. name
+        end
+        local lookup = rawget(_G, "NetworkLookup")
+        if lookup and lookup.buff_templates and rawget(lookup.buff_templates, name) then
+            return "local-only Foot Knight buff leaked into NetworkLookup: " .. name
+        end
+    end
+    local dodge = BuffTemplates and BuffTemplates.crt_fk_rock_dodge_distance
+    local dodge_buff = dodge and dodge.buffs and dodge.buffs[1]
+    if not dodge_buff or dodge_buff.multiplier ~= 0.90
+       or dodge_buff.apply_buff_func ~= "apply_movement_buff"
+       or dodge_buff.remove_buff_func ~= "remove_movement_buff" then
+        return "Rock dodge-distance tradeoff contract drifted"
+    end
+    local dr_cancel = BuffTemplates and BuffTemplates.crt_fk_teamwork_innate_dr_cancel
+    local dr_buff = dr_cancel and dr_cancel.buffs and dr_cancel.buffs[1]
+    if not dr_buff or dr_buff.stat_buff ~= "damage_taken" or dr_buff.multiplier ~= 0.10 then
+        return "Teamwork innate-DR cancellation contract drifted"
+    end
+    local defs = balance and balance.BALANCE_MODS
+    if #(feature.setting_ids or {}) ~= 6 then
+        return "Foot Knight suite does not expose exactly six toggles"
+    end
+    for _, setting_id in ipairs(feature.setting_ids or {}) do
+        if type(defs and defs[setting_id]) ~= "table" then
+            return "Foot Knight toggle missing from rework-master catalog: " .. tostring(setting_id)
+        end
+    end
+    if mod:get("rework_es_knight_secondary_melee") then
+        local career = CareerSettings and CareerSettings.es_knight
+        local slot_map = career and career.item_slot_types_by_slot_name
+        local slot_types = slot_map and slot_map.slot_ranged or {}
+        local has_melee = false
+        for _, slot_type in ipairs(slot_types) do
+            if slot_type == "melee" then has_melee = true; break end
+        end
+        if not has_melee or slot_types[1] ~= "melee" or slot_types[2] ~= "ranged" then
+            return "enabled secondary-melee slot contract missing or out of native order"
+        end
+    end
+    if mod:get("rework_es_knight_teamwork_great_weapon_offense") then
+        local template = BuffTemplates and BuffTemplates.markus_knight_damage_taken_ally_proximity
+        local driver = template and template.buffs and template.buffs[1]
+        if not driver or driver.range ~= 10 then
+            return "enabled That's Bloody Teamwork! radius is not 10m"
+        end
+    end
+    if mod:get("rework_es_knight_protective_presence_10m_rock_20m") then
+        local base = BuffTemplates and BuffTemplates.markus_knight_passive
+        local block = BuffTemplates and BuffTemplates.markus_knight_passive_block_cost_aura
+        local rock = BuffTemplates and BuffTemplates.markus_knight_passive_range
+        local base_driver = base and base.buffs and base.buffs[1]
+        local block_driver = block and block.buffs and block.buffs[1]
+        local rock_driver = rock and rock.buffs and rock.buffs[1]
+        if not base_driver or base_driver.range ~= 10
+           or not block_driver or block_driver.range ~= 20
+           or not rock_driver or rock_driver.range ~= 20 then
+            return "enabled Protective Presence/Rock ranges are not 10m/20m"
+        end
+    end
+end)

@@ -599,7 +599,12 @@ return {
                                 setting_id  = "rework_es_knight_group",
                                 type        = "group",
                                 sub_widgets = {
+                                    { setting_id = "rework_es_knight_innate_uninterruptible_heavies",                 type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_knight_protective_presence_10m_rock_20m",                  type = "checkbox", default_value = false },
+                                    { setting_id = "rework_es_knight_rock_shield_offense",                              type = "checkbox", default_value = false },
+                                    { setting_id = "rework_es_knight_teamwork_great_weapon_offense",                    type = "checkbox", default_value = false },
+                                    { setting_id = "rework_es_knight_final_march",                                      type = "checkbox", default_value = false },
+                                    { setting_id = "rework_es_knight_secondary_melee",                                 type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_knight_valiant_charge_great_foes_45s_battering_ram_30s",   type = "checkbox", default_value = false },
                                     { setting_id = "rework_es_knight_counter_punch_stagger_stack",                       type = "checkbox", default_value = false },
                                 },

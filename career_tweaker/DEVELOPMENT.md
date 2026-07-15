@@ -53,6 +53,8 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 | `career_tweaker_balance.lua` | The BALANCE_MODS rework catalog + apply/restore engine, the crt_* buff pre-registration, AND the issue-425 wire-safety subsystem (parity gate, wire-safe proc/driver wrappers, hot-join replay filter). | returns `{ apply, restore, active_count, parity_gate_ok, wire_parity_live, network_unsafe_ids, BALANCE_MODS }`; sets `mod._crt_registered_buff_names`, `mod._crt_mod_registered_buff_names` | after damage classification (entry captures `balance`) |
 | Big Rebalance (retired) | The unreachable port was deleted in 0.3.70-dev (#433). Recover historical source from git only as part of a new registration/parity design. | none | absent |
 | `career_tweaker_tourney.lua` | Tourney Balance Testing port (`trn_*` toggles). Same `{apply,restore,active_count}` contract. | returns the contract table | after balance |
+| `_crt_foot_knight_policy.lua` | Engine-free #619 capability, enemy-category, Final March, and secondary-slot composition policy. Shield/great-weapon behavior is template-capability based so compatible WT/CWV templates inherit it. | returns `{ is_shield_type, is_non_polearm_great_type, plan_secondary_slot, all_other_allies_dead, enemy_multiplier }`; published as `mod._crt.foot_knight.policy` | loaded by `_crt_foot_knight.lua` |
+| `_crt_foot_knight.lua` | Bounded #619 Foot Knight runtime. Owns local-only buff templates, 0.2s state reconciliation, once-per-mission Final March, Teamwork proximity state, reversible Teamwork range, and the native secondary-melee slot-map mutation. | `mod._crt.foot_knight = { tick, apply_settings, restore, reset_mission_state, outgoing_damage_multiplier, policy, setting_ids }` | after tourney and before armor/overcharge |
 | `career_tweaker_armor_overcharge.lua` | Seven armor/overcharge/Focused-Spirit controls using one `DamageUtils.apply_buffs_to_damage` hook and one consolidated `PlayerUnitHealthExtension.add_damage` hook. Owns Focused Spirit's proc wrapper and one-frame cooldown re-arm; the stacking template fields remain in balance's reversible lifecycle. | installs its own hooks; exports `mod._crt_focused_spirit_tick(dt)` | after tourney |
 | `career_tweaker_oe_cooldown.lua` | Outcast Engineer cooldown-reduction benefit. Driven per-frame from the entry's `mod.update`. | `mod._crt_oe_cdr_tick(dt)`, `mod._crt_oe_cdr_clear` | after armor |
 | `career_tweaker_mutex.lua` | Mutex cluster framework ("pick one of N" checkbox groups), enforced from `on_setting_changed`. | returns `{ declare, enforce, active, snapshot }` | after oe |
@@ -93,6 +95,13 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 6. **A new hook** → grep every crt file for the `(Class, method)` FIRST (VMF
    silently drops the 2nd hook on a pair). Put the hook in the module that owns
    the behavior. Add a `/crt_regression_test` target-present check for it.
+
+## Foot Knight #619 authority and compatibility
+
+- The custom buff templates are process-local and deliberately absent from `NetworkLookup`. On the host, the runtime reconciles every human and bot unit because damage and bot behavior are authoritative there. On clients, it reconciles only the local player for movement and combat prediction. No vanilla RPC carries a custom identifier.
+- Rock's dodge drawback composes through vanilla's `apply_movement_buff`/`remove_movement_buff` distance path. Teamwork cancels exactly the native -0.10 `damage_taken` contribution with a +0.10 local stat buff only while that native buff exists; it does not rewrite the aura, talent stacks, or Final March.
+- WT/CWV interoperability is capability-based: live `weapon_type`, runtime template name, and inherited melee template metadata decide behavior. Avoid item-key allowlists.
+- Secondary melee is represented only by `CareerSettings.es_knight.item_slot_types_by_slot_name.slot_ranged`. The module preserves array identity, uses vanilla order `{ "melee", "ranged" }`, tracks the exact array object it changed, and never deletes an inventory item. Other mods must consume that live capability rather than hard-code Slayer/Grail Knight career names.
 
 ## Load-order rules that are load-bearing
 

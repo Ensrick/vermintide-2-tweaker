@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.3.74-dev"
+local MOD_VERSION = "0.3.75-dev"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
@@ -219,6 +219,24 @@ local function _sync_rework_master_indicators()
 end
 
 mod._crt.rework_master_policy = rework_master_policy
+
+-- Issue #619: Foot Knight's capability-aware career mechanics load before the
+-- armor module because that module owns crt's singleton
+-- DamageUtils.apply_buffs_to_damage hook and delegates its outgoing multiplier
+-- to this concern.  Custom buffs remain local-only and never enter NetworkLookup.
+local ok_fk, foot_knight = pcall(mod.dofile, mod,
+    "scripts/mods/career_tweaker/_crt_foot_knight")
+if not ok_fk or type(foot_knight) ~= "table" then
+    mod:error("Failed to load Foot Knight module: %s", tostring(foot_knight))
+    foot_knight = {
+        tick = function() end,
+        apply_settings = function() end,
+        restore = function() end,
+        reset_mission_state = function() end,
+        outgoing_damage_multiplier = function() return 1 end,
+    }
+end
+mod._crt.foot_knight = foot_knight
 
 -- Armor, Overcharge & Focused Spirit toggles (one default-ON exemption plus
 -- six opt-in controls). Six controls are runtime hooks gated live on mod:get;
@@ -544,10 +562,14 @@ mod.on_game_state_changed = function(status, state_name)
     if status == "enter" and state_name == "StateIngame" and mod._crt_start_dump_retry then
         mod._crt_start_dump_retry()
     end
+    if status == "enter" and state_name == "StateIngame" then
+        foot_knight.reset_mission_state()
+    end
     -- Defensive nil-check: VMF's `mod:dofile` can return nil after logging an
     -- error instead of raising, so skip cleanly rather than crashing lifecycle.
     if balance and balance.apply then balance.apply() end
     if tourney and tourney.apply then tourney.apply() end
+    foot_knight.apply_settings()
 end
 
 mod.on_setting_changed = function(setting_id)
@@ -588,6 +610,7 @@ mod.on_setting_changed = function(setting_id)
         -- A rework_ flip can change a trn_ entry's conflict state (a trn_ entry
         -- yields to its overlapping rework_), so re-apply tourney too.
         if tourney and tourney.apply then tourney.apply() end
+        foot_knight.apply_settings()
     end
 
     if setting_id:find("^trn_") then
@@ -619,6 +642,7 @@ mod.on_disabled = function()
     --   * Native + Tourney balance reworks — restore patched BuffTemplate fields.
     if balance and balance.restore then balance.restore() end
     if tourney and tourney.restore then tourney.restore() end
+    foot_knight.restore()
     restore_talent_swaps()
     -- Drop the OE cooldown-reduction managed bonus cleanly (the tick also self-
     -- clears once mod:get returns nil, but do it eagerly so the live OE reverts to
@@ -690,6 +714,7 @@ mod.update = function(dt)
     if mod._crt_dump_retry_tick then mod._crt_dump_retry_tick(dt) end
     -- #440 automatic profile summaries; self-throttled to once per second.
     if mod._crt_bardin_disabler_tick then pcall(mod._crt_bardin_disabler_tick, dt) end
+    foot_knight.tick(dt)
 end
 
 -- ============================================================
