@@ -1275,13 +1275,13 @@ end)
 -- _CRAFTABLE_SLOT_TYPES is declared at the top of the file (near _is_active)
 -- so `_make_craft_synth`'s closure can reference it without a forward-ref bug.
 local _template_cache = {}
-local _template_cache_report = { total = 0, cwv = 0, career = nil }
+local _template_cache_report = { total = 0, cwv = 0, eligible = 0, suppressed = 0, career = nil }
 
 local function _build_template_cache()
     local career_name = _local_career_name()
     if not ItemMasterList or not career_name then
         _template_cache = {}
-        _template_cache_report = { total = 0, cwv = 0, career = career_name }
+        _template_cache_report = { total = 0, cwv = 0, eligible = 0, suppressed = 0, career = career_name }
         return
     end
 
@@ -1304,10 +1304,21 @@ local function _build_template_cache()
     _template_cache_report = {
         total = report.total,
         cwv = report.cwv,
+        eligible = report.eligible,
+        suppressed = report.suppressed,
         career = career_name,
     }
-    printf("[cim:524] acquisition_templates total=%d cwv=%d career=%s",
-        report.total, report.cwv, tostring(career_name))
+    printf("[cim:524] acquisition_templates eligible=%d families=%d suppressed=%d cwv=%d career=%s",
+        report.eligible, report.total, report.suppressed, report.cwv, tostring(career_name))
+    local collision_limit = math.min(#report.collisions, 12)
+    for i = 1, collision_limit do
+        local collision = report.collisions[i]
+        printf("[cim:524] dedupe family=%s keep=%s drop=%s",
+            tostring(collision.family), tostring(collision.kept), tostring(collision.dropped))
+    end
+    if #report.collisions > collision_limit then
+        printf("[cim:524] dedupe_more count=%d", #report.collisions - collision_limit)
+    end
 end
 
 mod._cim_template_lookup = function(backend_id)

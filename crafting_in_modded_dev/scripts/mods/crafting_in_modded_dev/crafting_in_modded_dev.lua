@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.78-dev"
+local MOD_VERSION = "0.8.79-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -277,6 +277,22 @@ mod.CIM244_PROPERTY_VALUE_POLICY_MARKER_v0_8_74 = true
 local _ok_sf, _err_sf = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/standard_forge")
 if not _ok_sf then mod:error("Failed to load standard_forge: %s", tostring(_err_sf)) end
 
+-- #617: the Athanor list draws inventory icons on ui_top_renderer with the
+-- masked+saturated atlas path. Keep renderer/material proof in a pure module so
+-- no provider icon can reach Gui.bitmap_uv unless the exact live Gui owns the
+-- resolved material. Unknown/unavailable custom icons fall back fail-closed.
+mod._cim_athanor_icon_policy = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_athanor_icon_policy")
+
+function mod._cim_resolve_provider_inventory_icon(icon_id, renderer_name)
+    local ok, provider = pcall(get_mod, "character_weapon_variants")
+    local registry = ok and provider and provider._cwv_inventory_icons
+    if type(registry) == "table" and type(registry.resolve) == "function" then
+        return registry.resolve(icon_id, renderer_name)
+    end
+    return icon_id, false
+end
+
 -- Modded-realm illusion swap (migrated from cosmetics_tweaker v0.8.49).
 -- Must load AFTER the forge core so `mod._cim_*` helpers are defined when
 -- the craft hook fires.
@@ -316,6 +332,20 @@ local _ok_inv, _err_inv = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modde
 if not _ok_inv then mod:error("Failed to load _cim_inventory_filter: %s", tostring(_err_inv)) end
 local _ok_mfs, _err_mfs = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/_cim_mission_forge_safety")
 if not _ok_mfs then mod:error("Failed to load _cim_mission_forge_safety: %s", tostring(_err_mfs)) end
+local _ok_kfi, _keep_forge_interaction = pcall(mod.dofile, mod,
+    "scripts/mods/crafting_in_modded_dev/_cim_keep_forge_interaction")
+if _ok_kfi then
+    mod._cim_keep_forge_interaction = _keep_forge_interaction
+    mod._cim_install_keep_forge_interaction = function()
+        return _keep_forge_interaction.install(mod, rawget(_G, "InteractionDefinitions"))
+    end
+    local installed, install_err = mod._cim_install_keep_forge_interaction()
+    if not installed then
+        printf("[cim:624] Keep forge interaction not installed: %s", tostring(install_err))
+    end
+else
+    mod:error("Failed to load _cim_keep_forge_interaction: %s", tostring(_keep_forge_interaction))
+end
 local _ok_dumpc, _err_dumpc = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/_cim_dump_commands")
 if not _ok_dumpc then mod:error("Failed to load _cim_dump_commands: %s", tostring(_err_dumpc)) end
 local _ok_tab, _err_tab = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/_cim_tab_preview")
@@ -4357,7 +4387,41 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
         end
     end
 
-    self:_populate_list(weapon_layout)
+    -- #617: do not let a catalog/provider icon reach the list widget until its
+    -- actual masked+saturated material is proven in this exact ui_top_renderer.
+    -- CWV optionally exports a descriptor with a paired vanilla fallback; the
+    -- policy also resolves the inherited base ItemMasterList icon so CIM stays
+    -- safe across mod load order and when CWV is absent.
+    local icon_policy = mod._cim_athanor_icon_policy
+    if type(icon_policy) ~= "table" or type(icon_policy.sanitize_layout) ~= "function" then
+        mod:warning("[cim:617] Athanor icon policy unavailable; using vanilla weapon list")
+        return func(self)
+    end
+    local safe_layout, icon_report = icon_policy.sanitize_layout(weapon_layout, {
+        item_master_list = ItemMasterList,
+        provider_resolve = mod._cim_resolve_provider_inventory_icon,
+        has_texture = function(texture_name)
+            return icon_policy.renderer_has_texture(
+                self._ui_top_renderer,
+                texture_name,
+                rawget(_G, "UIAtlasHelper"),
+                rawget(_G, "Gui"),
+                { masked = true, saturated = true })
+        end,
+    })
+    mod._cim_athanor_icon_report = icon_report
+    printf("[cim:617] Athanor icon closure total=%d verified=%d fallback=%d omitted=%d",
+        icon_report.total, icon_report.verified, icon_report.fallback, icon_report.omitted)
+    for i = 1, math.min(#icon_report.changes, 12) do
+        local change = icon_report.changes[i]
+        printf("[cim:617] icon key=%s original=%s replacement=%s",
+            tostring(change.key), tostring(change.original), tostring(change.replacement))
+    end
+    if #icon_report.changes > 12 then
+        printf("[cim:617] icon changes omitted_from_log=%d", #icon_report.changes - 12)
+    end
+
+    self:_populate_list(safe_layout)
 
     -- v0.7.53-dev: comprehensive menu-state probe. Logs every weapon currently
     -- in the Athanor menu list PLUS a full ItemMasterList sweep against the
@@ -4733,6 +4797,12 @@ mod.on_game_state_changed = function()
 end
 
 mod.update = function(dt)
+    -- #624: interaction tables normally exist before mods load, but a title
+    -- transition or hot reload can rebuild the registry. Idempotently restore
+    -- our one predicate wrapper; install() is one comparison after success.
+    if mod._cim_install_keep_forge_interaction then
+        mod._cim_install_keep_forge_interaction()
+    end
     -- Install the BackendUtils.set_loadout_item capture once the backend (and LA
     -- bridge) are up. Cheap once-guarded no-op after install. Issue #22 root fix.
     _install_backendutils_capture()
@@ -6406,6 +6476,89 @@ _rt_register("issue524_all_cwv_blacksmith_selectors", function()
     local live = mod._cim_template_cache_report and mod._cim_template_cache_report()
     if mod._cim_standard_forge_active and (not live or (live.cwv or 0) == 0) then
         return "#524 live forge cache contains no CWV selectors"
+    end
+end)
+
+_rt_register("issue524_native_craft_families_deduplicated", function()
+    local catalog = mod._cim_template_catalog
+    if type(catalog) ~= "table" or type(catalog.build) ~= "function" then
+        return "#524 template catalog unavailable"
+    end
+    local base = {
+        slot_type = "melee", item_type = "rt_sword", rarity = "plentiful",
+        can_wield = { "es_knight" },
+    }
+    local preview = table.clone(base, true)
+    preview.is_local = true
+    local cache, report = catalog.build({
+        item_master_list = { rt_sword = base, rt_sword_preview = preview },
+        career_name = "es_knight",
+        craftable_slot_types = { melee = true },
+    })
+    if report.total ~= 1 or report.suppressed ~= 1 or not cache.cim_template_rt_sword then
+        return "#524 native preview/helper aliases no longer collapse to one craft family"
+    end
+end)
+
+_rt_register("issue624_keep_forge_interaction", function()
+    local policy = mod._cim_keep_forge_interaction
+    local state = mod._cim_keep_forge_interaction_state
+    if type(policy) ~= "table" or type(policy.resolve) ~= "function" then
+        return "#624 Keep forge policy is not loaded"
+    end
+    if policy.resolve(false, true, true) ~= true
+        or policy.resolve(false, true, false) ~= false
+        or policy.resolve(false, false, true) ~= false then
+        return "#624 Keep/untrusted interaction boundary changed"
+    end
+    if type(state) ~= "table" or type(state.original_can_interact) ~= "function"
+        or type(state.installed_predicate) ~= "function" then
+        return "#624 forge_access predicate was not installed"
+    end
+    local definitions = rawget(_G, "InteractionDefinitions")
+    local live = definitions and definitions.forge_access and definitions.forge_access.client
+        and definitions.forge_access.client.can_interact
+    if live ~= state.installed_predicate then
+        return "#624 another writer replaced the CIM forge_access predicate"
+    end
+end)
+
+_rt_register("issue617_athanor_icon_resource_closure", function()
+    local policy = mod._cim_athanor_icon_policy
+    if type(policy) ~= "table" or type(policy.sanitize_layout) ~= "function"
+        or type(policy.material_name) ~= "function" then
+        return "#617 Athanor icon resource policy is not loaded"
+    end
+
+    -- Exact shape that crashed: custom atlas supplies ordinary/masked material
+    -- names but no masked+saturated material. This must fail proof before draw.
+    local atlas = {
+        has_atlas_settings_by_texture_name = function() return true end,
+        get_atlas_settings_by_texture_name = function()
+            return { material_name = "rt_custom", masked_material_name = "rt_custom_masked" }
+        end,
+    }
+    if policy.material_name("rt_custom_icon", atlas,
+        { masked = true, saturated = true }) ~= nil then
+        return "#617 missing masked+saturated atlas material was accepted"
+    end
+
+    local ok, provider = pcall(get_mod, "character_weapon_variants")
+    local registry = ok and provider and provider._cwv_inventory_icons
+    if type(registry) == "table" and type(registry.resolve) == "function"
+        and type(registry.FALLBACKS) == "table" then
+        for icon, expected in pairs(registry.FALLBACKS) do
+            local resolved, was_custom = registry.resolve(icon, policy.RENDERER_NAME)
+            if not was_custom or resolved ~= expected then
+                return "#617 CWV icon not fail-closed for Athanor: " .. tostring(icon)
+            end
+        end
+    end
+
+    local live = mod._cim_athanor_icon_report
+    if live and (live.omitted or 0) > 0 then
+        return string.format("#617 live Athanor catalog omitted %d rows with no renderer-safe icon",
+            live.omitted)
     end
 end)
 

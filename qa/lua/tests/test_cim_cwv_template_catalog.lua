@@ -4,7 +4,6 @@ return function(H, repo_root)
 
     local families = {
         cwv_es_dual_axes = "icon_wpn_axe_hatchet_t1_dual_cwv",
-        cwv_es_infantry_spear = "icon_wpn_emp_gk_spear_01_t1",
         cwv_es_imperial_crowbill = "icon_cwv_imperial_crowbill_01",
         cwv_dr_dawi_crowbill = "icon_cwv_dawi_crowbill_01",
         cwv_es_greataxe = "icon_cwv_es_greataxe_01",
@@ -29,7 +28,7 @@ return function(H, repo_root)
             craftable_slot_types = { melee = true },
             base_power = 300,
         })
-        H.equal(report.cwv, 5)
+        H.equal(report.cwv, 4)
         for key, icon in pairs(families) do
             local row = cache["cim_template_" .. key]
             H.truthy(row)
@@ -66,6 +65,98 @@ return function(H, repo_root)
         H.equal(cache.cim_template_cwv_other_career, nil)
         H.equal(cache.cim_template_paid_weapon, nil)
         H.equal(cache.cim_template_cwv_owned.mod_data, nil)
+    end)
+
+    H.test("native helper aliases collapse to one craft family", function()
+        local iml = {
+            es_bastard_sword_preview = {
+                slot_type = "melee", item_type = "es_bastard_sword", rarity = "plentiful",
+                can_wield = { "es_knight" }, is_local = true,
+            },
+            vs_es_bastard_sword = {
+                slot_type = "melee", item_type = "es_bastard_sword", rarity = "plentiful",
+                can_wield = { "es_knight" }, mechanisms = { "versus" },
+            },
+            es_bastard_sword = {
+                slot_type = "melee", item_type = "es_bastard_sword", rarity = "plentiful",
+                can_wield = { "es_knight" },
+            },
+        }
+        local cache, report = Catalog.build({
+            item_master_list = iml,
+            career_name = "es_knight",
+            craftable_slot_types = { melee = true },
+        })
+        H.equal(report.eligible, 3)
+        H.equal(report.total, 1)
+        H.equal(report.suppressed, 2)
+        H.truthy(cache.cim_template_es_bastard_sword)
+        H.equal(cache.cim_template_es_bastard_sword_preview, nil)
+        H.equal(cache.cim_template_vs_es_bastard_sword, nil)
+        H.equal(cache.cim_template_es_bastard_sword.cim_acquisition_family,
+            "item_type:melee:es_bastard_sword")
+    end)
+
+    H.test("CWV authored stat variants remain distinct inside shared item type", function()
+        local iml = {
+            cwv_es_axe_shield = {
+                cwv_definition = true, cwv_key = "cwv_es_axe_shield",
+                slot_type = "melee", item_type = "cwv_es_axe_shield", rarity = "default",
+                can_wield = { "es_knight" },
+            },
+            cwv_es_axe_shield_veteran = {
+                cwv_definition = true, cwv_key = "cwv_es_axe_shield_veteran",
+                slot_type = "melee", item_type = "cwv_es_axe_shield", rarity = "default",
+                can_wield = { "es_knight" },
+            },
+        }
+        local cache, report = Catalog.build({
+            item_master_list = iml,
+            career_name = "es_knight",
+            craftable_slot_types = { melee = true },
+        })
+        H.equal(report.total, 2)
+        H.equal(report.cwv, 2)
+        H.truthy(cache.cim_template_cwv_es_axe_shield)
+        H.truthy(cache.cim_template_cwv_es_axe_shield_veteran)
+    end)
+
+    H.test("localization collisions never merge distinct weapon families", function()
+        local iml = {
+            mod_sword = {
+                display_name = "shared_loc", slot_type = "melee", item_type = "mod_sword",
+                rarity = "default", can_wield = { "es_knight" },
+            },
+            mod_axe = {
+                display_name = "shared_loc", slot_type = "melee", item_type = "mod_axe",
+                rarity = "default", can_wield = { "es_knight" },
+            },
+        }
+        local cache, report = Catalog.build({
+            item_master_list = iml,
+            career_name = "es_knight",
+            craftable_slot_types = { melee = true },
+        })
+        H.equal(report.total, 2)
+        H.truthy(cache.cim_template_mod_sword)
+        H.truthy(cache.cim_template_mod_axe)
+    end)
+
+    H.test("live career availability is re-evaluated on every catalog rebuild", function()
+        local item = {
+            slot_type = "melee", item_type = "mod_weapon", rarity = "default",
+            can_wield = { "es_knight" },
+        }
+        local args = {
+            item_master_list = { mod_weapon = item },
+            career_name = "es_knight",
+            craftable_slot_types = { melee = true },
+        }
+        local enabled = Catalog.build(args)
+        H.truthy(enabled.cim_template_mod_weapon)
+        item.can_wield = { "dr_ranger" }
+        local disabled = Catalog.build(args)
+        H.equal(disabled.cim_template_mod_weapon, nil)
     end)
 
     H.test("forge activation and cache rebuild precede vanilla on_enter", function()

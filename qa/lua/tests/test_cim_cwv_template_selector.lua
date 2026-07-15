@@ -36,6 +36,40 @@ return function(H, repo_root)
         H.equal(rows[1], legacy)
     end)
 
+    H.test("real native row suppresses preview alias family", function()
+        local real = {
+            backend_id = "real_es_bastard_sword",
+            rarity = "default",
+            key = "es_bastard_sword",
+            data = { slot_type = "melee", item_type = "es_bastard_sword" },
+        }
+        local preview = selector("es_bastard_sword_preview")
+        preview.data = { slot_type = "melee", item_type = "es_bastard_sword", is_local = true }
+        preview.cim_acquisition_family = "item_type:melee:es_bastard_sword"
+        local rows = { real, preview, preview }
+        Selector.inject(rows, { preview })
+        H.equal(#rows, 1)
+        H.equal(rows[1], real)
+    end)
+
+    H.test("shared item type does not collapse distinct CWV variants", function()
+        local normal = selector("cwv_es_axe_shield")
+        normal.data = {
+            cwv_definition = true, cwv_key = "cwv_es_axe_shield",
+            slot_type = "melee", item_type = "cwv_es_axe_shield",
+        }
+        normal.cim_acquisition_family = "cwv:cwv_es_axe_shield"
+        local veteran = selector("cwv_es_axe_shield_veteran")
+        veteran.data = {
+            cwv_definition = true, cwv_key = "cwv_es_axe_shield_veteran",
+            slot_type = "melee", item_type = "cwv_es_axe_shield",
+        }
+        veteran.cim_acquisition_family = "cwv:cwv_es_axe_shield_veteran"
+        local rows = {}
+        Selector.inject(rows, { normal = normal, veteran = veteran })
+        H.equal(#rows, 2)
+    end)
+
     H.test("repeated crafts and repeated injection keep exactly one selector", function()
         local synth = selector("cwv_es_longsword")
         local rows = {

@@ -32,6 +32,9 @@ new module needs only its manifest dofile line + a row here.
 | `_cim_salvage_modded_button.lua` + `_cim_salvage_autofill_core.lua` | Issue #618 desktop/console salvage definition extension and input/animation hooks. Reuses vanilla's bounded rarity-fill paths; the pure core derives the fifth and sixth positions from vanilla's own rare-to-exotic spacing and is engine-free tested. The fifth control uses CIM's dedicated `store_tag_icon_weapon_modded` crossed-swords texture; `icon_bg_modded` remains item-card presentation only. |
 | `_cim_trait_slot_policy.lua` | Pure #414 mapping of vanilla's three melee and six ranged Chaos Wastes trait categories to exact `slot_type`; shared by standard rerolls and the Athanor picker. |
 | `_cim_property_value_policy.lua` | Pure #244 symmetric conversion between absolute Athanor/Weave bubble values and normalized two-endpoint Adventure property storage. |
+| `_cim_template_catalog.lua` + `_cim_template_selector.lua` | Pure #524 standard Craft Item selector policy. Ordinary helper aliases collapse by stable `slot_type + item_type`; provider `cim_craft_family` is an explicit override; authored CWV keys remain exact and distinct. The catalog chooses a deterministic real row and the selector compacts/reconciles session rows by the same family identity. |
+| `_cim_keep_forge_interaction.lua` | Issue #624 data-registry adapter for `InteractionDefinitions.forge_access.client.can_interact`. Restores the native world-object interaction only for `eac-untrusted` sessions in a live hub, stores the original predicate once for reload safety, and leaves the native stop/prompt/controller flow untouched. |
+| `_cim_athanor_icon_policy.lua` | Pure #617 fail-closed resource policy for Athanor selector icons. Resolves the atlas material variant required by the widget's exact masked/saturated flags, proves it against the live top Gui, and substitutes only renderer-proven provider/base/vanilla fallbacks without mutating ItemMasterList. |
 | `illusion_swap.lua` | Modded-realm weapon-skin apply (migrated from cosmetics_tweaker v0.8.49); synthetic skin ids, Apply-button eac-clear, unlocked-skin marking. Pre-existing. |
 | `saveweapon_import.lua` | One-shot SaveWeapon-mod importer command. Pre-existing. |
 | `_accessory_craft_panel.lua` | The 3-per-slot accessory craft-button overlay (own scenegraph). Pre-existing. |
@@ -50,6 +53,9 @@ new module needs only its manifest dofile line + a row here.
   (VMF drops the second - NON-NEGOTIABLE 8).
 - **New inventory/salvage grid filter behavior** -> `_cim_inventory_filter.lua`.
 - **New standard Salvage autofill presentation/input behavior** -> `_cim_salvage_modded_button.lua`; keep layout transformation in the pure `_cim_salvage_autofill_core.lua` and delegate selection to vanilla's fill paths.
+- **New standard Craft Item selector identity/filter behavior** -> `_cim_template_catalog.lua` for catalog construction and `_cim_template_selector.lua` for live-row reconciliation. Never dedupe by localized display text.
+- **New Athanor selector icon/provider support** -> `_cim_athanor_icon_policy.lua`. Register an explicit provider fallback, but retain exact-Gui material proof; package residency or an atlas entry alone is not renderability.
+- **New physical Keep forge availability rule** -> `_cim_keep_forge_interaction.lua`; preserve the native stop and HUD callbacks and delegate every non-CIM boundary to the stored vanilla predicate.
 - **New CW trait/category eligibility rule** -> `_cim_trait_slot_policy.lua`; keep it engine-free and cover exact vanilla category names offline.
 - **New Athanor property value/range rule** -> `_cim_property_value_policy.lua`; keep it engine-free, symmetric, and preserve the entry's special discrete-property paths.
 - **New read-only diagnostic dump command** with no cim-state dependency ->

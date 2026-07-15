@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-14.
+Last updated: 2026-07-15.
 
 ### athanor-literal-property-values - issue #244
 
@@ -38,13 +38,36 @@ Last updated: 2026-07-14.
 
 | Field | Value |
 |---|---|
-| Symptom | Each crafted CWV weapon appears to add another 300-power base/blacksmith choice, or every CWV Blacksmith selector is absent when the Craft Item page is opened directly. |
-| Root cause | CWV clones inherit the base weapon `.key`/`.name`, requiring exact selector identity. After acquisition moved wholly to CIM, the selector cache was also activated by a post-`on_enter` hook even though vanilla builds the initial recipe page inside `on_enter`; all synthetic rows therefore missed that first query. |
-| Fix version(s) | cim_dev 0.8.72-dev (bounded identity), 0.8.76-dev (pre-enter catalog availability) |
+| Symptom | Each crafted CWV weapon appears to add another base/blacksmith choice, every CWV selector is absent on initial entry, or native preview/Versus aliases appear beside the same weapon family. |
+| Root cause | CWV clones require exact authored identity, but ordinary ItemMasterList helper rows require family identity. The 0.8.76 exact-key catalog restored CWV rows but also admitted ordinary `_preview`/Versus aliases as separate selectors. |
+| Fix version(s) | cim_dev 0.8.72-dev (bounded identity), 0.8.76-dev (pre-enter availability), 0.8.79-dev (craft-family alias dedupe) |
 | Category | SOLO |
-| Repro | Open the standard Craft Item page directly and inspect Dual Axes, Infantry Spear, Crowbill, and Greataxe; craft Imperial Longsword twice, then leave and reopen the grid. |
-| Expected post-fix | Every career-owned CWV family has exactly one authored-icon Blacksmith selector; the two separate Modded-rarity crafts appear only in ordinary inventory. |
-| Detection | Offline `test_cim_cwv_template_selector.lua` and `test_cim_cwv_template_catalog.lua` pass; `/cim_regression_test` passes `issue524_cwv_selector_bounded` and `issue524_all_cwv_blacksmith_selectors`. |
+| Repro | Open the standard Craft Item page directly and inspect Dual Axes, Crowbill, Greataxe, and native Tuskgor Spear; craft Imperial Longsword twice, then leave and reopen the grid. |
+| Expected post-fix | Every ordinary weapon family has one deterministic selector; every authored CWV key remains distinct, including veteran/stat variants; Modded-rarity crafts appear only in ordinary inventory. |
+| Detection | Offline `test_cim_cwv_template_selector.lua` and `test_cim_cwv_template_catalog.lua` pass; `/cim_regression_test` passes all three `issue524_*` checks. `[cim:524]` reports bounded kept/dropped alias identities. |
+
+---
+
+### keep-forge-interaction - issue #624
+
+| Field | Value |
+|---|---|
+| Symptom | The physical forge in the Keep has no interaction prompt in the modded realm even with CIM installed. |
+| Root cause | Vanilla `forge_access.can_interact` returns false when `script_data["eac-untrusted"]` is true, before its existing transition callback can open the standard forge. |
+| Fix version(s) | cim_dev 0.8.79-dev |
+| Category | SOLO |
+| Repro | Enter the modded Keep, approach the physical forge, interact, close the view, and repeat with keyboard/mouse or controller. |
+| Expected post-fix | The native prompt opens CIM's backend-safe standard forge every time. Official realm and non-Keep behavior remain vanilla. |
+| Detection | Offline `test_cim_keep_forge_interaction.lua` passes and `/cim_regression_test` passes `issue624_keep_forge_interaction`; first successful availability emits one `[cim:624]` line. |
+
+### athanor-selector-icon-resource-closure - issue #617
+
+| Field | Value |
+|---|---|
+| Repro | Open CIM's Athanor weapon selector and scroll until a CWV Dual Axes row using `icon_wpn_axe_hatchet_t1_dual_cwv` becomes visible. |
+| Expected post-fix | The list remains open. Every icon passed to `_populate_list` has a masked+saturated material proven in the exact `ui_top_renderer` Gui. Unsafe custom icons use their paired vanilla/base icon; a row with no proven fallback is omitted rather than drawn. |
+| Boundedness | One catalog pass per list build; at most one summary plus twelve changed-row diagnostic lines. No per-frame probe, package load, renderer rebuild, RPC, or ItemMasterList mutation. |
+| Detection | Offline `test_cim_athanor_icon_policy.lua` proves all nine current CWV paired icons close to vanilla and rejects missing material variants. `/cim_regression_test` passes `issue617_athanor_icon_resource_closure`; `[cim:617] Athanor icon closure` reports `omitted=0` in a healthy live catalog. |
 
 ---
 
