@@ -1,9 +1,10 @@
 # Blocking contract gate for the active Weapon Tweaker beta/dev streams.
 #
 # `weapon_tweaker` is the public gameplay baseline. `weapon_tweaker_dev` keeps
-# that baseline plus an explicit tuning/diagnostic overlay. Common files outside
-# the five documented overlay owners remain byte-identical after namespace and
-# version normalization. The public tree is separately scanned so dev widgets,
+# that baseline plus an explicit tuning/diagnostic overlay. Every inline dev
+# overlay is bounded by paired WT_DEV_OVERLAY markers; after those blocks plus
+# stream namespace/version identity are removed, all common files must be exact.
+# The public tree is separately scanned so dev widgets,
 # commands, status tags, and files cannot leak back into the beta.
 
 [CmdletBinding()]
@@ -17,16 +18,10 @@ $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot '..' }
 
 $WtDevOnlyFiles = @(
+    '_wt_longbow_zoom_probe.lua',
     'wt_dev_anim_picker.lua',
     'wt_dev_hold_pose.lua',
     'wt_port_status.lua'
-)
-$WtOverlayFiles = @(
-    '_wt_anim_remap.lua',
-    '_wt_diagnostics.lua',
-    'weapon_tweaker.lua',
-    'weapon_tweaker_data.lua',
-    'weapon_tweaker_localization.lua'
 )
 $WtPublicCommands = @(
     'brace_to_repeater_dump',
@@ -42,8 +37,22 @@ $WtPublicCommands = @(
 )
 
 function Normalize-WtLua {
-    param([string]$Text)
+    param([string]$Text, [switch]$Dev)
     $value = $Text.Replace("`r`n", "`n")
+    $overlayKind = if ($Dev) { 'DEV' } else { 'PUBLIC' }
+    $markerPrefix = "WT_${overlayKind}_OVERLAY"
+    $begins = @([regex]::Matches($value, "(?m)^[ \t]*-- ${markerPrefix}_BEGIN:([A-Za-z0-9_-]+)[ \t]*$"))
+    $ends = @([regex]::Matches($value, "(?m)^[ \t]*-- ${markerPrefix}_END:([A-Za-z0-9_-]+)[ \t]*$"))
+    if ($begins.Count -ne 0 -or $ends.Count -ne 0) {
+        if ($begins.Count -ne $ends.Count) { throw "unbalanced $markerPrefix markers" }
+        $beginIds = @($begins | ForEach-Object { $_.Groups[1].Value } | Sort-Object)
+        $endIds = @($ends | ForEach-Object { $_.Groups[1].Value } | Sort-Object)
+        if (($beginIds -join "`n") -cne ($endIds -join "`n")) { throw "mismatched $markerPrefix marker ids" }
+        if (@($beginIds | Group-Object | Where-Object Count -ne 1).Count -ne 0) { throw "duplicate $markerPrefix marker id" }
+        $value = [regex]::Replace($value,
+            "(?ms)^[ \t]*-- ${markerPrefix}_BEGIN:([A-Za-z0-9_-]+)[ \t]*\n.*?^[ \t]*-- ${markerPrefix}_END:\1[ \t]*\n?", '')
+        if ($value -match "${markerPrefix}_(?:BEGIN|END):") { throw "unconsumed $markerPrefix marker" }
+    }
     $value = $value.Replace('scripts/mods/weapon_tweaker_dev/', 'scripts/mods/weapon_tweaker/')
     $value = $value.Replace('weapon_tweaker_dev_data', 'weapon_tweaker_data')
     $value = $value.Replace('weapon_tweaker_dev_localization', 'weapon_tweaker_localization')
@@ -62,7 +71,7 @@ function Get-WtLuaMap {
             elseif ($name -eq 'weapon_tweaker_dev_data.lua') { $name = 'weapon_tweaker_data.lua' }
             elseif ($name -eq 'weapon_tweaker_dev_localization.lua') { $name = 'weapon_tweaker_localization.lua' }
         }
-        $result[$name] = Normalize-WtLua ([IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8))
+        $result[$name] = Normalize-WtLua ([IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8)) -Dev:$Dev
     }
     return $result
 }
@@ -72,8 +81,13 @@ function Compare-WtLuaMaps {
     $errors = @()
     foreach ($name in @($Public.Keys | Sort-Object)) {
         if (-not $Dev.ContainsKey($name)) { $errors += "dev runtime is missing $name"; continue }
-        if ($WtOverlayFiles -notcontains $name -and $Public[$name] -cne $Dev[$name]) {
-            $errors += "gameplay drift outside documented dev overlay in $name"
+        if ($Public[$name] -cne $Dev[$name]) {
+            $publicLines = @($Public[$name].Split("`n"))
+            $devLines = @($Dev[$name].Split("`n"))
+            $limit = [Math]::Min($publicLines.Count, $devLines.Count)
+            $line = 0
+            while ($line -lt $limit -and $publicLines[$line] -ceq $devLines[$line]) { $line++ }
+            $errors += "gameplay drift outside a marked dev overlay in ${name}:$($line + 1) public='$($publicLines[$line])' dev='$($devLines[$line])'"
         }
     }
     foreach ($name in @($Dev.Keys | Sort-Object)) {
@@ -116,6 +130,7 @@ function Test-WtPublicSurface {
         @{ Name = 'dev animation picker'; Pattern = '\bwt_dev_anim_picker\b|\benable_dev_anim_picker\b' },
         @{ Name = 'dev hold-pose tuner'; Pattern = '\bwt_dev_hold_pose\b|\bwt_dev_hp_[A-Za-z0-9_]+' },
         @{ Name = 'dev port-status owner'; Pattern = '\bwt_port_status\b' },
+        @{ Name = 'issue-specific live probe'; Pattern = '\b_wt290_diag\b|\[wt:290\]|\b_wt316_zoom_probe\b|\[wt:316\]|\b_wt_longbow_zoom_probe\b' },
         @{ Name = 'dev-only command'; Pattern = 'mod:command\(\s*"(?:animlog|force1p|force3p|wt_coverage|wt_audit_[^"]+)"' },
         @{ Name = 'dev status tag'; Pattern = '\[(?:working|untested|verify-fix(?:-coop)?|diag|diagnostics-armed|needs animations|needs offsets|confirmed working|Issue\s+\d+(?:\s*&\s*\d+)?)\]' },
         @{ Name = 'dev menu label'; Pattern = 'Dev:\s' }
@@ -172,6 +187,13 @@ function Invoke-SelfTest {
     if (-not (@(Compare-WtLuaMaps $public $dev) -match 'undocumented dev-only')) { throw 'dev-only runtime file was not detected' }
     $dev = $public.Clone(); $dev['wt_dev_anim_picker.lua'] = 'return true'
     if (@(Compare-WtLuaMaps $public $dev).Count -ne 0) { throw 'documented dev-only file was rejected' }
+    $marked = "return { value = 1 }`n-- WT_DEV_OVERLAY_BEGIN:self-test`nmod:info('dev')`n-- WT_DEV_OVERLAY_END:self-test`n"
+    $normalized = Normalize-WtLua $marked -Dev
+    if ($normalized -cne "return { value = 1 }`n") { throw 'marked dev overlay was not removed exactly' }
+    $publicMarked = "return { value = 1 }`n-- WT_PUBLIC_OVERLAY_BEGIN:self-test`nreturn { public = true }`n-- WT_PUBLIC_OVERLAY_END:self-test`n"
+    if ((Normalize-WtLua $publicMarked) -cne "return { value = 1 }`n") { throw 'marked public overlay was not removed exactly' }
+    try { $null = Normalize-WtLua "-- WT_DEV_OVERLAY_BEGIN:broken`nreturn true`n" -Dev; throw 'unclosed dev overlay was accepted' }
+    catch { if ($_.Exception.Message -notmatch 'unbalanced') { throw } }
     Write-Host '[check_wt_stream_parity -SelfTest] OK'
     return 0
 }

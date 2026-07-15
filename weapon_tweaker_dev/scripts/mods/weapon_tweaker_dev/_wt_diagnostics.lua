@@ -5,18 +5,15 @@
 -- /dump_weapons, /wt_dump_wielded, plus the wield-time weapon-data dump and its
 -- SimpleInventoryExtension._wield_slot hook_safe. All read engine globals
 -- (Managers / SPProfiles / ScriptUnit / Weapons / ItemMasterList / Localize) and
--- never touch the anim-remap state or mutate mod state. No behavior change from
--- the pre-split god file. The anim-funnel-coupled commands (/info, /animlog,
--- /force3p, /force1p) and the port-pipeline /brace_to_repeater_* commands stay
--- in the entry -- they read the entry's hot anim-remap file-locals.
+-- never touch the anim-remap state or mutate mod state. Public-beta commands
+-- are intentionally read-only support surfaces; tuning and coverage commands
+-- live only in the friends-only dev stream.
 --
 -- Owned by: weapon_tweaker.lua entry point. Consumed via: mod:dofile.
--- Shared state: reads mod._wt.weapon_unlock_map + mod._wt.port_status for #109;
--- no writes and no exports. Registers the sole
--- (SimpleInventoryExtension, _wield_slot) hook repo-wide.
+-- Registers the sole (SimpleInventoryExtension, _wield_slot) hook repo-wide.
 
 local mod = get_mod("wt_dev")
-
+-- WT_DEV_OVERLAY_BEGIN:port-coverage-audits
 -- #109: audit the live Kruber unlock source rather than maintaining another
 -- hand-counted tracker.  This runs once at module load, writes only to the log,
 -- and is also callable on demand.  "Hidden" means the port is correctly tagged
@@ -271,6 +268,7 @@ mod:command("wt_audit_warrior_priest_3p",
                 counts.catalog_total, counts.total)
         end
     end)
+-- WT_DEV_OVERLAY_END:port-coverage-audits
 
 -- Keys are profile/character names. Warrior Priest (wh_priest career) shares
 -- the witch_hunter profile but uses a distinct 3P skeleton, so it's listed

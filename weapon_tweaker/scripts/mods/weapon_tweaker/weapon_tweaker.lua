@@ -336,8 +336,8 @@ end
 -- The three redirect layers (_anim_redirect / _career_anim_redirect /
 -- _suffix_career_map), the per-weapon + per-template + per-key remap tables and
 -- their resolvers, the weak-keyed per-unit remap state, the Unit.animation_event
--- funnel hook, the two wield hooks that populate that state, the anim-funnel
--- commands (/info /animlog /force3p /force1p), and the keep-previewer pose
+-- funnel hook, the two wield hooks that populate that state, the read-only
+-- /info support command, and the keep-previewer pose
 -- resolver moved to _wt_anim_remap.lua in the v0.12.210-dev Phase 2 decomposition.
 -- VERBATIM function-bag move, zero behavior change. The module keeps its own hot
 -- tables as file-local upvalues (the anim path is per-event-hot), so the funnel
@@ -363,10 +363,6 @@ local _suffix_career_map           = mod._wt.suffix_career_map
 local _3p_template_remaps          = mod._wt.three_p_template_remaps
 mod._wt.flamestorm_fx_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_flamestorm_fx_policy")
 mod:dofile("scripts/mods/weapon_tweaker/_wt_flamestorm_fx")
-local _WT316_ZOOM_PROBE            = mod:dofile("scripts/mods/weapon_tweaker/_wt_longbow_zoom_probe")
-local _wt316_zoom_probe            = _WT316_ZOOM_PROBE.new()
-local _wt316_zoom_records          = setmetatable({}, { __mode = "k" })
-
 -- ============================================================
 -- Weapon Scale Overrides
 -- ============================================================
@@ -1535,62 +1531,6 @@ local function _patch_longbow_empire_template_for_saltzpyre()
 end
 
 _patch_longbow_empire_template_for_saltzpyre()
-
--- #316 diagnostic: camera zoom is owner-only and source-driven by ActionAim,
--- while visible body playback is a separate 3P presentation concern. Observe
--- three non-Huntsman Kruber aim attempts after the native draw fix. The result
--- reports camera state and keeps visible playback explicitly unverified; each
--- attempt emits at most two raw-console rows (start + result/early finish).
-mod:hook_safe("ActionAim", "client_owner_start_action", function(self, new_action, t)
-    local item_master_list = rawget(_G, "ItemMasterList")
-    local item_data = item_master_list and rawget(item_master_list, self and self.item_name)
-    local template_name = item_data and item_data.template
-    local career_name = self and self.owner_unit and _unit_career_name(self.owner_unit)
-    local scoped = _3p_template_remaps.longbow_empire_template or {}
-    local remap = career_name and scoped[career_name]
-    local record = _wt316_zoom_probe:arm(template_name, career_name,
-        self and self.item_name, t, self and self.aim_zoom_time or t, {
-            action_kind = new_action and new_action.kind,
-            anim_event = new_action and new_action.anim_event,
-            default_zoom = new_action and new_action.default_zoom,
-            zoom_condition = new_action and type(new_action.zoom_condition_function) or "nil",
-            remap = remap == false and "native_draw_bow"
-                or (type(remap) == "table" and remap.draw_bow or nil),
-        })
-    if not record then return end
-    _wt316_zoom_records[self] = record
-    pcall(printf, "[wt:316] aim-start attempt=%d/%d career=%s item=%s template=%s kind=%s anim=%s aim_delay=%.3f default_zoom=%s condition=%s remap=%s",
-        record.attempt, _wt316_zoom_probe.max_attempts, tostring(career_name),
-        tostring(self.item_name), tostring(template_name), tostring(record.fields.action_kind),
-        tostring(record.fields.anim_event), record.due_at - record.started_at,
-        tostring(record.fields.default_zoom or "zoom_in(default)"),
-        tostring(record.fields.zoom_condition), tostring(record.fields.remap))
-end)
-
-mod:hook_safe("ActionAim", "client_owner_post_update", function(self, dt, t)
-    local record = _wt316_zoom_records[self]
-    if not record then return end
-    local status = self.owner_unit and ScriptUnit.has_extension(self.owner_unit, "status_system")
-    local zooming = status and status:is_zooming() or false
-    local result = _wt316_zoom_probe:observe(record, t, zooming, status and status.zoom_mode)
-    if not result then return end
-    _wt316_zoom_records[self] = nil
-    pcall(printf, "[wt:316] aim-result attempt=%d/%d career=%s outcome=%s elapsed=%.3f zooming=%s zoom_mode=%s visible_draw=%s",
-        record.attempt, _wt316_zoom_probe.max_attempts, tostring(record.career),
-        tostring(result.outcome), result.elapsed, tostring(result.zooming),
-        tostring(result.zoom_mode), tostring(result.visible_draw))
-end)
-
-mod:hook_safe("ActionAim", "finish", function(self, reason)
-    local record = _wt316_zoom_records[self]
-    if not record then return end
-    local result = _wt316_zoom_probe:finish(record, nil, reason)
-    _wt316_zoom_records[self] = nil
-    if not result then return end
-    pcall(printf, "[wt:316] aim-result attempt=%d/%d career=%s outcome=%s elapsed=%.3f reason=%s",
-        record.attempt, _wt316_zoom_probe.max_attempts, tostring(record.career),
-        tostring(result.outcome), result.elapsed, tostring(result.reason))
-end)
 
 -- ============================================================
 -- Saltzpyre Elf Longbow → Crossbow: base template anim patches
@@ -5509,12 +5449,6 @@ _rt_register("issue316_kruber_longbow_zoom_contract", function()
         if remap ~= false then
             return "non-Huntsman Kruber no longer preserves native draw_bow for " .. career
         end
-        if not _WT316_ZOOM_PROBE.is_target("longbow_empire_template", career) then
-            return "zoom diagnostic target scope missing " .. career
-        end
-    end
-    if _WT316_ZOOM_PROBE.is_target("longbow_empire_template", "es_huntsman") then
-        return "native Huntsman incorrectly included in cross-career zoom probe"
     end
     if scoped.es_huntsman ~= nil and scoped.es_huntsman ~= false then
         return "native Huntsman draw_bow is no longer exempt"
@@ -5523,9 +5457,6 @@ _rt_register("issue316_kruber_longbow_zoom_contract", function()
     if type(saltz) ~= "table" or saltz.draw_bow ~= "to_zoom"
             or saltz.attack_shoot_fast ~= "attack_shoot" then
         return "Saltzpyre crossbow presentation remap drifted"
-    end
-    if _wt316_zoom_probe.max_attempts ~= 3 then
-        return "zoom diagnostic is not capped at three attempts"
     end
 end)
 
@@ -6023,12 +5954,13 @@ _rt_register("wt_loc_raw_published", function()
         return "mod._wt_loc_raw present but missing expected unlock entries"
     end
 end)
-
+-- WT_PUBLIC_OVERLAY_BEGIN:public-beta-surface-regression
 _rt_register("issue635_public_beta_dev_surface_absent", function()
     local wt = mod._wt or {}
     if wt.dev_anim_picker ~= nil then return "dev animation picker exported in public beta" end
     if wt.dev_hold_pose ~= nil then return "dev Hold-Pose tuner exported in public beta" end
     if wt.port_status ~= nil then return "dev port-status owner exported in public beta" end
 end)
+-- WT_PUBLIC_OVERLAY_END:public-beta-surface-regression
 
 mod:info("[mem-probe] wt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_WT) / 1024)

@@ -300,9 +300,10 @@ and standalone at runtime.
 
 `check_wt_stream_parity.ps1` is the blocking contract gate for the active
 `weapon_tweaker` public-beta and `weapon_tweaker_dev` friends-only streams. It
-exact-compares every common gameplay file outside five documented dev-overlay
-owners, allowlists the three dev-only tuning modules, and independently rejects
-dev files, widgets, commands, and status tags from the public beta. It also
+exact-compares every common runtime file after removing only uniquely paired,
+self-tested stream-overlay blocks, allowlists the four dev-only tuning/probe
+modules, and independently rejects dev files, widgets, commands, issue-specific
+live probes, and status tags from the public beta. It also
 checks public setting/localization ownership, allowlists the public read-only
 support commands, pins both Workshop IDs/visibilities, and requires dev to be
 one patch ahead. Preview images, changelogs, generated bundles, and Workshop

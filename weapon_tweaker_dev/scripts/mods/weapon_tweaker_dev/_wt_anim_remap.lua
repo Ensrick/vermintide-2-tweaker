@@ -14,7 +14,7 @@
 --     two wield hooks (SimpleInventoryExtension / SimpleHuskInventoryExtension)
 --     that populate it
 --   * THE funnel: the Unit.animation_event hook that rewrites the fired 3P event
---   * the anim-funnel chat commands (/info /animlog /force3p /force1p) and the
+--   * the read-only /info support command and the
 --     keep-previewer pose resolver (_resolve_preview_wield_event)
 --
 -- Owned by: weapon_tweaker.lua entry point. Consumed via: mod:dofile (after the
@@ -25,7 +25,7 @@
 -- Shared state: the hot tables stay file-local upvalues HERE so the per-event
 -- funnel never indirects through mod._wt. The entry publishes the handles this
 -- module reads on its hot path -- mod._wt.feature_enabled / .local_career_name /
--- .dbg / .dev_anim_picker (+ the pre-existing .MOD_VERSION / .weapon_unlock_map
+-- .dbg (+ the pre-existing .MOD_VERSION / .weapon_unlock_map
 -- and manifest-loaded .build_3p_template_remaps)
 -- -- captured as upvalues here at load. This module EXPORTS the handles the
 -- entry's stayed code still needs (all non-hot-path reads): mod._wt.safe_has_anim
@@ -40,7 +40,9 @@ local WT  = mod._wt
 local feature_enabled     = WT.feature_enabled
 local _local_career_name  = WT.local_career_name
 local _dbg                = WT.dbg
+-- WT_DEV_OVERLAY_BEGIN:anim-picker-handle
 local _wt_dev_anim_picker = WT.dev_anim_picker
+-- WT_DEV_OVERLAY_END:anim-picker-handle
 local MOD_VERSION         = WT.MOD_VERSION
 local weapon_unlock_map   = WT.weapon_unlock_map
 local _build_3p_template_remaps = WT.build_3p_template_remaps
@@ -522,7 +524,9 @@ mod:command("info", "Show current weapon tweaker state", function()
         else remap_name = "custom" end
     end
     mod:echo("3P Remap: " .. remap_name)
+    -- WT_DEV_OVERLAY_BEGIN:info-animlog-row
     mod:echo("Anim log: " .. (_log_anims and "ON" or "OFF"))
+    -- WT_DEV_OVERLAY_END:info-animlog-row
     if career then
         local weapons = weapon_unlock_map[career]
         if weapons then
@@ -534,7 +538,7 @@ mod:command("info", "Show current weapon tweaker state", function()
         end
     end
 end)
-
+-- WT_DEV_OVERLAY_BEGIN:anim-force-commands
 mod:command("animlog", "Toggle animation event logging", function()
     _log_anims = not _log_anims
     mod:echo("Animation logging: " .. (_log_anims and "ON" or "OFF"))
@@ -588,6 +592,7 @@ mod:command("force1p", "Force a 1P animation event on local player's first-perso
         mod:echo("  -> event not found on first_person_unit")
     end
 end)
+-- WT_DEV_OVERLAY_END:anim-force-commands
 
 local function _is_local_player_unit(unit)
     local pm = Managers.player
@@ -653,10 +658,9 @@ local _ANIM_EVENT_SAMPLE_REMAP_N = 30
 local _anim_event_call_count = 0
 local _anim_event_remap_count = 0
 
--- #576 bounded, log-only evidence for reopened Saltzpyre ports. Neither
--- Unit.has_animation_event nor a successful C-call acknowledges visible clip
--- playback, so success is deliberately labelled UNVERIFIED. One record per
--- distinct transition tuple keeps repeated frames/swings silent (max 256).
+-- #576's bounded live evidence belongs to the friends-only dev overlay. The
+-- shared public path keeps the same remap behavior without issue-specific rows.
+-- WT_DEV_OVERLAY_BEGIN:bounded-live-animation-probes
 local _WT576_KEYS = {
     bw_ghost_scythe = true,
     we_spear = true,
@@ -758,7 +762,7 @@ local function _wt576_diag(state, career, source, target, outcome, detail)
         end
     end
 end
-
+-- WT_DEV_OVERLAY_END:bounded-live-animation-probes
 -- CLARIFY: stringified hook on the C-API class `Unit`. VMF resolves this
 -- against `_G.Unit.animation_event`. This is the central entry point — every
 -- animation event for every unit goes through here once the mod is loaded,
@@ -818,7 +822,7 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
             return func(unit, reload_target, ...)
         end
     end
-
+    -- WT_DEV_OVERLAY_BEGIN:anim-picker-play-trace
     -- ============================================================
     -- [wt:play] dev-picker play-path trace (v0.12.145-dev) — LOGGING ONLY.
     -- ============================================================
@@ -870,6 +874,7 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
             return _wt_play_orig_func(u, ev, ...)
         end
     end
+    -- WT_DEV_OVERLAY_END:anim-picker-play-trace
 
     if _log_anims then
         local _al_tag = is_local and "3P-body" or "3P-husk"
@@ -1039,6 +1044,7 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
                     tostring(state.template), tostring(state.key), _anim_event_remap_count)
             end
             local ok, err = pcall(func, unit, target, ...)
+            -- WT_DEV_OVERLAY_BEGIN:animation-probe-outcomes
             if ok then
                 _wt576_diag(state, career, event_name, target,
                     "accepted_unverified_no_observable_state_transition",
@@ -1051,8 +1057,10 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
                 _wt290_diag(state, career, event_name, target,
                     "animation_event_call_error", tostring(err))
             end
+            -- WT_DEV_OVERLAY_END:animation-probe-outcomes
             return
         end
+        -- WT_DEV_OVERLAY_BEGIN:animation-probe-misses
         if target and not target_capability then
             _wt576_diag(state, career, event_name, target, "target_missing",
                 "Unit.has_animation_event=false")
@@ -1064,6 +1072,7 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
             _wt290_diag(state, career, event_name, nil, "native_passthrough_or_unmapped",
                 _polearm_native_3p_events[event_name] and "source_is_native_on_polearm" or "source_event_has_no_remap_target")
         end
+        -- WT_DEV_OVERLAY_END:animation-probe-misses
         -- Force-fire path for SM-corrupting events (see
         -- feedback_animation_remap_rules). Adding `attack_swing_stab_02 ->
         -- attack_swing_left_diagonal` to the remap table broke ALL

@@ -135,9 +135,9 @@
 | Field | Check |
 |---|---|
 | Diagnostic version | WT 0.12.233-dev (not deployed; current behavior candidate dates to 0.12.192-dev) |
-| Automated | Offline `test_wt_longbow_zoom_probe` locks exact career/template scope, authored-time observation, one-shot completion, early finish, and the three-attempt cap. `/wt_regression_test`: `issue316_kruber_longbow_zoom_contract` locks the vanilla `ActionAim` fingerprint, Mercenary/Foot Knight/Grail Knight `draw_bow -> to_zoom` mappings, and Huntsman exclusion. |
+| Automated | `/wt_regression_test`: `issue316_kruber_longbow_zoom_contract` locks the vanilla `ActionAim` fingerprint, Mercenary/Foot Knight/Grail Knight native `draw_bow` handling, Huntsman exclusion, and Saltzpyre's crossbow presentation remap. The bounded lifecycle probe is development-stream-only. |
 | Solo visual | Equip Kruber's Longbow on Mercenary, Foot Knight, and Grail Knight. Hold aim for at least one second and confirm both first-person FOV zoom and the third-person aim pose. Huntsman is the native control. |
-| Log evidence | Save at most three `[wt:316] aim-start`/`aim-result` pairs. `finished_before_observation` means the aim action ended before observation; `not_zoomed` points to action/status state; `zoomed zoom_mode=zoom_in` without visible FOV zoom points to camera presentation. |
+| Log evidence | Public beta emits no issue-specific live probe rows. Use the friends-only development stream when bounded `[wt:316]` lifecycle evidence is required. |
 | Authority | Owner-only diagnostic; no RPC, remote-husk observation, or co-op verification is required. |
 
 ## #585 - Moonfire energy bar clears after ranged replacement
@@ -869,7 +869,7 @@ Last updated: 2026-07-13.
 | Category | STATIC / DIAGNOSTIC |
 | Repro | On Kruber, equip `wh_2h_billhook`; perform full lights, both heavies, push, and special hook while watching 3P. |
 | Expected post-fix | Baked picks overlay the complete receiver map. Every effective Billhook 3P event is remapped or native on the polearm body; 1P and native Saltzpyre remain untouched. |
-| Detection | `/wt_regression_test` passes `issue290_billhook_kruber_effective_3p_complete`; bounded `[wt:290]` rows identify the next actual Billhook attack without a command. |
+| Detection | `/wt_regression_test` passes `issue290_billhook_kruber_effective_3p_complete`; bounded `[wt:290]` live rows are available only in the friends-only development stream. |
 
 
 ---

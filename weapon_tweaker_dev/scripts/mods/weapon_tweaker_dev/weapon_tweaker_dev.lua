@@ -108,7 +108,7 @@ local CT_WT_ITEMMASTERLIST_RAWGET_MARKER_v0_12_73 = "wt-itemmasterlist-rawget-ha
 -- where fire-confirmation is load-bearing (NOT on per-frame hooks — see
 -- _safe_hook.lua header "RATE-LIMIT CAVEAT").
 mod:dofile("scripts/mods/weapon_tweaker_dev/_safe_hook")
-
+-- WT_DEV_OVERLAY_BEGIN:dev-tool-imports
 -- ============================================================
 -- Dev-only tooling modules (v0.12.96-dev)
 -- ============================================================
@@ -123,6 +123,8 @@ mod:dofile("scripts/mods/weapon_tweaker_dev/_safe_hook")
 -- See feedback_no_premature_dev_gates.md.
 local _wt_dev_anim_picker = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_dev_anim_picker")
 local _wt_dev_hold_pose   = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_dev_hold_pose")
+-- WT_DEV_OVERLAY_END:dev-tool-imports
+
 local _wt_axe_balance_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_axe_balance")
 local _wt_axe_balance = _wt_axe_balance_policy.new()
 -- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
@@ -261,14 +263,12 @@ mod._wt.MOD_VERSION = MOD_VERSION
 mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_regression")
 local _rt_register = mod._wt.rt_register
 
--- v0.12.99-dev: weapon_unlock_map + _cwv_managed extracted to wt_unlock_data.lua
--- so wt_dev_anim_picker.lua can dofile the same source without depending on
--- VMF's main-script-vs-data load order. (v0.12.98-dev had the picker reading
--- `mod._weapon_unlock_map`, which was nil at _data.lua time because VMF runs
--- _data.lua before main wt.lua finishes — load order is a VMF invariant.)
+-- weapon_unlock_map + _cwv_managed are shared by runtime availability owners.
 local _wt_unlock_data   = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_unlock_data")
 local weapon_unlock_map = _wt_unlock_data.weapon_unlock_map
+-- WT_DEV_OVERLAY_BEGIN:port-status-owner
 mod._wt.port_status = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_port_status")
+-- WT_DEV_OVERLAY_END:port-status-owner
 
 -- CLARIFY: career_weapon_variants ("CWV") publishes its own custom items for
 -- these (career, weapon) pairs. When CWV is installed, weapon_tweaker SKIPS
@@ -355,8 +355,8 @@ end
 -- The three redirect layers (_anim_redirect / _career_anim_redirect /
 -- _suffix_career_map), the per-weapon + per-template + per-key remap tables and
 -- their resolvers, the weak-keyed per-unit remap state, the Unit.animation_event
--- funnel hook, the two wield hooks that populate that state, the anim-funnel
--- commands (/info /animlog /force3p /force1p), and the keep-previewer pose
+-- funnel hook, the two wield hooks that populate that state, the read-only
+-- /info support command, and the keep-previewer pose
 -- resolver moved to _wt_anim_remap.lua in the v0.12.210-dev Phase 2 decomposition.
 -- VERBATIM function-bag move, zero behavior change. The module keeps its own hot
 -- tables as file-local upvalues (the anim path is per-event-hot), so the funnel
@@ -369,7 +369,9 @@ end
 mod._wt.feature_enabled   = feature_enabled
 mod._wt.local_career_name = _local_career_name
 mod._wt.dbg               = _dbg
+-- WT_DEV_OVERLAY_BEGIN:anim-picker-export
 mod._wt.dev_anim_picker   = _wt_dev_anim_picker
+-- WT_DEV_OVERLAY_END:anim-picker-export
 mod._wt.build_3p_template_remaps = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_anim_remap_data")
 mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_anim_remap")
 -- #536: reload ownership differs from attack remapping, so keep its local-3P
@@ -383,10 +385,11 @@ local _suffix_career_map           = mod._wt.suffix_career_map
 local _3p_template_remaps          = mod._wt.three_p_template_remaps
 mod._wt.flamestorm_fx_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_flamestorm_fx_policy")
 mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_flamestorm_fx")
+-- WT_DEV_OVERLAY_BEGIN:longbow-live-probe-owner
 local _WT316_ZOOM_PROBE            = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_longbow_zoom_probe")
 local _wt316_zoom_probe            = _WT316_ZOOM_PROBE.new()
 local _wt316_zoom_records          = setmetatable({}, { __mode = "k" })
-
+-- WT_DEV_OVERLAY_END:longbow-live-probe-owner
 -- ============================================================
 -- Weapon Scale Overrides
 -- ============================================================
@@ -1555,7 +1558,7 @@ local function _patch_longbow_empire_template_for_saltzpyre()
 end
 
 _patch_longbow_empire_template_for_saltzpyre()
-
+-- WT_DEV_OVERLAY_BEGIN:longbow-live-probe-hooks
 -- #316 diagnostic: camera zoom is owner-only and source-driven by ActionAim,
 -- while visible body playback is a separate 3P presentation concern. Observe
 -- three non-Huntsman Kruber aim attempts after the native draw fix. The result
@@ -1611,6 +1614,7 @@ mod:hook_safe("ActionAim", "finish", function(self, reason)
         record.attempt, _wt316_zoom_probe.max_attempts, tostring(record.career),
         tostring(result.outcome), result.elapsed, tostring(result.reason))
 end)
+-- WT_DEV_OVERLAY_END:longbow-live-probe-hooks
 
 -- ============================================================
 -- Saltzpyre Elf Longbow → Crossbow: base template anim patches
@@ -4099,9 +4103,11 @@ end
 -- _wt_availability.lua in the v0.12.209-dev OOP split; on_disabled below calls
 -- them via the entry's file-local aliases from the manifest.
 mod.on_disabled = function()
+    -- WT_DEV_OVERLAY_BEGIN:hold-pose-disable-lifecycle
     if _wt_dev_hold_pose and _wt_dev_hold_pose.on_disabled then
         _wt_dev_hold_pose.on_disabled()
     end
+    -- WT_DEV_OVERLAY_END:hold-pose-disable-lifecycle
     if weapon_backend.overcharge_presentation then pcall(weapon_backend.overcharge_presentation.restore) end
     _wt_bolt_staff_overcharge_runtime.revert()
     if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, true) end
@@ -4118,6 +4124,7 @@ mod.on_setting_changed = function(setting_id)
         weapon_backend.refresh_on_setting_change(mod)
     elseif setting_id and (setting_id:find("^trait_") or setting_id:find("^cw_trait_")) then
         apply_trait_filters()
+    -- WT_DEV_OVERLAY_BEGIN:dev-tool-setting-lifecycle
     elseif setting_id and setting_id:find("^wt_dev_anim_") then
         -- Dev: 3P anim picker — mutate live Weapons.<tpl> tables.
         _wt_dev_anim_picker.on_setting_changed(setting_id)
@@ -4125,6 +4132,7 @@ mod.on_setting_changed = function(setting_id)
         -- Hold-Pose owns immediate non-destructive bypass/restore for its
         -- isolated first-/third-person transform channels (#616).
         _wt_dev_hold_pose.on_setting_changed(setting_id)
+    -- WT_DEV_OVERLAY_END:dev-tool-setting-lifecycle
     elseif setting_id == "wt_priest_punch_buff" then
         if mod.wt_apply_priest_punch_buff then mod.wt_apply_priest_punch_buff() end
     elseif setting_id == "wt_brett_sword_shield_buff" then
@@ -4540,6 +4548,7 @@ _rt_register("issue576_reopened_ports_and_action_chain_contract", function()
         or scythe.attack_swing_heavy == scythe.attack_swing_heavy_left_diagonal then
         failures[#failures + 1] = "scythe H1/H3 roles collapsed"
     end
+    -- WT_DEV_OVERLAY_BEGIN:picker-source-regression
     if not (_wt_dev_anim_picker and _wt_dev_anim_picker.source_events_for) then
         failures[#failures + 1] = "picker source-event regression surface missing"
     else
@@ -4555,6 +4564,7 @@ _rt_register("issue576_reopened_ports_and_action_chain_contract", function()
             end
         end
     end
+    -- WT_DEV_OVERLAY_END:picker-source-regression
     for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
         local has_es, has_dr = false, false
         for _, key in ipairs(weapon_unlock_map[career] or {}) do
@@ -5537,6 +5547,9 @@ _rt_register("issue569_wp_hammer_remap_orientation_scope", function()
     if contract.native_exempt_key ~= "wh_2h_hammer" then
         return "native exemption key drifted"
     end
+end)
+-- WT_DEV_OVERLAY_BEGIN:hold-pose-regressions
+_rt_register("issue569_hold_pose_composition", function()
     local pose_contract = _wt_dev_hold_pose and _wt_dev_hold_pose._pose_contract
     local plan_values = _wt_dev_hold_pose and _wt_dev_hold_pose._component_plan_values
     if type(pose_contract) ~= "table" or type(plan_values) ~= "function" then
@@ -5649,6 +5662,7 @@ _rt_register("issue616_hold_pose_nonuniform_scale", function()
         return "complete nine-value transform does not compose all components"
     end
 end)
+-- WT_DEV_OVERLAY_END:hold-pose-regressions
 
 _rt_register("issue316_kruber_longbow_zoom_contract", function()
     if not rawget(_G, "Weapons") then return "skip: Weapons not loaded" end
@@ -5665,13 +5679,17 @@ _rt_register("issue316_kruber_longbow_zoom_contract", function()
         if remap ~= false then
             return "non-Huntsman Kruber no longer preserves native draw_bow for " .. career
         end
+        -- WT_DEV_OVERLAY_BEGIN:zoom-probe-career-assertion
         if not _WT316_ZOOM_PROBE.is_target("longbow_empire_template", career) then
             return "zoom diagnostic target scope missing " .. career
         end
+        -- WT_DEV_OVERLAY_END:zoom-probe-career-assertion
     end
+    -- WT_DEV_OVERLAY_BEGIN:zoom-probe-huntsman-assertion
     if _WT316_ZOOM_PROBE.is_target("longbow_empire_template", "es_huntsman") then
         return "native Huntsman incorrectly included in cross-career zoom probe"
     end
+    -- WT_DEV_OVERLAY_END:zoom-probe-huntsman-assertion
     if scoped.es_huntsman ~= nil and scoped.es_huntsman ~= false then
         return "native Huntsman draw_bow is no longer exempt"
     end
@@ -5680,9 +5698,11 @@ _rt_register("issue316_kruber_longbow_zoom_contract", function()
             or saltz.attack_shoot_fast ~= "attack_shoot" then
         return "Saltzpyre crossbow presentation remap drifted"
     end
+    -- WT_DEV_OVERLAY_BEGIN:zoom-probe-bound-assertion
     if _wt316_zoom_probe.max_attempts ~= 3 then
         return "zoom diagnostic is not capped at three attempts"
     end
+    -- WT_DEV_OVERLAY_END:zoom-probe-bound-assertion
 end)
 
 _rt_register("issue580_moonfire_saltzpyre_crossbow_3p_contract", function()
@@ -6168,7 +6188,7 @@ _rt_register("no_redundant_bardin_1h_on_saltzpyre", function()
     end
     if #bad > 0 then return "redundant Bardin 1h back on Saltzpyre: " .. table.concat(bad, ", ") end
 end)
-
+-- WT_DEV_OVERLAY_BEGIN:picker-localization-regressions
 _rt_register("dev_picker_names_localized", function()
     -- #159: the dev 3P Anim Picker must show DOCUMENTED localized weapon names,
     -- never raw internal keys (the tester saw "Sienna bw_deus_01" instead of
@@ -6212,12 +6232,11 @@ _rt_register("dev_picker_group_labels_registered", function()
         return "picker group labels not localized (registered values): " .. table.concat(bad, ", ")
     end
 end)
+-- WT_DEV_OVERLAY_END:picker-localization-regressions
 
 _rt_register("wt_loc_raw_published", function()
-    -- #197: the dev picker resolves documented weapon names by reading
-    -- mod._wt_loc_raw directly (NOT mod:localize, which errors "localization file was
-    -- not loaded" when the catalog is built before loc registration). Guard that the
-    -- localization file still publishes the raw table with the unlock entries.
+    -- Availability sorting reads the raw localization table before VMF finishes
+    -- registering localization. Guard the public owner surface stays available.
     if type(mod._wt_loc_raw) ~= "table" then
         return "mod._wt_loc_raw not published by localization file — picker names fall back to raw keys (#197)"
     end
@@ -6225,7 +6244,7 @@ _rt_register("wt_loc_raw_published", function()
         return "mod._wt_loc_raw present but missing expected unlock entries"
     end
 end)
-
+-- WT_DEV_OVERLAY_BEGIN:picker-runtime-regressions
 _rt_register("dev_picker_no_inspect_dropdown", function()
     -- User 2026-06-29: the inspect animation must NOT be a tunable picker dropdown —
     -- the weapon just uses whatever inspect anim it already has. Guard inspect events
@@ -6271,7 +6290,8 @@ _rt_register("saltz_billhook_set_uses_3p_events", function()
     end
     if #bad > 0 then return "Billhook SET F vocab wrong: " .. table.concat(bad, "; ") end
 end)
-
+-- WT_DEV_OVERLAY_END:picker-runtime-regressions
+-- WT_DEV_OVERLAY_BEGIN:dev-tool-installs
 -- ============================================================
 -- Dev tooling installs (v0.12.96-dev)
 -- ============================================================
@@ -6280,6 +6300,9 @@ end)
 -- with their initial values — the anim picker reads from those live tables
 -- at install time to seed its dropdown defaults.
 _wt_dev_anim_picker.install()
+-- WT_DEV_OVERLAY_END:dev-tool-installs
 
 mod:info("[mem-probe] wt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_WT) / 1024)
+-- WT_DEV_OVERLAY_BEGIN:hold-pose-install
 _wt_dev_hold_pose.install()
+-- WT_DEV_OVERLAY_END:hold-pose-install

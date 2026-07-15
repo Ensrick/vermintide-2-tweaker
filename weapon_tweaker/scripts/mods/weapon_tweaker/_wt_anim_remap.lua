@@ -597,27 +597,8 @@ local _ANIM_EVENT_SAMPLE_REMAP_N = 30
 local _anim_event_call_count = 0
 local _anim_event_remap_count = 0
 
--- #576 bounded, log-only evidence for reopened Saltzpyre ports. Neither
--- Unit.has_animation_event nor a successful C-call acknowledges visible clip
--- playback, so success is deliberately labelled UNVERIFIED. One record per
--- distinct transition tuple keeps repeated frames/swings silent (max 256).
--- #290 automatic evidence: the report's first trace attacked we_spear after merely
--- selecting Billhook in inventory. Capture the next ACTUAL local Kruber+Billhook attack
--- without a command or picker toggle. One row per distinct source/target/outcome, max 48.
-local _wt290_seen, _wt290_count = {}, 0
-local function _wt290_diag(state, career, source, target, outcome, detail)
-    if not state or state.key ~= "wh_2h_billhook" or not career or career:sub(1, 3) ~= "es_" then return end
-    local token = table.concat({ tostring(career), tostring(source), tostring(target),
-        tostring(state.remap_origin), tostring(outcome) }, "|")
-    if _wt290_seen[token] or _wt290_count >= 48 then return end
-    _wt290_seen[token] = true
-    _wt290_count = _wt290_count + 1
-    printf("[wt:290] weapon=wh_2h_billhook template=%s career=%s source=%s target=%s origin=%s outcome=%s detail=%s evidence=%d/48 chat=false",
-        tostring(state.template), tostring(career), tostring(source), tostring(target),
-        tostring(state.remap_origin or "none"), tostring(outcome), tostring(detail or "none"),
-        _wt290_count)
-end
-
+-- #576's bounded live evidence belongs to the friends-only dev overlay. The
+-- shared public path keeps the same remap behavior without issue-specific rows.
 -- CLARIFY: stringified hook on the C-API class `Unit`. VMF resolves this
 -- against `_G.Unit.animation_event`. This is the central entry point — every
 -- animation event for every unit goes through here once the mod is loaded,
@@ -846,21 +827,7 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
                     tostring(state.template), tostring(state.key), _anim_event_remap_count)
             end
             local ok, err = pcall(func, unit, target, ...)
-            if ok then
-                _wt290_diag(state, career, event_name, target,
-                    "accepted_unverified", "pcall_ok;has_event_is_capability_not_playback_ack")
-            else
-                _wt290_diag(state, career, event_name, target,
-                    "animation_event_call_error", tostring(err))
-            end
             return
-        end
-        if target and not target_capability then
-            _wt290_diag(state, career, event_name, target, "target_missing",
-                "Unit.has_animation_event=false")
-        elseif not target then
-            _wt290_diag(state, career, event_name, nil, "native_passthrough_or_unmapped",
-                _polearm_native_3p_events[event_name] and "source_is_native_on_polearm" or "source_event_has_no_remap_target")
         end
         -- Force-fire path for SM-corrupting events (see
         -- feedback_animation_remap_rules). Adding `attack_swing_stab_02 ->
