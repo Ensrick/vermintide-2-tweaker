@@ -12,6 +12,28 @@ weapon's `.unit`.
 > prop cannot be loaded safely. This doc remains the research foundation for
 > enemy meshes, trophy paths, and the duplicate-item constraints.
 
+### Canonical WOC inventory contract
+
+WOC artifacts are unique local relics, not CIM-crafted weapons. Every enabled
+definition is registered once at a deterministic backend id and marked
+`woc_unique_relic = true`. `_woc_relic_policy.lua` owns that classification for
+all present and future WOC items; consumers must use the marker rather than a
+screen name, rarity guess, or a special case for Blightreaper.
+
+The provider definition uses `promo` rarity and has no skin combination table.
+MoreItemsLibrary overwrites live mod-item rarity with `default` during
+`add_mod_items_to_local_backend`, so registration must also stamp the actual
+backend row and its `CustomData` after MIL returns. Definition-only writes do
+not satisfy the contract.
+
+At each in-game state entry WOC inventories all registered relic definitions,
+keeps the exact deterministic backend id, and reconciles historical CIM/MIL
+duplicates. Unequipped exact CIM records use CIM's canonical deletion
+transaction. Equipped, saved-loadout, or uncertain duplicates are retained and
+retried later; the canonical id is structurally excluded from deletion.
+CIM consumes the same provider marker to reject relic acquisition and mutation
+at its catalogue and central craft-dispatch boundaries.
+
 All paths/line citations below are against the decompiled source at
 `C:/Users/danjo/source/repos/Vermintide-2-Source-Code` (referred to as `src/`).
 
@@ -278,3 +300,12 @@ The authored source lives under `units/woc_blightreaper` and
 `textures/woc_blightreaper`; both 1P and 3P units are explicit dependencies of
 the WOC master package. Do not replace this with the hub-trophy path or add a
 unit-path package load.
+
+The extracted material reports native parent `EA15CAA2A17CD818`, packed rune
+input, `2E82F037A3245005` pulse noise, gold `{5, 4.4, 0}`, and pulse scalar
+`1.746000051498413`. That decompiler output is not compiler source: the SDK
+cannot resolve the hash-only parent material. v0.1.14-dev therefore retains the
+compile-valid authored PBR graph while #613 remains open for a source-backed or
+authored pulse graph. The canonical held transform is Euler XYZ
+`{-90, -90, -90}` plus `{0, 0, -0.3}`, applied at spawn through the shared
+appearance primitive on gameplay and preview consumers.

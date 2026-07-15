@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.13-dev"
+local MOD_VERSION = "0.1.14-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -142,6 +142,9 @@ local TEMPLATE    = "one_handed_swords_template_1"      -- 1H sword moveset / hi
 local _wire_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_wire_policy")
 local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_policy")
 local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview")
+local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
+local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
+local _wa = _appearance_lib.new()
 if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" then
 	-- Packaging failures must not become startup crashes. Preserve ordinary
 	-- vanilla loadout syncs, but fail closed for explicit WOC identities because
@@ -171,7 +174,7 @@ local function _ensure_appearance_aliases()
 	return installed
 end
 _ensure_appearance_aliases()
-_preview.install(_appearance)
+_preview.install(_appearance, _wa)
 
 -- Original display reference (documentation only — do NOT reference at runtime):
 --   units/props/inn/hub_trophy/hub_trophy_bogenhafen
@@ -226,6 +229,7 @@ local function _build_entry(base, backend_id)
 	-- the vanilla equip fallback `ItemMasterList[item.name]` (CWV clone-name
 	-- lesson, feedback_cwv_clone_name_clobber).
 	entry.woc_variant = true
+	entry.woc_item_key = ITEM_KEY
 
 	entry.display_name    = ITEM_KEY .. "_name"
 	entry.description     = ITEM_KEY .. "_description"
@@ -242,7 +246,7 @@ local function _build_entry(base, backend_id)
 	-- per-career DLC ownership is enforced by the game's own equip check.
 	entry.required_dlc = nil
 
-	entry.rarity = "default"
+	entry.rarity = _relic_policy.RARITY
 	entry.mod_data = {
 		backend_id     = backend_id,
 		ItemInstanceId = backend_id,
@@ -250,15 +254,16 @@ local function _build_entry(base, backend_id)
 			traits      = "[]",
 			power_level = "300",
 			properties  = "{}",
-			rarity      = "default",
+			rarity      = _relic_policy.RARITY,
 		},
-		rarity      = "default",
+		rarity      = _relic_policy.RARITY,
 		traits      = {},
 		power_level = 300,
 		properties  = {},
 	}
-	-- No skin pre-applied: the item renders from entry.right_hand_unit. Default
-	-- rarity keeps it forge-eligible and treated as unlocked.
+	-- No skin pre-applied: the item renders from entry.right_hand_unit. WOC
+	-- trophy weapons are unique immutable relics, not craft/customize templates.
+	_relic_policy.mark_definition(entry, backend_id)
 
 	return entry
 end
@@ -268,6 +273,79 @@ end
 -- ============================================================
 
 local _registered = false
+local _relic_definitions = {}
+
+local function _backend_items()
+	return Managers and Managers.backend and Managers.backend:get_interface("items")
+end
+
+local function _stamp_live_relic(items, entry)
+	if not items then return false end
+	local live
+	local ok = pcall(function() live = items:get_item_from_id(BACKEND_ID) end)
+	if not ok or not live then
+		local all
+		pcall(function() all = items:get_all_backend_items() end)
+		live = type(all) == "table" and all[BACKEND_ID] or nil
+	end
+	if not live then return false end
+	return _relic_policy.enforce_instance(live, entry, BACKEND_ID)
+end
+
+local function _equip_state(items, backend_id)
+	local ok_current, current = pcall(items.equipped_by, items, backend_id)
+	local ok_saved, saved = pcall(items.is_equipped_by_any_loadout, items, backend_id)
+	if not ok_current or not ok_saved
+			or type(current) ~= "table" or type(saved) ~= "table" then
+		return nil
+	end
+	return #current > 0 or #saved > 0
+end
+
+local function _remove_relic_duplicates(items, ids)
+	if #ids == 0 then return 0 end
+	local cim = get_mod("cim_dev") or get_mod("cim")
+	if not cim or type(cim._cim_get_craft) ~= "function"
+			or type(cim._cim277_delete_owned_ids) ~= "function" then
+		return 0
+	end
+	local owned = {}
+	for i = 1, #ids do
+		if cim._cim_get_craft(ids[i]) then owned[#owned + 1] = ids[i] end
+	end
+	if #owned == 0 then return 0 end
+	local count, err = cim._cim277_delete_owned_ids(owned)
+	if err then
+		printf("[WOC:637] CIM duplicate cleanup deferred: %s", tostring(err))
+		return 0
+	end
+	return tonumber(count) or 0
+end
+
+local function _reconcile_relic_inventory()
+	if not _registered then return end
+	local items = _backend_items()
+	if not items then return end
+	local all
+	local ok = pcall(function() all = items:get_all_backend_items() end)
+	if not ok or type(all) ~= "table" then return end
+
+	local cim = get_mod("cim_dev") or get_mod("cim")
+	local can_delete = cim and type(cim._cim_get_craft) == "function"
+		and type(cim._cim277_delete_owned_ids) == "function"
+	local report = _relic_policy.plan_reconciliation(all, _relic_definitions,
+		function(backend_id) return _equip_state(items, backend_id) end,
+		function(backend_id)
+			return can_delete and cim._cim_get_craft(backend_id) and true or nil
+		end)
+	local removed = _remove_relic_duplicates(items, report.removable)
+	if #report.deferred > 0 then
+		printf("[WOC:637] deferred %d equipped/uncertain relic duplicate(s); retrying on next state transition",
+			#report.deferred)
+	end
+	printf("[WOC:637] unique relics canonical=%d removed_duplicates=%d deferred=%d missing=%d",
+		#report.canonical, removed, #report.deferred, #report.missing)
+end
 
 local function _register_blightreaper()
 	if _registered then
@@ -292,6 +370,11 @@ local function _register_blightreaper()
 
 	local entry = _build_entry(base, BACKEND_ID)
 	mil:add_mod_items_to_local_backend({ entry }, "weapons_of_chaos")
+	_relic_definitions[1] = {
+		item_key = ITEM_KEY,
+		backend_id = BACKEND_ID,
+		master = entry,
+	}
 
 	-- Mirror into ItemMasterList so vanilla equip/preview paths resolve it
 	-- (HeroPreviewer.equip_item does `ItemMasterList[item_name]`). rawget
@@ -308,6 +391,11 @@ local function _register_blightreaper()
 		rawset(NetworkLookup.item_names, ITEM_KEY, idx)
 	end
 
+	local items = _backend_items()
+	if not _stamp_live_relic(items, entry) then
+		printf("[WOC:637] canonical backend row was not visible immediately; will restamp on state transition")
+	end
+
 	_registered = true
 	mod:info("[WOC] registered Blightreaper (%s) as backend item %s", ITEM_KEY, BACKEND_ID)
 end
@@ -317,6 +405,41 @@ end
 mod:hook_safe("StateInGameRunning", "on_enter", function()
 	_ensure_appearance_aliases()
 	_register_blightreaper()
+	if _registered then
+		local entry = _relic_definitions[1] and _relic_definitions[1].master
+		_stamp_live_relic(_backend_items(), entry)
+		_reconcile_relic_inventory()
+	end
+end)
+
+_rt_register("issue637_unique_immutable_relic_inventory", function()
+	if not mod:get("enable_blightreaper") then return "skip: Blightreaper is disabled" end
+	if not _registered then return "WOC relic registration has not completed" end
+	local entry = rawget(ItemMasterList, ITEM_KEY)
+	if not _relic_policy.is_definition(entry) or entry.rarity ~= _relic_policy.RARITY then
+		return "canonical provider row is not marked as an immutable promo relic"
+	end
+	local items = _backend_items()
+	local all
+	local ok = items and pcall(function() all = items:get_all_backend_items() end)
+	if not ok or type(all) ~= "table" then return "backend inventory unavailable" end
+	local cim = get_mod("cim_dev") or get_mod("cim")
+	local can_delete = cim and type(cim._cim_get_craft) == "function"
+		and type(cim._cim277_delete_owned_ids) == "function"
+	local report = _relic_policy.plan_reconciliation(all, _relic_definitions,
+		function(backend_id) return _equip_state(items, backend_id) end,
+		function(backend_id)
+			return can_delete and cim._cim_get_craft(backend_id) and true or nil
+		end)
+	if #report.canonical ~= 1 or #report.removable ~= 0
+			or #report.deferred ~= 0 or #report.missing ~= 0 then
+		return string.format("relic inventory not singular: canonical=%d removable=%d deferred=%d missing=%d",
+			#report.canonical, #report.removable, #report.deferred, #report.missing)
+	end
+	local live = all[BACKEND_ID]
+	if not _relic_policy.is_instance(live) or live.rarity ~= _relic_policy.RARITY then
+		return "MoreItemsLibrary live row did not retain the immutable promo marker"
+	end
 end)
 
 -- ============================================================
@@ -418,8 +541,17 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 			end
 		end
 	end
-	return func(world, hand, item_template, item_units, slot_name, item_data,
-		owner_unit_1p, owner_unit_3p, ...)
+	local is_blightreaper = hand == "right" and type(item_units) == "table"
+		and item_units.right_hand_unit == HELD_UNIT
+	local unit_3p, ammo_3p, unit_1p, ammo_1p = func(world, hand, item_template,
+		item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, ...)
+	if is_blightreaper then
+		local applied_3p = _wa.apply(unit_3p, _appearance.TRANSFORM)
+		local applied_1p = unit_1p and _wa.apply(unit_1p, _appearance.TRANSFORM) or false
+		pcall(printf, "[WOC:613] appearance applied surface=inventory-spawn 1p=%s 3p=%s",
+			tostring(applied_1p), tostring(applied_3p))
+	end
+	return unit_3p, ammo_3p, unit_1p, ammo_1p
 end)
 
 if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
@@ -589,6 +721,13 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 	if _appearance_alias_count ~= 2 then
 		return string.format("expected two forward inventory-package aliases, got %s",
 			tostring(_appearance_alias_count))
+	end
+	local transform = _appearance.TRANSFORM
+	if not transform or transform.rotation[1] ~= -90
+			or transform.rotation[2] ~= -90 or transform.rotation[3] ~= -90
+			or transform.offset[1] ~= 0 or transform.offset[2] ~= 0
+			or transform.offset[3] ~= -0.3 then
+		return "canonical rotation/offset contract drifted"
 	end
 	local ok_1p, resident_1p = pcall(Application.can_get, "unit", HELD_UNIT)
 	local ok_3p, resident_3p = pcall(Application.can_get, "unit", _appearance.UNIT_3P)

@@ -60,12 +60,28 @@ function M.provider_for(item_key, master)
     return "vanilla"
 end
 
+function M.is_immutable_relic(item)
+    if type(item) ~= "table" then return false end
+    if item.woc_unique_relic == true then return true end
+    if type(item.data) == "table" and item.data.woc_unique_relic == true then return true end
+    local custom = item.CustomData
+    return type(custom) == "table"
+        and (custom.woc_unique_relic == true or custom.woc_unique_relic == "true")
+end
+
 -- Returns true for ordinary vanilla rows (they remain vanilla-owned), or for a
 -- complete provider row. A malformed mod-provider definition returns false and
 -- a bounded problem list so acquisition selectors can reject it before draw.
 function M.validate_provider(item_key, master)
     local provider = M.provider_for(item_key, master)
     if provider == "vanilla" then return true, {}, provider end
+
+    -- WOC trophy weapons are deterministic one-per-account local relics.  The
+    -- provider marker is the sole cross-mod boundary: no CIM acquisition path
+    -- may turn one into a second crafted/editable instance.
+    if M.is_immutable_relic(master) then
+        return false, { "immutable_relic" }, provider
+    end
 
     local problems = {}
     if type(item_key) ~= "string" or item_key == "" then

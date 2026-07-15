@@ -1,0 +1,49 @@
+# Proves #613's authored resources and #637's relic policy are compiled into
+# WOC's runtime root and,
+# after shipping, that the inspected build is the one installed from Workshop.
+[CmdletBinding()]
+param(
+    [string]$BundleRoot,
+    [string]$WorkshopRoot = 'C:\Program Files (x86)\Steam\steamapps\workshop\content\552500\3753880932',
+    [switch]$SkipWorkshop,
+    [string]$Unpacker = $env:VT2_BUNDLE_UNPACKER,
+    [string]$CompressionDictionary = $env:VT2_COMPRESSION_DICTIONARY
+)
+$ErrorActionPreference = 'Stop'
+$repoRoot = Split-Path $PSScriptRoot -Parent
+if (-not $BundleRoot) { $BundleRoot = Join-Path $repoRoot 'weapons_of_chaos\bundleV2' }
+if (-not $Unpacker) { $Unpacker = 'C:\Users\danjo\source\repos\vt2_bundle_unpacker\target\release\unpacker.exe' }
+if (-not $CompressionDictionary) { $CompressionDictionary = 'C:\Program Files (x86)\Steam\steamapps\common\Warhammer Vermintide 2\bundle\compression.dictionary' }
+function Fail([string]$Message) { throw "[check_woc_blightreaper_bundle_contract] $Message" }
+foreach ($path in @($Unpacker, $CompressionDictionary)) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { Fail "tool input missing: $path" }
+}
+$rootBundle = Join-Path $BundleRoot 'dcea08518941f940.mod_bundle'
+if (-not (Test-Path -LiteralPath $rootBundle -PathType Leaf)) { Fail "root bundle missing: $rootBundle" }
+$listing = @(& $Unpacker --dict NUL --zstd-dict $CompressionDictionary list $rootBundle 2>&1)
+if ($LASTEXITCODE -ne 0) { Fail "unpacker failed: $($listing -join ' ')" }
+$text = $listing -join "`n"
+$required = [ordered]@{
+    '99D57F229E554C63.unit'     = '1P unit'
+    '82C10015C2C03BED.unit'     = '3P unit'
+    '99D57F229E554C63.material' = 'authored material'
+    '41355064E953AF6D.lua'       = 'shared appearance primitive'
+    'E4C641E0BD963F8B.lua'       = 'appearance policy'
+    '6E2356C79259A523.lua'       = 'preview consumers'
+    '23C6E7C1A71A2157.lua'       = 'unique relic policy'
+}
+foreach ($resource in $required.Keys) {
+    if ($text -notmatch "(?im)^$([regex]::Escape($resource))\b") { Fail "compiled root missing $($required[$resource]) ($resource)" }
+}
+$matched = 0
+if (-not $SkipWorkshop) {
+    if (-not (Test-Path -LiteralPath $WorkshopRoot -PathType Container)) { Fail "Workshop folder missing: $WorkshopRoot" }
+    foreach ($source in Get-ChildItem -LiteralPath $BundleRoot -File) {
+        $deployed = Join-Path $WorkshopRoot $source.Name
+        if (-not (Test-Path -LiteralPath $deployed -PathType Leaf)) { Fail "Workshop file missing: $($source.Name)" }
+        if ((Get-FileHash $source.FullName -Algorithm SHA256).Hash -ne (Get-FileHash $deployed -Algorithm SHA256).Hash) { Fail "Workshop hash mismatch: $($source.Name)" }
+        $matched++
+    }
+}
+$status = if ($SkipWorkshop) { 'skipped' } else { "$matched file(s) exact" }
+Write-Host "[check_woc_blightreaper_bundle_contract] OK - 7 compiled resources, Workshop=$status"

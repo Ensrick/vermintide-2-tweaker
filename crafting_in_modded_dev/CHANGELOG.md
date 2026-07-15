@@ -1,5 +1,17 @@
 # Crafting in Modded Changelog
 
+## 0.8.83-dev (2026-07-15): #637 immutable WOC relic boundary
+
+- CIM now treats WOC's provider-owned `woc_unique_relic` marker as a hard
+  acquisition and mutation boundary. Marked definitions are excluded from the
+  native Craft Item catalogue; `promo` keeps them out of Athanor and vanilla
+  recipe lists.
+- Added one defense at CIM's canonical craft dispatcher before illusion-swap
+  handling. Any marked input is converted to a bounded no-op, covering skin,
+  salvage, upgrade, reroll, and future CIM recipes without per-screen patches.
+- Added engine-free coverage for definition, live-row, and `CustomData` marker
+  shapes. WOC owns duplicate migration and the deterministic canonical item.
+
 ## 0.8.82-dev (2026-07-15): #524 five-power bounded Blacksmith selectors [verify-fix]
 
 - Restored the native crafting contract requested for CWV: every eligible definition has exactly one Blacksmith selector at power 5. The configured crafting power still applies only to the newly crafted Modded item.
