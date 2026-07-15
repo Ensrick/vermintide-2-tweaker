@@ -97,6 +97,23 @@ Plus a cross-cutting concern:
 
 | **Sync** | make the variant identity survive the network so husks resolve it | net-safe marker on the equipment/loadout wire | §5, issue #392 |
 
+### Presentation descriptor boundary
+
+The concern resolvers above produce one immutable **presentation descriptor**
+for an exact item instance. The descriptor carries resolved per-hand units,
+textures/material overrides, perspective transforms, pose, residency proof,
+and a safe fallback. Inventory, illusion browser, Athanor, lobby, score, owner,
+bot, and husk code are adapters: they translate the same descriptor into their
+surface's spawn and renderer API. They do not independently rediscover item
+identity, active illusion, or transform policy.
+
+Renderer material closure is deliberately not a global boolean. A texture can
+be resident while absent from the specific `Gui` used by `ui_top_renderer` or a
+forge/HDR renderer. An adapter may emit a custom GUI material only after it is
+registered in the renderer that will draw the pass; otherwise it must choose a
+resident vanilla fallback or omit the optional pass. See bug classes 47 and 48
+and issues #420/#481.
+
 ---
 
 ## §3 Concern × Path matrix — what each path MUST apply

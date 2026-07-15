@@ -1717,3 +1717,144 @@ backend list, or snapshots state inside `on_enter`.
 ### Related Issues / commits
 - CIM v0.8.76-dev (#524); offline `test_cim_cwv_template_catalog.lua`; runtime
   `issue524_all_cwv_blacksmith_selectors`.
+
+## 47. Custom GUI texture exists, but not in the drawing renderer
+
+**First seen:** 2026-07-15 (CIM Athanor list, issue #481/#618 cluster); prior
+related incident: Tweaker: GUI issue #528.
+**Lives in:** any custom texture/material used by a vanilla view with multiple
+renderers (`ui_renderer`, `ui_top_renderer`, HDR/store/forge renderers).
+
+### Symptoms
+- The texture is present in the bundle and may render on one screen, yet a
+  different screen crashes in `ui_passes.lua:134` or
+  `UIRenderer_draw_texture` because the renderer resolves a nil material.
+- A resource-residency check passes. This does not prove that the particular
+  `Gui` owned by the drawing renderer registered that material.
+- Replacing the icon with a vanilla atlas key avoids the crash.
+
+### Diagnosis pattern
+1. Record the exact view, pass, and renderer that performed the failing draw.
+2. Trace the renderer's material list at `UIRenderer.create`; do not infer it
+   from another renderer in the same view.
+3. Treat the closure as `(resource resident, material registered in this Gui,
+   pass has a non-nil string)`. All three must be true before drawing.
+
+### Fix template
+- Centralize custom GUI material registration and track it per renderer
+  instance, not globally.
+- At widget construction, emit the custom key only after positive proof for
+  the renderer that will draw it. Otherwise use a resident vanilla fallback or
+  omit the optional pass.
+- Add a static catalogue-to-renderer closure test and a runtime assertion over
+  every live custom icon row. Never rely on `pcall` around the native draw.
+
+**Related:** class 23 covers keep-only materials drawn mid-mission. This class
+also occurs inside the keep when the material is registered in the wrong
+renderer. Evidence: CIM log 2026-07-15 07:09:11, custom Dual Axes icon
+`icon_wpn_axe_hatchet_t1_dual_cwv` in `HeroWindowWeaveForgeWeapons._draw`.
+
+## 48. Preview presentation is reimplemented per screen
+
+**First seen:** recurring weapon/cosmetic cluster; formalized 2026-07-15 from
+issues #420, #481, #617.
+**Lives in:** item appearance code consumed by inventory, customization,
+Athanor, lobby, score, owner, bot, and husk surfaces.
+
+### Symptoms
+- A model, texture, transform, pose, or glow is correct in one preview but
+  missing or stale in another.
+- Fixes become a screen-by-screen game of whack-a-mole because each consumer
+  reconstructs a partial item presentation.
+- The same custom asset safely falls back in one view and crashes or renders
+  vanilla in another.
+
+### Fix template
+- Resolve one immutable presentation descriptor from canonical item-instance
+  identity. It includes component units, material/texture overrides,
+  perspective transforms, pose, residency requirements, and a fail-closed
+  substitute.
+- Make every surface adapt that descriptor to its renderer/spawn API. A surface
+  may not re-derive identity, illusion, or transform policy.
+- Test the full acceptance matrix in `WEAPON_APPEARANCE_STANDARD.md` plus the
+  Athanor and customization panes. Include initial open, re-open, transition,
+  hot join, and one unmodified control.
+
+**Related:** class 43 covers durable owner state versus ephemeral render state;
+class 27 covers husk identity; issue #420 owns the shared library extraction.
+
+## 49. Visual-only custom unit drops vanilla behavioral contracts
+
+**First seen:** 2026-07-15 (Encarmine helmet, issue #612; repair pending
+in-game verification).
+**Lives in:** imported or rebuilt hats, outfits, weapons, and props that replace
+a vanilla unit rather than only its textures/materials.
+
+### Symptoms
+- The mesh is visible, but a feather no longer jiggles, the whole cosmetic does
+  not fade near the camera, or LOD/attachment behavior differs from vanilla.
+- The custom FBX contains only static meshes while the donor unit contains an
+  armature, skinned renderables, animation/state-machine data, or dynamic
+  joints.
+- Material replacement changes fade/dither behavior even when geometry is
+  otherwise identical.
+
+### Fix template
+- Inventory the donor unit's nonvisual contract before importing: skeleton,
+  state machine, skinned meshes, dynamic/physics nodes, LODs, fade-compatible
+  shader/material parent, links, and attachment nodes.
+- Prefer retaining the vanilla donor unit and replacing instance materials or
+  textures. If geometry must change, use a rig-preserving pipeline and prove
+  every contract item survived compilation.
+- Regression-test structure offline; verify jiggle, near-camera fade, remote
+  rendering, preview rendering, and transition respawn in game.
+
+## 50. Texture conversion preserves haze outside intended alpha
+
+**First seen:** 2026-07-15 (Encarmine plume, issue #612; repair pending in-game
+verification).
+**Lives in:** PNG/DDS/texture conversion with cutout or translucent assets,
+especially mipmapped DXT textures.
+
+### Symptoms
+- A feather or decal is surrounded by translucent tape/film.
+- The visible feature is much darker/brighter than its donor even though the
+  source PNG looks acceptable at full resolution.
+- Gloss, alpha edge, or silhouette changes by distance as mips are selected.
+
+### Fix template
+- Gate assets with alpha histograms: background must be zero alpha; keep only a
+  narrow anti-aliased edge; reject broad populations of very-low alpha pixels.
+- Inspect generated mip alpha coverage and the compiled texture's cut-alpha
+  policy. Full-resolution PNG inspection is insufficient.
+- Compare luminance and packed material channels against the actual donor
+  asset. Tune diffuse and gloss independently; do not brighten by filling the
+  transparent sheet.
+- Render the compiled asset at near/mid/far distance and against light/dark
+  backgrounds before shipping.
+
+## 51. Completed agent branch never reaches canonical master
+
+**First confirmed:** 2026-07-15 (issue #528 cleanup at `d95399a`; umbrella
+issue #625).
+**Lives in:** parallel-agent work completed on `agent/*` without an explicit
+integration, ship, and ancestry reconciliation step.
+
+### Symptoms
+- A completion message or branch commit exists, but `git merge-base
+  --is-ancestor <commit> master` fails and canonical source still contains the
+  old hooks.
+- GitHub labels/comments say work shipped while the current master, Workshop
+  manifest, or tester log cannot contain that source.
+- Repeating the task appears necessary because the earlier implementation is
+  stranded rather than disproven.
+
+### Fix template
+- For every agent handoff, record commit, issue, changed paths, QA evidence,
+  version, manifest, and final disposition. Completion is not accepted until
+  the commit is an ancestor of canonical master or explicitly marked
+  superseded/obsolete.
+- Reconcile with patch equivalence, current-source overlap, and issue intent;
+  never bulk-merge stale mod versions.
+- Ship only from canonical source, then verify the Workshop manifest and the
+  tester's `[<mod>:LOAD]` version. Issue #625 owns the backlog reconciliation.
