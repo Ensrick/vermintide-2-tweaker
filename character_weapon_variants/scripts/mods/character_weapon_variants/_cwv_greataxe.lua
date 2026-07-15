@@ -61,6 +61,11 @@ M.MODELS = {
 		display_name = "Greataxe Model 01",
 		description = "A Greataxe model awaiting final review and naming.",
 		right_hand_unit = "units/cwv_es_greataxe/axe_01/axe_01",
+		-- User-tuned on Kruber through WT's 3P Hold-Pose tuner. These values
+		-- are model-specific and must not leak to the other four illusions.
+		right_hand_scale_3p = { 0.5, 0.5, 0.5 },
+		right_hand_offset_3p = { -0.010, 0.153, -0.309 },
+		right_hand_rotation_3p = { -90, 180, -90 },
 		display_unit = "units/weapons/weapon_display/display_2h_axes",
 		inventory_icon = "icon_wpn_dw_2h_axe_01_t1",
 		hud_icon = "weapon_generic_icon_axe2h",

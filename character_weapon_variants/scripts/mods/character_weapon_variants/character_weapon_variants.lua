@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.416-dev"
+local MOD_VERSION = "0.1.417-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -939,6 +939,9 @@ local _variant_definitions = {
 		character       = "empire_soldier",
 		careers         = _om.greataxe.DEFAULT_CAREERS,
 		right_hand_unit = (_om.greataxe.default_model() or {}).right_hand_unit,
+		right_hand_scale_3p = (_om.greataxe.default_model() or {}).right_hand_scale_3p,
+		right_hand_offset_3p = (_om.greataxe.default_model() or {}).right_hand_offset_3p,
+		right_hand_rotation_3p = (_om.greataxe.default_model() or {}).right_hand_rotation_3p,
 		inventory_icon  = (_om.greataxe.default_model() or {}).inventory_icon or "icon_wpn_dw_2h_axe_01_t1",
 		hud_icon        = (_om.greataxe.default_model() or {}).hud_icon or "weapon_generic_icon_axe2h",
 		skin_display_name = (_om.greataxe.default_model() or {}).display_name or "Greataxe Model 01",
@@ -11019,6 +11022,26 @@ mod._cwv_transform_registered = function(key) return _transform_map[key] ~= nil 
 -- def declaring a hand-unit override is registered (mesh-bearing => def-resolving).
 _om._variant_defs = _variant_definitions
 
+-- #597 Greataxe model transforms are illusion-specific. The generated base
+-- skin uses `<item>_skin`, while the manifest calls that same row `_skin_01`;
+-- bind both names to Model 01's reviewed transform. Every later model gets a
+-- synthetic def even when it has no transform, which deliberately blocks the
+-- dynamic inherit pass below from leaking Model 01's scale/offset/rotation to
+-- Models 02-05. These defs feed the same shared WeaponAppearance path used by
+-- owner/bot 3P, husks, inventory, lobby, score/team, and item previews.
+for index, model in ipairs(_om.greataxe.usable_models()) do
+	local transform_def = {
+		item_key = model.key,
+		right_hand_scale_3p = model.right_hand_scale_3p,
+		right_hand_offset_3p = model.right_hand_offset_3p,
+		right_hand_rotation_3p = model.right_hand_rotation_3p,
+	}
+	_skin_transform_map[model.key] = transform_def
+	if index == 1 then
+		_skin_transform_map[_om.greataxe.ITEM_KEY .. "_skin"] = transform_def
+	end
+end
+
 -- Custom illusions with their own scale/offset fields (e.g. greathammer
 -- skins applied to 1H mace targets need to scale the oversized 2H model
 -- down). These aren't variant defs — they live in `_custom_illusions` —
@@ -14730,12 +14753,37 @@ end)
 
 _rt_register("issue597_greataxe_replaces_poleaxe", function()
 	local greataxe = _om.greataxe
+	local function same_triplet(a, b)
+		return type(a) == "table" and type(b) == "table"
+			and a[1] == b[1] and a[2] == b[2] and a[3] == b[3]
+	end
 	if _find_def("cwv_es_poleaxe") then return "retired Poleaxe definition still registered" end
 	local def = _find_def(greataxe.ITEM_KEY)
 	if not def or def.base_weapon ~= greataxe.BASE_WEAPON then
 		return "Greataxe definition/base contract missing"
 	end
 	if #(def.careers or {}) ~= 4 then return "Greataxe must default to four Kruber careers" end
+	local model = greataxe.default_model()
+	if not model
+			or not same_triplet(model.right_hand_scale_3p, { 0.5, 0.5, 0.5 })
+			or not same_triplet(model.right_hand_offset_3p, { -0.010, 0.153, -0.309 })
+			or not same_triplet(model.right_hand_rotation_3p, { -90, 180, -90 }) then
+		return "Greataxe Model 01 reviewed transform drifted"
+	end
+	local base_skin_transform = _skin_transform_map[greataxe.ITEM_KEY .. "_skin"]
+	if not base_skin_transform
+			or not same_triplet(base_skin_transform.right_hand_scale_3p, model.right_hand_scale_3p)
+			or not same_triplet(base_skin_transform.right_hand_offset_3p, model.right_hand_offset_3p)
+			or not same_triplet(base_skin_transform.right_hand_rotation_3p, model.right_hand_rotation_3p) then
+		return "Greataxe Model 01 generated base skin lost its exact transform"
+	end
+	for index = 2, #greataxe.MODELS do
+		local control = _skin_transform_map[greataxe.MODELS[index].key]
+		if not control or control.right_hand_scale_3p or control.right_hand_offset_3p
+				or control.right_hand_rotation_3p then
+			return "Greataxe Model 01 transform leaked to Model " .. tostring(index)
+		end
+	end
 	local source = Weapons and Weapons.two_handed_axes_template_1
 	local clone = Weapons and Weapons[greataxe.TEMPLATE_KEY]
 	if not source or not clone then return "Greataxe source/clone template missing" end

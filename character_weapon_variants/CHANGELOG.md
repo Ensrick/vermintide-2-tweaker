@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.417-dev - 2026-07-14 - #597 Greataxe Model 01 transform [verify-fix-coop]
+
+- Baked the final Kruber third-person transform recovered from the latest Hold-Pose tuning session into Greataxe Model 01: absolute scale `{0.5, 0.5, 0.5}`, offset `{-0.010, 0.153, -0.309}`, and Euler rotation `{-90, 180, -90}` degrees.
+- Kept the transform model-specific. The generated base-skin identity and explicit Model 01 identity share the reviewed values, while Models 02-05 receive explicit transform-control records so they cannot inherit Model 01's correction.
+- Routed the committed values through CWV's shared WeaponAppearance policy, covering owner/bot third person, remote husks, the inventory character preview, lobby and score/team previews, and item/illusion previews without changing first person.
+- Added engine-free and in-game regression assertions for the exact values, base-skin alias, and unmodified-model controls.
+- Verification: confirm `[cwv:LOAD] v0.1.417-dev`; equip Greataxe Model 01 on Kruber and inspect owner third person plus the inventory character preview, then have another player inspect the remote weapon. Confirm Models 02-05 retain their own native transforms.
+
+**DoD:** Re-walked U-4 scale/grip, U-7 forward references, U-8 build hygiene, G-CUSTOM-ILLUSION identity, and G-APPEARANCE shared render-surface coverage. U-9 owner/remote visual confirmation remains deferred to #597's `verify-fix-coop` in-game verification.
+
 ## 0.1.416-dev - 2026-07-14 - #604 Crowbill default model correction [verify-fix-coop]
 
 - Corrected the provisional model assignment after in-game review: Kruber and Saltzpyre's Imperial Crowbill Model 01 now uses Parelaxel's Medieval War Hammer, while Bardin's Dawi Crowbill Model 01 uses soidev's heavier War Hammer. The previous build assigned these two downloaded models to the opposite weapon families.

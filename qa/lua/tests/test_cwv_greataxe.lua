@@ -72,6 +72,23 @@ return function(H, repo_root)
         end
     end)
 
+    H.test("CWV #597 Model 01 owns the reviewed Kruber 3P transform", function()
+        local model = policy.MODELS[1]
+        H.deep_equal(model.right_hand_scale_3p, { 0.5, 0.5, 0.5 })
+        H.deep_equal(model.right_hand_offset_3p, { -0.010, 0.153, -0.309 })
+        H.deep_equal(model.right_hand_rotation_3p, { -90, 180, -90 })
+        for index = 2, #policy.MODELS do
+            local control = policy.MODELS[index]
+            H.equal(control.right_hand_scale_3p, nil)
+            H.equal(control.right_hand_offset_3p, nil)
+            H.equal(control.right_hand_rotation_3p, nil)
+        end
+        local source = read(repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+        H.truthy(source:find('_skin_transform_map[_om.greataxe.ITEM_KEY .. "_skin"] = transform_def', 1, true))
+        H.truthy(source:find("Every later model gets a", 1, true))
+    end)
+
     H.test("CWV #597 Greataxe model manifest rejects incomplete rows", function()
         local original = policy.MODELS
         policy.MODELS = {}
