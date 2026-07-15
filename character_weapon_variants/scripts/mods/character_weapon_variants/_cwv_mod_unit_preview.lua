@@ -148,7 +148,7 @@ function M.install(policy)
 	-- table in `_item_info_by_slot`, so replacing the custom package name also
 	-- makes polling and unload use the real vanilla reference. Spawn data keeps
 	-- the custom unit while resident, and is changed to the fallback if not.
-	mod:hook("HeroPreviewer", "_load_packages", function(func, self, package_names)
+	local function load_character_preview_packages(func, self, package_names)
 		for index, package_name in ipairs(package_names) do
 			local alias = alias_for(package_name)
 			if alias then
@@ -166,7 +166,14 @@ function M.install(policy)
 			end
 		end
 		return func(self, package_names)
-	end)
+	end
+
+	-- VT2's class() copies inherited methods when the derived class is created.
+	-- The keep inventory uses MenuWorldPreviewer, so a hook on HeroPreviewer
+	-- alone never sees this path. Keep both: HeroPreviewer owns score/team-style
+	-- surfaces while MenuWorldPreviewer owns the inventory character preview.
+	mod:hook("HeroPreviewer", "_load_packages", load_character_preview_packages)
+	mod:hook("MenuWorldPreviewer", "_load_packages", load_character_preview_packages)
 
 	-- Athanor/illusion item preview. Load the vanilla package using the
 	-- previewer's own reference name, but acknowledge completion under the

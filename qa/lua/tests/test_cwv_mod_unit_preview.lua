@@ -165,6 +165,8 @@ return function(H, repo_root)
 		})
 		local load_hook = assert(hooks["LootItemUnitPreviewer.load_package"])
 		local unload_hook = assert(hooks["LootItemUnitPreviewer._unload_packages"])
+		local hero_load_hook = assert(hooks["HeroPreviewer._load_packages"])
+		local menu_load_hook = assert(hooks["MenuWorldPreviewer._load_packages"])
 		local downstream_calls = 0
 		local function vanilla_unload(value)
 			downstream_calls = downstream_calls + 1
@@ -181,6 +183,22 @@ return function(H, repo_root)
 			end
 			return value
 		end
+
+		-- #604: class() copies the parent's method, so both preview classes must
+		-- independently translate the custom package before PackageManager sees it.
+		local function exercise_character_preview(wrapper)
+			local package_names = { custom_a }
+			local previewer = {
+				_item_info_by_slot = {
+					melee = { spawn_data = { { unit_name = custom_a } } },
+				},
+			}
+			local downstream
+			wrapper(function(_, names) downstream = names[1] end, previewer, package_names)
+			return downstream, previewer._item_info_by_slot.melee.spawn_data[1].unit_name
+		end
+		local hero_package, hero_spawn = exercise_character_preview(hero_load_hook)
+		local menu_package, menu_spawn = exercise_character_preview(menu_load_hook)
 
 		local bypassed = new_previewer()
 		bypassed._loaded_packages[custom_a] = true
@@ -211,6 +229,8 @@ return function(H, repo_root)
 			shared_a_loaded = shared_a_loaded, shared_b_loaded = shared_b_loaded,
 			async_custom_loaded = rawget(async._loaded_packages, custom_a),
 			remaining_alias_refs = pm.refs[alias],
+			hero_package = hero_package, hero_spawn = hero_spawn,
+			menu_package = menu_package, menu_spawn = menu_spawn,
 		}
 
 		get_mod, WeaponUtils, Application = saved.get_mod, saved.WeaponUtils, saved.Application
@@ -225,5 +245,9 @@ return function(H, repo_root)
 		H.equal(results.shared_b_loaded, true)
 		H.equal(results.async_custom_loaded, nil)
 		H.equal(results.remaining_alias_refs, nil)
+		H.equal(results.hero_package, alias)
+		H.equal(results.hero_spawn, custom_a)
+		H.equal(results.menu_package, alias)
+		H.equal(results.menu_spawn, custom_a)
 	end)
 end

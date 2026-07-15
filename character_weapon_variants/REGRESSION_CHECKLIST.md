@@ -633,6 +633,16 @@ Last updated: 2026-07-14.
 | Expected post-fix | Hook `MenuWorldPreviewer.equip_item` (the derived class actually instantiated). Or hook both for safety. |
 | Detection | Audit each hook on `HeroPreviewer*`/`PlayFabMirrorBase*` — should be the derived class name. |
 
+### #604 custom package loads must cover both preview classes
+
+| Check | Requirement |
+|---|---|
+| Inventory character preview | `MenuWorldPreviewer._load_packages` translates each mod-owned unit package to its wire-safe vanilla alias before calling `PackageManager`. |
+| Score/team preview | `HeroPreviewer._load_packages` applies the same translation independently. |
+| Resident custom mesh | Translation changes package ownership only; spawn data retains the custom unit while that unit is resident. |
+| Missing custom mesh | Spawn data fails closed to the vanilla alias and emits one bounded warning. |
+| Regression | `test_cwv_mod_unit_preview.lua` must execute both copied class hooks; coverage of only the base hook is insufficient. |
+
 
 ---
 

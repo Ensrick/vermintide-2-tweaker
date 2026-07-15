@@ -1,5 +1,11 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.415-dev - 2026-07-14 - #604 Inventory character-preview package crash [verify-fix-coop]
+
+- Fixed the second Imperial Crowbill preview crash after crafting/equipping it. The keep inventory uses `MenuWorldPreviewer`, whose `_load_packages` method is a copied derived-class method and therefore bypassed CWV's `HeroPreviewer` hook. CWV now applies the same bounded vanilla-package alias policy to both preview classes.
+- Added host regression coverage proving both independent preview-class hooks translate the custom package path before it reaches `PackageManager`, while retaining the custom spawn unit when it is resident.
+- Verification: confirm `[cwv:LOAD] v0.1.415-dev`, craft/equip an Imperial Crowbill, then view it on the inventory character preview and leave/re-enter inventory. Repeat with another player present. Neither game may crash, and the Crowbill must remain visible on all applicable preview and in-world surfaces.
+
 ## 0.1.414-dev - 2026-07-14 - #604 Crowbill Athanor teardown crash [verify-fix-coop]
 
 - Fixed the current-version Athanor crash after crafting an Imperial Crowbill and leaving the weapon window. Tweaker: Cosmetics can validly recognize the resident custom unit first and short-circuit `LootItemUnitPreviewer.load_package`; CWV now repairs that cross-mod ordering by acquiring one real vanilla Crowbill package lease before translating the custom teardown key.
