@@ -1,5 +1,23 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.125-dev - 2026-07-15 - #629 authored shield texture refresh
+
+### Changed
+
+- Replaced the Purpure/Azure Shield of Honour Renewed diffuse with the author's
+  latest heraldry: the revised rose vine, expanded blood-drop field, white
+  fleurs-de-lis, purpure/azure quarters, and retained silver/wood surfaces.
+- Preserved the already-working shield unit, first-/third-person descriptors,
+  UV family, normal and combined maps, custom icon, and Cosmetics replay path.
+  This update changes only the authored shield diffuse.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.125-dev`. Equip the Purpure/Azure shield and
+verify the revised heraldry in the inventory hero preview, live first person,
+live third person, and on a remote client. Swap away and back, then enter a
+mission and confirm the shield does not revert or disappear.
+
 ## 0.9.124-dev - 2026-07-15 - #629 authored Purpure/Azure textures
 
 ### Changed
