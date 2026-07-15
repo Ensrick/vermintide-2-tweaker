@@ -30,6 +30,15 @@ M.RUNTIME_PREVIEW_PACKAGE_SAFE = false
 -- the final spawn choke points may substitute this resident unit immediately
 -- before World.spawn_unit / UnitSpawner.spawn_local_unit.
 M.SPAWN_ONLY_RENDERER = true
+-- #612 visual contract. The authored plume is an open alpha-cut surface: its
+-- 372 source faces are exported with one reversed counterpart each so the
+-- standard backface-culling path renders it from either side. The cloth shader
+-- consumes diffuse alpha; response revision 2 replaces the mistakenly decoded
+-- zero-roughness / near-solid-metal maps from v0.9.114.
+M.PLUME_SOURCE_FACES = 372
+M.PLUME_RENDER_FACES = 744
+M.ALPHA_AWARE_CLOTH = true
+M.MATERIAL_RESPONSE_REVISION = 2
 M.CUSTOM_MATERIALS = {
     "units/cosmetics_tweaker/encarmine_hat/encarmine_armored",
     "units/cosmetics_tweaker/encarmine_hat/encarmine_cloth",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-15 - Encarmine plume and material correction
+
+Tweaker: Cosmetics v0.9.115-dev / issue #612 makes the authored plume alpha-aware and two-sided, corrects the zero-roughness/near-solid-metal response-map decode, and lifts the carmine diffuse while preserving UV layout. Asset hashes, a reproducible Blender exporter, and face/material contract tests harden the visual fix; two-player verification is required.
+
 ## 2026-07-15 - Encarmine spawn-only rendering
 
 Tweaker: Cosmetics v0.9.114-dev / issue #612 keeps the custom helmet out of PackageManager-facing item data and substitutes its already-resident red/gold unit only at final preview, attachment, husk, and score spawn sites. Missing dependencies and peers without Cosmetics fail closed to the vanilla Laurel Helm. Two-player visual and fallback verification is required.

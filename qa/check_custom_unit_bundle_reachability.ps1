@@ -205,12 +205,18 @@ foreach ($entry in $inventory.Mods) {
 
             if ($resourcePath -eq 'units/cosmetics_tweaker/encarmine_hat/encarmine_hat') {
                 $expectedAssets = [ordered]@{
-                    'encarmine_armored_diffuse.png'  = '1E3A23798DF61BDC940C9E1D3CD42607078118A487420E02345D4C59B30912E7'
+                    'encarmine_armored_diffuse.png'  = 'AD7400CD51D729DB526763946B8F468BC057E62A743B4A38B7D7472C010E62EE'
                     'encarmine_cloth_diffuse.png'    = 'B5925708AB95BEFF7B800FCAD717F308BCFB173E8069343D3AADE83FC282954D'
                     'encarmine_armored_normal.png'   = '8FEB4D44EEB5C0551E752741F650264D4AA1224528910FCDF598186E89EF423D'
                     'encarmine_armored_combined.png' = '0714FCF0C7FD21CB35E8B857427E92C103AFE8ABB830308A2346F9E593C297B7'
+                    'encarmine_armored_metallic.png' = '9928C49EBB8B594A79DAEC75DE96AA78CE147DB2C87F167CA15C48B76902E294'
+                    'encarmine_armored_ao.png'       = 'F8D79D0EBAC612B92E59408E8B5037846C8DB3DC64241F7C0CDBC902FA33A29D'
+                    'encarmine_armored_roughness.png' = '6CE043D4A67CC02AEB53C5B700A8247073A19F2D94D918B3CBB90488C27D4519'
                     'encarmine_cloth_normal.png'     = '7433488E5AEC2277FD0860D67FC834A9EA1450EAAEDE8A15867681F78E47B189'
                     'encarmine_cloth_combined.png'   = 'FBEAD3279C4D420DDC75BA665EF112DC4110A82386F71F96BD3372BAF47C5045'
+                    'encarmine_cloth_metallic.png'   = 'A28F725A1ED300A12BAF2E2BB79DE9F73C77E6E7ECB576E935555D414938E689'
+                    'encarmine_cloth_ao.png'         = 'DE6C3ABD1352D70308FAB3ECE0651E2BCBC28DCB6B63B3B026D9748313719301'
+                    'encarmine_cloth_roughness.png'  = 'C552743A5354FF8AD649FDB2666867DBA7B91AF2777998121002EE314570BECF'
                 }
                 $textureRoot = Join-Path $modRoot 'textures\cosmetics_tweaker\encarmine_hat'
                 foreach ($asset in $expectedAssets.GetEnumerator()) {
@@ -222,6 +228,24 @@ foreach ($entry in $inventory.Mods) {
                     $actualSha = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash
                     if ($actualSha -ne $asset.Value) {
                         $errors.Add("$($entry.Dir): Encarmine source asset hash drifted: $($asset.Key) expected=$($asset.Value) actual=$actualSha")
+                    }
+                }
+                $fbxPath = Join-Path $modRoot 'units\cosmetics_tweaker\encarmine_hat\encarmine_hat.fbx'
+                $expectedFbxSha = '56B3156DC5AB2AC494A33D781AF2806F703BA26F853CC67859290A7AB76962F1'
+                if (-not (Test-Path -LiteralPath $fbxPath -PathType Leaf)) {
+                    $errors.Add("$($entry.Dir): Encarmine authored FBX missing")
+                } else {
+                    $actualFbxSha = (Get-FileHash -LiteralPath $fbxPath -Algorithm SHA256).Hash
+                    if ($actualFbxSha -ne $expectedFbxSha) {
+                        $errors.Add("$($entry.Dir): Encarmine authored FBX drifted expected=$expectedFbxSha actual=$actualFbxSha")
+                    }
+                }
+
+                $clothMaterialPath = Join-Path $modRoot 'units\cosmetics_tweaker\encarmine_hat\encarmine_cloth.material'
+                if (Test-Path -LiteralPath $clothMaterialPath -PathType Leaf) {
+                    $clothMaterial = [IO.File]::ReadAllText($clothMaterialPath, [Text.Encoding]::UTF8)
+                    if ($clothMaterial -notmatch '(?m)^\s*use_opacity_map\s*=\s*\{\s*type\s*=\s*"scalar"\s*value\s*=\s*1\s*\}') {
+                        $errors.Add("$($entry.Dir): Encarmine cloth material no longer consumes diffuse alpha")
                     }
                 }
             }

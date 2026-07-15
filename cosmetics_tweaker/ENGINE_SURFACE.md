@@ -21,6 +21,12 @@ clone-backend bridge, the MaterialSettingsTemplates glow pipeline, the embedded
 Material-Hijack texture/package hijack, the `CosmeticUtils` GameSession cosmetic
 sync channel, and hat/attachment unit spawning.
 
+The Encarmine plume is an authored alpha-cut open surface rather than a Lua
+render concern. Its cloth material consumes color-map alpha and the FBX carries
+one reversed face for every source face; otherwise Stingray renders either the
+transparent PNG background as an opaque strip or culls the reverse side. Asset
+hash and face/material revision gates live with the #612 package-closure checks.
+
 ## Hook table
 
 ≈70 behavioral registration sites across six runtime modules

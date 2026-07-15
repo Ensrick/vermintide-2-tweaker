@@ -1,5 +1,19 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.115-dev - 2026-07-15 - #612 Encarmine plume and material correction [verify-fix-coop]
+
+### Fixed
+
+- Replaced the plume's opaque material graph with the alpha-aware standard graph. The shader now consumes the supplied cloth diffuse alpha instead of rendering its transparent black background as a solid strip.
+- Exported one reversed counterpart for each of the plume's 372 source faces. The alpha-cut feather now has 744 render faces and remains visible from either side under Stingray backface culling without relying on a material-side culling override.
+- Corrected the mistakenly decoded PBR response maps. v0.9.114 treated almost the entire armor as metallic and gave it zero roughness; the new maps keep painted carmine at 8% metallic/72% roughness, gold and silver at 62% metallic/48% roughness, and cloth at 0% metallic with 72-95% roughness.
+- Lifted the authored armor diffuse by 8% brightness and 10% saturation after comparison with the Knights Encarmine outfit reference. UV layout is unchanged and cloth alpha pixels are byte-identical.
+- Added a reproducible Blender plume exporter, a before/after material contact sheet, asset hashes for all response maps and the FBX, and runtime/offline contract checks for alpha, face count, and material revision.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.115-dev` on both peers. Equip **Encarmine Helmet** on Foot Knight and inspect both sides of the plume in the inventory mannequin, keep/mission third person, a hot join, and the score screen. Expected: a feather-shaped black plume from both sides, no opaque rectangular background, brighter carmine paint, and restrained gloss with metal response confined to gold/silver regions. A peer without Cosmetics still sees Laurel. Run `/cos_regression_test`; `issue612_encarmine_hat_contract` must pass and neither log may contain a missing-resource error for `BD55DCA31255AAEC`.
+
 ## 0.9.114-dev - 2026-07-15 - #612 Encarmine spawn-only renderer [verify-fix-coop]
 
 ### Fixed

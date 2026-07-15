@@ -71,6 +71,10 @@ their internals alone.
 - **New authored hat with its own unit/materials** → `_cos_custom_hats.lua`. Register
   identity unconditionally, change only availability/rendering with settings, provide
   a vanilla wire fallback, and package every unit/material/texture/icon resource.
+  Open cloth/plume cards require both an alpha-aware shader (`use_opacity_map = 1`)
+  and reverse-facing geometry: standard backface culling does not make an alpha PNG
+  two-sided. Do not decode a vanilla packed map into PBR channels by position alone;
+  validate metallic/roughness statistics and pin every derived response map.
 - **New weapon-model scale or grip-offset override** → `_cos_render.lua`. Add a
   `_unit_path_scale_overrides` entry (keyed by unit-path substring) or a
   `_weapon_grip_offsets` entry (keyed by item name + career prefix); the render hooks

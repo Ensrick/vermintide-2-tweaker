@@ -189,6 +189,19 @@ return function(H, repo_root)
             H.truthy(f, "missing " .. suffix)
             if f then f:close() end
         end
+
+        local material_file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_cloth.material", "rb"))
+        local material_source = material_file:read("*a")
+        material_file:close()
+        H.truthy(material_source:find("use_opacity_map = { type = \"scalar\" value = 1 }", 1, true))
+
+        local helper_file = assert(io.open(repo_root
+            .. "/../_vt2_item_icons_extract/cosmetic_projects/Encarmine/tools/double_side_plume.py", "rb"))
+        local helper_source = helper_file:read("*a")
+        helper_file:close()
+        H.truthy(helper_source:find("bmesh.ops.duplicate", 1, true))
+        H.truthy(helper_source:find("bmesh.ops.reverse_faces", 1, true))
     end)
 
     H.test("Encarmine spawn-only renderer covers preview live and husk paths", function()
@@ -201,5 +214,14 @@ return function(H, repo_root)
         H.truthy(source:find('spawn_unit%(Application, "remote%-husk"%)'))
         H.truthy(source:find('spawn_unit%(Application, "appearance%-replay"%)'))
         H.truthy(source:find("PackageManager%-facing identity"))
+    end)
+
+    H.test("Encarmine authored plume and response revisions are pinned", function()
+        isolated(function(hats)
+            H.equal(hats.PLUME_SOURCE_FACES, 372)
+            H.equal(hats.PLUME_RENDER_FACES, 744)
+            H.truthy(hats.ALPHA_AWARE_CLOTH)
+            H.equal(hats.MATERIAL_RESPONSE_REVISION, 2)
+        end)
     end)
 end

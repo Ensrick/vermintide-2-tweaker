@@ -74,7 +74,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.114-dev"
+local MOD_VERSION = "0.9.115-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -10355,6 +10355,12 @@ _rt_register("issue612_encarmine_hat_contract", function()
         or type(CUSTOM_HATS.spawn_unit) ~= "function"
         or type(CUSTOM_HATS.spawn_resources_ready) ~= "function" then
         return "Encarmine spawn-only renderer contract missing"
+    end
+    if CUSTOM_HATS.ALPHA_AWARE_CLOTH ~= true
+        or CUSTOM_HATS.PLUME_SOURCE_FACES ~= 372
+        or CUSTOM_HATS.PLUME_RENDER_FACES ~= 744
+        or CUSTOM_HATS.MATERIAL_RESPONSE_REVISION ~= 2 then
+        return "Encarmine alpha/backface/material response contract drifted"
     end
     -- Package-facing identity is invariant even when all custom resources are
     -- resident; only direct spawn sites may receive the candidate path.
