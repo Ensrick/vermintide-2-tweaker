@@ -124,7 +124,7 @@ local data = {
                                     { setting_id = "unlock_es_knight_es_1h_mace", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_knight_es_1h_sword", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_knight_es_2h_hammer", type = "checkbox", default_value = true },
-                                    { setting_id = "unlock_es_knight_es_2h_heavy_spear", type = "checkbox", default_value = false },
+                                    { setting_id = "unlock_es_knight_es_2h_heavy_spear", type = "checkbox", default_value = _cwv_present },
                                     { setting_id = "unlock_es_knight_es_2h_sword", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_knight_es_2h_sword_executioner", type = "checkbox", default_value = true },
                                     { setting_id = "unlock_es_knight_es_bastard_sword", type = "checkbox", default_value = true },

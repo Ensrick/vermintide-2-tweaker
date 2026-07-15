@@ -12,6 +12,8 @@ return function(H, repo_root)
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants_data.lua")
     local atlas = read(repo_root
         .. "/character_weapon_variants/materials/character_weapon_variants/cwv_weapon_icons.lua")
+	local contract = dofile(repo_root
+		.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_inventory_icons.lua")
 
     local icon_pairs = {
         icon_axe_hatchet_t2_magic_01 = "icon_axe_hatchet_t2_magic_01_dual_cwv",
@@ -45,4 +47,15 @@ return function(H, repo_root)
         H.truthy(main:find("inventory_icon  = dual_inventory_icon", 1, true))
         H.truthy(main:find("dual-axes primary icon mismatch", 1, true))
     end)
+
+	H.test("CWV custom icon contract fails closed outside injected renderers", function()
+		for source_icon, dual_icon in pairs(icon_pairs) do
+			local hero_icon, custom = contract.resolve(dual_icon, "hero_view")
+			H.equal(hero_icon, dual_icon)
+			H.equal(custom, true)
+			local athanor_icon = contract.resolve(dual_icon, "athanor_top_renderer")
+			H.equal(athanor_icon, source_icon)
+		end
+		H.equal(contract.resolve("vanilla_icon", "athanor_top_renderer"), "vanilla_icon")
+	end)
 end

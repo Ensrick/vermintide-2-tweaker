@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.260-dev"
+local MOD_VERSION = "0.12.261-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -5844,6 +5844,28 @@ _rt_register("issue391_cwv_per_career_availability", function()
                 career, tostring(expected), tostring(present[career] == true))
         end
     end
+end)
+
+_rt_register("issue620_cwv_tuskgor_foot_knight_default", function()
+    if type(mod._wt.seed_cwv_tuskgor_foot_knight_default) ~= "function" then
+        return "#620 Tuskgor conditional default owner missing"
+    end
+    local active = mod._wt.cwv_ownership.cwv_is_active(get_mod("character_weapon_variants"))
+    if not active then return "skip: CWV inactive (WT-alone default remains off)" end
+    local item = rawget(_G, "ItemMasterList") and rawget(ItemMasterList, "es_2h_heavy_spear")
+    if not (item and item.cwv_combat_style_family == "spear"
+            and item.cwv_combat_style_ready == true) then
+        return "skip: CWV Tuskgor style family not ready"
+    end
+    if mod:get("wt_cwv_tuskgor_fk_default_seeded") ~= true
+            or mod:get("unlock_es_knight_es_2h_heavy_spear") ~= true then
+        return "#620 ready family did not seed Foot Knight default"
+    end
+    local present = false
+    for _, career in ipairs(item.can_wield or {}) do
+        if career == "es_knight" then present = true; break end
+    end
+    if not present then return "#620 Foot Knight missing from live Tuskgor can_wield" end
 end)
 
 _rt_register("issue593_conditional_cwv_axe_shield_ownership", function()

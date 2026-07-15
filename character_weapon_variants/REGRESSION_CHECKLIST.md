@@ -6,6 +6,17 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-15.
 
+## #620 Per-instance Combat Styles
+
+| Field | Check |
+|---|---|
+| Fix version(s) | CWV v0.1.422-dev |
+| Repro | Select supported Greatsword, Greathammer, and Tuskgor Spear instances, cycle with the contextual `Switch to:` button, then use the hotkey. Restart and hot join with a second CWV peer; include pre-#620 Infantry Spear, Imperial Longsword, and Black Guard UUIDs. Open CIM's Athanor on Dual Axes. |
+| Expected post-fix | Each exact instance retains its style. Greatswords expose four packages, Greathammers two, and Tuskgor Hunter/Infantry. Foot Knight has Tuskgor by default. Legacy UUIDs become their native item+style without illusion/forged-field loss, and retired rows are absent from new crafting/WT. All render surfaces agree without stale transforms, active-attack switches, per-frame RPCs, query loops, or missing-icon crashes. |
+| Detection | Offline `test_cwv_combat_styles.lua` passes; `/cwv_regression_test` passes `issue620_per_instance_combat_styles`; transition-only `[cwv:620] style commit/tx/rx` evidence is bounded. |
+
+---
+
 ## #617 Old Musket Athanor paint safety
 
 | Field | Check |
@@ -47,13 +58,13 @@ Last updated: 2026-07-15.
 - [ ] Multiple custom keys sharing one alias acquire one lease, and repeated teardown is a no-op.
 - [ ] `/cwv_regression_test` passes `issue604_preview_alias_teardown_contract` and `/verify_cwv_preview_bridge` reports zero repair failures.
 
-## #596 Infantry Spear
+## #596 Infantry Spear (superseded by #620 style)
 
-- [ ] CIM lists Infantry Spear for Mercenary, Huntsman, and Foot Knight; CWV alone does not offer it to Grail Knight.
-- [ ] Default and all six alternate illusions render only the Spear+Shield spear half in inventory, illusion preview, first person, local third person, and a remote husk.
-- [ ] Light/heavy/push-attack chains feel 15% slower; block and ordinary push timing remain elf-spear baseline.
-- [ ] `/cwv_regression_test` passes `cwv_issue596_infantry_spear_contract`; offline `test_cwv_infantry_spear.lua` passes.
-- [ ] With WT, each default career can be disabled; Grail Knight and another non-Kruber career are default-off but can be enabled. Career abilities remain usable while wielding it.
+- [ ] CIM lists native Tuskgor Spear, not a new Infantry Spear row; CWV enables Foot Knight and leaves Grail Knight default-off.
+- [ ] Tuskgor's added shield-free illusions render only the spear half in inventory, illusion preview, first person, local third person, and a remote husk.
+- [ ] Infantry style retains #596's 15% slower attack chains, 15% stagger/cleave, and 7.5% damage; block/push remain elf-spear baseline. Hunter is native Tuskgor.
+- [ ] A legacy Infantry UUID migrates in place to Tuskgor+Infantry with illusion and forged payload intact.
+- [ ] `/cwv_regression_test` passes both `cwv_issue596_infantry_spear_contract` and `issue620_per_instance_combat_styles`; offline spear/style suites pass.
 
 ---
 

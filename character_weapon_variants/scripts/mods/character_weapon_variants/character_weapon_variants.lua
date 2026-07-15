@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.421-dev"
+local MOD_VERSION = "0.1.422-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -60,6 +60,11 @@ _om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_cr
 _om.crowbill_hammer_mode = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_hammer_mode")
 _om.crowbill_presentation = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_presentation")
 _om.crowbill_runtime = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_runtime")
+_om.combat_style_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_styles")
+_om.inventory_icons = mod:dofile("scripts/mods/character_weapon_variants/_cwv_inventory_icons")
+-- Public read-only-by-convention contract for sibling renderers. Consumers
+-- should call resolve(icon, renderer) instead of guessing atlas residency.
+mod._cwv_inventory_icons = _om.inventory_icons
 mod._cwv_crowbill_family = _om.crowbill_family
 mod._cwv_crowbill_hammer_mode = _om.crowbill_hammer_mode
 mod._cwv_crowbill_presentation = _om.crowbill_presentation
@@ -388,7 +393,9 @@ local _variant_definitions = {
 		template        = "elven_sword_shield_template",
 	},
 	{
-		-- Infantry Spear: Kerillian's two-handed spear action graph on Kruber,
+		-- Retired #596 compatibility row. New crafts use native Tuskgor Spear and
+		-- select Infantry Combat Style per exact instance (#620). This hidden row
+		-- remains registered only long enough to restore/migrate legacy CIM UUIDs.
 		-- rendered with the spear half of his native Chaos Wastes Spear+Shield.
 		-- The custom template independently tunes attack timing and the three
 		-- damage-profile axes; push/block/wield/inspect actions stay at source
@@ -404,7 +411,8 @@ local _variant_definitions = {
 		inventory_icon  = "icon_wpn_empire_spearshield_t1",
 		hud_icon        = "weapon_generic_icon_falken",
 		skin_display_name = "Infantry Spear",
-		rarity          = "exotic",
+		rarity          = "promo",
+		cwv_retired     = true,
 		template        = "cwv_infantry_spear_template",
 		traits          = { "melee_attack_speed_on_crit" },
 		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
@@ -442,9 +450,14 @@ local _variant_definitions = {
 		inventory_icon  = "icon_wpn_empire_2h_sword_04_t1",
 		hud_icon        = "weapon_generic_icon_sword",
 		skin_display_name = "Imperial Longsword",
-		rarity          = "default",
-		-- CLARIFY: power_level = 5 is intentional (a "blacksmith template" item per
-		-- CHANGELOG v0.1.25), not a typo for 300. Properties roll on power_level.
+		-- Retired #620 restore bridge. Native es_2h_sword now owns the
+		-- Longsword Combat Style; CIM excludes promo/cwv_retired definitions.
+		rarity          = "promo",
+		skin_rarity     = "default",
+		cwv_retired     = true,
+		style_target_item = "es_2h_sword",
+		-- Historical blacksmith-template power retained for lossless restoration;
+		-- new crafting is retired and canonical Greatsword supplies real power.
 		power_level     = 5,
 		template        = "imperial_longsword_template",
 		item_type       = "cwv_imperial_longsword",
@@ -461,7 +474,10 @@ local _variant_definitions = {
 		inventory_icon  = "icon_wpn_empire_2h_sword_03_t2",
 		hud_icon        = "weapon_generic_icon_sword",
 		skin_display_name = "Black Guard Blade",
-		rarity          = "unique",
+		rarity          = "promo",
+		skin_rarity     = "unique",
+		cwv_retired     = true,
+		style_target_item = "es_2h_sword",
 		template        = "imperial_longsword_template",
 		item_type       = "cwv_imperial_longsword",
 		-- Scale/grip come from `_type_transforms.cwv_imperial_longsword`.
@@ -797,6 +813,7 @@ local _variant_definitions = {
 		hud_icon        = "weapon_generic_icon_sword",
 		skin_display_name = "Helmgart Watchsword",
 		rarity          = "exotic",
+		style_target_item = "es_2h_sword",
 		template        = "imperial_longsword_template",
 		item_type       = "cwv_imperial_longsword",
 		-- skin_only = true means this entry is registered for skin/illusion purposes
@@ -1788,7 +1805,12 @@ mod:hook_safe("SimpleInventoryExtension", "wield", function(self, slot_name)
 			local local_player = pm:local_player(1)
 			if local_player and local_player.player_unit == self.owner_unit then
 				local slot_data = self:get_slot_data(slot_name)
-				_cross_access_local_weapon_key = slot_data and slot_data.item_data and slot_data.item_data.key or nil
+				local wielded_item = slot_data and slot_data.item_data
+				_cross_access_local_weapon_key = wielded_item and wielded_item.key or nil
+				if _om.combat_styles and _om.combat_styles.effective_remap_key then
+					_cross_access_local_weapon_key = _om.combat_styles:effective_remap_key(wielded_item)
+						or _cross_access_local_weapon_key
+				end
 				local ok, career = pcall(local_player.career_name, local_player)
 				_cross_access_local_career = ok and career or nil
 			end
@@ -1819,6 +1841,9 @@ mod:hook_safe("SimpleInventoryExtension", "wield", function(self, slot_name)
 		end
 		if _om.crowbill_runtime and _om.crowbill_runtime.on_local_wield then
 			_om.crowbill_runtime.on_local_wield(self, slot_name, item_data)
+		end
+		if _om.combat_styles and _om.combat_styles.on_local_wield then
+			_om.combat_styles:on_local_wield(self, slot_name, item_data)
 		end
 	end
 
@@ -2070,6 +2095,21 @@ do
 	end
 
 	_create_infantry_spear_template()
+	-- #620 CWV expands the native Tuskgor Spear to Foot Knight. WT may still
+	-- expose its per-career checkbox, but CWV's authored default is ON whenever
+	-- this style family is present. No item instance is granted.
+	_om._ensure_tuskgor_foot_knight = function()
+		local tuskgor = ItemMasterList and rawget(ItemMasterList, "es_2h_heavy_spear")
+		if tuskgor then
+			tuskgor.cwv_combat_style_family = "spear"
+			tuskgor.cwv_combat_style_ready = true
+			tuskgor.can_wield = tuskgor.can_wield or {}
+			if not table.contains(tuskgor.can_wield, "es_knight") then
+				tuskgor.can_wield[#tuskgor.can_wield + 1] = "es_knight"
+			end
+		end
+	end
+	_om._ensure_tuskgor_foot_knight()
 end
 
 -- ANIM ADDENDUM: this function only touches stats + 3P fields. 1P animations
@@ -4363,6 +4403,13 @@ end
 mod:hook("BackendUtils", "get_item_template", function(func, item_data, backend_id)
 	local template = func(item_data, backend_id)
 	if not item_data then return template end
+	-- #620: one per-instance style owner chooses among pre-registered immutable
+	-- templates. This remains in the existing singleton BackendUtils hook so a
+	-- second VMF registration cannot shadow the musket/Crowbill paths.
+	if _om.combat_styles and _om.combat_styles.resolve_template then
+		local style_template = _om.combat_styles:resolve_template(item_data, backend_id)
+		if style_template then return style_template end
+	end
 	-- #604: local owner selects one of two pre-registered Crowbill templates.
 	-- Remote equipment remains the vanilla source template on the wire.
 	if _om.crowbill_runtime and _om.crowbill_runtime.resolve_template then
@@ -5168,11 +5215,22 @@ _cwv_husk_fx_guard_installed = true
 --     3P weapon units still live on `equipment` AFTER the swap completed, so a
 --     rapier unit that survived `GearUtils.destroy_equipment` (or a swap whose
 --     item-id resync never reached the husk) is visible in the trace.
--- hook_safe (post-observation, no return override) so it can never perturb
--- the wield path. Pre-flight (CLAUDE.md #8): CWV's only other
+-- #620 upgraded the single post-observation hook to one full wrapper so a
+-- strictly synchronous remote owner+slot style context exists while vanilla
+-- resolves BackendUtils.get_item_template. The context is always cleared even
+-- if vanilla errors; every prior post-wield observer remains consolidated here.
+-- Pre-flight (CLAUDE.md #8): CWV's only other
 -- SimpleHuskInventoryExtension hook is on `start_weapon_fx` (above) — this is
 -- the sole hook on (SimpleHuskInventoryExtension, _wield_slot) in CWV.
-mod:hook_safe("SimpleHuskInventoryExtension", "_wield_slot", function(self, world, equipment, slot_name, unit_1p, unit_3p)
+mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, world, equipment, slot_name, unit_1p, unit_3p)
+	if _om.combat_styles and _om.combat_styles.begin_husk_wield then
+		_om.combat_styles:begin_husk_wield(self, slot_name)
+	end
+	local ok, err = pcall(func, self, world, equipment, slot_name, unit_1p, unit_3p)
+	if _om.combat_styles and _om.combat_styles.end_husk_wield then
+		_om.combat_styles:end_husk_wield()
+	end
+	if not ok then error(err) end
 	pcall(function()
 		local slot = equipment and equipment.slots and equipment.slots[slot_name]
 		local item_data = slot and slot.item_data
@@ -5192,6 +5250,9 @@ mod:hook_safe("SimpleHuskInventoryExtension", "_wield_slot", function(self, worl
 	end
 	if _om.crowbill_runtime and _om.crowbill_runtime.on_husk_wield then
 		_om.crowbill_runtime.on_husk_wield(self, slot_name)
+	end
+	if _om.combat_styles and _om.combat_styles.on_husk_wield then
+		_om.combat_styles:on_husk_wield(self, slot_name)
 	end
 end)
 _cwv_husk_wield_diag_installed = true
@@ -8224,7 +8285,7 @@ local function _register_variant_skins()
 		local ammo_unit = def.ammo_unit or (base.ammo_unit and def.left_hand_unit)
 		local hud_icon = def.hud_icon or "weapon_generic_icon_axe1h"
 		local inventory_icon = def.inventory_icon or "icon_wpn_dw_shield_01_axe"
-		local rarity = def.rarity or "exotic"
+		local rarity = def.skin_rarity or def.rarity or "exotic"
 		-- display_unit is the LINK UNIT the LootItemUnitPreviewer spawns first
 		-- as the spinning pivot in the weapon-customization preview pane. It's
 		-- a vanilla "stage" mesh (e.g. `display_2h_swords` for greatswords).
@@ -8368,7 +8429,7 @@ local function _register_variant_skins()
 				name              = skin_key,
 				item_type         = "weapon_skin",
 				slot_type         = "weapon_skin",
-				matching_item_key = def.base_weapon,
+				matching_item_key = def.style_target_item or def.base_weapon,
 				rarity            = rarity,
 				display_name      = def.item_key .. "_skin_name",
 				description       = def.item_key .. "_description",
@@ -8467,7 +8528,7 @@ local function _register_cwv_skin_combinations()
 		for _, def in ipairs(_variant_definitions) do
 			if def.item_type == item_type then
 				local skin_key = def.item_key .. "_skin"
-				local rarity = def.rarity or "exotic"
+				local rarity = def.skin_rarity or def.rarity or "exotic"
 				local tier = seeded[table_name][rarity]
 				if tier then
 					tier[#tier + 1] = skin_key
@@ -8480,6 +8541,31 @@ local function _register_cwv_skin_combinations()
 end
 
 _register_cwv_skin_combinations()
+
+-- #620 retirement bridge: the three authored Imperial/Black Guard/Helmgart
+-- looks are now ordinary native-Greatsword illusions. Keep their stable skin
+-- keys for existing saves, but expose them through exactly one canonical
+-- picker. The old cwv owner pool remains only for pre-migration restore.
+do
+	local combo = WeaponSkins and WeaponSkins.skin_combinations
+		and WeaponSkins.skin_combinations.es_2h_sword_skins
+	if combo then
+		for _, def in ipairs(_variant_definitions) do
+			if def.style_target_item == "es_2h_sword" then
+				local skin_key = def.item_key .. "_skin"
+				local rarity = def.skin_rarity or def.rarity or "exotic"
+				local tier = combo[rarity]
+				if tier then
+					local present = false
+					for _, existing in ipairs(tier) do
+						if existing == skin_key then present = true; break end
+					end
+					if not present then tier[#tier + 1] = skin_key end
+				end
+			end
+		end
+	end
+end
 
 -- ============================================================
 -- Cross-character greatsword illusions
@@ -8513,15 +8599,11 @@ local _custom_illusions = {
 	{ skin_key = "cwv_wh_2h_sword_es_06",          matching_weapon = "wh_2h_sword", source_skin = "es_2h_sword_skin_06",          can_wield = _wh_careers },
 	{ skin_key = "cwv_wh_2h_sword_es_03_magic_01", matching_weapon = "wh_2h_sword", source_skin = "es_2h_sword_skin_03_magic_01", can_wield = _wh_careers },
 
-	-- Vanilla 2h-sword skins as illusions for the cwv Imperial Longsword
-	-- (cwv_imperial_longsword_skins combo table). matching_weapon stays
-	-- "es_bastard_sword" so the vanilla template lookup in
-	-- `_apply_skin_to_item` resolves to bastard_sword_template (the
-	-- Imperial Longsword's moveset). target_combo overrides the auto-resolved
-	-- combo table so these skins land in the cwv picker instead of vanilla
-	-- es_bastard_sword's. Initial display_name / description fall through
-	-- to the source vanilla skin's localization keys — user will rename
-	-- these as they review.
+	-- Vanilla 2h-sword looks retained under their stable cwv_il_* illusion
+	-- keys. #620 reroutes their canonical matching owner and target pool to
+	-- native es_2h_sword during registration; the selected Combat Style owns
+	-- moveset/stats independently of the illusion. Initial display_name /
+	-- description fall through to the source vanilla skin's localization keys.
 	-- Kruber greatsword (es_2h_sword) skins:
 	{ skin_key = "cwv_il_es_01",          matching_weapon = "es_bastard_sword", source_skin = "es_2h_sword_skin_01",          target_combo = "cwv_imperial_longsword_skins", can_wield = _es_careers },
 	{ skin_key = "cwv_il_es_02",          matching_weapon = "es_bastard_sword", source_skin = "es_2h_sword_skin_02",          target_combo = "cwv_imperial_longsword_skins", can_wield = _es_careers },
@@ -8638,6 +8720,12 @@ local function _register_custom_illusions()
 	for _, illusion in ipairs(_custom_illusions) do
 		local skin_key = illusion.skin_key
 		if _custom_skin_keys[skin_key] then goto continue end
+		-- #620: the former Imperial Longsword pool is now an illusion family
+		-- on native Greatsword. Keep the stable cwv_il_* keys, but make their
+		-- canonical matching owner and picker the native item so migrated UUIDs
+		-- retain their exact visuals without leaving a duplicate craft family.
+		local retired_longsword_pool = illusion.target_combo == "cwv_imperial_longsword_skins"
+		local matching_weapon = retired_longsword_pool and "es_2h_sword" or illusion.matching_weapon
 
 		local source = WeaponSkins.skins[illusion.source_skin]
 		if not source then
@@ -8674,7 +8762,7 @@ local function _register_custom_illusions()
 		local iml_entry = {
 			item_type         = "weapon_skin",
 			slot_type         = "weapon_skin",
-			matching_item_key = illusion.matching_weapon,
+			matching_item_key = matching_weapon,
 			rarity            = source.rarity,
 			display_name      = source.display_name,
 			description       = source.description,
@@ -8711,15 +8799,12 @@ local function _register_custom_illusions()
 		-- target_combo: explicit override for the skin_combination_table this
 		-- illusion gets appended to. Used when the illusion lives on a
 		-- different weapon than its `matching_weapon` — e.g. vanilla 2h-sword
-		-- skins added to `cwv_imperial_longsword_skins` while keeping
-		-- `matching_weapon = "es_bastard_sword"` so vanilla template lookups
-		-- still resolve to bastard_sword_template (the Imperial Longsword's
-		-- moveset). Without this override, `_register_custom_illusions`
-		-- would resolve the combo table from the matching_weapon's entry
-		-- (e.g. es_bastard_sword_skins) which is the wrong target.
-		local target_combo = illusion.target_combo
+		-- skins historically authored for `cwv_imperial_longsword_skins`.
+		-- #620 recognizes that legacy target and reroutes it to native
+		-- `es_2h_sword_skins`; all other families retain the authored override.
+		local target_combo = retired_longsword_pool and "es_2h_sword_skins" or illusion.target_combo
 		if not target_combo then
-			local weapon_data = ItemMasterList[illusion.matching_weapon]
+			local weapon_data = ItemMasterList[matching_weapon]
 			if weapon_data and weapon_data.skin_combination_table then
 				target_combo = weapon_data.skin_combination_table
 			end
@@ -8758,21 +8843,23 @@ local function _register_custom_illusions()
 		end
 
 		_custom_skin_keys[skin_key] = true
-		mod:info("Registered custom illusion: %s (from %s) -> %s", skin_key, illusion.source_skin, illusion.matching_weapon)
+		mod:info("Registered custom illusion: %s (from %s) -> %s", skin_key, illusion.source_skin, matching_weapon)
 		::continue::
 	end
 end
 
 _register_custom_illusions()
 
--- Spear+Shield spear halves -> Infantry Spear illusions. The source shield is
--- deliberately not copied; only its paired right-hand spear model is owned by
--- this two-handed item.
+-- Spear+Shield spear halves -> native Tuskgor Spear illusions (#620). The
+-- source shield is deliberately not copied. Legacy Infantry Spear skin ids are
+-- mapped during exact-instance migration rather than remaining a second pool.
 do
 	local infantry = _om.infantry_spear
 	local function _register_infantry_spear_illusions()
 		if not ItemMasterList or not WeaponSkins then return end
-		local combo = WeaponSkins.skin_combinations[infantry.SKIN_COMBINATION]
+		local target_item = "es_2h_heavy_spear"
+		local target_combo = "es_2h_heavy_spear_skins"
+		local combo = WeaponSkins.skin_combinations[target_combo]
 		local elf_display = WeaponSkins.skins.we_spear_skin_01
 		elf_display = elf_display and elf_display.display_unit
 		local registered = 0
@@ -8782,22 +8869,22 @@ do
 			if source and type(source.right_hand_unit) == "string" then
 				local suffix = source_key:gsub("^es_deus_01_skin_", "")
 				if suffix == "" then suffix = "01" end
-				local skin_key = infantry.ITEM_KEY .. "_" .. suffix
+				local skin_key = "cwv_tuskgor_spear_" .. suffix
 				if not _custom_skin_keys[skin_key] then
 					local row = {
 						key = skin_key, name = skin_key,
 						item_type = "weapon_skin", slot_type = "weapon_skin",
-						matching_item_key = infantry.ITEM_KEY,
+						matching_item_key = target_item,
 						rarity = source.rarity or "exotic",
-						display_name = infantry.ITEM_KEY .. "_skin_name",
-						description = infantry.ITEM_KEY .. "_description",
+						display_name = "cwv_es_infantry_spear_skin_name",
+						description = "cwv_es_infantry_spear_description",
 						display_unit = elf_display or source.display_unit,
 						hud_icon = "weapon_generic_icon_falken",
 						inventory_icon = source.inventory_icon or "icon_wpn_empire_spearshield_t1",
 						information_text = "information_weapon_skin",
 						right_hand_unit = source.right_hand_unit,
-						template = infantry.TEMPLATE_KEY,
-						can_wield = infantry.DEFAULT_CAREERS,
+						template = "two_handed_heavy_spears_template",
+						can_wield = { "es_huntsman", "es_knight" },
 					}
 					if source.material_settings_name then
 						row.material_settings_name = source.material_settings_name
@@ -8808,7 +8895,7 @@ do
 						display_unit = row.display_unit, hud_icon = row.hud_icon,
 						inventory_icon = row.inventory_icon, rarity = row.rarity,
 						right_hand_unit = source.right_hand_unit,
-						template = infantry.TEMPLATE_KEY,
+						template = "two_handed_heavy_spears_template",
 						material_settings_name = source.material_settings_name,
 					}
 					local tier = combo and combo[row.rarity]
@@ -8828,7 +8915,7 @@ do
 				end
 			end
 		end
-		mod:info("Registered %d shield-free Spear+Shield models for Infantry Spear", registered)
+		mod:info("Registered %d shield-free Spear+Shield models for Tuskgor Spear", registered)
 	end
 	_register_infantry_spear_illusions()
 end
@@ -10956,6 +11043,15 @@ mod:hook_safe("StateInGameRunning", "on_enter", function()
 	if _om._exact_pair_publish_local then
 		_om._exact_pair_publish_local("gameplay_enter")
 	end
+	if _om._migrate_legacy_style_items then
+		_om._migrate_legacy_style_items()
+	end
+	if _om._ensure_tuskgor_foot_knight then
+		_om._ensure_tuskgor_foot_knight()
+	end
+	if _om.combat_styles and _om.combat_styles.request_states then
+		_om.combat_styles:request_states("gameplay_enter")
+	end
 end)
 
 -- Last-chance boundary for starting a run in the same session before another
@@ -11383,7 +11479,153 @@ local _ES_MACE_SWORD_TWEAK_DEF = {
 	left_hand_scale = { 0.7, 0.7, 1.0 },
 }
 
+-- #620 Combat Style runtime. The policy is engine-free; this install supplies
+-- the exact source-backed template/identity/network seams and one style-owned
+-- Imperial transform record. Kerillian's style clones its donor plus cloned
+-- damage/power rows, so no vanilla or sibling style table is ever mutated.
+do
+	local policy = _om.combat_style_policy
+	local kerillian, err = policy.build_kerillian_template(Weapons,
+		function(value) return table.clone(value, true) end, _clone_damage_profile)
+	if kerillian then
+		Weapons[policy.KERILLIAN_TEMPLATE] = kerillian
+		mod:info("[cwv:620] registered Kerillian Greatsword style (speed=%.0f%% stagger=%.0f%% cleave=%.0f%%)",
+			policy.KERILLIAN_SPEED_MULT * 100, policy.KERILLIAN_STAGGER_MULT * 100,
+			policy.KERILLIAN_CLEAVE_MULT * 100)
+	else
+		mod:warning("[cwv:620] Kerillian Greatsword style unavailable: %s", tostring(err))
+	end
+
+	_om.combat_styles = policy.install(mod, {
+		cwv_key_for_item = function(backend_id, item_data)
+			return _om._cwv_key_for_item(backend_id, item_data)
+		end,
+		imperial_transform = {
+			item_key = "cwv_style_imperial_longsword",
+			right_hand_scale = _type_transforms.cwv_imperial_longsword.right_hand_scale,
+			right_hand_offset = _type_transforms.cwv_imperial_longsword.right_hand_offset,
+		},
+		peer_for_owner = function(owner_unit)
+			local pm = Managers and Managers.player
+			local ok, player = pm and pcall(pm.owner, pm, owner_unit)
+			player = ok and player or nil
+			if not player then return nil end
+			if type(player.peer_id) == "string" then return player.peer_id end
+			local nok, value = pcall(player.network_id, player)
+			return nok and value or nil
+		end,
+		rebuild_remote = function(peer_id, slot_name)
+			local pm = Managers and Managers.player
+			local ok, player = pm and pcall(pm.player_from_peer_id, pm, peer_id, 1)
+			player = ok and player or nil
+			local unit = player and player.player_unit
+			if not (unit and Unit.alive(unit)) then return false end
+			local iok, inventory = pcall(ScriptUnit.extension, unit, "inventory_system")
+			if iok and inventory and inventory.wielded_slot == slot_name
+					and type(inventory.wield) == "function" then
+				return pcall(inventory.wield, inventory, slot_name)
+			end
+			return false
+		end,
+	})
+	mod.cycle_combat_style = function()
+		return _om.combat_styles and _om.combat_styles:cycle_wielded()
+	end
+	policy.install_loadout_ui(mod, _om.combat_styles)
+
+	-- #620 legacy retirement: preserve every exact CIM UUID and its complete
+	-- forged payload while rewriting only the item family and corresponding
+	-- shield-free illusion key. The old item remains a hidden promo IML row so
+	-- CIM can always restore it before this bounded migration runs.
+	local migrated_legacy_styles = false
+	_om._migrate_legacy_style_items = function()
+		if migrated_legacy_styles then return 0 end
+		local cim
+		for _, mod_id in ipairs({ "cim_dev", "cim", "crafting_in_modded" }) do
+			local ok, candidate = pcall(get_mod, mod_id)
+			if ok and candidate then cim = candidate; break end
+		end
+		if not cim then return 0 end
+		local saved = cim:get("forged_weapons")
+		if type(saved) ~= "table" then return 0 end
+
+		local patches, plan_err = policy.plan_legacy_migrations(saved,
+			function(item_key)
+				return type(ItemMasterList) == "table" and rawget(ItemMasterList, item_key) ~= nil
+			end,
+			function(skin_key, target_item)
+				local skin = type(ItemMasterList) == "table" and rawget(ItemMasterList, skin_key)
+				return skin and skin.matching_item_key == target_item
+			end)
+		if not patches then
+			mod:warning("[cwv:620] legacy style migration deferred: %s", tostring(plan_err))
+			return 0
+		end
+		if #patches == 0 then migrated_legacy_styles = true; return 0 end
+
+		local identities, rollback = {}, {}
+		for _, patch in ipairs(patches) do
+			identities[#identities + 1] = {
+				identity = patch.identity, item_key = patch.target_item, style_id = patch.style_id,
+			}
+		end
+		-- Seed every exact style in one settings write before the item rows change.
+		-- If CIM persistence fails the old compatibility item still uses the same
+		-- style, so this ordering is safe and the migration remains retryable.
+		_om.combat_styles:migrate_identities(identities)
+
+		for _, patch in ipairs(patches) do
+			local persisted = saved[patch.identity]
+			local live = cim._cim_get_craft and cim._cim_get_craft(patch.identity)
+			rollback[#rollback + 1] = {
+				persisted = persisted, item_key = persisted.item_key, skin = persisted.skin,
+				live = live, live_item_key = live and live.item_key, live_skin = live and live.skin,
+			}
+			persisted.item_key, persisted.skin = patch.target_item, patch.skin
+			if live then live.item_key, live.skin = patch.target_item, patch.skin end
+		end
+
+		local persist_ok, persist_err = pcall(function()
+			if cim._cim_persist_crafts then cim._cim_persist_crafts()
+			else cim:set("forged_weapons", saved) end
+		end)
+		if not persist_ok then
+			for _, old in ipairs(rollback) do
+				old.persisted.item_key, old.persisted.skin = old.item_key, old.skin
+				if old.live then old.live.item_key, old.live.skin = old.live_item_key, old.live_skin end
+			end
+			mod:warning("[cwv:620] legacy style migration persistence failed; rows rolled back: %s",
+				tostring(persist_err))
+			return 0
+		end
+
+		-- Best-effort repair of wrappers already restored this session. The saved
+		-- CIM row is authoritative; a missing backend interface never invalidates
+		-- the committed migration and will reconstruct correctly next session.
+		for _, patch in ipairs(patches) do
+			pcall(function()
+				local items = Managers.backend:get_interface("items")
+				local item = items and items:get_item_from_id(patch.identity)
+				if item then
+					item.key, item.ItemId = patch.target_item, patch.target_item
+					item.skin = patch.skin
+					item.data = rawget(ItemMasterList, patch.target_item) or item.data
+					if type(item.mod_data) == "table" then item.mod_data.cwv_key = nil end
+				end
+			end)
+		end
+		migrated_legacy_styles = true
+		printf("[cwv:620] migrated %d legacy UUID(s) to canonical combat-style items", #patches)
+		return #patches
+	end
+end
+
 local function _resolve_cwv_def(item_data, skin)
+	if _om.combat_styles and _om.combat_styles.transform_decision then
+		local style_decision = _om.combat_styles:transform_decision(item_data,
+			item_data and item_data.backend_id)
+		if style_decision ~= nil then return style_decision or nil end
+	end
 	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin] end
 	if not item_data then return nil end
 	-- CLARIFY: backend_id resolution is the canonical path for cwv items per
@@ -11868,9 +12110,14 @@ do
 			return
 		end
 		local skin = item_units and item_units.skin
-		local def = _om._husk_identity_def
+		local style_decision
+		if _om.combat_styles and _om.combat_styles.remote_transform then
+			style_decision = _om.combat_styles:remote_transform(owner_unit_3p, slot_name)
+		end
+		if style_decision == false then return end
+		local def = style_decision or (_om._husk_identity_def
 			and _om._husk_identity_def(owner_unit_3p, slot_name, item_data and item_data.name)
-			or _resolve_cwv_def(item_data, skin)
+			or _resolve_cwv_def(item_data, skin))
 		if not def and skin == nil then
 			-- #392/#397 fallback, #475-hardened: base+career positive signal for
 			-- SKINLESS echoes only, can_wield evaluated LAZILY at wield time. A
@@ -12733,6 +12980,11 @@ end
 
 local function _resolve_preview_def(self, item_name)
 	local _, info = _find_preview_slot_info(self, item_name)
+	if _om.combat_styles and _om.combat_styles.transform_decision then
+		local decision = _om.combat_styles:transform_decision({ name = item_name },
+			info and info.backend_id)
+		if decision ~= nil then return decision or nil, info end
+	end
 	local skin = info and info.skin_name
 	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin], info end
 
@@ -13088,6 +13340,10 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	local cwv_key = _om._cwv_key_for_item(item.backend_id, item_data)
 	if cwv_key then
 		def = _transform_map[cwv_key] or _skin_transform_map[cwv_key] or def
+	end
+	if _om.combat_styles and _om.combat_styles.transform_decision then
+		local decision = _om.combat_styles:transform_decision(item_data, item.backend_id)
+		if decision ~= nil then def = decision or nil end
 	end
 	if not def then return units end
 
@@ -13802,6 +14058,49 @@ _rt_register("cwv_variant_flag_present", function()
     if #missing > 0 then
         return "cwv_variant flag missing on " .. #missing .. " entries: " .. table.concat(missing, ", ")
     end
+end)
+
+_rt_register("issue620_per_instance_combat_styles", function()
+	local policy = _om.combat_style_policy
+	local runtime = _om.combat_styles
+	if type(policy) ~= "table" or type(runtime) ~= "table" then
+		return "Combat Style policy/runtime is not installed"
+	end
+	local expected = {
+		es_2h_sword = { "greatsword", "longsword", "bretonnian", "kerillian" },
+		es_bastard_sword = { "bretonnian", "kerillian", "greatsword", "longsword" },
+		cwv_es_longsword = { "longsword", "bretonnian", "kerillian", "greatsword" },
+		es_2h_hammer = { "kruber", "warrior_priest" },
+		es_2h_heavy_spear = { "hunter", "infantry" },
+	}
+	for item_key, order in pairs(expected) do
+		local _, _, _, member = policy.style(item_key)
+		if type(member) ~= "table" or #member.order ~= #order then
+			return "Combat Style order missing for " .. item_key
+		end
+		for index, style_id in ipairs(order) do
+			if member.order[index] ~= style_id then
+				return "Combat Style order mismatch for " .. item_key
+			end
+		end
+	end
+	if type(rawget(Weapons, policy.KERILLIAN_TEMPLATE)) ~= "table" then
+		return "Kerillian Combat Style template is not registered"
+	end
+	for _, legacy_key in ipairs({ "cwv_es_longsword", "cwv_es_longsword_blackguard" }) do
+		local def = _find_def(legacy_key)
+		if not def or def.cwv_retired ~= true or def.rarity ~= "promo"
+				or def.style_target_item ~= "es_2h_sword" then
+			return "retired Longsword bridge drifted: " .. legacy_key
+		end
+		local skin = rawget(ItemMasterList, legacy_key .. "_skin")
+		if not skin or skin.matching_item_key ~= "es_2h_sword" then
+			return "retired Longsword illusion is not native-owned: " .. legacy_key
+		end
+	end
+	if policy._ui_installed ~= true then
+		return "Combat Style loadout control is not installed"
+	end
 end)
 
 _rt_register("issue317_career_scoped_animation_picker", function()
@@ -14957,7 +15256,9 @@ end)
 _rt_register("cwv_issue596_infantry_spear_contract", function()
 	local infantry = _om.infantry_spear
 	local def = _find_def(infantry.ITEM_KEY)
-	if not def then return "Infantry Spear definition missing" end
+	if not def or def.cwv_retired ~= true or def.rarity ~= "promo" then
+		return "Infantry Spear hidden migration bridge missing"
+	end
 	if def.base_weapon ~= "we_spear"
 			or def.right_hand_unit ~= "units/weapons/player/wpn_es_deus_spear_01/wpn_es_deus_spear_01" then
 		return "Infantry Spear base/model contract drifted"
@@ -14965,6 +15266,10 @@ _rt_register("cwv_issue596_infantry_spear_contract", function()
 	if #(def.careers or {}) ~= 3 or def.careers[1] ~= "es_mercenary"
 			or def.careers[2] ~= "es_huntsman" or def.careers[3] ~= "es_knight" then
 		return "Infantry Spear authored careers drifted (must exclude Grail Knight)"
+	end
+	local tuskgor = rawget(ItemMasterList, "es_2h_heavy_spear")
+	if not (tuskgor and table.contains(tuskgor.can_wield or {}, "es_knight")) then
+		return "Tuskgor Spear is not CWV-default-on for Foot Knight"
 	end
 	local source = Weapons and Weapons.two_handed_spears_elf_template_1
 	local tuned = Weapons and Weapons[infantry.TEMPLATE_KEY]

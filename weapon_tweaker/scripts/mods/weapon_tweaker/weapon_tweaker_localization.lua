@@ -1325,11 +1325,8 @@ loc.cwv_variant_availability = { en = "Career Weapon Variants" }
 local _cwv_variant_labels = {
     cwv_es_axe_shield = "Kruber: Axe and Shield",
     cwv_es_axe_shield_veteran = "Kruber: Imperial Axe and Shield",
-    cwv_es_infantry_spear = "Kruber: Infantry Spear",
     cwv_we_sword_shield = "Kerillian: Sword and Shield",
     cwv_we_sword_shield_veteran = "Kerillian: Elven Sword and Shield",
-    cwv_es_longsword = "Kruber: Imperial Longsword",
-    cwv_es_longsword_blackguard = "Kruber: Black Guard Blade",
     cwv_es_longsword_shield = "Kruber: Imperial Longsword and Shield",
     cwv_es_javelin = "Kruber: Tuskgor Javelin",
     cwv_wh_javelin = "Saltzpyre: Tuskgor Javelin",

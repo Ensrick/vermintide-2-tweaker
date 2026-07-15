@@ -1,0 +1,30 @@
+return function(H, repo_root)
+    local function read(relative)
+        local file = assert(io.open(repo_root .. "/" .. relative, "rb"))
+        local source = file:read("*a")
+        file:close()
+        return source
+    end
+
+    H.test("WT #620 Tuskgor Foot Knight default is CWV-conditional and readiness-gated", function()
+        local data = read("weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_data.lua")
+        local availability = read("weapon_tweaker/scripts/mods/weapon_tweaker/_wt_availability.lua")
+        local main = read("weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua")
+        local cwv = read("character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+        H.truthy(data:find('setting_id = "unlock_es_knight_es_2h_heavy_spear", type = "checkbox", default_value = _cwv_present', 1, true))
+        H.truthy(cwv:find('tuskgor.cwv_combat_style_family = "spear"', 1, true))
+        H.truthy(cwv:find('tuskgor.cwv_combat_style_ready = true', 1, true))
+        H.truthy(availability:find('item.cwv_combat_style_family == "spear"', 1, true))
+        H.truthy(availability:find('wt_cwv_tuskgor_fk_default_seeded', 1, true))
+        H.truthy(availability:find('_seed_cwv_tuskgor_foot_knight_default()', 1, true))
+        H.truthy(main:find('_rt_register("issue620_cwv_tuskgor_foot_knight_default"', 1, true))
+    end)
+
+    H.test("WT #620 Tuskgor late-ready seed is one-shot and preserves later choices", function()
+        local source = read("weapon_tweaker/scripts/mods/weapon_tweaker/_wt_availability.lua")
+        H.truthy(source:find('if not ready or mod:get("wt_cwv_tuskgor_fk_default_seeded") then return ready == true end', 1, true))
+        H.truthy(source:find('mod:set("wt_cwv_tuskgor_fk_default_seeded", true, false)', 1, true))
+        H.equal(select(2, source:gsub('mod:set%("unlock_es_knight_es_2h_heavy_spear", true, false%)', "")), 1)
+        H.truthy(source:find('if not (_cwv_active() and ItemMasterList) then return false end', 1, true))
+    end)
+end

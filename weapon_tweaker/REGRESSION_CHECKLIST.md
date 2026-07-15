@@ -1,5 +1,18 @@
 # Regression Checklist — weapon_tweaker
 
+## #620 - CWV Tuskgor Foot Knight conditional default
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.261-dev with CWV 0.1.422-dev |
+| WT alone | On a fresh profile, Foot Knight's Tuskgor Spear availability remains default-off. |
+| CWV ready | After CWV marks `es_2h_heavy_spear` as Combat Style-ready, the exact Foot Knight setting seeds on once and live `can_wield` contains `es_knight`. |
+| Persistence | Turn the row off after seeding; state transitions and hot reload must not force it back on. |
+| Automated | Offline `test_wt_cwv_tuskgor_default.lua`; `/wt_regression_test` passes `issue620_cwv_tuskgor_foot_knight_default`. |
+| Retirement | WT has no availability rows for legacy Infantry Spear, Imperial Longsword, or Black Guard Blade; native Tuskgor/Greatsword rows remain the only controls. |
+
+---
+
 ## #621/#622/#623 - opt-in weapon balance nerfs
 
 | Field | Check |
@@ -24,15 +37,14 @@
 
 ---
 
-## #596 - Infantry Spear availability
+## #596/#620 - Tuskgor Infantry Combat Style availability
 
 | Field | Check |
 |---|---|
-| Candidate version | WT 0.12.252-dev (not deployed) |
-| Automated | Offline `test_wt_cwv_independence` locks all 20 career controls, the three authored default-on Kruber careers, and 17 default-off expansion careers. CWV's `test_cwv_infantry_spear` covers the weapon contract. |
-| Default owners | Mercenary, Huntsman, and Foot Knight retain Infantry Spear when their children remain enabled. Each child can be disabled independently. Grail Knight defaults off. |
-| Expansion | Grail Knight or any non-Kruber career receives the weapon only when that exact WT child is enabled. Disabling the parent removes all owners without erasing child choices. |
-| Transition | With CWV active, toggle one authored and one expansion career, then disable/re-enable WT and CWV. Exact choices return without duplicate `can_wield` entries. |
+| Candidate version | WT 0.12.261-dev / CWV 0.1.422-dev |
+| Automated | Offline `test_wt_cwv_independence` proves the retired CWV row has no WT catalog entry; `test_wt_cwv_tuskgor_default` covers native readiness/default behavior. |
+| Default owners | Native Tuskgor keeps its ordinary WT rows. Foot Knight is default-off with WT alone and seeded on once when CWV's Combat Style family is ready. Grail Knight remains default-off. |
+| Transition | Disable Foot Knight after the CWV seed, then transition/hot reload; the user's false remains false and no retired Infantry row returns. |
 
 ---
 

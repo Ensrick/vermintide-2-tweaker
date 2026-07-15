@@ -42,7 +42,7 @@ return function(H, repo_root)
     end)
 
     H.test("issue368 CWV clone catalog is bounded and marker-gated", function()
-        H.equal(#catalog, 35)
+        H.equal(#catalog, 32)
         local seen = {}
         for _, row in ipairs(catalog) do
             H.equal(seen[row.key], nil, row.key)
@@ -87,18 +87,13 @@ return function(H, repo_root)
         H.equal(child_count, expected_children)
     end)
 
-    H.test("CWV #596 Infantry Spear controls default to three Kruber careers", function()
+    H.test("CWV #620 retires duplicate style-item availability rows", function()
         local by_key = {}
         for _, row in ipairs(catalog) do by_key[row.key] = row end
         local row = by_key.cwv_es_infantry_spear
-        H.truthy(row)
-        H.equal(#row.careers, 20)
-        H.equal(#row.default_careers, 3)
-        H.equal(#row.authored_careers, 3)
-        H.equal(#row.conditional_careers, 17)
-        H.equal(contains(row.default_careers, "es_questingknight"), false)
-        H.equal(contains(row.conditional_careers, "es_questingknight"), true)
-        H.equal(contains(row.careers, "bw_necromancer"), true)
+        H.equal(row, nil)
+		H.equal(by_key.cwv_es_longsword, nil)
+		H.equal(by_key.cwv_es_longsword_blackguard, nil)
         H.truthy(availability:find("variant.authored_careers or {}", 1, true))
     end)
 

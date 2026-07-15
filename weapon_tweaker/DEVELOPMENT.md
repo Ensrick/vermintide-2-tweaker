@@ -43,6 +43,20 @@ non-nil values exactly and are safe to reapply on state transitions.
 
 ## Conditional CWV ownership
 
+Issue #620 uses a conditional default rather than an ownership handoff. Native
+`es_2h_heavy_spear` remains the one Tuskgor item in both mods. WT-alone keeps
+Foot Knight default-off; active CWV marks the live item with
+`cwv_combat_style_family="spear"` and `cwv_combat_style_ready=true`. Only after
+both positive markers exist does `_wt_availability.lua` seed the exact Foot
+Knight setting on once per profile. The seed sentinel prevents later state
+transitions or CWV hot reloads from overriding a user's subsequent choice.
+
+Combat Styles retire WT catalogue rows in the same release that CWV retires
+their craft definitions. `cwv_es_infantry_spear`, `cwv_es_longsword`, and
+`cwv_es_longsword_blackguard` are restore-only keys; never add WT
+masters/children/localization for them again. Their native Tuskgor/Greatsword
+rows remain the sole availability controls.
+
 WT fallback ports remain real features when their dedicated CWV equivalent is
 absent. A row in `cwv_conditional_managed` is a live ownership handoff, not a
 permanent tombstone: WT suppresses the donor-native pair only while CWV is

@@ -11,21 +11,6 @@ local ES_AND_WH_STANDARD = {
 }
 local DR = { "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer" }
 local WE = { "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister" }
-local INFANTRY_SPEAR_DEFAULT = { "es_mercenary", "es_huntsman", "es_knight" }
-local INFANTRY_SPEAR_ALL = {
-    "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
-    "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer",
-    "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
-    "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
-    "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
-}
-local INFANTRY_SPEAR_CONDITIONAL = {
-    "es_questingknight",
-    "dr_ranger", "dr_ironbreaker", "dr_slayer", "dr_engineer",
-    "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister",
-    "wh_captain", "wh_bountyhunter", "wh_zealot", "wh_priest",
-    "bw_adept", "bw_scholar", "bw_unchained", "bw_necromancer",
-}
 local GREATAXE_DEFAULT = {
     "es_mercenary", "es_huntsman", "es_knight", "es_questingknight",
     "wh_captain", "wh_bountyhunter", "wh_zealot",
@@ -84,17 +69,13 @@ return {
     -- CWV disable/hot-reload can remove only WT's contribution.
     { key = "cwv_es_axe_shield", careers = ES_AND_WH_STANDARD, conditional_careers = WH_STANDARD },
     { key = "cwv_es_axe_shield_veteran", careers = ES_AND_WH_STANDARD, conditional_careers = WH_STANDARD },
-    -- Infantry Spear is authored for Mercenary/Huntsman/Foot Knight. WT owns
-    -- every optional receiver (Grail Knight included) and presents those
-    -- children default-off while retaining its normal per-career freedom.
-    { key = "cwv_es_infantry_spear", careers = INFANTRY_SPEAR_ALL,
-      default_careers = INFANTRY_SPEAR_DEFAULT,
-      authored_careers = INFANTRY_SPEAR_DEFAULT,
-      conditional_careers = INFANTRY_SPEAR_CONDITIONAL },
+    -- #620 retired the separate Infantry Spear row. Native
+    -- es_2h_heavy_spear owns both Hunter/Infantry Combat Styles and remains in
+    -- WT's ordinary per-career availability map.
     { key = "cwv_we_sword_shield", careers = WE },
     { key = "cwv_we_sword_shield_veteran", careers = WE },
-    { key = "cwv_es_longsword", careers = ES },
-    { key = "cwv_es_longsword_blackguard", careers = ES },
+    -- #620 retired the standalone 2H Imperial Longsword / Black Guard rows.
+    -- Native es_2h_sword owns Longsword Combat Style and their authored looks.
     { key = "cwv_es_longsword_shield", careers = ES },
     { key = "cwv_es_javelin", careers = ES },
     { key = "cwv_wh_javelin", careers = WH },

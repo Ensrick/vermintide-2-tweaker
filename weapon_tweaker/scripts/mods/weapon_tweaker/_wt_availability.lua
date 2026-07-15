@@ -43,6 +43,26 @@ local function _get_setting(setting_id)
     return mod:get(setting_id)
 end
 
+-- #620: native Tuskgor Spear remains a WT-alone default-off Foot Knight port,
+-- but CWV's ready Combat Style family authors that pair default-on. The hidden
+-- seed runs once per profile, only after the positive live IML marker exists,
+-- so late load/hot reload converges without repeatedly overriding a later user
+-- choice. Existing explicit/saved values remain ordinary WT settings.
+local function _seed_cwv_tuskgor_foot_knight_default()
+    if not (_cwv_active() and ItemMasterList) then return false end
+    local item = rawget(ItemMasterList, "es_2h_heavy_spear")
+    local ready = item and item.cwv_combat_style_family == "spear"
+        and item.cwv_combat_style_ready == true
+    if not ready or mod:get("wt_cwv_tuskgor_fk_default_seeded") then return ready == true end
+    mod:set("wt_cwv_tuskgor_fk_default_seeded", true, false)
+    if mod:get("unlock_es_knight_es_2h_heavy_spear") ~= true then
+        mod:set("unlock_es_knight_es_2h_heavy_spear", true, false)
+    end
+    mod:info("[wt:620] CWV Tuskgor Combat Style ready; seeded Foot Knight availability ON")
+    return true
+end
+WT.seed_cwv_tuskgor_foot_knight_default = _seed_cwv_tuskgor_foot_knight_default
+
 -- Pairs removed from `weapon_unlock_map`. Users who had the
 -- corresponding `unlock_es_*_<weapon>` toggle = true before the removal will
 -- have the career still in the weapon's `item.can_wield` list. The regular
@@ -132,6 +152,8 @@ end
 -- see DEVELOPMENT.md "Don't hook BackendUtils.can_wield_item").
 local function apply_weapon_unlocks()
     if not ItemMasterList then return end
+
+    _seed_cwv_tuskgor_foot_knight_default()
 
     -- Drop stale can_wield entries for pairs removed from `weapon_unlock_map`
     -- since the last release. Idempotent — runs every init + on_setting_changed.

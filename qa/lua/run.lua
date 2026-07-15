@@ -113,6 +113,8 @@ local suites = {
     "test_cwv_axe_balance",
     "test_cwv_item_text",
     "test_cwv_smoke_bomb_probe",
+    "test_cwv_combat_styles",
+    "test_wt_cwv_tuskgor_default",
     "test_cim_skin_persistence",
     "test_cim_bulk_cleanup",
     "test_cim_cwv_template_selector",

@@ -25,7 +25,7 @@ return {
 	},
 	options = {
 		-- Loose variant toggles sorted A->Z by display label: Bomb Slot,
-		-- Kruber Crossbow, Mace and Hammer Identity,
+		-- Combat Style, Kruber Crossbow, Mace and Hammer Identity,
 		-- Mace and Sword.
 		widgets = {
 			{
@@ -50,6 +50,15 @@ return {
 				type          = "checkbox",
 				default_value = true,
 				tooltip       = "enable_cwv_tuskgor_javelin_bomb_tooltip",
+			},
+			{
+				setting_id = "cwv_cycle_combat_style_hotkey",
+				type = "keybind",
+				default_value = {},
+				keybind_trigger = "pressed",
+				keybind_type = "function_call",
+				function_name = "cycle_combat_style",
+				tooltip = "cwv_cycle_combat_style_hotkey_tooltip",
 			},
 			-- v0.1.347-dev: cwv_es_crossbow variant toggle (Saltzpyre's
 			-- crossbow on all 4 Kruber careers, rifle 3P anim mapping).

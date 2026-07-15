@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.261-dev (2026-07-15) - #620 CWV Tuskgor Combat Style default [verify-fix-coop]
+
+- Kept WT-alone Foot Knight Tuskgor Spear default-off. When active CWV positively marks the native Tuskgor Combat Style family ready, WT seeds that exact Foot Knight setting on once per profile; late load and hot reload converge without repeatedly overriding later user choices.
+- The normal WT setting remains the final control after its one-time default seed. No hard dependency, per-frame check, item grant, or new transport was added.
+- Removed the retired standalone Infantry Spear, Imperial Longsword, and Black Guard Blade from WT's CWV availability catalogue. Their canonical native items now own those Combat Styles, so WT cannot re-expose duplicate craft families.
+- Added offline readiness/load-order/one-shot coverage and runtime `issue620_cwv_tuskgor_foot_knight_default`.
+
+With CWV v0.1.422-dev active, confirm Foot Knight's Tuskgor row defaults on and the live item is wieldable. Turn it off manually, transition, and confirm it stays off. On a fresh WT-only profile it must remain off. Enable/hot-reload CWV and confirm the one-time default converges on after its style marker becomes ready.
+
 ## 0.12.260-dev (2026-07-15) - #621 #622 #623 opt-in weapon balance nerfs [verify-fix]
 
 - Added default-off **1H Axe: 10% Less Cleave**. WT discovers donor-faithful single-axe templates by their combat capability, not labels, and redirects only direct attacks to private 0.90x attack/impact-cleave profiles. Dual Axes, Axe and Shield, throwing axes, 2H axes, shared profiles, and shared power rows remain unchanged.

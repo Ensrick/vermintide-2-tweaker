@@ -8,6 +8,27 @@ local/backend inventory. Crafting in Modded is the sole acquisition owner: it
 mints the backend ID, persists that exact ID, and equips the Primary or
 Secondary slot the player chose.
 
+For alternate movesets on one existing item, use the per-instance package
+contract in [COMBAT_STYLES.md](COMBAT_STYLES.md) instead of registering a new
+weapon solely to carry another template. A Combat Style must own its complete
+template/balance/presentation package and clone every donor/shared table before
+modification.
+
+Retiring a former style-only weapon is a data migration, not deletion. Keep a
+promo `cwv_retired` restore bridge, move every stable illusion key onto the
+native owner's combination table, and use `_cwv_combat_styles.lua`'s pure
+planner to validate all targets/skins before changing one CIM row. Preserve the
+backend UUID and every opaque forged field; mutate only `item_key`/`skin`, seed
+the exact style in one settings write, and roll the CIM rows back if persistence
+throws. Remove the retired key from WT and all new-craft catalogues in the same
+release so no half-state can mint more duplicates.
+
+Private atlas icon names are renderer-scoped capabilities. Registering a
+material in CWV's `custom_gui_textures` does not make it valid in another mod's
+renderer. `_cwv_inventory_icons.lua` is the cross-mod contract: it lists exact
+injected renderers and a resident vanilla fallback for each custom icon.
+Consumers must resolve through it or fail closed to their own proven icon.
+
 Do not infer ownership from a `cwv_` prefix. A CWV item is owned only when its
 exact backend ID exists in CIM's persisted craft table. Migration code may
 remove only the finite historical auto-grant IDs derived from authored
