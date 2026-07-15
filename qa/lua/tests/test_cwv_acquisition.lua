@@ -43,6 +43,7 @@ return function(H, repo_root)
             { item_key = "cwv_wh_dual_axes", base_weapon = "dr_dual_wield_axes" },
             { item_key = "cwv_es_axe_shield", base_weapon = "dr_shield_axe" },
             { item_key = "cwv_skin_only", base_weapon = "dr_1h_axe", skin_only = true },
+			{ item_key = "cwv_retired", base_weapon = "dr_1h_axe", cwv_retired = true },
         }
         local item_master_list = {
             cwv_wh_dual_axes = {
@@ -85,6 +86,7 @@ return function(H, repo_root)
         H.equal(mapping.cwv_wh_dual_axes, "deus_cwv_wh_dual_axes")
         H.equal(mapping.cwv_es_axe_shield, "deus_cwv_es_axe_shield")
         H.equal(mapping.cwv_skin_only, nil)
+		H.equal(mapping.cwv_retired, nil)
 
         local dual_deus = deus_weapons.deus_cwv_wh_dual_axes
         H.equal(dual_deus.base_item, "cwv_wh_dual_axes")

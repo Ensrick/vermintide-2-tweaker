@@ -38,7 +38,7 @@ function M.install(definitions, item_master_list, starting_mapping, deus_weapons
     end
 
     for _, def in ipairs(definitions) do
-        if type(def) == "table" and not def.skin_only then
+        if type(def) == "table" and not def.skin_only and not def.cwv_retired then
             local item_key = def.item_key
             local owner = type(item_key) == "string" and rawget(item_master_list, item_key)
             local base_deus_key = type(def.base_weapon) == "string"

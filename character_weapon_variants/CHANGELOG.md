@@ -1,5 +1,37 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.426-dev - 2026-07-15 - #620 atomic Combat Style transitions [verify-fix-coop]
+
+- Fixed the equipment-row switch crash. Every authored target style now owns
+  its exact vanilla first-person state-machine resource; a bounded asynchronous
+  PackageManager gate must report that resource resident before the live slot
+  is rebuilt. Persistence, network publication, and the commit diagnostic occur
+  only after the ready signal and successful rebuild. Failed, stale, active-
+  action, and duplicate transitions leave the previous style and item intact.
+- Corrected the equipment-row layout: ordinary gear cogs remain at their exact
+  vanilla position. Only a style-capable row places a smaller switch button
+  above its cog and moves that cog down. Eligibility is recomputed after native
+  population, equip/unequip, slot, and career refreshes; mouse and controller
+  paths share the same exact-instance transaction.
+- Removed the standalone Infantry Spear from CWV definition, ItemMasterList,
+  skin, crafting, availability, and Chaos Wastes registration surfaces. Its
+  tuned moveset and shield-free spear models now exist only as the native
+  Tuskgor Spear's Infantry Combat Style. Existing CIM UUIDs migrate in place to
+  Tuskgor Spear while preserving compatible cosmetics and the Infantry style;
+  the historical deterministic auto-grant is purged separately.
+- Added engine-free coverage proving that no commit can precede resource
+  readiness, failed loads preserve Hunter style, double clicks are bounded,
+  ordinary rows retain vanilla cog geometry, eligible rows refresh vertically,
+  retired owners cannot enter acquisition/Deus registration, and Tuskgor Spear
+  remains the sole owner of Infantry style.
+
+**Co-op verify:** Restart the game, confirm Infantry Spear is absent from every
+craft/availability list, equip Tuskgor Spear, and use the switch button above
+its gear cog. Confirm there is no crash, the style changes only after loading,
+and Hunter/Infantry persist on that exact instance. Verify the moveset and
+weapon appearance on a second peer, then repeat after a career/slot change and
+confirm ordinary rows' gear cogs never move.
+
 ## 0.1.425-dev - 2026-07-15 - #620 equipment-row Combat Style control [verify-fix-coop]
 
 - Fixed the missing Combat Style control on the actual console-style equipment

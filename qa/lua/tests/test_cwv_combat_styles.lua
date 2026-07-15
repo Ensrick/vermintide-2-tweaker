@@ -31,8 +31,7 @@ return function(H, repo_root)
 		H.equal(policy.next_style("wh_2h_hammer", "warrior_priest"), "kruber")
 		H.equal(policy.style("es_2h_heavy_spear"), "hunter")
 		H.equal(policy.next_style("es_2h_heavy_spear", "hunter"), "infantry")
-		H.equal(policy.style("cwv_es_infantry_spear"), "infantry")
-		H.equal(policy.next_style("cwv_es_infantry_spear", "infantry"), "hunter")
+		H.equal(policy.style("cwv_es_infantry_spear"), nil)
 	end)
 
 	H.test("CWV console equipment row exposes a non-overlapping authored style control", function()
@@ -63,12 +62,22 @@ return function(H, repo_root)
 		H.equal(rows, 2)
 		H.equal(#grid.element.passes, 6)
 		H.equal(grid.content.cwv_style_icon, "icon_switch")
-		H.equal(grid.style.customize_hotspot_1_1.offset[1], 36)
-		H.equal(grid.style.customize_item_hover_1_1.offset[1], 36)
-		H.equal(grid.style.cwv_style_hotspot_1_1.offset[1], 100)
-		H.truthy(grid.style.customize_hotspot_1_1.offset[1]
-			+ grid.style.customize_hotspot_1_1.size[1]
-			< grid.style.cwv_style_hotspot_1_1.offset[1])
+		-- Decoration is layout-neutral until the populated item rows are known.
+		H.equal(grid.style.customize_hotspot_1_1.offset[1], 100)
+		H.equal(grid.style.customize_hotspot_1_1.offset[2], 210)
+		H.equal(grid.style.customize_hotspot_2_1.offset[1], 100)
+		H.equal(grid.style.customize_hotspot_2_1.offset[2], 110)
+		H.equal(policy.refresh_console_row_layout(grid, runtime), 1)
+		-- Eligible row: same x, style above cog, native hover follows cog.
+		H.equal(grid.style.customize_hotspot_1_1.offset[1], 100)
+		H.equal(grid.style.customize_hotspot_1_1.offset[2], 183)
+		H.equal(grid.style.customize_item_hover_1_1.offset[2], 183)
+		H.equal(grid.style.cwv_style_hotspot_1_1.offset[1], 104)
+		H.equal(grid.style.cwv_style_hotspot_1_1.offset[2], 245)
+		-- Ordinary row is exact vanilla, not globally displaced.
+		H.equal(grid.style.customize_hotspot_2_1.offset[1], 100)
+		H.equal(grid.style.customize_hotspot_2_1.offset[2], 110)
+		H.equal(grid.style.customize_item_hover_2_1.offset[2], 110)
 
 		local first_hotspot_pass = grid.element.passes[1]
 		grid.content.cwv_style_hotspot_1_1.parent = grid.content
@@ -77,6 +86,7 @@ return function(H, repo_root)
 			"Switch to: Infantry Combat Style")
 		grid.content.cwv_style_hotspot_2_1.parent = grid.content
 		H.equal(grid.element.passes[4].content_check_function(grid.content.cwv_style_hotspot_2_1), false)
+		H.equal(grid.content.cwv_style_hotspot_2_1.cwv_visible, false)
 
 		grid.content.cwv_style_hotspot_1_1.on_pressed = true
 		local item, suffix, row = policy.consume_console_style_press(grid.content, runtime)
@@ -87,6 +97,48 @@ return function(H, repo_root)
 		local pass_count = #grid.element.passes
 		H.equal(policy.decorate_console_grid(grid, runtime), false)
 		H.equal(#grid.element.passes, pass_count)
+	end)
+
+	H.test("CWV style transition cannot commit before its resource is ready", function()
+		local saved, callbacks = nil, {}
+		local fake_mod = {
+			get = function() return nil end,
+			set = function(_, key, value)
+				saved = { key = key, value = clone(value) }
+			end,
+		}
+		local runtime = policy.install(fake_mod, {
+			acquire_style_resource = function(path, callback)
+				H.equal(path, "units/beings/player/first_person_base/state_machines/melee/spear")
+				callbacks[#callbacks + 1] = callback
+				return true
+			end,
+		})
+		local spear = { backend_id = "spear_uuid", name = "es_2h_heavy_spear" }
+		local completed = {}
+		local accepted, state = runtime:cycle_item(spear, nil, "test", true,
+			function(changed, err) completed[#completed + 1] = { changed, err } end)
+		H.equal(accepted, true)
+		H.equal(state, "transition pending")
+		H.equal(saved, nil)
+		H.equal(runtime:describe(spear).style_id, "hunter")
+		local duplicate, duplicate_err = runtime:cycle_item(spear, nil, "double", true)
+		H.equal(duplicate, false)
+		H.equal(duplicate_err, "transition pending")
+		callbacks[1](false, "load failed")
+		H.equal(saved, nil)
+		H.equal(runtime:describe(spear).style_id, "hunter")
+		H.equal(completed[1][1], false)
+
+		accepted = runtime:cycle_item(spear, nil, "retry", true,
+			function(changed, err) completed[#completed + 1] = { changed, err } end)
+		H.equal(accepted, true)
+		H.equal(saved, nil)
+		callbacks[2](true)
+		H.equal(completed[2][1], true)
+		H.equal(saved.key, policy.SETTING_KEY)
+		H.equal(saved.value.items.spear_uuid, "infantry")
+		H.equal(runtime:describe(spear).style_id, "infantry")
 	end)
 
 	H.test("CWV Combat Style persistence is exact-instance and compact", function()
@@ -234,12 +286,18 @@ return function(H, repo_root)
 		H.truthy(module:find('mod:hook("HeroWindowLoadoutConsole", "_handle_input"', 1, true))
 		H.truthy(module:find('icon = "icon_switch"', 1, true))
 		H.truthy(module:find('"cwv_style_hotspot" .. suffix', 1, true))
+		H.truthy(module:find('function runtime:request_item_style', 1, true))
+		H.truthy(module:find('acquire_style_resource', 1, true))
+		H.truthy(module:find('function M.refresh_console_row_layout', 1, true))
 		H.truthy(main:find("policy.plan_legacy_migrations(saved", 1, true))
 		H.truthy(main:find('_om._migrate_legacy_style_items = function()', 1, true))
 		H.truthy(module:find('cwv_es_longsword_blackguard = {', 1, true))
 		H.truthy(module:find('target_item = "es_2h_sword", style_id = "longsword"', 1, true))
 		H.truthy(main:find('for _, mod_id in ipairs({ "cim_dev", "cim", "crafting_in_modded" })', 1, true))
 		H.truthy(main:find('style_target_item = "es_2h_sword"', 1, true))
+		H.truthy(main:find('if def.skin_only or def.cwv_retired then', 1, true))
+		H.equal(main:find('item_key        = "cwv_es_infantry_spear"', 1, true), nil)
+		H.truthy(main:find('legacy_ids[_om.infantry_spear.ITEM_KEY .. "_001"] = true', 1, true))
 		H.equal(select(2, main:gsub('mod:hook%("BackendUtils", "get_item_template"', "")), 1)
 	end)
 end

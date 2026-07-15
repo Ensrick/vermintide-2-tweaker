@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.425-dev"
+local MOD_VERSION = "0.1.426-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -391,32 +391,6 @@ local _variant_definitions = {
 		rarity          = "default",
 		power_level     = 5,
 		template        = "elven_sword_shield_template",
-	},
-	{
-		-- Retired #596 compatibility row. New crafts use native Tuskgor Spear and
-		-- select Infantry Combat Style per exact instance (#620). This hidden row
-		-- remains registered only long enough to restore/migrate legacy CIM UUIDs.
-		-- rendered with the spear half of his native Chaos Wastes Spear+Shield.
-		-- The custom template independently tunes attack timing and the three
-		-- damage-profile axes; push/block/wield/inspect actions stay at source
-		-- values. WT owns optional career expansion beyond these three authored
-		-- careers (including Grail Knight, default off).
-		item_key        = "cwv_es_infantry_spear",
-		base_weapon     = "we_spear",
-		display_name    = "Infantry Spear",
-		description     = "A long state-issue spear used without a shield, trading elven speed for heavier thrusts and broader sweeps.",
-		character       = "empire_soldier",
-		careers         = _om.infantry_spear.DEFAULT_CAREERS,
-		right_hand_unit = "units/weapons/player/wpn_es_deus_spear_01/wpn_es_deus_spear_01",
-		inventory_icon  = "icon_wpn_empire_spearshield_t1",
-		hud_icon        = "weapon_generic_icon_falken",
-		skin_display_name = "Infantry Spear",
-		rarity          = "promo",
-		cwv_retired     = true,
-		template        = "cwv_infantry_spear_template",
-		traits          = { "melee_attack_speed_on_crit" },
-		properties      = { power_vs_skaven = 1, power_vs_chaos = 1 },
-		item_type       = "cwv_es_infantry_spear",
 	},
 	{
 		item_key        = "cwv_we_sword_shield_veteran",
@@ -8526,7 +8500,7 @@ local function _register_cwv_skin_combinations()
 	for item_type, table_name in pairs(_seed_targets) do
 		seeded[table_name] = _empty_skin_tiers()
 		for _, def in ipairs(_variant_definitions) do
-			if def.item_type == item_type then
+			if def.item_type == item_type and not def.cwv_retired and not def.no_skin then
 				local skin_key = def.item_key .. "_skin"
 				local rarity = def.skin_rarity or def.rarity or "exotic"
 				local tier = seeded[table_name][rarity]
@@ -10877,7 +10851,10 @@ local function _auto_register_all()
 	local n_built_ok = 0
 	local n_build_failed = 0
 	for _, def in ipairs(_variant_definitions) do
-		if def.skin_only then n_skipped_skin_only = n_skipped_skin_only + 1; goto continue end
+		if def.skin_only or def.cwv_retired then
+			n_skipped_skin_only = n_skipped_skin_only + 1
+			goto continue
+		end
 		-- v0.1.347-dev: per-variant toggle gate. Currently only cwv_es_crossbow
 		-- needs this (default-on; user can opt out). If disabled at session start,
 		-- registration is skipped and the variant never appears in inventory until
@@ -10988,6 +10965,9 @@ local function _auto_register_all()
 	-- start at _100 today, but the ownership callback makes the boundary robust
 	-- even if a legitimate saved craft reused _001 in an older/manual build.
 	local legacy_ids = mod._cwv_acquisition.legacy_auto_grant_ids(_variant_definitions)
+	-- Infantry Spear is no longer a variant definition at all (#620), but its
+	-- historical deterministic auto-grant id still needs one final cleanup.
+	legacy_ids[_om.infantry_spear.ITEM_KEY .. "_001"] = true
 	local cim_dev = get_mod("cim_dev")
 	local cim_public = get_mod("cim")
 	local function is_cim_owned(backend_id)
@@ -11564,6 +11544,39 @@ do
 		mod:warning("[cwv:620] Kerillian Greatsword style unavailable: %s", tostring(err))
 	end
 
+	-- A style can replace the first-person state machine even though the base
+	-- item's career packages did not load it (Tuskgor Hunter -> Infantry is the
+	-- concrete case). Own one reference per curated vanilla resource and invoke
+	-- the transition only from PackageManager's completion callback. Never pass
+	-- arbitrary item/UI data to PackageManager: a nonexistent package faults in
+	-- the engine's async queue outside Lua's pcall boundary.
+	local style_resource_allowlist = {}
+	for _, family in pairs(policy.FAMILIES) do
+		for _, style in pairs(family.styles) do
+			if type(style.resource) == "string" then style_resource_allowlist[style.resource] = true end
+		end
+	end
+	local held_style_resources = {}
+	local function acquire_style_resource(path, callback)
+		if not style_resource_allowlist[path] then return false, "resource is not authored" end
+		local packages = Managers and Managers.package
+		if not packages then return false, "package manager unavailable" end
+		local reference = "cwv_combat_styles"
+		if held_style_resources[path] then
+			local loaded = false
+			pcall(function() loaded = packages:has_loaded(path, reference) and true or false end)
+			callback(loaded, loaded and nil or "held resource lost")
+			return loaded
+		end
+		held_style_resources[path] = true
+		packages:load(path, reference, function()
+			local loaded = false
+			pcall(function() loaded = packages:has_loaded(path, reference) and true or false end)
+			callback(loaded, loaded and nil or "resource completion was not resident")
+		end, true, true)
+		return true
+	end
+
 	_om.combat_styles = policy.install(mod, {
 		cwv_key_for_item = function(backend_id, item_data)
 			return _om._cwv_key_for_item(backend_id, item_data)
@@ -11573,6 +11586,7 @@ do
 			right_hand_scale = _type_transforms.cwv_imperial_longsword.right_hand_scale,
 			right_hand_offset = _type_transforms.cwv_imperial_longsword.right_hand_offset,
 		},
+		acquire_style_resource = acquire_style_resource,
 		peer_for_owner = function(owner_unit)
 			local pm = Managers and Managers.player
 			local ok, player = pm and pcall(pm.owner, pm, owner_unit)
@@ -14235,7 +14249,8 @@ _rt_register("issue620_per_instance_combat_styles", function()
 		return "Combat Style console equipment-row control is not installed"
 	end
 	local layout = policy.console_style_layout({ 100, 200, 30 })
-	if not layout or layout.cog_offset[1] ~= 36 or layout.style_hitbox_offset[1] ~= 100 then
+	if not layout or layout.cog_offset[1] ~= 100 or layout.cog_offset[2] ~= 173
+			or layout.style_hitbox_offset[1] ~= 104 or layout.style_hitbox_offset[2] ~= 235 then
 		return "Combat Style console equipment-row layout drifted"
 	end
 end)
@@ -15393,16 +15408,19 @@ end)
 _rt_register("cwv_issue596_infantry_spear_contract", function()
 	local infantry = _om.infantry_spear
 	local def = _find_def(infantry.ITEM_KEY)
-	if not def or def.cwv_retired ~= true or def.rarity ~= "promo" then
-		return "Infantry Spear hidden migration bridge missing"
+	if def ~= nil then
+		return "standalone Infantry Spear remains in variant definitions"
 	end
-	if def.base_weapon ~= "we_spear"
-			or def.right_hand_unit ~= "units/weapons/player/wpn_es_deus_spear_01/wpn_es_deus_spear_01" then
-		return "Infantry Spear base/model contract drifted"
+	if rawget(ItemMasterList, infantry.ITEM_KEY) ~= nil then
+		return "standalone Infantry Spear leaked into ItemMasterList"
 	end
-	if #(def.careers or {}) ~= 3 or def.careers[1] ~= "es_mercenary"
-			or def.careers[2] ~= "es_huntsman" or def.careers[3] ~= "es_knight" then
-		return "Infantry Spear authored careers drifted (must exclude Grail Knight)"
+	if rawget(ItemMasterList, infantry.ITEM_KEY .. "_skin") ~= nil then
+		return "retired Infantry Spear skin leaked into ItemMasterList"
+	end
+	if #(infantry.DEFAULT_CAREERS or {}) ~= 3 or infantry.DEFAULT_CAREERS[1] ~= "es_mercenary"
+			or infantry.DEFAULT_CAREERS[2] ~= "es_huntsman"
+			or infantry.DEFAULT_CAREERS[3] ~= "es_knight" then
+		return "Infantry style authored careers drifted (must exclude Grail Knight)"
 	end
 	local tuskgor = rawget(ItemMasterList, "es_2h_heavy_spear")
 	if not (tuskgor and table.contains(tuskgor.can_wield or {}, "es_knight")) then

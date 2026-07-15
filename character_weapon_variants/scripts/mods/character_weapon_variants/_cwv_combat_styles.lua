@@ -16,20 +16,26 @@ M.KERILLIAN_STAGGER_MULT = 1.15
 M.KERILLIAN_CLEAVE_MULT = 1.15
 M.CONSOLE_STYLE_BUTTON = {
 	icon = "icon_switch",
-	icon_size = { 50, 45 },
-	hitbox_size = { 58, 58 },
-	cog_shift_x = -64,
+	icon_size = { 42, 38 },
+	hitbox_size = { 50, 45 },
+	cog_shift_y = -27,
+	style_shift_y = 35,
 }
 
 M.FAMILIES = {
 	greatsword = {
 		styles = {
-			greatsword = { label = "Greatsword Combat Style", template = "two_handed_swords_template_1" },
-			longsword = { label = "Longsword Combat Style", template = "imperial_longsword_template", transform = "imperial_longsword" },
-			bretonnian = { label = "Bretonnian Combat Style", template = "bastard_sword_template" },
+			greatsword = { label = "Greatsword Combat Style", template = "two_handed_swords_template_1",
+				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword" },
+			longsword = { label = "Longsword Combat Style", template = "imperial_longsword_template",
+				transform = "imperial_longsword",
+				resource = "units/beings/player/first_person_base/state_machines/melee/bastard_sword" },
+			bretonnian = { label = "Bretonnian Combat Style", template = "bastard_sword_template",
+				resource = "units/beings/player/first_person_base/state_machines/melee/bastard_sword" },
 			kerillian = {
 				label = "Kerillian Greatsword Combat Style",
 				template = M.KERILLIAN_TEMPLATE,
+				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword_we",
 				modifiers = { attack_speed = M.KERILLIAN_SPEED_MULT, stagger = M.KERILLIAN_STAGGER_MULT, cleave = M.KERILLIAN_CLEAVE_MULT },
 			},
 		},
@@ -42,8 +48,10 @@ M.FAMILIES = {
 	},
 	greathammer = {
 		styles = {
-			kruber = { label = "Kruber Greathammer Combat Style", template = "two_handed_hammers_template_1" },
-			warrior_priest = { label = "Warrior Priest Greathammer Combat Style", template = "two_handed_hammer_priest_template" },
+			kruber = { label = "Kruber Greathammer Combat Style", template = "two_handed_hammers_template_1",
+				resource = "units/beings/player/first_person_base/state_machines/melee/2h_hammer" },
+			warrior_priest = { label = "Warrior Priest Greathammer Combat Style", template = "two_handed_hammer_priest_template",
+				resource = "units/beings/player/first_person_base/state_machines/melee/2h_hammer_priest" },
 		},
 		members = {
 			es_2h_hammer = { default = "kruber", order = { "kruber", "warrior_priest" } },
@@ -53,14 +61,16 @@ M.FAMILIES = {
 	},
 	spear = {
 		styles = {
-			hunter = { label = "Hunter Combat Style", template = "two_handed_heavy_spears_template" },
-			infantry = { label = "Infantry Combat Style", template = "cwv_infantry_spear_template" },
+			hunter = { label = "Hunter Combat Style", template = "two_handed_heavy_spears_template",
+				resource = "units/beings/player/first_person_base/state_machines/melee/polearm" },
+			infantry = {
+				label = "Infantry Combat Style",
+				template = "cwv_infantry_spear_template",
+				resource = "units/beings/player/first_person_base/state_machines/melee/spear",
+			},
 		},
 		members = {
 			es_2h_heavy_spear = { default = "hunter", order = { "hunter", "infantry" } },
-			-- Hidden legacy row: old exact CIM instances retain their UUID and
-			-- Infantry default until the bounded migration rewrites them in-place.
-			cwv_es_infantry_spear = { default = "infantry", order = { "infantry", "hunter" } },
 		},
 	},
 }
@@ -156,22 +166,25 @@ local function copy_pair(value)
 	return { value[1] or 0, value[2] or 0 }
 end
 
--- Native console loadout rows place the customization cog immediately left of
--- the item row. The style button owns that original position and the cog moves
--- 64 px left, leaving a six-pixel gap between two 58 px hitboxes. Keeping this
--- arithmetic pure makes the non-overlap contract engine-free testable.
+-- Layout is always relative to the native cog. Unsupported rows are restored
+-- byte-for-byte to that authored offset. On an eligible row the style control
+-- sits above the cog and the cog moves down; neither control shifts sideways.
 function M.console_style_layout(cog_offset)
 	if type(cog_offset) ~= "table" then return nil end
-	local style_hitbox = copy_triplet(cog_offset)
+	local original = copy_triplet(cog_offset)
 	local cog = copy_triplet(cog_offset)
-	cog[1] = cog[1] + M.CONSOLE_STYLE_BUTTON.cog_shift_x
+	cog[2] = cog[2] + M.CONSOLE_STYLE_BUTTON.cog_shift_y
+	local style_hitbox = copy_triplet(cog_offset)
+	style_hitbox[1] = style_hitbox[1] + math.floor((58 - M.CONSOLE_STYLE_BUTTON.hitbox_size[1]) * 0.5)
+	style_hitbox[2] = style_hitbox[2] + M.CONSOLE_STYLE_BUTTON.style_shift_y
 	local icon = copy_triplet(style_hitbox)
 	icon[1] = icon[1] + math.floor((M.CONSOLE_STYLE_BUTTON.hitbox_size[1]
 		- M.CONSOLE_STYLE_BUTTON.icon_size[1]) * 0.5)
 	icon[2] = icon[2] + math.floor((M.CONSOLE_STYLE_BUTTON.hitbox_size[2]
 		- M.CONSOLE_STYLE_BUTTON.icon_size[2]) * 0.5)
 	icon[3] = icon[3] + 1
-	return { cog_offset = cog, style_hitbox_offset = style_hitbox, icon_offset = icon }
+	return { original_cog_offset = original, cog_offset = cog,
+		style_hitbox_offset = style_hitbox, icon_offset = icon }
 end
 
 local function console_row(runtime, parent_content, suffix)
@@ -200,6 +213,7 @@ function M.decorate_console_grid(widget_def, runtime)
 	local decorated = 0
 	content.cwv_style_icon = M.CONSOLE_STYLE_BUTTON.icon
 	content.cwv_style_icon_hover = M.CONSOLE_STYLE_BUTTON.icon
+	content.cwv_style_rows = content.cwv_style_rows or {}
 
 	for i = 1, rows do
 		for k = 1, columns do
@@ -210,10 +224,6 @@ function M.decorate_console_grid(widget_def, runtime)
 			local cog_hover_style = style[customize_hover]
 			local layout = cog_style and M.console_style_layout(cog_style.offset)
 			if layout and cog_hover_style and type(cog_hover_style.offset) == "table" then
-				-- Preserve the native gear action; only reposition both visual states.
-				cog_style.offset = copy_triplet(layout.cog_offset)
-				cog_hover_style.offset = copy_triplet(layout.cog_offset)
-
 				local hotspot_name = "cwv_style_hotspot" .. suffix
 				local icon_name = "cwv_style_icon" .. suffix
 				local hover_name = "cwv_style_icon_hover" .. suffix
@@ -249,6 +259,10 @@ function M.decorate_console_grid(widget_def, runtime)
 				}
 
 				content[hotspot_name] = { drag_texture_size = copy_pair(M.CONSOLE_STYLE_BUTTON.hitbox_size) }
+				content.cwv_style_rows[suffix] = {
+					original_cog_offset = copy_triplet(layout.original_cog_offset),
+					original_hover_offset = copy_triplet(cog_hover_style.offset),
+				}
 				style[hotspot_name] = {
 					horizontal_alignment = "left", vertical_alignment = "center",
 					size = copy_pair(M.CONSOLE_STYLE_BUTTON.hitbox_size),
@@ -278,13 +292,46 @@ function M.decorate_console_grid(widget_def, runtime)
 	return true, decorated
 end
 
+-- Re-evaluate eligibility after every vanilla loadout refresh. This owns all
+-- row movement, so equipping, unequipping, swapping careers, or selecting a
+-- different slot cannot leave a stale style control or displaced ordinary cog.
+function M.refresh_console_row_layout(widget, runtime)
+	local content = widget and widget.content
+	local style = widget and widget.style
+	local rows = content and content.cwv_style_rows
+	if type(content) ~= "table" or type(style) ~= "table" or type(rows) ~= "table" then return 0 end
+	local eligible = 0
+	for suffix, authored in pairs(rows) do
+		local row = console_row(runtime, content, suffix)
+		local cog = style["customize_hotspot" .. suffix]
+		local hover = style["customize_item_hover" .. suffix]
+		local hotspot = content["cwv_style_hotspot" .. suffix]
+		if cog and hover and hotspot then
+			if row then
+				local layout = M.console_style_layout(authored.original_cog_offset)
+				cog.offset = copy_triplet(layout.cog_offset)
+				hover.offset = copy_triplet(layout.cog_offset)
+				hotspot.cwv_visible = true
+				eligible = eligible + 1
+			else
+				cog.offset = copy_triplet(authored.original_cog_offset)
+				hover.offset = copy_triplet(authored.original_hover_offset)
+				hotspot.cwv_visible = false
+				hotspot.on_pressed = false
+				hotspot.on_release = false
+			end
+		end
+	end
+	return eligible
+end
+
 function M.consume_console_style_press(content, runtime)
 	if type(content) ~= "table" then return nil end
 	for i = 1, tonumber(content.rows) or 0 do
 		for k = 1, tonumber(content.columns) or 0 do
 			local suffix = "_" .. tostring(i) .. "_" .. tostring(k)
 			local hotspot = content["cwv_style_hotspot" .. suffix]
-			if hotspot and (hotspot.on_pressed or hotspot.on_release) then
+			if hotspot and hotspot.cwv_visible and (hotspot.on_pressed or hotspot.on_release) then
 				hotspot.on_pressed = false
 				hotspot.on_release = false
 				local item = content["item" .. suffix]
@@ -366,7 +413,7 @@ function M.install(mod, deps)
 	local store = M.normalize_store(mod:get(M.SETTING_KEY))
 	local remote = {}
 	local imperial_transform = deps.imperial_transform
-	local runtime = { store = store, remote = remote }
+	local runtime = { store = store, remote = remote, pending = {} }
 
 	local function item_identity(item, backend_id)
 		local data = item and (item.data or item)
@@ -530,11 +577,8 @@ function M.install(mod, deps)
 		end
 		local changed, err = M.set(store, row.identity, row.item_key, desired)
 		if not changed then return false, err or "unchanged" end
-		persist()
 		row.item_data.mod_data = row.item_data.mod_data or {}
 		row.item_data.mod_data.cwv_combat_style = desired
-		pcall(printf, "[cwv:620] style commit item=%s family=%s %s->%s reason=%s",
-			row.identity, row.family_id, row.style_id, desired, tostring(reason))
 		if rebuild then
 			local live = live_item and self:describe(live_item)
 			if live and live.identity == row.identity then
@@ -556,14 +600,64 @@ function M.install(mod, deps)
 				self:publish(inventory, slot_name, item, nil, reason or "transition")
 			end
 		end
+		-- Persistence and the commit diagnostic intentionally happen only after
+		-- the live slot accepted the rebuilt style. An engine resource gate runs
+		-- before this function whenever a transition requires a new state machine.
+		persist()
+		pcall(printf, "[cwv:620] style commit item=%s family=%s %s->%s reason=%s",
+			row.identity, row.family_id, row.style_id, desired, tostring(reason))
 		return true
 	end
 
-	function runtime:cycle_item(item, backend_id, reason, rebuild)
+	function runtime:request_item_style(item, backend_id, desired, reason, rebuild, complete)
+		local row = self:describe(item, backend_id)
+		if not row then return false, "unsupported item" end
+		if self.pending[row.identity] then return false, "transition pending" end
+		local resolved, style = M.style(row.item_key, desired)
+		if resolved ~= desired then return false, "unsupported style" end
+		local resource = style and style.resource
+		if not (rebuild and resource) then
+			local changed, err = self:set_item_style(item, backend_id, desired, reason, rebuild)
+			if type(complete) == "function" then complete(changed, err) end
+			return changed, err
+		end
+
+		local acquire = deps.acquire_style_resource
+		if type(acquire) ~= "function" then return false, "resource loader unavailable" end
+		local tx = { identity = row.identity, item_key = row.item_key,
+			from = row.style_id, desired = desired, resource = resource }
+		self.pending[row.identity] = tx
+		local settled = false
+		local function finish(ready, load_err)
+			if settled then return end
+			settled = true
+			if runtime.pending[tx.identity] ~= tx then return end
+			runtime.pending[tx.identity] = nil
+			local current = runtime:describe(item, backend_id)
+			if not ready or not current or current.identity ~= tx.identity
+					or current.item_key ~= tx.item_key or current.style_id ~= tx.from then
+				local err = load_err or "stale transition"
+				pcall(printf, "[cwv:620] style load rejected item=%s resource=%s reason=%s",
+					tx.identity, tx.resource, tostring(err))
+				if type(complete) == "function" then complete(false, err) end
+				return
+			end
+			local changed, err = runtime:set_item_style(item, backend_id, tx.desired, reason, rebuild)
+			if type(complete) == "function" then complete(changed, err) end
+		end
+		local ok, accepted, acquire_err = pcall(acquire, resource, finish)
+		if not ok or accepted == false then
+			finish(false, acquire_err or accepted or "resource load rejected")
+			return false, acquire_err or "resource load rejected"
+		end
+		return true, "transition pending"
+	end
+
+	function runtime:cycle_item(item, backend_id, reason, rebuild, complete)
 		local row = self:describe(item, backend_id)
 		if not row then return false, "unsupported item" end
 		local next_id = M.next_style(row.item_key, row.style_id)
-		return self:set_item_style(item, backend_id, next_id, reason, rebuild)
+		return self:request_item_style(item, backend_id, next_id, reason, rebuild, complete)
 	end
 
 	function runtime:cycle_wielded()
@@ -687,6 +781,13 @@ function M.install_loadout_ui(mod, runtime)
 		end
 	end
 
+	local function on_ui_transition_complete(window, changed)
+		if not changed then return end
+		local parent = window and window.parent
+		if parent then parent.loadout_sync_id = (parent.loadout_sync_id or 0) + 1 end
+		pcall(function() window:_play_sound("play_gui_equipment_selection_click") end)
+	end
+
 	if type(scenegraph) == "table" and type(widgets) == "table" then
 		mod:hook("HeroWindowLoadout", "_populate_loadout", function(func, self, ...)
 			local result = func(self, ...)
@@ -701,13 +802,10 @@ function M.install_loadout_ui(mod, runtime)
 			if widget and widget.content.visible and hotspot and hotspot.on_release then
 				hotspot.on_release = false
 				local item = selected(self)
-				local changed = item and runtime:cycle_item(item, item.backend_id,
-					"inventory_button", true)
-				if changed then
-					if self.parent then
-						self.parent.loadout_sync_id = (self.parent.loadout_sync_id or 0) + 1
-					end
-					pcall(function() self:_play_sound("play_gui_equipment_selection_click") end)
+				if item then runtime:cycle_item(item, item.backend_id,
+					"inventory_button", true, function(changed)
+						on_ui_transition_complete(self, changed)
+					end)
 				end
 				refresh(self)
 			end
@@ -727,21 +825,109 @@ function M.install_loadout_ui(mod, runtime)
 			return widget_def
 		end
 
+		local actions = console_definitions.generic_input_actions
+		for _, pair in ipairs({ { "default", "cwv_style" },
+				{ "default_no_customization", "cwv_style_no_customization" } }) do
+			local source = actions and actions[pair[1]]
+			if type(source) == "table" then
+				local list = {}
+				for index, action in ipairs(source) do list[index] = action end
+				list[#list + 1] = {
+					description_text = "cwv_cycle_combat_style_controller",
+					input_action = "special_1",
+					priority = #list + 1,
+				}
+				actions[pair[2]] = list
+			end
+		end
+
+		local function console_widget(window)
+			return window and window._widgets_by_name and window._widgets_by_name.loadout_grid
+		end
+
+		local function refresh_console(window)
+			local widget = console_widget(window)
+			return widget and M.refresh_console_row_layout(widget, runtime) or 0
+		end
+
+		local function selected_console_item(window)
+			local widget = console_widget(window)
+			local content = widget and widget.content
+			if not content then return nil end
+			for i = 1, tonumber(content.rows) or 0 do
+				for k = 1, tonumber(content.columns) or 0 do
+					local suffix = "_" .. tostring(i) .. "_" .. tostring(k)
+					local slot = content["hotspot" .. suffix]
+					local row = slot and slot.is_selected and console_row(runtime, content, suffix)
+					if row then return content["item" .. suffix], suffix, row end
+				end
+			end
+			return nil
+		end
+
+		mod:hook("HeroWindowLoadoutConsole", "_populate_loadout", function(func, self, ...)
+			local result = func(self, ...)
+			refresh_console(self)
+			return result
+		end)
+
+		mod:hook("HeroWindowLoadoutConsole", "_update_input_description", function(func, self, ...)
+			local result = func(self, ...)
+			local item = selected_console_item(self)
+			if item and self._menu_input_description then
+				local customizable = self._is_selected_item_customizable
+					and self:_is_selected_item_customizable()
+				local wanted = customizable and "cwv_style" or "cwv_style_no_customization"
+				local list = actions and actions[wanted]
+				if list and self._current_input_desc ~= wanted then
+					self._menu_input_description:change_generic_actions(list)
+					self._current_input_desc = wanted
+				end
+			end
+			return result
+		end)
+
 		mod:hook("HeroWindowLoadoutConsole", "_handle_input", function(func, self, ...)
-			local widget = self._widgets_by_name and self._widgets_by_name.loadout_grid
-			local item, suffix, row = widget and M.consume_console_style_press(widget.content, runtime)
+			refresh_console(self)
+			local widget = console_widget(self)
+			local item, suffix, row
+			if widget then item, suffix, row = M.consume_console_style_press(widget.content, runtime) end
 			if item then
-				local changed, err = runtime:cycle_item(item, item.backend_id,
-					"equipment_style_button", true)
-				if changed then
-					if self.parent then
-						self.parent.loadout_sync_id = (self.parent.loadout_sync_id or 0) + 1
-					end
-					pcall(function() self:_play_sound("play_gui_equipment_selection_click") end)
-					pcall(printf, "[cwv:620] equipment style button item=%s family=%s row=%s",
-						tostring(row.identity), tostring(row.family_id), tostring(suffix))
-				else
+				local accepted, err = runtime:cycle_item(item, item.backend_id,
+					"equipment_style_button", true, function(changed, complete_err)
+						on_ui_transition_complete(self, changed)
+						if changed then
+							pcall(printf, "[cwv:620] equipment style button item=%s family=%s row=%s",
+								tostring(row.identity), tostring(row.family_id), tostring(suffix))
+						elseif complete_err then
+							pcall(printf, "[cwv:620] equipment style button rejected item=%s reason=%s",
+								tostring(row.identity), tostring(complete_err))
+						end
+					end)
+				if not accepted then
 					pcall(printf, "[cwv:620] equipment style button deferred item=%s reason=%s",
+						tostring(row.identity), tostring(err))
+				end
+				return
+			end
+			return func(self, ...)
+		end)
+
+		mod:hook("HeroWindowLoadoutConsole", "_handle_gamepad_input", function(func, self, ...)
+			refresh_console(self)
+			local input = self._input_service and self:_input_service()
+			local item, _, row = selected_console_item(self)
+			if item and input and input:get("special_1", true) then
+				local accepted, err = runtime:cycle_item(item, item.backend_id,
+					"equipment_style_controller", true, function(changed, complete_err)
+						on_ui_transition_complete(self, changed)
+						if not changed and complete_err then
+							pcall(printf, "[cwv:620] controller style rejected item=%s reason=%s",
+								tostring(row.identity), tostring(complete_err))
+						end
+					end)
+				if not accepted then
+					pcall(printf, "[cwv:620] controller style deferred item=%s reason=%s",
 						tostring(row.identity), tostring(err))
 				end
 				return

@@ -17,6 +17,7 @@ local loc = {
 	},
 	cwv_cycle_combat_style_hotkey = { en = "[verify-fix-coop] [Issue 620] Cycle Combat Style" },
 	cwv_cycle_combat_style_hotkey_tooltip = { en = "Cycles the wielded supported weapon's saved Combat Style. The style belongs to that exact weapon instance and changes only when no attack is active. Greatswords cycle Greatsword, Imperial Longsword, Bretonnian, and Kerillian; Greathammers cycle Kruber and Warrior Priest; Tuskgor Spear cycles Hunter and Infantry." },
+	cwv_cycle_combat_style_controller = { en = "Switch Combat Style" },
 
 	-- ============================================================
 	-- Tuskgor Javelin (BOMB SLOT) — single-use thrown spear grenade
