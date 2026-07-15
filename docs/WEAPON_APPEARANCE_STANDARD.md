@@ -358,6 +358,7 @@ that passes in-world but fails in preview is the #237 class.
 | #418 | Residency | 2,3 | ref-string / guard duplicated — rename → silent base mesh |
 | #419 | Units | 4 | illusion browser previews base mesh (path-3 swap not mirrored) |
 | #420 | Texture | all | WA not shared; Material.set_texture banned-primitive copies |
+| #617 | Texture | 4 | Old Musket custom unit spawned in Athanor/browser without its texture consumer |
 
 ---
 

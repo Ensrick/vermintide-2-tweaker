@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.417-dev"
+local MOD_VERSION = "0.1.418-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -5909,25 +5909,44 @@ _om._track_old_musket_unit = function(unit, perspective, mode)
 end
 
 _om._apply_old_musket_textures = function(unit)
-	if not unit or not Unit.alive(unit) then return end
-	local ok, num_meshes = pcall(Unit.num_meshes, unit)
-	if not ok or not num_meshes then return end
-	for i = 0, num_meshes - 1 do
-		local mok, mesh = pcall(Unit.mesh, unit, i)
-		if mok and mesh then
-			local nok, num_mats = pcall(Mesh.num_materials, mesh)
-			if nok and num_mats then
-				for j = 0, num_mats - 1 do
-					local matok, mat = pcall(Mesh.material, mesh, j)
-					if matok and mat then
-						pcall(Material.set_texture, mat, "texture_map_c0ba2942", "textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo")
-						pcall(Material.set_texture, mat, "texture_map_59cd86b9", "textures/cwv_es_musket_custom/cwv_es_musket_custom_normal")
-						pcall(Material.set_texture, mat, "texture_map_0205ba86", "textures/cwv_es_musket_custom/cwv_es_musket_custom_metallic")
-					end
-				end
-			end
+	if not unit or not Unit.alive(unit)
+			or type(Unit.set_texture_for_materials) ~= "function" then return false, 0 end
+	-- #617: use the same per-unit texture primitive as vanilla
+	-- GearUtils.apply_material_settings (gear_utils.lua:150). The former
+	-- Material.set_texture loop mutated the shared compiled material and made
+	-- preview order capable of leaking this paint to another rifle. Every render
+	-- consumer now calls this one unit-local helper instead.
+	local ok1 = pcall(Unit.set_texture_for_materials, unit,
+		"texture_map_c0ba2942", "textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo")
+	local ok2 = pcall(Unit.set_texture_for_materials, unit,
+		"texture_map_59cd86b9", "textures/cwv_es_musket_custom/cwv_es_musket_custom_normal")
+	local ok3 = pcall(Unit.set_texture_for_materials, unit,
+		"texture_map_0205ba86", "textures/cwv_es_musket_custom/cwv_es_musket_custom_metallic")
+	return ok1 and ok2 and ok3, 3
+end
+
+-- #617: LootItemUnitPreviewer powers both the ordinary illusion browser and
+-- CIM's Athanor craft preview. It is not a HeroPreviewer, so the inventory-
+-- mannequin texture consumer above never reaches it. Build a pure target list
+-- from the authored spawn recipe: only the actual custom Old Musket unit may be
+-- painted. A resource-safety fallback that substituted a vanilla handgun must
+-- remain vanilla rather than receiving custom-musket UV textures.
+_om._old_musket_preview_texture_targets = function(def, units, spawn_data)
+	local targets = {}
+	if not def or def.item_key ~= "cwv_es_musket_old"
+			or type(def.right_hand_unit) ~= "string"
+			or type(units) ~= "table" or type(spawn_data) ~= "table" then
+		return targets
+	end
+	local base_path = def.right_hand_unit
+	for i, unit in ipairs(units) do
+		local row = spawn_data[i]
+		local path = row and row.unit_name
+		if unit and (path == base_path or path == base_path .. "_3p") then
+			targets[#targets + 1] = unit
 		end
 	end
+	return targets
 end
 
 _om._old_musket_transform_components = function(perspective, mode)
@@ -13002,6 +13021,24 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 		end
 	end
 
+	-- #617: this shared previewer is CIM's Athanor craft-screen consumer as
+	-- well as the illusion browser. The custom .unit intentionally carries a
+	-- vanilla material shell, so its three authored textures must be rebound
+	-- after every spawn just as they are for owner equipment and HeroPreviewer.
+	-- The target planner rejects vanilla resource fallbacks before any write.
+	local musket_targets = _om._old_musket_preview_texture_targets(def, units, spawn_data)
+	local applied = 0
+	for _, unit in ipairs(musket_targets) do
+		if _is_unit(unit) then
+			local ok = _om._apply_old_musket_textures(unit)
+			if ok then applied = applied + 1 end
+		end
+	end
+	if #musket_targets > 0 then
+		pcall(printf, "[cwv:617] Old Musket preview textures applied: item=%s targets=%d applied=%d",
+			tostring(cwv_key or weapon_key), #musket_targets, applied)
+	end
+
 	return units
 end)
 
@@ -15480,6 +15517,35 @@ _rt_register("musket_old_force_registered", function()
     if not check("cwv_es_musket_old") then
         return "#409 regression: cwv_es_musket_old NOT registered in _transform_map (force_register gate broke)"
     end
+end)
+
+_rt_register("issue617_old_musket_preview_texture_consumer", function()
+	if type(_om._apply_old_musket_textures) ~= "function" then
+		return "Old Musket per-unit texture helper missing"
+	end
+	local plan = _om._old_musket_preview_texture_targets
+	if type(plan) ~= "function" then
+		return "Old Musket LootItemUnitPreviewer target planner missing"
+	end
+	local custom_3p, vanilla_fallback, custom_base = {}, {}, {}
+	local def = {
+		item_key = "cwv_es_musket_old",
+		right_hand_unit = "units/cwv_es_musket_custom/cwv_es_musket_custom",
+	}
+	local targets = plan(def,
+		{ custom_3p, vanilla_fallback, custom_base },
+		{
+			{ unit_name = def.right_hand_unit .. "_3p" },
+			{ unit_name = "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p" },
+			{ unit_name = def.right_hand_unit },
+		})
+	if #targets ~= 2 or targets[1] ~= custom_3p or targets[2] ~= custom_base then
+		return "preview target planner must paint both custom paths and reject vanilla fallback"
+	end
+	if #plan({ item_key = "es_handgun", right_hand_unit = def.right_hand_unit },
+			{ custom_3p }, { { unit_name = def.right_hand_unit .. "_3p" } }) ~= 0 then
+		return "preview target planner painted a non-Old-Musket item"
+	end
 end)
 
 _rt_register("preview_meshswap_guards", function()

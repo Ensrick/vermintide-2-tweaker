@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.418-dev - 2026-07-15 - #617 Old Musket Athanor textures [verify-fix]
+
+- Fixed the Old Musket appearing as an untextured custom mesh in CIM's Athanor craft preview. The log proves CIM queued and spawned `units/cwv_es_musket_custom/cwv_es_musket_custom_3p`, but CWV's shared `LootItemUnitPreviewer` consumer applied only its transform; the texture binding existed only on owner equipment and the inventory character preview.
+- Routed both Athanor and the ordinary illusion browser through the same Old Musket texture helper after spawn. A pure target planner paints only the authored custom unit and explicitly rejects the vanilla handgun used by the missing-resource fallback.
+- Replaced the helper's shared `Material.set_texture` writes with vanilla's per-unit `Unit.set_texture_for_materials` primitive (`gear_utils.lua:150`), preventing preview order from leaking Old Musket textures onto other rifles.
+- Added offline and `/cwv_regression_test` coverage for both custom unit spellings, vanilla-fallback exclusion, non-Old-Musket exclusion, shared preview-hook wiring, and the per-unit primitive.
+- Verification: confirm `[cwv:LOAD] v0.1.418-dev`, open CIM's Athanor, select Old Musket, and verify the spinning model shows its wood/metal textures immediately. Switch to another rifle and back; both models must retain their own textures. The log must show `[cwv:617] Old Musket preview textures applied` with `targets=1 applied=1`.
+
+**DoD:** Re-walked U-8 build hygiene, G-CUSTOM-ILLUSION preview rendering, and G-APPEARANCE texture ownership across Athanor and illusion-browser consumers. Owner equipment and inventory character preview retain their existing shared-helper coverage. In-game visual confirmation remains deferred to #617's `verify-fix` check.
+
 ## 0.1.417-dev - 2026-07-14 - #597 Greataxe Model 01 transform [verify-fix-coop]
 
 - Baked the final Kruber third-person transform recovered from the latest Hold-Pose tuning session into Greataxe Model 01: absolute scale `{0.5, 0.5, 0.5}`, offset `{-0.010, 0.153, -0.309}`, and Euler rotation `{-90, 180, -90}` degrees.
@@ -9,7 +19,6 @@
 - Verification: confirm `[cwv:LOAD] v0.1.417-dev`; equip Greataxe Model 01 on Kruber and inspect owner third person plus the inventory character preview, then have another player inspect the remote weapon. Confirm Models 02-05 retain their own native transforms.
 
 **DoD:** Re-walked U-4 scale/grip, U-7 forward references, U-8 build hygiene, G-CUSTOM-ILLUSION identity, and G-APPEARANCE shared render-surface coverage. U-9 owner/remote visual confirmation remains deferred to #597's `verify-fix-coop` in-game verification.
-
 ## 0.1.416-dev - 2026-07-14 - #604 Crowbill default model correction [verify-fix-coop]
 
 - Corrected the provisional model assignment after in-game review: Kruber and Saltzpyre's Imperial Crowbill Model 01 now uses Parelaxel's Medieval War Hammer, while Bardin's Dawi Crowbill Model 01 uses soidev's heavier War Hammer. The previous build assigned these two downloaded models to the opposite weapon families.

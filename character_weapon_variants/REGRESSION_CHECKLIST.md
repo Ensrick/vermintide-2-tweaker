@@ -694,6 +694,22 @@ Last updated: 2026-07-14.
 
 ---
 
+### issue617-old-musket-loot-textures — Shared previewer spawns custom mesh without its texture consumer
+
+| Field | Value |
+|-------|-------|
+| Symptom | Old Musket has the correct custom shape but appears white/untextured in CIM's Athanor craft preview. |
+| Root cause | CIM and the illusion browser use `LootItemUnitPreviewer`; CWV's hook applied the Old Musket transform there but never called its bespoke texture helper. Owner equipment and `HeroPreviewer` therefore worked while this independent render consumer did not. |
+| Mod(s) | character_weapon_variants, crafting_in_modded_dev (consumer only) |
+| Fix version(s) | CWV v0.1.418-dev |
+| Category | STATIC + MANUAL |
+| Repro | Open CIM's Athanor, select Old Musket, switch to another rifle, then return. |
+| Expected post-fix | The custom unit is painted after every preview spawn; a vanilla missing-resource fallback remains untouched. Texture writes use per-unit `Unit.set_texture_for_materials`, never shared `Material.set_texture`. |
+| Detection | Offline `test_cwv_old_musket_presentation.lua`; runtime `issue617_old_musket_preview_texture_consumer`; log `[cwv:617] ... targets=1 applied=1`; visual Athanor check. |
+
+
+---
+
 ### feedback-vmf-hook-safe-no-chain — Two hook_safe on same Class.method silently drop one
 
 | Field | Value |
