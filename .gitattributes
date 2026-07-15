@@ -34,6 +34,7 @@ LICENSE        text eol=lf
 *.jpeg       binary
 *.gif        binary
 *.fbx        binary
+*.bones      binary
 *.exe        binary
 *.dll        binary
 *.zip        binary
