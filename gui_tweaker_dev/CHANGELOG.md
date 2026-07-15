@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.274-dev (2026-07-15) -- #619 Foot Knight secondary melee compatibility [verify-fix]
+
+- Replaced GUT's hardcoded Slayer/Grail Knight saved-loadout exception with the live career slot-capability map used by vanilla backend validation.
+- Foot Knight melee weapons saved in the secondary slot are accepted only while Career Tweaker has added `melee` to his live `slot_ranged` capability; disabling the toggle rejects later restores without restarting or erasing the saved row.
+- WT and CWV weapons follow their live `slot_type` and `can_wield` data without item-key lists, identity clones, or load-order coupling. Added offline and runtime coverage for hot enable/disable, native dual-melee careers, invalid careers, and absent capabilities.
+
+### Co-op verify
+
+With #619's Career Tweaker toggle enabled, equip a melee weapon in both Foot Knight slots, save and restore that GUT loadout, then enter a mission with a second player. Both weapons must remain equipped and visible. Disable the toggle, restore the same row, and confirm GUT refuses the secondary melee rather than equipping it on a career that no longer advertises the capability.
+
 ## 0.2.273-dev (2026-07-14) -- #605 Character Dialogue controls [verify-fix]
 
 - Added lazy dropdown providers so Character Dialogue's 34,327-line source catalogue allocates only when the Dialogue tab is opened.

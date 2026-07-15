@@ -1,5 +1,13 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Foot Knight secondary melee compatibility (#619)
+
+- [ ] With Career Tweaker's secondary-melee toggle enabled, GUT restores an `es_knight` saved loadout containing melee weapons in both `slot_melee` and `slot_ranged`.
+- [ ] Disabling the Career Tweaker toggle immediately causes a later restore of that row to reject the secondary melee without deleting or rewriting the saved identity.
+- [ ] Slayer and Grail Knight secondary-melee loadouts still restore; careers whose live slot map lacks the capability still reject melee in `slot_ranged`.
+- [ ] Vanilla, WT, and CWV melee items use the same live `slot_type`/`can_wield` decision with no key allowlist or cloned backend identity.
+- [ ] `/gut_regression_test` passes `issue619_saved_loadout_live_slot_capability`; offline `test_gut_loadout_slot_policy.lua` passes hot enable/disable and negative-path coverage.
+
 ## Career-themed HUD holders (#442)
 
 - [ ] Startup emits exactly two `[gut:442]` lines: 20 careers, two dedicated holders, eighteen fallbacks, zero malformed entries.

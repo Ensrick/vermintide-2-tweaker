@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.273-dev"
+local MOD_VERSION = "0.2.274-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -527,26 +527,65 @@ local function _career_display_name(career)
     return (ok and name) or key
 end
 
--- Validate item slot-type compatibility before equipping. Mirrors the
--- sanctioned mod's is_equipment_valid (lines 622-643) including the Slayer /
--- Questing Knight melee-in-ranged exemption. Returns (true) or (false, reason).
+-- Validate item slot-type compatibility before equipping. Vanilla's backend
+-- reads the live CareerSettings item_slot_types_by_slot_name map for this exact
+-- decision (playfab_mirror_base.lua:1662-1713, 3387-3402). Reading it on every
+-- restore lets Career Tweaker add/remove Foot Knight secondary melee at runtime
+-- without a GUT mod-identity dependency, cached clone, or hardcoded career list.
+local _gut_loadout_slot_policy = mod:dofile(
+    "scripts/mods/gui_tweaker_dev/_gut_loadout_slot_policy"
+)
+
 local function _validate_item_for_slot(item, slot_name, career_name)
-    if not (item and item.data) then return false, "item has no data" end
-    local data = item.data
-    if data.can_wield and not table.contains(data.can_wield, career_name) then
-        return false, string.format("career %s cannot wield %s", career_name, tostring(data.display_name or "?"))
+    if type(_gut_loadout_slot_policy) ~= "table" or
+       type(_gut_loadout_slot_policy.validate) ~= "function" then
+        return false, "live career slot capability policy unavailable"
     end
-    local slot = InventorySettings and InventorySettings.slots_by_name and InventorySettings.slots_by_name[slot_name]
-    if not slot then return false, "unknown slot " .. tostring(slot_name) end
-    local actual = data.slot_type
-    local expected = slot.type
-    if actual == expected then return true end
-    if expected == ItemType.RANGED and actual == ItemType.MELEE and
-       (career_name == "dr_slayer" or career_name == "es_questingknight") then
-        return true
-    end
-    return false, string.format("slot_type mismatch (item=%s, slot=%s)", tostring(actual), tostring(expected))
+
+    return _gut_loadout_slot_policy.validate(
+        item and item.data,
+        slot_name,
+        career_name,
+        CareerSettings
+    )
 end
+
+if type(printf) == "function" then
+    printf("[gut:619] saved-loadout validator=live_career_slot_capability")
+end
+
+_rt_register("issue619_saved_loadout_live_slot_capability", function()
+    if type(_gut_loadout_slot_policy) ~= "table" or
+       type(_gut_loadout_slot_policy.validate) ~= "function" then
+        return "loadout slot capability policy unavailable"
+    end
+
+    local career_settings = {
+        es_knight = {
+            item_slot_types_by_slot_name = {
+                slot_melee = { "melee" },
+                slot_ranged = { "ranged" },
+            },
+        },
+    }
+    local item_data = { slot_type = "melee", can_wield = { "es_knight" } }
+    local ok = _gut_loadout_slot_policy.validate(
+        item_data, "slot_ranged", "es_knight", career_settings
+    )
+    if ok then return "Foot Knight melee accepted without live slot capability" end
+
+    table.insert(career_settings.es_knight.item_slot_types_by_slot_name.slot_ranged, 1, "melee")
+    ok = _gut_loadout_slot_policy.validate(
+        item_data, "slot_ranged", "es_knight", career_settings
+    )
+    if not ok then return "Foot Knight melee rejected after live slot capability insertion" end
+
+    table.remove(career_settings.es_knight.item_slot_types_by_slot_name.slot_ranged, 1)
+    ok = _gut_loadout_slot_policy.validate(
+        item_data, "slot_ranged", "es_knight", career_settings
+    )
+    if ok then return "Foot Knight melee remained accepted after live slot capability removal" end
+end)
 
 -- Snapshot the current loadout for `career_name`. Reads gear from
 -- slots_by_ui_slot_index, cosmetics from slots_by_cosmetic_index, and
