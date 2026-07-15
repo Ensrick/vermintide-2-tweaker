@@ -1322,6 +1322,19 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth, display
         -- (v0.2.69-dev) REAL dropdown: a collapsed row (label + selected value + single
         -- down arrow) that opens a popup option list on click. Was a slider-arrow carousel.
         local options = _nf(w, "options")
+        -- #605: large source-generated catalogues can be supplied lazily. The
+        -- provider runs only when its tab is built, avoiding 34k dialogue option
+        -- records at launcher/keep boot when the user never opens Dialogue.
+        local options_provider = _nf(w, "options_provider")
+        if type(options) ~= "table" and type(options_provider) == "function" then
+            local ok_options, provided = pcall(options_provider)
+            if ok_options and type(provided) == "table" then
+                options = provided
+            else
+                mod:warning("[mt] options_provider failed for %s.%s: %s",
+                    tostring(category.mod_id), tostring(setting_id), tostring(provided))
+            end
+        end
         local ok, r = pcall(defs.create_dropdown, label, base_offset, depth)
         if ok and r and type(options) == "table" and #options > 0 then
             row = r
@@ -1339,6 +1352,18 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth, display
             row.content.active = false        -- popup closed at build time
         elseif ok and r then
             row = r; row._readonly = true; row.content.value_text = "?"
+        else err = r end
+    elseif wtype == "action" then
+        -- #605: immediate local action row for media controls and other operations
+        -- that are not persistent settings. Uses the resident dropdown field-box
+        -- chrome, but never opens a popup or enters the Apply transaction.
+        local ok, r = pcall(defs.create_dropdown, label, base_offset, depth,
+            { no_arrow = true, field_box = true })
+        if ok and r then
+            row = r
+            row._is_action = true
+            row._action = _nf(w, "on_activate")
+            row.content.value_text = tostring(_nf(w, "button_text") or "RUN")
         else err = r end
     elseif wtype == "keybind" then
         -- (#123) Interactive keybind row (dropdown row shape: label + clickable value).
@@ -2310,6 +2335,13 @@ function ModTweakerView:on_exit()
     -- model), so discard = drop the buffer — no native apply_changes(original_*) re-apply
     -- is needed (that exists only for native's live video-preview). Unapplied edits vanish.
     self._pending = {}
+    -- #605: preview playback belongs to the Dialogue view session. Stop it on
+    -- every close path without touching natural in-game dialogue.
+    pcall(function()
+        local cd = get_mod("character_dialogue")
+        local api = cd and cd.character_dialogue_api
+        if api and api.stop then api.stop() end
+    end)
     pcall(function()
         if self._cursor_pushed then
             ShowCursorStack.hide("ModTweakerView")
@@ -3285,6 +3317,22 @@ function ModTweakerView:_handle_input(input_service)
                     self:_open_dropdown_popup(row)
                     mod:debug("[mt:dump] input: dropdown '%s' opened", tostring(row._setting_id))
                     return
+                end
+            elseif row._wtype == "action" then
+                local clicked = c.hotspot and (c.hotspot.on_release or c.hotspot.on_left_release)
+                if clicked and not row._action_armed then
+                    row._action_armed = true
+                    _play_click()
+                    if type(row._action) == "function" then
+                        local ok_action, action_err = pcall(row._action)
+                        if not ok_action then
+                            mod:warning("[mt] action failed for %s.%s: %s",
+                                tostring(row._mod_id), tostring(row._setting_id), tostring(action_err))
+                        end
+                    end
+                    return
+                elseif not clicked then
+                    row._action_armed = false
                 end
             elseif row._wtype == "keybind" then
                 -- (#123) Left-click -> capture; right-click -> clear (like native options);

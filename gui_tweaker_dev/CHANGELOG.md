@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.273-dev (2026-07-14) -- #605 Character Dialogue controls [verify-fix]
+
+- Added lazy dropdown providers so Character Dialogue's 34,327-line source catalogue allocates only when the Dialogue tab is opened.
+- Added native-chrome action rows for Play, Pause/Resume, Stop, Enable, Disable, and Default without routing media operations through the settings transaction.
+- Mod Tweaker now stops local dialogue preview on every view-close path while leaving natural dialogue untouched.
+
+### Solo verify
+
+Open Mod Tweaker > Dialogue, type into the line dropdown to filter it, select a resident line and Apply, then test Play, Pause/Resume, and Stop. Enable/Disable/Default must persist and closing Mod Tweaker must stop preview audio.
+
 ## 0.2.272-dev (2026-07-14) -- #528 CKC Options checkbox renderer crash [verify-fix]
 
 - Fixed the verification crash while scrolling Options > Gameplay to Crosshair Kill Confirmation. The borrowed checkbox factory wrote raw `checkbox_checked` / `checkbox_unchecked` materials, but the active Options list renderer does not load them (`ui_passes.lua:134`).

@@ -33,6 +33,7 @@ authoritative; this table is the human-readable mirror. Cross-checked against th
 | `career_tweaker` | 3716286199 | Tweaker: Careers |
 | `enemy_tweaker` | 3716780252 | Tweaker: Enemies |
 | `character_weapon_variants` | 3716869446 | Character Weapon Variants |
+| `character_dialogue` | 3765055148 | Character Dialogue |
 | `dynamic_cosmetic_portraits` | 3721036701 | Dynamic Cosmetic Portraits |
 | `crafting_in_modded` | 3721038774 | Crafting in Modded (stable) |
 | `event_tweaker` | 3721290755 | Tweaker: Events |

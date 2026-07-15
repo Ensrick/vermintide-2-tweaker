@@ -1,0 +1,11 @@
+mod = [
+    "character_dialogue"
+]
+
+package = [
+    "resource_packages/character_dialogue/character_dialogue"
+]
+
+lua = [
+    "scripts/mods/character_dialogue/*"
+]

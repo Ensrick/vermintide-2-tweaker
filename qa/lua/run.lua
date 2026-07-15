@@ -188,6 +188,7 @@ local suites = {
     "test_gut_localization_orphan_cleanup",
     "test_gut_career_hud_holder",
     "test_gut_cosmetics_mission_mount",
+    "test_character_dialogue",
 }
 
 for _, suite in ipairs(suites) do
