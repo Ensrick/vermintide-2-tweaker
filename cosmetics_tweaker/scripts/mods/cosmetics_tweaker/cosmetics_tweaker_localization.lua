@@ -2,6 +2,18 @@ local mod = get_mod("cosmetics_tweaker")
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 
 local loc = {
+    cos_encarmine_hat_enabled = {
+        en = "Encarmine Helmet",
+    },
+    cos_encarmine_hat_enabled_tooltip = {
+        en = "Adds the custom Encarmine Helmet recolor for Foot Knight. Disabling this keeps the stable item identity registered for peer safety but falls back to the vanilla Laurel Helm appearance.",
+    },
+    cos_encarmine_hat_name = {
+        en = "Encarmine Helmet",
+    },
+    cos_encarmine_hat_description = {
+        en = "A red-and-gold Foot Knight helm with a black plume, created for Tweaker: Cosmetics.",
+    },
     mod_description = {
         en = "Unlock hats and weapon skins per career on every hero, plus size and grip tweaks for individual weapons.",
     },

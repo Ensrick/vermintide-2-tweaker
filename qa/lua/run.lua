@@ -121,6 +121,7 @@ local suites = {
     "test_dcp_portrait_materials",
     "test_dcp_player_scope_probe",
     "test_cos_score_identity",
+    "test_cos_custom_hats",
     "test_gut_native_loadout_policy",
     "test_gut_wt_loadout_trace",
     "test_gt_dummy_collision_policy",

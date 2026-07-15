@@ -1,5 +1,15 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.110-dev - 2026-07-14 - #612 Encarmine Helmet [verify-fix-coop]
+
+- Added the Encarmine Helmet as an independent Foot Knight cosmetic: a red-and-gold derivative of the hidden vanilla Laurel Helm mesh, with a black plume and authored icon. Its two mesh slots reuse the vanilla hat material contract and receive separate per-unit armor/cloth textures, avoiding global material mutation. It has no DLC ownership requirement.
+- Registered one stable item/network identity at startup. The enable toggle changes availability and rendering without mutating lookup order; disabled or non-Cosmetics peers receive the vanilla Laurel Helm fallback.
+- Reused the bounded Cosmetics appearance channel for remote husks, hot joins, lobby/hero previews, and score presentation. Added offline asset/identity coverage plus runtime check `issue612_encarmine_hat_contract`.
+
+### Co-op verification
+
+Equip the helmet on Foot Knight and inspect inventory, hero preview, lobby, mission third person, hot join, and score screen. Both Cosmetics peers must see the red/gold helmet with black plume. A peer without Cosmetics must see the safe vanilla Laurel Helm and must not crash. Disable the option and confirm the item becomes unavailable/falls back without lookup errors. Run `/cos_regression_test`; `issue612_encarmine_hat_contract` must pass.
+
 ## 0.9.109-dev - 2026-07-14 - #609 safe network-teardown lifecycle [verify-fix]
 
 - Routed every Cosmetics local-player lookup, including the per-frame deferred peer-purge path, through vanilla's `PlayerManager.local_player_safe()`. Title-screen and disconnect teardown now yield no player instead of calling `Network.peer_id()` after the backend is gone; live in-game behavior is unchanged.

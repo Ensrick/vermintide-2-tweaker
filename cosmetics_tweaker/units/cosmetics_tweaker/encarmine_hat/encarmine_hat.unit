@@ -1,0 +1,43 @@
+data = {
+	mat_slots = {
+		slot1 = "encarmine_armored"
+		slot2 = "encarmine_cloth"
+	}
+	mat_to_use = "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_07"
+	color_slot = "texture_map_c0ba2942"
+	norm_slot = "texture_map_59cd86b9"
+	MAB_slot = "texture_map_b788717c"
+	colors = {
+		slot1 = "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_diffuse"
+		slot2 = "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_diffuse"
+	}
+	normals = {
+		slot1 = "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_normal"
+		slot2 = "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_normal"
+	}
+	MABs = {
+		slot1 = "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_combined"
+		slot2 = "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_combined"
+	}
+}
+
+renderables = {
+	encarmine_armored = {
+		always_keep = false
+		culling = "bounding_volume"
+		generate_uv_unwrap = false
+		occluder = false
+		shadow_caster = true
+		surface_queries = false
+		viewport_visible = true
+	}
+	encarmine_cloth = {
+		always_keep = false
+		culling = "bounding_volume"
+		generate_uv_unwrap = false
+		occluder = false
+		shadow_caster = true
+		surface_queries = false
+		viewport_visible = true
+	}
+}

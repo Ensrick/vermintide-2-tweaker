@@ -12,8 +12,15 @@ lua = [
 
 material = [
 	"materials/ui/cos_glow_badge"
+	"materials/ui/icon_knight_hat_0006_encarmine"
 ]
 
 texture = [
 	"gui/1080p/single_textures/cosmetics_tweaker/cos_glow_badge"
+	"gui/1080p/single_textures/cosmetics_tweaker/icon_knight_hat_0006_encarmine"
+	"textures/cosmetics_tweaker/encarmine_hat/*"
+]
+
+unit = [
+	"units/cosmetics_tweaker/encarmine_hat/encarmine_hat"
 ]

@@ -7,6 +7,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-07-14.
 
 ---
+## Authored Encarmine Helmet (#612)
+
+| Field | Value |
+|---|---|
+| Identity | `cos_encarmine_hat` is registered exactly once regardless of settings; toggle changes never append or reorder `NetworkLookup.item_names`. |
+| Ownership | Foot Knight only, no DLC requirement; disabling hides the item and resolves equipped state to the vanilla Laurel Helm. |
+| Assets | Derivative unit has separate armor/cloth mesh slots, custom diffuse maps, untouched vanilla normal/combined maps, and an authored inventory icon; texture writes remain per-unit. |
+| Surfaces | Inventory grid, hero/lobby preview, local third person, remote husk, hot join, transitions, and score screen converge on one appearance. |
+| Peer safety | Cosmetics peers receive the bounded custom appearance token; peers without Cosmetics receive only `knight_hat_0006`. |
+| Detection | Offline `test_cos_custom_hats.lua`; `/cos_regression_test` passes `issue612_encarmine_hat_contract`; two-player visual/fallback verification. |
+
+---
 ## Network teardown player lookup (#609)
 
 | Field | Value |

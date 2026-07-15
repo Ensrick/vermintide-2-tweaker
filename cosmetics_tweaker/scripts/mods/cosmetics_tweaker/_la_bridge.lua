@@ -38,6 +38,7 @@ M.kruber_shield_item_types = SHIELD_PARITY.KRUBER_SHIELD_ITEM_TYPES
 M.kruber_shield_families = SHIELD_PARITY.KRUBER_SHIELD_FAMILIES
 
 M.registered            = false
+M.la_registered         = false -- custom authored cosmetics may activate the shared registry first
 M.backend_to_armoury    = {}  -- our backend_id -> LA Armoury_key
 M.backend_to_vanilla    = {}  -- our backend_id -> vanilla skin key (LA expects this as `skin` arg)
 M.unit_path_to_clones   = {}  -- vanilla unit path -> list of our backend_ids targeting it
@@ -601,7 +602,7 @@ function M.dump_offhand_resolution()
 end
 
 function M.register_all()
-    if M.registered then return end
+    if M.la_registered then return end
     if not la() or not mil() then
         mod:info("[LA bridge] LA or MIL not present; skipping registration")
         return
@@ -688,6 +689,7 @@ function M.register_all()
         end
     end
 
+    M.la_registered = true
     M.registered = true
     mod:info("[LA bridge] registered %d items, skipped %d (no vanilla unit match)", registered, #skipped)
     if #skipped > 0 then mod:info("[LA bridge] skipped: %s", table.concat(skipped, ", ")) end
@@ -862,6 +864,10 @@ function M.queue_unit_direct(world, unit, backend_id)
     local armoury_key = M.backend_to_armoury[backend_id]
     local vanilla_key = M.backend_to_vanilla[backend_id]
     if not armoury_key then return false end
+    -- Cosmetics-authored units carry their final materials in the compiled
+    -- unit. They participate in the shared appearance/fallback registry but
+    -- must never be handed to Loremaster's external painter.
+    if M.custom_variants and M.custom_variants[armoury_key] then return true end
     return apply_direct(world, unit, armoury_key, vanilla_key, backend_id)
 end
 

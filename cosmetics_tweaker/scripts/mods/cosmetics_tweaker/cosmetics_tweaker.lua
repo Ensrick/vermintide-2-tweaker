@@ -45,6 +45,7 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_moreitemslibrary_embedded")
 
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
+local CUSTOM_HATS = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_custom_hats")
 local CWV_FAMILY_CONTRACT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_family_contract")
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
@@ -73,7 +74,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.109-dev"
+local MOD_VERSION = "0.9.110-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -597,6 +598,9 @@ mod.on_game_state_changed = function(status, state_name)
     -- Glow state restores on equipment spawn; editor opening is manual.
 end
 mod.on_setting_changed = function(setting_id)
+    if setting_id == "cos_encarmine_hat_enabled" and CUSTOM_HATS then
+        CUSTOM_HATS.sync_toggle()
+    end
     if setting_id and setting_id:sub(1, 11) == "cos_unlock_" then
         mod._cos.apply_cosmetic_unlocks()
     end
@@ -4782,7 +4786,9 @@ mod:hook("HeroPreviewer", "equip_item", function(func, self, item_name, slot, ba
         local entry = peer_slots and peer_slots.slot_hat
         if entry and entry.kind == "hat" and entry.armoury_key then
             local la = get_mod("Loremasters-Armoury")
-            local variant = la and la.SKIN_LIST and la.SKIN_LIST[entry.armoury_key]
+            local variant = CUSTOM_HATS and CUSTOM_HATS.resolve_variant
+                and CUSTOM_HATS.resolve_variant(entry.armoury_key)
+                or (la and la.SKIN_LIST and la.SKIN_LIST[entry.armoury_key])
             if variant then
                 local la_unit = variant.new_units and variant.new_units[1]
                 if la_unit then
@@ -6341,6 +6347,10 @@ mod._send_offhand_mesh = function(unit, slot_name, hand_field, unit_path)
 end
 
 local function _resolve_la_variant(armoury_key)
+    if CUSTOM_HATS and CUSTOM_HATS.resolve_variant then
+        local custom = CUSTOM_HATS.resolve_variant(armoury_key)
+        if custom then return custom, nil end
+    end
     local la = get_mod("Loremasters-Armoury")
     if not la or type(la.SKIN_LIST) ~= "table" then return nil, nil end
     return la.SKIN_LIST[armoury_key], la
@@ -8320,7 +8330,9 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
         return func(self, slot_name, item_data)
     end
     local la = get_mod("Loremasters-Armoury")
-    local variant = la and la.SKIN_LIST and la.SKIN_LIST[cached.armoury_key]
+    local variant = CUSTOM_HATS and CUSTOM_HATS.resolve_variant
+        and CUSTOM_HATS.resolve_variant(cached.armoury_key)
+        or (la and la.SKIN_LIST and la.SKIN_LIST[cached.armoury_key])
     local la_unit = variant and variant.new_units and variant.new_units[1]
     if not la_unit then
         return func(self, slot_name, item_data)
@@ -8936,6 +8948,9 @@ mod.update = function(dt)
     end
 
     if not _la_bridge_init_done then
+        if CUSTOM_HATS and not CUSTOM_HATS.registered and ItemMasterList then
+            CUSTOM_HATS.register_all(LA_BRIDGE)
+        end
         local has_la  = get_mod("Loremasters-Armoury") ~= nil
         local has_mil = get_mod("MoreItemsLibrary") ~= nil
         if not _la_bridge_missing_dep_logged
@@ -10263,6 +10278,27 @@ _rt_register("cos_rpc_schema_present", function()
     end
     if COS_RPC_SCHEMA < 1 then
         return "COS_RPC_SCHEMA < 1"
+    end
+end)
+
+_rt_register("issue612_encarmine_hat_contract", function()
+    if not CUSTOM_HATS.registered then
+        CUSTOM_HATS.register_all(LA_BRIDGE)
+    end
+    local item = ItemMasterList and rawget(ItemMasterList, CUSTOM_HATS.ITEM_KEY)
+    if not item then return "Encarmine ItemMasterList entry missing" end
+    if item.inventory_icon ~= "icon_knight_hat_0006_encarmine" then
+        return "Encarmine icon contract drifted"
+    end
+    if item.required_dlc ~= nil or item.template ~= "es_hats_no_ear_moustache" then
+        return "Encarmine ownership or attachment contract drifted"
+    end
+    if LA_BRIDGE.backend_to_vanilla[CUSTOM_HATS.ITEM_KEY] ~= CUSTOM_HATS.BASE_KEY then
+        return "Encarmine vanilla wire fallback missing"
+    end
+    if Application and Application.can_get
+        and not Application.can_get("unit", CUSTOM_HATS.CUSTOM_UNIT) then
+        return "Encarmine compiled unit is not resident"
     end
 end)
 

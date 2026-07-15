@@ -13,8 +13,9 @@ behavior, and links out. Where a seam is byte-shared with `cwv`, this doc reuses
 2026-07-11 against the decompile and the mod source.
 
 `cosmetics_tweaker` is a wide, not deep, engine-contact mod: it recolours and
-re-meshes hats, weapon skins, shields and glow **without** minting new item
-templates (that is `cwv`'s job). So it hooks the same display and wire seams `cwv`
+re-meshes hats, weapon skins, shields and glow. The authored Encarmine Helmet is
+the narrow exception that mints a cosmetic item while cloning a vanilla hat
+attachment contract. So it hooks the same display and wire seams `cwv`
 does, plus five subsystems `cwv` never touches: the Loremaster's Armoury (LA)
 clone-backend bridge, the MaterialSettingsTemplates glow pipeline, the embedded
 Material-Hijack texture/package hijack, the `CosmeticUtils` GameSession cosmetic

@@ -117,6 +117,12 @@ local widgets = {
         setting_id  = "appearance_group",
         type        = "group",
         sub_widgets = {
+            {
+                setting_id    = "cos_encarmine_hat_enabled",
+                type          = "checkbox",
+                default_value = true,
+                tooltip       = "cos_encarmine_hat_enabled_tooltip",
+            },
             -- v0.9.47-dev: collapsed the redundant "Weapon Model Tweaks" wrapper;
             -- the lone toggles sit directly under this group now.
             {
@@ -161,9 +167,13 @@ return {
     options = { widgets = widgets },
 
     custom_gui_textures = {
-        textures = { "cos_glow_badge" },
+        textures = { "cos_glow_badge", "icon_knight_hat_0006_encarmine" },
         ui_renderer_injections = {
             { "hero_view", "materials/ui/cos_glow_badge" },
+            { "ingame_ui", "materials/ui/icon_knight_hat_0006_encarmine" },
+            { "hero_view", "materials/ui/icon_knight_hat_0006_encarmine" },
+            { "loading_view", "materials/ui/icon_knight_hat_0006_encarmine" },
+            { "popup_manager", "materials/ui/icon_knight_hat_0006_encarmine" },
         },
     },
 }
