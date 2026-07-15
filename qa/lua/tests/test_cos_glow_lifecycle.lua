@@ -82,7 +82,10 @@ return function(H, repo_root)
         local data = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_data.lua")
         H.truthy(package_file:find('"materials/ui/cos_glow_badge"', 1, true))
         H.truthy(package_file:find('"gui/1080p/single_textures/cosmetics_tweaker/cos_glow_badge"', 1, true))
-        H.truthy(data:find('textures = { "cos_glow_badge",', 1, true))
+        -- The texture list may be formatted on one line or expanded as other
+        -- authored Cosmetics icons are added.  Assert membership instead of
+        -- coupling this lifecycle test to whitespace/list layout.
+        H.truthy(data:find('"cos_glow_badge"', 1, true))
         H.truthy(data:find('{ "hero_view", "materials/ui/cos_glow_badge" }', 1, true))
     end)
 end
