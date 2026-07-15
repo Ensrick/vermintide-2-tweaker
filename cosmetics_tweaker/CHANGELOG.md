@@ -1,5 +1,32 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.117-dev - 2026-07-15 - #612 Encarmine live-material correction [verify-fix]
+
+### Fixed
+
+- Replaced v0.9.116's ambiguous fractional-alpha plus compiler-cut combination with an explicit cutout contract: alpha 0-15 remains transparent and every retained feather texel is authored at alpha 255. This preserves the measured feather silhouette while preventing the 0.5 compiler threshold from erasing it in the live character renderer.
+- Reduced the v0.9.115 armor roughness response by a bounded 10% (paint 184 -> 166; metallic detail 122 -> 110). This restores a modest highlight closer to the Knights Encarmine outfit without returning to v0.9.114's mirror-like all-metal response.
+- Added deterministic asset scripts and offline histogram/hash gates for binary plume alpha and the two-value armor roughness map. The rig, double-sided geometry, native controller, FadeSystem enrollment, and peer fallback contracts are unchanged.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.117-dev`, equip **Encarmine Helmet** on Foot Knight, and inspect both plume sides plus the helmet beside the Knights Encarmine armor in the inventory mannequin and live third person. Expected: the feather is visible as a clean dark-charcoal cutout with no rectangular film, and the helmet has a subtle metal highlight close to the outfit rather than reading flat/matte or mirror-like. Run `/cos_regression_test`; `issue612_encarmine_hat_contract` must pass.
+
+## 0.9.116-dev - 2026-07-15 - #612 Encarmine plume cutout correction [verify-fix-coop]
+
+### Changed
+
+- Removed the <=15/255 alpha haze left across the recolored plume and enabled the texture compiler's native 0.5 cut-alpha path. The authored anti-aliased feather silhouette remains; the translucent rectangular film does not.
+- Raised plume RGB by a measured 4x. Opaque median luminance moves from 22/255 to 88/255, keeping a visible dark-charcoal feather and its strand detail under VT2 character lighting instead of rendering nearly black.
+- Re-exported the Laurel high-detail helmet and plume as one skinned FBX, preserving all 13 Laurel bones and six weighted dynamic feather joints. A same-name source `.bones` resource gives the compiled custom unit a real animation skeleton.
+- Reuses the already-resident compiled Laurel controller at each bounded spawn surface. This preserves the original feather constraints/secondary motion without bundling or recreating Fatshark's unavailable state-machine source.
+- Registers newly linked Encarmine attachments once with `FadeSystem.new_linked_units`, so camera intersection fades the custom helmet with its player instead of leaving an opaque hat over a faded body.
+- Retained the verified self-contained armor/cloth material response from v0.9.115 and extended offline/runtime regression coverage to pin cut alpha, repaired texture and rig hashes, compiled bones, controller installation, and fade registration.
+
+### Co-op verification
+
+Confirm `[cosmetics:LOAD] v0.9.116-dev` on both Cosmetics peers. Equip **Encarmine Helmet** on Foot Knight and inspect the plume in inventory, keep/mission third person, hot join, and score presentation. Expected: a visible dark-charcoal feather silhouette with no translucent rectangle or black tape-like strip, visible detail on both sides, Laurel-like secondary motion while moving, and helmet fade matching the character when the third-person camera intersects him. The armor should retain its restrained Encarmine metal response. A peer without Cosmetics must still see Laurel. Run `/cos_regression_test`; `issue612_encarmine_hat_contract` must pass.
+
 ## 0.9.115-dev - 2026-07-15 - #612 Encarmine plume and material correction [verify-fix-coop]
 
 ### Fixed

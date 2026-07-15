@@ -176,6 +176,7 @@ return function(H, repo_root)
     H.test("Encarmine package assets and icon declarations exist", function()
         local files = {
             "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_hat.fbx",
+            "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_hat.bones",
             "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_hat.unit",
             "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_hat.package",
             "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_armored.material",
@@ -195,9 +196,16 @@ return function(H, repo_root)
         local material_source = material_file:read("*a")
         material_file:close()
         H.truthy(material_source:find("use_opacity_map = { type = \"scalar\" value = 1 }", 1, true))
+        H.truthy(material_source:find("encarmine_cloth_diffuse", 1, true))
+
+        local texture_file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_diffuse.texture", "rb"))
+        local texture_source = texture_file:read("*a")
+        texture_file:close()
+        H.truthy(texture_source:find("enable_cut_alpha_threshold = true", 1, true))
 
         local helper_file = assert(io.open(repo_root
-            .. "/../_vt2_item_icons_extract/cosmetic_projects/Encarmine/tools/double_side_plume.py", "rb"))
+            .. "/cosmetics_tweaker/tools/encarmine_asset_pipeline/double_side_plume.py", "rb"))
         local helper_source = helper_file:read("*a")
         helper_file:close()
         H.truthy(helper_source:find("bmesh.ops.duplicate", 1, true))
@@ -213,6 +221,10 @@ return function(H, repo_root)
         H.truthy(source:find('spawn_unit%(Application, "live%-attachment"%)'))
         H.truthy(source:find('spawn_unit%(Application, "remote%-husk"%)'))
         H.truthy(source:find('spawn_unit%(Application, "appearance%-replay"%)'))
+        H.truthy(source:find('install_native_plume_controller%(spawned_hat, "remote%-husk"%)'))
+        H.truthy(source:find('register_fade_link%(self%._unit, spawned_hat, "remote%-husk"%)'))
+        H.truthy(source:find('install_native_plume_controller%(unit, "hero%-preview"%)'))
+        H.truthy(source:find('register_fade_link%(self%._unit, hat_unit, "local%-attachment"%)'))
         H.truthy(source:find("PackageManager%-facing identity"))
     end)
 
@@ -221,7 +233,18 @@ return function(H, repo_root)
             H.equal(hats.PLUME_SOURCE_FACES, 372)
             H.equal(hats.PLUME_RENDER_FACES, 744)
             H.truthy(hats.ALPHA_AWARE_CLOTH)
-            H.equal(hats.MATERIAL_RESPONSE_REVISION, 2)
+            H.equal(hats.MATERIAL_RESPONSE_REVISION, 4)
+            H.equal(hats.PLUME_ALPHA_HAZE_MAX, 15)
+            H.equal(hats.PLUME_RGB_SCALE, 4)
+            H.equal(hats.PLUME_RETAINED_ALPHA, 255)
+            H.equal(hats.ARMOR_ROUGHNESS_SCALE, 0.90)
+            H.truthy(hats.SELF_CONTAINED_HELMET_MATERIALS)
+            H.equal(hats.PLUME_RIG_BONES, 13)
+            H.equal(hats.PLUME_DYNAMIC_BONES, 6)
+            H.equal(hats.NATIVE_PLUME_CONTROLLER,
+                "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_07")
+            H.truthy(hats.RUNTIME_CONTROLLER_INSTALL)
+            H.truthy(hats.FADE_LINK_REGISTRATION)
         end)
     end)
 end

@@ -33,12 +33,24 @@ M.SPAWN_ONLY_RENDERER = true
 -- #612 visual contract. The authored plume is an open alpha-cut surface: its
 -- 372 source faces are exported with one reversed counterpart each so the
 -- standard backface-culling path renders it from either side. The cloth shader
--- consumes diffuse alpha; response revision 2 replaces the mistakenly decoded
--- zero-roughness / near-solid-metal maps from v0.9.114.
+-- consumes diffuse alpha; response revision 3 retains a fully self-contained
+-- standard material graph because the SDK compiler does not ship the vanilla
+-- Laurel parent-material sources. The diffuse compiler removes only the <=15
+-- alpha haze before applying the native 0.5 cut threshold.
 M.PLUME_SOURCE_FACES = 372
 M.PLUME_RENDER_FACES = 744
 M.ALPHA_AWARE_CLOTH = true
-M.MATERIAL_RESPONSE_REVISION = 2
+M.MATERIAL_RESPONSE_REVISION = 4
+M.PLUME_ALPHA_HAZE_MAX = 15
+M.PLUME_RGB_SCALE = 4
+M.PLUME_RETAINED_ALPHA = 255
+M.ARMOR_ROUGHNESS_SCALE = 0.90
+M.SELF_CONTAINED_HELMET_MATERIALS = true
+M.PLUME_RIG_BONES = 13
+M.PLUME_DYNAMIC_BONES = 6
+M.NATIVE_PLUME_CONTROLLER = "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_07"
+M.RUNTIME_CONTROLLER_INSTALL = true
+M.FADE_LINK_REGISTRATION = true
 M.CUSTOM_MATERIALS = {
     "units/cosmetics_tweaker/encarmine_hat/encarmine_armored",
     "units/cosmetics_tweaker/encarmine_hat/encarmine_cloth",
@@ -133,6 +145,55 @@ function M.spawn_unit(application, surface)
         end
     end
     return resolved, custom
+end
+
+-- The SDK can compile a custom `.bones` list from source but cannot compile a
+-- reference to the game's Laurel `.state_machine` because that source asset is
+-- absent from the Mod Tools. The game does have the compiled controller at
+-- runtime (the package-safe Laurel fallback is deliberately preloaded first),
+-- so install it once on the freshly spawned custom unit. The imported FBX and
+-- same-name `.bones` file use the exact 13-bone Laurel skeleton.
+function M.install_native_plume_controller(unit, surface)
+    if not (unit and Unit and Unit.alive and Unit.alive(unit)) then return false end
+    if Unit.has_animation_state_machine and Unit.has_animation_state_machine(unit) then
+        return true
+    end
+    if not (Unit.has_node and Unit.has_node(unit, "j_feather_01_dynamic")
+            and Unit.has_node(unit, "j_feather_06_dynamic")) then
+        return false
+    end
+    local ok, err = pcall(Unit.set_animation_state_machine, unit, M.NATIVE_PLUME_CONTROLLER)
+    if not ok then
+        mod:error("[cos:612] plume controller install failed surface=%s err=%s",
+            tostring(surface or "unknown"), tostring(err))
+        return false
+    end
+    return true
+end
+
+-- FadeSystem only learns about newly linked inventory units when callers
+-- explicitly invoke `new_linked_units`; AttachmentUtils does not do that for
+-- hats. Register the custom attachment once after spawn/link so camera
+-- intersection fades it with its owning character instead of leaving an
+-- opaque helmet floating over a faded body.
+function M.register_fade_link(owner_unit, attachment_unit, surface)
+    if not (owner_unit and attachment_unit and Unit and Unit.alive
+            and Unit.alive(owner_unit) and Unit.alive(attachment_unit)) then
+        return false
+    end
+    local entity = Managers and Managers.state and Managers.state.entity
+    if not entity or type(entity.system) ~= "function" then return false end
+    local ok_system, fade_system = pcall(entity.system, entity, "fade_system")
+    if not ok_system or not fade_system or type(fade_system.new_linked_units) ~= "function" then
+        return false
+    end
+    local ok, err = pcall(fade_system.new_linked_units, fade_system, owner_unit, { attachment_unit })
+    if not ok then
+        mod:error("[cos:612] fade registration failed surface=%s err=%s",
+            tostring(surface or "unknown"), tostring(err))
+        return false
+    end
+    return true
 end
 
 function M.refresh_runtime_resources(application)

@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-14.
+Last updated: 2026-07-15.
 
 ---
 ## Authored Encarmine Helmet (#612)
@@ -13,10 +13,10 @@ Last updated: 2026-07-14.
 |---|---|
 | Identity | `cos_encarmine_hat` is registered exactly once regardless of settings; toggle changes never append or reorder `NetworkLookup.item_names`. |
 | Ownership | Foot Knight only, no DLC requirement; disabling hides the item and resolves equipped state to the vanilla Laurel Helm. |
-| Assets | Derivative unit has separate armor/cloth mesh slots, custom diffuse maps, untouched vanilla normal/combined sources, an authored inventory icon, and pinned response maps. Cloth diffuse alpha is consumed by its shader; each of the 372 source plume faces has one reversed counterpart (744 render faces). |
-| Surfaces | Inventory grid, hero/lobby preview, local third person, remote husk, hot join, transitions, and score screen converge on one appearance. Package-facing records stay on Laurel; only final spawn choke points substitute the resident custom unit. |
+| Assets | Derivative unit has separate armor/cloth mesh slots, custom diffuse maps, untouched vanilla normal/combined sources, an authored inventory icon, and pinned response maps. Cloth diffuse alpha <=15 is cleared, every retained texel is alpha 255, cut alpha is compiler-enabled, and retained RGB is lifted 4x. Armor roughness has exactly the bounded 166/110 paint/detail response. Each of the 372 source plume faces has one reversed counterpart (744 render faces). The FBX and same-name `.bones` retain all 13 Laurel bones and six weighted dynamic joints. |
+| Surfaces | Inventory grid, hero/lobby preview, local third person, remote husk, hot join, transitions, and score screen converge on one appearance. Package-facing records stay on Laurel; only final spawn choke points substitute the resident custom unit. Every custom spawn receives the resident Laurel controller; live owner/husk attachments are enrolled once in camera fade. |
 | Peer safety | Cosmetics peers receive the bounded custom appearance token; peers without Cosmetics receive only `knight_hat_0006`. |
-| Detection | Offline `test_cos_custom_hats.lua` proves preview/live/husk/replay spawn adapters, permanent package quarantine, alpha graph, and face/material revision; the bundle reachability gate pins the FBX and all authored maps; `/cos_regression_test` passes `issue612_encarmine_hat_contract`; bounded `[cos:612]` lines identify each applied surface; two-player visual/fallback verification. |
+| Detection | Offline `test_cos_custom_hats.lua` proves preview/live/husk/replay spawn adapters, permanent package quarantine, alpha graph, face/material revision, runtime controller install, and fade enrollment. The bundle reachability gate pins the FBX, textual bones, and all authored maps; `/cos_regression_test` passes `issue612_encarmine_hat_contract`; bounded `[cos:612]` lines identify each applied surface; two-player visual/motion/fade/fallback verification. |
 
 ---
 ## Network teardown player lookup (#609)

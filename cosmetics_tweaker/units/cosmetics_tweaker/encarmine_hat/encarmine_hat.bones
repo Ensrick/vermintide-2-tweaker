@@ -1,0 +1,15 @@
+bones = [
+    "rp_es_k_hat_07",
+    "j_feather_01_parent",
+    "j_feather_01_dynamic",
+    "j_feather_02_parent",
+    "j_feather_02_dynamic",
+    "j_feather_03_parent",
+    "j_feather_03_dynamic",
+    "j_feather_04_parent",
+    "j_feather_04_dynamic",
+    "j_feather_05_parent",
+    "j_feather_05_dynamic",
+    "j_feather_06_parent",
+    "j_feather_06_dynamic",
+]

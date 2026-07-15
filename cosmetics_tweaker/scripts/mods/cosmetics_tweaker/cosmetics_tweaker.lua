@@ -74,7 +74,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.115-dev"
+local MOD_VERSION = "0.9.117-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -8509,6 +8509,11 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
             tostring(wearer_peer), tostring(slot_name), tostring(err))
         return
     end
+    local spawned_slot = self._attachments and self._attachments.slots
+        and self._attachments.slots[slot_name]
+    local spawned_hat = spawned_slot and spawned_slot.unit
+    CUSTOM_HATS.install_native_plume_controller(spawned_hat, "remote-husk")
+    CUSTOM_HATS.register_fade_link(self._unit, spawned_hat, "remote-husk")
     -- Paint the LA texture onto the just-spawned hat unit. Mirror the
     -- cos_la_apply hat-branch paint logic at cosmetics_tweaker.lua:~3775.
     if la and type(la.apply_new_skin_from_texture) == "function" then
@@ -8526,6 +8531,24 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
             end
         end
     end
+end)
+
+-- #612: owner-side attachments bypass SimpleHuskInventoryExtension's weapon
+-- fade registration. Register the custom hat against the actual player root
+-- after PlayerUnitAttachmentExtension has stored the spawned slot data. The
+-- generic AttachmentUtils hook below installs the animation controller; this
+-- owner-aware hook supplies the root FadeSystem requires.
+mod:hook("PlayerUnitAttachmentExtension", "create_attachment", function(func, self, slot_name, item_data)
+    local r1, r2, r3, r4 = func(self, slot_name, item_data)
+    if slot_name == "slot_hat" and item_data
+        and CUSTOM_HATS.is_custom_identity(item_data.name) then
+        local slot = self._attachments and self._attachments.slots
+            and self._attachments.slots[slot_name]
+        local hat_unit = slot and slot.unit
+        CUSTOM_HATS.install_native_plume_controller(hat_unit, "local-attachment")
+        CUSTOM_HATS.register_fade_link(self._unit, hat_unit, "local-attachment")
+    end
+    return r1, r2, r3, r4
 end)
 
 -- v0.9.8.7: the v0.9.8.4 + v0.9.8.6 PlayerHuskAttachmentExtension.remove_attachment
@@ -9489,6 +9512,7 @@ if rawget(_G, "AttachmentUtils") then
             if slot_data and spawn_item ~= item_data then
                 slot_data.name = item_data.name
                 slot_data.item_data = item_data
+                CUSTOM_HATS.install_native_plume_controller(slot_data.unit, "live-attachment")
             end
             return slot_data
         end)
@@ -9591,6 +9615,9 @@ local function _spawn_item_unit_combined(func, self, unit, item_slot_type, item_
     end
     -- Vanilla.
     local r1, r2 = func(self, unit, item_slot_type, item_template, attachment_node_linking, scene_graph_links, material_settings, skip_wield_anim)
+    if item_slot_type == "hat" then
+        CUSTOM_HATS.install_native_plume_controller(unit, "hero-preview")
+    end
     -- v0.9.7: stash unit→backend_id for previewer-spawned weapon units so
     -- the glow picker's live preview can resolve the right item. The
     -- backend_id was captured on `self` by the equip_item hook below.
@@ -10359,7 +10386,16 @@ _rt_register("issue612_encarmine_hat_contract", function()
     if CUSTOM_HATS.ALPHA_AWARE_CLOTH ~= true
         or CUSTOM_HATS.PLUME_SOURCE_FACES ~= 372
         or CUSTOM_HATS.PLUME_RENDER_FACES ~= 744
-        or CUSTOM_HATS.MATERIAL_RESPONSE_REVISION ~= 2 then
+        or CUSTOM_HATS.MATERIAL_RESPONSE_REVISION ~= 4
+        or CUSTOM_HATS.PLUME_ALPHA_HAZE_MAX ~= 15
+        or CUSTOM_HATS.PLUME_RGB_SCALE ~= 4
+        or CUSTOM_HATS.PLUME_RETAINED_ALPHA ~= 255
+        or CUSTOM_HATS.ARMOR_ROUGHNESS_SCALE ~= 0.90
+        or CUSTOM_HATS.SELF_CONTAINED_HELMET_MATERIALS ~= true
+        or CUSTOM_HATS.PLUME_RIG_BONES ~= 13
+        or CUSTOM_HATS.PLUME_DYNAMIC_BONES ~= 6
+        or CUSTOM_HATS.RUNTIME_CONTROLLER_INSTALL ~= true
+        or CUSTOM_HATS.FADE_LINK_REGISTRATION ~= true then
         return "Encarmine alpha/backface/material response contract drifted"
     end
     -- Package-facing identity is invariant even when all custom resources are

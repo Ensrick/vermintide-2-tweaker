@@ -74,7 +74,14 @@ their internals alone.
   Open cloth/plume cards require both an alpha-aware shader (`use_opacity_map = 1`)
   and reverse-facing geometry: standard backface culling does not make an alpha PNG
   two-sided. Do not decode a vanilla packed map into PBR channels by position alone;
-  validate metallic/roughness statistics and pin every derived response map.
+  validate metallic/roughness statistics and pin every derived response map. Rigged
+  custom attachments also need a same-name textual `.bones` source; the current SDK
+  rejects inline `animation_blender_bones`. When a vanilla controller source is absent
+  from the Mod Tools, keep the package-safe vanilla base resident and install its
+  compiled controller once on the skeleton-compatible custom unit after spawn. Register
+  newly linked player attachments once with `FadeSystem.new_linked_units`; ordinary
+  `AttachmentUtils.link` does not enroll hats in camera fade. The complete reproducible
+  Encarmine recipe lives in `tools/encarmine_asset_pipeline/README.md`.
 - **New weapon-model scale or grip-offset override** → `_cos_render.lua`. Add a
   `_unit_path_scale_overrides` entry (keyed by unit-path substring) or a
   `_weapon_grip_offsets` entry (keyed by item name + career prefix); the render hooks
