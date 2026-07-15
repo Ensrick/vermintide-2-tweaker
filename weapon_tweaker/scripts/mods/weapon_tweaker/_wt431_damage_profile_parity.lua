@@ -109,6 +109,13 @@ local function _wt431_reapply_profile_repoints()
     if type(mod._wt431_brace_repoint) == "function" then
         pcall(mod._wt431_brace_repoint)
     end
+    -- #621: the 1H Axe cleave toggle points at private damage-profile clones
+    -- only while every human peer has WT. Re-run the existing bounded balance
+    -- transaction whenever that parity state changes; the other balance
+    -- toggles are idempotent and remain local template edits.
+    if type(mod._wt_apply_axe_balance) == "function" then
+        pcall(mod._wt_apply_axe_balance, nil, false)
+    end
 end
 
 if mod._wt_peer_parity then

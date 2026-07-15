@@ -1300,9 +1300,12 @@ local data = {
                 -- Leaves sorted A->Z by display label (repo standing sort rule).
                 sub_widgets = {
                     { setting_id = "authentic_brace_of_pistols", type = "checkbox", default_value = false },
+                    { setting_id = "wt_one_hand_axe_cleave_nerf", type = "checkbox", default_value = false },
+                    { setting_id = "wt_cog_hammer_heavy_speed_nerf", type = "checkbox", default_value = false },
                     { setting_id = "wt_dual_axes_cleave", type = "checkbox", default_value = true },
                     { setting_id = "wt_dual_axes_light_crit", type = "checkbox", default_value = true },
                     { setting_id = "wt_greataxe_light_crit", type = "checkbox", default_value = true },
+                    { setting_id = "wt_mace_sword_speed_nerf", type = "checkbox", default_value = false },
                     { setting_id = "wt_bolt_staff_primary_overcharge_reduction", type = "checkbox", default_value = false },
                     -- Explicit tooltip: the loc key ends in _tooltip, which VMF does NOT
                     -- auto-resolve (auto path only tries <setting_id>_description).

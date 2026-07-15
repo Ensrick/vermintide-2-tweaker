@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.259-dev"
+local MOD_VERSION = "0.12.260-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4133,7 +4133,10 @@ mod.on_setting_changed = function(setting_id)
         _wt_bolt_staff_overcharge_runtime.apply()
     elseif setting_id == _wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING
             or setting_id == _wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING
-            or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING then
+            or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING
+            or setting_id == _wt_axe_balance_policy.ONE_HAND_AXE_CLEAVE_SETTING
+            or setting_id == _wt_axe_balance_policy.COG_HAMMER_HEAVY_SPEED_SETTING
+            or setting_id == _wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING then
         mod._wt_apply_axe_balance(setting_id, false)
     end
 end
@@ -4148,26 +4151,134 @@ do
     end
     mod._wt_apply_axe_balance = function(setting_id, force_off)
         if type(Weapons) ~= "table" then return end
-        local function enabled(id) return not force_off and mod:get(id) ~= false end
+        local function enabled(id, default_on)
+            if force_off then return false end
+            local value = mod:get(id)
+            if value == nil then return default_on == true end
+            return value == true
+        end
         if not setting_id or setting_id == _wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING then
             _wt_axe_balance:apply_greataxe_crit(
-                enabled(_wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING), Weapons)
+                enabled(_wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING, true), Weapons)
         end
         if not setting_id or setting_id == _wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING then
             _wt_axe_balance:apply_dual_crit(
-                enabled(_wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING), Weapons)
+                enabled(_wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING, true), Weapons)
         end
         if not setting_id or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING then
             if type(DamageProfileTemplates) == "table" and type(PowerLevelTemplates) == "table" then
                 _wt_axe_balance:apply_dual_cleave(
-                    enabled(_wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING), Weapons,
+                    enabled(_wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING, true), Weapons,
                     DamageProfileTemplates, PowerLevelTemplates,
                     function(value) return table.clone(value, true) end, register_profile)
             end
         end
+        if not setting_id or setting_id == _wt_axe_balance_policy.ONE_HAND_AXE_CLEAVE_SETTING then
+            if type(DamageProfileTemplates) == "table" and type(PowerLevelTemplates) == "table" then
+                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
+                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
+                    and mod._wt431_profiles_allowed() == true
+                _wt_axe_balance:apply_one_hand_axe_cleave(
+                    enabled(_wt_axe_balance_policy.ONE_HAND_AXE_CLEAVE_SETTING, false), Weapons,
+                    DamageProfileTemplates, PowerLevelTemplates,
+                    function(value) return table.clone(value, true) end, register_profile,
+                    mod._wt431_custom_profile_fallback, parity_allowed)
+            end
+        end
+        if not setting_id or setting_id == _wt_axe_balance_policy.COG_HAMMER_HEAVY_SPEED_SETTING then
+            _wt_axe_balance:apply_cog_heavy_speed(
+                enabled(_wt_axe_balance_policy.COG_HAMMER_HEAVY_SPEED_SETTING, false), Weapons)
+        end
+        if not setting_id or setting_id == _wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING then
+            _wt_axe_balance:apply_mace_sword_speed(
+                enabled(_wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING, false), Weapons)
+        end
     end
     mod._wt_apply_axe_balance(nil, false)
 end
+
+_rt_register("issue621_one_hand_axe_cleave_boundary", function()
+    local function action(profile)
+        return { kind = "sweep", damage_profile = profile }
+    end
+    local single = {
+        weapon_type = "AXE_1H", buff_type = "MELEE_1H",
+        state_machine = "units/beings/player/first_person_base/state_machines/melee/1h_axe",
+        actions = { action_one = { light_attack_left = action("rt_axe") } },
+    }
+    local dual = table.clone(single, true)
+    dual.left_hand_unit = "offhand"
+    dual.state_machine = "units/beings/player/first_person_base/state_machines/melee/dual_axes"
+    local profiles = { rt_axe = { cleave_distribution = { attack = 2, impact = 4 } } }
+    local state = _wt_axe_balance_policy.new()
+    state:apply_one_hand_axe_cleave(true, { single = single, dual = dual }, profiles, {},
+        function(value) return table.clone(value, true) end, nil, {}, true)
+    local generated = profiles.wt_1h_axe_cleave_90_rt_axe
+    if not generated or math.abs(generated.cleave_distribution.attack - 1.8) > 0.000001
+            or math.abs(generated.cleave_distribution.impact - 3.6) > 0.000001 then
+        return "#621 cleave clone is not exact 0.90x attack/impact"
+    end
+    if single.actions.action_one.light_attack_left.damage_profile ~= "wt_1h_axe_cleave_90_rt_axe"
+            or dual.actions.action_one.light_attack_left.damage_profile ~= "rt_axe" then
+        return "#621 single/dual capability boundary drifted"
+    end
+    state:apply_one_hand_axe_cleave(false, { single = single }, profiles, {},
+        function(value) return table.clone(value, true) end, nil, {}, true)
+    if single.actions.action_one.light_attack_left.damage_profile ~= "rt_axe" then
+        return "#621 disable did not restore exact source profile"
+    end
+end)
+
+_rt_register("issue622_cog_hammer_heavy_speed_boundary", function()
+    local actions = {
+        heavy_attack_left = { anim_time_scale = 0.99 },
+        heavy_attack_right = { anim_time_scale = 0.99 },
+        heavy_attack_left_charged = {}, heavy_attack_right_charged = {},
+        light_attack_left = { anim_time_scale = 0.90 }, push = {},
+    }
+    local state = _wt_axe_balance_policy.new()
+    state:apply_cog_heavy_speed(true, {
+        two_handed_cog_hammers_template_1 = { actions = { action_one = actions } },
+    })
+    if math.abs(actions.heavy_attack_left.anim_time_scale - 0.90) > 0.000001
+            or math.abs(actions.heavy_attack_left_charged.anim_time_scale - (1 / 1.10)) > 0.000001
+            or actions.light_attack_left.anim_time_scale ~= 0.90
+            or actions.push.anim_time_scale ~= nil then
+        return "#622 heavy-only speed boundary drifted"
+    end
+    state:apply_cog_heavy_speed(false, {})
+    if actions.heavy_attack_left.anim_time_scale ~= 0.99
+            or actions.heavy_attack_left_charged.anim_time_scale ~= nil then
+        return "#622 disable did not restore authored scales"
+    end
+end)
+
+_rt_register("issue623_native_mace_sword_speed_boundary", function()
+    local native = {
+        light_attack_left_diagonal = { anim_time_scale = 0.945 },
+        light_attack_right = { anim_time_scale = 1.035 },
+        heavy_attack = { anim_time_scale = 1.035 },
+        heavy_attack_2 = { anim_time_scale = 1.035 },
+        light_attack_left = { anim_time_scale = 0.90 },
+    }
+    local reverse = table.clone(native, true)
+    local state = _wt_axe_balance_policy.new()
+    state:apply_mace_sword_speed(true, {
+        dual_wield_hammer_sword_template = { actions = { action_one = native } },
+        sword_and_mace_template = { actions = { action_one = reverse } },
+    })
+    if math.abs(native.light_attack_left_diagonal.anim_time_scale - (0.945 / 1.10)) > 0.000001
+            or math.abs(native.heavy_attack_2.anim_time_scale - (1.035 / 1.10)) > 0.000001
+            or native.light_attack_left.anim_time_scale ~= 0.90
+            or reverse.light_attack_left_diagonal.anim_time_scale ~= 0.945 then
+        return "#623 native-only action boundary drifted"
+    end
+    state:apply_mace_sword_speed(false, {})
+    if native.light_attack_left_diagonal.anim_time_scale ~= 0.945
+            or native.heavy_attack.anim_time_scale ~= 1.035 then
+        return "#623 disable did not restore authored scales"
+    end
+end)
 
 -- Install basic backend hooks (UI filtering and can_wield override)
 weapon_backend.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_actions_on_weapons)

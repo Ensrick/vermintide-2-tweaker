@@ -139,6 +139,149 @@ return function(H, repo_root)
 		H.equal(dual.actions.action_one.light_attack_left.damage_profile, "axe_light")
 	end)
 
+	local function one_hand_axe_template()
+		local template = axe_template()
+		template.weapon_type = "AXE_1H"
+		template.buff_type = "MELEE_1H"
+		template.state_machine =
+			"units/beings/player/first_person_base/state_machines/melee/1h_axe"
+		return template
+	end
+
+	H.test("WT #621 discovers single 1H Axe clones by capability and excludes neighboring axe families", function()
+		local single = one_hand_axe_template()
+		local clone_template = clone(single)
+		local dual = clone(single)
+		dual.left_hand_unit = "axe_offhand"
+		dual.state_machine = "units/beings/player/first_person_base/state_machines/melee/dual_axes"
+		local shield = clone(single)
+		shield.left_hand_unit = "shield"
+		shield.weapon_type = "AXE_1H_SHIELD"
+		shield.state_machine = "units/beings/player/first_person_base/state_machines/melee/1h_axe_shield"
+		local two_hand = clone(single)
+		two_hand.weapon_type = "AXE_2H"
+		two_hand.buff_type = "MELEE_2H"
+		two_hand.state_machine = "units/beings/player/first_person_base/state_machines/melee/2h_hammer"
+		H.equal(policy.is_one_hand_axe_template(single), true)
+		H.equal(policy.is_one_hand_axe_template(clone_template), true)
+		H.equal(policy.is_one_hand_axe_template(dual), false)
+		H.equal(policy.is_one_hand_axe_template(shield), false)
+		H.equal(policy.is_one_hand_axe_template(two_hand), false)
+	end)
+
+	H.test("WT #621 1H Axe cleave clones private profiles, registers deterministically, and restores", function()
+		local native, compatible_clone = one_hand_axe_template(), one_hand_axe_template()
+		local excluded_dual = one_hand_axe_template()
+		excluded_dual.left_hand_unit = "offhand"
+		excluded_dual.state_machine = "units/beings/player/first_person_base/state_machines/melee/dual_axes"
+		local profiles = {
+			axe_light = { cleave_distribution = "cleave_light", marker = "source" },
+			axe_bopp = { cleave_distribution = { attack = 3, impact = 5 } },
+			axe_heavy = { cleave_distribution = "cleave_heavy" },
+		}
+		local powers = {
+			cleave_light = { attack = 2, impact = 4 },
+			cleave_heavy = { attack = 6, impact = 8 },
+		}
+		local registered, fallback = {}, {}
+		local state = policy.new()
+		local template_count = state:apply_one_hand_axe_cleave(true, {
+			z_compatible_clone = compatible_clone,
+			a_native = native,
+			dual_wield_axes_template_1 = excluded_dual,
+		}, profiles, powers, clone, function(key) registered[#registered + 1] = key end,
+			fallback, true)
+		H.equal(template_count, 2)
+		H.equal(native.actions.action_one.light_attack_left.damage_profile,
+			"wt_1h_axe_cleave_90_axe_light")
+		H.equal(compatible_clone.actions.action_one.heavy_attack.damage_profile_left,
+			"wt_1h_axe_cleave_90_axe_heavy")
+		H.equal(excluded_dual.actions.action_one.light_attack_left.damage_profile, "axe_light")
+		H.truthy(math.abs(powers[profiles.wt_1h_axe_cleave_90_axe_light.cleave_distribution].attack - 1.8) < 0.000001)
+		H.truthy(math.abs(profiles.wt_1h_axe_cleave_90_axe_bopp.cleave_distribution.impact - 4.5) < 0.000001)
+		H.equal(profiles.axe_light.marker, "source")
+		H.equal(powers.cleave_light.attack, 2)
+		H.deep_equal(registered, {
+			"wt_1h_axe_cleave_90_axe_bopp",
+			"wt_1h_axe_cleave_90_axe_heavy",
+			"wt_1h_axe_cleave_90_axe_light",
+		})
+		H.equal(fallback.wt_1h_axe_cleave_90_axe_heavy, "axe_heavy")
+
+		state:apply_one_hand_axe_cleave(false, { native = native, clone = compatible_clone },
+			profiles, powers, clone, nil, fallback, true)
+		H.equal(native.actions.action_one.light_attack_left.damage_profile, "axe_light")
+		H.equal(compatible_clone.actions.action_one.heavy_attack.damage_profile_right, "axe_heavy")
+	end)
+
+	H.test("WT #621 holds vanilla profile pointers until peer parity is confirmed", function()
+		local axe = one_hand_axe_template()
+		local profiles = { axe_light = { cleave_distribution = { attack = 1, impact = 1 } },
+			axe_bopp = { cleave_distribution = { attack = 1, impact = 1 } },
+			axe_heavy = { cleave_distribution = { attack = 1, impact = 1 } } }
+		local state = policy.new()
+		state:apply_one_hand_axe_cleave(true, { single = axe }, profiles, {}, clone, nil, {}, false)
+		H.equal(axe.actions.action_one.light_attack_left.damage_profile, "axe_light")
+		state:apply_one_hand_axe_cleave(true, { single = axe }, profiles, {}, clone, nil, {}, true)
+		H.equal(axe.actions.action_one.light_attack_left.damage_profile,
+			"wt_1h_axe_cleave_90_axe_light")
+	end)
+
+	H.test("WT #622 Cog Hammer speed nerf touches only four heavy releases and restores nil fields", function()
+		local function action(scale) return { kind = "sweep", anim_time_scale = scale } end
+		local actions = {
+			heavy_attack_left = action(0.99), heavy_attack_right = action(0.99),
+			heavy_attack_left_charged = action(nil), heavy_attack_right_charged = action(nil),
+			light_attack_left = action(0.9), light_attack_left_charged = action(0.9),
+			light_attack_bopp = action(0.99), push = { kind = "push_stagger" },
+			default = { kind = "melee_start" },
+		}
+		local state = policy.new()
+		state:apply_cog_heavy_speed(true, {
+			two_handed_cog_hammers_template_1 = { actions = { action_one = actions } },
+		})
+		H.truthy(math.abs(actions.heavy_attack_left.anim_time_scale - 0.9) < 0.000001)
+		H.truthy(math.abs(actions.heavy_attack_left_charged.anim_time_scale - (1 / 1.1)) < 0.000001)
+		H.equal(actions.light_attack_left.anim_time_scale, 0.9)
+		H.equal(actions.light_attack_left_charged.anim_time_scale, 0.9)
+		H.equal(actions.light_attack_bopp.anim_time_scale, 0.99)
+		H.equal(actions.push.anim_time_scale, nil)
+		state:apply_cog_heavy_speed(true, {
+			two_handed_cog_hammers_template_1 = { actions = { action_one = actions } },
+		})
+		H.truthy(math.abs(actions.heavy_attack_left.anim_time_scale - 0.9) < 0.000001)
+		state:apply_cog_heavy_speed(false, {})
+		H.equal(actions.heavy_attack_left.anim_time_scale, 0.99)
+		H.equal(actions.heavy_attack_left_charged.anim_time_scale, nil)
+	end)
+
+	H.test("WT #623 native Mace and Sword slows L1/L2 and heavies without touching CWV reverse clone", function()
+		local function action(scale) return { kind = "sweep", anim_time_scale = scale } end
+		local native_actions = {
+			light_attack_left_diagonal = action(0.945), light_attack_right = action(1.035),
+			heavy_attack = action(1.035), heavy_attack_2 = action(1.035),
+			light_attack_right_diagonal = action(1.035), light_attack_left = action(0.9),
+			light_attack_bopp = action(0.9), push = { kind = "push_stagger" },
+		}
+		local cwv_actions = clone(native_actions)
+		local weapons = {
+			dual_wield_hammer_sword_template = { actions = { action_one = native_actions } },
+			sword_and_mace_template = { actions = { action_one = cwv_actions } },
+		}
+		local state = policy.new()
+		state:apply_mace_sword_speed(true, weapons)
+		H.truthy(math.abs(native_actions.light_attack_left_diagonal.anim_time_scale - (0.945 / 1.1)) < 0.000001)
+		H.truthy(math.abs(native_actions.light_attack_right.anim_time_scale - (1.035 / 1.1)) < 0.000001)
+		H.truthy(math.abs(native_actions.heavy_attack_2.anim_time_scale - (1.035 / 1.1)) < 0.000001)
+		H.equal(native_actions.light_attack_right_diagonal.anim_time_scale, 1.035)
+		H.equal(native_actions.light_attack_left.anim_time_scale, 0.9)
+		H.equal(native_actions.light_attack_bopp.anim_time_scale, 0.9)
+		H.equal(cwv_actions.light_attack_left_diagonal.anim_time_scale, 0.945)
+		state:apply_mace_sword_speed(false, weapons)
+		H.equal(native_actions.light_attack_left_diagonal.anim_time_scale, 0.945)
+		H.equal(native_actions.heavy_attack.anim_time_scale, 1.035)
+	end)
+
 	H.test("WT #601 settings default on and compose with canonical lifecycle", function()
 		local data = read(repo_root
 			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_data.lua")
@@ -158,5 +301,27 @@ return function(H, repo_root)
 		H.truthy(source:find("mod._wt_apply_axe_balance(setting_id, false)", 1, true))
 		local cwv_data = read(repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants_data.lua")
 		H.equal(cwv_data:find(policy.GREATAXE_LIGHT_CRIT_SETTING, 1, true), nil)
+	end)
+
+	H.test("WT #621/#622/#623 settings default off and share the canonical balance lifecycle", function()
+		local data = read(repo_root
+			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_data.lua")
+		for _, id in ipairs({
+			policy.ONE_HAND_AXE_CLEAVE_SETTING,
+			policy.COG_HAMMER_HEAVY_SPEED_SETTING,
+			policy.MACE_SWORD_SPEED_SETTING,
+		}) do
+			local at = assert(data:find('setting_id = "' .. id .. '"', 1, true))
+			local row = data:sub(at, at + 220)
+			H.truthy(row:find("default_value = false", 1, true))
+		end
+		local source = read(repo_root
+			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua")
+		H.truthy(source:find("apply_one_hand_axe_cleave", 1, true))
+		H.truthy(source:find("apply_cog_heavy_speed", 1, true))
+		H.truthy(source:find("apply_mace_sword_speed", 1, true))
+		local parity = read(repo_root
+			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt431_damage_profile_parity.lua")
+		H.truthy(parity:find("mod._wt_apply_axe_balance", 1, true))
 	end)
 end

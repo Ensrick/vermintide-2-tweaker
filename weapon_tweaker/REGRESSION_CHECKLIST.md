@@ -1,5 +1,18 @@
 # Regression Checklist — weapon_tweaker
 
+## #621/#622/#623 - opt-in weapon balance nerfs
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.260-dev |
+| Automated | Offline `test_cwv_axe_balance.lua` covers capability discovery, private 0.90x cleave clones, deterministic registration/fallback, peer-parity hold, exact speed allow-lists, CWV exclusion, idempotence, and nil/non-nil restore. `/wt_regression_test`: `issue621_one_hand_axe_cleave_boundary`, `issue622_cog_hammer_heavy_speed_boundary`, `issue623_native_mace_sword_speed_boundary`. |
+| 1H Axe | Enable **1H Axe: 10% Less Cleave** and compare a native 1H Axe against Dual Axes, Axe and Shield, and a 2H Axe. Only the single axe loses cleave. Disable and confirm vanilla cleave returns without restart. |
+| Cog Hammer | Enable **Cog Hammer: 10% Slower Heavies**. Test both axe-mode heavies and both charged/hammer-mode heavies; each takes 10% longer. Lights in both modes, push, block, wield, and weapon special remain vanilla. |
+| Mace and Sword | Enable **Mace and Sword: Slower Attacks**. Native L1/L2 and H1/H2 take 10% longer. L3/L4, push, block, and CWV Sword and Mace remain vanilla. Disable and confirm exact original cadence returns. |
+| Co-op safety | The 1H Axe clone profiles apply only after existing WT peer parity confirms every human; losing parity restores vanilla pointers and the #431 wire floor retains vanilla profile IDs. Cog/Mace speed uses vanilla animation-variable replication and no new transport. |
+
+---
+
 ## #597 - CWV Greataxe availability
 
 | Field | Check |

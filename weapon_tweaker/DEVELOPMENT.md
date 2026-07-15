@@ -1,6 +1,6 @@
 # Weapon Tweaker — Development Notes
 
-## General axe identity balance (Issue #601)
+## Isolated weapon balance transactions (Issues #601/#621/#622/#623)
 
 Weapon Tweaker owns the three default-on controls under `Weapon Tweaks`:
 Greataxe light critical chance, Dual Axes light critical chance, and Dual Axes
@@ -13,6 +13,33 @@ Generated `wt_axe_cleave_*` profiles clone source damage and cleave rows,
 scaling only cleave attack/impact. Disabling restores exact captured action
 fields; repeated enabled reconciliation only discovers previously unseen late
 actions and never compounds existing mutations.
+
+Three additional controls are default-off and share the same lifecycle owner:
+
+- **1H Axe cleave nerf (#621):** discovers templates by the exact combat
+  capability tuple `weapon_type=AXE_1H`, `buff_type=MELEE_1H`,
+  `state_machine=.../melee/1h_axe`, and no left-hand unit. This includes
+  donor-faithful WT/CWV clones without maintaining display-name lists. It
+  deliberately excludes Dual Axes (`.../dual_axes`), Axe and Shield
+  (`AXE_1H_SHIELD`, `.../1h_axe_shield`), throwing axes, and 2H axes. Direct
+  attack profiles are privately cloned at 0.90x attack/impact cleave; source
+  profiles and shared PowerLevelTemplates remain untouched.
+- **Cog Hammer heavy speed nerf (#622):** scales only the four release nodes
+  `heavy_attack_left/right` and `heavy_attack_left/right_charged` by `1/1.10`.
+  Lights (including charged-mode lights), wind-ups, push, block, wield, and
+  weapon special are outside the action allow-list.
+- **Mace and Sword speed nerf (#623):** targets only vanilla
+  `dual_wield_hammer_sword_template`: L1 `light_attack_left_diagonal`, L2
+  `light_attack_right`, and `heavy_attack`/`heavy_attack_2`. The CWV reversed
+  `sword_and_mace_template`, later lights, push, block, wield, and inspect are
+  excluded by exact template/action identity.
+
+For speed, `anim_time_scale` is the authoritative action scalar: vanilla
+divides completion and chain-window times by it
+(`weapon_unit_extension.lua:487-489,930-937`). Therefore dividing the authored
+scale by 1.10 makes the selected attacks take 10% longer without rewriting
+every damage window or chain timestamp. All policies restore captured nil and
+non-nil values exactly and are safe to reapply on state transitions.
 
 ## Conditional CWV ownership
 
@@ -106,6 +133,7 @@ SEPARATE key from the established flat `mod._wt_*` fields (`mod._wt_link_filter`
 | `_wt_diagnostics.lua` | Read-only diagnostic dump/probe commands (`/sm_probe`, `/dump`, `/dump_actions`, `/dump_weapons`, `/wt_dump_wielded`) + the wield-time weapon-data dump and its sole `SimpleInventoryExtension._wield_slot` hook_safe. Reads engine globals only; no exports; leaf. |
 | `_wt_longbow_zoom_probe.lua` | Pure, engine-free bounded lifecycle for #316's automatically armed owner-side Empire Longbow zoom probe. Owns exact career/template targeting, due-time observation, one-shot finish, and the three-attempt cap; the entry owns the three `ActionAim` hooks and raw-console formatting. Returns its module table directly and has no `mod` or engine dependency. |
 | `_wt_bolt_staff_overcharge.lua` | Issue #341's hook-free Bolt Staff primary-overcharge transaction. Owns the 0.6 planner plus snapshot/apply/revert runtime for the unique `PlayerUnitStatusSettings.overcharge_values.spark` scalar. Returns its module table directly; the entry wires init, lifecycle, setting-change, disable, and runtime regression surfaces. |
+| `_wt_axe_balance.lua` | Engine-free reversible Weapon Tweaks transactions for #601/#621/#622/#623. Owns exact action/template capability boundaries, private cleave-profile generation, deterministic registration, authored speed snapshots, and hot-toggle restoration. The entry owns setting/lifecycle dispatch and #621's existing #431 peer-parity gate. |
 | `_wt_overcharge_presentation.lua` + `_policy` | Issue #388's cross-career Deepwood parity. The owner-side module reversibly projects `OverchargeData.we_thornsister` onto the local player's existing overcharge extension while `we_life_staff` is equipped, and lazily hooks `OverchargeBarUI.set_charge_bar_fraction` for local/spectator native colors. The pure sibling owns identity/profile/color tests. No transport is added. |
 | `_wt_flamestorm_fx_policy.lua` / `_wt_flamestorm_fx.lua` | #400 exact cross-career Flamestorm target policy plus observer-side replicated 3P flame orientation. Keeps the 3P muzzle position, replaces only particle rotation with network `aim_direction`, and owns the `WeaponSystem.rpc_start_flamethrower` / `update_synced_flamethrower_particle_effects` post-hooks. |
 | `wt_dev_hold_pose.lua` | #616 local-owner transform authoring. Owns separate first-person and third-person right/left offset, Euler rotation, and absolute scale channels; channel-local weak baseline caches; non-destructive enable/bypass/restore; per-frame apply; reset/dump commands; and its widget/localization subtree. The entry dispatches `wt_dev_hp_*` setting changes and disable cleanup. It must never target previewers, bots, husks, score presentation, or committed appearance definitions. |

@@ -1,5 +1,15 @@
 # Weapon Tweaker Changelog
 
+## 0.12.260-dev (2026-07-15) - #621 #622 #623 opt-in weapon balance nerfs [verify-fix]
+
+- Added default-off **1H Axe: 10% Less Cleave**. WT discovers donor-faithful single-axe templates by their combat capability, not labels, and redirects only direct attacks to private 0.90x attack/impact-cleave profiles. Dual Axes, Axe and Shield, throwing axes, 2H axes, shared profiles, and shared power rows remain unchanged.
+- Added default-off **Cog Hammer: 10% Slower Heavies**. Only the four axe/charged-mode heavy releases take 10% longer; lights, wind-ups, push, block, wield, and weapon special retain authored timing.
+- Added default-off **Mace and Sword: Slower Attacks**. Only vanilla Mace and Sword light 1/light 2 and both heavy releases take 10% longer. Later lights, push, utility actions, and CWV's reversed Sword and Mace template are excluded.
+- All three settings hot-apply and exactly restore captured values. The 1H Axe profile repoint composes with WT's existing custom-profile peer-parity gate and wire floor; profile registration is deterministic and preference-independent.
+- Added offline and `/wt_regression_test` coverage for capability boundaries, exact multipliers, shared-table preservation, action allow-lists, idempotence, restoration, and parity fallback.
+
+Enable and disable each toggle separately in a keep or mission. For 1H Axe, compare a single axe with Dual Axes and Axe and Shield. For Cog Hammer, test both mode families plus light/push controls. For native Mace and Sword, compare L1/L2 and heavies with later lights and CWV Sword and Mace. Run `/wt_regression_test`; all three issue checks must pass.
+
 ## 0.12.259-dev (2026-07-14) - #616 isolated 1P/3P Hold-Pose tuning and bypass [verify-fix]
 
 - Added a distinct first-person Hold-Pose channel with independent right/left offset, Euler rotation, and absolute non-uniform scale. It resolves only the local player's 1P wield units; the existing channel resolves only local-owner 3P units.
