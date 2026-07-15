@@ -93,3 +93,38 @@ qa/lua/vendor/lua-5.1.5-win64/lua5.1.exe -e `
 
 The old FBX/custom-material scripts remain historical diagnostics only. They
 must never be selected by runtime item or preview paths.
+
+## Lessons learned and default rule for future recolors
+
+The completed Encarmine work establishes the default architecture for any
+future cosmetic that keeps a vanilla shape:
+
+1. **Treat the compiled donor as behavior, not merely geometry.** Keep its
+   skeleton, cloth controller, LOD graph, bounds, shadow meshes, material
+   graphs, attachment links, and camera-fade participation by retaining the
+   exact donor unit.
+2. **Author only the channels that actually need to change.** For a recolor,
+   replace diffuse RGB on the spawned material instances. Preserve donor alpha,
+   normals, tangents, and packed material maps unless the new design has a
+   reviewed reason to change one of them.
+3. **Resolve material ownership semantically.** Compiled geometry-array order
+   is not runtime `Unit.mesh` order. Follow each mesh's `geometry_index` and
+   material reference, then validate the expected armor/plume role. Numeric
+   position guesses caused the helmet and feather textures to be reversed.
+4. **Never mutate the shared material resource.** Bind textures only on the
+   exact spawned item instance so the ordinary Laurel Helm and other wearers
+   remain unchanged.
+5. **Do not repair alpha cards with thresholding or duplicated faces.** Preserve
+   the donor's fractional coverage alpha and alpha-aware material. Those
+   workarounds produced the invisible feather and tape-like rectangle.
+6. **Keep package-facing identity vanilla-safe.** Inventory, preview, and peer
+   synchronization records point at the resident donor. A custom resource must
+   not be submitted to `PackageManager` merely because Lua can name it.
+7. **Prove structure offline, then verify every renderer.** The gates above
+   must pass before build. In game, inspect inventory/hero preview, owner 3P,
+   remote husk, hot join, lobby/score, plume motion, near-camera fade, and an
+   unmodified donor control.
+
+If a future cosmetic changes geometry rather than color alone, that is a new
+rig-preservation project. It must prove every donor contract item explicitly;
+the recolor path must not be generalized into an FBX replacement path.
