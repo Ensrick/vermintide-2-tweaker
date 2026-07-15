@@ -74,7 +74,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.113-dev"
+local MOD_VERSION = "0.9.114-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -5084,6 +5084,26 @@ local function _spawn_item_wrapper(func, self, item_name, spawn_data)
         self._cos_la_spawning = item_name
         _dbg("[LA preview]   -> spawning clone %s", item_name)
     end
+    -- #612: HeroPreviewer builds and loads package_names before _spawn_item.
+    -- Keep the ItemMasterList unit on the package-safe vanilla Laurel, then
+    -- substitute the already-resident custom unit only here, after the vanilla
+    -- package gate has completed and immediately before World.spawn_unit.
+    -- This covers the inventory mannequin, career previews, and TeamPreviewer
+    -- score rows without ever asking PackageManager for the custom unit path.
+    local score_hat = self._cos_score_hat
+    local encarmine = CUSTOM_HATS and (
+        CUSTOM_HATS.is_custom_identity(item_name)
+        or (score_hat and CUSTOM_HATS.is_custom_identity(score_hat.armoury_key)))
+    if encarmine and type(spawn_data) == "table" then
+        local spawn_unit, custom = CUSTOM_HATS.spawn_unit(Application, "hero-preview")
+        if custom then
+            for _, sd in ipairs(spawn_data) do
+                if sd.item_slot_type == "hat" and sd.unit_name == CUSTOM_HATS.BASE_UNIT then
+                    sd.unit_name = spawn_unit
+                end
+            end
+        end
+    end
     local result = func(self, item_name, spawn_data)
     self._cos_la_spawning = nil
     _spawn_item_post(self, item_name, spawn_data)
@@ -6668,6 +6688,11 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
     if kind == "hat" then
         if variant.swap_hand ~= "hat" then return false end
         local la_unit_path = variant.new_units and variant.new_units[1]
+        -- #612: this branch calls AttachmentUtils directly after the vanilla
+        -- wire-safe hat already exists, so it is a safe spawn-only surface.
+        if CUSTOM_HATS and CUSTOM_HATS.is_custom_identity(armoury_key) then
+            la_unit_path = CUSTOM_HATS.spawn_unit(Application, "appearance-replay")
+        end
         if not la_unit_path then return false end
 
         -- v0.9.13-dev: guard now delegates to the pure helper
@@ -8335,6 +8360,12 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
         and CUSTOM_HATS.resolve_variant(cached.armoury_key)
         or (la and la.SKIN_LIST and la.SKIN_LIST[cached.armoury_key])
     local la_unit = variant and variant.new_units and variant.new_units[1]
+    -- #612: the late vanilla husk attachment must converge on the same
+    -- resident Encarmine unit as the earlier Cosmetics replay.  This call site
+    -- spawns directly through AttachmentUtils; it never invokes PackageManager.
+    if CUSTOM_HATS and CUSTOM_HATS.is_custom_identity(cached.armoury_key) then
+        la_unit = CUSTOM_HATS.spawn_unit(Application, "remote-husk")
+    end
     if not la_unit then
         return func(self, slot_name, item_data)
     end
@@ -9433,14 +9464,33 @@ if rawget(_G, "AttachmentUtils") then
     -- unit=nil path calling AttachmentUtils.link(target=nil) -> Unit.node crash.
     if AttachmentUtils.create_attachment then
         mod:hook(AttachmentUtils, "create_attachment", function(func, world, owner_unit, attachments, slot_name, item_data, show)
-            local path = item_data and item_data.unit
+            -- #612: local/bot attachment creation is already past every
+            -- inventory-package load. Preserve the original table for vanilla
+            -- and peer sync; only the direct spawn receives the resident custom
+            -- unit. A missing dependency returns the Laurel fallback.
+            local spawn_item = item_data
+            if item_data and item_data.name == CUSTOM_HATS.ITEM_KEY then
+                local resolved, custom = CUSTOM_HATS.spawn_unit(Application, "live-attachment")
+                if custom then
+                    spawn_item = table.clone(item_data)
+                    spawn_item.unit = resolved
+                end
+            end
+            local path = spawn_item and spawn_item.unit
             if type(path) == "string" and path ~= "" and not _unit_resident(path) then
                 mod:info("[cos-hat] SKIP non-resident headpiece=%s slot=%s owner=%s (viewer package not resident; no hat instead of crash)",
                     tostring(path), tostring(slot_name),
                     tostring(type(owner_unit) == "userdata" and "unit" or owner_unit))
                 return { unit = nil, name = item_data and item_data.name, item_data = item_data }
             end
-            return func(world, owner_unit, attachments, slot_name, item_data, show)
+            local slot_data = func(world, owner_unit, attachments, slot_name, spawn_item, show)
+            -- Keep the durable/network-facing identity on the package-safe
+            -- custom item rather than the temporary cloned spawn table.
+            if slot_data and spawn_item ~= item_data then
+                slot_data.name = item_data.name
+                slot_data.item_data = item_data
+            end
+            return slot_data
         end)
     end
 
@@ -10301,16 +10351,18 @@ _rt_register("issue612_encarmine_hat_contract", function()
     if CUSTOM_HATS.RUNTIME_PREVIEW_PACKAGE_SAFE ~= false then
         return "Encarmine unsafe preview package promotion re-enabled"
     end
+    if CUSTOM_HATS.SPAWN_ONLY_RENDERER ~= true
+        or type(CUSTOM_HATS.spawn_unit) ~= "function"
+        or type(CUSTOM_HATS.spawn_resources_ready) ~= "function" then
+        return "Encarmine spawn-only renderer contract missing"
+    end
+    -- Package-facing identity is invariant even when all custom resources are
+    -- resident; only direct spawn sites may receive the candidate path.
+    if item.unit ~= CUSTOM_HATS.BASE_UNIT or CUSTOM_HATS.CUSTOM_UNIT ~= CUSTOM_HATS.BASE_UNIT then
+        return "Encarmine custom unit leaked into PackageManager-facing identity"
+    end
     if CUSTOM_HATS.runtime_custom_ready then
-        if item.unit ~= CUSTOM_HATS.CANDIDATE_CUSTOM_UNIT
-            or CUSTOM_HATS.CUSTOM_UNIT ~= CUSTOM_HATS.CANDIDATE_CUSTOM_UNIT then
-            return "Encarmine proven custom package did not activate"
-        end
-        if not CUSTOM_HATS.runtime_resources_ready(Application) then
-            return "Encarmine custom dependency closure drifted after activation"
-        end
-    elseif item.unit ~= CUSTOM_HATS.BASE_UNIT or CUSTOM_HATS.CUSTOM_UNIT ~= CUSTOM_HATS.BASE_UNIT then
-        return "Encarmine fallback did not fail closed"
+        return "Encarmine package-path activation must remain quarantined"
     end
 end)
 

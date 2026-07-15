@@ -24,6 +24,12 @@ M.CUSTOM_UNIT = M.BASE_UNIT
 -- candidate quarantined until the preview path is decoupled from the spawned
 -- unit (base package preload + custom resident-unit spawn).
 M.RUNTIME_PREVIEW_PACKAGE_SAFE = false
+-- The custom unit is compiled into Cosmetics' already-resident root package,
+-- but it is not itself a valid PackageManager package.  Preview/equip data
+-- must therefore keep BASE_UNIT (so vanilla loads the listed package), while
+-- the final spawn choke points may substitute this resident unit immediately
+-- before World.spawn_unit / UnitSpawner.spawn_local_unit.
+M.SPAWN_ONLY_RENDERER = true
 M.CUSTOM_MATERIALS = {
     "units/cosmetics_tweaker/encarmine_hat/encarmine_armored",
     "units/cosmetics_tweaker/encarmine_hat/encarmine_cloth",
@@ -45,6 +51,7 @@ M.registered = false
 M._probe_elapsed = 0
 M._probe_attempts = 0
 M._probe_limit = 30
+M._spawn_diag_seen = {}
 
 local ITEM_LOCALIZATION = {
     cos_encarmine_hat_name = "Encarmine Helmet",
@@ -58,6 +65,8 @@ local function can_get(application, resource_type, path)
     local ok, result = pcall(application.can_get, resource_type, path)
     return ok and result == true
 end
+
+local enabled
 
 local function ensure_custom_clone_bridge()
     local bridge = M.bridge
@@ -82,6 +91,39 @@ function M.runtime_resources_ready(application)
         if not can_get(application, "texture", path) then return false end
     end
     return true
+end
+
+function M.spawn_resources_ready(application)
+    if not can_get(application, "unit", M.CANDIDATE_CUSTOM_UNIT) then
+        return false
+    end
+    for _, path in ipairs(M.CUSTOM_MATERIALS) do
+        if not can_get(application, "material", path) then return false end
+    end
+    for _, path in ipairs(M.CUSTOM_TEXTURES) do
+        if not can_get(application, "texture", path) then return false end
+    end
+    return true
+end
+
+function M.is_custom_identity(item_or_variant_key)
+    return item_or_variant_key == M.ITEM_KEY or item_or_variant_key == M.VARIANT_KEY
+end
+
+function M.spawn_unit(application, surface)
+    local custom = enabled() and M.SPAWN_ONLY_RENDERER
+        and M.spawn_resources_ready(application)
+    local resolved = custom and M.CANDIDATE_CUSTOM_UNIT or M.BASE_UNIT
+    surface = tostring(surface or "unknown")
+    local diag_key = surface .. "|" .. resolved
+    if not M._spawn_diag_seen[diag_key] then
+        M._spawn_diag_seen[diag_key] = true
+        if printf then
+            pcall(printf, "[cos:612] spawn-only surface=%s unit=%s custom=%s package_request=false",
+                surface, resolved, tostring(custom))
+        end
+    end
+    return resolved, custom
 end
 
 function M.refresh_runtime_resources(application)
@@ -111,7 +153,7 @@ function M.tick(dt)
     end
 end
 
-local function enabled()
+enabled = function()
     if not mod or type(mod.get) ~= "function" then return true end
     local ok, value = pcall(mod.get, mod, "cos_encarmine_hat_enabled")
     return not ok or value ~= false

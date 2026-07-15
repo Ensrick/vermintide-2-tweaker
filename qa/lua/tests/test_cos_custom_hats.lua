@@ -123,11 +123,21 @@ return function(H, repo_root)
             H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
             H.equal(bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], nil)
 
+            -- The same resident dependency closure is valid only at direct
+            -- spawn choke points. It must never mutate the package-facing IML.
+            local spawn_path, custom = hats.spawn_unit(_G.Application, "test-preview")
+            H.truthy(custom)
+            H.equal(spawn_path, hats.CANDIDATE_CUSTOM_UNIT)
+            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
+
             -- Losing any one compiled dependency must restore the safe unit.
             allowed.material[hats.CUSTOM_MATERIALS[1]] = nil
             H.equal(hats.refresh_runtime_resources(_G.Application), false)
             H.equal(hats.CUSTOM_UNIT, hats.BASE_UNIT)
             H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
+            local fallback_path, fallback_custom = hats.spawn_unit(_G.Application, "test-fallback")
+            H.equal(fallback_path, hats.BASE_UNIT)
+            H.equal(fallback_custom, false)
         end)
     end)
 
@@ -155,6 +165,10 @@ return function(H, repo_root)
             local fallback = hats.resolve_variant(hats.VARIANT_KEY)
             H.equal(fallback.new_units[1], hats.BASE_UNIT)
             H.equal(fallback.enabled, false)
+            _G.Application = { can_get = function() return true end }
+            local spawn_path, custom = hats.spawn_unit(_G.Application, "test-disabled")
+            H.equal(spawn_path, hats.BASE_UNIT)
+            H.equal(custom, false)
             H.truthy(NetworkLookup.item_names.cos_encarmine_hat)
         end)
     end)
@@ -175,5 +189,17 @@ return function(H, repo_root)
             H.truthy(f, "missing " .. suffix)
             if f then f:close() end
         end
+    end)
+
+    H.test("Encarmine spawn-only renderer covers preview live and husk paths", function()
+        local f = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua", "rb"))
+        local source = f:read("*a")
+        f:close()
+        H.truthy(source:find('spawn_unit%(Application, "hero%-preview"%)'))
+        H.truthy(source:find('spawn_unit%(Application, "live%-attachment"%)'))
+        H.truthy(source:find('spawn_unit%(Application, "remote%-husk"%)'))
+        H.truthy(source:find('spawn_unit%(Application, "appearance%-replay"%)'))
+        H.truthy(source:find("PackageManager%-facing identity"))
     end)
 end

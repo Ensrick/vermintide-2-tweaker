@@ -1,5 +1,18 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.114-dev - 2026-07-15 - #612 Encarmine spawn-only renderer [verify-fix-coop]
+
+### Fixed
+
+- Kept `cos_encarmine_hat` and every package-facing preview record permanently bound to the inventory-package-listed vanilla Laurel unit, preventing another fatal request for missing `BD55DCA31255AAEC.package`.
+- Added a spawn-only renderer at the four final unit creation surfaces: inventory/career/score preview, local and bot attachments, remote-husk late attachment reconstruction, and bounded Cosmetics appearance replay. Those surfaces substitute the already-resident Encarmine unit immediately before `World.spawn_unit`/`UnitSpawner.spawn_local_unit`; they never submit its path to `PackageManager`.
+- The custom renderer activates only when the unit, both authored materials, and all ten textures are resident. Any incomplete peer/build remains on Laurel. Non-Cosmetics peers continue to receive only `knight_hat_0006` over vanilla synchronization.
+- Added once-per-surface `[cos:612]` diagnostics and extended `issue612_encarmine_hat_contract` plus offline Lua coverage to lock the package/spawn boundary.
+
+### Co-op verification
+
+Confirm `[cosmetics:LOAD] v0.9.114-dev` on both peers. Equip **Encarmine Helmet** on Foot Knight and inspect the inventory mannequin, keep/mission third person, a hot join, and the score screen. Cosmetics peers should see the exact authored red-and-gold helmet with black plume; a peer without Cosmetics should see Laurel. Neither log may contain a PackageManager request or missing-resource error for `BD55DCA31255AAEC`; `/cos_regression_test` must pass `issue612_encarmine_hat_contract`.
+
 ## 0.9.113-dev - 2026-07-15 - #612 Encarmine preview-package crash quarantine [verify-fix]
 
 ### Fixed

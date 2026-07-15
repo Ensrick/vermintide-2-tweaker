@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-15 - Encarmine spawn-only rendering
+
+Tweaker: Cosmetics v0.9.114-dev / issue #612 keeps the custom helmet out of PackageManager-facing item data and substitutes its already-resident red/gold unit only at final preview, attachment, husk, and score spawn sites. Missing dependencies and peers without Cosmetics fail closed to the vanilla Laurel Helm. Two-player visual and fallback verification is required.
+
 ## 2026-07-14 - Keep-slot bot takeover
 
 Tweaker: General DEV v0.2.239-dev / issue #247 replaces the disabled owner-destructive AI swap with a bounded keep-slot transaction across Adventure, Chaos Wastes, and Weaves. The human Player/profile/party slot remains authoritative; one normal bot safely yields and regains its exact slot when vanilla filled the party; observer and reclaim use native camera/force-respawn flows; and schema-v2 request/result messages authenticate the sender and converge rejected client settings. Two-player verification remains required; no deployment is part of this change.
