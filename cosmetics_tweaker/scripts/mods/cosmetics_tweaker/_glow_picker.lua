@@ -75,6 +75,17 @@ GlowPicker.identity_key = _identity_key
 local PANEL_W, PANEL_H = 600, 620
 local TOP_INSET        = 80   -- distance from screen top to panel top
 
+-- #377: the persistent Edit Glow toggle belongs to the panel geometry even
+-- while the panel is closed. Return its lower-right-aligned origin in the
+-- same 1920x1080 virtual canvas used by the customization screen. Keeping the
+-- calculation here prevents the caller from drifting away from panel changes.
+function GlowPicker.toggle_anchor(button_width, z)
+    button_width = tonumber(button_width) or 0
+    local panel_right = (1920 + PANEL_W) * 0.5
+    local panel_bottom = 1080 - TOP_INSET - PANEL_H
+    return { panel_right - button_width, panel_bottom, z or 20 }
+end
+
 local function _make_scenegraph_definition()
     -- audit 2026-06-07 (F11): `UILayer` is a vanilla global (scripts/ui/ui_layer.lua,
     -- popup = 950), but this fn is evaluated as an ARGUMENT to pcall at the _build

@@ -74,7 +74,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.118-dev"
+local MOD_VERSION = "0.9.119-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -765,6 +765,7 @@ local function _create_glow_editor_button()
     -- renderer configurations do not expose the custom single texture through
     -- UIAtlasHelper, which used to return nil here and remove glow options for
     -- every item even though skin classification was correct.
+    local button_width, button_height = 96, 38
     local definition = {
         element = { passes = {
             { content_id = "button_hotspot", pass_type = "hotspot", style_id = "button" },
@@ -778,20 +779,20 @@ local function _create_glow_editor_button()
         },
         style = {
             button = {
-                size = { 96, 38 }, color = { 230, 30, 30, 38 }, offset = { 0, 0, 1 },
+                size = { button_width, button_height }, color = { 230, 30, 30, 38 }, offset = { 0, 0, 1 },
             },
             button_border = {
-                size = { 96, 38 }, thickness = 2,
+                size = { button_width, button_height }, thickness = 2,
                 color = { 255, 200, 170, 90 }, offset = { 0, 0, 2 },
             },
             glow_editor_label = {
-                size = { 96, 38 }, font_size = 13, font_type = "hell_shark",
+                size = { button_width, button_height }, font_size = 13, font_type = "hell_shark",
                 horizontal_alignment = "center", vertical_alignment = "center",
                 text_color = { 255, 255, 255, 255 }, offset = { 0, 0, 3 },
             },
         },
         scenegraph_id = "screen",
-        offset = { 1272, 380, 20 },
+        offset = GlowPicker.toggle_anchor(button_width, 20),
     }
     local widget = UIWidget.init(definition)
     widget.content.equipped = false
@@ -10436,8 +10437,13 @@ _rt_register("glow_manual_editor_button_377", function()
         return "non-glow preview did not disable the manual control"
     end
     if type(GlowPicker.committed_state_for) ~= "function"
-        or type(GlowPicker.is_open_for) ~= "function" then
+            or type(GlowPicker.is_open_for) ~= "function" then
         return "committed/manual picker API incomplete"
+    end
+    local anchor = type(GlowPicker.toggle_anchor) == "function"
+        and GlowPicker.toggle_anchor(96, 20) or nil
+    if not anchor or anchor[1] ~= 1164 or anchor[2] ~= 380 or anchor[3] ~= 20 then
+        return "manual editor toggle is not aligned to the panel bottom-right"
     end
 end)
 

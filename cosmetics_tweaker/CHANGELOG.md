@@ -1,5 +1,23 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.119-dev - 2026-07-15 - #377 Edit Glow panel alignment [verify-fix]
+
+### Fixed
+
+- Replaced the free-standing `{1272, 380}` Edit Glow offset with an anchor
+  derived from the 600x620 glow panel on the shared 1920x1080 virtual canvas.
+  The 96px toggle now begins at x=1164, so its right edge aligns exactly with
+  the panel's bottom-right edge at x=1260 instead of sitting wholly to its
+  right.
+- Added offline and runtime checks that pin the panel-relative anchor and reject
+  the previous hard-coded placement.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.119-dev`, open weapon customization on a
+glow-capable illusion, and inspect the Edit Glow toggle with the editor both
+open and closed. Its right edge should align with the glow panel's right edge.
+
 ## 0.9.118-dev - 2026-07-15 - #612 Encarmine compiled-transform correction [verify-fix]
 
 ### Fixed
