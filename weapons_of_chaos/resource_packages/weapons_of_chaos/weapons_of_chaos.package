@@ -1,5 +1,6 @@
 lua = [
 	"scripts/mods/weapons_of_chaos/_woc_appearance_policy"
+	"scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse"
 	"scripts/mods/weapons_of_chaos/_lib_weapon_appearance"
 	"scripts/mods/weapons_of_chaos/_woc_mod_unit_preview"
 	"scripts/mods/weapons_of_chaos/_woc_relic_policy"
@@ -23,5 +24,7 @@ texture = [
 	"textures/woc_blightreaper/blightreaper_emissive"
 	"textures/woc_blightreaper/blightreaper_metallic"
 	"textures/woc_blightreaper/blightreaper_normal"
+	"textures/woc_blightreaper/blightreaper_noise"
+	"textures/woc_blightreaper/blightreaper_packed"
 	"textures/woc_blightreaper/blightreaper_roughness"
 ]

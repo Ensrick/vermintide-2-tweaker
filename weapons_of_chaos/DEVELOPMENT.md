@@ -304,8 +304,14 @@ unit-path package load.
 The extracted material reports native parent `EA15CAA2A17CD818`, packed rune
 input, `2E82F037A3245005` pulse noise, gold `{5, 4.4, 0}`, and pulse scalar
 `1.746000051498413`. That decompiler output is not compiler source: the SDK
-cannot resolve the hash-only parent material. v0.1.14-dev therefore retains the
-compile-valid authored PBR graph while #613 remains open for a source-backed or
-authored pulse graph. The canonical held transform is Euler XYZ
+cannot resolve the hash-only parent material. The source-backed replacement is
+the base-game runed Kruber sword material, whose decompiled graph has the same
+two-noise pulse structure and named emissive variables. WOC lifetime-anchors
+that standalone player-equipment package, applies the donor material once per
+spawned WOC unit, then replaces every texture and restores the trophy's exact
+gold/intensity/pulse values. Missing resources fail closed before Stingray C
+calls; there is no polling or RPC. Full hashes, bindings, source citations, and
+the rejected compiler paths live in `tools/BLIGHTREAPER_ASSET_PIPELINE.md`.
+The canonical held transform is Euler XYZ
 `{-90, -90, -90}` plus `{0, 0, -0.3}`, applied at spawn through the shared
 appearance primitive on gameplay and preview consumers.

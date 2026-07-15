@@ -133,6 +133,7 @@ local suites = {
     "test_woc_wire_policy",
     "test_woc_relic_policy",
     "test_woc_appearance_policy",
+	"test_woc_blightreaper_pulse",
     "test_dcp_portrait_materials",
     "test_dcp_player_scope_probe",
     "test_cos_score_identity",

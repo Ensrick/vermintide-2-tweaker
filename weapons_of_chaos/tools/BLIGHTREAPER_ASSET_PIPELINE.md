@@ -57,9 +57,39 @@ packed texture into slot `15DD7D93`, maps the same noise texture into both
 `1.746000051498413`. These are research inputs, not compile-ready Stingray
 source. An unquoted hash fails material parsing; a quoted hash parses but the
 SDK compiler then requests the unavailable source path
-`EA15CAA2A17CD818.material`. Until the original parent path/source graph is
-resolved or an authored pulse graph is built, WOC must retain its compile-valid
-standard-PBR material and #613 must not be marked ready for verification.
+`EA15CAA2A17CD818.material`. Do not retry either hash form: neither is a
+buildable material source.
+
+## Pulse donor
+
+The native appearance is shader-driven emissive animation. No Blightreaper
+particle, flow, or unit animation binding was found. The base-game Kruber runed
+Empire sword is the bounded replacement shader donor:
+
+- 1P unit/material/package:
+  `units/weapons/player/wpn_emp_sword_02_t1/wpn_emp_sword_02_t1_runed_01`;
+- 3P sibling: the same path with `_3p`;
+- standalone package hashes verified in the installed bundles:
+  `767E95AC6F261662` (1P) and `F378E3B3BCD290B4` (3P);
+- vanilla availability is grounded by
+  `scripts/settings/equipment/weapon_skins.lua:3886,3900`.
+
+Its decompiled material has the same behavioral contract as the trophy:
+two noise inputs, `rune_emissive_color`, `intensity`, `pulse`, and matching
+UV/pulse vectors. WOC binds that resident material once per spawned WOC unit,
+then replaces its albedo, normal, packed M/R/rune, emissive, and both noise
+inputs with WOC resources. It sets the native trophy values
+`rune_emissive_color={5,4.4,0}`, `intensity=1.746000051498413`, and
+`pulse={1,0.5}`. The different 1P/3P rune slots are explicitly described by
+`_woc_appearance_policy.lua`.
+
+All resources are preflighted with `Application.can_get` before any engine
+material call. Texture writes use the vanilla per-unit primitive
+`Unit.set_texture_for_materials` (see `gear_utils.lua:150`), never shared
+`Material.set_texture`. Application is spawn/event driven, weakly deduplicated,
+and has no update loop or RPC. If a donor material or WOC texture is absent, it
+logs one bounded `[WOC:613] pulse SKIP` line and leaves the compile-valid WOC
+material in place.
 
 ## Mesh export
 
@@ -85,8 +115,8 @@ in the `.unit` render settings.
 
 ## Build and reachability
 
-The WOC master package explicitly lists the material, both units, and the five
-compile-valid PBR textures. Run:
+The WOC master package explicitly lists the material, both units, five static
+PBR textures, the native packed map, and the native pulse-noise map. Run:
 
 ```powershell
 pwsh -NoProfile -File qa/check_custom_unit_bundle_reachability.ps1
@@ -95,8 +125,8 @@ VMBLauncher.exe build weapons_of_chaos
 ```
 
 Never add a `Managers.package:load` call for the authored unit path. Previewers
-borrow the vanilla Empire sword package lease while the WOC master bundle owns
-the actual unit residency.
+and loadout collection borrow the verified runed Empire sword package lease
+while the WOC master bundle owns the actual unit residency.
 
 The canonical presentation transform is applied once per spawned unit through
 the synchronized `_lib_weapon_appearance.lua` consumer: Euler XYZ

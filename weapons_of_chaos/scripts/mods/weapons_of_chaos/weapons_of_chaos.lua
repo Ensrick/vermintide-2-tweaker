@@ -143,8 +143,9 @@ local _wire_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_wire_policy"
 local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_policy")
 local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview")
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
+local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
-local _wa = _appearance_lib.new()
+local _wa = _pulse_lib.new(_appearance, _appearance_lib.new())
 if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" then
 	-- Packaging failures must not become startup crashes. Preserve ordinary
 	-- vanilla loadout syncs, but fail closed for explicit WOC identities because
@@ -546,10 +547,10 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	local unit_3p, ammo_3p, unit_1p, ammo_1p = func(world, hand, item_template,
 		item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, ...)
 	if is_blightreaper then
-		local applied_3p = _wa.apply(unit_3p, _appearance.TRANSFORM)
-		local applied_1p = unit_1p and _wa.apply(unit_1p, _appearance.TRANSFORM) or false
-		pcall(printf, "[WOC:613] appearance applied surface=inventory-spawn 1p=%s 3p=%s",
-			tostring(applied_1p), tostring(applied_3p))
+		_wa.apply(unit_3p, _appearance.TRANSFORM, "3p", "inventory-spawn")
+		if unit_1p then
+			_wa.apply(unit_1p, _appearance.TRANSFORM, "1p", "inventory-spawn")
+		end
 	end
 	return unit_3p, ammo_3p, unit_1p, ammo_1p
 end)
@@ -733,6 +734,27 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 	local ok_3p, resident_3p = pcall(Application.can_get, "unit", _appearance.UNIT_3P)
 	if not ok_1p or resident_1p ~= true then return "authored 1P unit is not resident" end
 	if not ok_3p or resident_3p ~= true then return "authored 3P unit is not resident" end
+	for _, perspective in ipairs({ "1p", "3p" }) do
+		local descriptor = _appearance.pulse_descriptor(perspective)
+		local ok_material, material_ready = pcall(
+			Application.can_get, "material", descriptor.material)
+		if not ok_material or material_ready ~= true then
+			return string.format("%s pulse donor material is not resident: %s",
+				perspective, tostring(descriptor.material))
+		end
+		if #descriptor.textures ~= 6 or #descriptor.variables ~= 3 then
+			return string.format("%s pulse descriptor is not bounded 6-texture/3-variable shape",
+				perspective)
+		end
+		for _, binding in ipairs(descriptor.textures) do
+			local ok_texture, texture_ready = pcall(
+				Application.can_get, "texture", binding.texture)
+			if not ok_texture or texture_ready ~= true then
+				return string.format("%s pulse texture is not resident: %s",
+					perspective, tostring(binding.texture))
+			end
+		end
+	end
 end)
 
 -- Applied marker (§3.6): always fires (operational telemetry); surfaces the live

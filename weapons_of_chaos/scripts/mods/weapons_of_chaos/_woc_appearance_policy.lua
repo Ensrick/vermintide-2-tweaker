@@ -5,8 +5,21 @@ local M = {}
 
 M.UNIT_1P = "units/woc_blightreaper/blightreaper"
 M.UNIT_3P = M.UNIT_1P .. "_3p"
-M.VANILLA_1P = "units/weapons/player/wpn_emp_sword_02_t1/wpn_emp_sword_02_t1"
+-- Base-game runed Empire sword packages are standalone loadable aliases and
+-- carry the same two-noise-texture pulse graph as the native trophy material.
+-- They are lifetime anchors and shader donors only; WOC keeps its own mesh and
+-- unit-local textures. See tools/BLIGHTREAPER_ASSET_PIPELINE.md.
+M.VANILLA_1P =
+	"units/weapons/player/wpn_emp_sword_02_t1/wpn_emp_sword_02_t1_runed_01"
 M.VANILLA_3P = M.VANILLA_1P .. "_3p"
+M.DONOR_MATERIAL_1P = M.VANILLA_1P
+M.DONOR_MATERIAL_3P = M.VANILLA_3P
+M.TEXTURE_ROOT = "textures/woc_blightreaper/"
+M.PULSE_VARIABLES = {
+	{ name = "rune_emissive_color", value = { 5, 4.4, 0 } },
+	{ name = "intensity", value = 1.746000051498413 },
+	{ name = "pulse", value = { 1, 0.5 } },
+}
 M.TRANSFORM = {
 	offset = { 0, 0, -0.3 },
 	rotation = { -90, -90, -90 },
@@ -14,6 +27,30 @@ M.TRANSFORM = {
 
 function M.is_custom_unit_name(name)
 	return name == M.UNIT_1P or name == M.UNIT_3P
+end
+
+local function pulse_textures(rune_slot)
+	local root = M.TEXTURE_ROOT
+	return {
+		{ slot = "texture_map_c0ba2942", texture = root .. "blightreaper_albedo" },
+		{ slot = "texture_map_0205ba86", texture = root .. "blightreaper_normal" },
+		{ slot = "texture_map_59cd86b9", texture = root .. "blightreaper_packed" },
+		{ slot = rune_slot, texture = root .. "blightreaper_emissive" },
+		{ slot = "texture_map_1cf504ab", texture = root .. "blightreaper_noise" },
+		{ slot = "texture_map_71d74d4d", texture = root .. "blightreaper_noise" },
+	}
+end
+
+M.PULSE_TEXTURES_1P = pulse_textures("texture_map_4617b8e0")
+M.PULSE_TEXTURES_3P = pulse_textures("texture_map_ee282ea2")
+
+function M.pulse_descriptor(perspective)
+	local third_person = perspective == "3p"
+	return {
+		material = third_person and M.DONOR_MATERIAL_3P or M.DONOR_MATERIAL_1P,
+		textures = third_person and M.PULSE_TEXTURES_3P or M.PULSE_TEXTURES_1P,
+		variables = M.PULSE_VARIABLES,
+	}
 end
 
 function M.preview_package_alias(name)

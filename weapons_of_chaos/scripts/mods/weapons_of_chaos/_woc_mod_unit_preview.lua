@@ -21,12 +21,10 @@ function M.install(policy, appearance)
 	local function apply(unit, name, surface)
 		if not policy.is_custom_unit_name(name) then return false end
 		if unit == nil or transformed[unit] then return false end
-		local ok = appearance and appearance.apply(unit, policy.TRANSFORM) or false
-		if ok then
-			transformed[unit] = true
-			pcall(printf, "[WOC:613] appearance applied surface=%s unit=%s",
-				tostring(surface), tostring(name))
-		end
+		local perspective = name == policy.UNIT_3P and "3p" or "1p"
+		local ok = appearance
+			and appearance.apply(unit, policy.TRANSFORM, perspective, surface) or false
+		if ok then transformed[unit] = true end
 		return ok
 	end
 	local warned = {}
