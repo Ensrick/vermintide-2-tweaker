@@ -55,4 +55,14 @@ return function(Harness, repo_root)
         Harness.truthy(source:find('wtype == "action"'), "action row support missing")
         Harness.truthy(source:find('get_mod%("character_dialogue"%)'), "preview cleanup missing")
     end)
+
+    Harness.test("cd resolves Fatshark module-local hook targets before VMF hook install", function()
+        local path = repo_root .. "/character_dialogue/scripts/mods/character_dialogue/character_dialogue.lua"
+        local f = assert(io.open(path, "rb")); local source = f:read("*a"); f:close()
+        local require_pos = source:find('local DialogueQueries = require%("scripts/entity_system/systems/dialogues/dialogue_queries"%)')
+        local hook_pos = source:find('mod:hook%(DialogueQueries, "get_filtered_dialogue_event_index"')
+        Harness.truthy(require_pos, "DialogueQueries module require missing")
+        Harness.truthy(hook_pos, "DialogueQueries hook missing")
+        Harness.truthy(require_pos < hook_pos, "DialogueQueries must resolve before VMF hook install")
+    end)
 end

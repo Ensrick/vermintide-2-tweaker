@@ -1,5 +1,11 @@
 # Character Dialogue Changelog
 
+## 0.1.1-dev (2026-07-15) - #605 [verify-fix]
+
+- Load Fatshark's module-local `DialogueQueries` table explicitly before
+  installing the natural-selection hook, eliminating the VMF nil-object error
+  emitted at startup.
+
 ## 0.1.0-dev (2026-07-14) - #605 [verify-fix]
 
 - Added an offline-generated catalogue of 34,327 stable dialogue event IDs from Fatshark's generated dialogue sources.
