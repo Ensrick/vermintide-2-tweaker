@@ -1720,8 +1720,8 @@ backend list, or snapshots state inside `on_enter`.
 
 ## 47. Custom GUI texture exists, but not in the drawing renderer
 
-**First seen:** 2026-07-15 (CIM Athanor list, issue #481/#618 cluster); prior
-related incident: Tweaker: GUI issue #528.
+**First seen:** 2026-07-15 (CIM Athanor list, issues #617/#618; related preview
+issue #481); prior related incident: Tweaker: GUI issue #528.
 **Lives in:** any custom texture/material used by a vanilla view with multiple
 renderers (`ui_renderer`, `ui_top_renderer`, HDR/store/forge renderers).
 
