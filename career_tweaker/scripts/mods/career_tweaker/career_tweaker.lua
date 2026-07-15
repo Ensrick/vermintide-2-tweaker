@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.3.75-dev"
+local MOD_VERSION = "0.4.0-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Currently only the
@@ -149,28 +149,12 @@ end
 
 local _rework_master_batch = false
 
--- #221 historical menu-consolidation audit. #445 already owns the safe
--- whole-family controls. The older per-cluster proposal spans independent
--- hook/template owners, so expose one bounded observation-only census instead
--- of adding checkboxes that cannot yet guarantee complete reversible gating.
-local ok_umbrella, umbrella_audit = pcall(mod.dofile, mod,
-    "scripts/mods/career_tweaker/_crt_umbrella_audit_policy")
-if ok_umbrella and type(umbrella_audit) == "table" then
-    mod._crt.umbrella_audit = function()
-        local snapshot = umbrella_audit.snapshot(
-            rework_master_policy.ensrick_ids,
-            rework_master_policy.tourney_ids,
-            function(id) return mod:get(id) and true or false end)
-        pcall(printf, "%s", umbrella_audit.format(snapshot))
-        return snapshot
-    end
-    mod._crt.umbrella_audit()
-    mod:command("crt_umbrella_audit", "Log issue #221 umbrella-owner census", function()
-        mod._crt.umbrella_audit()
-    end)
-else
-    mod:error("Failed to load umbrella audit policy: %s", tostring(umbrella_audit))
-end
+-- Public-beta boundary: the #221 ownership census is an investigation probe,
+-- not player-facing behavior. Its policy source remains available for future
+-- development, but the beta neither loads it nor registers its command.
+-- Former development call retained only as an audit breadcrumb:
+-- umbrella_audit.snapshot(...), exposed through /crt_umbrella_audit.
+mod._crt.PUBLIC_BETA_UMBRELLA_AUDIT_DISABLED = true
 
 local function _rework_master_snapshot()
     local state = {}
@@ -273,15 +257,16 @@ end
 -- every same-talent rival group crt declares.
 mod._crt.mutex = mutex
 
--- Talent & ability swapping: HeroWindowTalents hooks + the DLC gate + the
--- apply/restore engine. Loaded here so the lifecycle callbacks below can capture
--- its exports as file-locals; also owns mod._crt.ALL_CAREERS (read by ct_status).
-local ok_ts, _ts = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/_crt_talent_swap")
-if not ok_ts then mod:error("Failed to load talent-swap module: %s", tostring(_ts)) end
-local _ALL_CAREERS         = mod._crt.ALL_CAREERS or {}
-local apply_talent_swaps   = mod._crt.apply_talent_swaps or function() end
-local restore_talent_swaps = mod._crt.restore_talent_swaps or function() end
-local refresh_talent_ui    = mod._crt.refresh_talent_ui or function() end
+-- Public-beta boundary: career talent/ability casting-transposition is excluded.
+-- Do not load `_crt_talent_swap.lua`: loading it installs HeroWindowTalents
+-- hooks and exposes apply/restore entry points. VMF retains the old saved
+-- `talent_swap_*` values in user settings, but this beta never reads, writes,
+-- clears, or applies them. A later redesign can therefore migrate the data.
+mod._crt.PUBLIC_BETA_TALENT_SWAPS_DISABLED = true
+mod._crt.apply_talent_swaps = nil
+mod._crt.restore_talent_swaps = nil
+mod._crt.refresh_talent_ui = nil
+mod._crt.ALL_CAREERS = nil
 
 -- Read-only talent/buff diagnostics: /crt_dump_talents + the auto-dump harness.
 -- Exposes mod.crt_dump_career_talents, mod._crt_auto_dump_check,
@@ -290,12 +275,10 @@ local refresh_talent_ui    = mod._crt.refresh_talent_ui or function() end
 local ok_dg, _dg = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/_crt_diagnostics")
 if not ok_dg then mod:error("Failed to load diagnostics module: %s", tostring(_dg)) end
 
--- #440 automatic, bounded Bardin-vs-control dodge/disabler instrumentation.
--- Observation-only: five hooks record timing/geometry/outcomes without changing
--- any target, status, return value, or gameplay setting.
-local ok_bdp, _bdp = pcall(mod.dofile, mod,
-    "scripts/mods/career_tweaker/_crt_bardin_disabler_probe")
-if not ok_bdp then mod:error("Failed to load Bardin disabler probe: %s", tostring(_bdp)) end
+-- Public-beta boundary: the #440 co-op investigation probe is intentionally
+-- inert. Its source remains available for a later diagnostic build, but no
+-- gameplay/AI hooks are installed in this public beta.
+mod._crt.PUBLIC_BETA_BARDIN_PROBE_DISABLED = true
 
 -- Live #445/#446 group. Unlike the old BH example, both members are active and
 -- visible; the retired cbr_* catalog is never used as a UI dependency.
@@ -553,7 +536,6 @@ end
 -- ============================================================
 
 mod.on_game_state_changed = function(status, state_name)
-    apply_talent_swaps()
     -- Auto-dump the rework careers' talent/buff map. Only on StateIngame enter
     -- (keep/mission) -- NEVER at StateSplashScreen/StateLoading, where
     -- Managers.player:local_player() raises "Network backend has not been set".
@@ -601,10 +583,6 @@ mod.on_setting_changed = function(setting_id)
     -- bounded to one level.
     mutex.enforce(setting_id)
 
-    if setting_id:find("^talent_swap_") then
-        apply_talent_swaps()
-    end
-
     if setting_id:find("^rework_") then
         if balance and balance.apply then balance.apply() end
         -- A rework_ flip can change a trn_ entry's conflict state (a trn_ entry
@@ -630,28 +608,15 @@ mod.on_setting_changed = function(setting_id)
 end
 
 mod.on_disabled = function()
-    -- audit 2026-06-07 (v0.3.22-dev), BUG_CLASSES §7: previously on_disabled only
-    -- unwound the balance buff-template mutations and left talent
-    -- swaps + the global table/hook mutations behind. Restore what's CHEAP, echo
-    -- the limitation for the rest (matches gt v0.2.56's documented-limitation
-    -- pattern, Issue #15).
-    --
     -- Cheaply reversible (done here):
-    --   * Talent swaps — re-bind saved originals into TalentTrees / CareerSettings
-    --     (rebind only; _talent_swap_originals already holds the pre-swap values).
     --   * Native + Tourney balance reworks — restore patched BuffTemplate fields.
     if balance and balance.restore then balance.restore() end
     if tourney and tourney.restore then tourney.restore() end
     foot_knight.restore()
-    restore_talent_swaps()
     -- Drop the OE cooldown-reduction managed bonus cleanly (the tick also self-
     -- clears once mod:get returns nil, but do it eagerly so the live OE reverts to
     -- exact vanilla recharge the instant the mod is disabled).
     if mod._crt_oe_cdr_clear then mod._crt_oe_cdr_clear() end
-    -- Refresh the inventory talent picker if it's open so a live disable visibly
-    -- reverts swapped trees instead of waiting for a menu re-open.
-    refresh_talent_ui()
-
     -- NOT cheaply reversible (restart required), so we document rather than unwind:
     --   * The crt_* stub buff names registered UNCONDITIONALLY into BuffTemplates +
     --     NetworkLookup.buff_templates at load (career_tweaker_balance.lua:67-87).
@@ -660,12 +625,12 @@ mod.on_disabled = function()
     --     no-op stubs in place. Restart clears them.
     --   * VMF-installed hooks (ExperienceSettings.get_experience, the mirror
     --     get_read_only_data overrides, ProgressionUnlocks.is_unlocked_for_profile,
-    --     HeroWindowTalents on_enter/on_exit, plus the two armor/overcharge hooks
+    --     plus the two armor/overcharge hooks
     --     DamageUtils.apply_buffs_to_damage + PlayerUnitHealthExtension.add_damage).
     --     VMF deactivates a disabled mod's
     --     hooks for us, and each body also gates on a mod:get(...) read, so they
     --     no-op while disabled — but the wrappers stay installed until restart.
-    mod:echo("[crt] Talent swaps + balance reworks reverted. Buff registrations and hooks need a game restart for a fully clean vanilla state.")
+    mod:echo("[crt] Balance reworks reverted. Buff registrations and hooks need a game restart for a fully clean vanilla state.")
 end
 
 -- ============================================================
@@ -676,21 +641,8 @@ end
 -- chaos_wastes_tweaker convention; consider renaming to "crt_status" to
 -- disambiguate from chaos_wastes_tweaker commands (none currently collide).
 
-mod:command("ct_status", "Show Career Tweaker version and active swaps/balance mods", function()
+mod:command("ct_status", "Show Career Tweaker version and active balance mods", function()
     mod:echo("Career Tweaker v" .. MOD_VERSION)
-
-    local any_swap = false
-    for _, career_name in ipairs(_ALL_CAREERS) do
-        local src = mod:get("talent_swap_" .. career_name)
-        if src and src ~= "none" then
-            mod:echo("  " .. career_name .. " <- " .. src)
-            any_swap = true
-        end
-    end
-    if not any_swap then
-        mod:echo("  No talent swaps active")
-    end
-
     local bal_count = (balance and balance.active_count and balance.active_count()) or 0
     mod:echo("  Balance mods active: " .. tostring(bal_count))
 end)

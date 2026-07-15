@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-> **Suite location (v0.3.57-dev):** the `/crt_regression_test` harness and all check bodies moved from `career_tweaker.lua` into `scripts/mods/career_tweaker/_crt_regression.lua` (Phase 1 OOP split). Check names + registration order are unchanged. The talent-swap and diagnostics concerns the checks reference now live in `_crt_talent_swap.lua` / `_crt_diagnostics.lua` (see `DEVELOPMENT.md` module map).
+> **Suite location:** `/crt_regression_test` lives in `scripts/mods/career_tweaker/_crt_regression.lua`. In 0.4.0-beta it also locks the casting/transposition and issue-probe exclusion boundary.
 
 Last updated: 2026-07-15.
 
@@ -48,9 +48,9 @@ Last updated: 2026-07-15.
 |-------|-------|
 | Symptom | Bardin is anecdotally less consistent at dodging Packmasters, Lifeleeches, or Gutter Runners. |
 | Source boundary | All profiles clone one dodge table. Packmaster/Lifeleech use common dodge status; Gutter uses root+0.2 trajectory, 1m trigger overlap, and `j_neck` tracking. Compiled player trigger geometry remains unverified. |
-| Fix version(s) | 0.3.68-dev (diagnostics only; not deployed) |
-| Expected | No speculative gameplay change. Automatic bounded `[crt:440]` rows distinguish live dodge timing/displacement from disabler tracking and profile geometry proxies. |
-| Detection | Offline `test_crt_bardin_disabler_probe.lua`; runtime `/crt_regression_test` check `issue440_bardin_disabler_probe`; compare Bardin and a non-Bardin in one co-op log. |
+| Fix version(s) | 0.3.68-dev diagnostic source; excluded from 0.4.0-beta |
+| Expected | The public beta installs no disabler/dodge hooks and emits no `[crt:440]` rows. |
+| Detection | `/crt_regression_test` must report `PASS: public_beta_issue_probes_disabled`. Re-arm the dormant source only in a future diagnostic build before collecting co-op evidence. |
 
 ---
 ## No-op talent-menu close preserves live buffs (#283)
@@ -58,8 +58,8 @@ Last updated: 2026-07-15.
 | Field | Value |
 |-------|-------|
 | Symptom | Opening and closing Talents without changing a row rebuilds every talent buff and erases accumulated stacks such as Bounty Hunter's Job Well Done. |
-| Expected | Identical desktop/controller selections skip persistence and talent/ammo reapply; changing any row delegates to vanilla unchanged. |
-| Detection | Offline `test_crt_talent_selection.lua`; runtime `/crt_regression_test` check `issue283_talent_menu_noop_guard`; solo in-game check in CHANGELOG 0.3.66-dev. |
+| Expected | The 0.4.0 public beta exposes no casting/transposition widgets, loads no swap module, and installs no talent-window hooks. Existing saved selections remain untouched and unapplied. |
+| Detection | `/crt_regression_test` must report `PASS: public_beta_talent_swaps_disabled`; confirm the Career Ability & Talent Swapping group is absent after a full restart. The historical pure selection test remains as redesign evidence, not shipped behavior. |
 
 ---
 ## Handmaiden Focused Spirit (#472)

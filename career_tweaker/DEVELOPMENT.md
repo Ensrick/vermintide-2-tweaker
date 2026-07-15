@@ -1,9 +1,14 @@
 # Career Tweaker — Development Notes
 
 Internal id `crt`, Workshop 3716286199, single-stream **public** (edit this
-directory directly; ships with `-AllowPublic`). Talent/ability swapping plus a
-set of opt-in career reworks. Lua-only (survives hot-reload in theory, but full
+directory directly; ships with `-AllowPublic`). The 0.4.0 beta contains opt-in
+career reworks; the experimental talent/ability casting-transposition system is
+intentionally excluded. Lua-only (survives hot-reload in theory, but full
 restart is still safest).
+
+Public-beta boundary check: `pwsh career_tweaker/tests/check_public_beta.ps1`.
+It fails if casting/transposition widgets or loaders return, either issue probe
+is armed, or the runtime exclusion regressions disappear.
 
 > Operational rules live in the repo-root `PROJECT_STANDARDS.md` (esp. §2.2a
 > module-split conventions and §3.6 logging). This file is the crt-specific
@@ -21,9 +26,9 @@ armor/overcharge, oe_cooldown, mutex); Phase 1 (v0.3.57-dev) added the three
 
 ## The `mod._crt` shared namespace
 
-Every module and the entry's lifecycle callbacks communicate through one table,
-`mod._crt` (created at the top of `career_tweaker.lua`). A module that owns a
-function EXPORTS it (`mod._crt.apply_talent_swaps = apply_talent_swaps`);
+Every active module and the entry's lifecycle callbacks communicate through one
+table, `mod._crt` (created at the top of `career_tweaker.lua`). A module that owns a
+function exports it through that table;
 consumers read it. Cross-module reads that happen at LOAD time (e.g. the
 regression module capturing `mod._crt.balance` as a file-local) require the owner
 to be EARLIER in the manifest; reads that happen at RUNTIME (lifecycle callbacks,
@@ -46,7 +51,7 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 
 | File | Responsibility | Public surface (via `mod._crt` unless noted) | Manifest position |
 |------|----------------|----------------------------------------------|-------------------|
-| `career_tweaker.lua` | Entry/manifest + lifecycle. MOD_VERSION, boot banner/fingerprint, the dofile manifest, the mutex cluster declare, the Character-XP-level override + Unlock-All-Careers hooks, the 2026-06-21 ability-swap / career-select bug-fix hooks, `mod.update`, `on_game_state_changed` / `on_setting_changed` / `on_disabled`, `ct_status`, and the issue-425 beacon install. | owns `mod._crt`, `mod._crt.MOD_VERSION`, `mod._crt.dbg` / `dbg_alert`, `mod._crt.balance`, `mod._crt_peer_parity` | — (the entry) |
+| `career_tweaker.lua` | Entry/manifest + lifecycle. MOD_VERSION, boot banner/fingerprint, the dofile manifest, the mutex cluster declare, Character-XP-level override + Unlock-All-Careers hooks, `mod.update`, `on_game_state_changed` / `on_setting_changed` / `on_disabled`, `ct_status`, the issue-425 beacon, and the public-beta exclusion markers. | owns `mod._crt`, `mod._crt.MOD_VERSION`, `mod._crt.dbg` / `dbg_alert`, `mod._crt.balance`, `mod._crt_peer_parity` | — (the entry) |
 | `career_tweaker_data.lua` | VMF widget tree (the settings UI). | returns the widget table | before script (VMF) |
 | `career_tweaker_localization.lua` | Localized strings. | returns the loc table | before data (VMF) |
 | `_crt_damage_classification.lua` | Pure #334/#472 damage-category policy: chip/AOE, self-DoT, and Focused Spirit's Ratling extension. Engine-free and unit-tested. | returns `{ is_chip_or_aoe, is_self_dot, focused_spirit_ignores }`, published as `mod._crt.damage_classification` | first script module, before balance |
@@ -58,19 +63,20 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 | `career_tweaker_armor_overcharge.lua` | Seven armor/overcharge/Focused-Spirit controls using one `DamageUtils.apply_buffs_to_damage` hook and one consolidated `PlayerUnitHealthExtension.add_damage` hook. Owns Focused Spirit's proc wrapper and one-frame cooldown re-arm; the stacking template fields remain in balance's reversible lifecycle. | installs its own hooks; exports `mod._crt_focused_spirit_tick(dt)` | after tourney |
 | `career_tweaker_oe_cooldown.lua` | Outcast Engineer cooldown-reduction benefit. Driven per-frame from the entry's `mod.update`. | `mod._crt_oe_cdr_tick(dt)`, `mod._crt_oe_cdr_clear` | after armor |
 | `career_tweaker_mutex.lua` | Mutex cluster framework ("pick one of N" checkbox groups), enforced from `on_setting_changed`. | returns `{ declare, enforce, active, snapshot }` | after oe |
-| `_crt_talent_selection.lua` | Pure snapshot/equality policy for the desktop and controller talent-menu no-op guard (#283). Engine-free and unit-tested. | returns `{ snapshot, equal }`, published as `mod._crt.talent_selection` | loaded by `_crt_talent_swap.lua` |
-| `_crt_talent_swap.lua` | Talent-tree + ability/passive swap engine: desktop/controller talent-window lifecycle hooks, no-op close guard, DLC gate, apply/restore. | `apply_talent_swaps`, `restore_talent_swaps`, `refresh_talent_ui`, `ALL_CAREERS`, `get_talent_swap_originals` / `set_talent_swap_originals`; sets `talent_menu_guard_installed` | after mutex, before the entry captures its talent lifecycle locals |
+| `_crt_talent_selection.lua` | Dormant pure snapshot/equality policy retained for a future casting/transposition redesign. | returns `{ snapshot, equal }` if loaded independently | **not loaded in 0.4.0-beta** |
+| `_crt_talent_swap.lua` | Dormant historical talent-tree + ability/passive swap engine. Saved `talent_swap_*` values remain in VMF storage, but the beta exposes no widgets and never loads this module. | none in the beta | **not loaded in 0.4.0-beta** |
 | `_crt_diagnostics.lua` | Read-only talent/buff diagnostics: `/crt_dump_talents`, the reusable dump body, the per-session auto-dump harness + retry pump. | `mod.crt_dump_career_talents` (mod method), `mod._crt_auto_dump_check`, `mod._crt_dump_retry_tick(dt)`, `mod._crt_start_dump_retry` | after talent |
-| `_crt_bardin_disabler_probe.lua` | Automatic bounded #440 comparison of player dodge timing/geometry against Packmaster, Lifeleech, and Gutter Runner outcomes. Observation-only; no setting or gameplay mutation. | `mod._crt.bardin_disabler_probe`, `mod._crt_bardin_disabler_tick(dt)` | after diagnostics, before regression |
+| `_crt_bardin_disabler_probe.lua` | Dormant #440 comparison probe retained for a future diagnostic build. | none in the beta | **not loaded in 0.4.0-beta** |
+| `_crt_umbrella_audit_policy.lua` | Dormant #221 ownership-census policy retained for future development. | none in the beta | **not loaded in 0.4.0-beta** |
 | `_lib_peer_parity.lua` | COPIED single-source shared lib (master: `tools/shared_lib/_lib_peer_parity.lua`). The issue-371 peer-parity beacon factory. Do NOT diverge from master. | returns a factory function | dofile'd inside the beacon block |
 | `_crt_regression.lua` | The `/crt_regression_test` harness + all check bodies, in frozen registration order. | `mod._crt.rt_register` (for future phases) | LAST |
 
 ## Where new code goes
 
-1. **A new talent/ability swap concern** → `_crt_talent_swap.lua`. If the entry's
-   lifecycle callbacks must drive it, export through `mod._crt` and capture a
-   file-local in the entry right after the talent dofile (mirror the existing
-   `apply_talent_swaps` capture).
+1. **A redesigned talent/ability casting-transposition concern** → work behind
+   the public-beta exclusion first. Do not restore the widget group or load
+   `_crt_talent_swap.lua` until its identity/lifecycle design has deterministic
+   tests and explicit user approval for a later beta.
 2. **A new rework / balance tweak** → `career_tweaker_balance.lua` (BALANCE_MODS).
    Declarative `patches` target `BuffTemplates[name].buffs[sub_index or 1]`;
    specify `sub_index` when a parent template contains multiple sub-buffs (#366).
@@ -106,12 +112,12 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 ## Load-order rules that are load-bearing
 
 - **`_crt_regression.lua` is LAST.** Its check bodies capture `mod._crt.balance`,
-  the talent-swap restore path + accessors, the `_dbg` helpers, and `MOD_VERSION`
-  as module-locals AT LOAD. Those must be populated first (balance dofile,
-  talent dofile, and the entry's top-of-file exports).
-- **`_crt_talent_swap.lua` loads before the entry captures its talent lifecycle
-  locals** (`apply_talent_swaps` etc.), because the lifecycle callbacks call the
-  captured file-locals.
+  the `_dbg` helpers, and `MOD_VERSION` as module-locals at load. It also asserts
+  that the beta exclusion markers are present and the retired runtime exports
+  remain nil.
+- **`_crt_talent_swap.lua` is deliberately absent from the manifest.** Merely
+  loading it installs talent-window hooks, so a setting gate after `dofile`
+  would not be a valid fail-closed exclusion.
 - **The issue-425 beacon block sits AFTER `mod.update` is defined.** The shared
   lib's `install()` WRAPS the existing `mod.update`; running it earlier would
   capture nil and drop the OE + dump ticks.

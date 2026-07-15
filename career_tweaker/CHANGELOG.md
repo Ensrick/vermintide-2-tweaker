@@ -1,5 +1,14 @@
 # Career Tweaker Changelog
 
+## 0.4.0-beta - 2026-07-15 - public beta rollup
+
+- Promoted the tested Career balance and rework line through 0.3.75-dev, including the Foot Knight feature suite, rework-family masters, Ranger ale improvements, Zealot Flagellation, Handmaiden reworks, peer-parity hardening, localization corrections, and retired Big Rebalance cleanup.
+- Excluded career talent/ability casting and transposition from this beta. The menu, loader, lifecycle dispatch, status output, and talent-window hooks are absent; saved `talent_swap_*` values are retained without being read, changed, or applied.
+- Excluded the open Bardin-disabler and historical umbrella-ownership investigation probes. Their development source remains available, but this beta installs none of their hooks or commands.
+- Added runtime regression contracts proving the excluded systems stay inert while ordinary Career balance features remain available.
+
+**Beta verify:** after a full restart, confirm the Career Ability & Talent Swapping group is absent, existing careers and talents remain unchanged on keep/mission transitions, and `/crt_regression_test` reports `PASS: public_beta_talent_swaps_disabled` plus `PASS: public_beta_issue_probes_disabled`. Then exercise the ordinary opt-in reworks relevant to your career.
+
 ## 0.3.75-dev - 2026-07-15 - #619 Foot Knight feature suite [verify-fix-coop]
 
 - Added six independent, default-off Foot Knight controls: uninterruptible heavy attacks; 10m Protective Presence with 20m Rock of Reikland; Rock shield offense; expanded That's Bloody Teamwork! great-weapon offense; Final March; and melee weapons in the secondary slot.

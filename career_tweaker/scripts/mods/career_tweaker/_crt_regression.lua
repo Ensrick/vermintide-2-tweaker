@@ -8,12 +8,10 @@
 -- (they define the in-game /crt_regression_test output order) -- do not reorder.
 --
 -- Manifest position: LAST. The check bodies read several surfaces owned by other
--- modules -- balance (mod._crt.balance), the talent-swap restore path + its
--- pending-originals accessors (mod._crt.restore_talent_swaps /
--- get_talent_swap_originals / set_talent_swap_originals), the two _dbg helpers
+-- modules -- balance (mod._crt.balance), the two _dbg helpers
 -- (mod._crt.dbg / dbg_alert), and MOD_VERSION (mod._crt.MOD_VERSION). Those are
 -- captured as module-locals at load time here, so this module MUST load after
--- career_tweaker_balance and _crt_talent_swap and after the entry has populated
+-- career_tweaker_balance and after the entry has populated
 -- mod._crt.{MOD_VERSION,dbg,dbg_alert,balance}. Most check bodies otherwise read
 -- only globals or existing mod fields (mod._crt_registered_buff_names,
 -- mod._crt_mod_registered_buff_names, mod._crt_peer_parity), which resolve at
@@ -32,9 +30,6 @@ local MOD_VERSION               = mod._crt.MOD_VERSION
 local _dbg                      = mod._crt.dbg
 local _dbg_alert                = mod._crt.dbg_alert
 local balance                   = mod._crt.balance
-local restore_talent_swaps      = mod._crt.restore_talent_swaps
-local get_talent_swap_originals = mod._crt.get_talent_swap_originals
-local set_talent_swap_originals = mod._crt.set_talent_swap_originals
 
 -- /regression_test scaffold.
 local _RT_CHECKS = {}
@@ -261,40 +256,13 @@ _rt_register("armor_cursed_armor_procfunc_wrapper", function()
     end
 end)
 
-_rt_register("on_disabled_unwinds_talent_swaps", function()
-    -- v0.3.22-dev (audit 2026-06-07, BUG_CLASSES §7): on_disabled must cheaply
-    -- unwind talent swaps, not just the balance/big_rebalance buff mutations.
-    -- The unwind is restore_talent_swaps(), which re-binds saved originals and
-    -- clears the pending-swap table. This check FAILS if that unwind path is
-    -- removed/broken (i.e. the F13 bug returns).
-    --
-    -- Behavioral assertion: seed a SYNTHETIC pending-swap whose career_name is
-    -- not in CareerSettings, so restore_talent_swaps() iterates it (cs == nil ->
-    -- no real game-table write) and then clears the table. Asserts the unwind
-    -- actually runs and resets state without mutating real career data.
-    -- v0.3.57-dev (Phase 1 OOP split): restore_talent_swaps + the pending-swap
-    -- table now live in _crt_talent_swap.lua; reach them through the exported
-    -- accessors instead of the old entry file-locals.
-    if type(restore_talent_swaps) ~= "function" then
-        return "restore_talent_swaps helper missing — on_disabled can't unwind swaps"
+_rt_register("public_beta_talent_swaps_disabled", function()
+    if mod._crt.PUBLIC_BETA_TALENT_SWAPS_DISABLED ~= true then
+        return "public-beta talent-swap disable marker missing"
     end
-    if type(get_talent_swap_originals) ~= "function" or type(set_talent_swap_originals) ~= "function" then
-        return "talent-swap originals accessors missing (mod._crt.get/set_talent_swap_originals)"
-    end
-    local saved = get_talent_swap_originals()
-    set_talent_swap_originals({
-        __crt_rt_probe_not_a_real_career__ = {
-            tree = false, activated_ability = "x", passive_ability = "y",
-        },
-    })
-    local ok, err = pcall(restore_talent_swaps)
-    local cleared = (next(get_talent_swap_originals()) == nil)
-    set_talent_swap_originals(saved)  -- always restore the real (live) table
-    if not ok then
-        return "restore_talent_swaps raised: " .. tostring(err)
-    end
-    if not cleared then
-        return "restore_talent_swaps did not clear the pending-swap table — swaps would persist after disable"
+    if mod._crt.apply_talent_swaps ~= nil or mod._crt.restore_talent_swaps ~= nil
+        or mod._crt.refresh_talent_ui ~= nil or mod._crt.ALL_CAREERS ~= nil then
+        return "talent-swap runtime surface is exposed in the public beta"
     end
 end)
 
@@ -772,15 +740,16 @@ _rt_register("issue367_ale_one_second_drink", function()
     end
 end)
 
-_rt_register("issue440_bardin_disabler_probe", function()
-    local probe = mod._crt and mod._crt.bardin_disabler_probe
-    if type(probe) ~= "table" or type(probe.regression_check) ~= "function" then
-        return "Bardin disabler probe module missing"
+_rt_register("public_beta_issue_probes_disabled", function()
+    if mod._crt.PUBLIC_BETA_BARDIN_PROBE_DISABLED ~= true
+        or mod._crt.PUBLIC_BETA_UMBRELLA_AUDIT_DISABLED ~= true then
+        return "public-beta issue-probe disable marker missing"
     end
-    if probe.hook_count ~= 5 or type(mod._crt_bardin_disabler_tick) ~= "function" then
-        return "Bardin disabler probe hook/tick wiring drifted"
+    if mod._crt.bardin_disabler_probe ~= nil
+        or mod._crt_bardin_disabler_tick ~= nil
+        or mod._crt.umbrella_audit ~= nil then
+        return "an investigation probe is active in the public beta"
     end
-    return probe.regression_check()
 end)
 
 _rt_register("issue473_dance_of_blades_contract", function()

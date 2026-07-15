@@ -12,14 +12,18 @@ decompile.
 
 `crt` does two things to the engine: it makes a character's level/career-unlock
 state *appear* higher than the backend records (progression overrides), and it
-swaps or reworks careers' talents, abilities and passives at runtime (the balance
-catalog). The second job puts mod-registered buff names onto vanilla NETWORKED
+reworks careers' talents, abilities and passives at runtime (the balance
+catalog). The balance job puts mod-registered buff names onto vanilla NETWORKED
 buff paths, which is the mod's one wire-safety exposure (issue 425 / issue 371).
+The historical talent/ability casting-transposition engine is dormant in
+0.4.0-beta: its widget group is absent and its module is never loaded.
 
 ## Hook table
 
-31 registrations (`tools/mod-lint/lint-mod.ps1 -Mod career_tweaker`
-PASS = one hook per (Class, method) mod-wide), grouped into 5 rows-of-concern.
+32 authored registrations (`tools/mod-lint/lint-mod.ps1 -Mod career_tweaker`
+PASS = one hook per (Class, method) mod-wide), of which 23 are loaded by
+0.4.0-beta. The nine hooks in the dormant swap and #440 probe modules remain
+source for later redesign/diagnostics but do not execute.
 `[hook]` = full wrapper (`mod:hook`, can rewrite args/returns); `[safe]` =
 `mod:hook_safe` (post-callback, no override); `[tbl]` = table-form hook
 (class/helper table passed by reference, immediate resolution, nil-guarded). The
@@ -39,14 +43,14 @@ issue-425 peer-parity beacon (`_lib_peer_parity.lua`) adds NO hooks - it POLLS
 | Class.method (kind) | Vanilla behavior | Why crt hooks it | Trap / invariant |
 |---|---|---|---|
 | `HeroWindowCharacterSummary.on_enter` / `on_exit` [safe] `:330`/`:333` | The career-select window; `_setup_hero_selection_widgets` bakes each career's `content.locked` ONCE at populate, from the hero level [src: `scripts/ui/views/hero_view/windows/hero_window_character_summary.lua`, `[unverified]` exact line] | Track the live window instance so a `level_override_*` / `unlock_all_careers` change can re-run its tile setup (stale-tile fix, `refresh_career_unlock_ui` `:336`) | `pcall` the refresh: the window may be mid-teardown between a late `on_exit` and the setting-change call |
-| `HeroWindowTalents.on_enter` / `on_exit` [safe/full] `_crt_talent_swap.lua` | On enter, vanilla clones the backend's selected talent rows (`hero_window_talents.lua:106-115`). On exit it unconditionally persists those rows and calls `talents_changed()` plus ammo-buff reapply (`:53-74`), even if no row changed. | Track the open desktop picker for swap refresh and snapshot its rows. An identical close performs only animator teardown, preserving accumulated talent buffs (#283); a changed close delegates fully to vanilla. | The full exit hook is intentionally bounded to the source-audited no-change branch. Missing/invalid snapshots fail open to vanilla. One registration per method. |
-| `HeroWindowTalentsConsole.on_enter` / `on_exit` [safe/full] `_crt_talent_swap.lua` | Controller talent picker has the same unconditional persistence/reapply close path (`hero_window_talents_console.lua:67-88`). | Apply the same #283 snapshot guard so input mode does not change gameplay behavior. | Distinct engine class. Changed rows always delegate; the no-op branch retains vanilla's `ui_animator = nil` teardown. |
+| `HeroWindowTalents.on_enter` / `on_exit` [dormant source] `_crt_talent_swap.lua` | On enter, vanilla clones the backend's selected talent rows (`hero_window_talents.lua:106-115`). On exit it persists rows and reapplies talent/ammo state (`:53-74`). | No beta hook. Casting/transposition and its no-op close guard are excluded together. | `_crt_talent_swap.lua` is not loaded; saved selections are never read or applied. |
+| `HeroWindowTalentsConsole.on_enter` / `on_exit` [dormant source] `_crt_talent_swap.lua` | Controller talent picker has the same persistence/reapply close path (`hero_window_talents_console.lua:67-88`). | No beta hook. | Same fail-closed exclusion as desktop. |
 
-### Career ability / activated-cooldown (crash history) (owner doc: `docs/engine/10`)
+### Career ability / activated-cooldown (owner doc: `docs/engine/10`)
 
 | Class.method (kind) | Vanilla behavior | Why crt hooks it | Trap / invariant |
 |---|---|---|---|
-| `CareerExtension.current_ability_cooldown` [hook] `:316` | Returns `(cooldown, max_cooldown)` for an ability; the ult-activate path and the HUD cooldown bar both consume it [src: `scripts/unit_extensions/default_player_unit/careers/career_extension.lua:673`] | Nil-guard: live-swapping a career's `activated_ability` desyncs the spawned extension's `_abilities`/cooldown from the mutated `CareerSettings`, so the next ult reads nil and the engine crashes at `apply_buffs_to_value(nil, "activated_cooldown")` (`:316`, fix 2026-06-21) | `pcall` (catches both the nil-return site and the tail at `career_extension.lua` line ~698) AND preserve BOTH returns - dropping the 2nd is the multi-return-collapse gotcha (`docs/VMF_RECIPES.md` §2). Fallback `(0, 1)`: ready + no divide-by-zero |
+| `CareerExtension.current_ability_cooldown` [hook] `:316` | Returns `(cooldown, max_cooldown)` for an ability; the ult-activate path and the HUD cooldown bar both consume it [src: `scripts/unit_extensions/default_player_unit/careers/career_extension.lua:673`] | Retains the two-return defensive guard for malformed/foreign runtime ability state. The beta itself no longer live-swaps activated abilities. | `pcall` and preserve BOTH returns; dropping the second is the multi-return-collapse gotcha (`docs/VMF_RECIPES.md` §2). Fallback `(0, 1)`: ready + no divide-by-zero. |
 | `CareerExtension.start_activated_ability_cooldown` [safe] `career_tweaker_balance.lua:3679` | Fires at the START of an ability's flow, sets the cooldown [src: `career_extension.lua:349`] | SINGLE consolidation point for two reworks: Foot Knight Battering Ram cooldown refund (`reduce_activated_ability_cooldown_percent`, `career_extension.lua:443`) and the BH Double-Shotted 3s ranged buff | CONSOLIDATED - a 2nd `hook_safe` on this pair silently shadowed the BH branch in v0.2.27->v0.2.32 ("Attempting to rehook active hook" at load). Add new gated branches to the body, never a 2nd hook (`docs/VMF_RECIPES.md` §1) |
 | `CareerAbilityWHZealot._run_ability` [safe] `career_tweaker_balance.lua:3572` | Fires the Zealot Holy Fervour ability (buffs + lunge) [src: `scripts/unit_extensions/default_player_unit/careers/career_ability_wh_zealot.lua`, `[unverified]` exact line] | On the green->THP rework, move current permanent HP into temp HP via `PlayerUnitHealthExtension:convert_to_temp` after vanilla fires (`:3572`) | `convert_to_temp` self-routes: server mutates GameSession, client sends `rpc_request_convert_temp`; server clamps `math.min(current, amount)` so read-back permanent is safe |
 | `CareerAbilityBWUnchained._run_ability` [hook] `career_tweaker_balance.lua:3973` | Fires the Unchained ult, which calls `overcharge_extension:reset()` [src: `scripts/unit_extensions/default_player_unit/careers/career_ability_bw_unchained.lua`, `[unverified]` exact line] | Two reworks on one hook (distinct class from the Zealot hook, no collision): capture overcharge before `func`, restore 75% after (vent 25% only); add the max-US burst buff (`:3973`) | Full `[hook]` (not safe) because it must read overcharge BEFORE vanilla resets it and restore AFTER; both branches gate on their own `mod:get` per call |
@@ -73,12 +77,12 @@ issue-425 peer-parity beacon (`_lib_peer_parity.lua`) adds NO hooks - it POLLS
 | `PlayerUnitHealthExtension.add_heal` [hook] `_crt_flagellation.lua` | Applies permanent or temporary healing, caps it to maximum health, and replicates the realized heal [src: `player_unit_health_extension.lua:842-899`] | #447 measures THP realized during an exact Zealot level-5 proc window and converts half as much green health for Flagellation | Server-only conversion through vanilla `convert_to_temp` (`:1187-1207`). Four native proc wrappers supply the synchronous attribution boundary; generic `heal_from_proc` is insufficient. No custom buff/RPC/lookup |
 | `BuffSystem.hot_join_sync` [hook] `career_tweaker_balance.lua:4102` | Replays EVERY `server_controlled_buffs` entry to a joining peer via `rpc_add_buff`, encoding `NetworkLookup.buff_templates[name]` [src: `scripts/entity_system/systems/buff/buff_system.lua:66`, encode at `:87`; `rpc_add_buff` decode `:417`] | Sender-side, UNCONDITIONAL: hide `crt_*` (and mod-registered-name) entries from the ONE replay pass so a non-crt joiner never decodes a modded index and fatals (`:4102`, issue 425) | Wire safety is never toggle-gated (memory `reference_vt2_wire_safety_never_toggle_gated`; `docs/engine/03` §31). The replay fires during the join handshake BEFORE any parity ack can exist, so no roster gate can win that race - filter is the only fix. `pcall` the wrapped sync, restore stashed entries unconditionally, rethrow to preserve vanilla failure semantics |
 
-### Disabler/dodge diagnostics (observation only)
+### Disabler/dodge diagnostics (dormant in 0.4.0-beta)
 
 | Class.method (kind) | Vanilla behavior | Why crt hooks it | Trap / invariant |
 |---|---|---|---|
-| `PlayerCharacterStateDodging.on_enter` / `.on_exit` [safe] `_crt_bardin_disabler_probe.lua` | Starts/ends the shared per-unit dodge state and networked `dodging` flag [src: `player_character_state_dodging.lua:38-93`] | #440 retain start/end time and position so later disabler resolution can report actual phase, elapsed time and displacement | Weak-key records; only dodges begun within 25m of a disabler emit a bounded local row. This supplies client-owned timing while the host owns AI resolution, without RPC traffic or status writes |
-| `BTPackMasterAttackAction.attack_success` [safe] / `BTCorruptorGrabAction.grab_player` [hook] / `BTCrazyJumpAction.leave` [hook] `_crt_bardin_disabler_probe.lua` | Resolve Packmaster from dodge flag+angle/distance+LOS (`bt_pack_master_attack_action.lua:108-139`); Lifeleech from tracked dodge/projectile geometry+LOS (`bt_corruptor_grab_action.lua:108-121,183-238`); Gutter from root+0.2 trajectory, 1m trigger overlap and neck snap (`bt_prepare_for_crazy_jump_action.lua:188-219`; `bt_crazy_jump_action.lua:163-205,244-292,413-471`) | #440 emit bounded comparative outcome rows for Bardin and controls | Exactly 16 rows per disabler kind; full wrappers delegate once and preserve the vanilla return. No target/status/action mutation; first-person height is presentation-only and not consumed here |
+| `PlayerCharacterStateDodging.on_enter` / `.on_exit` [dormant source] `_crt_bardin_disabler_probe.lua` | Starts/ends the shared per-unit dodge state and networked `dodging` flag [src: `player_character_state_dodging.lua:38-93`] | No beta hook. | Probe source remains available for a later diagnostic build. |
+| `BTPackMasterAttackAction.attack_success` / `BTCorruptorGrabAction.grab_player` / `BTCrazyJumpAction.leave` [dormant source] `_crt_bardin_disabler_probe.lua` | Native disabler resolution seams. | No beta hook. | `/crt_regression_test` asserts the probe surface and tick are absent. |
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for crt's cases)
 

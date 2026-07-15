@@ -1,48 +1,5 @@
 local mod = get_mod("crt")
 
--- Per-dropdown factory. VMF's options.lua localize_dropdown_data mutates each
--- option's `text` field IN PLACE (`option.text = mod:localize(option.text)`).
--- A single shared options table reused across N dropdowns gets localized N
--- times: first pass converts "talent_swap_option_none" -> "None (default)";
--- the second pass localizes "None (default)" (not a key) and falls back to
--- "<None (default)>"; each subsequent reuse adds another bracket pair, so by
--- the 20th dropdown the option reads "<<<...None (default)...>>>".
--- Every dropdown MUST get its own freshly-built options table - return a new
--- table from this builder on every call site.
--- (Same pattern documented in enemy_tweaker_data.lua, line 17.)
--- Option order follows the vanilla hero roster (Kruber, Bardin, Kerillian,
--- Saltzpyre, Sienna), matching the per-career dropdowns below.
-local function _talent_swap_options()
-    return {
-        { text = "talent_swap_option_none",              value = "none"              },
-        -- Markus (Kruber)
-        { text = "talent_swap_option_es_huntsman",       value = "es_huntsman"       },
-        { text = "talent_swap_option_es_knight",         value = "es_knight"         },
-        { text = "talent_swap_option_es_mercenary",      value = "es_mercenary"      },
-        { text = "talent_swap_option_es_questingknight", value = "es_questingknight" },
-        -- Bardin
-        { text = "talent_swap_option_dr_ironbreaker",    value = "dr_ironbreaker"    },
-        { text = "talent_swap_option_dr_slayer",         value = "dr_slayer"         },
-        { text = "talent_swap_option_dr_ranger",         value = "dr_ranger"         },
-        { text = "talent_swap_option_dr_engineer",       value = "dr_engineer"       },
-        -- Kerillian
-        { text = "talent_swap_option_we_shade",          value = "we_shade"          },
-        { text = "talent_swap_option_we_maidenguard",    value = "we_maidenguard"    },
-        { text = "talent_swap_option_we_waywatcher",     value = "we_waywatcher"     },
-        { text = "talent_swap_option_we_thornsister",    value = "we_thornsister"    },
-        -- Victor (Saltzpyre)
-        { text = "talent_swap_option_wh_zealot",         value = "wh_zealot"         },
-        { text = "talent_swap_option_wh_bountyhunter",   value = "wh_bountyhunter"   },
-        { text = "talent_swap_option_wh_captain",        value = "wh_captain"        },
-        { text = "talent_swap_option_wh_priest",         value = "wh_priest"         },
-        -- Sienna
-        { text = "talent_swap_option_bw_scholar",        value = "bw_scholar"        },
-        { text = "talent_swap_option_bw_adept",          value = "bw_adept"          },
-        { text = "talent_swap_option_bw_unchained",      value = "bw_unchained"      },
-        { text = "talent_swap_option_bw_necromancer",    value = "bw_necromancer"    },
-    }
-end
-
 return {
     name              = mod:localize("mod_name"),
     description       = mod:localize("mod_description"),
@@ -63,42 +20,6 @@ return {
                     { setting_id = "unchained_no_overcharge_from_self_dot",  type = "checkbox", default_value = false, tooltip = "unchained_no_overcharge_from_self_dot_tooltip" },
                     { setting_id = "maidenguard_focused_spirit_ignore_chip_damage", type = "checkbox", default_value = true, tooltip = "maidenguard_focused_spirit_ignore_chip_damage_tooltip" },
                     { setting_id = "oe_benefit_from_cooldown_reduction",    type = "checkbox", default_value = false, tooltip = "oe_benefit_from_cooldown_reduction_tooltip" },
-                },
-            },
-            -- ============================================================
-            -- Career Ability & Talent Swapping
-            -- Roster-order exemption: per-career dropdowns follow the vanilla
-            -- hero roster (Kruber, Bardin, Kerillian, Saltzpyre, Sienna), not A-Z.
-            -- ============================================================
-            {
-                setting_id = "career_swapping_group",
-                type       = "group",
-                sub_widgets = {
-                    -- Markus (Kruber)
-                    { setting_id = "talent_swap_es_huntsman",       type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_es_knight",         type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_es_mercenary",      type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_es_questingknight", type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    -- Bardin
-                    { setting_id = "talent_swap_dr_ironbreaker",    type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_dr_slayer",         type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_dr_ranger",         type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_dr_engineer",       type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    -- Kerillian
-                    { setting_id = "talent_swap_we_shade",          type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_we_maidenguard",    type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_we_waywatcher",     type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_we_thornsister",    type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    -- Victor (Saltzpyre)
-                    { setting_id = "talent_swap_wh_zealot",         type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_wh_bountyhunter",   type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_wh_captain",        type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_wh_priest",         type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    -- Sienna
-                    { setting_id = "talent_swap_bw_scholar",        type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_bw_adept",          type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_bw_unchained",      type = "dropdown", default_value = "none", options = _talent_swap_options() },
-                    { setting_id = "talent_swap_bw_necromancer",    type = "dropdown", default_value = "none", options = _talent_swap_options() },
                 },
             },
             -- ============================================================

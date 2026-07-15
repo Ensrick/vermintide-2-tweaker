@@ -1,6 +1,8 @@
 # Career Tweaker Code Review (2026-05-23, v0.3.7-dev)
 
 > **[SUPERSEDED 2026-07-14 — #433 retired the implementation]** The Big Rebalance implementation described below was deleted. Hidden `cbr_*` identifiers remain reserved only for save compatibility; historical source is recoverable from git. Do not treat BR findings in this snapshot as current work.
+>
+> **[PUBLIC-BETA BOUNDARY 2026-07-15]** The talent/ability swapping engine described in this historical snapshot is not loaded or exposed by 0.4.0-beta. Saved `talent_swap_*` values are retained but inert pending a redesign. Current architecture lives in `DEVELOPMENT.md` and `ENGINE_SURFACE.md`.
 
 **Scope:** all Lua source in career_tweaker/ (excluding undleV2/, build artifacts, and archived files).
 
