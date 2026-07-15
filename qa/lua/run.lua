@@ -59,6 +59,7 @@ local suites = {
     "test_mod_tweaker_disabled_sections",
     "test_gut_video_profiles",
     "test_gut_cutscene_probe",
+    "test_gut_cutscene_policy274",
     "test_et_settings_queue",
     "test_et_health_multiplier",
     "test_et_personal_handicap",

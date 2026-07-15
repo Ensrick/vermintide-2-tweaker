@@ -11,15 +11,13 @@ local mod = get_mod("gut_dev")
 -- mod.gut_skip_cutscenes_toggle).
 --
 -- VT2's CutsceneSystem gates the ESC/Space skip behind
--- `script_data.skippable_cutscenes` (cutscene_system.lua:98). ISSUE 275 POLICY
--- (0.2.209-dev): gut only unlocks/skips a cutscene that carries a WIRED
--- `event_on_skip` flow event; that flag is SCOPE-unlocked just around the
--- skip_pressed call, never latched on globally, so a boss/phase cinematic with
--- event_on_skip=nil (Nurgloth on The Enchanter's Lair / dlc_castle) plays out
--- untouched instead of desyncing the fight into a ~66%-health softlock. In "auto"
--- mode we additionally trigger the deferred skip the moment a wired cutscene's
--- activation flow fires, so the player never sits through a skippable cutscene. See
--- the `_gut_cutscene_has_wired_skip` gate below.
+-- `script_data.skippable_cutscenes` (cutscene_system.lua:98). ISSUE 274 POLICY:
+-- gut only unlocks/skips the exact authored mission-intro event (`cs_01_skip`);
+-- that flag is
+-- SCOPE-unlocked just around the skip_pressed call, never latched on globally.
+-- Mid-mission, phase, and outro cinematics are preserved even when they carry
+-- some other wired event_on_skip. Unknown identities fail closed. See the
+-- `_gut_cutscene_is_intro` gate below.
 --
 -- Hooks (all guarded; PRE-FLIGHT verified disjoint from the rest of gut — a
 -- whole-mod grep before migration found NO other gut hook on CutsceneSystem or on
@@ -118,6 +116,7 @@ local mod = get_mod("gut_dev")
 local _printf = rawget(_G, "printf") or function(fmt, ...) print(string.format(fmt, ...)) end
 local _probe257 = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_cutscene_probe257")
 local _probe257_state = _probe257.new()
+local _policy274 = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_cutscene_policy274")
 
 local function _level_key()
     local lvl = "?"
@@ -172,12 +171,12 @@ end
 -- sync. Setting id `gut_skip_cutscenes_enabled` to avoid colliding with the
 -- standalone Skip Cutscenes / Skip Cutscenes Please mod settings.
 
--- issue 537 / issue 275: own-or-pin ownership of the shared engine skip gate
+-- issue 537 / issue 275 / issue 274: own-or-pin ownership of the shared engine skip gate
 -- `script_data.skippable_cutscenes`. It is a GLOBAL on the engine settings table, read at
 -- exactly one runtime site (CutsceneSystem.skip_pressed, cutscene_system.lua:98) and
 -- shared with vanilla (the debug menu preset sets it, debug_screen_config.lua:742) and any
 -- co-installed cutscene mod. gut must NEVER persistently latch it on -- the hooks below
--- scope-unlock it only around a skip on a wired-event_on_skip cutscene and restore the
+-- scope-unlock it only around the authored `cs_01_skip` mission intro and restore the
 -- at-rest value on every path. Capture the pre-gut value ONCE, before any gut hook
 -- installs, so that disabling the feature restores whatever a co-installed mod / the debug
 -- menu set instead of clobbering it to a hardcoded nil. Guarded by a boolean flag (a nil
@@ -218,8 +217,8 @@ local _skip_next_fade = false
 -- then call `skip_pressed` which runs the full teardown.
 local _pending_auto_skip_system = nil
 -- issue 275 (0.2.209-dev): the old `_pending_auto_skip_force` flag (the deus-vs-
--- adventure force-unlock split) is gone. Under the wired-on_skip policy the deferred
--- processor only ever fires for a cutscene that carries a wired event_on_skip, and it
+-- adventure force-unlock split) is gone. Under issue 274's intro-only policy the
+-- deferred processor only ever fires for the exact `cs_01_skip` intro event, and it
 -- scope-unlocks script_data.skippable_cutscenes around that single skip_pressed call
 -- every time (then restores the at-rest value on every path, including a throw).
 -- gut v0.2.159-dev (#106, bastion re-arm variant, 2026-07-01): post-skip camera guard.
@@ -250,13 +249,28 @@ local _pending_auto_skip_system = nil
 --       FRESH CutsceneSystem (cutscene_system.lua:11-24 init), so `_skipped == self`
 --       can never match across a level boundary. Stricter than a boolean + reset.
 local _skipped_cutscene_system = nil
+local _post_skip_guard_remaining = 0
+
+local function _post_skip_guard_active(system)
+    return _policy274.guard_is_active(
+        _skipped_cutscene_system, system, _post_skip_guard_remaining)
+end
+
+local function _clear_post_skip_guard(reason)
+    if _skipped_cutscene_system then
+        _printf("[gut:274] post-intro camera guard cleared reason=%s level=%s",
+            tostring(reason), _level_key())
+    end
+    _skipped_cutscene_system = nil
+    _post_skip_guard_remaining = 0
+end
 
 local function _gut_cutscene_skip_active()
     return mod:get("gut_skip_cutscenes_enabled") and true or false
 end
 
--- issue 275 (0.2.209-dev): gut may only unlock/skip a cutscene that carries a WIRED
--- `event_on_skip` flow event. The engine's skip has no per-cutscene lock -- it gates
+-- issue 274: gut may only unlock/skip the exact authored mission-intro event
+-- `cs_01_skip`. The engine's skip has no per-cutscene lock -- it gates
 -- the whole thing behind `if self.active_camera and script_data.skippable_cutscenes`
 -- (cutscene_system.lua:98). `event_on_skip` is the LEVEL author's own skip/teardown
 -- flow event: on skip the engine fires it early (cutscene_system.lua:99-105). A
@@ -265,9 +279,9 @@ end
 -- `event_on_skip=nil` -> there is NO legal skip path, and terminating it early leaves
 -- the level's cinematic flow sequence dangling; the boss fight state machine desyncs
 -- and his health floors at ~66% forever (softlock, reported 2026-06-18 / repro
--- 2026-07-05). So: nil `event_on_skip` = LOCKED = play it out vanilla, no unlock, no
--- skip. This gate replaces the old deus/adventure split: deus and adventure now behave
--- identically (wired on_skip = skippable, nil = locked). `_gut_in_deus` survives only
+-- 2026-07-05). A merely non-nil event is not proof that a cinematic is an intro:
+-- Parting of the Waves and Well of Dreams outro paths demonstrated the failure.
+-- Exact `cs_01_skip` = intro; nil/unknown/other = preserve. `_gut_in_deus` survives only
 -- to keep the `in_deus` field in the [gut:cutscene] probe output for log continuity.
 local function _gut_in_deus()
     local mechanism = Managers and Managers.mechanism and Managers.mechanism.game_mechanism
@@ -276,24 +290,28 @@ local function _gut_in_deus()
         and mechanism:get_deus_run_controller() ~= nil or false
 end
 
--- issue 275 gate: a cutscene is legally skippable ONLY if it carries a wired
--- `event_on_skip`. The engine stores it on the CutsceneSystem instance as
+-- issue 274 gate: a cutscene is eligible for gut's forced skip ONLY if its
+-- `event_on_skip` is exactly `cs_01_skip`. The engine stores it on the instance as
 -- `self.event_on_skip` in flow_cb_activate_cutscene_logic (cutscene_system.lua:183)
--- and nils it on skip / deactivate (:105 / :196). nil = no wired skip path -> gut
--- must leave the cutscene playing. Exposed as mod._gut_cutscene_has_wired_skip so the
--- regression scaffold can assert it refuses a nil-on_skip cutscene.
-local function _gut_cutscene_has_wired_skip(cutscene_system)
-    return cutscene_system ~= nil and cutscene_system.event_on_skip ~= nil
+-- and nils it on skip / deactivate (:105 / :196). Every unknown identity fails
+-- closed. The compatibility export retains its old name for the existing runtime
+-- scaffold, but its semantics are now intentionally intro-only.
+local function _gut_cutscene_is_intro(cutscene_system)
+    return cutscene_system ~= nil and _policy274.is_intro(cutscene_system.event_on_skip)
 end
-mod._gut_cutscene_has_wired_skip = _gut_cutscene_has_wired_skip
+-- Compatibility export retained for the existing #275 runtime check. Its
+-- semantics are deliberately narrower now: a wired event is not sufficient;
+-- only the authored mission-intro event may be unlocked by gut.
+mod._gut_cutscene_has_wired_skip = _gut_cutscene_is_intro
+mod._gut_cutscene_is_intro = _gut_cutscene_is_intro
 
 if CutsceneSystem then
     mod:hook(CutsceneSystem, "flow_cb_cutscene_effect", function(func, self, name, flow_params, ...)
         _trace257(self, "effect", {
             disposition = _probe257.fade_disposition(name, _skip_next_fade,
-                _skipped_cutscene_system == self),
+                _post_skip_guard_active(self)),
             skip_next = _skip_next_fade,
-            guard = _skipped_cutscene_system == self,
+            guard = _post_skip_guard_active(self),
             active_camera = self.active_camera ~= nil,
             on_skip = self.event_on_skip,
             fade_in = flow_params and flow_params.fade_in_time,
@@ -318,7 +336,7 @@ if CutsceneSystem then
         -- docstring + CHANGELOG): a scripted standalone fx_fade routed through
         -- CutsceneSystem while the guard is armed is also swallowed (cosmetic pop
         -- instead of a masking fade) - accepted vs. the erroneous black screen.
-        if _skipped_cutscene_system == self and name == "fx_fade" then
+        if _post_skip_guard_active(self) and name == "fx_fade" then
             _printf("[gut:cutscene] fx_fade swallowed (post-skip guard) | level=%s", _level_key())
             return
         end
@@ -327,8 +345,8 @@ if CutsceneSystem then
 
     mod:hook(CutsceneSystem, "flow_cb_activate_cutscene_logic", function(func, self, player_input_enabled, event_on_activate, event_on_skip)
         _trace257(self, "logic_activate", {
-            disposition = event_on_skip ~= nil and "wired_skip" or "locked_no_skip",
-            guard = _skipped_cutscene_system == self,
+            disposition = _policy274.classify(event_on_skip),
+            guard = _post_skip_guard_active(self),
             active_camera = self.active_camera ~= nil,
             on_activate = event_on_activate,
             on_skip = event_on_skip,
@@ -337,10 +355,7 @@ if CutsceneSystem then
         -- #106 bastion fix: a genuinely NEW cutscene is starting — clear the post-skip
         -- camera guard BEFORE the auto-skip evaluation below, so this cutscene's camera
         -- activates normally and, if auto-skip fires, the skip re-arms the guard itself.
-        if _skipped_cutscene_system then
-            _printf("[gut:cutscene] post-skip camera guard RESET (new cutscene activating) | level=%s", _level_key())
-            _skipped_cutscene_system = nil
-        end
+        _clear_post_skip_guard("new_cutscene_logic")
         local result = func(self, player_input_enabled, event_on_activate, event_on_skip)
         -- DIAGNOSTIC (#106): log every CutsceneSystem activation (on_activate/on_skip
         -- event names + level + deus gate + readable teardown state). The boss-phase
@@ -361,10 +376,10 @@ if CutsceneSystem then
             -- cinematic (event_on_skip=nil, e.g. Nurgloth on dlc_castle) is left to
             -- play out vanilla -- skipping it fires the level flow's event_on_skip
             -- early and desyncs the fight into a ~66%-health softlock. deus and
-            -- adventure are treated identically now; the wired-skip gate is the sole
+            -- adventure are treated identically now; the intro-identity gate is the sole
             -- arbiter (the old in_deus force-unlock split is gone with the global
             -- latch it relied on).
-            if event_on_skip ~= nil then
+            if _policy274.is_intro(event_on_skip) then
                 -- Swallow the cutscene's fade-IN since it will actually skip; pairs
                 -- with the deferred processor's fade-OUT so no blackscreen shows.
                 _skip_next_fade = true
@@ -375,8 +390,9 @@ if CutsceneSystem then
                 -- only around that skip_pressed call.
                 _pending_auto_skip_system = self
             else
-                _printf("[gut:cutscene] LOCKED (no wired on_skip flow event - not skippable, issue 275) | level=%s in_deus=%s",
-                    _level_key(), tostring(_gut_in_deus()))
+                _printf("[gut:274] NOT-INTRO (cutscene preserved) | level=%s disposition=%s on_skip=%s in_deus=%s",
+                    _level_key(), _policy274.classify(event_on_skip), tostring(event_on_skip),
+                    tostring(_gut_in_deus()))
             end
         end
         return result
@@ -388,9 +404,9 @@ if CutsceneSystem then
     -- branch fires regardless of the level's own author intent.
     mod:hook(CutsceneSystem, "skip_pressed", function(func, self, ...)
         _trace257(self, "skip_before", {
-            disposition = _gut_cutscene_has_wired_skip(self) and "wired_skip" or "locked_no_skip",
+            disposition = _gut_cutscene_is_intro(self) and "intro_skip" or "preserve_non_intro",
             skip_next = _skip_next_fade,
-            guard = _skipped_cutscene_system == self,
+            guard = _post_skip_guard_active(self),
             active_camera = self.active_camera ~= nil,
             on_skip = self.event_on_skip,
             auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
@@ -412,9 +428,11 @@ if CutsceneSystem then
         -- is exactly "a skip executed" — an orphan press (no active cutscene) or an
         -- author-locked CW cutscene falling through vanilla does NOT arm the guard.
         local had_camera = self.active_camera ~= nil
+        local was_intro = _gut_cutscene_is_intro(self)
         local function _arm_post_skip_guard()
-            if had_camera and self.active_camera == nil then
+            if was_intro and had_camera and self.active_camera == nil then
                 _skipped_cutscene_system = self
+                _post_skip_guard_remaining = _policy274.POST_INTRO_GUARD_SECONDS
                 _trace257(self, "guard_armed", {
                     disposition = "post_skip_guard",
                     skip_next = _skip_next_fade,
@@ -426,14 +444,14 @@ if CutsceneSystem then
                 _printf("[gut:cutscene] post-skip camera guard ARMED | level=%s", _level_key())
             end
         end
-        -- issue 275: force-unlock (scope-only) ONLY when the cutscene carries a wired
-        -- event_on_skip. A boss/phase cinematic with event_on_skip=nil (Nurgloth /
-        -- dlc_castle) has no legal skip path; unlocking it fires the level flow's
-        -- event_on_skip early and desyncs the fight -> softlock. For a locked cutscene
+        -- issue 274: force-unlock (scope-only) ONLY for exact mission intros. A
+        -- boss/phase/outro cinematic has no gut-owned skip path; unlocking it can fire
+        -- level flow early, desync a fight, or suppress the outro camera. For any
+        -- non-intro cutscene
         -- we fall through to vanilla skip_pressed with script_data.skippable_cutscenes
         -- unset (retail default), so vanilla's own gate refuses the skip and the
         -- cutscene plays out. deus and adventure are treated identically now.
-        if _gut_cutscene_skip_active() and _gut_cutscene_has_wired_skip(self) then
+        if _gut_cutscene_skip_active() and _gut_cutscene_is_intro(self) then
             local saved = script_data.skippable_cutscenes
             script_data.skippable_cutscenes = true
             _skip_next_fade = true
@@ -444,14 +462,15 @@ if CutsceneSystem then
             -- skip is now unnecessary — cancel it.
             _pending_auto_skip_system = nil
             _arm_post_skip_guard()
-            _printf("[gut:cutscene] SKIP-PRESSED after (unlock, wired on_skip) | %s", _cs_snapshot(self))
+            _printf("[gut:cutscene] SKIP-PRESSED after (unlock, intro-only) | %s", _cs_snapshot(self))
             return result
         end
-        -- Locked cutscene (no wired on_skip): a genuine skip press on an active locked
-        -- cutscene logs the decision, then falls through to vanilla (which refuses).
-        if _gut_cutscene_skip_active() and had_camera and not _gut_cutscene_has_wired_skip(self) then
-            _printf("[gut:cutscene] LOCKED (no wired on_skip flow event - not skippable, issue 275) | level=%s in_deus=%s",
-                _level_key(), tostring(in_deus))
+        -- Non-intro cutscene: log the decision, then preserve vanilla behavior without
+        -- gut force-unlocking the global skip gate.
+        if _gut_cutscene_skip_active() and had_camera and not _gut_cutscene_is_intro(self) then
+            _printf("[gut:274] NOT-INTRO skip press preserved | level=%s disposition=%s on_skip=%s in_deus=%s",
+                _level_key(), _policy274.classify(self.event_on_skip),
+                tostring(self.event_on_skip), tostring(in_deus))
         end
         local result = func(self, ...)
         _arm_post_skip_guard()
@@ -479,9 +498,9 @@ if CutsceneSystem then
     -- client instrumentation blind spot.
     mod:hook(CutsceneSystem, "flow_cb_activate_cutscene_camera", function(func, self, camera_unit, transition_data, ingame_hud_enabled, letterbox_enabled)
         _trace257(self, "camera_activate", {
-            disposition = _skipped_cutscene_system == self and "suppress_post_skip" or "pass_camera",
+            disposition = _post_skip_guard_active(self) and "suppress_post_skip" or "pass_camera",
             skip_next = _skip_next_fade,
-            guard = _skipped_cutscene_system == self,
+            guard = _post_skip_guard_active(self),
             active_camera = self.active_camera ~= nil,
             on_skip = self.event_on_skip,
             hud = ingame_hud_enabled,
@@ -501,13 +520,13 @@ if CutsceneSystem then
         do
             local in_deus = _gut_in_deus()
             if _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto")
-               and (not in_deus or script_data.skippable_cutscenes) then
+               and _gut_cutscene_is_intro(self) then
                 _skip_next_fade = true
                 _printf("[gut:cutscene] CAMERA-NODE fade-arm (_skip_next_fade=true, #140) | level=%s in_deus=%s skippable=%s",
                     _level_key(), tostring(in_deus), tostring(script_data and script_data.skippable_cutscenes))
             end
         end
-        if _skipped_cutscene_system == self then
+        if _post_skip_guard_active(self) then
             _printf("[gut:cutscene] CAMERA-ACTIVATE suppressed (post-skip guard) | level=%s hud=%s letterbox=%s | %s",
                 _level_key(), tostring(ingame_hud_enabled), tostring(letterbox_enabled), _cs_snapshot(self))
             return nil
@@ -526,7 +545,7 @@ if CutsceneSystem then
         _trace257(self, "camera_deactivate", {
             disposition = "observed",
             skip_next = _skip_next_fade,
-            guard = _skipped_cutscene_system == self,
+            guard = _post_skip_guard_active(self),
             active_camera = self.active_camera ~= nil,
             on_skip = self.event_on_skip,
             auto = _gut_cutscene_skip_active() and mod:get("gut_skip_cutscenes_auto") and true or false,
@@ -557,6 +576,12 @@ mod.update = function(dt)
     if _gut_cutscene_prev_update then _gut_cutscene_prev_update(dt) end
     -- [gut:frametime] heartbeat. dt is seconds; VMF calls mod.update every frame.
     local d = dt or 0
+    if _skipped_cutscene_system then
+        _post_skip_guard_remaining = _policy274.tick_guard(_post_skip_guard_remaining, d)
+        if _post_skip_guard_remaining <= 0 then
+            _clear_post_skip_guard("timeout")
+        end
+    end
     local ms = d * 1000
     _ft_frames = _ft_frames + 1
     _ft_accum_ms = _ft_accum_ms + ms
@@ -579,10 +604,10 @@ mod.update = function(dt)
         -- our tick fired (race with another mod or the cutscene ending naturally).
         local saved_skippable = script_data.skippable_cutscenes
         local ok, err = pcall(function()
-            -- issue 275: re-verify the wired event_on_skip at fire time (defense in
-            -- depth; it is niled only on skip/deactivate, so a genuinely skippable
-            -- cutscene still carries it here). No wired path -> leave it playing.
-            if sys.active_camera and _gut_cutscene_has_wired_skip(sys) then
+            -- Re-verify the exact intro event at fire time. The field is niled on
+            -- skip/deactivate, so a still-live intro retains it here. Any changed or
+            -- unknown identity is preserved.
+            if sys.active_camera and _gut_cutscene_is_intro(sys) then
                 -- Scope-unlock ONLY around this skip_pressed. At rest
                 -- script_data.skippable_cutscenes stays unset (retail default, issue
                 -- 275); we set it true just so vanilla's gate
@@ -592,13 +617,14 @@ mod.update = function(dt)
                 _skip_next_fade = true
                 -- DIAGNOSTIC (#106): the deferred tick + before/after teardown state.
                 -- force_unlock is always true here now: we only reach this for a
-                -- wired-on_skip cutscene (issue 275).
+                -- exact intro event (issue 274).
                 _printf("[gut:cutscene] AUTO-SKIP deferred-tick firing | level=%s force_unlock=%s skippable=%s | before: %s",
                     _level_key(), tostring(true), tostring(script_data.skippable_cutscenes), _cs_snapshot(sys))
                 sys:skip_pressed()
                 _printf("[gut:cutscene] AUTO-SKIP deferred-tick done | after: %s", _cs_snapshot(sys))
             elseif sys.active_camera then
-                _printf("[gut:cutscene] LOCKED (no wired on_skip flow event - not skippable, issue 275) | level=%s", _level_key())
+                _printf("[gut:274] pending cutscene no longer identifies as intro; preserved | level=%s on_skip=%s",
+                    _level_key(), tostring(sys.event_on_skip))
             end
         end)
         -- Restore the at-rest skip gate unconditionally (see saved_skippable note above).
@@ -626,7 +652,7 @@ mod.gut_skip_cutscenes_toggle = function()
     mod:set("gut_skip_cutscenes_enabled", new_val)
     -- issue 275 / issue 537: do NOT latch script_data.skippable_cutscenes ON. At rest the
     -- engine skip gate stays at its pre-gut value; the hooks scope-unlock it only around a
-    -- skip_pressed call on a cutscene that carries a wired event_on_skip. When disabling,
+    -- skip_pressed call on the exact `cs_01_skip` mission intro. When disabling,
     -- restore the captured pre-gut value via the shared own-or-pin helper (same path the
     -- VMF checkbox uses in on_setting_changed) rather than clobbering a co-installed mod's
     -- set to a hardcoded nil.
@@ -634,7 +660,7 @@ mod.gut_skip_cutscenes_toggle = function()
     mod:echo("Skip cutscenes: " .. (new_val and "ON" or "OFF"))
 end
 
-mod:command("skipcutscenes", "Toggle skipping cutscenes (auto-skip if 'Auto-skip' is enabled in settings, otherwise just allows ESC/Space)", function()
+mod:command("skipcutscenes", "Toggle mission-intro skipping (auto-skip if 'Auto-skip' is enabled; otherwise allows ESC/Space during the intro)", function()
     mod.gut_skip_cutscenes_toggle()
 end)
 
@@ -642,9 +668,51 @@ end)
 -- = true at load whenever the toggle was on, which force-unlocked EVERY cutscene
 -- engine-wide (including author-locked boss cinematics like Nurgloth on dlc_castle).
 -- At rest the flag now stays unset, exactly like retail; the hooks scope-unlock it
--- only around a skip on a cutscene that carries a wired event_on_skip.
+-- only around an exact `cs_01_skip` mission intro.
 
 mod:info("[gut] Skip Cutscenes installed (migrated from gt, issue #106; [gut:cutscene] printf diagnostic active; toggle: %s, auto: %s)",
     tostring(mod:get("gut_skip_cutscenes_enabled")), tostring(mod:get("gut_skip_cutscenes_auto")))
 
-return { rt_checks = _probe257.rt_checks }
+local _rt_checks = {}
+for i = 1, #(_probe257.rt_checks or {}) do
+    _rt_checks[#_rt_checks + 1] = _probe257.rt_checks[i]
+end
+_rt_checks[#_rt_checks + 1] = {
+    name = "issue274_intro_only_cutscene_policy",
+    fn = function()
+        if not _policy274.is_intro("cs_01_skip") then
+            return "issue 274 regression: canonical mission intro is no longer skippable"
+        end
+        if _policy274.is_intro(nil) then
+            return "issue 274 regression: unidentified cutscene accepted"
+        end
+        local forbidden = {
+            "cs_02_skip",
+            "boss_phase_skip",
+            "dlc_dwarf_whaling_outro",
+            "well_of_dreams_outro",
+        }
+        for i = 1, #forbidden do
+            if _policy274.is_intro(forbidden[i]) then
+                return "issue 274 regression: non-intro cutscene accepted: "
+                    .. tostring(forbidden[i])
+            end
+        end
+    end,
+}
+_rt_checks[#_rt_checks + 1] = {
+    name = "issue274_post_intro_guard_bounded",
+    fn = function()
+        if _policy274.POST_INTRO_GUARD_SECONDS <= 0
+            or _policy274.POST_INTRO_GUARD_SECONDS > 15 then
+            return "issue 274 regression: post-intro camera guard is unbounded"
+        end
+        local owner = {}
+        if _policy274.guard_is_active(owner, owner,
+            _policy274.tick_guard(_policy274.POST_INTRO_GUARD_SECONDS, 15)) then
+            return "issue 274 regression: post-intro camera guard survives its deadline"
+        end
+    end,
+}
+
+return { rt_checks = _rt_checks }
