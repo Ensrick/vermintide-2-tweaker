@@ -22,6 +22,7 @@ and reverts everything. This matches how the Athanor handles property/trait edit
 ]]
 
 local mod = get_mod("cim_dev")
+mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_salvage_modded_button")
 local template_selector = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_template_selector")
 local template_catalog = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_template_catalog")
 mod._cim_template_selector = template_selector

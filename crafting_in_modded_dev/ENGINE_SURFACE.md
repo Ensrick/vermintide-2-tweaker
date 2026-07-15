@@ -10,7 +10,7 @@ the named `crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/*.lua`
 module. `§N` = a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue.
 
 **Dev/stable relationship.** This documents `crafting_in_modded_dev` (`cim_dev`,
-MOD_VERSION `0.8.74-dev`, friends-only Workshop 3733366851), the ACTIVE working
+MOD_VERSION `0.8.77-dev`, friends-only Workshop 3733366851), the ACTIVE working
 stream. `crafting_in_modded/` (`cim`, public Workshop 3721038774) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action (`tools/promote/promote.ps1`), so
@@ -19,8 +19,8 @@ so any cross-mod consumer resolving `get_mod("cim")` will NOT see the dev clone.
 cim's own render-rescue for CWV crafts, by contrast, keys on the `cwv_` backend_id
 prefix, which is stream-agnostic.
 
-**Verification split (honest).** Line-verified against the 2026-07-12 `cim_dev`
-module source: every hook signature (grep-confirmed, **107 `mod:hook`/`hook_safe`
+**Verification split (honest).** Line-verified against the 2026-07-14 `cim_dev`
+module source: every hook signature (grep-confirmed, **136 `mod:hook`/`hook_safe`
 sites + 1 `mod:network_register`**), the full body of `standard_forge.lua`,
 `illusion_swap.lua`, `modded_rarities.lua`, and the main-file craft-record shape
 (`:282-582`), wire-safety core (`:753-903`), LA equip-capture (`:1543-1576`),
@@ -50,7 +50,7 @@ surfaces below.
 
 ## Hook table
 
-**108 hook sites** (`mod:hook`/`mod:hook_safe`) + **1 VMF RPC channel**
+**136 hook sites** (`mod:hook`/`mod:hook_safe`) + **1 VMF RPC channel**
 (`mod:network_register("cim_modded_slot")`) + a set of engine-**table** contacts
 (rarity registration, template-cache injection - see Surface 1/5 notes). Grouped
 below into rows-of-concern. `[hook]` = full wrapper (`mod:hook`, can rewrite
@@ -65,6 +65,7 @@ the trap column.
 
 | Class.method (kind) | Vanilla behavior at the seam | Why cim hooks it | Trap / invariant |
 |---|---|---|---|
+| `{CraftPageSalvage, CraftPageSalvageConsole}.{_handle_input, _update_animations}` [hook/safe] `_cim_salvage_modded_button.lua` | Desktop dispatches rarity buttons into `_fill_by_rarity`, which stops at `CraftingSettings.NUM_SALVAGE_SLOTS`; console publishes the selected rarity through the overview state [src: `craft_page_salvage.lua:164-276`; `craft_page_salvage_console.lua:153-181`; `crafting_recipes.lua:4`] | Add the fifth `modded` rarity control to both definition tables, animate it with the existing icon-button helper, and delegate the press to the matching vanilla bounded fill route | Definition transform is idempotent and derives direction/spacing from rare -> exotic. Clear moves one step to sixth. No custom item-selection or salvage transaction path. Runtime check: `issue618_modded_salvage_autofill`. |
 | `BackendInterfaceCraftingPlayfab.craft` [hook] `standard_forge.lua:1446` | Enqueues an `ExecuteCloudScript` PlayFab request with `send_eac_challenge=true`; recipe resolved via `_get_valid_recipe` [src: `backend_interface_crafting_playfab.lua`, queue at `playfab_request_queue.lua:44`] | THE choke point: short-circuit PlayFab, dispatch to a local `synth[recipe.name]`, write results into the backend mirror | CONSOLIDATED (illusion-apply intercept runs FIRST, then `_is_active` gate). NEVER fall through to `func` in modded realm - it triggers the EAC kick (reason 511). Must return a non-nil `(id, recipe)` even on silent-drop or the press-and-hold refires every frame (log spam) |
 | `BackendInterfaceCraftingPlayfab._get_valid_recipe` [hook] `standard_forge.lua:433` | Validates recipe + material ingredients against the player's inventory [src: `backend_interface_crafting_playfab.lua`] | Bypass material validation; synthesize a shim recipe for cim-only names (`craft_necklace`/`craft_charm`/`craft_trinket`) vanilla's `_crafting_recipes_by_name` lacks | Only fires under `_is_active()`; returns `(recipe, valid_ids)` with `amount=1` per bid |
 | `PlayFabRequestQueue.enqueue` [hook] `standard_forge.lua:1589` | Enqueues any PlayFab cloud-function request [src: `playfab_request_queue.lua`] | Defense-in-depth: drop every `crafting*` FunctionName before it reaches the EAC path, even if the `craft` hook is bypassed | Gated on `_is_active()` + `request.FunctionName` prefix; leaves non-craft traffic (achievements/quests) untouched |

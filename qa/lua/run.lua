@@ -116,6 +116,7 @@ local suites = {
     "test_cim_bulk_cleanup",
     "test_cim_cwv_template_selector",
     "test_cim_cwv_template_catalog",
+    "test_cim_salvage_autofill",
     "test_cim_trait_slot_policy",
     "test_cim_property_value_policy",
     "test_cim_tab_preview",

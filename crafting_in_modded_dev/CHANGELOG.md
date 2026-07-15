@@ -1,5 +1,15 @@
 # Crafting in Modded Changelog
 
+## 0.8.77-dev (2026-07-14): #618 modded salvage autofill [verify-fix]
+
+- Added a fifth rarity autofill button to both standard salvage layouts. It uses CIM's existing `icon_bg_modded` resource, selects only `modded` items, and moves Clear to the sixth position.
+- Reused vanilla's existing fill paths rather than duplicating salvage selection. Desktop calls `CraftPageSalvage._fill_by_rarity("modded")`; console sends the same rarity through `HeroViewStateOverview.set_auto_fill_rarity`. Both remain bounded by vanilla's nine `CraftingSettings.NUM_SALVAGE_SLOTS` slots.
+- Added an idempotent pure definition transformer, desktop/console engine-free tests, apply-site `[cim:618]` traces, and runtime regression `issue618_modded_salvage_autofill`.
+
+### Test method
+
+Open the standard Salvage page with at least ten Modded-rarity items, click the new pale-gold fifth rarity button, and confirm exactly nine Modded items fill the salvage queue while Clear remains the sixth button. Run `/cim_regression_test` and require `issue618_modded_salvage_autofill` PASS.
+
 ## 0.8.76-dev (2026-07-14): #524 restore all CWV Blacksmith selectors [verify-fix]
 
 - Fixed every CWV Blacksmith/base selector disappearing from the standard Craft Item grid, including Dual Axes, Infantry Spear, Imperial/Dawi Crowbill, and Kruber Greataxe. CWV registered all 34 craftable definitions in the reported session, but CIM activated its forge/cache only after vanilla `HeroWindowCraftingConsole.on_enter` had already built the initially selected recipe page.

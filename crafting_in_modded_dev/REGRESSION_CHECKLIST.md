@@ -435,7 +435,22 @@ Last updated: 2026-07-14.
 
 ---
 
+### issue618-modded-salvage-autofill — Fifth rarity button preserves nine-slot bound
+
+| Field | Value |
+|-------|-------|
+| Symptom | The standard Salvage page has no autofill control for CIM's Modded rarity. |
+| Root cause | Vanilla defines buttons only for plentiful, common, rare, and exotic, then Clear. |
+| Mod(s) | cim_dev |
+| Fix version(s) | 0.8.77-dev |
+| Category | UI / CRAFTING |
+| Repro | Open standard Salvage with at least ten Modded-rarity items and press the pale-gold fifth rarity button. |
+| Expected post-fix | Exactly nine matching items fill the queue; Clear remains available as the sixth button. |
+| Detection | Engine-free `test_cim_salvage_autofill.lua`; runtime `/cim_regression_test` check `issue618_modded_salvage_autofill`; `[cim:618]` apply/press traces. |
+
 ## Slugs
+
+- issue618-modded-salvage-autofill
 
 - feedback-deploy-vs-upload-distinction
 - feedback-mod-version-format
