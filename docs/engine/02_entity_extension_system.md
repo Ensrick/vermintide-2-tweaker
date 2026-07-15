@@ -290,7 +290,8 @@ are where we fight the engine or leave a lifecycle edge open.
    enemies are skipped for the num_hit cap with a `[wt:br_hooks]` printf.
    Note the BR module is ON ICE (`weapon_tweaker.lua:88-89`, issue 433), so
    the guard is dormant until a BR revival.
-   (Same UNFIXED line remains in the STALE `weapon_tweaker_dev` clone - do not edit that dir.)
+   The active `weapon_tweaker_dev` mirror now receives this guard through the
+   blocking WT stream-parity gate (`qa/check_wt_stream_parity.ps1`).
 
 2. **[P2] et BR stagger-heal proc derefs inventory ext unguarded.**
    `enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker_big_rebalance.lua:478-479`

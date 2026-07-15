@@ -68,8 +68,8 @@
 #     exact, cheap, and matches the doctrine's own enumeration in § 13.5.
 #
 # Exclusions: `_archive/`, `bundleV2/`, `.build/`, `.temp/`, `_test_fixtures/`,
-# upstream source clones, `_*_extract/` snapshots, the frozen legacy `tweaker/`
-# mod, and the STALE `weapon_tweaker_dev/` experiment clone (never edited).
+# upstream source clones, `_*_extract/` snapshots, and the frozen legacy
+# `tweaker/` mod. Active `weapon_tweaker_dev/` is scanned.
 #
 # Output mirrors qa/check_unpack_safety.ps1 / qa/check_vmf_widget_types.ps1.
 #
@@ -214,7 +214,6 @@ function Get-ScanFiles {
                        -and $p -notlike "*\_tmp\*" `
                        -and $p -notlike "*\.spawn_tweaks_ref\*" `
                        -and $p -notlike "*\tweaker\*" `
-                       -and $p -notlike "*\weapon_tweaker_dev\*" `
                        -and $p -notlike "*\_test_fixtures\*" `
                        -and $p -notlike "*\sample_*\*" `
                        -and $p -notlike "*\Vermintide-2-Source-Code\*" `

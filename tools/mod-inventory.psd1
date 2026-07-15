@@ -24,8 +24,8 @@
 #   Public     - $true only for visibility=public stable items (the --allow-public set)
 #   Name       - friendly name for the release manifest
 #
-# EXCLUDED: legacy frozen `tweaker` (SDK build, Workshop 3704660429) and stale
-# `weapon_tweaker_dev` experiment clone - neither is part of any pipeline.
+# EXCLUDED: legacy frozen `tweaker` (SDK build, Workshop 3704660429). The
+# friends-only `weapon_tweaker_dev` mirror is active and parity-gated.
 #
 # NOTE: this is a pure data file (Import-PowerShellDataFile / Invoke-Expression
 # safe). No executable statements, no comment-based help blocks.
@@ -33,6 +33,7 @@
 @{
     Mods = @(
         @{ Dir = 'weapon_tweaker';             ModId = 'wt';                         WorkshopId = '3712896117'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Weapon Tweaker' }
+        @{ Dir = 'weapon_tweaker_dev';         ModId = 'wt_dev';                     WorkshopId = '3748824853'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'Weapon Tweaker (Dev)' }
         @{ Dir = 'chaos_wastes_tweaker';       ModId = 'ct';                         WorkshopId = '3712929235'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'Chaos Wastes Tweaker' }
         @{ Dir = 'chaos_wastes_tweaker_dev';   ModId = 'ct_dev';                     WorkshopId = '3733366926'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'Chaos Wastes Tweaker (Dev)' }
         @{ Dir = 'general_tweaker';            ModId = 'gt';                         WorkshopId = '3713619122'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'General Tweaker' }

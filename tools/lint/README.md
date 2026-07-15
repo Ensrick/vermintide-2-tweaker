@@ -49,7 +49,7 @@ The set is **dynamic**: anything in the repo root that has an `itemV2.cfg`. As o
 `crafting_in_modded`, `event_tweaker`, `modded_progression`,
 `verminious_dreams_lighting` — plus the `_dev` clones that carry their own cfg
 (`chaos_wastes_tweaker_dev`, `crafting_in_modded_dev`, `general_tweaker_dev`,
-`gui_tweaker_dev`, `verminious_dreams_lighting_dev`, and the stale
+`gui_tweaker_dev`, `verminious_dreams_lighting_dev`, and the active parity-gated
 `weapon_tweaker_dev`). The canonical mod list is the repo-root `CLAUDE.md`
 "Mod Directory".
 

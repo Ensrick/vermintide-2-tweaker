@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|
 | 1 | No recursive deletes (`rm -rf`, `Remove-Item -Recurse -Force`, etc.). Rename to `.bak.v<old>` and delete one path at a time with approval. |
 | 2 | Never auto-launch VT2 or any game/interactive app without explicit user permission. |
-| 3 | Edit ONLY the `*_dev/` dir for the 5 split mods (ct, cim, gt, gut, vdl). `weapon_tweaker_dev/` is a STALE clone: never edit it; `weapon_tweaker/` is active. |
+| 3 | Edit ONLY the `*_dev/` dir for the 5 promotion-pair mods (ct, cim, gt, gut, vdl). Weapon Tweaker is a special mirror pair: feature work lands in public-beta `weapon_tweaker/`, then `weapon_tweaker_dev/` is refreshed by exact runtime parity while preserving its `wt_dev` namespace, friends-only ID, and preview. |
 | 4 | Ship doctrine keys off the MOD_VERSION suffix. `-dev`/`-alpha`/`-beta` = FULL pipeline every build, NO ask. Clean version (no suffix) = stable: needs a fresh per-build ship signal naming the version. |
 | 5 | Bump MOD_VERSION (3-segment semver + suffix) every build; write the CHANGELOG entry and doc updates in the SAME response. |
 | 6 | VMBLauncher is the ONLY build/deploy/upload path. Never raw `node vmb.js`, `ugc_tool`, `scp`, or hand-wrapped SDK. |
@@ -151,7 +151,7 @@ CHANGELOG is the source of truth.
 | Mod | Internal ID | Workshop ID | Stream | Purpose |
 |-----|-------------|-------------|--------|---------|
 | weapon_tweaker | `wt` | 3712896117 | single | Full-freedom cross-character weapon access: any character wields any weapon (1P universal, untouched), 3P anim events remapped into a receiver-native weapon's vocab so the bystander view stays plausible. Identical-functional ports are migrating out to `cosmetics_tweaker`; wt keeps genuine functional cross-character ports. Operates **independently** of `character_weapon_variants` (overlap allowed); wt is the availability control surface — it owns the per-weapon enable/disable toggles and, when co-installed with CWV, also covers CWV's weapons. See `docs/CROSS_MOD_ARCHITECTURE.md` / Issue #368. |
-| **weapon_tweaker_dev** | `wt_dev` | (none) | **STALE - DO NOT EDIT** | Abandoned experiment clone on disk. `weapon_tweaker/` (unsuffixed) is the ACTIVE dir for all wt work. Never edit this directory. |
+| **weapon_tweaker_dev** | `wt_dev` | 3748824853 | dev mirror | Friends-only runtime-parity mirror of the public beta. Preserve the separate VMF/settings namespace and Workshop presentation; `qa/check_wt_stream_parity.ps1` permits no gameplay-code drift. |
 | chaos_wastes_tweaker | `ct` | 3712929235 | stable | CW economy, curses, boons, altars, traits. In-flight work in `chaos_wastes_tweaker_dev`. |
 | chaos_wastes_tweaker_dev | `ct_dev` | 3733366926 | dev | In-flight `ct` work; friends-only clone. Distinct VMF registration so it coexists with stable `ct`. See "Dev/stable split workflow". |
 | general_tweaker | `gt` | 3713619122 | stable | 3rd-person camera, noclip, freecam, godmode, in-mission keep menus, debug/data dumps, host-side lobby controls (slot reservations, ignore list, kick-on-idle, MOTD, failed-join mod reveal). Lobby settings/commands namespaced `gt_lobby_*`; `mod.GT_LOBBY_RPC_SCHEMA` per VMF_RECIPES section 10. In-flight work in `general_tweaker_dev`. |

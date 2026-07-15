@@ -37,7 +37,7 @@ in each mod's `CHANGELOG.md`; they are intentionally not duplicated here.
 | [`verminious_dreams_lighting`](./verminious_dreams_lighting/) | `verminious_dreams_lighting` | Stable | [3727221800](https://steamcommunity.com/sharedfiles/filedetails/?id=3727221800) | Override lighting for the Verminious Dreams missions. |
 | [`verminious_dreams_lighting_dev`](./verminious_dreams_lighting_dev/) | `verminious_dreams_lighting_dev` | Dev | [3733366748](https://steamcommunity.com/sharedfiles/filedetails/?id=3733366748) | Friends-only development stream for the lighting mod. |
 | [`weapon_tweaker`](./weapon_tweaker/) | `wt` | Single | [3712896117](https://steamcommunity.com/sharedfiles/filedetails/?id=3712896117) | Enable cross-character weapon access with third-person animation remapping. |
-| [`weapon_tweaker_dev`](./weapon_tweaker_dev/) | `wt_dev` | **Stale; do not edit** | — | Abandoned experiment clone; all weapon work belongs in `weapon_tweaker`. |
+| [`weapon_tweaker_dev`](./weapon_tweaker_dev/) | `wt_dev` | Dev (friends-only mirror) | [3748824853](https://steamcommunity.com/sharedfiles/filedetails/?id=3748824853) | Runtime-parity mirror of the public beta with a separate settings namespace and visually distinct Workshop presentation. |
 | [`weapons_of_chaos`](./weapons_of_chaos/) | `WOC` | Single | [3753880932](https://steamcommunity.com/sharedfiles/filedetails/?id=3753880932) | Adapt enemy weapons and keep artifacts into player-usable items. |
 | [`tweaker`](./tweaker/) | `t` | **Frozen legacy** | [3704660429](https://steamcommunity.com/sharedfiles/filedetails/?id=3704660429) | Original monolith retained for history; do not extend it. |
 

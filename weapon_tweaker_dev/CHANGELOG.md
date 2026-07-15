@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.265-dev (2026-07-15) - #634 restore the friends-only dev stream
+
+- Rebased the `wt_dev` runtime on the complete `0.12.264-beta` public baseline, including every modularized weapon, animation, appearance, diagnostics, and regression subsystem.
+- Preserved the separate `wt_dev` VMF/settings namespace, friends-only Workshop item `3748824853`, dev preview image, and live animation/hold-pose tuning controls.
+- Added a blocking stream-parity gate: future beta changes must reach dev unless the difference is an explicitly documented stream identity or presentation field.
+
 ## 0.12.139-dev (2026-07-14) - #433 remove dead Big Rebalance payload [not deployed]
 
 - Mirrored stable WT's retirement cleanup: deleted the unreachable Big Rebalance implementation and definitions (165,617 bytes total), its no-op lifecycle dispatch, and its dead-only true-flight regression helpers/checks.

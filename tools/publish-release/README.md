@@ -247,8 +247,8 @@ repo, append it there.
 Inventory entries are required to have a live folder and matching `itemV2.cfg`; every active
 root mod with an `itemV2.cfg` must be present. `qa/check_mod_inventory.ps1` blocks missing,
 retired, duplicate, or cfg/README-drifted records before release selection. The frozen
-`tweaker` monolith and stale `weapon_tweaker_dev` experiment are explicit non-pipeline
-exceptions, not silent missing-folder skips.
+`tweaker` monolith is the only explicit non-pipeline exception. The friends-only
+`weapon_tweaker_dev` mirror is active and parity-gated.
 
 Script-internal gotcha: the inventory variable in the .ps1 is named `$releaseSet`, NOT `$mods` —
 PowerShell variable names are case-insensitive, so `$mods` silently overwrites the `$Mods`

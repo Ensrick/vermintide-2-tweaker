@@ -113,7 +113,7 @@ foreach ($modDir in @(Get-ChildItem -Path $root -Directory -ErrorAction Silently
 
 $readmePath = Join-Path $root 'README.md'
 $readme = if (Test-Path $readmePath) { [System.IO.File]::ReadAllText($readmePath, [System.Text.Encoding]::UTF8) } else { '' }
-$excluded = @{ weapon_tweaker_dev = $true }
+$excluded = @{}
 $errors = @(Test-InventoryModel @($inventory.Mods) $discovered $cfgByDir $readme $excluded)
 if ($errors.Count -gt 0) {
     Write-Host '[check_mod_inventory] ERRORS:' -ForegroundColor Red

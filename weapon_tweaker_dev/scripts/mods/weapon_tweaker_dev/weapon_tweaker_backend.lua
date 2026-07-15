@@ -20,11 +20,39 @@ local function feature_enabled(mod, setting_id, default_value)
 end
 
 -- CLARIFY: invoked once at the bottom of weapon_tweaker.lua (~L3043). Sets
--- up backend hooks. Note: `apply_weapon_unlocks` is passed in but never
--- called from this module — only retained because it might be needed for
--- legacy code paths or future use. Could be dropped from the signature.
-function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
+-- up backend hooks. The two availability callbacks are invoked together only
+-- on a bounded CWV active-state transition so can_wield and career actions
+-- cannot drift across enable/disable/hot-reload.
+function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_actions_on_weapons)
     mod.loadout_cache = mod.loadout_cache or {}
+    local cwv_ownership = mod._wt and mod._wt.cwv_ownership
+    local cwv_managed = mod._wt and mod._wt.cwv_conditional_managed or {}
+    local function cwv_active()
+        return cwv_ownership
+            and cwv_ownership.cwv_is_active(get_mod("character_weapon_variants"))
+            or false
+    end
+    local function cwv_axe_shield_ready()
+        return cwv_ownership
+            and cwv_ownership.replacement_ready(ItemMasterList, "dr_shield_axe") or false
+    end
+    local function cwv_greataxe_ready()
+        return cwv_ownership
+            and cwv_ownership.replacement_ready(ItemMasterList, "dr_2h_axe") or false
+    end
+    M._last_cwv_active = cwv_active()
+    M._last_cwv_axe_shield_ready = cwv_axe_shield_ready()
+    M._last_cwv_greataxe_ready = cwv_greataxe_ready()
+
+    -- Passive overcharge-vent / energy-regen restore for cross-character
+    -- overcharge weapons (Sienna staves) + the Moonfire Bow on careers that
+    -- lack the native rate. Exposes M.tick(dt); driven from mod.update below
+    -- (the single per-frame surface VMF schedules). Loaded once here. See the
+    -- module header for the full networking / consumption-side rationale.
+    local passive_charge = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_passive_charge")
+    M.passive_charge = passive_charge
+    local overcharge_presentation = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation")
+    M.overcharge_presentation = overcharge_presentation
 
     local function is_mod_unlocked_weapon(career_name, weapon_key)
         if not career_name or not weapon_key then
@@ -36,6 +64,12 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
             return false
         end
 
+        if cwv_ownership and cwv_ownership.should_yield_native(
+                career_name, weapon_key, cwv_active(), cwv_managed,
+                cwv_ownership.replacement_ready(ItemMasterList, weapon_key)) then
+            return false
+        end
+
         for _, unlocked_key in ipairs(career_weapons) do
             if unlocked_key == weapon_key and mod:get("unlock_" .. career_name .. "_" .. weapon_key) then
                 return true
@@ -44,11 +78,16 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
 
         return false
     end
+    -- Regression-visible pure ownership predicate. The read-side hooks below
+    -- use this same closure, so a removed pair is rejected before any stale
+    -- cached backend id can override vanilla's loadout.
+    M.is_mod_unlocked_weapon = is_mod_unlocked_weapon
 
     M._filter_dirty = false
 
     function M.refresh_on_setting_change(mod)
-        if Managers.backend and Managers.backend._interfaces["items"] then
+        if Managers.backend and Managers.backend._interfaces
+                and Managers.backend._interfaces["items"] then
             local items_interface = Managers.backend:get_interface("items")
             for career_name, slots in pairs(mod.loadout_cache) do
                 for slot_name, backend_id in pairs(slots) do
@@ -92,15 +131,78 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
     --      can collide with weave-mode interface usage and other mods. Runs
     --      once when Managers.backend has interfaces created (in the lobby).
     -- VMF schedules `mod.update` every frame so the conditions are polled.
-    mod.update = function()
+    -- VMF passes the frame `dt` as the first arg (repo-wide convention:
+    -- `mod.update = function(dt) ... end`); the deferred-init guards below
+    -- ignore it, but the passive-charge tick needs it.
+    mod.update = function(dt)
+        if mod._wt368_deferred_availability then
+            mod._wt368_deferred_availability = nil
+            apply_weapon_unlocks()
+            mod:info("[wt:368] deferred final availability reconciliation applied")
+        end
+        -- Per-frame passive-charge restore (cross-character staves / Moonfire
+        -- Bow). Self-gated on its VMF toggle (default OFF) and the local owned
+        -- player only; pcall-isolated internally so it can never break init.
+        passive_charge.tick(dt)
+        pcall(overcharge_presentation.tick)
+
+        -- Per-frame DURABLE 3P grip-offset re-apply (the Necromancer Ghost
+        -- Scythe on Kruber, etc.). A one-shot create_equipment offset is stomped
+        -- by the engine's per-tick canonical-pose reset in-game (preview-OK /
+        -- in-game-wrong), so members of _DURABLE_GRIP_OFFSETS re-apply every
+        -- frame on the local player's wielded 3P unit. 3P-ONLY, career-gated,
+        -- additive-from-canonical (never compounds). See the _DURABLE_GRIP_OFFSETS
+        -- header in weapon_tweaker.lua / OFFSETS.md. Defined on the mod table
+        -- because that's where the offset data lives (separate dofile scope).
+        -- Guarded: nil before weapon_tweaker.lua finishes loading (load order).
+        if mod._reapply_durable_grip_offsets then
+            pcall(mod._reapply_durable_grip_offsets)
+        end
+
+        -- #569: durable, absolute 3P-only local-Z half-turn for non-native
+        -- weapons on standard Saltzpyre careers whose live wield redirect is
+        -- the Warrior Priest greathammer family. Tracks local/bot/husk/preview
+        -- units and restores canonical rotation while unwielded.
+        if mod._wt569_reapply_3p_orientation then
+            pcall(mod._wt569_reapply_3p_orientation)
+        end
+
+        -- #593: CWV may be enabled/disabled or hot-reloaded without a game
+        -- state transition. Reconcile exactly once per ownership transition:
+        -- can_wield is strip/rebuilt and stale WT loadout-cache rows are pruned.
+        local owns_axe_shield = cwv_active()
+        local axe_shield_ready = cwv_axe_shield_ready()
+        local greataxe_ready = cwv_greataxe_ready()
+        if owns_axe_shield ~= M._last_cwv_active
+                or axe_shield_ready ~= M._last_cwv_axe_shield_ready
+                or greataxe_ready ~= M._last_cwv_greataxe_ready then
+            M._last_cwv_active = owns_axe_shield
+            M._last_cwv_axe_shield_ready = axe_shield_ready
+            M._last_cwv_greataxe_ready = greataxe_ready
+            apply_weapon_unlocks()
+            patch_career_actions_on_weapons()
+            if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+            M.refresh_on_setting_change(mod)
+            mod:info("[wt:593/597] CWV ownership transition active=%s axe_shield_ready=%s greataxe_ready=%s; native fallbacks reconciled",
+                tostring(owns_axe_shield), tostring(axe_shield_ready), tostring(greataxe_ready))
+        end
+
         if not mod._applied_unlocks and ItemMasterList then
             mod._applied_unlocks = true
             apply_weapon_unlocks()
         end
 
-        if not mod.done_hooking_backend and Managers.backend and Managers.backend._interfaces["items"] then
+        if not mod.done_hooking_backend and Managers.backend and Managers.backend._interfaces
+                and Managers.backend._interfaces["items"] then
             mod.done_hooking_backend = true
             local items_interface = Managers.backend:get_interface("items")
+
+            -- #582: eagerly prune cache entries whose ownership disappeared in
+            -- this version (notably native dr_dual_wield_axes on ES/WH). The
+            -- get_loadout/get_loadout_item_id hooks also revalidate on every
+            -- read, but doing this once here makes hot-reload/session-retained
+            -- state converge before the first inventory query.
+            M.refresh_on_setting_change(mod)
 
             -- CLARIFY: when the user equips a CROSS-CAREER (mod-unlocked)
             -- weapon, we INTERCEPT the call and store the backend_id in our
@@ -247,4 +349,3 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks)
 end
 
 return M
-

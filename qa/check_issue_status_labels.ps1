@@ -86,12 +86,13 @@ $StatusLabels = @('verify-fix', 'verify-fix-coop', 'diagnostics-armed', 'Fixed')
 $LifecycleLabels = $StatusLabels + @('not-started')
 
 # ---- active mods whose CHANGELOG.md is authored newest-first ----
-# Mirrors the ship-doctrine "active mods" set: the single-stream mods + the five
-# `_dev` clones. Excludes weapon_tweaker_dev (STALE clone), the frozen legacy
-# `tweaker`, retired buff_tweaker/_archive, and the unsuffixed stable dirs of the
-# five split mods (their in-flight CHANGELOG lives in the `_dev` sibling).
+# Mirrors the ship-doctrine active set: single-stream mods, five promotion-pair
+# dev clones, and the active Weapon Tweaker friends-only mirror. Excludes the
+# frozen legacy `tweaker`, retired buff_tweaker/_archive, and the unsuffixed
+# stable dirs of the five promotion pairs.
 $ActiveMods = @(
     'weapon_tweaker',
+    'weapon_tweaker_dev',
     'cosmetics_tweaker',
     'character_weapon_variants',
     'weapons_of_chaos',

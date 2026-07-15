@@ -1,43 +1,81 @@
 --[[
 ============================================================================
- wt_dev_anim_picker.lua — Dev: 3P Animation Picker (dynamic catalog)
+ wt_dev_anim_picker.lua — Dev: 3P Animation Picker (STATIC hardcoded menu)
 ============================================================================
 
-Live in-game tuning surface for cross-character weapon 3P animations.
+Live in-game tuning surface for cross-character weapon 3P animations on the
+KRUBER body, for the 14 weapons flagged `[Needs Animations]` on Kruber.
 
-DYNAMIC CATALOG (v0.12.98-dev+): instead of a hand-maintained list of ports,
-this module derives the catalog at install() time by walking the same
-`weapon_unlock_map` table that drives wt's unlock toggles. Every (career,
-weapon_key) pair where the source weapon's native owner differs from the
-receiver career's character model becomes one row in the picker. WP gets a
-distinct top-level submenu (his own skeleton) but bow/crossbow/longbow/
-repeating-firearm ports are filtered out for him per
-feedback_vt2_no_bows_on_warrior_priest.md. Pairs already managed by CWV
-(per `_cwv_managed` in main wt.lua) are skipped to avoid competing surfaces.
+STATIC HARDCODED (v0.12.143-dev): the previous dynamic catalog/vocab walk and
+the per-weapon 3P anim-SET chooser dropdown are GONE. The established SET per
+weapon is fixed (resolved offline from `wt_wield_patches.lua` → the `to_*`
+wield event → its target template), so the menu no longer negotiates it. Three
+static tables drive the whole picker:
+
+  * `_WEAPON_SET`     : weapon_key → established SET letter (A..E).
+  * `_SET_VOCAB`      : SET letter → the target template's authored anim_event
+                        vocab — the dropdown OPTIONS (identical for every weapon
+                        in that set).
+  * `_WEAPON_ATTACKS` : weapon_key → the weapon's own source attack anim_events
+                        (one per unique `anim_event`; each gets a dropdown).
+
+MOVE LABELS (v0.12.148-dev, display-only): two parallel static maps decorate the
+above with gameplay move labels, move-first, raw event kept as a clarifier:
+
+  * `_SET_MOVE_LABEL[set][anim_event]`        → dropdown OPTION label
+                                                ("Heavy 2  ·  attack_swing_heavy")
+  * `_SOURCE_MOVE_LABEL[weapon_key][anim_event]` → attack ROW label
+                                                ("Light 1  ·  attack_swing_down_left")
+
+`_move_label_for_set` / `_move_label_for_source` build the strings; an unlabeled
+event (the deliberate specials — slams, scythe specials, flame-sword spell) falls
+back to the raw event name (never blank). The stored setting VALUE is ALWAYS the
+raw anim_event — only the displayed text carries the label, so the apply path is
+untouched.
+
+The picker = per flagged weapon → one collapsible GROUP, with one per-attack
+`anim_event_3p` dropdown per source attack, whose OPTIONS are the HARDCODED
+established-set vocab. Selecting one applies via `anim_event_3p` (3P-only)
+through `_apply_anim_event_change` + persist + boot-replay.
+
+APPLY TIMING — the load-bearing fix (v0.12.144-dev). The engine does NOT read
+attack 3P anims off the live `Weapons[name]` table the picker mutates. It reads
+them off `MechanismOverrides.get(rawget(Weapons, name))` (weapon_utils.lua:211 →
+get_item_template → WeaponUnitExtension.start_action, which reads
+`current_action_settings.anim_event_3p` per swing). `MechanismOverrides.get`
+shallow-COPIES any template carrying a `mechanism_overrides` field (or a child
+that does) and caches the copy in `CACHE[t]` for the whole mechanism — so once
+cached, a menu-time write to the live original is invisible to attacks. So after
+every write `_apply_anim_event_change` calls `_bust_mechanism_override_cache`
+(→ `MechanismOverrides.recursive_cleanup`, a guarded no-op when the template was
+never cached) to drop the stale copy, then `_try_force_rewield` re-resolves the
+template. Same path runs from `reapply_stored_picks` at boot. No re-equip
+required — the cache-bust makes the live write take on the next attack.
+
+3P-ONLY: every value written is `anim_event_3p` (a 3P field) — never
+`anim_event` / `wield_anim` (1P, universal across all six characters). Picking
+an event the Kruber body doesn't author falls through to the previous idle
+stance (no T-pose, no crash — feedback_vt2_no_tpose_default_stance.md), so the
+user can dump-and-iterate.
+
+Membership = wt_port_status's `_NEEDS_ANIMS.kruber` allow-list (queried via
+`_PORT_STATUS.needs_anims`), so the menu lists ONLY the weapons the user flagged
+[Needs Animations]; untested / confirmed / status-tagged ports never leak in,
+and no status tag is shown on the rows (the row title is just the weapon name).
 
 Same `M.build_widget_tree() / M.loc_keys() / M.install() / M.on_setting_changed`
-signatures as v1 — the lead's wiring in main wt.lua + _data.lua +
-_localization.lua expects these exact entry points.
-
-Skeleton-vocab tables are built at install() time from live `Weapons.*`
-data — every wield event any natively-owned weapon points at via
-`wield_anim_career_3p`/`wield_anim_3p`, plus every `anim_event`/`anim_event_3p`
-that appears on the actions of natively-owned weapons. Best-effort
-approximation grounded in observable data; picking an event the receiver's
-body doesn't author falls through to the previous idle stance (no T-pose,
-no crash — see feedback_vt2_no_tpose_default_stance.md), and the user can
-dump-and-iterate.
+entry points the lead's wiring expects (weapon_tweaker_data.lua,
+weapon_tweaker_localization.lua, weapon_tweaker.lua). build_widget_tree() returns
+an ARRAY of per-weapon group widgets (never nil), nested as the `sub_widgets` of
+the `enable_dev_anim_picker` checkbox so VMF reveals/hides them LIVE on toggle
+(reference_vmf_native_master_toggle_submenu). The nested group → per-attack
+dropdown shape keeps the gut Mod Tweaker depth-drill working (standard
+type="group" + sub_widgets).
 
 Per VMF_RECIPES § 5: every dropdown gets its OWN options table (no shared
 references — silent `<<key>>` cascades if shared).
 Per VMF_RECIPES § 6: every `setting_id` is globally unique (`wt_dev_anim_*`).
 Per VMF_RECIPES § 9: debug logs gate on `enable_debug_logging`.
-
-NOTE (v0.12.98-dev+): `weapon_unlock_map` and `_cwv_managed` were previously
-file-local in wt main and had to be mirrored here verbatim. Main wt.lua now
-exposes them as `mod._weapon_unlock_map` and `mod._cwv_managed` so this
-module reads the live tables directly — no mirror, no drift. If main wt.lua
-ever drops those exposures, install() will warn-and-skip the catalog walk.
 ============================================================================
 --]]
 
@@ -46,10 +84,8 @@ local mod = get_mod("wt_dev")
 local M = {}
 
 -- ---------------------------------------------------------------------------
--- Debug helper (mirrors the wt main-file convention — gated on the universal
--- `enable_debug_logging` VMF setting, per VMF_RECIPES § 9).
+-- Debug helper (routed through VMF mod:debug channel, PROJECT_STANDARDS.md § 3.6).
 -- ---------------------------------------------------------------------------
-
 local function _dbg(fmt, ...)
     mod:debug("[wt:dev_anim] " .. fmt, ...)
 end
@@ -61,402 +97,1135 @@ end
 -- Sentinel value used in dropdown widgets to represent "clear the override".
 local UNSET = "__unset__"
 
--- ---------------------------------------------------------------------------
--- Character key + native-owner inference
--- ---------------------------------------------------------------------------
--- Character key (the top-level submenu bucket) is determined by career prefix
--- with one exception: wh_priest is a distinct skeleton from the other wh_*
--- careers, so he gets his own bucket. Same mapping is used to infer the
--- NATIVE OWNER of a weapon from its key prefix:
---
---   es_* = Kruber (empire-soldier)
---   dr_* = Bardin (dwarf)
---   we_* = Kerillian (wood-elf)
---   wh_* = Saltzpyre (witch-hunter)   -- shared by WP as the prefix family
---   bw_* = Sienna (bright-wizard)
---
--- Owner-vs-receiver: when owner == receiver, the port is native (no remap).
--- When owner != receiver, the port is genuinely cross-character.
+-- Receiver bucket: this picker is KRUBER-only.
+local _RECEIVER_CHAR = "kruber"
+local _RECEIVER_SHORT = "Kruber"
 
-local _CHARACTER_ORDER = {
-    "kruber", "saltzpyre", "wh_priest", "bardin", "kerillian", "sienna",
-}
+-- The Kruber careers an anim_event pick conceptually applies on (the picker
+-- writes anim_event_3p on the template's ACTIONS, not per-career, so this is
+-- only carried on the setting rec for boot-replay parity / dump labeling).
+local _KRUBER_CAREERS = { "es_huntsman", "es_knight", "es_mercenary", "es_questingknight" }
 
-local _CHARACTER_LABEL = {
-    kruber    = "Kruber (Mercenary / Huntsman / Foot Knight / Grail Knight)",
-    saltzpyre = "Saltzpyre (WHC / Bounty Hunter / Zealot)",
-    wh_priest = "Warrior Priest (distinct skeleton)",
-    bardin    = "Bardin (Ranger / Ironbreaker / Slayer / Engineer)",
-    kerillian = "Kerillian (Waystalker / Handmaiden / Shade / Sister of the Thorn)",
-    sienna    = "Sienna (Battle Wizard / Pyromancer / Unchained / Necromancer)",
-}
+-- The non-WP Saltzpyre careers (Warrior Priest = wh_priest is its own bucket;
+-- handled separately in wt_port_status). Carried on the setting rec for
+-- boot-replay parity / dump labeling (same role as _KRUBER_CAREERS above).
+local _SALTZ_CAREERS = { "wh_captain", "wh_bountyhunter", "wh_zealot" }
 
--- Short labels used in per-port entry titles (the long labels above are
--- only used for the character-submenu headers themselves). Format:
--- "<Source Qualifier> <Weapon Name> rendered on <Short Character Name> body".
-local _CHARACTER_SHORT = {
-    kruber    = "Kruber",
-    saltzpyre = "Saltzpyre",
-    wh_priest = "Warrior Priest",
-    bardin    = "Bardin",
-    kerillian = "Kerillian",
-    sienna    = "Sienna",
-}
+-- The four Kerillian careers (Sister of the Thorn = we_thornsister included; she
+-- shares the elf 3P skeleton). Carried on the setting rec for boot-replay parity /
+-- dump labeling (same role as _KRUBER_CAREERS / _SALTZ_CAREERS above).
+local _KERI_CAREERS = { "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister" }
 
 -- ---------------------------------------------------------------------------
--- Weapon display table (v0.12.100-dev+)
+-- Source-of-truth modules
 -- ---------------------------------------------------------------------------
--- Each cross-character port label combines a SOURCE QUALIFIER (the race /
--- affiliation of the weapon's native owner) with the in-game weapon name.
--- This disambiguates ports where the receiver has a same-name native (e.g.
--- Kruber already has a Greatsword; Kerillian's Greatsword on his body is
--- "Elf Greatsword rendered on Kruber body").
---
--- `_SOURCE_QUALIFIER` is keyed by the 3-char weapon_key prefix; overrides
--- (see `_QUALIFIER_OVERRIDES`) handle special cases (Bretonnian weapons,
--- Warrior-Priest-only `wh_*` entries).
---
--- `_WEAPON_NAME` is the in-game display name. Names match Workshop /
--- in-game tooltip text; keep in sync if a vanilla weapon is renamed.
+-- The shared (career, weapon_key) status resolver. The picker gates membership
+-- on _PORT_STATUS.needs_anims (the EXPLICIT [Needs Animations] allow-list) so it
+-- lists ONLY the weapons flagged in wt_port_status's _NEEDS_ANIMS.kruber. Same
+-- module the Availability menu uses, so the two stay in lockstep.
+local _PORT_STATUS = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_port_status")
 
+-- ---------------------------------------------------------------------------
+-- FALLBACK weapon display names (source-character-qualified)
+-- ---------------------------------------------------------------------------
+-- NOTE (#159, v0.12.178-dev): this is now only a FALLBACK. _weapon_display_name
+-- resolves names from the documented localization first (the single source of
+-- truth shared with the Weapon Availability menu); this curated map is consulted
+-- only if a weapon has no unlock loc entry. Kept so labels never regress to a
+-- bare internal key.
+-- Curated weapon-TYPE name per key. KEYED ON WEAPON TYPE, never the cosmetic
+-- ItemMasterList.localized_name (which on a base key is the default SKIN's name,
+-- e.g. dr_2h_pick.display_name = "dw_2h_pick_skin_01_name" → "…Azdrek" — the
+-- type-vs-illusion trap, same as vs_* keys in
+-- reference_vt2_versus_items_hidden_in_adventure). Source character qualifier is
+-- the 2-char weapon_key prefix (Kruber/Bardin/Kerillian/Saltzpyre/Sienna) to
+-- match the Weapon Availability menu.
 local _SOURCE_QUALIFIER = {
-    es = "Empire",
-    dr = "Dwarf",
-    we = "Elf",
-    wh = "Witch Hunter",
-    bw = "Bright Wizard",
-}
-
--- Per-key overrides where the prefix-based qualifier is wrong.
-local _QUALIFIER_OVERRIDES = {
-    es_sword_shield_breton = "Bretonnian",
-    -- Warrior-Priest-only wh_* weapons (these don't appear in cross-character
-    -- ports today because WP only cross-receives es_1h_flail, but listed for
-    -- future-proofing if WP gets ported elsewhere).
-    wh_flail_shield   = "Warrior Priest",
-    wh_hammer_book    = "Warrior Priest",
-    wh_hammer_shield  = "Warrior Priest",
+    es = "Kruber", dr = "Bardin", we = "Kerillian", wh = "Saltzpyre", bw = "Sienna",
 }
 
 local _WEAPON_NAME = {
-    -- Empire (Kruber)
-    es_1h_flail               = "Flail",
-    es_1h_mace                = "Mace",
-    es_1h_sword               = "Sword",
-    es_2h_hammer              = "Two-Handed Hammer",
-    es_2h_heavy_spear         = "Spear",
-    es_2h_sword               = "Greatsword",
-    es_2h_sword_executioner   = "Executioner Sword",
-    es_bastard_sword          = "Bastard Sword",
-    es_blunderbuss            = "Blunderbuss",
-    es_deus_01                = "Deus Sword",
-    es_dual_wield_hammer_sword = "Hammer & Sword",
-    es_halberd                = "Halberd",
-    es_handgun                = "Handgun",
-    es_longbow                = "Longbow",
-    es_mace_shield            = "Mace & Shield",
-    es_repeating_handgun      = "Repeater Handgun",
-    es_sword_shield           = "Sword & Shield",
-    es_sword_shield_breton    = "Sword & Shield",
-    -- Dwarf (Bardin)
-    dr_1h_axe                 = "Axe",
-    dr_1h_hammer              = "Hammer",
-    dr_1h_throwing_axes       = "Throwing Axes",
-    dr_2h_axe                 = "Greataxe",
-    dr_2h_cog_hammer          = "Cog Hammer",
-    dr_2h_hammer              = "Two-Handed Hammer",
-    dr_2h_pick                = "Pickaxe",
-    dr_crossbow               = "Crossbow",
-    dr_deus_01                = "Deus Hammer",
-    dr_drake_pistol           = "Drakefire Pistols",
-    dr_drakegun               = "Drakegun",
-    dr_dual_wield_axes        = "Dual Axes",
-    dr_dual_wield_hammers     = "Dual Hammers",
-    dr_handgun                = "Handgun",
-    dr_rakegun                = "Grudge-Raker",
-    dr_shield_axe             = "Axe & Shield",
-    dr_shield_hammer          = "Hammer & Shield",
-    dr_steam_pistol           = "Masterwork Pistol",
-    -- Elf (Kerillian)
-    we_1h_axe                 = "Axe",
-    we_1h_spears_shield       = "Spear & Shield",
-    we_1h_sword               = "Sword",
-    we_2h_axe                 = "Two-Handed Axe",
-    we_2h_sword               = "Greatsword",
-    we_crossbow_repeater      = "Repeater Crossbow",
-    we_deus_01                = "Moonfire Bow",  -- v0.12.118 mislabel fix (was "Deus Greatsword"; per-char deus_01 keys are CW weapons)
-    we_dual_wield_daggers     = "Dual Daggers",
-    we_dual_wield_swords      = "Dual Swords",
+    dr_2h_pick                 = "Pickaxe",
+    dr_2h_cog_hammer           = "Cog Hammer",
+    wh_2h_hammer               = "Two-Handed Hammer",
+    we_2h_axe                  = "Two-Handed Axe",
+    bw_1h_mace                 = "Mace",
+    bw_ghost_scythe            = "Ghost Scythe",
+    dr_dual_wield_axes         = "Dual Axes",
+    we_dual_wield_daggers      = "Dual Daggers",
+    we_dual_wield_swords       = "Dual Swords",
     we_dual_wield_sword_dagger = "Sword & Dagger",
-    we_javelin                = "Javelin",
-    we_life_staff             = "Deepwood Staff",  -- v0.12.118 mislabel fix (was "Moonfire Bow")
-    we_longbow                = "Longbow",
-    we_shortbow               = "Shortbow",
-    we_shortbow_hagbane       = "Hagbane Shortbow",
-    we_spear                  = "Spear",
-    -- Witch Hunter (Saltzpyre) and Warrior Priest
-    wh_1h_axe                 = "Axe",
-    wh_1h_falchion            = "Falchion",
-    wh_1h_hammer              = "Hammer",
-    wh_2h_billhook            = "Billhook",
-    wh_2h_hammer              = "Two-Handed Hammer",
-    wh_2h_sword               = "Two-Handed Sword",
-    wh_brace_of_pistols       = "Brace of Pistols",
-    wh_crossbow               = "Crossbow",
-    wh_crossbow_repeater      = "Repeater Crossbow",
-    wh_deus_01                = "Deus Rapier",
-    wh_dual_hammer            = "Dual Hammers",
-    wh_dual_wield_axe_falchion = "Axe & Falchion",
-    wh_fencing_sword          = "Rapier",
-    wh_flail_shield           = "Flail & Shield",
-    wh_hammer_book            = "Hammer & Book",
-    wh_hammer_shield          = "Hammer & Shield",
-    wh_repeating_pistols      = "Repeater Pistol",
-    -- Bright Wizard (Sienna)
-    bw_1h_crowbill            = "Crowbill",
-    bw_1h_flail_flaming       = "Flaming Flail",
-    bw_1h_mace                = "Mace",
-    bw_dagger                 = "Dagger",
-    bw_deus_01                = "Deus Staff",
-    bw_flame_sword            = "Flaming Sword",
-    bw_ghost_scythe           = "Ghost Scythe",
-    bw_necromancy_staff       = "Soulstealer Staff",
-    bw_skullstaff_beam        = "Beam Staff",
-    bw_skullstaff_fireball    = "Fireball Staff",
-    bw_skullstaff_flamethrower = "Flamethrower Staff",
-    bw_skullstaff_geiser      = "Geyser Staff",
-    bw_skullstaff_spear       = "Bolt Staff",
-    bw_sword                  = "Sword",
+    wh_dual_hammer             = "Dual Hammers",
+    bw_dagger                  = "Dagger",
+    bw_flame_sword             = "Flaming Sword",
+    wh_flail_shield            = "Flail & Shield",
+    we_1h_axe                  = "Axe",
 }
 
-local function _source_qualifier(weapon_key)
-    if _QUALIFIER_OVERRIDES[weapon_key] then return _QUALIFIER_OVERRIDES[weapon_key] end
-    local pfx = weapon_key and weapon_key:sub(1, 2)
-    return _SOURCE_QUALIFIER[pfx] or "?"
-end
+-- Lazy weapon_key -> a career that grants it, so we can look up the documented
+-- name from the SAME localized "unlock_<career>_<weapon_key>" string the Weapon
+-- Availability menu uses (#159). Sourced from wt_unlock_data.weapon_unlock_map (a
+-- leaf data module — no circular dofile back into this picker / the loc file).
+-- Built lazily (at catalog/widget build, after loc is registered), never at file
+-- scope (the loc file dofiles this picker, so a file-scope mod:localize would be
+-- premature). The source weapon's name is career-independent, so any granting
+-- career resolves the same name.
+local _doc_career = nil
 
--- ---------------------------------------------------------------------------
--- Author-curated per-port in-game STATUS TAG (v0.12.129-dev)
--- ---------------------------------------------------------------------------
--- Appended to each port's picker group name so the in-game menu shows tuning
--- status at a glance. Hand-maintained in lockstep with ANIMATION_COVERAGE.md
--- (the code does NOT parse the .md). Keyed by weapon_key — so a label applies to
--- that port on EVERY receiver it appears on (most current entries are Kruber
--- tuning results; cross-receiver divergence would need a (char,weapon) key).
--- Ports absent here show _DEFAULT_STATUS_LABEL.
-local _DEFAULT_STATUS_LABEL = "[Untested]"
-local _PORT_STATUS_LABEL = {
-    -- Inventory-model error (correct in-mission, mis-held in keep preview)
-    bw_1h_crowbill       = "[Inventory Model Error]",
-    we_2h_sword          = "[Inventory Model Error]",
-    we_1h_spears_shield  = "[Inventory Model Error]",
-    -- Not working in 3rd person yet
-    bw_dagger            = "[Not Working 3rd Person]",
-    dr_2h_cog_hammer     = "[Not Working 3rd Person]",
-    dr_2h_pick           = "[Not Working 3rd Person]",
-    bw_ghost_scythe      = "[Not Working 3rd Person]",
-    we_2h_axe            = "[Not Working 3rd Person]",
-    wh_2h_hammer         = "[Not Working 3rd Person]",
-    bw_1h_mace           = "[Not Working 3rd Person]",
-    we_dual_wield_swords = "[Not Working 3rd Person]",
-    -- Confirmed working in-game
-    bw_1h_flail_flaming  = "[Working]",
-    we_1h_sword          = "[Working]",   -- working on Kruber + Saltzpyre (non-WP)
-    dr_2h_axe            = "[Working]",
-    es_longbow           = "[Working]",   -- Saltzpyre non-WP (model sub -> Crossbow)
-    -- Per-(receiver|weapon) tuning status (v0.12.133-dev) — Saltzpyre walk:
-    ["saltzpyre|dr_2h_pick"]      = "[Needs Anim Mapping]",     -- Pickaxe -> Reckoner: wield ok, attacks need manual mapping
-    ["saltzpyre|es_sword_shield"] = "[Needs Anims + Rotation]", -- Sword & Shield -> Axe & Falchion: pose ok, pick anims + rotate
-    ["saltzpyre|es_handgun"]      = "[Needs Offsets]",          -- Handgun -> Crossbow: works; 3P grip nudge needed (bake via attachment_node_linking, not _weapon_grip_offsets)
-}
-
--- ---------------------------------------------------------------------------
--- Target-weapon resolution (v0.12.101-dev+)
--- ---------------------------------------------------------------------------
--- The existing patcher block in main wt.lua (`_WIELD_ANIM_CAREER_3P_PATCHES`
--- at weapon_tweaker.lua:2300, plus the per-template `_patch_*` functions
--- nearby) sets `wield_anim_career_3p[<receiver_career>]` to a `to_<stance>`
--- event for every cross-character port whose target weapon is already
--- decided. We derive the TARGET TEMPLATE from that event — no separate
--- target map to maintain.
---
--- When a port's first-career wield event is in this table, the picker:
---   * Drops the wield dropdown (decision is encoded, not negotiable).
---   * Builds per-attack `anim_event_3p` dropdowns filtered to the target
---     template's `actions[*][*].anim_event` vocab — every animation that
---     target weapon authors, nothing else.
---   * Annotates the port label with "(using <Target Name> animations)".
-
--- Colliding wield events: the SAME to_* string resolves to a DIFFERENT target
--- template depending on the receiver body (e.g. to_1h_sword = Empire Sword on
--- Kruber, Elf Sword on Kerillian, Falchion on Saltzpyre). Receiver-keyed by
--- career prefix (es=Kruber, we=Kerillian, wh=Saltzpyre non-WP); checked BEFORE
--- the flat map. v0.12.132-dev bulk-encode (generated from
--- CROSS_CHARACTER_PORT_DECISIONS.md; every event verified vs vanilla wield_anim).
-local _WIELD_TARGET_BY_RECEIVER = {
-    es = {
-        to_1h_axe    = { template = "one_hand_axe_template_1",     display = "Witch Hunter 1H Axe (via Empire 1H Sword)" },
-        to_1h_hammer = { template = "one_handed_hammer_template_1", display = "Empire 1H Mace" },
-        to_1h_sword  = { template = "one_handed_swords_template_1", display = "Empire 1H Sword" },
-    },
-    we = {
-        to_1h_axe   = { template = "we_one_hand_axe_template",     display = "Elf 1H Axe" },
-        to_1h_sword = { template = "we_one_hand_sword_template_1", display = "Elf 1H Sword" },
-    },
-    wh = {
-        to_1h_axe    = { template = "one_hand_axe_template_1",           display = "Saltzpyre: 1H Axe" },
-        to_1h_hammer = { template = "one_handed_hammer_priest_template", display = "Saltzpyre: 1H Hammer (Skull-Splitter)" },
-        to_1h_sword  = { template = "one_hand_falchion_template_1",      display = "Saltzpyre: Falchion" },
-    },
-}
-
-local _WIELD_EVENT_TO_TARGET = {
-    -- wield_event = { template = "<canonical>", display = "<in-game name>" }
-    -- (to_1h_sword lives in _WIELD_TARGET_BY_RECEIVER above — it collides 3 ways.)
-    to_polearm           = { template = "two_handed_halberds_template_1", display = "Empire Halberd" },
-    to_2h_billhook       = { template = "two_handed_billhooks_template",  display = "Witch Hunter Billhook" },
-    to_crossbow          = { template = "crossbow_template_1",            display = "Witch Hunter Crossbow" },
-    to_repeating_handgun = { template = "repeating_handgun_template_1",   display = "Empire Repeater Handgun" },
-    to_handgun           = { template = "handgun_template_1",             display = "Empire Handgun" },
-    to_brace_of_pistols  = { template = "brace_of_pistols_template_1",    display = "Witch Hunter Brace of Pistols" },
-    -- v0.12.128-dev: Kruber port targets. Event strings VERIFIED from vanilla
-    -- (the target template's own wield_anim) — NOT the decisions-doc shorthand
-    -- to_1h_mace_shield / to_dual_hammer_sword, which DO NOT EXIST in vanilla.
-    to_1h_hammer_shield     = { template = "one_handed_hammer_shield_template_1", display = "Mace & Shield" },
-    to_dual_hammer_sword_es = { template = "dual_wield_hammer_sword_template",    display = "Mace & Sword" },
-    -- v0.12.132-dev bulk additions (unique, non-colliding events; verified vs vanilla):
-    to_1h_spear_shield        = { template = "one_handed_spears_shield_template",   display = "Elf Spear & Shield" },
-    to_1h_sword_shield        = { template = "one_handed_sword_shield_template_1",  display = "Empire Sword & Shield" },
-    to_2h_axe_we              = { template = "two_handed_axes_template_2",          display = "Glaive" },
-    to_2h_hammer              = { template = "two_handed_hammers_template_1",       display = "Empire Greathammer" },
-    to_2h_hammer_priest       = { template = "two_handed_hammer_priest_template",   display = "Saltzpyre: Two-Handed Hammer" },
-    to_2h_sword               = { template = "two_handed_swords_template_1",        display = "Saltzpyre: Two-Handed Sword" },
-    to_2h_sword_we            = { template = "two_handed_swords_wood_elf_template", display = "Elf 2H Sword" },
-    to_blunderbuss            = { template = "blunderbuss_template_1",              display = "Empire Blunderbuss" },
-    to_dual_axe_sword_wh      = { template = "dual_wield_axe_falchion_template",    display = "Saltzpyre: Axe & Falchion" },
-    to_dual_hammers_priest    = { template = "dual_wield_hammers_priest_template",  display = "Saltzpyre: Dual Hammers" },
-    to_dual_sword_dagger      = { template = "dual_wield_sword_dagger_template_1",  display = "Sword & Dagger" },
-    to_dual_swords            = { template = "dual_wield_swords_template_1",        display = "Dual Swords" },
-    to_es_longbow             = { template = "longbow_empire_template",             display = "Empire Longbow" },
-    to_fencing_sword          = { template = "fencing_sword_template_1",            display = "Saltzpyre: Rapier" },
-    to_javelin                = { template = "javelin_template",                    display = "Javelin" },
-    to_repeater_pistol        = { template = "repeating_pistol_template_1",         display = "Repeater Pistol" },
-    to_repeating_crossbow_elf = { template = "repeating_crossbow_elf_template",     display = "Repeater Crossbow" },
-    to_spear                  = { template = "two_handed_spears_elf_template_1",    display = "Elf Spear" },
-    -- Add more as decisions get encoded in _WIELD_ANIM_CAREER_3P_PATCHES.
-}
-
-local function _resolve_target_for_port(entry)
-    local tpl = Weapons and rawget(Weapons, entry.template_name)
-    if not tpl or not tpl.wield_anim_career_3p then return nil end
-    local first_career = entry.careers and entry.careers[1]
-    if not first_career then return nil end
-    local wield = tpl.wield_anim_career_3p[first_career]
-    if not wield then return nil end
-    -- Receiver-aware: a colliding event (to_1h_sword/_axe/_hammer) resolves by the
-    -- receiver's career prefix (es/we/wh) FIRST, then the flat receiver-agnostic map.
-    local by_recv = _WIELD_TARGET_BY_RECEIVER[first_career:sub(1, 2)]
-    return (by_recv and by_recv[wield]) or _WIELD_EVENT_TO_TARGET[wield]
-end
-
-local function _collect_target_anim_event_vocab(target_template_name)
-    local tpl = Weapons and rawget(Weapons, target_template_name)
-    if not tpl or not tpl.actions then return {} end
-    local set, out = {}, {}
-    for _, action_group in pairs(tpl.actions) do
-        if type(action_group) == "table" then
-            for _, sub in pairs(action_group) do
-                if type(sub) == "table" then
-                    -- Read both fields: vanilla uses `anim_event` for both
-                    -- 1p and 3p (3p is implicit). Some templates also set
-                    -- `anim_event_3p` for an explicit override.
-                    local e1 = sub.anim_event
-                    local e2 = sub.anim_event_3p
-                    if type(e1) == "string" and not set[e1] then set[e1] = true; out[#out + 1] = e1 end
-                    if type(e2) == "string" and not set[e2] then set[e2] = true; out[#out + 1] = e2 end
-                end
+local function _build_doc_career()
+    if _doc_career then return end
+    _doc_career = {}
+    local unlock = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_unlock_data")
+    local map = unlock and unlock.weapon_unlock_map
+    if map then
+        for career, list in pairs(map) do
+            for _, weapon_key in ipairs(list) do
+                if not _doc_career[weapon_key] then _doc_career[weapon_key] = career end
             end
         end
     end
-    table.sort(out)
-    return out
 end
 
--- Receiver character bucket from a career name.
-local function _char_key_for_career(career)
-    if not career then return nil end
-    if career == "wh_priest" then return "wh_priest" end
-    local prefix2 = career:sub(1, 3)
-    if prefix2 == "es_" then return "kruber"
-    elseif prefix2 == "dr_" then return "bardin"
-    elseif prefix2 == "we_" then return "kerillian"
-    elseif prefix2 == "wh_" then return "saltzpyre"
-    elseif prefix2 == "bw_" then return "sienna"
+-- Resolve a weapon's player-facing name. PRIMARY source = the documented
+-- localization (the single source of truth, identical to the Availability menu);
+-- the computed "[Needs Animations → ...]" status tag is stripped so only the
+-- clean "Source: Name" remains. Falls back to the curated _WEAPON_NAME map, then
+-- a source-qualified key — but NEVER surfaces a bare internal key silently.
+local function _weapon_display_name(weapon_key)
+    _build_doc_career()
+    local career = _doc_career[weapon_key]
+    -- Read the documented name DIRECTLY from wt's raw localization table (published
+    -- on `mod._wt_loc_raw` by weapon_tweaker_localization.lua before it dofiles this
+    -- picker). We must NOT call mod:localize here (#197): the catalog/labels are built
+    -- at mod-init / loc_keys() time — BEFORE wt's localization is registered — so
+    -- mod:localize floods "[wt][ERROR] (localize): localization file was not loaded"
+    -- (27x) AND returns nothing usable (labels fell back to raw keys). The raw-table
+    -- read has no load-order dependency. Strip any computed "[...]" status tag.
+    local raw = mod._wt_loc_raw
+    if raw and career then
+        local entry = raw["unlock_" .. career .. "_" .. weapon_key]
+        if type(entry) == "table" and entry.en then
+            return (entry.en:gsub("^%s*%b[]%s*", ""))
+        end
     end
-    return nil
+    local qualifier = _SOURCE_QUALIFIER[weapon_key:sub(1, 2)] or "?"
+    local name = _WEAPON_NAME[weapon_key]
+    if name then return qualifier .. " " .. name end
+    return qualifier .. " " .. weapon_key
 end
 
--- Native owner character (one of the six top-level keys) from a weapon_key.
--- Returns nil for unrecognized prefixes (defensive — weapon_unlock_map only
--- holds known prefixes today, but it's cheap to guard).
-local function _native_owner_for_weapon_key(weapon_key)
-    if not weapon_key then return nil end
-    local prefix2 = weapon_key:sub(1, 3)
-    if prefix2 == "es_" then return "kruber"
-    elseif prefix2 == "dr_" then return "bardin"
-    elseif prefix2 == "we_" then return "kerillian"
-    elseif prefix2 == "wh_" then
-        -- Native owner of the wh_* prefix family is Saltzpyre. Warrior Priest
-        -- shares the prefix but is a distinct skeleton — handled as a
-        -- RECEIVER, not as an owner.
-        return "saltzpyre"
-    elseif prefix2 == "bw_" then return "sienna"
-    end
-    return nil
-end
-
--- Whether a weapon_key looks like a ranged firearm/bow that WP's skeleton
--- doesn't author (no `to_longbow` / `to_crossbow` / `to_repeating_*` /
--- `to_handgun` / `to_brace_of_pistols` / `to_blunderbuss` wields on the
--- priest body). Used to filter the catalog walk so WP never gets a bow row.
-local _WP_FORBIDDEN_SUBSTRINGS = {
-    "longbow", "crossbow", "shortbow", "bow", -- bow family
-    "handgun", "repeating", "blunderbuss",    -- firearm family
-    "pistol", "brace_of_pistols",             -- pistol family
-    "drake",                                  -- drake* firearms (Bardin)
-    "javelin", "throwing_axes",               -- thrown ranged
+-- ---------------------------------------------------------------------------
+-- HARDCODED: established SET per weapon (A..E)
+-- ---------------------------------------------------------------------------
+-- Resolved offline (per the v0.12.143-dev spec) from each weapon's `to_*` wield
+-- event (wt_wield_patches.lua) → its target template. The SET is established and
+-- non-negotiable — there is NO set-chooser dropdown anymore.
+--   A Greathammer       (to_2h_hammer            / two_handed_hammers_template_1)
+--   B Mace & Sword      (to_dual_hammer_sword_es / dual_wield_hammer_sword_template)
+--   C Empire 1H Sword   (to_1h_sword             / one_handed_swords_template_1)
+--   D Mace & Shield     (to_1h_hammer_shield     / one_handed_hammer_shield_template_1)
+--   E Witch Hunter 1H Axe (to_1h_axe             / one_hand_axe_template_1)
+-- NOTE (v0.12.149-dev): dr_2h_pick (A), dr_dual_wield_axes (B), bw_dagger (C),
+-- and bw_flame_sword (C) were BAKED career-scoped into _3p_template_remaps
+-- (weapon_tweaker.lua) once their picks were confirmed on Kruber, and removed
+-- from _NEEDS_ANIMS — so the catalog gate (`_PORT_STATUS.needs_anims`) drops
+-- them and they no longer appear in the picker. Their _WEAPON_SET entries are
+-- deleted here to keep this mirror in lockstep (they were inert regardless).
+-- NOTE (v0.12.150-dev): bw_1h_mace (A) and bw_ghost_scythe (A) BAKED the same way
+-- (.one_handed_hammer_wizard_template_1.es_ / .staff_scythe.es_); the scythe also
+-- bakes a +0.569 Z es_-scoped grip offset (_weapon_grip_offsets) — both removed
+-- from _NEEDS_ANIMS and their _WEAPON_SET entries deleted here.
+local _WEAPON_SET = {
+    -- SET A — Greathammer
+    -- v0.12.188-dev: dr_2h_cog_hammer (#182), wh_2h_hammer (#180) and the 7 Sienna
+    --   staves + Deus (bw_skullstaff_beam/_fireball/_flamethrower/_geiser/_spear,
+    --   bw_necromancy_staff, bw_deus_01) were BAKED career-scoped (es_) into
+    --   _3p_template_remaps (weapon_tweaker.lua) from the user's persisted picks ->
+    --   removed from _NEEDS_ANIMS, so the catalog gate drops them from the picker;
+    --   their _WEAPON_SET / _WEAPON_TEMPLATE / _WEAPON_ATTACKS entries are deleted
+    --   to keep this mirror in lockstep. (Earlier the same was done for dr_2h_pick /
+    --   bw_1h_mace / bw_ghost_scythe in v0.12.149/.150.)
+    we_2h_axe                  = "A",  -- Glaive: 2H but established set is Greathammer (to_2h_hammer)
+    -- SET B — Mace & Sword
+    we_dual_wield_daggers      = "B",
+    we_dual_wield_swords       = "B",
+    we_dual_wield_sword_dagger = "B",
+    wh_dual_hammer             = "B",
+    -- SET C — Empire 1H Sword
+    -- wh_fencing_sword (#178 Rapier) BAKED v0.12.188-dev (fencing_sword_template_1.es_)
+    --   -> removed from _NEEDS_ANIMS + the picker tables.
+    -- SET D — Mace & Shield
+    wh_flail_shield            = "D",
+    -- SET E — Witch Hunter 1H Axe
+    we_1h_axe                  = "E",
+    -- v0.12.201-dev: wh_hammer_book (SET F) BAKED (es_) -> _CONFIRMED.kruber; removed here.
 }
-local function _wp_forbidden_weapon(weapon_key)
-    if not weapon_key then return false end
-    for _, sub in ipairs(_WP_FORBIDDEN_SUBSTRINGS) do
-        if weapon_key:find(sub, 1, true) then return true end
-    end
-    return false
+
+-- Friendly SET label shown in each weapon's group title, e.g. "[Greathammer]".
+local _SET_LABEL = {
+    A = "Greathammer",
+    B = "Mace & Sword",
+    C = "Empire 1H Sword",
+    D = "Mace & Shield",
+    E = "Witch Hunter 1H Axe",
+    F = "1H Mace/Skullsplitter",  -- #181: to_1h_hammer / one_handed_hammer_template_1
+}
+
+-- ---------------------------------------------------------------------------
+-- HARDCODED: per-SET anim_event vocab (the dropdown OPTIONS)
+-- ---------------------------------------------------------------------------
+-- Each is the target template's full authored anim_event vocab (extracted from
+-- the target weapon_template's actions[*][*].anim_event, deduped + verified
+-- against the decompiled source). Identical for every weapon mapped to that set.
+-- These ARRAYS are templates — _build_options() copies a FRESH options table per
+-- dropdown (VMF_RECIPES § 5; never share an options reference).
+local _SET_VOCAB = {
+    -- A Greathammer (two_handed_hammers_template_1 / 2h_hammers.lua)
+    A = {
+        "attack_swing_charge",
+        "attack_swing_charge_right",
+        "attack_swing_charge_left",
+        "attack_swing_heavy_right",
+        "attack_swing_heavy",
+        "attack_swing_down_left",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_down_right",
+        "attack_push",
+        "parry_pose",
+    },
+    -- B Mace & Sword (dual_wield_hammer_sword_template / dual_wield_hammer_sword.lua)
+    B = {
+        "attack_swing_charge_left",
+        "attack_swing_charge_right",
+        "attack_swing_heavy_left_diagonal",
+        "attack_swing_heavy_right_diagonal",
+        "attack_swing_left_diagonal",
+        "attack_swing_right",
+        "attack_swing_right_diagonal",
+        "attack_swing_left",
+        "attack_swing_down",
+        "attack_push",
+        "parry_pose",
+    },
+    -- C Empire 1H Sword (one_handed_swords_template_1 / 1h_swords.lua)
+    C = {
+        "attack_swing_charge_left",
+        "attack_swing_charge_right_pose",
+        "attack_swing_charge_left_pose",
+        "attack_swing_heavy",
+        "attack_swing_heavy_right",
+        "attack_swing_left_diagonal",
+        "attack_swing_right",
+        "attack_swing_down",
+        "attack_swing_right_diagonal",
+        "attack_push",
+        "parry_pose",
+    },
+    -- D Mace & Shield (one_handed_hammer_shield_template_1 / 1h_hammers_shield.lua)
+    D = {
+        "attack_swing_charge",
+        "attack_swing_charge_left_pose",
+        "attack_swing_charge_pose",
+        "attack_swing_heavy",
+        "attack_swing_heavy_left",
+        "attack_swing_left",
+        "attack_swing_right_diagonal",
+        "attack_swing_up_left",
+        "attack_swing_down",
+        "attack_push",
+        "parry_pose",
+    },
+    -- E Witch Hunter 1H Axe (one_hand_axe_template_1 / 1h_axes.lua)
+    E = {
+        "attack_swing_charge_left_diagonal",
+        "attack_swing_charge_right_diagonal_pose",
+        "attack_swing_charge_left_diagonal_pose",
+        "attack_swing_heavy_down",
+        "attack_swing_heavy_down_right",
+        "attack_swing_left_diagonal",
+        "attack_swing_right_diagonal",
+        "attack_swing_left",
+        "attack_swing_down_right",
+        "attack_push",
+        "parry_pose",
+    },
+    -- F 1H Mace / Skullsplitter (#181). Kruber wields wh_hammer_book as to_1h_hammer
+    -- (es_1h_mace's stance = one_handed_hammer_template_1 / 1h_hammers.lua). That
+    -- template carries NO anim_event_3p overrides, so its anim_event names ARE the
+    -- 3P events the Kruber mace body authors — safe to write verbatim as anim_event_3p
+    -- (no 1P/3P divergence, unlike SET F-billhook #196). inspect_start_2 deliberately
+    -- omitted (the picker never remaps inspect).
+    F = {
+        "attack_swing_charge_left_diagonal",
+        "attack_swing_charge_left_diagonal_pose",
+        "attack_swing_charge_right_diagonal_pose",
+        "attack_swing_heavy_down",
+        "attack_swing_heavy_down_right",
+        "attack_swing_left_diagonal",
+        "attack_swing_left_diagonal_last",
+        "attack_swing_right",
+        "attack_swing_right_diagonal",
+        "attack_swing_down_right",
+        "attack_push",
+        "parry_pose",
+    },
+}
+
+-- ---------------------------------------------------------------------------
+-- HARDCODED: gameplay MOVE LABEL per (SET, anim_event) — for dropdown OPTIONS
+-- ---------------------------------------------------------------------------
+-- Mirrors `_SET_VOCAB` 1:1. Each target-set vocab event resolved (offline, by
+-- chain-tracing the target template's action graph) to the gameplay move it
+-- drives: Light N / Heavy N / Charge N (windup) / Push / Block. These are the
+-- TARGET-side labels shown move-first on the dropdown options (e.g.
+-- "Heavy 2  ·  attack_swing_heavy"). Every `_SET_VOCAB` entry has a label here;
+-- _move_label_for_set() falls back to the raw event if one is ever missing.
+local _SET_MOVE_LABEL = {
+    A = {  -- Greathammer
+        attack_swing_charge          = "Charge 1 (windup)",
+        attack_swing_charge_right    = "Charge 2 (windup)",
+        attack_swing_charge_left     = "Charge 3 (windup)",
+        attack_swing_heavy_right     = "Heavy 1",
+        attack_swing_heavy           = "Heavy 2",
+        attack_swing_down_left       = "Light 1",
+        attack_swing_left            = "Light 2",
+        attack_swing_left_diagonal   = "Push Attack",
+        attack_swing_down_right      = "Light 3",
+        attack_push                  = "Push",
+        parry_pose                   = "Block",
+    },
+    B = {  -- Mace & Sword
+        attack_swing_charge_left          = "Charge 1 (windup)",
+        attack_swing_charge_right         = "Charge 2 (windup)",
+        attack_swing_heavy_left_diagonal  = "Heavy 1",
+        attack_swing_heavy_right_diagonal = "Heavy 2",
+        attack_swing_left_diagonal        = "Light 1",
+        attack_swing_right                = "Light 2",
+        attack_swing_right_diagonal       = "Light 3",
+        attack_swing_left                 = "Light 4",
+        attack_swing_down                 = "Push Attack",
+        attack_push                       = "Push",
+        parry_pose                        = "Block",
+    },
+    C = {  -- Empire 1H Sword
+        attack_swing_charge_left        = "Charge 1 (windup)",
+        attack_swing_charge_right_pose  = "Charge 2 (windup)",
+        attack_swing_charge_left_pose   = "Charge 3 (windup)",
+        attack_swing_heavy              = "Heavy 1",
+        attack_swing_heavy_right        = "Heavy 2",
+        attack_swing_left_diagonal      = "Light 1",
+        attack_swing_right              = "Light 2",
+        attack_swing_down               = "Light 3",
+        attack_swing_right_diagonal     = "Push Attack",
+        attack_push                     = "Push",
+        parry_pose                      = "Block",
+    },
+    D = {  -- Mace & Shield
+        attack_swing_charge            = "Charge 1 (windup)",
+        attack_swing_charge_left_pose  = "Charge 2 (windup)",
+        attack_swing_charge_pose       = "Charge 3 (windup)",
+        attack_swing_heavy             = "Heavy 1 (shield bash)",
+        attack_swing_heavy_left        = "Heavy 2",
+        attack_swing_left              = "Light 1",
+        attack_swing_right_diagonal    = "Light 2",
+        attack_swing_up_left           = "Light 3",
+        attack_swing_down              = "Push Attack",
+        attack_push                    = "Push",
+        parry_pose                     = "Block",
+    },
+    E = {  -- Witch Hunter 1H Axe
+        attack_swing_charge_left_diagonal       = "Charge 1 (windup)",
+        attack_swing_charge_right_diagonal_pose = "Charge 2 (windup)",
+        attack_swing_charge_left_diagonal_pose  = "Charge 3 (windup)",
+        attack_swing_heavy_down                 = "Heavy 1",
+        attack_swing_heavy_down_right           = "Heavy 2",
+        attack_swing_left_diagonal              = "Light 1",
+        attack_swing_right_diagonal             = "Light 2",
+        attack_swing_left                       = "Light 3",
+        attack_swing_down_right                 = "Push Attack",
+        attack_push                             = "Push",
+        parry_pose                              = "Block",
+    },
+}
+
+-- ---------------------------------------------------------------------------
+-- HARDCODED: source template name per weapon (where anim_event_3p is written)
+-- ---------------------------------------------------------------------------
+local _WEAPON_TEMPLATE = {
+    dr_2h_pick                 = "two_handed_picks_template_1",
+    we_2h_axe                  = "two_handed_axes_template_2",
+    bw_1h_mace                 = "one_handed_hammer_wizard_template_1",
+    bw_ghost_scythe            = "staff_scythe",
+    dr_dual_wield_axes         = "dual_wield_axes_template_1",
+    we_dual_wield_daggers      = "dual_wield_daggers_template_1",
+    we_dual_wield_swords       = "dual_wield_swords_template_1",
+    we_dual_wield_sword_dagger = "dual_wield_sword_dagger_template_1",
+    wh_dual_hammer             = "dual_wield_hammers_priest_template",
+    bw_dagger                  = "one_handed_daggers_template_1",
+    bw_flame_sword             = "flaming_sword_template_1",
+    wh_flail_shield            = "one_handed_flail_shield_template",
+    we_1h_axe                  = "we_one_hand_axe_template",
+    -- v0.12.201-dev: wh_hammer_book BAKED (es_) -> _CONFIRMED.kruber; removed (#181).
+    -- v0.12.188-dev: dr_2h_cog_hammer, wh_2h_hammer, wh_fencing_sword and the 7
+    -- Sienna staves + Deus were BAKED (es_) and removed here (see _WEAPON_SET note).
+}
+
+-- ---------------------------------------------------------------------------
+-- HARDCODED: per-weapon source attack anim_events (one dropdown each)
+-- ---------------------------------------------------------------------------
+-- Each weapon's own unique source-template `anim_event` values (deduped — the
+-- engine's per-action vocab), verified against the decompiled weapon_templates.
+-- One dropdown is built per entry; its OPTIONS = the weapon's established SET
+-- vocab (above). A few source attacks have no clean target-set equivalent
+-- (attack_swing_right_spell on bw_flame_sword; attack_slam/attack_slam_charge on
+-- wh_2h_hammer + wh_flail_shield; special_action(_02) on bw_ghost_scythe) — they
+-- still get a dropdown; the user maps them to the nearest set event or leaves
+-- them UNSET (falls through to the prior idle stance, no T-pose, no crash).
+local _WEAPON_ATTACKS = {
+    -- SET A — Greathammer
+    dr_2h_pick = {
+        "attack_push",
+        "attack_swing_charge_left_down",
+        "attack_swing_charge_left_down_pose",
+        "attack_swing_charge_right_down",
+        "attack_swing_down_left",
+        "attack_swing_down_left_axe",
+        "attack_swing_down_right",
+        "attack_swing_down_right_axe",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_right_diagonal",
+        "parry_pose",
+    },
+    -- v0.12.188-dev: dr_2h_cog_hammer, wh_2h_hammer and wh_fencing_sword (Rapier)
+    -- BAKED (es_) and removed here (see _WEAPON_SET note).
+    we_2h_axe = {
+        "attack_push",
+        "attack_swing_charge_down",
+        "attack_swing_charge_left",
+        "attack_swing_heavy_down",
+        "attack_swing_heavy_left",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_right",
+        "parry_pose",
+    },
+    bw_1h_mace = {
+        "attack_push",
+        "attack_swing_charge_left_diagonal",
+        "attack_swing_charge_left_pose",
+        "attack_swing_charge_right_pose",
+        "attack_swing_down",
+        "attack_swing_heavy_down",
+        "attack_swing_heavy_left_up",
+        "attack_swing_heavy_right_up",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_left_diagonal_last",
+        "attack_swing_right_diagonal",
+        "parry_pose",
+    },
+    bw_ghost_scythe = {
+        "attack_push",
+        "attack_swing_charge_left",
+        "attack_swing_charge_left_diagonal",
+        "attack_swing_charge_right",
+        "attack_swing_heavy",
+        "attack_swing_heavy_left_diagonal",
+        "attack_swing_heavy_right",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_left_diagonal_last",
+        "attack_swing_right",
+        "attack_swing_up_right",
+        "parry_pose",
+        "special_action",
+        "special_action_02",
+    },
+    -- SET B — Mace & Sword
+    dr_dual_wield_axes = {
+        "attack_push",
+        "attack_swing_charge_diagonal",
+        "attack_swing_charge_left",
+        "attack_swing_charge_right",
+        "attack_swing_down",
+        "attack_swing_heavy",
+        "attack_swing_heavy_left_diagonal",
+        "attack_swing_heavy_right",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_right",
+        "attack_swing_right_diagonal",
+        "parry_pose",
+    },
+    we_dual_wield_daggers = {
+        "attack_push",
+        "attack_swing_charge",
+        "attack_swing_charge_left",
+        "attack_swing_charge_right",
+        "attack_swing_down_left",
+        "attack_swing_down_right",
+        "attack_swing_heavy",
+        "attack_swing_heavy_down",
+        "attack_swing_left",
+        "attack_swing_right",
+        "parry_pose",
+        "push_stab",
+    },
+    we_dual_wield_swords = {
+        "attack_push",
+        "attack_swing_charge_diagonal",
+        "attack_swing_charge_left",
+        "attack_swing_charge_right",
+        "attack_swing_heavy_left_diagonal",
+        "attack_swing_heavy_right",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_right",
+        "attack_swing_right_diagonal",
+        "parry_pose",
+        "push_stab",
+    },
+    we_dual_wield_sword_dagger = {
+        "attack_push",
+        "attack_swing_charge",
+        "attack_swing_charge_diagonal",
+        "attack_swing_charge_left",
+        "attack_swing_heavy",
+        "attack_swing_heavy_left_diagonal",
+        "attack_swing_left",
+        "attack_swing_right",
+        "attack_swing_right_diagonal",
+        "attack_swing_stab",
+        "parry_pose",
+        "push_stab",
+    },
+    wh_dual_hammer = {
+        "attack_push",
+        "attack_swing_charge_down",
+        "attack_swing_charge_left",
+        "attack_swing_charge_right",
+        "attack_swing_down",
+        "attack_swing_heavy_down",
+        "attack_swing_heavy_left_diagonal",
+        "attack_swing_heavy_right_diagonal",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_stab",
+        "attack_swing_up",
+        "parry_pose",
+    },
+    -- SET C — Empire 1H Sword
+    bw_dagger = {
+        "attack_push",
+        "attack_swing_charge",
+        "attack_swing_charge_left",
+        "attack_swing_heavy",
+        "attack_swing_heavy_right",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_right_diagonal",
+        "attack_swing_stab",
+        "parry_pose",
+    },
+    bw_flame_sword = {
+        "attack_push",
+        "attack_swing_charge",
+        "attack_swing_charge_right",
+        "attack_swing_heavy",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_right_diagonal",
+        "attack_swing_right_spell",  -- no clean SET C twin; map to nearest or UNSET
+        "attack_swing_stab",
+        "parry_pose",
+    },
+    -- SET D — Mace & Shield
+    wh_flail_shield = {
+        "attack_push",
+        "attack_slam",  -- no clean SET D twin; map to nearest or UNSET
+        "attack_swing_charge",
+        "attack_swing_charge_down_pose",
+        "attack_swing_charge_pose",
+        "attack_swing_down",
+        "attack_swing_down_right",
+        "attack_swing_heavy_down",
+        "attack_swing_heavy_left",
+        "attack_swing_left",
+        "attack_swing_left_diagonal",
+        "attack_swing_right_diagonal",
+        "parry_pose",
+    },
+    -- SET E — Witch Hunter 1H Axe
+    we_1h_axe = {
+        "attack_push",
+        "attack_swing_charge_left_diagonal",
+        "attack_swing_charge_left_diagonal_pose",
+        "attack_swing_charge_right_diagonal_pose",
+        "attack_swing_down",
+        "attack_swing_down_right",
+        "attack_swing_heavy_down",
+        "attack_swing_heavy_down_right",
+        "attack_swing_left",
+        "attack_swing_right",
+        "attack_swing_up",  -- vanilla carries anim_event_3p="attack_swing_up_left" here
+        "parry_pose",
+    },
+    -- v0.12.201-dev: wh_hammer_book (SET F) BAKED (es_) -> _CONFIRMED.kruber; removed here.
+    -- v0.12.188-dev: the 7 Sienna staves + Deus (bw_skullstaff_beam/_fireball/
+    -- _flamethrower/_geiser/_spear, bw_necromancy_staff, bw_deus_01) were BAKED
+    -- (es_) and removed here (see _WEAPON_SET note).
+}
+
+-- ---------------------------------------------------------------------------
+-- HARDCODED: gameplay MOVE LABEL per (weapon_key, anim_event) — for ROW labels
+-- ---------------------------------------------------------------------------
+-- Mirrors `_WEAPON_ATTACKS` 1:1. Each SOURCE-weapon attack anim_event resolved
+-- (offline, by chain-tracing each weapon's own decompiled template + reading the
+-- authoritative sub-action NAME: light_attack_* = Light, heavy_attack_* = Heavy,
+-- the melee_start charge poses = "Charge N (windup)") to the gameplay move it
+-- drives. These are the SOURCE-side labels shown move-first on each attack ROW
+-- (e.g. "Light 1  ·  attack_swing_down_left"). A few specials with no clean
+-- target-set twin (slams, scythe specials, the flame-sword spell) DELIBERATELY
+-- have no label here and fall through to the raw event name via
+-- _move_label_for_source() — never blank.
+local _SOURCE_MOVE_LABEL = {
+    -- SET A — Greathammer
+    dr_2h_pick = {
+        attack_swing_charge_left_down      = "Light/Heavy 1 (windup)",
+        attack_swing_charge_left_down_pose = "Light 3 (windup)",
+        attack_swing_charge_right_down     = "Light/Heavy 2 (windup)",
+        attack_swing_left_diagonal         = "Light 1",
+        attack_swing_right_diagonal        = "Light 2",
+        attack_swing_left                  = "Light 3",
+        attack_swing_down_left             = "Heavy 1",
+        attack_swing_down_right            = "Heavy 2",
+        attack_swing_down_left_axe         = "Heavy 1 (charged)",
+        attack_swing_down_right_axe        = "Heavy 2 (charged)",
+        attack_push                        = "Push",
+        parry_pose                         = "Block",
+    },
+    dr_2h_cog_hammer = {
+        attack_swing_charge            = "Light/Heavy 1 (windup)",
+        attack_swing_charge_pose       = "Light 5 (windup)",
+        attack_swing_charge_right_down = "Light/Heavy 2 (windup)",
+        attack_swing_charge_right      = "Heavy (charged, windup)",
+        attack_swing_up                = "Light 1",
+        attack_swing_up_pose           = "Light 5",
+        attack_swing_right_diagonal    = "Light 2",
+        attack_swing_left_diagonal     = "Light 3",
+        attack_swing_up_right          = "Light 4",
+        attack_swing_left              = "Light (bopp)",
+        attack_swing_down_left         = "Heavy 1",
+        attack_swing_down_right        = "Heavy 2",
+        attack_swing_heavy             = "Light 1 (charged)",
+        attack_swing_heavy_right       = "Light 2 (charged)",
+        attack_push                    = "Push",
+        parry_pose                     = "Block",
+    },
+    wh_2h_hammer = {
+        attack_swing_charge_right         = "Light/Heavy 1 (windup)",
+        attack_swing_charge               = "Light/Heavy 2 (windup)",
+        attack_swing_charge_right_down    = "Light/Heavy 3 (windup)",
+        attack_swing_down_right           = "Light 1",
+        attack_swing_up_left              = "Light 2",
+        attack_swing_left                 = "Light 3",
+        attack_swing_up                   = "Heavy 1",
+        attack_swing_heavy_right          = "Heavy 2",
+        attack_swing_heavy_right_diagonal = "Heavy 3",
+        attack_slam                       = "Slam (special)",
+        attack_slam_charge                = "Slam (charged special)",
+        attack_push                       = "Push",
+        parry_pose                        = "Block",
+        parry_pose_02                     = "Block (alt)",
+    },
+    we_2h_axe = {
+        attack_swing_charge_left   = "Light/Heavy 1 (windup)",
+        attack_swing_charge_down   = "Light 2/3 (windup)",
+        attack_swing_left          = "Light 1",
+        attack_swing_right         = "Light 2",
+        attack_swing_left_diagonal = "Light 3",
+        attack_swing_heavy_left    = "Heavy 1",
+        attack_swing_heavy_down    = "Heavy 2",
+        attack_push                = "Push",
+        parry_pose                 = "Block",
+    },
+    bw_1h_mace = {
+        attack_swing_charge_left_diagonal = "Light/Heavy 1 (windup)",
+        attack_swing_charge_left_pose     = "Light/Heavy 2&4 (windup)",
+        attack_swing_charge_right_pose    = "Light/Heavy 3 (windup)",
+        attack_swing_down                 = "Light 1",
+        attack_swing_left_diagonal_last   = "Light 2",
+        attack_swing_right_diagonal       = "Light 3",
+        attack_swing_left_diagonal        = "Light 4",
+        attack_swing_left                 = "Light (bopp)",
+        attack_swing_heavy_down           = "Heavy 1",
+        attack_swing_heavy_left_up        = "Heavy 2",
+        attack_swing_heavy_right_up       = "Heavy 3",
+        attack_push                       = "Push",
+        parry_pose                        = "Block",
+    },
+    bw_ghost_scythe = {
+        attack_swing_charge_left          = "Light/Heavy 1 (windup)",
+        attack_swing_charge_right         = "Light/Heavy 2&4 (windup)",
+        attack_swing_charge_left_diagonal = "Light/Heavy 3 (windup)",
+        attack_swing_left_diagonal        = "Light 1",
+        attack_swing_up_right             = "Light 2",
+        attack_swing_left                 = "Light 3",
+        attack_swing_right                = "Light 4",
+        attack_swing_left_diagonal_last   = "Light (bopp)",
+        attack_swing_heavy                = "Heavy 1",
+        attack_swing_heavy_right          = "Heavy 2",
+        attack_swing_heavy_left_diagonal  = "Heavy 3",
+        attack_push                       = "Push",
+        parry_pose                        = "Block",
+        -- special_action / special_action_02: Necromancer scythe special, no SET A twin (raw fallback)
+    },
+    -- SET B — Mace & Sword
+    dr_dual_wield_axes = {
+        attack_swing_charge_left         = "Light/Heavy 1 (windup)",
+        attack_swing_charge_right        = "Heavy 2 (windup)",
+        attack_swing_charge_diagonal     = "Heavy 3 (windup)",
+        attack_swing_left                = "Light 1",
+        attack_swing_right               = "Light 2",
+        attack_swing_left_diagonal       = "Light 3",
+        attack_swing_right_diagonal      = "Light 4",
+        attack_swing_down                = "Light (bopp)",
+        attack_swing_heavy               = "Heavy 1",
+        attack_swing_heavy_right         = "Heavy 2",
+        attack_swing_heavy_left_diagonal = "Heavy 3",
+        attack_push                      = "Push",
+        parry_pose                       = "Block",
+    },
+    we_dual_wield_daggers = {
+        attack_swing_charge       = "Light/Heavy 1 (windup)",
+        attack_swing_charge_left  = "Light 2/3/4 (windup)",
+        attack_swing_charge_right = "Heavy (stab, windup)",
+        attack_swing_left         = "Light 1",
+        attack_swing_right        = "Light 2",
+        attack_swing_down_left    = "Light 3",
+        attack_swing_down_right   = "Light 4",
+        attack_swing_heavy        = "Heavy 1",
+        attack_swing_heavy_down   = "Heavy 2",
+        attack_push               = "Push",
+        push_stab                 = "Push Attack",
+        parry_pose                = "Block",
+    },
+    we_dual_wield_swords = {
+        attack_swing_charge_diagonal     = "Light/Heavy 1 (windup)",
+        attack_swing_charge_left         = "Light/Heavy 2 (windup)",
+        attack_swing_charge_right        = "Light 3/4 (windup)",
+        attack_swing_left_diagonal       = "Light 1",
+        attack_swing_right_diagonal      = "Light 2",
+        attack_swing_left                = "Light 3",
+        attack_swing_right               = "Light 4",
+        attack_swing_heavy_left_diagonal = "Heavy 1",
+        attack_swing_heavy_right         = "Heavy 2",
+        attack_push                      = "Push",
+        push_stab                        = "Push Attack",
+        parry_pose                       = "Block",
+    },
+    we_dual_wield_sword_dagger = {
+        attack_swing_charge_diagonal     = "Light/Heavy 1 (windup)",
+        attack_swing_charge_left         = "Light 2/3/4 (windup)",
+        attack_swing_charge              = "Heavy 2 (windup)",
+        attack_swing_left                = "Light 1",
+        attack_swing_right_diagonal      = "Light 2",
+        attack_swing_right               = "Light 3",
+        attack_swing_stab                = "Light 4 (stab)",
+        attack_swing_heavy_left_diagonal = "Heavy 1",
+        attack_swing_heavy               = "Heavy 2",
+        attack_push                      = "Push",
+        push_stab                        = "Push Attack",
+        parry_pose                       = "Block",
+    },
+    wh_dual_hammer = {
+        attack_swing_charge_down          = "Light/Heavy 1 (windup)",
+        attack_swing_charge_right         = "Light/Heavy 2 (windup)",
+        attack_swing_charge_left          = "Light/Heavy 3 (windup)",
+        attack_swing_left                 = "Light 1",
+        attack_swing_up                   = "Light 2",
+        attack_swing_left_diagonal        = "Light 3",
+        attack_swing_down                 = "Light (down)",
+        attack_swing_stab                 = "Light (bopp)",
+        attack_swing_heavy_down           = "Heavy 1",
+        attack_swing_heavy_right_diagonal = "Heavy 2",
+        attack_swing_heavy_left_diagonal  = "Heavy 3",
+        attack_push                       = "Push",
+        parry_pose                        = "Block",
+    },
+    -- SET C — Empire 1H Sword
+    bw_dagger = {
+        attack_swing_charge        = "Light/Heavy 1 (windup)",
+        attack_swing_charge_left   = "Heavy 2 (windup)",
+        attack_swing_left_diagonal = "Light 1",
+        attack_swing_right_diagonal = "Light 2",
+        attack_swing_stab          = "Light 3 (stab)",
+        attack_swing_left          = "Light 4",
+        attack_swing_heavy         = "Heavy 1",
+        attack_swing_heavy_right   = "Heavy 2",
+        attack_push                = "Push",
+        parry_pose                 = "Block",
+    },
+    bw_flame_sword = {
+        attack_swing_charge_right  = "Light/Heavy 1 (windup)",
+        attack_swing_charge        = "Heavy 2 (windup)",
+        attack_swing_left          = "Light 1",
+        attack_swing_right_diagonal = "Light 2",
+        attack_swing_stab          = "Light 3 (stab)",
+        attack_swing_left_diagonal = "Light (bopp)",
+        attack_swing_heavy         = "Heavy 2",
+        -- attack_swing_right_spell: flame-sword spell attack, no clean SET C twin (raw fallback)
+        attack_push                = "Push",
+        parry_pose                 = "Block",
+    },
+    -- SET D — Mace & Shield
+    wh_flail_shield = {
+        attack_swing_charge           = "Light/Heavy 1 (windup)",
+        attack_swing_charge_pose      = "Light 2/5 (windup)",
+        attack_swing_charge_down_pose = "Light 6 (windup)",
+        attack_swing_down             = "Light 1",
+        attack_swing_down_right       = "Light 2",
+        attack_swing_left_diagonal    = "Light 4",
+        attack_swing_right_diagonal   = "Light 5",
+        attack_swing_heavy_down       = "Light 2 (alt)",
+        attack_swing_left             = "Heavy 1",
+        attack_swing_heavy_left       = "Heavy 2",
+        -- attack_slam: shield slam (light_attack_03), no clean SET D twin (raw fallback)
+        attack_push                   = "Push",
+        parry_pose                    = "Block",
+    },
+    -- SET E — Witch Hunter 1H Axe
+    we_1h_axe = {
+        attack_swing_charge_left_diagonal       = "Light/Heavy 1 (windup)",
+        attack_swing_charge_right_diagonal_pose = "Light/Heavy 2&4 (windup)",
+        attack_swing_charge_left_diagonal_pose  = "Light/Heavy 3 (windup)",
+        attack_swing_left                       = "Light 1",
+        attack_swing_right                      = "Light 2",
+        attack_swing_down                       = "Light 3",
+        attack_swing_down_right                 = "Light 4",
+        attack_swing_up                         = "Light (bopp)",
+        attack_swing_heavy_down                 = "Heavy 1",
+        attack_swing_heavy_down_right           = "Heavy 2",
+        attack_push                             = "Push",
+        parry_pose                              = "Block",
+    },
+}
+
+-- ===========================================================================
+-- SALTZPYRE (non-WP: wh_captain / wh_bountyhunter / wh_zealot) — batch 1
+-- ===========================================================================
+-- Source-verified from decompiled weapon_templates + reused from the Kruber
+-- tables above (source attack events are receiver-INDEPENDENT). 9 melee ports,
+-- 5 redirect-target SETs. SET A/B targets are Warrior-Priest weapons (bless DLC);
+-- their anims live on the shared Saltzpyre body but may be absent without the DLC
+-- (picker falls through to idle, no T-pose, no crash). Move labels deliberately
+-- OMITTED for batch 1 (empty maps -> rows/options show the raw anim_event, which
+-- _move_label_for_* already falls back to); add polished labels in a follow-up.
+local _SALTZ_SET_LABEL = {
+    A = "Warrior Priest Greathammer",
+    B = "Warrior Priest Dual Hammers",
+    C = "Dual Axe & Falchion",
+    D = "Fencing Sword (Rapier)",
+    E = "1H Falchion",
+    F = "Billhook",  -- Saltzpyre's 2H Billhook (in-game "Bill Hook"); polearm target (#161)
+    G = "2H Sword",  -- Saltzpyre's 2H Sword (two_handed_swords_template_1); #160 executioner target
+}
+
+local _SALTZ_SET_VOCAB = {
+    -- A: WP Greathammer (two_handed_hammer_priest_template) — = Kruber wh_2h_hammer events
+    A = {
+        "attack_swing_charge", "attack_swing_charge_right", "attack_swing_charge_right_down",
+        "attack_swing_heavy_right", "attack_swing_heavy_right_diagonal", "attack_swing_down_right",
+        "attack_swing_left", "attack_swing_up", "attack_swing_up_left",
+        "attack_slam", "attack_slam_charge", "attack_push", "parry_pose", "parry_pose_02",
+    },
+    -- B: WP Dual Hammers (dual_wield_hammers_priest_template) — = Kruber wh_dual_hammer events
+    B = {
+        "attack_swing_charge_down", "attack_swing_charge_left", "attack_swing_charge_right",
+        "attack_swing_heavy_down", "attack_swing_heavy_left_diagonal", "attack_swing_heavy_right_diagonal",
+        "attack_swing_down", "attack_swing_left", "attack_swing_left_diagonal",
+        "attack_swing_stab", "attack_swing_up", "attack_push", "parry_pose",
+    },
+    -- C: Dual Axe & Falchion (dual_wield_axe_falchion) — grepped
+    C = {
+        "attack_swing_charge_down", "attack_swing_charge_left",
+        "attack_swing_heavy_down", "attack_swing_heavy_left",
+        "attack_swing_right", "attack_swing_right_diagonal", "attack_swing_left_diagonal",
+        "attack_swing_down_left", "attack_swing_down", "attack_push", "parry_pose",
+    },
+    -- D: Fencing Sword / Rapier (fencing_swords) — grepped, MELEE only (attack_shoot/front_idle_exit excluded)
+    D = {
+        "attack_swing_stab_charge", "attack_swing_stab",
+        "attack_swing_right", "attack_swing_left", "attack_swing_right_diagonal",
+        "attack_push", "parry_pose",
+    },
+    -- E: 1H Falchion (1h_falchions) — grepped
+    E = {
+        "attack_swing_charge_left_diagonal", "attack_swing_charge_right_diagonal_pose",
+        "attack_swing_charge_left_diagonal_pose", "attack_swing_heavy_left_diagonal",
+        "attack_swing_heavy_right_diagonal", "attack_swing_left_diagonal", "attack_swing_right_diagonal",
+        "attack_swing_down", "attack_swing_up", "attack_push", "parry_pose",
+    },
+    -- F: Saltzpyre Billhook (2h_billhooks / two_handed_billhooks_template).
+    -- These are the billhook's `anim_event_3p` VALUES (what the Saltzpyre 3P body
+    -- actually plays) — the picker writes anim_event_3p, and the billhook's
+    -- charge/heavy attacks have DIVERGENT 1P/3P names (e.g. 1P attack_swing_charge_stab
+    -- -> 3P attack_swing_stab_charge). The original vocab listed the 1P anim_event
+    -- names, so charge/heavy picks set a 3P event the body doesn't author and fell
+    -- through to idle (#196). Source: 2h_billhooks.lua anim_event_3p column, deduped.
+    -- Polearm target (#161): Kerillian Spear + Kruber Halberd already wield as this.
+    F = {
+        "attack_swing_stab_charge",          -- charge stab (1P attack_swing_charge_stab)
+        "attack_swing_charge_left_diagonal", -- charge down (1P attack_swing_charge_down)
+        "attack_swing_heavy_left_diagonal",  -- heavy down  (1P attack_swing_heavy_down)
+        "attack_swing_heavy_stab", "attack_swing_stab", "attack_swing_left_diagonal",
+        "attack_swing_down", "attack_push", "parry_pose",
+    },
+    -- G: Saltzpyre 2H Sword (two_handed_swords_template_1) — the `to_2h_sword`
+    -- redirect target for the Kruber Executioner Sword on Saltzpyre (#160). The
+    -- template carries ZERO anim_event_3p overrides (verified in 2h_swords.lua), so
+    -- there is no 1P/3P divergence — the 3P vocab equals the template's anim_event
+    -- names (#196-safe). Melee only (a 2H sword has no ranged actions).
+    G = {
+        "attack_swing_charge_diagonal", "attack_swing_charge_diagonal_left",
+        "attack_swing_charge_diagonal_right", "attack_swing_heavy_left_diagonal",
+        "attack_swing_heavy_right_diagonal", "attack_swing_left_diagonal",
+        "attack_swing_right_diagonal", "attack_swing_down_right",
+        "attack_push", "parry_pose",
+    },
+}
+
+-- v0.12.188-dev: ALL 17 Saltzpyre batch-1/2/3 ports (we_2h_axe,
+-- es_dual_wield_hammer_sword, dr_dual_wield_axes, we_dual_wield_daggers/_swords/
+-- _sword_dagger, bw_dagger, bw_flame_sword, we_spear, es_halberd, the 5
+-- bw_skullstaff_*, bw_necromancy_staff, bw_deus_01) were BAKED career-scoped (wh_)
+-- into _3p_template_remaps (weapon_tweaker.lua) from the user's persisted picks ->
+-- removed from _NEEDS_ANIMS.saltzpyre, so the catalog gate drops them. The
+-- _SALTZ_* picker tables are emptied to keep the mirror in lockstep. Re-populate
+-- with the next Saltzpyre batch. (_SALTZ_SET_LABEL/_SALTZ_SET_VOCAB left defined.)
+-- v0.12.194-dev (#160): re-populated with the Kruber Executioner Sword (SET G).
+-- v0.12.201-dev: Executioner Sword BAKED (wh_) -> _CONFIRMED.saltzpyre; REPLACED here
+-- by the Saltzpyre batch-2 — 11 cross-character 3P ports queued for the tester's
+-- dev-picker tuning. SET A/B targets are Warrior-Priest weapons (bless DLC); their
+-- anims live on the shared Saltzpyre body but may be absent without the DLC (picker
+-- falls through to idle, no T-pose, no crash). Every wield-render target is a wh_*
+-- redirect already present in _WIELD_ANIM_CAREER_3P_PATCHES_BULK (wt_wield_patches).
+-- Kept in lockstep with _NEEDS_ANIMS.saltzpyre (wt_port_status).
+-- v0.12.213-dev (#519): 10 of the 11 batch-2 ports were fully tuned and BAKED
+-- career-scoped (wh_) into _3p_template_remaps (_wt_anim_remap.lua) -> removed
+-- from _NEEDS_ANIMS.saltzpyre, so the catalog gate drops them; their entries in
+-- the three _SALTZ_* tables below are deleted to keep this mirror in lockstep.
+-- Only dr_dual_wield_hammers remains (zero non-unset picks — not yet tuned).
+local _SALTZ_WEAPON_SET = {
+    bw_ghost_scythe = "A", -- #576 reopened
+    we_spear        = "F", -- #576 reopened
+    -- SET B — Warrior Priest Dual Hammers (to_dual_hammers_priest)
+    dr_dual_wield_hammers = "B",
+}
+
+-- Source template per Saltzpyre port (where anim_event_3p is written) = the port's
+-- own source weapon template. Confirmed against ItemMasterList.
+local _SALTZ_WEAPON_TEMPLATE = {
+    bw_ghost_scythe = "staff_scythe",
+    we_spear        = "two_handed_spears_elf_template_1",
+    -- SET B — WP Dual Hammers
+    dr_dual_wield_hammers = "dual_wield_hammers_template",
+    -- v0.12.213-dev (#519): the 10 baked batch-2 entries removed (see _SALTZ_WEAPON_SET).
+}
+
+-- Per-weapon source attack anim_events (one dropdown each), deduped from the source
+-- template's actions. Receiver-independent — each list is copied VERBATIM from the
+-- matching _KERI_WEAPON_ATTACKS entry (bw_1h_mace from the Kruber _WEAPON_ATTACKS).
+local _SALTZ_WEAPON_ATTACKS = {
+    bw_ghost_scythe = {
+        "attack_push", "attack_swing_charge_left", "attack_swing_charge_left_diagonal",
+        "attack_swing_charge_right", "attack_swing_heavy", "attack_swing_heavy_left_diagonal",
+        "attack_swing_heavy_right", "attack_swing_left", "attack_swing_left_diagonal",
+        "attack_swing_left_diagonal_last", "attack_swing_right", "attack_swing_up_right",
+        "parry_pose", "special_action", "special_action_02",
+    },
+    we_spear = {
+        "attack_push", "attack_swing_charge_left", "attack_swing_charge_right",
+        "attack_swing_down_left", "attack_swing_down_left_axe", "attack_swing_down_right",
+        "attack_swing_heavy", "attack_swing_heavy_right", "attack_swing_right",
+        "parry_pose", "push_stab",
+    },
+    -- v0.12.213-dev (#519): the 10 baked batch-2 entries removed (see _SALTZ_WEAPON_SET).
+    -- SET B — WP Dual Hammers
+    dr_dual_wield_hammers = {
+        "attack_swing_charge_down", "attack_swing_charge_right", "attack_swing_charge_left",
+        "attack_swing_heavy_down", "attack_swing_heavy_right_diagonal", "attack_swing_heavy_left_diagonal",
+        "attack_swing_left", "attack_swing_down", "attack_swing_left_diagonal", "attack_swing_up",
+        "attack_swing_stab", "attack_push", "parry_pose",
+    },
+}
+
+-- ===========================================================================
+-- KERILLIAN (all four elf careers: Waywatcher / Handmaiden / Shade / Sister of
+-- the Thorn) — batch 1
+-- ===========================================================================
+-- Same construction as the Saltzpyre batch above: source attack events are
+-- receiver-INDEPENDENT (extracted from the decompiled weapon_templates; the
+-- shared ones match the Kruber tables above), and each SET's dropdown vocab is
+-- the KERILLIAN-native target template's authored anim_event_3p column (falling
+-- back to anim_event where no _3p override) — the 3P events the elf body actually
+-- plays for that weapon. #196: the vocab lists anim_event_3p VALUES, never the 1P
+-- anim_event names. Only 1h_axes_wood_elf diverges (source anim_event
+-- attack_swing_up carries anim_event_3p=attack_swing_up_left), folded into SET D.
+-- The SET per weapon is the `we_*` wield redirect from wt_wield_patches (the
+-- `to_*` event on the port's source template). Move labels deliberately OMITTED
+-- for batch 1 (empty maps -> rows/options show the raw anim_event, which
+-- _move_label_for_* already falls back to); add polished labels in a follow-up.
+local _KERI_SET_LABEL = {
+    A = "Elf 2H Axe/Glaive",   -- to_2h_axe_we            (2h_axes_wood_elf)
+    B = "Elf 2H Sword",        -- to_2h_sword_we          (2h_swords_wood_elf)
+    C = "Elf 1H Sword",        -- to_1h_sword             (1h_swords_wood_elf)
+    D = "Elf 1H Axe",          -- to_1h_axe               (1h_axes_wood_elf)
+    E = "Elf Spear & Shield",  -- to_1h_spear_shield      (1h_spears_shield)
+    F = "Dual Swords",         -- to_dual_swords          (dual_wield_swords)
+    G = "Sword & Dagger",      -- to_dual_sword_dagger    (dual_wield_sword_dagger)
+    H = "Elf Javelin",         -- to_javelin              (javelin)
+}
+
+-- Each is the KERILLIAN-native target template's authored 3P vocab (anim_event_3p,
+-- falling back to anim_event). Extracted + deduped from the decompiled elf
+-- templates. _build_options() copies a FRESH options table per dropdown.
+local _KERI_SET_VOCAB = {
+    -- A: Elf 2H Axe/Glaive (2h_axes_wood_elf) — no 1P/3P divergence
+    A = {
+        "attack_swing_charge_left", "attack_swing_charge_down",
+        "attack_swing_right", "attack_swing_left", "attack_swing_left_diagonal",
+        "attack_swing_heavy_left", "attack_swing_heavy_down",
+        "attack_push", "parry_pose",
+    },
+    -- B: Elf 2H Sword (2h_swords_wood_elf)
+    B = {
+        "attack_swing_charge", "attack_swing_right", "attack_swing_left",
+        "attack_swing_heavy", "attack_swing_heavy_right",
+        "attack_push", "parry_pose",
+    },
+    -- C: Elf 1H Sword (1h_swords_wood_elf)
+    C = {
+        "attack_swing_charge_down", "attack_swing_charge_right_diagonal_pose",
+        "attack_swing_charge_left", "attack_swing_heavy_down",
+        "attack_swing_heavy_down_right", "attack_swing_heavy_left_up",
+        "attack_swing_left_diagonal", "attack_swing_right_diagonal",
+        "attack_swing_stab", "attack_swing_left", "attack_push", "parry_pose",
+    },
+    -- D: Elf 1H Axe (1h_axes_wood_elf). #196 divergence: the source action
+    -- anim_event=attack_swing_up carries anim_event_3p=attack_swing_up_left, so
+    -- the 3P vocab lists attack_swing_up_left (what the elf body actually plays).
+    D = {
+        "attack_swing_charge_left_diagonal", "attack_swing_charge_right_diagonal_pose",
+        "attack_swing_charge_left_diagonal_pose", "attack_swing_heavy_down",
+        "attack_swing_heavy_down_right", "attack_swing_left", "attack_swing_right",
+        "attack_swing_down_right", "attack_swing_down", "attack_swing_up_left",
+        "attack_push", "parry_pose",
+    },
+    -- E: Elf Spear & Shield (1h_spears_shield)
+    E = {
+        "attack_swing_charge_left", "attack_swing_charge_right_diagonal_pose",
+        "attack_swing_charge_stab", "attack_swing_heavy_left",
+        "attack_swing_heavy_down_right", "attack_swing_heavy_stab",
+        "attack_swing_stab", "attack_swing_stab_lh", "push_stab",
+        "attack_push", "parry_pose",
+    },
+    -- F: Dual Swords (dual_wield_swords)
+    F = {
+        "attack_swing_charge_diagonal", "attack_swing_charge_left",
+        "attack_swing_charge_right", "attack_swing_heavy_left_diagonal",
+        "attack_swing_heavy_right", "attack_swing_left_diagonal",
+        "attack_swing_right_diagonal", "attack_swing_left", "attack_swing_right",
+        "push_stab", "attack_push", "parry_pose",
+    },
+    -- G: Sword & Dagger (dual_wield_sword_dagger)
+    G = {
+        "attack_swing_charge_diagonal", "attack_swing_charge_left",
+        "attack_swing_charge", "attack_swing_heavy_left_diagonal",
+        "attack_swing_heavy", "attack_swing_right_diagonal", "attack_swing_left",
+        "attack_swing_right", "attack_swing_stab", "push_stab",
+        "attack_push", "parry_pose",
+    },
+    -- H: Elf Javelin (javelin) — melee chain + throw
+    H = {
+        "attack_swing_charge", "attack_chain_01", "attack_chain_02",
+        "attack_chain_03", "attack_swing_stab", "attack_swing_stab_02",
+        "attack_swing_stab_charge", "attack_swing_left", "attack_swing_right",
+        "attack_swing_up", "attack_throw", "throw_charge", "reload",
+    },
+}
+
+-- SET per Kerillian port = the `we_*` wield redirect target (wt_wield_patches;
+-- the `to_*` event on each port's source template). Kept in lockstep with
+-- _NEEDS_ANIMS.kerillian (wt_port_status.lua).
+-- v0.12.201-dev: Kerillian batch-1 fully BAKED (we_) -> _CONFIRMED.kerillian; emptied in lockstep.
+local _KERI_WEAPON_SET = {}
+
+-- Source template per Kerillian port (where anim_event_3p is written). Confirmed
+-- against ItemMasterList.
+-- v0.12.201-dev: emptied in lockstep with the Kerillian batch-1 bake (see _KERI_WEAPON_SET).
+local _KERI_WEAPON_TEMPLATE = {}
+
+-- Per-weapon source attack anim_events (one dropdown each), deduped from the
+-- source template's actions (inspect events excluded). Receiver-independent: the
+-- shared source templates match the Kruber tables above.
+-- v0.12.201-dev: emptied in lockstep with the Kerillian batch-1 bake (see _KERI_WEAPON_SET).
+local _KERI_WEAPON_ATTACKS = {}
+
+-- The receiver dispatch table. Kruber points at the EXISTING (unchanged) Kruber
+-- tables; Saltzpyre at the new ones above. Move-label maps empty for Saltzpyre
+-- (raw events shown). Add future receivers here.
+local _RECV = {
+    kruber = {
+        short = "Kruber", careers = _KRUBER_CAREERS, query_career = "es_huntsman",
+        set_label = _SET_LABEL, set_vocab = _SET_VOCAB, set_move_label = _SET_MOVE_LABEL,
+        weapon_set = _WEAPON_SET, weapon_template = _WEAPON_TEMPLATE,
+        weapon_attacks = _WEAPON_ATTACKS, source_move_label = _SOURCE_MOVE_LABEL,
+    },
+    saltzpyre = {
+        short = "Saltzpyre", careers = _SALTZ_CAREERS, query_career = "wh_captain",
+        set_label = _SALTZ_SET_LABEL, set_vocab = _SALTZ_SET_VOCAB, set_move_label = {},
+        weapon_set = _SALTZ_WEAPON_SET, weapon_template = _SALTZ_WEAPON_TEMPLATE,
+        weapon_attacks = _SALTZ_WEAPON_ATTACKS, source_move_label = {},
+    },
+    kerillian = {
+        short = "Kerillian", careers = _KERI_CAREERS, query_career = "we_waywatcher",
+        set_label = _KERI_SET_LABEL, set_vocab = _KERI_SET_VOCAB, set_move_label = {},
+        weapon_set = _KERI_WEAPON_SET, weapon_template = _KERI_WEAPON_TEMPLATE,
+        weapon_attacks = _KERI_WEAPON_ATTACKS, source_move_label = {},
+    },
+}
+local _RECEIVERS = { "kruber", "saltzpyre", "kerillian" }  -- display/sort order
+
+-- ---------------------------------------------------------------------------
+-- Move-label resolvers (move-first, raw event as secondary clarifier).
+-- ---------------------------------------------------------------------------
+-- Separator between the gameplay move label and the raw anim_event clarifier.
+local _LABEL_SEP = "  \194\183  "  -- "  ·  " (U+00B7 middle dot, UTF-8)
+
+-- Target-side (dropdown OPTION) label for an event in a SET's vocab.
+-- Returns "Heavy 2  ·  attack_swing_heavy", or the raw event if unlabeled.
+local function _move_label_for_set(receiver, set, event)
+    local m = _RECV[receiver].set_move_label[set]
+    local move = m and m[event]
+    if move then return move .. _LABEL_SEP .. event end
+    return event
+end
+
+-- Source-side (attack ROW) label for a weapon's source attack event.
+-- Returns "Light 1  ·  attack_swing_down_left", or the raw event if unlabeled
+-- (the deliberate specials: slams, scythe specials, flame-sword spell).
+local function _move_label_for_source(receiver, weapon_key, event)
+    local m = _RECV[receiver].source_move_label[weapon_key]
+    local move = m and m[event]
+    if move then return move .. _LABEL_SEP .. event end
+    return event
 end
 
 -- ---------------------------------------------------------------------------
--- Source-of-truth (v0.12.99-dev+)
--- ---------------------------------------------------------------------------
--- v0.12.98-dev attempted to read from `mod._weapon_unlock_map`, which was
--- nil at _data.lua time — VMF calls _data.lua before main wt.lua finishes,
--- so the exposure hadn't happened yet. Picker built an empty catalog → 0
--- sub_widgets → VMF rejected the top-level group → wt failed to load.
--- v0.12.99-dev fix: `mod:dofile` `wt_unlock_data` directly. Same file main
--- wt.lua loads. No load-order dependency, no mirror to drift.
-
-local _UNLOCK_DATA = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_unlock_data")
-
-local function _get_unlock_map()
-    return _UNLOCK_DATA.weapon_unlock_map
-end
-
-local function _get_cwv_managed()
-    return _UNLOCK_DATA.cwv_managed
-end
-
--- ---------------------------------------------------------------------------
--- Linear-scan helper. Lua 5.1 has no built-in `table.contains`. Declared
--- BEFORE first call site per feedback_lua_forward_reference.md.
+-- Linear-scan helper (Lua 5.1 has no table.contains). Declared before use.
 -- ---------------------------------------------------------------------------
 local function _is_in(t, v)
     for i = 1, #t do
@@ -466,305 +1235,73 @@ local function _is_in(t, v)
 end
 
 -- ---------------------------------------------------------------------------
--- Weapon label builder (v0.12.100-dev+)
+-- Catalog: the ordered list of flagged weapons surfaced in the picker.
 -- ---------------------------------------------------------------------------
--- Returns "<Source Qualifier> <Weapon Name>" — the source-character-qualified
--- name used in port labels. Disambiguates same-named weapons across
--- characters (e.g. Kerillian's Greatsword vs Kruber's: "Elf Greatsword" vs
--- "Empire Greatsword"). Falls back to a humanized weapon_key if the curated
--- table is missing the entry (flagged at install time via _OPEN_QUESTIONS).
+-- Built once from _WEAPON_SET, gated on the _NEEDS_ANIMS.kruber allow-list (so a
+-- weapon dropped from the allow-list disappears here too — single source of
+-- truth). One entry per weapon; sorted A→Z by display label
+-- (feedback_sort_categories_alphabetically). port_id is a stable, unique,
+-- Lua-identifier-safe id used for setting_ids + dump constant names.
+local _CATALOG = {}
+local _catalog_built = false
 
--- v0.12.133-dev: pull the REAL in-game weapon name from the game's own
--- localization (ItemMasterList[key].localized_name, precomputed as
--- Localize(display_name) at item_master_list.lua:114-115). User directive: stop
--- hand-naming weapons; use the loc data everywhere so the picker communicates
--- exactly which weapon is which (e.g. wh_2h_hammer = "Reckoner", not a guess).
--- Returns nil when there's no item / loc string so callers fall back.
-local function _weapon_loc_name(weapon_key)
-    if not weapon_key then return nil end
-    local item = ItemMasterList and rawget(ItemMasterList, weapon_key)
-    if not item then return nil end
-    local s = item.localized_name
-    if (not s or s == "") and item.display_name and Localize then
-        local ok, loc = pcall(Localize, item.display_name)
-        if ok then s = loc end
-    end
-    if type(s) == "string" and s ~= "" and s ~= item.display_name then return s end
-    return nil
-end
+-- Pick a representative Kruber career to feed the allow-list query. Any of the
+-- four resolves identically (the allow-list is keyed by receiver bucket).
+local _ALLOW_QUERY_CAREER = "es_huntsman"
 
--- Reverse map a template_name -> a weapon_key that uses it, so a TARGET (keyed by
--- template in _WIELD_EVENT_TO_TARGET) can be localized to its real in-game name.
--- Built once, lazily, off ItemMasterList. Prefers a base (non-vs_/non-skin) key.
-local _TEMPLATE_TO_KEY
-local function _weapon_key_for_template(template_name)
-    if not template_name then return nil end
-    if not _TEMPLATE_TO_KEY then
-        _TEMPLATE_TO_KEY = {}
-        if ItemMasterList then
-            for k, v in pairs(ItemMasterList) do
-                if type(v) == "table" and v.template then
-                    local cur = _TEMPLATE_TO_KEY[v.template]
-                    -- Prefer a plain base key over vs_/magic/skin variants.
-                    if cur == nil or (cur:find("^vs_") and not k:find("^vs_")) then
-                        _TEMPLATE_TO_KEY[v.template] = k
-                    end
-                end
-            end
-        end
-    end
-    return _TEMPLATE_TO_KEY[template_name]
-end
+local function _ensure_catalog_built()
+    if _catalog_built then return end
 
--- Real loc name for a TARGET template (the weapon the port renders as), with a
--- hand-written fallback for templates ItemMasterList doesn't map cleanly.
-local function _target_loc_display(template_name, fallback)
-    return _weapon_loc_name(_weapon_key_for_template(template_name)) or fallback
-end
-
-local function _humanize_weapon_key_fallback(weapon_key)
-    if not weapon_key then return "?" end
-    local stripped = weapon_key:gsub("^[a-z][a-z]_", "")
-    stripped = stripped:gsub("_", " ")
-    stripped = stripped:gsub("(%a)(%w*)", function(first, rest) return first:upper() .. rest end)
-    return stripped
-end
-
-local function _weapon_display_name(weapon_key)
-    if not weapon_key then return "?" end
-    local qualifier = _source_qualifier(weapon_key)
-    local name = _weapon_loc_name(weapon_key) or _WEAPON_NAME[weapon_key] or _humanize_weapon_key_fallback(weapon_key)
-    return qualifier .. " " .. name
-end
-
--- ---------------------------------------------------------------------------
--- Skeleton vocabulary builders (live, install-time)
--- ---------------------------------------------------------------------------
--- For each character model, enumerate the wield events + anim_event vocab
--- the natively-owned weapons author. Result: per-character_key vocab tables
--- used by the dropdown option builders.
---
--- Wield vocab per character model:
---   • Every Weapons.<tpl>.wield_anim_career_3p[<career>] where <career>
---     belongs to that character model AND the weapon is natively owned by
---     that character.
---   • Plus Weapons.<tpl>.wield_anim_3p for every natively-owned weapon.
---   • Plus Weapons.<tpl>.wield_anim (1P-side, but on many templates this is
---     the same as wield_anim_3p and is the only field present).
---
--- Anim-event vocab per character model:
---   • Every distinct `actions[*][*].anim_event` across natively-owned
---     templates.
---   • Plus every distinct `actions[*][*].anim_event_3p` across those same
---     templates (existing per-action 3P overrides — the patcher-applied
---     ones AND any vanilla ones).
---
--- "Natively owned" means the weapon_key's prefix matches the character key
--- (per `_native_owner_for_weapon_key`).
---
--- Both vocabs are best-effort approximations. If the user picks a value the
--- receiver's body doesn't author the 3P playback falls through to the
--- previous-weapon idle stance (no T-pose, no crash). The user dumps via
--- `/wt_dump_anim_picks` and the lead folds confirmed-working values back
--- into the static patcher tables.
-
-local _live_wield_vocab = {}      -- char_key -> sorted unique list
-local _live_anim_event_vocab = {} -- char_key -> sorted unique list
-
--- Returns true if a weapon_key is natively owned by this character model.
--- `kerillian` matches `we_*`, `bardin` matches `dr_*`, etc.
-local _NATIVE_PREFIX_BY_CHAR = {
-    kruber    = "es_",
-    bardin    = "dr_",
-    kerillian = "we_",
-    saltzpyre = "wh_",
-    -- wh_priest shares the `wh_` prefix family with Saltzpyre. For VOCAB
-    -- BUILDING this is over-permissive — WP's skeleton authors fewer events
-    -- than the WHC/BH/Zealot skeleton (no `to_brace_of_pistols`,
-    -- `to_crossbow`, `to_repeating_pistol`, etc.). Since WP's port list is
-    -- already filtered by `_wp_forbidden_weapon` to exclude bow/crossbow/
-    -- firearm receivers entirely, the over-permissive vocab only shows up
-    -- as extra dropdown options on the few melee rows that DO land on WP
-    -- (currently just `es_1h_flail`). Best-effort approximation per the
-    -- spec; the user picks, tries in-game, dumps what works.
-    wh_priest = "wh_",
-    sienna    = "bw_",
-}
-
-local function _weapon_native_to_char(weapon_key, char_key)
-    if not weapon_key or not char_key then return false end
-    local prefix = _NATIVE_PREFIX_BY_CHAR[char_key]
-    if not prefix then return false end
-    return weapon_key:sub(1, #prefix) == prefix
-end
-
--- Lookup of every template name natively owned by a character. Built by
--- iterating ItemMasterList once.
-local function _build_native_templates_by_char()
+    -- Membership gate: ONLY weapons explicitly flagged [Needs Animations] for the
+    -- receiver (wt_port_status _NEEDS_ANIMS[receiver]). Belt-and-suspenders — every
+    -- weapon_set key is in the allow-list by construction, but gating here keeps the
+    -- two in lockstep if one is edited without the other. Iterated per receiver so
+    -- each receiver's catalog entries carry its own careers/short/templates and a
+    -- receiver-namespaced port_id ("p_<receiver>_<weapon_key>").
     local out = {}
-    for _, char_key in ipairs(_CHARACTER_ORDER) do out[char_key] = {} end
-    if not ItemMasterList then return out end
-    -- Walk via pairs() — ItemMasterList is metatable-protected on strict
-    -- builds; rawget is the cited convention but we want EVERY entry, so
-    -- iterate the raw pairs and tolerate any single-entry pcall failure.
-    for weapon_key, item in pairs(ItemMasterList) do
-        if type(item) == "table" and type(weapon_key) == "string" then
-            local tpl = item.template
-            if type(tpl) == "string" then
-                for _, char_key in ipairs(_CHARACTER_ORDER) do
-                    if _weapon_native_to_char(weapon_key, char_key) then
-                        out[char_key][tpl] = true
-                    end
-                end
+    for _, r in ipairs(_RECEIVERS) do
+        local rd = _RECV[r]
+        for weapon_key, set in pairs(rd.weapon_set) do
+            if _PORT_STATUS.needs_anims(rd.query_career, weapon_key) then
+                out[#out + 1] = {
+                    weapon_key    = weapon_key,
+                    set           = set,
+                    template_name = rd.weapon_template[weapon_key],
+                    attacks       = rd.weapon_attacks[weapon_key] or {},
+                    careers       = rd.careers,
+                    char_key      = r,
+                    label         = _weapon_display_name(weapon_key) .. " rendered on " .. rd.short .. " body",
+                    port_id       = "p_" .. r .. "_" .. weapon_key,
+                }
             end
         end
     end
-    return out
-end
+    table.sort(out, function(a, b)
+        if a.char_key ~= b.char_key then return a.char_key < b.char_key end
+        return a.label < b.label
+    end)
+    _CATALOG = out
+    _catalog_built = true
 
--- Iterate all templates natively owned by a character, calling fn(template_name, tpl_table).
-local function _foreach_native_template(char_key, native_templates, fn)
-    local templates = native_templates[char_key]
-    if not templates or not Weapons then return end
-    for tpl_name in pairs(templates) do
-        local tpl = rawget(Weapons, tpl_name) -- rawget per repo convention
-        if tpl then fn(tpl_name, tpl) end
-    end
-end
-
--- Returns sorted-unique list out of an arbitrary-keyed set.
-local function _sorted_unique_keys(set)
-    local out = {}
-    for k in pairs(set) do out[#out + 1] = k end
-    table.sort(out)
-    return out
-end
-
--- Build the per-character live wield vocab.
-local function _build_live_wield_vocab(native_templates)
-    local result = {}
-    for _, char_key in ipairs(_CHARACTER_ORDER) do
-        local set = {}
-        _foreach_native_template(char_key, native_templates, function(_, tpl)
-            -- 3P wield default(s)
-            if type(tpl.wield_anim_3p) == "string" then set[tpl.wield_anim_3p] = true end
-            if type(tpl.wield_anim)    == "string" then set[tpl.wield_anim]    = true end
-            -- Per-career 3P wield overrides.
-            local map = tpl.wield_anim_career_3p
-            if type(map) == "table" then
-                for career, ev in pairs(map) do
-                    -- Only keep events whose career belongs to THIS character
-                    -- bucket — `to_2h_billhook` on `wh_captain` belongs in
-                    -- Saltzpyre's vocab, not Kerillian's, even though the
-                    -- template might be elf-native.
-                    if _char_key_for_career(career) == char_key and type(ev) == "string" then
-                        set[ev] = true
-                    end
-                end
-            end
-        end)
-        result[char_key] = _sorted_unique_keys(set)
-    end
-    return result
-end
-
--- Build the per-character live anim_event vocab.
-local function _build_live_anim_event_vocab(native_templates)
-    local result = {}
-    for _, char_key in ipairs(_CHARACTER_ORDER) do
-        local set = {}
-        _foreach_native_template(char_key, native_templates, function(_, tpl)
-            if type(tpl.actions) == "table" then
-                for _, action_group in pairs(tpl.actions) do
-                    if type(action_group) == "table" then
-                        for _, sub in pairs(action_group) do
-                            if type(sub) == "table" then
-                                if type(sub.anim_event)    == "string" then set[sub.anim_event]    = true end
-                                if type(sub.anim_event_3p) == "string" then set[sub.anim_event_3p] = true end
-                            end
-                        end
-                    end
-                end
-            end
-        end)
-        result[char_key] = _sorted_unique_keys(set)
-    end
-    return result
-end
-
--- ---------------------------------------------------------------------------
--- Dropdown options factories (per VMF_RECIPES § 5 — fresh table per widget)
--- ---------------------------------------------------------------------------
-
-local function _build_wield_options(char_key, current_value)
-    local vocab = _live_wield_vocab[char_key] or {}
-    local opts = {}
-    local seen = {}
-
-    if current_value and current_value ~= UNSET and not _is_in(vocab, current_value) then
-        opts[#opts + 1] = { text = current_value .. " (current)", value = current_value }
-        seen[current_value] = true
-    end
-
-    for _, v in ipairs(vocab) do
-        if not seen[v] then
-            opts[#opts + 1] = { text = v, value = v }
-            seen[v] = true
+    _dbg("static catalog built: %d flagged weapon(s)", #_CATALOG)
+    -- Surface any flagged weapon missing a template/attack table (would yield an
+    -- empty dropdown set) so a stale hardcoded table is caught at boot.
+    for _, e in ipairs(_CATALOG) do
+        if not e.template_name then
+            mod:warning("[wt:dev_anim] %s has no _WEAPON_TEMPLATE entry — row will have no dropdowns.", e.weapon_key)
+        elseif #e.attacks == 0 then
+            mod:warning("[wt:dev_anim] %s has no _WEAPON_ATTACKS entry — row will have no dropdowns.", e.weapon_key)
         end
     end
-
-    opts[#opts + 1] = { text = "(unset — fall through)", value = UNSET }
-    return opts
-end
-
-local function _build_anim_event_options(char_key, source_event, current_value)
-    local vocab = _live_anim_event_vocab[char_key] or {}
-    local opts = {}
-    local seen = {}
-
-    if current_value and current_value ~= UNSET and not _is_in(vocab, current_value) then
-        opts[#opts + 1] = { text = current_value .. " (current)", value = current_value }
-        seen[current_value] = true
-    end
-
-    if source_event and not seen[source_event] then
-        opts[#opts + 1] = { text = source_event .. " (source — passthrough)", value = source_event }
-        seen[source_event] = true
-    end
-
-    for _, v in ipairs(vocab) do
-        if not seen[v] then
-            opts[#opts + 1] = { text = v, value = v }
-            seen[v] = true
-        end
-    end
-
-    opts[#opts + 1] = { text = "(unset — fall through)", value = UNSET }
-    return opts
 end
 
 -- ---------------------------------------------------------------------------
--- Template / action-event introspection
+-- Template / action introspection (live, for default seeding + apply)
 -- ---------------------------------------------------------------------------
 
-local function _collect_source_anim_events(template_name)
-    local tpl = Weapons and rawget(Weapons, template_name)
-    if not tpl or not tpl.actions then return nil end
-    local seen, out = {}, {}
-    for _, action_group in pairs(tpl.actions) do
-        if type(action_group) == "table" then
-            for _, sub in pairs(action_group) do
-                if type(sub) == "table" and type(sub.anim_event) == "string" and not seen[sub.anim_event] then
-                    seen[sub.anim_event] = true
-                    out[#out + 1] = sub.anim_event
-                end
-            end
-        end
-    end
-    table.sort(out)
-    return out
-end
-
+-- Current live anim_event_3p for a (template, source_event), if any sub-action
+-- carrying that source anim_event already has a 3P override. Used as the
+-- dropdown default so the menu reflects current state.
 local function _first_anim_event_3p_for(template_name, source_event)
     local tpl = Weapons and rawget(Weapons, template_name)
     if not tpl or not tpl.actions then return nil end
@@ -780,592 +1317,362 @@ local function _first_anim_event_3p_for(template_name, source_event)
     return nil
 end
 
--- Resolve weapon_key → template_name via ItemMasterList. rawget per repo
--- convention (DEVELOPMENT.md "rawget for fragile globals"). Returns nil on
--- any failure to resolve.
-local function _resolve_template(weapon_key)
-    if not ItemMasterList or not weapon_key then return nil end
-    local item = rawget(ItemMasterList, weapon_key)
-    if not item then return nil end
-    return item.template
-end
-
--- ---------------------------------------------------------------------------
--- Dynamic catalog construction
--- ---------------------------------------------------------------------------
--- Walks `_unlock_map`, filters per the conversion rules:
---   1. owner != receiver (skip natives)
---   2. WP + bow/crossbow/firearm = skip
---   3. _cwv_managed[career][weapon_key] = skip
---   4. unresolved template = warn + skip
--- Coalesces receiver careers sharing the same template within a character
--- bucket into one port entry. Returns a list of entries:
---   { port_id, char_key, template_name, weapon_key, label, careers={...} }
-
-local _OPEN_QUESTIONS = {} -- collects warnings for status report (unresolved templates, etc.)
-
--- Forward-declared locals (assigned further down). Declared here so
--- `_build_dynamic_catalog` can reference `_stable_keys_of`, and
--- `M.build_widget_tree` can reference `_ensure_catalog_built`, without
--- relying on global-namespace fallback. See feedback_lua_forward_reference.md.
-local _stable_keys_of
-local _ensure_catalog_built
-
--- v0.12.130-dev: dev-picker gate. The picker's VMF widget tree weighs ~11.4 MB of
--- lua_heap (88% of wt's ENTIRE boot footprint) — pure dev tooling. A host OOM
--- (lua_heap pinned at 100% mid-mission) traced wt's cap pressure to this tree.
--- Default OFF so normal play / friends never pay it. Read the persisted VMF
--- setting RAW (reliable at boot/data-build time, unlike mod:get — see the
--- v0.12.98 data-time-read lesson). Baked port anims (in weapon_tweaker.lua) are
--- unaffected; only the live tuning UI + in-progress picker picks are gated off.
-local function _dev_picker_enabled()
-    local ok, v = pcall(Application.user_setting, "mods_settings", "wt_dev", "enable_dev_anim_picker")
-    return ok and v == true
-end
-
--- Per-(receiver, weapon) status label, falling back to the weapon-key-global
--- entry, then [Untested]. The (char,weapon) form lets a label true only on one
--- receiver (e.g. "[Needs Anim Mapping]" for Bardin's Pickaxe ON Saltzpyre) not
--- bleed onto the same weapon's Kruber/Kerillian ports.
-local function _port_status_label(char_key, weapon_key)
-    return _PORT_STATUS_LABEL[(char_key or "") .. "|" .. weapon_key]
-        or _PORT_STATUS_LABEL[weapon_key]
-        or _DEFAULT_STATUS_LABEL
-end
-
--- A port is "done" once tagged [Working] (per-receiver or global). Done ports
--- drop out of the picker catalog so the tuning UI only lists ports needing work.
-local function _picker_done(char_key, weapon_key)
-    return _port_status_label(char_key, weapon_key) == "[Working]"
-end
-
-local function _build_dynamic_catalog()
-    -- Dev-picker gate: when disabled, return an EMPTY catalog so the widget tree
-    -- + loc keys (the ~11.4 MB) build nothing. Enable via "enable_dev_anim_picker"
-    -- (requires a game restart — wt is not hot-reload safe).
-    if not _dev_picker_enabled() then
-        return {}, {}
-    end
-
-    -- Read live tables off main wt.lua. If main hasn't exposed them (e.g.
-    -- this module loaded but main wt.lua errored out before reaching the
-    -- exposure block), warn and return an empty catalog — picker will
-    -- surface zero entries rather than crash.
-    local _unlock_map   = _get_unlock_map()
-    local _cwv_managed  = _get_cwv_managed()
-    if not _unlock_map then
-        mod:warning("[wt:dev_anim] mod._weapon_unlock_map is nil — main wt.lua didn't expose it. Picker will be empty until main wt.lua initializes.")
-        return {}, {}
-    end
-    _cwv_managed = _cwv_managed or {} -- harmless if main didn't expose; no pairs get CWV-skipped.
-
-    -- (receiver_char_key, template_name) -> entry
-    local index = {}
-    -- Stable list of insertion order so menu order is deterministic.
-    local order = {}
-
-    for _, career in _stable_keys_of(_unlock_map) do
-        local weapon_keys = _unlock_map[career]
-        local receiver_char = _char_key_for_career(career)
-        if not receiver_char then
-            _OPEN_QUESTIONS[#_OPEN_QUESTIONS + 1] = "unknown char for career " .. tostring(career)
-        else
-            for _, weapon_key in ipairs(weapon_keys) do
-                local owner = _native_owner_for_weapon_key(weapon_key)
-
-                -- Filter (1): native — skip. Per the spec, `wh_*` weapons
-                -- are native to BOTH Saltzpyre and Warrior Priest (they
-                -- share the `wh_` prefix family). So for receiver=wh_priest,
-                -- owner=saltzpyre (i.e. any wh_-prefixed weapon) counts as
-                -- native and gets skipped. Result: WP's submenu lists only
-                -- the genuinely cross-prefix entries in his row (currently
-                -- just `es_1h_flail`).
-                local is_native = (owner == receiver_char)
-                if receiver_char == "wh_priest" and owner == "saltzpyre" then
-                    is_native = true
-                end
-
-                -- Filter (2): WP + ranged weapon — skip.
-                local wp_forbidden = (receiver_char == "wh_priest" and _wp_forbidden_weapon(weapon_key))
-
-                -- Filter (3): CWV-managed pair — skip.
-                local cwv_owned = (_cwv_managed[career] and _cwv_managed[career][weapon_key]) or false
-
-                if not is_native and not wp_forbidden and not cwv_owned and not _picker_done(receiver_char, weapon_key) then
-                    -- Filter (4): resolve template.
-                    local template_name = _resolve_template(weapon_key)
-                    if not template_name then
-                        local msg = "ItemMasterList["..weapon_key.."] missing or has no .template field"
-                        _OPEN_QUESTIONS[#_OPEN_QUESTIONS + 1] = msg
-                        mod:warning("[wt:dev_anim] %s — skipping", msg)
-                    else
-                        local idx_key = receiver_char .. "|" .. template_name
-                        local entry = index[idx_key]
-                        if not entry then
-                            entry = {
-                                char_key      = receiver_char,
-                                template_name = template_name,
-                                weapon_key    = weapon_key,
-                                careers       = {},
-                                _careers_seen = {},
-                            }
-                            entry.port_id = "p_" .. receiver_char .. "_" .. weapon_key
-                                              .. "_" .. template_name
-                            -- Label resolved below once careers are populated
-                            -- (we need careers[1] to resolve the target weapon).
-                            entry.label = nil
-                            index[idx_key] = entry
-                            order[#order + 1] = idx_key
-                        end
-                        if not entry._careers_seen[career] then
-                            entry._careers_seen[career] = true
-                            entry.careers[#entry.careers + 1] = career
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- Materialize in insertion order; sort careers within each entry for
-    -- predictable display. Resolve target weapon NOW so labels and loc keys
-    -- have access to the annotation.
-    local out = {}
-    for _, idx_key in ipairs(order) do
-        local entry = index[idx_key]
-        table.sort(entry.careers)
-        entry._careers_seen = nil
-        local target = _resolve_target_for_port(entry)
-        if target then
-            entry.target_template = target.template
-            entry.target_display  = _target_loc_display(target.template, target.display)
-            entry.label = string.format(
-                "%s rendered on %s body  ·  using %s animations",
-                _weapon_display_name(entry.weapon_key),
-                _CHARACTER_SHORT[entry.char_key] or entry.char_key,
-                entry.target_display
-            )
-        else
-            entry.label = string.format(
-                "%s rendered on %s body",
-                _weapon_display_name(entry.weapon_key),
-                _CHARACTER_SHORT[entry.char_key] or entry.char_key
-            )
-        end
-        out[#out + 1] = entry
-    end
-    return out
-end
-
--- Sorted-iteration helper for the unlock_map walk so career order is
--- deterministic across runs. Returns an iterator suitable for use in
--- `for i, k in _stable_keys_of(t) do`.
-function _stable_keys_of(t) -- assigned to the forward local declared above
-
-    local keys = {}
-    for k in pairs(t) do keys[#keys + 1] = k end
-    table.sort(keys)
-    local i = 0
-    return function()
-        i = i + 1
-        local k = keys[i]
-        if k == nil then return nil end
-        return i, k
-    end
-end
-
--- The live catalog. Populated by `_install_catalog()` at install-time after
--- `Weapons` and `ItemMasterList` are guaranteed present.
-local _CATALOG = {}
-
 -- ---------------------------------------------------------------------------
 -- setting_id factories (globally unique per VMF_RECIPES § 6)
 -- ---------------------------------------------------------------------------
-
--- v0.12.100-dev: one wield dropdown per port (not per career). All careers
--- on the same character model share the same skeleton/animation, so they
--- should always have the same wield event. Apply writes to every career in
--- `entry.careers`.
-local function _sid_wield(port_id)
-    return "wt_dev_anim_" .. port_id .. "_w"
+local function _sid_group(port_id)
+    return "wt_dev_anim_grp_" .. port_id
 end
 
 local function _sid_anim_event(port_id, source_event)
     return "wt_dev_anim_" .. port_id .. "_ev_" .. source_event
 end
 
-local function _sid_group(port_id)
-    return "wt_dev_anim_grp_" .. port_id
-end
-
-local function _sid_char_group(char_key)
-    return "wt_dev_anim_char_" .. char_key
-end
-
--- setting_id -> { port_id, template_name, kind, career|source_event, ... }
+-- setting_id -> { port_id, template_name, kind="anim_event", source_event, ... }
+--
+-- CROSS-INSTANCE HAZARD (the v0.12.147-dev fix). `mod:dofile` RE-EXECUTES the
+-- chunk on every call and does NOT cache/return a singleton — so the THREE
+-- `mod:dofile("…/wt_dev_anim_picker")` call sites (weapon_tweaker.lua:139 SCRIPT,
+-- weapon_tweaker_data.lua:1757 DATA, weapon_tweaker_localization.lua:1366 LOC)
+-- each get their OWN private copy of this upvalue. Only the DATA instance ever
+-- ran `build_widget_tree()` (which is what populates `_setting_index`), so the
+-- SCRIPT instance's `_setting_index` stayed EMPTY — and `install()` →
+-- `reapply_stored_picks()` (boot) and `on_setting_changed()` (live) both run on
+-- the SCRIPT instance, iterating an empty table → ZERO picks applied, ZERO
+-- `[wt:apply]` lines, every `[wt:play]` showing `picks_set={}`. The dropdowns
+-- still rendered the user's stored picks because they're drawn off VMF settings
+-- by the DATA instance, masking the empty SCRIPT-side index. FIX:
+-- `_ensure_setting_index_built()` rebuilds the index lazily from the same static
+-- tables on WHICHEVER instance needs it, so the apply path is self-sufficient
+-- regardless of which dofile instance it runs on.
 local _setting_index = {}
+local _setting_index_built = false
+
+-- Register one setting_index record for (entry, source_event). Single source of
+-- truth shared by `_build_attack_dropdown` (DATA instance, building widgets) and
+-- `_ensure_setting_index_built` (SCRIPT instance, apply-only) so the rec shape
+-- can never drift between the two. Returns sid + default_value for the caller.
+local function _register_attack_setting(entry, source_event)
+    local sid = _sid_anim_event(entry.port_id, source_event)
+    local cur = _first_anim_event_3p_for(entry.template_name, source_event)
+    local default_value = cur or UNSET
+    _setting_index[sid] = {
+        port_id       = entry.port_id,
+        template_name = entry.template_name,
+        kind          = "anim_event",
+        source_event  = source_event,
+        receiver_char = entry.char_key,
+        default_value = default_value,
+    }
+    return sid, default_value
+end
+
+-- Populate `_setting_index` on THIS dofile instance without building any widgets.
+-- The apply/boot-replay path (reapply_stored_picks, on_setting_changed) lives on
+-- the SCRIPT instance, which never calls build_widget_tree() (only the DATA
+-- instance does) — so without this the SCRIPT-side index is empty and nothing is
+-- ever applied. Idempotent + cheap (static tables, no catalog/vocab walk).
+local function _ensure_setting_index_built()
+    if _setting_index_built then return end
+    _ensure_catalog_built()
+    local n = 0
+    for _, entry in ipairs(_CATALOG) do
+        for _, source_event in ipairs(entry.attacks) do
+            _register_attack_setting(entry, source_event)
+            n = n + 1
+        end
+    end
+    _setting_index_built = true
+    _dbg("setting index built (apply-side): %d setting(s)", n)
+end
+
+-- ---------------------------------------------------------------------------
+-- Dropdown options factory (fresh table per widget — VMF_RECIPES § 5)
+-- ---------------------------------------------------------------------------
+-- Options = the established SET's hardcoded vocab + a "(current)" pin for any
+-- live/default value off-vocab + the UNSET fall-through sentinel.
+-- The `value` stored to settings stays the RAW anim_event (the apply path reads
+-- it verbatim) — only the displayed `text` is the move-first label
+-- ("Heavy 2  ·  attack_swing_heavy" via _move_label_for_set; raw event for any
+-- unlabeled vocab entry). loc_keys() registers each text string as its own key.
+local function _build_options(receiver, set, default_value)
+    local vocab = _RECV[receiver].set_vocab[set] or {}
+    local opts = {}
+    local seen = {}
+
+    if default_value and default_value ~= UNSET and not _is_in(vocab, default_value) then
+        -- Off-vocab current value: prefix the SET move-label if it happens to map,
+        -- else the raw event, then the "(current)" pin.
+        opts[#opts + 1] = { text = _move_label_for_set(receiver, set, default_value) .. " (current)", value = default_value }
+        seen[default_value] = true
+    end
+
+    for _, v in ipairs(vocab) do
+        if not seen[v] then
+            opts[#opts + 1] = { text = _move_label_for_set(receiver, set, v), value = v }
+            seen[v] = true
+        end
+    end
+
+    opts[#opts + 1] = { text = "(unset - fall through)", value = UNSET }
+    return opts
+end
 
 -- ---------------------------------------------------------------------------
 -- Widget tree construction
 -- ---------------------------------------------------------------------------
 
--- v0.12.101-dev: per-port option builder. If the port has a decided target
--- weapon (derived from wield_anim_career_3p — see _resolve_target_for_port),
--- use target's anim_event vocab for ALL per-attack dropdowns and DROP the
--- wield dropdown. Otherwise fall back to receiver-character broad vocab.
-local function _build_port_group(entry)
+-- One per-attack 3P-anim dropdown for one source attack. Options = the weapon's
+-- established SET vocab (HARDCODED). Registers a kind="anim_event" rec so the
+-- existing _apply_anim_event_change (writes anim_event_3p ONLY — 3P) + persist +
+-- boot-replay apply the pick with no new apply code.
+local function _build_attack_dropdown(entry, source_event)
+    -- Register the apply-side rec through the shared helper so the DATA-instance
+    -- widget build and the SCRIPT-instance apply-only build can never drift.
+    local sid, default_value = _register_attack_setting(entry, source_event)
+
+    return {
+        setting_id    = sid,
+        type          = "dropdown",
+        default_value = default_value,
+        options       = _build_options(entry.char_key, entry.set, default_value),
+        tooltip       = "wt_dev_anim_attack_tooltip",
+    }
+end
+
+-- One collapsible GROUP per flagged weapon, with one per-attack dropdown inside.
+-- The group → dropdown nesting keeps the gut Mod Tweaker depth-drill working.
+local function _build_weapon_group(entry)
     local sub_widgets = {}
-    local tpl = Weapons and rawget(Weapons, entry.template_name)
-    local tpl_present = tpl ~= nil
-
-    -- Target weapon already resolved at catalog build time (entry.target_template).
-    local target_vocab
-    if entry.target_template then
-        target_vocab = _collect_target_anim_event_vocab(entry.target_template)
+    for _, source_event in ipairs(entry.attacks) do
+        sub_widgets[#sub_widgets + 1] = _build_attack_dropdown(entry, source_event)
     end
-
-    -- Wield row: ONLY surfaced when no target weapon is decided. With a
-    -- target, the wield event is fixed by the patcher in main wt.lua and a
-    -- dropdown would just confuse the user. v0.12.101-dev.
-    if not entry.target_template then
-        local sid = _sid_wield(entry.port_id)
-        local cur
-        if tpl_present and tpl.wield_anim_career_3p and entry.careers[1] then
-            cur = tpl.wield_anim_career_3p[entry.careers[1]]
-        end
-        local default_value = cur or UNSET
-
-        sub_widgets[#sub_widgets + 1] = {
-            setting_id    = sid,
-            type          = "dropdown",
-            default_value = default_value,
-            options       = _build_wield_options(entry.char_key, default_value),
-        }
-        _setting_index[sid] = {
-            port_id       = entry.port_id,
-            template_name = entry.template_name,
-            kind          = "wield",
-            careers       = entry.careers,
-            receiver_char = entry.char_key,
-            -- v0.12.118: captured so reapply_stored_picks can tell user-changed
-            -- settings (stored value ~= build-time default) from untouched ones.
-            default_value = default_value,
-        }
-    end
-
-    -- anim_event rows — one per unique source anim_event in the source
-    -- template. Dropdown options:
-    --   * With a target weapon: every anim_event the TARGET template
-    --     authors (filtered, focused). The user picks which target anim
-    --     plays for each source attack.
-    --   * Without a target: broad receiver-character vocab (legacy
-    --     behavior, useful for ports the user hasn't decided on yet).
-    local source_events = _collect_source_anim_events(entry.template_name)
-    if source_events then
-        for _, source_event in ipairs(source_events) do
-            local sid = _sid_anim_event(entry.port_id, source_event)
-            local cur = _first_anim_event_3p_for(entry.template_name, source_event)
-            local default_value = cur or UNSET
-
-            local options
-            if target_vocab then
-                -- Filtered to target weapon's vocab. Plus an UNSET sentinel.
-                options = {}
-                local seen = {}
-                if default_value ~= UNSET and not _is_in(target_vocab, default_value) then
-                    options[#options + 1] = { text = default_value .. " (current)", value = default_value }
-                    seen[default_value] = true
-                end
-                for _, v in ipairs(target_vocab) do
-                    if not seen[v] then
-                        options[#options + 1] = { text = v, value = v }
-                        seen[v] = true
-                    end
-                end
-                options[#options + 1] = { text = "(unset — fall through)", value = UNSET }
-            else
-                options = _build_anim_event_options(entry.char_key, source_event, default_value)
-            end
-
-            sub_widgets[#sub_widgets + 1] = {
-                setting_id    = sid,
-                type          = "dropdown",
-                default_value = default_value,
-                options       = options,
-            }
-            _setting_index[sid] = {
-                port_id       = entry.port_id,
-                template_name = entry.template_name,
-                kind          = "anim_event",
-                source_event  = source_event,
-                receiver_char = entry.char_key,
-                -- v0.12.118: see the wield rec note — powers boot re-apply.
-                default_value = default_value,
-            }
-        end
-    end
-
     return {
         setting_id  = _sid_group(entry.port_id),
         type        = "group",
         sub_widgets = sub_widgets,
-    }, tpl_present
-end
-
--- Top-level entry point called by the lead. Internal structure:
---
---   wt_dev_anim_picker (group)
---     ├─ wt_dev_anim_char_kruber (group)
---     │    ├─ <port group 1>
---     │    ├─ <port group 2>
---     │    └─ ...
---     ├─ wt_dev_anim_char_saltzpyre (group)
---     ├─ wt_dev_anim_char_wh_priest (group)
---     ├─ wt_dev_anim_char_bardin    (group)
---     ├─ wt_dev_anim_char_kerillian (group)
---     └─ wt_dev_anim_char_sienna    (group)
---
--- Empty character buckets are SKIPPED — v0.12.97-dev empty-bucket-skip rule
--- (VMF errors at init with "must have at least 1 sub_widget" when a `group`
--- widget has zero `sub_widgets`).
-function M.build_widget_tree()
-    _setting_index = {}
-    _ensure_catalog_built() -- safe to call from build_widget_tree even pre-install
-    local _mp0 = collectgarbage("count")  -- [mem-probe] widget-tree lua cost (excl. catalog, measured separately)
-
-    -- Bucket: char_key -> list of port-group widgets
-    local buckets = {}
-    for _, key in ipairs(_CHARACTER_ORDER) do buckets[key] = {} end
-
-    for _, entry in ipairs(_CATALOG) do
-        local grp, tpl_present = _build_port_group(entry)
-        if not tpl_present then
-            mod:warning("[wt:dev_anim] entry references missing Weapons.%s — submenu surfaced anyway",
-                entry.template_name)
-        end
-        -- Skip ports that ended up with zero sub_widgets (target set + no
-        -- source actions → empty group → VMF would reject at init).
-        if grp and grp.sub_widgets and #grp.sub_widgets > 0 and buckets[entry.char_key] then
-            buckets[entry.char_key][#buckets[entry.char_key] + 1] = grp
-        elseif grp then
-            mod:warning("[wt:dev_anim] port %s has zero sub_widgets — skipping (target set with no source actions?)",
-                entry.port_id)
-        end
-    end
-
-    local char_groups = {}
-    for _, char_key in ipairs(_CHARACTER_ORDER) do
-        if #buckets[char_key] > 0 then
-            char_groups[#char_groups + 1] = {
-                setting_id  = _sid_char_group(char_key),
-                type        = "group",
-                sub_widgets = buckets[char_key],
-            }
-        end
-    end
-
-    -- v0.12.99-dev: guard against empty top-level group. If every character
-    -- bucket dropped (catalog is empty — e.g. all pairs CWV-managed, or the
-    -- unlock data file failed to load), DON'T return a `type = "group"` with
-    -- zero `sub_widgets` — VMF rejects that at init with "must have at least
-    -- 1 sub_widget" and the entire mod fails to load. Return nil instead;
-    -- the lead's _data.lua integration nil-checks before appending. This
-    -- bug class burned us at v0.12.96-dev (empty character bucket) and
-    -- v0.12.98-dev (empty top-level group when unlock_map was nil); the
-    -- /wt_regression_test gate now scans every group for empty sub_widgets
-    -- as a permanent guard.
-    if #char_groups == 0 then
-        mod:warning("[wt:dev_anim] catalog is empty after all filters — picker not surfaced. If this is unexpected, check mod:dofile of wt_unlock_data.lua and the CWV-managed filter list.")
-        return nil
-    end
-
-    mod:info("[mem-probe] wt_dev_anim widget_tree: +%.1f MB lua (%d char groups) [resident at boot via VMF, picker-only]",
-        (collectgarbage("count") - _mp0) / 1024, #char_groups)
-    return {
-        setting_id  = "wt_dev_anim_picker",
-        type        = "group",
-        sub_widgets = char_groups,
     }
 end
 
--- Idempotent catalog builder. Defers to install-time wrapping in case
--- build_widget_tree is called before install (the lead calls it from
--- _data.lua, which is loaded BEFORE the main file finishes — but
--- ItemMasterList and Weapons are populated by the engine before any mod
--- code runs, so it's safe). The vocab tables also need Weapons + IML so we
--- build them here too.
-local _catalog_built = false
-function _ensure_catalog_built()
-    if _catalog_built then return end
-    local _mp0 = collectgarbage("count")  -- [mem-probe] catalog+vocab lua cost
+-- Top-level entry point (weapon_tweaker_data.lua). Returns the ARRAY of per-weapon
+-- group widgets (never nil). _data.lua nests this as the `sub_widgets` of the
+-- enable_dev_anim_picker CHECKBOX — VMF reveals/hides them LIVE on toggle
+-- (reference_vmf_native_master_toggle_submenu). Built unconditionally at boot so
+-- the children are in the tree for VMF to reveal; the static-table build is
+-- trivially cheap (no catalog/vocab walk).
+function M.build_widget_tree()
+    _setting_index = {}
+    _setting_index_built = false
+    _ensure_catalog_built()
 
-    -- Vocabs first — port groups read them.
-    local native_templates = _build_native_templates_by_char()
-    _live_wield_vocab      = _build_live_wield_vocab(native_templates)
-    _live_anim_event_vocab = _build_live_anim_event_vocab(native_templates)
-
-    _CATALOG = _build_dynamic_catalog()
-    _catalog_built = true
-
-    -- [mem-probe] ungated so one boot yields the breakdown (lua_heap-cap diagnostic).
-    mod:info("[mem-probe] wt_dev_anim catalog+vocab: +%.1f MB lua (%d catalog entries) [resident at boot, picker-only]",
-        (collectgarbage("count") - _mp0) / 1024, #_CATALOG)
-    _dbg("catalog built: %d entries", #_CATALOG)
-    for _, char_key in ipairs(_CHARACTER_ORDER) do
-        local n = 0
-        for _, entry in ipairs(_CATALOG) do
-            if entry.char_key == char_key then n = n + 1 end
+    local sub_widgets = {}
+    for _, entry in ipairs(_CATALOG) do
+        if not (Weapons and rawget(Weapons, entry.template_name)) then
+            mod:warning("[wt:dev_anim] %s references missing Weapons.%s — row surfaced anyway (live-apply no-ops until template loads).",
+                entry.weapon_key, tostring(entry.template_name))
         end
-        _dbg("  %s: %d port(s)", char_key, n)
+        sub_widgets[#sub_widgets + 1] = _build_weapon_group(entry)
     end
+    -- _build_weapon_group -> _build_attack_dropdown -> _register_attack_setting
+    -- fully populated `_setting_index` for this instance; mark it built so a later
+    -- _ensure_setting_index_built() on this same instance is a no-op.
+    _setting_index_built = true
+    _dbg("widget tree: %d weapon group(s)", #sub_widgets)
+    return sub_widgets
 end
 
 -- ---------------------------------------------------------------------------
 -- Localization
 -- ---------------------------------------------------------------------------
-
+-- All group labels / dropdown labels / option texts must be registered at boot
+-- REGARDLESS of the toggle, because the widgets are in the tree at boot
+-- (sub_widgets of the enable_dev_anim_picker checkbox) and VMF reveals them live
+-- on toggle — an unregistered key renders `<<key>>` the instant the box flips.
 function M.loc_keys()
     _ensure_catalog_built()
-    local _mp0 = collectgarbage("count")  -- [mem-probe] loc-keys lua cost (excl. catalog)
 
     local keys = {
-        wt_dev_anim_picker = { en = "Dev: 3P Animation Picker" },
+        wt_dev_anim_picker = { en = "Dev: 3P Anim Picker" },
+        wt_dev_anim_attack_tooltip = {
+            en = "Choose which third-person animation plays for this attack, from the weapon's built-in animation set; the change applies right away on your equipped weapon and affects only the third-person view. If the character has no matching animation, it keeps the previous pose instead.",
+        },
     }
 
-    for _, char_key in ipairs(_CHARACTER_ORDER) do
-        keys[_sid_char_group(char_key)] = { en = _CHARACTER_LABEL[char_key] or char_key }
-    end
-
-    -- v0.12.100-dev: register loc keys for every dropdown option `text` value.
-    -- VMF wraps unknown loc keys in `<>` brackets when rendering dropdowns,
-    -- which surfaced as the "internal names in <>" bug. We pre-register each
-    -- text-as-its-own-en-string so VMF localizes verbatim and the user sees
-    -- the actual event name.
+    -- VMF wraps unknown loc keys in `<>` when rendering dropdowns, so each option
+    -- `text` value (raw event, "(current)" pin, sentinel) must be its own key.
     local function _register_self(text)
         if text and not keys[text] then keys[text] = { en = text } end
     end
 
-    _register_self("(unset — fall through)")
+    _register_self("(unset - fall through)")
 
-    -- Register every vocab value (wield + anim event vocabs, all chars).
-    for _, vocab in pairs(_live_wield_vocab) do
-        for _, v in ipairs(vocab) do _register_self(v) end
-    end
-    for _, vocab in pairs(_live_anim_event_vocab) do
-        for _, v in ipairs(vocab) do _register_self(v) end
-    end
-
-    for _, entry in ipairs(_CATALOG) do
-        keys[_sid_group(entry.port_id)] = { en = entry.label .. "  " .. _port_status_label(entry.char_key, entry.weapon_key) }
-
-        -- Wield loc key — ONLY when no target is decided (the dropdown only
-        -- surfaces in that case). v0.12.101-dev: targeted ports drop the
-        -- wield dropdown so a loc key would be unused.
-        if not entry.target_template then
-            keys[_sid_wield(entry.port_id)] = { en = "Wield event" }
-        end
-
-        local tpl = Weapons and rawget(Weapons, entry.template_name)
-        if tpl and tpl.wield_anim_career_3p then
-            for _, career in ipairs(entry.careers) do
-                local v = tpl.wield_anim_career_3p[career]
-                if type(v) == "string" then
-                    _register_self(v)
-                    _register_self(v .. " (current)")
-                end
-            end
-        end
-
-        -- Register target-weapon vocab values so the dropdowns render their
-        -- option text instead of being VMF-wrapped as `<value>`.
-        if entry.target_template then
-            local target_vocab = _collect_target_anim_event_vocab(entry.target_template)
-            for _, v in ipairs(target_vocab) do
+    -- Register every SET vocab OPTION text (move-first label + "(current)" pin),
+    -- matching exactly what `_build_options` emits for each option's `text`. The
+    -- displayed option is "Heavy 2  ·  attack_swing_heavy" (move-first); the
+    -- stored `value` is the raw event. Both the labeled form and the raw form are
+    -- registered so an off-vocab/unlabeled fall-through still resolves.
+    for _, r in ipairs(_RECEIVERS) do
+        for set, vocab in pairs(_RECV[r].set_vocab) do
+            for _, v in ipairs(vocab) do
+                local labeled = _move_label_for_set(r, set, v)
+                _register_self(labeled)
+                _register_self(labeled .. " (current)")
+                -- Raw forms too (unlabeled fall-through + off-vocab "(current)" pins).
                 _register_self(v)
                 _register_self(v .. " (current)")
             end
         end
+    end
 
-        local source_events = _collect_source_anim_events(entry.template_name)
-        if source_events then
-            for _, source_event in ipairs(source_events) do
-                keys[_sid_anim_event(entry.port_id, source_event)] = {
-                    en = "Animation for source action `" .. source_event .. "`",
-                }
-                -- Source-event variants used by _build_anim_event_options
-                -- (only triggered on UNFILTERED dropdowns; for targeted ports
-                -- these aren't surfaced, but registering them is harmless).
-                _register_self(source_event)
-                _register_self(source_event .. " (source — passthrough)")
-                local cur = _first_anim_event_3p_for(entry.template_name, source_event)
-                if type(cur) == "string" then
-                    _register_self(cur)
-                    _register_self(cur .. " (current)")
-                end
+    -- Per-weapon group label + per-attack dropdown labels.
+    for _, entry in ipairs(_CATALOG) do
+        -- Group label: "<character> <weapon type> rendered on Kruber body  [<set>]".
+        -- The [set] bracket is the established animation-set name (NOT a status
+        -- tag — status tags moved to the Weapon Availability menu).
+        keys[_sid_group(entry.port_id)] = {
+            en = entry.label .. "  [" .. (_RECV[entry.char_key].set_label[entry.set] or entry.set) .. "]",
+        }
+        for _, src in ipairs(entry.attacks) do
+            -- Attack ROW label = move-first ("↳ Light 1  ·  attack_swing_down_left"),
+            -- falling through to "↳ <raw event>" for the deliberate specials
+            -- (slams / scythe specials / flame-sword spell) that have no move label.
+            keys[_sid_anim_event(entry.port_id, src)] = {
+                en = "↳ " .. _move_label_for_source(entry.char_key, entry.weapon_key, src),
+            }
+            -- A live anim_event_3p default may be off-vocab — register its
+            -- "(current)" pin (both the SET-labeled form, in case it maps, and the
+            -- raw form) so it doesn't VMF-wrap.
+            local cur = _first_anim_event_3p_for(entry.template_name, src)
+            if type(cur) == "string" then
+                local cur_labeled = _move_label_for_set(entry.char_key, entry.set, cur)
+                _register_self(cur_labeled)
+                _register_self(cur_labeled .. " (current)")
+                _register_self(cur)
+                _register_self(cur .. " (current)")
             end
         end
     end
 
-    local _n = 0 ; for _ in pairs(keys) do _n = _n + 1 end  -- [mem-probe]
-    mod:info("[mem-probe] wt_dev_anim loc_keys: +%.1f MB lua (%d loc strings) [resident at boot, picker-only]",
-        (collectgarbage("count") - _mp0) / 1024, _n)
     return keys
 end
 
 -- ---------------------------------------------------------------------------
 -- Live re-apply
 -- ---------------------------------------------------------------------------
-
 local function _dropdown_value_to_field(v)
     if v == nil or v == UNSET then return nil end
     return v
 end
 
-local function _apply_wield_change(rec, new_value)
-    local tpl = Weapons and rawget(Weapons, rec.template_name)
-    if not tpl then
-        mod:warning("[wt:dev_anim] Weapons.%s missing; cannot apply wield change", rec.template_name)
+-- THE LOAD-BEARING FIX (v0.12.144-dev). The engine does NOT read sub-actions off
+-- the live `Weapons[name]` table the picker mutates — it reads them off
+-- `MechanismOverrides.get(rawget(Weapons, name))`
+-- (Vermintide-2-Source-Code/scripts/helpers/weapon_utils.lua:211 ->
+-- backend_interface_item_playfab.lua:871 -> backend_utils.lua:136 ->
+-- WeaponUnitExtension.start_action -> get_action_anim_event reading
+-- current_action_settings.anim_event_3p). MechanismOverrides.get
+-- (.../game_mode/mechanisms/mechanism_overrides.lua:13) shallow-COPIES any
+-- template (or nested child) that carries a `mechanism_overrides` field and
+-- caches that copy in `CACHE[t]`, persisting across calls for the whole
+-- mechanism. Once cached, every get_item_template returns the stale COPY, so a
+-- menu-time write to the live `Weapons[name]` original is never seen by an
+-- attack. Invalidating `CACHE[Weapons[name]]` forces the next get_item_template
+-- to rebuild the copy from the now-mutated live template. `recursive_cleanup`
+-- (mechanism_overrides.lua:119) removes that entry; it's a guarded no-op
+-- (`if original then`) when the template was never cached (e.g. a template with
+-- no overrides anywhere in its tree), so it's safe to call unconditionally.
+local function _bust_mechanism_override_cache(template_name)
+    if not (MechanismOverrides and MechanismOverrides.recursive_cleanup) then return false end
+    local tpl = Weapons and rawget(Weapons, template_name)
+    if not tpl then return false end
+    local mech = Managers and Managers.mechanism
+    local mech_name = mech and mech.current_mechanism_name and mech:current_mechanism_name()
+    -- recursive_cleanup keys its "is this the same mechanism" decision off
+    -- new_mechanism_name; pass the live mechanism so a same-mechanism rebuild
+    -- isn't mistakenly skipped. nil is tolerated (cleanup still drops CACHE[t]).
+    local ok, err = pcall(MechanismOverrides.recursive_cleanup, tpl, mech_name)
+    if not ok then
+        _dbg("[apply] MechanismOverrides cache-bust raised for tpl=%s (%s)", tostring(template_name), tostring(err))
         return false
     end
-    tpl.wield_anim_career_3p = tpl.wield_anim_career_3p or {}
-    local field_value = _dropdown_value_to_field(new_value)
-    -- v0.12.100-dev: write to ALL careers on the receiver model (single
-    -- dropdown drives N table entries since all same-model careers share
-    -- the same skeleton/animations).
-    local careers = rec.careers or {}
-    for _, career in ipairs(careers) do
-        tpl.wield_anim_career_3p[career] = field_value
-    end
-    _dbg("[apply] tpl=%s wield_anim_career_3p[%s careers] = %s",
-        rec.template_name, #careers, tostring(field_value))
-    return #careers > 0
+    _dbg("[apply] MechanismOverrides cache busted for tpl=%s (mech=%s)", tostring(template_name), tostring(mech_name))
+    return true
 end
 
-local function _apply_anim_event_change(rec, new_value)
-    local tpl = Weapons and rawget(Weapons, rec.template_name)
-    if not tpl or not tpl.actions then
-        mod:warning("[wt:dev_anim] Weapons.%s.actions missing; cannot apply anim_event change", rec.template_name)
-        return 0
-    end
-    local field_value = _dropdown_value_to_field(new_value)
-    local n = 0
-    for _, action_group in pairs(tpl.actions) do
+-- Collect the live template's actual (action_kind, sub_action, anim_event) tuples.
+-- Used by the n==0 diagnostic so a source-string mismatch is visible in the log:
+-- we print the vocab the engine will actually read, next to the source string the
+-- dropdown tried to match. v0.12.145-dev instrumentation.
+local function _live_anim_event_vocab(tpl)
+    local out = {}
+    if not (tpl and tpl.actions) then return out end
+    for action_kind, action_group in pairs(tpl.actions) do
         if type(action_group) == "table" then
-            for _, sub in pairs(action_group) do
-                if type(sub) == "table" and sub.anim_event == rec.source_event then
-                    sub.anim_event_3p = field_value
-                    n = n + 1
+            for sub_name, sub in pairs(action_group) do
+                if type(sub) == "table" and type(sub.anim_event) == "string" then
+                    out[#out + 1] = string.format("%s.%s:anim_event=%s,anim_event_3p=%s",
+                        tostring(action_kind), tostring(sub_name),
+                        tostring(sub.anim_event), tostring(sub.anim_event_3p))
                 end
             end
         end
     end
-    _dbg("[apply] tpl=%s source_event=%s -> anim_event_3p=%s (%d sub_actions mutated)",
-        rec.template_name, rec.source_event, tostring(field_value), n)
+    table.sort(out)
+    return out
+end
+
+-- Writes anim_event_3p (3P only) on every sub-action of the template whose
+-- source anim_event matches rec.source_event. Returns the count mutated.
+local function _apply_anim_event_change(rec, new_value)
+    local tpl = Weapons and rawget(Weapons, rec.template_name)
+    if not tpl or not tpl.actions then
+        mod:warning("[wt:dev_anim] Weapons.%s.actions missing; cannot apply anim_event change", tostring(rec.template_name))
+        return 0
+    end
+    local field_value = _dropdown_value_to_field(new_value)
+    local n = 0
+    -- Capture which action.sub each write landed on (proves the write reached
+    -- the same sub-action the engine selects at swing time).
+    local hits = {}
+    for action_kind, action_group in pairs(tpl.actions) do
+        if type(action_group) == "table" then
+            for sub_name, sub in pairs(action_group) do
+                if type(sub) == "table" and sub.anim_event == rec.source_event then
+                    sub.anim_event_3p = field_value
+                    n = n + 1
+                    hits[#hits + 1] = tostring(action_kind) .. "." .. tostring(sub_name)
+                end
+            end
+        end
+    end
+    -- Drop the stale MechanismOverrides shallow-copy so the engine re-reads the
+    -- now-mutated live template on the next get_item_template. Always — even when
+    -- n == 0, an already-cached copy must not outlive intent; the call is a
+    -- guarded no-op when nothing was cached.
+    _bust_mechanism_override_cache(rec.template_name)
+    -- [wt:apply] — ALWAYS logged (not gated on enable_debug_logging) so a single
+    -- attack's apply trail is in every user log. Proves (a) the write reached the
+    -- template the wielded weapon uses, and (b) HOW MANY sub-actions matched.
+    -- v0.12.145-dev diagnostic.
+    mod:info("[wt:apply] tpl=%s source_event=%s -> anim_event_3p=%s n=%d sites={%s}",
+        tostring(rec.template_name), tostring(rec.source_event),
+        tostring(field_value), n, table.concat(hits, ","))
+    if n == 0 then
+        -- LOUD: a zero-match write means rec.source_event isn't an actual
+        -- anim_event on any sub-action of this template — the hardcoded
+        -- _WEAPON_ATTACKS source string doesn't match the live template vocab,
+        -- so the dropdown silently does nothing. Surface it (was silent before).
+        mod:warning("[wt:dev_anim] no-op write: source_event=%q not found on any Weapons.%s sub-action — dropdown writes nothing (stale _WEAPON_ATTACKS? run /wt_coverage or /wt_dump_anim_picks).",
+            tostring(rec.source_event), tostring(rec.template_name))
+        -- Dump the live vocab so the mismatch is diagnosable from the log alone.
+        local vocab = _live_anim_event_vocab(tpl)
+        mod:info("[wt:apply] live Weapons.%s vocab (%d sub-actions): %s",
+            tostring(rec.template_name), #vocab, table.concat(vocab, " | "))
+    end
     return n
 end
 
--- Force a wield refresh so the engine re-fires `wield_anim_career_3p` /
--- re-reads `anim_event_3p` on the next animation event.
+-- Force a wield refresh so the engine re-reads anim_event_3p on the next event.
 local function _try_force_rewield()
     local pm = Managers.player
     if not pm then return false, "Managers.player nil" end
@@ -1397,19 +1704,17 @@ local function _try_force_rewield()
 end
 
 function M.on_setting_changed(setting_id)
+    -- Runs on the SCRIPT instance (mod.on_setting_changed -> here). That instance
+    -- never built the index via build_widget_tree(), so populate it here too —
+    -- otherwise rec is always nil and every live dropdown change is a silent
+    -- no-op. See _setting_index hazard note.
+    _ensure_setting_index_built()
     local rec = _setting_index[setting_id]
     if not rec then return end -- not one of ours
     local new_value = mod:get(setting_id)
 
-    local ok = false
-    if rec.kind == "wield" then
-        ok = _apply_wield_change(rec, new_value)
-    elseif rec.kind == "anim_event" then
-        local n = _apply_anim_event_change(rec, new_value)
-        ok = n > 0
-    end
-
-    if not ok then return end
+    local n = _apply_anim_event_change(rec, new_value)
+    if n <= 0 then return end
 
     local rw_ok, rw_err = _try_force_rewield()
     if not rw_ok then
@@ -1423,69 +1728,42 @@ end
 -- ---------------------------------------------------------------------------
 -- /wt_dump_anim_picks chat command
 -- ---------------------------------------------------------------------------
-
 local function _dump_port(entry)
-    -- Sanitize port_id into an uppercase Lua-identifier-safe constant name.
     local pname = "_" .. entry.port_id:upper():gsub("[^A-Z0-9_]", "_")
     local tpl = Weapons and rawget(Weapons, entry.template_name)
     if not tpl then
-        mod:info("-- ==== %s (template missing: %s) ====", entry.label, entry.template_name)
+        mod:info("-- ==== %s (template missing: %s) ====", entry.label, tostring(entry.template_name))
         return
     end
 
-    mod:info("-- ==== %s (%s) ====", entry.label, entry.template_name)
+    mod:info("-- ==== %s  [SET %s = %s] (%s) (on %s) ====",
+        entry.label, entry.set, (_RECV[entry.char_key].set_label[entry.set] or entry.set),
+        entry.template_name, _RECV[entry.char_key].short)
 
-    -- Wield block.
-    mod:info("local %s_WIELD_3P = {", pname)
-    local any_wield = false
-    local wield = tpl.wield_anim_career_3p or {}
-    for _, career in ipairs(entry.careers) do
-        local v = wield[career]
-        if v then
-            mod:info("    %-18s = %q,", career, v)
-            any_wield = true
+    mod:info("local %s_ANIM_REMAP_3P = {", pname)
+    local any_remap = false
+    for _, source_event in ipairs(entry.attacks) do
+        local target = _first_anim_event_3p_for(entry.template_name, source_event)
+        if target then
+            mod:info("    %-36s = %q,", source_event, target)
+            any_remap = true
         end
     end
-    if not any_wield then
-        mod:info("    -- (no wield_anim_career_3p entries set)")
+    if not any_remap then
+        mod:info("    -- (no anim_event_3p remaps set)")
     end
     mod:info("}")
-
-    -- Remap block.
-    local source_events = _collect_source_anim_events(entry.template_name)
-    if source_events and #source_events > 0 then
-        mod:info("local %s_ANIM_REMAP_3P = {", pname)
-        local any_remap = false
-        for _, source_event in ipairs(source_events) do
-            local target = _first_anim_event_3p_for(entry.template_name, source_event)
-            if target then
-                mod:info("    %-28s = %q,", source_event, target)
-                any_remap = true
-            end
-        end
-        if not any_remap then
-            mod:info("    -- (no anim_event_3p remaps set — strict-subset port)")
-        end
-        mod:info("}")
-    end
-
-    mod:info("") -- blank line between ports
+    mod:info("")
 end
 
 local function _register_dump_command()
     mod:command("wt_dump_anim_picks",
-        "Dump current 3P anim picker values as Lua-pastable snippets (optional: filter by character key)",
-        function(filter_char)
+        "Dump current 3P anim picker values as Lua-pastable snippets",
+        function()
             _ensure_catalog_built()
-            mod:info("-- ==== wt 3P Anim Picker dump (%d ports) ====", #_CATALOG)
-            for _, char_key in ipairs(_CHARACTER_ORDER) do
-                if not filter_char or filter_char == char_key then
-                    for _, entry in ipairs(_CATALOG) do
-                        if entry.char_key == char_key then
-                            _dump_port(entry)
-                        end
-                    end
-                end
+            mod:info("-- ==== wt 3P Anim Picker dump (%d weapon(s)) ====", #_CATALOG)
+            for _, entry in ipairs(_CATALOG) do
+                _dump_port(entry)
             end
             mod:info("-- ==== end dump ====")
             mod:echo("Anim picker dump written to console log.")
@@ -1493,16 +1771,11 @@ local function _register_dump_command()
 end
 
 -- ---------------------------------------------------------------------------
--- /wt_coverage probe (v0.12.119) — PROJECT_STANDARDS §3.7 data harness
+-- /wt_coverage probe — PROJECT_STANDARDS §3.7 data harness
 -- ---------------------------------------------------------------------------
--- Walks the picker catalog for the CURRENT character and reports, per port,
--- whether the wield event and every per-action anim_event_3p are actually
--- AUTHORED on the local 3P skeleton. One parseable line per port — this is the
--- in-game generator for weapon_tweaker/ANIMATION_COVERAGE.md statuses, so the
--- user runs one command per character instead of eyeballing every port.
--- Caveat: "authored" proves the clip exists, NOT that it plays visibly in
--- chain states (DEVELOPMENT.md "invisible playback") — final word is the eye.
-
+-- For the CURRENT character, reports per flagged weapon whether each per-action
+-- anim_event_3p is actually AUTHORED on the local 3P skeleton. Caveat: "authored"
+-- proves the clip exists, NOT that it plays visibly in chain states.
 local function _coverage_has_anim(unit, event)
     if type(event) ~= "string" or event == "" then return false end
     local ok, result = pcall(Unit.has_animation_event, unit, event)
@@ -1511,7 +1784,7 @@ end
 
 local function _register_coverage_command()
     mod:command("wt_coverage",
-        "3P coverage probe for the CURRENT character: per-port wield + action events vs the local skeleton",
+        "3P coverage probe for the CURRENT character: per-weapon action events vs the local skeleton",
         function()
             _ensure_catalog_built()
             local pm = Managers and Managers.player
@@ -1521,81 +1794,65 @@ local function _register_coverage_command()
                 mod:echo("[wt_coverage] no local player unit — run from the keep or a mission.")
                 return
             end
-            local career_ext = ScriptUnit and ScriptUnit.has_extension
-                and ScriptUnit.has_extension(unit, "career_system")
-            local career_name = career_ext and career_ext.career_name and career_ext:career_name()
-            if not career_name then
-                mod:echo("[wt_coverage] could not resolve current career.")
-                return
-            end
 
-            local ports, full, partial, broken = 0, 0, 0, 0
-            mod:info("[wt:coverage] ==== career=%s ====", career_name)
+            local weapons, full, partial, broken = 0, 0, 0, 0
+            mod:info("[wt:coverage] ==== 3P anim picker coverage (current character) ====")
             for _, entry in ipairs(_CATALOG) do
-                local applies = false
-                for _, c in ipairs(entry.careers or {}) do
-                    if c == career_name then applies = true; break end
-                end
-                if applies then
-                    ports = ports + 1
-                    local tpl = Weapons and rawget(Weapons, entry.template_name)
-                    if not tpl then
-                        broken = broken + 1
-                        mod:info("[wt:coverage] port=%s tpl=%s STATUS=template_missing", entry.port_id, entry.template_name)
-                    else
-                        local wield = tpl.wield_anim_career_3p and tpl.wield_anim_career_3p[career_name]
-                        local wield_ok = wield and _coverage_has_anim(unit, wield) or false
-                        local total, authored, missing = 0, 0, {}
-                        for _, action_group in pairs(tpl.actions or {}) do
-                            if type(action_group) == "table" then
-                                for _, sub in pairs(action_group) do
-                                    if type(sub) == "table" and type(sub.anim_event_3p) == "string" then
-                                        total = total + 1
-                                        if _coverage_has_anim(unit, sub.anim_event_3p) then
-                                            authored = authored + 1
-                                        elseif #missing < 6 then
-                                            missing[#missing + 1] = sub.anim_event_3p
-                                        end
+                weapons = weapons + 1
+                local tpl = Weapons and rawget(Weapons, entry.template_name)
+                if not tpl then
+                    broken = broken + 1
+                    mod:info("[wt:coverage] weapon=%s tpl=%s STATUS=template_missing", entry.weapon_key, tostring(entry.template_name))
+                else
+                    local total, authored, missing = 0, 0, {}
+                    for _, action_group in pairs(tpl.actions or {}) do
+                        if type(action_group) == "table" then
+                            for _, sub in pairs(action_group) do
+                                if type(sub) == "table" and type(sub.anim_event_3p) == "string" then
+                                    total = total + 1
+                                    if _coverage_has_anim(unit, sub.anim_event_3p) then
+                                        authored = authored + 1
+                                    elseif #missing < 6 then
+                                        missing[#missing + 1] = sub.anim_event_3p
                                     end
                                 end
                             end
                         end
-                        local status
-                        if (wield == nil or wield_ok) and authored == total then
-                            status = "FULL"; full = full + 1
-                        elseif authored > 0 or wield_ok then
-                            status = "PARTIAL"; partial = partial + 1
-                        else
-                            status = "NONE"; broken = broken + 1
-                        end
-                        mod:info("[wt:coverage] port=%s tpl=%s wield=%s wield_authored=%s actions_3p=%d authored=%d missing={%s} STATUS=%s",
-                            entry.port_id, entry.template_name, tostring(wield), tostring(wield_ok),
-                            total, authored, table.concat(missing, ","), status)
                     end
+                    local status
+                    if total > 0 and authored == total then
+                        status = "FULL"; full = full + 1
+                    elseif authored > 0 then
+                        status = "PARTIAL"; partial = partial + 1
+                    else
+                        status = "NONE"; broken = broken + 1
+                    end
+                    mod:info("[wt:coverage] weapon=%s tpl=%s set=%s actions_3p=%d authored=%d missing={%s} STATUS=%s",
+                        entry.weapon_key, entry.template_name, entry.set,
+                        total, authored, table.concat(missing, ","), status)
                 end
             end
-            mod:info("[wt:coverage] ==== %d port(s): %d FULL, %d PARTIAL, %d NONE/missing ====",
-                ports, full, partial, broken)
-            mod:echo("[wt_coverage] %s: %d port(s) probed — %d full, %d partial, %d none. Details in console log.",
-                career_name, ports, full, partial, broken)
+            mod:info("[wt:coverage] ==== %d weapon(s): %d FULL, %d PARTIAL, %d NONE/missing ====",
+                weapons, full, partial, broken)
+            mod:echo("[wt_coverage] %d weapon(s) probed — %d full, %d partial, %d none. Details in console log.",
+                weapons, full, partial, broken)
         end)
 end
 
 -- ---------------------------------------------------------------------------
--- Boot re-apply of stored picks (v0.12.118)
+-- Boot re-apply of stored picks
 -- ---------------------------------------------------------------------------
--- Before this, picker picks lived only in the VMF settings store: they applied
--- live via on_setting_changed but were NEVER replayed onto Weapons.* at boot,
--- so every tuned port silently reverted to patcher/template defaults on
--- restart until someone baked the values into source. This closes the user's
--- tune-in-game -> persists-across-sessions -> bake-when-happy loop.
---
--- Only settings the user EXPLICITLY changed are re-applied: a setting whose
--- stored value equals the rec's build-time default is skipped. This guard is
--- load-bearing — widget defaults are captured at _data.lua time, BEFORE main
--- wt.lua's template patchers run, so blindly re-applying every setting would
--- overwrite patcher output with stale pre-patcher state.
+-- Picker picks live in the VMF settings store and apply live via
+-- on_setting_changed, but are NEVER replayed onto Weapons.* at boot unless this
+-- runs — so every tuned attack would revert to template defaults on restart.
+-- Only settings the user EXPLICITLY changed are re-applied (stored value ~=
+-- build-time default), so we don't overwrite vanilla/patcher state with stale
+-- pre-build defaults.
 function M.reapply_stored_picks()
+    -- This runs on the SCRIPT dofile instance (install() at the bottom of
+    -- weapon_tweaker.lua), which never called build_widget_tree() — so without
+    -- this the index is empty and nothing replays. See _setting_index hazard note.
+    _ensure_setting_index_built()
     local applied, skipped_missing = 0, 0
     for sid, rec in pairs(_setting_index) do
         local v = mod:get(sid)
@@ -1603,16 +1860,12 @@ function M.reapply_stored_picks()
             local tpl = Weapons and rawget(Weapons, rec.template_name)
             if not tpl then
                 skipped_missing = skipped_missing + 1
-            elseif rec.kind == "wield" then
-                if _apply_wield_change(rec, v) then applied = applied + 1 end
             elseif rec.kind == "anim_event" then
                 if _apply_anim_event_change(rec, v) > 0 then applied = applied + 1 end
             end
         end
     end
     if applied > 0 or skipped_missing > 0 then
-        -- Ungated: the user must be able to confirm their tuned picks are live
-        -- this session without enabling Debug Logging.
         mod:info("[wt:dev_anim] boot re-apply: %d stored pick(s) applied%s. /wt_dump_anim_picks to export as source.",
             applied,
             skipped_missing > 0 and (", " .. skipped_missing .. " skipped (template missing)") or "")
@@ -1621,54 +1874,236 @@ function M.reapply_stored_picks()
 end
 
 -- ---------------------------------------------------------------------------
+-- Play-path instrumentation hooks (v0.12.145-dev)
+-- ---------------------------------------------------------------------------
+-- These let the main script's animation_event hook decide whether a given 3P
+-- body is wielding a PICKED weapon (so the [wt:play] trace stays scoped to the
+-- weapons the picker actually touches, not every swing in the game).
+
+-- Reverse map: template_name -> true, for every weapon the picker surfaces.
+-- Built lazily from the catalog (which is itself gated on the _NEEDS_ANIMS
+-- allow-list), so it tracks the live set of flagged weapons.
+local _picked_template_set = nil
+local function _ensure_template_set()
+    if _picked_template_set then return end
+    _ensure_catalog_built()
+    local s = {}
+    for _, entry in ipairs(_CATALOG) do
+        if entry.template_name then s[entry.template_name] = true end
+    end
+    _picked_template_set = s
+end
+
+-- True if template_name is one of the picker's flagged-weapon templates.
+function M.is_picker_template(template_name)
+    if not template_name then return false end
+    _ensure_template_set()
+    return _picked_template_set[template_name] == true
+end
+
+-- Regression hook (#159): weapon_keys in the built catalog whose display label
+-- fell back to the raw internal key (i.e. no documented localization resolved).
+-- Should always be empty — a non-empty result means a picker weapon would show
+-- e.g. "Sienna bw_deus_01" instead of "Sienna: Coruscation Staff".
+function M.unresolved_display_names()
+    _ensure_catalog_built()
+    local bad = {}
+    for _, e in ipairs(_CATALOG) do
+        -- label embeds the weapon name; if it still contains the raw key, the
+        -- documented-name lookup missed and _weapon_display_name fell back.
+        if e.label and e.label:find(e.weapon_key, 1, true) then
+            bad[#bad + 1] = e.weapon_key
+        end
+    end
+    return bad
+end
+
+-- Regression hook (user 2026-06-29): inspect must NOT be a tunable dropdown — the
+-- picker should never remap it (the weapon keeps its existing inspect animation).
+-- Returns any catalog (weapon:event) whose source attack is an inspect event.
+-- Should always be empty.
+function M.inspect_attacks()
+    _ensure_catalog_built()
+    local bad = {}
+    for _, e in ipairs(_CATALOG) do
+        for _, ev in ipairs(e.attacks) do
+            if type(ev) == "string" and ev:find("inspect", 1, true) then
+                bad[#bad + 1] = e.weapon_key .. ":" .. ev
+            end
+        end
+    end
+    return bad
+end
+
+-- Issue #411: every source-event row advertised by the picker must resolve to
+-- at least one live sub-action on its declared source template. A stale event
+-- makes the dropdown a silent no-op (`_apply_anim_event_change` writes n=0).
+-- Returns failures plus coverage counts so both /wt_regression_test and the
+-- focused verification command exercise the exact catalog VMF registered.
+function M.source_event_coverage()
+    _ensure_catalog_built()
+    local failures, missing_templates = {}, {}
+    local weapons, events = 0, 0
+    for _, e in ipairs(_CATALOG) do
+        weapons = weapons + 1
+        local tpl = Weapons and rawget(Weapons, e.template_name)
+        if not (tpl and tpl.actions) then
+            missing_templates[#missing_templates + 1] = e.weapon_key .. "=" .. tostring(e.template_name)
+        else
+            local live = {}
+            for _, action_group in pairs(tpl.actions) do
+                if type(action_group) == "table" then
+                    for _, sub in pairs(action_group) do
+                        if type(sub) == "table" and type(sub.anim_event) == "string" then
+                            live[sub.anim_event] = true
+                        end
+                    end
+                end
+            end
+            for _, source_event in ipairs(e.attacks) do
+                events = events + 1
+                if not live[source_event] then
+                    failures[#failures + 1] = e.weapon_key .. ":" .. source_event
+                        .. " (" .. e.template_name .. ")"
+                end
+            end
+        end
+    end
+    table.sort(failures)
+    table.sort(missing_templates)
+    return failures, weapons, events, missing_templates
+end
+
+-- Regression hook (#196): a SET's vocab must list anim_event_3p VALUES (what the
+-- picker writes + the body plays), never the 1P anim_event names. Exposes a set's
+-- vocab so a test can assert the billhook charge fix didn't regress.
+function M.set_vocab_for(receiver, set)
+    local rd = _RECV[receiver]
+    return rd and rd.set_vocab and rd.set_vocab[set] or nil
+end
+
+-- #576 regression surface: expose the registered source-event obligations for
+-- one receiver/weapon without exposing mutable catalog internals.
+function M.source_events_for(receiver, weapon_key)
+    local rd = _RECV[receiver]
+    local src = rd and rd.weapon_attacks and rd.weapon_attacks[weapon_key]
+    if not src then return nil end
+    local out = {}
+    for i, event in ipairs(src) do out[i] = event end
+    return out
+end
+
+-- Regression hook (#159/#197): the (group setting_id, weapon_key) for every catalog
+-- entry, so a test can verify the REGISTERED localized label (mod:localize on the sid
+-- = the actual string VMF renders) resolves to a real name — not a raw internal key
+-- and not an unregistered <key>. Checking the registered value (vs a freshly-rebuilt
+-- label) is what catches a label registered BEFORE names could resolve (#197).
+function M.catalog_group_keys()
+    _ensure_catalog_built()
+    local out = {}
+    for _, e in ipairs(_CATALOG) do
+        out[#out + 1] = { sid = _sid_group(e.port_id), weapon_key = e.weapon_key }
+    end
+    return out
+end
+
+-- The anim_event_3p the picker would currently apply for (template, source_event),
+-- read live off the mutated Weapons template. Returns the string, or nil if the
+-- source_event has no 3P override on any sub-action (UNSET / never picked).
+-- This is what the engine SHOULD be reading at swing time for that attack.
+function M.current_3p_for(template_name, source_event)
+    return _first_anim_event_3p_for(template_name, source_event)
+end
+
+-- Live snapshot of every (source anim_event -> picked anim_event_3p) mapping
+-- currently set on the template's sub-actions. The KEY insight for the play-path
+-- trace: on the 3P body the engine fires the picked `anim_event_3p` VALUE
+-- directly (weapon_unit_extension.lua:512), so what arrives at the
+-- animation_event hook should be one of these VALUES. This map lets the trace
+-- report, for the 3P event the engine read, whether it MATCHES a picked value
+-- (pick took) or is still a template default (pick was lost upstream).
+-- Returns { source_event = picked_3p_value, ... } (only sub-actions with a 3P
+-- override set).
+function M.live_3p_map(template_name)
+    local out = {}
+    local tpl = Weapons and rawget(Weapons, template_name)
+    if not (tpl and tpl.actions) then return out end
+    for _, action_group in pairs(tpl.actions) do
+        if type(action_group) == "table" then
+            for _, sub in pairs(action_group) do
+                if type(sub) == "table" and type(sub.anim_event) == "string"
+                    and type(sub.anim_event_3p) == "string" then
+                    out[sub.anim_event] = sub.anim_event_3p
+                end
+            end
+        end
+    end
+    return out
+end
+
+-- True if `event_3p` is one of the anim_event_3p VALUES the picker currently has
+-- set on this template (i.e. an event the user picked that the engine should be
+-- firing on the 3P body). Used by the play-path trace to confirm the read event
+-- is a picked value rather than a leftover template default.
+function M.is_picked_3p_value(template_name, event_3p)
+    if not event_3p then return false end
+    local map = M.live_3p_map(template_name)
+    for _, picked_val in pairs(map) do
+        if picked_val == event_3p then return true end
+    end
+    return false
+end
+
+-- ---------------------------------------------------------------------------
 -- install()
 -- ---------------------------------------------------------------------------
-
 function M.install()
     if not Weapons then
         mod:warning("[wt:dev_anim] Weapons global nil at install; live-apply will warn until templates load.")
     end
-    if not ItemMasterList then
-        mod:warning("[wt:dev_anim] ItemMasterList global nil at install; catalog will be empty until tables load.")
-    end
 
     _ensure_catalog_built()
 
-    -- Per-port template existence check — surfaces partial-install + future
-    -- gated-patcher cases.
     for _, entry in ipairs(_CATALOG) do
         if not (Weapons and rawget(Weapons, entry.template_name)) then
             mod:warning("[wt:dev_anim] Weapons.%s missing at install; submenu surfaced but live-apply is a no-op until template loads.",
-                entry.template_name)
+                tostring(entry.template_name))
         end
     end
 
     _register_dump_command()
     _register_coverage_command()
+    mod:command("verify_wt_anim_picker_sources",
+        "Verify every Anim Picker source event writes a live weapon action", function()
+            local failures, weapons, events, missing = M.source_event_coverage()
+            if #failures == 0 then
+                mod:echo("[wt:411] PASS: %d source events across %d picker weapons resolve live",
+                    events, weapons)
+            else
+                mod:echo("[wt:411] FAIL: %d dead Anim Picker source event(s)", #failures)
+                for _, failure in ipairs(failures) do
+                    mod:echo("  %s", failure)
+                    printf("[wt:411] dead picker source: %s", failure)
+                end
+            end
+            if #missing > 0 then
+                mod:echo("[wt:411] NOTE: %d unavailable template(s) skipped; see console log", #missing)
+                printf("[wt:411] unavailable picker templates skipped: %s", table.concat(missing, ", "))
+            end
+        end)
 
-    -- v0.12.118: replay user-tuned picks onto the live templates. install()
-    -- runs at the END of main wt.lua — after every template patcher — so this
-    -- layers user picks on top of patcher output, same as a live menu change.
+    local dead, covered_weapons, covered_events, unavailable = M.source_event_coverage()
+    printf("[wt:411] picker source coverage: weapons=%d events=%d dead=%d unavailable_templates=%d",
+        covered_weapons, covered_events, #dead, #unavailable)
+    for _, failure in ipairs(dead) do printf("[wt:411] dead picker source: %s", failure) end
+
+    -- Replay user-tuned picks onto the live templates. install() runs at the END
+    -- of main wt.lua — after every template patcher — so this layers user picks
+    -- on top of patcher output, same as a live menu change.
     M.reapply_stored_picks()
 
-    -- One-time install notification — log line only, no chat spam.
-    local counts = {}
-    for _, char_key in ipairs(_CHARACTER_ORDER) do
-        local n = 0
-        for _, entry in ipairs(_CATALOG) do
-            if entry.char_key == char_key then n = n + 1 end
-        end
-        if n > 0 then counts[#counts + 1] = char_key .. "=" .. n end
-    end
-    mod:info("[wt:dev_anim] installed. %d ports (%s). /wt_dump_anim_picks to dump.",
-        #_CATALOG, table.concat(counts, " "))
-
-    if #_OPEN_QUESTIONS > 0 then
-        mod:info("[wt:dev_anim] %d open question(s) from catalog build:", #_OPEN_QUESTIONS)
-        for _, msg in ipairs(_OPEN_QUESTIONS) do
-            mod:info("  - %s", msg)
-        end
-    end
+    mod:info("[wt:dev_anim] installed (static). %d weapon(s) flagged [Needs Animations] across receivers. /wt_dump_anim_picks to dump.",
+        #_CATALOG)
 end
 
 return M

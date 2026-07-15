@@ -286,7 +286,6 @@ function Get-ScanFiles {
                        -and $p -notlike "*\_tmp\*" `
                        -and $p -notlike "*\.spawn_tweaks_ref\*" `
                        -and $p -notlike "*\tweaker\*" `
-                       -and $p -notlike "*\weapon_tweaker_dev\*" `
                        -and $p -notlike "*\_test_fixtures\*" `
                        -and $p -notlike "*\sample_*\*" `
                        -and $p -notlike "*\Vermintide-2-Source-Code\*" `
