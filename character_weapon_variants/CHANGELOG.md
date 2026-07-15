@@ -1,5 +1,27 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.424-dev - 2026-07-15 - #604 Crowbill transform delivery [verify-fix-coop]
+
+- Fixed the shipped `0.1.423-dev` no-op: its Dawi tune existed only under the
+  generated skin key, while default-rarity/CIM blacksmith instances are
+  intentionally skinless and `GearUtils.create_equipment` can receive a
+  base-shaped item row. The shared resolver now accepts the exact spawned
+  Crowbill model unit as positive identity and binds each family's default
+  Model 01 to the variant fallback.
+- Corrected the earlier unrequested 3P-only interpretation. Dawi Model 01 now
+  applies scale `{0.5, 0.5, 0.5}` and Euler rotation `{-90, -90, -90}` in held
+  1P, owner/bot/husk 3P, inventory/lobby/score presentation, and item/Athanor
+  previews. Imperial Model 05's reviewed scale/offset/rotation likewise uses
+  the same all-surface contract; sibling models remain untouched.
+- Added bounded always-on `[cwv:604] transform delivered` and `TRANSFORM MISS`
+  diagnostics, exact base/3P unit-path and skinless-default runtime assertions,
+  and offline consumer-wiring coverage.
+
+**DoD:** Re-walked U-4 shared appearance fan-out, G-CUSTOM-ILLUSION model
+identity, owner 1P/3P, bot/husk, inventory/lobby/score, item/Athanor, bounded
+diagnostics, and U-8 build hygiene. In-game/co-op visual confirmation remains
+pending on #604.
+
 ## 0.1.423-dev - 2026-07-15 - #604 Dawi Crowbill Model 01 rotation [verify-fix-coop]
 
 - Baked the user-reviewed Dawi Crowbill Model 01 transform as absolute scale

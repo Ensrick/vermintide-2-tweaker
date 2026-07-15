@@ -85,12 +85,11 @@ M.MODELS = {
         right_hand_unit = "units/cwv_crowbill/dawi_01/dawi_01",
         inventory_icon = M.PLACEHOLDER_ICON,
         hud_icon = "weapon_generic_icon_falken",
-        -- User-reviewed Hold-Pose tune for Dawi Model 01. Keep this on the
-        -- shared 3P/presentation channel so owner 3P, husks, inventory, lobby,
-        -- score/team, and item previews consume one canonical orientation;
-        -- first person retains the authored mesh transform.
-        right_hand_scale_3p = { 0.5, 0.5, 0.5 },
-        right_hand_rotation_3p = { -90, -90, -90 },
+        -- User-reviewed Hold-Pose tune for Dawi Model 01. The request was not
+        -- perspective-limited: held 1P, owner/bot/husk 3P and every preview
+        -- consume the same canonical transform.
+        right_hand_scale = { 0.5, 0.5, 0.5 },
+        right_hand_rotation = { -90, -90, -90 },
     },
     {
         variant_key = "cwv_es_imperial_crowbill",
@@ -127,11 +126,11 @@ M.MODELS = {
         right_hand_unit = "units/cwv_crowbill/imperial_05/imperial_05",
         inventory_icon = M.PLACEHOLDER_ICON,
         hud_icon = "weapon_generic_icon_falken",
-        -- User-reviewed Hold-Pose tune. 3P/presentation only: owner first
-        -- person retains the authored mesh transform.
-        right_hand_scale_3p = { 0.45, 0.45, 0.45 },
-        right_hand_offset_3p = { 0, -0.03, -0.20 },
-        right_hand_rotation_3p = { -90, -90, -90 },
+        -- User-reviewed Hold-Pose tune. The request was not perspective-
+        -- limited, so the same model-space transform is canonical everywhere.
+        right_hand_scale = { 0.45, 0.45, 0.45 },
+        right_hand_offset = { 0, -0.03, -0.20 },
+        right_hand_rotation = { -90, -90, -90 },
     },
 }
 

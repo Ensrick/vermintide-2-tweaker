@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.423-dev"
+local MOD_VERSION = "0.1.424-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -11260,20 +11260,42 @@ for index, model in ipairs(_om.greataxe.usable_models()) do
 	end
 end
 
--- #604 Crowbill transforms are model-specific and 3P-only. Register every
+-- #604 Crowbill transforms are model-specific. Register every
 -- model as an explicit control so a reviewed tune can never leak into a sibling
 -- through the dynamic family-inheritance pass below. These synthetic defs feed
 -- the same shared WeaponAppearance consumers as Greataxe: owner/bot 3P, remote
 -- husks, inventory/lobby/score character previews, and item/Athanor previews.
--- First-person fields are deliberately absent.
+-- The exact spawned unit path is also indexed: default-rarity/CIM blacksmith
+-- instances are intentionally skinless, and GearUtils may receive base-shaped
+-- item_data, but the resolved unit is still an unambiguous model identity.
+-- Default Model 01 additionally becomes the variant fallback so a skinless
+-- default instance resolves the same transform before/after reconstruction.
+local _crowbill_transform_by_unit = {}
 for _, model in ipairs(_om.crowbill_family.usable_models()) do
-	_skin_transform_map[model.key] = {
-		item_key = model.key,
-		right_hand_scale_3p = model.right_hand_scale_3p,
-		right_hand_offset_3p = model.right_hand_offset_3p,
-		right_hand_rotation_3p = model.right_hand_rotation_3p,
-	}
+	local base_def = _find_def(model.variant_key)
+	local transform_def = base_def and table.clone(base_def, true) or {}
+	transform_def.item_key = model.variant_key
+	transform_def.crowbill_model_key = model.key
+	transform_def.crowbill_mode_family = _om.crowbill_family.HAMMER_MODE_FAMILY
+	transform_def.right_hand_unit = model.right_hand_unit
+	transform_def.right_hand_scale = model.right_hand_scale
+	transform_def.right_hand_offset = model.right_hand_offset
+	transform_def.right_hand_rotation = model.right_hand_rotation
+	transform_def.right_hand_scale_1p = model.right_hand_scale_1p
+	transform_def.right_hand_offset_1p = model.right_hand_offset_1p
+	transform_def.right_hand_rotation_1p = model.right_hand_rotation_1p
+	transform_def.right_hand_scale_3p = model.right_hand_scale_3p
+	transform_def.right_hand_offset_3p = model.right_hand_offset_3p
+	transform_def.right_hand_rotation_3p = model.right_hand_rotation_3p
+	_skin_transform_map[model.key] = transform_def
+	_crowbill_transform_by_unit[model.right_hand_unit] = transform_def
+	_crowbill_transform_by_unit[model.right_hand_unit .. "_3p"] = transform_def
+	if _om.crowbill_family.model_for_variant(model.variant_key) == model then
+		_transform_map[model.variant_key] = transform_def
+	end
 end
+
+_om._cwv_crowbill_transform_by_unit = _crowbill_transform_by_unit
 
 -- Custom illusions with their own scale/offset fields (e.g. greathammer
 -- skins applied to 1H mace targets need to scale the oversized 2H model
@@ -11458,7 +11480,53 @@ mod._cwv_crowbill_apply_presentation = _om._apply_crowbill_presentation
 local function _apply_scale(unit, scale_tbl)  WA.apply_scale(unit, scale_tbl) end
 local function _apply_offset(unit, offset_tbl) WA.apply_offset(unit, offset_tbl) end
 local function _transform_unit(unit, scale_tbl, offset_tbl, rotation)
-	WA.apply(unit, { scale = scale_tbl, offset = offset_tbl, rotation = rotation })
+	return WA.apply(unit, { scale = scale_tbl, offset = offset_tbl, rotation = rotation })
+end
+
+-- #604 single transform-delivery owner. Every world/presentation consumer calls
+-- this helper, which resolves the same hand+perspective fields and emits one
+-- bounded always-on line per spawned tuned Crowbill unit. This turns a future
+-- silent resolver miss into direct evidence in the user's ordinary console log.
+local _crowbill_transform_diag_seen = setmetatable({}, { __mode = "k" })
+local _crowbill_transform_diag_total = 0
+_om._cwv_crowbill_transform_delivery = { counts = {} }
+local function _triplet_text(value)
+	if type(value) ~= "table" then return "nil" end
+	return string.format("%.3f,%.3f,%.3f", value[1] or 0, value[2] or 0, value[3] or 0)
+end
+local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, unit_name, skin)
+	if not def then return false end
+	local prefix = hand == "left" and "left_hand_" or "right_hand_"
+	local scale = _resolve_field(def, prefix .. "scale_" .. perspective)
+		or _resolve_field(def, prefix .. "scale")
+	local offset = _resolve_field(def, prefix .. "offset_" .. perspective)
+		or _resolve_field(def, prefix .. "offset")
+	local rotation = _resolve_field(def, prefix .. "rotation_" .. perspective)
+		or _resolve_field(def, prefix .. "rotation")
+	local applied = _transform_unit(unit, scale, offset, rotation)
+	if def.crowbill_model_key and (scale or offset or rotation) and unit
+			and _is_unit(unit) and _crowbill_transform_diag_total < 64 then
+		local surfaces = _crowbill_transform_diag_seen[unit]
+		if not surfaces then
+			surfaces = {}
+			_crowbill_transform_diag_seen[unit] = surfaces
+		end
+		local token = tostring(surface) .. ":" .. tostring(perspective) .. ":" .. tostring(hand)
+		if not surfaces[token] then
+			surfaces[token] = true
+			_crowbill_transform_diag_total = _crowbill_transform_diag_total + 1
+			local counts = _om._cwv_crowbill_transform_delivery.counts
+			counts[surface] = (counts[surface] or 0) + 1
+			pcall(printf,
+				"[cwv:604] transform delivered surface=%s perspective=%s hand=%s variant=%s model=%s unit=%s skin=%s scale=(%s) offset=(%s) rotation=(%s) applied=%s count=%d/64",
+				tostring(surface), tostring(perspective), tostring(hand),
+				tostring(def.item_key), tostring(def.crowbill_model_key),
+				tostring(unit_name), tostring(skin), _triplet_text(scale),
+				_triplet_text(offset), _triplet_text(rotation), tostring(applied),
+				_crowbill_transform_diag_total)
+		end
+	end
+	return applied
 end
 
 -- Vanilla mace+sword cosmetic tweak (toggleable via "mace_sword_tweak"
@@ -11620,13 +11688,18 @@ do
 	end
 end
 
-local function _resolve_cwv_def(item_data, skin)
+local function _resolve_cwv_def(item_data, skin, resolved_unit_name)
 	if _om.combat_styles and _om.combat_styles.transform_decision then
 		local style_decision = _om.combat_styles:transform_decision(item_data,
 			item_data and item_data.backend_id)
 		if style_decision ~= nil then return style_decision or nil end
 	end
 	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin] end
+	-- #604: exact spawned Crowbill model identity outranks the base-shaped item
+	-- row. This is the canonical path for skinless default-rarity/CIM instances.
+	if resolved_unit_name and _crowbill_transform_by_unit[resolved_unit_name] then
+		return _crowbill_transform_by_unit[resolved_unit_name]
+	end
 	if not item_data then return nil end
 	-- CLARIFY: backend_id resolution is the canonical path for cwv items per
 	-- memory note feedback_cwv_backend_id_lookup.md — item_data.key/.name return
@@ -11655,6 +11728,18 @@ local function _resolve_cwv_def(item_data, skin)
 		end
 	end
 	return nil
+end
+
+_om._cwv_resolve_crowbill_transform = function(skin, resolved_unit_name, variant_key)
+	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin], "skin" end
+	if resolved_unit_name and _crowbill_transform_by_unit[resolved_unit_name] then
+		return _crowbill_transform_by_unit[resolved_unit_name], "unit"
+	end
+	if variant_key and _transform_map[variant_key]
+			and _transform_map[variant_key].crowbill_model_key then
+		return _transform_map[variant_key], "variant_default"
+	end
+	return nil, "miss"
 end
 
 -- ============================================================
@@ -12115,9 +12200,11 @@ do
 			style_decision = _om.combat_styles:remote_transform(owner_unit_3p, slot_name)
 		end
 		if style_decision == false then return end
+		local resolved_unit_name = item_units and item_units[
+			hand == "right" and "right_hand_unit" or "left_hand_unit"]
 		local def = style_decision or (_om._husk_identity_def
 			and _om._husk_identity_def(owner_unit_3p, slot_name, item_data and item_data.name)
-			or _resolve_cwv_def(item_data, skin))
+			or _resolve_cwv_def(item_data, skin, resolved_unit_name))
 		if not def and skin == nil then
 			-- #392/#397 fallback, #475-hardened: base+career positive signal for
 			-- SKINLESS echoes only, can_wield evaluated LAZILY at wield time. A
@@ -12165,7 +12252,8 @@ do
 			rotation = _resolve_field(def, "left_hand_rotation_3p") or _resolve_field(def, "left_hand_rotation")
 		end
 		if scale or offset or rotation then
-			_transform_unit(weapon_unit_3p, scale, offset, rotation)
+			_apply_cwv_hand_transform(weapon_unit_3p, def, hand, "3p", "remote_husk",
+				resolved_unit_name, skin)
 			printf("[cwv husk-transform] applied hand=%s def=%s scale=%s offset=%s -- issues 397/394",
 				tostring(hand), tostring(def.item_key or def.item_type),
 				scale and "y" or "n", offset and "y" or "n")
@@ -12911,12 +12999,35 @@ end
 -- if a future variant needs different 1P vs 3P meshes, restore the
 -- hook here from git history.
 
+local _crowbill_transform_miss_seen = {}
+local _crowbill_transform_miss_total = 0
 mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
 	local result = func(world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
 	if not result then return result end
 
-	local def = _resolve_cwv_def(item_data, result.skin)
-	if not def then return result end
+	local def = _resolve_cwv_def(item_data, result.skin, result.right_hand_unit_name)
+	if not def then
+		local base_name = item_data and item_data.name
+		local unit_name = result.right_hand_unit_name
+		local looks_crowbill = base_name == _om.crowbill_family.SOURCE_ITEM
+			or (type(unit_name) == "string" and unit_name:find("crowbill", 1, true))
+		if looks_crowbill and _crowbill_transform_miss_total < 16 then
+			local token = tostring(base_name) .. ":" .. tostring(unit_name) .. ":" .. tostring(result.skin)
+			if not _crowbill_transform_miss_seen[token] then
+				_crowbill_transform_miss_seen[token] = true
+				_crowbill_transform_miss_total = _crowbill_transform_miss_total + 1
+				pcall(printf,
+					"[cwv:604] TRANSFORM MISS surface=create_equipment base=%s key=%s cwv_key=%s bid=%s mod_bid=%s skin=%s unit=%s career=%s count=%d/16",
+					tostring(base_name), tostring(item_data and item_data.key),
+					tostring(item_data and item_data.cwv_key),
+					tostring(item_data and item_data.backend_id),
+					tostring(item_data and item_data.mod_data and item_data.mod_data.backend_id),
+					tostring(result.skin), tostring(unit_name), tostring(career_name),
+					_crowbill_transform_miss_total)
+			end
+		end
+		return result
+	end
 
 	_dbg("Applying transforms (slot=%s, skin=%s, item_key=%s, 3p_only=%s)",
 		tostring(slot_name), tostring(result.skin), def.item_key, tostring(def.scale_3p_only or false))
@@ -12947,11 +13058,15 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
 	local right_rot_3p    = _resolve_field(def, "right_hand_rotation_3p") or right_rot
 	local left_rot_3p     = _resolve_field(def, "left_hand_rotation_3p")  or left_rot
 	if not def.scale_3p_only then
-		_transform_unit(result.right_unit_1p, right_scale_1p, right_offset_1p, right_rot_1p)
-		_transform_unit(result.left_unit_1p,  left_scale_1p,  left_offset_1p,  left_rot_1p)
+		_apply_cwv_hand_transform(result.right_unit_1p, def, "right", "1p", "owner_1p",
+			result.right_hand_unit_name, result.skin)
+		_apply_cwv_hand_transform(result.left_unit_1p, def, "left", "1p", "owner_1p",
+			result.left_hand_unit_name, result.skin)
 	end
-	_transform_unit(result.right_unit_3p, right_scale_3p, right_offset_3p, right_rot_3p)
-	_transform_unit(result.left_unit_3p,  left_scale_3p,  left_offset_3p,  left_rot_3p)
+	_apply_cwv_hand_transform(result.right_unit_3p, def, "right", "3p",
+		is_bot and "bot" or "owner_3p", result.right_hand_unit_name, result.skin)
+	_apply_cwv_hand_transform(result.left_unit_3p, def, "left", "3p",
+		is_bot and "bot" or "owner_3p", result.left_hand_unit_name, result.skin)
 
 	-- #604: same absolute pick/hammer face on held 1P and owner/bot 3P.
 	-- Presentation composes from the authored rotation captured here; the weak
@@ -12978,6 +13093,15 @@ local function _find_preview_slot_info(self, item_name)
 	return nil, nil
 end
 
+local function _crowbill_def_from_spawn_data(spawn_data)
+	for _, row in ipairs(spawn_data or {}) do
+		local unit_name = row and (row.unit_name or row.right_hand_unit)
+		local def = unit_name and _crowbill_transform_by_unit[unit_name]
+		if def then return def, unit_name end
+	end
+	return nil, nil
+end
+
 local function _resolve_preview_def(self, item_name)
 	local _, info = _find_preview_slot_info(self, item_name)
 	if _om.combat_styles and _om.combat_styles.transform_decision then
@@ -12987,6 +13111,8 @@ local function _resolve_preview_def(self, item_name)
 	end
 	local skin = info and info.skin_name
 	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin], info end
+	local model_def = info and _crowbill_def_from_spawn_data(info.spawn_data)
+	if model_def then return model_def, info end
 
 	if info and info.backend_id then
 		-- v0.1.316: match ANY instance suffix (_001, _002, _003, ...). The
@@ -13047,16 +13173,13 @@ local function _cwv_spawn_item_post(self, item_name)
 
 	-- Preview spawns 3P-style models; use _3p override if set, else unified.
 	if slot.right and _is_unit(slot.right) then
-		_transform_unit(slot.right,
-			_resolve_field(def, "right_hand_scale_3p")    or _resolve_field(def, "right_hand_scale"),
-			_resolve_field(def, "right_hand_offset_3p")   or _resolve_field(def, "right_hand_offset"),
-			_resolve_field(def, "right_hand_rotation_3p") or _resolve_field(def, "right_hand_rotation"))
+		local _, preview_unit_name = _crowbill_def_from_spawn_data(info and info.spawn_data)
+		_apply_cwv_hand_transform(slot.right, def, "right", "3p", "inventory_preview",
+			preview_unit_name, info and info.skin_name)
 	end
 	if slot.left and _is_unit(slot.left) then
-		_transform_unit(slot.left,
-			_resolve_field(def, "left_hand_scale_3p")    or _resolve_field(def, "left_hand_scale"),
-			_resolve_field(def, "left_hand_offset_3p")   or _resolve_field(def, "left_hand_offset"),
-			_resolve_field(def, "left_hand_rotation_3p") or _resolve_field(def, "left_hand_rotation"))
+		_apply_cwv_hand_transform(slot.left, def, "left", "3p", "inventory_preview",
+			nil, info and info.skin_name)
 	end
 	-- #604: MenuWorldPreviewer/HeroPreviewer is the shared reconstruction
 	-- seam for inventory mannequin, keep/lobby, and score/team presentations.
@@ -13332,13 +13455,15 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	-- from the backend_id (pattern documented in feedback_cwv_backend_id_lookup.md).
 	-- The cwv-keyed transform map then takes precedence over the base-key map so
 	-- variant-specific scales/offsets apply correctly.
-	local def = _skin_transform_map[weapon_key] or _transform_map[weapon_key]
+	local explicit_skin_def = _skin_transform_map[weapon_key]
+	local model_def, preview_unit_name = _crowbill_def_from_spawn_data(spawn_data)
+	local def = model_def or explicit_skin_def or _transform_map[weapon_key]
 	-- #482 ladder: bid pattern (CWV's own _001/_002 instances AND cim
 	-- standard-forge copies, issue 390) -> item.data.cwv_key stamp (Athanor
 	-- crafts with UUID bids) so the cosmetic-preview scale applies to every
 	-- crafted variant instance too.
 	local cwv_key = _om._cwv_key_for_item(item.backend_id, item_data)
-	if cwv_key then
+	if cwv_key and not model_def and not explicit_skin_def then
 		def = _transform_map[cwv_key] or _skin_transform_map[cwv_key] or def
 	end
 	if _om.combat_styles and _om.combat_styles.transform_decision then
@@ -13357,7 +13482,12 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	          or _resolve_field(def, "right_hand_rotation")    or _resolve_field(def, "left_hand_rotation")
 	if scale or offset or rotation then
 		for _, unit in ipairs(units) do
-			_transform_unit(unit, scale, offset, rotation)
+			if def.crowbill_model_key then
+				_apply_cwv_hand_transform(unit, def, "right", "3p", "item_browser",
+					preview_unit_name, weapon_key)
+			else
+				_transform_unit(unit, scale, offset, rotation)
+			end
 		end
 	end
 	-- #604: LootItemUnitPreviewer backs the item browser/customization pane.
@@ -16115,26 +16245,26 @@ _rt_register("issue604_imperial_crowbill_model05_transform", function()
 		if model.key == "cwv_es_imperial_crowbill_skin_05" then target = model; break end
 	end
 	if not target
-			or not same_triplet(target.right_hand_scale_3p, { 0.45, 0.45, 0.45 })
-			or not same_triplet(target.right_hand_offset_3p, { 0, -0.03, -0.20 })
-			or not same_triplet(target.right_hand_rotation_3p, { -90, -90, -90 }) then
+			or not same_triplet(target.right_hand_scale, { 0.45, 0.45, 0.45 })
+			or not same_triplet(target.right_hand_offset, { 0, -0.03, -0.20 })
+			or not same_triplet(target.right_hand_rotation, { -90, -90, -90 }) then
 		return "#604 Imperial Crowbill Model 05 reviewed transform drifted"
 	end
 	local applied = _skin_transform_map[target.key]
 	if not applied
-			or not same_triplet(applied.right_hand_scale_3p, target.right_hand_scale_3p)
-			or not same_triplet(applied.right_hand_offset_3p, target.right_hand_offset_3p)
-			or not same_triplet(applied.right_hand_rotation_3p, target.right_hand_rotation_3p)
-			or applied.right_hand_scale or applied.right_hand_offset or applied.right_hand_rotation
+			or not same_triplet(applied.right_hand_scale, target.right_hand_scale)
+			or not same_triplet(applied.right_hand_offset, target.right_hand_offset)
+			or not same_triplet(applied.right_hand_rotation, target.right_hand_rotation)
 			or applied.right_hand_scale_1p or applied.right_hand_offset_1p
-			or applied.right_hand_rotation_1p then
-		return "#604 Model 05 transform is not isolated to the canonical 3P map"
+			or applied.right_hand_rotation_1p or applied.right_hand_scale_3p
+			or applied.right_hand_offset_3p or applied.right_hand_rotation_3p then
+		return "#604 Model 05 transform is not on the canonical all-surface map"
 	end
 	for _, model in ipairs(family.MODELS) do
 		if model.key ~= target.key and model.key ~= "cwv_dr_dawi_crowbill_skin" then
 			local control = _skin_transform_map[model.key]
-			if not control or control.right_hand_scale_3p
-					or control.right_hand_offset_3p or control.right_hand_rotation_3p then
+			if not control or control.right_hand_scale
+					or control.right_hand_offset or control.right_hand_rotation then
 				return "#604 Model 05 transform leaked to " .. tostring(model.key)
 			end
 		end
@@ -16156,19 +16286,31 @@ _rt_register("issue604_dawi_crowbill_model01_transform", function()
 		if model.key == "cwv_dr_dawi_crowbill_skin" then target = model; break end
 	end
 	if not target
-			or not same_triplet(target.right_hand_scale_3p, { 0.5, 0.5, 0.5 })
-			or not same_triplet(target.right_hand_rotation_3p, { -90, -90, -90 })
-			or target.right_hand_offset_3p
-			or target.right_hand_rotation or target.right_hand_rotation_1p then
+			or not same_triplet(target.right_hand_scale, { 0.5, 0.5, 0.5 })
+			or not same_triplet(target.right_hand_rotation, { -90, -90, -90 })
+			or target.right_hand_offset
+			or target.right_hand_rotation_3p or target.right_hand_rotation_1p then
 		return "#604 Dawi Crowbill Model 01 reviewed transform drifted"
 	end
 	local applied = _skin_transform_map[target.key]
 	if not applied
-			or not same_triplet(applied.right_hand_scale_3p, target.right_hand_scale_3p)
-			or not same_triplet(applied.right_hand_rotation_3p, target.right_hand_rotation_3p)
-			or applied.right_hand_offset_3p
-			or applied.right_hand_rotation or applied.right_hand_rotation_1p then
-		return "#604 Dawi Model 01 transform is not isolated to the canonical 3P map"
+			or not same_triplet(applied.right_hand_scale, target.right_hand_scale)
+			or not same_triplet(applied.right_hand_rotation, target.right_hand_rotation)
+			or applied.right_hand_offset
+			or applied.right_hand_rotation_3p or applied.right_hand_rotation_1p then
+		return "#604 Dawi Model 01 transform is not on the canonical all-surface map"
+	end
+	local unit_def = _crowbill_transform_by_unit[target.right_hand_unit]
+	local unit_3p_def = _crowbill_transform_by_unit[target.right_hand_unit .. "_3p"]
+	if unit_def ~= applied or unit_3p_def ~= applied then
+		return "#604 Dawi exact unit-path resolver is not bound to Model 01"
+	end
+	if _transform_map[target.variant_key] ~= applied then
+		return "#604 skinless Dawi default variant does not resolve Model 01 transform"
+	end
+	if type(_om._cwv_resolve_crowbill_transform) ~= "function"
+			or type(_om._cwv_crowbill_transform_delivery) ~= "table" then
+		return "#604 Crowbill runtime delivery/diagnostic seam missing"
 	end
 end)
 
