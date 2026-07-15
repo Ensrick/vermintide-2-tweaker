@@ -1293,11 +1293,9 @@ local function _build_template_cache()
         return
     end
 
-    -- Templates inherit the player's chosen base power level so the craft
-    -- preview ("X power" widget) shows what the resulting item will actually
-    -- be (feedback #9). Pre-v0.7.24 this was hardcoded 5, which produced
-    -- "5 power" in the preview while the craft result was 300.
-    local base_power = _cim_base_power()
+    -- Blacksmith selectors are always 5-power definition tokens. The actual
+    -- craft result still receives the configured base power in _make_craft_synth.
+    local base_power = 5
     local real_names = _cim_real_display_names()
     local report
     _template_cache, report = template_catalog.build({

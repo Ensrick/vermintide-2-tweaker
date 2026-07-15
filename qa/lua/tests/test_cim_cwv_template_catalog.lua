@@ -37,7 +37,31 @@ return function(H, repo_root)
             H.equal(row.data.inventory_icon, icon)
             H.equal(row.rarity, "default")
             H.equal(row.backend_id, "cim_template_" .. key)
+            H.equal(row.power_level, 5)
+            H.equal(row.CustomData.power_level, "5")
         end
+    end)
+
+    H.test("accessory icons remain separate five-power selectors", function()
+        local iml = {
+            necklace = {
+                slot_type = "necklace", item_type = "necklace", rarity = "default",
+                can_wield = { "es_knight" }, inventory_icon = "necklace_01",
+            },
+            necklace_02 = {
+                slot_type = "necklace", item_type = "necklace", rarity = "default",
+                can_wield = { "es_knight" }, inventory_icon = "necklace_02",
+            },
+        }
+        local cache, report = Catalog.build({
+            item_master_list = iml,
+            career_name = "es_knight",
+            craftable_slot_types = { necklace = true },
+            base_power = 300,
+        })
+        H.equal(report.total, 2)
+        H.equal(cache.cim_template_necklace.power_level, 5)
+        H.equal(cache.cim_template_necklace_02.power_level, 5)
     end)
 
     H.test("catalog enforces career and DLC ownership without acquisition", function()

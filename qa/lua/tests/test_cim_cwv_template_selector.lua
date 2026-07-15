@@ -36,6 +36,39 @@ return function(H, repo_root)
         H.equal(rows[1], legacy)
     end)
 
+    H.test("duplicate real CWV rows collapse to one five-power selector", function()
+        local older = {
+            backend_id = "cwv_es_longsword_001",
+            rarity = "default",
+            power_level = 300,
+            key = "es_bastard_sword",
+            data = { slot_type = "melee", item_type = "es_bastard_sword" },
+        }
+        local canonical = {
+            backend_id = "cwv_es_longsword_002",
+            rarity = "default",
+            power_level = 5,
+            key = "es_bastard_sword",
+            data = { slot_type = "melee", item_type = "es_bastard_sword" },
+        }
+        local rows = { older, canonical, selector("cwv_es_longsword") }
+        Selector.inject(rows, {})
+        H.equal(#rows, 1)
+        H.equal(rows[1], canonical)
+    end)
+
+    H.test("distinct accessory icon selectors are not merged", function()
+        local first = selector("necklace")
+        first.data = { slot_type = "necklace", item_type = "necklace" }
+        first.cim_acquisition_family = "accessory:necklace:necklace"
+        local second = selector("necklace_02")
+        second.data = { slot_type = "necklace", item_type = "necklace" }
+        second.cim_acquisition_family = "accessory:necklace:necklace_02"
+        local rows = {}
+        Selector.inject(rows, { first = first, second = second })
+        H.equal(#rows, 2)
+    end)
+
     H.test("real native row suppresses preview alias family", function()
         local real = {
             backend_id = "real_es_bastard_sword",

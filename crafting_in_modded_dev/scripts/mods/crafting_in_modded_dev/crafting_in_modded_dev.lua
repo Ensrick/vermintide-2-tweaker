@@ -50,7 +50,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.81-dev"
+local MOD_VERSION = "0.8.82-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -6521,6 +6521,21 @@ _rt_register("issue524_cwv_selector_bounded", function()
     if #rows ~= 1 or rows[1] ~= legacy then
         return "legacy/default CWV row did not suppress duplicate synthetic selectors"
     end
+    local legacy_300 = {
+        backend_id = "cwv_rt_longsword_002",
+        rarity = "default",
+        power_level = 300,
+        key = "es_bastard_sword",
+        data = { key = "es_bastard_sword", slot_type = "melee", item_type = "es_bastard_sword" },
+    }
+    legacy.data.slot_type = "melee"
+    legacy.data.item_type = "es_bastard_sword"
+    legacy.power_level = 5
+    rows = { legacy_300, legacy, synthetic }
+    selector.inject(rows, { synthetic })
+    if #rows ~= 1 or rows[1] ~= legacy or rows[1].power_level ~= 5 then
+        return "duplicate real/default CWV rows did not collapse to the 5-power selector"
+    end
     local crafted = {
         backend_id = "cwv_rt_longsword_100",
         rarity = "modded",
@@ -6565,7 +6580,9 @@ _rt_register("issue524_all_cwv_blacksmith_selectors", function()
             end
             local selector = cache["cim_template_" .. key]
             if owns and (not selector or selector.cim_acquisition_key ~= key
-                or selector.data ~= data or selector.rarity ~= "default") then
+                or selector.data ~= data or selector.rarity ~= "default"
+                or selector.power_level ~= 5
+                or not selector.CustomData or selector.CustomData.power_level ~= "5") then
                 return "#524 missing/incorrect Blacksmith selector: " .. key .. " for " .. career
             end
             if not owns and selector then
@@ -6586,7 +6603,7 @@ _rt_register("issue524_native_craft_families_deduplicated", function()
         return "#524 template catalog unavailable"
     end
     local base = {
-        slot_type = "melee", item_type = "rt_sword", rarity = "plentiful",
+        slot_type = "melee", item_type = "Regression Test Sword", rarity = "plentiful",
         can_wield = { "es_knight" },
     }
     local preview = table.clone(base, true)

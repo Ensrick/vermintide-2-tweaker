@@ -1,5 +1,16 @@
 # Crafting in Modded Changelog
 
+## 0.8.82-dev (2026-07-15): #524 five-power bounded Blacksmith selectors [verify-fix]
+
+- Restored the native crafting contract requested for CWV: every eligible definition has exactly one Blacksmith selector at power 5. The configured crafting power still applies only to the newly crafted Modded item.
+- Extended the native picker compactor to deduplicate legacy/real default-rarity CWV rows as well as CIM's synthetic rows, preferring an existing 5-power row and excluding 300-power template twins. Crafted Modded-rarity instances remain independent inventory records.
+- Preserved the deliberate accessory behavior: necklace, charm/ring, and trinket icon variants retain separate 5-power selectors rather than collapsing by shared item type.
+- Added offline and runtime regressions for synthetic power, repeated real rows, crafted-instance isolation, and accessory icon families. `/cim_regression_test` now rejects any CWV selector whose power is not exactly 5.
+
+### Test method
+
+Open the native Craft Item picker on Kruber with CWV enabled. Every eligible CWV weapon must appear exactly once as a 5-power Blacksmith item; no 300-power Blacksmith row may appear. Craft one CWV weapon twice at 300 power, close and reopen the picker, and confirm the two crafted items remain in inventory while the picker still contains one 5-power selector. Confirm the distinct accessory icon choices remain available. Run `/cim_regression_test` and require all `issue524_*` checks to pass.
+
 ## 0.8.81-dev (2026-07-15): #474 shared authored-preview resource gate
 
 - CIM Athanor now asks an enabled provider for its canonical preview descriptor before resolving the inherited vanilla item. Old Musket therefore uses CWV's exact custom unit, package anchor, material, textures, transform, and fallback instead of a CIM-specific model guess.

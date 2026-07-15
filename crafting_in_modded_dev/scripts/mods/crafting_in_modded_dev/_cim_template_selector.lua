@@ -10,6 +10,17 @@ local function _rarity(item)
         or (type(item.mod_data) == "table" and item.mod_data.rarity)
 end
 
+local function _power(item)
+    if type(item) ~= "table" then return nil end
+    local custom = type(item.CustomData) == "table" and item.CustomData or nil
+    return tonumber(item.power_level or (custom and custom.power_level))
+end
+
+local function _is_weapon_row(item)
+    local data = type(item) == "table" and type(item.data) == "table" and item.data or nil
+    return data and (data.slot_type == "melee" or data.slot_type == "ranged") or false
+end
+
 function M.canonical_key(item)
     if type(item) ~= "table" then return nil end
 
@@ -52,6 +63,10 @@ function M.canonical_family(item)
     if data and type(data.cim_craft_family) == "string" then
         return "provider:" .. data.cim_craft_family
     end
+    if data and (data.slot_type == "necklace" or data.slot_type == "ring"
+        or data.slot_type == "trinket") then
+        return "accessory:" .. tostring(data.slot_type) .. ":" .. tostring(key)
+    end
     if data and type(data.item_type) == "string" then
         return "item_type:" .. tostring(data.slot_type or "?") .. ":" .. data.item_type
     end
@@ -69,7 +84,14 @@ function M.inject(items, templates)
         local rarity = _rarity(item)
         if not item.cim_acquisition_template and (rarity == nil or rarity == "default") then
             local family = M.canonical_family(item)
-            if family then real_families[family] = true end
+            if family then
+                local current = real_families[family]
+                -- Legacy sessions can contain several real default CWV rows.
+                -- Prefer the canonical 5-power Blacksmith row deterministically.
+                if not current or (_power(item) == 5 and _power(current) ~= 5) then
+                    real_families[family] = item
+                end
+            end
         end
     end
 
@@ -86,6 +108,14 @@ function M.inject(items, templates)
                 keep = false
             else
                 synthetic_families[family] = true
+            end
+        elseif item and _rarity(item) == "default" and _is_weapon_row(item) then
+            local family = M.canonical_family(item)
+            -- Collapse repeated real/default weapon selectors too. Older code
+            -- only bounded CIM's synthetic rows, allowing persisted/legacy CWV
+            -- Blacksmith instances to appear beside each other indefinitely.
+            if family and real_families[family] ~= item then
+                keep = false
             end
         end
         if keep then

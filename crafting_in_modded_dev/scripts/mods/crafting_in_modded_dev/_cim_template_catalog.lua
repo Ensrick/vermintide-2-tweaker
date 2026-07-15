@@ -35,6 +35,13 @@ function M.craft_family(key, data)
     if _is_cwv_definition(key, data) then
         return "cwv:" .. tostring(data.cwv_key or key)
     end
+    -- Accessories deliberately expose one Blacksmith selector per authored
+    -- icon/key. They are not weapon aliases and must not collapse merely
+    -- because every necklace (or ring/trinket) shares one item_type.
+    if data.slot_type == "necklace" or data.slot_type == "ring"
+        or data.slot_type == "trinket" then
+        return "accessory:" .. tostring(data.slot_type) .. ":" .. tostring(key)
+    end
     if type(data.item_type) == "string" and data.item_type ~= "" then
         return "item_type:" .. tostring(data.slot_type or "?") .. ":" .. data.item_type
     end
@@ -64,7 +71,10 @@ function M.build(args)
     local item_master_list = args.item_master_list
     local career_name = args.career_name
     local craftable_slot_types = args.craftable_slot_types or {}
-    local base_power = tonumber(args.base_power) or 5
+    -- Blacksmith selectors are definition tokens, not crafted results. Keep
+    -- their vanilla-facing power fixed at 5; the craft transaction separately
+    -- assigns the configured result power.
+    local base_power = 5
     local requires_unowned_dlc = args.requires_unowned_dlc or function() return false end
     local versus_shadowed = args.versus_shadowed or function() return false end
     local validate_provider = args.validate_provider or function() return true end
