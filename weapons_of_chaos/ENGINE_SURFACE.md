@@ -15,7 +15,7 @@ vanilla behavior, and links out. Decompile paths are relative to
 via the duplicate-item approach modeled on `character_weapon_variants`: it clones
 a player base weapon template into a new MoreItemsLibrary item and swaps the held
 mesh to a different `.unit`. As of v0.1.12-dev there is ONE item - the Blightreaper
-(Kruber 1H sword, all careers), rendered on an interim base-Empire-sword mesh
+(Kruber 1H sword, all careers), rendered with the authored Blightreaper mesh
 because the intended keep-trophy prop is not runtime-loadable (see dead ends). Its
 engine contact is small: a display-name `Localize` hook, a registration-timing
 hook, and the single wire-safety hook that keeps a non-WOC peer from crashing -
@@ -92,14 +92,25 @@ shadow before encode. `WOC` applies no skin and rarity `"default"` (a vanilla
 index), so unlike CWV there is no skin/rarity axis to substitute, only the item-name axis
 (`docs/engine/03` §31; project `project_vt2_cross_peer_wire_safety`).
 
-### Held-mesh derivation (owner: `docs/engine/06`)
+### Held-mesh derivation and preview residency (owner: `docs/engine/06`)
 
-The interim `HELD_UNIT` is the base Empire sword's `right_hand_unit` - always
-resident with the player loadout and carrying a real `<unit>_3p` sibling, so
-vanilla's 1P/3P derivation in `gear_utils.lua` (append `_3p` to `right_hand_unit`)
-just works with no force-load and no special-case spawn. Pointing the held mesh at
-a genuine enemy `.unit` later is where the residency and `_3p`-sibling problems in
-the dead-ends section bite (`docs/engine/05`, `docs/engine/06`).
+`HELD_UNIT` is the WOC-owned `units/woc_blightreaper/blightreaper`, with an
+explicit `_3p` sibling, so vanilla's 1P/3P derivation in `gear_utils.lua` remains
+intact. Both units, their material, and their textures are static dependencies
+of WOC's master resource package; no unit path is passed to PackageManager.
+
+Vanilla previewers and `WeaponUtils.get_weapon_packages` nevertheless treat a
+unit path as a globally discoverable package identity. `_woc_appearance_policy`
+maps only those package requests to the matching Empire sword 1P/3P packages;
+spawn data remains custom while `Application.can_get("unit", custom)` is true
+and visibly falls back to the sword if master-bundle residency is missing.
+`NetworkLookup.inventory_packages` receives only forward custom-name -> vanilla
+index aliases; numeric reverse entries stay vanilla.
+
+The ordinary loadout RPC remains `es_1h_sword` for non-WOC safety. A bounded
+VMF same-mod sideband publishes one Blightreaper bit per loadout-sync edge.
+WOC-capable receivers cache it by peer+slot and re-key `GearUtils` husk spawn to
+the bundled unit; absent-WOC peers receive no custom resource identity.
 
 ## What the engine will NOT let us do (dead ends, already paid for)
 
@@ -113,8 +124,9 @@ in-file header - do not re-discover these.
   and is loaded on-demand only by the keep-decoration system.
   `Managers.package:load` on its UNIT path HARD-CRASHED on keep entry - an engine
   `resource_package()` C-fatal that bypasses the surrounding `pcall` (confirmed
-  Blightreaper v0.1.1-dev). To wield it you must EXTRACT and author a real weapon
-  `.unit` (its own `_3p` sibling + a loadable package). General rule: never
+  Blightreaper v0.1.1-dev). The actual mission-placed sword was separately
+  extracted and authored in v0.1.13-dev (its own `_3p` sibling + master-package
+  residency); the diorama remains forbidden. General rule: never
   `Managers.package:load` a unit path, only a real `.package` NAME you have
   verified contains the unit (memory
   `reference_vt2_package_load_needs_package_not_unit_path`).
@@ -145,7 +157,7 @@ added, or a cited vanilla line drifts after a game patch, edit the affected row 
 the SAME commit. This doc complements, and must not duplicate, `DEVELOPMENT.md`
 (the enemy-mesh catalog + full crash post-mortem) - when a new enemy weapon lands,
 `DEVELOPMENT.md` is the primary and this doc gains rows only if the new item adds a
-new engine seam (e.g. a package force-load once a real enemy `.unit` is authored).
+new engine seam (for example, a verified package-name load for a future enemy unit).
 The load-bearing wire-safety citations (`loadout_utils.lua:25/72`,
 `network_lookup.lua:2362`) were re-verified this pass. `StateInGameRunning.on_enter`
 interior line is `[unverified]` (class + method grep-confirmed via the CWV

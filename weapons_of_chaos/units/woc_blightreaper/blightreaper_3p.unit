@@ -1,0 +1,15 @@
+materials = {
+	blightreaper_mat = "units/woc_blightreaper/blightreaper"
+}
+
+renderables = {
+	blightreaper = {
+		always_keep = false
+		culling = "bounding_volume"
+		generate_uv_unwrap = false
+		occluder = false
+		shadow_caster = true
+		surface_queries = false
+		viewport_visible = true
+	}
+}

@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.12-dev"
+local MOD_VERSION = "0.1.13-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -16,19 +16,12 @@ mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 -- (`es_1h_sword` / `one_handed_swords_template_1`), equippable by every career
 -- of all five heroes.
 --
--- HELD MESH — INTERIM: the Bögenhafen keep-trophy diorama prop
--- (`units/props/inn/hub_trophy/hub_trophy_bogenhafen`) was the intended mesh,
--- but it is NOT runtime-loadable: it has no standalone `.package`, is absent
--- from the boot-loaded `resource_packages/dlcs/bogenhafen` and base
--- `resource_packages/levels/inn` bundles, and is loaded on-demand only by the
--- keep-decoration system. Force-loading its UNIT path via `Managers.package:load`
--- HARD-CRASHED on keep entry (engine `resource_package()` C-fatal, bypasses
--- pcall — repo memory `reference_vt2_package_load_needs_package_not_unit_path`).
--- So the held mesh is temporarily the base Empire sword (`HELD_UNIT`, always
--- resident with the player loadout, real `_3p` sibling). Swap `HELD_UNIT` to the
--- extracted/authored model once it ships as a real loadable unit; the trophy
--- path is recorded below as the extraction target ONLY (never referenced at
--- runtime). No package force-load, no prop spawn anywhere in this file.
+-- HELD MESH: the sword placed beside the Bögenhafen mission cage was extracted
+-- from the level bundle and re-authored as explicit WOC-owned 1P and 3P units.
+-- WOC's master package owns their residency; preview/package collectors borrow
+-- the base Empire sword package identity without replacing the local render
+-- unit. The keep-trophy diorama itself remains documentation-only and is never
+-- force-loaded (a unit-path PackageManager load is an engine C-fatal).
 -- ============================================================================
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
@@ -147,6 +140,8 @@ local BACKEND_ID  = ITEM_KEY .. "_001"
 local BASE_WEAPON = "es_1h_sword"                       -- Kruber 1H sword (clone source)
 local TEMPLATE    = "one_handed_swords_template_1"      -- 1H sword moveset / hit detection
 local _wire_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_wire_policy")
+local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_policy")
+local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview")
 if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" then
 	-- Packaging failures must not become startup crashes. Preserve ordinary
 	-- vanilla loadout syncs, but fail closed for explicit WOC identities because
@@ -163,17 +158,25 @@ if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" t
 	}
 end
 
--- Held mesh (INTERIM). Base es_1h_sword right_hand_unit
--- (item_master_list_exported.lua:6548) — always resident with the player
--- loadout and has a real `<unit>_3p` sibling, so vanilla 1P/3P derivation just
--- works (no force-load, no special-case spawn).
-local HELD_UNIT = "units/weapons/player/wpn_emp_sword_02_t1/wpn_emp_sword_02_t1"
+local HELD_UNIT = _appearance.UNIT_1P
 
--- FUTURE EXTRACTION TARGET (documentation only — do NOT reference at runtime):
+-- Package lookup aliases are forward-only. WOC-capable peers retain the
+-- authored unit locally; peers without WOC continue decoding the vanilla sword
+-- index and never receive a Workshop unit path.
+local _appearance_alias_count = 0
+local function _ensure_appearance_aliases()
+	local installed = _appearance.install_network_package_aliases(
+		NetworkLookup and NetworkLookup.inventory_packages)
+	if installed > _appearance_alias_count then _appearance_alias_count = installed end
+	return installed
+end
+_ensure_appearance_aliases()
+_preview.install(_appearance)
+
+-- Original display reference (documentation only — do NOT reference at runtime):
 --   units/props/inn/hub_trophy/hub_trophy_bogenhafen
 -- The Bögenhafen keep-trophy diorama prop. Not runtime-loadable today; when a
--- real held model is extracted/authored as a loadable unit, point HELD_UNIT at
--- it (and add a `<unit>_3p` sibling, or handle the 3P derivation then).
+-- The actual sword was recovered from the mission level placement instead.
 
 -- can_wield = every career of all five heroes. Base careers sourced from
 -- scripts/settings/profiles/career_settings.lua; the five DLC careers verified
@@ -312,6 +315,7 @@ end
 -- StateInGameRunning.on_enter fires on entering the keep AND each mission load;
 -- the `_registered` guard makes re-fires a no-op (CWV registration-timing pattern).
 mod:hook_safe("StateInGameRunning", "on_enter", function()
+	_ensure_appearance_aliases()
 	_register_blightreaper()
 end)
 
@@ -354,10 +358,80 @@ local function _wire_safe_item(item)
 end
 
 local _blightreaper_sync_seen = false
+local _IDENTITY_SCHEMA = 1
+local _remote_blightreaper = {}
+
+-- The vanilla loadout RPC intentionally carries `es_1h_sword` for mixed-lobby
+-- crash safety. This VMF same-mod sideband restores the one missing bit only on
+-- WOC-capable peers. It is bounded to loadout sync edges, never sent per-frame.
+mod:network_register("woc_blightreaper_identity", function(sender_peer_id, schema, slot_name, equipped)
+	if schema ~= _IDENTITY_SCHEMA or type(sender_peer_id) ~= "string" then return end
+	if slot_name ~= "slot_melee" and slot_name ~= "slot_ranged" then return end
+	local by_slot = _remote_blightreaper[sender_peer_id]
+	if not by_slot then by_slot = {}; _remote_blightreaper[sender_peer_id] = by_slot end
+	local active = equipped == 1
+	if by_slot[slot_name] == active then return end
+	by_slot[slot_name] = active
+
+	-- The ordinary equipment RPC and this sideband may arrive in either order.
+	-- Re-wield once when the husk already exists; otherwise its upcoming vanilla
+	-- wield consumes the cached identity.
+	local pm = Managers and Managers.player
+	local player = pm and pm.player_from_peer_id and pm:player_from_peer_id(sender_peer_id)
+	local unit = player and player.player_unit
+	if unit and Unit.alive(unit) then
+		local inventory
+		pcall(function() inventory = ScriptUnit.extension(unit, "inventory_system") end)
+		if inventory and inventory.wielded_slot == slot_name and type(inventory.wield) == "function" then
+			pcall(inventory.wield, inventory, slot_name)
+		end
+	end
+end)
+
+local function _husk_peer_id(owner_unit_3p)
+	if not owner_unit_3p then return nil end
+	local player
+	pcall(function() player = Managers.player:owner(owner_unit_3p) end)
+	return player and (player.peer_id or (player.network_id and player:network_id()))
+end
+
+-- Remote husks resolve the intentionally vanilla wire item. Re-key the render
+-- unit only when the WOC sideband positively identifies this peer+slot. Passing
+-- a shallow item-data shadow with a WOC name prevents another variant mod from
+-- reinterpreting the same base-sword echo after our decision.
+mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_template,
+		item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, ...)
+	if not owner_unit_1p and hand == "right" then
+		local peer_id = _husk_peer_id(owner_unit_3p)
+		local active = peer_id and _remote_blightreaper[peer_id]
+		active = active and active[slot_name]
+		if active and type(item_units) == "table" then
+			local unit_shadow = {}
+			for key, value in pairs(item_units) do unit_shadow[key] = value end
+			item_units = unit_shadow
+			item_units.right_hand_unit = HELD_UNIT
+			if type(item_data) == "table" then
+				local shadow = {}
+				for key, value in pairs(item_data) do shadow[key] = value end
+				shadow.name = ITEM_KEY
+				item_data = shadow
+			end
+		end
+	end
+	return func(world, hand, item_template, item_units, slot_name, item_data,
+		owner_unit_1p, owner_unit_3p, ...)
+end)
+
 if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 	mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
-		if item and (item.backend_id == BACKEND_ID or item.ItemInstanceId == BACKEND_ID) then
+		local is_blightreaper = item and
+			(item.backend_id == BACKEND_ID or item.ItemInstanceId == BACKEND_ID)
+		if is_blightreaper then
 			_blightreaper_sync_seen = true
+		end
+		if slot_name == "slot_melee" or slot_name == "slot_ranged" then
+			pcall(mod.network_send, mod, "woc_blightreaper_identity", "others",
+				_IDENTITY_SCHEMA, slot_name, is_blightreaper and 1 or 0)
 		end
 		local send_item = _wire_safe_item(item)
 		if send_item == nil then
@@ -503,6 +577,23 @@ _rt_register("no_unit_path_package_force_load", function()
 	if txt:find(load_needle, 1, true) then
 		return "a package force-load reappeared -- verify it targets a real .package NAME, not a unit path (keep-entry C-fatal, DEVELOPMENT.md)"
 	end
+end)
+
+_rt_register("issue613_blightreaper_appearance_contract", function()
+	if HELD_UNIT ~= "units/woc_blightreaper/blightreaper" then
+		return "Blightreaper item no longer points at the authored WOC unit"
+	end
+	if _appearance.UNIT_3P ~= HELD_UNIT .. "_3p" then
+		return "explicit 3P sibling contract drifted"
+	end
+	if _appearance_alias_count ~= 2 then
+		return string.format("expected two forward inventory-package aliases, got %s",
+			tostring(_appearance_alias_count))
+	end
+	local ok_1p, resident_1p = pcall(Application.can_get, "unit", HELD_UNIT)
+	local ok_3p, resident_3p = pcall(Application.can_get, "unit", _appearance.UNIT_3P)
+	if not ok_1p or resident_1p ~= true then return "authored 1P unit is not resident" end
+	if not ok_3p or resident_3p ~= true then return "authored 3P unit is not resident" end
 end)
 
 -- Applied marker (§3.6): always fires (operational telemetry); surfaces the live

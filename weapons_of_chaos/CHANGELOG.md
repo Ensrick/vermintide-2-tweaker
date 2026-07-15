@@ -1,5 +1,32 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.13-dev (2026-07-15) - #613 actual Blightreaper model and complete appearance path [verify-fix-coop]
+
+### Changed
+- Recovered the actual Blightreaper sword placed beside the cage in the
+  Bögenhafen city level (`A9AECA9EA15818DA`), rather than trying to wield the
+  keep-trophy diorama. Authored explicit WOC-owned 1P/3P units, material, and
+  albedo/normal/metallic/roughness/emissive textures.
+- Added the assets to WOC's master resource package. Vanilla package collectors
+  and previewers borrow Empire-sword package leases while keeping the authored
+  WOC unit as the local render unit; a missing-residency path fails visibly to
+  the vanilla sword instead of crashing.
+- Added forward-only `NetworkLookup.inventory_packages` aliases and a bounded
+  same-WOC identity sideband. WOC peers re-key remote husks to Blightreaper;
+  peers without WOC continue receiving only the safe vanilla sword identity.
+- Covered inventory character, score/team, item/illusion/Athanor, owner 1P/3P,
+  bots, and remote husk reconstruction, with engine-free package/lookup tests
+  and a live `/woc_regression_test` residency check.
+
+### Test method
+1. Equip Blightreaper and verify its authored model in 1P, owner 3P, inventory
+   character preview, item preview, and score/team preview.
+2. Join with a second WOC peer; verify both peers see the authored model on the
+   remote husk after join, weapon swaps, respawn, and a mission transition.
+3. Join once with a peer that does not have WOC; verify that peer remains stable
+   and sees the vanilla sword fallback.
+4. Run `/woc_regression_test`; require zero failures.
+
 ## 0.1.12-dev (2026-07-14) - #595 startup crash: bundled wire policy + fail-closed guard [verify-fix]
 
 ### Why

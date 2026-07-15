@@ -8,7 +8,7 @@ from a player base weapon template, with its held mesh swapped to an enemy
 weapon's `.unit`.
 
 > **Status:** early implementation with one registered item, Blightreaper. Its
-> interim held mesh is the resident Empire sword because the intended trophy
+> v0.1.3-dev's interim held mesh was the resident Empire sword because the intended trophy
 > prop cannot be loaded safely. This doc remains the research foundation for
 > enemy meshes, trophy paths, and the duplicate-item constraints.
 
@@ -235,8 +235,8 @@ verbatim; only the mesh source differs.
 > The SDK build also **refuses** a static `.package` `unit = [...]` dependency on
 > it (no source `.unit` to compile). **Conclusion:** to wield this prop you must
 > EXTRACT + author a real weapon `.unit` (its own `_3p` sibling + a loadable
-> package). Until then WOC's Blightreaper renders the base Empire 1H sword mesh
-> (interim, crash-free; fix shipped v0.1.3-dev). General rule for any enemy/prop
+> package). WOC v0.1.3-dev therefore rendered the base Empire 1H sword mesh
+> until the separate mission-placed sword was extracted in v0.1.13-dev. General rule for any enemy/prop
 > mesh: **never `Managers.package:load` a unit path** — only ever load a real
 > `.package` NAME you've verified contains the unit.
 
@@ -264,3 +264,17 @@ verbatim; only the mesh source differs.
   `feedback_cross_char_transforms_3p_only`,
   `reference_vt2_package_load_needs_package_not_unit_path`,
   `reference_vt2_la_package_force_load_crash`.
+
+### Blightreaper extraction completed (2026-07-15, issue #613)
+
+The keep trophy is a diorama and remains unusable as a held unit. The actual
+weapon is a separate level-placement unit in the Bögenhafen city bundle:
+`A9AECA9EA15818DA`. Its high LOD (`6692D5DA`, 2,608 vertices / 2,858 polygons)
+was exported with the pommel at the origin and the blade aligned to the weapon
+axis. The source material uses `E6AB38B75D7D9F4E` as albedo,
+`751BDA5C60330E94` as tangent normal, and the packed
+`19E12EFD2E45F9F2` channels as metallic, roughness, and rune emissive mask.
+The authored source lives under `units/woc_blightreaper` and
+`textures/woc_blightreaper`; both 1P and 3P units are explicit dependencies of
+the WOC master package. Do not replace this with the hub-trophy path or add a
+unit-path package load.

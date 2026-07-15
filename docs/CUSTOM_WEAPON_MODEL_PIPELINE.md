@@ -61,6 +61,13 @@ the source manifest/hashes, and required notices. The Greataxe precedent is
 `character_weapon_variants/tools/GREATAXE_ASSET_PIPELINE.md` plus
 `character_weapon_variants/THIRD_PARTY_NOTICES.md`.
 
+For extracted first-party game resources, record the source bundle/unit hash,
+selected object/LOD, dependency texture hashes, channel interpretation, and
+derived output hashes instead of inventing third-party attribution. Do not
+commit unpacked game bundles or unmodified native resources. The Blightreaper
+precedent is `weapons_of_chaos/tools/BLIGHTREAPER_ASSET_PIPELINE.md` plus its
+scripted high-LOD export.
+
 ## 3. Source formats and conversion target
 
 VMB/Stingray should receive FBX as the final mesh input.
