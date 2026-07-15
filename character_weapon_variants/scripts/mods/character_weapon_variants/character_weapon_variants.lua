@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.420-dev"
+local MOD_VERSION = "0.1.421-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -5908,21 +5908,71 @@ _om._track_old_musket_unit = function(unit, perspective, mode)
 	end
 end
 
-_om._apply_old_musket_textures = function(unit)
+local _OLD_MUSKET_TEXTURE_BINDINGS = {
+	{ "texture_map_c0ba2942", "textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo" },
+	{ "texture_map_59cd86b9", "textures/cwv_es_musket_custom/cwv_es_musket_custom_normal" },
+	{ "texture_map_0205ba86", "textures/cwv_es_musket_custom/cwv_es_musket_custom_metallic" },
+}
+local _OLD_MUSKET_PREVIEW_MATERIAL_3P =
+	"units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p"
+local _old_musket_paint_diag_seen = {}
+
+local function _old_musket_paint_diag_once(reason, detail)
+	if _old_musket_paint_diag_seen[reason] then return end
+	_old_musket_paint_diag_seen[reason] = true
+	pcall(printf, "[cwv:617] Old Musket paint SKIP reason=%s detail=%s chat=false",
+		tostring(reason), tostring(detail))
+end
+
+-- #617 crash hardening. Unit.set_texture_for_materials is a Stingray C call:
+-- a missing texture or invalid preview-world material can access-violate before
+-- Lua pcall regains control. Prove every resource first; absence degrades to an
+-- unpainted preview and a bounded engine diagnostic, never an unsafe call.
+_om._old_musket_texture_resources_ready = function(can_get)
+	if type(can_get) ~= "function" then return false, "Application.can_get unavailable" end
+	for _, binding in ipairs(_OLD_MUSKET_TEXTURE_BINDINGS) do
+		local ok, available = pcall(can_get, "texture", binding[2])
+		if not ok or available ~= true then return false, binding[2] end
+	end
+	return true
+end
+
+_om._prepare_old_musket_preview_material = function(unit)
+	if type(Unit.set_all_materials) ~= "function" then
+		return false, "Unit.set_all_materials unavailable"
+	end
+	local can_get = Application and Application.can_get
+	if type(can_get) ~= "function" then return false, "Application.can_get unavailable" end
+	local ok_get, available = pcall(can_get, "material", _OLD_MUSKET_PREVIEW_MATERIAL_3P)
+	if not ok_get or available ~= true then return false, _OLD_MUSKET_PREVIEW_MATERIAL_3P end
+	local ok_set = pcall(Unit.set_all_materials, unit, _OLD_MUSKET_PREVIEW_MATERIAL_3P)
+	if not ok_set then return false, "Unit.set_all_materials rejected preview unit" end
+	return true
+end
+
+_om._apply_old_musket_textures = function(unit, preview_world)
 	if not unit or not Unit.alive(unit)
 			or type(Unit.set_texture_for_materials) ~= "function" then return false, 0 end
-	-- #617: use the same per-unit texture primitive as vanilla
-	-- GearUtils.apply_material_settings (gear_utils.lua:150). The former
-	-- Material.set_texture loop mutated the shared compiled material and made
-	-- preview order capable of leaking this paint to another rifle. Every render
-	-- consumer now calls this one unit-local helper instead.
-	local ok1 = pcall(Unit.set_texture_for_materials, unit,
-		"texture_map_c0ba2942", "textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo")
-	local ok2 = pcall(Unit.set_texture_for_materials, unit,
-		"texture_map_59cd86b9", "textures/cwv_es_musket_custom/cwv_es_musket_custom_normal")
-	local ok3 = pcall(Unit.set_texture_for_materials, unit,
-		"texture_map_0205ba86", "textures/cwv_es_musket_custom/cwv_es_musket_custom_metallic")
-	return ok1 and ok2 and ok3, 3
+	local resources_ready, missing = _om._old_musket_texture_resources_ready(
+		Application and Application.can_get)
+	if not resources_ready then
+		_old_musket_paint_diag_once("texture-resource-missing", missing)
+		return false, 0
+	end
+	if preview_world then
+		local material_ready, reason = _om._prepare_old_musket_preview_material(unit)
+		if not material_ready then
+			_old_musket_paint_diag_once("preview-material-unbound", reason)
+			return false, 0
+		end
+	end
+	-- Vanilla's per-unit primitive (gear_utils.lua:150) avoids mutating the
+	-- shared compiled handgun material. The preconditions above are mandatory;
+	-- wrapping only this C call in pcall cannot catch its 0x8 access violation.
+	for _, binding in ipairs(_OLD_MUSKET_TEXTURE_BINDINGS) do
+		Unit.set_texture_for_materials(unit, binding[1], binding[2])
+	end
+	return true, #_OLD_MUSKET_TEXTURE_BINDINGS
 end
 
 -- #617: LootItemUnitPreviewer powers both the ordinary illusion browser and
@@ -12804,9 +12854,9 @@ local function _cwv_spawn_item_post(self, item_name)
 	-- character-preview UI. v0.1.318: pass the stance mode so 3P-MELEE
 	-- transforms apply when the player has the musket in melee stance.
 	-- Mode is read from item_data.mod_data.cwv_musket_stance.
-	-- v0.1.326: diagnostic logging to figure out why texture stays white
-	-- in the inventory preview. Logs whether the hook reached this point,
-	-- the unit's mesh/material counts, and each Material.set_texture result.
+	-- v0.1.326 originally added inline material diagnostics here. #617 now
+	-- routes this preview through the same resource-gated per-unit painter as
+	-- every other surface; direct shared Material writes are forbidden.
 	if def.item_key == "cwv_es_musket_old" and slot.right and _is_unit(slot.right) then
 		local _stance = "ranged"
 		local item_data = info and info.item_data
@@ -12819,36 +12869,12 @@ local function _cwv_spawn_item_post(self, item_name)
 			_stance = _om._old_musket_modes_by_backend[info.backend_id] or "ranged"
 		end
 		_dbg("[cwv preview] firing for cwv_es_musket_old: unit=%s stance=%s", tostring(slot.right), _stance)
-		-- Inline diagnostic texture binding (so we can SEE per-call results)
+		-- Preview worlds can spawn the custom mesh before its inherited material
+		-- is instantiated. Bind the known vanilla 3P parent, then use the single
+		-- resource-gated painter (#617 crash regression).
 		local unit = slot.right
-		local meshes_seen, mats_seen, tex_set_oks = 0, 0, 0
-		local ok_nm, num_meshes = pcall(Unit.num_meshes, unit)
-		if ok_nm and num_meshes then
-			for i = 0, num_meshes - 1 do
-				local mok, mesh = pcall(Unit.mesh, unit, i)
-				if mok and mesh then
-					meshes_seen = meshes_seen + 1
-					local nok, num_mats = pcall(Mesh.num_materials, mesh)
-					if nok and num_mats then
-						for j = 0, num_mats - 1 do
-							local matok, mat = pcall(Mesh.material, mesh, j)
-							if matok and mat then
-								mats_seen = mats_seen + 1
-								local rok1 = pcall(Material.set_texture, mat, "texture_map_c0ba2942", "textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo")
-								local rok2 = pcall(Material.set_texture, mat, "texture_map_59cd86b9", "textures/cwv_es_musket_custom/cwv_es_musket_custom_normal")
-								local rok3 = pcall(Material.set_texture, mat, "texture_map_0205ba86", "textures/cwv_es_musket_custom/cwv_es_musket_custom_metallic")
-								if rok1 and rok2 and rok3 then tex_set_oks = tex_set_oks + 1 end
-							end
-						end
-					end
-				end
-			end
-		else
-			-- v0.1.341-dev: promoted to `_dbg_alert` — "failed" is an alert
-			-- (texture application path skipped; preview texture won't apply).
-			_dbg_alert("[cwv preview] Unit.num_meshes failed: ok=%s num_meshes=%s", tostring(ok_nm), tostring(num_meshes))
-		end
-		_dbg("[cwv preview] textures applied: meshes=%d mats=%d ok_triples=%d", meshes_seen, mats_seen, tex_set_oks)
+		local painted, texture_count = _om._apply_old_musket_textures(unit, true)
+		_dbg("[cwv preview] texture paint safe=%s bindings=%d", tostring(painted), texture_count or 0)
 		if _om._track_old_musket_unit then
 			_om._track_old_musket_unit(slot.right, "3p", _stance)
 		end
@@ -13098,7 +13124,7 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	local applied = 0
 	for _, unit in ipairs(musket_targets) do
 		if _is_unit(unit) then
-			local ok = _om._apply_old_musket_textures(unit)
+			local ok = _om._apply_old_musket_textures(unit, true)
 			if ok then applied = applied + 1 end
 		end
 	end
@@ -15600,6 +15626,29 @@ end)
 _rt_register("issue617_old_musket_preview_texture_consumer", function()
 	if type(_om._apply_old_musket_textures) ~= "function" then
 		return "Old Musket per-unit texture helper missing"
+	end
+	local resources_ready = _om._old_musket_texture_resources_ready
+	if type(resources_ready) ~= "function" then
+		return "Old Musket C-call resource preflight missing"
+	end
+	local seen = {}
+	local ready, detail = resources_ready(function(kind, path)
+		seen[path] = kind
+		return true
+	end)
+	local seen_count = 0
+	for _, kind in pairs(seen) do
+		if kind ~= "texture" then return "resource preflight queried a non-texture" end
+		seen_count = seen_count + 1
+	end
+	if not ready or detail ~= nil or seen_count ~= 3 then
+		return "resource preflight must prove all three authored textures"
+	end
+	local denied, missing = resources_ready(function(_, path)
+		return not path:find("_albedo", 1, true)
+	end)
+	if denied or not missing or not missing:find("_albedo", 1, true) then
+		return "resource preflight must fail closed on one missing texture"
 	end
 	local plan = _om._old_musket_preview_texture_targets
 	if type(plan) ~= "function" then

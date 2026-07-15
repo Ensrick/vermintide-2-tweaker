@@ -1,10 +1,12 @@
 local mod = get_mod("cim_dev")
 
 -- =========================================================================
--- Custom UI textures shipped with cim. Currently just `icon_bg_modded` —
--- the rarity-background tile drawn behind every modded-rarity item in the
--- inventory grid (registered as UISettings.item_rarity_textures.modded by
--- modded_rarities.lua).
+-- Custom UI textures shipped with cim. `icon_bg_modded` is the rarity-
+-- background tile drawn behind every modded-rarity inventory item;
+-- `store_tag_icon_weapon_modded` is the crossed-swords glyph used by the
+-- fifth standard Salvage rarity button (#618). These are deliberately
+-- separate assets because vanilla's salvage buttons do not use item-card
+-- rarity backgrounds.
 --
 -- Renderer creators we inject into: every UI surface that renders inventory
 -- icons, so the material is loaded into that renderer's atlas before the
@@ -13,6 +15,7 @@ local mod = get_mod("cim_dev")
 -- =========================================================================
 local _texture_names = {
     "icon_bg_modded",
+    "store_tag_icon_weapon_modded",
 }
 
 local _renderer_creators = {

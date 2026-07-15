@@ -446,7 +446,7 @@ Last updated: 2026-07-14.
 | Category | UI / CRAFTING |
 | Repro | Open standard Salvage with at least ten Modded-rarity items and press the pale-gold fifth rarity button. |
 | Expected post-fix | Exactly nine matching items fill the queue; Clear remains available as the sixth button. |
-| Detection | Engine-free `test_cim_salvage_autofill.lua`; runtime `/cim_regression_test` check `issue618_modded_salvage_autofill`; `[cim:618]` apply/press traces. |
+| Detection | Engine-free `test_cim_salvage_autofill.lua` checks layout, bounded vanilla dispatch, dedicated crossed-swords texture ID, and full resource packaging; runtime `/cim_regression_test` check `issue618_modded_salvage_autofill`; `[cim:618]` apply/press traces. |
 
 ## Slugs
 

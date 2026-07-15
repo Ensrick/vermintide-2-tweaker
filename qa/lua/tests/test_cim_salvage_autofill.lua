@@ -32,6 +32,8 @@ return function(H, repo_root)
         H.equal(desktop.scenegraph_definition.auto_fill_clear.position[2], -350)
         H.equal(desktop.widgets.auto_fill_exotic.content.texture_icon.texture_id,
             "store_tag_icon_weapon_exotic")
+        H.equal(desktop.widgets.auto_fill_modded.content.texture_icon.texture_id,
+            "store_tag_icon_weapon_modded")
     end)
 
     H.test("CIM salvage adds horizontal fifth rarity button before Clear", function()
@@ -60,5 +62,32 @@ return function(H, repo_root)
         H.truthy(source:find('self:_fill_by_rarity("modded")', 1, true))
         H.truthy(source:find('set_auto_fill_rarity("modded")', 1, true))
         H.truthy(source:find("CraftingSettings.NUM_SALVAGE_SLOTS ~= 9", 1, true))
+    end)
+
+    H.test("CIM salvage crossed-swords asset is fully packaged", function()
+        local mod_root = repo_root .. "/crafting_in_modded_dev/"
+        local paths = {
+            "gui/1080p/single_textures/cim/store_tag_icon_weapon_modded.png",
+            "gui/1080p/single_textures/cim/store_tag_icon_weapon_modded.texture",
+            "materials/ui/store_tag_icon_weapon_modded.material",
+        }
+        for _, path in ipairs(paths) do
+            local file = io.open(mod_root .. path, "rb")
+            H.truthy(file, "missing salvage icon resource: " .. path)
+            if file then file:close() end
+        end
+
+        local function read(path)
+            local file = assert(io.open(mod_root .. path, "rb"))
+            local source = file:read("*a")
+            file:close()
+            return source
+        end
+        H.truthy(read("resource_packages/crafting_in_modded_dev/crafting_in_modded_dev.package"):find(
+            '"materials/ui/store_tag_icon_weapon_modded"', 1, true))
+        H.truthy(read("resource_packages/crafting_in_modded_dev/crafting_in_modded_dev.package"):find(
+            '"gui/1080p/single_textures/cim/store_tag_icon_weapon_modded"', 1, true))
+        H.truthy(read("scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev_data.lua"):find(
+            '"store_tag_icon_weapon_modded"', 1, true))
     end)
 end

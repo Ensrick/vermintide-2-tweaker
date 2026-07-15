@@ -12,8 +12,10 @@ lua = [
 
 material = [
 	"materials/ui/icon_bg_modded"
+	"materials/ui/store_tag_icon_weapon_modded"
 ]
 
 texture = [
 	"gui/1080p/single_textures/cim/icon_bg_modded"
+	"gui/1080p/single_textures/cim/store_tag_icon_weapon_modded"
 ]

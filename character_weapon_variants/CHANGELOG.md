@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.421-dev - 2026-07-15 - #617 Athanor preview crash [verify-fix]
+
+- Symptom: clicking CIM's Athanor item-selector icon crashed the game while its default selection auto-previewed `cwv_es_musket_old`. The crash was an engine access violation followed by `Script Error: textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo`; the Lua stack ended in `_apply_old_musket_textures` through `LootItemUnitPreviewer.spawn_units`.
+- Root cause: v0.1.418 called Stingray's C-level `Unit.set_texture_for_materials` in the preview world without first proving the three texture resources or binding a real material to the custom mesh. The log's `MeshObject Failed looking up material` warning immediately preceded the call. Lua `pcall` cannot catch this C access-violation class.
+- Fix: the shared Old Musket painter now fails closed unless `Application.can_get` proves all three authored textures. Preview-world consumers first bind the known resident vanilla handgun 3P material with `Unit.set_all_materials`; a missing texture, material, or API produces one bounded `[cwv:617] Old Musket paint SKIP` engine diagnostic and no unsafe C call. Removed the remaining inventory-preview `Material.set_texture` loop so every surface uses the same guarded helper.
+- Regression: offline `Old Musket texture C-call fails closed` and runtime `issue617_old_musket_preview_texture_consumer` cover three-resource success, a single missing-texture denial, preview parent-material binding, shared-helper routing, and the absence of direct shared-material writes.
+- Verification: confirm `[cwv:LOAD] v0.1.421-dev`; open CIM's Athanor and click the item-selector icon. It must remain open and Old Musket must preview without a crash. Switch to another rifle and back; each retains its own textures. The log should show `[cwv:617] Old Musket preview textures applied` with `targets=1 applied=1`, and must not show `Old Musket paint SKIP`.
+
+**DoD:** Re-walked G-CUSTOM-ILLUSION preview rendering, U-8 build hygiene, and the custom-resource C-call safety boundary. In-game visual confirmation remains pending on #617.
+
 ## 0.1.420-dev - 2026-07-14 - #482 #604 persisted identity and Crowbill tune [verify-fix-coop]
 
 - Symptom: a previously crafted Imperial Longsword/Black Guard Blade could retain its CWV inventory identity and mesh but lose the family's canonical scale and grip after later builds. Recrafting must never be required to receive current authored transforms.

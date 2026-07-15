@@ -61,7 +61,7 @@ function M.install(definitions)
 
     local modded_widget = deep_copy(exotic_widget)
     modded_widget.scenegraph_id = "auto_fill_modded"
-    modded_widget.content.texture_icon.texture_id = "icon_bg_modded"
+    modded_widget.content.texture_icon.texture_id = "store_tag_icon_weapon_modded"
     widgets.auto_fill_modded = modded_widget
 
     return true
@@ -76,7 +76,7 @@ function M.is_installed(definitions)
         and widget.scenegraph_id == "auto_fill_modded"
         and type(widget.content) == "table"
         and type(widget.content.texture_icon) == "table"
-        and widget.content.texture_icon.texture_id == "icon_bg_modded"
+        and widget.content.texture_icon.texture_id == "store_tag_icon_weapon_modded"
         and type(node) == "table"
 end
 

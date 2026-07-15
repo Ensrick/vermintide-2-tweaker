@@ -1,5 +1,15 @@
 # Crafting in Modded Changelog
 
+## 0.8.78-dev (2026-07-14): #618 crossed-swords salvage icon [verify-fix]
+
+- Corrected the fifth Modded-rarity salvage control to use a dedicated pale-gold crossed-swords glyph matching vanilla's Plentiful, Common, Rare, and Exotic buttons. The first candidate incorrectly reused `icon_bg_modded`, which is the item-card rarity background shown as a bright square.
+- Extracted the authoritative 56x56 silhouette from vanilla's `gui_store_menu_atlas` (`materials/ui/ui_1080p_store_menu`, diffuse resource `7A5A590C28ED1213`) and recolored it with CIM's registered Modded rarity color while preserving alpha and luminance.
+- Added the texture, material, package entries, renderer injection, engine-free asset-closure assertions, and retained runtime regression `issue618_modded_salvage_autofill`.
+
+### Test method
+
+Open the standard Salvage page and confirm the fifth rarity control shows pale-gold crossed swords matching the four vanilla buttons, not a square rarity background. With at least ten Modded-rarity items, click it and confirm exactly nine Modded items fill the queue while Clear remains sixth. Run `/cim_regression_test` and require `issue618_modded_salvage_autofill` PASS.
+
 ## 0.8.77-dev (2026-07-14): #618 modded salvage autofill [verify-fix]
 
 - Added a fifth rarity autofill button to both standard salvage layouts. It uses CIM's existing `icon_bg_modded` resource, selects only `modded` items, and moves Clear to the sixth position.

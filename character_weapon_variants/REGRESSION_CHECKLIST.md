@@ -4,7 +4,18 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-14.
+Last updated: 2026-07-15.
+
+## #617 Old Musket Athanor paint safety
+
+| Field | Check |
+|---|---|
+| Fix version(s) | CWV v0.1.421-dev |
+| Repro | Open CIM's Athanor and click its item-selector icon while Old Musket is the first/default item. Switch to another rifle and back. |
+| Expected post-fix | The selector stays open, Old Musket has its authored textures, the comparison rifle keeps its own textures, and no texture/material access violation occurs. |
+| Detection | `/cwv_regression_test` passes `issue617_old_musket_preview_texture_consumer`; offline `Old Musket texture C-call fails closed` passes; the live log records `targets=1 applied=1` and no `Old Musket paint SKIP`. |
+
+---
 
 ## #604 Imperial Crowbill Model 05 transform isolation
 
