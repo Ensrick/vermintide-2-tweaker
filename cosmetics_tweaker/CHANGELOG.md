@@ -1,5 +1,17 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.113-dev - 2026-07-15 - #612 Encarmine preview-package crash quarantine [verify-fix]
+
+### Fixed
+
+- The v0.9.112 dependency probe produced a false positive: VMB's same-hash sidecar bundle contains the custom unit/material/texture payload, but no loadable `BD55DCA31255AAEC.package` resource. `Application.can_get("package", path)` still returned true, promoted the item back to the custom unit, and Foot Knight career/inventory preview fatally called `PackageManager:load` on that path.
+- Removed that probe as an activation authority. The persisted `cos_encarmine_hat` identity now always resolves to the vanilla Laurel Helm package-safe fallback before every hero preview, career switch, attachment, and reconstruction path. The authored unit and textures remain quarantined for a later spawn-only renderer that preloads the vanilla package and substitutes only an already-resident custom unit.
+- Reworked offline and runtime regression coverage so even an all-true `Application.can_get` fixture cannot promote the unsafe path. `issue612_encarmine_hat_contract` now fails if package promotion is re-enabled.
+
+### Solo verification
+
+Confirm `[cosmetics:LOAD] v0.9.113-dev`, start with **Encarmine Helmet** persisted, and switch to Foot Knight/open his inventory preview. The game must not request `units/cosmetics_tweaker/encarmine_hat/encarmine_hat` through PackageManager or crash. This guard build intentionally renders the vanilla Laurel Helm while the custom spawn-only path remains quarantined.
+
 ## 0.9.112-dev - 2026-07-15 - #612 Encarmine compiled package/material repair [verify-fix-coop]
 
 ### Fixed

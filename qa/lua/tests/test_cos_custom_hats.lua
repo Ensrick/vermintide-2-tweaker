@@ -104,7 +104,7 @@ return function(H, repo_root)
         end)
     end)
 
-    H.test("Encarmine activates custom unit only after complete resource proof", function()
+    H.test("Encarmine package probe cannot promote an unsafe preview unit", function()
         isolated(function(hats, bridge)
             local allowed = { package = {}, unit = {}, material = {}, texture = {} }
             allowed.package[hats.CANDIDATE_CUSTOM_UNIT] = true
@@ -117,10 +117,11 @@ return function(H, repo_root)
                 end,
             }
             H.truthy(hats.register_all(bridge))
-            H.truthy(hats.runtime_custom_ready)
-            H.equal(hats.CUSTOM_UNIT, hats.CANDIDATE_CUSTOM_UNIT)
-            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.CANDIDATE_CUSTOM_UNIT)
-            H.equal(bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT][1], hats.ITEM_KEY)
+            H.equal(hats.RUNTIME_PREVIEW_PACKAGE_SAFE, false)
+            H.equal(hats.runtime_custom_ready, false)
+            H.equal(hats.CUSTOM_UNIT, hats.BASE_UNIT)
+            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
+            H.equal(bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], nil)
 
             -- Losing any one compiled dependency must restore the safe unit.
             allowed.material[hats.CUSTOM_MATERIALS[1]] = nil
@@ -130,16 +131,16 @@ return function(H, repo_root)
         end)
     end)
 
-    H.test("Encarmine late package proof installs one renderer bridge alias", function()
+    H.test("Encarmine late package proof remains quarantined", function()
         isolated(function(hats, bridge)
             H.truthy(hats.register_all(bridge))
             H.equal(bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], nil)
             _G.Application = { can_get = function() return true end }
-            H.truthy(hats.refresh_runtime_resources(_G.Application))
-            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.CANDIDATE_CUSTOM_UNIT)
-            H.equal(#bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], 1)
-            H.truthy(hats.refresh_runtime_resources(_G.Application))
-            H.equal(#bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], 1)
+            H.equal(hats.refresh_runtime_resources(_G.Application), false)
+            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
+            H.equal(bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], nil)
+            H.equal(hats.refresh_runtime_resources(_G.Application), false)
+            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
         end)
     end)
 

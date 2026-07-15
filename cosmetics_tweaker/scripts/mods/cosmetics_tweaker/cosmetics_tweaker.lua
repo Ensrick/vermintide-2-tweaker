@@ -74,7 +74,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.112-dev"
+local MOD_VERSION = "0.9.113-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -10297,6 +10297,9 @@ _rt_register("issue612_encarmine_hat_contract", function()
     end
     if LA_BRIDGE.backend_to_vanilla[CUSTOM_HATS.ITEM_KEY] ~= CUSTOM_HATS.BASE_KEY then
         return "Encarmine vanilla wire fallback missing"
+    end
+    if CUSTOM_HATS.RUNTIME_PREVIEW_PACKAGE_SAFE ~= false then
+        return "Encarmine unsafe preview package promotion re-enabled"
     end
     if CUSTOM_HATS.runtime_custom_ready then
         if item.unit ~= CUSTOM_HATS.CANDIDATE_CUSTOM_UNIT

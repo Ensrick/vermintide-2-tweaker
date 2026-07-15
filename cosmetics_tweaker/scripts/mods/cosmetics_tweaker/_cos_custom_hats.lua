@@ -16,6 +16,14 @@ M.BASE_UNIT = "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_07"
 -- any missing resource retains the inventory-package-listed vanilla fallback.
 M.CANDIDATE_CUSTOM_UNIT = "units/cosmetics_tweaker/encarmine_hat/encarmine_hat"
 M.CUSTOM_UNIT = M.BASE_UNIT
+-- VMB emits the contents of a sidecar .package as a same-hash mod_bundle,
+-- but it does not emit a loadable `<path>.package` resource inside that
+-- bundle. `Application.can_get("package", path)` nevertheless reports true,
+-- so it is not a sufficient guard for HeroPreviewer's later
+-- PackageManager:load(path). That engine call fatals below Lua. Keep the
+-- candidate quarantined until the preview path is decoupled from the spawned
+-- unit (base package preload + custom resident-unit spawn).
+M.RUNTIME_PREVIEW_PACKAGE_SAFE = false
 M.CUSTOM_MATERIALS = {
     "units/cosmetics_tweaker/encarmine_hat/encarmine_armored",
     "units/cosmetics_tweaker/encarmine_hat/encarmine_cloth",
@@ -77,7 +85,8 @@ function M.runtime_resources_ready(application)
 end
 
 function M.refresh_runtime_resources(application)
-    local ready = M.runtime_resources_ready(application)
+    local dependency_ready = M.runtime_resources_ready(application)
+    local ready = M.RUNTIME_PREVIEW_PACKAGE_SAFE and dependency_ready
     M.runtime_custom_ready = ready
     M.CUSTOM_UNIT = ready and M.CANDIDATE_CUSTOM_UNIT or M.BASE_UNIT
     ensure_custom_clone_bridge()
@@ -87,7 +96,9 @@ function M.refresh_runtime_resources(application)
 end
 
 function M.tick(dt)
-    if M.runtime_custom_ready or M._probe_attempts >= M._probe_limit then return end
+    if not M.RUNTIME_PREVIEW_PACKAGE_SAFE
+        or M.runtime_custom_ready
+        or M._probe_attempts >= M._probe_limit then return end
     M._probe_elapsed = M._probe_elapsed + (tonumber(dt) or 0)
     if M._probe_attempts > 0 and M._probe_elapsed < 0.25 then return end
     M._probe_elapsed = 0
