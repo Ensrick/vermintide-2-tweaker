@@ -110,8 +110,8 @@ redistributed in this repository. Derived resources are shipped beneath:
 
 | Asset | Title | Author | Author profile | Source | License |
 |---|---|---|---|---|---|
-| `dawi_01` | Medieval War Hammer | Parelaxel | https://sketchfab.com/parelaxel | https://sketchfab.com/3d-models/medieval-war-hammer-665734b41cce4a49abeb757c3bda7705 | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
-| `imperial_01` | War Hammer | soidev | https://sketchfab.com/soidev | https://sketchfab.com/3d-models/war-hammer-97ffc67970b54bebb35aa08f4723753e | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `imperial_01` | Medieval War Hammer | Parelaxel | https://sketchfab.com/parelaxel | https://sketchfab.com/3d-models/medieval-war-hammer-665734b41cce4a49abeb757c3bda7705 | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `dawi_01` | War Hammer | soidev | https://sketchfab.com/soidev | https://sketchfab.com/3d-models/war-hammer-97ffc67970b54bebb35aa08f4723753e | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | `imperial_02` | war_hammer | Loqual | https://sketchfab.com/pionck8824 | https://sketchfab.com/3d-models/war-hammer-cf9ad0c7fa8e4cecb323ecfadc787bea | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | `imperial_03` | Medieval Steel Warhammer | Peter Nox | https://sketchfab.com/Peter.Nox | https://sketchfab.com/3d-models/medieval-steel-warhammer-85caa1dc806c46fb9d256572fcd5854a | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | `imperial_04` | Warhammer - [ Diablo II ] | Ole Gunnar Isager | https://sketchfab.com/FrenchBaguette | https://sketchfab.com/3d-models/warhammer-diablo-ii-6d9963339387410c9127811b72307e8f | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
@@ -124,7 +124,7 @@ redistributed in this repository. Derived resources are shipped beneath:
   dimension was normalized to two Blender units; the inferred handle butt was
   placed at the origin with the haft along positive X.
 - Material slots were collapsed to the short Stingray-safe name
-  `crowbill_mat`. The Imperial model's separate head and handle UV/material
+  `crowbill_mat`. The Dawi model's separate head and handle UV/material
   spaces were remapped into a horizontal atlas before that collapse.
 - Matching 1P and `_3p` FBX/unit siblings were emitted with
   perspective-appropriate shadow settings.

@@ -40,9 +40,13 @@ return function(H, repo_root)
         H.equal(family.PLACEHOLDER_UNIT:find("units/cwv_", 1, true), nil)
         H.equal(#family.MODELS, 6)
         H.equal(#family.usable_models(), 6)
-        H.equal(family.model_for_variant("cwv_es_imperial_crowbill").right_hand_unit,
+        local imperial_default = family.model_for_variant("cwv_es_imperial_crowbill")
+        local dawi_default = family.model_for_variant("cwv_dr_dawi_crowbill")
+        H.equal(imperial_default.source_asset_id, "parelaxel_medieval_war_hammer")
+        H.equal(imperial_default.right_hand_unit,
             "units/cwv_crowbill/imperial_01/imperial_01")
-        H.equal(family.model_for_variant("cwv_dr_dawi_crowbill").right_hand_unit,
+        H.equal(dawi_default.source_asset_id, "soidev_war_hammer")
+        H.equal(dawi_default.right_hand_unit,
             "units/cwv_crowbill/dawi_01/dawi_01")
         local master = read(repo_root
             .. "/character_weapon_variants/resource_packages/character_weapon_variants/character_weapon_variants.package")

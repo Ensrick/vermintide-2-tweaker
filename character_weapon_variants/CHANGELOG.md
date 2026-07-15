@@ -1,5 +1,14 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.416-dev - 2026-07-14 - #604 Crowbill default model correction [verify-fix-coop]
+
+- Corrected the provisional model assignment after in-game review: Kruber and Saltzpyre's Imperial Crowbill Model 01 now uses Parelaxel's Medieval War Hammer, while Bardin's Dawi Crowbill Model 01 uses soidev's heavier War Hammer. The previous build assigned these two downloaded models to the opposite weapon families.
+- Corrected the reproducible conversion manifest and attribution tables so future asset regeneration preserves that assignment instead of silently restoring the regression.
+- Added engine-free regression coverage tying each default variant to its reviewed source-asset identity as well as its semantic unit path.
+- Verification: confirm `[cwv:LOAD] v0.1.416-dev`; inspect Imperial Crowbill Model 01 on Kruber and Dawi Crowbill Model 01 on Bardin in CIM, the inventory character preview, and a mission. Kruber must show the former Dawi-labeled model, Bardin must show the former Imperial-labeled model, and another player must see the same selected models.
+
+**DoD:** Re-walked U-4 model identity, U-6 documentation, U-8 build hygiene, G-MESH-FAMILY asset provenance, and G-APPEARANCE registration coverage. Owner and remote visual confirmation remains deferred to #604's `verify-fix-coop` in-game verification.
+
 ## 0.1.415-dev - 2026-07-14 - #604 Inventory character-preview package crash [verify-fix-coop]
 
 - Fixed the second Imperial Crowbill preview crash after crafting/equipping it. The keep inventory uses `MenuWorldPreviewer`, whose `_load_packages` method is a copied derived-class method and therefore bypassed CWV's `HeroPreviewer` hook. CWV now applies the same bounded vanilla-package alias policy to both preview classes.

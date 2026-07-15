@@ -12,7 +12,9 @@ if (-not (Test-Path -LiteralPath $Magick -PathType Leaf)) { throw "ImageMagick n
 
 $assets = @(
     @{
-        Id = 'dawi_01'
+        # Player review established that this slimmer Parelaxel model is the
+        # intended first Imperial/Kruber presentation, not the Dawi default.
+        Id = 'imperial_01'
         Archive = 'dawi_medieval_war_hammer\archive\medieval-war-hammer.zip'
         ArchiveSha256 = 'A90B5FB669AAB55C3FC0C46A21815FC6A4FC573706EFF1B49B144F6B32C107CA'
         Mesh = 'dawi_medieval_war_hammer\source\WarHammerSF.fbx'
@@ -23,7 +25,9 @@ $assets = @(
         Atlas = $false
     },
     @{
-        Id = 'imperial_01'
+        # Player review established that the heavier soidev model is the
+        # intended Dawi/Bardin presentation.
+        Id = 'dawi_01'
         Archive = 'imperial_war_hammer\archive\war-hammer.zip'
         ArchiveSha256 = 'A02A997C3E04822C1830597AC3C2457EA5D97AFDBD445F6C30BFDD5EDF565B87'
         Mesh = 'imperial_war_hammer\source\Hammer.fbx'
