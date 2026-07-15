@@ -205,11 +205,10 @@ foreach ($entry in $inventory.Mods) {
 
             if ($resourcePath -eq 'units/cosmetics_tweaker/encarmine_hat/encarmine_hat') {
                 $expectedAssets = [ordered]@{
-                    'encarmine_armored_diffuse.png'  = 'AD7400CD51D729DB526763946B8F468BC057E62A743B4A38B7D7472C010E62EE'
-                    # RGB remains the reviewed charcoal recolor; alpha now
-                    # matches Laurel byte-for-byte instead of the failed
-                    # binary cutout workaround (#612 response revision 5).
-                    'encarmine_cloth_diffuse.png'    = 'DE3C8B8B19211CDA4FF7199E0055CE702BB09A61EFBB23B7CB47A37BDBA316B3'
+                    # Exact user-authored `_encarmine` inputs. The cloth PNG
+                    # already carries Laurel's fractional alpha byte-for-byte.
+                    'encarmine_armored_diffuse.png'  = '1E3A23798DF61BDC940C9E1D3CD42607078118A487420E02345D4C59B30912E7'
+                    'encarmine_cloth_diffuse.png'    = 'B5925708AB95BEFF7B800FCAD717F308BCFB173E8069343D3AADE83FC282954D'
                     'encarmine_armored_normal.png'   = '8FEB4D44EEB5C0551E752741F650264D4AA1224528910FCDF598186E89EF423D'
                     'encarmine_armored_combined.png' = '0714FCF0C7FD21CB35E8B857427E92C103AFE8ABB830308A2346F9E593C297B7'
                     'encarmine_armored_metallic.png' = '9928C49EBB8B594A79DAEC75DE96AA78CE147DB2C87F167CA15C48B76902E294'

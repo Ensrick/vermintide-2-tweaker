@@ -19,8 +19,11 @@ M.CUSTOM_UNIT = M.BASE_UNIT
 M.RENDER_MODE = "vanilla_laurel_material_instance_override"
 M.LAUREL_SCENE_CONTRACT = {
     mesh_count = 8,
-    armor_mesh_indices = { 1, 2, 3 },
-    plume_mesh_indices = { 4, 5, 6 },
+    -- Unit.mesh follows the compiled geometry order. The Laurel resource is
+    -- shadow, feather x3, armor x3, shadow; swapping these two ranges paints
+    -- armor pixels onto the plume and plume pixels onto the helmet.
+    plume_mesh_indices = { 1, 2, 3 },
+    armor_mesh_indices = { 4, 5, 6 },
     shadow_mesh_indices = { 0, 7 },
     lod_steps = 3,
     rig_bones = 13,

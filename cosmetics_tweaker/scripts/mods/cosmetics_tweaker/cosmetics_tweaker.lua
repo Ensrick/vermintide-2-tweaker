@@ -75,7 +75,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.120-dev"
+local MOD_VERSION = "0.9.121-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -160,16 +160,19 @@ end
 -- onto the un-swapped bret mesh" case (mesh-vs-texture mismatch). Pure
 -- diagnostics — never mutates anything, never paints.
 local function _trace_paint(site, context, bid, unit, armoury_key, outcome)
-    local la = get_mod("Loremasters-Armoury")
-    local variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
+    local variant = GK_SET and GK_SET.resolve_variant(armoury_key)
+    if not variant then
+        local la = get_mod("Loremasters-Armoury")
+        variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
+    end
     local kind = variant and variant.kind or "?"
     local expected = "(texture-variant→paints base mesh)"
     local match = "n/a"
-    if variant and variant.kind == "unit" and variant.new_units then
+    if variant and variant.new_units then
         expected = tostring(variant.new_units[1])
     end
     local actual = _unit_mesh_name(unit)
-    if variant and variant.kind == "unit" and variant.new_units then
+    if variant and variant.new_units then
         match = tostring(actual == tostring(variant.new_units[1]))
     end
     mod:info("[cos:trace] PAINT site=%s ctx=%s bid=%s kind=%s key=%s target=%s target_mesh=%s expected=%s match=%s outcome=%s",
@@ -1471,27 +1474,39 @@ local function _override_package_ready(unit_path)
     return true
 end
 
--- v0.9.45-dev (BUG 1/2): variant-aware LA-shield mesh resolution shared by the
+-- Variant-aware authored-shield mesh resolution shared by the
 -- LOCAL offhand-override path (BackendUtils.get_item_units, non-husk body) and
--- the husk path so the two can NEVER disagree on how a `kind="unit"` LA shield's
--- 3P sibling is derived. Before this, the husk path resolved the 3P as
+-- the husk path so the two can NEVER disagree on the canonical shield model.
+-- Before this, the husk path resolved the 3P as
 -- `new_units[2]` (LA's authored 3P mesh) while the local path's
 -- `_override_package_ready` derived it by `..\"_3p\"` suffix. They happen to
 -- match for today's shields (`new_units[2] == new_units[1].."_3p"`), but the
 -- suffix is NOT guaranteed for future LA variants, and routing both paths
--- through one resolver removes the divergence by construction (the teammate's
--- "reuse/extract so the two can't drift again"). Returns (la_1p, la_3p, ready);
--- (nil, nil, false) for a missing/non-unit variant so callers can fall back to
--- the legacy gate for `kind="texture"` picks.
-local function _resolve_la_unit_mesh(armoury_key)
-    if not armoury_key then return nil, nil, false end
+-- through one resolver removes the divergence by construction.
+-- #200/#629: texture-authored variants may declare `new_units` too.  Those
+-- units are their UV/material owners and MUST be spawned before paint; treating
+-- texture variants as paint-only wrapped the final LA choices over whichever
+-- shield happened to be equipped.  Cosmetics-authored components (currently
+-- the Purpure/Azure GK shield) use this exact resolver as well.
+local function _resolve_authored_offhand_variant(armoury_key)
+    if not armoury_key then return nil, nil end
+    local authored = GK_SET and GK_SET.resolve_variant(armoury_key)
+    if authored then return authored, "cosmetics" end
     local la = get_mod("Loremasters-Armoury")
     local variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
-    if not variant or variant.kind ~= "unit" then return nil, nil, false end
+    return variant, variant and "loremaster" or nil
+end
+
+local function _resolve_authored_offhand_mesh(armoury_key)
+    if not armoury_key then return nil, nil, false end
+    local variant, source = _resolve_authored_offhand_variant(armoury_key)
+    if not variant then return nil, nil, false end
     local nu = variant.new_units
     local la_1p = nu and nu[1]
     if not la_1p then return nil, nil, false end
-    local la_3p = (nu and nu[2]) or (la_1p .. "_3p")
+    local la_3p = (nu and nu[2])
+        or (source == "cosmetics" and la_1p)
+        or (la_1p .. "_3p")
     local cg = Application and Application.can_get
     local ready = (cg and cg("unit", la_1p) and cg("unit", la_3p)) and true or false
     return la_1p, la_3p, ready
@@ -1650,6 +1665,20 @@ for item_type in pairs(CWV_FAMILY_CONTRACT.families) do
     local pool = pool_source and _SHIELD_POOLS_BY_ITEM_TYPE[pool_source]
     if pool then
         _offhand_options[item_type] = { left_hand_unit = _shallow_copy(pool) }
+    end
+end
+
+-- #629: the recolored Shield of Honour Renewed is an independently selectable
+-- Kruber offhand component, not a whole-weapon illusion.  Insert a distinct
+-- record into every compatible vanilla/CWV pool so the same component appears
+-- for Bretonnian Sword+Shield, Empire Sword+Shield, Mace+Shield, and compatible
+-- generated families without sharing mutable row state between them.
+if GK_SET and GK_SET.offhand_option then
+    for _, item_type in ipairs(LA_BRIDGE.kruber_shield_item_types or {}) do
+        local hands = _offhand_options[item_type]
+        if hands and hands.left_hand_unit then
+            hands.left_hand_unit[#hands.left_hand_unit + 1] = GK_SET.offhand_option()
+        end
     end
 end
 
@@ -2469,7 +2498,8 @@ mod:hook_safe("HeroWindowItemCustomization", "on_exit", function(self, params)
                 -- the session - _offhand_selection had no on-disk mirror).
                 if entry.backend_id and LA_PERSIST and LA_PERSIST.save_offhand then
                     LA_PERSIST.save_offhand(entry.backend_id, entry.hand_field,
-                        entry.armoury_key, entry.vanilla_key)
+                        entry.armoury_key, entry.vanilla_key, nil,
+                        entry.inventory_icon, entry.cos_authored)
                 end
                 n = n + 1
                 end
@@ -2691,7 +2721,10 @@ mod._la_restore_offhand_selections = function()
     local needs_la, needs_mesh = false, false
     for _, hands in pairs(saved) do
         for _, rec in pairs(hands) do
-            if rec and rec.armoury_key then needs_la = true end
+            if rec and rec.armoury_key
+                    and not (GK_SET and GK_SET.resolve_variant(rec.armoury_key)) then
+                needs_la = true
+            end
             if rec and type(rec.unit_path) == "string" and rec.unit_path ~= "" then
                 needs_mesh = true
             end
@@ -2714,6 +2747,27 @@ mod._la_restore_offhand_selections = function()
             for _, la_opt in ipairs(pool) do
                 if la_opt.armoury_key and not by_key[la_opt.armoury_key] then
                     by_key[la_opt.armoury_key] = la_opt
+                end
+            end
+        end
+    end
+    -- Cosmetics-authored offhands live in the same persisted schema but do not
+    -- require Loremaster's Armoury.  Rebuild them from the canonical component
+    -- pools so a saved GK shield survives restart even when LA is absent.
+    for _, hand_pools in pairs(_offhand_options) do
+        for _, pool in pairs(hand_pools) do
+            for _, opt in ipairs(pool) do
+                if opt.la_armoury_key and opt.cos_authored
+                        and not by_key[opt.la_armoury_key] then
+                    by_key[opt.la_armoury_key] = {
+                        name = opt.name,
+                        armoury_key = opt.la_armoury_key,
+                        vanilla_skin = opt.vanilla_skin,
+                        intended_unit = opt.intended_unit,
+                        authored_family = opt.authored_family,
+                        variant_kind = opt.variant_kind,
+                        inventory_icon = opt.inventory_icon,
+                    }
                 end
             end
         end
@@ -2750,6 +2804,8 @@ mod._la_restore_offhand_selections = function()
                     intended_unit   = la_opt.intended_unit,
                     authored_family = la_opt.authored_family,
                     variant_kind    = la_opt.variant_kind,
+                    inventory_icon  = la_opt.inventory_icon,
+                    cos_authored    = la_opt.inventory_icon ~= nil,
                     rarity          = "promo",
                 }
                 if la_opt.intended_unit then _preload_offhand_package(la_opt.intended_unit) end
@@ -3640,6 +3696,8 @@ HeroWindowItemCustomization._ct_on_offhand_pressed = function(self, hand_field, 
                 hand_field   = hand_field,
                 armoury_key  = opt.la_armoury_key,
                 vanilla_key  = opt.vanilla_skin,
+                inventory_icon = opt.inventory_icon,
+                cos_authored = opt.cos_authored == true,
                 backend_id   = self._item_backend_id,  -- v0.9.71: persistence key
             }
             -- v0.9.43-dev WRITE trace: deferred peer-sync emit queued (drains on
@@ -4009,10 +4067,10 @@ if BackendUtils then
                 -- instance; its rolled rarity skin wins over the LA mesh swap.
                 and not _deus_yield
             then
-                local la = get_mod("Loremasters-Armoury")
-                local variant = la and la.SKIN_LIST and la.SKIN_LIST[entry.armoury_key]
+                local variant, variant_source =
+                    _resolve_authored_offhand_variant(entry.armoury_key)
                 if not variant then
-                    _dbg("[husk-mesh-swap] miss: variant %s not in LA.SKIN_LIST", tostring(entry.armoury_key))
+                    _dbg("[husk-mesh-swap] miss: authored variant %s unavailable", tostring(entry.armoury_key))
                     -- v0.9.0.14-hotfix: dedup'd chat warning. Surface the
                     -- missing-variant problem to the local user so they know
                     -- their LA install is missing what a peer is broadcasting
@@ -4023,7 +4081,8 @@ if BackendUtils then
                         mod:echo("[cosmetics_tweaker] LA variant '%s' missing from your local LA install. Peer's cosmetic won't render. Enable Loremaster's Armoury in launcher + restart, or update LA.",
                             tostring(entry.armoury_key))
                     end
-                elseif variant.kind == "texture" then
+                elseif variant.kind == "texture"
+                    and not (variant.new_units and variant.new_units[1]) then
                     -- #373: Weavebound/Shyish shields use dedicated magic
                     -- material units that do not expose LA's diffuse slot.
                     -- Swap only an exact, same-family magic unit to its vanilla
@@ -4039,19 +4098,17 @@ if BackendUtils then
                             tostring(_current_husk_wield.wearer_peer), tostring(hand_field),
                             tostring(prev), tostring(receiver), tostring(entry.armoury_key))
                     end
-                elseif variant.kind ~= "unit" then
-                    _dbg("[husk-mesh-swap] skip: variant %s is kind=%s", tostring(entry.armoury_key), tostring(variant.kind))
                 elseif not (variant.new_units and variant.new_units[1]) then
                     _dbg("[husk-mesh-swap] miss: variant %s has no new_units[1]", tostring(entry.armoury_key))
                 else
                     -- v0.9.45-dev (BUG 1/2): resolve via the SHARED helper so the
                     -- local override path (below) and this husk path can't drift.
-                    -- _resolve_la_unit_mesh derives the 3P from new_units[2]
+                    -- _resolve_authored_offhand_mesh derives the 3P from new_units[2]
                     -- (fallback `.."_3p"`) and verifies both halves are loadable.
-                    local la_unit, la_unit_3p, mesh_ready = _resolve_la_unit_mesh(entry.armoury_key)
+                    local la_unit, la_unit_3p, mesh_ready = _resolve_authored_offhand_mesh(entry.armoury_key)
                     if not mesh_ready then
-                        _dbg("[husk-mesh-swap] miss: variant %s LA mesh not loadable (1p=%s 3p=%s) — package preload may have failed",
-                            tostring(entry.armoury_key), tostring(la_unit), tostring(la_unit_3p))
+                        _dbg("[husk-mesh-swap] miss: variant %s authored mesh not loadable (1p=%s 3p=%s source=%s) — package preload may have failed",
+                            tostring(entry.armoury_key), tostring(la_unit), tostring(la_unit_3p), tostring(variant_source))
                     else
                         -- v0.9.9.4-dev: write to the hand_field recorded
                         -- in the cached entry (default left for backward
@@ -4269,7 +4326,7 @@ if BackendUtils then
                     -- v0.9.45-dev (BUG 1/2): variant-aware resolution for kind=
                     -- "unit" LA shields. For those picks resolve the override mesh
                     -- + its 3P readiness through the SAME helper the husk path uses
-                    -- (_resolve_la_unit_mesh → new_units[1]/[2]) instead of
+                    -- (_resolve_authored_offhand_mesh → new_units[1]/[2]) instead of
                     -- _override_package_ready's `.."_3p"` suffix derivation, so the
                     -- host's own body and the husk view can't disagree on whether
                     -- the mesh is swappable. Non-LA picks AND kind="texture" LA
@@ -4277,7 +4334,7 @@ if BackendUtils then
                     -- gate (their intended_unit is a vanilla mesh).
                     local resolved_unit, resolved_ready
                     if opt.la_armoury_key then
-                        local la_1p, _la_3p, la_ready = _resolve_la_unit_mesh(opt.la_armoury_key)
+                        local la_1p, _la_3p, la_ready = _resolve_authored_offhand_mesh(opt.la_armoury_key)
                         if la_1p then
                             resolved_unit, resolved_ready = la_1p, la_ready
                         else
@@ -4304,9 +4361,8 @@ if BackendUtils then
                     -- `suffix3p_ok` is still logged so the trace shows whether the
                     -- old `.."_3p"` suffix would have resolved (they agree for
                     -- today's shields, where new_units[2] == new_units[1].."_3p").
-                    local la = get_mod("Loremasters-Armoury")
-                    local variant = opt.la_armoury_key and la and la.SKIN_LIST
-                        and la.SKIN_LIST[opt.la_armoury_key]
+                    local variant = opt.la_armoury_key
+                        and _resolve_authored_offhand_variant(opt.la_armoury_key)
                     local cg = Application and Application.can_get
                     local suffix_3p_ok = (override_unit and cg)
                         and cg("unit", tostring(override_unit) .. "_3p") or false
@@ -4463,8 +4519,7 @@ end
 -- Units whose mesh cannot be read retain the legacy permissive behavior.
 -- Reuses _unit_mesh_name (pcall-safe). Called only on the "ingame" path.
 local function _offhand_paint_mesh_ok(u, armoury_key)
-    local la = get_mod("Loremasters-Armoury")
-    local variant = la and la.SKIN_LIST and la.SKIN_LIST[armoury_key]
+    local variant = _resolve_authored_offhand_variant(armoury_key)
     if not variant then return true end
     local actual = _unit_mesh_name(u)
     if actual == "<no-unit_name>" or actual == "<not-unit>" then return true end
@@ -4478,8 +4533,21 @@ local function _offhand_paint_mesh_ok(u, armoury_key)
         or (variant.new_units[2] ~= nil and actual == tostring(variant.new_units[2]))
 end
 
+-- One paint entry point for every authored offhand component.  Cosmetics owns
+-- its own texture resources; Loremaster's bridge owns LA material semantics.
+-- Callers never need to know which provider authored the selected row.
+local function _apply_authored_offhand_to_unit(world, unit, armoury_key,
+        vanilla_skin, context)
+    local authored = GK_SET and GK_SET.resolve_variant(armoury_key)
+    if authored then
+        return GK_SET.apply_variant_to_unit(authored, unit, context)
+    end
+    return LA_BRIDGE.apply_offhand_to_unit(
+        world, unit, armoury_key, vanilla_skin, context)
+end
+
 local function _apply_la_offhand_to_units(world, item_data, units, has_skin, backend_id_arg, context)
-    if not LA_BRIDGE.registered then _dbg("[LA paint] skip: bridge not registered"); return end
+    if not LA_BRIDGE.registered then _dbg("[LA paint] skip: authored bridge not registered"); return end
     if not world or not item_data then _dbg("[LA paint] skip: world/item_data nil"); return end
     if not has_skin then _dbg("[LA paint] skip: has_skin=false"); return end
     -- v0.8.32: read selection by backend_id. Resolve from arg first, then
@@ -4563,7 +4631,8 @@ local function _apply_la_offhand_to_units(world, item_data, units, has_skin, bac
                                     tostring(context), tostring(sel.la_armoury_key), tostring(u)))
                         end
                     else
-                    local ok = LA_BRIDGE.apply_offhand_to_unit(world, u, sel.la_armoury_key, sel.vanilla_skin, context)
+                    local ok = _apply_authored_offhand_to_unit(
+                        world, u, sel.la_armoury_key, sel.vanilla_skin, context)
                     _dbg("[LA paint]   unit=%s ok=%s", tostring(u), tostring(ok))
                     if PROBE then
                         PROBE.emit("cos:sync",
@@ -5144,26 +5213,9 @@ local function _spawn_item_wrapper(func, self, item_name, spawn_data)
         self._cos_la_spawning = item_name
         _dbg("[LA preview]   -> spawning clone %s", item_name)
     end
-    -- #612: HeroPreviewer builds and loads package_names before _spawn_item.
-    -- Keep the ItemMasterList unit on the package-safe vanilla Laurel, then
-    -- substitute the already-resident custom unit only here, after the vanilla
-    -- package gate has completed and immediately before World.spawn_unit.
-    -- This covers the inventory mannequin, career previews, and TeamPreviewer
-    -- score rows without ever asking PackageManager for the custom unit path.
-    local score_hat = self._cos_score_hat
-    local encarmine = CUSTOM_HATS and (
-        CUSTOM_HATS.is_custom_identity(item_name)
-        or (score_hat and CUSTOM_HATS.is_custom_identity(score_hat.armoury_key)))
-    if encarmine and type(spawn_data) == "table" then
-        local spawn_unit, custom = CUSTOM_HATS.spawn_unit(Application, "hero-preview")
-        if custom then
-            for _, sd in ipairs(spawn_data) do
-                if sd.item_slot_type == "hat" and sd.unit_name == CUSTOM_HATS.BASE_UNIT then
-                    sd.unit_name = spawn_unit
-                end
-            end
-        end
-    end
+    -- #612: Encarmine now spawns the package-safe Laurel donor unchanged.
+    -- `_spawn_item_unit_combined` paints only that instance after spawn, so the
+    -- preview keeps Laurel's complete LOD/rig/controller/fade contract.
     local result = func(self, item_name, spawn_data)
     self._cos_la_spawning = nil
     _spawn_item_post(self, item_name, spawn_data)
@@ -6756,8 +6808,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
     if kind == "hat" then
         if variant.swap_hand ~= "hat" then return false end
         local la_unit_path = variant.new_units and variant.new_units[1]
-        -- #612: this branch calls AttachmentUtils directly after the vanilla
-        -- wire-safe hat already exists, so it is a safe spawn-only surface.
+        -- #612: Encarmine deliberately resolves to the exact Laurel donor.
         if CUSTOM_HATS and CUSTOM_HATS.is_custom_identity(armoury_key) then
             la_unit_path = CUSTOM_HATS.spawn_unit(Application, "appearance-replay")
         end
@@ -6862,6 +6913,12 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
             _dbg_alert("[cos_la_apply hat] create_attachment %s failed: %s",
                 tostring(armoury_key), tostring(err))
         end
+        if CUSTOM_HATS and CUSTOM_HATS.is_custom_identity(armoury_key) then
+            local slot_data = ext._attachments and ext._attachments.slots
+                and ext._attachments.slots[slot_name]
+            local hat_unit = slot_data and slot_data.unit
+            CUSTOM_HATS.apply_surface(hat_unit, "appearance-replay")
+        end
         local authored_variant = GK_SET and GK_SET.resolve_variant(armoury_key)
         if authored_variant then
             local slot_data = ext._attachments and ext._attachments.slots and ext._attachments.slots[slot_name]
@@ -6880,7 +6937,8 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         -- the ref in slot_data.unit) — passing owner_unit paints the player
         -- body's meshes (no-op for hat textures). The just-created hat unit
         -- lives at ext._attachments.slots[slot_name].unit.
-        if not authored_variant and la and type(la.apply_new_skin_from_texture) == "function" then
+        if not (CUSTOM_HATS and CUSTOM_HATS.is_custom_identity(armoury_key))
+            and la and type(la.apply_new_skin_from_texture) == "function" then
             local world = _level_world()
             local slot_data = ext._attachments and ext._attachments.slots and ext._attachments.slots[slot_name]
             local hat_unit = slot_data and slot_data.unit
@@ -6982,7 +7040,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
             -- local re-apply paint. This path paints via the un-gated
             -- "network_husk" context, which ASSUMES the get_item_units mesh-swap
             -- already replaced the vanilla shield with the LA custom mesh. For an
-            -- LA kind="unit" shield whose mesh-swap was SKIPPED (_resolve_la_unit_mesh
+            -- authored shield whose mesh-swap was SKIPPED (_resolve_authored_offhand_mesh
             -- not ready, or a non-bret shield weapon — "Empire Sword and Shield" —
             -- whose offhand swap didn't fire), painting the heraldry onto the
             -- un-swapped VANILLA shield warps the texture onto the wrong model.
@@ -7009,7 +7067,8 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
                 end
             else
                 LA_BRIDGE._bridge_active = true
-                local ok, err = pcall(LA_BRIDGE.apply_offhand_to_unit, world, target, armoury_key, vanilla_key, "network_husk")
+                local ok, err = pcall(_apply_authored_offhand_to_unit,
+                    world, target, armoury_key, vanilla_key, "network_husk")
                 LA_BRIDGE._bridge_active = false
                 if PROBE then
                     PROBE.emit("cos:sync",
@@ -7160,9 +7219,9 @@ local function _ensure_offhand_mesh(owner_unit, hand_field, armoury_key, tag)
     -- texture variants pulse only when the live mesh is one of #373's exact
     -- magic units, targeting its same-family vanilla receiver.
     local la_unit, mesh_ready
-    if variant.kind == "unit" and variant.new_units and variant.new_units[1] then
-        local _la3p
-        la_unit, _la3p, mesh_ready = _resolve_la_unit_mesh(armoury_key)
+    if variant.new_units and variant.new_units[1] then
+        local _
+        la_unit, _, mesh_ready = _resolve_authored_offhand_mesh(armoury_key)
     elseif variant.kind == "texture" and live and Unit.alive(live) then
         la_unit = LA_BRIDGE.resolve_texture_receiver(armoury_key, _unit_mesh_name(live))
         mesh_ready = la_unit and _override_package_ready(la_unit) or false
@@ -8457,9 +8516,8 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
         and CUSTOM_HATS.resolve_variant(cached.armoury_key)
         or (la and la.SKIN_LIST and la.SKIN_LIST[cached.armoury_key])
     local la_unit = variant and variant.new_units and variant.new_units[1]
-    -- #612: the late vanilla husk attachment must converge on the same
-    -- resident Encarmine unit as the earlier Cosmetics replay.  This call site
-    -- spawns directly through AttachmentUtils; it never invokes PackageManager.
+    -- #612: the late husk attachment uses the exact Laurel donor; only its
+    -- spawned material instances are changed below.
     if CUSTOM_HATS and CUSTOM_HATS.is_custom_identity(cached.armoury_key) then
         la_unit = CUSTOM_HATS.spawn_unit(Application, "remote-husk")
     end
@@ -8609,14 +8667,15 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
     local spawned_slot = self._attachments and self._attachments.slots
         and self._attachments.slots[slot_name]
     local spawned_hat = spawned_slot and spawned_slot.unit
-    CUSTOM_HATS.install_native_plume_controller(spawned_hat, "remote-husk")
-    CUSTOM_HATS.register_fade_link(self._unit, spawned_hat, "remote-husk")
+    if CUSTOM_HATS.is_custom_identity(cached.armoury_key) then
+        CUSTOM_HATS.apply_surface(spawned_hat, "remote-husk")
+    end
     if GK_SET and GK_SET.resolve_variant(cached.armoury_key) and spawned_hat then
         GK_SET.apply_variant_to_unit(cached.armoury_key, spawned_hat, "remote_husk")
     end
     -- Paint the LA texture onto the just-spawned hat unit. Mirror the
     -- cos_la_apply hat-branch paint logic at cosmetics_tweaker.lua:~3775.
-    if not (GK_SET and GK_SET.resolve_variant(cached.armoury_key))
+    if not CUSTOM_HATS.is_custom_identity(cached.armoury_key)
         and la and type(la.apply_new_skin_from_texture) == "function" then
         local world = _level_world()
         local slot_data = self._attachments and self._attachments.slots and self._attachments.slots[slot_name]
@@ -8634,11 +8693,9 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
     end
 end)
 
--- #612: owner-side attachments bypass SimpleHuskInventoryExtension's weapon
--- fade registration. Register the custom hat against the actual player root
--- after PlayerUnitAttachmentExtension has stored the spawned slot data. The
--- generic AttachmentUtils hook below installs the animation controller; this
--- owner-aware hook supplies the root FadeSystem requires.
+-- #612: owner-side Encarmine attachments retain the vanilla Laurel unit and
+-- therefore its native controller/fade registration. Paint only the spawned
+-- material instances after AttachmentUtils has stored the slot.
 mod:hook("PlayerUnitAttachmentExtension", "create_attachment", function(func, self, slot_name, item_data)
     local r1, r2, r3, r4 = func(self, slot_name, item_data)
     if slot_name == "slot_hat" and item_data and item_data.name == GK_SET.HAT_ITEM_KEY then
@@ -8651,8 +8708,7 @@ mod:hook("PlayerUnitAttachmentExtension", "create_attachment", function(func, se
         local slot = self._attachments and self._attachments.slots
             and self._attachments.slots[slot_name]
         local hat_unit = slot and slot.unit
-        CUSTOM_HATS.install_native_plume_controller(hat_unit, "local-attachment")
-        CUSTOM_HATS.register_fade_link(self._unit, hat_unit, "local-attachment")
+        CUSTOM_HATS.apply_surface(hat_unit, "local-attachment")
     end
     return r1, r2, r3, r4
 end)
@@ -9596,18 +9652,10 @@ if rawget(_G, "AttachmentUtils") then
     -- unit=nil path calling AttachmentUtils.link(target=nil) -> Unit.node crash.
     if AttachmentUtils.create_attachment then
         mod:hook(AttachmentUtils, "create_attachment", function(func, world, owner_unit, attachments, slot_name, item_data, show)
-            -- #612: local/bot attachment creation is already past every
-            -- inventory-package load. Preserve the original table for vanilla
-            -- and peer sync; only the direct spawn receives the resident custom
-            -- unit. A missing dependency returns the Laurel fallback.
+            -- #612: never substitute a custom unit here. The Encarmine item
+            -- points at the exact native Laurel donor and is painted after the
+            -- attachment exists.
             local spawn_item = item_data
-            if item_data and item_data.name == CUSTOM_HATS.ITEM_KEY then
-                local resolved, custom = CUSTOM_HATS.spawn_unit(Application, "live-attachment")
-                if custom then
-                    spawn_item = table.clone(item_data)
-                    spawn_item.unit = resolved
-                end
-            end
             local path = spawn_item and spawn_item.unit
             if type(path) == "string" and path ~= "" and not _unit_resident(path) then
                 mod:info("[cos-hat] SKIP non-resident headpiece=%s slot=%s owner=%s (viewer package not resident; no hat instead of crash)",
@@ -9616,12 +9664,8 @@ if rawget(_G, "AttachmentUtils") then
                 return { unit = nil, name = item_data and item_data.name, item_data = item_data }
             end
             local slot_data = func(world, owner_unit, attachments, slot_name, spawn_item, show)
-            -- Keep the durable/network-facing identity on the package-safe
-            -- custom item rather than the temporary cloned spawn table.
-            if slot_data and spawn_item ~= item_data then
-                slot_data.name = item_data.name
-                slot_data.item_data = item_data
-                CUSTOM_HATS.install_native_plume_controller(slot_data.unit, "live-attachment")
+            if slot_data and item_data and item_data.name == CUSTOM_HATS.ITEM_KEY then
+                CUSTOM_HATS.apply_surface(slot_data.unit, "live-attachment")
             end
             return slot_data
         end)
@@ -9725,10 +9769,11 @@ local function _spawn_item_unit_combined(func, self, unit, item_slot_type, item_
     -- Vanilla.
     local r1, r2 = func(self, unit, item_slot_type, item_template, attachment_node_linking, scene_graph_links, material_settings, skip_wield_anim)
     if item_slot_type == "hat" then
-        CUSTOM_HATS.install_native_plume_controller(unit, "hero-preview")
         local authored_key = self._cos_la_spawning and LA_BRIDGE.backend_to_armoury[self._cos_la_spawning]
             or (self._cos_score_hat and self._cos_score_hat.armoury_key)
-        if authored_key and GK_SET.resolve_variant(authored_key) then
+        if authored_key and CUSTOM_HATS.is_custom_identity(authored_key) then
+            CUSTOM_HATS.apply_surface(unit, "hero-preview")
+        elseif authored_key and GK_SET.resolve_variant(authored_key) then
             GK_SET.apply_variant_to_unit(authored_key, unit, "hero_preview")
         end
     end
@@ -9746,7 +9791,9 @@ local function _spawn_item_unit_combined(func, self, unit, item_slot_type, item_
     -- on the JUST-SPAWNED hat unit or the mesh renders in vanilla colours
     -- (LA_SYNC_MODEL 6.2); kind="unit" meshes carry their own baked material and the
     -- call no-ops (variant.textures nil). Mirrors the husk hat paint call shape.
-    if self._cos_score_hat and item_slot_type == "hat" and type(unit) == "userdata" and Unit.alive(unit) then
+    if self._cos_score_hat and item_slot_type == "hat"
+        and not CUSTOM_HATS.is_custom_identity(self._cos_score_hat.armoury_key)
+        and type(unit) == "userdata" and Unit.alive(unit) then
         local la = get_mod("Loremasters-Armoury")
         if la and type(la.apply_new_skin_from_texture) == "function" then
             local info = self._cos_score_hat
@@ -10489,36 +10536,28 @@ _rt_register("issue612_encarmine_hat_contract", function()
     if LA_BRIDGE.backend_to_vanilla[CUSTOM_HATS.ITEM_KEY] ~= CUSTOM_HATS.BASE_KEY then
         return "Encarmine vanilla wire fallback missing"
     end
-    if CUSTOM_HATS.RUNTIME_PREVIEW_PACKAGE_SAFE ~= false then
-        return "Encarmine unsafe preview package promotion re-enabled"
-    end
-    if CUSTOM_HATS.SPAWN_ONLY_RENDERER ~= true
-        or type(CUSTOM_HATS.spawn_unit) ~= "function"
-        or type(CUSTOM_HATS.spawn_resources_ready) ~= "function" then
-        return "Encarmine spawn-only renderer contract missing"
-    end
-    if CUSTOM_HATS.ALPHA_AWARE_CLOTH ~= true
-        or CUSTOM_HATS.PLUME_SOURCE_FACES ~= 372
-        or CUSTOM_HATS.PLUME_RENDER_FACES ~= 744
-        or CUSTOM_HATS.MATERIAL_RESPONSE_REVISION ~= 4
-        or CUSTOM_HATS.PLUME_ALPHA_HAZE_MAX ~= 15
-        or CUSTOM_HATS.PLUME_RGB_SCALE ~= 4
-        or CUSTOM_HATS.PLUME_RETAINED_ALPHA ~= 255
-        or CUSTOM_HATS.ARMOR_ROUGHNESS_SCALE ~= 0.90
-        or CUSTOM_HATS.SELF_CONTAINED_HELMET_MATERIALS ~= true
-        or CUSTOM_HATS.PLUME_RIG_BONES ~= 13
-        or CUSTOM_HATS.PLUME_DYNAMIC_BONES ~= 6
-        or CUSTOM_HATS.RUNTIME_CONTROLLER_INSTALL ~= true
-        or CUSTOM_HATS.FADE_LINK_REGISTRATION ~= true then
-        return "Encarmine alpha/backface/material response contract drifted"
+    local scene = CUSTOM_HATS.LAUREL_SCENE_CONTRACT
+    if CUSTOM_HATS.RENDER_MODE ~= "vanilla_laurel_material_instance_override"
+        or type(CUSTOM_HATS.apply_surface) ~= "function"
+        or not scene
+        or scene.mesh_count ~= 8
+        or #scene.armor_mesh_indices ~= 3
+        or #scene.plume_mesh_indices ~= 3
+        or #scene.shadow_mesh_indices ~= 2
+        or scene.lod_steps ~= 3
+        or scene.rig_bones ~= 13
+        or scene.dynamic_plume_bones ~= 6
+        or CUSTOM_HATS.MATERIAL_RESPONSE_REVISION ~= 5
+        or CUSTOM_HATS.DONOR_ALPHA_CONTRACT ~= true
+        or CUSTOM_HATS.DONOR_NORMAL_TANGENT_CONTRACT ~= true
+        or CUSTOM_HATS.DONOR_CONTROLLER_CONTRACT ~= true
+        or CUSTOM_HATS.DONOR_FADE_CONTRACT ~= true then
+        return "Encarmine exact-Laurel material-instance contract drifted"
     end
     -- Package-facing identity is invariant even when all custom resources are
     -- resident; only direct spawn sites may receive the candidate path.
     if item.unit ~= CUSTOM_HATS.BASE_UNIT or CUSTOM_HATS.CUSTOM_UNIT ~= CUSTOM_HATS.BASE_UNIT then
         return "Encarmine custom unit leaked into PackageManager-facing identity"
-    end
-    if CUSTOM_HATS.runtime_custom_ready then
-        return "Encarmine package-path activation must remain quarantined"
     end
 end)
 

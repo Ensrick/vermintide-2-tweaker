@@ -55,9 +55,14 @@ function M.magic_texture_receiver(authored_family, unit_path)
     return family and family[unit_path] or nil
 end
 
-function M.add_compatible_targets(character, variant_kind, authored_family, weapon_types)
+function M.add_compatible_targets(character, variant_kind, authored_family,
+        weapon_types, has_canonical_unit)
     if character ~= "Kruber" then return false end
-    local targets = variant_kind == "unit"
+    -- A texture variant with an explicit canonical unit owns both its UVs and
+    -- model just like a unit variant.  It can safely fan out because the shared
+    -- resolver swaps that model before paint.  Pure-paint variants remain
+    -- family-restricted.
+    local targets = (variant_kind == "unit" or has_canonical_unit)
         and M.KRUBER_SHIELD_ITEM_TYPES
         or M.KRUBER_SHIELD_FAMILIES[authored_family]
     if not targets then return false end

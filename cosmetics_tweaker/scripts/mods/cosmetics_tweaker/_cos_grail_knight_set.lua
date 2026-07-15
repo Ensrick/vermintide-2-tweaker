@@ -121,17 +121,6 @@ local function register_network_skin(key)
     lookup[key] = #lookup
 end
 
-local function add_skin_to_combination(key, matching_item_key)
-    local weapon = ItemMasterList and rawget(ItemMasterList, matching_item_key)
-    local combinations = weapon and weapon.skin_combination_table
-        and WeaponSkins and WeaponSkins.skin_combinations
-        and WeaponSkins.skin_combinations[weapon.skin_combination_table]
-    local tier = combinations and (combinations.exotic or combinations.rare or combinations.common)
-    if not tier then return end
-    for _, existing in ipairs(tier) do if existing == key then return end end
-    tier[#tier + 1] = key
-end
-
 local function register_cosmetics_template()
     local cosmetics = rawget(_G, "Cosmetics")
     if not cosmetics then return false end
@@ -155,9 +144,31 @@ function M.resolve_variant(key)
         return { kind = "texture", swap_hand = "armor", new_units = { M.SKIN_TP_UNIT }, textures = M.TEXTURES.skin_3p,
             textures_fps = M.TEXTURES.skin_1p, fps_units = { M.SKIN_FP_UNIT }, cos_authored = true }
     elseif key == M.SHIELD_VARIANT_KEY then
-        return { kind = "texture", swap_hand = "illusion", new_units = { M.SHIELD_BASE_UNIT }, textures = M.TEXTURES.shield, cos_authored = true }
+        -- The same vanilla shield unit is valid on both owner/preview (1P) and
+        -- husk/score (3P) surfaces.  Keep both entries explicit so the shared
+        -- offhand resolver never guesses a non-existent "_3p" sibling.
+        return { kind = "texture", swap_hand = "left_hand_unit",
+            new_units = { M.SHIELD_BASE_UNIT, M.SHIELD_BASE_UNIT },
+            textures = M.TEXTURES.shield, cos_authored = true }
     end
     return nil
+end
+
+-- Reusable row-2 component record.  The caller inserts a fresh copy into each
+-- compatible Kruber shield family so primary and offhand choices stay
+-- independent and no weapon family owns the component exclusively.
+function M.offhand_option()
+    return {
+        name = M.ITEM_LOCALIZATION.cos_gk_purpure_azure_shield_name,
+        la_armoury_key = M.SHIELD_VARIANT_KEY,
+        vanilla_skin = M.SHIELD_BASE_KEY,
+        intended_unit = M.SHIELD_BASE_UNIT,
+        authored_family = "kruber_grail_knight_shield",
+        variant_kind = "texture",
+        inventory_icon = M.ICONS.shield,
+        rarity = "promo",
+        cos_authored = true,
+    }
 end
 
 local function resources_ready(textures)
@@ -229,7 +240,9 @@ function M.register_all(bridge)
     WeaponSkins.skins[M.SHIELD_SKIN_KEY].description = "cos_gk_purpure_azure_shield_description"
     WeaponSkins.skins[M.SHIELD_SKIN_KEY].inventory_icon = M.ICONS.shield
     register_network_skin(M.SHIELD_SKIN_KEY)
-    add_skin_to_combination(M.SHIELD_SKIN_KEY, shield.matching_item_key)
+    -- Do not append this to a whole-weapon skin combination.  The shield is
+    -- offered by the independent offhand component row so the primary weapon
+    -- illusion remains untouched and its icon can compose with the shield.
     if mod._cos and mod._cos.custom_skin_keys then mod._cos.custom_skin_keys[M.SHIELD_SKIN_KEY] = true end
 
     local mappings = {

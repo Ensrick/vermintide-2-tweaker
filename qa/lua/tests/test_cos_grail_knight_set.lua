@@ -31,6 +31,40 @@ return function(H, repo_root)
         H.truthy(entry:find('GK_SET.apply_variant_to_unit(cached.armoury_key, spawned_hat, "remote_husk")', 1, true))
     end)
 
+    H.test("Grail Knight shield is a reusable independent Kruber offhand", function()
+        H.truthy(module:find("function M.offhand_option()", 1, true))
+        H.truthy(module:find("la_armoury_key = M.SHIELD_VARIANT_KEY", 1, true))
+        H.truthy(module:find("intended_unit = M.SHIELD_BASE_UNIT", 1, true))
+        H.truthy(module:find("inventory_icon = M.ICONS.shield", 1, true))
+        H.truthy(module:find("new_units = { M.SHIELD_BASE_UNIT, M.SHIELD_BASE_UNIT }", 1, true))
+        H.equal(module:find("add_skin_to_combination(M.SHIELD_SKIN_KEY", 1, true), nil)
+        H.truthy(entry:find("for _, item_type in ipairs(LA_BRIDGE.kruber_shield_item_types or {})", 1, true))
+        H.truthy(entry:find("hands.left_hand_unit[#hands.left_hand_unit + 1] = GK_SET.offhand_option()", 1, true))
+        for _, family in ipairs({
+            "es_1h_sword_shield", "es_1h_mace_shield",
+            "es_1h_sword_shield_breton", "es_deus_01",
+            "cwv_es_axe_shield", "cwv_es_longsword_shield",
+            "cwv_es_warpriest_hammer_shield",
+        }) do
+            H.truthy(entry:find(family, 1, true), "missing Kruber shield family " .. family)
+        end
+    end)
+
+    H.test("authored offhand resolver composes canonical model before material", function()
+        H.truthy(entry:find("local function _resolve_authored_offhand_variant", 1, true))
+        H.truthy(entry:find("local function _resolve_authored_offhand_mesh", 1, true))
+        H.truthy(entry:find("local function _apply_authored_offhand_to_unit", 1, true))
+        H.truthy(entry:find("variant.new_units and variant.new_units[1]", 1, true))
+        H.truthy(entry:find("_resolve_authored_offhand_mesh(entry.armoury_key)", 1, true))
+        H.truthy(entry:find("_resolve_authored_offhand_mesh(opt.la_armoury_key)", 1, true))
+        H.truthy(entry:find("_apply_authored_offhand_to_unit(", 1, true))
+        -- Local preview/body and remote husk must consume the same descriptor.
+        H.truthy(entry:find('"loot_previewer"', 1, true))
+        H.truthy(entry:find('"hero_previewer"', 1, true))
+        H.truthy(entry:find('"ingame"', 1, true))
+        H.truthy(entry:find('"network_husk"', 1, true))
+    end)
+
     H.test("Grail Knight authored resources are packaged", function()
         H.truthy(package_file:find('"textures/cosmetics_tweaker/grail_knight_set/*"', 1, true))
         for _, name in ipairs({

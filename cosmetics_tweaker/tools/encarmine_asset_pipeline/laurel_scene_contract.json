@@ -1,0 +1,44 @@
+{
+  "resource": "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_07",
+  "materials": [
+    ["1903313B", "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_base"],
+    ["5ED8F236", "shaders/characters/character_shadow"],
+    ["BD15BFF9", "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_feather"]
+  ],
+  "mesh_objects": [
+    ["B52F488E", 1, 8, 0, 2698],
+    ["59CD59C9", 14, 7, 0, 27277],
+    ["24A4E748", 15, 6, 0, 27273],
+    ["C051D3AB", 16, 5, 0, 27273],
+    ["B0439F75", 17, 4, 11, 27277],
+    ["8DCB0268", 18, 3, 10, 27273],
+    ["AD1E2AED", 19, 2, 9, 27273],
+    ["624574A9", 20, 1, 0, 2944]
+  ],
+  "geometry_material_slots": [
+    ["5ED8F236"],
+    ["BD15BFF9"],
+    ["BD15BFF9"],
+    ["BD15BFF9"],
+    ["1903313B"],
+    ["1903313B"],
+    ["1903313B"],
+    ["5ED8F236"]
+  ],
+  "lod_objects": [
+    {
+      "name": "0C5BC110",
+      "node_index": 20,
+      "flags": 27271,
+      "steps": [
+        { "range": [1.0, 0.6], "meshes": [6, 3, 0] },
+        { "range": [0.6, 0.2], "meshes": [5, 2, 0] },
+        { "range": [0.2, 0.0], "meshes": [4, 1] }
+      ]
+    }
+  ],
+  "armature": {
+    "bones": 13,
+    "dynamic_plume_bones": 6
+  }
+}

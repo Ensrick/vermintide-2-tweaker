@@ -68,6 +68,20 @@ return function(H, repo_root)
             "shield"), "icon_red")
     end)
 
+    H.test("Cosmetics-authored offhand keeps its custom icon without LA", function()
+        local authored = {
+            left_hand_unit = {
+                armoury_key = "cos_gk_purpure_azure_shield_variant",
+                vanilla_key = "es_sword_shield_breton_skin_03",
+                inventory_icon = "icon_cos_gk_purpure_azure_shield",
+                cos_authored = true,
+            },
+        }
+        H.equal(policy.resolve_inventory_icon({ backend_id = "shield" },
+            nil, authored, bridge_to_armoury, bridge_to_vanilla, skin_list,
+            "shield"), "icon_cos_gk_purpure_azure_shield")
+    end)
+
     H.test("unknown LA metadata fails closed to vanilla icon", function()
         H.equal(policy.resolve_inventory_icon({ backend_id = "item", skin = "skin_a" },
             "missing_clone", nil, bridge_to_armoury, bridge_to_vanilla, skin_list), nil)
@@ -121,6 +135,11 @@ return function(H, repo_root)
         H.equal(record.vanilla_key, "shield_skin")
         H.equal(record.unit_path, "units/shield")
         H.equal(record.inventory_icon, "selected_shield_icon")
+        persist.save_offhand("authored_shield", "left_hand_unit", "gk_variant",
+            "shield_skin", nil, "gk_icon", true)
+        local authored = persist.get_saved_offhands_for("authored_shield").left_hand_unit
+        H.equal(authored.inventory_icon, "gk_icon")
+        H.equal(authored.cos_authored, true)
         _G.get_mod = old_get_mod
     end)
 

@@ -1,5 +1,34 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.121-dev - 2026-07-15 - #200/#612/#629 cosmetic surface parity
+
+### Fixed
+
+- Rebased the Encarmine helm on the exact vanilla Laurel donor scene and its
+  native rig, plume controller, LODs, fade, normals, and alpha behavior.
+  Corrected the compiled mesh order and restored the exact user-authored armor
+  and cloth diffuse maps; only the donor's spawned material instances change.
+- Registered the Purpure/Azure Shield of Honour Renewed as an independent
+  offhand component across every compatible Kruber shield family, including
+  Bretonnian Sword and Shield, Mace and Shield, and CWV families. The primary
+  weapon illusion remains independently selectable.
+- Unified authored-shield resolution for Cosmetics and Loremaster choices.
+  Variants with a canonical model now spawn that exact 1P/3P model before
+  material application in cosmetic/inventory previews, the owner body, remote
+  husks, and score/lobby surfaces. This prevents LA textures from wrapping over
+  the currently equipped shield on Spear and Shield and Mace and Shield.
+- Persisted the custom shield's exact icon and identity per weapon instance,
+  including a safe Cosmetics-only fallback when Loremaster's Armoury is absent.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.121-dev`. Verify the new helmet, outfit, and
+shield on Bretonnian Sword and Shield plus another Kruber shield family; then
+verify the final two LA shield choices on both Spear and Shield and Mace and
+Shield across inventory preview, owner 1P/3P, and a remote client.
+Also verify the Encarmine helm's plume physics, alpha, camera fade, surface
+response, inventory preview, live owner, score screen, and remote husk.
+
 ## 0.9.120-dev - 2026-07-15 - #377/#629 Cosmetics presentation and Grail Knight set
 
 ### Added

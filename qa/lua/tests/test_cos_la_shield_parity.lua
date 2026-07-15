@@ -41,6 +41,18 @@ return function(Harness, repo_root)
         for _, item_type in ipairs(policy.KRUBER_SHIELD_ITEM_TYPES) do
             Harness.truthy(custom_unit[item_type], "custom-unit variant missing " .. item_type)
         end
+        -- #200 final-two options on Spear+Shield/Mace+Shield are texture
+        -- variants with explicit canonical models.  They own their UV surface
+        -- and therefore follow the same safe fan-out as a unit variant.
+        local canonical_texture = {}
+        Harness.truthy(policy.add_compatible_targets(
+            "Kruber", "texture", "empire", canonical_texture, true))
+        Harness.truthy(canonical_texture.es_deus_01,
+            "canonical LA model missing Spear+Shield")
+        Harness.truthy(canonical_texture.es_1h_mace_shield,
+            "canonical LA model missing Mace+Shield")
+        Harness.truthy(canonical_texture.cwv_es_axe_shield,
+            "canonical LA model missing compatible CWV shield family")
         local bardin = { dr_1h_axe_shield = true }
         Harness.equal(policy.add_compatible_targets("Bardin", "texture", "dwarf", bardin), false)
         Harness.truthy(bardin.dr_1h_axe_shield)

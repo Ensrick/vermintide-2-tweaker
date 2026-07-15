@@ -35,6 +35,9 @@ local function _offhand_icon(item, saved_offhands, skin_list)
     if record.armoury_key then
         return _icon_for(record.armoury_key,
             record.vanilla_key or item.skin, skin_list)
+            or (record.cos_authored == true
+                and type(record.inventory_icon) == "string"
+                and record.inventory_icon ~= "" and record.inventory_icon or nil)
     end
     return type(record.inventory_icon) == "string"
         and record.inventory_icon ~= "" and record.inventory_icon or nil

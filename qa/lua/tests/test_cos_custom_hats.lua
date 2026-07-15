@@ -146,6 +146,15 @@ return function(H, repo_root)
             H.equal(mesh_counts[0], nil)
             H.equal(mesh_counts[7], nil)
             for index = 1, 6 do H.equal(mesh_counts[index], 3) end
+            for _, call in ipairs(calls) do
+                if call.mesh_index >= 1 and call.mesh_index <= 3 then
+                    H.truthy(call.texture:find("encarmine_cloth_", 1, true),
+                        "Laurel plume mesh received an armor texture")
+                elseif call.mesh_index >= 4 and call.mesh_index <= 6 then
+                    H.truthy(call.texture:find("encarmine_armored_", 1, true),
+                        "Laurel armor mesh received a plume texture")
+                end
+            end
 
             local again_ok, again_reason = hats.apply_surface(unit, "unit-test")
             H.truthy(again_ok)
@@ -189,6 +198,10 @@ return function(H, repo_root)
             H.equal(contract.mesh_count, 8)
             H.equal(#contract.armor_mesh_indices, 3)
             H.equal(#contract.plume_mesh_indices, 3)
+            H.equal(contract.plume_mesh_indices[1], 1)
+            H.equal(contract.plume_mesh_indices[3], 3)
+            H.equal(contract.armor_mesh_indices[1], 4)
+            H.equal(contract.armor_mesh_indices[3], 6)
             H.equal(#contract.shadow_mesh_indices, 2)
             H.equal(contract.shadow_mesh_indices[1], 0)
             H.equal(contract.shadow_mesh_indices[2], 7)
@@ -232,5 +245,26 @@ return function(H, repo_root)
             H.truthy(hats.ARMOR_TEXTURES.combined:find("encarmine_armored_combined", 1, true))
             H.truthy(hats.PLUME_TEXTURES.combined:find("encarmine_cloth_combined", 1, true))
         end)
+    end)
+
+    H.test("Encarmine compiled-scene gate parses donor structure", function()
+        local validator = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/tools/encarmine_asset_pipeline/validate_laurel_resource.py", "rb"))
+        local source = validator:read("*a")
+        validator:close()
+        H.truthy(source:find("UnitImporterVT2", 1, true))
+        H.truthy(source:find("unit.meshes", 1, true))
+        H.truthy(source:find("unit.lod_objects", 1, true))
+        H.truthy(source:find("geometry.materials", 1, true))
+        H.truthy(source:find("ENCARMINE_LAUREL_COMPILED_CONTRACT=OK", 1, true))
+
+        local contract = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/tools/encarmine_asset_pipeline/laurel_scene_contract.json", "rb"))
+        local contract_source = contract:read("*a")
+        contract:close()
+        H.truthy(contract_source:find('"mesh_objects"', 1, true))
+        H.truthy(contract_source:find('"geometry_material_slots"', 1, true))
+        H.truthy(contract_source:find('"lod_objects"', 1, true))
+        H.truthy(contract_source:find('"dynamic_plume_bones": 6', 1, true))
     end)
 end

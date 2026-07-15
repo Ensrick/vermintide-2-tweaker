@@ -477,12 +477,12 @@ local function build_offhand_options()
                 -- appeared as offhand options on her spear+shield.
                 if has_shield_authored then
                     -- v0.8.57: family-aware cross-pollination.
-                    --   kind="unit"    → broad pool across all the
+                    --   kind="unit" or texture+canonical-unit → broad pool across all the
                     --                    character's shield item_types.
                     --                    The variant carries its own mesh
                     --                    in new_units[1] so it renders
                     --                    correctly on any base item.
-                    --   kind="texture" → restricted to the variant's
+                    --   pure texture    → restricted to the variant's
                     --                    authored family. Texture is
                     --                    authored for a specific mesh's UV
                     --                    layout; painting it onto a
@@ -490,12 +490,12 @@ local function build_offhand_options()
                     --                    incorrectly (Bret texture on
                     --                    Empire mesh visible as warped
                     --                    artwork).
-                    -- Kruber custom-unit variants carry an authored mesh and
-                    -- can span his complete catalogue. Texture variants must
-                    -- stay inside their authored UV family; several Bretonnian
-                    -- variants are pure paint and have no replacement unit.
+                    -- Any Kruber variant carrying an authored mesh can span his
+                    -- complete catalogue. Pure-paint texture variants must stay
+                    -- inside their authored UV family.
                     if SHIELD_PARITY.add_compatible_targets(
-                            character, variant.kind, authored_family, weapon_types) then
+                            character, variant.kind, authored_family, weapon_types,
+                            variant.new_units and variant.new_units[1] ~= nil) then
                         -- Compatible targets added by the shared policy.
                     elseif variant.kind == "unit" then
                         local char_pool = _LA_CHARACTER_ALL_SHIELDS[character]
@@ -516,13 +516,13 @@ local function build_offhand_options()
                     table.sort(sorted_icons)
                     local vanilla_skin_key = sorted_icons[1]
                     local intended_unit, source = _resolve_intended_unit(la_key, variant, sorted_icons)
-                    -- For kind="unit" custom-mesh variants, register both
-                    -- new_units entries (1p and _3p) in
+                    -- For every canonical-mesh variant, register both
+                    -- new_units entries (1p and 3p) in
                     -- NetworkLookup.inventory_packages so vanilla code
                     -- reading the table for sync doesn't crash on the
                     -- strict __index. kind="texture" variants point to
                     -- vanilla meshes that are already in the table.
-                    if variant.kind == "unit" and variant.new_units then
+                    if variant.new_units then
                         _register_la_path_in_network_lookup(variant.new_units[1])
                         _register_la_path_in_network_lookup(variant.new_units[2])
                     end
