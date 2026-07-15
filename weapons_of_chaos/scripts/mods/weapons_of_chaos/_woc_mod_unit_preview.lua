@@ -5,7 +5,7 @@
 -- authored unit in spawn data; fall back to the sword only if residency fails.
 local M = {}
 
-function M.install(policy)
+function M.install(policy, appearance)
 	local mod = get_mod("WOC")
 	if mod._woc_mod_unit_preview_installed then return end
 	mod._woc_mod_unit_preview_installed = true
@@ -16,6 +16,18 @@ function M.install(policy)
 	local function resident(name)
 		local ok, value = pcall(Application.can_get, "unit", name)
 		return ok and value == true
+	end
+	local transformed = setmetatable({}, { __mode = "k" })
+	local function apply(unit, name, surface)
+		if not policy.is_custom_unit_name(name) then return false end
+		if unit == nil or transformed[unit] then return false end
+		local ok = appearance and appearance.apply(unit, policy.TRANSFORM) or false
+		if ok then
+			transformed[unit] = true
+			pcall(printf, "[WOC:613] appearance applied surface=%s unit=%s",
+				tostring(surface), tostring(name))
+		end
+		return ok
 	end
 	local warned = {}
 	local function warn_once(name, fallback)
@@ -52,6 +64,25 @@ function M.install(policy)
 	mod:hook("HeroPreviewer", "_load_packages", load_character_packages)
 	mod:hook("MenuWorldPreviewer", "_load_packages", load_character_packages)
 
+	-- Character previews (inventory, lobby, score/end screen). Hook the parent
+	-- and the copy-derived MenuWorldPreviewer because VT2 copies class methods at
+	-- definition time. Absolute rotation + weak per-unit offset guard make the
+	-- double-traversal harmless.
+	local function transform_character_items(func, self, item_name, spawn_data)
+		local result = func(self, item_name, spawn_data)
+		for _, spawn in ipairs(spawn_data or {}) do
+			if policy.is_custom_unit_name(spawn.unit_name) then
+				local slot = self._equipment_units and self._equipment_units[spawn.slot_index]
+				local unit = type(slot) == "table"
+					and (spawn.right_hand and slot.right or spawn.left_hand and slot.left)
+				apply(unit, spawn.unit_name, "character-preview")
+			end
+		end
+		return result
+	end
+	mod:hook("HeroPreviewer", "_spawn_item", transform_character_items)
+	mod:hook("MenuWorldPreviewer", "_spawn_item", transform_character_items)
+
 	-- Athanor and illusion browser. One custom key owns one borrowed lease.
 	mod:hook("LootItemUnitPreviewer", "load_package", function(func, self, name)
 		local alias = alias_for(name)
@@ -79,7 +110,11 @@ function M.install(policy)
 				and self._woc_preview_fallbacks[spawn.unit_name]
 			if fallback then spawn.unit_name = fallback end
 		end
-		return func(self, spawn_data)
+		local units = func(self, spawn_data)
+		for index, spawn in ipairs(spawn_data or {}) do
+			apply(units and units[index], spawn.unit_name, "item-preview")
+		end
+		return units
 	end)
 
 	mod:hook("LootItemUnitPreviewer", "_unload_packages", function(func, self)

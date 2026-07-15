@@ -15,7 +15,7 @@ return {
 
 	-- Settings
 	enable_blightreaper = {
-		en = "[untested] Enable Blightreaper",
+		en = "[verify-fix] Enable Blightreaper",
 	},
 	enable_blightreaper_tooltip = {
 		en = "Adds the Blightreaper, a one-handed sword any career can equip. Takes effect after you restart the game.",

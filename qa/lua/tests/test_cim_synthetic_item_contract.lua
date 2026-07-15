@@ -5,6 +5,30 @@ return function(H, repo_root)
     local catalog = assert(loadfile(root .. "_cim_template_catalog.lua"))()
     local cleanup = assert(loadfile(root .. "_cim_bulk_cleanup_core.lua"))()
 
+	H.test("CIM #637 rejects WOC unique relic definitions", function()
+		local relic = {
+			woc_variant = true,
+			woc_unique_relic = true,
+			slot_type = "melee",
+			can_wield = { "es_mercenary" },
+			template = "one_handed_swords_template_1",
+			item_type = "woc_blightreaper",
+			inventory_icon = "es_1h_sword_01",
+		}
+		local ok, problems, provider = contract.validate_provider("woc_blightreaper", relic)
+		H.equal(ok, false)
+		H.equal(provider, "woc")
+		H.equal(problems[1], "immutable_relic")
+		H.truthy(contract.is_immutable_relic(relic))
+		H.truthy(contract.is_immutable_relic({ data = relic }))
+		H.truthy(contract.is_immutable_relic({
+			CustomData = { woc_unique_relic = "true" },
+		}))
+		H.truthy(contract.is_immutable_relic({
+			CustomData = { woc_unique_relic = true },
+		}))
+	end)
+
     local function master(marker)
         local row = {
             slot_type = "melee",

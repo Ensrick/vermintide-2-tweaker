@@ -50,7 +50,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.82-dev"
+local MOD_VERSION = "0.8.83-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -549,7 +549,6 @@ _rt_register("issue628_provider_contract", function()
         "cwv_dr_dawi_mace_shield",
         "cwv_dr_dawi_dual_maces",
         "cwv_es_longsword",
-        "woc_blightreaper",
     }
     local checked = 0
     for i = 1, #keys do
@@ -561,6 +560,14 @@ _rt_register("issue628_provider_contract", function()
             if not ok then
                 return key .. " incomplete: " .. table.concat(problems, ",")
             end
+        end
+    end
+    local woc = ItemMasterList and rawget(ItemMasterList, "woc_blightreaper")
+    if woc then
+        checked = checked + 1
+        local ok, problems, provider = contract.validate_provider("woc_blightreaper", woc)
+        if ok or provider ~= "woc" or problems[1] ~= "immutable_relic" then
+            return "woc_blightreaper was not rejected as an immutable relic"
         end
     end
     if checked == 0 then return "skip: CWV/WOC provider rows are not loaded" end

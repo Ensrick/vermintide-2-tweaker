@@ -29,7 +29,7 @@ The native material resolves these texture resources:
 | `E6AB38B75D7D9F4E` | albedo | `86E527D685F3B00C8ACBDEE12302F9D90180961A1C9DCF5858ABB816A9681EE2` |
 | `751BDA5C60330E94` | two-channel tangent normal | `A585D41B32F97169047FAC48697E5247437A829BD4093A9C565A3A379DC9059A` |
 | `19E12EFD2E45F9F2` | packed metallic/roughness/rune mask | `41A6BB34BDDE0E3DF13D591854CB11C18BFF2813134F86CF197310F738C16544` |
-| `2E82F037A3245005` | native pulsing-shader noise (not used by standard PBR approximation) | `E86BA601B35DD93D6E497544564C5687414C1E6D41A8CDBD8B02C2DFF4B30E6F` |
+| `2E82F037A3245005` | native pulsing-shader noise, bound to both parent-material pulse slots | `E86BA601B35DD93D6E497544564C5687414C1E6D41A8CDBD8B02C2DFF4B30E6F` |
 
 The packed channels become R=metallic, G=roughness, and B=emissive. Rebuild
 normal Z from the decoded R/G channels before exporting the normal PNG:
@@ -48,6 +48,18 @@ Committed derived-output hashes:
 | `blightreaper_metallic.png` | `11B23D104ABB9669E161A145076000E87D36B9123EA72BB40D48FD2FF4FEFEBA` |
 | `blightreaper_roughness.png` | `D8286E6E1F0DE1531188B083B044613AB7F57B453BE889EC048E1D532EF6F6E4` |
 | `blightreaper_emissive.png` | `8370D8FDAC18720A178BED690D4A31F5B69356F1CE7331289438DBB1DA4F727B` |
+| `blightreaper_packed.png` | `8E8138764578B2FC760FE34CF0A14C2D293A711F4DB19364074ED9355E0046C9` |
+| `blightreaper_noise.png` | `7CA9AAC06D3749E7F0B3EFFEF9837E7AF4E581D20C33889B82DF9C94CCAE2D1A` |
+
+The decompiled native material retains parent `EA15CAA2A17CD818`, maps the
+packed texture into slot `15DD7D93`, maps the same noise texture into both
+`499B0151` and `66402E57`, and retains gold `{5, 4.4, 0}` plus scalar
+`1.746000051498413`. These are research inputs, not compile-ready Stingray
+source. An unquoted hash fails material parsing; a quoted hash parses but the
+SDK compiler then requests the unavailable source path
+`EA15CAA2A17CD818.material`. Until the original parent path/source graph is
+resolved or an authored pulse graph is built, WOC must retain its compile-valid
+standard-PBR material and #613 must not be marked ready for verification.
 
 ## Mesh export
 
@@ -73,8 +85,8 @@ in the `.unit` render settings.
 
 ## Build and reachability
 
-The WOC master package explicitly lists the material, both units, and the
-texture root. Run:
+The WOC master package explicitly lists the material, both units, and the five
+compile-valid PBR textures. Run:
 
 ```powershell
 pwsh -NoProfile -File qa/check_custom_unit_bundle_reachability.ps1
@@ -85,3 +97,8 @@ VMBLauncher.exe build weapons_of_chaos
 Never add a `Managers.package:load` call for the authored unit path. Previewers
 borrow the vanilla Empire sword package lease while the WOC master bundle owns
 the actual unit residency.
+
+The canonical presentation transform is applied once per spawned unit through
+the synchronized `_lib_weapon_appearance.lua` consumer: Euler XYZ
+`{-90, -90, -90}` degrees and offset `{0, 0, -0.3}`. Do not duplicate these
+values in individual preview hooks or drive them per frame.

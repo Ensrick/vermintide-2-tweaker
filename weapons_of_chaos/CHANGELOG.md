@@ -1,5 +1,49 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.14-dev (2026-07-15) - #637 unique immutable WOC relics [verify-fix]
+
+### Unique relic inventory (#637)
+
+- Defined one provider-owned `woc_unique_relic` contract for every present and
+  future WOC item. Each enabled definition now registers one deterministic
+  local backend instance and uses vanilla `promo` rarity to stay outside
+  crafting, salvage, upgrade, reroll, illusion, and Athanor edit surfaces.
+- Repaired MoreItemsLibrary's intentional live-row `rarity = "default"`
+  overwrite after registration. The actual backend row, its `CustomData`, and
+  the provider definition now carry the same immutable marker and rarity.
+- Added bounded migration for old CIM-crafted duplicates. Exact unequipped CIM
+  instances are removed through CIM's ownership transaction; equipped or
+  uncertain rows are retained fail-closed and retried at later state edges.
+  The deterministic canonical item is never a deletion candidate.
+- CIM dev now rejects the provider marker both while building acquisition
+  catalogues and at its single crafting dispatcher, closing ordinary Forge,
+  customization, illusion, salvage, reroll, upgrade, and future recipe paths.
+- Added engine-free multi-item reconciliation coverage plus the live
+  `issue637_unique_immutable_relic_inventory` regression.
+
+### Canonical presentation work (not ready for verification)
+
+- Applied the author-reviewed rotation `{-90, -90, -90}` degrees and offset
+  `{0, 0, -0.3}` through the canonical shared weapon-appearance primitive.
+  The same bounded spawn-time transform now covers owner 1P/3P, bots, remote
+  husks, inventory/lobby/score character previews, and item/Athanor previews.
+- Kept the forward-only vanilla package aliases and same-WOC identity sideband;
+  peers without WOC still receive only the vanilla Empire-sword fallback.
+- Added offline locks for the exact transform, rendering-surface coverage,
+  shared-library parity, and package residency.
+- The extracted native material resolves to parent resource hash
+  `EA15CAA2A17CD818`, but Stingray's source compiler cannot resolve a hash-only
+  parent (`File does not exist EA15CAA2A17CD818.material`). The compile-valid
+  authored PBR material remains in this build. Native gold pulse restoration
+  therefore remains tracked separately and is not presented as a deployed fix.
+
+### Verification
+
+Confirm Blightreaper appears exactly once in inventory and does not
+appear in Craft Item, Salvage, Athanor, Upgrade, Reroll, or Illusion choices.
+Restart after any historical duplicate is unequipped, then require
+`issue637_unique_immutable_relic_inventory` PASS in `/woc_regression_test`.
+
 ## 0.1.13-dev (2026-07-15) - #613 actual Blightreaper model and complete appearance path [verify-fix-coop]
 
 ### Changed

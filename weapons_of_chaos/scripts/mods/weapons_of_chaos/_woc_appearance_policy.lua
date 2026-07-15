@@ -7,6 +7,14 @@ M.UNIT_1P = "units/woc_blightreaper/blightreaper"
 M.UNIT_3P = M.UNIT_1P .. "_3p"
 M.VANILLA_1P = "units/weapons/player/wpn_emp_sword_02_t1/wpn_emp_sword_02_t1"
 M.VANILLA_3P = M.VANILLA_1P .. "_3p"
+M.TRANSFORM = {
+	offset = { 0, 0, -0.3 },
+	rotation = { -90, -90, -90 },
+}
+
+function M.is_custom_unit_name(name)
+	return name == M.UNIT_1P or name == M.UNIT_3P
+end
 
 function M.preview_package_alias(name)
 	if name == M.UNIT_1P then return M.VANILLA_1P end

@@ -14,20 +14,28 @@ vanilla behavior, and links out. Decompile paths are relative to
 `WOC` lets player characters wield ENEMY weapons and named keep-trophy artifacts
 via the duplicate-item approach modeled on `character_weapon_variants`: it clones
 a player base weapon template into a new MoreItemsLibrary item and swaps the held
-mesh to a different `.unit`. As of v0.1.12-dev there is ONE item - the Blightreaper
+mesh to a different `.unit`. As of v0.1.14-dev there is ONE item - the Blightreaper
 (Kruber 1H sword, all careers), rendered with the authored Blightreaper mesh
 because the intended keep-trophy prop is not runtime-loadable (see dead ends). Its
-engine contact is small: a display-name `Localize` hook, a registration-timing
-hook, and the single wire-safety hook that keeps a non-WOC peer from crashing -
-plus direct `ItemMasterList` / `NetworkLookup` table appends done outside any hook.
+engine contact includes display/registration/wire safety plus the four canonical
+weapon-render consumers: gameplay inventory spawn, character preview, item
+preview, and package collection/loading.
 
 ## Hook table
 
-3 registration sites. `[hook]` = full wrapper (`mod:hook`, can rewrite
+The registration sites below are split between `weapons_of_chaos.lua` and
+`_woc_mod_unit_preview.lua`. `[hook]` = full wrapper (`mod:hook`, can rewrite
 args/returns); `[safe]` = `mod:hook_safe` (post-callback, no override); `[tbl]` =
 table-form hook (plain-table target, nil-guarded). The item and NetworkLookup
 registration itself is NOT a hook - it is direct `rawset`/assignment inside the
 `_register_blightreaper` chokepoint (`:230`), covered in the subsystem notes.
+
+`_woc_relic_policy.lua` is the engine-free inventory authority for issue #637.
+It marks every WOC provider definition and actual MIL backend row as one
+immutable `promo` relic, plans duplicate reconciliation by exact backend id,
+and never admits the deterministic canonical id to its deletion set. CIM dev
+consumes this marker at its provider validator and sole crafting dispatcher;
+this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
 
 ### Item resolution + display naming (owner docs: `docs/engine/06`, `docs/engine/09`)
 
@@ -46,6 +54,16 @@ registration itself is NOT a hook - it is direct `rawset`/assignment inside the
 | Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
 |---|---|---|---|
 | `LoadoutUtils.sync_loadout_slot` [hook,tbl] | Encodes `item.key` as `NetworkLookup.item_names[item_key]` for direct, host-broadcast, client-to-server, and hot-join sync [src: `scripts/helpers/loadout_utils.lua:12-53`; decode at `:69-83`] | Observe the exact Blightreaper backend item for live #509 evidence; preserve its inherited vanilla identity, while `_woc_wire_policy.lua` substitutes any future explicit `woc_` key with a vanilla `BASE_WEAPON` shadow | ROW-OF-CONCERN. Native parsing stamps the cloned base entry `key/name = es_1h_sword` [src: `scripts/settings/equipment/item_master_list.lua:109-112`], and MIL uses `item.key` for backend `ItemId/key`, so the current item already sends a boot-stable identity. WOC still appends `ITEM_KEY` locally for explicit-key consumers; any future `woc_` item must never emit that order-dependent id. The policy is unconditional, shallow-copy/non-mutating, and fails closed if the base index is unavailable. |
+
+### Appearance and preview parity (owner docs: `docs/engine/05`, `docs/engine/06`, `docs/engine/09`)
+
+| Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
+|---|---|---|---|
+| `GearUtils.spawn_inventory_unit` [hook,tbl] | Spawns explicit 3P and optional 1P units, links them, and returns `(weapon_3p, ammo_3p, weapon_1p, ammo_1p)` [src: `scripts/unit_extensions/default_player_unit/inventory/gear_utils.lua:155-255`] | Re-key positively identified WOC husks, then apply the same canonical transform once to returned owner/bot/husk units | Capture and return all four values; never bail from vanilla. Same-WOC identity is bounded to loadout-sync edges, not per frame. |
+| `WeaponUtils.get_weapon_packages` [hook,tbl] | Collects weapon unit paths for package preparation | Replace only WOC unit package identities with resident vanilla lease aliases | Spawn data remains WOC-owned; numeric reverse network lookup remains vanilla. |
+| `HeroPreviewer._load_packages` / `MenuWorldPreviewer._load_packages` [hook] | Loads character-preview equipment packages | Borrow the vanilla lease and fall back only when `Application.can_get("unit", custom)` fails | Both classes are required because VT2 copy-inherits methods before mods load. |
+| `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` [hook] | Spawns and links inventory, lobby, and score/end-screen equipment | Apply the canonical transform to the exact spawned WOC unit | Weak per-unit guard bounds duplicate traversal; no per-frame writes. |
+| `LootItemUnitPreviewer.load_package` / `spawn_units` / `_unload_packages` [hook] | Owns item, illusion, Athanor, and crafting-preview package leases and units | Borrow/unload one vanilla lease per custom key and transform returned WOC units | Never load the WOC unit path through PackageManager; the master package owns residency. |
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for WOC's cases)
 
@@ -77,6 +95,13 @@ vanilla-keyed even though its backend instance id and presentation are WOC-owned
 Runtime check `issue509_registered_blightreaper_wire_contract` asserts this
 against the live backend mirror rather than relying only on static source.
 
+MIL then unconditionally writes `backend_item.rarity` and
+`backend_item.CustomData.rarity` to `default`. WOC deliberately repairs the
+actual stored row to `promo` after registration and stamps
+`woc_unique_relic`; otherwise the native/CIM selectors would mistake the relic
+for a Blacksmith template. `issue637_unique_immutable_relic_inventory` proves
+one canonical row and zero removable/deferred duplicates at runtime.
+
 ### NetworkLookup append + the wire-safety consequence (owner: `docs/engine/03`)
 
 Registration also appends `ITEM_KEY` into `NetworkLookup.item_names` as a local
@@ -88,7 +113,7 @@ it disagree, and the client's decode hits the strict `__index`
 hook (table above) is the defense-in-depth boundary: current MIL-created
 Blightreaper rows pass through by identity because they inherit `es_1h_sword`;
 any explicit present/future `woc_` row is substituted with a `BASE_WEAPON`
-shadow before encode. `WOC` applies no skin and rarity `"default"` (a vanilla
+shadow before encode. `WOC` applies no skin and rarity `"promo"` (a vanilla
 index), so unlike CWV there is no skin/rarity axis to substitute, only the item-name axis
 (`docs/engine/03` §31; project `project_vt2_cross_peer_wire_safety`).
 

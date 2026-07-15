@@ -1481,7 +1481,36 @@ mod._cim407_craft_item_recipe_for_slot = function(slot)
     return nil
 end
 
+local function _immutable_relic_input(item_backend_ids)
+    local contract = mod._cim_synthetic_item_contract
+    local items = Managers.backend and Managers.backend:get_interface("items")
+    if type(contract) ~= "table" or type(contract.is_immutable_relic) ~= "function"
+            or not items then return nil end
+    for i = 1, #(item_backend_ids or {}) do
+        local item
+        pcall(function() item = items:get_item_from_id(item_backend_ids[i]) end)
+        if contract.is_immutable_relic(item) then return item_backend_ids[i] end
+    end
+    return nil
+end
+
+local function _immutable_relic_noop(self, backend_id)
+    printf("[cim:637] immutable WOC relic rejected from craft transaction bid=%s",
+        tostring(backend_id))
+    self._last_id = (self._last_id or 0) + 1
+    self._craft_requests[self._last_id] = {}
+    return self._last_id, { name = "cim_noop" }
+end
+
 mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career_name, item_backend_ids, recipe_override)
+    -- Provider-level WOC marker closes every mutation path in one place:
+    -- ordinary craft pages, customization, illusion swap, salvage, rerolls,
+    -- upgrades, and any future recipe dispatched through this interface.
+    local immutable_backend_id = _immutable_relic_input(item_backend_ids)
+    if immutable_backend_id then
+        return _immutable_relic_noop(self, immutable_backend_id)
+    end
+
     -- Illusion-swap intercept FIRST: applies regardless of whether the
     -- standard crafting UI is open. Defined in illusion_swap.lua and
     -- wired here so we only register ONE craft hook (VMF rejects rehooks
