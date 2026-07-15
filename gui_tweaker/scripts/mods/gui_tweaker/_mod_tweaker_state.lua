@@ -1,4 +1,5 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
+local _printf = rawget(_G, "printf") or function() end
 
 -- ============================================================================
 -- Mod Tweaker — HeroView SUB-STATE (KEEP path)
@@ -24,6 +25,10 @@
 
 local defs = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_definitions")
 local ordering = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_ordering")
+local transactions = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_transaction")
+local profiles = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_profiles")
+local disabled_sections = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_disabled_sections")
+local tab_labels = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_tab_labels")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -74,11 +79,21 @@ local MAX_TABS = 8   -- tab nodes that fit the window width; >MAX => paginate
 -- verminious_dreams_lighting (+ _dev) are intentionally OMITTED — they keep their
 -- own normal VMF menu and don't belong as a Mod Tweaker tab.
 local _MY_MODS = {
-    gut = true, gut_dev = true, wt = true, ct = true, ct_dev = true, gt = true, gt_dev = true,
+    gut = true, gut = true, wt = true, ct = true, ct_dev = true, gt = true, gt_dev = true,
     cim = true, cim_dev = true, crt = true, cosmetics_tweaker = true,
     dynamic_cosmetic_portraits = true, enemy_tweaker = true,
     character_weapon_variants = true, event_tweaker = true, mp = true, bt = true,
+    -- HideBuffs deliberately NOT whitelisted (#312): UI Tweaks options live in
+    -- gut's OWN menu under the "UI Tweaks" group (gut_hide_hud_ui_group), not as a
+    -- separate Mod Tweaker tab. Re-adding it would resurrect the duplicate tab.
+    -- Crosshair Kill Confirmation deliberately NOT whitelisted (#339, was wrongly a
+    -- tab under #313): its options are injected INTO gut's Interface tab under the HUD
+    -- group by _inject_ckc_into_gut, exactly like the UI Tweaks precedent. A THIRD-PARTY
+    -- integration is NEVER a top-level tab -- see gui_tweaker/MOD_TWEAKER_INTEGRATION.md.
 }
+
+-- Third-party mod whose options fold into a gut category (NOT a tab). #339.
+local _CKC_NAME = "Crosshair Kill Confirmation"
 
 local function _nf(node, key)  -- defensive node-field read
     if type(node) ~= "table" then return nil end
@@ -87,7 +102,7 @@ local function _nf(node, key)  -- defensive node-field read
     return v
 end
 
--- (#389) Stable keep-substate twin of the Mod Tweaker foreign-slider registry.
+-- (#389) Keep-substate twin of the standalone Mod Tweaker slider registry.
 local STEP_OVERRIDES = {
     cim = { base_power_level = 25 }, cim_dev = { base_power_level = 25 },
     ct = { starting_coins = 25 }, ct_dev = { starting_coins = 25 },
@@ -104,33 +119,81 @@ end
 
 local function _vmf_label(node, mod_obj)
     local t = _nf(node, "title") or _nf(node, "text") or _nf(node, "setting_id") or "?"
-    -- title may be a raw loc key or already display text; localize and keep the
-    -- result only if it isn't a "<missing>" marker (works either way).
+    if type(t) ~= "string" then return tostring(t) end
+    -- Same "<...>" defence as _vmf_tooltip: VMF can freeze a "<key>" missing-marker into a
+    -- title/text field. Strip it, re-localize the inner key now (all mods registered at render
+    -- time), and NEVER surface a marker; fall back to the bare key text (a label must be non-nil).
+    local inner = string.match(t, "^<(.-)>$")
+    local key = inner or t
     if mod_obj and mod_obj.localize then
-        local ok, s = pcall(mod_obj.localize, mod_obj, t)
-        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then t = s end
+        local ok, s = pcall(mod_obj.localize, mod_obj, key)
+        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then return s end
     end
-    return tostring(t)
+    return key
+end
+
+-- (#207) The node's tooltip DESCRIPTION (the hover-popup body). In VMF widget data the
+-- `tooltip` field is usually an ALREADY-localized display string (mods write
+-- `tooltip = mod:localize("<id>_tooltip")` in their _data.lua), but it can occasionally be
+-- a raw loc key — so mirror _vmf_label's pcall-localize and keep the localized result only
+-- when it resolves cleanly (not a "<missing>" marker). Empty / absent tooltip -> nil (the
+-- row then has no popup). Reads via _nf so it works for both flat (VMF) + nested (gut) nodes.
+local function _vmf_tooltip(node, mod_obj)
+    local t = _nf(node, "tooltip")
+    if type(t) ~= "string" or t == "" then return nil end
+    -- ROOT FIX for the recurring "<...>" in DESCRIPTIONS. VMF can FREEZE a missing-loc
+    -- marker ("<key>") into node.tooltip when the tooltip key did not resolve at data-build
+    -- time. The old code rejected re-localizing a "<...>" string but then FELL BACK to
+    -- returning that same marker (the leak). Instead: strip the brackets to recover the key,
+    -- re-localize it now (all mods are registered at render time), and NEVER surface a marker.
+    local inner = string.match(t, "^<(.-)>$")   -- "<gut_x_tooltip>" -> "gut_x_tooltip"
+    local key = inner or t
+    if mod_obj and mod_obj.localize then
+        local ok, s = pcall(mod_obj.localize, mod_obj, key)
+        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then
+            return s
+        end
+    end
+    -- Could not localize. Never show a "<...>" marker as the description.
+    if inner or string.find(t, "^<") then return nil end
+    return t   -- raw value was already plain display text
+end
+
+-- (#208) Per-NODE owner resolution for the synthesized "Equipment" category, which merges
+-- up to four inventory mods (Cosmetics / Crafting / Weapons / Career Weapon Variants) into
+-- one tab. A normal category has a single `mod_obj`/`mod_id`; the Equipment category instead
+-- carries `_owners[setting_id] = { mod_id, mod_obj }` for every member setting so get/set/
+-- stage/apply route to the OWNING mod object. For every NON-Equipment category `_owners` is
+-- nil, so this returns `category.mod_obj` / `category.mod_id` — byte-for-byte the prior path.
+local function _owner(category, setting_id)
+    local owners = category and category._owners
+    if owners and setting_id ~= nil then
+        local o = owners[setting_id]
+        if o then return o.mod_obj, o.mod_id end
+    end
+    return category and category.mod_obj, category and category.mod_id
 end
 
 local function _cat_get(category, setting_id)
-    if category.mod_obj then
-        local ok, v = pcall(category.mod_obj.get, category.mod_obj, setting_id)
+    local mod_obj, mod_id = _owner(category, setting_id)
+    if mod_obj then
+        local ok, v = pcall(mod_obj.get, mod_obj, setting_id)
         return ok and v or nil
     end
     local MT = _mt()
-    return MT and MT:get(category.mod_id, setting_id)
+    return MT and MT:get(mod_id, setting_id)
 end
 
 local function _cat_set(category, setting_id, value)
-    if category.mod_obj then
+    local mod_obj, mod_id = _owner(category, setting_id)
+    if mod_obj then
         -- 3rd arg true => fire the mod's on_setting_changed so it reacts live
         -- (matches stock VMF options behaviour). Persistence is automatic.
-        pcall(category.mod_obj.set, category.mod_obj, setting_id, value, true)
+        pcall(mod_obj.set, mod_obj, setting_id, value, true)
         return
     end
     local MT = _mt()
-    if MT then MT:set(category.mod_id, setting_id, value) end
+    if MT then MT:set(mod_id, setting_id, value) end
 end
 
 -- Native menu sound feedback. The real Options menu fires Wwise events on the
@@ -152,7 +215,7 @@ local function _wwise_probe()
         for i = 1, #names do
             local w = Managers.world and Managers.world:has_world(names[i]) and Managers.world:world(names[i])
             local ww = w and World.wwise_world(w)
-            mod:info("[mt:wwise] world '%s' present=%s wwise_world=%s",
+            mod:debug("[mt:wwise] world '%s' present=%s wwise_world=%s",
                 names[i], tostring(w ~= nil), tostring(ww ~= nil))
         end
     end)
@@ -167,6 +230,307 @@ end
 local function _play_click() _play_event("Play_hud_select") end
 -- Hover sound — fire on the EDGE (hover-enter) only, never every frame.
 local function _play_hover() _play_event("Play_hud_hover") end
+
+-- ---------------------------------------------------------------
+-- (#208) EQUIPMENT MERGE. The four inventory-management mods get folded into ONE
+-- collapsible "Equipment" tab when 2+ are installed. Disabled members retain their
+-- normal section header with no editable rows and a "Disabled in VMF" tooltip. Roles:
+--   cosmetics_tweaker -> Cosmetics ; cim/cim_dev -> Crafting ; wt -> Weapons ;
+--   character_weapon_variants -> Career Weapon Variants.
+-- Sections render top-level (Cosmetics, Crafting, Weapons); CWV nests UNDER Weapons
+-- when wt is also active, else sits top-level. N=1-only-CWV just relabels that one tab
+-- "Weapons". The synthesized category is FLAT (_flat=true) with a parallel `_depths`
+-- array (so each member keeps its own internal group/gear nesting, shifted under its
+-- section header) + a `_owners[setting_id]` map so get/set/stage/apply route per-node to
+-- the owning mod object (see _owner + the staged-change helpers). TWIN of the standalone
+-- view's identical block — keep both in sync.
+-- ---------------------------------------------------------------
+local _EQUIP_ROLE = {
+    cosmetics_tweaker = "cosmetics",
+    cim = "crafting", cim_dev = "crafting",
+    wt = "weapons",
+    character_weapon_variants = "cwv",
+}
+
+-- Localize a gut section/tab label; reject a "<missing-key>" marker + fall back to a
+-- literal (same guard as _vmf_label). Safe at _rebuild time (loc is registered by then).
+local function _equip_loc(key, fallback)
+    if mod and mod.localize then
+        local ok, s = pcall(mod.localize, mod, key)
+        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then return s end
+    end
+    return fallback
+end
+
+-- Post-process the _vmf_categories() output (called just before its final sort).
+local function _synthesize_equipment(cats)
+    local members, n = disabled_sections.select_members(cats, _EQUIP_ROLE)
+    if n == 0 then return cats end
+
+    if n == 1 then
+        -- Only the CWV-alone case changes: its single tab is relabeled "Weapons".
+        if members.cwv then members.cwv.label = _equip_loc("gut_equip_weapons", "Weapons") end
+        return cats
+    end
+
+    -- N >= 2: build the merged Equipment category; drop the folded members from the list.
+    local folded = {}
+    for _, c in pairs(members) do folded[c] = true end
+    local rest = {}
+    for _, c in ipairs(cats) do if not folded[c] then rest[#rest + 1] = c end end
+
+    local widgets, depths, owners = {}, {}, {}
+    local owner_ids, owner_seen = {}, {}
+    local function _note_owner(mid)
+        if not owner_seen[mid] then owner_seen[mid] = true; owner_ids[#owner_ids + 1] = mid end
+    end
+    -- One synthetic collapsible group header at `header_depth` (owns no setting).
+    local function _add_header(setting_id, label, header_depth, enabled)
+        widgets[#widgets + 1] = enabled == false
+            and disabled_sections.disabled_header(setting_id, label, header_depth,
+                _equip_loc("gut_disabled_in_vmf", disabled_sections.REASON))
+            or { setting_id = setting_id, type = "group", title = label }
+        depths[#depths + 1] = header_depth
+    end
+    -- A member's setting nodes (skipping its synthesized VMF header at [1]), rebased so the
+    -- member's SHALLOWEST node renders at `target_top_depth` (one level under its section
+    -- header), with internal nesting preserved. Records each node's owner.
+    local function _add_member(member, target_top_depth)
+        if not member or member.enabled == false then return end
+        local src = member and member.widgets
+        if type(src) ~= "table" then return end
+        -- VMF mods' top content usually sits at NATURAL depth 1 (not 0), so blindly adding a
+        -- base offset lands it a level too deep — which is why the nested CWV header (correctly
+        -- at depth 1) looked un-indented beside wt's content (wrongly at depth 2). Rebase by the
+        -- member's OWN minimum natural depth: its shallowest node renders exactly at
+        -- target_top_depth (one level under its section header), preserving internal nesting. (#208)
+        local min_d
+        for i = 2, #src do
+            local nd = _nf(src[i], "depth") or 0
+            if not min_d or nd < min_d then min_d = nd end
+        end
+        min_d = min_d or 0
+        for i = 2, #src do
+            local node = src[i]
+            widgets[#widgets + 1] = node
+            depths[#depths + 1] = target_top_depth + ((_nf(node, "depth") or 0) - min_d)
+            local sid = _nf(node, "setting_id")
+            if type(sid) == "string" then
+                owners[sid] = { mod_id = member.mod_id, mod_obj = member.mod_obj }
+                _note_owner(member.mod_id)
+            end
+        end
+    end
+
+    -- Section order: Cosmetics -> Crafting -> Weapons (deliberate-order exception).
+    if members.cosmetics then
+        _add_header("__equip_cosmetics", _equip_loc("gut_equip_cosmetics", "Cosmetics"), 0,
+            members.cosmetics.enabled)
+        _add_member(members.cosmetics, 1)
+    end
+    if members.crafting then
+        _add_header("__equip_crafting", _equip_loc("gut_equip_crafting", "Crafting"), 0,
+            members.crafting.enabled)
+        _add_member(members.crafting, 1)
+    end
+    if members.weapons then
+        local weapons_header_enabled = members.weapons.enabled ~= false
+            or (members.cwv and members.cwv.enabled ~= false)
+        _add_header("__equip_weapons", _equip_loc("gut_equip_weapons", "Weapons"), 0,
+            weapons_header_enabled)
+        _add_member(members.weapons, 1)
+        if members.cwv then
+            -- CWV nested UNDER Weapons (header depth 1, its settings depth 2+).
+            _add_header("__equip_cwv", _equip_loc("gut_equip_cwv", "Career Weapon Variants"), 1,
+                members.cwv.enabled)
+            _add_member(members.cwv, 2)
+        end
+    elseif members.cwv then
+        -- No wt: CWV sits at the TOP LEVEL of Equipment (no Weapons wrapper).
+        _add_header("__equip_cwv", _equip_loc("gut_equip_cwv", "Career Weapon Variants"), 0,
+            members.cwv.enabled)
+        _add_member(members.cwv, 1)
+    end
+
+    rest[#rest + 1] = {
+        mod_id = "gut_equipment",
+        label = _equip_loc("gut_equip_tab", "Equipment"),
+        widgets = widgets,
+        _depths = depths,             -- parallel depth array (consumed by _build_rows)
+        _owners = owners,             -- setting_id -> { mod_id, mod_obj } (consumed by _owner)
+        _owner_mod_ids = owner_ids,   -- member mod_ids (dirty-check + apply iteration)
+        mod_obj = nil,                -- spans multiple mods; per-node ownership via _owners
+        enabled = true,
+        _flat = true,
+    }
+    return rest
+end
+
+-- (#339) Fold Crosshair Kill Confirmation's live options INTO gut's "Interface" tab
+-- under the HUD group, as a "Crosshair Kill Confirmation" sub-collapsible -- NOT a
+-- top-level tab (the mistake #313 made). Reuses the _synthesize_equipment `_owners`
+-- mechanism to route CKC nodes to the real CKC mod, but MUTATES the existing gut
+-- category instead of appending a new one. See MOD_TWEAKER_INTEGRATION.md.
+--
+-- Correctness notes (traps handled):
+--   * NEVER mutate VMF's own list in place (it is reused every _rebuild) -- gut's widget
+--     array is COPIED and CKC's nodes are shallow-COPIED before stamping depth.
+--   * gut's category is MIXED-owner (its own settings + injected CKC settings), so
+--     _owner_mod_ids MUST include BOTH gut's id and CKC -- else apply/dirty (which take
+--     the `if _owner_mod_ids` branch) would flush ONLY CKC and silently drop every gut
+--     Interface edit. mod_obj stays = gut so gut's own settings fall back via _owner.
+--   * gut's category is _flat=true; the flat render path reads each node's own `depth`
+--     (rebased by the tab's min depth), so injected nodes MUST carry a `depth` in gut's
+--     natural depth space (HUD group depth + 1 for the sub-header, +2 for its options).
+-- This function is kept byte-parallel with the twin in _mod_tweaker_view.lua.
+local function _inject_ckc_into_gut(out)
+    local ckc = get_mod(_CKC_NAME)
+    if not ckc then return end                        -- CKC not installed: nothing to fold
+    local gut_cat
+    for _, c in ipairs(out) do
+        if c.mod_id == "gut" or c.mod_id == "gut" then gut_cat = c; break end
+    end
+    if not gut_cat or type(gut_cat.widgets) ~= "table" then return end
+
+    local vmf = get_mod("VMF")
+    local wd = vmf and vmf.options_widgets_data
+    if type(wd) ~= "table" then return end
+    local ckc_list
+    for _, list in ipairs(wd) do
+        local h = (type(list) == "table") and list[1]
+        if h and _nf(h, "mod_name") == _CKC_NAME then ckc_list = list; break end
+    end
+    if type(ckc_list) ~= "table" or #ckc_list < 2 then return end  -- no real options
+
+    -- Locate the HUD group node in gut's flat list.
+    local src = gut_cat.widgets
+    local hud_idx, hud_depth
+    for i = 1, #src do
+        if _nf(src[i], "setting_id") == "gut_hide_hud_ui_group" then
+            hud_idx = i; hud_depth = _nf(src[i], "depth") or 0; break
+        end
+    end
+    if not hud_idx then return end
+    -- (#527) [CKC-SPLICE-FIRST-527] The block splices at the START of the HUD child
+    -- block (immediately after the HUD group header), not the end: collapsible
+    -- sub-groups sort FIRST at their level (user doctrine, issue 527), and
+    -- "Crosshair Kill Confirmation" precedes "UI Tweaks" A-Z, so the head of the
+    -- block IS its alphabetical slot among the HUD sub-groups.
+    local ins_idx = hud_idx + 1
+
+    -- Build the CKC sub-group block: a group header at HUD+1, CKC options rebased to HUD+2.
+    -- Title is the mod's proper name as a literal (a non-key string): _vmf_label localizes
+    -- against gut, gets a "<...>" miss, and falls back to this literal. Keeps the injection
+    -- self-contained without editing gut's loc file.
+    local block = { { setting_id = "gut_ckc_group", type = "group",
+                      title = _CKC_NAME, depth = hud_depth + 1 } }
+    local ckc_min
+    for i = 2, #ckc_list do
+        local d = _nf(ckc_list[i], "depth") or 0
+        if not ckc_min or d < ckc_min then ckc_min = d end
+    end
+    ckc_min = ckc_min or 0
+    local owners = gut_cat._owners or {}
+    for i = 2, #ckc_list do
+        local node = ckc_list[i]
+        local nn = {}                                 -- shallow copy (never mutate VMF's node)
+        for k, v in pairs(node) do nn[k] = v end
+        nn.depth = hud_depth + 2 + ((_nf(node, "depth") or 0) - ckc_min)
+        block[#block + 1] = nn
+        local sid = _nf(node, "setting_id")
+        if type(sid) == "string" then owners[sid] = { mod_id = _CKC_NAME, mod_obj = ckc } end
+    end
+
+    -- Splice the block into a COPY of gut's widget list at the START of the HUD child
+    -- block (#527; see [CKC-SPLICE-FIRST-527] above).
+    local new_w = {}
+    for i = 1, ins_idx - 1 do new_w[#new_w + 1] = src[i] end
+    for i = 1, #block do new_w[#new_w + 1] = block[i] end
+    for i = ins_idx, #src do new_w[#new_w + 1] = src[i] end
+
+    gut_cat.widgets = new_w
+    gut_cat._owners = owners
+    gut_cat._owner_mod_ids = { gut_cat.mod_id, _CKC_NAME }   -- MIXED: flush BOTH buffers
+    -- gut_cat.mod_obj stays = gut (its own settings fall back via _owner)
+end
+
+-- (#312) Bridge gut's surfaced "UI Tweaks" toggles to the STOCK UI Tweaks (HideBuffs)
+-- mod so the Mod Tweaker reads/writes ITS live settings, not gut's own private copies.
+-- gut kept HideBuffs' setting_ids VERBATIM in its data tree (hide_frames, HIDE_BOSS_HP_BAR,
+-- ...), but the two mods persist them in SEPARATE VMF namespaces (gut vs HideBuffs) --
+-- so a toggle the user set ON in UI Tweaks' own VMF menu showed OFF in the Mod Tweaker
+-- (issue #312, user reports 2026-07-10 / 2026-07-12). When HideBuffs is installed + enabled
+-- we route every OVERLAPPING checkbox setting_id's get/set to it via the same per-node
+-- _owners mechanism the Equipment merge (#208) and CKC injection (#339) use: reads now show
+-- HideBuffs' live value, edits stage under a "HideBuffs" buffer and commit as HB:set(id, v,
+-- true) (fires its on_setting_changed live + VMF-persists) -- the own-or-pin doctrine that
+-- matches the drag-offset sync module (_gut_uitweaks_sync.lua) and the CKC bridge (#313).
+-- HideBuffs becomes the single owner of the shared toggles. No-op when HideBuffs is absent
+-- or disabled: gut's own copies drive its absorbed hb/ fork exactly as before. Runs AFTER
+-- _inject_ckc_into_gut so it MERGES into any CKC-set _owner_mod_ids. Marker
+-- [UITWEAKS-BRIDGE-312]. Byte-parallel twin with the one in _mod_tweaker_view.lua.
+local function _bridge_uitweaks_to_stock(out)
+    local HB = get_mod("HideBuffs")
+    if not HB then return end                          -- stock UI Tweaks absent: gut owns its copies
+    if type(HB.is_enabled) == "function" then
+        local ok_en, en = pcall(HB.is_enabled, HB)
+        if ok_en and en == false then
+            local gut_cat
+            for _, c in ipairs(out) do
+                if c.mod_id == "gut" or c.mod_id == "gut" then gut_cat = c; break end
+            end
+            if gut_cat then
+                gut_cat.widgets = disabled_sections.disable_group_subtree(gut_cat.widgets,
+                    "hb_group",
+                    _equip_loc("gut_disabled_in_vmf", disabled_sections.REASON))
+            end
+            return                                    -- present but disabled: explained header only
+        end
+    end
+    local names = HB.SETTING_NAMES
+    if type(names) ~= "table" then return end
+    -- Real HideBuffs setting_ids are the VALUES of SETTING_NAMES (key may differ from id).
+    local valid = {}
+    for _, sid in pairs(names) do
+        if type(sid) == "string" then valid[sid] = true end
+    end
+    local gut_cat
+    for _, c in ipairs(out) do
+        if c.mod_id == "gut" or c.mod_id == "gut" then gut_cat = c; break end
+    end
+    if not gut_cat or type(gut_cat.widgets) ~= "table" then return end
+
+    local owners  = gut_cat._owners or {}
+    local bridged = 0
+    for i = 1, #gut_cat.widgets do
+        local node  = gut_cat.widgets[i]
+        local sid   = _nf(node, "setting_id")
+        local wtype = _nf(node, "type")
+        -- Bridge only OVERLAPPING value toggles: a checkbox whose id is a real HideBuffs
+        -- setting. Skips groups, the HIDE_HUD hotkey (keybind, read-only here), and gut's
+        -- OWN control settings (gut_uitweaks_sync / the vanilla mirrors are NOT in
+        -- SETTING_NAMES). Never override a node already owned (e.g. a CKC-injected one).
+        if type(sid) == "string" and valid[sid]
+                and (wtype == "checkbox" or wtype == "boolean")
+                and owners[sid] == nil then
+            owners[sid] = { mod_id = "HideBuffs", mod_obj = HB }
+            bridged = bridged + 1
+        end
+    end
+    if bridged == 0 then return end
+    gut_cat._owners = owners
+    -- Merge "HideBuffs" into _owner_mod_ids so apply/dirty flush ITS staged buffer too.
+    -- _inject_ckc_into_gut may have already set this to { gut_id, CKC }; preserve those and
+    -- add gut's own id (its non-bridged settings buffer under it) + HideBuffs.
+    local ids  = gut_cat._owner_mod_ids or {}
+    local seen = {}
+    for _, id in ipairs(ids) do seen[id] = true end
+    if not seen[gut_cat.mod_id] then ids[#ids + 1] = gut_cat.mod_id end
+    seen[gut_cat.mod_id] = true
+    if not seen["HideBuffs"] then ids[#ids + 1] = "HideBuffs" end
+    gut_cat._owner_mod_ids = ids
+    -- gut_cat.mod_obj stays = gut (its own non-bridged settings fall back via _owner).
+end
 
 local function _vmf_categories()
     local out = {}
@@ -209,17 +573,34 @@ local function _vmf_categories()
         if type(mod_name) == "string" and _MY_MODS[mod_name] then
             local mod_obj = get_mod(mod_name)
             local label = _nf(header, "readable_mod_name") or mod_name
+            -- (Fix 3) gut's OWN Mod Tweaker tab reads "Interface" (this IS the interface/GUI
+            -- menu), not the VMF readable_mod_name. Label-only override — the mod id, Workshop
+            -- title, and .mod/cfg are untouched. Applies to both the stable + dev ids.
+            if mod_name == "gut" or mod_name == "gut" then label = "Interface" end
             local enabled = true
             if mod_obj and mod_obj.is_enabled then
                 local ok_en, en = pcall(mod_obj.is_enabled, mod_obj)
                 if ok_en then enabled = en and true or false end
             end
+            -- #318 revised contract: retain installed disabled mods so synthesis can
+            -- place an explained grey header in the normal merged section. An
+            -- unsynthesized single-mod category retains the established disabled tab.
             out[#out + 1] = {
                 mod_id = mod_name, label = label, widgets = list,
                 mod_obj = mod_obj, enabled = enabled, _flat = true,
             }
         end
     end
+    -- (#339) Fold Crosshair Kill Confirmation into gut's Interface tab under HUD (NOT a
+    -- tab). No-op when CKC is absent. Before the sort (it mutates the existing gut cat).
+    _inject_ckc_into_gut(out)
+    -- (#312) Bridge gut's UI Tweaks toggles to the stock HideBuffs mod's live settings
+    -- (own-or-pin) so the Mod Tweaker stays consistent with UI Tweaks' own VMF options.
+    -- After CKC injection (it merges into any CKC-set _owner_mod_ids), before the sort.
+    _bridge_uitweaks_to_stock(out)
+    -- (#208) Fold the four inventory mods into one "Equipment" tab when 2+ are active
+    -- (or relabel the N=1-only-CWV tab). Done BEFORE the sort so Equipment participates.
+    out = _synthesize_equipment(out)
     table.sort(out, function(a, b)
         if a.enabled ~= b.enabled then return a.enabled end
         return tostring(a.label) < tostring(b.label)
@@ -250,10 +631,14 @@ local function _cat_key(category)
     return category and category.mod_id or "?"
 end
 
--- Stage one edit into the per-category pending buffer (replaces the live _cat_set on
--- every row edit). Records the value + refreshes the APPLY button dirty state.
+-- Stage one edit into the pending buffer (replaces the live _cat_set on every row edit).
+-- Records the value + refreshes the APPLY button dirty state. (#208) The buffer is keyed by
+-- the OWNER mod_id resolved from the node, so an Equipment edit to e.g. a cosmetics setting
+-- buffers under "cosmetics_tweaker"; for a normal category _owner returns category.mod_id, so
+-- the key is _cat_key(category) exactly as before.
 function HeroViewStateModTweaker:stage_set(category, setting_id, value)
-    local key = _cat_key(category)
+    local _, owner_id = _owner(category, setting_id)
+    local key = owner_id or _cat_key(category)
     self._pending[key] = self._pending[key] or {}
     self._pending[key][setting_id] = value
     -- NOTE: do NOT set self._dirty here. self._dirty drives the auto-save-to-log on exit,
@@ -264,17 +649,29 @@ end
 
 -- Read a setting's EFFECTIVE value: the staged value if one is pending, else the live
 -- value passed in (which the caller read via _cat_get). Mirrors native _get_setting
--- (assigned(pending, live)).
+-- (assigned(pending, live)). (#208) Reads from the OWNER mod_id's buffer (see stage_set).
 function HeroViewStateModTweaker:get_staged(category, setting_id, live_value)
-    local p = self._pending[_cat_key(category)]
+    local _, owner_id = _owner(category, setting_id)
+    local p = self._pending[owner_id or _cat_key(category)]
     if p and p[setting_id] ~= nil then return p[setting_id] end
     return live_value
 end
 
--- True if the ACTIVE category has any pending edit (drives APPLY enabled/greyed).
+-- True if the ACTIVE category has any pending edit (drives APPLY enabled/greyed). (#208) The
+-- merged Equipment category buffers under EACH member mod_id, so it's dirty if ANY member's
+-- buffer is non-empty; a normal category checks its single _cat_key buffer as before.
 function HeroViewStateModTweaker:_active_category_dirty()
     local cat = self._categories and self._categories[self._selected]
-    local p = cat and self._pending[_cat_key(cat)]
+    if not cat then return false end
+    local ids = cat._owner_mod_ids
+    if ids then
+        for i = 1, #ids do
+            local p = self._pending[ids[i]]
+            if p and next(p) ~= nil then return true end
+        end
+        return false
+    end
+    local p = self._pending[_cat_key(cat)]
     return (p ~= nil) and (next(p) ~= nil)
 end
 
@@ -283,23 +680,198 @@ function HeroViewStateModTweaker:_update_apply_button()
     if self._apply then self._apply.content.disabled = not self:_active_category_dirty() end
 end
 
+function HeroViewStateModTweaker:_profile_snapshot(category, defaults)
+    local out = {}
+    for i = 1, #(self._build_nodes or {}) do
+        local node = self._build_nodes[i]
+        local sid = _nf(node, "setting_id")
+        local kind = _nf(node, "type")
+        if sid and kind ~= "group" and kind ~= "keybind" then
+            local _, owner_id = _owner(category, sid)
+            local value = defaults and _nf(node, "default_value") or _cat_get(category, sid)
+            if value == nil and defaults then value = _cat_get(category, sid) end
+            if owner_id and value ~= nil then
+                out[profiles.member_key(owner_id, sid)] = value
+            end
+        end
+    end
+    return out
+end
+
+
+function HeroViewStateModTweaker:_profile_ensure(category)
+    if not category then return end
+    local tab_id = _cat_key(category)
+    self._profile_slot = profiles.get_active(mod, tab_id)
+    local ready_key = tab_id .. ":" .. tostring(self._profile_slot)
+    if self._profile_ready[ready_key] then return end
+    if not profiles.load(mod, tab_id, self._profile_slot) then
+        local use_defaults = self._profile_slot ~= 1
+        profiles.save(mod, tab_id, self._profile_slot,
+            self:_profile_snapshot(category, use_defaults))
+        _printf("[gut:561] initialized tab=%s profile=%d source=%s",
+            tostring(tab_id), self._profile_slot, use_defaults and "defaults" or "live")
+    end
+    self._profile_ready[ready_key] = true
+end
+
+
+function HeroViewStateModTweaker:_profile_capture(category)
+    if not category then return end
+    local tab_id = _cat_key(category)
+    local slot = profiles.get_active(mod, tab_id)
+    profiles.save(mod, tab_id, slot, self:_profile_snapshot(category, false))
+    self._profile_ready[tab_id .. ":" .. tostring(slot)] = true
+    self._profile_slot = slot
+end
+
+
+function HeroViewStateModTweaker:_switch_profile(slot)
+    local category = self._categories and self._categories[self._selected]
+    if not category then return end
+    local tab_id = _cat_key(category)
+    local current = profiles.get_active(mod, tab_id)
+    if slot == current then return end
+    if self:_active_category_dirty() then self:apply_pending(category) end
+    self:_profile_capture(category)
+    local values = profiles.load(mod, tab_id, slot)
+    if not values then
+        values = self:_profile_snapshot(category, true)
+        profiles.save(mod, tab_id, slot, values)
+    end
+    profiles.set_active(mod, tab_id, slot)
+    self._profile_ready[tab_id .. ":" .. tostring(slot)] = true
+    self._profile_slot = slot
+    local staged = 0
+    for member, value in pairs(values) do
+        local owner_id, sid = profiles.split_member_key(member)
+        local _, actual_owner = _owner(category, sid)
+        if owner_id and sid and actual_owner == owner_id then
+            self:stage_set(category, sid, value)
+            staged = staged + 1
+        end
+    end
+    if staged > 0 then self:apply_pending(category) else self:_build_rows(category) end
+    _printf("[gut:561] switched tab=%s profile=%d settings=%d",
+        tostring(tab_id), slot, staged)
+    _play_click()
+end
+
 -- APPLY: commit the whole pending buffer for `category` through the existing _cat_set
 -- path (the ONLY place _cat_set runs on edit — a stray slider drag never takes effect
 -- until clicked), clear the buffer, grey the button, and repaint the rows from the new
 -- live values. Native handle_apply_button -> apply_changes (options_view.lua:1919).
+-- (#208) For the merged Equipment category, flush EACH member mod_id's buffer (each edit
+-- routes to its owner's mod_obj via _cat_set -> _owners), then clear them all.
 function HeroViewStateModTweaker:apply_pending(category)
+    local ids = category._owner_mod_ids
+    if ids then
+        local any = false
+        for i = 1, #ids do
+            local mid = ids[i]
+            local p = self._pending[mid]
+            if p and next(p) ~= nil then
+                local count, batched, batch_err = transactions.commit(category, p, _owner, _cat_set)
+                if batched then
+                    printf("[gut:560] committed owner=%s settings=%d notifications=%d error=%s",
+                        tostring(mid), count, batch_err and 0 or 1, tostring(batch_err or "none"))
+                end
+                self._pending[mid] = {}
+                any = true
+            end
+        end
+        if not any then return end
+        self._dirty = true
+        self:_update_apply_button()
+        self:_build_rows(category)
+        self:_profile_capture(category)
+        _play_click()
+        mod:debug("[mt:apply] committed Equipment buffers {%s}", table.concat(ids, ", "))
+        return
+    end
     local key = _cat_key(category)
     local p = self._pending[key]
     if not p or next(p) == nil then return end
-    for id, value in pairs(p) do _cat_set(category, id, value) end
+    local count, batched, batch_err = transactions.commit(category, p, _owner, _cat_set)
+    if batched then
+        printf("[gut:560] committed owner=%s settings=%d notifications=%d error=%s",
+            tostring(key), count, batch_err and 0 or 1, tostring(batch_err or "none"))
+    end
     self._pending[key] = {}
     self._dirty = true   -- a LIVE write happened -> export the TOML on exit
     self:_update_apply_button()
     -- Rebuild the rows so each reads its new live value (the mod's on_setting_changed
     -- may have snapped/clamped further, e.g. ct's 25-coin rounding).
     self:_build_rows(category)
+    self:_profile_capture(category)
     _play_click()
     mod:debug("[mt:apply] committed pending buffer for '%s'", tostring(key))
+end
+
+-- (v0.2.148-dev) RESTORE DEFAULTS: stage every setting in the CURRENT tab back to its
+-- default_value, then repaint the rows so the staged defaults show. This does NOT write
+-- live — it STAGES (like a manual edit); the user clicks Apply to commit, at which point
+-- apply_pending flushes the buffer through _cat_set. Because stage_set routes each edit to
+-- its OWNER mod_id (_owner), the Equipment tab resets every member mod correctly.
+-- Skips groups/headers (no setting_id), settings with no default_value, and keybinds
+-- (type=="keybind", whose default_value is an empty table).
+function HeroViewStateModTweaker:reset_to_defaults()
+    local nodes    = self._build_nodes
+    local category = self._build_category
+    if not nodes or not category then return end
+    local n = 0
+    for i = 1, #nodes do
+        local node = nodes[i]
+        local sid  = _nf(node, "setting_id")
+        local dv   = _nf(node, "default_value")
+        if sid and dv ~= nil and _nf(node, "type") ~= "keybind" then
+            self:stage_set(category, sid, dv)
+            n = n + 1
+        end
+    end
+    self:_update_apply_button()
+    self:_build_rows(category)
+    _play_click()
+    mod:debug("[mt:reset] staged %d default(s) for '%s'", n, tostring(_cat_key(category)))
+end
+
+-- (Fix 3, v0.2.151-dev) Show the native "restore defaults" CONFIRM popup before resetting.
+-- Rendered by the game's own Managers.popup (its own manager + renderer — no borrowed-renderer
+-- issue), the same mechanism vanilla OptionsView uses for its reset/apply confirms
+-- (options_view.lua:3335). queue_popup(text, topic, result_1, button_1, result_2, button_2);
+-- query_result later returns the chosen result key. Only the CONFIRM ("reset_values") result
+-- runs reset_to_defaults (current tab only). Falls back to an immediate reset if the popup
+-- manager is unavailable, so the button never dead-ends.
+function HeroViewStateModTweaker:_queue_reset_popup()
+    _play_click()
+    if self._reset_popup_id then return end   -- already showing
+    if not (Managers and Managers.popup and Managers.popup.queue_popup) then
+        self:reset_to_defaults()
+        return
+    end
+    -- Mirror the VANILLA reset-settings popup (options_view.lua:3335) VERBATIM: the engine
+    -- Localizes popup text, so RAW English strings render as `<raw string>`. Real vanilla loc
+    -- keys (reset_settings_popup_text / popup_discard_changes_topic / button_ok / popup_choice_cancel)
+    -- resolve correctly. CONFIRM result = "reset_values"; cancel = "revert_changes".
+    local ok, id = pcall(function()
+        local text = Localize("reset_settings_popup_text")
+        return Managers.popup:queue_popup(text, Localize("popup_discard_changes_topic"), "reset_values", Localize("button_ok"), "revert_changes", Localize("popup_choice_cancel"))
+    end)
+    if ok and id then self._reset_popup_id = id else self:reset_to_defaults() end
+end
+
+-- (Fix 3, v0.2.151-dev) Poll the reset-confirm popup each frame; run the reset ONLY on the
+-- CONFIRM ("reset_values") result. Any other result (cancel / click-away) just dismisses.
+function HeroViewStateModTweaker:_check_reset_popup()
+    local id = self._reset_popup_id
+    if not id then return end
+    if not (Managers and Managers.popup) then self._reset_popup_id = nil; return end
+    local result = Managers.popup:query_result(id)
+    if result then
+        Managers.popup:cancel_popup(id)
+        self._reset_popup_id = nil
+        if result == "reset_values" then self:reset_to_defaults() end
+    end
 end
 
 -- ---------------------------------------------------------------
@@ -334,10 +906,21 @@ HeroViewStateModTweaker.on_enter = function (self, params)
     -- buffer on a tab switch. mod_id survives, and gives per-category isolation for free.
     self._pending   = self._pending or {}
     self._apply     = defs.create_apply_button()
+    -- (v0.2.148-dev) RESTORE DEFAULTS button (bottom bar, to the LEFT of Apply). Clicking it
+    -- STAGES every current-tab setting back to its default_value (see reset_to_defaults) — the
+    -- user then clicks Apply to commit, exactly like a normal staged edit.
+    self._reset     = defs.create_default_button()
+    self._profiles_label, self._profile_buttons = defs.create_profile_controls()
+    self._profile_slot = 1
+    self._profile_ready = {}
+    -- (#207) Reusable hover-info popup widget (rect bg + frame + title/desc text). The draw
+    -- loop sets its content + geometry + fade alpha each frame via defs.layout_tooltip.
+    self._tooltip   = defs.create_tooltip_popup()
     -- v0.2.65-dev: no "MOD TWEAKER" title widget — native Options has none and the
     -- tab strip now spans the full top band (see defs: mt_title node + build_title
     -- factory removed).
-    self._hint      = defs.build_hint("")
+    -- (Fix 5, v0.2.149-dev) The bottom "Click a tab to pick a mod..." hint was removed to
+    -- match the vanilla Options menu (no bottom hint). build_hint/self._hint are gone.
 
     self._tabs = {}
     self._rows = {}
@@ -392,6 +975,13 @@ HeroViewStateModTweaker.update = function (self, dt, t)
             sbc and tostring(sbc.thumb_frac) or "nil", sbc and tostring(sbc.scroll_value) or "nil",
             (ok_sb and sbp) and string.format("{%d,%d}", sbp[1], sbp[2]) or "?",
             tostring(sbhs and sbhs.is_hover), tostring(sbhs and sbhs.is_held))
+    end
+
+    -- (Fix 3, v0.2.151-dev) While the reset-confirm popup is up, it's MODAL: only poll its
+    -- result (the game popup owns input + renders itself); don't process ESC / row input.
+    if self._reset_popup_id then
+        self:_check_reset_popup()
+        return
     end
 
     -- A mission-start vote closes the menu (matches the compendium).
@@ -483,8 +1073,20 @@ HeroViewStateModTweaker.on_exit = function (self)
     self._rows = nil
     self._scrollbar = nil
     self._exit = nil
-    self._hint = nil
     self._apply = nil
+    self._reset = nil   -- (v0.2.148-dev) RESTORE DEFAULTS button
+    self._profiles_label = nil
+    self._profile_buttons = nil
+    self._profile_ready = nil
+    -- (Fix 3, v0.2.151-dev) Cancel a dangling reset-confirm popup so it can't outlive the menu.
+    if self._reset_popup_id then
+        pcall(function()
+            if Managers and Managers.popup then Managers.popup:cancel_popup(self._reset_popup_id) end
+        end)
+        self._reset_popup_id = nil
+    end
+    self._tooltip = nil   -- (#207) hover-info popup widget
+    self._tt_row = nil
     -- (v0.2.70-dev) DISCARD pending edits on exit. Nothing was written live (staged-change
     -- model), so discard = drop the buffer — no native apply_changes(original_*) re-apply
     -- is needed (that exists only for native's live video-preview). Unapplied edits vanish.
@@ -497,12 +1099,6 @@ end
 -- so one bad node can't blank the view. Editable: checkbox, numeric (stepper),
 -- dropdown (option cycler). Read-only: group titles, keybind, text, unknown.
 -- ---------------------------------------------------------------
--- (v0.2.82-dev — ITEM 5) Vertical gap inserted ABOVE each top-level (depth-0) group
--- header in the normal list (except the first row), so consecutive top-level
--- collapsible sections read as visually separated like the vanilla options sections.
--- Child rows inside a section are untouched (intra-section spacing stays tight). px.
--- TWIN of the standalone view's TOP_SECTION_GAP — keep both in sync.
-local TOP_SECTION_GAP = 14
 -- Build ONE row widget for a single settings node `w`. Factored out of _build_rows
 -- so both the normal list AND the gear drill-down view (Back + parent + children)
 -- build child rows through the identical path (no new persistence — _cat_get/_cat_set
@@ -517,7 +1113,9 @@ local TOP_SECTION_GAP = 14
 -- children — incl. nested dropdowns — never render). Mirrors the original inline gid.
 function HeroViewStateModTweaker:_group_key(w, category)
     local setting_id = _nf(w, "setting_id")
-    local label = category._flat and _vmf_label(w, category.mod_obj)
+    -- (#208) Localize against the node's OWNER mod (Equipment members belong to four mods);
+    -- _owner returns category.mod_obj for normal categories, so this is unchanged there.
+    local label = category._flat and _vmf_label(w, (_owner(category, setting_id)))
                   or tostring(w.label or w.text or w.setting_id or "?")
     return (category.mod_id or "?") .. ":" .. tostring(setting_id or label)
 end
@@ -526,8 +1124,16 @@ function HeroViewStateModTweaker:_build_node_row(w, category, base_offset, depth
     depth = depth or 0
     local setting_id = _nf(w, "setting_id")
     local wtype = _nf(w, "type")
-    local label = category._flat and _vmf_label(w, category.mod_obj)
+    -- (#208) Resolve the node's OWNER mod_obj for label/tooltip localization (the merged
+    -- Equipment tab spans four mods); for a normal category _owner returns category.mod_obj.
+    local owner_mod_obj = _owner(category, setting_id)
+    local label = category._flat and _vmf_label(w, owner_mod_obj)
                   or tostring(w.label or w.text or w.setting_id or "?")
+    -- (#207) The node's localized tooltip DESCRIPTION (mod_obj may be nil for gut's own
+    -- nested categories — _vmf_tooltip then just uses the raw string). Stored on the row
+    -- below so the draw loop can show a hover popup; nil = no popup for this row.
+    -- (#208) Localize against the node's OWNER mod (see owner_mod_obj above).
+    local tooltip = _vmf_tooltip(w, owner_mod_obj)
     local row, err
 
     if wtype == "header" then
@@ -604,11 +1210,33 @@ function HeroViewStateModTweaker:_build_node_row(w, category, base_offset, depth
     end
 
     if row then
+        if _nf(w, "disabled") == true then
+            row._readonly = true
+            row._disabled_in_vmf = true
+            local color = row.style and row.style.label and row.style.label.text_color
+            if color then color[1], color[2], color[3], color[4] = 128, 128, 128, 128 end
+        end
         row._mod_id = category.mod_id
         row._setting_id = setting_id
         row._wtype = wtype
         row._category = category
         row._list_y = base_offset[2]  -- this row's Y (factory just decremented to it)
+        -- (#207) Hover-popup text: TITLE = the row label, DESC = the localized tooltip.
+        row._tip_title = label
+        row._tip_desc = tooltip
+        -- (v0.2.157-dev diag, temp) Farm any residual "<...>" marker. If the RAW node data or the
+        -- RESOLVED label/desc still contains a "<", printf it so the exact culprit + owning mod are
+        -- named next time the menu opens. With the _vmf_label/_vmf_tooltip hardening this should
+        -- fire ZERO times; if it does not fire yet the user still sees "<>", the marker is coming
+        -- from some OTHER element (value/dropdown/etc.), which this rules in or out.
+        local _rt = _nf(w, "tooltip")
+        local _rtt = _nf(w, "title") or _nf(w, "text")
+        local function _hasmark(x) return type(x) == "string" and string.find(x, "<") end
+        if _hasmark(_rt) or _hasmark(_rtt) or _hasmark(label) or _hasmark(tooltip) then
+            printf("[gut:desc] MARKER mod=%s sid=%s type=%s raw_title=%q raw_tt=%q -> label=%q desc=%q",
+                tostring(category.mod_id), tostring(setting_id), tostring(wtype),
+                tostring(_rtt), tostring(_rt), tostring(label), tostring(tooltip))
+        end
     end
     return row, err, wtype, setting_id, label
 end
@@ -648,7 +1276,10 @@ local function _order_category_nodes(category, nodes, depths)
         preserve_all = category.mod_id == "gut_equipment",
         get_type = function(node) return _nf(node, "type") end,
         is_generated_header = function(node) return _nf(node, "mod_name") ~= nil end,
-        get_label = function(node) return _vmf_label(node, category.mod_obj) end,
+        get_label = function(node)
+            local owner = _owner(category, _nf(node, "setting_id"))
+            return _vmf_label(node, owner or category.mod_obj)
+        end,
         has_explicit_order = function(node)
             return _nf(node, "mod_tweaker_preserve_order") == true
                 or _nf(node, "mod_tweaker_order") ~= nil
@@ -669,22 +1300,56 @@ function HeroViewStateModTweaker:_build_rows(category)
     -- collapsed row widget is being discarded, so drop the dangling open-dropdown refs.
     self._open_dropdown = nil
     self._dd_list = nil
+    -- (#207) The hovered tooltip row is one of the rows being discarded; drop the dangling
+    -- reference so a stale widget can't be redrawn (the fade machine re-acquires next frame).
+    self._tt_row = nil
     if not category or type(category.widgets) ~= "table" then return end
     self._expanded = self._expanded or {}   -- group_key -> true (expanded); default collapsed
 
     -- Flatten into parallel node + depth arrays. The VMF flat list ships its own
     -- `depth`; the gut nested tree gets a synthesized depth from _walk_nested. Both
     -- then feed the SAME drill-detection ("the next node is deeper") + inline-skip.
+    -- (#208) The synthesized Equipment category is flat too but carries a precomputed
+    -- `_depths` array (its section headers + depth-shifted member nodes); use it when
+    -- present, else fall back to each node's own `depth` field. (0 is truthy in Lua, so a
+    -- depth-0 entry survives the `or` fallback.)
     local nodes, depths = {}, {}
     if category._flat then
+        local pd = category._depths
+        -- A plain VMF tab (no synthesized _depths) carries VMF's natural per-node `depth`,
+        -- which starts at 1 for the mod's top-level content — indenting the WHOLE tab one level
+        -- for no reason. Rebase by the tab's MINIMUM natural setting depth (excluding the
+        -- non-rendered per-mod header) so its top-level rows render at depth 0 (no indent), the
+        -- same as the Equipment tab. Equipment supplies its own already-rebased `_depths`. (#208)
+        local min_d
+        if not pd then
+            for i = 1, #category.widgets do
+                local w = category.widgets[i]
+                if _nf(w, "type") ~= "header" then
+                    local d = _nf(w, "depth")
+                    if type(d) == "number" and (not min_d or d < min_d) then min_d = d end
+                end
+            end
+            min_d = min_d or 0
+        end
         for i = 1, #category.widgets do
             nodes[#nodes + 1] = category.widgets[i]
-            depths[#depths + 1] = _nf(category.widgets[i], "depth") or 0
+            if pd then
+                depths[#depths + 1] = pd[i] or _nf(category.widgets[i], "depth") or 0
+            else
+                depths[#depths + 1] = (_nf(category.widgets[i], "depth") or 0) - min_d
+            end
         end
     else
         for i = 1, #category.widgets do _walk_nested(category.widgets[i], nodes, depths, 0) end
     end
     nodes, depths = _order_category_nodes(category, nodes, depths)
+
+    -- (v0.2.148-dev) Keep the flattened node/depth/category refs so the RESTORE DEFAULTS
+    -- button (reset_to_defaults) can iterate the current tab's settings. Mirrors the view twin
+    -- (_mod_tweaker_view.lua stores these for its auto-collapse handler + the reset button).
+    self._build_nodes, self._build_depths, self._build_category = nodes, depths, category
+    self:_profile_ensure(category)
 
     local base_offset = { 0, -10, 0 }
 
@@ -711,8 +1376,9 @@ function HeroViewStateModTweaker:_build_rows(category)
             -- per-attack dropdown) is finally built and its options surface. The old loop
             -- rendered the parent's DIRECT children only (`depths[j] == pdepth + 1`), so the
             -- depth-3 dropdown nodes never existed as rows (the "no options" symptom).
-            local prow, perr, pwtype, psid = self:_build_node_row(nodes[p_idx], category, base_offset, 0)
-            self:_append_row(prow, perr, pwtype, category, psid, base_offset, false)
+            -- (v0.2.153-dev) The parent's OWN toggle row is NOT re-rendered here — you
+            -- already toggle it on the main list and the "Advanced: <name>" Back row gives
+            -- context, so repeating it was redundant. Children rebase to depth 0 below.
             local pdepth = depths[p_idx]
             local plan = defs.plan_drill_children(nodes, depths, p_idx, pdepth,
                 function(node) return _nf(node, "type") end,
@@ -725,7 +1391,7 @@ function HeroViewStateModTweaker:_build_rows(category)
             for k = 1, #plan do
                 local p = plan[k]
                 local crow, cerr, cwtype, csid, clabel =
-                    self:_build_node_row(nodes[p.index], category, base_offset, p.depth)
+                    self:_build_node_row(nodes[p.index], category, base_offset, math.max(0, p.depth - 1))
                 self:_append_row(crow, cerr, cwtype, category, csid, base_offset, p.has_gear, clabel)
             end
         end
@@ -751,15 +1417,8 @@ function HeroViewStateModTweaker:_build_rows(category)
             skip_below = nil
             local wtype = _nf(w, "type")
             local has_children = (depths[i + 1] ~= nil) and (depths[i + 1] > depth)
-            -- (v0.2.82-dev — ITEM 5) Vertical padding BETWEEN top-level collapsible sections.
-            -- Decrement the running offset by TOP_SECTION_GAP before a depth-0 group header so
-            -- a gap opens above it — but ONLY when content already exists above (skip the gap
-            -- before the FIRST row). Applied before _build_node_row decrements base_offset by
-            -- ROW_H so the gap lands above the header. Top-level ONLY (child rows untouched).
-            -- TWIN of the standalone view's identical block — keep both in sync.
-            if wtype == "group" and depth == 0 and #self._rows > 0 then
-                base_offset[2] = base_offset[2] - TOP_SECTION_GAP
-            end
+            -- (#208) No special top-section gap — sections/groups stack with the same row
+            -- rhythm as every other tab, so the Equipment tab's spacing matches other menus.
             local row, err, _wt, setting_id, label = self:_build_node_row(w, category, base_offset, depth)
 
             if wtype == "group" then
@@ -835,15 +1494,6 @@ local function _truncate(s, n)
     return s
 end
 
--- Per-mod tab-label overrides (keyed by mod_id, both stable + dev ids). An entry
--- here REPLACES the derived label outright (applied BEFORE the "Tweaker: " prefix
--- strip + truncation), so the tab reads EXACTLY the override string. Extend by
--- adding a `<mod_id> = "LABEL"` line. gt/gt_dev are deliberately absent — their
--- VMF name already reads "General", so the prefix-strip path yields "General".
-local _TAB_LABEL_OVERRIDE = {
-    cim = "CRAFTING", cim_dev = "CRAFTING",
-}
-
 function HeroViewStateModTweaker:_rebuild()
     -- Every VMF mod becomes a category (gut included, via its real settings);
     -- then any controller-registered category VMF didn't already provide.
@@ -906,7 +1556,7 @@ function HeroViewStateModTweaker:_rebuild()
         local ts = { font_type = "hell_shark", font_size = 20, upper_case = true }
         local font, scaled = UIFontByResolution(ts)
         for _, c in ipairs(cats) do
-            local override = _TAB_LABEL_OVERRIDE[c.mod_id]
+            local override = tab_labels.exact(c.mod_id)
             local lbl
             if override then
                 lbl = override
@@ -939,7 +1589,7 @@ function HeroViewStateModTweaker:_rebuild()
         -- applied BEFORE the prefix-strip/truncate so the tab reads exactly the
         -- override; otherwise drop the "Tweaker: " prefix (this menu is all my
         -- tweaker mods) and truncate to fit the tab.
-        local override = _TAB_LABEL_OVERRIDE[cat.mod_id]
+        local override = tab_labels.exact(cat.mod_id)
         local lbl
         if override then
             lbl = override
@@ -965,15 +1615,7 @@ function HeroViewStateModTweaker:_rebuild()
 
     self:_build_rows(self._categories[self._selected])
 
-    if total == 0 then
-        self._hint.content.text = "No mods with options found."
-    elseif paged then
-        self._hint.content.text = string.format(
-            "%d mods, page %d/%d.  Last tab = next page.  Click a setting; ESC closes.  ( * = mod disabled )",
-            total, self._page + 1, self._page_count)
-    else
-        self._hint.content.text = "Click a tab to pick a mod.  Click a checkbox / use [<] [>].  ESC closes.  ( * = disabled )"
-    end
+    -- (Fix 5, v0.2.149-dev) The bottom hint text was removed (native Options has no hint).
 
     mod:debug("[mt] rebuild: total=%d page=%d/%d displayed=%d selected=%d rows=%d",
         total, self._page + 1, self._page_count, #self._categories, self._selected, #self._rows)
@@ -1185,7 +1827,7 @@ local function _format_value(value, num_decimals)
     return string.format("%." .. (num_decimals or 0) .. "f", value or 0)
 end
 
-function HeroViewStateModTweaker:_begin_edit(row)
+function HeroViewStateModTweaker:_begin_edit(row, click_x)
     if self._editing_row and self._editing_row ~= row then
         -- Committing the previously-focused row keeps a single active editor.
         self:_commit_edit(self._editing_row)
@@ -1194,6 +1836,13 @@ function HeroViewStateModTweaker:_begin_edit(row)
     self._editing_row = row
     c.editing = true
     c.edit_str = _format_value(c.value, c.num_decimals)
+    c.caret_idx = #c.edit_str
+    if click_x and defs.numeric_caret_index then
+        local renderer = self.ui_top_renderer or self.ui_renderer
+        local ok, idx = pcall(defs.numeric_caret_index, renderer,
+            row.style and row.style.value, c.edit_str, c._caret_box_w or 64, click_x)
+        if ok and type(idx) == "number" then c.caret_idx = idx end
+    end
     c.caret_t = 0
     c.value_text = c.edit_str
     _play_click()
@@ -1205,31 +1854,38 @@ function HeroViewStateModTweaker:_edit_apply_keystrokes(c)
     local keystrokes = Keyboard.keystrokes()
     if not keystrokes or #keystrokes == 0 then return false end
     local s = c.edit_str or ""
+    local idx = math.clamp(c.caret_idx or #s, 0, #s)
     local nd = c.num_decimals or 0
+    local allow_neg = (c.min or 0) < 0
     local changed = false
     for _, stroke in ipairs(keystrokes) do
-        if type(stroke) == "string" then
-            if #s < _EDIT_MAX_LEN then
-                if tonumber(stroke) then
-                    -- digit: allowed before the dot, or while < nd digits sit after it.
-                    local dot = string.find(s, "%.")
-                    if not dot or #s < dot + nd then s = s .. stroke; changed = true end
-                elseif stroke == "-" then
-                    -- minus toggle, only when the range actually allows negatives.
-                    if (c.min or 0) < 0 then
-                        if string.find(s, "%-") then s = string.gsub(s, "%-", "")
-                        else s = "-" .. s end
-                        changed = true
-                    end
-                elseif stroke == "." and nd > 0 and not string.find(s, "%.") then
-                    s = s .. "."; changed = true
-                end
+        if stroke == Keyboard.LEFT then
+            if idx > 0 then idx = idx - 1; changed = true end
+        elseif stroke == Keyboard.RIGHT then
+            if idx < #s then idx = idx + 1; changed = true end
+        elseif stroke == Keyboard.HOME then
+            if idx ~= 0 then idx = 0; changed = true end
+        elseif stroke == Keyboard.END then
+            if idx ~= #s then idx = #s; changed = true end
+        elseif stroke == Keyboard.BACKSPACE then
+            if idx > 0 then s = s:sub(1, idx - 1) .. s:sub(idx + 1); idx = idx - 1; changed = true end
+        elseif stroke == Keyboard.DELETE then
+            if idx < #s then s = s:sub(1, idx) .. s:sub(idx + 2); changed = true end
+        elseif type(stroke) == "string" and #s < _EDIT_MAX_LEN then
+            local cand = s:sub(1, idx) .. stroke .. s:sub(idx + 1)
+            local ok = false
+            if stroke == "-" then
+                ok = allow_neg and idx == 0 and not s:find("-", 1, true)
+            elseif stroke == "." then
+                ok = nd > 0 and not s:find(".", 1, true)
+            elseif tonumber(stroke) then
+                local dot = cand:find("%.")
+                ok = (not dot) or (#cand - dot <= nd)
             end
-        elseif stroke == Keyboard.BACKSPACE and #s > 0 then
-            s = string.sub(s, 1, -2); changed = true
+            if ok then s = cand; idx = idx + 1; changed = true end
         end
     end
-    if changed then c.edit_str = s end
+    if changed then c.edit_str = s; c.caret_idx = idx end
     return changed
 end
 
@@ -1436,7 +2092,6 @@ function HeroViewStateModTweaker:_handle_dropdown_input(input_service)
 end
 
 function HeroViewStateModTweaker:_handle_input(input_service)
-
     -- (v0.2.69-dev) MODAL dropdown popup: while a dropdown is open, the popup owns input
     -- (option click / wheel-scroll / click-away). Short-circuit so no other row reacts.
     if self._open_dropdown then
@@ -1479,6 +2134,26 @@ function HeroViewStateModTweaker:_handle_input(input_service)
         local ah = self._apply and self._apply.content.button_hotspot
         if ah and (ah.on_release or ah.on_left_release) and not self._apply.content.disabled then
             self:apply_pending(self._categories[self._selected])
+            return
+        end
+    end
+
+    -- (Fix 3, v0.2.151-dev) RESTORE DEFAULTS button: show a native confirm popup FIRST.
+    -- Only the CONFIRM result runs reset_to_defaults (current tab only); the result is
+    -- polled in update() via _check_reset_popup.
+    do
+        local rh = self._reset and self._reset.content.button_hotspot
+        if rh and (rh.on_release or rh.on_left_release) then
+            self:_queue_reset_popup()
+            return
+        end
+    end
+
+
+    for i = 1, #(self._profile_buttons or {}) do
+        local ph = self._profile_buttons[i].content.hotspot
+        if ph and (ph.on_release or ph.on_left_release) then
+            self:_switch_profile(i)
             return
         end
     end
@@ -1615,6 +2290,18 @@ function HeroViewStateModTweaker:_handle_input(input_service)
                 local vhs_clicked = vhs and (vhs.on_release or vhs.on_left_release)
                 if c.editing then
                     -- ACTIVE EDITOR branch — suppress drag/arrows entirely (spec §6.6).
+                    if vhs_clicked and defs.numeric_caret_index then
+                        local cursor = input_service and input_service:get("cursor")
+                        if cursor then
+                            local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
+                            local click_x = UIInverseScaleVectorToResolution(cursor)[1] - anchor[1]
+                            local ok, idx = pcall(defs.numeric_caret_index,
+                                self.ui_top_renderer or self.ui_renderer,
+                                row.style and row.style.value, c.edit_str or "",
+                                c._caret_box_w or 64, click_x)
+                            if ok and type(idx) == "number" then c.caret_idx = idx end
+                        end
+                    end
                     self:_edit_apply_keystrokes(c)
                     -- CONSUME Enter / stray keys so they COMMIT and never open game chat
                     -- (v0.2.67-dev). Chat reads keyboard Enter on the INDEPENDENT chat_input
@@ -1640,7 +2327,13 @@ function HeroViewStateModTweaker:_handle_input(input_service)
                     end
                     -- Still editing: skip the drag/arrow handling for this row this frame.
                 elseif vhs_clicked then
-                    self:_begin_edit(row)
+                    local click_x
+                    local cursor = input_service and input_service:get("cursor")
+                    if cursor then
+                        local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
+                        click_x = UIInverseScaleVectorToResolution(cursor)[1] - anchor[1]
+                    end
+                    self:_begin_edit(row, click_x)
                     return
                 else
                 -- Draggable track. During the HOLD we only move the VISUAL; we COMMIT
@@ -1709,10 +2402,56 @@ function HeroViewStateModTweaker:_apply_row_hover(row)
     local row_hot = c.hotspot or c.track_hs
     local hovered = (row_hot and row_hot.is_hover) and true or false
     if (c.dec and c.dec.is_hover) or (c.inc and c.inc.is_hover) then hovered = true end
+    -- (Fix 4, v0.2.149-dev) An EXPANDED collapsible group stays lit (row highlight bar +
+    -- arrow glow) even when not hovered, so the open section reads as active. Thread the LIVE
+    -- expanded state (self._expanded[row._group_key] — the same source the row toggle uses)
+    -- into content.expanded so create_group_header's glow driver sees it each frame.
+    if row._is_group then
+        local exp = self._expanded[row._group_key] and true or false
+        c.expanded = exp
+        if exp then hovered = true end
+    end
     if c.is_highlighted ~= nil then c.is_highlighted = hovered end
     -- (2) hover-enter edge sound (debounced on the row's own _was_hovered flag).
     if hovered and not row._was_hovered then _play_hover() end
     row._was_hovered = hovered
+end
+
+-- (#207) HOVER INFO POPUP fade + draw. Replicates the native option-tooltip fade EXACTLY
+-- (ui_settings.lua:22-23 -> tooltip_wait_duration = 0.1, tooltip_fade_in_speed = 4): on a
+-- tooltip'd row becoming hovered, wait 0.1s (alpha 0), then ramp progress by dt*4 and set
+-- alpha = math.easeOutCubic(progress); on no-hover OR a different row, reset progress = 0 +
+-- wait = 0.1 -> alpha 0 -> instant disappear. `hover_row` is the hovered tooltip row this
+-- frame (or nil); `hover_world_y` its bottom-edge world Y (for layout's on-screen flip).
+-- TWIN of ModTweakerView:_update_tooltip — keep both in sync.
+local TT_WAIT, TT_SPEED = 0.1, 4
+function HeroViewStateModTweaker:_update_tooltip(dt, hover_row, hover_world_y, renderer)
+    -- Modal suppression: no tooltip while a dropdown popup is open, a slider is being
+    -- dragged, or a numeric field is being edited (matches _apply_row_hover's suppression).
+    if self._open_dropdown or self._slider_dragging or self._editing_row then hover_row = nil end
+
+    if hover_row and hover_row == self._tt_row then
+        if (self._tt_wait or 0) > 0 then
+            self._tt_wait = self._tt_wait - dt
+            self._tt_alpha = 0
+        else
+            self._tt_progress = math.min((self._tt_progress or 0) + dt * TT_SPEED, 1)
+            self._tt_alpha = math.easeOutCubic(self._tt_progress)
+        end
+    else
+        -- De-hover OR moved to a different row: reset (instant disappear) + adopt the new row.
+        self._tt_progress = 0
+        self._tt_wait = TT_WAIT
+        self._tt_alpha = 0
+        self._tt_row = hover_row
+    end
+
+    local row = self._tt_row
+    if not (row and (self._tt_alpha or 0) > 0 and self._tooltip) then return end
+    local ok = pcall(defs.layout_tooltip, self._tooltip, renderer,
+        row._tip_title or (row.content and row.content.label) or "", row._tip_desc or "",
+        row._list_y or 0, hover_world_y or 0, self._tt_alpha)
+    if ok then UIRenderer.draw_widget(renderer, self._tooltip) end
 end
 
 -- ---------------------------------------------------------------
@@ -1727,7 +2466,9 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
     local scenegraph = self.ui_scenegraph
     if not (renderer and scenegraph and self._chrome) then return end
 
-    -- Highlight the active tab: gold when selected / on hover, dim grey otherwise.
+    -- (Fix 2) Tab text color matches the VANILLA options tabs (UIWidgets.create_text_button,
+    -- ui_widgets.lua:9200-9229): NORMAL = font_button_normal {255,160,146,101}; SELECTED OR
+    -- HOVERED = white {255,255,255,255} (native text_hover fires on is_hover OR is_selected).
     for i = 1, #self._tabs do
         local tab = self._tabs[i]
         local st = tab.style and tab.style.text
@@ -1738,10 +2479,13 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
         tab._was_hovered = hov
         if st and st.text_color then
             local active = (i == self._selected) or hov
-            st.text_color[1] = 255
-            st.text_color[2] = active and 255 or 140
-            st.text_color[3] = active and 215 or 140
-            st.text_color[4] = active and 90 or 140
+            if active then
+                -- selected OR hovered -> white (vanilla text_hover).
+                st.text_color[1], st.text_color[2], st.text_color[3], st.text_color[4] = 255, 255, 255, 255
+            else
+                -- idle -> font_button_normal (vanilla text).
+                st.text_color[1], st.text_color[2], st.text_color[3], st.text_color[4] = 255, 160, 146, 101
+            end
         end
     end
 
@@ -1762,10 +2506,18 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
         self._apply._was_hovered = hovered
         if asty.text and asty.text.text_color then
             local t = asty.text.text_color
-            if enabled then
-                t[1], t[2], t[3], t[4] = 255, 255, 168, 0           -- cheeseburger gold
+            -- (v0.2.157-dev) EXACT vanilla colours FARMED from the live game's ready Apply
+            -- button ([opt-apply] probe, OptionsView.update_apply_button): ready = cheeseburger
+            -- {255,255,168,0}, hover = white {255,255,255,255}, disabled = gray a50
+            -- {50,128,128,128}. (Format is {A,R,G,B}.) The prior font_button_normal/font_default
+            -- values were a wrong guess -- vanilla's Apply is cheeseburger when ready, NOT the tab
+            -- colour; and disabled is gray a50, NOT font_default a75.
+            if not enabled then
+                t[1], t[2], t[3], t[4] = 50, 128, 128, 128            -- gray a50 (vanilla disabled)
+            elseif hovered then
+                t[1], t[2], t[3], t[4] = 255, 255, 255, 255           -- white on hover
             else
-                t[1], t[2], t[3], t[4] = 255, 110, 110, 110         -- dim grey (disabled)
+                t[1], t[2], t[3], t[4] = 255, 255, 168, 0             -- cheeseburger (vanilla ready)
             end
         end
         if asty.bg and asty.bg.color then
@@ -1780,6 +2532,28 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
         end
     end
 
+    -- (v0.2.148-dev) RESTORE DEFAULTS button per-frame styling. Always enabled; brighten the
+    -- text to white on hover (else font_default grey), and play the hover-enter sound edge-
+    -- debounced on self._reset._was_hovered — mirroring the APPLY button feedback.
+    if self._reset then
+        local rc = self._reset.content
+        local rsty = self._reset.style
+        local r_hov = rc.button_hotspot and rc.button_hotspot.is_hover
+        if r_hov and not self._reset._was_hovered then _play_hover() end
+        self._reset._was_hovered = r_hov
+        if rsty.text and rsty.text.text_color then
+            local t = rsty.text.text_color
+            -- (Fix 3, v0.2.149-dev) Match the TAB / Apply create_text_button scheme:
+            -- idle = font_button_normal {255,160,146,101} (was font_default {255,181,181,181}),
+            -- white {255,255,255,255} on hover. Always enabled.
+            if r_hov then
+                t[1], t[2], t[3], t[4] = 255, 255, 255, 255         -- white on hover
+            else
+                t[1], t[2], t[3], t[4] = 255, 160, 146, 101         -- font_button_normal (idle)
+            end
+        end
+    end
+
     -- (v0.2.71-dev) hover-enter sound on the EXIT (X) button (was unwired). Edge-debounced
     -- on self._exit._was_hovered. Mirrors the tab/APPLY hover edges added this version.
     if self._exit then
@@ -1787,6 +2561,18 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
         local x_hov = xh and xh.is_hover
         if x_hov and not self._exit._was_hovered then _play_hover() end
         self._exit._was_hovered = x_hov
+    end
+
+
+    for i = 1, #(self._profile_buttons or {}) do
+        local button = self._profile_buttons[i]
+        local hov = button.content.hotspot and button.content.hotspot.is_hover
+        if hov and not button._was_hovered then _play_hover() end
+        button._was_hovered = hov
+        local c = button.style.text.text_color
+        if hov then c[1], c[2], c[3], c[4] = 255, 255, 255, 255
+        elseif i == (self._profile_slot or 1) then c[1], c[2], c[3], c[4] = 255, 255, 168, 0
+        else c[1], c[2], c[3], c[4] = 255, 160, 146, 101 end
     end
 
     -- Apply scroll: translate the list container node; all rows move with it.
@@ -1810,7 +2596,7 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
     for i = 1, #(self._chrome or {}) do
         UIRenderer.draw_widget(renderer, self._chrome[i])
     end
-    if self._hint then UIRenderer.draw_widget(renderer, self._hint) end
+    -- (Fix 5, v0.2.149-dev) bottom hint widget removed — nothing to draw here.
     for i = 1, #self._tabs do
         UIRenderer.draw_widget(renderer, self._tabs[i])
     end
@@ -1820,6 +2606,12 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
     -- (v0.2.70-dev) APPLY button (bottom-right of the bottom panel). Drawn with the chrome
     -- so it's never culled by the list_mask (it lives outside the scrolling list).
     if self._apply then UIRenderer.draw_widget(renderer, self._apply) end
+    -- (v0.2.148-dev) RESTORE DEFAULTS button (to the LEFT of Apply). Same render path.
+    if self._reset then UIRenderer.draw_widget(renderer, self._reset) end
+    if self._profiles_label then UIRenderer.draw_widget(renderer, self._profiles_label) end
+    for i = 1, #(self._profile_buttons or {}) do
+        UIRenderer.draw_widget(renderer, self._profile_buttons[i])
+    end
 
     -- Cull + draw rows against the list_mask box (CPU position-cull; no GPU mask).
     -- World positions are valid here because begin_pass re-evaluated the scenegraph
@@ -1827,6 +2619,8 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
     local mask_pos  = UISceneGraph.get_world_position(scenegraph, defs.list_mask_sg)
     local mask_size = UISceneGraph.get_size(scenegraph, defs.list_mask_sg)
     local anchor    = UISceneGraph.get_world_position(scenegraph, defs.list_sg)  -- mt_list_start (scrolled)
+    -- (#207) The hovered row that carries a tooltip becomes the active popup target.
+    local tt_hover_row, tt_hover_world_y
     for i = 1, #self._rows do
         local row = self._rows[i]
         local ry = row._list_y or 0
@@ -1838,6 +2632,15 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
         row._middle_visible = middle
         if middle then
             self:_apply_row_hover(row)
+            -- (#207) Capture the hovered tooltip'd row (+ its bottom-edge world Y for the
+            -- on-screen flip test). Either the full-row hover hotspot (row_hs, added by
+            -- _append_highlight) or the row's own hotspot counts as "hovered".
+            if row._tip_desc and row._tip_desc ~= "" then
+                local rc = row.content
+                if (rc.row_hs and rc.row_hs.is_hover) or (rc.hotspot and rc.hotspot.is_hover) then
+                    tt_hover_row, tt_hover_world_y = row, py
+                end
+            end
             -- TYPE-TO-EDIT live feedback (v0.2.66-dev): advance the caret pulse + mirror
             -- the typed buffer into the value text + red-tint on invalid, for the active
             -- editor row only. Runs in draw so it ticks every frame regardless of input.
@@ -1871,6 +2674,10 @@ function HeroViewStateModTweaker:_draw(dt, input_service)
         self:_position_dropdown_highlight()
         UIRenderer.draw_widget(renderer, self._dd_list)
     end
+
+    -- (#207) HOVER INFO POPUP — fade + draw last (over the rows; suppressed while a
+    -- dropdown popup is open). Mutually exclusive with the dropdown popup in practice.
+    self:_update_tooltip(dt, tt_hover_row, tt_hover_world_y, renderer)
 
     end)  -- close pcall(function()
     UIRenderer.end_pass(renderer)  -- ALWAYS runs, even if a draw above errored

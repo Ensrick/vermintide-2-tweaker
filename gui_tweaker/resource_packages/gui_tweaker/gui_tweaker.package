@@ -8,4 +8,5 @@ package = [
 
 lua = [
 	"scripts/mods/gui_tweaker/*"
+	"scripts/mods/gui_tweaker/hb/*"
 ]

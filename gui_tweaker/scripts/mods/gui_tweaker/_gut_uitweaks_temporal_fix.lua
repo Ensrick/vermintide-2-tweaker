@@ -1,4 +1,4 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
 
 -- ============================================================================
 -- UI Tweaks "Temporal Fix" (absorbed into gut)

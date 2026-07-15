@@ -1,4 +1,4 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
 
 local CustomizerModule = {}
 
@@ -18,21 +18,30 @@ end
 -- max(absolute_floor, vanilla_size * 0.5) so future resize work has a sane bound.
 local ABS_MIN_W, ABS_MIN_H = 20, 18
 
--- Each entry: scenegraph mutation target for one HUD widget. nominal_size is the
--- on-screen draggable region; for pivot nodes (size 0x0) we use the listed value
--- so the overlay rectangle is grabbable. definitions_file is documentation only.
+-- Each entry keeps the scenegraph mutation target separate from the node whose
+-- world-space rectangle is rendered and hit-tested. This mirrors vanilla
+-- HudCustomizer.run's root_scenegraph_id / drag_scenegraph_id contract
+-- (scripts/ui/hud_ui/hud_customizer.lua:43-47, 110-122). nominal_size is only a
+-- fallback for a missing/zero-sized drag node. definitions_file is documentation.
 local REGISTRY = {
-    { id = "ability_ui",          class_name = "AbilityUI",          scenegraph_node_id = "ability_root",     definitions_file = "scripts/ui/hud_ui/ability_ui_definitions.lua",          vanilla_position = {   0,    0, 10 }, vanilla_size = { 624,  66 }, nominal_size = { 624,  66 }, can_resize_axes = { x = true,  y = false } },
-    { id = "equipment_ui",        class_name = "EquipmentUI",        scenegraph_node_id = "pivot",            definitions_file = "scripts/ui/hud_ui/equipment_ui_definitions.lua",        vanilla_position = {   0,   69,  4 }, vanilla_size = { 300,  60 }, nominal_size = { 300,  60 }, can_resize_axes = { x = false, y = false } },
+    { id = "ability_ui",          class_name = "AbilityUI",          scenegraph_node_id = "ability_root",      drag_scenegraph_node_id = "ability_root",    definitions_file = "scripts/ui/hud_ui/ability_ui_definitions.lua",          vanilla_position = {   0,    0, 10 }, vanilla_size = { 624,  66 }, nominal_size = { 624,  66 }, can_resize_axes = { x = true,  y = false } },
+    { id = "equipment_ui",        class_name = "EquipmentUI",        scenegraph_node_id = "pivot",             drag_scenegraph_node_id = "background_panel",definitions_file = "scripts/ui/hud_ui/equipment_ui_definitions.lua",        vanilla_position = {   0,   69,  4 }, vanilla_size = { 300,  60 }, nominal_size = { 300,  60 }, can_resize_axes = { x = false, y = false } },
     { id = "overcharge_bar",      class_name = "OverchargeBarUI",    scenegraph_node_id = "charge_bar",       definitions_file = "scripts/ui/hud_ui/overcharge_bar_ui_definitions.lua",    vanilla_position = {   0, -220,  1 }, vanilla_size = { 250,  16 }, nominal_size = { 250,  16 }, can_resize_axes = { x = true,  y = false } },
     { id = "career_ability_bar",  class_name = "CareerAbilityBarUI", scenegraph_node_id = "ability_bar",      definitions_file = "scripts/ui/hud_ui/career_ability_bar_ui_definitions.lua",vanilla_position = {   0, -200,  1 }, vanilla_size = { 250,  16 }, nominal_size = { 250,  16 }, can_resize_axes = { x = true,  y = false } },
     { id = "energy_bar",          class_name = "EnergyBarUI",        scenegraph_node_id = "charge_bar",       definitions_file = "scripts/ui/hud_ui/energy_bar_ui_definitions.lua",        vanilla_position = {   0, -220,  1 }, vanilla_size = { 250,  16 }, nominal_size = { 250,  16 }, can_resize_axes = { x = true,  y = false } },
-    { id = "buff_ui",             class_name = "BuffUI",             scenegraph_node_id = "pivot_root",       definitions_file = "scripts/ui/hud_ui/buff_ui_definitions.lua",              vanilla_position = { 150,   18,  1 }, vanilla_size = { 300,  66 }, nominal_size = { 300,  66 }, can_resize_axes = { x = false, y = false } },
-    { id = "boss_health",         class_name = "BossHealthUI",       scenegraph_node_id = "pivot_parent",     definitions_file = "scripts/ui/hud_ui/boss_health_ui_definitions.lua",       vanilla_position = {   0,  -72,  0 }, vanilla_size = { 500,  70 }, nominal_size = { 500,  70 }, can_resize_axes = { x = false, y = false } },
-    { id = "challenge_tracker",   class_name = "ChallengeTrackerUI", scenegraph_node_id = "pivot",            definitions_file = "scripts/ui/hud_ui/challenge_tracker_ui_definitions.lua", vanilla_position = {   1,  155,  0 }, vanilla_size = { 260,  75 }, nominal_size = { 260,  75 }, can_resize_axes = { x = false, y = false } },
-    { id = "loot_objective",      class_name = "LootObjectiveUI",    scenegraph_node_id = "background_parent",definitions_file = "scripts/ui/hud_ui/loot_objective_ui_definitions.lua",    vanilla_position = {-200, -100,  1 }, vanilla_size = { 383,  86 }, nominal_size = { 383,  86 }, can_resize_axes = { x = false, y = false } },
-    { id = "news_feed",           class_name = "NewsFeedUI",         scenegraph_node_id = "pivot",            definitions_file = "scripts/ui/hud_ui/news_feed_ui_definitions.lua",         vanilla_position = { -20, -300,  1 }, vanilla_size = { 420, 120 }, nominal_size = { 420, 120 }, can_resize_axes = { x = false, y = false } },
+    { id = "buff_ui",             class_name = "BuffUI",             scenegraph_node_id = "pivot_root",        drag_scenegraph_node_id = "pivot_dragger",   definitions_file = "scripts/ui/hud_ui/buff_ui_definitions.lua",              vanilla_position = { 150,   18,  1 }, vanilla_size = { 300,  66 }, nominal_size = { 300,  66 }, can_resize_axes = { x = false, y = false } },
+    { id = "boss_health",         class_name = "BossHealthUI",       scenegraph_node_id = "pivot_parent",      drag_scenegraph_node_id = "pivot_dragger",   definitions_file = "scripts/ui/hud_ui/boss_health_ui_definitions.lua",       vanilla_position = {   0,  -72,  0 }, vanilla_size = { 500,  70 }, nominal_size = { 500,  70 }, can_resize_axes = { x = false, y = false } },
+    { id = "challenge_tracker",   class_name = "ChallengeTrackerUI", scenegraph_node_id = "pivot",             drag_scenegraph_node_id = "quest",           definitions_file = "scripts/ui/hud_ui/challenge_tracker_ui_definitions.lua", vanilla_position = {   1,  155,  0 }, vanilla_size = { 260,  75 }, nominal_size = { 260,  75 }, can_resize_axes = { x = false, y = false } },
+    { id = "loot_objective",      class_name = "LootObjectiveUI",    scenegraph_node_id = "background_parent", drag_scenegraph_node_id = "background",      definitions_file = "scripts/ui/hud_ui/loot_objective_ui_definitions.lua",    vanilla_position = {-200, -100,  1 }, vanilla_size = { 383,  86 }, nominal_size = { 383,  86 }, can_resize_axes = { x = false, y = false } },
+    { id = "news_feed",           class_name = "NewsFeedUI",         scenegraph_node_id = "pivot",             drag_scenegraph_node_id = "news_pivot_1",    definitions_file = "scripts/ui/hud_ui/news_feed_ui_definitions.lua",         vanilla_position = { -20, -300,  1 }, vanilla_size = { 420, 120 }, nominal_size = { 420, 120 }, can_resize_axes = { x = false, y = false } },
 }
+
+-- Bars already mutate their rendered, positive-size node, so make that identity
+-- explicit too; callers never need to guess based on node size.
+for i = 1, #REGISTRY do
+    local entry = REGISTRY[i]
+    entry.drag_scenegraph_node_id = entry.drag_scenegraph_node_id or entry.scenegraph_node_id
+end
 
 -- Compute min_size per entry from the absolute floor + 50% of vanilla_size, so
 -- future resize work has a per-widget bound; v0.2.0 never actually reads this.
@@ -43,10 +52,91 @@ end
 
 CustomizerModule.REGISTRY = REGISTRY
 
+-- (#310) Displayable HUD area, expressed in the SAME reference space as the cursor
+-- (UIInverseScaleVectorToResolution) and node.world_position. ui_scenegraph.lua:210-213
+-- + the root/`fit` branches (:236-246) put that space at [0 .. res_w*inv_scale] x
+-- [0 .. res_h*inv_scale] -- i.e. 1920x1080 at 1080p, scaled proportionally at other
+-- resolutions. nil-safe -> 1080p default so a missing RESOLUTION_LOOKUP never traps a drag.
+function CustomizerModule.hud_bounds()
+    local r = rawget(_G, "RESOLUTION_LOOKUP")
+    local inv = (r and r.inv_scale) or 1
+    local w = (r and r.res_w) or 1920
+    local h = (r and r.res_h) or 1080
+    return { min_x = 0, min_y = 0, max_x = w * inv, max_y = h * inv }
+end
+
+-- (#310) Confine a proposed drag delta so the element's box [world, world+size] stays
+-- inside `bounds` (the displayable HUD area). world_x/y + size describe the element's
+-- LIVE box this frame; applied_dx/dy is the delta already applied (last frame), which
+-- lets us map delta-space onto world-space 1:1 (a delta change shifts world_position by
+-- the same amount, since the parent chain is fixed). Returns the clamped delta. Pure +
+-- unit-tested (`hud_confine_delta_clamps`). If the element is WIDER/TALLER than the area
+-- on an axis, that axis is left unclamped so an oversize element is never trapped.
+function CustomizerModule.confine_delta(world_x, world_y, size_x, size_y, applied_dx, applied_dy, dx, dy, bounds)
+    local wx = world_x + (dx - applied_dx)
+    local wy = world_y + (dy - applied_dy)
+    local max_x = bounds.max_x - (size_x or 0)
+    local max_y = bounds.max_y - (size_y or 0)
+    if max_x >= bounds.min_x then
+        if wx < bounds.min_x then wx = bounds.min_x elseif wx > max_x then wx = max_x end
+    end
+    if max_y >= bounds.min_y then
+        if wy < bounds.min_y then wy = bounds.min_y elseif wy > max_y then wy = max_y end
+    end
+    return wx - world_x + applied_dx, wy - world_y + applied_dy
+end
+
 -- O(1) lookup by widget id (used by drag/apply/reset/list).
 local REGISTRY_BY_ID = {}
 for i = 1, #REGISTRY do REGISTRY_BY_ID[REGISTRY[i].id] = REGISTRY[i] end
 CustomizerModule.REGISTRY_BY_ID = REGISTRY_BY_ID
+
+-- (#310) HUD classes are not consistent about scenegraph visibility. Most of the
+-- original classes expose `ui_scenegraph`, but CareerAbilityBarUI stores the same
+-- live table as `_ui_scenegraph` (career_ability_bar_ui.lua:101).
+function CustomizerModule.scenegraph_for_view(view)
+    if type(view) ~= "table" then return nil, "missing_view" end
+    if type(view.ui_scenegraph) == "table" then return view.ui_scenegraph, "ui_scenegraph" end
+    if type(view._ui_scenegraph) == "table" then return view._ui_scenegraph, "_ui_scenegraph" end
+    return nil, "missing_scenegraph"
+end
+
+-- Pure coverage classifier used by the bounded live #310 probe and offline tests.
+function CustomizerModule.coverage_status(view, entry)
+    if type(entry) ~= "table" then return "missing_entry", "none" end
+    local scenegraph, source = CustomizerModule.scenegraph_for_view(view)
+    if not scenegraph then return source, source end
+    local move = scenegraph[entry.scenegraph_node_id]
+    if not move then return "missing_move_node", source end
+    local drag_id = entry.drag_scenegraph_node_id or entry.scenegraph_node_id
+    local drag = scenegraph[drag_id]
+    if not drag and drag_id ~= entry.scenegraph_node_id then
+        return "move_fallback", source
+    end
+    if not drag then return "missing_drag_node", source end
+    local size = drag.size
+    if not (size and tonumber(size[1]) and tonumber(size[1]) > 0
+            and tonumber(size[2]) and tonumber(size[2]) > 0) then
+        return "nominal_size_fallback", source
+    end
+    return "ready", source
+end
+
+-- Resolve the rectangle used by hit testing, confinement, and overlay drawing.
+-- The movement node remains entry.scenegraph_node_id. Missing dynamic nodes (for
+-- example an empty news feed) fall back safely to the movement node + nominal size.
+-- Exported as an engine-free seam for issue #547 regression coverage.
+function CustomizerModule.drag_geometry(scenegraph, entry)
+    if type(scenegraph) ~= "table" or type(entry) ~= "table" then return nil end
+    local drag_id = entry.drag_scenegraph_node_id or entry.scenegraph_node_id
+    local node = scenegraph[drag_id] or scenegraph[entry.scenegraph_node_id]
+    if not node or not node.world_position then return nil end
+    local size = node.size
+    if not (size and size[1] and size[1] > 0 and size[2] and size[2] > 0) then
+        size = entry.nominal_size or { 0, 0 }
+    end
+    return node, size, drag_id
+end
 
 -- internal state
 local _edit_mode_sticky = false
@@ -124,10 +214,24 @@ end
 -- Writes baseline + pure delta (see local_position_for above); the baseline is
 -- the registry entry's vanilla_position, the same field reset_widget restores to.
 -- No-op when offset is {0, 0} unless forced; safe under pcall against missing nodes.
+--
+-- (#312) UI Tweaks ownership: when the standalone UI Tweaks mod (HideBuffs) owns
+-- this element (sync on + HB enabled), IT writes the element's own node/offset every
+-- frame. gut must contribute nothing, so pin gut's node to the vanilla baseline --
+-- this both zeros gut's own contribution and clears any residual gut offset so the
+-- two can't stack. See _gut_uitweaks_sync.lua for the element map + verification.
 local function _apply_offset_to_scenegraph(view, node_id, widget_id, force)
-    if not view or not view.ui_scenegraph then return end
-    local node = view.ui_scenegraph[node_id]
+    local scenegraph = CustomizerModule.scenegraph_for_view(view)
+    if not scenegraph then return end
+    local node = scenegraph[node_id]
     if not node or not node.local_position then return end
+    local sync = mod._gut_uitweaks_sync
+    if sync and sync.is_owned and sync.is_owned(widget_id) then
+        local bx, by = CustomizerModule.local_position_for(widget_id, 0, 0)
+        node.local_position[1] = bx
+        node.local_position[2] = by
+        return
+    end
     local dx, dy = _get_widget_offset(widget_id)
     if not force and dx == 0 and dy == 0 then return end
     local lx, ly = CustomizerModule.local_position_for(widget_id, dx, dy)
@@ -153,6 +257,30 @@ end
 -- the alt-path, with an added sticky-toggle path for accessibility.
 function CustomizerModule.is_edit_mode()
     return _edit_mode_sticky or _edit_mode_alt
+end
+
+-- (#310) Cutscene-owns-input probe (mirror of _gut_camera's _gut_cutscene_owns_camera):
+-- cutscene skip runs on a SEPARATE input service, so suspending PlayerInputExtension
+-- during a cutscene is both pointless and explicitly excluded by the mode's safety
+-- contract. pcall-guarded end to end (a nil entity manager in a menu returns false).
+local function _cutscene_active()
+    local mgr_state = Managers and Managers.state
+    local entity_mgr = mgr_state and mgr_state.entity
+    if not entity_mgr then return false end
+    local ok, cs = pcall(entity_mgr.system, entity_mgr, "cutscene_system")
+    if not ok or not cs then return false end
+    local ok2, active = pcall(cs.is_active, cs)
+    return ok2 and active or false
+end
+
+-- (#310) Whether HUD edit mode should suspend LOCAL gameplay input right now. The
+-- freecam PlayerInputExtension.is_input_blocked hook consults this (VMF drops a 2nd hook
+-- on that pair, so the edit-mode block is CONSOLIDATED into freecam's sole hook) to
+-- freeze the character + camera while edit mode is active, so the mouse drives the HUD
+-- editor rather than aiming/turning. Excludes cutscenes; edit-mode-gated (short-circuits
+-- before the cutscene probe when not editing, so it is cheap and menu-safe).
+function CustomizerModule.should_suspend_input()
+    return CustomizerModule.is_edit_mode() and not _cutscene_active()
 end
 
 -- Flip the sticky toggle and (de)assert the cursor visibility stack reason.
@@ -253,19 +381,46 @@ function CustomizerModule.tick_drag()
     if _drag_active then
         local dx = cursor[1] - _drag_base[1]
         local dy = cursor[2] - _drag_base[2]
-        _set_widget_offset(_drag_active, dx, dy)
+        -- (#312) Owned elements write through to UI Tweaks instead of gut's own store.
+        local sync = mod._gut_uitweaks_sync
+        local owned = sync and sync.is_owned and sync.is_owned(_drag_active)
+        if owned then
+            pcall(sync.preview, _drag_active, dx, dy)  -- in-memory HB write; HB redraws next frame
+        else
+            -- (#310) Confine the drag so the element's box stays within the displayable
+            -- HUD area. Uses the element's LIVE world box + the delta applied last frame
+            -- (_get_widget_offset still holds it, we overwrite below) to clamp in
+            -- world-space, then back-solves the confined delta. Owned elements delegate to
+            -- UI Tweaks and are left to HB's own layout, so this path is gut-native only.
+            local entry = REGISTRY_BY_ID[_drag_active]
+            local view  = entry and _live_views[entry.class_name]
+            local scenegraph = CustomizerModule.scenegraph_for_view(view)
+            local node, size = CustomizerModule.drag_geometry(scenegraph, entry)
+            if node and node.world_position then
+                local adx, ady = _get_widget_offset(_drag_active)
+                local ok_c, cdx, cdy = pcall(CustomizerModule.confine_delta,
+                    node.world_position[1], node.world_position[2], size[1], size[2],
+                    adx, ady, dx, dy, CustomizerModule.hud_bounds())
+                if ok_c then dx, dy = cdx, cdy end
+            end
+            _set_widget_offset(_drag_active, dx, dy)
+        end
         if released then
             local id = _drag_active
             local start_dx, start_dy = _drag_start_offset and _drag_start_offset[1] or 0,
                                        _drag_start_offset and _drag_start_offset[2] or 0
             local delta_x = dx - start_dx
             local delta_y = dy - start_dy
-            _save_offsets()
+            if owned then
+                pcall(sync.commit, id, dx, dy)  -- HB durable write + notify (re-layout)
+            else
+                _save_offsets()
+            end
             _drag_active = nil
             _drag_start_offset = nil
             -- _dbg: drag_end
-            pcall(_dbg, "[gui_tweaker] drag_end: id=%s final_offset={%d,%d} delta={%d,%d}",
-                tostring(id), dx, dy, delta_x, delta_y)
+            pcall(_dbg, "[gui_tweaker] drag_end: id=%s owned=%s final_offset={%d,%d} delta={%d,%d}",
+                tostring(id), tostring(owned and true or false), dx, dy, delta_x, delta_y)
         end
         _reapply_all_offsets()
         return
@@ -275,16 +430,25 @@ function CustomizerModule.tick_drag()
     for i = 1, #REGISTRY do
         local entry = REGISTRY[i]
         local view = _live_views[entry.class_name]
-        local node = view and view.ui_scenegraph and view.ui_scenegraph[entry.scenegraph_node_id]
+        local scenegraph = CustomizerModule.scenegraph_for_view(view)
+        local node, size = CustomizerModule.drag_geometry(scenegraph, entry)
         if node and node.world_position then
             local pos = Vector3(node.world_position[1], node.world_position[2], 999)
-            local size = (node.size and node.size[1] and node.size[1] > 0 and node.size) or entry.nominal_size
             local hit = false
             pcall(function() hit = math.point_is_inside_2d_box(cursor, pos, size) end)
             if hit then
                 _drag_hover = entry.id
                 if pressed then
-                    local dx, dy = _get_widget_offset(entry.id)
+                    -- (#312) Anchor the drag at the element's CURRENT offset: UI Tweaks'
+                    -- when it owns this element, else gut's own stored offset.
+                    local sync = mod._gut_uitweaks_sync
+                    local dx, dy
+                    if sync and sync.is_owned and sync.is_owned(entry.id) then
+                        dx, dy = 0, 0
+                        pcall(function() dx, dy = sync.get_offset(entry.id) end)
+                    else
+                        dx, dy = _get_widget_offset(entry.id)
+                    end
                     _drag_active = entry.id
                     _drag_base[1] = cursor[1] - dx
                     _drag_base[2] = cursor[2] - dy
@@ -322,10 +486,10 @@ function CustomizerModule.draw_overlay(ui_renderer)
     for i = 1, #REGISTRY do
         local entry = REGISTRY[i]
         local view = _live_views[entry.class_name]
-        local node = view and view.ui_scenegraph and view.ui_scenegraph[entry.scenegraph_node_id]
+        local scenegraph = CustomizerModule.scenegraph_for_view(view)
+        local node, size = CustomizerModule.drag_geometry(scenegraph, entry)
         if node and node.world_position then
             local pos = Vector3(node.world_position[1], node.world_position[2], 999)
-            local size = (node.size and node.size[1] and node.size[1] > 0 and node.size) or entry.nominal_size
             local color = default_color
             if _drag_active == entry.id then
                 color = active_color
@@ -358,7 +522,8 @@ function CustomizerModule.install_hooks()
                 pcall(_apply_offset_to_scenegraph, self, entry.scenegraph_node_id, entry.id, false)
                 -- _dbg: widget_init / widget_init_skip
                 pcall(function()
-                    local node = self and self.ui_scenegraph and self.ui_scenegraph[entry.scenegraph_node_id]
+                    local scenegraph = CustomizerModule.scenegraph_for_view(self)
+                    local node = scenegraph and scenegraph[entry.scenegraph_node_id]
                     if not node then
                         _dbg_alert("[gui_tweaker] widget_init_skip: id=%s class=%s reason=scenegraph_node_missing",
                             tostring(entry.id), tostring(entry.class_name))
@@ -392,15 +557,35 @@ function CustomizerModule.install_hooks()
     return installed, failed, failures
 end
 
+-- (#312) Public offset accessors for the UI Tweaks sync module's one-time migrate()
+-- (reads gut's stored offset then clears it as it folds the value into UI Tweaks).
+-- Kept on the customizer so the in-memory cache and the persistent store stay in
+-- lockstep (clearing goes through _save_offsets, not a raw mod:set behind our back).
+function CustomizerModule.get_widget_offset(widget_id)
+    return _get_widget_offset(widget_id)
+end
+function CustomizerModule.clear_widget_offset(widget_id)
+    _offsets_cache[widget_id] = nil
+    _save_offsets()
+end
+
 -- Set widget's offset back to {0, 0}, persist, and re-apply to the live view.
 function CustomizerModule.reset_widget(widget_id)
     local entry = REGISTRY_BY_ID[widget_id]
     if not entry then return false end
+    -- (#312) If UI Tweaks owns this element, zero ITS offset too (element back to
+    -- vanilla) with a durable save; gut's node is already pinned to vanilla by the
+    -- owner-aware apply path, so clearing gut's store below just tidies bookkeeping.
+    local sync = mod._gut_uitweaks_sync
+    if sync and sync.is_owned and sync.is_owned(widget_id) then
+        pcall(sync.reset, widget_id)
+    end
     _offsets_cache[widget_id] = nil
     _save_offsets()
     local view = _live_views[entry.class_name]
     if view then
-        local node = view.ui_scenegraph and view.ui_scenegraph[entry.scenegraph_node_id]
+        local scenegraph = CustomizerModule.scenegraph_for_view(view)
+        local node = scenegraph and scenegraph[entry.scenegraph_node_id]
         if node and node.local_position then
             node.local_position[1] = entry.vanilla_position[1]
             node.local_position[2] = entry.vanilla_position[2]
@@ -431,7 +616,7 @@ function CustomizerModule.list_offsets()
     return out
 end
 
--- Current resolution key (exposed for the /gut_list_hud command).
+-- Current resolution key (exposed for the /list_hud command).
 function CustomizerModule.resolution_key()
     return _resolution_key or _resolution_key_now()
 end
@@ -446,17 +631,27 @@ function CustomizerModule.dump_hero_view(view)
             _dbg("[gui_tweaker] hero_view: dump skipped (nil view)")
             return
         end
-        local state = view._machine and view._machine._state or nil
-        local state_name = "?"
-        local state_index = "?"
+        -- (#224 follow-up) Resolve the live state or report a clear reason via printf
+        -- (user-visible; mod:debug is invisible with mod logging OFF). This dump runs
+        -- from HeroView.on_enter, which fires BEFORE post_update_on_enter creates the
+        -- state machine (hero_view.lua:499-514) -- so a nil machine here is expected
+        -- timing, not a resolution failure.
+        local machine = view._machine
+        local state = machine and machine._state or nil
         if state then
+            local state_name = "?"
+            local state_index = "?"
             pcall(function()
                 local mt = getmetatable(state)
                 state_name = (mt and mt.__index and mt.__index.NAME) or state.NAME or tostring(state)
             end)
             pcall(function() state_index = tostring(state.state_index or state._state_index or "?") end)
+            printf("[gut:heroview] dump: state=%s state_index=%s", tostring(state_name), tostring(state_index))
+        elseif not machine then
+            printf("[gut:heroview] dump: state machine not created yet (on_enter precedes post_update_on_enter)")
+        else
+            printf("[gut:heroview] dump: machine present but no active _state")
         end
-        _dbg("[gui_tweaker] hero_view: state=%s state_index=%s", tostring(state_name), tostring(state_index))
 
         if state and type(state._layout_settings) == "table" then
             local count = 0

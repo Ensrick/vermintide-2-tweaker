@@ -1,4 +1,4 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
 
 -- ============================================================================
 -- Parry Indicator (absorbed into gut, with one behavioural change)

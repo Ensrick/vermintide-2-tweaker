@@ -1,4 +1,4 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
 
 -- ============================================================================
 -- Loremaster's Armoury atlas keep-alive  (crash efadf778 guard)
@@ -79,9 +79,9 @@ end
 
 -- INSTRUMENT (v0.2.56): the Mod Tweaker BORROWS the long-lived IngameUI renderer
 -- and re-pinning happens on every open. This exported probe logs the atlas
--- residency + our _pinned state at the moment of a pin attempt; logging routes
--- through mod:debug (VMF debug channel). Called by the re-pin sites in
--- gui_tweaker.lua / _mod_tweaker_view.lua right before pin().
+-- residency + our _pinned state at the moment of a pin attempt, routing through
+-- mod:debug. Called by the re-pin sites in gui_tweaker.lua /
+-- _mod_tweaker_view.lua right before pin().
 local function _residency_snapshot(tag)
     local pm = Managers and Managers.package
     local resident = "?"
@@ -106,8 +106,8 @@ end)
 -- filtered to LA's atlas package, to catch if anything unloads the atlas BETWEEN
 -- Mod Tweaker opens (the suspected in-mission 3rd/4th-open crash cause). hook_safe
 -- = pure observation, no behaviour change. gut hooks PackageManager.unload NOWHERE
--- ELSE (verified via grep before adding) — no duplicate-hook collision. Logging
--- routes through mod:debug (VMF debug channel).
+-- ELSE (verified via grep before adding) — no duplicate-hook collision. Routes
+-- through mod:debug so it logs only when the debug level is active.
 mod:hook_safe("PackageManager", "unload", function(self, package_name, reference_name)
     if package_name == LA_PACKAGE then
         mod:debug("[gut:la] PackageManager.unload(%s, ref=%s) — LA atlas package being unloaded (gut_pinned=%s)",

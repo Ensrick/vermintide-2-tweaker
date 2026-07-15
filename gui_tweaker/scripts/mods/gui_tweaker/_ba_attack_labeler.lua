@@ -1,4 +1,4 @@
-﻿--[[
+--[[
 	_ba_attack_labeler.lua  (Bestiary & Armory feature, migrated into gut)
 
 	Derive a weapon's attack chain + human labels purely from its

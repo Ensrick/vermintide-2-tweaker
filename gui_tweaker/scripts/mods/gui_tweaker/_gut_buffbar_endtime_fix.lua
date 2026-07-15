@@ -1,4 +1,4 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
 
 -- ============================================================================
 -- UI Tweaks buff-bar end-time crash fix (absorbed into gut)
@@ -31,14 +31,8 @@
 --   correct "adopt the refreshed end time" result -- with no crash and no
 --   visible change beyond stopping the error spam. We only touch the exact
 --   crash case (stored nil + incoming non-nil); every other path is untouched.
---   Gated on `gut_buffbar_endtime_fix`, read live so the toggle reverts
---   instantly. No-op if UI Tweaks isn't installed.
-
-local SETTING = "gut_buffbar_endtime_fix"
-
-local function _enabled()
-    return mod:get(SETTING)
-end
+--   IMPLICIT (no toggle): a crash-prevention fix should never be switchable, so
+--   the nil-guard ALWAYS applies. No-op if UI Tweaks isn't installed.
 
 -- Install once. Safe to call repeatedly (guarded) and before/after HideBuffs
 -- loads (no-op until PriorityBuffUI exists).
@@ -55,7 +49,7 @@ local function apply()
     PBUI._add_buff = function(self, buff, infinite, end_time)
         -- Only intervene for the precise crash condition: a finite incoming
         -- end_time about to be compared against a stored nil end_time.
-        if _enabled() and end_time ~= nil and self and self._active_buffs and buff then
+        if end_time ~= nil and self and self._active_buffs and buff then
             local template = buff.template
             local buff_id = buff.id
             local buff_name = template and template.name
@@ -80,9 +74,8 @@ local function apply()
     end
 
     PBUI._gut_endtime_fix_installed = true
-    mod:info("[gut] UI Tweaks buff-bar end-time crash fix installed (PriorityBuffUI._add_buff nil-guard; toggle: %s)",
-        tostring(_enabled()))
+    mod:info("[gut] UI Tweaks buff-bar end-time crash fix installed (PriorityBuffUI._add_buff nil-guard; implicit, always-on)")
     return true
 end
 
-return { apply = apply, SETTING = SETTING }
+return { apply = apply }

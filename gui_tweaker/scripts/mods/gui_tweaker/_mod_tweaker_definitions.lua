@@ -1,4 +1,5 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
+local NumericEditor = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_numeric_editor")
 
 -- Mod Tweaker scenegraph + widgets (v0.3 — native settings-menu chrome).
 -- Rebuilt to look like the game's Options menu by REUSING the native pieces
@@ -72,6 +73,19 @@ scenegraph_definition.mt_dropdown = {
     position = { 40, 0, 100 },
     size = { 1, 1 },
 }
+-- (#207) HOVER INFO POPUP anchor. SAME origin + parent as mt_list_start / mt_dropdown
+-- (so it inherits the list scroll offset and the popup tracks its hovered row), but a
+-- HIGHER z so the tooltip overlay draws above the rows AND above an open dropdown popup.
+-- The view draws the tooltip widget OUTSIDE the row-cull loop, so (like the dropdown) it
+-- is never position-culled by the list_mask — a tooltip on a near-bottom row can extend
+-- past the visible list / be flipped to draw above its row (see layout_tooltip).
+scenegraph_definition.mt_tooltip = {
+    parent = "mt_list",
+    horizontal_alignment = "left",
+    vertical_alignment = "top",
+    position = { 40, 0, 200 },
+    size = { 1, 1 },
+}
 -- Vertical scrollbar track.
 --
 -- (v0.2.74-dev) POSITION ROOT-CAUSE FIX. The bar used to parent to `list_mask` and
@@ -108,32 +122,75 @@ scenegraph_definition.mt_scrollbar = {
     position = { -12, 0, 50 },
     size = { 10, _LIST_WINDOW_H },
 }
+-- (#497) SEARCH BAND. Reserve a fixed strip at the TOP of the list window for the per-tab
+-- search bar (mt_search + create_search_box below). The bar is fixed chrome (does NOT scroll)
+-- sitting OUTSIDE and ABOVE the settings list, flush with the row-content width. To open the
+-- strip we SHRINK the list window (list_mask) by SEARCH_BAND_H and nudge its centre DOWN by
+-- half that, so its TOP edge drops by SEARCH_BAND_H while its BOTTOM stays put; the scrollbar
+-- (also centre-anchored on background_frame, its track_h read at factory-call time) is shrunk
+-- + shifted identically so it still spans the list. list_mask stays CENTRE-aligned -- the row
+-- cull in _draw reads its live world-pos/size (alignment-correct either way), so we only
+-- resize + offset it, never re-anchor it. The mt_search NODE is added lower (after ROW_W).
+local SEARCH_BAND_H = 44
+local SEARCH_BOX_H  = 30
+scenegraph_definition.list_mask.size[2]        = scenegraph_definition.list_mask.size[2] - SEARCH_BAND_H
+scenegraph_definition.list_mask.position[2]    = (scenegraph_definition.list_mask.position[2] or 0) - SEARCH_BAND_H / 2
+scenegraph_definition.mt_scrollbar.size[2]     = scenegraph_definition.mt_scrollbar.size[2] - SEARCH_BAND_H
+scenegraph_definition.mt_scrollbar.position[2] = (scenegraph_definition.mt_scrollbar.position[2] or 0) - SEARCH_BAND_H / 2
 -- v0.2.65-dev: the "MOD TWEAKER" title is GONE entirely (node + factory + draws
 -- removed in both twins). Native Options has NO title text in the top band — the
 -- tab buttons span the whole band. The earlier band-split (a title in the upper
 -- ~24px, tabs in the lower ~26px) was undone: tabs now occupy the FULL 50px band,
 -- bottom-aligned +9px off the panel bottom, exactly like native button_pivot
 -- (options_view_definitions.lua:204-217). No reserved x-space for a title.
-scenegraph_definition.mt_hint = {
-    parent = "background_bottom_panel",
-    horizontal_alignment = "left",
-    vertical_alignment = "center",
-    position = { 30, 0, 4 },
-    size = { WINDOW_WIDTH - 60, 30 },
-}
+-- (v0.2.149-dev) The bottom "Click a tab to pick a mod..." hint was removed to match the
+-- vanilla Options menu (which has no bottom hint). Its `mt_hint` scenegraph node, the
+-- `build_hint` factory, and the `_text_widget` helper it used were all deleted.
 -- (v0.2.70-dev) APPLY button — bottom-right of the bottom panel. Clones native
 -- `apply_button` (options_view_definitions.lua:344-357): parent = background_bottom_panel,
--- right/top aligned, position {-30,-7}, size {150,30}. Native also defines a
--- reset_to_default (DEFAULT) button parented to apply_button (:358-371) — DELIBERATELY
--- NOT cloned here (the user does not want a DEFAULT button). z 5 so it draws over the
--- panel fill + hint text.
+-- right/top aligned, position {-30,-7}, z 5 so it draws over the panel fill.
+-- (Fix 2, v0.2.151-dev) WIDTH now TEXT-FIT to vanilla, not the old fixed 150. Vanilla's
+-- apply/reset buttons are `_setup_text_button_size`'d — width measured from the label at
+-- font 22 (~59 for "APPLY", ~86 for the reset label). Measuring via UIRenderer.text_size
+-- is impractical HERE (the scenegraph is built at module-load, before any renderer exists),
+-- so we use FIXED tuned widths in design space: APPLY_W=60 ("APPLY" @22), RESET_W=92
+-- ("DEFAULT" @22). These feed both the node size AND the widget hotspot/box below so the
+-- click zone tracks the visible text.
+local APPLY_W = 60
+local RESET_W = 92
 scenegraph_definition.mt_apply = {
     parent = "background_bottom_panel",
     horizontal_alignment = "right",
     vertical_alignment = "top",
     position = { -30, -7, 5 },
-    size = { 150, 30 },
+    size = { APPLY_W, 30 },
 }
+-- (v0.2.148-dev) RESTORE DEFAULTS button — clones native `reset_to_default`
+-- (options_view_definitions.lua:358-371; options_view.lua:855-856/981-984), which is
+-- parented to the apply button and sits to its LEFT.
+-- (Fix 2, v0.2.151-dev) local_position.x = -(apply_width + 50) — the vanilla gap (was the
+-- fabricated -(APPLY_W + 20)). Based on the REAL apply width (APPLY_W=60), so the Default
+-- button's right edge sits 50px left of Apply's left edge. Text-fit width RESET_W.
+scenegraph_definition.mt_reset = {
+    parent = "mt_apply",
+    horizontal_alignment = "right",
+    vertical_alignment = "top",
+    position = { -(APPLY_W + 50), 0, 0 },
+    size = { RESET_W, 30 },
+}
+-- (#561) Per-tab Profiles selector. Ten compact numbered buttons occupy the
+-- bottom-left; Apply/Default remain on the right. The label and buttons are
+-- independent widgets so the active slot can use the native gold highlight.
+scenegraph_definition.mt_profiles_label = {
+    parent = "background_bottom_panel", horizontal_alignment = "left",
+    vertical_alignment = "top", position = { 30, -7, 5 }, size = { 90, 30 },
+}
+for i = 1, 10 do
+    scenegraph_definition["mt_profile_" .. i] = {
+        parent = "mt_profiles_label", horizontal_alignment = "right",
+        vertical_alignment = "top", position = { 8 + i * 31, 0, 0 }, size = { 28, 30 },
+    }
+end
 -- Horizontal tab strip spanning the FULL top panel (one node per registered mod),
 -- matching native Options where the settings_button_N tabs span the whole band off
 -- button_pivot (NO title sharing the band). Native metrics (options_view_definitions
@@ -193,36 +250,8 @@ local function build_scrollbar()
     return def and UIWidget.init(def) or nil
 end
 
--- Plain text widget. Hand-built (NOT UIWidgets.create_simple_text): that factory
--- localizes the text despite a passed localize=false, so a literal display string
--- rendered as the missing-key marker "<...>". A plain text pass with localize=false
--- shows the literal string. (Used by build_hint; the title that used to use it was
--- removed in v0.2.65-dev to match native Options, which has no top-band title.)
-local function _text_widget(text, sg, font_size, color, halign)
-    return UIWidget.init({
-        scenegraph_id = sg,
-        element = { passes = { { pass_type = "text", style_id = "text", text_id = "text" } } },
-        content = { text = tostring(text or "") },
-        style = {
-            text = {
-                font_type = "hell_shark",
-                font_size = font_size,
-                horizontal_alignment = halign or "center",
-                vertical_alignment = "center",
-                localize = false,
-                upper_case = false,
-                text_color = color or Colors.get_color_table_with_alpha("font_default", 255),
-                offset = { 0, 0, 2 },
-            },
-        },
-        offset = { 0, 0, 0 },
-    })
-end
-
-local function build_hint(text)
-    return _text_widget(text or "", "mt_hint", 20,
-        Colors.get_color_table_with_alpha("font_default", 200), "left")
-end
+-- (v0.2.149-dev) `_text_widget` + `build_hint` were removed with the bottom hint — the
+-- only consumer. See the mt_hint scenegraph-node note above.
 
 -- A category TAB. Built as our OWN hotspot+text widget rather than
 -- UIWidgets.create_text_button: that factory hard-codes `localize = true` +
@@ -248,7 +277,12 @@ local function create_tab(label, index)
         style = {
             text = {
                 font_type = "hell_shark",
-                font_size = 20,
+                -- (Fix 1, v0.2.151-dev) font 18 (was 22) = the FARMED vanilla title_buttons
+                -- (tab) font, dumped live from the real Options menu. DECOUPLED from the
+                -- Apply/Default buttons, which the farm shows at 22 (hell_shark apply/reset) —
+                -- so tabs = 18 while those buttons stay 22 (see create_apply_button /
+                -- create_default_button). The earlier shared 22 rendered the tabs too large.
+                font_size = 18,
                 horizontal_alignment = "center",
                 vertical_alignment = "center",
                 -- localize=false stays (mod names are display strings, not loc keys,
@@ -257,7 +291,11 @@ local function create_tab(label, index)
                 -- native ALL-CAPS tab look (native sets it at ui_widgets.lua:9203).
                 localize = false,
                 upper_case = true,
-                text_color = Colors.get_color_table_with_alpha("font_default", 200),
+                -- (Fix 2) Idle/base color matches the VANILLA options tab (UIWidgets.create_text_button,
+                -- ui_widgets.lua:9208): normal tab text = font_button_normal @ 255. The view/state driver
+                -- overwrites this per-frame (white when selected/hovered, font_button_normal otherwise —
+                -- mirroring the vanilla text/text_hover split), but the base is set to match too.
+                text_color = Colors.get_color_table_with_alpha("font_button_normal", 255),
                 offset = { 0, 0, 2 },
             },
         },
@@ -294,7 +332,7 @@ local ROW_W    = LIST_MASK_W - 100
 -- Gear-button box size. PROMOTED above RA (v0.2.67-dev) so the right-anchor shift below
 -- can reserve a gear gutter of (GEAR_SIZE + 24) = 50px. The gear texture is authored at
 -- 58px but texture_size rescales it into this 26px box (see create_gear_button).
-local GEAR_SIZE = 26
+local GEAR_SIZE = 36
 -- Row height tuned toward native. Native settings rows are 30px tall with ZERO
 -- inter-row gap (checkbox/slider both 30 — options_view_definitions.lua:1301/1566;
 -- rows stack with no padding, options_view.lua:1111). gut was 46 (too tall / too
@@ -378,6 +416,13 @@ local ARROW_HOTSPOT_W = INPUT_FIELD_WIDTH / 2       -- 200
 -- * depth. Each label's clamp width is also narrowed by `ind` so an indented label still
 -- terminates before the controls.
 local INDENT_PER_DEPTH = 24
+-- (#206) Shared LEFT label x for every non-chevron row (checkbox / slider / numeric /
+-- stepper / dropdown / section title), so rows of DIFFERENT widget types left-align at a
+-- given depth. Previously the base x was hard-coded per factory (checkbox & dropdown 12,
+-- slider & section title 0), so toggles and dropdowns sat 12px right of sliders/titles at
+-- the same depth -- the reported "indent on toggles". Collapsible GROUP HEADERS are exempt:
+-- their label intentionally clears the +/- chevron column (tree-style), see create_group_header.
+local LABEL_BASE_X = 12
 
 local function _text_style(x, y, w, size, color, halign)
     return {
@@ -386,6 +431,14 @@ local function _text_style(x, y, w, size, color, halign)
         horizontal_alignment = halign or "left",
         vertical_alignment = "center",
         localize = false,
+        -- (Fix 1, v0.2.149-dev) ALL-CAPS to match the vanilla Options menu, which renders
+        -- every row label / value upper-case. This single point covers every row label built
+        -- through _text_style — checkbox / slider / numeric / dropdown / section-title /
+        -- group-header labels, the dropdown value + option list, and the back-row label.
+        -- (ON/OFF words + the numeric slider value are already caps / digits, so it's a no-op
+        -- there.) The tooltip popup builds its OWN styles (create_tooltip_popup) and is NOT
+        -- routed through here, so its description prose stays normal case.
+        upper_case = true,
         text_color = color or Colors.get_color_table_with_alpha("font_default", 255),
         offset = { x, y, 3 },
         size = { w, ROW_H },
@@ -424,6 +477,13 @@ local function _append_highlight(passes, style, content, y)
     -- EYEBALL: confirm the brightness reads like the native Options-menu hover.
     style.highlight = { offset = { 0, y + 2, 0 }, size = { ROW_W, ROW_H - 4 },
         color = { 255, 255, 255, 255 } }
+    -- (row highlight) Full-row HOVER hotspot so the bar lights up when the cursor is anywhere on the
+    -- row, not just over the control. Dropdown/slider/keybind rows only have a PARTIAL control hotspot
+    -- (input box / track), so hovering their LABEL never set is_hover. Hover-ONLY: the view reads
+    -- row_hs.is_hover for the highlight and never its on_release, so it can't steal the control clicks.
+    passes[#passes + 1] = { pass_type = "hotspot", content_id = "row_hs", style_id = "row_hs" }
+    content.row_hs = {}
+    style.row_hs = { size = { ROW_W, ROW_H }, offset = { 0, y, 0 } }
 end
 
 -- Append the native texture-arrow pair (left + flipped right) for one stepper/
@@ -454,7 +514,7 @@ end
 -- offset_function is ignored.
 local ARROW_ALPHA_IDLE_BASE  = 255     -- base settings_arrow_normal: FULL at rest (native :3415/:3457)
 -- Base sprite RGB TINT. Native draws the base arrow at {255,181,181,181} (grey), NOT white —
--- captured live 2026-06-25 (gut_dev v0.2.93 glow probe, [gut-glow-probe] NATIVE). Drawing the
+-- captured live 2026-06-25 (gut v0.2.93 glow probe, [gut-glow-probe] NATIVE). Drawing the
 -- base white (255) killed the hover glow: the white _clicked overlay fading in over a white base
 -- = zero brightness contrast, so the glow was invisible (#92 arrows / #99 dropdown).
 local ARROW_RGB_IDLE_BASE    = 181
@@ -569,14 +629,18 @@ local function create_checkbox(text, base_offset, depth)
     }
     local style = {
         hotspot  = { size = { ROW_W, ROW_H }, offset = { 0, y, 0 } },
-        -- Label font 16 (was 24): gut renders booleans as a STEPPER, so it uses the
-        -- native STEPPER label size 16 (options_view_definitions.lua:3488-3502), NOT
-        -- the native CHECKBOX label size 28 (:1423-1434). hell_shark (unmasked) here
-        -- vs native hell_shark_masked, but the size matches.
-        label    = _text_style(12 + ind, y, DEC_ARROW_X - 24 - ind, 16),
-        on_text  = _text_style(val_x, y, val_w, 18,
+        -- (Fix 1, v0.2.151-dev) Label font 16 (was 28). The FARMED vanilla option-row label
+        -- (dumped live from the real Options menu, hell_shark_masked, 16, upper_case, NOT
+        -- dynamic) is 16 — booleans render as a STEPPER here, and every vanilla option row
+        -- (checkbox/slider/dropdown) uses the same 16 label. The earlier 28 (from the
+        -- create_checkbox_widget decompiled literal) rendered far too large once the global
+        -- RESOLUTION_LOOKUP.scale doubled it. hell_shark (unmasked) here vs native
+        -- hell_shark_masked, but the size matches. ON/OFF value text dropped 18 -> 16 to
+        -- stay <= the label size.
+        label    = _text_style(LABEL_BASE_X + ind, y, DEC_ARROW_X - LABEL_BASE_X - 12 - ind, 16),
+        on_text  = _text_style(val_x, y, val_w, 16,
                      Colors.get_color_table_with_alpha("font_default", 255), "center"),
-        off_text = _text_style(val_x, y, val_w, 18,
+        off_text = _text_style(val_x, y, val_w, 16,
                      Colors.get_color_table_with_alpha("font_default", 255), "center"),
     }
     local content = {
@@ -625,11 +689,44 @@ local THUMB_W, THUMB_H = 14, 27
 -- masked=false because the borrowed renderer has no stencil and the sprite is fully
 -- contained in its UV rect.
 local THUMB_HOVER_W, THUMB_HOVER_H = 34, 25
--- Font material for the type-to-edit caret's text-width measurement. arial is proven to
--- resolve on the borrowed renderer with a nil font-name (HudCustomizer pattern, used by
--- _gut_respawn_timer.lua:28). UIRenderer.text_size's 3rd arg is a MATERIAL PATH, not a
--- font name, so we cannot pass "hell_shark" here.
-local CARET_FONT_MATERIAL = "materials/fonts/arial"
+-- Measure a value with the exact path UIPasses.text uses: UIFontByResolution
+-- supplies the scaled size/material and the style's font_type is forwarded as
+-- font_name. UIRenderer.text_size returns design-space width plus the glyph
+-- origin used by the native centered-alignment formula (ui_passes.lua:1964-1990,
+-- 2177-2181; ui_renderer.lua:1254-1260).
+local function _measure_value(renderer, value_style, text)
+    if not renderer or not value_style then return nil end
+    local ok_font, font, scaled_size = pcall(UIFontByResolution, value_style)
+    if not ok_font or type(font) ~= "table" then return nil end
+    local ok, width, _, origin = pcall(UIRenderer.text_size, renderer,
+        tostring(text or ""), font[1], scaled_size, value_style.font_type)
+    if not ok or type(width) ~= "number" then return nil end
+    return width, origin and origin.x or 0
+end
+
+local function numeric_caret_x(renderer, value_style, text, box_w, caret_idx)
+    local full_width, origin_x = _measure_value(renderer, value_style, text)
+    if not full_width then return nil end
+    local idx = math.clamp(caret_idx or #text, 0, #text)
+    local prefix_width = _measure_value(renderer, value_style, string.sub(text, 1, idx))
+    if not prefix_width then return nil end
+    return NumericEditor.caret_x(value_style.offset[1], box_w, full_width, origin_x, prefix_width)
+end
+
+local function numeric_caret_index(renderer, value_style, text, box_w, click_x)
+    local full_width, origin_x = _measure_value(renderer, value_style, text)
+    if not full_width then return nil end
+    local text_left = NumericEditor.centered_text_left(
+        value_style.offset[1], box_w, full_width, origin_x)
+    local advances = {}
+    for idx = 0, #text do
+        local width = _measure_value(renderer, value_style, string.sub(text, 1, idx))
+        if not width then return nil end
+        advances[idx + 1] = width
+    end
+    return NumericEditor.nearest_index(click_x, text_left, advances)
+end
+
 local function create_slider(text, tooltip, base_offset, depth)
     local y  = base_offset[2] - ROW_H
     base_offset[2] = y
@@ -700,20 +797,13 @@ local function create_slider(text, tooltip, base_offset, depth)
                         if r then
                             local vs = ui_style.value
                             local s = tostring(ui_content.value_text or "")
-                            -- Measure with the proven arial material (HudCustomizer pattern,
-                            -- _gut_respawn_timer.lua:28/47) — text_size's 3rd arg is a FONT
-                            -- MATERIAL PATH, not the "hell_shark" font NAME (which fails the
-                            -- lookup). Value strings are short numerics, so arial width is a
-                            -- close-enough proxy for caret placement at the text's end.
-                            local ok_w, tw_px = pcall(UIRenderer.text_size, r, s,
-                                CARET_FONT_MATERIAL, vs.font_size)
-                            if ok_w and type(tw_px) == "number" then
-                                -- value text is centered in its box: left edge = box_x + (box_w - tw)/2.
-                                local box_x = vs.offset[1]
-                                local box_w = ui_content._caret_box_w or 64
-                                local text_left = box_x + (box_w - tw_px) / 2
-                                ui_style.caret.offset[1] = text_left + tw_px + 1
-                            end
+                            -- #575: use the exact native font resolution + centered
+                            -- glyph-origin formula. This remains correct across UI
+                            -- scale, signs, decimal points, and proportional digits.
+                            local idx = math.clamp(ui_content.caret_idx or #s, 0, #s)
+                            local caret_x = numeric_caret_x(r, vs, s,
+                                ui_content._caret_box_w or 64, idx)
+                            if caret_x then ui_style.caret.offset[1] = caret_x end
                             -- Pulse alpha (math.sirp ping-pongs 0..1; *255 -> alpha). caret_t
                             -- is advanced by the view each frame it's editing.
                             local a = math.sirp(0, 0.85, (ui_content.caret_t or 0) * 1.5) * 255
@@ -728,12 +818,11 @@ local function create_slider(text, tooltip, base_offset, depth)
                 if ui_style.value_focus_bg then
                     ui_style.value_focus_bg.color[1] = ui_content.editing and 90 or 0
                 end
-                -- DEBUG PROBE (routes through mod:debug): logs internal_value, the
-                -- computed thumb offset[1], and whether the slider_thumb texture is set —
-                -- so if the thumb still doesn't move in-game, the log pins the cause (bad
-                -- internal_value vs. offset not applied vs. texture unresolved). Throttled
-                -- to ~1/sec via a per-widget frame counter so it can't flood the log on
-                -- every draw frame.
+                -- DEBUG PROBE (gated): logs internal_value, the computed thumb offset[1],
+                -- and whether the slider_thumb texture is set — so if the thumb still
+                -- doesn't move in-game, the log pins the cause (bad internal_value vs.
+                -- offset not applied vs. texture unresolved). Throttled to ~1/sec via a
+                -- per-widget frame counter so it can't flood the log on every draw frame.
                 ui_content._probe_n = (ui_content._probe_n or 0) + 1
                 if ui_content._probe_n % 60 == 1 then
                     mod:debug("[mt:slider-probe] internal=%.3f thumb_off_x=%.1f thumb_tex=%s",
@@ -796,7 +885,7 @@ local function create_slider(text, tooltip, base_offset, depth)
         -- (options_view_definitions.lua:1991-2002). hell_shark (unmasked) here vs
         -- native hell_shark_masked, but the size matches. Label fills the left column
         -- up to the decrement arrow.
-        label      = _text_style(0 + ind, y, dec_x - 12 - ind, 16),
+        label      = _text_style(LABEL_BASE_X + ind, y, dec_x - LABEL_BASE_X - 12 - ind, 16),
         -- Track recolored to native `slider_box` near-black {255,5,5,5} (was {255,35,35,35}).
         -- The yellow `fill` style was DELETED (v0.2.67-dev) — native sliders have no fill.
         track      = { offset = { track_x, cy - TRACK_H / 2, 2 }, size = { track_w, TRACK_H }, color = { 255, 5, 5, 5 } },
@@ -895,6 +984,11 @@ local DD_ARROW_GLOW_ALPHA = 255
 local DD_ROW_W   = INPUT_FIELD_WIDTH - 56   -- 344
 local DD_ROW_H   = 24
 local DD_MAX_ROWS = 10
+-- (#505) Filter-header band heights, added ABOVE the option rows when the view passes a
+-- `header` spec to create_dropdown_list (a long / category-registered dropdown). The search
+-- line is always present in the header; the chip row only when the dropdown has categories.
+local DD_HEADER_SEARCH_H = 26
+local DD_HEADER_CHIP_H   = 28
 
 -- (#92 corrected — match the VANILLA GAME SETTINGS dropdown, not VMF.) The real Options
 -- dropdown does NOT recolor its value text on hover/open: both the collapsed
@@ -985,7 +1079,12 @@ local function create_dropdown(text, base_offset, depth, opts)
                 -- texture pass (always down), hidden via content_check when active.
                 ui_content.uvs = open and DD_FLIP_UVS_V or DD_NO_FLIP_UVS_V
                 if ui_style.arrow_glow then
-                    -- (#99) Fade the dropdown glow in/out like the stepper arrows, not a hard pop.
+                    -- (#99) Native data ([gut-glow-probe] on menu_settings_motion_sickness_hit): the
+                    -- glow is drop_down_menu_arrow_clicked (31x28), REPOSITIONED when it flips —
+                    -- arrow_hover (closed) at 28-tall-centre +13, arrow_hover_flipped (open) at -12.
+                    -- (.125's "same sprite as the arrow" made it the 31x15 base = invisible. Reverted.)
+                    ui_style.arrow_glow.offset[2] = cy - 14 + (open and -12 or 13)
+                    -- Fade the dropdown glow in/out like the stepper arrows, not a hard pop.
                     local c = ui_style.arrow_glow.color
                     local t = lit and DD_ARROW_GLOW_ALPHA or 0
                     local d = t - (c[1] or 0)
@@ -1017,12 +1116,12 @@ local function create_dropdown(text, base_offset, depth, opts)
         -- strings live in their own top-level keys, and the ONE shared content.uvs is flipped by
         -- the driver (up while open, down while closed).
         arrow_up_tex   = DD_ARROW,
-        arrow_glow_tex = DD_ARROW_CLICKED,
+        arrow_glow_tex = DD_ARROW_CLICKED,   -- (#99) native hover-glow sprite (31x28); driver repositions on flip
         uvs            = DD_NO_FLIP_UVS_V,
     }
     local style = {
         hotspot = { size = { INPUT_FIELD_WIDTH, ROW_H }, offset = { RA - INPUT_FIELD_WIDTH, y, 0 } },
-        label   = _text_style(12 + ind, y, (RA - INPUT_FIELD_WIDTH) - 24 - ind, 16),
+        label   = _text_style(LABEL_BASE_X + ind, y, (RA - INPUT_FIELD_WIDTH) - LABEL_BASE_X - 12 - ind, 16),
         -- Idle value color = cheeseburger (native current_selection idle), ramped to white by
         -- the local_offset pass above on hover/open.
         value   = _text_style(val_x, y, val_w, 16, _dd_value_color_idle(), "center"),
@@ -1035,8 +1134,12 @@ local function create_dropdown(text, base_offset, depth, opts)
         -- the base so the lit sprite reads on top (native draws _clicked at +0 over base +1,
         -- but on the borrowed renderer draw ORDER, not z, layers within one widget — this pass
         -- is appended after the base so it paints over).
-        arrow_glow = { texture_size = { DD_ARROW_W, DD_ARROW_H }, offset = { arrow_x, arrow_y, 5 },
-                       color = { 0, 181, 181, 181 } },   -- seed alpha 0, native grey RGB; driver ramps alpha->255 when lit (#99)
+        -- (#99b) The glow uses the `drop_down_menu_arrow_clicked` sprite, which is 31x28 in the
+        -- atlas (NOT the 31x15 base) — drawing it at the base DD_ARROW_H squished + mispositioned
+        -- it (the same bug the stepper arrows had, #92/#99). Use the true clicked height and
+        -- re-center it on the row mid-line (cy - 28/2).
+        arrow_glow = { texture_size = { DD_ARROW_W, 28 }, offset = { arrow_x, cy - 14, 5 },
+                       color = { 0, 181, 181, 181 } },   -- (#99) drop_down_menu_arrow_clicked 31x28, native grey; driver ramps alpha 0->255 + shifts offset on flip
     }
     style.value.upper_case = true
     if opts and opts.field_box then
@@ -1081,7 +1184,7 @@ end
 -- The view reads content.opt_<i>.on_left_release to commit option i, and is_hover to
 -- position the highlight. Returns the widget + the visible count (so the view can map
 -- clicks to absolute option indices via start_index).
-local function create_dropdown_list(texts, current_idx, anchor_y, start_index)
+local function create_dropdown_list(texts, current_idx, anchor_y, start_index, header)
     start_index = math.max(1, start_index or 1)
     local n = #texts
     local num_draws = math.min(n, DD_MAX_ROWS)
@@ -1089,8 +1192,21 @@ local function create_dropdown_list(texts, current_idx, anchor_y, start_index)
     -- collapsed row's bottom-Y; its top is anchor_y + ROW_H, so the list top is at
     -- anchor_y — i.e. flush under the collapsed row). Rows descend by DD_ROW_H.
     local list_top = anchor_y
-    local panel_h = DD_ROW_H * num_draws
     local x0 = RA - INPUT_FIELD_WIDTH + 10   -- align the popup under the value band
+
+    -- (#505) Optional FILTER HEADER band above the option rows. `header` (nil = the plain
+    -- dropdown, unchanged) carries { query = <string>, chips = { { label=, active= }, ... } }.
+    -- The header occupies the TOP of the panel; option rows are pushed down by header_h so the
+    -- popup still drops downward from the collapsed row. The view updates content.search_text
+    -- each frame (query + blink caret) and reads content.chip_<i> hotspots for chip clicks.
+    local chips = header and header.chips
+    local n_chips = (type(chips) == "table") and #chips or 0
+    local header_h = 0
+    if header then
+        header_h = DD_HEADER_SEARCH_H + (n_chips > 0 and DD_HEADER_CHIP_H or 0)
+    end
+    local opt_top = list_top - header_h            -- top of the OPTION-row area
+    local panel_h = header_h + DD_ROW_H * num_draws
 
     local passes = {
         -- bg shade (border fake): 2px larger all around, one z behind the panel.
@@ -1104,6 +1220,49 @@ local function create_dropdown_list(texts, current_idx, anchor_y, start_index)
                   color = { 255, 10, 10, 10 } },
     }
     local content = {}
+
+    -- (#505) Header passes (search line + optional chip row). Built before the option rows so
+    -- their hotspots resolve and their bg strips sit at the panel top.
+    if header then
+        local sy = list_top - DD_HEADER_SEARCH_H
+        passes[#passes + 1] = { pass_type = "rect", style_id = "search_bg" }
+        passes[#passes + 1] = { pass_type = "text", style_id = "search_text", text_id = "search_text" }
+        style.search_bg = { offset = { x0, sy, 10 }, size = { DD_ROW_W, DD_HEADER_SEARCH_H }, color = { 255, 22, 22, 22 } }
+        style.search_text = {
+            font_type = "hell_shark", font_size = 15,
+            horizontal_alignment = "left", vertical_alignment = "center",
+            localize = false, upper_case = false,
+            text_color = { 255, 200, 200, 200 },
+            offset = { x0 + 8, sy, 12 }, size = { DD_ROW_W - 16, DD_HEADER_SEARCH_H },
+        }
+        content.search_text = tostring(header.query or "")
+        if n_chips > 0 then
+            local cy = list_top - DD_HEADER_SEARCH_H - DD_HEADER_CHIP_H
+            local chip_w = DD_ROW_W / n_chips
+            for ci = 1, n_chips do
+                local chip = chips[ci]
+                local cx = x0 + (ci - 1) * chip_w
+                local bg_id, txt_id, hs_id = "chip_bg_" .. ci, "chip_txt_" .. ci, "chip_" .. ci
+                local active = chip.active and true or false
+                passes[#passes + 1] = { pass_type = "rect", style_id = bg_id }
+                passes[#passes + 1] = { pass_type = "text", style_id = txt_id, text_id = txt_id }
+                passes[#passes + 1] = { pass_type = "hotspot", content_id = hs_id, style_id = hs_id }
+                style[bg_id]  = { offset = { cx + 2, cy + 3, 10 }, size = { chip_w - 4, DD_HEADER_CHIP_H - 6 },
+                                  color = active and { 255, 90, 70, 30 } or { 255, 30, 30, 30 } }
+                style[txt_id] = {
+                    font_type = "hell_shark", font_size = 14,
+                    horizontal_alignment = "center", vertical_alignment = "center",
+                    localize = false, upper_case = false,
+                    text_color = active and { 255, 255, 220, 150 } or { 255, 175, 175, 175 },
+                    offset = { cx + 2, cy, 12 }, size = { chip_w - 4, DD_HEADER_CHIP_H },
+                }
+                style[hs_id]  = { offset = { cx, cy, 11 }, size = { chip_w, DD_HEADER_CHIP_H } }
+                content[txt_id] = tostring(chip.label or "")
+                content[hs_id]  = {}
+            end
+        end
+    end
+
     -- Highlight sprite (drawn once, repositioned to the hovered/selected row by the view).
     passes[#passes + 1] = {
         pass_type = "texture", style_id = "hl", texture_id = "hl_tex",
@@ -1111,12 +1270,12 @@ local function create_dropdown_list(texts, current_idx, anchor_y, start_index)
     }
     content.hl_tex = "playerlist_hover"
     content.hl_visible = false
-    style.hl = { offset = { x0, list_top - DD_ROW_H, 10 }, size = { DD_ROW_W, DD_ROW_H },
+    style.hl = { offset = { x0, opt_top - DD_ROW_H, 10 }, size = { DD_ROW_W, DD_ROW_H },
                  color = { 255, 255, 255, 255 } }
 
     for k = 1, num_draws do
         local opt_i = start_index + k - 1
-        local row_top = list_top - (k - 1) * DD_ROW_H
+        local row_top = opt_top - (k - 1) * DD_ROW_H
         local text_id = "txt_" .. k
         local hs_id   = "opt_" .. k
         -- (#92 corrected — match the VANILLA GAME SETTINGS popup, not VMF.) The real Options
@@ -1169,10 +1328,166 @@ local function create_dropdown_list(texts, current_idx, anchor_y, start_index)
     w._dd_num_draws  = num_draws
     w._dd_start      = start_index
     w._dd_total      = n
-    w._dd_list_top   = list_top
+    w._dd_list_top   = opt_top        -- (#505) OPTION-row top (below any header band)
     w._dd_x0         = x0
     w._dd_row_h      = DD_ROW_H
+    -- (#505) filtered-space selected index (highlight seed) + header geometry the view reads.
+    w._dd_cur        = current_idx
+    w._dd_header_h   = header_h
+    w._dd_chip_count = n_chips
     return w
+end
+
+-- ---------------------------------------------------------------
+-- (#207) HOVER INFO POPUP — native options-menu tooltip, HAND-BUILT for the borrowed
+-- renderer. Native settings rows carry an `option_tooltip` pass (ui_passes.lua:3350) that
+-- composes UITooltipPasses.generic_text + a box drawn by UITooltipPasses.background: a
+-- `{255,3,3,3}` fill rect + the `item_tooltip_frame_01` frame (ui_passes_tooltips.lua:21-71).
+-- item_tooltip_frame_01's texture IS `menu_frame_12` (ui_frame_settings.lua:921-941) — the
+-- SAME frame gut's window chrome (background_frame) already draws, so it's PROVEN resident on
+-- the borrowed HeroView / level-world renderer. So this popup reproduces the native box the
+-- proven way: a plain `rect` "panel" fill (dark {255,3,3,3}, NO atlas/material lookup) + a
+-- `texture_frame` menu_frame_12 border (the real settings-tooltip frame, sized per-frame),
+-- plus plain `text` passes, on the mt_tooltip scenegraph node (parented to mt_list so it
+-- scrolls with the rows, z above them) drawn LAST in the view's draw loop so it overlays +
+-- isn't culled. Title = the row label (font_title, larger size 22); description = the node's
+-- localized `tooltip`, word-wrapped below it (font_default, size 18). The view sets
+-- content.title / content.desc + the geometry + the fade alpha every frame via layout_tooltip.
+local TT_W             = math.min(600, ROW_W)   -- native tooltip width 600, clamped to gut's panel
+local TT_PAD_X         = 16
+local TT_PAD_Y         = 12
+local TT_GAP           = 6                       -- vertical gap between title + description
+local TT_TITLE_SIZE    = 22
+local TT_DESC_SIZE     = 18
+local TT_SCREEN_MARGIN = 8                       -- px margin from a screen edge before flipping the box's side
+-- (#207) menu_frame_12 9-slice BORDER — the SAME ornate frame the NATIVE settings option
+-- tooltip draws: vanilla option_tooltip -> UITooltipPasses.background uses item_tooltip_frame_01,
+-- whose texture IS menu_frame_12, over a {255,3,3,3} fill (ui_passes_tooltips.lua:21-71 /
+-- ui_frame_settings.lua:921-941). menu_frame_12 is already proven to resolve on the borrowed
+-- renderer (gut's window chrome background_frame uses it via UIWidgets.create_frame). We draw it
+-- as a texture_frame pass whose area_size + offset are set per-frame in layout_tooltip so the
+-- frame resizes with the box. Metrics copied verbatim from UIFrameSettings.menu_frame_12.
+local TT_FRAME_TEXTURE   = "menu_frame_12"
+local TT_FRAME_TEX_SIZE  = { 64, 64 }
+local TT_FRAME_TEX_SIZES = { corner = { 11, 11 }, vertical = { 5, 1 }, horizontal = { 1, 5 } }
+
+-- One reusable tooltip widget. The view sets content.title / content.desc and every frame
+-- calls layout_tooltip to size/position the box + ramp the fade alpha. Mirrors the dropdown
+-- popup's z-ordering (drawn above rows). The border is the native menu_frame_12 9-slice (the
+-- SAME frame the real settings tooltip uses — see TT_FRAME_* above), NOT a flat grey rect.
+local function create_tooltip_popup()
+    local passes = {
+        -- Dark panel FILL (native settings-tooltip background = {255,3,3,3}).
+        { pass_type = "rect", style_id = "panel" },
+        -- TITLE (header, larger) over a word-wrapped DESCRIPTION below it.
+        { pass_type = "text", style_id = "title", text_id = "title" },
+        { pass_type = "text", style_id = "desc",  text_id = "desc" },
+        -- menu_frame_12 BORDER, drawn LAST (highest z) so its edges sit crisply over the fill.
+        -- area_size + offset are driven per-frame by layout_tooltip so it wraps the box exactly.
+        { pass_type = "texture_frame", style_id = "frame", texture_id = "frame" },
+    }
+    local content = { title = "", desc = "", frame = TT_FRAME_TEXTURE }
+    local style = {
+        panel = { offset = { 0, 0, 60 }, size = { TT_W, 10 }, color = { 255, 3, 3, 3 } },
+        title = {
+            font_type = "hell_shark", font_size = TT_TITLE_SIZE,
+            horizontal_alignment = "left", vertical_alignment = "top",
+            localize = false, word_wrap = true,
+            text_color = Colors.get_color_table_with_alpha("font_title", 255),
+            offset = { 0, 0, 62 }, size = { TT_W - TT_PAD_X * 2, 30 },
+        },
+        desc = {
+            font_type = "hell_shark", font_size = TT_DESC_SIZE,
+            horizontal_alignment = "left", vertical_alignment = "top",
+            localize = false, word_wrap = true,
+            text_color = Colors.get_color_table_with_alpha("font_default", 255),
+            offset = { 0, 0, 62 }, size = { TT_W - TT_PAD_X * 2, 30 },
+        },
+        -- menu_frame_12 9-slice; color[1] (alpha) ramped by the fade. area_size/offset per-frame.
+        frame = {
+            texture_size = TT_FRAME_TEX_SIZE, texture_sizes = TT_FRAME_TEX_SIZES,
+            color = { 255, 255, 255, 255 },
+            offset = { 0, 0, 63 }, area_size = { TT_W, 10 },
+        },
+    }
+    return UIWidget.init({
+        scenegraph_id = "mt_tooltip",
+        element = { passes = passes },
+        content = content,
+        style = style,
+        offset = { 0, 0, 0 },
+    })
+end
+
+-- Measure one word-wrapped text block: returns (line_count, line_height) in UNSCALED UI
+-- space, mirroring the native generic_text / text-pass measurement (ui_passes.lua:1992-2000
+-- / 4001-4007): word_wrap with the SCALED font size + the raw box width, line height =
+-- (font_max - font_min) * inv_scale. Caller pcall-guards; on failure falls back to 1 line.
+local function _tt_measure(renderer, style, text, inner_w)
+    local font, scaled = UIFontByResolution(style)
+    local lines = UIRenderer.word_wrap(renderer, text, font[1], scaled, inner_w)
+    local _, fmin, fmax = UIGetFontHeight(renderer.gui, style.font_type, scaled)
+    local line_h = (fmax - fmin) * RESOLUTION_LOOKUP.inv_scale
+    return math.max(1, #lines), line_h
+end
+
+-- Lay out + fade the tooltip popup for the hovered row, every frame. `row_list_y` is the
+-- hovered row's offset Y (its bottom edge, in mt_list_start / mt_tooltip space, which share
+-- the {40,0} origin); `world_row_y` is that same bottom edge in screen/design space (for the
+-- on-screen flip test); `alpha` is the fade [0..1].
+-- (#207) Anchors the box ABOVE the row by default (its bottom edge flush to the row's top),
+-- matching the native options tooltip; FLIPS it BELOW only when drawing above would run off the
+-- TOP of the visible screen. Box height fits the wrapped title + description. Mutates in place.
+local function layout_tooltip(widget, renderer, title, desc, row_list_y, world_row_y, alpha)
+    local style, content = widget.style, widget.content
+    content.title = tostring(title or "")
+    content.desc  = tostring(desc or "")
+    local inner_w = TT_W - TT_PAD_X * 2
+
+    -- Measure wrapped heights (native generic_text approach). Fallback = 1 line each.
+    local title_lines, title_lh = 1, TT_TITLE_SIZE + 8
+    local desc_lines,  desc_lh  = 1, TT_DESC_SIZE + 6
+    pcall(function() title_lines, title_lh = _tt_measure(renderer, style.title, content.title, inner_w) end)
+    pcall(function() desc_lines,  desc_lh  = _tt_measure(renderer, style.desc,  content.desc,  inner_w) end)
+    local title_h = title_lines * title_lh
+    local desc_h  = desc_lines  * desc_lh
+    local box_h   = TT_PAD_Y + title_h + TT_GAP + desc_h + TT_PAD_Y
+
+    -- (#207) DEFAULT = draw the box ABOVE the row (its bottom edge flush to the row's top), like
+    -- the native options tooltip. `box_top` is the box's TOP edge in offset space (offset is
+    -- bottom-left, +Y up). Drawing above puts the box's TOP at world Y = world_row_y + ROW_H +
+    -- box_h; flip to BELOW only if that runs off the TOP of the visible screen. Screen height is
+    -- read in the SAME design space as world_row_y (res_h * inv_scale; falls back to 1080).
+    local screen_h = 1080
+    pcall(function()
+        local r = RESOLUTION_LOOKUP
+        if r and r.res_h and r.inv_scale then screen_h = r.res_h * r.inv_scale end
+    end)
+    local above_top_world = world_row_y + ROW_H + box_h
+    local draw_below = above_top_world > (screen_h - TT_SCREEN_MARGIN)
+    local box_top    = draw_below and row_list_y or (row_list_y + ROW_H + box_h)
+    local box_bottom = box_top - box_h
+    local x0 = LABEL_BASE_X
+    if x0 + TT_W > ROW_W then x0 = math.max(0, ROW_W - TT_W) end
+
+    style.panel.offset[1], style.panel.offset[2] = x0, box_bottom
+    style.panel.size[1],   style.panel.size[2]   = TT_W, box_h
+    -- menu_frame_12 border wraps the fill exactly (same rect); area_size drives the 9-slice.
+    style.frame.offset[1],    style.frame.offset[2]    = x0, box_bottom
+    style.frame.area_size[1], style.frame.area_size[2] = TT_W, box_h
+    style.title.offset[1] = x0 + TT_PAD_X
+    style.title.offset[2] = box_top - TT_PAD_Y - title_h
+    style.title.size[1],   style.title.size[2]   = inner_w, title_h
+    style.desc.offset[1]  = x0 + TT_PAD_X
+    style.desc.offset[2]  = box_top - TT_PAD_Y - title_h - TT_GAP - desc_h
+    style.desc.size[1],    style.desc.size[2]    = inner_w, desc_h
+
+    -- Fade: alpha [0..1] -> 0..255 on EVERY pass color (panel, frame, both texts).
+    local a = math.floor(math.clamp(alpha or 0, 0, 1) * 255 + 0.5)
+    style.panel.color[1]      = a
+    style.frame.color[1]      = a
+    style.title.text_color[1] = a
+    style.desc.text_color[1]  = a
 end
 
 -- Section / unsupported row: label-only text (font_title, upper case). Safe.
@@ -1180,7 +1495,10 @@ local function create_section_title(text, base_offset, depth)
     local y = base_offset[2] - ROW_H
     base_offset[2] = y
     local ind = INDENT_PER_DEPTH * (depth or 0)   -- LEFT label only
-    local st = _text_style(0 + ind, y, ROW_W - ind, 22, Colors.get_color_table_with_alpha("font_title", 255))
+    -- (Fix 1, v0.2.151-dev) font 18 (was 24) = the FARMED vanilla in-list header font
+    -- (dumped live from the real Options menu). The decompiled 24 (keybind_info/tooltip)
+    -- rendered too large once the global scale doubled it.
+    local st = _text_style(LABEL_BASE_X + ind, y, ROW_W - LABEL_BASE_X - ind, 18, Colors.get_color_table_with_alpha("font_title", 255))
     st.upper_case = true
     local passes = { { pass_type = "text", style_id = "label", text_id = "label" } }
     local style  = { label = st }
@@ -1201,19 +1519,80 @@ local function create_group_header(text, expanded, base_offset, depth)
     local y = base_offset[2] - ROW_H
     base_offset[2] = y
     local ind = INDENT_PER_DEPTH * (depth or 0)   -- LEFT indicator + label only
+    local cy = y + ROW_H / 2
     local passes = {
         { pass_type = "hotspot", content_id = "hotspot", style_id = "hotspot" },
         -- (v0.2.67-dev) The tinted `bg` bar pass was DELETED — the larger colored title
         -- text (font 22 / font_title) is the group differentiator now, not a colored bar.
-        { pass_type = "text",    style_id = "indicator", text_id = "indicator" },
+        -- (#165) Collapse/expand indicator is now the drop_down_menu_arrow CHEVRON sprite (was the
+        -- text glyph "[+]"/"[-]"), drawn via rotated_texture: ▼ DOWN when expanded (angle 0), ▶ RIGHT
+        -- when collapsed (angle +pi/2 — VT2 UI is Y-up, so a down chevron rotated +90° CCW points
+        -- right), like a native tree toggle. Hover brighten comes from the row's _append_highlight bar.
+        -- (#165) Per-frame glow driver. ONLY a local_offset pass runs its offset_function every
+        -- frame (reference_vt2_offset_function_local_offset_only), and it mutates the LIVE ui_style
+        -- used for drawing — the exact proven pattern the dropdown arrow glow uses. Read the row
+        -- hotspot's is_hover and brighten ui_style.arrow grey->white. (The earlier _apply_row_hover
+        -- attempt wrote row.style — a possibly-cloned table — so it never reached the render.)
+        { pass_type = "local_offset", offset_function = function(_, ui_style, ui_content)
+            -- Fade the orangey `_clicked` glow sprite in/out (alpha ramp toward 255/0,
+            -- snapping within 4) — the EXACT scheme the dropdown + stepper arrow glows use.
+            -- (Fix 4, v0.2.149-dev) An EXPANDED group keeps its arrow lit even when NOT
+            -- hovered, so an open section reads as active (like the row highlight below).
+            -- ui_content.expanded is baked at build time AND refreshed live each frame by
+            -- the twins' _apply_row_hover (from self._expanded[row._group_key], the same
+            -- source the row toggle uses), so it tracks a toggle without a rebuild.
+            local hov = ui_content.hotspot and ui_content.hotspot.is_hover
+            local lit = hov or ui_content.expanded
+            local g = ui_style.arrow_glow
+            if g and g.color then
+                local t = lit and 255 or 0
+                local d = t - (g.color[1] or 0)
+                g.color[1] = (math.abs(d) < 4) and t or ((g.color[1] or 0) + d * 0.3)
+            end
+        end },
+        { pass_type = "rotated_texture", style_id = "arrow", texture_id = "arrow_tex" },
+        -- (#165) the orangey hover GLOW: drop_down_menu_arrow_clicked drawn OVER the chevron at the
+        -- same rotation, alpha-ramped by the driver above — same glow image as every other arrow.
+        { pass_type = "rotated_texture", style_id = "arrow_glow", texture_id = "arrow_glow_tex" },
         { pass_type = "text",    style_id = "label",     text_id = "label" },
     }
-    local content = { hotspot = {}, indicator = expanded and "[-]" or "[+]", label = tostring(text) }
+    local content = { hotspot = {}, arrow_tex = "drop_down_menu_arrow",
+                      arrow_glow_tex = "drop_down_menu_arrow_clicked", label = tostring(text),
+                      -- (Fix 4, v0.2.149-dev) initial expanded state; the glow driver reads it,
+                      -- and the twins refresh it live each frame in _apply_row_hover.
+                      expanded = expanded and true or false }
     local style = {
         hotspot   = { size = { ROW_W, ROW_H }, offset = { 0, y, 0 } },
         -- (v0.2.67-dev) The tinted `bg` style was DELETED — see the pass note above.
-        indicator = _text_style(8 + ind, y, 34, 22, Colors.get_color_table_with_alpha("font_title", 255), "center"),
-        label     = _text_style(46 + ind, y, ROW_W - 60 - ind, 22, Colors.get_color_table_with_alpha("font_title", 255), "left"),
+        -- (#165) Pivot = sprite centre so it rotates in place; sized ~24x12 + vertically centred on
+        -- the row, sitting in the old indicator column (left of the label at 46+ind).
+        -- (#165) REST arrow dimmed 180 -> 130 grey so the white hover arrow reads as an
+        -- obvious glow. Centre = (8+ind+12, cy) for the 24x12 sprite.
+        -- (#165) ONE arrow pass. The view's _apply_row_hover drives this colour DIRECTLY each frame
+        -- (grey 130 at rest -> white 255 on hover). The arrow pass always renders (no content_check),
+        -- so the hover shows reliably — the old content_check `arrow_hover` overlay never appeared
+        -- (rotated_texture ignores content_check_function on the borrowed Mod Tweaker renderer).
+        arrow       = { angle = expanded and 0 or (-math.pi * 0.5), pivot = { 12, 6 },
+                        texture_size = { 24, 12 }, color = { 255, 181, 181, 181 },
+                        offset = { 8 + ind, cy - 6, 1 } },
+        -- (#165) orangey hover glow overlay (drop_down_menu_arrow_clicked, 31x28 -> 24x22).
+        -- The CHEVRON sits ~1px from the BOTTOM of this sprite, NOT at its box centre. Ground
+        -- truth is the #99 dropdown: the 28-tall glow needs +13 to align its chevron with the
+        -- base arrow, i.e. the chevron is 13/28 below box-centre -> ~1px up from the bottom of
+        -- our 22-tall box. So we must rotate about the CHEVRON (pivot {12,1}), not the box
+        -- centre ({12,11}). The old box-centre pivot left the chevron ~10px off the rotation
+        -- centre: a vertical shift while expanded, and -- once rotated 90deg for the collapsed
+        -- state -- a SIDEWAYS shift onto the wrong side of the base arrow (the reported bug).
+        -- offset cy-1 keeps the rotation centre at (20+ind, cy) = the base chevron, so the glow
+        -- now sits on the chevron in BOTH states. Alpha seeds 0, driver ramps to 255 on hover.
+        arrow_glow  = { angle = expanded and 0 or (-math.pi * 0.5), pivot = { 12, 1 },
+                        texture_size = { 24, 22 }, color = { 0, 181, 181, 181 },
+                        offset = { 8 + ind, cy - 1, 2 } },
+        -- (#206) EXEMPT from LABEL_BASE_X: a collapsible group's label intentionally clears
+        -- the +/- chevron column (chevron spans ~8..32+ind), so it sits at 46+ind, tree-style
+        -- indented past the toggle. This is by design, not the cross-row misalignment #206 fixed.
+        -- (Fix 1, v0.2.151-dev) font 18 (was 24) = the FARMED vanilla in-list header font.
+        label     = _text_style(46 + ind, y, ROW_W - 60 - ind, 18, Colors.get_color_table_with_alpha("font_title", 255), "left"),
     }
     _append_highlight(passes, style, content, y)
     _append_separator(passes, style, y)
@@ -1388,7 +1767,7 @@ local function build_scrollbar_rect()
         scenegraph_id = "mt_scrollbar",
         element = {
             passes = {
-                { pass_type = "rect", style_id = "track" },
+                { pass_type = "rounded_background", style_id = "track" },  -- (#166) rounded corners like the vanilla scrollbar
                 -- THUMB SIZE/POSITION DRIVER (v0.2.77-dev) — the fix for "thumb is always
                 -- the full length of the track and can't be dragged". The thumb-sizing
                 -- offset_function previously lived on the `rect` thumb pass itself, but the
@@ -1450,7 +1829,7 @@ local function build_scrollbar_rect()
                 -- THUMB: plain rect pass; its size[2]/offset[2] are driven by the
                 -- local_offset pass above (NOT a per-pass offset_function, which rect
                 -- passes ignore).
-                { pass_type = "rect", style_id = "thumb" },
+                { pass_type = "rounded_background", style_id = "thumb" },  -- (#166) rounded corners like the vanilla scrollbar
                 { pass_type = "hotspot", content_id = "hotspot" },
             },
         },
@@ -1467,8 +1846,8 @@ local function build_scrollbar_rect()
             -- The {8, track_h} thumb SIZE below is the SCENEGRAPH default; the local_offset
             -- pass above overwrites size[2]/offset[2] every frame (do NOT move the sizing back
             -- onto the rect pass — it would silently never run; see the pass comment above).
-            track   = { offset = { 0, 0, 0 }, size = { 8, track_h }, color = { 255, 5, 5, 5 } },
-            thumb   = { offset = { 0, 0, 2 }, size = { 8, track_h }, color = { 255, 160, 146, 101 } },
+            track   = { offset = { 0, 0, 0 }, size = { 8, track_h }, color = { 255, 5, 5, 5 },       corner_radius = 2 },  -- (#166) vanilla corner_radius = 2
+            thumb   = { offset = { 0, 0, 2 }, size = { 8, track_h }, color = { 255, 160, 146, 101 }, corner_radius = 2 },
             hotspot = { offset = { -4, 0, 3 }, size = { 16, track_h } },
         },
         offset = { 0, 0, 0 },
@@ -1509,17 +1888,177 @@ local function create_apply_button()
         },
         content = { button_hotspot = {}, text = tostring(label), disabled = true },
         style = {
-            -- Whole-button hit zone (fills the 150x30 node).
-            button_hotspot = { size = { 150, 30 }, offset = { 0, 0, 0 } },
-            bg     = { offset = { 0, 0, 0 }, size = { 150, 30 }, color = { 200, 10, 10, 10 } },
-            border = { offset = { 0, 0, 1 }, size = { 150, 30 }, color = { 255, 80, 80, 80 },
+            -- (Fix 2, v0.2.151-dev) Whole-button hit zone fits the text-fit APPLY_W node
+            -- (was fixed 150). Text centers in the node size (the text pass carries no
+            -- explicit size), so hotspot == node width keeps the click zone over the label.
+            button_hotspot = { size = { APPLY_W, 30 }, offset = { 0, 0, 0 } },
+            bg     = { offset = { 0, 0, 0 }, size = { APPLY_W, 30 }, color = { 200, 10, 10, 10 } },
+            border = { offset = { 0, 0, 1 }, size = { APPLY_W, 30 }, color = { 255, 80, 80, 80 },
                        thickness = 1 },
             text   = {
                 font_type = "hell_shark", font_size = 22,
                 horizontal_alignment = "center", vertical_alignment = "center",
                 localize = false, upper_case = true,
-                text_color = Colors.get_color_table_with_alpha("cheeseburger", 255),
+                -- (Fix 3, v0.2.149-dev) Base = font_button_normal {255,160,146,101} (was
+                -- cheeseburger gold). Apply is the same create_text_button widget type as
+                -- the tabs + Default, so it now shares their scheme: font_button_normal idle,
+                -- white on hover (ENABLED). The twins' per-frame driver overwrites this each
+                -- frame (idle / white-on-hover / disabled font_default α75).
+                text_color = Colors.get_color_table_with_alpha("font_button_normal", 255),
                 offset = { 0, 0, 2 },
+            },
+        },
+        offset = { 0, 0, 0 },
+    })
+end
+
+-- (v0.2.148-dev) RESTORE DEFAULTS button. Mirrors create_apply_button (bare text + hover,
+-- no box), on the mt_reset node to Apply's LEFT. Clones native `reset_to_default`. Always
+-- enabled — clicking it STAGES every current-tab setting back to its default_value (the
+-- view/state twins then repaint the rows; the user clicks Apply to commit, exactly like a
+-- normal staged edit). Label comes from gut's own loc key `gut_mt_reset` via mod:localize
+-- (gut loc keys are NOT in the global Localize table, unlike the vanilla "menu_settings_*"
+-- keys create_apply_button uses), falling back to the literal so a missing key never blanks
+-- it. upper_case=true renders "Default" as "DEFAULT" like the native chrome.
+local function create_default_button()
+    local label = "DEFAULT"   -- (Fix 3, v0.2.149-dev) was "RESTORE DEFAULTS"; loc gut_mt_reset is now "Default"
+    local ok, s = pcall(mod.localize, mod, "gut_mt_reset")
+    if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then label = s end
+    return UIWidget.init({
+        scenegraph_id = "mt_reset",
+        element = {
+            passes = {
+                { pass_type = "hotspot", content_id = "button_hotspot", style_id = "button_hotspot" },
+                { pass_type = "text", style_id = "text", text_id = "text" },
+            },
+        },
+        content = { button_hotspot = {}, text = tostring(label) },
+        style = {
+            -- (Fix 2, v0.2.151-dev) Hit zone fits the text-fit RESET_W node (was fixed 150).
+            button_hotspot = { size = { RESET_W, 30 }, offset = { 0, 0, 0 } },
+            text   = {
+                font_type = "hell_shark", font_size = 22,
+                horizontal_alignment = "center", vertical_alignment = "center",
+                localize = false, upper_case = true,
+                -- (Fix 3, v0.2.149-dev) Base = font_button_normal {255,160,146,101} (was
+                -- font_default). Matches the TAB + Apply scheme (all create_text_button in
+                -- vanilla). The twins' per-frame driver sets idle = font_button_normal and
+                -- brightens to white on hover (this button is always enabled).
+                text_color = Colors.get_color_table_with_alpha("font_button_normal", 255),
+                offset = { 0, 0, 2 },
+            },
+        },
+        offset = { 0, 0, 0 },
+    })
+end
+
+local function _profile_text_widget(scenegraph_id, text, width)
+    return UIWidget.init({
+        scenegraph_id = scenegraph_id,
+        element = { passes = {
+            { pass_type = "hotspot", content_id = "hotspot", style_id = "hotspot" },
+            { pass_type = "rect", style_id = "bg" },
+            { pass_type = "text", style_id = "text", text_id = "text" },
+        } },
+        content = { hotspot = {}, text = text },
+        style = {
+            hotspot = { size = { width, 30 }, offset = { 0, 0, 0 } },
+            bg = { size = { width, 30 }, offset = { 0, 0, 0 }, color = { 0, 0, 0, 0 } },
+            text = { font_type = "hell_shark", font_size = 18,
+                horizontal_alignment = "center", vertical_alignment = "center",
+                localize = false, text_color = { 255, 160, 146, 101 },
+                offset = { 0, 0, 2 } },
+        },
+        offset = { 0, 0, 0 },
+    })
+end
+
+local function create_profile_controls()
+    local profile_label = "Profiles"
+    local ok, localized = pcall(mod.localize, mod, "gut_mt_profiles")
+    if ok and type(localized) == "string" and localized ~= ""
+            and not string.find(localized, "^<") then
+        profile_label = localized
+    end
+    local label = _profile_text_widget("mt_profiles_label", profile_label, 90)
+    local buttons = {}
+    for i = 1, 10 do
+        buttons[i] = _profile_text_widget("mt_profile_" .. i, tostring(i), 28)
+    end
+    return label, buttons
+end
+
+-- (#497) SEARCH box node + factory. The node sits in the band freed above list_mask
+-- (see SEARCH_BAND_H): parented to background_frame (the fixed centred panel, NOT the
+-- scrolling list) so it never moves, left-aligned at x=58 = list_mask inset (18) +
+-- mt_list_start inset (40) so its left edge lines up with the row content, and width =
+-- ROW_W so it spans the row-content column exactly ("flush with the length of the menu").
+-- _LIST_WINDOW_H is the ORIGINAL list height (captured before the shrink above), so
+-- _LIST_TOP is the original top margin; the box is vertically centred in the freed band.
+local _LIST_TOP = (WINDOW_HEIGHT - _LIST_WINDOW_H) / 2
+scenegraph_definition.mt_search = {
+    parent = "background_frame",
+    horizontal_alignment = "left",
+    vertical_alignment = "top",
+    position = { 58, -(_LIST_TOP + (SEARCH_BAND_H - SEARCH_BOX_H) / 2), 6 },
+    size = { ROW_W, SEARCH_BOX_H },
+}
+
+-- (#497) Per-tab SEARCH box widget. A fixed (non-scrolling) input field. The view focuses it
+-- on click, captures printable keystrokes into self._search_str (Keyboard.keystrokes -- the
+-- SAME raw path the numeric type-to-edit uses), and re-filters the current tab's rows live.
+-- The view drives content.text each frame (the query + a blink caret when focused, or the
+-- placeholder when empty+unfocused) and style.text.text_color / style.bg_inner.color for
+-- focus emphasis. #572 reuses the exact atlas-backed inventory search material from
+-- HeroWindowCraftingInventoryConsole (`search_filters_icon`, gui_menus_atlas), so no
+-- custom asset/package is introduced. The icon is a passive texture pass: the existing
+-- full-field hotspot remains the only focus/click target. #572 follow-up: render the
+-- padded tile at 95px (112px reduced by 15%, rounded), translate its visible glyph into
+-- the field, and hide it while typing.
+local function search_icon_visible(content)
+    return not content.search_focused
+end
+
+local function create_search_box()
+    local W, H, PAD = ROW_W, SEARCH_BOX_H, 14
+    -- The atlas entry is a padded 128x128 tile. Vanilla's negative offset belongs to a
+    -- separate inventory filter-control region; copying it to this full-width field put
+    -- the visible glyph outside the bar. Render the padded tile 15% smaller than #572's
+    -- prior 112px pass and translate its centred art wholly inside the field (about x=8..32).
+    -- Vanilla centers the 128px atlas tile at y=-4. Preserve that optical
+    -- alignment at our 95px scale: round(-4 * 95 / 128) = -3 design pixels.
+    local ICON_TEXTURE, ICON_SIZE, ICON_X, ICON_Y = "search_filters_icon", 95, -28, -3
+    local TEXT_X = 47
+    return UIWidget.init({
+        scenegraph_id = "mt_search",
+        element = {
+            passes = {
+                { pass_type = "rect", style_id = "bg_outer" },
+                { pass_type = "rect", style_id = "bg_inner" },
+                { pass_type = "texture", style_id = "search_icon", texture_id = "search_icon",
+                  content_check_function = search_icon_visible },
+                { pass_type = "hotspot", content_id = "hotspot", style_id = "hotspot" },
+                { pass_type = "text", style_id = "text", text_id = "text" },
+            },
+        },
+        content = { hotspot = {}, text = "", search_icon = ICON_TEXTURE, search_focused = false },
+        style = {
+            bg_outer = { offset = { 0, 0, 1 }, size = { W, H }, color = { 220, 0, 0, 0 } },
+            bg_inner = { offset = { 2, 2, 2 }, size = { W - 4, H - 4 }, color = { 255, 14, 14, 14 } },
+            search_icon = {
+                horizontal_alignment = "left", vertical_alignment = "center",
+                texture_size = { ICON_SIZE, ICON_SIZE }, offset = { ICON_X, ICON_Y, 3 },
+                color = { 255, 255, 255, 255 },
+                base_color = { 255, 255, 255, 255 },
+                disabled_color = { 128, 128, 128, 128 },
+            },
+            hotspot  = { size = { W, H }, offset = { 0, 0, 0 } },
+            text = {
+                font_type = "hell_shark", font_size = 20,
+                horizontal_alignment = "left", vertical_alignment = "center",
+                localize = false, upper_case = false, word_wrap = false,
+                text_color = { 255, 255, 255, 255 },
+                offset = { TEXT_X, 0, 4 }, size = { W - TEXT_X - PAD, H },
             },
         },
         offset = { 0, 0, 0 },
@@ -1537,16 +2076,38 @@ return {
     build_chrome = build_chrome,
     build_exit_button = build_exit_button,
     build_scrollbar = build_scrollbar,
-    build_hint = build_hint,
     create_apply_button = create_apply_button,
     apply_sg = "mt_apply",
+    create_default_button = create_default_button,
+    reset_sg = "mt_reset",
+    create_profile_controls = create_profile_controls,
     create_tab = create_tab,
+    -- (#497) Per-tab search box (fixed input field above the list).
+    create_search_box = create_search_box,
+    search_sg = "mt_search",
+    search_icon_contract = {
+        texture = "search_filters_icon", native_size = 128, size = 95,
+        previous_size = 112, scale_from_previous = 95 / 112,
+        scale = 0.7421875, icon_x = -28, icon_y = -3,
+        native_icon_y = -4,
+        visible_left = 8, visible_right = 32, text_x = 47,
+        hotspot_w = ROW_W, hotspot_h = SEARCH_BOX_H,
+        focus_content_key = "search_focused",
+        source = "HeroWindowCraftingInventoryConsole",
+    },
+    search_icon_visible = search_icon_visible,
     create_checkbox = create_checkbox,
     create_slider = create_slider,
     create_stepper = create_stepper,
     create_dropdown = create_dropdown,
     create_dropdown_list = create_dropdown_list,
     dropdown_sg = "mt_dropdown",
+    -- (#207) Hover info popup (native-style per-setting tooltip) — hand-built for the
+    -- borrowed renderer (rect bg + frame + title/desc text). layout_tooltip sizes/positions
+    -- + fades it each frame from the view's draw loop.
+    create_tooltip_popup = create_tooltip_popup,
+    layout_tooltip = layout_tooltip,
+    tooltip_sg = "mt_tooltip",
     create_section_title = create_section_title,
     create_group_header = create_group_header,
     create_gear_button = create_gear_button,
@@ -1554,6 +2115,9 @@ return {
     -- (v0.2.75-dev) Shared drill subtree planner — both twins build a drilled view's
     -- child rows from this so a 3-deep dropdown (checkbox -> group -> dropdown) is reached.
     plan_drill_children = plan_drill_children,
+    -- #575 exact native-metric click/caret helpers shared by both presentations.
+    numeric_caret_x = numeric_caret_x,
+    numeric_caret_index = numeric_caret_index,
     -- Geometry the view needs to trim a gear-parent's whole-row hotspot so it doesn't
     -- overlap (and double-fire with) the gear in the 3rd column.
     row_w = ROW_W,

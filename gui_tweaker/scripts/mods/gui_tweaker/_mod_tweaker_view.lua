@@ -1,4 +1,4 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
 local _printf = rawget(_G, "printf") or function() end  -- engine printf (survives mod-logging-OFF); nil-guarded
 
 -- Mod Tweaker view (v0.3 — native settings-menu chrome).
@@ -11,6 +11,11 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 -- Registry of categories/values is owned by the controller (mod.mod_tweaker).
 
 local defs = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_definitions")
+local transactions = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_transaction")
+local Search = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_search")
+local profiles = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_profiles")
+local disabled_sections = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_disabled_sections")
+local tab_labels = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_tab_labels")
 local ordering = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_ordering")
 
 local UIRenderer = UIRenderer
@@ -19,7 +24,35 @@ local ShowCursorStack = ShowCursorStack
 local UIWidget = UIWidget
 local math = math
 
+-- (#164) gut-side per-setting slider STEP registry, keyed [mod_id][setting_id] = step.
+-- This is the RELIABLE mechanism for a FOREIGN VMF mod's slider. Verified against the
+-- decompiled VMF source (scripts/mods/vmf/modules/core/options.lua):
+--   * A custom `step` field on a mod's numeric widget def is NON-fatal but INVISIBLE to us:
+--     initialize_numeric_data (options.lua:439-448) rebuilds every numeric widget into a
+--     FRESH table copying ONLY range/default_value/decimals_number/unit_text, so a `step`
+--     field is stripped before it reaches vmf.options_widgets_data (the list gut reads at
+--     _vmf_categories). It never arrives, so a foreign slider's step can't ride the widget def.
+--   * A 3-element `range = {min,max,step}` is worse: validate_numeric_data FATALS on it
+--     ("'range' field must contain an array-like table with 2 elements") and aborts the
+--     mod's ENTIRE options init (ct .188 shipped this and was DEAD; reverted .189).
+-- So a foreign slider's coarse step lives HERE, keyed by the mod's new_mod() id (NOT its
+-- directory name — category.mod_id is the REGISTERED id: ct/ct_dev, cim/cim_dev). Both the
+-- stable and dev ids are listed so the override matches whichever the user runs. The
+-- widget-def `step` field is still honored FIRST (see _resolve_step) for any category gut
+-- ever walks from RAW data (its own hand-authored tree), where VMF never touched the node.
+local STEP_OVERRIDES = {
+    cim     = { base_power_level = 25 },  -- crafting starting power level (range 0-950)
+    cim_dev = { base_power_level = 25 },
+    ct      = { starting_coins   = 25 },  -- CW starting pilgrim's coins (range 0-3000)
+    ct_dev  = { starting_coins   = 25 },
+}
+
 local SERVICE = "gut_mod_tweaker"
+
+-- (#505) A dropdown gets the FILTER HEADER (type-to-filter search line, and category chips when
+-- registered) when it has at least this many options OR carries registered categories. Below the
+-- threshold with no categories, it stays the plain dropdown (unchanged) — small lists don't need it.
+local DD_FILTER_MIN = 8
 
 local ModTweakerView = class(ModTweakerView)
 ModTweakerView.NAME = "mod_tweaker_view"
@@ -60,10 +93,21 @@ function ModTweakerView:init(ingame_ui_context)
     -- buffer on a tab switch. mod_id survives, and gives per-category isolation for free.
     self._pending = self._pending or {}
     self._apply = defs.create_apply_button()
+    -- (v0.2.148-dev) RESTORE DEFAULTS button (bottom bar, to the LEFT of Apply). Clicking it
+    -- STAGES every current-tab setting back to its default_value (see reset_to_defaults) — the
+    -- user then clicks Apply to commit, exactly like a normal staged edit.
+    self._reset = defs.create_default_button()
+    self._profiles_label, self._profile_buttons = defs.create_profile_controls()
+    self._profile_slot = 1
+    self._profile_ready = {}
+    -- (#207) Reusable hover-info popup widget (rect bg + frame + title/desc text). The draw
+    -- loop sets its content + geometry + fade alpha each frame via defs.layout_tooltip.
+    self._tooltip = defs.create_tooltip_popup()
     -- v0.2.65-dev: no "MOD TWEAKER" title widget — native Options has none and the
     -- tab strip now spans the full top band (see defs: mt_title node + build_title
     -- factory removed).
-    self._hint = defs.build_hint("")
+    -- (Fix 5, v0.2.149-dev) The bottom "Click a tab to pick a mod..." hint was removed to
+    -- match the vanilla Options menu (no bottom hint). build_hint/self._hint are gone.
 
     self._tabs = {}
     self._rows = {}
@@ -78,6 +122,20 @@ function ModTweakerView:init(ingame_ui_context)
     self._visible_h = 0       -- list_mask height (read at runtime)
     self._sb_dragging = false -- scrollbar thumb being dragged
     self._drill = nil         -- gear drill-down state: nil = normal list; { setting_id, label } = drilled in
+
+    -- (#497) Per-tab SEARCH filter. self._search is the fixed input box above the list;
+    -- self._search_str is the raw typed query (lowercased for matching in _search_active).
+    -- Focus is click-driven (self._search_focused); while focused printable keystrokes edit
+    -- the query and _build_rows re-renders the current tab as a flat filtered list. Cleared on
+    -- every open (on_enter) and on a tab switch, so search scope is always the current tab.
+    self._search = defs.create_search_box()
+    self._search_str = ""
+    self._search_focused = false
+    self._search_caret_t = 0
+    self._search_tx = nil
+    self._search_rebuild_pending = nil
+    self._search_last_ancestors = nil
+    self._search_top_ancestors = nil
 end
 
 -- ---------------------------------------------------------------
@@ -125,11 +183,21 @@ local MAX_TABS = 8   -- tab nodes that fit the window width; >MAX => paginate
 -- verminious_dreams_lighting (+ _dev) are intentionally OMITTED — they keep their
 -- own normal VMF menu and don't belong as a Mod Tweaker tab.
 local _MY_MODS = {
-    gut = true, gut_dev = true, wt = true, ct = true, ct_dev = true, gt = true, gt_dev = true,
+    gut = true, gut = true, wt = true, ct = true, ct_dev = true, gt = true, gt_dev = true,
     cim = true, cim_dev = true, crt = true, cosmetics_tweaker = true,
     dynamic_cosmetic_portraits = true, enemy_tweaker = true,
     character_weapon_variants = true, event_tweaker = true, mp = true, bt = true,
+    -- HideBuffs deliberately NOT whitelisted (#312): UI Tweaks options live in
+    -- gut's OWN menu under the "UI Tweaks" group (gut_hide_hud_ui_group), not as a
+    -- separate Mod Tweaker tab. Re-adding it would resurrect the duplicate tab.
+    -- Crosshair Kill Confirmation deliberately NOT whitelisted (#339, was wrongly a
+    -- tab under #313): its options are injected INTO gut's Interface tab under the HUD
+    -- group by _inject_ckc_into_gut, exactly like the UI Tweaks precedent. A THIRD-PARTY
+    -- integration is NEVER a top-level tab -- see gui_tweaker/MOD_TWEAKER_INTEGRATION.md.
 }
+
+-- Third-party mod whose options fold into a gut category (NOT a tab). #339.
+local _CKC_NAME = "Crosshair Kill Confirmation"
 
 local function _nf(node, key)  -- defensive node-field read
     if type(node) ~= "table" then return nil end
@@ -138,32 +206,65 @@ local function _nf(node, key)  -- defensive node-field read
     return v
 end
 
--- (#389) VMF copies foreign numeric widget definitions and strips custom fields,
--- so fixed increments for another mod must be owned by Mod Tweaker and keyed by
--- that mod's registered id. Keep stable/dev ids so either published stream works.
-local STEP_OVERRIDES = {
-    cim = { base_power_level = 25 }, cim_dev = { base_power_level = 25 },
-    ct = { starting_coins = 25 }, ct_dev = { starting_coins = 25 },
-}
-
+-- (#164) Resolve the fixed step/increment for a numeric widget. Precedence:
+--   1. an explicit `step` field on the widget def (canonical + self-documenting; only ever
+--      reachable for a category gut walks from RAW data — VMF strips it off foreign mods,
+--      see STEP_OVERRIDES),
+--   2. the gut-side STEP_OVERRIDES[mod_id][setting_id] registry (the working path for a
+--      foreign VMF mod like ct/cim), else
+--   3. the natural increment: one unit for integers, 10^-decimals otherwise.
+-- The value is snapped to this grid (anchored at range min) by _snap_and_clamp, NOT here;
+-- this only picks the increment magnitude. (No range[3] fallback: a 3-element range is fatal
+-- to VMF's own validator, so it can never appear on a live widget.)
 local function _resolve_step(node, mod_id, setting_id, dec)
     local field = _nf(node, "step")
     if type(field) == "number" and field > 0 then return field end
-    local by_mod = mod_id and STEP_OVERRIDES[mod_id]
-    local fixed = by_mod and setting_id and by_mod[setting_id]
-    if type(fixed) == "number" and fixed > 0 then return fixed end
+    local m = mod_id and STEP_OVERRIDES[mod_id]
+    local reg = m and setting_id and m[setting_id]
+    if type(reg) == "number" and reg > 0 then return reg end
     return (dec and dec > 0) and (10 ^ -dec) or 1
 end
 
 local function _vmf_label(node, mod_obj)
     local t = _nf(node, "title") or _nf(node, "text") or _nf(node, "setting_id") or "?"
-    -- title may be a raw loc key or already display text; localize and keep the
-    -- result only if it isn't a "<missing>" marker (works either way).
+    if type(t) ~= "string" then return tostring(t) end
+    -- Same "<...>" defence as _vmf_tooltip: VMF can freeze a "<key>" missing-marker into a
+    -- title/text field. Strip it, re-localize the inner key now (all mods registered at render
+    -- time), and NEVER surface a marker; fall back to the bare key text (a label must be non-nil).
+    local inner = string.match(t, "^<(.-)>$")
+    local key = inner or t
     if mod_obj and mod_obj.localize then
-        local ok, s = pcall(mod_obj.localize, mod_obj, t)
-        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then t = s end
+        local ok, s = pcall(mod_obj.localize, mod_obj, key)
+        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then return s end
     end
-    return tostring(t)
+    return key
+end
+
+-- (#207) The node's tooltip DESCRIPTION (the hover-popup body). In VMF widget data the
+-- `tooltip` field is usually an ALREADY-localized display string (mods write
+-- `tooltip = mod:localize("<id>_tooltip")` in their _data.lua), but it can occasionally be
+-- a raw loc key — so mirror _vmf_label's pcall-localize and keep the localized result only
+-- when it resolves cleanly (not a "<missing>" marker). Empty / absent tooltip -> nil (the
+-- row then has no popup). Reads via _nf so it works for both flat (VMF) + nested (gut) nodes.
+local function _vmf_tooltip(node, mod_obj)
+    local t = _nf(node, "tooltip")
+    if type(t) ~= "string" or t == "" then return nil end
+    -- ROOT FIX for the recurring "<...>" in DESCRIPTIONS. VMF can FREEZE a missing-loc
+    -- marker ("<key>") into node.tooltip when the tooltip key did not resolve at data-build
+    -- time. The old code rejected re-localizing a "<...>" string but then FELL BACK to
+    -- returning that same marker (the leak). Instead: strip the brackets to recover the key,
+    -- re-localize it now (all mods are registered at render time), and NEVER surface a marker.
+    local inner = string.match(t, "^<(.-)>$")   -- "<gut_x_tooltip>" -> "gut_x_tooltip"
+    local key = inner or t
+    if mod_obj and mod_obj.localize then
+        local ok, s = pcall(mod_obj.localize, mod_obj, key)
+        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then
+            return s
+        end
+    end
+    -- Could not localize. Never show a "<...>" marker as the description.
+    if inner or string.find(t, "^<") then return nil end
+    return t   -- raw value was already plain display text
 end
 
 -- (#95) Render a VMF keybind value (an ARRAY of key-name strings, e.g. {"left alt"}
@@ -230,8 +331,11 @@ end
 -- reports whether add_mod_keybind + generate_keybinds actually landed. See VMF_AND_USER_SETTINGS.md.
 local function _commit_keybind(row, keys)
     local cat = row and row._category
-    local mod_obj = cat and cat.mod_obj
     local sid = row and row._setting_id
+    -- (#208) For the merged Equipment tab, resolve the keybind's OWNER mod object from the
+    -- node (cat._owners[sid]); falls back to the category's single mod_obj for normal tabs.
+    local owner = cat and cat._owners and sid and cat._owners[sid]
+    local mod_obj = (owner and owner.mod_obj) or (cat and cat.mod_obj)
     local vmf = get_mod("VMF")
     if not mod_obj or not sid or not vmf then
         _printf("[gut:keybind] cannot commit: mod_obj=%s sid=%s vmf=%s", tostring(mod_obj), tostring(sid), tostring(vmf))
@@ -263,24 +367,41 @@ local function _commit_keybind(row, keys)
     return true
 end
 
+-- (#208) Per-NODE owner resolution for the synthesized "Equipment" category, which merges
+-- up to four inventory mods (Cosmetics / Crafting / Weapons / Career Weapon Variants) into
+-- one tab. A normal category has a single `mod_obj`/`mod_id`; the Equipment category instead
+-- carries `_owners[setting_id] = { mod_id, mod_obj }` for every member setting so get/set/
+-- stage/apply route to the OWNING mod object. For every NON-Equipment category `_owners` is
+-- nil, so this returns `category.mod_obj` / `category.mod_id` — byte-for-byte the prior path.
+local function _owner(category, setting_id)
+    local owners = category and category._owners
+    if owners and setting_id ~= nil then
+        local o = owners[setting_id]
+        if o then return o.mod_obj, o.mod_id end
+    end
+    return category and category.mod_obj, category and category.mod_id
+end
+
 local function _cat_get(category, setting_id)
-    if category.mod_obj then
-        local ok, v = pcall(category.mod_obj.get, category.mod_obj, setting_id)
+    local mod_obj, mod_id = _owner(category, setting_id)
+    if mod_obj then
+        local ok, v = pcall(mod_obj.get, mod_obj, setting_id)
         return ok and v or nil
     end
     local MT = _mt()
-    return MT and MT:get(category.mod_id, setting_id)
+    return MT and MT:get(mod_id, setting_id)
 end
 
 local function _cat_set(category, setting_id, value)
-    if category.mod_obj then
+    local mod_obj, mod_id = _owner(category, setting_id)
+    if mod_obj then
         -- 3rd arg true => fire the mod's on_setting_changed so it reacts live
         -- (matches stock VMF options behaviour). Persistence is automatic.
-        pcall(category.mod_obj.set, category.mod_obj, setting_id, value, true)
+        pcall(mod_obj.set, mod_obj, setting_id, value, true)
         return
     end
     local MT = _mt()
-    if MT then MT:set(category.mod_id, setting_id, value) end
+    if MT then MT:set(mod_id, setting_id, value) end
 end
 
 -- Native menu sound feedback. The real Options menu fires Wwise events on the
@@ -350,6 +471,306 @@ local function _play_open() _play_event("Play_hud_button_open") end
 -- so the Mod Tweaker's close matches native menu feel. (v0.2.82-dev — ITEM 1.)
 local function _play_close() _play_event("Play_hud_button_close") end
 
+-- ---------------------------------------------------------------
+-- (#208) EQUIPMENT MERGE. The four inventory-management mods get folded into ONE
+-- collapsible "Equipment" tab when 2+ are installed. Disabled members retain their
+-- normal section header with no editable rows and a "Disabled in VMF" tooltip. Roles:
+--   cosmetics_tweaker -> Cosmetics ; cim/cim_dev -> Crafting ; wt -> Weapons ;
+--   character_weapon_variants -> Career Weapon Variants.
+-- Sections render top-level (Cosmetics, Crafting, Weapons); CWV nests UNDER Weapons
+-- when wt is also active, else sits top-level. N=1-only-CWV just relabels that one tab
+-- "Weapons". The synthesized category is FLAT (_flat=true) with a parallel `_depths`
+-- array (so each member keeps its own internal group/gear nesting, shifted under its
+-- section header) + a `_owners[setting_id]` map so get/set/stage/apply route per-node to
+-- the owning mod object (see _owner + the staged-change helpers). TWIN of the HeroView
+-- sub-state's identical block — keep both in sync.
+-- ---------------------------------------------------------------
+local _EQUIP_ROLE = {
+    cosmetics_tweaker = "cosmetics",
+    cim = "crafting", cim_dev = "crafting",
+    wt = "weapons",
+    character_weapon_variants = "cwv",
+}
+
+-- Localize a gut section/tab label; reject a "<missing-key>" marker + fall back to a
+-- literal (same guard as _vmf_label). Safe at _rebuild time (loc is registered by then).
+local function _equip_loc(key, fallback)
+    if mod and mod.localize then
+        local ok, s = pcall(mod.localize, mod, key)
+        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then return s end
+    end
+    return fallback
+end
+
+-- Post-process the _vmf_categories() output (called just before its final sort).
+local function _synthesize_equipment(cats)
+    local members, n = disabled_sections.select_members(cats, _EQUIP_ROLE)
+    if n == 0 then return cats end
+
+    if n == 1 then
+        -- Only the CWV-alone case changes: its single tab is relabeled "Weapons".
+        if members.cwv then members.cwv.label = _equip_loc("gut_equip_weapons", "Weapons") end
+        return cats
+    end
+
+    -- N >= 2: build the merged Equipment category; drop the folded members from the list.
+    local folded = {}
+    for _, c in pairs(members) do folded[c] = true end
+    local rest = {}
+    for _, c in ipairs(cats) do if not folded[c] then rest[#rest + 1] = c end end
+
+    local widgets, depths, owners = {}, {}, {}
+    local owner_ids, owner_seen = {}, {}
+    local function _note_owner(mid)
+        if not owner_seen[mid] then owner_seen[mid] = true; owner_ids[#owner_ids + 1] = mid end
+    end
+    -- One synthetic collapsible group header at `header_depth` (owns no setting).
+    local function _add_header(setting_id, label, header_depth, enabled)
+        widgets[#widgets + 1] = enabled == false
+            and disabled_sections.disabled_header(setting_id, label, header_depth,
+                _equip_loc("gut_disabled_in_vmf", disabled_sections.REASON))
+            or { setting_id = setting_id, type = "group", title = label }
+        depths[#depths + 1] = header_depth
+    end
+    -- A member's setting nodes (skipping its synthesized VMF header at [1]), rebased so the
+    -- member's SHALLOWEST node renders at `target_top_depth` (one level under its section
+    -- header), with internal nesting preserved. Records each node's owner.
+    local function _add_member(member, target_top_depth)
+        if not member or member.enabled == false then return end
+        local src = member and member.widgets
+        if type(src) ~= "table" then return end
+        -- VMF mods' top content usually sits at NATURAL depth 1 (not 0), so blindly adding a
+        -- base offset lands it a level too deep — which is why the nested CWV header (correctly
+        -- at depth 1) looked un-indented beside wt's content (wrongly at depth 2). Rebase by the
+        -- member's OWN minimum natural depth: its shallowest node renders exactly at
+        -- target_top_depth (one level under its section header), preserving internal nesting. (#208)
+        local min_d
+        for i = 2, #src do
+            local nd = _nf(src[i], "depth") or 0
+            if not min_d or nd < min_d then min_d = nd end
+        end
+        min_d = min_d or 0
+        for i = 2, #src do
+            local node = src[i]
+            widgets[#widgets + 1] = node
+            depths[#depths + 1] = target_top_depth + ((_nf(node, "depth") or 0) - min_d)
+            local sid = _nf(node, "setting_id")
+            if type(sid) == "string" then
+                owners[sid] = { mod_id = member.mod_id, mod_obj = member.mod_obj }
+                _note_owner(member.mod_id)
+            end
+        end
+    end
+
+    -- Section order: Cosmetics -> Crafting -> Weapons (deliberate-order exception).
+    if members.cosmetics then
+        _add_header("__equip_cosmetics", _equip_loc("gut_equip_cosmetics", "Cosmetics"), 0,
+            members.cosmetics.enabled)
+        _add_member(members.cosmetics, 1)
+    end
+    if members.crafting then
+        _add_header("__equip_crafting", _equip_loc("gut_equip_crafting", "Crafting"), 0,
+            members.crafting.enabled)
+        _add_member(members.crafting, 1)
+    end
+    if members.weapons then
+        local weapons_header_enabled = members.weapons.enabled ~= false
+            or (members.cwv and members.cwv.enabled ~= false)
+        _add_header("__equip_weapons", _equip_loc("gut_equip_weapons", "Weapons"), 0,
+            weapons_header_enabled)
+        _add_member(members.weapons, 1)
+        if members.cwv then
+            -- CWV nested UNDER Weapons (header depth 1, its settings depth 2+).
+            _add_header("__equip_cwv", _equip_loc("gut_equip_cwv", "Career Weapon Variants"), 1,
+                members.cwv.enabled)
+            _add_member(members.cwv, 2)
+        end
+    elseif members.cwv then
+        -- No wt: CWV sits at the TOP LEVEL of Equipment (no Weapons wrapper).
+        _add_header("__equip_cwv", _equip_loc("gut_equip_cwv", "Career Weapon Variants"), 0,
+            members.cwv.enabled)
+        _add_member(members.cwv, 1)
+    end
+
+    rest[#rest + 1] = {
+        mod_id = "gut_equipment",
+        label = _equip_loc("gut_equip_tab", "Equipment"),
+        widgets = widgets,
+        _depths = depths,             -- parallel depth array (consumed by _build_rows)
+        _owners = owners,             -- setting_id -> { mod_id, mod_obj } (consumed by _owner)
+        _owner_mod_ids = owner_ids,   -- member mod_ids (dirty-check + apply iteration)
+        mod_obj = nil,                -- spans multiple mods; per-node ownership via _owners
+        enabled = true,
+        _flat = true,
+    }
+    return rest
+end
+
+-- (#339) Fold Crosshair Kill Confirmation's live options INTO gut's "Interface" tab
+-- under the HUD group, as a "Crosshair Kill Confirmation" sub-collapsible -- NOT a
+-- top-level tab (the mistake #313 made). Reuses the _synthesize_equipment `_owners`
+-- mechanism to route CKC nodes to the real CKC mod, but MUTATES the existing gut
+-- category instead of appending a new one. See MOD_TWEAKER_INTEGRATION.md.
+--
+-- Correctness notes (traps handled):
+--   * NEVER mutate VMF's own list in place (it is reused every _rebuild) -- gut's widget
+--     array is COPIED and CKC's nodes are shallow-COPIED before stamping depth.
+--   * gut's category is MIXED-owner (its own settings + injected CKC settings), so
+--     _owner_mod_ids MUST include BOTH gut's id and CKC -- else apply/dirty (which take
+--     the `if _owner_mod_ids` branch) would flush ONLY CKC and silently drop every gut
+--     Interface edit. mod_obj stays = gut so gut's own settings fall back via _owner.
+--   * gut's category is _flat=true; the flat render path reads each node's own `depth`
+--     (rebased by the tab's min depth), so injected nodes MUST carry a `depth` in gut's
+--     natural depth space (HUD group depth + 1 for the sub-header, +2 for its options).
+local function _inject_ckc_into_gut(out)
+    local ckc = get_mod(_CKC_NAME)
+    if not ckc then return end                        -- CKC not installed: nothing to fold
+    local gut_cat
+    for _, c in ipairs(out) do
+        if c.mod_id == "gut" or c.mod_id == "gut" then gut_cat = c; break end
+    end
+    if not gut_cat or type(gut_cat.widgets) ~= "table" then return end
+
+    local vmf = get_mod("VMF")
+    local wd = vmf and vmf.options_widgets_data
+    if type(wd) ~= "table" then return end
+    local ckc_list
+    for _, list in ipairs(wd) do
+        local h = (type(list) == "table") and list[1]
+        if h and _nf(h, "mod_name") == _CKC_NAME then ckc_list = list; break end
+    end
+    if type(ckc_list) ~= "table" or #ckc_list < 2 then return end  -- no real options
+
+    -- Locate the HUD group node in gut's flat list.
+    local src = gut_cat.widgets
+    local hud_idx, hud_depth
+    for i = 1, #src do
+        if _nf(src[i], "setting_id") == "gut_hide_hud_ui_group" then
+            hud_idx = i; hud_depth = _nf(src[i], "depth") or 0; break
+        end
+    end
+    if not hud_idx then return end
+    -- (#527) [CKC-SPLICE-FIRST-527] The block splices at the START of the HUD child
+    -- block (immediately after the HUD group header), not the end: collapsible
+    -- sub-groups sort FIRST at their level (user doctrine, issue 527), and
+    -- "Crosshair Kill Confirmation" precedes "UI Tweaks" A-Z, so the head of the
+    -- block IS its alphabetical slot among the HUD sub-groups.
+    local ins_idx = hud_idx + 1
+
+    -- Build the CKC sub-group block: a group header at HUD+1, CKC options rebased to HUD+2.
+    -- Title is the mod's proper name as a literal (a non-key string): _vmf_label localizes
+    -- against gut, gets a "<...>" miss, and falls back to this literal. Keeps the injection
+    -- self-contained without editing gut's loc file.
+    local block = { { setting_id = "gut_ckc_group", type = "group",
+                      title = _CKC_NAME, depth = hud_depth + 1 } }
+    local ckc_min
+    for i = 2, #ckc_list do
+        local d = _nf(ckc_list[i], "depth") or 0
+        if not ckc_min or d < ckc_min then ckc_min = d end
+    end
+    ckc_min = ckc_min or 0
+    local owners = gut_cat._owners or {}
+    for i = 2, #ckc_list do
+        local node = ckc_list[i]
+        local nn = {}                                 -- shallow copy (never mutate VMF's node)
+        for k, v in pairs(node) do nn[k] = v end
+        nn.depth = hud_depth + 2 + ((_nf(node, "depth") or 0) - ckc_min)
+        block[#block + 1] = nn
+        local sid = _nf(node, "setting_id")
+        if type(sid) == "string" then owners[sid] = { mod_id = _CKC_NAME, mod_obj = ckc } end
+    end
+
+    -- Splice the block into a COPY of gut's widget list at the START of the HUD child
+    -- block (#527; see [CKC-SPLICE-FIRST-527] above).
+    local new_w = {}
+    for i = 1, ins_idx - 1 do new_w[#new_w + 1] = src[i] end
+    for i = 1, #block do new_w[#new_w + 1] = block[i] end
+    for i = ins_idx, #src do new_w[#new_w + 1] = src[i] end
+
+    gut_cat.widgets = new_w
+    gut_cat._owners = owners
+    gut_cat._owner_mod_ids = { gut_cat.mod_id, _CKC_NAME }   -- MIXED: flush BOTH buffers
+    -- gut_cat.mod_obj stays = gut (its own settings fall back via _owner)
+end
+
+-- (#312) Bridge gut's surfaced "UI Tweaks" toggles to the STOCK UI Tweaks (HideBuffs)
+-- mod so the Mod Tweaker reads/writes ITS live settings, not gut's own private copies.
+-- gut kept HideBuffs' setting_ids VERBATIM in its data tree (hide_frames, HIDE_BOSS_HP_BAR,
+-- ...), but the two mods persist them in SEPARATE VMF namespaces (gut vs HideBuffs) --
+-- so a toggle the user set ON in UI Tweaks' own VMF menu showed OFF in the Mod Tweaker
+-- (issue #312, user reports 2026-07-10 / 2026-07-12). When HideBuffs is installed + enabled
+-- we route every OVERLAPPING checkbox setting_id's get/set to it via the same per-node
+-- _owners mechanism the Equipment merge (#208) and CKC injection (#339) use: reads now show
+-- HideBuffs' live value, edits stage under a "HideBuffs" buffer and commit as HB:set(id, v,
+-- true) (fires its on_setting_changed live + VMF-persists) -- the own-or-pin doctrine that
+-- matches the drag-offset sync module (_gut_uitweaks_sync.lua) and the CKC bridge (#313).
+-- HideBuffs becomes the single owner of the shared toggles. No-op when HideBuffs is absent
+-- or disabled: gut's own copies drive its absorbed hb/ fork exactly as before. Runs AFTER
+-- _inject_ckc_into_gut so it MERGES into any CKC-set _owner_mod_ids. Marker
+-- [UITWEAKS-BRIDGE-312]. Byte-parallel twin with the one in _mod_tweaker_state.lua.
+local function _bridge_uitweaks_to_stock(out)
+    local HB = get_mod("HideBuffs")
+    if not HB then return end                          -- stock UI Tweaks absent: gut owns its copies
+    if type(HB.is_enabled) == "function" then
+        local ok_en, en = pcall(HB.is_enabled, HB)
+        if ok_en and en == false then
+            local gut_cat
+            for _, c in ipairs(out) do
+                if c.mod_id == "gut" or c.mod_id == "gut" then gut_cat = c; break end
+            end
+            if gut_cat then
+                gut_cat.widgets = disabled_sections.disable_group_subtree(gut_cat.widgets,
+                    "hb_group",
+                    _equip_loc("gut_disabled_in_vmf", disabled_sections.REASON))
+            end
+            return                                    -- present but disabled: explained header only
+        end
+    end
+    local names = HB.SETTING_NAMES
+    if type(names) ~= "table" then return end
+    -- Real HideBuffs setting_ids are the VALUES of SETTING_NAMES (key may differ from id).
+    local valid = {}
+    for _, sid in pairs(names) do
+        if type(sid) == "string" then valid[sid] = true end
+    end
+    local gut_cat
+    for _, c in ipairs(out) do
+        if c.mod_id == "gut" or c.mod_id == "gut" then gut_cat = c; break end
+    end
+    if not gut_cat or type(gut_cat.widgets) ~= "table" then return end
+
+    local owners  = gut_cat._owners or {}
+    local bridged = 0
+    for i = 1, #gut_cat.widgets do
+        local node  = gut_cat.widgets[i]
+        local sid   = _nf(node, "setting_id")
+        local wtype = _nf(node, "type")
+        -- Bridge only OVERLAPPING value toggles: a checkbox whose id is a real HideBuffs
+        -- setting. Skips groups, the HIDE_HUD hotkey (keybind, read-only here), and gut's
+        -- OWN control settings (gut_uitweaks_sync / the vanilla mirrors are NOT in
+        -- SETTING_NAMES). Never override a node already owned (e.g. a CKC-injected one).
+        if type(sid) == "string" and valid[sid]
+                and (wtype == "checkbox" or wtype == "boolean")
+                and owners[sid] == nil then
+            owners[sid] = { mod_id = "HideBuffs", mod_obj = HB }
+            bridged = bridged + 1
+        end
+    end
+    if bridged == 0 then return end
+    gut_cat._owners = owners
+    -- Merge "HideBuffs" into _owner_mod_ids so apply/dirty flush ITS staged buffer too.
+    -- _inject_ckc_into_gut may have already set this to { gut_id, CKC }; preserve those and
+    -- add gut's own id (its non-bridged settings buffer under it) + HideBuffs.
+    local ids  = gut_cat._owner_mod_ids or {}
+    local seen = {}
+    for _, id in ipairs(ids) do seen[id] = true end
+    if not seen[gut_cat.mod_id] then ids[#ids + 1] = gut_cat.mod_id end
+    seen[gut_cat.mod_id] = true
+    if not seen["HideBuffs"] then ids[#ids + 1] = "HideBuffs" end
+    gut_cat._owner_mod_ids = ids
+    -- gut_cat.mod_obj stays = gut (its own non-bridged settings fall back via _owner).
+end
+
 local function _vmf_categories()
     local out = {}
     local vmf = get_mod("VMF")
@@ -391,17 +812,34 @@ local function _vmf_categories()
         if type(mod_name) == "string" and _MY_MODS[mod_name] then
             local mod_obj = get_mod(mod_name)
             local label = _nf(header, "readable_mod_name") or mod_name
+            -- (Fix 3) gut's OWN Mod Tweaker tab reads "Interface" (this IS the interface/GUI
+            -- menu), not the VMF readable_mod_name. Label-only override — the mod id, Workshop
+            -- title, and .mod/cfg are untouched. Applies to both the stable + dev ids.
+            if mod_name == "gut" or mod_name == "gut" then label = "Interface" end
             local enabled = true
             if mod_obj and mod_obj.is_enabled then
                 local ok_en, en = pcall(mod_obj.is_enabled, mod_obj)
                 if ok_en then enabled = en and true or false end
             end
+            -- #318 revised contract: retain installed disabled mods so synthesis can
+            -- place an explained grey header in the normal merged section. An
+            -- unsynthesized single-mod category retains the established disabled tab.
             out[#out + 1] = {
                 mod_id = mod_name, label = label, widgets = list,
                 mod_obj = mod_obj, enabled = enabled, _flat = true,
             }
         end
     end
+    -- (#339) Fold Crosshair Kill Confirmation into gut's Interface tab under HUD (NOT a
+    -- tab). No-op when CKC is absent. Before the sort (it mutates the existing gut cat).
+    _inject_ckc_into_gut(out)
+    -- (#312) Bridge gut's UI Tweaks toggles to the stock HideBuffs mod's live settings
+    -- (own-or-pin) so the Mod Tweaker stays consistent with UI Tweaks' own VMF options.
+    -- After CKC injection (it merges into any CKC-set _owner_mod_ids), before the sort.
+    _bridge_uitweaks_to_stock(out)
+    -- (#208) Fold the four inventory mods into one "Equipment" tab when 2+ are active
+    -- (or relabel the N=1-only-CWV tab). Done BEFORE the sort so Equipment participates.
+    out = _synthesize_equipment(out)
     table.sort(out, function(a, b)
         if a.enabled ~= b.enabled then return a.enabled end
         return tostring(a.label) < tostring(b.label)
@@ -434,12 +872,17 @@ local function _cat_key(category)
     return category and category.mod_id or "?"
 end
 
--- Stage one edit into the per-category pending buffer (replaces the live _cat_set on
--- every row edit). Records the value + refreshes the APPLY button dirty state.
+-- Stage one edit into the pending buffer (replaces the live _cat_set on every row edit).
+-- Records the value + refreshes the APPLY button dirty state. (#208) The buffer is keyed by
+-- the OWNER mod_id resolved from the node, so an Equipment edit to e.g. a cosmetics setting
+-- buffers under "cosmetics_tweaker"; for a normal category _owner returns category.mod_id, so
+-- the key is _cat_key(category) exactly as before.
 function ModTweakerView:stage_set(category, setting_id, value)
-    local key = _cat_key(category)
+    local _, owner_id = _owner(category, setting_id)
+    local key = owner_id or _cat_key(category)
     self._pending[key] = self._pending[key] or {}
     self._pending[key][setting_id] = value
+    self:_search_note_setting(category, setting_id)
     -- NOTE: do NOT set self._dirty here. self._dirty drives the auto-save-to-log on exit,
     -- which must reflect LIVE writes only — a pending (unapplied) edit was never written,
     -- so exiting with only-pending edits must NOT export. apply_pending sets _dirty.
@@ -448,17 +891,29 @@ end
 
 -- Read a setting's EFFECTIVE value: the staged value if one is pending, else the live
 -- value passed in (which the caller read via _cat_get). Mirrors native _get_setting
--- (assigned(pending, live)).
+-- (assigned(pending, live)). (#208) Reads from the OWNER mod_id's buffer (see stage_set).
 function ModTweakerView:get_staged(category, setting_id, live_value)
-    local p = self._pending[_cat_key(category)]
+    local _, owner_id = _owner(category, setting_id)
+    local p = self._pending[owner_id or _cat_key(category)]
     if p and p[setting_id] ~= nil then return p[setting_id] end
     return live_value
 end
 
--- True if the ACTIVE category has any pending edit (drives APPLY enabled/greyed).
+-- True if the ACTIVE category has any pending edit (drives APPLY enabled/greyed). (#208) The
+-- merged Equipment category buffers under EACH member mod_id, so it's dirty if ANY member's
+-- buffer is non-empty; a normal category checks its single _cat_key buffer as before.
 function ModTweakerView:_active_category_dirty()
     local cat = self._categories and self._categories[self._selected]
-    local p = cat and self._pending[_cat_key(cat)]
+    if not cat then return false end
+    local ids = cat._owner_mod_ids
+    if ids then
+        for i = 1, #ids do
+            local p = self._pending[ids[i]]
+            if p and next(p) ~= nil then return true end
+        end
+        return false
+    end
+    local p = self._pending[_cat_key(cat)]
     return (p ~= nil) and (next(p) ~= nil)
 end
 
@@ -467,15 +922,184 @@ function ModTweakerView:_update_apply_button()
     if self._apply then self._apply.content.disabled = not self:_active_category_dirty() end
 end
 
+-- (#561) Profile snapshots are flat maps of owner-qualified setting ids. One
+-- persisted map belongs to exactly one visible tab/slot, keeping VMF's deep-copy
+-- cost bounded. Slot 1 lazily adopts the user's current live settings; an unused
+-- slot starts from the tab's declared defaults.
+function ModTweakerView:_profile_snapshot(category, defaults)
+    local out = {}
+    for i = 1, #(self._build_nodes or {}) do
+        local node = self._build_nodes[i]
+        local sid = _nf(node, "setting_id")
+        local kind = _nf(node, "type")
+        -- Keybinds are device/user-global input configuration, not gameplay/UI
+        -- profile state; VMF also requires a separate binding registration path.
+        if sid and kind ~= "group" and kind ~= "keybind" then
+            local _, owner_id = _owner(category, sid)
+            local value = defaults and _nf(node, "default_value") or _cat_get(category, sid)
+            if value == nil and defaults then value = _cat_get(category, sid) end
+            if owner_id and value ~= nil then
+                out[profiles.member_key(owner_id, sid)] = value
+            end
+        end
+    end
+    return out
+end
+
+function ModTweakerView:_profile_ensure(category)
+    if not category then return end
+    local tab_id = _cat_key(category)
+    self._profile_slot = profiles.get_active(mod, tab_id)
+    local ready_key = tab_id .. ":" .. tostring(self._profile_slot)
+    if self._profile_ready[ready_key] then return end
+    if not profiles.load(mod, tab_id, self._profile_slot) then
+        local use_defaults = self._profile_slot ~= 1
+        profiles.save(mod, tab_id, self._profile_slot,
+            self:_profile_snapshot(category, use_defaults))
+        _printf("[gut:561] initialized tab=%s profile=%d source=%s",
+            tostring(tab_id), self._profile_slot, use_defaults and "defaults" or "live")
+    end
+    self._profile_ready[ready_key] = true
+end
+
+function ModTweakerView:_profile_capture(category)
+    if not category then return end
+    local tab_id = _cat_key(category)
+    local slot = profiles.get_active(mod, tab_id)
+    profiles.save(mod, tab_id, slot, self:_profile_snapshot(category, false))
+    self._profile_ready[tab_id .. ":" .. tostring(slot)] = true
+    self._profile_slot = slot
+end
+
+function ModTweakerView:_switch_profile(slot)
+    local category = self._categories and self._categories[self._selected]
+    if not category then return end
+    local tab_id = _cat_key(category)
+    local current = profiles.get_active(mod, tab_id)
+    if slot == current then return end
+
+    -- Profile switches are an explicit commit boundary: staged edits are applied
+    -- to the profile they were made under before another profile is restored.
+    if self:_active_category_dirty() then self:apply_pending(category) end
+    self:_profile_capture(category)
+
+    local values = profiles.load(mod, tab_id, slot)
+    if not values then
+        values = self:_profile_snapshot(category, true)
+        profiles.save(mod, tab_id, slot, values)
+    end
+    profiles.set_active(mod, tab_id, slot)
+    self._profile_ready[tab_id .. ":" .. tostring(slot)] = true
+    self._profile_slot = slot
+
+    local staged = 0
+    for member, value in pairs(values) do
+        local owner_id, sid = profiles.split_member_key(member)
+        local _, actual_owner = _owner(category, sid)
+        if owner_id and sid and actual_owner == owner_id then
+            self:stage_set(category, sid, value)
+            staged = staged + 1
+        end
+    end
+    if staged > 0 then self:apply_pending(category) else self:_build_rows(category) end
+    _printf("[gut:561] switched tab=%s profile=%d settings=%d",
+        tostring(tab_id), slot, staged)
+    _play_click()
+end
+
+-- (#446) Mutually-exclusive group enforcement. `setting_id` (a checkbox in `category`)
+-- was just switched ON; stage every OTHER member of its registered exclusive group OFF,
+-- so at most one member is ever ON. Members are keyed by their REGISTERED (mod_id,
+-- setting_id) and staged DIRECTLY into the pending buffer under the member's OWN mod_id
+-- -- the same key stage_set resolves via _owner for a same-mod member, and the correct
+-- per-mod buffer for a cross-mod member, so a sibling living in another tab still commits
+-- when that tab is applied. Only a member whose EFFECTIVE value (staged, else the member
+-- mod's live get) is currently truthy is written, so we never manufacture a false-dirty
+-- edit. Returns true if any sibling changed -- the caller then rebuilds so the switched-
+-- off rows repaint (checkbox display is cached; only a row rebuild re-reads the staged
+-- flag).
+function ModTweakerView:_enforce_exclusive(category, setting_id)
+    local MT = _mt()
+    if not MT or type(MT.get_exclusive_group_id) ~= "function" then return false end
+    local _, owner_id = _owner(category, setting_id)
+    if not owner_id then return false end
+    local gid = MT:get_exclusive_group_id(owner_id, setting_id)
+    if not gid then return false end
+    local members = MT:get_exclusive_members(gid)
+    if type(members) ~= "table" then return false end
+    local changed = false
+    for i = 1, #members do
+        local m = members[i]
+        if not (m.mod_id == owner_id and m.setting_id == setting_id) then
+            local p = self._pending[m.mod_id]
+            local eff
+            if p and p[m.setting_id] ~= nil then
+                eff = p[m.setting_id]
+            else
+                local mo = get_mod(m.mod_id)
+                if mo then local ok, v = pcall(mo.get, mo, m.setting_id); if ok then eff = v end end
+                if eff == nil and MT.get then eff = MT:get(m.mod_id, m.setting_id) end
+            end
+            if eff then
+                self._pending[m.mod_id] = self._pending[m.mod_id] or {}
+                self._pending[m.mod_id][m.setting_id] = false
+                changed = true
+            end
+        end
+    end
+    if changed then self:_update_apply_button() end
+    return changed
+end
+
 -- APPLY: commit the whole pending buffer for `category` through the existing _cat_set
 -- path (the ONLY place _cat_set runs on edit — a stray slider drag never takes effect
 -- until clicked), clear the buffer, grey the button, and repaint the rows from the new
 -- live values. Native handle_apply_button -> apply_changes (options_view.lua:1919).
+-- (#208) For the merged Equipment category, flush EACH member mod_id's buffer (each edit
+-- routes to its owner's mod_obj via _cat_set -> _owners), re-register any keybinds across
+-- the committed settings, then clear them all.
 function ModTweakerView:apply_pending(category)
+    local ids = category._owner_mod_ids
+    if ids then
+        local committed = {}   -- setting_id -> value across all members (for keybind re-reg)
+        local any = false
+        for i = 1, #ids do
+            local mid = ids[i]
+            local p = self._pending[mid]
+            if p and next(p) ~= nil then
+                local count, batched, batch_err = transactions.commit(category, p, _owner, _cat_set)
+                for id, value in pairs(p) do committed[id] = value end
+                if batched then
+                    printf("[gut:560] committed owner=%s settings=%d notifications=%d error=%s",
+                        tostring(mid), count, batch_err and 0 or 1, tostring(batch_err or "none"))
+                end
+                self._pending[mid] = {}
+                any = true
+            end
+        end
+        if not any then return end
+        -- (#123) Keybinds need VMF re-registration, not just a value set.
+        for _, row in ipairs(self._rows or {}) do
+            if row._is_keybind and row._setting_id and committed[row._setting_id] ~= nil then
+                _commit_keybind(row, committed[row._setting_id])
+            end
+        end
+        self._dirty = true
+        self:_update_apply_button()
+        self:_build_rows(category)
+        self:_profile_capture(category)
+        _play_click()
+        mod:debug("[mt:apply] committed Equipment buffers {%s}", table.concat(ids, ", "))
+        return
+    end
     local key = _cat_key(category)
     local p = self._pending[key]
     if not p or next(p) == nil then return end
-    for id, value in pairs(p) do _cat_set(category, id, value) end
+    local count, batched, batch_err = transactions.commit(category, p, _owner, _cat_set)
+    if batched then
+        printf("[gut:560] committed owner=%s settings=%d notifications=%d error=%s",
+            tostring(key), count, batch_err and 0 or 1, tostring(batch_err or "none"))
+    end
     -- (#123) Keybinds need VMF re-registration, not just a value set: register any keybind
     -- whose value was in THIS committed buffer (vmf.add_mod_keybind + generate_keybinds).
     for _, row in ipairs(self._rows or {}) do
@@ -489,8 +1113,75 @@ function ModTweakerView:apply_pending(category)
     -- Rebuild the rows so each reads its new live value (the mod's on_setting_changed
     -- may have snapped/clamped further, e.g. ct's 25-coin rounding).
     self:_build_rows(category)
+    self:_profile_capture(category)
     _play_click()
     mod:debug("[mt:apply] committed pending buffer for '%s'", tostring(key))
+end
+
+-- (v0.2.148-dev) RESTORE DEFAULTS: stage every setting in the CURRENT tab back to its
+-- default_value, then repaint the rows so the staged defaults show. This does NOT write
+-- live — it STAGES (like a manual edit); the user clicks Apply to commit, at which point
+-- apply_pending flushes the buffer through _cat_set. Because stage_set routes each edit to
+-- its OWNER mod_id (_owner), the Equipment tab resets every member mod correctly.
+-- Skips groups/headers (no setting_id), settings with no default_value, and keybinds
+-- (type=="keybind", whose default_value is an empty table).
+function ModTweakerView:reset_to_defaults()
+    local nodes    = self._build_nodes
+    local category = self._build_category
+    if not nodes or not category then return end
+    local n = 0
+    for i = 1, #nodes do
+        local node = nodes[i]
+        local sid  = _nf(node, "setting_id")
+        local dv   = _nf(node, "default_value")
+        if sid and dv ~= nil and _nf(node, "type") ~= "keybind" then
+            self:stage_set(category, sid, dv)
+            n = n + 1
+        end
+    end
+    self:_update_apply_button()
+    self:_build_rows(category)
+    _play_click()
+    mod:debug("[mt:reset] staged %d default(s) for '%s'", n, tostring(_cat_key(category)))
+end
+
+-- (Fix 3, v0.2.151-dev) Show the native "restore defaults" CONFIRM popup before resetting.
+-- Rendered by the game's own Managers.popup (its own manager + renderer — no borrowed-renderer
+-- issue), the same mechanism vanilla OptionsView uses for its reset/apply confirms
+-- (options_view.lua:3335). queue_popup(text, topic, result_1, button_1, result_2, button_2);
+-- query_result later returns the chosen result key. Only the CONFIRM ("reset_values") result
+-- runs reset_to_defaults (current tab only). Falls back to an immediate reset if the popup
+-- manager is unavailable, so the button never dead-ends.
+function ModTweakerView:_queue_reset_popup()
+    _play_click()
+    if self._reset_popup_id then return end   -- already showing
+    if not (Managers and Managers.popup and Managers.popup.queue_popup) then
+        self:reset_to_defaults()
+        return
+    end
+    -- Mirror the VANILLA reset-settings popup (options_view.lua:3335) VERBATIM: the engine
+    -- Localizes popup text, so RAW English strings render as `<raw string>`. Real vanilla loc
+    -- keys (reset_settings_popup_text / popup_discard_changes_topic / button_ok / popup_choice_cancel)
+    -- resolve correctly. CONFIRM result = "reset_values"; cancel = "revert_changes".
+    local ok, id = pcall(function()
+        local text = Localize("reset_settings_popup_text")
+        return Managers.popup:queue_popup(text, Localize("popup_discard_changes_topic"), "reset_values", Localize("button_ok"), "revert_changes", Localize("popup_choice_cancel"))
+    end)
+    if ok and id then self._reset_popup_id = id else self:reset_to_defaults() end
+end
+
+-- (Fix 3, v0.2.151-dev) Poll the reset-confirm popup each frame; run the reset ONLY on the
+-- CONFIRM ("reset_values") result. Any other result (cancel / click-away) just dismisses.
+function ModTweakerView:_check_reset_popup()
+    local id = self._reset_popup_id
+    if not id then return end
+    if not (Managers and Managers.popup) then self._reset_popup_id = nil; return end
+    local result = Managers.popup:query_result(id)
+    if result then
+        Managers.popup:cancel_popup(id)
+        self._reset_popup_id = nil
+        if result == "reset_values" then self:reset_to_defaults() end
+    end
 end
 
 -- ---------------------------------------------------------------
@@ -499,11 +1190,6 @@ end
 -- so one bad node can't blank the view. Editable: checkbox, numeric (stepper),
 -- dropdown (option cycler). Read-only: group titles, keybind, text, unknown.
 -- ---------------------------------------------------------------
--- (v0.2.82-dev — ITEM 5) Vertical gap inserted ABOVE each top-level (depth-0) group
--- header in the normal list (except the first row), so consecutive top-level
--- collapsible sections read as visually separated like the vanilla options sections.
--- Child rows inside a section are untouched (intra-section spacing stays tight). px.
-local TOP_SECTION_GAP = 14
 -- Build ONE row widget for a single settings node `w`. Factored out of _build_rows
 -- so both the normal list AND the gear drill-down view (Back + parent + children)
 -- build child rows through the identical path (no new persistence — _cat_get/_cat_set
@@ -518,17 +1204,68 @@ local TOP_SECTION_GAP = 14
 -- children — incl. nested dropdowns — never render). Mirrors the original inline gid.
 function ModTweakerView:_group_key(w, category)
     local setting_id = _nf(w, "setting_id")
-    local label = category._flat and _vmf_label(w, category.mod_obj)
+    -- (#208) Localize against the node's OWNER mod (Equipment members belong to four mods);
+    -- _owner returns category.mod_obj for normal categories, so this is unchanged there.
+    local label = category._flat and _vmf_label(w, (_owner(category, setting_id)))
                   or tostring(w.label or w.text or w.setting_id or "?")
     return (category.mod_id or "?") .. ":" .. tostring(setting_id or label)
 end
 
-function ModTweakerView:_build_node_row(w, category, base_offset, depth)
+-- (#163) Auto-collapse ("one branch open per level"). Gated on gut_mt_auto_collapse, default ON.
+function ModTweakerView:_auto_collapse_on()
+    local v = mod:get("gut_mt_auto_collapse")
+    if v == nil then return true end
+    return v and true or false
+end
+
+-- When a group is OPENED, collapse its SAME-LEVEL siblings (groups sharing the same parent block,
+-- at the same depth). When a group is CLOSED, collapse its nested DESCENDANT groups (so re-opening
+-- shows a clean collapsed sub-tree). Level-aware via the flat node/depth arrays saved at build.
+function ModTweakerView:_auto_collapse_apply(gid, now_expanded)
+    local nodes, depths, cat = self._build_nodes, self._build_depths, self._build_category
+    if not (nodes and depths and cat) then return end
+    local i
+    for k = 1, #nodes do
+        if _nf(nodes[k], "type") == "group" and self:_group_key(nodes[k], cat) == gid then i = k; break end
+    end
+    if not i then return end
+    local d = depths[i]
+    if now_expanded then
+        -- siblings = depth==d groups inside this group's parent block (bounded by the nearest
+        -- shallower node on each side; lo/hi=outside for top-level groups).
+        local lo, hi = 0, #nodes + 1
+        for j = i - 1, 1, -1 do if depths[j] < d then lo = j; break end end
+        for j = i + 1, #nodes do if depths[j] < d then hi = j; break end end
+        for j = lo + 1, hi - 1 do
+            if j ~= i and depths[j] == d and _nf(nodes[j], "type") == "group" then
+                self._expanded[self:_group_key(nodes[j], cat)] = nil
+            end
+        end
+    else
+        -- descendants = the contiguous run of deeper nodes immediately after i.
+        for j = i + 1, #nodes do
+            if depths[j] <= d then break end
+            if _nf(nodes[j], "type") == "group" then
+                self._expanded[self:_group_key(nodes[j], cat)] = nil
+            end
+        end
+    end
+end
+
+function ModTweakerView:_build_node_row(w, category, base_offset, depth, display_expanded)
     depth = depth or 0
     local setting_id = _nf(w, "setting_id")
     local wtype = _nf(w, "type")
-    local label = category._flat and _vmf_label(w, category.mod_obj)
+    -- (#208) Resolve the node's OWNER mod_obj for label/tooltip localization (the merged
+    -- Equipment tab spans four mods); for a normal category _owner returns category.mod_obj.
+    local owner_mod_obj = _owner(category, setting_id)
+    local label = category._flat and _vmf_label(w, owner_mod_obj)
                   or tostring(w.label or w.text or w.setting_id or "?")
+    -- (#207) The node's localized tooltip DESCRIPTION (mod_obj may be nil for gut's own
+    -- nested categories — _vmf_tooltip then just uses the raw string). Stored on the row
+    -- below so the draw loop can show a hover popup; nil = no popup for this row.
+    -- (#208) Localize against the node's OWNER mod (see owner_mod_obj above).
+    local tooltip = _vmf_tooltip(w, owner_mod_obj)
     local row, err
 
     if wtype == "header" then
@@ -536,9 +1273,13 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth)
     elseif wtype == "group" then
         -- Collapsible group header (default COLLAPSED). The caller handles expand state.
         local gid = self:_group_key(w, category)
-        local expanded = self._expanded[gid] and true or false
+        local expanded = display_expanded
+        if expanded == nil then expanded = self._expanded[gid] and true or false end
         local ok, r = pcall(defs.create_group_header, label, expanded, base_offset, depth)
-        if ok and r then row = r; row._is_group = true; row._group_key = gid else err = r end
+        if ok and r then
+            row = r; row._is_group = true; row._group_key = gid
+            row._display_expanded = display_expanded
+        else err = r end
     elseif wtype == "checkbox" or wtype == "boolean" then
         local ok, r = pcall(defs.create_checkbox, label, base_offset, depth)
         if ok and r then
@@ -562,15 +1303,15 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth)
             row.content.min, row.content.max, row.content.num_decimals = min, max, dec
             row.content.value = val
             row.content.internal_value = (max > min) and math.clamp((val - min) / (max - min), 0, 1) or 0
-            -- ±step for the [<]/[>] glyphs: ~range/40 (coarse), at least the natural
-            -- increment. The track gives fine/continuous control; after a commit we
-            -- re-read the value so any mod-side snapping (ct rounds starting_coins to
-            -- 25 in its on_setting_changed) is reflected — matching VMF's own slider.
-            -- (#164) A slider can declare a FIXED increment via `step` (or range[3]) — e.g. ct
-            -- starting_coins in steps of 25. Otherwise ONE natural unit (1 / 10^-decimals); the
-            -- old range/40 made a single arrow click jump too far (#152). To wire a 25-step:
-            -- add `step = 25` (or `range = {0, 3000, 25}`) to the mod's slider widget def.
-            local step = _resolve_step(w, category and category.mod_id, setting_id, dec)
+            -- (#164) Fixed per-click / snap increment for this slider. Resolved by
+            -- _resolve_step: an explicit widget-def `step` field first, else the gut-side
+            -- STEP_OVERRIDES registry (the working path for a foreign VMF mod — VMF strips a
+            -- custom `step` field off foreign widgets, see STEP_OVERRIDES), else the natural
+            -- unit (1 / 10^-decimals). The track/arrows step by this; _snap_and_clamp snaps the
+            -- value to the grid (anchored at range min). A pre-existing off-step value (e.g. a
+            -- 324-coin value dialed in VMF's own fine-grained menu) is shown as-is here and
+            -- only snaps once the user moves it. #152: this replaced the old ~range/40 over-jump.
+            local step = _resolve_step(w, category and category.mod_id, setting_id or _nf(w, "setting_id"), dec)
             row.content.step = step
             mod:debug("[mt:num] '%s' bounds=%s..%s dec=%s step=%s val=%s",
                 tostring(setting_id), tostring(min), tostring(max), tostring(dec), tostring(step), tostring(val))
@@ -581,6 +1322,19 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth)
         -- (v0.2.69-dev) REAL dropdown: a collapsed row (label + selected value + single
         -- down arrow) that opens a popup option list on click. Was a slider-arrow carousel.
         local options = _nf(w, "options")
+        -- #605: large source-generated catalogues can be supplied lazily. The
+        -- provider runs only when its tab is built, avoiding 34k dialogue option
+        -- records at launcher/keep boot when the user never opens Dialogue.
+        local options_provider = _nf(w, "options_provider")
+        if type(options) ~= "table" and type(options_provider) == "function" then
+            local ok_options, provided = pcall(options_provider)
+            if ok_options and type(provided) == "table" then
+                options = provided
+            else
+                mod:warning("[mt] options_provider failed for %s.%s: %s",
+                    tostring(category.mod_id), tostring(setting_id), tostring(provided))
+            end
+        end
         local ok, r = pcall(defs.create_dropdown, label, base_offset, depth)
         if ok and r and type(options) == "table" and #options > 0 then
             row = r
@@ -598,6 +1352,18 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth)
             row.content.active = false        -- popup closed at build time
         elseif ok and r then
             row = r; row._readonly = true; row.content.value_text = "?"
+        else err = r end
+    elseif wtype == "action" then
+        -- #605: immediate local action row for media controls and other operations
+        -- that are not persistent settings. Uses the resident dropdown field-box
+        -- chrome, but never opens a popup or enters the Apply transaction.
+        local ok, r = pcall(defs.create_dropdown, label, base_offset, depth,
+            { no_arrow = true, field_box = true })
+        if ok and r then
+            row = r
+            row._is_action = true
+            row._action = _nf(w, "on_activate")
+            row.content.value_text = tostring(_nf(w, "button_text") or "RUN")
         else err = r end
     elseif wtype == "keybind" then
         -- (#123) Interactive keybind row (dropdown row shape: label + clickable value).
@@ -640,11 +1406,33 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth)
     end
 
     if row then
+        if _nf(w, "disabled") == true then
+            row._readonly = true
+            row._disabled_in_vmf = true
+            local color = row.style and row.style.label and row.style.label.text_color
+            if color then color[1], color[2], color[3], color[4] = 128, 128, 128, 128 end
+        end
         row._mod_id = category.mod_id
         row._setting_id = setting_id
         row._wtype = wtype
         row._category = category
         row._list_y = base_offset[2]  -- this row's Y (factory just decremented to it)
+        -- (#207) Hover-popup text: TITLE = the row label, DESC = the localized tooltip.
+        row._tip_title = label
+        row._tip_desc = tooltip
+        -- (v0.2.157-dev diag, temp) Farm any residual "<...>" marker. If the RAW node data or the
+        -- RESOLVED label/desc still contains a "<", printf it so the exact culprit + owning mod are
+        -- named next time the menu opens. With the _vmf_label/_vmf_tooltip hardening this should
+        -- fire ZERO times; if it does not fire yet the user still sees "<>", the marker is coming
+        -- from some OTHER element (value/dropdown/etc.), which this rules in or out.
+        local _rt = _nf(w, "tooltip")
+        local _rtt = _nf(w, "title") or _nf(w, "text")
+        local function _hasmark(x) return type(x) == "string" and string.find(x, "<") end
+        if _hasmark(_rt) or _hasmark(_rtt) or _hasmark(label) or _hasmark(tooltip) then
+            printf("[gut:desc] MARKER mod=%s sid=%s type=%s raw_title=%q raw_tt=%q -> label=%q desc=%q",
+                tostring(category.mod_id), tostring(setting_id), tostring(wtype),
+                tostring(_rtt), tostring(_rt), tostring(label), tostring(tooltip))
+        end
     end
     return row, err, wtype, setting_id, label
 end
@@ -679,12 +1467,115 @@ function ModTweakerView:_append_row(row, err, wtype, category, setting_id, base_
     end
 end
 
+-- (#497) Localized display label for a node, mirroring the label logic in _build_node_row
+-- (flat/VMF categories localize via the owner mod; nested gut nodes use the raw field). The
+-- search filter matches against the SAME text the row renders. Caller lowercases for matching.
+local function _node_label(category, w)
+    local setting_id = _nf(w, "setting_id")
+    if category._flat then
+        return _vmf_label(w, (_owner(category, setting_id)))
+    end
+    return tostring(w.label or w.text or w.setting_id or "?")
+end
+
+-- (#497) The active search term (lowercased, trimmed) or nil when the box is empty/whitespace.
+-- _build_rows renders the filtered flat list only when this returns non-nil.
+function ModTweakerView:_search_active()
+    local s = self._search_str
+    if type(s) ~= "string" then return nil end
+    s = s:gsub("^%s+", ""):gsub("%s+$", "")
+    if s == "" then return nil end
+    return s:lower()
+end
+
+function ModTweakerView:_search_restore()
+    if not self._search_tx then return false end
+    Search.restore(self._expanded, self._search_tx)
+    self._search_tx = nil
+    self._search_rebuild_pending = nil
+    self._search_last_ancestors = nil
+    self._search_top_ancestors = nil
+    return true
+end
+
+function ModTweakerView:_search_clear_restore()
+    local changed = self:_search_restore()
+    self._search_str = ""
+    self._search_focused = false
+    return changed
+end
+
+function ModTweakerView:_search_finish()
+    if not self._search_tx then return false end
+    Search.finish(self._expanded, self._search_tx, self._search_last_ancestors,
+        self._search_top_ancestors, self:_auto_collapse_on())
+    self._search_tx = nil
+    self._search_str = ""
+    self._search_focused = false
+    self._search_rebuild_pending = nil
+    self._search_last_ancestors = nil
+    self._search_top_ancestors = nil
+    return true
+end
+
+-- Result interactions keep search alive. Remember only settings that actually stage a value;
+-- Escape/outside-click later retains this branch instead of whichever row was merely opened.
+function ModTweakerView:_search_note_setting(category, setting_id)
+    if not self._search_tx then return end
+    for i = 1, #(self._rows or {}) do
+        local row = self._rows[i]
+        if row and row._category == category and row._setting_id == setting_id
+           and type(row._search_ancestors) == "table" then
+            self._search_last_ancestors = row._search_ancestors
+            return
+        end
+    end
+end
+
+local function _hot(h)
+    return h and (h.is_hover or h.is_held or h.on_release or h.on_left_release)
+end
+
+function ModTweakerView:_search_pointer_over_result()
+    for i = 1, #(self._rows or {}) do
+        local row = self._rows[i]
+        local c = row and row.content
+        if row and not row._readonly and row._middle_visible ~= false and c
+           and (_hot(c.hotspot) or _hot(c.row_hs) or _hot(c.dec) or _hot(c.inc)
+                or _hot(c.track_hs) or _hot(c.value_hs)) then
+            return true
+        end
+    end
+    return false
+end
+
+function ModTweakerView:_search_pointer_over_chrome()
+    local function widget_hot(widget, hotspot)
+        local c = widget and widget.content
+        return c and _hot(c[hotspot])
+    end
+    if widget_hot(self._exit, "button_hotspot") or widget_hot(self._apply, "button_hotspot")
+       or widget_hot(self._reset, "button_hotspot") or widget_hot(self._scrollbar, "hotspot") then
+        return true
+    end
+    for i = 1, #(self._tabs or {}) do
+        if widget_hot(self._tabs[i], "hotspot") then return true end
+    end
+    for i = 1, #(self._profile_buttons or {}) do
+        if widget_hot(self._profile_buttons[i], "hotspot") then return true end
+    end
+    return false
+end
+
 local function _order_category_nodes(category, nodes, depths)
     return ordering.order_flat(nodes, depths, {
         preserve_all = category.mod_id == "gut_equipment",
         get_type = function(node) return _nf(node, "type") end,
         is_generated_header = function(node) return _nf(node, "mod_name") ~= nil end,
-        get_label = function(node) return _vmf_label(node, category.mod_obj) end,
+        get_label = function(node)
+            local owner = _owner(category, _nf(node, "setting_id"))
+            return _vmf_label(node, owner or category.mod_obj)
+        end,
         has_explicit_order = function(node)
             return _nf(node, "mod_tweaker_preserve_order") == true
                 or _nf(node, "mod_tweaker_order") ~= nil
@@ -705,24 +1596,156 @@ function ModTweakerView:_build_rows(category)
     -- collapsed row widget is being discarded, so drop the dangling open-dropdown refs.
     self._open_dropdown = nil
     self._dd_list = nil
+    -- (#207) The hovered tooltip row is one of the rows being discarded; drop the dangling
+    -- reference so a stale widget can't be redrawn (the fade machine re-acquires next frame).
+    self._tt_row = nil
     if not category or type(category.widgets) ~= "table" then return end
     self._expanded = self._expanded or {}   -- group_key -> true (expanded); default collapsed
 
     -- Flatten into parallel node + depth arrays. The VMF flat list ships its own
     -- `depth`; the gut nested tree gets a synthesized depth from _walk_nested. Both
     -- then feed the SAME drill-detection ("the next node is deeper") + inline-skip.
+    -- (#208) The synthesized Equipment category is flat too but carries a precomputed
+    -- `_depths` array (its section headers + depth-shifted member nodes); use it when
+    -- present, else fall back to each node's own `depth` field. (0 is truthy in Lua, so a
+    -- depth-0 entry survives the `or` fallback.)
     local nodes, depths = {}, {}
     if category._flat then
+        local pd = category._depths
+        -- A plain VMF tab (no synthesized _depths) carries VMF's natural per-node `depth`,
+        -- which starts at 1 for the mod's top-level content — indenting the WHOLE tab one level
+        -- for no reason. Rebase by the tab's MINIMUM natural setting depth (excluding the
+        -- non-rendered per-mod header) so its top-level rows render at depth 0 (no indent), the
+        -- same as the Equipment tab. Equipment supplies its own already-rebased `_depths`. (#208)
+        local min_d
+        if not pd then
+            for i = 1, #category.widgets do
+                local w = category.widgets[i]
+                if _nf(w, "type") ~= "header" then
+                    local d = _nf(w, "depth")
+                    if type(d) == "number" and (not min_d or d < min_d) then min_d = d end
+                end
+            end
+            min_d = min_d or 0
+        end
         for i = 1, #category.widgets do
             nodes[#nodes + 1] = category.widgets[i]
-            depths[#depths + 1] = _nf(category.widgets[i], "depth") or 0
+            if pd then
+                depths[#depths + 1] = pd[i] or _nf(category.widgets[i], "depth") or 0
+            else
+                depths[#depths + 1] = (_nf(category.widgets[i], "depth") or 0) - min_d
+            end
         end
     else
         for i = 1, #category.widgets do _walk_nested(category.widgets[i], nodes, depths, 0) end
     end
     nodes, depths = _order_category_nodes(category, nodes, depths)
+    -- (#163) Keep the flat node/depth arrays for the auto-collapse handler — sibling + descendant
+    -- detection needs the tree shape; the group toggle in _handle_input reads these.
+    self._build_nodes, self._build_depths, self._build_category = nodes, depths, category
+    self:_profile_ensure(category)
 
     local base_offset = { 0, -10, 0 }
+
+    -- (#497) SEARCH FILTER. When the per-tab search box has a term, render a FLAT filtered
+    -- list instead of the normal collapse/gear/drill list. A node is kept when its localized
+    -- label contains the term ("a setting OR collapsible that matches", case-insensitive),
+    -- PLUS every ANCESTOR of a match (so a nested match stays reachable and shows its section
+    -- context) and, for a matched GROUP (collapsible), its DESCENDANTS (so the matched
+    -- section's contents show). No gears, no collapse, no drill -- results are always fully
+    -- expanded and visible. Ancestors/descendants are found from the parallel depth array.
+    local term = self:_search_active()
+    if term then
+        if not self._search_tx or self._search_tx.category ~= category then
+            if self._search_tx then Search.restore(self._expanded, self._search_tx) end
+            local group_keys = Search.group_keys(nodes,
+                function(node) return _nf(node, "type") end,
+                function(node) return self:_group_key(node, category) end)
+            self._search_tx = Search.begin(self._expanded, group_keys, category)
+            self._search_last_ancestors = nil
+            self._search_top_ancestors = nil
+        end
+        self._drill = nil                       -- a search supersedes any drill-down
+        local keep = {}
+        for i = 1, #nodes do
+            if _nf(nodes[i], "type") ~= "header" then
+                local lbl = _node_label(category, nodes[i])
+                if type(lbl) == "string" and string.find(lbl:lower(), term, 1, true) then
+                    keep[i] = true
+                end
+            end
+        end
+        -- Freeze the direct-match set, then widen it to ancestors + matched-group descendants.
+        local matched, direct = {}, {}
+        for i = 1, #nodes do
+            if keep[i] then
+                matched[#matched + 1] = i
+                direct[i] = true
+            end
+        end
+        for _, i in ipairs(matched) do
+            local need = depths[i]
+            for j = i - 1, 1, -1 do
+                if depths[j] < need then
+                    keep[j] = true; need = depths[j]
+                    if need <= 0 then break end
+                end
+            end
+            if _nf(nodes[i], "type") == "group" then
+                for j = i + 1, #nodes do
+                    if depths[j] <= depths[i] then break end
+                    keep[j] = true
+                end
+            end
+        end
+        -- Render kept nodes flat at their natural depth (no gear/collapse). A kept group is
+        -- forced expanded (its children already show), so its [+]/[-] can't misread as closed.
+        local shown = 0
+        for i = 1, #nodes do
+            if keep[i] and _nf(nodes[i], "type") ~= "header" then
+                local is_group = _nf(nodes[i], "type") == "group"
+                local row, err, wtype, setting_id = self:_build_node_row(
+                    nodes[i], category, base_offset, depths[i], is_group and true or nil)
+                if row then
+                    row._search_ancestors = Search.ancestors(nodes, depths, i,
+                        function(node) return _nf(node, "type") end,
+                        function(node) return self:_group_key(node, category) end)
+                    if direct[i] and not self._search_top_ancestors then
+                        local path = {}
+                        for p = 1, #row._search_ancestors do
+                            path[p] = row._search_ancestors[p]
+                        end
+                        -- A directly matched collapsible is itself the result to retain.
+                        if is_group then
+                            path[#path + 1] = self:_group_key(nodes[i], category)
+                        end
+                        self._search_top_ancestors = path
+                    end
+                end
+                self:_append_row(row, err, wtype, category, setting_id, base_offset, false)
+                if row then shown = shown + 1 end
+            end
+        end
+        if shown == 0 then
+            local ok_n, nr = pcall(defs.create_section_title,
+                "No settings match \"" .. tostring(self._search_str) .. "\"", base_offset, 0)
+            if ok_n and nr then nr._readonly = true; self._rows[#self._rows + 1] = nr end
+        end
+        self._content_h = math.abs(base_offset[2]) + 20
+        self:_recompute_scroll_bounds()
+        self._scroll_y = math.clamp(self._scroll_y or 0, 0, self._max_scroll)
+        return
+    end
+
+    -- Backspace-to-empty and programmatic clears finish like an explicit dismissal.
+    if self._search_tx then
+        Search.finish(self._expanded, self._search_tx, self._search_last_ancestors,
+            self._search_top_ancestors, self:_auto_collapse_on())
+        self._search_tx = nil
+        self._search_rebuild_pending = nil
+        self._search_last_ancestors = nil
+        self._search_top_ancestors = nil
+    end
 
     -- DRILLED-IN advanced view: render only Back + parent + that parent's children.
     if self._drill then
@@ -747,8 +1770,9 @@ function ModTweakerView:_build_rows(category)
             -- per-attack dropdown) is finally built and its options surface. The old loop
             -- rendered the parent's DIRECT children only (`depths[j] == pdepth + 1`), so the
             -- depth-3 dropdown nodes never existed as rows (the "no options" symptom).
-            local prow, perr, pwtype, psid = self:_build_node_row(nodes[p_idx], category, base_offset, 0)
-            self:_append_row(prow, perr, pwtype, category, psid, base_offset, false)
+            -- (v0.2.153-dev) The parent's OWN toggle row is NOT re-rendered here — you
+            -- already toggle it on the main list and the "Advanced: <name>" Back row gives
+            -- context, so repeating it was redundant. Children rebase to depth 0 below.
             local pdepth = depths[p_idx]
             local plan = defs.plan_drill_children(nodes, depths, p_idx, pdepth,
                 function(node) return _nf(node, "type") end,
@@ -761,7 +1785,7 @@ function ModTweakerView:_build_rows(category)
             for k = 1, #plan do
                 local p = plan[k]
                 local crow, cerr, cwtype, csid, clabel =
-                    self:_build_node_row(nodes[p.index], category, base_offset, p.depth)
+                    self:_build_node_row(nodes[p.index], category, base_offset, math.max(0, p.depth - 1))
                 self:_append_row(crow, cerr, cwtype, category, csid, base_offset, p.has_gear, clabel)
             end
         end
@@ -787,18 +1811,8 @@ function ModTweakerView:_build_rows(category)
             skip_below = nil
             local wtype = _nf(w, "type")
             local has_children = (depths[i + 1] ~= nil) and (depths[i + 1] > depth)
-            -- (v0.2.82-dev — ITEM 5) Vertical padding BETWEEN top-level collapsible sections.
-            -- The vanilla options menu spaces its sections apart; our top-level collapsibles
-            -- (depth-0 `group` headers) stacked flush. Decrement the running offset by
-            -- TOP_SECTION_GAP before a depth-0 group header so a gap opens above it — but
-            -- ONLY when content already exists above (skip the gap before the FIRST row, so
-            -- the list doesn't start with a dead band). Applied here (before _build_node_row
-            -- decrements base_offset by ROW_H) so the gap lands above the header, not below.
-            -- Top-level ONLY: child rows inside a section (depth > 0) and non-group rows are
-            -- untouched, keeping intra-section spacing tight like native.
-            if wtype == "group" and depth == 0 and #self._rows > 0 then
-                base_offset[2] = base_offset[2] - TOP_SECTION_GAP
-            end
+            -- (#208) No special top-section gap — sections/groups stack with the same row
+            -- rhythm as every other tab, so the Equipment tab's spacing matches other menus.
             local row, err, _wt, setting_id, label = self:_build_node_row(w, category, base_offset, depth)
 
             if wtype == "group" then
@@ -874,15 +1888,6 @@ local function _truncate(s, n)
     return s
 end
 
--- Per-mod tab-label overrides (keyed by mod_id, both stable + dev ids). An entry
--- here REPLACES the derived label outright (applied BEFORE the "Tweaker: " prefix
--- strip + truncation), so the tab reads EXACTLY the override string. Extend by
--- adding a `<mod_id> = "LABEL"` line. gt/gt_dev are deliberately absent — their
--- VMF name already reads "General", so the prefix-strip path yields "General".
-local _TAB_LABEL_OVERRIDE = {
-    cim = "CRAFTING", cim_dev = "CRAFTING",
-}
-
 function ModTweakerView:_rebuild()
     -- Every VMF mod becomes a category (gut included, via its real settings);
     -- then any controller-registered category VMF didn't already provide.
@@ -945,7 +1950,7 @@ function ModTweakerView:_rebuild()
         local ts = { font_type = "hell_shark", font_size = 20, upper_case = true }
         local font, scaled = UIFontByResolution(ts)
         for _, c in ipairs(cats) do
-            local override = _TAB_LABEL_OVERRIDE[c.mod_id]
+            local override = tab_labels.exact(c.mod_id)
             local lbl
             if override then
                 lbl = override
@@ -978,7 +1983,7 @@ function ModTweakerView:_rebuild()
         -- applied BEFORE the prefix-strip/truncate so the tab reads exactly the
         -- override; otherwise drop the "Tweaker: " prefix (this menu is all my
         -- tweaker mods) and truncate to fit the tab.
-        local override = _TAB_LABEL_OVERRIDE[cat.mod_id]
+        local override = tab_labels.exact(cat.mod_id)
         local lbl
         if override then
             lbl = override
@@ -986,9 +1991,11 @@ function ModTweakerView:_rebuild()
             local raw = tostring(cat.label or cat.mod_id):gsub("^Tweaker:%s*", "")
             lbl = _truncate(raw, 16)
         end
-        if cat.enabled == false then lbl = lbl .. "*" end
         local tab = defs.create_tab(lbl, i)
-        if tab then self._tabs[i] = tab end
+        if tab then
+            tab.content.disabled = (cat.enabled == false)  -- VMF-disabled mod -> greyed-out tab (driver dims it)
+            self._tabs[i] = tab
+        end
     end
     self._more_tab_index = nil
     if paged then
@@ -1004,15 +2011,7 @@ function ModTweakerView:_rebuild()
 
     self:_build_rows(self._categories[self._selected])
 
-    if total == 0 then
-        self._hint.content.text = "No mods with options found."
-    elseif paged then
-        self._hint.content.text = string.format(
-            "%d mods, page %d/%d.  Last tab = next page.  Click a setting; ESC closes.  ( * = mod disabled )",
-            total, self._page + 1, self._page_count)
-    else
-        self._hint.content.text = "Click a tab to pick a mod.  Click a checkbox / use [<] [>].  ESC closes.  ( * = disabled )"
-    end
+    -- (Fix 5, v0.2.149-dev) The bottom hint text was removed (native Options has no hint).
 
     mod:debug("[mt] rebuild: total=%d page=%d/%d displayed=%d selected=%d rows=%d",
         total, self._page + 1, self._page_count, #self._categories, self._selected, #self._rows)
@@ -1229,6 +2228,9 @@ function ModTweakerView:on_enter(params)
     self._active = true
     self._draw_frames = 0
     self._drill = nil   -- always open on the normal list, never a stale drill from a prior open
+    self:_search_clear_restore() -- (#559) never carry a search transaction across menu opens
+    self._search_str = ""       -- (#497) every open starts unfiltered, on the current tab
+    self._search_focused = false
     -- DEFENSIVE re-pin LA's atlas + instrument on every open (site ii). The Mod
     -- Tweaker borrows the long-lived IngameUI renderer; the in-mission 3rd/4th-open
     -- crash on materials/Loremasters-Armoury/armoury_atlas happens because the atlas
@@ -1254,8 +2256,16 @@ function ModTweakerView:on_enter(params)
 end
 
 function ModTweakerView:on_exit()
+    self:_search_finish() -- (#559) retain last-changed/top-result branch on menu exit
     self._active = false
     self.exiting = nil
+    -- (Fix 3, v0.2.151-dev) Cancel a dangling reset-confirm popup so it can't outlive the menu.
+    if self._reset_popup_id then
+        pcall(function()
+            if Managers and Managers.popup then Managers.popup:cancel_popup(self._reset_popup_id) end
+        end)
+        self._reset_popup_id = nil
+    end
     -- Auto-save: if any setting changed while open, emit the TOML to the log so the
     -- companion watcher writes gut_mod_settings.toml (the mod can't write directly).
     -- self._dirty is set ONLY by apply_pending (a LIVE write), never by a pending edit —
@@ -1270,6 +2280,13 @@ function ModTweakerView:on_exit()
     -- model), so discard = drop the buffer — no native apply_changes(original_*) re-apply
     -- is needed (that exists only for native's live video-preview). Unapplied edits vanish.
     self._pending = {}
+    -- #605: preview playback belongs to the Dialogue view session. Stop it on
+    -- every close path without touching natural in-game dialogue.
+    pcall(function()
+        local cd = get_mod("character_dialogue")
+        local api = cd and cd.character_dialogue_api
+        if api and api.stop then api.stop() end
+    end)
     pcall(function()
         if self._cursor_pushed then
             ShowCursorStack.hide("ModTweakerView")
@@ -1282,6 +2299,7 @@ function ModTweakerView:on_exit()
 end
 
 function ModTweakerView:exit(return_to_game)
+    self:_search_finish() -- (#559) covers X, final Escape, and external exit routing
     self.exiting = true
     -- (v0.2.82-dev — ITEM 1) Native menu-close feedback. exit() is the single funnel
     -- for leaving (ESC, the X button, and return-to-game all route here), so one
@@ -1342,6 +2360,14 @@ function ModTweakerView:update(dt, t)
             tostring(sbhs and sbhs.is_hover), tostring(sbhs and sbhs.is_held))
     end
 
+    -- (Fix 3, v0.2.151-dev) While the reset-confirm popup is up, it's MODAL: only poll its
+    -- result (the game popup owns input + renders itself); don't process ESC / row input.
+    if self._reset_popup_id then
+        self:_check_reset_popup()
+        return
+    end
+
+
     if input_service:get("toggle_menu", true) or input_service:get("back", true) then
         -- (v0.2.69-dev) ESC priority while a DROPDOWN POPUP is open: the FIRST ESC closes
         -- the popup (no commit) instead of closing the menu / leaving the drill.
@@ -1370,6 +2396,17 @@ function ModTweakerView:update(dt, t)
         -- drills OUT (back to the normal list); only a second ESC closes the menu.
         if self._drill then
             self._drill = nil
+            self._scroll_y = 0
+            _play_click()
+            self:_build_rows(self._categories[self._selected])
+            return
+        end
+        -- (#497) ESC priority: if the search box is focused OR a filter is active, the FIRST ESC
+        -- clears the search (restores the full tab) and stays in the menu; only a SUBSEQUENT ESC
+        -- (no filter, nothing else pending) closes the menu. Ordered after edit/keybind/drill so
+        -- ESC first cancels those, matching the "back out one level per ESC" model.
+        if self._search_focused or (self._search_str and self._search_str ~= "") then
+            self:_search_finish()
             self._scroll_y = 0
             _play_click()
             self:_build_rows(self._categories[self._selected])
@@ -1409,12 +2446,49 @@ end
 -- digits capped at num_decimals after the dot, "-" gated on min<0, "." once when
 -- decimals>0, Backspace, 16-char cap.
 local _EDIT_MAX_LEN = 16
+-- (#497) Max search query length (free text; the numeric editor's cap is _EDIT_MAX_LEN).
+local _SEARCH_MAX_LEN = 40
+
+-- (#572) Use the exact visible label of the active tab, including category overrides
+-- such as CRAFTING/CWV/PROGRESSION. This keeps the empty-field prompt contextual without
+-- introducing a second localization/name map that can drift from the tab chrome.
+local function _search_placeholder(self)
+    local tab = self and self._tabs and self._tabs[self._selected]
+    local label = tab and tab.content and tab.content.text
+    if label == nil or label == "" then
+        local category = self and self._categories and self._categories[self._selected]
+        label = category and (category.label or category.mod_id)
+    end
+    if label == nil or label == "" then label = "this tab" end
+    return "Search " .. tostring(label)
+end
+
+-- (#497 / #505) Shared raw-keystroke reader. Applies this frame's Keyboard.keystrokes() to a
+-- query string: Backspace erases the last char, printable ASCII (32-126) appends up to max_len.
+-- Returns (new_str, changed). Reused by the per-tab search box (#497) and the open-dropdown
+-- type-to-filter (#505) — the SAME raw path the numeric type-to-edit uses; Enter (13) / ESC (27)
+-- are sub-32 so they are ignored here and handled by their own callers.
+local function _apply_keystrokes(str, max_len)
+    local keystrokes = Keyboard.keystrokes()
+    if not keystrokes or #keystrokes == 0 then return str, false end
+    local s = str or ""
+    local changed = false
+    for _, stroke in ipairs(keystrokes) do
+        if stroke == Keyboard.BACKSPACE then
+            if #s > 0 then s = s:sub(1, #s - 1); changed = true end
+        elseif type(stroke) == "string" and #stroke == 1 and #s < (max_len or _SEARCH_MAX_LEN) then
+            local b = string.byte(stroke)
+            if b and b >= 32 and b <= 126 then s = s .. stroke; changed = true end
+        end
+    end
+    return s, changed
+end
 
 local function _format_value(value, num_decimals)
     return string.format("%." .. (num_decimals or 0) .. "f", value or 0)
 end
 
-function ModTweakerView:_begin_edit(row)
+function ModTweakerView:_begin_edit(row, click_x)
     if self._editing_row and self._editing_row ~= row then
         -- Committing the previously-focused row keeps a single active editor.
         self:_commit_edit(self._editing_row)
@@ -1423,6 +2497,15 @@ function ModTweakerView:_begin_edit(row)
     self._editing_row = row
     c.editing = true
     c.edit_str = _format_value(c.value, c.num_decimals)
+    c.caret_idx = #c.edit_str
+    -- #575: choose the nearest measured insertion boundary when the editor was
+    -- entered by clicking the value; keyboard-only focus still starts at End.
+    if click_x and defs.numeric_caret_index then
+        local renderer = self.ui_top_renderer or self.ui_renderer
+        local ok, idx = pcall(defs.numeric_caret_index, renderer,
+            row.style and row.style.value, c.edit_str, c._caret_box_w or 64, click_x)
+        if ok and type(idx) == "number" then c.caret_idx = idx end
+    end
     c.caret_t = 0
     c.value_text = c.edit_str
     _play_click()
@@ -1433,32 +2516,57 @@ end
 function ModTweakerView:_edit_apply_keystrokes(c)
     local keystrokes = Keyboard.keystrokes()
     if not keystrokes or #keystrokes == 0 then return false end
-    local s = c.edit_str or ""
-    local nd = c.num_decimals or 0
+    local s   = c.edit_str or ""
+    local idx = math.clamp(c.caret_idx or #s, 0, #s)   -- (#188) chars BEFORE the caret
+    local nd  = c.num_decimals or 0
+    local allow_neg = (c.min or 0) < 0
     local changed = false
     for _, stroke in ipairs(keystrokes) do
-        if type(stroke) == "string" then
-            if #s < _EDIT_MAX_LEN then
-                if tonumber(stroke) then
-                    -- digit: allowed before the dot, or while < nd digits sit after it.
-                    local dot = string.find(s, "%.")
-                    if not dot or #s < dot + nd then s = s .. stroke; changed = true end
-                elseif stroke == "-" then
-                    -- minus toggle, only when the range actually allows negatives.
-                    if (c.min or 0) < 0 then
-                        if string.find(s, "%-") then s = string.gsub(s, "%-", "")
-                        else s = "-" .. s end
-                        changed = true
-                    end
-                elseif stroke == "." and nd > 0 and not string.find(s, "%.") then
-                    s = s .. "."; changed = true
-                end
+        if stroke == Keyboard.LEFT then
+            if idx > 0 then idx = idx - 1; changed = true end
+        elseif stroke == Keyboard.RIGHT then
+            if idx < #s then idx = idx + 1; changed = true end
+        elseif stroke == Keyboard.HOME then
+            if idx ~= 0 then idx = 0; changed = true end
+        elseif stroke == Keyboard.END then
+            if idx ~= #s then idx = #s; changed = true end
+        elseif stroke == Keyboard.BACKSPACE then
+            if idx > 0 then s = s:sub(1, idx - 1) .. s:sub(idx + 1); idx = idx - 1; changed = true end
+        elseif stroke == Keyboard.DELETE then
+            if idx < #s then s = s:sub(1, idx) .. s:sub(idx + 2); changed = true end
+        elseif type(stroke) == "string" and #s < _EDIT_MAX_LEN then
+            -- Insert AT the caret; accept only if the result stays a valid partial number
+            -- (optional single leading '-', digits, <=1 '.', <= nd digits after the dot).
+            local cand = s:sub(1, idx) .. stroke .. s:sub(idx + 1)
+            local ok = false
+            if stroke == "-" then
+                ok = allow_neg and idx == 0 and not s:find("-", 1, true)
+            elseif stroke == "." then
+                ok = nd > 0 and not s:find(".", 1, true)
+            elseif tonumber(stroke) then
+                local dot = cand:find("%.")
+                ok = (not dot) or (#cand - dot <= nd)
             end
-        elseif stroke == Keyboard.BACKSPACE and #s > 0 then
-            s = string.sub(s, 1, -2); changed = true
+            if ok then s = cand; idx = idx + 1; changed = true end
         end
     end
-    if changed then c.edit_str = s end
+    if changed then c.edit_str = s; c.caret_idx = idx end
+    return changed
+end
+
+-- (#497) Append/erase ONE batch of keystrokes into the search query. Mirrors the numeric
+-- editor's Keyboard.keystrokes() capture but for FREE TEXT: printable ASCII (32..126) appends
+-- at the end, Backspace erases the last char, capped at _SEARCH_MAX_LEN. The caret is always at
+-- the end (no mid-string editing -- keeps the appended blink caret jitter-free), so no LEFT/
+-- RIGHT/DELETE handling. Returns true if the query changed, so the caller re-filters only then.
+function ModTweakerView:_search_apply_keystrokes()
+    local s, changed = _apply_keystrokes(self._search_str or "", _SEARCH_MAX_LEN)
+    if changed then
+        self._search_str = s
+        self._search_caret_t = 0
+        self._search_last_ancestors = nil
+        self._search_top_ancestors = nil
+    end
     return changed
 end
 
@@ -1545,14 +2653,83 @@ end
 -- (start_index) changes, and drawn in _draw after the rows so it overlays everything.
 -- ---------------------------------------------------------------
 
--- (Re)build the popup overlay widget for the open dropdown at the current start_index.
+-- (#505) Recompute self._dd_visible = the array of ABSOLUTE option indices passing the current
+-- filter (type-to-filter query AND active category chip). When neither is active this is the full
+-- identity list, so the popup renders exactly like the unfiltered dropdown. Called on open and on
+-- every query/chip change. Also re-clamps _dd_start into the (possibly shorter) filtered window.
+function ModTweakerView:_recompute_dd_visible(row)
+    local vals  = row._options_values or {}
+    local texts = row._options_texts or {}
+    local n = #texts
+    local q = self._dd_query
+    if type(q) == "string" then
+        q = q:gsub("^%s+", ""):gsub("%s+$", "")
+        q = (q == "") and nil or q:lower()
+    else
+        q = nil
+    end
+    local cat = (self._dd_cats and self._dd_cat) and self._dd_cats[self._dd_cat] or nil
+    local vis = {}
+    for i = 1, n do
+        local keep = true
+        if q then
+            local t = texts[i]
+            keep = type(t) == "string" and string.find(t:lower(), q, 1, true) ~= nil
+        end
+        if keep and cat and type(cat.match) == "function" then
+            local ok, r = pcall(cat.match, vals[i], texts[i])
+            keep = ok and r and true or false
+        end
+        if keep then vis[#vis + 1] = i end
+    end
+    self._dd_visible = vis
+    local num_draws = math.min(#vis, 10)
+    self._dd_start = math.clamp(self._dd_start or 1, 1, math.max(1, #vis - num_draws + 1))
+    -- The option set changed, so drop the sticky hover index (#158b); it re-seeds to the selected
+    -- (or first) option on the next _position_dropdown_highlight and can't point past the new list.
+    self._dd_hl_k = nil
+end
+
+-- (#505) The chip descriptors for the open dropdown's header, or nil when it has no registered
+-- categories (a length-only filterable dropdown shows just the search line, no chips). Chip 1 is
+-- always the implicit "All" (clears the category), chips 2..n are the registered categories.
+function ModTweakerView:_dd_chips()
+    local cats = self._dd_cats
+    if not (cats and #cats > 0) then return nil end
+    local chips = { { label = "All", active = (self._dd_cat == nil) } }
+    for i = 1, #cats do
+        chips[#chips + 1] = { label = cats[i].label or ("Category " .. i), active = (self._dd_cat == i) }
+    end
+    return chips
+end
+
+-- (Re)build the popup overlay widget for the open dropdown at the current start_index. When the
+-- dropdown is filterable (#505) the visible options are the filtered subset and a header band
+-- (search line + chips) is attached; otherwise it is the full list with no header (unchanged path).
 function ModTweakerView:_refresh_dropdown_list()
     local row = self._open_dropdown
     if not row then self._dd_list = nil; return end
-    local texts = row._options_texts or {}
-    local cur   = row._option_idx or 1
     local start = self._dd_start or 1
-    local ok, w = pcall(defs.create_dropdown_list, texts, cur, row._list_y or 0, start)
+    if not row._dd_filterable then
+        -- Plain dropdown: full list, selected index in absolute space, no header.
+        local ok, w = pcall(defs.create_dropdown_list, row._options_texts or {}, row._option_idx or 1,
+                            row._list_y or 0, start)
+        self._dd_list = (ok and w) or nil
+        return
+    end
+    -- Filtered dropdown: map the visible subset to display texts + the selected option's FILTERED
+    -- index (or -1 when the selection is filtered out, so nothing renders gold).
+    local vis = self._dd_visible or {}
+    local all_texts = row._options_texts or {}
+    local texts, cur = {}, -1
+    for fi = 1, #vis do
+        texts[fi] = all_texts[vis[fi]] or ""
+        if vis[fi] == row._option_idx then cur = fi end
+    end
+    self._dd_no_match = (#texts == 0)
+    if self._dd_no_match then texts = { "(no matches)" }; cur = -1 end
+    local header = { query = self._dd_query or "", chips = self:_dd_chips() }
+    local ok, w = pcall(defs.create_dropdown_list, texts, cur, row._list_y or 0, start, header)
     self._dd_list = (ok and w) or nil
 end
 
@@ -1560,12 +2737,38 @@ function ModTweakerView:_open_dropdown_popup(row)
     -- Committing any active type-edit first keeps a single modal surface.
     if self._editing_row then self:_commit_edit(self._editing_row) end
     self._open_dropdown = row
+    self._dd_hl_k = nil   -- (#158b) reset the sticky highlight index for this open
     row.content.active = true
+    -- (#505) Fresh per-open filter state. Look up any registered category chips for this
+    -- (mod_id, setting_id); a dropdown is filterable when it is long OR has categories.
+    self._dd_query = ""
+    self._dd_cat = nil
+    self._dd_cats = nil
+    self._dd_no_match = false
+    self._dd_caret_t = 0
+    local mt = _mt()
+    if mt and mt.get_dropdown_categories then
+        local ok, cats = pcall(mt.get_dropdown_categories, mt, row._mod_id, row._setting_id)
+        if ok and type(cats) == "table" and #cats > 0 then self._dd_cats = cats end
+    end
     local n = #(row._options_texts or {})
-    local num_draws = math.min(n, 10)
-    -- Scroll the window so the selected option is visible (native start_index clamp).
-    self._dd_start = math.clamp((row._option_idx or 1) - num_draws + 1, 1, math.max(1, n - num_draws + 1))
-    if (row._option_idx or 1) <= num_draws then self._dd_start = 1 end
+    row._dd_filterable = (n >= DD_FILTER_MIN) or (self._dd_cats ~= nil)
+    self._dd_start = 1
+    if row._dd_filterable then
+        self:_recompute_dd_visible(row)
+        -- Scroll the FILTERED window so the selected option is visible (native start_index clamp).
+        local vis, sel_fi = self._dd_visible, nil
+        for fi = 1, #vis do if vis[fi] == row._option_idx then sel_fi = fi; break end end
+        local num_draws = math.min(#vis, 10)
+        if sel_fi then
+            self._dd_start = math.clamp(sel_fi - num_draws + 1, 1, math.max(1, #vis - num_draws + 1))
+            if sel_fi <= num_draws then self._dd_start = 1 end
+        end
+    else
+        local num_draws = math.min(n, 10)
+        self._dd_start = math.clamp((row._option_idx or 1) - num_draws + 1, 1, math.max(1, n - num_draws + 1))
+        if (row._option_idx or 1) <= num_draws then self._dd_start = 1 end
+    end
     self:_refresh_dropdown_list()
     _play_click()
 end
@@ -1575,10 +2778,16 @@ function ModTweakerView:_close_dropdown_popup()
     if row then row.content.active = false end
     self._open_dropdown = nil
     self._dd_list = nil
-    -- (#158) The closing click's on_release stays LATCHED on the shared-node row hotspots
-    -- for several frames; swallow row/tab input briefly so it can't "bleed" through to the
-    -- row sitting BEHIND the just-closed popup (read by _handle_input).
-    self._dd_input_swallow = 6
+    -- (#505) Drop the per-open filter state so a later plain dropdown can't read a stale query/cat.
+    self._dd_query = nil
+    self._dd_cat = nil
+    self._dd_cats = nil
+    self._dd_visible = nil
+    self._dd_no_match = false
+    -- (#158) The closing click's on_release stays LATCHED on the shared mt_list_start node; block
+    -- ALL row input until the next fresh left-press (read by _handle_input) so it can't bleed
+    -- through to the row behind the just-closed popup, nor re-open the dropdown.
+    self._dd_block_until_press = true
 end
 
 function ModTweakerView:_commit_dropdown(opt_i)
@@ -1609,14 +2818,28 @@ function ModTweakerView:_position_dropdown_highlight()
         local hs = c["opt_" .. k]
         if hs and hs.is_hover then hovered_k = k; break end
     end
-    -- Fall back to the selected option's slot (if it's in the visible window).
-    if not hovered_k then
-        local sel_k = (row._option_idx or 1) - (w._dd_start or 1) + 1
-        if sel_k >= 1 and sel_k <= num_draws then hovered_k = sel_k end
+    -- (#158b) STICKY highlight. The bug: every frame the cursor's hover briefly dropped (crossing
+    -- between rows, an is_hover flicker, or leaving the popup) the old code SNAPPED the highlight to
+    -- the selected option — which for a top/None-selected dropdown is row 1 — i.e. the "flicker to
+    -- the top". Fix: when an option IS hovered, remember it (_dd_hl_k); when nothing is hovered,
+    -- KEEP the last index instead of snapping. Seed at the selected option only on the first frame
+    -- after open (_dd_hl_k reset to nil in _open_dropdown_popup). The highlight only ever moves to a
+    -- row the cursor actually hovered.
+    if hovered_k then
+        self._dd_hl_k = hovered_k
+    elseif self._dd_hl_k == nil then
+        -- (#505) Seed from the FILTERED-space selected index the popup was built with (w._dd_cur);
+        -- for a plain dropdown that equals row._option_idx in absolute space (unchanged). -1 = the
+        -- selection is filtered out, so no seed and the highlight stays hidden until a hover.
+        local oi = w._dd_cur
+        if oi and oi >= 1 then
+            local sel_k = oi - (w._dd_start or 1) + 1
+            if sel_k >= 1 and sel_k <= num_draws then self._dd_hl_k = sel_k end
+        end
     end
-    if hovered_k and w.style and w.style.hl then
-        local row_h = w._dd_row_h or 24
-        w.style.hl.offset[2] = (w._dd_list_top or 0) - hovered_k * row_h
+    local k = self._dd_hl_k
+    if k and k >= 1 and k <= num_draws and w.style and w.style.hl then
+        w.style.hl.offset[2] = (w._dd_list_top or 0) - k * (w._dd_row_h or 24)
         c.hl_visible = true
     else
         c.hl_visible = false
@@ -1636,7 +2859,40 @@ function ModTweakerView:_handle_dropdown_input(input_service)
     local n = w._dd_total or 0
     local num_draws = w._dd_num_draws or 0
 
-    -- Wheel scrolls the visible option window (only when the list overflows).
+    -- (#505) FILTER HEADER input (only for a filterable dropdown): category-chip clicks +
+    -- type-to-filter keystrokes. Handled before wheel/option/click-away so a filtering keystroke
+    -- or chip click is never also read as an option interaction. Chat input is blocked each frame
+    -- so keys/Enter don't leak to game chat (the modal device block doesn't cover chat_input).
+    if row._dd_filterable then
+        if Managers.chat and Managers.chat.block_chat_input_for_one_frame then
+            pcall(function() Managers.chat:block_chat_input_for_one_frame() end)
+        end
+        local chip_count = w._dd_chip_count or 0
+        for ci = 1, chip_count do
+            local hs = c["chip_" .. ci]
+            if hs and (hs.on_release or hs.on_left_release) then
+                -- Chip 1 = "All" (clear the category); chips 2..n = category (ci - 1).
+                self._dd_cat = (ci == 1) and nil or (ci - 1)
+                self._dd_start = 1
+                self:_recompute_dd_visible(row)
+                self:_refresh_dropdown_list()
+                _play_click()
+                return true
+            end
+        end
+        local newq, changed = _apply_keystrokes(self._dd_query or "", _SEARCH_MAX_LEN)
+        if changed then
+            self._dd_query = newq
+            self._dd_caret_t = 0
+            self._dd_start = 1
+            self:_recompute_dd_visible(row)
+            self:_refresh_dropdown_list()
+            return true
+        end
+    end
+
+    -- Wheel scrolls the visible option window (only when the list overflows). n is the FILTERED
+    -- option count (w._dd_total), so this clamps against what is actually shown.
     if n > num_draws then
         local wheel = input_service and input_service:get("scroll_axis")
         if wheel and wheel.y and wheel.y ~= 0 then
@@ -1650,11 +2906,21 @@ function ModTweakerView:_handle_dropdown_input(input_service)
         end
     end
 
-    -- Per-option click -> commit that absolute option index.
+    -- Per-option click -> commit. For a filtered dropdown, the visible row k maps through
+    -- self._dd_visible back to the ABSOLUTE option index; for a plain dropdown _dd_visible is nil
+    -- and the click is the absolute index directly (unchanged). A "(no matches)" placeholder row
+    -- maps to nil and is ignored.
     for k = 1, num_draws do
         local hs = c["opt_" .. k]
         if hs and (hs.on_release or hs.on_left_release) then
-            self:_commit_dropdown((w._dd_start or 1) + k - 1)
+            local fi = (w._dd_start or 1) + k - 1
+            local abs
+            if row._dd_filterable then
+                abs = self._dd_visible and self._dd_visible[fi]   -- nil for the "(no matches)" row
+            else
+                abs = fi
+            end
+            if abs then self:_commit_dropdown(abs) else self:_close_dropdown_popup() end
             return true
         end
     end
@@ -1669,19 +2935,68 @@ function ModTweakerView:_handle_dropdown_input(input_service)
 end
 
 function ModTweakerView:_handle_input(input_service)
-
     -- (v0.2.69-dev) MODAL dropdown popup: while a dropdown is open, the popup owns input
     -- (option click / wheel-scroll / click-away). Short-circuit so no other row reacts.
     if self._open_dropdown then
         if self:_handle_dropdown_input(input_service) then return end
     end
 
-    -- (#158) Swallow row/tab input for a few frames after a popup closes, so the closing
-    -- click's still-latched on_release can't trigger the row BEHIND it (click bleed-through).
-    if (self._dd_input_swallow or 0) > 0 then
-        self._dd_input_swallow = self._dd_input_swallow - 1
-        mod:debug("[mt:dd] swallow post-popup-close row input (frames left=%d)", self._dd_input_swallow)
-        return
+    -- (#158) After a dropdown popup closes, the closing click's on_release stays LATCHED on the
+    -- shared mt_list_start node for an UNBOUNDED number of frames (the old 6-frame swallow was too
+    -- short -> the row BEHIND got clicked, and clicking an open dropdown re-opened it). Block ALL
+    -- row input until the next FRESH left-press begins a new click cycle; the stale latch always
+    -- clears long before the user clicks again. Mouse.pressed(0) = a genuinely new press.
+    if Mouse.pressed(0) then self._dd_block_until_press = false end
+    if self._dd_block_until_press then return end
+
+    -- (#497/#559) SEARCH BOX focus + typing. A left-press ON the box focuses it (committing any
+    -- active numeric edit first). A press on a result leaves the transaction alive until that
+    -- result acts; a neutral blank-area press clears search and restores the snapshot. While
+    -- focused, printable keystrokes edit the query and the list re-filters live;
+    -- chat input is blocked each frame so keys/Enter never leak to game chat (the numeric editor
+    -- needs the same lever, ChatManager.block_chat_input_for_one_frame -- the modal device block
+    -- does not cover the independent chat_input service), and Enter drops focus keeping the
+    -- filter. Placed before the scroll/button/row handling so a filtering keystroke is never
+    -- also read as a row interaction.
+    do
+        local sc = self._search and self._search.content
+        local shs = sc and sc.hotspot
+        if Mouse.pressed(0) then
+            if shs and shs.is_hover then
+                if not self._search_focused then
+                    if self._editing_row then self:_commit_edit(self._editing_row) end
+                    self._capturing_keybind = nil
+                    self._search_focused = true
+                    self._search_caret_t = 0
+                    _play_click()
+                end
+            else
+                self._search_focused = false
+                if self._search_tx and not self:_search_pointer_over_result()
+                   and not self:_search_pointer_over_chrome() then
+                    self:_search_finish()
+                    self._scroll_y = 0
+                    self._dd_block_until_press = true
+                    self:_build_rows(self._categories[self._selected])
+                    return
+                end
+            end
+        end
+        if self._search_focused then
+            if Managers.chat and Managers.chat.block_chat_input_for_one_frame then
+                pcall(function() Managers.chat:block_chat_input_for_one_frame() end)
+            end
+            if Keyboard.released(13) then   -- Enter: keep the filter, drop focus
+                self._search_focused = false
+                _play_click()
+                return
+            end
+            if self:_search_apply_keystrokes() then
+                self._scroll_y = 0
+                self:_build_rows(self._categories[self._selected])
+                return
+            end
+        end
     end
 
     -- Scroll: mouse wheel (1 notch ~= 1 row) + scrollbar thumb drag. The wheel reads
@@ -1749,7 +3064,36 @@ function ModTweakerView:_handle_input(input_service)
     do
         local ah = self._apply and self._apply.content.button_hotspot
         if ah and (ah.on_release or ah.on_left_release) and not self._apply.content.disabled then
+            self:_search_finish()
             self:apply_pending(self._categories[self._selected])
+            return
+        end
+    end
+
+    -- (Fix 3, v0.2.151-dev) RESTORE DEFAULTS button: show a native confirm popup FIRST.
+    -- Only the CONFIRM result runs reset_to_defaults (current tab only); the result is
+    -- polled in update() via _check_reset_popup.
+    do
+        local rh = self._reset and self._reset.content.button_hotspot
+        if rh and (rh.on_release or rh.on_left_release) then
+            local search_cleared = self:_search_finish()
+            if search_cleared then
+                self._scroll_y = 0
+                self:_build_rows(self._categories[self._selected])
+            end
+            self:_queue_reset_popup()
+            return
+        end
+    end
+
+
+    -- (#561) Profile switches auto-apply pending edits to the old slot, then
+    -- restore the selected slot as one bounded per-owner transaction.
+    for i = 1, #(self._profile_buttons or {}) do
+        local ph = self._profile_buttons[i].content.hotspot
+        if ph and (ph.on_release or ph.on_left_release) then
+            self:_search_finish()
+            self:_switch_profile(i)
             return
         end
     end
@@ -1764,14 +3108,18 @@ function ModTweakerView:_handle_input(input_service)
             _play_click()
             mod:debug("[mt:dump] input: tab[%d] clicked (was %d, drill=%s)", i, self._selected or -1, tostring(self._drill ~= nil))
             if self._more_tab_index and i == self._more_tab_index then
+                self:_search_finish()
                 self._drill = nil
+                self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
                 self._page = ((self._page or 0) + 1) % math.max(1, self._page_count or 1)
                 self._selected = 1
                 self._scroll_y = 0
                 self:_rebuild()
                 return
             elseif (i ~= self._selected or self._drill) and self._categories[i] then
+                self:_search_finish()
                 self._drill = nil
+                self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
                 self._selected = i
                 self._scroll_y = 0
                 self:_build_rows(self._categories[i])
@@ -1801,13 +3149,28 @@ function ModTweakerView:_handle_input(input_service)
         end
     end
 
+    -- (#slider-modal) Detect a slider being DRAGGED before processing rows, so the drag is MODAL:
+    -- while held, no OTHER row reacts to clicks/releases (releasing over a checkbox was toggling
+    -- it) and only the dragged row highlights. track_hs.is_held is set by the engine each frame.
+    self._slider_dragging = nil
+    for i = 1, #self._rows do
+        local r = self._rows[i]
+        local cc = r.content
+        -- is_held = mid-drag. r._dragging stays true THROUGH the release frame (the slider branch
+        -- below clears it), so the modal also covers the RELEASE frame — that release was landing
+        -- on a checkbox behind the cursor and toggling it.
+        if (cc and cc.track_hs and cc.track_hs.is_held) or r._dragging then self._slider_dragging = r; break end
+    end
+
     -- Rows. Persist on change via _cat_set (routes to the real VMF mod object, or
     -- the gut controller for the dogfood category).
     for i = 1, #self._rows do
         local row = self._rows[i]
-        -- Skip rows culled this frame (outside the list_mask) so a click on a
-        -- scrolled-away row can't register.
-        if not row._readonly and row._middle_visible ~= false then
+        -- Skip rows culled this frame (outside the list_mask) so a click on a scrolled-away row
+        -- can't register. While a slider is dragging, ALSO skip every OTHER row (modal drag) so
+        -- the cursor can't toggle/click anything else mid-drag.
+        if not row._readonly and row._middle_visible ~= false
+           and not (self._slider_dragging and row ~= self._slider_dragging) then
             local c = row.content
             if row._is_gear then
                 -- GEAR click: drill INTO this setting's advanced sub-options. Captures
@@ -1828,14 +3191,23 @@ function ModTweakerView:_handle_input(input_service)
                     self._drill = nil
                     self._scroll_y = 0
                     self:_build_rows(self._categories[self._selected])
+                    self._search_rebuild_pending = nil
                     return
                 end
             elseif row._is_group then
                 -- Collapsible group header: toggle expand/collapse, then rebuild.
                 if c.hotspot and (c.hotspot.on_release or c.hotspot.on_left_release) then
                     _play_click()
-                    self._expanded[row._group_key] = not self._expanded[row._group_key]
+                    local gid = row._group_key
+                    local now_expanded = not self._expanded[gid]
+                    self._expanded[gid] = now_expanded or nil
+                    -- (#163) Auto-collapse (default ON): opening closes same-level siblings; closing
+                    -- collapses nested descendants — one branch open per level.
+                    if self:_auto_collapse_on() then
+                        self:_auto_collapse_apply(gid, now_expanded)
+                    end
                     self:_build_rows(self._categories[self._selected])
+                    self._search_rebuild_pending = nil
                     return
                 end
             elseif row._wtype == "checkbox" or row._wtype == "boolean" then
@@ -1864,6 +3236,20 @@ function ModTweakerView:_handle_input(input_service)
                     -- (v0.2.70-dev) STAGE the toggle (was a live _cat_set). Commits on APPLY.
                     self:stage_set(row._category, row._setting_id, c.flag)
                     mod:debug("[mt:dump] input: checkbox '%s' -> %s (staged)", tostring(row._setting_id), tostring(c.flag))
+                    -- (#446) Mutually-exclusive group: turning a member ON stages its
+                    -- siblings OFF, then rebuild so the switched-off rows repaint (checkbox
+                    -- display is cached -- only a row rebuild re-reads the staged flag). Same
+                    -- rebuild+return shape as the group-header toggle above. Turning a member
+                    -- OFF (c.flag=false) is the "select None" path and touches no sibling.
+                    -- Block row input until the next FRESH press so this release's still-
+                    -- latched on_left_release on the shared mt_list_start node can't re-toggle
+                    -- the rebuilt rows next frame (same latch class as the dropdown #158 /
+                    -- slider-modal guard).
+                    if c.flag and self:_enforce_exclusive(row._category, row._setting_id) then
+                        self._dd_block_until_press = true
+                        self:_build_rows(self._categories[self._selected])
+                        return
+                    end
                 elseif not clicked then
                     row._toggle_armed = false
                 end
@@ -1876,6 +3262,22 @@ function ModTweakerView:_handle_input(input_service)
                     self:_open_dropdown_popup(row)
                     mod:debug("[mt:dump] input: dropdown '%s' opened", tostring(row._setting_id))
                     return
+                end
+            elseif row._wtype == "action" then
+                local clicked = c.hotspot and (c.hotspot.on_release or c.hotspot.on_left_release)
+                if clicked and not row._action_armed then
+                    row._action_armed = true
+                    _play_click()
+                    if type(row._action) == "function" then
+                        local ok_action, action_err = pcall(row._action)
+                        if not ok_action then
+                            mod:warning("[mt] action failed for %s.%s: %s",
+                                tostring(row._mod_id), tostring(row._setting_id), tostring(action_err))
+                        end
+                    end
+                    return
+                elseif not clicked then
+                    row._action_armed = false
                 end
             elseif row._wtype == "keybind" then
                 -- (#123) Left-click -> capture; right-click -> clear (like native options);
@@ -1916,6 +3318,18 @@ function ModTweakerView:_handle_input(input_service)
                 local vhs_clicked = vhs and (vhs.on_release or vhs.on_left_release)
                 if c.editing then
                     -- ACTIVE EDITOR branch — suppress drag/arrows entirely (spec §6.6).
+                    if vhs_clicked and defs.numeric_caret_index then
+                        local cursor = input_service and input_service:get("cursor")
+                        if cursor then
+                            local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
+                            local click_x = UIInverseScaleVectorToResolution(cursor)[1] - anchor[1]
+                            local ok, idx = pcall(defs.numeric_caret_index,
+                                self.ui_top_renderer or self.ui_renderer,
+                                row.style and row.style.value, c.edit_str or "",
+                                c._caret_box_w or 64, click_x)
+                            if ok and type(idx) == "number" then c.caret_idx = idx end
+                        end
+                    end
                     self:_edit_apply_keystrokes(c)
                     -- CONSUME Enter / stray keys so they COMMIT and never open game chat
                     -- (v0.2.67-dev). Chat reads keyboard Enter on the INDEPENDENT chat_input
@@ -1941,7 +3355,13 @@ function ModTweakerView:_handle_input(input_service)
                     end
                     -- Still editing: skip the drag/arrow handling for this row this frame.
                 elseif vhs_clicked then
-                    self:_begin_edit(row)
+                    local click_x
+                    local cursor = input_service and input_service:get("cursor")
+                    if cursor then
+                        local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
+                        click_x = UIInverseScaleVectorToResolution(cursor)[1] - anchor[1]
+                    end
+                    self:_begin_edit(row, click_x)
                     return
                 else
                 -- Draggable track. During the HOLD we only move the VISUAL; we COMMIT
@@ -1958,10 +3378,10 @@ function ModTweakerView:_handle_input(input_service)
                         local cx = UIInverseScaleVectorToResolution(cursor)[1]
                         local frac = math.clamp((cx - (anchor[1] + (c.track_x or 0))) / math.max(1, c.track_w), 0, 1)
                         cur = (c.min or 0) + frac * ((c.max or 1) - (c.min or 0))
-                        local nd = c.num_decimals or 0
-                        local m = (nd > 0) and (10 ^ nd) or 1
-                        cur = math.floor(cur * m + 0.5) / m
-                        if c.step and c.step > 0 then cur = math.floor(cur / c.step + 0.5) * c.step end  -- (#164) snap drag to the declared step
+                        -- (#164) snap the dragged value to the step grid (anchored at range
+                        -- min), or to decimals when no step — the SAME math the arrow + text-
+                        -- entry paths use, so drag/arrow/type all land on identical grid points.
+                        cur = _snap_and_clamp(c, cur)
                         moved = true
                         row._dragging = true
                     end
@@ -1971,6 +3391,10 @@ function ModTweakerView:_handle_input(input_service)
                     -- the shared node for several frames -> it re-ran the cursor math (slider kept
                     -- "following" after release) AND fired commit+_play_click each frame (the 3-6
                     -- machine-gun increment clicks). is_held is the live held state and drops cleanly.
+                    -- (#slider-modal) Block other rows' input until the next fresh press, so the
+                    -- release's still-LATCHED on_release on a checkbox behind the cursor can't toggle
+                    -- it once the drag-modal disengages next frame (same latch class as dropdown #158).
+                    self._dd_block_until_press = true
                     row._dragging = false
                     commit = true; play_sound = true
                 end
@@ -1987,7 +3411,7 @@ function ModTweakerView:_handle_input(input_service)
                 if rel_dir ~= 0 then
                     if not row._arrow_latched then
                         row._arrow_latched = true
-                        cur = math.clamp(cur + rel_dir * unit, c.min, c.max); moved = true; commit = true; play_sound = true
+                        cur = _snap_and_clamp(c, cur + rel_dir * unit); moved = true; commit = true; play_sound = true  -- (#164) step + snap to grid (min-anchored)
                         _printf("[gut:slider-arrow] %s CLICK dir=%d step=%s -> %s", tostring(row._setting_id), rel_dir, tostring(unit), tostring(cur))
                     end
                 else
@@ -1997,7 +3421,7 @@ function ModTweakerView:_handle_input(input_service)
                 if hold_dir ~= 0 then
                     row._arrow_hf = (row._arrow_hf or 0) + 1
                     if row._arrow_hf >= (row._arrow_hnext or 22) then   -- ~0.37s delay before first repeat
-                        cur = math.clamp(cur + hold_dir * unit, c.min, c.max); moved = true; commit = true
+                        cur = _snap_and_clamp(c, cur + hold_dir * unit); moved = true; commit = true  -- (#164) step + snap to grid (min-anchored)
                         row._arrow_hnext = row._arrow_hf + math.max(2, 11 - math.floor(row._arrow_hf / 20))  -- accelerate
                         _printf("[gut:slider-arrow] %s HOLD-REPEAT f=%d dir=%d -> %s", tostring(row._setting_id), row._arrow_hf, hold_dir, tostring(cur))
                     end
@@ -2054,10 +3478,10 @@ end
 function ModTweakerView:_apply_row_hover(row)
     local c = row.content
     if not c then return end
-    -- (#158) While a dropdown popup is OPEN it's modal: suppress the underlying rows' hover
-    -- highlight + hover sound, so the popup doesn't bleed a phantom highlight onto the row
-    -- sitting behind it.
-    if self._open_dropdown then
+    -- (#158 / #slider-modal) While a dropdown popup is OPEN, or a slider is being dragged, it's
+    -- MODAL: suppress every OTHER row's hover highlight + hover sound, so the menu doesn't light up
+    -- phantom rows behind the popup or under the cursor mid-drag.
+    if self._open_dropdown or (self._slider_dragging and row ~= self._slider_dragging) then
         if c.is_highlighted ~= nil then c.is_highlighted = false end
         row._was_hovered = false
         return
@@ -2066,10 +3490,62 @@ function ModTweakerView:_apply_row_hover(row)
     local row_hot = c.hotspot or c.track_hs
     local hovered = (row_hot and row_hot.is_hover) and true or false
     if (c.dec and c.dec.is_hover) or (c.inc and c.inc.is_hover) then hovered = true end
+    -- (row highlight) Full-row hover hotspot (added in _append_highlight) so dropdown / slider /
+    -- keybind rows highlight when the cursor is over their LABEL, not only the control.
+    if c.row_hs and c.row_hs.is_hover then hovered = true end
+    -- (Fix 4, v0.2.149-dev) An EXPANDED collapsible group stays lit (row highlight bar +
+    -- arrow glow) even when not hovered, so the open section reads as active. Thread the LIVE
+    -- expanded state (self._expanded[row._group_key] — the same source the row toggle uses)
+    -- into content.expanded so create_group_header's glow driver sees it each frame.
+    if row._is_group then
+        local exp = row._display_expanded
+        if exp == nil then exp = self._expanded[row._group_key] and true or false end
+        c.expanded = exp
+        if exp then hovered = true end
+    end
     if c.is_highlighted ~= nil then c.is_highlighted = hovered end
+    -- (#165) Collapsible arrow brightening now lives in create_group_header's local_offset driver
+    -- (mutates the live ui_style at draw-time); the pre-draw row.style write here didn't render.
     -- (2) hover-enter edge sound (debounced on the row's own _was_hovered flag).
     if hovered and not row._was_hovered then _play_hover() end
     row._was_hovered = hovered
+end
+
+-- (#207) HOVER INFO POPUP fade + draw. Replicates the native option-tooltip fade EXACTLY
+-- (ui_settings.lua:22-23 -> tooltip_wait_duration = 0.1, tooltip_fade_in_speed = 4): on a
+-- tooltip'd row becoming hovered, wait 0.1s (alpha 0), then ramp progress by dt*4 and set
+-- alpha = math.easeOutCubic(progress); on no-hover OR a different row, reset progress = 0 +
+-- wait = 0.1 -> alpha 0 -> instant disappear. `hover_row` is the hovered tooltip row this
+-- frame (or nil); `hover_world_y` its bottom-edge world Y (for layout's on-screen flip).
+-- Drawn on the SAME borrowed renderer the rows use, inside the protected begin/end_pass.
+local TT_WAIT, TT_SPEED = 0.1, 4
+function ModTweakerView:_update_tooltip(dt, hover_row, hover_world_y, renderer)
+    -- Modal suppression: no tooltip while a dropdown popup is open, a slider is being
+    -- dragged, or a numeric field is being edited (matches _apply_row_hover's suppression).
+    if self._open_dropdown or self._slider_dragging or self._editing_row then hover_row = nil end
+
+    if hover_row and hover_row == self._tt_row then
+        if (self._tt_wait or 0) > 0 then
+            self._tt_wait = self._tt_wait - dt
+            self._tt_alpha = 0
+        else
+            self._tt_progress = math.min((self._tt_progress or 0) + dt * TT_SPEED, 1)
+            self._tt_alpha = math.easeOutCubic(self._tt_progress)
+        end
+    else
+        -- De-hover OR moved to a different row: reset (instant disappear) + adopt the new row.
+        self._tt_progress = 0
+        self._tt_wait = TT_WAIT
+        self._tt_alpha = 0
+        self._tt_row = hover_row
+    end
+
+    local row = self._tt_row
+    if not (row and (self._tt_alpha or 0) > 0 and self._tooltip) then return end
+    local ok = pcall(defs.layout_tooltip, self._tooltip, renderer,
+        row._tip_title or (row.content and row.content.label) or "", row._tip_desc or "",
+        row._list_y or 0, hover_world_y or 0, self._tt_alpha)
+    if ok then UIRenderer.draw_widget(renderer, self._tooltip) end
 end
 
 -- ---------------------------------------------------------------
@@ -2089,7 +3565,9 @@ function ModTweakerView:_draw(dt, input_service)
     local renderer = self.ui_top_renderer or self.ui_renderer
     local scenegraph = self.ui_scenegraph
 
-    -- Highlight the active tab: gold when selected / on hover, dim grey otherwise.
+    -- (Fix 2) Tab text color matches the VANILLA options tabs (UIWidgets.create_text_button,
+    -- ui_widgets.lua:9200-9229): NORMAL = font_button_normal {255,160,146,101}; SELECTED OR
+    -- HOVERED = white {255,255,255,255} (native text_hover fires on is_hover OR is_selected).
     for i = 1, #self._tabs do
         local tab = self._tabs[i]
         local st = tab.style and tab.style.text
@@ -2100,10 +3578,16 @@ function ModTweakerView:_draw(dt, input_service)
         tab._was_hovered = hov
         if st and st.text_color then
             local active = (i == self._selected) or hov
-            st.text_color[1] = 255
-            st.text_color[2] = active and 255 or 140
-            st.text_color[3] = active and 215 or 140
-            st.text_color[4] = active and 90 or 140
+            if tab.content.disabled then
+                -- (VMF-disabled mod) tab greyed out: dim + low alpha, regardless of hover/selected.
+                st.text_color[1] = 110; st.text_color[2] = 90; st.text_color[3] = 90; st.text_color[4] = 90
+            elseif active then
+                -- selected OR hovered -> white (vanilla text_hover).
+                st.text_color[1], st.text_color[2], st.text_color[3], st.text_color[4] = 255, 255, 255, 255
+            else
+                -- idle -> font_button_normal (vanilla text).
+                st.text_color[1], st.text_color[2], st.text_color[3], st.text_color[4] = 255, 160, 146, 101
+            end
         end
     end
 
@@ -2124,10 +3608,18 @@ function ModTweakerView:_draw(dt, input_service)
         self._apply._was_hovered = hovered
         if asty.text and asty.text.text_color then
             local t = asty.text.text_color
-            if enabled then
-                t[1], t[2], t[3], t[4] = 255, 255, 168, 0           -- cheeseburger gold
+            -- (v0.2.157-dev) EXACT vanilla colours FARMED from the live game's ready Apply
+            -- button ([opt-apply] probe, OptionsView.update_apply_button): ready = cheeseburger
+            -- {255,255,168,0}, hover = white {255,255,255,255}, disabled = gray a50
+            -- {50,128,128,128}. (Format is {A,R,G,B}.) The prior font_button_normal/font_default
+            -- values were a wrong guess -- vanilla's Apply is cheeseburger when ready, NOT the tab
+            -- colour; and disabled is gray a50, NOT font_default a75.
+            if not enabled then
+                t[1], t[2], t[3], t[4] = 50, 128, 128, 128            -- gray a50 (vanilla disabled)
+            elseif hovered then
+                t[1], t[2], t[3], t[4] = 255, 255, 255, 255           -- white on hover
             else
-                t[1], t[2], t[3], t[4] = 255, 110, 110, 110         -- dim grey (disabled)
+                t[1], t[2], t[3], t[4] = 255, 255, 168, 0             -- cheeseburger (vanilla ready)
             end
         end
         if asty.bg and asty.bg.color then
@@ -2140,6 +3632,42 @@ function ModTweakerView:_draw(dt, input_service)
             asty.border.color[1] = 255
             asty.border.color[2], asty.border.color[3], asty.border.color[4] = b, b, b
         end
+    end
+
+    -- (v0.2.148-dev) RESTORE DEFAULTS button per-frame styling. Always enabled; brighten the
+    -- text to white on hover (else font_default grey), and play the hover-enter sound edge-
+    -- debounced on self._reset._was_hovered — mirroring the APPLY button feedback.
+    if self._reset then
+        local rc = self._reset.content
+        local rsty = self._reset.style
+        local r_hov = rc.button_hotspot and rc.button_hotspot.is_hover
+        if r_hov and not self._reset._was_hovered then _play_hover() end
+        self._reset._was_hovered = r_hov
+        if rsty.text and rsty.text.text_color then
+            local t = rsty.text.text_color
+            -- (Fix 3, v0.2.149-dev) Match the TAB / Apply create_text_button scheme:
+            -- idle = font_button_normal {255,160,146,101} (was font_default {255,181,181,181}),
+            -- white {255,255,255,255} on hover. Always enabled.
+            if r_hov then
+                t[1], t[2], t[3], t[4] = 255, 255, 255, 255         -- white on hover
+            else
+                t[1], t[2], t[3], t[4] = 255, 160, 146, 101         -- font_button_normal (idle)
+            end
+        end
+    end
+
+
+    -- (#561) Active profile is gold; hover is white; inactive slots use the
+    -- same warm native button colour as the tab strip.
+    for i = 1, #(self._profile_buttons or {}) do
+        local button = self._profile_buttons[i]
+        local hov = button.content.hotspot and button.content.hotspot.is_hover
+        if hov and not button._was_hovered then _play_hover() end
+        button._was_hovered = hov
+        local c = button.style.text.text_color
+        if hov then c[1], c[2], c[3], c[4] = 255, 255, 255, 255
+        elseif i == (self._profile_slot or 1) then c[1], c[2], c[3], c[4] = 255, 255, 168, 0
+        else c[1], c[2], c[3], c[4] = 255, 160, 146, 101 end
     end
 
     -- (v0.2.71-dev) hover-enter sound on the EXIT (X) button (was unwired). Edge-debounced
@@ -2172,7 +3700,7 @@ function ModTweakerView:_draw(dt, input_service)
     for i = 1, #(self._chrome or {}) do
         UIRenderer.draw_widget(renderer, self._chrome[i])
     end
-    if self._hint then UIRenderer.draw_widget(renderer, self._hint) end
+    -- (Fix 5, v0.2.149-dev) bottom hint widget removed — nothing to draw here.
     for i = 1, #self._tabs do
         UIRenderer.draw_widget(renderer, self._tabs[i])
     end
@@ -2182,6 +3710,44 @@ function ModTweakerView:_draw(dt, input_service)
     -- (v0.2.70-dev) APPLY button (bottom-right of the bottom panel). Drawn with the chrome
     -- so it's never culled by the list_mask (it lives outside the scrolling list).
     if self._apply then UIRenderer.draw_widget(renderer, self._apply) end
+    -- (v0.2.148-dev) RESTORE DEFAULTS button (to the LEFT of Apply). Same render path.
+    if self._reset then UIRenderer.draw_widget(renderer, self._reset) end
+    if self._profiles_label then UIRenderer.draw_widget(renderer, self._profiles_label) end
+    for i = 1, #(self._profile_buttons or {}) do
+        UIRenderer.draw_widget(renderer, self._profile_buttons[i])
+    end
+
+    -- (#497) SEARCH box: update its text (query + blink caret, or the placeholder) + focus
+    -- emphasis, then draw it as fixed chrome above the list. Drawn every frame so its hotspot
+    -- flags populate for _handle_input (which runs after _draw). It lives on mt_search (its own
+    -- fixed node above list_mask), so it never overlaps or culls with the scrolling rows.
+    if self._search then
+        local sc  = self._search.content
+        local sty = self._search.style
+        local q = self._search_str or ""
+        local focused = self._search_focused
+        -- #572: the magnifier is an empty-field affordance. Keep the full-field
+        -- hotspot unchanged, but suppress only its passive texture while focused.
+        sc.search_focused = focused
+        self._search_caret_t = (self._search_caret_t or 0) + (dt or 0)
+        if q == "" and not focused then
+            sc.text = _search_placeholder(self)
+            if sty.text and sty.text.text_color then
+                sty.text.text_color[1], sty.text.text_color[2], sty.text.text_color[3], sty.text.text_color[4] = 160, 120, 120, 120
+            end
+        else
+            local blink = focused and (self._search_caret_t % 1.0) < 0.5
+            sc.text = q .. (blink and "|" or "")
+            if sty.text and sty.text.text_color then
+                sty.text.text_color[1], sty.text.text_color[2], sty.text.text_color[3], sty.text.text_color[4] = 255, 255, 255, 255
+            end
+        end
+        if sty.bg_inner and sty.bg_inner.color then
+            local v = focused and 26 or 14
+            sty.bg_inner.color[2], sty.bg_inner.color[3], sty.bg_inner.color[4] = v, v, v
+        end
+        UIRenderer.draw_widget(renderer, self._search)
+    end
 
     -- Cull + draw rows against the list_mask box (CPU position-cull; no GPU mask).
     -- World positions are valid here because begin_pass re-evaluated the scenegraph
@@ -2189,6 +3755,8 @@ function ModTweakerView:_draw(dt, input_service)
     local mask_pos  = UISceneGraph.get_world_position(scenegraph, defs.list_mask_sg)
     local mask_size = UISceneGraph.get_size(scenegraph, defs.list_mask_sg)
     local anchor    = UISceneGraph.get_world_position(scenegraph, defs.list_sg)  -- mt_list_start (scrolled)
+    -- (#207) The hovered row that carries a tooltip becomes the active popup target.
+    local tt_hover_row, tt_hover_world_y
     for i = 1, #self._rows do
         local row = self._rows[i]
         local ry = row._list_y or 0
@@ -2200,6 +3768,15 @@ function ModTweakerView:_draw(dt, input_service)
         row._middle_visible = middle
         if middle then
             self:_apply_row_hover(row)
+            -- (#207) Capture the hovered tooltip'd row (+ its bottom-edge world Y for the
+            -- on-screen flip test). Either the full-row hover hotspot (row_hs, added by
+            -- _append_highlight) or the row's own hotspot counts as "hovered".
+            if row._tip_desc and row._tip_desc ~= "" then
+                local rc = row.content
+                if (rc.row_hs and rc.row_hs.is_hover) or (rc.hotspot and rc.hotspot.is_hover) then
+                    tt_hover_row, tt_hover_world_y = row, py
+                end
+            end
             -- TYPE-TO-EDIT live feedback (v0.2.66-dev): advance the caret pulse + mirror
             -- the typed buffer into the value text + red-tint on invalid, for the active
             -- editor row only. Runs in draw so it ticks every frame regardless of input.
@@ -2230,9 +3807,27 @@ function ModTweakerView:_draw(dt, input_service)
     -- the row if the list scrolls under it. Position the hover/selected highlight before
     -- drawing: highlight the option row under the cursor, else the currently-selected one.
     if self._dd_list then
+        -- (#505) Live search-line text + blink caret for a filterable popup's header (same
+        -- per-frame update the fixed search box uses). content.search_text only exists when the
+        -- popup was built with a header, so guard on it — a plain dropdown has no header band.
+        local dc = self._dd_list.content
+        if dc and dc.search_text ~= nil then
+            self._dd_caret_t = (self._dd_caret_t or 0) + (dt or 0)
+            local q = self._dd_query or ""
+            if q == "" then
+                dc.search_text = "Type to filter..."
+            else
+                local blink = (self._dd_caret_t % 1.0) < 0.5
+                dc.search_text = q .. (blink and "|" or "")
+            end
+        end
         self:_position_dropdown_highlight()
         UIRenderer.draw_widget(renderer, self._dd_list)
     end
+
+    -- (#207) HOVER INFO POPUP — fade + draw last (over the rows; suppressed while a
+    -- dropdown popup is open). Mutually exclusive with the dropdown popup in practice.
+    self:_update_tooltip(dt, tt_hover_row, tt_hover_world_y, renderer)
 
     end)  -- close pcall(function()
     UIRenderer.end_pass(renderer)  -- ALWAYS runs, even if a draw above errored
@@ -2240,5 +3835,11 @@ function ModTweakerView:_draw(dt, input_service)
         mod:warning("[mt] draw error (end_pass protected so the menu chrome survives): %s", tostring(_draw_err))
     end
 end
+
+-- (#164) Exposed for /gut_regression_test (mod_tweaker_step_resolution): the pure step-resolution
+-- + grid-snap helpers, unit-testable without building a live view. Statics, not methods.
+ModTweakerView._resolve_step = _resolve_step
+ModTweakerView._snap_and_clamp = _snap_and_clamp
+ModTweakerView._search_placeholder = _search_placeholder
 
 return ModTweakerView

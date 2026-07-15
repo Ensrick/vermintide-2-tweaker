@@ -1,4 +1,4 @@
-﻿--[[
+--[[
 	_ba_enemy_provider.lua  (Bestiary & Armory feature, migrated into gut)
 
 	PURE-DYNAMIC enemy data layer for the Bestiary. Replaces the original

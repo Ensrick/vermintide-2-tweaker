@@ -1,4 +1,4 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
 
 -- ============================================================
 -- Hide UI (3 modes)  [migrated from general_tweaker (gt) 2026-06-20]
@@ -152,11 +152,27 @@ local function _gut_hud_apply_camera_mode_visibility(want_visible)
     if pu and Unit.alive(pu) then
         local inv = ScriptUnit.has_extension(pu, "inventory_system")
         if inv and inv._equipment and inv._equipment.slots then
-            for _, slot_data in pairs(inv._equipment.slots) do
-                for _, key in ipairs({"left_unit_1p", "right_unit_1p"}) do
-                    local u = slot_data[key]
-                    if u and Unit.alive(u) then
-                        pcall(Unit.set_unit_visibility, u, want_visible)
+            -- (#170) On UN-HIDE, only restore the WIELDED slot's 1p units. Force-showing EVERY
+            -- slot revealed the holstered weapon(s) too -> both weapons rendered blended over each
+            -- other until a re-wield. On HIDE, stomping every slot invisible is correct. If the
+            -- wielded slot can't be resolved on un-hide, don't force any slot (leave unhide_weapons'
+            -- own restore standing) rather than reveal the holstered ones.
+            local wielded
+            if want_visible and inv.get_wielded_slot_name then
+                local ok, w = pcall(inv.get_wielded_slot_name, inv)
+                if ok then wielded = w end
+            end
+            for slot_name, slot_data in pairs(inv._equipment.slots) do
+                local show
+                if not want_visible then show = false
+                elseif wielded then show = (slot_name == wielded)
+                else show = nil end
+                if show ~= nil then
+                    for _, key in ipairs({"left_unit_1p", "right_unit_1p"}) do
+                        local u = slot_data[key]
+                        if u and Unit.alive(u) then
+                            pcall(Unit.set_unit_visibility, u, show)
+                        end
                     end
                 end
             end
@@ -196,7 +212,7 @@ mod.gut_hud_cycle = function()
     mod:echo("Hide UI: " .. _HUD_MODE_LABEL[new_mode])
 end
 
-mod:command("gut_hud", "Cycle Hide UI mode (off/partial/complete/camera)", function()
+mod:command("hud", "Cycle Hide UI mode (off/partial/complete/camera)", function()
     mod.gut_hud_cycle()
 end)
 
@@ -205,6 +221,23 @@ end)
 -- outlines whenever the UI was hidden.
 local function _gut_hud_mode_wants_outlines_off(m)
     return m == HUD_MODE_COMPLETE or m == HUD_MODE_CAMERA
+end
+
+-- (#171) Restore the HUD components we force-hid in complete/camera. The
+-- game_mode_hud_disabled hook returns false again on the way back to off/partial, but
+-- anything we set_visible(false) stays hidden until something re-asserts true (the user
+-- had to toggle UI Tweaks to get the HUD back). set_visible(true) once on the exit
+-- transition; vanilla's HUD update then re-applies its own visibility-group rules.
+local function _gut_hud_restore_components()
+    local ingame_ui = Managers.ui and Managers.ui._ingame_ui
+    local ingame_hud = ingame_ui and ingame_ui.ingame_hud
+    if not (ingame_hud and ingame_hud._components_array) then return end
+    for _, component in ipairs(ingame_hud._components_array) do
+        if component and component.set_visible then
+            pcall(component.set_visible, component, true)
+        end
+    end
+    mod:debug("[gut:hud] restored %d HUD components on un-hide", #ingame_hud._components_array)
 end
 
 -- Per-frame enforcement for complete + camera modes. Partial mode rides
@@ -225,8 +258,14 @@ mod.update = function(dt)
         return
     end
     local current = _gut_hud_mode()
-    if current == HUD_MODE_COMPLETE or current == HUD_MODE_CAMERA then
+    local is_force_mode  = (current == HUD_MODE_COMPLETE or current == HUD_MODE_CAMERA)
+    local was_force_mode = (_gut_hud_last_applied_mode == HUD_MODE_COMPLETE or _gut_hud_last_applied_mode == HUD_MODE_CAMERA)
+    if is_force_mode then
         _gut_hud_force_hide_components()
+    elseif was_force_mode then
+        -- (#171) Just left complete/camera -> un-stick the components we force-hid so the HUD
+        -- actually returns (previously it stayed hidden until a UI Tweaks toggle).
+        _gut_hud_restore_components()
     end
     -- Arms/weapons hide stays CAMERA-only.
     if current == HUD_MODE_CAMERA and _gut_hud_last_applied_mode ~= HUD_MODE_CAMERA then

@@ -1,11 +1,11 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
 
 -- ============================================================================
 -- Compendium HeroView injection — Phase 0
 -- ============================================================================
 -- Registers the HeroViewStateCompendium sub-state into HeroView's screen list
 -- (so transition_with_fade("hero_view", { menu_state_name = "gut_compendium" })
--- routes to it), and captures the ingame_ui_context so /gut_armory /gut_bestiary
+-- routes to it), and captures the ingame_ui_context so /armory /bestiary
 -- can open it from the keep. The top-tab button (HeroWindowOptions) is Phase 1 —
 -- for now the chat commands are the entry point, which keeps Phase 0 off the
 -- crash-sensitive tab-bar hooks.
@@ -70,35 +70,93 @@ mod:hook_safe("StateInGameRunning", "update", function(self)
     end
 end)
 
+-- Switch an ALREADY-OPEN hero_view to the Compendium sub-state via HeroView's OWN
+-- internal screen-change mechanism (issue #223). This is the ONLY correct path from
+-- inside hero_view: HeroView.update consumes _requested_screen_change_data next frame
+-- -> _change_screen_by_name -> _wanted_state, and the running GameStateMachine swaps
+-- HeroViewStateOverview -> HeroViewStateCompendium WITHOUT re-running HeroView.on_enter
+-- (hero_view.lua:236-245, 470-490). Contrast with an IngameUI transition back to
+-- "hero_view" + force_open, which re-runs HeroView.on_enter -> _setup_hdr_gui ->
+-- create_world("hero_view_hdr") while the old world still exists -> engine fatal
+-- 'World "hero_view_hdr" already exists' (the #223 crash; ingame_ui.lua:953 forces the
+-- on_exit/on_enter block whenever force_open is set even if old_view == new_view).
+-- The state machine passes its own state_machine_params (parent = HeroView,
+-- ingame_ui_context) to the new state's on_enter (state_machine.lua:74-78), but no
+-- per-transition params, so the mode is stashed on the mod for the state to read.
+-- Returns true when the switch was requested. `hero_view` is the live HeroView instance
+-- (reachable as the panel window's self.parent.parent, or ingame_ui.views.hero_view).
+function mod._gut_switch_to_compendium_state(hero_view, mode)
+    if not (hero_view and hero_view.requested_screen_change_by_name) then
+        return false
+    end
+    mod._gut_pending_compendium_mode = mode or "armory"
+    local ok = pcall(hero_view.requested_screen_change_by_name, hero_view, "gut_compendium")
+    if ok then
+        printf("[gut:217] hero_view internal state switch -> gut_compendium (mode=%s)", tostring(mode or "armory"))
+        return true
+    end
+    printf("[gut:217] hero_view internal state switch FAILED (requested_screen_change_by_name raised)")
+    return false
+end
+
 -- Open the Compendium hero-view screen. `mode` ("armory"/"bestiary") is passed as
 -- a transition param (best-effort; the Phase-0 panel is identical either way).
 function mod._gut_open_compendium(mode)
     local ctx = mod._gut_ingame_ui_context
     if not ctx then
-        mod:echo("Hero menu isn't ready yet - open the keep first, then retry.")
+        mod:echo("Hero menu isn't ready yet - jump into the keep or a mission, then retry.")
         return
     end
-    if ctx.is_in_inn == false then
-        mod:echo("The Compendium only opens in the keep/inn.")
-        return
-    end
+    -- (2026-07-02) The Compendium (Armory + Bestiary) opens in the keep AND
+    -- mid-mission, no toggle. Its surfaces are atlas/primitive UI only -- the
+    -- Bestiary sub-state (HeroViewStateCompendium) and the in-menu Armory window
+    -- (HeroWindowArmory) draw flat rect/border/text/hotspot passes on the shared
+    -- ui_(top_)renderer with NO viewport, NO preview world, NO keep-only material
+    -- -- so they carry none of the mid-mission crash classes the crafting/cosmetics
+    -- tabs guard against. The former `is_in_inn == false` keep-gate is gone.
     local ingame_ui = ctx.ingame_ui
-    if ingame_ui and ingame_ui.transition_with_fade then
-        ingame_ui:transition_with_fade("hero_view", {
-            menu_state_name = "gut_compendium",
-            gut_compendium_mode = mode or "armory",
-            -- force_open = true so the sub-state switches even when hero_view is ALREADY
-            -- the active view (e.g. invoked from the keep ESC menu). Without it,
-            -- IngameUI.handle_transition skips the re-enter when old_view == new_view ==
-            -- "hero_view", and menu_state_name (read only in post_update_on_enter) is
-            -- ignored — the fade plays but nothing opens. Mirrors the vanilla keep-button
-            -- flow (ingame_view_menu_layout_console.lua:742-745). Same fix as the Mod
-            -- Tweaker sub-state below.
-            force_open = true,
-        })
-    else
+    if not (ingame_ui and ingame_ui.transition_with_fade) then
         mod:echo("Could not open the hero view (ingame_ui unavailable).")
+        return
     end
+    -- HARD GUARD (#223): if hero_view is ALREADY the current view, an
+    -- IngameUI re-enter (transition_with_fade + force_open) fatals on the duplicate
+    -- hero_view_hdr world. Route to the internal state switch instead; if that path is
+    -- somehow unavailable, no-op rather than fall through to the crashing transition
+    -- (a dead tab beats a dead game).
+    if ingame_ui.current_view == "hero_view" then
+        local hero_view = ingame_ui.views and ingame_ui.views.hero_view
+        -- Armory prefers the IN-MENU window layout when the overview state is live
+        -- (matches the tab). Duck-type the overview via set_layout_by_name; the compendium
+        -- sub-state (Bestiary) has no such method, so it falls through to the state switch.
+        if mode == "armory" and mod._gut_open_armory_layout then
+            local state = hero_view and hero_view._machine and hero_view._machine._state
+            if state and state.set_layout_by_name and mod._gut_open_armory_layout(state) then
+                return
+            end
+        end
+        if not mod._gut_switch_to_compendium_state(hero_view, mode) then
+            printf("[gut:217] blocked hero_view re-enter (already inside; state switch unavailable)")
+        end
+        return
+    end
+    -- From OUTSIDE hero_view (e.g. /armory typed while walking the keep OR mid-mission
+    -- gameplay): the fresh open needs force_open so the sub-state applies. IngameUI
+    -- .handle_transition only runs post_update_on_enter (the sole consumer of
+    -- menu_state_name) when old_view ~= new_view OR force_open (ingame_ui.lua:953).
+    -- Here old_view is not hero_view, so this is safe (no duplicate-world re-enter).
+    -- In the keep use the normal "hero_view" transition; mid-mission use
+    -- "hero_view_force", which sets exit_to_game (ingame_ui_settings.lua:441-443) so
+    -- ESC/close returns to gameplay -- the same call gut's mission-inventory opener
+    -- relies on. Both are is_transition_allowed mid-mission (ingame_ui.lua:872 blocks
+    -- only profile_view / inventory_view_force when matchmaking-ready). Mirrors the
+    -- vanilla keep-button flow (ingame_view_menu_layout_console.lua:742-745).
+    local in_keep = ctx.is_in_inn and true or false
+    ingame_ui:transition_with_fade(in_keep and "hero_view" or "hero_view_force", {
+        menu_state_name = "gut_compendium",
+        gut_compendium_mode = mode or "armory",
+        force_open = true,
+    })
 end
 
 -- Open the Mod Tweaker as a HeroView SUB-STATE (KEEP path). Mirrors
@@ -135,10 +193,10 @@ function mod._gut_open_mod_tweaker()
     end
 end
 
--- Chat opener mirroring /gut_armory. Lets the user open the Mod Tweaker sub-state
+-- Chat opener mirroring /armory. Lets the user open the Mod Tweaker sub-state
 -- from the keep without the ESC menu (useful for testing the no-deprecated-look /
 -- no-LA-crash path directly).
-mod:command("gut_mod_tweaker", "Open the Mod Tweaker (hero-menu sub-state, keep only)", function()
+mod:command("mod_tweaker", "Open the Mod Tweaker (hero-menu sub-state, keep only)", function()
     if mod._gut_open_mod_tweaker then mod._gut_open_mod_tweaker()
     else mod:echo("Mod Tweaker sub-state not ready (inject module didn't load).") end
 end)

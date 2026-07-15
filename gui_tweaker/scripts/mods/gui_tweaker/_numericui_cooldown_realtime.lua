@@ -1,4 +1,4 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
 
 -- ============================================================================
 -- NumericUI ability-cooldown: show REAL-TIME reduced seconds (not a sped-up count)

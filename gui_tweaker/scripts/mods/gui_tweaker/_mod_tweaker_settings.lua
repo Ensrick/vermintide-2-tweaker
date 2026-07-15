@@ -1,4 +1,4 @@
-﻿local mod = get_mod("gut")
+local mod = get_mod("gut")
 
 -- Mod Tweaker: registered-category store + standalone persistence layer.
 -- v0.1 scaffold. Hosts the runtime registry of mod-author-registered settings
@@ -34,6 +34,31 @@ local _ordered_ids = {}
 -- Per-(mod_id, setting_id) -> widget def, built lazily on register so reads
 -- can find a widget's default value without re-walking the widget tree.
 local _widget_index = {}
+
+-- (#446) Mutually-exclusive groups. group_id -> ordered member list
+-- { { mod_id=, setting_id= }, ... }; plus a reverse "mod_id\0setting_id" -> group_id
+-- index for O(1) membership lookup from the view's toggle handler. Members are ordinary
+-- boolean/checkbox settings in ANY mod; the Mod Tweaker turns a member's siblings OFF
+-- when one is switched ON, giving a radio-group over plain checkboxes. Data-driven so
+-- any sibling mod can declare its own groups without a gut code change (register via the
+-- ModTweaker public API).
+local _exclusive_groups = {}
+local _exclusive_member_index = {}
+
+-- (#505) Filtered/searchable-dropdown CATEGORY registry. Keyed by _member_key(mod_id,
+-- setting_id) -> ordered normalized category list { { label=<string>, match=<fn(value,text)> }, ... }.
+-- A sibling mod declares the category chips for one of its dropdown settings; the Mod Tweaker
+-- renders them above the OPEN dropdown popup so the user can narrow a long option list to one
+-- category (in addition to the always-available type-to-filter). Data-driven, like the exclusive
+-- groups above: no gut code change per dropdown. A dropdown with NO registration still works and
+-- (when long) still type-to-filters -- categories are the optional second axis.
+local _dropdown_categories = {}
+
+-- \0 separator: setting/mod ids are simple identifiers that never contain a NUL byte,
+-- so this can't collide the way a "::"-joined key could if an id held that substring.
+local function _member_key(mod_id, setting_id)
+    return tostring(mod_id) .. "\0" .. tostring(setting_id)
+end
 
 local function _walk_widgets(node, into)
     if type(node) ~= "table" then return end
@@ -133,5 +158,139 @@ end
 -- Surfaces the kv key shape for diagnostics / tests; not part of the public
 -- API contract.
 function SettingsModule._kv_key(mod_id, setting_id) return _kv_key(mod_id, setting_id) end
+
+-- ---------------------------------------------------------------
+-- (#446) Mutually-exclusive group registry.
+-- ---------------------------------------------------------------
+
+-- register_exclusive_group(group_id, members) -- members: array of
+-- { mod = <mod_id>, setting = <setting_id> } (mod_id / setting_id keys also accepted).
+-- Declares that AT MOST ONE member may be ON at a time: the Mod Tweaker stages the other
+-- members OFF when one is switched ON. All-off is a valid state (the "None [Default]"
+-- option is just another member, or simply every member off). Re-registering the same
+-- group_id REPLACES it, so an author reload re-declares cleanly. Returns true, or
+-- (false, reason).
+function SettingsModule.register_exclusive_group(group_id, members)
+    if type(group_id) ~= "string" or group_id == "" then
+        return false, "exclusive group id must be a non-empty string"
+    end
+    if type(members) ~= "table" or #members < 2 then
+        return false, "exclusive group needs a members array of 2+ entries"
+    end
+    local normalized = {}
+    for i = 1, #members do
+        local m = members[i]
+        if type(m) ~= "table" then
+            return false, string.format("exclusive member %d is not a table", i)
+        end
+        local mid = m.mod_id or m.mod
+        local sid = m.setting_id or m.setting
+        if type(mid) ~= "string" or mid == "" or type(sid) ~= "string" or sid == "" then
+            return false, string.format("exclusive member %d needs string mod_id + setting_id", i)
+        end
+        normalized[i] = { mod_id = mid, setting_id = sid }
+    end
+    -- Replace path: scrub any prior index entries for this group_id first, so a member
+    -- dropped from the new list stops resolving to the group.
+    local prior = _exclusive_groups[group_id]
+    if prior then
+        for i = 1, #prior do
+            _exclusive_member_index[_member_key(prior[i].mod_id, prior[i].setting_id)] = nil
+        end
+    end
+    _exclusive_groups[group_id] = normalized
+    for i = 1, #normalized do
+        _exclusive_member_index[_member_key(normalized[i].mod_id, normalized[i].setting_id)] = group_id
+    end
+    _dbg("[mt] register_exclusive_group: %s members=%d", group_id, #normalized)
+    return true
+end
+
+-- Returns the group_id a (mod_id, setting_id) belongs to, or nil.
+function SettingsModule.get_exclusive_group_id(mod_id, setting_id)
+    return _exclusive_member_index[_member_key(mod_id, setting_id)]
+end
+
+-- Returns the ordered member array for a group_id, or nil.
+function SettingsModule.get_exclusive_members(group_id)
+    return _exclusive_groups[group_id]
+end
+
+-- Count of registered exclusive groups (diagnostics / rt check).
+function SettingsModule.exclusive_group_count()
+    local n = 0
+    for _ in pairs(_exclusive_groups) do n = n + 1 end
+    return n
+end
+
+-- ---------------------------------------------------------------
+-- (#505) Filtered-dropdown category registry.
+-- ---------------------------------------------------------------
+
+-- Normalize an author category list into { { label=<string>, match=<fn(value,text)->bool> }, ... }.
+-- Each author entry is { label = <string>, match = <fn OR key-list> } (aliases: values / keys for
+-- the key-list form). A function match is called with (option_value, option_text); a key-list match
+-- tests membership of the option VALUE against the list. Returns (normalized, err).
+local function _normalize_dd_categories(categories)
+    if type(categories) ~= "table" or #categories < 1 then
+        return nil, "dropdown categories need an array of 1+ entries"
+    end
+    local out = {}
+    for i = 1, #categories do
+        local cdef = categories[i]
+        if type(cdef) ~= "table" then
+            return nil, string.format("dropdown category %d is not a table", i)
+        end
+        local label = cdef.label
+        if type(label) ~= "string" or label == "" then
+            return nil, string.format("dropdown category %d needs a non-empty string label", i)
+        end
+        local m = cdef.match or cdef.values or cdef.keys
+        local matchfn
+        if type(m) == "function" then
+            matchfn = m
+        elseif type(m) == "table" then
+            -- Key-list: membership test on the option value. Own a clone so a later author
+            -- mutation of the passed list can't change matching behavior.
+            local set = {}
+            for k = 1, #m do set[m[k]] = true end
+            matchfn = function(value) return set[value] == true end
+        else
+            return nil, string.format("dropdown category %q needs match=function or a key-list", label)
+        end
+        out[i] = { label = label, match = matchfn }
+    end
+    return out
+end
+
+-- register_dropdown_categories(mod_id, setting_id, categories) -- declares the filter chips for one
+-- dropdown setting. Re-registering the same (mod_id, setting_id) REPLACES the list (author reload
+-- re-declares cleanly). Returns true, or (false, reason).
+function SettingsModule.register_dropdown_categories(mod_id, setting_id, categories)
+    if type(mod_id) ~= "string" or mod_id == "" then
+        return false, "dropdown categories need a non-empty string mod_id"
+    end
+    if type(setting_id) ~= "string" or setting_id == "" then
+        return false, "dropdown categories need a non-empty string setting_id"
+    end
+    local normalized, err = _normalize_dd_categories(categories)
+    if not normalized then return false, err end
+    _dropdown_categories[_member_key(mod_id, setting_id)] = normalized
+    _dbg("[mt] register_dropdown_categories: %s.%s categories=%d",
+        tostring(mod_id), tostring(setting_id), #normalized)
+    return true
+end
+
+-- Returns the normalized category list for a (mod_id, setting_id), or nil.
+function SettingsModule.get_dropdown_categories(mod_id, setting_id)
+    return _dropdown_categories[_member_key(mod_id, setting_id)]
+end
+
+-- Count of dropdown settings carrying registered categories (diagnostics / rt check).
+function SettingsModule.dropdown_category_count()
+    local n = 0
+    for _ in pairs(_dropdown_categories) do n = n + 1 end
+    return n
+end
 
 return SettingsModule

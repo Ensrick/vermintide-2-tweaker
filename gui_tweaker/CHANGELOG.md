@@ -1,5 +1,34 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.275 (2026-07-15) — public rollup of dev 0.2.121-dev..0.2.275-dev
+
+### Why
+
+Promotes the release-ready Tweaker: GUI development line into the stable mod while keeping experimental commands, automatic issue probes, and research-only modules out of the public bundle.
+
+### Changed
+
+- Mod Tweaker now has search with transient collapsible state, per-tab profiles, bounded batch Apply/Default transactions, corrected numeric caret geometry, exact compact tab labels, disabled-mod sections in place, tree-preserving group ordering, and the native search icon (#318, #497, #525, #557, #559, #560, #561, #572, #575).
+- Vanilla Options remains entirely stock for Crosshair Kill Confirmation: no injected gear icon, checkbox conversion, suppression, redirect, or OptionsView hook survives the promotion (#528).
+- Added native-style Mod Tweaker action rows and lazy providers used by Character Dialogue without eagerly allocating its generated catalogue (#605).
+- Promoted modded-realm native loadouts, cosmetic/CWV overlay isolation, live slot-capability validation, and crash-safe unresolved-item fallbacks (#175, #287, #353, #372, #379, #387, #402, #539, #619).
+- Promoted optional in-mission inventory, hero selection, customization, crafting access, and mission selection with resource-residency guards (#80, #87, #155, #172, #193, #305, #336, #363, #530, #539).
+- Promoted third-person camera, free camera, floating damage numbers, startup/menu options, loading-monologue control, and wired-only cutscene skipping. Locked boss cinematics remain untouched and post-skip fades/cameras cannot re-arm (#106, #140, #190, #191, #192, #202, #209, #216, #275, #307, #537).
+- Promoted HUD editing/hiding, corrected drag geometry, UI Tweaks compatibility, bot victory-pose repair, held-Tab weapon/talent refresh, native scoreboard improvements, disconnect retention, and On Yer Feet revive attribution (#232, #245, #250, #272, #281, #310, #312, #437, #438, #547).
+- Promoted Armory/Bestiary HeroView integration, inventory backdrop selection, original temporary-health names, source-confirmed hidden passive descriptions, and Simple UI confinement (#153, #217, #223, #224, #314, #352, #522).
+- Stable localization strips every dev lifecycle/status tag. The stable package now explicitly includes the absorbed `hb/` Lua subtree.
+
+### Public exclusions
+
+- Excluded the experimental `/gut_swap_career` feasibility command.
+- Excluded every normal-Options extension, including the still-unverified Video Profiles feature (#292), plus the Options layout probe, loadout-capacity census, Well of Dreams trace, WT loadout trace, all-language detect-only scaffold, career-HUD-holder census, and central scoreboard diagnostics.
+- Removed the 30-second frame-time and launch-memory probes; routine cutscene telemetry is VMF-debug-gated rather than always-on.
+
+### Notes
+
+- Public Workshop identity and configured visibility are preserved exactly (`published_id = 3732144878`, `friends_only`).
+- This is an independent stable source tree; no runtime dependency on `gui_tweaker_dev` remains.
+
 ## 0.2.120 (2026-07-13) — Fixed 25-point weapon-power steps (#389)
 
 - Promoted Mod Tweaker's foreign-slider registry to stable. CIM's Base Power Level and CT's Starting Coins use fixed 25-point increments for both registered stable/dev mod ids.
