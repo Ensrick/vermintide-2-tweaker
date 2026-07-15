@@ -74,6 +74,7 @@ local suites = {
     "test_mp_emporium_purchase",
     "test_mp_loot_diag",
     "test_wt_passive_charge",
+    "test_wt_hold_pose",
     "test_wt_overcharge_presentation",
     "test_wt_bolt_staff_overcharge",
     "test_wt_longbow_zoom_probe",

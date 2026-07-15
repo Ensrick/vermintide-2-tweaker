@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.258-dev (2026-07-14) - #616 complete Hold-Pose transforms [verify-fix]
+
+- Added independent right/left Scale X, Y, and Z controls to the dev Weapon Hold-Pose tuner. Identity is `{1, 1, 1}`; values are absolute, non-uniform, and reconstructed every apply so live re-apply cannot compound.
+- Scale uses its own `Unit.set_local_scale` write and composes with the existing canonical-plus-delta position/rotation paths without clobbering either. Reset restores the captured baked scale, and the dump now emits all nine transform values per hand.
+- Added runtime regression coverage for identity, non-uniform scale, complete transform composition, and the explicit absolute/non-compounding contract.
+
+Open Dev: Weapon Hold Pose Tuner, confirm Scale X/Y/Z appear under both hands, change one axis with live apply enabled, and verify offset/rotation remain intact. Run `/wt_dev_hp_reset` and confirm the weapon returns to its baked scale; `/wt_dump_hold_pose` must include `scale = { x, y, z }`.
+
 ## 0.12.257-dev (2026-07-14) - Crowbill and Ranger preview idles [verify-fix]
 
 - **Crowbill inventory preview:** Added receiver-side `to_1h_sword` wield entries for every Bardin and standard Saltzpyre career, matching the existing Kruber/Kerillian correction. The original Sienna `bw_1h_crowbill` remains independently available in WT and is never yielded to CWV's Imperial/Dawi Crowbill families; its vanilla fire-DoT attack identity is unchanged.

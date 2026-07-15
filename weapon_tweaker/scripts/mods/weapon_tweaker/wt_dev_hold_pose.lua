@@ -3,8 +3,9 @@ wt_dev_hold_pose — Dev: Weapon Hold Pose Tuner
 ==============================================
 
 Live in-game tuning of how the currently-wielded weapon is held on the local
-player's 3P body. Composes independent position/rotation deltas over the
-weapon unit's captured canonical/baked transform each frame, then
+player's 3P body. Composes independent position/rotation deltas plus an
+absolute non-uniform scale over the weapon unit's captured canonical/baked
+transform each frame, then
 emits a Lua-pastable `unit_attachment_node_linking`-style snippet via the
 `/wt_dump_hold_pose` chat command so the lead can bake the tuned numbers back
 into a weapon template / spawn-data helper.
@@ -215,7 +216,7 @@ end
 -- Pose application
 -- ---------------------------------------------------------------------------
 
--- Read one hand's six slider values (p = "rh" | "lh"). The keys are written
+-- Read one hand's nine transform values (p = "rh" | "lh"). The keys are written
 -- out LITERALLY per hand: the mod-lint save-restore check pairs each
 -- /wt_dev_hp_reset `mod:set("KEY", ...)` with a literal `mod:get("KEY")` in
 -- this file, and a concatenated `"wt_dev_hp_"..p..` key is invisible to it
@@ -227,34 +228,44 @@ local function _read_sliders(p)
                mod:get("wt_dev_hp_rh_offset_z") or 0,
                mod:get("wt_dev_hp_rh_rot_pitch") or 0,
                mod:get("wt_dev_hp_rh_rot_yaw")   or 0,
-               mod:get("wt_dev_hp_rh_rot_roll")  or 0
+               mod:get("wt_dev_hp_rh_rot_roll")  or 0,
+               mod:get("wt_dev_hp_rh_scale_x") or 1,
+               mod:get("wt_dev_hp_rh_scale_y") or 1,
+               mod:get("wt_dev_hp_rh_scale_z") or 1
     end
     return mod:get("wt_dev_hp_lh_offset_x") or 0,
            mod:get("wt_dev_hp_lh_offset_y") or 0,
            mod:get("wt_dev_hp_lh_offset_z") or 0,
            mod:get("wt_dev_hp_lh_rot_pitch") or 0,
            mod:get("wt_dev_hp_lh_rot_yaw")   or 0,
-           mod:get("wt_dev_hp_lh_rot_roll")  or 0
+           mod:get("wt_dev_hp_lh_rot_roll")  or 0,
+           mod:get("wt_dev_hp_lh_scale_x") or 1,
+           mod:get("wt_dev_hp_lh_scale_y") or 1,
+           mod:get("wt_dev_hp_lh_scale_z") or 1
 end
 
--- True when every Hold-Pose slider is at its default (0). Zero means no
--- delta over the captured canonical/baked transform. After a tuned component
--- returns to zero it is restored once; subsequent frames are a true no-op.
+-- True when every Hold-Pose slider is at identity: position/rotation zero and
+-- scale one. Returning a tuned component to identity restores its captured
+-- baseline once; subsequent frames are a true no-op.
 local function _pose_is_default(p)
-    local ox, oy, oz, pitch_deg, yaw_deg, roll_deg = _read_sliders(p)
+    local ox, oy, oz, pitch_deg, yaw_deg, roll_deg, sx, sy, sz = _read_sliders(p)
     return ox == 0 and oy == 0 and oz == 0
        and pitch_deg == 0 and yaw_deg == 0 and roll_deg == 0
+       and sx == 1 and sy == 1 and sz == 1
 end
 
 -- Split the slider state into independent transform components. This is a
 -- pure seam used by the runtime and #569 regression: an omitted/zero position
 -- component must never cause a rotation write, and vice versa.
-local function _component_plan_values(ox, oy, oz, pitch_deg, yaw_deg, roll_deg)
+local function _component_plan_values(ox, oy, oz, pitch_deg, yaw_deg, roll_deg, sx, sy, sz)
+    sx, sy, sz = sx or 1, sy or 1, sz or 1
     return {
         position = ox ~= 0 or oy ~= 0 or oz ~= 0,
         rotation = pitch_deg ~= 0 or yaw_deg ~= 0 or roll_deg ~= 0,
+        scale = sx ~= 1 or sy ~= 1 or sz ~= 1,
         ox = ox, oy = oy, oz = oz,
         pitch = pitch_deg, yaw = yaw_deg, roll = roll_deg,
+        sx = sx, sy = sy, sz = sz,
     }
 end
 local function _component_plan(p)
@@ -266,7 +277,8 @@ M._pose_contract = {
     mode = "canonical_plus_delta",
     position_setter = "Unit.set_local_position",
     rotation_setter = "Unit.set_local_rotation",
-    scale_setter = false,
+    scale_setter = "Unit.set_local_scale",
+    scale_mode = "absolute",
     scope = "local_player_3p_only",
     compounds = false,
 }
@@ -274,6 +286,7 @@ M._pose_contract = {
 local function _capture_baseline(weapon_unit)
     local ok_pos, pos = pcall(Unit.local_position, weapon_unit, 0)
     local ok_rot, rot = pcall(Unit.local_rotation, weapon_unit, 0)
+    local ok_scale, scale = pcall(Unit.local_scale, weapon_unit, 0)
     -- #569 owns an explicit canonical+half-turn rotation for tracked WP-remap
     -- units. Query that authoritative pose so capture is correct regardless of
     -- hook ordering; unrelated local units keep their live canonical rotation.
@@ -283,23 +296,28 @@ local function _capture_baseline(weapon_unit)
             rot, ok_rot = desired_569, true
         end
     end
-    if not ok_pos or not pos or not ok_rot or not rot then return nil end
+    if not ok_pos or not pos or not ok_rot or not rot
+            or not ok_scale or not scale then return nil end
     local row = {
         px = pos[1], py = pos[2], pz = pos[3],
+        sx = scale[1], sy = scale[2], sz = scale[3],
         rotation = QuaternionBox(rot),
         position_dirty = false,
         rotation_dirty = false,
+        scale_dirty = false,
     }
     _pose_baselines[weapon_unit] = row
     return row
 end
 
--- Apply independent deltas to one local 3P weapon root. Position and rotation
--- use separate setters so changing either component cannot reset the other or
--- the unit scale. Every desired value is rebuilt from the captured baseline,
--- never the previous tuner result, so repeated frames/commands do not compound.
+-- Apply independent values to one local 3P weapon root. Position, rotation,
+-- and scale use separate setters so changing one component cannot reset either
+-- of the others. Position/rotation are deltas from the captured baseline;
+-- scale is the absolute authored value shown in the tuner. Every desired value
+-- is rebuilt from scalars, never the previous tuner result, so repeated
+-- frames/commands do not compound.
 --
--- DEFER-TO-BAKED: with no cached dirty component, all-zero sliders do not
+-- DEFER-TO-BAKED: with no cached dirty component, the identity sliders do not
 -- capture or write anything. A dirty component returning to zero restores its
 -- captured baseline exactly once, then becomes a no-op.
 local function _apply_pose_to(weapon_unit, p)
@@ -307,16 +325,17 @@ local function _apply_pose_to(weapon_unit, p)
     if not Unit.alive(weapon_unit) then return false end
     local plan = _component_plan(p)
     local row = _pose_baselines[weapon_unit]
-    if not row and not plan.position and not plan.rotation then return false end
+    if not row and not plan.position and not plan.rotation and not plan.scale then return false end
     row = row or _capture_baseline(weapon_unit)
     if not row then return false end
 
     local plan_key = tostring(plan.position) .. "/" .. tostring(plan.rotation)
+        .. "/" .. tostring(plan.scale)
     if row.last_plan ~= plan_key then
         row.last_plan = plan_key
         pcall(printf,
-            "[wt:569] hold-pose compose position=%s rotation=%s base=canonical_or_baked scale=preserved compounds=false scope=local_3p",
-            tostring(plan.position), tostring(plan.rotation))
+            "[wt:616] hold-pose compose position=%s rotation=%s scale=%s base=canonical_or_baked compounds=false scope=local_3p",
+            tostring(plan.position), tostring(plan.rotation), tostring(plan.scale))
     end
 
     local wrote = false
@@ -346,6 +365,18 @@ local function _apply_pose_to(weapon_unit, p)
         if ok then row.rotation_dirty = false end
         wrote = ok or wrote
     end
+
+    if plan.scale then
+        local desired_scale = Vector3(plan.sx, plan.sy, plan.sz)
+        local ok = pcall(Unit.set_local_scale, weapon_unit, 0, desired_scale)
+        row.scale_dirty = ok or row.scale_dirty
+        wrote = ok or wrote
+    elseif row.scale_dirty then
+        local base_scale = Vector3(row.sx, row.sy, row.sz)
+        local ok = pcall(Unit.set_local_scale, weapon_unit, 0, base_scale)
+        if ok then row.scale_dirty = false end
+        wrote = ok or wrote
+    end
     return wrote
 end
 
@@ -360,6 +391,10 @@ local function _restore_cached_poses()
             end
             if row.rotation_dirty then
                 if pcall(Unit.set_local_rotation, unit, 0, row.rotation:unbox()) then restored = restored + 1 end
+            end
+            if row.scale_dirty then
+                local scale = Vector3(row.sx, row.sy, row.sz)
+                if pcall(Unit.set_local_scale, unit, 0, scale) then restored = restored + 1 end
             end
         end
         _pose_baselines[unit] = nil
@@ -404,7 +439,7 @@ local function _dump_snippet()
 
     for _, h in ipairs(HANDS) do
         local p = h.p
-        local ox, oy, oz, pitch_deg, yaw_deg, roll_deg = _read_sliders(p)
+        local ox, oy, oz, pitch_deg, yaw_deg, roll_deg, sx, sy, sz = _read_sliders(p)
 
         local resolved_unit, hand, slot_name, item_key = _resolve_wielded(target_slot, h.hand)
         local non_default = not _pose_is_default(p)
@@ -418,20 +453,23 @@ local function _dump_snippet()
                 tostring(hand), tostring(item_key), tostring(slot_name), tostring(h.src))
             mod:info("    -- Sliders: offset_xyz=(%.3f, %.3f, %.3f) m  rot_pyr=(%.1f, %.1f, %.1f) deg",
                 ox, oy, oz, pitch_deg, yaw_deg, roll_deg)
+            mod:info("    -- Scale: scale_xyz=(%.3f, %.3f, %.3f) absolute", sx, sy, sz)
             mod:info("    {")
             mod:info("        source = %q,", h.src)
             mod:info("        target = 0,")
             mod:info("        offset = { %.3f, %.3f, %.3f },", ox, oy, oz)
             mod:info("        rotation = { pitch = %.1f, yaw = %.1f, roll = %.1f },  -- degrees, Euler XYZ",
                 pitch_deg, yaw_deg, roll_deg)
+            mod:info("        scale = { %.3f, %.3f, %.3f },  -- absolute, non-compounding", sx, sy, sz)
             mod:info("    },")
         end
     end
 
     mod:info("}")
-    mod:info("-- Apply as deltas over the captured canonical/baked transform (per hand):")
+    mod:info("-- Apply position/rotation as deltas and scale as absolute (per hand):")
     mod:info("--   Unit.set_local_position(unit, 0, base_pos + Vector3(offset_x, offset_y, offset_z))")
     mod:info("--   Unit.set_local_rotation(unit, 0, Quaternion.multiply(base_rot, Quaternion.from_euler_angles_xyz(pitch, yaw, roll)))")
+    mod:info("--   Unit.set_local_scale(unit, 0, Vector3(scale_x, scale_y, scale_z))")
     mod:info("-- ==== end dump ====")
 end
 
@@ -526,6 +564,30 @@ function M.build_widget_tree()
                         decimals_number = 1,
                         unit_text = " deg",
                     },
+                    {
+                        setting_id = "wt_dev_hp_rh_scale_x",
+                        type = "numeric",
+                        default_value = 1,
+                        range = { 0.01, 3.0 },
+                        decimals_number = 3,
+                        unit_text = " x",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_rh_scale_y",
+                        type = "numeric",
+                        default_value = 1,
+                        range = { 0.01, 3.0 },
+                        decimals_number = 3,
+                        unit_text = " x",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_rh_scale_z",
+                        type = "numeric",
+                        default_value = 1,
+                        range = { 0.01, 3.0 },
+                        decimals_number = 3,
+                        unit_text = " x",
+                    },
                 },
             },
             -- LEFT-hand pose sliders (drive the left_unit_3p independently).
@@ -581,6 +643,30 @@ function M.build_widget_tree()
                         decimals_number = 1,
                         unit_text = " deg",
                     },
+                    {
+                        setting_id = "wt_dev_hp_lh_scale_x",
+                        type = "numeric",
+                        default_value = 1,
+                        range = { 0.01, 3.0 },
+                        decimals_number = 3,
+                        unit_text = " x",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_lh_scale_y",
+                        type = "numeric",
+                        default_value = 1,
+                        range = { 0.01, 3.0 },
+                        decimals_number = 3,
+                        unit_text = " x",
+                    },
+                    {
+                        setting_id = "wt_dev_hp_lh_scale_z",
+                        type = "numeric",
+                        default_value = 1,
+                        range = { 0.01, 3.0 },
+                        decimals_number = 3,
+                        unit_text = " x",
+                    },
                 },
             },
             {
@@ -621,6 +707,9 @@ function M.loc_keys()
         wt_dev_hp_rh_rot_pitch   = { en = "RH Rotation pitch (deg, Euler X)" },
         wt_dev_hp_rh_rot_yaw     = { en = "RH Rotation yaw (deg, Euler Y)" },
         wt_dev_hp_rh_rot_roll    = { en = "RH Rotation roll (deg, Euler Z)" },
+        wt_dev_hp_rh_scale_x     = { en = "RH Scale X (absolute)" },
+        wt_dev_hp_rh_scale_y     = { en = "RH Scale Y (absolute)" },
+        wt_dev_hp_rh_scale_z     = { en = "RH Scale Z (absolute)" },
         wt_dev_hp_lh_group       = { en = "Left hand" },
         wt_dev_hp_lh_offset_x    = { en = "LH Offset X (metres)" },
         wt_dev_hp_lh_offset_y    = { en = "LH Offset Y (metres)" },
@@ -628,6 +717,9 @@ function M.loc_keys()
         wt_dev_hp_lh_rot_pitch   = { en = "LH Rotation pitch (deg, Euler X)" },
         wt_dev_hp_lh_rot_yaw     = { en = "LH Rotation yaw (deg, Euler Y)" },
         wt_dev_hp_lh_rot_roll    = { en = "LH Rotation roll (deg, Euler Z)" },
+        wt_dev_hp_lh_scale_x     = { en = "LH Scale X (absolute)" },
+        wt_dev_hp_lh_scale_y     = { en = "LH Scale Y (absolute)" },
+        wt_dev_hp_lh_scale_z     = { en = "LH Scale Z (absolute)" },
         wt_dev_hp_live_apply  = { en = "Live re-apply every frame" },
     }
 end
@@ -670,9 +762,9 @@ function M.install()
             mod:echo("[wt_dev_hp] dumped hold-pose snippet -- see console log")
         end)
 
-    -- Quick reset to zeros (faster than dragging twelve sliders back to 0).
+    -- Quick reset to identity (offset/rotation zero, scale one).
     mod:command("wt_dev_hp_reset",
-        "Reset Hold-Pose sliders (both hands) to zero offsets / zero rotation.",
+        "Reset Hold-Pose sliders (both hands) to identity transform.",
         function()
             mod:set("wt_dev_hp_rh_offset_x", 0)
             mod:set("wt_dev_hp_rh_offset_y", 0)
@@ -680,25 +772,31 @@ function M.install()
             mod:set("wt_dev_hp_rh_rot_pitch", 0)
             mod:set("wt_dev_hp_rh_rot_yaw",   0)
             mod:set("wt_dev_hp_rh_rot_roll",  0)
+            mod:set("wt_dev_hp_rh_scale_x", 1)
+            mod:set("wt_dev_hp_rh_scale_y", 1)
+            mod:set("wt_dev_hp_rh_scale_z", 1)
             mod:set("wt_dev_hp_lh_offset_x", 0)
             mod:set("wt_dev_hp_lh_offset_y", 0)
             mod:set("wt_dev_hp_lh_offset_z", 0)
             mod:set("wt_dev_hp_lh_rot_pitch", 0)
             mod:set("wt_dev_hp_lh_rot_yaw",   0)
             mod:set("wt_dev_hp_lh_rot_roll",  0)
+            mod:set("wt_dev_hp_lh_scale_x", 1)
+            mod:set("wt_dev_hp_lh_scale_y", 1)
+            mod:set("wt_dev_hp_lh_scale_z", 1)
             local restored = _restore_cached_poses()
             -- mod:set from non-on_setting_changed paths updates the store
             -- but the open widget doesn't refresh until view re-open (see
             -- VMF_RECIPES § checkbox cached display state). The pose itself
             -- DOES re-apply correctly because _apply_pose_all reads via
             -- mod:get on the next frame.
-            mod:echo("[wt_dev_hp] sliders reset to zero; restored %d pose component(s) "
+            mod:echo("[wt_dev_hp] sliders reset to identity; restored %d pose component(s) "
                 .. "(close + reopen settings to see the UI update)", restored)
         end)
 
     mod:info("[wt_dev_hp] Dev: Weapon Hold Pose Tuner installed -- "
         .. "live-apply per-frame, /wt_dev_hp_apply for one-shot, "
-        .. "/wt_dump_hold_pose to dump a snippet, /wt_dev_hp_reset to zero.")
+        .. "/wt_dump_hold_pose to dump a snippet, /wt_dev_hp_reset to identity.")
 end
 
 return M

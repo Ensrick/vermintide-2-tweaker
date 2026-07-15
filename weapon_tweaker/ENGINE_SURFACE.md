@@ -99,7 +99,7 @@ the wrapper named in the trap column (`_safe_hook.lua`, issue 26).
 
 | Class.method (kind) | Vanilla behavior | Why wt hooks it | Trap / invariant |
 |---|---|---|---|
-| `StateInGameRunning.update` [safe] `wt_dev_hold_pose.lua` | Per-frame in-mission tick [src: `scripts/game_state/state_ingame_running.lua`] | Hold-Pose tuner: compose local-player 3P position and rotation deltas independently over one captured canonical/baked weapon-root transform | Per-frame hook stays on `hook_safe` (NOT `traced_hook`) to avoid trace flood; inert unless live apply is on. Never use absolute `set_local_pose`: position-only must preserve #569 rotation/scale, rotation-only must preserve baked position/scale, and desired values rebuild from baseline rather than the prior frame |
+| `StateInGameRunning.update` [safe] `wt_dev_hold_pose.lua` | Per-frame in-mission tick [src: `scripts/game_state/state_ingame_running.lua`] | Hold-Pose tuner: compose local-player 3P position/rotation deltas and absolute non-uniform scale independently over one captured canonical/baked weapon-root transform | Per-frame hook stays on `hook_safe` (NOT `traced_hook`) to avoid trace flood; inert unless live apply is on. Never use absolute `set_local_pose`: each component has its own setter, identity restores its captured baseline once, and desired values rebuild from scalars rather than the prior frame |
 
 ## Subsystem notes (how the vanilla flow runs, for wt's cases)
 

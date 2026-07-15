@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.257-dev"
+local MOD_VERSION = "0.12.258-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -5429,22 +5429,45 @@ _rt_register("issue569_wp_hammer_remap_orientation_scope", function()
     if pose_contract.mode ~= "canonical_plus_delta"
         or pose_contract.position_setter ~= "Unit.set_local_position"
         or pose_contract.rotation_setter ~= "Unit.set_local_rotation"
-        or pose_contract.scale_setter ~= false
+        or pose_contract.scale_setter ~= "Unit.set_local_scale"
+        or pose_contract.scale_mode ~= "absolute"
         or pose_contract.scope ~= "local_player_3p_only"
         or pose_contract.compounds ~= false then
-        return "Hold-Pose must preserve canonical position/rotation/scale without compounding"
+        return "Hold-Pose must compose position/rotation/scale without compounding"
     end
     local position_only = plan_values(0, 0, 0.1, 0, 0, 0)
-    if not position_only.position or position_only.rotation then
+    if not position_only.position or position_only.rotation or position_only.scale then
         return "position-only Hold-Pose edit would overwrite canonical rotation"
     end
     local rotation_only = plan_values(0, 0, 0, 0, 0, 15)
-    if rotation_only.position or not rotation_only.rotation then
+    if rotation_only.position or not rotation_only.rotation or rotation_only.scale then
         return "rotation-only Hold-Pose edit would overwrite canonical position"
     end
-    local zero = plan_values(0, 0, 0, 0, 0, 0)
-    if zero.position or zero.rotation then
-        return "zero Hold-Pose sliders are not a no-op"
+    local identity = plan_values(0, 0, 0, 0, 0, 0, 1, 1, 1)
+    if identity.position or identity.rotation or identity.scale then
+        return "identity Hold-Pose sliders are not a no-op"
+    end
+end)
+
+_rt_register("issue616_hold_pose_nonuniform_scale", function()
+    local pose_contract = _wt_dev_hold_pose and _wt_dev_hold_pose._pose_contract
+    local plan_values = _wt_dev_hold_pose and _wt_dev_hold_pose._component_plan_values
+    if type(pose_contract) ~= "table" or type(plan_values) ~= "function" then
+        return "Hold-Pose scale contract missing"
+    end
+    if pose_contract.scale_setter ~= "Unit.set_local_scale"
+            or pose_contract.scale_mode ~= "absolute"
+            or pose_contract.compounds ~= false then
+        return "scale must be absolute and non-compounding"
+    end
+    local scale_only = plan_values(0, 0, 0, 0, 0, 0, 0.5, 0.75, 1.25)
+    if scale_only.position or scale_only.rotation or not scale_only.scale
+            or scale_only.sx ~= 0.5 or scale_only.sy ~= 0.75 or scale_only.sz ~= 1.25 then
+        return "non-uniform scale plan clobbers another component"
+    end
+    local all = plan_values(0.1, -0.2, 0.3, -90, 180, -90, 0.5, 0.6, 0.7)
+    if not all.position or not all.rotation or not all.scale then
+        return "complete nine-value transform does not compose all components"
     end
 end)
 
