@@ -298,13 +298,15 @@ clean.
 with `tools/shared_lib/sync-shared-libs.ps1 -Apply`; consumers remain bundled
 and standalone at runtime.
 
-`check_wt_stream_parity.ps1` is the blocking mirror gate for the active
+`check_wt_stream_parity.ps1` is the blocking contract gate for the active
 `weapon_tweaker` public-beta and `weapon_tweaker_dev` friends-only streams. It
-compares every shipped Lua file after normalizing only the separate VMF id,
-script/package paths, entry filenames, and version suffix. It also pins both
-Workshop IDs/visibilities and requires dev to be one patch ahead. Independent
-preview images, changelogs, generated bundles, and Workshop metadata are the
-only presentation/history exclusions; there are no gameplay-code exclusions.
+exact-compares every common gameplay file outside five documented dev-overlay
+owners, allowlists the three dev-only tuning modules, and independently rejects
+dev files, widgets, commands, and status tags from the public beta. It also
+checks public setting/localization ownership, allowlists the public read-only
+support commands, pins both Workshop IDs/visibilities, and requires dev to be
+one patch ahead. Preview images, changelogs, generated bundles, and Workshop
+metadata remain independent presentation/history surfaces.
 
 ## Current state of each check
 

@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.266-dev (2026-07-15) - #635 preserve the development overlay
+
+- Kept the live 3P Animation Picker, Hold-Pose tuner, port-status decoration, tuning diagnostics, and their regression coverage in the friends-only `wt_dev` stream while the public beta removes them.
+- Added a blocking stream contract that keeps all non-overlay gameplay modules synchronized with the public beta and independently rejects any dev-surface leak into public WT.
+- Gameplay behavior is unchanged from `0.12.265-dev`; this bump identifies the separately rebuilt, deployed, and uploaded development stream.
+
 ## 0.12.265-dev (2026-07-15) - #634 restore the friends-only dev stream
 
 - Rebased the `wt_dev` runtime on the complete `0.12.264-beta` public baseline, including every modularized weapon, animation, appearance, diagnostics, and regression subsystem.

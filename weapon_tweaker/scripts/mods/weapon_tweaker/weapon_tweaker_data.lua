@@ -1595,46 +1595,10 @@ local data = {
                 },
             },
 ]==]
-            -- v0.12.140-dev: enable_dev_anim_picker is now a MASTER TOGGLE — its
-            -- picker rows are appended as its `sub_widgets` after the static
-            -- tree (below), so VMF reveals the whole picker menu LIVE on toggle (no
-            -- restart). See the append block below.
             -- (enable_debug_logging removed v0.12.176-dev — #169)
         },
     },
 }
-
--- Dev tooling widget trees (appended after the static widget tree).
---
--- v0.12.140-dev: the 3P Anim-Set Chooser is now a MASTER-TOGGLE → sub_widgets
--- surface (reference_vmf_native_master_toggle_submenu). build_widget_tree() returns
--- an ARRAY of per-Kruber-port group widgets (never nil); we nest that array as the
--- `sub_widgets` of an `enable_dev_anim_picker` checkbox so VMF's per-frame
--- visibility loop (vmf_options_view.lua:4461-4463) reveals/hides the entire picker
--- menu LIVE when the box is toggled — no game restart. The children are built
--- unconditionally at boot (Kruber-only lightweight build, no ~11 MB leak) so
--- they're present in the tree for VMF to reveal. An empty sub_widgets array is
--- tolerated on a checkbox (only type="group" rejects zero children), but we guard
--- anyway: attach sub_widgets only when non-empty, else fall back to a bare checkbox.
-local _wt_dev_anim_picker_data = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_anim_picker")
-local _wt_dev_hold_pose_data   = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_hold_pose")
-local _anim_rows = _wt_dev_anim_picker_data.build_widget_tree()  -- array (may be empty, never nil)
-
-local _picker_checkbox = {
-    setting_id    = "enable_dev_anim_picker",
-    type          = "checkbox",
-    default_value = false,
-    tooltip       = "enable_dev_anim_picker_tooltip",
-}
-if _anim_rows and #_anim_rows > 0 then
-    _picker_checkbox.sub_widgets = _anim_rows
-end
-data.options.widgets[#data.options.widgets + 1] = _picker_checkbox
-
--- Hold-pose dev tree is untouched — it still returns ONE top-level group widget
--- (or nil when its dynamic catalog is empty); nil-check before appending.
-local _hp_tree = _wt_dev_hold_pose_data.build_widget_tree()
-if _hp_tree then data.options.widgets[#data.options.widgets + 1] = _hp_tree end
 
 -- #368: VMF builds this file before CWV performs its deferred in-keep clone
 -- registration, so the menu uses WT's bounded definition catalog. The runtime

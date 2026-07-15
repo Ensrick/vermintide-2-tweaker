@@ -27,7 +27,7 @@ return function(H, repo_root)
 
     H.test("WT #576 Axe+Shield diagnostics distinguish H3 wind-up from release", function()
         local source = read(repo_root
-            .. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap.lua")
+            .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_anim_remap.lua")
         for _, key in ipairs({ "dr_shield_axe", "cwv_es_axe_shield", "cwv_es_axe_shield_veteran" }) do
             H.truthy(source:find(key .. " = true", 1, true), key .. " must be diagnostic-armed")
         end

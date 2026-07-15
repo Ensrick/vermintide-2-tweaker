@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.265-beta (2026-07-15) - #635 public beta surface cleanup
+
+- Removed the live 3P Animation Picker and Hold-Pose tuner modules, widgets, handlers, commands, dynamic status decoration, and tuning-only diagnostics from the public beta. They remain available in the separate friends-only `wt_dev` stream.
+- Preserved every baked animation remap, grip/scale/rotation transform, cross-career availability control, weapon tweak, and read-only support command owned by the public mod.
+- Extended `qa/check_wt_stream_parity.ps1` to reject public dev-tool files/symbols/status tags, non-read-only commands, and orphan visible settings while allowing only documented dev-overlay differences.
+- Added `/wt_regression_test` check `issue635_public_beta_dev_surface_absent` for the public runtime export boundary.
+
 ## 0.12.264-beta (2026-07-15) - #316 Kruber Longbow native draw playback [verify-fix-coop]
 
 - Fixed the live-evidence regression where Mercenary successfully entered

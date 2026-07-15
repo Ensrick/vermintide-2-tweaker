@@ -1,6 +1,6 @@
 return function(H, repo_root)
     local status = dofile(repo_root
-        .. "/weapon_tweaker/scripts/mods/weapon_tweaker/wt_port_status.lua")
+        .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/wt_port_status.lua")
 
     H.test("WT #108 confirmed redirects survive baking", function()
         H.equal(status.redirect_target("es_mercenary", "we_2h_axe"), "[Empire Greathammer]")

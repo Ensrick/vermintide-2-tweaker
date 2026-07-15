@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.264-beta"
+local MOD_VERSION = "0.12.265-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -109,20 +109,6 @@ local CT_WT_ITEMMASTERLIST_RAWGET_MARKER_v0_12_73 = "wt-itemmasterlist-rawget-ha
 -- _safe_hook.lua header "RATE-LIMIT CAVEAT").
 mod:dofile("scripts/mods/weapon_tweaker/_safe_hook")
 
--- ============================================================
--- Dev-only tooling modules (v0.12.96-dev)
--- ============================================================
--- Two nested VMF menus for live in-game tuning of cross-character ports.
--- Loaded HERE (after _safe_hook, before template patchers) so the module
--- locals are available; their `install()` calls fire at the bottom of this
--- file after the template patchers have populated `Weapons.<template>` with
--- their initial values (which is what the anim picker dropdowns mirror).
---
--- These modules will be stripped (or moved to a sibling `_dev` directory)
--- when wt forks a stable release-side mod; until then they ship inline.
--- See feedback_no_premature_dev_gates.md.
-local _wt_dev_anim_picker = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_anim_picker")
-local _wt_dev_hold_pose   = mod:dofile("scripts/mods/weapon_tweaker/wt_dev_hold_pose")
 local _wt_axe_balance_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_axe_balance")
 local _wt_axe_balance = _wt_axe_balance_policy.new()
 -- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
@@ -261,14 +247,9 @@ mod._wt.MOD_VERSION = MOD_VERSION
 mod:dofile("scripts/mods/weapon_tweaker/_wt_regression")
 local _rt_register = mod._wt.rt_register
 
--- v0.12.99-dev: weapon_unlock_map + _cwv_managed extracted to wt_unlock_data.lua
--- so wt_dev_anim_picker.lua can dofile the same source without depending on
--- VMF's main-script-vs-data load order. (v0.12.98-dev had the picker reading
--- `mod._weapon_unlock_map`, which was nil at _data.lua time because VMF runs
--- _data.lua before main wt.lua finishes — load order is a VMF invariant.)
+-- weapon_unlock_map + _cwv_managed are shared by runtime availability owners.
 local _wt_unlock_data   = mod:dofile("scripts/mods/weapon_tweaker/wt_unlock_data")
 local weapon_unlock_map = _wt_unlock_data.weapon_unlock_map
-mod._wt.port_status = mod:dofile("scripts/mods/weapon_tweaker/wt_port_status")
 
 -- CLARIFY: career_weapon_variants ("CWV") publishes its own custom items for
 -- these (career, weapon) pairs. When CWV is installed, weapon_tweaker SKIPS
@@ -369,7 +350,6 @@ end
 mod._wt.feature_enabled   = feature_enabled
 mod._wt.local_career_name = _local_career_name
 mod._wt.dbg               = _dbg
-mod._wt.dev_anim_picker   = _wt_dev_anim_picker
 mod._wt.build_3p_template_remaps = mod:dofile("scripts/mods/weapon_tweaker/_wt_anim_remap_data")
 mod:dofile("scripts/mods/weapon_tweaker/_wt_anim_remap")
 -- #536: reload ownership differs from attack remapping, so keep its local-3P
@@ -4099,9 +4079,6 @@ end
 -- _wt_availability.lua in the v0.12.209-dev OOP split; on_disabled below calls
 -- them via the entry's file-local aliases from the manifest.
 mod.on_disabled = function()
-    if _wt_dev_hold_pose and _wt_dev_hold_pose.on_disabled then
-        _wt_dev_hold_pose.on_disabled()
-    end
     if weapon_backend.overcharge_presentation then pcall(weapon_backend.overcharge_presentation.restore) end
     _wt_bolt_staff_overcharge_runtime.revert()
     if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, true) end
@@ -4118,13 +4095,6 @@ mod.on_setting_changed = function(setting_id)
         weapon_backend.refresh_on_setting_change(mod)
     elseif setting_id and (setting_id:find("^trait_") or setting_id:find("^cw_trait_")) then
         apply_trait_filters()
-    elseif setting_id and setting_id:find("^wt_dev_anim_") then
-        -- Dev: 3P anim picker — mutate live Weapons.<tpl> tables.
-        _wt_dev_anim_picker.on_setting_changed(setting_id)
-    elseif setting_id and setting_id:find("^wt_dev_hp_") then
-        -- Hold-Pose owns immediate non-destructive bypass/restore for its
-        -- isolated first-/third-person transform channels (#616).
-        _wt_dev_hold_pose.on_setting_changed(setting_id)
     elseif setting_id == "wt_priest_punch_buff" then
         if mod.wt_apply_priest_punch_buff then mod.wt_apply_priest_punch_buff() end
     elseif setting_id == "wt_brett_sword_shield_buff" then
@@ -4539,21 +4509,6 @@ _rt_register("issue576_reopened_ports_and_action_chain_contract", function()
     if not scythe or scythe.attack_swing_charge_left == scythe.attack_swing_charge_left_diagonal
         or scythe.attack_swing_heavy == scythe.attack_swing_heavy_left_diagonal then
         failures[#failures + 1] = "scythe H1/H3 roles collapsed"
-    end
-    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.source_events_for) then
-        failures[#failures + 1] = "picker source-event regression surface missing"
-    else
-        local required = {
-            bw_ghost_scythe = { "attack_swing_charge_left", "attack_swing_heavy", "attack_swing_left_diagonal" },
-            we_spear = { "attack_swing_charge_right", "attack_swing_heavy_right" },
-        }
-        for key, events in pairs(required) do
-            local got, present = _wt_dev_anim_picker.source_events_for("saltzpyre", key), {}
-            for _, event in ipairs(got or {}) do present[event] = true end
-            for _, event in ipairs(events) do
-                if not present[event] then failures[#failures + 1] = key .. " missing picker row " .. event end
-            end
-        end
     end
     for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
         local has_es, has_dr = false, false
@@ -5537,117 +5492,6 @@ _rt_register("issue569_wp_hammer_remap_orientation_scope", function()
     if contract.native_exempt_key ~= "wh_2h_hammer" then
         return "native exemption key drifted"
     end
-    local pose_contract = _wt_dev_hold_pose and _wt_dev_hold_pose._pose_contract
-    local plan_values = _wt_dev_hold_pose and _wt_dev_hold_pose._component_plan_values
-    if type(pose_contract) ~= "table" or type(plan_values) ~= "function" then
-        return "Hold-Pose composition contract missing"
-    end
-    if pose_contract.mode ~= "canonical_plus_delta"
-        or pose_contract.position_setter ~= "Unit.set_local_position"
-        or pose_contract.rotation_setter ~= "Unit.set_local_rotation"
-        or pose_contract.scale_setter ~= "Unit.set_local_scale"
-        or pose_contract.scale_mode ~= "absolute"
-        or pose_contract.scope ~= "local_player_isolated_1p_3p"
-        or pose_contract.compounds ~= false then
-        return "Hold-Pose must compose position/rotation/scale without compounding"
-    end
-    local position_only = plan_values(0, 0, 0.1, 0, 0, 0)
-    if not position_only.position or position_only.rotation or position_only.scale then
-        return "position-only Hold-Pose edit would overwrite canonical rotation"
-    end
-    local rotation_only = plan_values(0, 0, 0, 0, 0, 15)
-    if rotation_only.position or not rotation_only.rotation or rotation_only.scale then
-        return "rotation-only Hold-Pose edit would overwrite canonical position"
-    end
-    local identity = plan_values(0, 0, 0, 0, 0, 0, 1, 1, 1)
-    if identity.position or identity.rotation or identity.scale then
-        return "identity Hold-Pose sliders are not a no-op"
-    end
-end)
-
-_rt_register("issue616_hold_pose_channel_bypass_restore", function()
-    local contract = _wt_dev_hold_pose and _wt_dev_hold_pose._pose_contract
-    local policy_values = _wt_dev_hold_pose and _wt_dev_hold_pose._channel_policy_values
-    if type(contract) ~= "table" or type(policy_values) ~= "function" then
-        return "Hold-Pose channel/bypass contract missing"
-    end
-    if contract.scope ~= "local_player_isolated_1p_3p"
-            or type(contract.channels) ~= "table"
-            or not contract.channels.first_person
-            or not contract.channels.third_person then
-        return "1P/3P channels are not explicitly isolated"
-    end
-    local excluded = contract.excluded_surfaces
-    for _, key in ipairs({ "inventory_preview", "hero_preview", "bots",
-            "remote_husks", "score", "baked_transforms" }) do
-        if type(excluded) ~= "table" or excluded[key] ~= true then
-            return "tuner surface leakage guard missing: " .. key
-        end
-    end
-    local all_on = policy_values(true, true, true)
-    local one_off = policy_values(true, false, true)
-    local master_off = policy_values(false, true, true)
-    if not all_on.master or not all_on.first_person or not all_on.third_person
-            or one_off.first_person or not one_off.third_person then
-        return "channel enable state is not independent"
-    end
-    if master_off.master or master_off.first_person or master_off.third_person then
-        return "master bypass did not disable both transform channels"
-    end
-    if not one_off.preserves_settings or not one_off.restores_baseline_on_bypass
-            or contract.bypass ~= "restore_channel_baseline_without_erasing_settings" then
-        return "bypass erases values or fails to restore the canonical baseline"
-    end
-end)
-
-_rt_register("issue616_hold_pose_live_edit_delivery", function()
-    local classify = _wt_dev_hold_pose and _wt_dev_hold_pose._setting_channel
-    local delivery = _wt_dev_hold_pose and _wt_dev_hold_pose._live_delivery_contract
-    if type(classify) ~= "function" or type(delivery) ~= "table" then
-        return "Hold-Pose live edit delivery contract missing"
-    end
-    if classify("wt_dev_hp_rh_offset_y") ~= "third_person"
-            or classify("wt_dev_hp_lh_rot_roll") ~= "third_person"
-            or classify("wt_dev_hp_rh_scale_x") ~= "third_person" then
-        return "third-person position/rotation/scale edit routing drifted"
-    end
-    if classify("wt_dev_hp_fp_rh_offset_y") ~= "first_person"
-            or classify("wt_dev_hp_fp_lh_rot_roll") ~= "first_person"
-            or classify("wt_dev_hp_fp_rh_scale_x") ~= "first_person" then
-        return "first-person position/rotation/scale edit routing drifted"
-    end
-    if classify("wt_dev_hp_target_slot") ~= "both"
-            or classify("wt_dev_hp_enabled") ~= nil then
-        return "Hold-Pose non-transform setting routing is not exact"
-    end
-    if delivery.setting_dispatch ~= "channel_exact"
-            or delivery.immediate_apply ~= true
-            or delivery.bypass_preserves_values ~= true
-            or delivery.bypass_does_not_apply ~= true then
-        return "Hold-Pose immediate/bypass delivery semantics drifted"
-    end
-end)
-
-_rt_register("issue616_hold_pose_nonuniform_scale", function()
-    local pose_contract = _wt_dev_hold_pose and _wt_dev_hold_pose._pose_contract
-    local plan_values = _wt_dev_hold_pose and _wt_dev_hold_pose._component_plan_values
-    if type(pose_contract) ~= "table" or type(plan_values) ~= "function" then
-        return "Hold-Pose scale contract missing"
-    end
-    if pose_contract.scale_setter ~= "Unit.set_local_scale"
-            or pose_contract.scale_mode ~= "absolute"
-            or pose_contract.compounds ~= false then
-        return "scale must be absolute and non-compounding"
-    end
-    local scale_only = plan_values(0, 0, 0, 0, 0, 0, 0.5, 0.75, 1.25)
-    if scale_only.position or scale_only.rotation or not scale_only.scale
-            or scale_only.sx ~= 0.5 or scale_only.sy ~= 0.75 or scale_only.sz ~= 1.25 then
-        return "non-uniform scale plan clobbers another component"
-    end
-    local all = plan_values(0.1, -0.2, 0.3, -90, 180, -90, 0.5, 0.6, 0.7)
-    if not all.position or not all.rotation or not all.scale then
-        return "complete nine-value transform does not compose all components"
-    end
 end)
 
 _rt_register("issue316_kruber_longbow_zoom_contract", function()
@@ -6169,55 +6013,9 @@ _rt_register("no_redundant_bardin_1h_on_saltzpyre", function()
     if #bad > 0 then return "redundant Bardin 1h back on Saltzpyre: " .. table.concat(bad, ", ") end
 end)
 
-_rt_register("dev_picker_names_localized", function()
-    -- #159: the dev 3P Anim Picker must show DOCUMENTED localized weapon names,
-    -- never raw internal keys (the tester saw "Sienna bw_deus_01" instead of
-    -- "Sienna: Coruscation Staff" because the seven staves were missing from the
-    -- old hardcoded _WEAPON_NAME and fell back to the key). _weapon_display_name
-    -- now resolves from the Availability loc; this guards every catalog weapon.
-    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.unresolved_display_names) then
-        return "skip: picker has no unresolved_display_names()"
-    end
-    local bad = _wt_dev_anim_picker.unresolved_display_names()
-    if type(bad) == "table" and #bad > 0 then
-        return "picker weapons showing raw internal keys (no documented name): " .. table.concat(bad, ", ")
-    end
-end)
-
-_rt_register("dev_picker_group_labels_registered", function()
-    -- #159/#197 END-TO-END: the REGISTERED localized label for every picker weapon
-    -- group (the actual string VMF renders) must resolve to a real name — not a raw
-    -- internal key (#159), and not an unregistered <key>/bare setting_id (#197 — a
-    -- label registered before names could resolve). This checks the registered value
-    -- (mod:localize on the group sid), NOT a freshly-recomputed label, so it would
-    -- have CAUGHT #197 (the in-game `dev_picker_names_localized` test rebuilds fresh
-    -- and so resolved correctly even while the registered menu labels were raw).
-    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.catalog_group_keys) then
-        return "skip: picker has no catalog_group_keys()"
-    end
-    local entries = _wt_dev_anim_picker.catalog_group_keys()
-    if type(entries) ~= "table" or #entries == 0 then return "skip: empty picker catalog" end
-    local bad = {}
-    for _, e in ipairs(entries) do
-        local s = mod:localize(e.sid)
-        if type(s) ~= "string" or s == "" then
-            bad[#bad + 1] = e.weapon_key .. "=<empty>"
-        elseif s == e.sid or s:sub(1, 1) == "<" then
-            bad[#bad + 1] = e.weapon_key .. "=<unregistered>"
-        elseif s:find(e.weapon_key, 1, true) then
-            bad[#bad + 1] = e.weapon_key .. "=<raw-key>"
-        end
-    end
-    if #bad > 0 then
-        return "picker group labels not localized (registered values): " .. table.concat(bad, ", ")
-    end
-end)
-
 _rt_register("wt_loc_raw_published", function()
-    -- #197: the dev picker resolves documented weapon names by reading
-    -- mod._wt_loc_raw directly (NOT mod:localize, which errors "localization file was
-    -- not loaded" when the catalog is built before loc registration). Guard that the
-    -- localization file still publishes the raw table with the unlock entries.
+    -- Availability sorting reads the raw localization table before VMF finishes
+    -- registering localization. Guard the public owner surface stays available.
     if type(mod._wt_loc_raw) ~= "table" then
         return "mod._wt_loc_raw not published by localization file — picker names fall back to raw keys (#197)"
     end
@@ -6226,60 +6024,11 @@ _rt_register("wt_loc_raw_published", function()
     end
 end)
 
-_rt_register("dev_picker_no_inspect_dropdown", function()
-    -- User 2026-06-29: the inspect animation must NOT be a tunable picker dropdown —
-    -- the weapon just uses whatever inspect anim it already has. Guard inspect events
-    -- from creeping back into _WEAPON_ATTACKS / _SALTZ_WEAPON_ATTACKS.
-    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.inspect_attacks) then
-        return "skip: picker has no inspect_attacks()"
-    end
-    local bad = _wt_dev_anim_picker.inspect_attacks()
-    if type(bad) == "table" and #bad > 0 then
-        return "inspect events present in picker (should be removed): " .. table.concat(bad, ", ")
-    end
+_rt_register("issue635_public_beta_dev_surface_absent", function()
+    local wt = mod._wt or {}
+    if wt.dev_anim_picker ~= nil then return "dev animation picker exported in public beta" end
+    if wt.dev_hold_pose ~= nil then return "dev Hold-Pose tuner exported in public beta" end
+    if wt.port_status ~= nil then return "dev port-status owner exported in public beta" end
 end)
-
-_rt_register("issue411_dev_picker_source_events_resolve_live", function()
-    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.source_event_coverage) then
-        return "picker has no source_event_coverage()"
-    end
-    local failures, weapons, events = _wt_dev_anim_picker.source_event_coverage()
-    if #failures > 0 then return "dead picker source entries: " .. table.concat(failures, ", ") end
-    if weapons == 0 or events == 0 then
-        return string.format("picker source coverage inspected nothing (weapons=%d events=%d)",
-            weapons, events)
-    end
-end)
-
-_rt_register("saltz_billhook_set_uses_3p_events", function()
-    -- #196: the Billhook SET (F) vocab must list the billhook's anim_event_3p VALUES
-    -- (e.g. attack_swing_stab_charge), NOT its 1P anim_event names (attack_swing_charge_stab),
-    -- because the picker writes anim_event_3p. The 1P names set a 3P event the Saltzpyre
-    -- body doesn't author -> charge/heavy picks fall through to idle.
-    if not (_wt_dev_anim_picker and _wt_dev_anim_picker.set_vocab_for) then
-        return "skip: picker has no set_vocab_for()"
-    end
-    local vocab = _wt_dev_anim_picker.set_vocab_for("saltzpyre", "F")
-    if type(vocab) ~= "table" then return "skip: Billhook SET F vocab not found" end
-    local has = {}
-    for _, e in ipairs(vocab) do has[e] = true end
-    local bad = {}
-    if not has["attack_swing_stab_charge"] then bad[#bad + 1] = "missing 3P charge event attack_swing_stab_charge" end
-    for _, one_p in ipairs({ "attack_swing_charge_stab", "attack_swing_charge_down",
-                             "attack_swing_heavy_down", "attack_swing_heavy_left", "attack_swing_stab_02" }) do
-        if has[one_p] then bad[#bad + 1] = "1P-only event leaked into vocab: " .. one_p end
-    end
-    if #bad > 0 then return "Billhook SET F vocab wrong: " .. table.concat(bad, "; ") end
-end)
-
--- ============================================================
--- Dev tooling installs (v0.12.96-dev)
--- ============================================================
--- Both modules expose M.install(). Called HERE, at the bottom of wt.lua, so
--- the template patchers above have already populated `Weapons.<template>`
--- with their initial values — the anim picker reads from those live tables
--- at install time to seed its dropdown defaults.
-_wt_dev_anim_picker.install()
 
 mod:info("[mem-probe] wt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_WT) / 1024)
-_wt_dev_hold_pose.install()

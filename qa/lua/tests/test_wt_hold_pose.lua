@@ -3,7 +3,7 @@ return function(H, repo_root)
     _G.get_mod = function()
         return { get = function() return nil end }
     end
-    local path = repo_root .. "/weapon_tweaker/scripts/mods/weapon_tweaker/wt_dev_hold_pose.lua"
+    local path = repo_root .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/wt_dev_hold_pose.lua"
     local HoldPose = dofile(path)
     _G.get_mod = prior_get_mod
 

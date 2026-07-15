@@ -14,7 +14,7 @@
 --     two wield hooks (SimpleInventoryExtension / SimpleHuskInventoryExtension)
 --     that populate it
 --   * THE funnel: the Unit.animation_event hook that rewrites the fired 3P event
---   * the anim-funnel chat commands (/info /animlog /force3p /force1p) and the
+--   * the read-only /info support command and the
 --     keep-previewer pose resolver (_resolve_preview_wield_event)
 --
 -- Owned by: weapon_tweaker.lua entry point. Consumed via: mod:dofile (after the
@@ -25,7 +25,7 @@
 -- Shared state: the hot tables stay file-local upvalues HERE so the per-event
 -- funnel never indirects through mod._wt. The entry publishes the handles this
 -- module reads on its hot path -- mod._wt.feature_enabled / .local_career_name /
--- .dbg / .dev_anim_picker (+ the pre-existing .MOD_VERSION / .weapon_unlock_map
+-- .dbg (+ the pre-existing .MOD_VERSION / .weapon_unlock_map
 -- and manifest-loaded .build_3p_template_remaps)
 -- -- captured as upvalues here at load. This module EXPORTS the handles the
 -- entry's stayed code still needs (all non-hot-path reads): mod._wt.safe_has_anim
@@ -40,7 +40,6 @@ local WT  = mod._wt
 local feature_enabled     = WT.feature_enabled
 local _local_career_name  = WT.local_career_name
 local _dbg                = WT.dbg
-local _wt_dev_anim_picker = WT.dev_anim_picker
 local MOD_VERSION         = WT.MOD_VERSION
 local weapon_unlock_map   = WT.weapon_unlock_map
 local _build_3p_template_remaps = WT.build_3p_template_remaps
@@ -522,7 +521,6 @@ mod:command("info", "Show current weapon tweaker state", function()
         else remap_name = "custom" end
     end
     mod:echo("3P Remap: " .. remap_name)
-    mod:echo("Anim log: " .. (_log_anims and "ON" or "OFF"))
     if career then
         local weapons = weapon_unlock_map[career]
         if weapons then
@@ -532,60 +530,6 @@ mod:command("info", "Show current weapon tweaker state", function()
             end
             mod:echo("Weapons: " .. enabled .. "/" .. #weapons .. " enabled")
         end
-    end
-end)
-
-mod:command("animlog", "Toggle animation event logging", function()
-    _log_anims = not _log_anims
-    mod:echo("Animation logging: " .. (_log_anims and "ON" or "OFF"))
-end)
-
-mod:command("force3p", "Force a 3P animation event on local player (usage: /force3p attack_swing_stab)", function(event)
-    -- CLARIFY: targets `player.player_unit` which is actually the 3P body
-    -- (see CLAUDE.md "Animation Remapping"). Bypasses our own hook by calling
-    -- `_original_animation_event` directly so the test isn't muddied by remap
-    -- redirects — used to verify which raw events animate visibly on the
-    -- currently-loaded weapon SM (per feedback_animation_remap_rules:
-    -- has_animation_event TRUE does not guarantee visible playback).
-    if not event then mod:echo("Usage: /force3p <event_name>") return end
-    local player = Managers.player:local_player(1)
-    if not player or not player.player_unit then mod:echo("No local player unit") return end
-    local unit = player.player_unit
-    local ok_h, has = pcall(Unit.has_animation_event, unit, event)
-    has = ok_h and has
-    mod:echo("force3p: " .. event .. " (exists=" .. tostring(has) .. ")")
-    if has then
-        if _original_animation_event then
-            pcall(_original_animation_event, unit, event)
-        else
-            pcall(Unit.animation_event, unit, event)
-        end
-        mod:echo("  -> fired on player_unit")
-    else
-        mod:echo("  -> event not found on player_unit")
-    end
-end)
-
-mod:command("force1p", "Force a 1P animation event on local player's first-person unit (usage: /force1p attack_swing_stab)", function(event)
-    -- Mirror of force3p but targets the 1P hands unit captured in the wield
-    -- hook. Used to probe whether the currently-wielded weapon's 1P SM has a
-    -- visible animation for an event that's not referenced by the template
-    -- (e.g. searching for a hidden stab on bastard_sword).
-    if not event then mod:echo("Usage: /force1p <event_name>") return end
-    if not _local_fp_unit then mod:echo("No 1P unit captured (wield a weapon first)") return end
-    local unit = _local_fp_unit
-    local ok_h, has = pcall(Unit.has_animation_event, unit, event)
-    has = ok_h and has
-    mod:echo("force1p: " .. event .. " (exists=" .. tostring(has) .. ")")
-    if has then
-        if _original_animation_event then
-            pcall(_original_animation_event, unit, event)
-        else
-            pcall(Unit.animation_event, unit, event)
-        end
-        mod:echo("  -> fired on first_person_unit")
-    else
-        mod:echo("  -> event not found on first_person_unit")
     end
 end)
 
@@ -657,73 +601,6 @@ local _anim_event_remap_count = 0
 -- Unit.has_animation_event nor a successful C-call acknowledges visible clip
 -- playback, so success is deliberately labelled UNVERIFIED. One record per
 -- distinct transition tuple keeps repeated frames/swings silent (max 256).
-local _WT576_KEYS = {
-    bw_ghost_scythe = true,
-    we_spear = true,
-    -- Axe+Shield variants share one template/remap but can retain either the
-    -- vanilla donor key or their canonical CWV identity in per-unit state.
-    dr_shield_axe = true,
-    cwv_es_axe_shield = true,
-    cwv_es_axe_shield_veteran = true,
-}
-local _WT576_SOURCE = {
-    bw_ghost_scythe = {
-        attack_push=true, attack_swing_charge_left=true, attack_swing_charge_left_diagonal=true,
-        attack_swing_charge_right=true, attack_swing_heavy=true,
-        attack_swing_heavy_left_diagonal=true, attack_swing_heavy_right=true,
-        attack_swing_left=true, attack_swing_left_diagonal=true,
-        attack_swing_left_diagonal_last=true, attack_swing_right=true,
-        attack_swing_up_right=true, parry_pose=true, special_action=true, special_action_02=true,
-    },
-    we_spear = {
-        attack_push=true, attack_swing_charge_left=true, attack_swing_charge_right=true,
-        attack_swing_down_left=true, attack_swing_down_left_axe=true,
-        attack_swing_down_right=true, attack_swing_heavy=true,
-        attack_swing_heavy_right=true, attack_swing_right=true,
-        parry_pose=true, push_stab=true,
-    },
-    dr_shield_axe = {
-        attack_swing_charge=true, attack_swing_heavy=true,
-        attack_swing_charge_right_pose=true, attack_swing_heavy_right=true,
-        attack_swing_charge_left_diagonal_pose=true, attack_swing_heavy_down=true,
-    },
-    cwv_es_axe_shield = {
-        attack_swing_charge=true, attack_swing_heavy=true,
-        attack_swing_charge_right_pose=true, attack_swing_heavy_right=true,
-        attack_swing_charge_left_diagonal_pose=true, attack_swing_heavy_down=true,
-    },
-    cwv_es_axe_shield_veteran = {
-        attack_swing_charge=true, attack_swing_heavy=true,
-        attack_swing_charge_right_pose=true, attack_swing_heavy_right=true,
-        attack_swing_charge_left_diagonal_pose=true, attack_swing_heavy_down=true,
-    },
-}
-local _wt576_seen, _wt576_count = {}, 0
-
-local function _wt576_phases(key, source)
-    if key == "dr_shield_axe" or key == "cwv_es_axe_shield"
-        or key == "cwv_es_axe_shield_veteran" then
-        local phase = {
-            attack_swing_charge = "action_one.h1_charge",
-            attack_swing_heavy = "action_one.h1_committed_attack",
-            attack_swing_charge_right_pose = "action_one.h2_charge",
-            attack_swing_heavy_right = "action_one.h2_committed_attack",
-            attack_swing_charge_left_diagonal_pose = "action_one.h3_charge",
-            attack_swing_heavy_down = "action_one.h3_committed_attack",
-        }
-        return { phase[source] or "action_transition" }
-    elseif key == "we_spear" and source == "attack_swing_charge_right" then
-        return { "action_one.h1_charge_start", "action_one.h1_charge_loop" }
-    elseif key == "we_spear" and source == "attack_swing_heavy_right" then
-        return { "action_one.h1_charge_release", "action_one.h1_committed_attack" }
-    elseif source:find("charge", 1, true) then
-        return { "action_one.charge_start", "action_one.charge_loop" }
-    elseif source:find("heavy", 1, true) then
-        return { "action_one.charge_release", "action_one.committed_heavy" }
-    end
-    return { "action_transition" }
-end
-
 -- #290 automatic evidence: the report's first trace attacked we_spear after merely
 -- selecting Billhook in inventory. Capture the next ACTUAL local Kruber+Billhook attack
 -- without a command or picker toggle. One row per distinct source/target/outcome, max 48.
@@ -739,24 +616,6 @@ local function _wt290_diag(state, career, source, target, outcome, detail)
         tostring(state.template), tostring(career), tostring(source), tostring(target),
         tostring(state.remap_origin or "none"), tostring(outcome), tostring(detail or "none"),
         _wt290_count)
-end
-
-local function _wt576_diag(state, career, source, target, outcome, detail)
-    if not state or not _WT576_KEYS[state.key] or not mod:get("enable_dev_anim_picker") then return end
-    if not (_WT576_SOURCE[state.key] and _WT576_SOURCE[state.key][source]) then return end
-    for _, phase in ipairs(_wt576_phases(state.key, source)) do
-        local origin = state.remap_origin or "none"
-        local token = table.concat({ tostring(state.key), tostring(state.template), tostring(career),
-            phase, tostring(source), tostring(target), tostring(origin), tostring(outcome) }, "|")
-        if not _wt576_seen[token] and _wt576_count < 256 then
-            _wt576_seen[token] = true
-            _wt576_count = _wt576_count + 1
-            printf("[wt:576] weapon=%s template=%s career=%s phase=%s source=%s target=%s origin=%s outcome=%s detail=%s evidence=%d/256 chat=false",
-                tostring(state.key), tostring(state.template), tostring(career), phase,
-                tostring(source), tostring(target), tostring(origin), tostring(outcome),
-                tostring(detail or "none"), _wt576_count)
-        end
-    end
 end
 
 -- CLARIFY: stringified hook on the C-API class `Unit`. VMF resolves this
@@ -816,58 +675,6 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
         if reload_target then
             pcall(func, unit, reload_stance)
             return func(unit, reload_target, ...)
-        end
-    end
-
-    -- ============================================================
-    -- [wt:play] dev-picker play-path trace (v0.12.145-dev) — LOGGING ONLY.
-    -- ============================================================
-    -- Diagnose-before-mitigate: prove WHERE a picked anim_event_3p is lost
-    -- between the menu write and the engine. Scoped tightly so it stays
-    -- readable: only fires for the LOCAL 3P body, only while wielding one of the
-    -- picker's flagged-weapon templates, only for combat events (attack_/push_/
-    -- parry_), and only when the dev picker toggle is ON.
-    --
-    -- HOW IT WORKS: when the gate is active we (a) log the event the ENGINE READ
-    -- (event_name as start_action passed it — this is the live
-    -- current_action_settings.anim_event_3p the picker mutated, OR the template
-    -- default if the pick didn't take), and (b) wrap `func` so EVERY downstream
-    -- call in this hook logs the FINAL event actually handed to the engine. If
-    -- the funnel renames the picked event, the FINAL line differs from the READ
-    -- line and names the rename — that's the override hypothesis, confirmed or
-    -- refuted per event. (The one FORCE path that calls `_original_animation_event`
-    -- directly is gated on state.remap == spear_to_billhook, which never applies
-    -- to any picker weapon, so wrapping only `func` is complete coverage here.)
-    if is_local and event_name and state and state.template
-        and (event_name:sub(1, 7) == "attack_" or event_name:sub(1, 5) == "push_" or event_name:sub(1, 6) == "parry_")
-        and mod:get("enable_dev_anim_picker")
-        and _wt_dev_anim_picker and _wt_dev_anim_picker.is_picker_template
-        and _wt_dev_anim_picker.is_picker_template(state.template) then
-        -- On the 3P body the engine fires the picked anim_event_3p VALUE directly
-        -- (weapon_unit_extension.lua:512). So `event_name` here SHOULD be one of
-        -- the picker's set 3P values if the pick took. is_picked_3p tells us
-        -- whether the read event is a picked value (pick reached the engine) or a
-        -- template default (pick lost UPSTREAM — apply n==0, wrong template, or
-        -- never written). The live_3p_map dump shows what the picks currently are.
-        local is_picked_3p = _wt_dev_anim_picker.is_picked_3p_value(state.template, event_name)
-        local map = _wt_dev_anim_picker.live_3p_map(state.template)
-        local map_parts = {}
-        for src, val in pairs(map) do map_parts[#map_parts + 1] = tostring(src) .. "->" .. tostring(val) end
-        table.sort(map_parts)
-        mod:info("[wt:play] READ event=%s tmpl=%s key=%s career=%s is_picked_3p_value=%s has_event_capability_only=%s visible_playback=unverified picks_set={%s}",
-            tostring(event_name), tostring(state.template), tostring(state.key),
-            tostring(career), tostring(is_picked_3p), tostring(_safe_has_anim(unit, event_name)),
-            table.concat(map_parts, ","))
-        local _wt_play_orig_func = func
-        func = function(u, ev, ...)
-            -- Logs the FINAL event the engine receives AFTER wt's funnel. If it
-            -- differs from the read event, wt renamed it — the override
-            -- hypothesis, confirmed/refuted per swing.
-            mod:info("[wt:play] FINAL event=%s (read was %s)%s has_event_capability_only=%s visible_playback=unverified",
-                tostring(ev), tostring(event_name),
-                (tostring(ev) ~= tostring(event_name)) and " <<RENAMED BY FUNNEL>>" or " (unchanged)",
-                tostring(_safe_has_anim(u, ev)))
-            return _wt_play_orig_func(u, ev, ...)
         end
     end
 
@@ -1040,27 +847,18 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
             end
             local ok, err = pcall(func, unit, target, ...)
             if ok then
-                _wt576_diag(state, career, event_name, target,
-                    "accepted_unverified_no_observable_state_transition",
-                    "pcall_ok;has_event_is_capability_not_playback_ack")
                 _wt290_diag(state, career, event_name, target,
                     "accepted_unverified", "pcall_ok;has_event_is_capability_not_playback_ack")
             else
-                _wt576_diag(state, career, event_name, target,
-                    "animation_event_call_error", tostring(err))
                 _wt290_diag(state, career, event_name, target,
                     "animation_event_call_error", tostring(err))
             end
             return
         end
         if target and not target_capability then
-            _wt576_diag(state, career, event_name, target, "target_missing",
-                "Unit.has_animation_event=false")
             _wt290_diag(state, career, event_name, target, "target_missing",
                 "Unit.has_animation_event=false")
         elseif not target then
-            _wt576_diag(state, career, event_name, nil, "unmapped_source",
-                "source_event_has_no_remap_target")
             _wt290_diag(state, career, event_name, nil, "native_passthrough_or_unmapped",
                 _polearm_native_3p_events[event_name] and "source_is_native_on_polearm" or "source_event_has_no_remap_target")
         end

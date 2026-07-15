@@ -1,7 +1,7 @@
 return function(H, repo_root)
     local root = repo_root .. "/weapon_tweaker/scripts/mods/weapon_tweaker/"
     local unlocks = dofile(root .. "wt_unlock_data.lua").weapon_unlock_map.wh_priest
-    local status = dofile(root .. "wt_port_status.lua")
+    local status = dofile(repo_root .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/wt_port_status.lua")
     local expected = {
         es_1h_flail = true,
         wh_1h_hammer = true,
@@ -51,7 +51,7 @@ return function(H, repo_root)
     end)
 
     H.test("WT #113 Warrior Priest diagnostics are automatic and bounded", function()
-        local file = assert(io.open(root .. "_wt_diagnostics.lua", "rb"))
+        local file = assert(io.open(repo_root .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_diagnostics.lua", "rb"))
         local source = file:read("*a")
         file:close()
         H.truthy(source:find("_audit_warrior_priest_3p(false)", 1, true))

@@ -1,10 +1,10 @@
-# Blocking parity gate for the active Weapon Tweaker beta/dev streams.
+# Blocking contract gate for the active Weapon Tweaker beta/dev streams.
 #
-# `weapon_tweaker` is the canonical feature baseline. The friends-only
-# `weapon_tweaker_dev` stream must contain the same shipped Lua runtime after
-# normalizing its deliberately separate VMF id, settings namespace, script
-# path, entry filenames, version suffix, package identity, Workshop identity,
-# visibility, and preview image. No gameplay/runtime exception list exists.
+# `weapon_tweaker` is the public gameplay baseline. `weapon_tweaker_dev` keeps
+# that baseline plus an explicit tuning/diagnostic overlay. Common files outside
+# the five documented overlay owners remain byte-identical after namespace and
+# version normalization. The public tree is separately scanned so dev widgets,
+# commands, status tags, and files cannot leak back into the beta.
 
 [CmdletBinding()]
 param(
@@ -15,6 +15,31 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot '..' }
+
+$WtDevOnlyFiles = @(
+    'wt_dev_anim_picker.lua',
+    'wt_dev_hold_pose.lua',
+    'wt_port_status.lua'
+)
+$WtOverlayFiles = @(
+    '_wt_anim_remap.lua',
+    '_wt_diagnostics.lua',
+    'weapon_tweaker.lua',
+    'weapon_tweaker_data.lua',
+    'weapon_tweaker_localization.lua'
+)
+$WtPublicCommands = @(
+    'brace_to_repeater_dump',
+    'brace_to_repeater_skin',
+    'dump',
+    'dump_actions',
+    'dump_weapons',
+    'info',
+    'sm_probe',
+    'verify_wt_availability_sort',
+    'wt_dump_wielded',
+    'wt_regression_test'
+)
 
 function Normalize-WtLua {
     param([string]$Text)
@@ -47,10 +72,91 @@ function Compare-WtLuaMaps {
     $errors = @()
     foreach ($name in @($Public.Keys | Sort-Object)) {
         if (-not $Dev.ContainsKey($name)) { $errors += "dev runtime is missing $name"; continue }
-        if ($Public[$name] -cne $Dev[$name]) { $errors += "runtime drift in $name" }
+        if ($WtOverlayFiles -notcontains $name -and $Public[$name] -cne $Dev[$name]) {
+            $errors += "gameplay drift outside documented dev overlay in $name"
+        }
     }
     foreach ($name in @($Dev.Keys | Sort-Object)) {
-        if (-not $Public.ContainsKey($name)) { $errors += "undocumented dev-only runtime file $name" }
+        if (-not $Public.ContainsKey($name) -and $WtDevOnlyFiles -notcontains $name) {
+            $errors += "undocumented dev-only runtime file $name"
+        }
+    }
+    return $errors
+}
+
+function Remove-LuaComments {
+    param([string]$Text)
+    $value = $Text
+    $value = [regex]::Replace($value, '--\[==\[(?s:.*?)\]==\]', '')
+    $value = [regex]::Replace($value, '--\[\[(?s:.*?)\]\]', '')
+    $value = [regex]::Replace($value, '(?m)--[^\r\n]*\r?$', '')
+    return $value
+}
+
+function Get-WtActiveLua {
+    param([string]$Directory)
+    $parts = @()
+    foreach ($file in @(Get-ChildItem -LiteralPath $Directory -File -Filter '*.lua' | Sort-Object Name)) {
+        $parts += Remove-LuaComments ([IO.File]::ReadAllText($file.FullName, [Text.Encoding]::UTF8))
+    }
+    return ($parts -join "`n")
+}
+
+function Test-WtPublicSurface {
+    param([string]$PublicLua)
+    $errors = @()
+    foreach ($name in $WtDevOnlyFiles) {
+        if (Test-Path -LiteralPath (Join-Path $PublicLua $name)) {
+            $errors += "public beta contains dev-only file $name"
+        }
+    }
+
+    $active = Get-WtActiveLua $PublicLua
+    $forbidden = @(
+        @{ Name = 'dev animation picker'; Pattern = '\bwt_dev_anim_picker\b|\benable_dev_anim_picker\b' },
+        @{ Name = 'dev hold-pose tuner'; Pattern = '\bwt_dev_hold_pose\b|\bwt_dev_hp_[A-Za-z0-9_]+' },
+        @{ Name = 'dev port-status owner'; Pattern = '\bwt_port_status\b' },
+        @{ Name = 'dev-only command'; Pattern = 'mod:command\(\s*"(?:animlog|force1p|force3p|wt_coverage|wt_audit_[^"]+)"' },
+        @{ Name = 'dev status tag'; Pattern = '\[(?:working|untested|verify-fix(?:-coop)?|diag|diagnostics-armed|needs animations|needs offsets|confirmed working|Issue\s+\d+(?:\s*&\s*\d+)?)\]' },
+        @{ Name = 'dev menu label'; Pattern = 'Dev:\s' }
+    )
+    foreach ($rule in $forbidden) {
+        if ($active -match $rule.Pattern) { $errors += "public beta active Lua contains $($rule.Name)" }
+    }
+
+    $commands = @([regex]::Matches($active, 'mod:command\(\s*"([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+    foreach ($command in $commands) {
+        if ($WtPublicCommands -notcontains $command) { $errors += "public beta command is not read-only allowlisted: /$command" }
+    }
+    foreach ($command in $WtPublicCommands) {
+        if ($commands -notcontains $command) { $errors += "documented public support command missing: /$command" }
+    }
+
+    $dataPath = Join-Path $PublicLua 'weapon_tweaker_data.lua'
+    $locPath = Join-Path $PublicLua 'weapon_tweaker_localization.lua'
+    $data = Remove-LuaComments ([IO.File]::ReadAllText($dataPath, [Text.Encoding]::UTF8))
+    $loc = Remove-LuaComments ([IO.File]::ReadAllText($locPath, [Text.Encoding]::UTF8))
+    $locKeys = @{}
+    foreach ($match in [regex]::Matches($loc, '(?m)^\s*([A-Za-z][A-Za-z0-9_]*)\s*=')) { $locKeys[$match.Groups[1].Value] = $true }
+    foreach ($match in [regex]::Matches($loc, '\bloc\.([A-Za-z][A-Za-z0-9_]*)\s*=')) { $locKeys[$match.Groups[1].Value] = $true }
+    $settingIds = @([regex]::Matches($data, 'setting_id\s*=\s*"([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+    foreach ($settingId in $settingIds) {
+        if (-not $locKeys.ContainsKey($settingId)) { $errors += "visible public setting lacks localization owner: $settingId" }
+    }
+    return $errors
+}
+
+function Test-WtDevOverlay {
+    param([string]$DevLua)
+    $errors = @()
+    foreach ($name in $WtDevOnlyFiles) {
+        if (-not (Test-Path -LiteralPath (Join-Path $DevLua $name) -PathType Leaf)) {
+            $errors += "friends-only dev overlay is missing $name"
+        }
+    }
+    $active = Get-WtActiveLua $DevLua
+    foreach ($required in @('enable_dev_anim_picker', 'wt_dev_hp_', 'wt_dev_anim_picker', 'wt_dev_hold_pose', 'wt_port_status')) {
+        if ($active -notmatch [regex]::Escape($required)) { $errors += "friends-only dev overlay is missing symbol $required" }
     }
     return $errors
 }
@@ -59,10 +165,13 @@ function Invoke-SelfTest {
     $public = @{ 'weapon_tweaker.lua' = Normalize-WtLua 'local mod = get_mod("wt"); local MOD_VERSION = "0.12.264-beta"; mod:dofile("scripts/mods/weapon_tweaker/x")' }
     $dev = @{ 'weapon_tweaker.lua' = Normalize-WtLua 'local mod = get_mod("wt_dev"); local MOD_VERSION = "0.12.265-dev"; mod:dofile("scripts/mods/weapon_tweaker_dev/x")' }
     if (@(Compare-WtLuaMaps $public $dev).Count -ne 0) { throw 'documented stream identity differences were rejected' }
-    $dev['weapon_tweaker.lua'] += '; behavior_changed = true'
-    if (-not (@(Compare-WtLuaMaps $public $dev) -match 'runtime drift')) { throw 'runtime drift was not detected' }
-    $dev = $public.Clone(); $dev['dev_only.lua'] = 'return true'
+    $public['shared.lua'] = 'return { value = 1 }'
+    $dev['shared.lua'] = 'return { value = 2 }'
+    if (-not (@(Compare-WtLuaMaps $public $dev) -match 'gameplay drift')) { throw 'runtime drift was not detected' }
+    $dev = $public.Clone(); $dev['unexpected_dev_only.lua'] = 'return true'
     if (-not (@(Compare-WtLuaMaps $public $dev) -match 'undocumented dev-only')) { throw 'dev-only runtime file was not detected' }
+    $dev = $public.Clone(); $dev['wt_dev_anim_picker.lua'] = 'return true'
+    if (@(Compare-WtLuaMaps $public $dev).Count -ne 0) { throw 'documented dev-only file was rejected' }
     Write-Host '[check_wt_stream_parity -SelfTest] OK'
     return 0
 }
@@ -82,6 +191,8 @@ foreach ($required in @($publicLua, $devLua)) {
 
 if ($errors.Count -eq 0) {
     $errors += @(Compare-WtLuaMaps (Get-WtLuaMap $publicLua) (Get-WtLuaMap $devLua -Dev))
+    $errors += @(Test-WtPublicSurface $publicLua)
+    $errors += @(Test-WtDevOverlay $devLua)
 }
 
 $publicCfg = [IO.File]::ReadAllText((Join-Path $publicRoot 'itemV2.cfg'), [Text.Encoding]::UTF8)
@@ -115,5 +226,5 @@ if ($errors.Count -gt 0) {
     foreach ($message in $errors) { Write-Host "  X $message" -ForegroundColor Red }
     exit 2
 }
-if (-not $Quiet) { Write-Host '[check_wt_stream_parity] OK - dev runtime exactly mirrors public beta; only documented stream identity/presentation differs.' -ForegroundColor Green }
+if (-not $Quiet) { Write-Host '[check_wt_stream_parity] OK - public beta is dev-surface clean; shared gameplay files match; friends-only overlay is present.' -ForegroundColor Green }
 exit 0
