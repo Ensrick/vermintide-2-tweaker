@@ -231,7 +231,7 @@ foreach ($entry in $inventory.Mods) {
                     }
                 }
                 $fbxPath = Join-Path $modRoot 'units\cosmetics_tweaker\encarmine_hat\encarmine_hat.fbx'
-                $expectedFbxSha = 'C7EE6B0B5DBAB9CEB6DB43CF413531D6B1B425541244EA7A53C66E58B3640707'
+                $expectedFbxSha = '7F4CD4FCC517AF914B4E555EAC29B8D9E989269B9059E22F0CBA86A1B83DD932'
                 if (-not (Test-Path -LiteralPath $fbxPath -PathType Leaf)) {
                     $errors.Add("$($entry.Dir): Encarmine authored FBX missing")
                 } else {

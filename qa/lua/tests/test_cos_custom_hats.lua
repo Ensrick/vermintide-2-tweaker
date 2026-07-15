@@ -210,6 +210,22 @@ return function(H, repo_root)
         helper_file:close()
         H.truthy(helper_source:find("bmesh.ops.duplicate", 1, true))
         H.truthy(helper_source:find("bmesh.ops.reverse_faces", 1, true))
+
+        local exporter_file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/tools/encarmine_asset_pipeline/export_rigged_encarmine.py", "rb"))
+        local exporter_source = exporter_file:read("*a")
+        exporter_file:close()
+        H.truthy(exporter_source:find('apply_scale_options="FBX_SCALE_UNITS"', 1, true))
+        H.truthy(exporter_source:find("validate_round_trip(primary)", 1, true))
+        H.truthy(exporter_source:find("local/world scale=1", 1, true))
+
+        local compiled_validator_file = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/tools/encarmine_asset_pipeline/validate_compiled_scene.py", "rb"))
+        local compiled_validator_source = compiled_validator_file:read("*a")
+        compiled_validator_file:close()
+        H.truthy(compiled_validator_source:find("ENCARMINE_COMPILED_CONTRACT=OK", 1, true))
+        H.truthy(compiled_validator_source:find("relative world basis", 1, true))
+        H.truthy(compiled_validator_source:find("plume dimensions", 1, true))
     end)
 
     H.test("Encarmine spawn-only renderer covers preview live and husk paths", function()

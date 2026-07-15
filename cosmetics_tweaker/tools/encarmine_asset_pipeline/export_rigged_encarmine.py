@@ -21,6 +21,54 @@ PLUME_OBJECT = "AD1E2AED"
 ARMATURE_OBJECT = "armature object"
 
 
+def _assert_near(actual: float, expected: float, label: str, tolerance: float = 1e-5) -> None:
+    if abs(actual - expected) > tolerance:
+        raise RuntimeError(f"{label}: expected {expected}, got {actual}")
+
+
+def validate_round_trip(path: Path) -> None:
+    """Reject FBX unit-conversion drift before Stingray can compile it.
+
+    The FBX exporter can hide a 100x unit conversion on a skinned mesh while
+    preserving its apparent Blender dimensions. Stingray bakes that transform
+    a second time. Re-importing the actual artifact is therefore mandatory;
+    inspecting the source .blend alone cannot detect this failure.
+    """
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.ops.import_scene.fbx(filepath=str(path))
+
+    armor = bpy.data.objects.get("encarmine_armored")
+    plume = bpy.data.objects.get("encarmine_cloth")
+    armature = bpy.data.objects.get("encarmine_hat_armature")
+    if not armor or armor.type != "MESH":
+        raise RuntimeError("round-trip armor mesh missing")
+    if not plume or plume.type != "MESH":
+        raise RuntimeError("round-trip plume mesh missing")
+    if not armature or armature.type != "ARMATURE":
+        raise RuntimeError("round-trip armature missing")
+
+    for obj in (armor, plume, armature):
+        for axis, value in zip("xyz", obj.scale):
+            _assert_near(value, 1.0, f"{obj.name} local scale {axis}")
+    for obj in (armor, plume):
+        for row in range(3):
+            basis_length = sum(obj.matrix_world[col][row] ** 2 for col in range(3)) ** 0.5
+            _assert_near(basis_length, 1.0, f"{obj.name} world basis {row}")
+
+    if len(armor.data.polygons) != 7960:
+        raise RuntimeError(f"round-trip armor faces: expected 7960, got {len(armor.data.polygons)}")
+    if len(plume.data.polygons) != 744:
+        raise RuntimeError(f"round-trip plume faces: expected 744, got {len(plume.data.polygons)}")
+    if len(armature.data.bones) != 13:
+        raise RuntimeError(f"round-trip bones: expected 13, got {len(armature.data.bones)}")
+    expected_groups = {f"j_feather_{index:02d}_dynamic" for index in range(1, 7)}
+    actual_groups = {group.name for group in plume.vertex_groups}
+    if not expected_groups.issubset(actual_groups):
+        raise RuntimeError(f"round-trip feather groups missing: {sorted(expected_groups - actual_groups)}")
+
+    print("Encarmine FBX round-trip: local/world scale=1, armor=7960, plume=744, bones=13")
+
+
 def main() -> None:
     args = sys.argv[sys.argv.index("--") + 1 :]
     if len(args) < 2:
@@ -83,22 +131,31 @@ def main() -> None:
         axis_forward="-Z",
         axis_up="Y",
         apply_unit_scale=True,
+        # Preserve the donor's local scale-1 skinned-mesh contract. Blender's
+        # default FBX_SCALE_NONE bakes metre-to-centimetre conversion into the
+        # plume object's local transform (100x); Stingray then bakes that
+        # transform again when compiling the unit.
+        apply_scale_options="FBX_SCALE_UNITS",
         add_leaf_bones=False,
         bake_anim=False,
         path_mode="AUTO",
     )
+
+    armor_faces = len(armor.data.polygons)
+    plume_faces = len(plume.data.polygons)
+    bone_count = len(armature.data.bones)
+    validate_round_trip(primary)
 
     for mirror in destinations[1:]:
         mirror.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(primary, mirror)
 
     print(
-        f"Encarmine rig export: armor_faces={len(armor.data.polygons)} "
-        f"plume_faces={source_faces}->{len(plume.data.polygons)} "
-        f"bones={len(armature.data.bones)} outputs={len(destinations)}"
+        f"Encarmine rig export: armor_faces={armor_faces} "
+        f"plume_faces={source_faces}->{plume_faces} "
+        f"bones={bone_count} outputs={len(destinations)}"
     )
 
 
 if __name__ == "__main__":
     main()
-

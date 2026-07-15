@@ -1,5 +1,17 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.118-dev - 2026-07-15 - #612 Encarmine compiled-transform correction [verify-fix]
+
+### Fixed
+
+- Corrected the actual live regression behind the invisible feather. The v0.9.116 rig exporter used Blender's default `FBX_SCALE_NONE`, which wrote the skinned plume with an extra hidden 100x local unit conversion. Stingray's normal root conversion then left the helmet at a 100x imported world basis but compounded the plume to 10,000x. The authored texture alpha, compiled DDS, material binding, six dynamic weights, and Laurel bone rest transforms were all intact; the plume's relative compiled render transform was not.
+- Export now uses `FBX_SCALE_UNITS`, preserving scale 1 on the armor, plume, and armature while retaining 744 double-sided plume faces, all 13 Laurel bones, six dynamic feather groups, the native Laurel controller, and FadeSystem enrollment.
+- Added a mandatory post-export FBX round-trip gate plus a post-compiler bundle gate. They reject non-unit local/source basis scale, unequal compiled armor/plume basis, live plume bounds outside the Laurel-sized envelope, missing groups, and face/bone-count drift before deployment. The pipeline documentation now records this failure mode.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.118-dev`, equip **Encarmine Helmet** on Foot Knight, and inspect the feather in the inventory mannequin and live third person. Expected: the dark-charcoal feather is visible on both sides without rectangular haze, moves through the native Laurel controller, and the helmet fades with the character. Run `/cos_regression_test`; `issue612_encarmine_hat_contract` must pass.
+
 ## 0.9.117-dev - 2026-07-15 - #612 Encarmine live-material correction [verify-fix]
 
 ### Fixed
