@@ -108,12 +108,31 @@ SEPARATE key from the established flat `mod._wt_*` fields (`mod._wt_link_filter`
 | `_wt_bolt_staff_overcharge.lua` | Issue #341's hook-free Bolt Staff primary-overcharge transaction. Owns the 0.6 planner plus snapshot/apply/revert runtime for the unique `PlayerUnitStatusSettings.overcharge_values.spark` scalar. Returns its module table directly; the entry wires init, lifecycle, setting-change, disable, and runtime regression surfaces. |
 | `_wt_overcharge_presentation.lua` + `_policy` | Issue #388's cross-career Deepwood parity. The owner-side module reversibly projects `OverchargeData.we_thornsister` onto the local player's existing overcharge extension while `we_life_staff` is equipped, and lazily hooks `OverchargeBarUI.set_charge_bar_fraction` for local/spectator native colors. The pure sibling owns identity/profile/color tests. No transport is added. |
 | `_wt_flamestorm_fx_policy.lua` / `_wt_flamestorm_fx.lua` | #400 exact cross-career Flamestorm target policy plus observer-side replicated 3P flame orientation. Keeps the 3P muzzle position, replaces only particle rotation with network `aim_direction`, and owns the `WeaponSystem.rpc_start_flamethrower` / `update_synced_flamethrower_particle_effects` post-hooks. |
+| `wt_dev_hold_pose.lua` | #616 local-owner transform authoring. Owns separate first-person and third-person right/left offset, Euler rotation, and absolute scale channels; channel-local weak baseline caches; non-destructive enable/bypass/restore; per-frame apply; reset/dump commands; and its widget/localization subtree. The entry dispatches `wt_dev_hp_*` setting changes and disable cleanup. It must never target previewers, bots, husks, score presentation, or committed appearance definitions. |
 
 Pre-existing `_*.lua` / `wt_*.lua` modules (`_safe_hook`, `_wt_brett_sword_shield_buff`,
 `_wt_passive_charge`, `wt_dev_anim_picker`, `wt_dev_hold_pose`, `wt_unlock_data`,
 `wt_wield_patches`, `wt_port_status`, `weapon_tweaker_backend`) predate this split —
 leave their internals alone. The retired Big Rebalance implementation and definitions
 were deleted under #433 and remain recoverable from git history.
+
+### Hold-Pose tuner channel boundary (#616)
+
+The development tuner has two isolated local-owner channels. `first_person`
+resolves only `equipment.right_hand_wielded_unit` / `left_hand_wielded_unit`
+(or the selected slot's `*_unit_1p` fields). `third_person` resolves only the
+matching `*_wielded_unit_3p` / `*_unit_3p` fields. Each channel captures its
+own weak-keyed canonical baseline and applies position, rotation, and scale
+through separate setters.
+
+The master and channel enable switches are bypasses, not resets. The master
+defaults off and restores both cached channels when disabled. Disabling one channel restores
+only that channel's dirty units to their captured canonical/baked values and
+clears only its ephemeral baseline cache. VMF retains every numeric setting;
+re-enabling resumes with those values. `/wt_dev_hp_reset` is the sole operation
+that writes identity values to both channels. The live tuner is deliberately
+not an appearance fan-out system: inventory/hero preview, bots, remote husks,
+score/team presentation, and baked transforms remain untouched.
 
 ### Where new code goes
 

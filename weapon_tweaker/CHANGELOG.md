@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.259-dev (2026-07-14) - #616 isolated 1P/3P Hold-Pose tuning and bypass [verify-fix]
+
+- Added a distinct first-person Hold-Pose channel with independent right/left offset, Euler rotation, and absolute non-uniform scale. It resolves only the local player's 1P wield units; the existing channel resolves only local-owner 3P units.
+- Added a simple master **Enable Weapon Hold-Pose Tuner** switch plus independent **Enable first-person tuner** and **Enable third-person tuner** switches. The master defaults off. Disabling the master restores both views; disabling a channel restores only that view. Neither path zeros or erases slider values, and re-enabling resumes with the saved values.
+- Kept the tuner out of inventory/hero previews, bots, remote husks, score presentation, and committed transforms. Dump now emits separate first- and third-person tables, including bypassed values.
+- Extended the offline Lua and in-game runtime suites for channel isolation, component composition, saved-value persistence, bypass/restore behavior, and excluded-surface ownership.
+
+Enable the master and Live re-apply, tune a visible 3P value and a visible 1P value, then disable the master. Both views must immediately return to their baked poses without any numeric field changing; re-enable the master and confirm both prior values return. The per-channel switches must bypass only their own view.
+
 ## 0.12.258-dev (2026-07-14) - #616 complete Hold-Pose transforms [verify-fix]
 
 - Added independent right/left Scale X, Y, and Z controls to the dev Weapon Hold-Pose tuner. Identity is `{1, 1, 1}`; values are absolute, non-uniform, and reconstructed every apply so live re-apply cannot compound.

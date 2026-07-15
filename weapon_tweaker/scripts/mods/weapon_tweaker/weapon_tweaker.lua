@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.258-dev"
+local MOD_VERSION = "0.12.259-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4099,6 +4099,9 @@ end
 -- _wt_availability.lua in the v0.12.209-dev OOP split; on_disabled below calls
 -- them via the entry's file-local aliases from the manifest.
 mod.on_disabled = function()
+    if _wt_dev_hold_pose and _wt_dev_hold_pose.on_disabled then
+        _wt_dev_hold_pose.on_disabled()
+    end
     if weapon_backend.overcharge_presentation then pcall(weapon_backend.overcharge_presentation.restore) end
     _wt_bolt_staff_overcharge_runtime.revert()
     if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, true) end
@@ -4118,6 +4121,10 @@ mod.on_setting_changed = function(setting_id)
     elseif setting_id and setting_id:find("^wt_dev_anim_") then
         -- Dev: 3P anim picker — mutate live Weapons.<tpl> tables.
         _wt_dev_anim_picker.on_setting_changed(setting_id)
+    elseif setting_id and setting_id:find("^wt_dev_hp_") then
+        -- Hold-Pose owns immediate non-destructive bypass/restore for its
+        -- isolated first-/third-person transform channels (#616).
+        _wt_dev_hold_pose.on_setting_changed(setting_id)
     elseif setting_id == "wt_priest_punch_buff" then
         if mod.wt_apply_priest_punch_buff then mod.wt_apply_priest_punch_buff() end
     elseif setting_id == "wt_brett_sword_shield_buff" then
@@ -4129,8 +4136,6 @@ mod.on_setting_changed = function(setting_id)
             or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING then
         mod._wt_apply_axe_balance(setting_id, false)
     end
-    -- wt_dev_hp_* settings are read by the hold-pose tuner's per-frame hook
-    -- via mod:get directly, no dispatcher branch needed.
 end
 
 do
@@ -5431,7 +5436,7 @@ _rt_register("issue569_wp_hammer_remap_orientation_scope", function()
         or pose_contract.rotation_setter ~= "Unit.set_local_rotation"
         or pose_contract.scale_setter ~= "Unit.set_local_scale"
         or pose_contract.scale_mode ~= "absolute"
-        or pose_contract.scope ~= "local_player_3p_only"
+        or pose_contract.scope ~= "local_player_isolated_1p_3p"
         or pose_contract.compounds ~= false then
         return "Hold-Pose must compose position/rotation/scale without compounding"
     end
@@ -5446,6 +5451,41 @@ _rt_register("issue569_wp_hammer_remap_orientation_scope", function()
     local identity = plan_values(0, 0, 0, 0, 0, 0, 1, 1, 1)
     if identity.position or identity.rotation or identity.scale then
         return "identity Hold-Pose sliders are not a no-op"
+    end
+end)
+
+_rt_register("issue616_hold_pose_channel_bypass_restore", function()
+    local contract = _wt_dev_hold_pose and _wt_dev_hold_pose._pose_contract
+    local policy_values = _wt_dev_hold_pose and _wt_dev_hold_pose._channel_policy_values
+    if type(contract) ~= "table" or type(policy_values) ~= "function" then
+        return "Hold-Pose channel/bypass contract missing"
+    end
+    if contract.scope ~= "local_player_isolated_1p_3p"
+            or type(contract.channels) ~= "table"
+            or not contract.channels.first_person
+            or not contract.channels.third_person then
+        return "1P/3P channels are not explicitly isolated"
+    end
+    local excluded = contract.excluded_surfaces
+    for _, key in ipairs({ "inventory_preview", "hero_preview", "bots",
+            "remote_husks", "score", "baked_transforms" }) do
+        if type(excluded) ~= "table" or excluded[key] ~= true then
+            return "tuner surface leakage guard missing: " .. key
+        end
+    end
+    local all_on = policy_values(true, true, true)
+    local one_off = policy_values(true, false, true)
+    local master_off = policy_values(false, true, true)
+    if not all_on.master or not all_on.first_person or not all_on.third_person
+            or one_off.first_person or not one_off.third_person then
+        return "channel enable state is not independent"
+    end
+    if master_off.master or master_off.first_person or master_off.third_person then
+        return "master bypass did not disable both transform channels"
+    end
+    if not one_off.preserves_settings or not one_off.restores_baseline_on_bypass
+            or contract.bypass ~= "restore_channel_baseline_without_erasing_settings" then
+        return "bypass erases values or fails to restore the canonical baseline"
     end
 end)
 

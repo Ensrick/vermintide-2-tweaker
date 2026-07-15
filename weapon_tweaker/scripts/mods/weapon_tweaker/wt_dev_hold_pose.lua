@@ -3,7 +3,7 @@ wt_dev_hold_pose — Dev: Weapon Hold Pose Tuner
 ==============================================
 
 Live in-game tuning of how the currently-wielded weapon is held on the local
-player's 3P body. Composes independent position/rotation deltas plus an
+player's isolated 1P and 3P channels. Composes independent position/rotation deltas plus an
 absolute non-uniform scale over the weapon unit's captured canonical/baked
 transform each frame, then
 emits a Lua-pastable `unit_attachment_node_linking`-style snippet via the
@@ -21,9 +21,12 @@ Quaternion stack temp per frame — cheap, and we early-out when no weapon unit
 is resolvable. Per-frame writes use FRESH `Vector3` / `Quaternion` stack
 temporaries each call (we never store raw Q/V across frames — engine rule).
 
-Caveat: this is a 3P-body-side cosmetic tweak. 1P (first-person) hand pose is
-untouched. The dump command emits a degrees-and-metres snippet shaped like
-the `unit_attachment_node_linking.third_person.<kind>` arrays in
+Caveat: this is local-player development tooling only. The 1P channel resolves
+only `right/left_hand_wielded_unit`; the 3P channel resolves only the matching
+`*_3p` fields. Inventory/hero preview, bots, remote husks, score presentation,
+and baked transforms are never targeted. The dump command emits degrees-and-
+metres snippets shaped like the `unit_attachment_node_linking.first_person`
+and `.third_person.<kind>` arrays in
 weapon_tweaker.lua (see CROSS_CHARACTER_PORT_RECIPE.md § attachment_node_linking)
 plus per-frame offset / Euler fields so the lead can bake them as either a
 linking-table mutation or a one-shot pose write.
@@ -55,10 +58,15 @@ local mod = get_mod("wt")
 
 local M = {}
 
--- Weak keys keep per-unit canonical snapshots only for the lifetime of the
--- local 3P weapon unit. Scalars and QuaternionBox are safe across frames;
+-- Weak keys keep per-unit canonical snapshots only for the lifetime of each
+-- local weapon unit. The maps are channel-separated so 1P bypass/restore can
+-- never consume or mutate a 3P baseline (or vice versa). Scalars and
+-- QuaternionBox are safe across frames;
 -- raw Vector3/Quaternion/Matrix4x4 values are never retained.
-local _pose_baselines = setmetatable({}, { __mode = "k" })
+local _pose_baselines = {
+    first_person = setmetatable({}, { __mode = "k" }),
+    third_person = setmetatable({}, { __mode = "k" }),
+}
 
 -- ---------------------------------------------------------------------------
 -- Source-node enumeration helpers
@@ -127,7 +135,7 @@ end
 -- ...where hand is "right" or "left", slot_name is "slot_ranged"/"slot_melee"/
 -- whatever the player is currently wielding, and item_key is the IML key.
 -- Any failure returns nil.
-local function _resolve_wielded(target_slot, target_hand)
+local function _resolve_wielded(target_slot, target_hand, channel)
     local pm = Managers and Managers.player
     local lp = pm and pm.local_player and pm:local_player()
     local punit = lp and lp.player_unit
@@ -154,15 +162,25 @@ local function _resolve_wielded(target_slot, target_hand)
     -- ones the engine is currently attaching). If not currently wielded,
     -- pull from slot_data.<hand>_unit_3p instead.
     local current_wielded = equipment.wielded_slot
-    local right_unit_3p, left_unit_3p
+    local right_unit, left_unit
     if slot_name == current_wielded then
-        right_unit_3p = equipment.right_hand_wielded_unit_3p
-        left_unit_3p  = equipment.left_hand_wielded_unit_3p
+        if channel == "first_person" then
+            right_unit = equipment.right_hand_wielded_unit
+            left_unit  = equipment.left_hand_wielded_unit
+        else
+            right_unit = equipment.right_hand_wielded_unit_3p
+            left_unit  = equipment.left_hand_wielded_unit_3p
+        end
     else
         local slot_data = equipment.slots and equipment.slots[slot_name]
         if slot_data then
-            right_unit_3p = slot_data.right_unit_3p
-            left_unit_3p  = slot_data.left_unit_3p
+            if channel == "first_person" then
+                right_unit = slot_data.right_unit_1p
+                left_unit  = slot_data.left_unit_1p
+            else
+                right_unit = slot_data.right_unit_3p
+                left_unit  = slot_data.left_unit_3p
+            end
         end
     end
 
@@ -176,19 +194,19 @@ local function _resolve_wielded(target_slot, target_hand)
     -- Pick the hand. "both" returns whichever one exists first; the apply
     -- loop iterates over hands separately to cover both when "both" is set.
     if target_hand == "left" then
-        if left_unit_3p and Unit.alive(left_unit_3p) then
-            return left_unit_3p, "left", slot_name, item_key
+        if left_unit and Unit.alive(left_unit) then
+            return left_unit, "left", slot_name, item_key
         end
     elseif target_hand == "right" then
-        if right_unit_3p and Unit.alive(right_unit_3p) then
-            return right_unit_3p, "right", slot_name, item_key
+        if right_unit and Unit.alive(right_unit) then
+            return right_unit, "right", slot_name, item_key
         end
     else  -- "both" — return right first (most common single-handed case)
-        if right_unit_3p and Unit.alive(right_unit_3p) then
-            return right_unit_3p, "right", slot_name, item_key
+        if right_unit and Unit.alive(right_unit) then
+            return right_unit, "right", slot_name, item_key
         end
-        if left_unit_3p and Unit.alive(left_unit_3p) then
-            return left_unit_3p, "left", slot_name, item_key
+        if left_unit and Unit.alive(left_unit) then
+            return left_unit, "left", slot_name, item_key
         end
     end
     return nil, nil, slot_name, item_key
@@ -216,13 +234,13 @@ end
 -- Pose application
 -- ---------------------------------------------------------------------------
 
--- Read one hand's nine transform values (p = "rh" | "lh"). The keys are written
+-- Read one channel/hand's nine transform values. The keys are written
 -- out LITERALLY per hand: the mod-lint save-restore check pairs each
 -- /wt_dev_hp_reset `mod:set("KEY", ...)` with a literal `mod:get("KEY")` in
 -- this file, and a concatenated `"wt_dev_hp_"..p..` key is invisible to it
 -- (it reads as the truncated literal `"wt_dev_hp_"`).
-local function _read_sliders(p)
-    if p == "rh" then
+local function _read_sliders(channel, hand)
+    if channel == "third_person" and hand == "right" then
         return mod:get("wt_dev_hp_rh_offset_x") or 0,
                mod:get("wt_dev_hp_rh_offset_y") or 0,
                mod:get("wt_dev_hp_rh_offset_z") or 0,
@@ -232,8 +250,8 @@ local function _read_sliders(p)
                mod:get("wt_dev_hp_rh_scale_x") or 1,
                mod:get("wt_dev_hp_rh_scale_y") or 1,
                mod:get("wt_dev_hp_rh_scale_z") or 1
-    end
-    return mod:get("wt_dev_hp_lh_offset_x") or 0,
+    elseif channel == "third_person" then
+        return mod:get("wt_dev_hp_lh_offset_x") or 0,
            mod:get("wt_dev_hp_lh_offset_y") or 0,
            mod:get("wt_dev_hp_lh_offset_z") or 0,
            mod:get("wt_dev_hp_lh_rot_pitch") or 0,
@@ -241,14 +259,34 @@ local function _read_sliders(p)
            mod:get("wt_dev_hp_lh_rot_roll")  or 0,
            mod:get("wt_dev_hp_lh_scale_x") or 1,
            mod:get("wt_dev_hp_lh_scale_y") or 1,
-           mod:get("wt_dev_hp_lh_scale_z") or 1
+               mod:get("wt_dev_hp_lh_scale_z") or 1
+    elseif hand == "right" then
+        return mod:get("wt_dev_hp_fp_rh_offset_x") or 0,
+               mod:get("wt_dev_hp_fp_rh_offset_y") or 0,
+               mod:get("wt_dev_hp_fp_rh_offset_z") or 0,
+               mod:get("wt_dev_hp_fp_rh_rot_pitch") or 0,
+               mod:get("wt_dev_hp_fp_rh_rot_yaw")   or 0,
+               mod:get("wt_dev_hp_fp_rh_rot_roll")  or 0,
+               mod:get("wt_dev_hp_fp_rh_scale_x") or 1,
+               mod:get("wt_dev_hp_fp_rh_scale_y") or 1,
+               mod:get("wt_dev_hp_fp_rh_scale_z") or 1
+    end
+    return mod:get("wt_dev_hp_fp_lh_offset_x") or 0,
+           mod:get("wt_dev_hp_fp_lh_offset_y") or 0,
+           mod:get("wt_dev_hp_fp_lh_offset_z") or 0,
+           mod:get("wt_dev_hp_fp_lh_rot_pitch") or 0,
+           mod:get("wt_dev_hp_fp_lh_rot_yaw")   or 0,
+           mod:get("wt_dev_hp_fp_lh_rot_roll")  or 0,
+           mod:get("wt_dev_hp_fp_lh_scale_x") or 1,
+           mod:get("wt_dev_hp_fp_lh_scale_y") or 1,
+           mod:get("wt_dev_hp_fp_lh_scale_z") or 1
 end
 
 -- True when every Hold-Pose slider is at identity: position/rotation zero and
 -- scale one. Returning a tuned component to identity restores its captured
 -- baseline once; subsequent frames are a true no-op.
-local function _pose_is_default(p)
-    local ox, oy, oz, pitch_deg, yaw_deg, roll_deg, sx, sy, sz = _read_sliders(p)
+local function _pose_is_default(channel, hand)
+    local ox, oy, oz, pitch_deg, yaw_deg, roll_deg, sx, sy, sz = _read_sliders(channel, hand)
     return ox == 0 and oy == 0 and oz == 0
        and pitch_deg == 0 and yaw_deg == 0 and roll_deg == 0
        and sx == 1 and sy == 1 and sz == 1
@@ -268,8 +306,8 @@ local function _component_plan_values(ox, oy, oz, pitch_deg, yaw_deg, roll_deg, 
         sx = sx, sy = sy, sz = sz,
     }
 end
-local function _component_plan(p)
-    return _component_plan_values(_read_sliders(p))
+local function _component_plan(channel, hand)
+    return _component_plan_values(_read_sliders(channel, hand))
 end
 M._component_plan = _component_plan
 M._component_plan_values = _component_plan_values
@@ -279,18 +317,24 @@ M._pose_contract = {
     rotation_setter = "Unit.set_local_rotation",
     scale_setter = "Unit.set_local_scale",
     scale_mode = "absolute",
-    scope = "local_player_3p_only",
+    scope = "local_player_isolated_1p_3p",
+    channels = { first_person = true, third_person = true },
+    excluded_surfaces = {
+        inventory_preview = true, hero_preview = true, bots = true,
+        remote_husks = true, score = true, baked_transforms = true,
+    },
+    bypass = "restore_channel_baseline_without_erasing_settings",
     compounds = false,
 }
 
-local function _capture_baseline(weapon_unit)
+local function _capture_baseline(weapon_unit, channel)
     local ok_pos, pos = pcall(Unit.local_position, weapon_unit, 0)
     local ok_rot, rot = pcall(Unit.local_rotation, weapon_unit, 0)
     local ok_scale, scale = pcall(Unit.local_scale, weapon_unit, 0)
     -- #569 owns an explicit canonical+half-turn rotation for tracked WP-remap
     -- units. Query that authoritative pose so capture is correct regardless of
     -- hook ordering; unrelated local units keep their live canonical rotation.
-    if mod._wt569_desired_rotation_for_unit then
+    if channel == "third_person" and mod._wt569_desired_rotation_for_unit then
         local ok_569, desired_569 = pcall(mod._wt569_desired_rotation_for_unit, weapon_unit)
         if ok_569 and desired_569 then
             rot, ok_rot = desired_569, true
@@ -306,7 +350,7 @@ local function _capture_baseline(weapon_unit)
         rotation_dirty = false,
         scale_dirty = false,
     }
-    _pose_baselines[weapon_unit] = row
+    _pose_baselines[channel][weapon_unit] = row
     return row
 end
 
@@ -320,13 +364,14 @@ end
 -- DEFER-TO-BAKED: with no cached dirty component, the identity sliders do not
 -- capture or write anything. A dirty component returning to zero restores its
 -- captured baseline exactly once, then becomes a no-op.
-local function _apply_pose_to(weapon_unit, p)
+local function _apply_pose_to(weapon_unit, channel, hand)
     if not weapon_unit then return false end
     if not Unit.alive(weapon_unit) then return false end
-    local plan = _component_plan(p)
-    local row = _pose_baselines[weapon_unit]
+    local plan = _component_plan(channel, hand)
+    local channel_baselines = _pose_baselines[channel]
+    local row = channel_baselines[weapon_unit]
     if not row and not plan.position and not plan.rotation and not plan.scale then return false end
-    row = row or _capture_baseline(weapon_unit)
+    row = row or _capture_baseline(weapon_unit, channel)
     if not row then return false end
 
     local plan_key = tostring(plan.position) .. "/" .. tostring(plan.rotation)
@@ -334,8 +379,8 @@ local function _apply_pose_to(weapon_unit, p)
     if row.last_plan ~= plan_key then
         row.last_plan = plan_key
         pcall(printf,
-            "[wt:616] hold-pose compose position=%s rotation=%s scale=%s base=canonical_or_baked compounds=false scope=local_3p",
-            tostring(plan.position), tostring(plan.rotation), tostring(plan.scale))
+            "[wt:616] hold-pose compose channel=%s hand=%s position=%s rotation=%s scale=%s base=canonical_or_baked compounds=false",
+            channel, hand, tostring(plan.position), tostring(plan.rotation), tostring(plan.scale))
     end
 
     local wrote = false
@@ -380,9 +425,10 @@ local function _apply_pose_to(weapon_unit, p)
     return wrote
 end
 
-local function _restore_cached_poses()
+local function _restore_channel(channel)
     local restored = 0
-    for unit, row in pairs(_pose_baselines) do
+    local channel_baselines = _pose_baselines[channel]
+    for unit, row in pairs(channel_baselines) do
         local ok_alive, alive = pcall(Unit.alive, unit)
         if ok_alive and alive then
             if row.position_dirty then
@@ -397,22 +443,52 @@ local function _restore_cached_poses()
                 if pcall(Unit.set_local_scale, unit, 0, scale) then restored = restored + 1 end
             end
         end
-        _pose_baselines[unit] = nil
+        channel_baselines[unit] = nil
     end
     return restored
 end
 
+local function _restore_cached_poses()
+    return _restore_channel("first_person") + _restore_channel("third_person")
+end
+
+local function _channel_enabled(channel)
+    if mod:get("wt_dev_hp_enabled") ~= true then return false end
+    if channel == "first_person" then
+        return mod:get("wt_dev_hp_enable_1p") == true
+    end
+    return mod:get("wt_dev_hp_enable_3p") ~= false
+end
+
+local function _channel_policy_values(master_enabled, enable_1p, enable_3p)
+    return {
+        master = master_enabled == true,
+        first_person = master_enabled == true and enable_1p == true,
+        third_person = master_enabled == true and enable_3p ~= false,
+        preserves_settings = true,
+        restores_baseline_on_bypass = true,
+    }
+end
+M._channel_policy_values = _channel_policy_values
+
 -- Apply each hand's pose from ITS OWN sliders, independently. No hand
 -- dropdown, no "both" mode — RH sliders drive the right-hand unit, LH sliders
 -- drive the left-hand unit, each gated by its own defer-to-baked guard.
-local function _apply_pose_all()
+local function _apply_channel(channel)
+    if not _channel_enabled(channel) then return false end
     local target_slot = mod:get("wt_dev_hp_target_slot") or "auto"
     local applied = false
-    local u_r = select(1, _resolve_wielded(target_slot, "right"))
-    if u_r then applied = _apply_pose_to(u_r, "rh") or applied end
-    local u_l = select(1, _resolve_wielded(target_slot, "left"))
-    if u_l then applied = _apply_pose_to(u_l, "lh") or applied end
+    local u_r = select(1, _resolve_wielded(target_slot, "right", channel))
+    if u_r then applied = _apply_pose_to(u_r, channel, "right") or applied end
+    local u_l = select(1, _resolve_wielded(target_slot, "left", channel))
+    if u_l then applied = _apply_pose_to(u_l, channel, "left") or applied end
     return applied
+end
+
+local function _apply_pose_all()
+    local applied_1p = _apply_channel("first_person")
+    local applied_3p = _apply_channel("third_person")
+    return applied_1p or applied_3p
 end
 
 -- ---------------------------------------------------------------------------
@@ -427,45 +503,50 @@ local function _dump_snippet()
     local source_node = mod:get("wt_dev_hp_source_node") or "j_righthand"
     local career = _local_career()
 
-    -- One entry per hand: p = slider prefix, hand = resolve label, src = source bone.
+    -- One entry per hand. Both channels are dumped even when bypassed so a
+    -- disable/enable round-trip never discards authored values.
     local HANDS = {
-        { p = "rh", hand = "right", src = source_node },
-        { p = "lh", hand = "left",  src = "j_lefthand" },
+        { hand = "right", src = source_node },
+        { hand = "left",  src = "j_lefthand" },
+    }
+    local CHANNELS = {
+        { key = "first_person", table_name = "_custom_first_person" },
+        { key = "third_person", table_name = "_custom_third_person" },
     }
 
     mod:info("-- ==== wt Hold Pose dump ====")
     mod:info("-- character=%s  slot=%s  kind=%s", career, tostring(target_slot), tostring(target_kind))
-    mod:info("local _custom_third_person = {")
+    for _, channel in ipairs(CHANNELS) do
+        mod:info("-- channel=%s enabled=%s", channel.key, tostring(_channel_enabled(channel.key)))
+        mod:info("local %s = {", channel.table_name)
+        for _, h in ipairs(HANDS) do
+            local ox, oy, oz, pitch_deg, yaw_deg, roll_deg, sx, sy, sz =
+                _read_sliders(channel.key, h.hand)
+            local resolved_unit, hand, slot_name, item_key =
+                _resolve_wielded(target_slot, h.hand, channel.key)
+            local non_default = not _pose_is_default(channel.key, h.hand)
 
-    for _, h in ipairs(HANDS) do
-        local p = h.p
-        local ox, oy, oz, pitch_deg, yaw_deg, roll_deg, sx, sy, sz = _read_sliders(p)
-
-        local resolved_unit, hand, slot_name, item_key = _resolve_wielded(target_slot, h.hand)
-        local non_default = not _pose_is_default(p)
-
-        -- Emit a block when this hand has a resolved unit OR non-default sliders.
-        if resolved_unit or non_default then
-            hand      = hand      or h.hand
-            slot_name = slot_name or target_slot
-            item_key  = item_key  or "<unknown>"
-            mod:info("    -- hand=%s  weapon=%s  slot=%s  source_node=%s",
-                tostring(hand), tostring(item_key), tostring(slot_name), tostring(h.src))
-            mod:info("    -- Sliders: offset_xyz=(%.3f, %.3f, %.3f) m  rot_pyr=(%.1f, %.1f, %.1f) deg",
-                ox, oy, oz, pitch_deg, yaw_deg, roll_deg)
-            mod:info("    -- Scale: scale_xyz=(%.3f, %.3f, %.3f) absolute", sx, sy, sz)
-            mod:info("    {")
-            mod:info("        source = %q,", h.src)
-            mod:info("        target = 0,")
-            mod:info("        offset = { %.3f, %.3f, %.3f },", ox, oy, oz)
-            mod:info("        rotation = { pitch = %.1f, yaw = %.1f, roll = %.1f },  -- degrees, Euler XYZ",
-                pitch_deg, yaw_deg, roll_deg)
-            mod:info("        scale = { %.3f, %.3f, %.3f },  -- absolute, non-compounding", sx, sy, sz)
-            mod:info("    },")
+            if resolved_unit or non_default then
+                hand      = hand      or h.hand
+                slot_name = slot_name or target_slot
+                item_key  = item_key  or "<unknown>"
+                mod:info("    -- hand=%s  weapon=%s  slot=%s  source_node=%s",
+                    tostring(hand), tostring(item_key), tostring(slot_name), tostring(h.src))
+                mod:info("    -- Sliders: offset_xyz=(%.3f, %.3f, %.3f) m  rot_pyr=(%.1f, %.1f, %.1f) deg",
+                    ox, oy, oz, pitch_deg, yaw_deg, roll_deg)
+                mod:info("    -- Scale: scale_xyz=(%.3f, %.3f, %.3f) absolute", sx, sy, sz)
+                mod:info("    {")
+                mod:info("        source = %q,", h.src)
+                mod:info("        target = 0,")
+                mod:info("        offset = { %.3f, %.3f, %.3f },", ox, oy, oz)
+                mod:info("        rotation = { pitch = %.1f, yaw = %.1f, roll = %.1f },  -- degrees, Euler XYZ",
+                    pitch_deg, yaw_deg, roll_deg)
+                mod:info("        scale = { %.3f, %.3f, %.3f },  -- absolute, non-compounding", sx, sy, sz)
+                mod:info("    },")
+            end
         end
+        mod:info("}")
     end
-
-    mod:info("}")
     mod:info("-- Apply position/rotation as deltas and scale as absolute (per hand):")
     mod:info("--   Unit.set_local_position(unit, 0, base_pos + Vector3(offset_x, offset_y, offset_z))")
     mod:info("--   Unit.set_local_rotation(unit, 0, Quaternion.multiply(base_rot, Quaternion.from_euler_angles_xyz(pitch, yaw, roll)))")
@@ -495,6 +576,11 @@ function M.build_widget_tree()
                 },
             },
             {
+                setting_id = "wt_dev_hp_enabled",
+                type = "checkbox",
+                default_value = false,
+            },
+            {
                 setting_id = "wt_dev_hp_target_kind",
                 type = "dropdown",
                 default_value = "wielded",
@@ -510,6 +596,11 @@ function M.build_widget_tree()
                 type = "dropdown",
                 default_value = "j_righthand",
                 options = source_node_options,
+            },
+            {
+                setting_id = "wt_dev_hp_enable_3p",
+                type = "checkbox",
+                default_value = true,
             },
             -- RIGHT-hand pose sliders (drive the right_unit_3p independently).
             {
@@ -670,6 +761,47 @@ function M.build_widget_tree()
                 },
             },
             {
+                setting_id = "wt_dev_hp_1p_group",
+                type = "group",
+                sub_widgets = {
+                    {
+                        setting_id = "wt_dev_hp_enable_1p",
+                        type = "checkbox",
+                        default_value = false,
+                    },
+                    {
+                        setting_id = "wt_dev_hp_fp_rh_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "wt_dev_hp_fp_rh_offset_x", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_fp_rh_offset_y", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_fp_rh_offset_z", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_fp_rh_rot_pitch", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_fp_rh_rot_yaw", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_fp_rh_rot_roll", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_fp_rh_scale_x", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                            { setting_id = "wt_dev_hp_fp_rh_scale_y", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                            { setting_id = "wt_dev_hp_fp_rh_scale_z", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                        },
+                    },
+                    {
+                        setting_id = "wt_dev_hp_fp_lh_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "wt_dev_hp_fp_lh_offset_x", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_fp_lh_offset_y", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_fp_lh_offset_z", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_fp_lh_rot_pitch", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_fp_lh_rot_yaw", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_fp_lh_rot_roll", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_fp_lh_scale_x", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                            { setting_id = "wt_dev_hp_fp_lh_scale_y", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                            { setting_id = "wt_dev_hp_fp_lh_scale_z", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                        },
+                    },
+                },
+            },
+            {
                 -- Live re-apply gate. When false, the per-frame hook is a no-op
                 -- and the user must `/wt_dev_hp_apply` for a one-shot write
                 -- (or `/wt_dump_hold_pose` to print the snippet without
@@ -697,9 +829,11 @@ end
 function M.loc_keys()
     return {
         wt_dev_hold_pose      = { en = "Dev: Weapon Hold Pose Tuner" },
+        wt_dev_hp_enabled     = { en = "Enable Weapon Hold-Pose Tuner" },
         wt_dev_hp_target_slot = { en = "Target slot" },
         wt_dev_hp_target_kind = { en = "Linking-table kind (for dump)" },
         wt_dev_hp_source_node = { en = "Source node (3P body bone)" },
+        wt_dev_hp_enable_3p      = { en = "Enable third-person tuner" },
         wt_dev_hp_rh_group       = { en = "Right hand" },
         wt_dev_hp_rh_offset_x    = { en = "RH Offset X (metres)" },
         wt_dev_hp_rh_offset_y    = { en = "RH Offset Y (metres)" },
@@ -720,6 +854,28 @@ function M.loc_keys()
         wt_dev_hp_lh_scale_x     = { en = "LH Scale X (absolute)" },
         wt_dev_hp_lh_scale_y     = { en = "LH Scale Y (absolute)" },
         wt_dev_hp_lh_scale_z     = { en = "LH Scale Z (absolute)" },
+        wt_dev_hp_1p_group          = { en = "First-person transform" },
+        wt_dev_hp_enable_1p         = { en = "Enable first-person tuner" },
+        wt_dev_hp_fp_rh_group       = { en = "First-person right hand" },
+        wt_dev_hp_fp_rh_offset_x    = { en = "1P RH Offset X (metres)" },
+        wt_dev_hp_fp_rh_offset_y    = { en = "1P RH Offset Y (metres)" },
+        wt_dev_hp_fp_rh_offset_z    = { en = "1P RH Offset Z (metres)" },
+        wt_dev_hp_fp_rh_rot_pitch   = { en = "1P RH Rotation pitch (deg, Euler X)" },
+        wt_dev_hp_fp_rh_rot_yaw     = { en = "1P RH Rotation yaw (deg, Euler Y)" },
+        wt_dev_hp_fp_rh_rot_roll    = { en = "1P RH Rotation roll (deg, Euler Z)" },
+        wt_dev_hp_fp_rh_scale_x     = { en = "1P RH Scale X (absolute)" },
+        wt_dev_hp_fp_rh_scale_y     = { en = "1P RH Scale Y (absolute)" },
+        wt_dev_hp_fp_rh_scale_z     = { en = "1P RH Scale Z (absolute)" },
+        wt_dev_hp_fp_lh_group       = { en = "First-person left hand" },
+        wt_dev_hp_fp_lh_offset_x    = { en = "1P LH Offset X (metres)" },
+        wt_dev_hp_fp_lh_offset_y    = { en = "1P LH Offset Y (metres)" },
+        wt_dev_hp_fp_lh_offset_z    = { en = "1P LH Offset Z (metres)" },
+        wt_dev_hp_fp_lh_rot_pitch   = { en = "1P LH Rotation pitch (deg, Euler X)" },
+        wt_dev_hp_fp_lh_rot_yaw     = { en = "1P LH Rotation yaw (deg, Euler Y)" },
+        wt_dev_hp_fp_lh_rot_roll    = { en = "1P LH Rotation roll (deg, Euler Z)" },
+        wt_dev_hp_fp_lh_scale_x     = { en = "1P LH Scale X (absolute)" },
+        wt_dev_hp_fp_lh_scale_y     = { en = "1P LH Scale Y (absolute)" },
+        wt_dev_hp_fp_lh_scale_z     = { en = "1P LH Scale Z (absolute)" },
         wt_dev_hp_live_apply  = { en = "Live re-apply every frame" },
     }
 end
@@ -736,6 +892,10 @@ function M.install()
     -- would need a separate hook target — out of scope for v1, document
     -- the limitation.)
     mod:hook_safe("StateInGameRunning", "update", function(self, dt, t)
+        -- Bypass is restorative, not destructive. Polling makes the restore
+        -- robust even when another settings surface bypasses on_setting_changed.
+        if not _channel_enabled("first_person") then _restore_channel("first_person") end
+        if not _channel_enabled("third_person") then _restore_channel("third_person") end
         if not mod:get("wt_dev_hp_live_apply") then return end
         _apply_pose_all()
     end)
@@ -762,7 +922,9 @@ function M.install()
             mod:echo("[wt_dev_hp] dumped hold-pose snippet -- see console log")
         end)
 
-    -- Quick reset to identity (offset/rotation zero, scale one).
+    -- Quick reset to identity (offset/rotation zero, scale one) for both
+    -- channels. This is intentionally distinct from bypass: the enable
+    -- toggles never call this command and therefore never erase saved values.
     mod:command("wt_dev_hp_reset",
         "Reset Hold-Pose sliders (both hands) to identity transform.",
         function()
@@ -784,6 +946,24 @@ function M.install()
             mod:set("wt_dev_hp_lh_scale_x", 1)
             mod:set("wt_dev_hp_lh_scale_y", 1)
             mod:set("wt_dev_hp_lh_scale_z", 1)
+            mod:set("wt_dev_hp_fp_rh_offset_x", 0)
+            mod:set("wt_dev_hp_fp_rh_offset_y", 0)
+            mod:set("wt_dev_hp_fp_rh_offset_z", 0)
+            mod:set("wt_dev_hp_fp_rh_rot_pitch", 0)
+            mod:set("wt_dev_hp_fp_rh_rot_yaw",   0)
+            mod:set("wt_dev_hp_fp_rh_rot_roll",  0)
+            mod:set("wt_dev_hp_fp_rh_scale_x", 1)
+            mod:set("wt_dev_hp_fp_rh_scale_y", 1)
+            mod:set("wt_dev_hp_fp_rh_scale_z", 1)
+            mod:set("wt_dev_hp_fp_lh_offset_x", 0)
+            mod:set("wt_dev_hp_fp_lh_offset_y", 0)
+            mod:set("wt_dev_hp_fp_lh_offset_z", 0)
+            mod:set("wt_dev_hp_fp_lh_rot_pitch", 0)
+            mod:set("wt_dev_hp_fp_lh_rot_yaw",   0)
+            mod:set("wt_dev_hp_fp_lh_rot_roll",  0)
+            mod:set("wt_dev_hp_fp_lh_scale_x", 1)
+            mod:set("wt_dev_hp_fp_lh_scale_y", 1)
+            mod:set("wt_dev_hp_fp_lh_scale_z", 1)
             local restored = _restore_cached_poses()
             -- mod:set from non-on_setting_changed paths updates the store
             -- but the open widget doesn't refresh until view re-open (see
@@ -795,8 +975,40 @@ function M.install()
         end)
 
     mod:info("[wt_dev_hp] Dev: Weapon Hold Pose Tuner installed -- "
-        .. "live-apply per-frame, /wt_dev_hp_apply for one-shot, "
+        .. "isolated 1P/3P channels with non-destructive bypass, live-apply per-frame, /wt_dev_hp_apply for one-shot, "
         .. "/wt_dump_hold_pose to dump a snippet, /wt_dev_hp_reset to identity.")
+end
+
+function M.on_setting_changed(setting_id)
+    if setting_id == "wt_dev_hp_enabled" then
+        if mod:get("wt_dev_hp_enabled") ~= true then
+            local restored = _restore_cached_poses()
+            pcall(printf, "[wt:616] tuner master bypass restored=%d values_preserved=true", restored)
+        else
+            local applied = _apply_pose_all()
+            pcall(printf, "[wt:616] tuner master enabled values_restored=true applied=%s", tostring(applied))
+        end
+    elseif setting_id == "wt_dev_hp_enable_1p" then
+        if not _channel_enabled("first_person") then
+            local restored = _restore_channel("first_person")
+            pcall(printf, "[wt:616] tuner bypass channel=first_person restored=%d values_preserved=true", restored)
+        else
+            local applied = _apply_channel("first_person")
+            pcall(printf, "[wt:616] tuner enabled channel=first_person values_restored=true applied=%s", tostring(applied))
+        end
+    elseif setting_id == "wt_dev_hp_enable_3p" then
+        if not _channel_enabled("third_person") then
+            local restored = _restore_channel("third_person")
+            pcall(printf, "[wt:616] tuner bypass channel=third_person restored=%d values_preserved=true", restored)
+        else
+            local applied = _apply_channel("third_person")
+            pcall(printf, "[wt:616] tuner enabled channel=third_person values_restored=true applied=%s", tostring(applied))
+        end
+    end
+end
+
+function M.on_disabled()
+    return _restore_cached_poses()
 end
 
 return M
