@@ -22,6 +22,13 @@ pwsh -NoProfile -File qa/check_lua_unit_tests.ps1 -SelfTest
   `check_rt_textual_invariants.ps1`.
 - Keep repository metadata and cross-file policy in the PowerShell QA checks.
 
+Optional local provenance fixtures, such as a sibling checkout of the
+decompiled vanilla source, must be registered with `H.test_if`. A missing
+fixture is reported as an explicit skip so a clean clone remains reproducible.
+Optional checks may strengthen source provenance only: every production
+behavior still needs a deterministic repository-owned test or regression
+sentinel that runs in CI.
+
 The first suite exercises the existing Bestiary & Armory attack-label helper:
 stable sorting/filtering is fully pure, while ranged-label lookup uses only a
 single test-local `Localize` seam. Tests load the production module directly;

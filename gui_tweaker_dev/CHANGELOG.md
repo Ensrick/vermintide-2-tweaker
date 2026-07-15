@@ -1,5 +1,22 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.275-dev (2026-07-15) -- #528 remove CKC vanilla Options integration [verify-fix]
+
+### Why
+
+The user superseded the prior bridge design after the Options renderer crash: vanilla Options must remain completely stock, regardless of whether Crosshair Kill Confirmation is installed.
+
+### Changed
+
+- Removed the CKC Options bridge, checkbox/render policies, five CKC-owned `OptionsView` hooks, gear widget/material passes, native kill-confirm suppression, and Mod Tweaker focus redirect.
+- Removed CKC mutation from the shared Video-profile list hook. Non-Video definitions now pass to vanilla by the original table identity without writes.
+- Kept CKC settings only in CKC's own VMF page and the existing Mod Tweaker Interface > HUD fold.
+- Replaced bridge-positive tests and diagnostics with `issue528_ckc_vanilla_options_isolated`, which asserts the production bridge modules/hooks/materials/redirect are absent and the non-Video definition path is identity-preserving.
+
+### Test
+
+With CKC installed, open Options > Gameplay. The Crosshair Kill Confirmation row must remain the stock multi-option control with no GUT gear, checkbox conversion, suppression, or redirect. CKC's VMF page and Mod Tweaker HUD fold must remain editable. Run `/gut_regression_test`; `issue528_ckc_vanilla_options_isolated` must pass. Solo, one tester.
+
 ## 0.2.274-dev (2026-07-15) -- #619 Foot Knight secondary melee compatibility [verify-fix]
 
 - Replaced GUT's hardcoded Slayer/Grail Knight saved-loadout exception with the live career slot-capability map used by vanilla backend validation.

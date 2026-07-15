@@ -26,7 +26,13 @@ function Find-ModLuas {
     Get-ChildItem -Path $repoRoot -Filter "*.lua" -Recurse -File -ErrorAction SilentlyContinue `
         | Where-Object {
             $p = $_.FullName
-            $p -notlike "*\_archive\*" `
+            # A command belongs to a VMF mod only when it lives below the
+            # canonical <mod>/scripts/mods/<mod>/ source seam.  The old
+            # repo-wide scan also classified qa/lua fixtures as a mod named
+            # "qa", so literal command strings in tests produced false
+            # cross-mod collisions and kept CI red (2026-07-15 audit).
+            $p -match '[\\/]scripts[\\/]mods[\\/][^\\/]+[\\/]' `
+                -and $p -notlike "*\_archive\*" `
                 -and $p -notlike "*\bundleV2\*" `
                 -and $p -notlike "*\.build\*" `
                 -and $p -notlike "*\.temp\*" `

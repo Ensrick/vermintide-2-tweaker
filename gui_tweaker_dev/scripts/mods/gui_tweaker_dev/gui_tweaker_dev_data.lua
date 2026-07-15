@@ -626,10 +626,8 @@ local options_data = {
                         tooltip       = "gut_mt_auto_collapse_tooltip",
                     },
                     -- (#528) The former gut_ckc_options_bridge availability toggle
-                    -- (issue 313) is GONE: the Crosshair Kill Confirmation bridge is
-                    -- an implicit feature, active whenever CKC is installed and
-                    -- togglable (_gut_ckc_bridge.lua). The old saved value is left
-                    -- orphaned in mods_settings (harmless).
+                    -- stays retired. CKC is surfaced only inside its own VMF page
+                    -- and Mod Tweaker; vanilla Options is deliberately untouched.
                 },
             },
         },

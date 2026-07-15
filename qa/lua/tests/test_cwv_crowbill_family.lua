@@ -9,24 +9,31 @@ return function(H, repo_root)
         return source
     end
 
+    local function exists(path)
+        local file = io.open(path, "rb")
+        if file then file:close() end
+        return file ~= nil
+    end
+
     local function row_for(catalog, key)
         for _, row in ipairs(catalog or {}) do
             if row.key == key then return row end
         end
     end
 
-    H.test("CWV Crowbill source keys match vanilla definitions", function()
+    local source_root = repo_root .. "/../Vermintide-2-Source-Code/scripts/settings/equipment/"
+    H.test_if(exists(source_root .. "item_master_list_paperweight.lua"),
+        "CWV Crowbill source keys match vanilla definitions", function()
         H.equal(family.SOURCE_ITEM, "bw_1h_crowbill")
         H.equal(family.SOURCE_TEMPLATE, "one_handed_crowbill")
         H.equal(family.SOURCE_SKIN_TABLE, "bw_1h_crowbill_skins")
-        local source_root = repo_root .. "/../Vermintide-2-Source-Code/scripts/settings/equipment/"
         local iml = read(source_root .. "item_master_list_paperweight.lua")
         local template = read(source_root .. "weapon_templates/1h_crowbills.lua")
         H.truthy(iml:find("ItemMasterList.bw_1h_crowbill =", 1, true))
         H.truthy(iml:find('skin_combination_table = "bw_1h_crowbill_skins"', 1, true))
         H.truthy(iml:find('template = "one_handed_crowbill"', 1, true))
         H.truthy(template:find("one_handed_crowbill = weapon_template", 1, true))
-    end)
+        end, "optional decompiled vanilla source is not present in this clean clone")
 
     H.test("CWV Crowbill identities defaults fallback and approved models are exact", function()
         H.equal(#family.VARIANTS, 2)

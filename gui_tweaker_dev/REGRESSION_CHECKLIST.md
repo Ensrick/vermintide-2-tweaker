@@ -89,14 +89,12 @@ Last updated: 2026-07-14.
 - [ ] Re-enter the official realm and confirm its loadout rows were not changed by the modded test.
 - [ ] `/gut_regression_test` passes `native_loadouts_la_cosmetic_outer_capture`; the log contains no `BU cosmetic capture SKIP` for successfully equipped LA cosmetics.
 
-## CKC native Options checkbox (#528 follow-up)
+## CKC vanilla Options isolation (#528)
 
-- [ ] Scroll until the CKC row enters/leaves the visible mask repeatedly; no `Material checkbox_checked not found in Gui` crash occurs.
-- [ ] With CKC installed and togglable, Options > Gameplay renders Crosshair Kill Confirmation as one native checkbox, never an On/Off dropdown.
-- [ ] Checking/unchecking the box live-enables/disables CKC and does not re-enable vanilla kill confirmation.
-- [ ] The cog remains visible beside the checkbox, clears the scrollbar, and focuses Mod Tweaker > Interface > HUD > Crosshair Kill Confirmation.
-- [ ] With CKC absent or non-togglable, the untouched stock multi-option dropdown renders.
-- [ ] `/gut_regression_test` passes `ckc_bridge_uses_native_checkbox`.
+- [ ] With CKC installed, Options > Gameplay renders the stock Crosshair Kill Confirmation row exactly as it does without GUT.
+- [ ] No CKC gear, checkbox conversion, redirect, row suppression, or native-setting overwrite appears in vanilla Options.
+- [ ] CKC's own VMF page and Mod Tweaker > Interface > HUD > Crosshair Kill Confirmation remain editable.
+- [ ] `/gut_regression_test` passes `issue528_ckc_vanilla_options_isolated`.
 
 ---
 

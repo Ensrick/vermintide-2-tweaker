@@ -3,6 +3,15 @@ return function(H, repo_root)
         .. "/career_tweaker/scripts/mods/career_tweaker/_crt_bardin_disabler_probe.lua"
     local source_root = repo_root .. "/../Vermintide-2-Source-Code/scripts/"
 
+    local function exists(path)
+        local file = io.open(path, "rb")
+        if file then file:close() end
+        return file ~= nil
+    end
+
+    local source_fixture = source_root .. "settings/player_movement_settings.lua"
+    local has_vanilla_source = exists(source_fixture)
+
     local function read(path)
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
@@ -41,7 +50,8 @@ return function(H, repo_root)
         H.truthy(source:find("local result = func(self, t, unit, blackboard)", 1, true))
     end)
 
-    H.test("CRT #440 source contract has no Bardin-specific dodge branch", function()
+    H.test_if(has_vanilla_source,
+        "CRT #440 source contract has no Bardin-specific dodge branch", function()
         local movement = read(source_root .. "settings/player_movement_settings.lua")
         local dodge = read(source_root
             .. "unit_extensions/default_player_unit/states/player_character_state_dodging.lua")
@@ -51,9 +61,10 @@ return function(H, repo_root)
         H.equal(dodge:find("dwarf_ranger", 1, true), nil)
         H.truthy(dodge:find("movement_settings_table.dodging.distance", 1, true))
         H.truthy(dodge:find("status_extension:set_is_dodging(true)", 1, true))
-    end)
+        end, "optional decompiled vanilla source is not present in this clean clone")
 
-    H.test("CRT #440 diagnostics cover each distinct disabler boundary", function()
+    H.test_if(has_vanilla_source,
+        "CRT #440 diagnostics cover each distinct disabler boundary", function()
         local pack = read(source_root
             .. "entity_system/systems/behaviour/nodes/bt_pack_master_attack_action.lua")
         local corruptor = read(source_root
@@ -67,5 +78,5 @@ return function(H, repo_root)
         H.truthy(prepare:find("Unit.world_position(blackboard.target_unit, 0) + Vector3(0, 0, 0.2)", 1, true))
         H.truthy(gutter:find('local radius = 1', 1, true))
         H.truthy(gutter:find('Unit.node(unit, "j_neck")', 1, true))
-    end)
+        end, "optional decompiled vanilla source is not present in this clean clone")
 end

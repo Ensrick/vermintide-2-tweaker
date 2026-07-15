@@ -31,6 +31,19 @@ $baselinePath = Join-Path $PSScriptRoot "baselines\file_sizes.json"
 $overTarget = @()
 $overHard = @()
 
+function Test-GeneratedPureDataLua([string]$path) {
+    # PROJECT_STANDARDS section 2.1 exempts pure data.  Recognize only the
+    # narrow generator contract: an explicit DO NOT HAND-EDIT banner followed
+    # by a top-level table return.  Generated logic remains subject to the
+    # normal limit, while catalogues such as Character Dialogue's 34k stable
+    # event rows do not require an artificial code-module split.
+    $head = @(Get-Content -LiteralPath $path -TotalCount 10 -ErrorAction Stop)
+    if ($head.Count -eq 0 -or $head[0] -notmatch 'AUTO-GENERATED.+DO NOT HAND-EDIT') {
+        return $false
+    }
+    return [bool]($head | Where-Object { $_ -match '^\s*return\s*\{' } | Select-Object -First 1)
+}
+
 function Find-ModLuas {
     Get-ChildItem -Path $repoRoot -Filter "*.lua" -Recurse -File -ErrorAction SilentlyContinue `
         | Where-Object {
@@ -48,7 +61,8 @@ function Find-ModLuas {
                 -and $p -notlike "*.lua.processed" `
                 -and $_.Name -notmatch "^_cosmetic_unlocks" `
                 -and $_.Name -notmatch "_localization\.lua$" `
-                -and $_.Name -notmatch "^item_master_list_"
+                -and $_.Name -notmatch "^item_master_list_" `
+                -and -not (Test-GeneratedPureDataLua $_.FullName)
         }
 }
 

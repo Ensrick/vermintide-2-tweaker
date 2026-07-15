@@ -67,6 +67,21 @@ function Harness.test(name, body)
     tests[#tests + 1] = { name = name, body = body }
 end
 
+function Harness.test_if(condition, name, body, reason)
+    assert(type(condition) == "boolean", "test condition must be a boolean")
+    assert(type(name) == "string" and name ~= "", "test name must be a non-empty string")
+    assert(type(body) == "function", "test body must be a function")
+    if condition then
+        tests[#tests + 1] = { name = name, body = body }
+    else
+        tests[#tests + 1] = {
+            name = name,
+            skipped = true,
+            reason = reason or "optional fixture unavailable",
+        }
+    end
+end
+
 function Harness.equal(actual, expected, message)
     if actual ~= expected then
         error((message or "values differ") .. ": expected " .. render(expected) .. ", got " .. render(actual), 2)
@@ -90,14 +105,20 @@ function Harness.run(options)
     local failed = 0
 
     for _, test_case in ipairs(tests) do
-        local ok, failure = xpcall(test_case.body, debug.traceback)
-        if ok then
+        if test_case.skipped then
             if not options.quiet then
-                io.write("  [PASS] ", test_case.name, "\n")
+                io.write("  [SKIP] ", test_case.name, " -- ", test_case.reason, "\n")
             end
         else
-            failed = failed + 1
-            io.stderr:write("  [FAIL] ", test_case.name, "\n", tostring(failure), "\n")
+            local ok, failure = xpcall(test_case.body, debug.traceback)
+            if ok then
+                if not options.quiet then
+                    io.write("  [PASS] ", test_case.name, "\n")
+                end
+            else
+                failed = failed + 1
+                io.stderr:write("  [FAIL] ", test_case.name, "\n", tostring(failure), "\n")
+            end
         end
     end
 

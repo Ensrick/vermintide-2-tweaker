@@ -384,9 +384,9 @@ return {
     gut_mt_auto_collapse_tooltip = {
         en = "In the Mod Tweaker, keeps only one section open at a time, so opening a section closes the others at the same level. Turn off to expand sections independently (on by default).",
     },
-    -- (#528) The gut_ckc_options_bridge availability toggle (issue 313) was retired:
-    -- the Crosshair Kill Confirmation bridge is implicit, active whenever the CKC
-    -- mod is installed and togglable. Its loc keys are gone with the widget.
+    -- (#528) The gut_ckc_options_bridge availability toggle and the later implicit
+    -- vanilla-Options bridge are both retired. CKC remains in its own VMF page and
+    -- the Mod Tweaker HUD fold; no bridge localization belongs here.
 
     -- ============================================================
     -- Loadout Manager -- issue #175 (modded-scoped store itself is implicit/always-on)

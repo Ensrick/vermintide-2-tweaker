@@ -137,7 +137,7 @@ local suites = {
     "test_gut_simple_ui_bounds",
     "test_gut_hud_drag_geometry",
     "test_mod_tweaker_slider_steps",
-    "test_gut_ckc_checkbox",
+    "test_gut_ckc_options_isolation",
     "test_gt_chest_pickup_probe",
     "test_gt_teleport_loop_policy",
     "test_cos_glow_lifecycle",

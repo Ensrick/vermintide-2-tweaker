@@ -6,18 +6,26 @@ return function(H, repo_root)
         return source
     end
 
-    H.test("Ranger Dual Axes preview uses the non-Slayer dual-wield stance", function()
+    local function exists(path)
+        local file = io.open(path, "rb")
+        if file then file:close() end
+        return file ~= nil
+    end
+
+    local source_root = repo_root .. "/../Vermintide-2-Source-Code/scripts/settings/equipment/weapon_templates/"
+
+    H.test_if(exists(source_root .. "dual_wield_axes.lua"),
+        "Ranger Dual Axes preview uses the non-Slayer dual-wield stance", function()
         local patches = dofile(repo_root
             .. "/weapon_tweaker/scripts/mods/weapon_tweaker/wt_wield_patches.lua")
         H.equal(patches.bulk.dual_wield_hammers_template.dr_ranger, nil)
         H.equal(patches.bulk.dual_wield_axes_template_1.dr_ranger, nil)
 
-        local source_root = repo_root .. "/../Vermintide-2-Source-Code/scripts/settings/equipment/weapon_templates/"
         local axes = read(source_root .. "dual_wield_axes.lua")
         local hammers = read(source_root .. "dual_wield_hammers.lua")
         H.truthy(axes:find('weapon_template.wield_anim = "to_dual_axes"', 1, true))
         H.truthy(hammers:find('weapon_template.wield_anim = "to_dual_hammers"', 1, true))
-    end)
+        end, "optional decompiled vanilla source is not present in this clean clone")
 
     H.test("Ranger Dual Axes corrects only the exact preview tuple", function()
         local main = read(repo_root

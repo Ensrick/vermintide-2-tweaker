@@ -69,12 +69,11 @@ following the UI Tweaks model:
 - **Do NOT** whitelist `"Crosshair Kill Confirmation"` in `_MY_MODS` (that is the current
   bug — it produces a top-level CKC tab).
 - Surface CKC's options as rows / a sub-`group` under the HUD category. Because CKC is a live
-  external mod, drive it live via VMF (`get_mod("VMF").mod_state_changed`, and the CKC mod's
-  own `:set`/`:get`) — the same live-bridge `_gut_ckc_bridge.lua` already uses for the
-  vanilla-menu takeover.
-- **The vanilla-Options gear** (`_gut_ckc_bridge.lua`) that opens the Mod Tweaker must focus
-  the **HUD category**, not a CKC tab. `mod._gut_mt_focus_request` must carry a
-  category/anchor target, not the mod name as a tab id.
+  external mod, read/write the CKC mod's own settings through its `:set`/`:get` API.
+- **Do not integrate CKC into vanilla Options.** No row replacement, checkbox conversion,
+  gear, focus redirect, native-setting suppression, widget/material injection, or CKC-owned
+  `OptionsView` hook is permitted (#528 user decision, 2026-07-14). CKC controls belong only
+  to CKC's VMF page and this Mod Tweaker HUD fold.
 
 ## Decision test (apply every time)
 
@@ -86,7 +85,7 @@ Is this one of the author's own Tweaker-series mods (shipped by us, in the Tweak
            (crosshair/HUD stuff -> Interface/HUD; etc.)
          - NEVER add it to _MY_MODS
          - NEVER give it a top-level collapsible of its own
-         - any "open in Mod Tweaker" bridge focuses the CATEGORY, not a tab
+         - do not modify vanilla Options to provide a shortcut into the integration
 ```
 
 ## Mutually-exclusive option groups (#446)

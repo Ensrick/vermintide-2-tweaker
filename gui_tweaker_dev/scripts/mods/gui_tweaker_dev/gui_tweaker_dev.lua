@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.274-dev"
+local MOD_VERSION = "0.2.275-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2936,80 +2936,41 @@ _rt_register("mod_tweaker_no_integrated_toplevel_tabs", function()
     end
 end)
 
-_rt_register("ckc_bridge_module_wired", function()
-    -- The bridge module published its marker + API table at load (regardless of whether
-    -- the CKC mod itself is installed).
-    if mod._GUT_CKC_BRIDGE_MARKER ~= "gut-ckc-bridge-313" then
-        return "mod._GUT_CKC_BRIDGE_MARKER missing/wrong (bridge module not loaded)"
+_rt_register("issue528_ckc_vanilla_options_isolated", function()
+    -- User decision 2026-07-14: CKC belongs only to its own VMF page and the
+    -- Mod Tweaker fold. Production must never hook, rewrite, augment, suppress,
+    -- or redirect the vanilla Options row. Source checks are split so this
+    -- regression cannot match its own needles; retail without io safely skips.
+    if mod._gut_ckc_bridge ~= nil or mod._GUT_CKC_BRIDGE_MARKER ~= nil then
+        return "#528 CKC vanilla-Options bridge API was published"
     end
-    if type(mod._gut_ckc_bridge) ~= "table" then
-        return "mod._gut_ckc_bridge table missing"
-    end
-end)
-
-_rt_register("ckc_bridge_implicit_no_toggle", function()
-    -- (#528) The CKC bridge is IMPLICIT (active whenever CKC is installed + togglable).
-    -- The retired gut_ckc_options_bridge availability toggle must stay gone: no widget
-    -- in the data file, and the bridge module must not read the setting id. (Inverse of
-    -- the pre-#528 ckc_bridge_loc_keys check, which REQUIRED the key.) Split needles;
-    -- unreadable source => silent skip.
     local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local dir = src:match("^(.*[/\\])[^/\\]*$")
     if not dir then return end
-    local retired = "gut_ckc_options" .. "_bridge"
-    local data_txt = _gut_read_all(dir .. "gui_tweaker_dev_data.lua")
-    if data_txt and data_txt:find('"' .. retired .. '"', 1, true) then
-        return "retired availability toggle " .. retired .. " re-added to the data file (#528: the bridge is implicit)"
-    end
-    local br_txt = _gut_read_all(dir .. "_gut_ckc_bridge.lua")
-    if br_txt and br_txt:find('"' .. retired .. '"', 1, true) then
-        return "_gut_ckc_bridge.lua reads " .. retired .. " again (#528: no availability gate; _is_active = CKC presence only)"
-    end
-end)
-
-_rt_register("ckc_bridge_uses_native_checkbox", function()
-    local bridge = mod._gut_ckc_bridge
-    local policy = bridge and bridge.widget_policy
-    if type(policy) ~= "table" or type(policy.prepare_definition) ~= "function" then
-        return "CKC native-checkbox policy missing (#528 follow-up)"
-    end
-    local row = { setting_name = "crosshair_kill_confirm", widget_type = "drop_down" }
-    local token = policy.prepare_definition({ row }, "crosshair_kill_confirm", true)
-    if not token or row.widget_type ~= "checkbox" then
-        return "CKC row was not redirected through native checkbox factory"
-    end
-    policy.restore_definition(token)
-    if row.widget_type ~= "drop_down" then
-        return "CKC row definition was not restored after native list build"
-    end
-    local content = { flag = false }
-    policy.restore_checkbox(content, true)
-    if policy.checkbox_value(content) ~= true then
-        return "CKC checkbox does not round-trip content.flag"
-    end
-    local render = bridge and bridge.render_policy
-    if type(render) ~= "table" or type(render.harden) ~= "function" then
-        return "CKC renderer-safe checkbox policy missing (#528 crash regression)"
-    end
-    local widget = {
-        content = { flag = false, checkbox = "checkbox_unchecked" },
-        style = { checkbox = { size = { 16, 16 } } },
-        element = { passes = {
-            { pass_type = "local_offset", offset_function = function(_, _, c)
-                c.checkbox = c.flag and "checkbox_checked" or "checkbox_unchecked"
-            end },
-            { pass_type = "texture", style_id = "checkbox", texture_id = "checkbox" },
-        } },
+    local forbidden = {
+        "_gut_ckc_" .. "bridge",
+        "_gut_ckc_" .. "widget_policy",
+        "_gut_ckc_" .. "render_policy",
+        "cb_crosshair_" .. "kill_confirm",
+        "gut_ckc_" .. "gear",
+        "prepare_settings_" .. "definition",
+        "_gut_mt_focus_" .. "request",
     }
-    if not render.harden(widget) then
-        return "CKC borrowed checkbox could not be hardened"
+    for _, fn in ipairs({ "_gut_video_profiles.lua", "_mod_tweaker_view.lua" }) do
+        local txt = _gut_read_all(dir .. fn)
+        if txt then
+            for _, needle in ipairs(forbidden) do
+                if txt:find(needle, 1, true) then
+                    return "#528 " .. fn .. " still carries CKC Options bridge surface: " .. needle
+                end
+            end
+        end
     end
-    widget.content.flag = true
-    widget.element.passes[1].offset_function(nil, nil, widget.content, nil)
-    if widget.content.checkbox ~= "matchmaking_checkbox" then
-        return "CKC native offset restored a missing raw checkbox material"
+    local video = _gut_read_all(dir .. "_gut_video_profiles.lua")
+    if video and not video:find("local built_definition = definition", 1, true) then
+        return "#528 non-Video Options definitions no longer pass through by identity"
     end
 end)
 
@@ -3037,64 +2998,6 @@ _rt_register("hud_collapsibles_hold_first_position", function()
         local txt = _gut_read_all(dir .. fn)
         if txt and not txt:find(splice_needle, 1, true) then
             return fn .. " lost the " .. splice_needle .. " head-of-HUD splice (#527: CKC group must lead the HUD child block)"
-        end
-    end
-end)
-
-_rt_register("ckc_gear_left_of_field_clears_scrollbar", function()
-    -- (#313) The vanilla-Options cog must sit in the gutter LEFT of the On/Off field, clear
-    -- of the page scrollbar (user report 2026-07-11 "overflows into the scrollbar"). Assert
-    -- _append_gear carries the left-gutter marker AND no longer uses the old right-of-row
-    -- "+ ROW_W + 10" placement that overlapped the scrollbar. Split needles; unreadable
-    -- source => silent skip (retail sandbox has no io -- #511).
-    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local dir = src:match("^(.*[/\\])[^/\\]*$")
-    if not dir then return end
-    local br_txt = _gut_read_all(dir .. "_gut_ckc_bridge.lua")
-    if not br_txt then return end
-    local gutter_needle = "CKC-GEAR-LEFT-GUTTER" .. "-313"
-    if not br_txt:find(gutter_needle, 1, true) then
-        return "_gut_ckc_bridge.lua lost the " .. gutter_needle ..
-            " left-gutter cog placement -- the cog would overflow the page scrollbar again (#313)"
-    end
-    -- The old placement anchored the cog to the row's RIGHT edge (sz[1] + 10). Its return
-    -- (the scrollbar overlap) must not come back.
-    local old_needle = "(sz[1] or 1300) + " .. "10"
-    if br_txt:find(old_needle, 1, true) then
-        return "_gut_ckc_bridge.lua still places the cog at row-right (" .. old_needle ..
-            ") -- it overlaps the scrollbar; place it left of the field (#313)"
-    end
-end)
-
-_rt_register("ckc_three_surface_sync_precedence", function()
-    -- (#311) The three surfaces (vanilla row / gut Mod Tweaker HUD group / CKC's own VMF page)
-    -- converge on one source of truth. Assert (1) the bridge header documents the precedence
-    -- (marker [CKC-SYNC-PRECEDENCE-311]) and (2) the Mod Tweaker write-through fires the owner
-    -- mod's on_setting_changed live -- _cat_set calls mod_obj.set(id, value, true) so a HUD-group
-    -- edit reaches CKC (the own-or-pin doctrine). Split needles; unreadable source => skip.
-    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local dir = src:match("^(.*[/\\])[^/\\]*$")
-    if not dir then return end
-    local br_txt = _gut_read_all(dir .. "_gut_ckc_bridge.lua")
-    if br_txt then
-        local prec_needle = "CKC-SYNC-PRECEDENCE" .. "-311"
-        if not br_txt:find(prec_needle, 1, true) then
-            return "_gut_ckc_bridge.lua header lost the " .. prec_needle ..
-                " three-surface sync precedence (#311)"
-        end
-    end
-    local st_txt = _gut_read_all(dir .. "_mod_tweaker_state.lua")
-    if st_txt then
-        -- _cat_set must fire the owner's on_setting_changed (3rd arg true) so a HUD-group
-        -- CKC edit writes THROUGH to the CKC mod live.
-        local wt_needle = "mod_obj.set, mod_obj, setting_id, value, " .. "true"
-        if not st_txt:find(wt_needle, 1, true) then
-            return "_mod_tweaker_state.lua _cat_set no longer live-fires on_setting_changed" ..
-                " (mod_obj.set ... true) -- Mod Tweaker HUD-group edits would not reach CKC (#311)"
         end
     end
 end)
@@ -3454,16 +3357,6 @@ do
     end
 end
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_diag_optionsview")
-
--- (#313) Crosshair Kill Confirmation options-menu bridge. When the CKC mod
--- ("Crosshair Kill Confirmation") is installed + togglable, takes over the vanilla
--- crosshair_kill_confirm dropdown as an On/Off toggle for the mod, forces the vanilla
--- marker off (remembering + restoring the prior group), and adds a gear that opens the
--- Mod Tweaker on the CKC tab. Self-wires: chains on_all_mods_loaded + on_setting_changed
--- at dofile time (this line is the ONLY main-file contribution). No-op when CKC is absent.
--- Must dofile AFTER on_setting_changed (~632) + the on_all_mods_loaded chain (~2001), both
--- well above here. See _gut_ckc_bridge.lua.
-pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_ckc_bridge")
 
 -- (#340) All-language display support: DETECT-AND-DEFER only. The source mod
 -- "Support All Languages" (Workshop 3232229691) ships a CUSTOM ~32 MB CJK font

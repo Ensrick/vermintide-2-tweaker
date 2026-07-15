@@ -46,7 +46,6 @@ Key ours:
 | `gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_gui_material_guard.lua` | The repo's Gui-material crash-class mitigation: one consolidated `UIRenderer.create` hook that DROPS non-resident materials and INJECTS keep-only atlases when resident (`:298-305` hook, `:135-293` `_prepare`) |
 | `gui_tweaker_dev/.../gui_tweaker_dev.lua:1083-1318` | Custom-view registration: `_attach_view` into `IngameUI.views`, transition closure injected into `package.loaded["scripts/ui/views/ingame_ui_settings"].transitions`, `Managers.ui:handle_transition` opener |
 | `gui_tweaker_dev/.../_mod_tweaker_view.lua` | The canonical full custom view (borrowed renderer, own scenegraph, own input service, full IngameUI view interface) |
-| `gui_tweaker_dev/.../_gut_ckc_bridge.lua` | Issue #313 worked example: OptionsView `cb_*` takeover + widget augmentation via UIWidget re-init (`:166-220`, `:317-321`) |
 | `crafting_in_modded_dev/.../crafting_in_modded_dev.lua:2108-2556` + `:4078` | Weave-forge (Athanor) mid-mission enablement: viewport/env/HDR-renderer hooks + parent-state `update` driver |
 | `crafting_in_modded_dev/.../_accessory_craft_panel.lua` | Own-scenegraph button overlay nested in a vanilla window (drawn off `HeroWindowWeaveProperties._draw`) |
 | `cosmetics_tweaker/.../_glow_picker.lua` (+ hooks `cosmetics_tweaker.lua:9602-9640`) | The proven own-scenegraph popup overlay pattern |
@@ -231,8 +230,6 @@ prefer data fixes or lazy registration (memory
 | Custom view interface | Implement AT MINIMUM: `update(dt,t)`, `input_service()`, `on_enter(params)`, `on_exit()`, `destroy()`; optional: `exit(return_to_game)`, `transitioning()`, `post_update*` | `IngameUI.destroy` calls the OPEN view's `on_exit` UNGUARDED (`ingame_ui.lua:234-240`); `_menu_blocking_information` calls `input_service()` unguarded (`:770`). Full reference impl: `_mod_tweaker_view.lua:1776-1957` |
 | Hero window draw/update | `mod:hook_safe("HeroWindowX", "_draw"/"draw", ...)` to piggy-back an own-scenegraph overlay; get renderer from `self._ui_top_renderer or self._ui_renderer or self.ui_top_renderer or self.ui_renderer` (naming differs per window: customization uses underscore `hero_window_item_customization.lua:1006`, cosmetics loadout does not `:167`) | Never inject `UIWidgets.create_default_button` into a host window's draw arrays (screen-covering rect / corner placement / double-fire - memory `reference_vt2_menu_button_overlay_pattern`); many windows have no `_widgets`, they draw `_top_widgets`/`_bottom_widgets`/`_*_hdr_widgets` |
 | Per-frame widget mutation in a window | Hook the PARENT state's `update` (e.g. `HeroViewStateWeaveForge.update`), find the window in `state._active_windows` | A child window's own `update` fires before `_widgets`/`_widgets_by_name` exist (memory `reference_vt2_widget_timing_pattern`) |
-| OptionsView single-entry takeover | Hook the SYNTHESIZED named methods `cb_<setting_name>`, `cb_<setting_name>_setup`, `cb_<setting_name>_saved_value` - real methods created per entry by `generate_settings` (`options_view_settings.lua:1298-1333`) | Changes STAGE via `_set_setting` (`options_view.lua:1825`) and only commit on Apply. Worked example: `_gut_ckc_bridge.lua` (#313) |
-| OptionsView widget augmentation | Wrap `build_drop_down_widget`/`build_checkbox_widget` (`options_view.lua:1270`, `:1483`), append passes+content+style, then RE-INIT: `return UIWidget.init({ element = { passes = passes }, content = content, style = style, offset = widget.offset })` (`_gut_ckc_bridge.lua:215-219`) | `pass_data` is a fixed array (`ui_widget.lua:19-26`) - in-place pass appends index past it. `widget.content.definition` is stamped AFTER the build hook returns (`options_view.lua:1108`), so it lands on your re-inited widget automatically |
 | Preview worlds | `MenuWorldPreviewer.equip_item`/`_spawn_item` for keep inventory; `LootItemUnitPreviewer.spawn_units` (full `mod:hook`, NOT hook_safe) for the skin browser | HOOK THE DERIVED CLASS: `class.lua:51-57` copies parent methods at definition time, so `HeroPreviewer` hooks never fire on `MenuWorldPreviewer` instances (repo CLAUDE.md "Three Weapon Rendering Paths"); cosmetics hooks BOTH (`cosmetics_tweaker.lua:5310`, `:5346`, `:5455-5456`) |
 | Button sounds | `host_window:_play_sound("Play_hud_select")` - forwards to the view state's `play_sound` | Do NOT resolve wwise off `music_world`; not registered in nested view contexts (memory `reference_vt2_ui_button_sound_use_window_play_sound`) |
 | HUD components | `ingame_hud:component("<ClassName>")` from an `IngameUI.update` hook_safe | hud_ui classes are mission-lazy; string hooks fail at the keep with a red VMF error (memory `reference_vmf_hud_ui_class_hook_fails_at_keep`) - patch DATA or register lazily |
@@ -342,8 +339,8 @@ non-negotiable 8). gut documents its whole-mod grep in each hook site
 What our code already does RIGHT (do not "improve" away): borrowed-renderer +
 own-scenegraph overlays instead of widget injection (`_glow_picker.lua`,
 `_accessory_craft_panel.lua`); full-interface custom view with origin-capture
-exit (`_mod_tweaker_view.lua`); cb_ takeover + UIWidget re-init for options rows
-(`_gut_ckc_bridge.lua`); hooking BOTH previewer classes
+exit (`_mod_tweaker_view.lua`); leaving CKC's vanilla Options definitions untouched
+(#528); hooking BOTH previewer classes
 (`cosmetics_tweaker.lua:5310/:5346`); parent-state update drivers
 (`crafting_in_modded_dev.lua:4078`); atlas-safe row materials
 (`_mod_tweaker_definitions.lua`).
