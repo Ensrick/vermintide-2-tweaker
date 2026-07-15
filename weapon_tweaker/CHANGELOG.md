@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.262-beta (2026-07-15) - public beta rollup
+
+- Cut the current active Tweaker: Weapons line as a public beta. This is a release-track promotion of the already-built, committed, and uploaded `0.12.261-dev` payload; it does not introduce another gameplay change between the final dev candidate and this beta.
+- Included the current working line: CWV Combat Style ownership/default integration (#620); opt-in 1H Axe, Cog Hammer, and Mace and Sword balance controls (#621/#622/#623); isolated first-/third-person Hold-Pose channels and scale/bypass controls (#616); Crowbill and Ranger preview-idle corrections (#603/#606); current CWV ownership, availability, identity, appearance-transform, animation, and weapon-tweak integrations documented in the entries below.
+- Preserved public defaults: every new balance nerf remains default-off; the Hold-Pose tuner master remains default-off; CWV-dependent defaults remain conditional on CWV readiness and preserve user overrides.
+- Excluded the abandoned `weapon_tweaker_dev` experiment clone in full. It is a stale 0.12.139-dev fork, not the development source for this mod, and copying it would regress the active line. Open-issue diagnostics and explicitly requested developer tuning controls already belonging to the single active stream remain bounded behind their existing gates.
+
+Run `/wt_regression_test`, then walk the verification steps attached to the open Tweaker: Weapons issues. This beta changes only the release suffix from the already-shipped 0.12.261-dev candidate, so its behavior should be byte-equivalent apart from version/reporting metadata.
+
 ## 0.12.261-dev (2026-07-15) - #620 CWV Tuskgor Combat Style default [verify-fix-coop]
 
 - Kept WT-alone Foot Knight Tuskgor Spear default-off. When active CWV positively marks the native Tuskgor Combat Style family ready, WT seeds that exact Foot Knight setting on once per profile; late load and hot reload converge without repeatedly overriding later user choices.
