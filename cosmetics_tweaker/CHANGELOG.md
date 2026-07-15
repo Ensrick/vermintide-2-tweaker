@@ -1,5 +1,29 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.124-dev - 2026-07-15 - #629 authored Purpure/Azure textures
+
+### Changed
+
+- Replaced the Purpure/Azure Grail Knight outfit's third-person diffuse with the
+  author's finished purpure, azure, white, and blackened-silver texture. The
+  existing first-person outfit texture remains unchanged until a matching
+  first-person edit is authored.
+- Replaced the matching Pureheart helmet diffuse with the author's finished
+  navy and blackened-silver texture.
+- Preserved the extracted donor units and their original face, eyes, hair,
+  skin, normal, packed-map, rig, fade, and physics behavior. This update changes
+  only the two authored diffuse inputs; the working shield and render-surface
+  repair from v0.9.123 remain unchanged.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.124-dev`. Equip the Purpure/Azure outfit and
+Pureheart helmet, then verify the new colors on the inventory hero, live third
+person, lobby/score presentation, and a remote client. Confirm Markus's face is
+unchanged, the helmet uses the original Pureheart geometry, and the existing
+Purpure/Azure shield still renders correctly. The first-person outfit remains
+on its prior texture by design.
+
 ## 0.9.123-dev - 2026-07-15 - #629 Grail Knight render-surface repair
 
 ### Fixed
