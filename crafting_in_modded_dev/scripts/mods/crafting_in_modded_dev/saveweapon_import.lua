@@ -172,41 +172,43 @@ mod._cim_saveweapon_import = function()
                     for _, t in ipairs(traits_list) do valid_traits[#valid_traits + 1] = t end
                 end
 
-                local custom_data = {
-                    power_level = "300",
-                    rarity      = "modded",
-                }
-                if cjson_mod then
-                    custom_data.properties = cjson_mod.encode(valid_props)
-                    custom_data.traits     = cjson_mod.encode(valid_traits)
-                    if parsed.skin then custom_data.skin = parsed.skin end
-                end
-
                 local backend_id = Application.guid()
-                local item = {
-                    ItemId         = item_key,
-                    ItemInstanceId = backend_id,
-                    CustomData     = custom_data,
-                }
+                local contract = mod._cim_synthetic_item_contract
+                local master = rawget(ItemMasterList, item_key)
+                local record, record_err = contract and contract.normalize_record(backend_id, {
+                    item_key = item_key,
+                    properties = valid_props,
+                    traits = valid_traits,
+                    trait = valid_traits[1],
+                    skin = parsed.skin,
+                    power_level = 300,
+                    rarity = "modded",
+                    via_mirror = true,
+                }, master)
+                local encoder = cjson_mod and cjson_mod.encode
+                local item, payload_err = record
+                    and contract.build_mirror_payload(record, master, encoder)
+                if not item then
+                    skipped_bad = skipped_bad + 1
+                    mod:info("[saveweapon-import] contract rejected %s: %s",
+                        item_key, tostring(record_err or payload_err))
+                else
                 local add_ok, add_err = pcall(mirror.add_item, mirror, backend_id, item)
                 if not add_ok then
                     skipped_bad = skipped_bad + 1
                     mod:info("[saveweapon-import] add_item failed for %s: %s", item_key, tostring(add_err))
                 else
-                    if mod._cim_register_craft then
-                        mod._cim_register_craft(backend_id, {
-                            item_key    = item_key,
-                            properties  = valid_props,
-                            traits      = valid_traits,
-                            trait       = valid_traits[1],
-                            skin        = parsed.skin,
-                            power_level = 300,
-                            rarity      = "modded",
-                            via_mirror  = true,
-                        })
+                    local registered, register_err = mod._cim_register_craft(backend_id, record)
+                    if not registered then
+                        mirror:remove_item(backend_id)
+                        skipped_bad = skipped_bad + 1
+                        mod:info("[saveweapon-import] persistence rejected %s: %s",
+                            item_key, tostring(register_err))
+                    else
+                        seen[sig] = true
+                        imported = imported + 1
                     end
-                    seen[sig] = true
-                    imported = imported + 1
+                end
                 end
             end
         end

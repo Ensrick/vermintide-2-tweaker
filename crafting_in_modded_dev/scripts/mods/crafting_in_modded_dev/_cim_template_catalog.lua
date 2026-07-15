@@ -67,9 +67,17 @@ function M.build(args)
     local base_power = tonumber(args.base_power) or 5
     local requires_unowned_dlc = args.requires_unowned_dlc or function() return false end
     local versus_shadowed = args.versus_shadowed or function() return false end
+    local validate_provider = args.validate_provider or function() return true end
     local real_names = args.real_names
     local cache = {}
-    local report = { total = 0, cwv = 0, eligible = 0, suppressed = 0, collisions = {} }
+    local report = {
+        total = 0,
+        cwv = 0,
+        eligible = 0,
+        suppressed = 0,
+        collisions = {},
+        rejected_providers = {},
+    }
 
     if type(item_master_list) ~= "table" or type(career_name) ~= "string" then
         return cache, report
@@ -85,18 +93,26 @@ function M.build(args)
             and data.rarity ~= "magic" and data.rarity ~= "promo"
             and not requires_unowned_dlc(key)
             and not versus_shadowed(data, real_names) then
-            local family = M.craft_family(key, data)
-            local candidate = {
-                key = key,
-                data = data,
-                family = family,
-                score = _candidate_score(key, data),
-            }
-            report.eligible = report.eligible + 1
-            candidates[#candidates + 1] = candidate
-            local current = family and representatives[family]
-            if family and _candidate_wins(candidate, current) then
-                representatives[family] = candidate
+            local provider_ok, provider_problems = validate_provider(key, data)
+            if provider_ok == false then
+                report.rejected_providers[#report.rejected_providers + 1] = {
+                    key = tostring(key),
+                    problems = provider_problems or {},
+                }
+            else
+                local family = M.craft_family(key, data)
+                local candidate = {
+                    key = key,
+                    data = data,
+                    family = family,
+                    score = _candidate_score(key, data),
+                }
+                report.eligible = report.eligible + 1
+                candidates[#candidates + 1] = candidate
+                local current = family and representatives[family]
+                if family and _candidate_wins(candidate, current) then
+                    representatives[family] = candidate
+                end
             end
         end
     end
@@ -117,6 +133,7 @@ function M.build(args)
         if a.family ~= b.family then return tostring(a.family) < tostring(b.family) end
         return tostring(a.dropped) < tostring(b.dropped)
     end)
+    table.sort(report.rejected_providers, function(a, b) return a.key < b.key end)
 
     local ordered = {}
     for _, candidate in pairs(representatives) do ordered[#ordered + 1] = candidate end

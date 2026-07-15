@@ -525,19 +525,25 @@ end
 -- entry that points to the salvaged backend_id.
 synth.salvage = function(self, item_backend_ids)
     local mirror = self._backend_mirror
-    local unregistered = 0
-    for i, bid in ipairs(item_backend_ids) do
-        mirror:remove_item(bid)
-        if mod._cim_unregister_craft then
-            mod._cim_unregister_craft(bid)
-            unregistered = unregistered + 1
-        end
-        if mod._cim_clear_modded_loadout_for_bid then
-            mod._cim_clear_modded_loadout_for_bid(bid)
-        end
+    local contract = mod._cim_synthetic_item_contract
+    local records = {}
+    for i = 1, #item_backend_ids do
+        local bid = item_backend_ids[i]
+        records[bid] = mod._cim_get_craft and mod._cim_get_craft(bid) or nil
     end
-    mod:echo("[cim] Salvaged " .. tostring(#item_backend_ids) .. " item(s)" ..
-             (unregistered > 0 and (" (" .. unregistered .. " modded crafts unregistered)") or ""))
+    local owned, foreign = contract.partition_exact_ids(item_backend_ids, records)
+
+    -- CIM-owned rows use the same exact-instance transaction as /forge_delete:
+    -- mirror removal + forged_weapons persistence + every CIM loadout/skin
+    -- reference are cleared once. Ordinary rows remain session-local only; no
+    -- PlayFab/official-backend request is made anywhere in this synth.
+    local deleted = 0
+    if #owned > 0 and mod._cim277_delete_owned_ids then
+        deleted = mod._cim277_delete_owned_ids(owned) or 0
+    end
+    for i = 1, #foreign do mirror:remove_item(foreign[i]) end
+    mod:info("[cim:628] salvage local-only selected=%d owned=%d deleted=%d foreign=%d",
+        #item_backend_ids, #owned, deleted, #foreign)
     return {}
 end
 
@@ -1091,14 +1097,6 @@ local function _make_craft_synth(allowed_slots)
 
         local power_level = _cim_base_power()
         local cjson_mod = rawget(_G, "cjson")
-        local custom_data = {
-            power_level = tostring(power_level),
-            rarity = "modded",
-        }
-        if cjson_mod then
-            custom_data.properties = cjson_mod.encode(rolled_props)
-            custom_data.traits = cjson_mod.encode(rolled_traits)
-        end
 
         -- issue 390: CWV variant crafts get a `cwv_<key>_NNN` backend_id so the
         -- CWV render-rescue hooks recognize them; everything else keeps a fresh
@@ -1108,11 +1106,28 @@ local function _make_craft_synth(allowed_slots)
             backend_id = _mint_cwv_backend_id(item_key)
         end
         backend_id = backend_id or Application.guid()
-        local item = {
-            ItemId = item_key,
-            ItemInstanceId = backend_id,
-            CustomData = custom_data,
-        }
+        local contract = mod._cim_synthetic_item_contract
+        local master = rawget(ItemMasterList, item_key)
+        local record, record_err = contract and contract.normalize_record(backend_id, {
+            item_key = item_key,
+            properties = rolled_props,
+            traits = rolled_traits,
+            power_level = power_level,
+            rarity = "modded",
+            via_mirror = true,
+        }, master)
+        if not record then
+            printf("[cim:628] craft rejected bid=%s key=%s reason=%s",
+                tostring(backend_id), tostring(item_key), tostring(record_err))
+            return nil
+        end
+        local encoder = cjson_mod and cjson_mod.encode
+        local item, payload_err = contract.build_mirror_payload(record, master, encoder)
+        if not item then
+            printf("[cim:628] craft payload rejected bid=%s key=%s reason=%s",
+                tostring(backend_id), tostring(item_key), tostring(payload_err))
+            return nil
+        end
 
         local ok, err = pcall(self._backend_mirror.add_item, self._backend_mirror, backend_id, item)
         if not ok then
@@ -1137,14 +1152,7 @@ local function _make_craft_synth(allowed_slots)
         -- Persist so the item survives a game restart. Same save layer as the
         -- Athanor — registered with `via_mirror = true` so `_athanor_inject_all`
         -- re-creates it via backend_mirror:add_item on next session.
-        local weapon_data = {
-            item_key = item_key,
-            properties = rolled_props,
-            traits = rolled_traits,
-            power_level = power_level,
-            rarity = "modded",
-            via_mirror = true,
-        }
+        local weapon_data = record
         if mod._cim_register_craft then
             mod._cim_register_craft(backend_id, weapon_data)
         end
@@ -1299,6 +1307,12 @@ local function _build_template_cache()
         base_power = base_power,
         requires_unowned_dlc = _item_requires_unowned_dlc,
         versus_shadowed = _cim_versus_shadowed,
+        validate_provider = function(item_key, master)
+            local contract = mod._cim_synthetic_item_contract
+            if not contract then return false, { "contract" } end
+            local ok, problems = contract.validate_provider(item_key, master)
+            return ok, problems
+        end,
         real_names = real_names,
     })
     _template_cache_report = {
@@ -1318,6 +1332,16 @@ local function _build_template_cache()
     end
     if #report.collisions > collision_limit then
         printf("[cim:524] dedupe_more count=%d", #report.collisions - collision_limit)
+    end
+    local rejected_limit = math.min(#report.rejected_providers, 24)
+    for i = 1, rejected_limit do
+        local rejected = report.rejected_providers[i]
+        printf("[cim:628] provider rejected before UI key=%s missing=%s",
+            tostring(rejected.key), table.concat(rejected.problems, ","))
+    end
+    if #report.rejected_providers > rejected_limit then
+        printf("[cim:628] provider_rejected_more count=%d",
+            #report.rejected_providers - rejected_limit)
     end
 end
 

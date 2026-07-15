@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.79-dev"
+local MOD_VERSION = "0.8.80-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -255,6 +255,12 @@ mod:info("[regression-test-command] registered as /cim_regression_test")
 local _ok_rr, _err_rr = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/modded_rarities")
 if not _ok_rr then mod:error("Failed to load modded_rarities: %s", tostring(_err_rr)) end
 
+-- #628: one engine-free identity contract shared by both craft surfaces,
+-- provider acquisition selectors, inventory/salvage, persistence and deletion.
+-- Keep it on `mod` so split modules consume the same singleton at runtime.
+mod._cim_synthetic_item_contract = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_synthetic_item_contract")
+
 -- Pure source-backed mapping from the nine vanilla CW trait categories to
 -- their owning weapon slot. Load before standard_forge, which consumes it.
 local _ok_tsp, _trait_slot_policy = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/_cim_trait_slot_policy")
@@ -390,6 +396,10 @@ local function _forge_save()
     local save_data = {}
     for bid, w in pairs(_forged_weapons) do
         save_data[bid] = {
+            schema_version = w.schema_version,
+            owner = w.owner,
+            provider = w.provider,
+            slot_type = w.slot_type,
             item_key = w.item_key,
             properties = w.properties,
             trait = w.trait,
@@ -430,8 +440,10 @@ local function _forge_load()
         -- next session.
         local rarity = w.rarity
         if rarity == "promo" then rarity = "modded" end
-        _forged_weapons[bid] = {
+        local contract = mod._cim_synthetic_item_contract
+        local normalized, err = contract and contract.normalize_record(bid, {
             item_key = w.item_key,
+            slot_type = w.slot_type,
             properties = w.properties or {},
             trait = w.trait,
             traits = w.traits,
@@ -441,11 +453,14 @@ local function _forge_load()
             via_mirror = via_mirror,
             rerolled_props_indices = w.rerolled_props_indices,
             rerolled_trait_indices = w.rerolled_trait_indices,
-            -- v0.7.37-alpha: load-side pass-through of the opaque overlay slot
-            -- (see _forge_save comment). Tolerant of missing field on legacy
-            -- saves — nil just means no sibling overlay.
             custom_glow = w.custom_glow,
-        }
+        })
+        if normalized then
+            _forged_weapons[bid] = normalized
+        else
+            printf("[cim:628] rejected saved synthetic item bid=%s reason=%s",
+                tostring(bid), tostring(err))
+        end
     end
     _forge_save() -- persist any rarity migrations
 end
@@ -454,20 +469,18 @@ end
 -- crafted item into the persistent save layer. `via_mirror = true` means the
 -- item is added via `backend_mirror:add_item` on session restore (not MIL).
 mod._cim_register_craft = function(backend_id, weapon_data)
-    local entry = {
-        item_key = weapon_data.item_key,
-        properties = weapon_data.properties or {},
-        trait = weapon_data.trait,
-        traits = weapon_data.traits,
-        skin = weapon_data.skin,
-        power_level = weapon_data.power_level or 300,
-        rarity = weapon_data.rarity,
-        via_mirror = weapon_data.via_mirror ~= false,
-        -- v0.7.37-alpha: pass-through. See _forge_save comment.
-        custom_glow = weapon_data.custom_glow,
-    }
+    local contract = mod._cim_synthetic_item_contract
+    local item_key = type(weapon_data) == "table" and weapon_data.item_key
+    local master = item_key and ItemMasterList and rawget(ItemMasterList, item_key)
+    local entry, err = contract and contract.normalize_record(backend_id, weapon_data, master)
+    if not entry then
+        printf("[cim:628] rejected synthetic item registration bid=%s key=%s reason=%s",
+            tostring(backend_id), tostring(item_key), tostring(err))
+        return false, err
+    end
     _forged_weapons[backend_id] = entry
     _forge_save()
+    return true, entry
 end
 
 -- v0.7.37-alpha: sibling-mod updater for the opaque overlay slot. Lets
@@ -526,6 +539,43 @@ mod._cim_is_modded_item = function(item)
     return mod._cim_is_modded_backend_id(item.backend_id)
 end
 
+_rt_register("issue628_provider_contract", function()
+    local contract = mod._cim_synthetic_item_contract
+    if type(contract) ~= "table" then return "synthetic item contract is missing" end
+    local keys = {
+        "cwv_dr_dawi_mace",
+        "cwv_dr_dawi_mace_shield",
+        "cwv_dr_dawi_dual_maces",
+        "cwv_es_longsword",
+        "woc_blightreaper",
+    }
+    local checked = 0
+    for i = 1, #keys do
+        local key = keys[i]
+        local master = ItemMasterList and rawget(ItemMasterList, key)
+        if master then
+            checked = checked + 1
+            local ok, problems = contract.validate_provider(key, master)
+            if not ok then
+                return key .. " incomplete: " .. table.concat(problems, ",")
+            end
+        end
+    end
+    if checked == 0 then return "skip: CWV/WOC provider rows are not loaded" end
+end)
+
+_rt_register("issue628_saved_instance_contract", function()
+    local contract = mod._cim_synthetic_item_contract
+    for backend_id, record in pairs(_forged_weapons) do
+        if record.schema_version ~= contract.SCHEMA_VERSION
+                or record.owner ~= contract.OWNER
+                or record.backend_id ~= backend_id
+                or type(record.item_key) ~= "string" then
+            return "malformed saved instance: " .. tostring(backend_id)
+        end
+    end
+end)
+
 
 local function _forge_create_item(weapon_data, backend_id)
     if not ItemMasterList then return nil end
@@ -535,6 +585,16 @@ local function _forge_create_item(weapon_data, backend_id)
         mod:echo("Forge: unknown weapon key '" .. tostring(item_key) .. "'")
         return nil
     end
+
+    local contract = mod._cim_synthetic_item_contract
+    local normalized, normalize_err = contract and contract.normalize_record(
+        backend_id, weapon_data, master)
+    if not normalized then
+        printf("[cim:628] rejected MIL injection bid=%s key=%s reason=%s",
+            tostring(backend_id), tostring(item_key), tostring(normalize_err))
+        return nil
+    end
+    weapon_data = normalized
 
     local props = weapon_data.properties or {}
     local trait = weapon_data.trait
@@ -4646,7 +4706,8 @@ local function _athanor_inject_item(weapon_data, backend_id)
     -- character_weapon_variants mod hasn't registered yet at this stage of
     -- backend init. Skip injection for unknown keys (re-craft is recoverable).
     local item_key = weapon_data.item_key
-    if not item_key or not rawget(ItemMasterList, item_key) then
+    local master = item_key and rawget(ItemMasterList, item_key)
+    if not item_key or not master then
         return nil, "item_key '" .. tostring(item_key) .. "' not in ItemMasterList yet"
     end
 
@@ -4657,25 +4718,18 @@ local function _athanor_inject_item(weapon_data, backend_id)
     -- old saves, but the mechanisms clear still needs to run for those.
     _ensure_item_adventure_visible(item_key, weapon_data.career_name)
 
-    local cjson_mod = rawget(_G, "cjson")
-    local props = weapon_data.properties or {}
-    local traits = weapon_data.traits or (weapon_data.trait and {weapon_data.trait}) or {}
-
-    local custom_data = {
-        power_level = tostring(weapon_data.power_level or 300),
-        rarity = weapon_data.rarity or "modded",
-    }
-    if cjson_mod then
-        custom_data.properties = cjson_mod.encode(props)
-        custom_data.traits = cjson_mod.encode(traits)
+    local contract = mod._cim_synthetic_item_contract
+    local normalized, normalize_err = contract and contract.normalize_record(
+        backend_id, weapon_data, master)
+    if not normalized then
+        printf("[cim:628] rejected mirror injection bid=%s key=%s reason=%s",
+            tostring(backend_id), tostring(item_key), tostring(normalize_err))
+        return nil, normalize_err
     end
-    if weapon_data.skin then custom_data.skin = weapon_data.skin end
-
-    local item = {
-        ItemId = item_key,
-        ItemInstanceId = backend_id,
-        CustomData = custom_data,
-    }
+    local cjson_mod = rawget(_G, "cjson")
+    local encoder = cjson_mod and cjson_mod.encode
+    local item, payload_err = contract.build_mirror_payload(normalized, master, encoder)
+    if not item then return nil, payload_err end
 
     local ok, err = pcall(backend_mirror.add_item, backend_mirror, backend_id, item)
     if not ok then return nil, err end
@@ -4883,8 +4937,12 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
         return
     end
 
-    _forged_weapons[new_backend_id] = weapon_data
-    _forge_save()
+    local registered, register_err = mod._cim_register_craft(new_backend_id, weapon_data)
+    if not registered then
+        Managers.backend:get_backend_mirror():remove_item(new_backend_id)
+        mod:warning("[cim] Craft persistence rejected: " .. tostring(register_err))
+        return
+    end
     if mod._cim_note_craft_bid then mod._cim_note_craft_bid(new_backend_id) end
 
     -- Issue #562: default-on auto-equip targets the forge button's exact slot
@@ -5049,7 +5107,13 @@ local function _cim_amulet_craft_one_slot(properties_win, slot_index, slot_name)
         mod:warning("[cim] Craft " .. slot_name .. " failed: " .. tostring(err))
         return false
     end
-    if mod._cim_register_craft then mod._cim_register_craft(new_bid, weapon_data) end
+    local registered, register_err = mod._cim_register_craft(new_bid, weapon_data)
+    if not registered then
+        Managers.backend:get_backend_mirror():remove_item(new_bid)
+        mod:warning("[cim] Craft " .. slot_name .. " persistence rejected: "
+            .. tostring(register_err))
+        return false
+    end
     if mod._cim_note_craft_bid then mod._cim_note_craft_bid(new_bid) end
     -- Craft only — see issue #12. Player equips from inventory.
     _amulet_dirty[slot_index] = false
@@ -5127,8 +5191,11 @@ mod:hook("HeroWindowWeaveProperties", "_upgrade_magic_level", function(func, sel
         return
     end
 
-    if mod._cim_register_craft then
-        mod._cim_register_craft(new_backend_id, weapon_data)
+    local registered, register_err = mod._cim_register_craft(new_backend_id, weapon_data)
+    if not registered then
+        Managers.backend:get_backend_mirror():remove_item(new_backend_id)
+        mod:warning("[cim] Craft persistence rejected: " .. tostring(register_err))
+        return
     end
 
     -- Craft only — see issue #12. Player equips from inventory.
@@ -5590,15 +5657,18 @@ mod:command("forge_confirm", "Create the forged weapon", function()
     local backend_id = _forge_pending.item_key .. "_" .. rnd .. "_forged"
 
     if _forge_inject_item(_forge_pending, backend_id) then
-        _forged_weapons[backend_id] = {
+        local registered, register_err = mod._cim_register_craft(backend_id, {
             item_key = _forge_pending.item_key,
             properties = _forge_pending.properties,
             trait = _forge_pending.trait,
             skin = _forge_pending.skin,
             power_level = _forge_pending.power_level,
             via_mirror = false,
-        }
-        _forge_save()
+        })
+        if not registered then
+            mod:warning("Forge: persistence rejected: " .. tostring(register_err))
+            return
+        end
 
         local master = rawget(ItemMasterList, _forge_pending.item_key)
         local display = _forge_pending.item_key

@@ -6,6 +6,20 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-15.
 
+### canonical-synthetic-item-salvage - issue #628
+
+| Field | Value |
+|---|---|
+| Symptom | CIM-crafted provider weapons can craft/equip/persist but disappear from Salvage, or unsafe rows are admitted independently of equip, favorite, and saved-loadout state. |
+| Root cause | Craft, mirror restore, inventory filtering, and salvage constructed or classified partial item records independently; the old salvage adapter explicitly bypassed vanilla safety exclusions. |
+| Fix version(s) | cim_dev 0.8.80-dev |
+| Category | SOLO |
+| Repro | Craft the three Dawi Maces, one older CWV weapon, and Blightreaper; inspect inventory/preview/restart/salvage, then repeat while equipped, favorited, or present in any saved loadout. |
+| Expected post-fix | Every surface consumes one exact CIM-owned identity; only an unequipped, unfavorited, no-loadout Modded instance appears; salvage deletes that exact mirror/save/reference set without PlayFab traffic. |
+| Detection | Offline `test_cim_synthetic_item_contract.lua` passes and `/cim_regression_test` passes `issue628_provider_contract` plus `issue628_saved_instance_contract`. |
+
+---
+
 ### athanor-literal-property-values - issue #244
 
 | Field | Value |

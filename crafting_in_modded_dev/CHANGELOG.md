@@ -1,5 +1,16 @@
 # Crafting in Modded Changelog
 
+## 0.8.80-dev (2026-07-15): #628 canonical synthetic items and safe salvage [verify-fix]
+
+- Replaced CIM's screen-specific modded-item exceptions with one normalized synthetic-item contract. Provider mods own complete `ItemMasterList` definitions; CIM now owns one schema-versioned acquired instance carrying its exact backend id, item key, provider, slot, rarity, properties, traits, illusion, and persistence metadata. Athanor crafting, standard crafting, SaveWeapon import, mirror restore, legacy MIL import, inventory filtering, and deletion consume that same contract.
+- Removed the salvage hook's unsafe behavior that re-added Modded items regardless of equip, saved-loadout, or favorite state. CIM now preserves vanilla's slot and rarity exclusions and rejects current-equipped, any-loadout-equipped, favorited, default, promo, magic, blacksmith/template, malformed, and non-owned rows. Only exact persisted CIM instances can enter the repair path.
+- Routed Salvage through the existing exact-owner #277 deletion transaction. The exact mirror row, `forged_weapons` record, CIM saved-loadout references, and exact-instance illusion override are removed together; ordinary items remain session-local, and no official PlayFab craft/salvage request is issued in the modded realm.
+- Added a provider validator before acquisition-selector construction, with bounded `[cim:628]` evidence for incomplete CWV/WOC rows. Added engine-free truth tables for all safety exclusions, malformed provider failure, exact-instance deletion partitioning, idempotent rebuilds, mirror identity, all three Dawi Maces, an older CWV Imperial Longsword, and WOC Blightreaper. Runtime checks `issue628_provider_contract` and `issue628_saved_instance_contract` cover the live registry/save boundary.
+
+### Test method
+
+Craft Dawi Mace, Dawi Mace and Shield, Dawi Dual Maces, Imperial Longsword, and Blightreaper through CIM. Confirm each exact Modded item appears in inventory and its normal preview, survives a restart, and appears in Salvage only after it is removed from every current/saved loadout and is not favorited. Confirm the equipped, saved-loadout-equipped, favorited, and Blacksmith selector copies never appear. Salvage one exact crafted copy while retaining a second copy of the same weapon, restart, and confirm only the selected instance remains deleted. Run `/cim_regression_test` and require `issue628_provider_contract` and `issue628_saved_instance_contract` PASS.
+
 ## 0.8.79-dev (2026-07-15): #524 craft-family dedupe; #624 Keep forge; #617 Athanor icon closure [verify-fix]
 
 - Reopened #524 after the native Craft Item picker still showed duplicate weapon choices. The 0.8.76 catalog enumerated exact ItemMasterList keys, which admitted native helper aliases such as `_preview` and Versus rows beside the real weapon. CIM now builds one deterministic selector per ordinary `slot_type + item_type` craft family. Provider localization is never identity, crafted Modded-rarity instances remain separate inventory records, and every authored CWV `cwv_key` remains independently craftable, including veteran/stat variants that intentionally share an item type.

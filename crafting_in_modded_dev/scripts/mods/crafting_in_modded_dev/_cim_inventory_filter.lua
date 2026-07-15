@@ -135,15 +135,15 @@ mod:hook("BackendInterfaceItemPlayfab", "get_filtered_items", function(func, sel
 end)
 
 -- ============================================================
--- Salvage filter override: surface modded items in the salvage grid
+-- Salvage filter adapter: exact CIM ownership + vanilla safety contract (#628)
 -- ============================================================
--- Vanilla `can_salvage` (backend_interface_common.lua:412) excludes
--- `rarity == "promo"` AND equipped items AND items in any loadout. Modded
--- items skip the rarity exclusion (rarity = "modded", not "promo"). Post-hook
--- the filter to add our crafts back regardless of equip/loadout state when
--- the filter is the salvage recipe's (`can_salvage and not is_equipped and not
--- is_equipped_by_any_loadout`). Also catches legacy promo-rarity crafts.
-local _SALVAGE_SLOT_TYPES = { melee = true, ranged = true, ring = true, necklace = true, trinket = true }
+-- BackendInterfaceCommon.can_salvage requires a weapon/accessory slot, a
+-- non-default/non-promo/non-magic rarity, no active equip and no favorite
+-- (vanilla source backend_interface_common.lua:404-423). The recipe adds
+-- `not is_equipped_by_any_loadout`. Older CIM code bypassed all three safety
+-- exclusions and re-added every modded-looking row. This adapter now delegates
+-- identity and eligibility to the canonical synthetic-item contract and only
+-- restores an exact persisted CIM instance when every vanilla guard passes.
 
 local function _is_salvage_filter(filter_infix)
     if type(filter_infix) ~= "string" then return false end
@@ -163,20 +163,33 @@ mod:hook("BackendInterfaceCommon", "filter_items", function(func, self, items, f
     local backend_items = Managers.backend and Managers.backend:get_interface("items")
     if not backend_items then return result end
 
-    -- Surface modded items in salvage REGARDLESS of equip / loadout / favorite
-    -- state. Vanilla excludes equipped items so players don't accidentally
-    -- destroy their gear, but modded crafts are throwaway by design — the user
-    -- crafted them and wants the option to delete them even after equipping.
-    --
-    -- Use the item-level check (rarity OR bid heuristic) so promo items from
-    -- earlier sessions / other machines / older mod versions still surface
-    -- even if their bid format doesn't match our current regex.
+    local contract = mod._cim_synthetic_item_contract
+    if type(contract) ~= "table" then return result end
+
     for _, item in ipairs(items) do
         local bid = item and item.backend_id
-        if bid and not seen[bid]
-           and mod._cim_is_modded_item and mod._cim_is_modded_item(item) then
-            local slot_type = item.data and item.data.slot_type
-            if _SALVAGE_SLOT_TYPES[slot_type] then
+        local record = bid and mod._cim_get_craft and mod._cim_get_craft(bid)
+        if bid and record and not seen[bid] then
+            local equipped, any_loadout, favorite = true, true, true
+
+            local ok_equipped, careers = pcall(backend_items.equipped_by, backend_items, bid)
+            if ok_equipped and type(careers) == "table" then equipped = #careers > 0 end
+
+            local ok_loadout, loadouts = pcall(
+                backend_items.is_equipped_by_any_loadout, backend_items, bid)
+            if ok_loadout and type(loadouts) == "table" then any_loadout = #loadouts > 0 end
+
+            if ItemHelper and ItemHelper.is_favorite_backend_id then
+                local ok_favorite, value = pcall(ItemHelper.is_favorite_backend_id, bid, item)
+                if ok_favorite then favorite = value and true or false end
+            end
+
+            local eligible = contract.is_salvage_eligible(item, record, {
+                is_equipped = equipped,
+                is_equipped_by_any_loadout = any_loadout,
+                is_favorite = favorite,
+            })
+            if eligible then
                 result[#result + 1] = item
                 seen[bid] = true
             end
