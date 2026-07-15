@@ -1,5 +1,27 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.277-dev (2026-07-15) -- #274 mission-intro-only cutscene skipping [untested]
+
+- Restricted both automatic and manual forced skipping to the exact authored mission-intro event, `cs_01_skip`.
+- Mid-mission and end-of-mission cutscenes now remain on the vanilla path, including cutscenes with missing, unknown, or different skip events.
+- Bounded the post-intro camera guard to 15 seconds so an intro cannot leave stale suppression armed for a later outro.
+- Added offline and runtime regression coverage for intro classification, non-intro preservation, and guard expiry.
+
+### Test
+
+Enable cutscene skipping, then start a mission and confirm only its opening cinematic is skipped. Complete the mission and confirm the ending cinematic plays normally; also exercise a mid-mission cinematic if the selected map has one. Run `/gut_regression_test`; the issue 274 checks must pass.
+
+## 0.2.276-dev (2026-07-15) -- #522 inventory preview lighting correction [untested]
+
+- Retired the nonfunctional alternate-level backdrop swap. Inventory keeps the exact vanilla preview package, level, geometry, camera, and background.
+- Replaced the old choices with Vanilla, Dim (65% exposure), and Dark (40% exposure). Legacy Dark Camp and Victory Camp values migrate deterministically to Dim and Dark.
+- The selected exposure is applied only through the live `HeroWindowCharacterPreview` preview world's post-blend shading callback. Any prior callback is chained and restored exactly on Vanilla, window close, or mod disable; the hot path allocates nothing.
+- Added source-backed regression coverage for preview-world scoping, in-place setting changes, legacy migration, and exact callback restoration.
+
+### Test
+
+Open Inventory and choose each Character Preview Lighting value. Vanilla must match the original scene exactly; Dim and Dark must progressively darken only the character-preview pane without changing the background. Change values while Inventory is open, close/reopen it, then run `/gut_regression_test`; `inventory_preview_lighting_522` must pass.
+
 ## 0.2.275-dev (2026-07-15) -- #528 remove CKC vanilla Options integration [verify-fix]
 
 ### Why

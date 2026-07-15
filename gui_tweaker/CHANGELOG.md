@@ -1,5 +1,12 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.276 (2026-07-15) — #522 inventory preview lighting correction [untested]
+
+- Retired the nonfunctional alternate-level backdrop swap. Inventory keeps the exact vanilla preview package, level, geometry, camera, and background.
+- Replaced the old choices with Vanilla, Dim (65% exposure), and Dark (40% exposure). Legacy Dark Camp and Victory Camp values migrate deterministically to Dim and Dark.
+- The selected exposure is applied only through the live `HeroWindowCharacterPreview` preview world's post-blend shading callback. Any prior callback is chained and restored exactly on Vanilla, window close, or mod disable; the hot path allocates nothing.
+- Added source-backed regression coverage for preview-world scoping, in-place setting changes, legacy migration, and exact callback restoration.
+
 ## 0.2.275 (2026-07-15) — public rollup of dev 0.2.121-dev..0.2.275-dev
 
 ### Why
