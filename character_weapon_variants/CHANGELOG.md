@@ -1,5 +1,17 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.423-dev - 2026-07-15 - #604 Dawi Crowbill Model 01 rotation [verify-fix-coop]
+
+- Baked the user-reviewed Dawi Crowbill Model 01 transform as absolute scale
+  `{0.5, 0.5, 0.5}` and Euler rotation `{-90, -90, -90}` degrees on the
+  canonical 3P/presentation transform.
+- Kept offset unchanged and excluded first person. Owner 3P, bots,
+  remote husks, inventory/lobby/score presentation, and item/Athanor previews
+  all consume the same model-specific transform without leaking it to sibling
+  Crowbill models.
+- Added offline and runtime regression coverage for exact values, 1P exclusion,
+  and shared transform-map wiring.
+
 ## 0.1.422-dev - 2026-07-15 - #620 per-instance Combat Styles [verify-fix-coop]
 
 - Added one contextual Combat Style button to the equipment/loadout screen and an optional mid-mission `Cycle Combat Style` hotkey. The choice persists against the exact crafted backend item, so cosmetics, glow, properties, traits, and the inventory identity stay on that instance.

@@ -85,6 +85,12 @@ M.MODELS = {
         right_hand_unit = "units/cwv_crowbill/dawi_01/dawi_01",
         inventory_icon = M.PLACEHOLDER_ICON,
         hud_icon = "weapon_generic_icon_falken",
+        -- User-reviewed Hold-Pose tune for Dawi Model 01. Keep this on the
+        -- shared 3P/presentation channel so owner 3P, husks, inventory, lobby,
+        -- score/team, and item previews consume one canonical orientation;
+        -- first person retains the authored mesh transform.
+        right_hand_scale_3p = { 0.5, 0.5, 0.5 },
+        right_hand_rotation_3p = { -90, -90, -90 },
     },
     {
         variant_key = "cwv_es_imperial_crowbill",

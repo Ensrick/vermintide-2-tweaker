@@ -53,6 +53,8 @@ local loc = {
 	cwv_dr_dawi_dual_maces = { en = "Dawi Dual Maces" },
 	cwv_dr_dawi_dual_maces_name = { en = "Dawi Dual Maces" },
 	cwv_dr_dawi_dual_maces_description = { en = "A matched pair of Dawi maces for an unbroken rhythm of crushing blows." },
+	cwv_es_imperial_crowbill = { en = "Imperial Crowbill" },
+	cwv_dr_dawi_crowbill = { en = "Dawi Crowbill" },
 
 	-- On-ice `cwv_es_musket` variant item_type display name. The variant def is
 	-- commented out (kept as a backup idea — the live musket is

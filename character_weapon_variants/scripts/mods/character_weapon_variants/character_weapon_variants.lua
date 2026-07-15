@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.422-dev"
+local MOD_VERSION = "0.1.423-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -16131,13 +16131,44 @@ _rt_register("issue604_imperial_crowbill_model05_transform", function()
 		return "#604 Model 05 transform is not isolated to the canonical 3P map"
 	end
 	for _, model in ipairs(family.MODELS) do
-		if model.key ~= target.key then
+		if model.key ~= target.key and model.key ~= "cwv_dr_dawi_crowbill_skin" then
 			local control = _skin_transform_map[model.key]
 			if not control or control.right_hand_scale_3p
 					or control.right_hand_offset_3p or control.right_hand_rotation_3p then
 				return "#604 Model 05 transform leaked to " .. tostring(model.key)
 			end
 		end
+	end
+end)
+
+_rt_register("issue604_dawi_crowbill_model01_transform", function()
+	local family = mod._cwv_crowbill_family
+	if type(family) ~= "table" or type(family.MODELS) ~= "table" then
+		return "#604 Crowbill model manifest missing"
+	end
+	local function same_triplet(actual, expected)
+		return type(actual) == "table"
+			and actual[1] == expected[1] and actual[2] == expected[2]
+			and actual[3] == expected[3]
+	end
+	local target
+	for _, model in ipairs(family.MODELS) do
+		if model.key == "cwv_dr_dawi_crowbill_skin" then target = model; break end
+	end
+	if not target
+			or not same_triplet(target.right_hand_scale_3p, { 0.5, 0.5, 0.5 })
+			or not same_triplet(target.right_hand_rotation_3p, { -90, -90, -90 })
+			or target.right_hand_offset_3p
+			or target.right_hand_rotation or target.right_hand_rotation_1p then
+		return "#604 Dawi Crowbill Model 01 reviewed transform drifted"
+	end
+	local applied = _skin_transform_map[target.key]
+	if not applied
+			or not same_triplet(applied.right_hand_scale_3p, target.right_hand_scale_3p)
+			or not same_triplet(applied.right_hand_rotation_3p, target.right_hand_rotation_3p)
+			or applied.right_hand_offset_3p
+			or applied.right_hand_rotation or applied.right_hand_rotation_1p then
+		return "#604 Dawi Model 01 transform is not isolated to the canonical 3P map"
 	end
 end)
 

@@ -55,6 +55,10 @@ return function(H, repo_root)
         H.equal(dawi_default.source_asset_id, "soidev_war_hammer")
         H.equal(dawi_default.right_hand_unit,
             "units/cwv_crowbill/dawi_01/dawi_01")
+        H.deep_equal(dawi_default.right_hand_scale_3p, { 0.5, 0.5, 0.5 })
+        H.deep_equal(dawi_default.right_hand_rotation_3p, { -90, -90, -90 })
+        H.equal(dawi_default.right_hand_rotation, nil)
+        H.equal(dawi_default.right_hand_rotation_1p, nil)
         local master = read(repo_root
             .. "/character_weapon_variants/resource_packages/character_weapon_variants/character_weapon_variants.package")
         local variants_seen = {}
@@ -108,7 +112,7 @@ return function(H, repo_root)
         H.equal(target.right_hand_offset_1p, nil)
         H.equal(target.right_hand_rotation_1p, nil)
         for _, control in ipairs(family.MODELS) do
-            if control ~= target then
+            if control ~= target and control.key ~= "cwv_dr_dawi_crowbill_skin" then
                 H.equal(control.right_hand_scale_3p, nil)
                 H.equal(control.right_hand_offset_3p, nil)
                 H.equal(control.right_hand_rotation_3p, nil)
@@ -118,6 +122,21 @@ return function(H, repo_root)
             .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
         H.truthy(main:find("issue604_imperial_crowbill_model05_transform", 1, true))
         H.truthy(main:find("for _, model in ipairs(_om.crowbill_family.usable_models()) do", 1, true))
+    end)
+
+    H.test("Dawi Crowbill Model 01 owns only its reviewed 3P transform", function()
+        local target = row_for(family.MODELS, "cwv_dr_dawi_crowbill_skin")
+        H.truthy(target)
+        H.deep_equal(target.right_hand_scale_3p, { 0.5, 0.5, 0.5 })
+        H.deep_equal(target.right_hand_rotation_3p, { -90, -90, -90 })
+        H.equal(target.right_hand_offset_3p, nil)
+        H.equal(target.right_hand_scale, nil)
+        H.equal(target.right_hand_scale_1p, nil)
+        H.equal(target.right_hand_rotation, nil)
+        H.equal(target.right_hand_rotation_1p, nil)
+        local main = read(repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+        H.truthy(main:find("issue604_dawi_crowbill_model01_transform", 1, true))
     end)
 
     H.test("CWV Crowbill hammer-mode seam preserves the authored contract", function()
