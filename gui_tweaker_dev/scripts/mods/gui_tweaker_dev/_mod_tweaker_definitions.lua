@@ -457,6 +457,69 @@ local function _append_separator(passes, style, y)
     style.separator = { offset = { 0, y, 1 }, size = { ROW_W, SEP_THICKNESS }, color = SEP_COLOR }
 end
 
+-- #605: one compact Character Dialogue event row.  The three controls are in
+-- the same logical/rendered row so preview ownership and line state are never
+-- detached from the event they affect.  Only the virtual window creates these.
+local function create_dialogue_row(text, state_text, base_offset, depth)
+    local y = base_offset[2] - ROW_H
+    base_offset[2] = y
+    local ind = INDENT_PER_DEPTH * (depth or 0)
+    local pause_w, play_w, state_w, gap = 88, 72, 104, 8
+    local pause_x = ROW_W - pause_w - 10
+    local play_x = pause_x - play_w - gap
+    local state_x = play_x - state_w - gap
+    local label_x = LABEL_BASE_X + ind
+    local label_w = math.max(80, state_x - label_x - 12)
+    local button_color = { 220, 12, 12, 12 }
+    local border_color = { 180, 90, 90, 90 }
+    local text_color = Colors.get_color_table_with_alpha("font_button_normal", 255)
+    local passes = {
+        { pass_type = "hotspot", content_id = "state_hotspot", style_id = "state_hotspot" },
+        { pass_type = "hotspot", content_id = "play_hotspot", style_id = "play_hotspot" },
+        { pass_type = "hotspot", content_id = "pause_hotspot", style_id = "pause_hotspot" },
+        { pass_type = "text", style_id = "label", text_id = "label" },
+        { pass_type = "rect", style_id = "state_bg" },
+        { pass_type = "border", style_id = "state_border" },
+        { pass_type = "text", style_id = "state_text", text_id = "state_text" },
+        { pass_type = "rect", style_id = "play_bg" },
+        { pass_type = "border", style_id = "play_border" },
+        { pass_type = "text", style_id = "play_text", text_id = "play_text" },
+        { pass_type = "rect", style_id = "pause_bg" },
+        { pass_type = "border", style_id = "pause_border" },
+        { pass_type = "text", style_id = "pause_text", text_id = "pause_text" },
+    }
+    local content = {
+        state_hotspot = {}, play_hotspot = {}, pause_hotspot = {},
+        label = tostring(text), state_text = tostring(state_text or "DEFAULT"),
+        play_text = "PLAY", pause_text = "PAUSE",
+    }
+    local function box(x, w, z, color)
+        return { offset = { x, y + 3, z or 2 }, size = { w, ROW_H - 6 }, color = color }
+    end
+    local function button_text(x, w)
+        local s = _text_style(x, y, w, 16, text_color, "center")
+        s.upper_case = true
+        return s
+    end
+    local style = {
+        label = _text_style(label_x, y, label_w, 17, Colors.get_color_table_with_alpha("font_default", 255)),
+        state_hotspot = box(state_x, state_w, 8), play_hotspot = box(play_x, play_w, 8),
+        pause_hotspot = box(pause_x, pause_w, 8),
+        state_bg = box(state_x, state_w, 2, button_color), state_border = box(state_x, state_w, 3, border_color),
+        state_text = button_text(state_x, state_w),
+        play_bg = box(play_x, play_w, 2, button_color), play_border = box(play_x, play_w, 3, border_color),
+        play_text = button_text(play_x, play_w),
+        pause_bg = box(pause_x, pause_w, 2, button_color), pause_border = box(pause_x, pause_w, 3, border_color),
+        pause_text = button_text(pause_x, pause_w),
+    }
+    style.state_border.thickness, style.play_border.thickness, style.pause_border.thickness = 1, 1, 1
+    _append_separator(passes, style, y)
+    return UIWidget.init({
+        scenegraph_id = LIST_SG, element = { passes = passes }, content = content,
+        style = style, offset = { 0, 0, 0 },
+    })
+end
+
 -- Prepend a whole-row hover highlight pass (atlas-backed "playerlist_hover" in
 -- gui_menus_atlas — drawn ONLY when content.is_highlighted, which the view sets
 -- from the row hotspot's is_hover each frame). Inserted at the FRONT of the pass
@@ -2110,6 +2173,7 @@ return {
     tooltip_sg = "mt_tooltip",
     create_section_title = create_section_title,
     create_group_header = create_group_header,
+    create_dialogue_row = create_dialogue_row,
     create_gear_button = create_gear_button,
     create_back_row = create_back_row,
     -- (v0.2.75-dev) Shared drill subtree planner — both twins build a drilled view's

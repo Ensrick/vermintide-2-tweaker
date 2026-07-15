@@ -1,5 +1,27 @@
 # Character Dialogue Changelog
 
+## 0.1.2-dev (2026-07-15) - #605 [verify-fix]
+
+- Replaced the 34,327-option flat dropdown with a Character Dialogue-owned,
+  grouped browser API. Heroes use their canonical event prefixes; generated
+  source filenames are not trusted as speaker identity because those containers
+  can also hold enemy-lord dialogue.
+- Excluded the catalogue's one exact `dummy` Wwise sentinel while retaining real
+  event names that merely contain that word. All 34,326 playable candidates are
+  assigned to a character, NPC, enemy, or fallback group.
+- Added bounded 32-row paging, grouping-preserving search, stable event identity,
+  and a pure single-owner play/pause/resume/stop state machine.
+- Registered the new Dialogue browser control only with Tweaker: GUI dev; stable
+  GUI versions cannot accidentally attempt to render the new control.
+
+### Solo verify
+
+Open Mod Tweaker > Dialogue. Expand multiple character sections and confirm only
+one stays open. Search by event/source text, then use the same row's state, Play,
+and Pause/Resume buttons. Starting a second row must replace the first; collapsing
+its character or leaving/closing the view must stop it. Run
+`/cd_regression_test`; failures must be zero.
+
 ## 0.1.1-dev (2026-07-15) - #605 [verify-fix]
 
 - Load Fatshark's module-local `DialogueQueries` table explicitly before

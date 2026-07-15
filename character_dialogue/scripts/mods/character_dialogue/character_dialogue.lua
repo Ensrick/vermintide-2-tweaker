@@ -1,11 +1,13 @@
 local mod = get_mod("character_dialogue")
-local MOD_VERSION = "0.1.1-dev"
+local MOD_VERSION = "0.1.2-dev"
 -- Fatshark keeps DialogueQueries local to dialogue_system.lua; it is not a
 -- global like TagQueryDatabase.  Resolve the canonical module before asking
 -- VMF to install the hook, otherwise VMF receives nil and emits a startup
 -- error on every launch.
 local DialogueQueries = require("scripts/entity_system/systems/dialogues/dialogue_queries")
 local Policy = mod:dofile("scripts/mods/character_dialogue/_cd_policy")
+local Browser = mod:dofile("scripts/mods/character_dialogue/_cd_browser")
+local PreviewPolicy = mod:dofile("scripts/mods/character_dialogue/_cd_preview_policy")
 
 local function log(fmt, ...)
     mod:debug("[cd:dbg] " .. fmt, ...)
@@ -26,7 +28,8 @@ if type(overrides) ~= "table" then overrides = {} end
 
 local preview = { world = nil, playing_id = nil, event = nil, paused = false }
 local catalogue_cache
-local options_cache
+local catalogue_index_cache
+local browser_group_cache = { query = nil, groups = nil }
 
 local function clone_table(source)
     local out = {}
@@ -58,13 +61,16 @@ local function stop_preview()
     if preview.playing_id and preview.world and WwiseWorld then
         pcall(WwiseWorld.stop_event, preview.world, preview.playing_id)
     end
-    preview.world, preview.playing_id, preview.event, preview.paused = nil, nil, nil, false
+    local next_state = PreviewPolicy.transition(preview, "stop")
+    preview.world, preview.playing_id = nil, nil
+    preview.event, preview.paused = next_state.event, next_state.paused
     return true
 end
 
 local function play_preview(event)
+    local next_state, _, validation_error = PreviewPolicy.transition(preview, "play", event)
+    if validation_error then return false, validation_error end
     stop_preview()
-    if type(event) ~= "string" or event == "" then return false, "no dialogue selected" end
     local _, wwise_world = level_wwise_world()
     if not wwise_world then return false, "level audio world is unavailable" end
     local ok, playing_id = pcall(WwiseWorld.trigger_event, wwise_world, event)
@@ -72,22 +78,25 @@ local function play_preview(event)
         printf("[character_dialogue:preview] unavailable event=%s error=%s", event, tostring(playing_id))
         return false, "sound event is not resident in this game state"
     end
-    preview.world, preview.playing_id, preview.event, preview.paused = wwise_world, playing_id, event, false
+    preview.world, preview.playing_id = wwise_world, playing_id
+    preview.event, preview.paused = next_state.event, next_state.paused
     printf("[character_dialogue:preview] play event=%s id=%s", event, tostring(playing_id))
     return true
 end
 
 local function pause_preview()
-    if not preview.playing_id or preview.paused then return false, "nothing is playing" end
+    local next_state, _, validation_error = PreviewPolicy.transition(preview, "pause")
+    if not preview.playing_id or validation_error then return false, validation_error or "nothing is playing" end
     local ok = pcall(WwiseWorld.pause_event, preview.world, preview.playing_id)
-    if ok then preview.paused = true end
+    if ok then preview.paused = next_state.paused end
     return ok
 end
 
 local function resume_preview()
-    if not preview.playing_id or not preview.paused then return false, "nothing is paused" end
+    local next_state, _, validation_error = PreviewPolicy.transition(preview, "resume")
+    if not preview.playing_id or validation_error then return false, validation_error or "nothing is paused" end
     local ok = pcall(WwiseWorld.resume_event, preview.world, preview.playing_id)
-    if ok then preview.paused = false end
+    if ok then preview.paused = next_state.paused end
     return ok
 end
 
@@ -99,79 +108,36 @@ local function catalogue()
     return catalogue_cache or {}
 end
 
-local function dialogue_options()
-    if options_cache then return options_cache end
-    local entries = catalogue()
-    local out = {}
-    for i = 1, #entries do
-        local tuple = entries[i]
-        local event, source = tuple[1], tuple[4]
-        out[i] = { value = event, text = event .. "  [" .. tostring(source or "unknown") .. "]" }
+local function catalogue_index()
+    if not catalogue_index_cache then
+        catalogue_index_cache = Browser.build_index(catalogue())
+        log("browser index built entries=%d", catalogue_index_cache.total or -1)
     end
-    options_cache = out
-    return out
+    return catalogue_index_cache
 end
 
-local function selected_event()
-    for _, gut_id in ipairs({ "gut_dev", "gut" }) do
-        local gut = get_mod(gut_id)
-        local mt = gut and gut.mod_tweaker
-        if mt and mt.get then
-            local value = mt:get("character_dialogue", "selected_line")
-            if type(value) == "string" and value ~= "" then return value end
-        end
-    end
-    local entries = catalogue()
-    return entries[1] and entries[1][1] or nil
-end
-
-local function action_result(action, ok, err)
-    printf("[character_dialogue:ui] action=%s event=%s ok=%s detail=%s",
-        action, tostring(selected_event()), tostring(ok), tostring(err or ""))
+local function toggle_pause(event)
+    if preview.event ~= event then return play_preview(event) end
+    return preview.paused and resume_preview() or pause_preview()
 end
 
 local function register_mod_tweaker()
-    for _, gut_id in ipairs({ "gut_dev", "gut" }) do
-        local gut = get_mod(gut_id)
-        local mt = gut and gut.mod_tweaker
-        if mt and mt.register_category and not mt:is_registered("character_dialogue") then
-            local ok, err = mt:register_category({
-                mod_id = "character_dialogue",
-                label = "Dialogue",
-                widgets = {
-                    {
-                        setting_id = "selected_line", type = "dropdown", label = "Dialogue line",
-                        default = "", options_provider = dialogue_options,
-                        tooltip = "Type while the list is open to search all extracted dialogue events.",
-                    },
-                    { setting_id = "play", type = "action", label = "Play", button_text = "PLAY", on_activate = function()
-                        local ok2, err2 = play_preview(selected_event()); action_result("play", ok2, err2)
-                    end },
-                    { setting_id = "pause", type = "action", label = "Pause / Resume", button_text = "PAUSE", on_activate = function()
-                        local ok2, err2 = preview.paused and resume_preview() or pause_preview(); action_result("pause_resume", ok2, err2)
-                    end },
-                    { setting_id = "stop", type = "action", label = "Stop", button_text = "STOP", on_activate = function()
-                        action_result("stop", stop_preview())
-                    end },
-                    { setting_id = "enable", type = "action", label = "Enable selected line", button_text = "ENABLE", on_activate = function()
-                        local ok2, err2 = set_override(selected_event(), true); action_result("enable", ok2, err2)
-                    end },
-                    { setting_id = "disable", type = "action", label = "Disable selected line", button_text = "DISABLE", on_activate = function()
-                        local ok2, err2 = set_override(selected_event(), false); action_result("disable", ok2, err2)
-                    end },
-                    { setting_id = "inherit", type = "action", label = "Use game default", button_text = "DEFAULT", on_activate = function()
-                        local ok2, err2 = set_override(selected_event(), nil); action_result("inherit", ok2, err2)
-                    end },
-                },
-            })
-            if ok then
-                log("registered Dialogue tab with %s", gut_id)
-                return true
-            end
-            warn("Dialogue tab registration failed: %s", tostring(err))
-        end
-    end
-    return false
+    -- dialogue_browser is a bounded custom control introduced by Tweaker: GUI
+    -- dev. Never fall back to stable GUT: it would render the control as unknown.
+    local gut = get_mod("gut_dev")
+    local mt = gut and gut.mod_tweaker
+    if not mt or not mt.register_category or mt:is_registered("character_dialogue") then return false end
+    local ok, err = mt:register_category({
+        mod_id = "character_dialogue",
+        label = "Dialogue",
+        widgets = {{
+            setting_id = "dialogue_browser", type = "dialogue_browser",
+            label = "Character Dialogue",
+            tooltip = "Search by event, subtitle, group, or source. Expand a character to browse lines.",
+        }},
+    })
+    if ok then log("registered virtual Dialogue tab with gut_dev") else warn("Dialogue tab registration failed: %s", tostring(err)) end
+    return ok and true or false
 end
 
 -- Host-authoritative natural selection. Preserve vanilla byte-for-byte when a
@@ -205,14 +171,29 @@ mod:hook(TagQueryDatabase, "iterate_query", function(func, self, t)
 end)
 
 mod.character_dialogue_api = {
-    version = 1,
+    version = 2,
     catalogue = catalogue,
-    dialogue_options = dialogue_options,
+    browser_groups = function(query)
+        query = type(query) == "string" and query or ""
+        if browser_group_cache.query ~= query then
+            browser_group_cache.query = query
+            browser_group_cache.groups = Browser.index_groups(catalogue_index(), query)
+        end
+        return browser_group_cache.groups
+    end,
+    browser_page = function(speaker, query, offset, limit)
+        return Browser.index_page(catalogue_index(), speaker, query, offset, limit)
+    end,
+    browser_window = Browser.window,
+    browser_reconcile_focus = Browser.reconcile_focus,
+    browser_row_height = Browser.ROW_HEIGHT,
+    browser_page_limit = Browser.PAGE_LIMIT,
     get_line_state = function(event) return overrides[event] end,
     set_line_state = set_override,
     play = play_preview,
     pause = pause_preview,
     resume = resume_preview,
+    toggle_pause = toggle_pause,
     stop = stop_preview,
     preview_state = function() return preview.event, preview.paused, preview.playing_id end,
 }
@@ -237,7 +218,16 @@ mod:command("cd_regression_test", "Character Dialogue self-check", function()
         if type(id) ~= "string" or id == "" or seen[id] then failures = failures + 1; break end
         seen[id] = true
     end
-    mod:echo("Character Dialogue v%s: catalogue=%d overrides=%d failures=%d", MOD_VERSION, #entries, table.size(overrides), failures)
+    local groups = Browser.groups(entries, "")
+    local grouped = 0
+    for i = 1, #groups do grouped = grouped + groups[i].count end
+    local browsable = 0
+    for i = 1, #entries do if Browser.is_browsable(entries[i]) then browsable = browsable + 1 end end
+    if grouped ~= browsable then failures = failures + 1 end
+    local page = Browser.page(entries, "kruber", "", 0, Browser.PAGE_LIMIT)
+    if #page > Browser.PAGE_LIMIT then failures = failures + 1 end
+    mod:echo("Character Dialogue v%s: catalogue=%d browsable=%d grouped=%d visible_cap=%d overrides=%d failures=%d",
+        MOD_VERSION, #entries, browsable, grouped, #page, table.size(overrides), failures)
 end)
 
 mod.on_all_mods_loaded = function() register_mod_tweaker() end

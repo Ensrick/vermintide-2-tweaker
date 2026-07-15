@@ -1,5 +1,28 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.278-dev (2026-07-15) -- #605 Character Dialogue browser [verify-fix]
+
+- Replaced Character Dialogue's flat dropdown and detached action rows with one
+  collapsible per speaking character and one compact row per dialogue event.
+- Each line's Default/Enabled/Disabled state, Play, and Pause/Resume controls now
+  remain on that exact row; only the active event reports Playing or Paused.
+- Virtualized the 34,326 playable candidates: at most 32 catalogue records plus
+  the small visible overscan window are materialized, regardless of catalogue
+  size. Scrolling recycles the window and search retains character grouping.
+- Preview audio stops when its character collapses, another character opens, the
+  user leaves the Dialogue tab, the view closes/destroys, or the world changes.
+- Added engine-free coverage for grouping, sentinel rejection, stable row
+  identity, paging/window bounds, focus reconciliation, single preview ownership,
+  pause/resume, and cleanup wiring.
+
+### Solo verify
+
+Open Mod Tweaker > Dialogue, expand a character, and scroll through the list.
+Search for a line, change its state, play and pause it on the same row, then play
+another row. Confirm the active label follows only the exact line and audio stops
+after collapsing the group, changing tabs, or closing Mod Tweaker. Run
+`/gut_regression_test` and `/cd_regression_test`; both must pass.
+
 ## 0.2.277-dev (2026-07-15) -- #274 mission-intro-only cutscene skipping [untested]
 
 - Restricted both automatic and manual forced skipping to the exact authored mission-intro event, `cs_01_skip`.
@@ -21,7 +44,6 @@ Enable cutscene skipping, then start a mission and confirm only its opening cine
 ### Test
 
 Open Inventory and choose each Character Preview Lighting value. Vanilla must match the original scene exactly; Dim and Dark must progressively darken only the character-preview pane without changing the background. Change values while Inventory is open, close/reopen it, then run `/gut_regression_test`; `inventory_preview_lighting_522` must pass.
-
 ## 0.2.275-dev (2026-07-15) -- #528 remove CKC vanilla Options integration [verify-fix]
 
 ### Why

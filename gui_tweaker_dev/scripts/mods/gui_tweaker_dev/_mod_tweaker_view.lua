@@ -17,6 +17,7 @@ local profiles = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_profiles"
 local disabled_sections = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_disabled_sections")
 local tab_labels = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_tab_labels")
 local ordering = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_ordering")
+local DialogueUI = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -1602,6 +1603,14 @@ function ModTweakerView:_build_rows(category)
     if not category or type(category.widgets) ~= "table" then return end
     self._expanded = self._expanded or {}   -- group_key -> true (expanded); default collapsed
 
+    -- #605: the 34k-line Character Dialogue catalogue is a virtual data source,
+    -- not a VMF widget tree. Build only the rows intersecting the scroll window.
+    self._dialogue_category = false
+    if DialogueUI.is_category(category) then
+        DialogueUI.build(self, category, defs)
+        return
+    end
+
     -- Flatten into parallel node + depth arrays. The VMF flat list ships its own
     -- `depth`; the gut nested tree gets a synthesized depth from _walk_nested. Both
     -- then feed the SAME drill-detection ("the next node is deeper") + inline-skip.
@@ -2425,6 +2434,8 @@ function ModTweakerView:update(dt, t)
 end
 
 function ModTweakerView:destroy()
+    -- #605: destruction can bypass on_exit during state replacement.
+    DialogueUI.stop()
     pcall(function()
         if self._cursor_pushed then
             ShowCursorStack.hide("ModTweakerView")
@@ -3048,6 +3059,8 @@ function ModTweakerView:_handle_input(input_service)
             self._sb_dragging = false
         end
     end
+    -- Recycle the bounded dialogue row pool when scrolling crosses a row.
+    if DialogueUI.refresh_window(self) then return end
 
     -- Exit (X) button.
     if self._exit and self._exit.content.button_hotspot and self._exit.content.button_hotspot.on_release then
@@ -3108,6 +3121,7 @@ function ModTweakerView:_handle_input(input_service)
             _play_click()
             mod:debug("[mt:dump] input: tab[%d] clicked (was %d, drill=%s)", i, self._selected or -1, tostring(self._drill ~= nil))
             if self._more_tab_index and i == self._more_tab_index then
+                if DialogueUI.is_category(self._categories[self._selected]) then DialogueUI.stop() end
                 self:_search_finish()
                 self._drill = nil
                 self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
@@ -3117,6 +3131,7 @@ function ModTweakerView:_handle_input(input_service)
                 self:_rebuild()
                 return
             elseif (i ~= self._selected or self._drill) and self._categories[i] then
+                if DialogueUI.is_category(self._categories[self._selected]) then DialogueUI.stop() end
                 self:_search_finish()
                 self._drill = nil
                 self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
@@ -3126,6 +3141,13 @@ function ModTweakerView:_handle_input(input_service)
                 return
             end
         end
+    end
+
+    -- #605 deterministic controller focus: vertical navigation selects one
+    -- logical virtual row; horizontal navigation selects State/Play/Pause.
+    if DialogueUI.handle_controller(self, input_service) then
+        _play_click()
+        return
     end
 
     -- Diagnostic for "can't change any option": are row hotspots receiving cursor
@@ -3172,7 +3194,12 @@ function ModTweakerView:_handle_input(input_service)
         if not row._readonly and row._middle_visible ~= false
            and not (self._slider_dragging and row ~= self._slider_dragging) then
             local c = row.content
-            if row._is_gear then
+            if row._is_dialogue_group or row._is_dialogue_line then
+                if DialogueUI.handle_row(self, row) then
+                    _play_click()
+                    return
+                end
+            elseif row._is_gear then
                 -- GEAR click: drill INTO this setting's advanced sub-options. Captures
                 -- the parent setting_id + label, resets scroll, and rebuilds the list as
                 -- Back + parent + children (see _build_rows' _drill branch).
@@ -3767,6 +3794,7 @@ function ModTweakerView:_draw(dt, input_service)
         local middle = math.point_is_inside_2d_box({ px, py + 23 }, mask_pos, mask_size)  -- ROW_H/2
         row._middle_visible = middle
         if middle then
+            DialogueUI.refresh_row(row, self)
             self:_apply_row_hover(row)
             -- (#207) Capture the hovered tooltip'd row (+ its bottom-edge world Y for the
             -- on-screen flip test). Either the full-row hover hotspot (row_hs, added by
@@ -3789,6 +3817,9 @@ function ModTweakerView:_draw(dt, input_service)
                 if c.hotspot then c.hotspot.on_release = nil; c.hotspot.on_left_release = nil end
                 if c.dec then c.dec.on_release = nil; c.dec.on_left_release = nil end
                 if c.inc then c.inc.on_release = nil; c.inc.on_left_release = nil end
+                if c.state_hotspot then c.state_hotspot.on_release = nil; c.state_hotspot.on_left_release = nil end
+                if c.play_hotspot then c.play_hotspot.on_release = nil; c.play_hotspot.on_left_release = nil end
+                if c.pause_hotspot then c.pause_hotspot.on_release = nil; c.pause_hotspot.on_left_release = nil end
             end
         end
     end

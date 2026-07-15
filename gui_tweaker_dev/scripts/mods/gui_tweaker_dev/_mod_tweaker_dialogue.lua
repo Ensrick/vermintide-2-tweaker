@@ -1,0 +1,348 @@
+-- #605 Character Dialogue adapter. Character Dialogue owns catalogue/search/
+-- playback semantics; this module renders only a bounded virtual window.
+local DialogueUI = {}
+
+local function api()
+    local cd = get_mod("character_dialogue")
+    local value = cd and cd.character_dialogue_api
+    return value and value.version >= 2 and value or nil
+end
+
+function DialogueUI.is_category(category)
+    local widget = category and category.widgets and category.widgets[1]
+    return category and category.mod_id == "character_dialogue"
+        and widget and widget.type == "dialogue_browser"
+end
+
+function DialogueUI.stop()
+    local value = api()
+    if value and value.stop then pcall(value.stop) end
+end
+
+local function state_text(value)
+    if value == true then return "ENABLED" end
+    if value == false then return "DISABLED" end
+    return "DEFAULT"
+end
+
+local function group_key(id) return "character_dialogue:" .. tostring(id) end
+
+function DialogueUI.build(view, category, defs)
+    local value = api()
+    view._dialogue_virtual_first = nil
+    view._dialogue_virtual_last = nil
+    view._dialogue_category = true
+    view._build_nodes, view._build_depths, view._build_category = {}, {}, category
+    if not value then
+        local at = { 0, -10, 0 }
+        local row = defs.create_section_title("Character Dialogue is unavailable", at, 0)
+        row._readonly, row._list_y = true, at[2]
+        view._rows[1], view._content_h = row, 80
+        view:_recompute_scroll_bounds()
+        return true
+    end
+
+    local query = view._search_str or ""
+    local query_changed = view._dialogue_last_query ~= query
+    view._dialogue_last_query = query
+    local groups = value.browser_groups(query)
+    local expanded = view._dialogue_expanded
+    local line_count = 0
+    if expanded then
+        local _, total = value.browser_page(expanded, query, 0, 1)
+        line_count = total or 0
+        if line_count == 0 then
+            -- Filtering the active character to zero is a real collapse edge.
+            -- Stop its owned preview before removing the group from the view.
+            value.stop()
+            expanded = nil
+            view._dialogue_expanded = nil
+        end
+    end
+    local window = value.browser_window(groups, expanded, line_count,
+        view._scroll_y or 0, view._visible_h or 680, 2)
+    view._dialogue_virtual_first, view._dialogue_virtual_last = window.first, window.last
+    view._dialogue_logical_count = window.logical_count
+
+    local visible_groups, expanded_pos = {}, nil
+    for i = 1, #groups do
+        if groups[i].count > 0 then
+            visible_groups[#visible_groups + 1] = groups[i]
+            if groups[i].id == expanded then expanded_pos = #visible_groups end
+        end
+    end
+
+    local first_line_offset, last_line_offset
+    if expanded_pos then
+        first_line_offset = math.max(0, window.first - expanded_pos - 1)
+        last_line_offset = math.min(line_count - 1, window.last - expanded_pos - 1)
+        if last_line_offset < first_line_offset then first_line_offset, last_line_offset = nil, nil end
+    end
+    local page, by_offset = {}, {}
+    if first_line_offset then
+        page = value.browser_page(expanded, query, first_line_offset,
+            last_line_offset - first_line_offset + 1)
+        for i = 1, #page do by_offset[first_line_offset + i - 1] = page[i] end
+    end
+
+    local visible_ids, visible_sequences = {}, {}
+    for sequence = window.first, window.last do
+        local base = { 0, -10 - (sequence - 1) * (value.browser_row_height or 32), 0 }
+        local line_offset
+        if expanded_pos and sequence > expanded_pos and sequence <= expanded_pos + line_count then
+            line_offset = sequence - expanded_pos - 1
+        end
+        if line_offset ~= nil then
+            local item = by_offset[line_offset]
+            if item then
+                local row = defs.create_dialogue_row(item.event,
+                    state_text(value.get_line_state(item.event)), base, 1)
+                row._is_dialogue_line = true
+                row._dialogue_event = item.event
+                row._dialogue_speaker = item.speaker
+                row._dialogue_row_id = item.id
+                row._dialogue_sequence = sequence
+                row._list_y = base[2]
+                row._category = category
+                view._rows[#view._rows + 1] = row
+                visible_ids[#visible_ids + 1] = item.id
+                visible_sequences[#visible_sequences + 1] = sequence
+            end
+        else
+            local group_index = sequence
+            if expanded_pos and sequence > expanded_pos + line_count then
+                group_index = sequence - line_count
+            end
+            local group = visible_groups[group_index]
+            if group then
+                local row = defs.create_group_header(
+                    string.format("%s  (%d)", group.label, group.count),
+                    group.id == expanded, base, 0)
+                row._is_group = true
+                row._is_dialogue_group = true
+                row._dialogue_speaker = group.id
+                row._dialogue_sequence = sequence
+                row._dialogue_group_index = group_index
+                row._dialogue_row_id = group_key(group.id)
+                local label_color = row.style and row.style.label and row.style.label.text_color
+                if label_color then
+                    row._dialogue_base_label_color = { label_color[1], label_color[2], label_color[3], label_color[4] }
+                end
+                row._group_key = group_key(group.id)
+                row._list_y = base[2]
+                row._category = category
+                view._rows[#view._rows + 1] = row
+                visible_ids[#visible_ids + 1] = row._dialogue_row_id
+                visible_sequences[#visible_sequences + 1] = sequence
+            end
+        end
+    end
+
+    if window.logical_count == 0 then
+        local base = { 0, -10, 0 }
+        local row = defs.create_section_title("No dialogue lines match this search", base, 0)
+        row._readonly, row._list_y = true, base[2]
+        view._rows[1] = row
+    end
+    view._content_h = window.content_height
+    local target_sequence = view._dialogue_focus_target_sequence
+    view._dialogue_focus_target_sequence = nil
+    if target_sequence then
+        for i = 1, #visible_sequences do
+            if visible_sequences[i] == target_sequence then
+                view._dialogue_focus_id = visible_ids[i]
+                view._dialogue_focus_sequence = target_sequence
+                break
+            end
+        end
+    elseif query_changed then
+        -- Filtering may move a sequence onto a different event. Reconcile by
+        -- stable Wwise/group identity, falling back to the first visible row.
+        local index, id = value.browser_reconcile_focus(visible_ids, view._dialogue_focus_id)
+        view._dialogue_focus_id = id
+        view._dialogue_focus_sequence = index and visible_sequences[index] or nil
+    elseif not view._dialogue_focus_id and visible_ids[1] then
+        view._dialogue_focus_id = visible_ids[1]
+        view._dialogue_focus_sequence = visible_sequences[1]
+    end
+    view._dialogue_focus_sequence = math.clamp(
+        view._dialogue_focus_sequence or window.first, 1, math.max(1, window.logical_count))
+    view._dialogue_focus_control = math.clamp(view._dialogue_focus_control or 1, 1, 3)
+    view:_recompute_scroll_bounds()
+    view._scroll_y = math.clamp(view._scroll_y or 0, 0, view._max_scroll)
+    return true
+end
+
+local function released(hotspot)
+    return hotspot and (hotspot.on_release or hotspot.on_left_release)
+end
+
+local function once(row, key, down)
+    row._dialogue_latches = row._dialogue_latches or {}
+    local fire = down and not row._dialogue_latches[key]
+    row._dialogue_latches[key] = down and true or false
+    return fire
+end
+
+local function toggle_group(view, row, value, block_stale_mouse_release)
+    local speaker = row._dialogue_speaker
+    local closing = view._dialogue_expanded == speaker
+    value.stop()
+    view._dialogue_expanded = closing and nil or speaker
+    view._dialogue_focus_id = group_key(speaker)
+    view._dialogue_focus_sequence = row._dialogue_group_index or 1
+    view._dialogue_focus_target_sequence = view._dialogue_focus_sequence
+    view._dialogue_focus_control = 1
+    view._scroll_y = 0
+    -- Rebuilt shared-node rows must not consume the stale mouse release. Do not
+    -- set this for controller confirm: it has no future Mouse.pressed edge.
+    if block_stale_mouse_release then view._dd_block_until_press = true end
+    view:_build_rows(view._categories[view._selected])
+end
+
+local function activate_line(view, row, value, control)
+    local event = row._dialogue_event
+    if control == 1 then
+        local current = value.get_line_state(event)
+        local next_value = current == nil and true or current == true and false or nil
+        value.set_line_state(event, next_value)
+        row.content.state_text = state_text(next_value)
+    elseif control == 2 then
+        value.play(event)
+    else
+        value.toggle_pause(event)
+    end
+end
+
+function DialogueUI.handle_row(view, row)
+    local value = api()
+    if not value then return false end
+    local content = row.content or {}
+    if row._is_dialogue_group then
+        local down = released(content.hotspot)
+        if once(row, "group", down) then
+            toggle_group(view, row, value, true)
+            return true
+        end
+        return false
+    end
+    if not row._is_dialogue_line then return false end
+    if once(row, "state", released(content.state_hotspot)) then
+        view._dialogue_focus_id = row._dialogue_row_id
+        view._dialogue_focus_sequence, view._dialogue_focus_control = row._dialogue_sequence, 1
+        activate_line(view, row, value, 1)
+        return true
+    end
+    if once(row, "play", released(content.play_hotspot)) then
+        view._dialogue_focus_id = row._dialogue_row_id
+        view._dialogue_focus_sequence, view._dialogue_focus_control = row._dialogue_sequence, 2
+        activate_line(view, row, value, 2)
+        return true
+    end
+    if once(row, "pause", released(content.pause_hotspot)) then
+        view._dialogue_focus_id = row._dialogue_row_id
+        view._dialogue_focus_sequence, view._dialogue_focus_control = row._dialogue_sequence, 3
+        activate_line(view, row, value, 3)
+        return true
+    end
+    return false
+end
+
+function DialogueUI.handle_controller(view, input_service)
+    if not view._dialogue_category or not input_service or view._search_focused then return false end
+    local count = view._dialogue_logical_count or 0
+    if count == 0 then return false end
+    local focus = math.clamp(view._dialogue_focus_sequence or 1, 1, count)
+    local moved
+    if input_service:get("move_up", true) then focus = math.max(1, focus - 1); moved = true
+    elseif input_service:get("move_down", true) then focus = math.min(count, focus + 1); moved = true end
+    if moved then
+        view._dialogue_focus_sequence = focus
+        view._dialogue_focus_control = 1
+        view._dialogue_focus_target_sequence = focus
+        local first, last = view._dialogue_virtual_first or 1, view._dialogue_virtual_last or count
+        if focus < first + 1 or focus > last - 1 then
+            local row_h = (api() and api().browser_row_height) or 32
+            view._scroll_y = math.clamp((focus - 3) * row_h, 0, view._max_scroll or 0)
+            view:_build_rows(view._categories[view._selected])
+        else
+            for i = 1, #(view._rows or {}) do
+                local row = view._rows[i]
+                if row._dialogue_sequence == focus then view._dialogue_focus_id = row._dialogue_row_id; break end
+            end
+            view._dialogue_focus_target_sequence = nil
+        end
+        return true
+    end
+    local focused_row
+    for i = 1, #(view._rows or {}) do
+        if view._rows[i]._dialogue_sequence == focus
+           and view._rows[i]._dialogue_row_id == view._dialogue_focus_id then
+            focused_row = view._rows[i]
+            break
+        end
+    end
+    if not focused_row then return false end
+    if focused_row._is_dialogue_line then
+        local control = view._dialogue_focus_control or 1
+        if input_service:get("move_left", true) then
+            view._dialogue_focus_control = math.max(1, control - 1); return true
+        elseif input_service:get("move_right", true) then
+            view._dialogue_focus_control = math.min(3, control + 1); return true
+        end
+    end
+    if input_service:get("confirm", true) then
+        local value = api()
+        if focused_row._is_dialogue_group then toggle_group(view, focused_row, value, false)
+        else activate_line(view, focused_row, value, view._dialogue_focus_control or 1) end
+        return true
+    end
+    return false
+end
+
+function DialogueUI.refresh_row(row, view)
+    if not row then return end
+    local selected = view and row._dialogue_sequence == view._dialogue_focus_sequence
+        and row._dialogue_row_id == view._dialogue_focus_id
+    if row._is_dialogue_group then
+        local color = row.style and row.style.label and row.style.label.text_color
+        if color then
+            local base = row._dialogue_base_label_color or { 255, 255, 168, 0 }
+            if selected then color[1], color[2], color[3], color[4] = 255, 255, 255, 255
+            else color[1], color[2], color[3], color[4] = base[1], base[2], base[3], base[4] end
+        end
+        return
+    end
+    if not row._is_dialogue_line then return end
+    local value = api()
+    if not value then return end
+    local event, paused = value.preview_state()
+    local active = event == row._dialogue_event
+    row.content.state_text = state_text(value.get_line_state(row._dialogue_event))
+    row.content.play_text = active and (paused and "PAUSED" or "PLAYING") or "PLAY"
+    row.content.pause_text = active and paused and "RESUME" or "PAUSE"
+    for index, style_id in ipairs({ "state_text", "play_text", "pause_text" }) do
+        local color = row.style and row.style[style_id] and row.style[style_id].text_color
+        if color then
+            if selected and index == (view._dialogue_focus_control or 1) then
+                color[1], color[2], color[3], color[4] = 255, 255, 168, 0
+            else
+                color[1], color[2], color[3], color[4] = 255, 160, 146, 101
+            end
+        end
+    end
+end
+
+function DialogueUI.refresh_window(view)
+    if not view._dialogue_category then return false end
+    local value = api()
+    if not value then return false end
+    local first = math.max(1, math.floor((view._scroll_y or 0) / (value.browser_row_height or 32)) + 1 - 2)
+    if first ~= view._dialogue_virtual_first then
+        view:_build_rows(view._categories[view._selected])
+        return true
+    end
+    return false
+end
+
+return DialogueUI
