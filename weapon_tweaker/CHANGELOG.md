@@ -6,6 +6,7 @@
 - Preserved every baked animation remap, grip/scale/rotation transform, cross-career availability control, weapon tweak, and read-only support command owned by the public mod.
 - Extended `qa/check_wt_stream_parity.ps1` to reject public dev-tool files/symbols/status tags, non-read-only commands, and orphan visible settings while allowing only documented dev-overlay differences.
 - Added `/wt_regression_test` check `issue635_public_beta_dev_surface_absent` for the public runtime export boundary.
+- Removed the retired Kruber Longbow zoom-controls claim from the Workshop feature list; the native draw behavior remains owned by the shipped #316 animation fix, not a user-facing zoom setting.
 
 ## 0.12.264-beta (2026-07-15) - #316 Kruber Longbow native draw playback [verify-fix-coop]
 

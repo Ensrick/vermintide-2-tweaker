@@ -5,6 +5,7 @@
 - Kept the live 3P Animation Picker, Hold-Pose tuner, port-status decoration, tuning diagnostics, and their regression coverage in the friends-only `wt_dev` stream while the public beta removes them.
 - Added a blocking stream contract that keeps all non-overlay gameplay modules synchronized with the public beta and independently rejects any dev-surface leak into public WT.
 - Gameplay behavior is unchanged from `0.12.265-dev`; this bump identifies the separately rebuilt, deployed, and uploaded development stream.
+- Removed the retired Kruber Longbow zoom-controls claim from this stream's Workshop feature list.
 
 ## 0.12.265-dev (2026-07-15) - #634 restore the friends-only dev stream
 
