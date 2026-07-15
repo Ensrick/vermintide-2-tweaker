@@ -1,5 +1,20 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.112-dev - 2026-07-15 - #612 Encarmine compiled package/material repair [verify-fix-coop]
+
+### Fixed
+
+- Added the missing same-path `units/cosmetics_tweaker/encarmine_hat/encarmine_hat.package` resource. Hero and loot previewers can now load the custom unit path as a real PackageManager package instead of fatally requesting absent resource `BD55DCA31255AAEC.package`.
+- Replaced the invalid Material-Hijack parent binding with two fully compiled, unit-owned materials matching the FBX renderables `encarmine_armored` and `encarmine_cloth`. They use the exact supplied Encarmine armor/cloth diffuse pixels, the unchanged vanilla normal maps, and metallic/AO/roughness channels derived losslessly from the unchanged vanilla packed maps.
+- The custom unit activates only after `Application.can_get` proves its package, unit, both materials, and all ten material textures resident. Any incomplete or drifted build continues to render the v0.9.111 Laurel Helm fallback rather than entering PackageManager.
+- Extended the compiled-bundle gate: sidecar unit packages must be forwarded from an explicit mod package root, own a standalone bundle, contain their unit, contain every authored material, and contain every texture referenced by those materials.
+- Pinned SHA-256 checks for both exact supplied Encarmine diffuse files and all four unchanged vanilla normal/packed sources. Asset replacement or accidental recompression now fails QA.
+- Preserved the existing stable item identity, global localization, vanilla fallback wire identity, inventory/mission renderer routing, score presentation, and bounded remote appearance channel.
+
+### Co-op verification
+
+Confirm `[cosmetics:LOAD] v0.9.112-dev`, equip **Encarmine Helmet** on Foot Knight, and inspect the inventory mannequin, keep/lobby third person, a mission, hot join, and score presentation. Both Cosmetics peers must see the exact red/gold armor and black cloth/plume. A peer without Cosmetics must see the vanilla Laurel fallback and must not crash. `/cos_regression_test` must pass `issue612_encarmine_hat_contract`; the log must contain no missing-resource warning for `BD55DCA31255AAEC`.
+
 ## 0.9.111-dev - 2026-07-15 - #612 critical Encarmine equip crash guard [in-progress]
 
 ### Fixed

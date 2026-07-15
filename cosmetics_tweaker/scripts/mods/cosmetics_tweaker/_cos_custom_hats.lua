@@ -10,14 +10,33 @@ M.ITEM_KEY = "cos_encarmine_hat"
 M.VARIANT_KEY = "cos_custom_encarmine_hat"
 M.BASE_KEY = "knight_hat_0006"
 M.BASE_UNIT = "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_07"
--- v0.9.110's custom package compiled successfully but retained an unresolved
--- runtime dependency. PackageManager fatals are engine-side and bypass pcall,
--- so a persisted equip can otherwise crash again as soon as a preview loads.
--- Keep the candidate path for diagnostics, but fail closed on the proven
--- inventory-package-listed vanilla unit until dependency closure is verified.
+-- v0.9.110 shipped a unit without a same-path resource package, so preview
+-- PackageManager loads fatally missed BD55DCA31255AAEC.package. Keep the
+-- candidate quarantined behind a complete package/unit/material/texture probe;
+-- any missing resource retains the inventory-package-listed vanilla fallback.
 M.CANDIDATE_CUSTOM_UNIT = "units/cosmetics_tweaker/encarmine_hat/encarmine_hat"
 M.CUSTOM_UNIT = M.BASE_UNIT
+M.CUSTOM_MATERIALS = {
+    "units/cosmetics_tweaker/encarmine_hat/encarmine_armored",
+    "units/cosmetics_tweaker/encarmine_hat/encarmine_cloth",
+}
+M.CUSTOM_TEXTURES = {
+    "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_diffuse",
+    "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_normal",
+    "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_metallic",
+    "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_ao",
+    "textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_roughness",
+    "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_diffuse",
+    "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_normal",
+    "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_metallic",
+    "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_ao",
+    "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_roughness",
+}
+M.runtime_custom_ready = false
 M.registered = false
+M._probe_elapsed = 0
+M._probe_attempts = 0
+M._probe_limit = 30
 
 local ITEM_LOCALIZATION = {
     cos_encarmine_hat_name = "Encarmine Helmet",
@@ -25,6 +44,61 @@ local ITEM_LOCALIZATION = {
         "A red-and-gold Foot Knight helm with a black plume, created for Tweaker: Cosmetics.",
 }
 M.ITEM_LOCALIZATION = ITEM_LOCALIZATION
+
+local function can_get(application, resource_type, path)
+    if not (application and type(application.can_get) == "function") then return false end
+    local ok, result = pcall(application.can_get, resource_type, path)
+    return ok and result == true
+end
+
+local function ensure_custom_clone_bridge()
+    local bridge = M.bridge
+    if not (M.runtime_custom_ready and bridge and bridge.unit_path_to_clones) then return end
+    local clones = bridge.unit_path_to_clones[M.CANDIDATE_CUSTOM_UNIT] or {}
+    for _, key in ipairs(clones) do
+        if key == M.ITEM_KEY then return end
+    end
+    clones[#clones + 1] = M.ITEM_KEY
+    bridge.unit_path_to_clones[M.CANDIDATE_CUSTOM_UNIT] = clones
+end
+
+function M.runtime_resources_ready(application)
+    if not can_get(application, "package", M.CANDIDATE_CUSTOM_UNIT)
+        or not can_get(application, "unit", M.CANDIDATE_CUSTOM_UNIT) then
+        return false
+    end
+    for _, path in ipairs(M.CUSTOM_MATERIALS) do
+        if not can_get(application, "material", path) then return false end
+    end
+    for _, path in ipairs(M.CUSTOM_TEXTURES) do
+        if not can_get(application, "texture", path) then return false end
+    end
+    return true
+end
+
+function M.refresh_runtime_resources(application)
+    local ready = M.runtime_resources_ready(application)
+    M.runtime_custom_ready = ready
+    M.CUSTOM_UNIT = ready and M.CANDIDATE_CUSTOM_UNIT or M.BASE_UNIT
+    ensure_custom_clone_bridge()
+    local entry = ItemMasterList and rawget(ItemMasterList, M.ITEM_KEY)
+    if entry then entry.unit = M.CUSTOM_UNIT end
+    return ready
+end
+
+function M.tick(dt)
+    if M.runtime_custom_ready or M._probe_attempts >= M._probe_limit then return end
+    M._probe_elapsed = M._probe_elapsed + (tonumber(dt) or 0)
+    if M._probe_attempts > 0 and M._probe_elapsed < 0.25 then return end
+    M._probe_elapsed = 0
+    M._probe_attempts = M._probe_attempts + 1
+    if M.refresh_runtime_resources(Application) then
+        M.sync_toggle()
+        mod:info("[cos:encarmine] compiled package closure ready after %d probe(s)", M._probe_attempts)
+    elseif M._probe_attempts == M._probe_limit then
+        mod:error("[cos:encarmine] custom package closure unavailable after %d probes; retaining Laurel fallback", M._probe_attempts)
+    end
+end
 
 local function enabled()
     if not mod or type(mod.get) ~= "function" then return true end
@@ -86,6 +160,8 @@ function M.sync_toggle()
 end
 
 function M.register_all(bridge)
+    M.bridge = bridge or M.bridge
+    M.refresh_runtime_resources(Application)
     if M.registered then
         M.sync_toggle()
         return true
@@ -107,10 +183,7 @@ function M.register_all(bridge)
         bridge.armoury_to_backend[M.VARIANT_KEY] = M.ITEM_KEY
         -- Never alias the shared vanilla fallback path as a custom clone: that
         -- would make ordinary Laurel Helm instances look like this item.
-        if M.CUSTOM_UNIT ~= M.BASE_UNIT then
-            bridge.unit_path_to_clones[M.CUSTOM_UNIT] = bridge.unit_path_to_clones[M.CUSTOM_UNIT] or {}
-            bridge.unit_path_to_clones[M.CUSTOM_UNIT][#bridge.unit_path_to_clones[M.CUSTOM_UNIT] + 1] = M.ITEM_KEY
-        end
+        ensure_custom_clone_bridge()
         bridge.custom_variants = bridge.custom_variants or {}
         bridge.custom_variants[M.VARIANT_KEY] = true
         -- `registered` means the shared net-safe appearance registry is live.
@@ -119,8 +192,8 @@ function M.register_all(bridge)
     end
 
     M.registered = true
-    mod:warning("[cos:encarmine] safe fallback active: %s -> %s (candidate=%s enabled=%s)",
-        M.ITEM_KEY, M.BASE_UNIT, M.CANDIDATE_CUSTOM_UNIT, tostring(enabled()))
+    mod:info("[cos:encarmine] registered %s -> %s (package_ready=%s enabled=%s)",
+        M.ITEM_KEY, M.CUSTOM_UNIT, tostring(M.runtime_custom_ready), tostring(enabled()))
     return true
 end
 

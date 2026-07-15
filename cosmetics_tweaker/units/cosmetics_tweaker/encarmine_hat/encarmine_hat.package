@@ -1,0 +1,12 @@
+unit = [
+	"units/cosmetics_tweaker/encarmine_hat/encarmine_hat"
+]
+
+material = [
+	"units/cosmetics_tweaker/encarmine_hat/encarmine_armored"
+	"units/cosmetics_tweaker/encarmine_hat/encarmine_cloth"
+]
+
+texture = [
+	"textures/cosmetics_tweaker/encarmine_hat/*"
+]

@@ -3,6 +3,7 @@ return function(H, repo_root)
         local saved_get_mod = _G.get_mod
         local saved_iml = _G.ItemMasterList
         local saved_lookup = _G.NetworkLookup
+        local saved_application = _G.Application
         local saved_clone = table.clone
         local setting = true
         local backend_entries = nil
@@ -40,6 +41,7 @@ return function(H, repo_root)
             },
         }
         _G.NetworkLookup = { item_names = {} }
+        _G.Application = nil
         table.clone = function(source)
             local out = {}
             for k, v in pairs(source) do out[k] = v end
@@ -62,6 +64,7 @@ return function(H, repo_root)
         _G.get_mod = saved_get_mod
         _G.ItemMasterList = saved_iml
         _G.NetworkLookup = saved_lookup
+        _G.Application = saved_application
         table.clone = saved_clone
         if not ok then error(err, 0) end
     end
@@ -101,6 +104,45 @@ return function(H, repo_root)
         end)
     end)
 
+    H.test("Encarmine activates custom unit only after complete resource proof", function()
+        isolated(function(hats, bridge)
+            local allowed = { package = {}, unit = {}, material = {}, texture = {} }
+            allowed.package[hats.CANDIDATE_CUSTOM_UNIT] = true
+            allowed.unit[hats.CANDIDATE_CUSTOM_UNIT] = true
+            for _, path in ipairs(hats.CUSTOM_MATERIALS) do allowed.material[path] = true end
+            for _, path in ipairs(hats.CUSTOM_TEXTURES) do allowed.texture[path] = true end
+            _G.Application = {
+                can_get = function(kind, path)
+                    return allowed[kind] and allowed[kind][path] or false
+                end,
+            }
+            H.truthy(hats.register_all(bridge))
+            H.truthy(hats.runtime_custom_ready)
+            H.equal(hats.CUSTOM_UNIT, hats.CANDIDATE_CUSTOM_UNIT)
+            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.CANDIDATE_CUSTOM_UNIT)
+            H.equal(bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT][1], hats.ITEM_KEY)
+
+            -- Losing any one compiled dependency must restore the safe unit.
+            allowed.material[hats.CUSTOM_MATERIALS[1]] = nil
+            H.equal(hats.refresh_runtime_resources(_G.Application), false)
+            H.equal(hats.CUSTOM_UNIT, hats.BASE_UNIT)
+            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
+        end)
+    end)
+
+    H.test("Encarmine late package proof installs one renderer bridge alias", function()
+        isolated(function(hats, bridge)
+            H.truthy(hats.register_all(bridge))
+            H.equal(bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], nil)
+            _G.Application = { can_get = function() return true end }
+            H.truthy(hats.refresh_runtime_resources(_G.Application))
+            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.CANDIDATE_CUSTOM_UNIT)
+            H.equal(#bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], 1)
+            H.truthy(hats.refresh_runtime_resources(_G.Application))
+            H.equal(#bridge.unit_path_to_clones[hats.CANDIDATE_CUSTOM_UNIT], 1)
+        end)
+    end)
+
     H.test("Encarmine toggle fails closed without changing lookup identity", function()
         isolated(function(hats, bridge, set_setting)
             H.truthy(hats.register_all(bridge))
@@ -120,6 +162,9 @@ return function(H, repo_root)
         local files = {
             "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_hat.fbx",
             "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_hat.unit",
+            "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_hat.package",
+            "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_armored.material",
+            "/cosmetics_tweaker/units/cosmetics_tweaker/encarmine_hat/encarmine_cloth.material",
             "/cosmetics_tweaker/textures/cosmetics_tweaker/encarmine_hat/encarmine_armored_diffuse.png",
             "/cosmetics_tweaker/textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_diffuse.png",
             "/cosmetics_tweaker/gui/1080p/single_textures/cosmetics_tweaker/icon_knight_hat_0006_encarmine.png",

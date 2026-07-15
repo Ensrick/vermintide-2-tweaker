@@ -79,15 +79,20 @@ function Get-Murmur64([string]$ResourcePath) {
 }
 
 $bundleListCache = @{}
-function Get-BundleUnitIds([string]$BundlePath) {
-    if ($bundleListCache.ContainsKey($BundlePath)) { return $bundleListCache[$BundlePath] }
+function Get-BundleResourceIds([string]$BundlePath, [string]$Extension) {
+    $cacheKey = "$BundlePath|$Extension"
+    if ($bundleListCache.ContainsKey($cacheKey)) { return $bundleListCache[$cacheKey] }
     $ids = @{}
     foreach ($line in Invoke-Unpacker @('list', $BundlePath)) {
-        $match = [regex]::Match($line, '(?i)^([0-9a-f]{16})\.unit\b')
+        $match = [regex]::Match($line, "(?i)^([0-9a-f]{16})\.$([regex]::Escape($Extension))\b")
         if ($match.Success) { $ids[$match.Groups[1].Value.ToUpperInvariant()] = $true }
     }
-    $bundleListCache[$BundlePath] = $ids
+    $bundleListCache[$cacheKey] = $ids
     return $ids
+}
+
+function Get-BundleUnitIds([string]$BundlePath) {
+    return Get-BundleResourceIds $BundlePath 'unit'
 }
 
 function Get-ModPackageRoots([string]$ModSourcePath) {
@@ -124,6 +129,7 @@ foreach ($entry in $inventory.Mods) {
     }
 
     $rootUnitIds = @{}
+    $rootPackageIds = @{}
     $rootBundleNames = New-Object System.Collections.Generic.List[string]
     foreach ($root in $roots) {
         $rootHash = Get-Murmur64 $root
@@ -134,6 +140,7 @@ foreach ($entry in $inventory.Mods) {
         }
         $rootBundleNames.Add([IO.Path]::GetFileName($bundle))
         foreach ($id in (Get-BundleUnitIds $bundle).Keys) { $rootUnitIds[$id] = $true }
+        foreach ($id in (Get-BundleResourceIds $bundle 'package').Keys) { $rootPackageIds[$id] = $true }
     }
 
     foreach ($unitFile in $unitFiles) {
@@ -141,19 +148,84 @@ foreach ($entry in $inventory.Mods) {
         $resourcePath = $relative.Substring(0, $relative.Length - '.unit'.Length)
         $unitHash = Get-Murmur64 $resourcePath
         $checkedUnits++
-        if ($rootUnitIds[$unitHash]) { continue }
+        if (-not $rootUnitIds[$unitHash]) {
+            $owners = New-Object System.Collections.Generic.List[string]
+            foreach ($bundle in Get-ChildItem -LiteralPath $bundleRoot -File -Filter '*.mod_bundle') {
+                if ($rootBundleNames.Contains($bundle.Name)) { continue }
+                if ((Get-BundleUnitIds $bundle.FullName)[$unitHash]) { $owners.Add($bundle.Name) }
+            }
+            $ownerText = if ($owners.Count -gt 0) {
+                'compiled only in unrooted bundle(s): ' + ($owners -join ', ')
+            } else {
+                'absent from every compiled bundle'
+            }
+            $errors.Add("$($entry.Dir): $resourcePath [$unitHash.unit] is not resident from any explicit .mod package root; $ownerText")
+            continue
+        }
 
-        $owners = New-Object System.Collections.Generic.List[string]
-        foreach ($bundle in Get-ChildItem -LiteralPath $bundleRoot -File -Filter '*.mod_bundle') {
-            if ($rootBundleNames.Contains($bundle.Name)) { continue }
-            if ((Get-BundleUnitIds $bundle.FullName)[$unitHash]) { $owners.Add($bundle.Name) }
+        # A sibling package is an authored promise that PackageManager may load
+        # the unit path directly (the exact boundary used by hero previews).
+        # Prove both the root forwarding resource and the standalone package's
+        # unit/material dependency closure; a successful shader compile alone
+        # is insufficient because engine async package fatals bypass Lua.
+        $sidecarPackage = [IO.Path]::ChangeExtension($unitFile.FullName, '.package')
+        if (Test-Path -LiteralPath $sidecarPackage -PathType Leaf) {
+            if (-not $rootPackageIds[$unitHash]) {
+                $errors.Add("$($entry.Dir): $resourcePath has a sidecar .package but [$unitHash.package] is absent from every explicit root bundle")
+                continue
+            }
+            $standalone = Join-Path $bundleRoot ($unitHash.ToLowerInvariant() + '.mod_bundle')
+            if (-not (Test-Path -LiteralPath $standalone -PathType Leaf)) {
+                $errors.Add("$($entry.Dir): $resourcePath sidecar package has no compiled $($unitHash.ToLowerInvariant()).mod_bundle")
+                continue
+            }
+            if (-not (Get-BundleUnitIds $standalone)[$unitHash]) {
+                $errors.Add("$($entry.Dir): $resourcePath standalone package omits its unit [$unitHash.unit]")
+            }
+            $unitText = [IO.File]::ReadAllText($unitFile.FullName, [Text.Encoding]::UTF8)
+            foreach ($materialMatch in [regex]::Matches($unitText, '(?m)^\s*\w+\s*=\s*"([^"]+)"\s*$')) {
+                $materialPath = $materialMatch.Groups[1].Value
+                if ($materialPath -notmatch '/encarmine_(?:armored|cloth)$') { continue }
+                $materialHash = Get-Murmur64 $materialPath
+                if (-not (Get-BundleResourceIds $standalone 'material')[$materialHash]) {
+                    $errors.Add("$($entry.Dir): $resourcePath standalone package omits material $materialPath [$materialHash.material]")
+                }
+                $materialSource = Join-Path $modRoot (($materialPath -replace '/', '\') + '.material')
+                if (Test-Path -LiteralPath $materialSource -PathType Leaf) {
+                    $materialText = [IO.File]::ReadAllText($materialSource, [Text.Encoding]::UTF8)
+                    foreach ($textureMatch in [regex]::Matches($materialText, '"(textures/[^"]+)"')) {
+                        $texturePath = $textureMatch.Groups[1].Value
+                        $textureHash = Get-Murmur64 $texturePath
+                        if (-not (Get-BundleResourceIds $standalone 'texture')[$textureHash]) {
+                            $errors.Add("$($entry.Dir): $resourcePath standalone package omits texture $texturePath [$textureHash.texture]")
+                        }
+                    }
+                }
+            }
+
+            if ($resourcePath -eq 'units/cosmetics_tweaker/encarmine_hat/encarmine_hat') {
+                $expectedAssets = [ordered]@{
+                    'encarmine_armored_diffuse.png'  = '1E3A23798DF61BDC940C9E1D3CD42607078118A487420E02345D4C59B30912E7'
+                    'encarmine_cloth_diffuse.png'    = 'B5925708AB95BEFF7B800FCAD717F308BCFB173E8069343D3AADE83FC282954D'
+                    'encarmine_armored_normal.png'   = '8FEB4D44EEB5C0551E752741F650264D4AA1224528910FCDF598186E89EF423D'
+                    'encarmine_armored_combined.png' = '0714FCF0C7FD21CB35E8B857427E92C103AFE8ABB830308A2346F9E593C297B7'
+                    'encarmine_cloth_normal.png'     = '7433488E5AEC2277FD0860D67FC834A9EA1450EAAEDE8A15867681F78E47B189'
+                    'encarmine_cloth_combined.png'   = 'FBEAD3279C4D420DDC75BA665EF112DC4110A82386F71F96BD3372BAF47C5045'
+                }
+                $textureRoot = Join-Path $modRoot 'textures\cosmetics_tweaker\encarmine_hat'
+                foreach ($asset in $expectedAssets.GetEnumerator()) {
+                    $assetPath = Join-Path $textureRoot $asset.Key
+                    if (-not (Test-Path -LiteralPath $assetPath -PathType Leaf)) {
+                        $errors.Add("$($entry.Dir): Encarmine source asset missing: $($asset.Key)")
+                        continue
+                    }
+                    $actualSha = (Get-FileHash -LiteralPath $assetPath -Algorithm SHA256).Hash
+                    if ($actualSha -ne $asset.Value) {
+                        $errors.Add("$($entry.Dir): Encarmine source asset hash drifted: $($asset.Key) expected=$($asset.Value) actual=$actualSha")
+                    }
+                }
+            }
         }
-        $ownerText = if ($owners.Count -gt 0) {
-            'compiled only in unrooted bundle(s): ' + ($owners -join ', ')
-        } else {
-            'absent from every compiled bundle'
-        }
-        $errors.Add("$($entry.Dir): $resourcePath [$unitHash.unit] is not resident from any explicit .mod package root; $ownerText")
     }
 }
 

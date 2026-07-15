@@ -74,7 +74,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.111-dev"
+local MOD_VERSION = "0.9.112-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -8752,6 +8752,7 @@ end
 -- is cheap insurance.
 local _la_bridge_missing_dep_logged = false
 mod.update = function(dt)
+	CUSTOM_HATS.tick(dt)
     -- v0.9.12-dev: pump persistence-restore queue. SimpleInventoryExtension
     -- .extensions_ready queues a Player for restore; tick processes the queue
     -- once career_name + player_unit are both ready (~1 frame later).
@@ -10297,15 +10298,16 @@ _rt_register("issue612_encarmine_hat_contract", function()
     if LA_BRIDGE.backend_to_vanilla[CUSTOM_HATS.ITEM_KEY] ~= CUSTOM_HATS.BASE_KEY then
         return "Encarmine vanilla wire fallback missing"
     end
-    if item.unit ~= CUSTOM_HATS.BASE_UNIT or CUSTOM_HATS.CUSTOM_UNIT ~= CUSTOM_HATS.BASE_UNIT then
-        return "Encarmine unsafe custom package route is active"
-    end
-    if CUSTOM_HATS.CANDIDATE_CUSTOM_UNIT == CUSTOM_HATS.CUSTOM_UNIT then
-        return "Encarmine candidate unit escaped fail-closed quarantine"
-    end
-    if Application and Application.can_get
-        and not Application.can_get("unit", CUSTOM_HATS.BASE_UNIT) then
-        return "Encarmine safe vanilla unit is not resident"
+    if CUSTOM_HATS.runtime_custom_ready then
+        if item.unit ~= CUSTOM_HATS.CANDIDATE_CUSTOM_UNIT
+            or CUSTOM_HATS.CUSTOM_UNIT ~= CUSTOM_HATS.CANDIDATE_CUSTOM_UNIT then
+            return "Encarmine proven custom package did not activate"
+        end
+        if not CUSTOM_HATS.runtime_resources_ready(Application) then
+            return "Encarmine custom dependency closure drifted after activation"
+        end
+    elseif item.unit ~= CUSTOM_HATS.BASE_UNIT or CUSTOM_HATS.CUSTOM_UNIT ~= CUSTOM_HATS.BASE_UNIT then
+        return "Encarmine fallback did not fail closed"
     end
 end)
 

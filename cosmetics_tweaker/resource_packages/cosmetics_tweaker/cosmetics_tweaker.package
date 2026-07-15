@@ -4,6 +4,7 @@ mod = [
 
 package = [
 	"resource_packages/cosmetics_tweaker/cosmetics_tweaker"
+	"units/cosmetics_tweaker/encarmine_hat/encarmine_hat"
 ]
 
 lua = [
@@ -13,6 +14,8 @@ lua = [
 material = [
 	"materials/ui/cos_glow_badge"
 	"materials/ui/icon_knight_hat_0006_encarmine"
+	"units/cosmetics_tweaker/encarmine_hat/encarmine_armored"
+	"units/cosmetics_tweaker/encarmine_hat/encarmine_cloth"
 ]
 
 texture = [
