@@ -46,6 +46,7 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_moreitemslibrary_embedded")
 local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
 local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 local CUSTOM_HATS = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_custom_hats")
+local GK_SET = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_grail_knight_set")
 local CWV_FAMILY_CONTRACT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_family_contract")
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
@@ -74,7 +75,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.119-dev"
+local MOD_VERSION = "0.9.120-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -378,6 +379,7 @@ mod._cos = mod._cos or {}
 mod._cos.U = U
 mod._cos.LA_BRIDGE = LA_BRIDGE
 mod._cos.encarmine_item_localization = CUSTOM_HATS.ITEM_LOCALIZATION
+mod._cos.gk_set_item_localization = GK_SET.ITEM_LOCALIZATION
 mod._cos.flush_log = _flush_log
 mod._cos.skin_requires_unowned_dlc = _skin_requires_unowned_dlc
 -- custom_skin_keys: the illusions module fills it at registration; the wire-safety
@@ -602,6 +604,9 @@ mod.on_setting_changed = function(setting_id)
     if setting_id == "cos_encarmine_hat_enabled" and CUSTOM_HATS then
         CUSTOM_HATS.sync_toggle()
     end
+    if setting_id == "cos_gk_purpure_azure_enabled" and GK_SET then
+        GK_SET.sync_toggle()
+    end
     if setting_id and setting_id:sub(1, 11) == "cos_unlock_" then
         mod._cos.apply_cosmetic_unlocks()
     end
@@ -770,21 +775,19 @@ local function _create_glow_editor_button()
         element = { passes = {
             { content_id = "button_hotspot", pass_type = "hotspot", style_id = "button" },
             { pass_type = "rect", style_id = "button" },
-            { pass_type = "border", style_id = "button_border" },
             { pass_type = "text", text_id = "glow_editor_label", style_id = "glow_editor_label" },
+            { pass_type = "texture_frame", style_id = "button_frame", texture_id = "button_frame" },
         } },
         content = {
             button_hotspot = {},
+            button_frame = GlowPicker.FRAME_TEXTURE,
             glow_editor_label = mod:localize("glow_picker_editor_button"),
         },
         style = {
             button = {
                 size = { button_width, button_height }, color = { 230, 30, 30, 38 }, offset = { 0, 0, 1 },
             },
-            button_border = {
-                size = { button_width, button_height }, thickness = 2,
-                color = { 255, 200, 170, 90 }, offset = { 0, 0, 2 },
-            },
+            button_frame = GlowPicker.frame_style(button_width, button_height, 3),
             glow_editor_label = {
                 size = { button_width, button_height }, font_size = 13, font_type = "hell_shark",
                 horizontal_alignment = "center", vertical_alignment = "center",
@@ -4645,6 +4648,20 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
         local has_skin = result.skin ~= nil and result.skin ~= ""
         _apply_la_offhand_to_units(world, item_data, { result.left_unit_3p, result.left_unit_1p }, has_skin, nil, "ingame")
     end
+    if result and item_data then
+        local skin_key = result.skin or item_data.skin
+        if (not skin_key or skin_key == "") and item_data.backend_id and Managers and Managers.backend then
+            local items = Managers.backend:get_interface("items")
+            skin_key = items and items.get_skin and items:get_skin(item_data.backend_id) or skin_key
+        end
+        if skin_key == GK_SET.SHIELD_SKIN_KEY then
+            for _, target in ipairs({ result.left_unit_3p, result.left_unit_1p }) do
+                if target and Unit.alive(target) then
+                    GK_SET.apply_variant_to_unit(GK_SET.SHIELD_VARIANT_KEY, target, "create_equipment")
+                end
+            end
+        end
+    end
     if result then
         -- v0.9.0-dev: resolve wearer from the 3P unit (= player_unit body).
         -- create_equipment doesn't pass a player object, but unit_3p IS the
@@ -4954,6 +4971,14 @@ mod:hook_safe("TeamPreviewer", "cb_hero_unit_spawned_skin_preview", function(sel
     local peer_slots = peer and mod._la_equips_by_peer and mod._la_equips_by_peer[peer]
     local entry = peer_slots and peer_slots.slot_skin
     if not (entry and entry.kind == "armor" and entry.armoury_key) then return end
+    local authored = GK_SET and GK_SET.resolve_variant(entry.armoury_key)
+    if authored then
+        local mesh_unit = hero_previewer.mesh_unit
+        if type(mesh_unit) == "userdata" and Unit.alive(mesh_unit) then
+            GK_SET.apply_variant_to_unit(authored, mesh_unit, "score_preview")
+        end
+        return
+    end
     local la = get_mod("Loremasters-Armoury")
     local variant = la and la.SKIN_LIST and la.SKIN_LIST[entry.armoury_key]
     if not (variant and type(la.apply_new_skin_from_texture) == "function") then return end
@@ -4970,6 +4995,35 @@ mod:hook_safe("TeamPreviewer", "cb_hero_unit_spawned_skin_preview", function(sel
         if printf then printf("[la-state] SCORE-ARMOR paint key=%s target=%d/%d ok=%s%s",
             tostring(entry.armoury_key), i, #targets, tostring(ok),
             ok and "" or (" err=" .. tostring(err))) end
+    end
+end)
+
+-- Apply the authored outfit to the actual vanilla 1P/3P mesh attachments.
+-- The custom Cosmetics entry reuses those attachments verbatim, so native
+-- animation, visibility and fade behavior remain authoritative.
+mod:hook_safe("PlayerUnitCosmeticExtension", "extensions_ready", function(self)
+    local custom = Cosmetics and Cosmetics[GK_SET.SKIN_ITEM_KEY]
+    if custom and self._cosmetics and self._cosmetics.skin == custom then
+        local tp = self._tp_unit_mesh
+        if tp and Unit.alive(tp) then
+            GK_SET.apply_variant_to_unit(GK_SET.SKIN_VARIANT_KEY, tp, "third_person")
+        end
+        local fp_ext = ScriptUnit.has_extension(self._unit, "first_person_system")
+        local fp = fp_ext and fp_ext.get_first_person_mesh_unit and fp_ext:get_first_person_mesh_unit()
+        if fp and Unit.alive(fp) then
+            GK_SET.apply_variant_to_unit(GK_SET.SKIN_VARIANT_KEY, fp, "first_person")
+        end
+    end
+end)
+
+mod:hook_safe("HeroPreviewer", "post_update", function(self)
+    local loading = self._hero_loading_package_data
+    local skin_data = loading and loading.skin_data
+    if skin_data and skin_data.name == GK_SET.SKIN_ITEM_KEY then
+        local mesh = self.mesh_unit
+        if mesh and Unit.alive(mesh) then
+            GK_SET.apply_variant_to_unit(GK_SET.SKIN_VARIANT_KEY, mesh, "hero_preview")
+        end
     end
 end)
 
@@ -5012,6 +5066,11 @@ local function _spawn_item_post(self, item_name, spawn_data)
                     local has_skin = (item_data.item_type == "weapon_skin")
                             or (stored_skin and stored_skin ~= "")
                     _apply_la_offhand_to_units(world, item_data, left_units, has_skin, stored_bid, "hero_previewer")
+                    if stored_skin == GK_SET.SHIELD_SKIN_KEY or item_name == GK_SET.SHIELD_SKIN_KEY then
+                        for _, target in ipairs(left_units) do
+                            GK_SET.apply_variant_to_unit(GK_SET.SHIELD_VARIANT_KEY, target, "hero_previewer")
+                        end
+                    end
                 end
             end
         end
@@ -5263,6 +5322,10 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
             -- cycles row-1 main-hand illusions.
             local effective_bid = item.backend_id or _active_customization_backend_id
             _apply_la_offhand_to_units(world, item_data, { units[1] }, true, effective_bid, "loot_previewer")
+            local skin_key = item.skin or (item_data.item_type == "weapon_skin" and item_data.name)
+            if skin_key == GK_SET.SHIELD_SKIN_KEY then
+                GK_SET.apply_variant_to_unit(GK_SET.SHIELD_VARIANT_KEY, units[1], "loot_previewer")
+            end
         end
     end
 
@@ -6369,6 +6432,10 @@ mod._send_offhand_mesh = function(unit, slot_name, hand_field, unit_path)
 end
 
 local function _resolve_la_variant(armoury_key)
+    if GK_SET and GK_SET.resolve_variant then
+        local authored = GK_SET.resolve_variant(armoury_key)
+        if authored then return authored, nil end
+    end
     if CUSTOM_HATS and CUSTOM_HATS.resolve_variant then
         local custom = CUSTOM_HATS.resolve_variant(armoury_key)
         if custom then return custom, nil end
@@ -6795,6 +6862,14 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
             _dbg_alert("[cos_la_apply hat] create_attachment %s failed: %s",
                 tostring(armoury_key), tostring(err))
         end
+        local authored_variant = GK_SET and GK_SET.resolve_variant(armoury_key)
+        if authored_variant then
+            local slot_data = ext._attachments and ext._attachments.slots and ext._attachments.slots[slot_name]
+            local hat_unit = slot_data and slot_data.unit
+            if hat_unit and Unit.alive(hat_unit) then
+                GK_SET.apply_variant_to_unit(authored_variant, hat_unit, "appearance_replay")
+            end
+        end
         -- v0.9.0.3-hotfix: paint the LA texture onto the JUST-CREATED HAT
         -- ATTACHMENT UNIT (not the wearer's player_unit). LA's
         -- apply_new_skin_from_texture iterates `Unit.num_meshes(unit)` on the
@@ -6805,7 +6880,7 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
         -- the ref in slot_data.unit) — passing owner_unit paints the player
         -- body's meshes (no-op for hat textures). The just-created hat unit
         -- lives at ext._attachments.slots[slot_name].unit.
-        if la and type(la.apply_new_skin_from_texture) == "function" then
+        if not authored_variant and la and type(la.apply_new_skin_from_texture) == "function" then
             local world = _level_world()
             local slot_data = ext._attachments and ext._attachments.slots and ext._attachments.slots[slot_name]
             local hat_unit = slot_data and slot_data.unit
@@ -6829,6 +6904,9 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
 
     if kind == "armor" then
         if variant.swap_hand ~= "armor" then return false end
+        if GK_SET and GK_SET.resolve_variant(armoury_key) then
+            return GK_SET.apply_armor_to_owner(owner_unit, "appearance_replay")
+        end
         if not la or type(la.apply_new_skin_from_texture) ~= "function" then return false end
         local world = _level_world()
         if not world then return false end
@@ -6954,6 +7032,23 @@ local function _apply_la_on_unit(owner_unit, slot_name, kind, armoury_key, vanil
     end
 
     if kind == "illusion" then
+        local authored = GK_SET and GK_SET.resolve_variant(armoury_key)
+        if authored then
+            local inv = ScriptUnit.has_extension(owner_unit, "inventory_system")
+            local equipment = inv and inv._equipment
+            local match = mod._la_wielded_item_matches(inv, equipment, slot_name, true)
+            if not match then return false end
+            local applied = false
+            for _, target in ipairs({
+                equipment and equipment.left_hand_wielded_unit_3p,
+                equipment and equipment.left_hand_wielded_unit,
+            }) do
+                if target and Unit.alive(target) then
+                    applied = GK_SET.apply_variant_to_unit(authored, target, "wielded_shield") or applied
+                end
+            end
+            return applied
+        end
         if not la or type(la.apply_new_skin_from_texture) ~= "function" then return false end
         local inv = ScriptUnit.has_extension(owner_unit, "inventory_system")
         local equipment = inv and inv._equipment
@@ -8357,7 +8452,8 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
         return func(self, slot_name, item_data)
     end
     local la = get_mod("Loremasters-Armoury")
-    local variant = CUSTOM_HATS and CUSTOM_HATS.resolve_variant
+    local variant = GK_SET and GK_SET.resolve_variant(cached.armoury_key)
+        or CUSTOM_HATS and CUSTOM_HATS.resolve_variant
         and CUSTOM_HATS.resolve_variant(cached.armoury_key)
         or (la and la.SKIN_LIST and la.SKIN_LIST[cached.armoury_key])
     local la_unit = variant and variant.new_units and variant.new_units[1]
@@ -8515,9 +8611,13 @@ mod:hook("PlayerHuskAttachmentExtension", "create_attachment", function(func, se
     local spawned_hat = spawned_slot and spawned_slot.unit
     CUSTOM_HATS.install_native_plume_controller(spawned_hat, "remote-husk")
     CUSTOM_HATS.register_fade_link(self._unit, spawned_hat, "remote-husk")
+    if GK_SET and GK_SET.resolve_variant(cached.armoury_key) and spawned_hat then
+        GK_SET.apply_variant_to_unit(cached.armoury_key, spawned_hat, "remote_husk")
+    end
     -- Paint the LA texture onto the just-spawned hat unit. Mirror the
     -- cos_la_apply hat-branch paint logic at cosmetics_tweaker.lua:~3775.
-    if la and type(la.apply_new_skin_from_texture) == "function" then
+    if not (GK_SET and GK_SET.resolve_variant(cached.armoury_key))
+        and la and type(la.apply_new_skin_from_texture) == "function" then
         local world = _level_world()
         local slot_data = self._attachments and self._attachments.slots and self._attachments.slots[slot_name]
         local hat_unit = slot_data and slot_data.unit
@@ -8541,6 +8641,11 @@ end)
 -- owner-aware hook supplies the root FadeSystem requires.
 mod:hook("PlayerUnitAttachmentExtension", "create_attachment", function(func, self, slot_name, item_data)
     local r1, r2, r3, r4 = func(self, slot_name, item_data)
+    if slot_name == "slot_hat" and item_data and item_data.name == GK_SET.HAT_ITEM_KEY then
+        local slot = self._attachments and self._attachments.slots and self._attachments.slots[slot_name]
+        local hat_unit = slot and slot.unit
+        if hat_unit then GK_SET.apply_variant_to_unit(GK_SET.HAT_VARIANT_KEY, hat_unit, "local_attachment") end
+    end
     if slot_name == "slot_hat" and item_data
         and CUSTOM_HATS.is_custom_identity(item_data.name) then
         local slot = self._attachments and self._attachments.slots
@@ -9007,6 +9112,9 @@ mod.update = function(dt)
     if not _la_bridge_init_done then
         if CUSTOM_HATS and not CUSTOM_HATS.registered and ItemMasterList then
             CUSTOM_HATS.register_all(LA_BRIDGE)
+        end
+        if GK_SET and not GK_SET.registered and ItemMasterList then
+            GK_SET.register_all(LA_BRIDGE)
         end
         local has_la  = get_mod("Loremasters-Armoury") ~= nil
         local has_mil = get_mod("MoreItemsLibrary") ~= nil
@@ -9618,6 +9726,11 @@ local function _spawn_item_unit_combined(func, self, unit, item_slot_type, item_
     local r1, r2 = func(self, unit, item_slot_type, item_template, attachment_node_linking, scene_graph_links, material_settings, skip_wield_anim)
     if item_slot_type == "hat" then
         CUSTOM_HATS.install_native_plume_controller(unit, "hero-preview")
+        local authored_key = self._cos_la_spawning and LA_BRIDGE.backend_to_armoury[self._cos_la_spawning]
+            or (self._cos_score_hat and self._cos_score_hat.armoury_key)
+        if authored_key and GK_SET.resolve_variant(authored_key) then
+            GK_SET.apply_variant_to_unit(authored_key, unit, "hero_preview")
+        end
     end
     -- v0.9.7: stash unit→backend_id for previewer-spawned weapon units so
     -- the glow picker's live preview can resolve the right item. The
@@ -10409,6 +10522,49 @@ _rt_register("issue612_encarmine_hat_contract", function()
     end
 end)
 
+local function _issue629_grail_knight_set_contract()
+    if not GK_SET.registered then GK_SET.register_all(LA_BRIDGE) end
+    if not GK_SET.registered then return "Grail Knight set registration unavailable" end
+    local hat = ItemMasterList and rawget(ItemMasterList, GK_SET.HAT_ITEM_KEY)
+    local skin = ItemMasterList and rawget(ItemMasterList, GK_SET.SKIN_ITEM_KEY)
+    local shield = ItemMasterList and rawget(ItemMasterList, GK_SET.SHIELD_SKIN_KEY)
+    if not (hat and skin and shield) then return "one or more set items are missing" end
+    if hat.unit ~= GK_SET.HAT_BASE_UNIT then return "Pureheart vanilla unit contract drifted" end
+    if Cosmetics[GK_SET.SKIN_ITEM_KEY].first_person_attachment.unit ~= GK_SET.SKIN_FP_UNIT
+        or Cosmetics[GK_SET.SKIN_ITEM_KEY].third_person_attachment.unit ~= GK_SET.SKIN_TP_UNIT then
+        return "Gallant vanilla attachment contract drifted"
+    end
+    if shield.left_hand_unit ~= GK_SET.SHIELD_BASE_UNIT then
+        return "Shield of Honour Renewed vanilla unit contract drifted"
+    end
+    if LA_BRIDGE.backend_to_vanilla[GK_SET.HAT_ITEM_KEY] ~= GK_SET.HAT_BASE_KEY
+        or LA_BRIDGE.backend_to_vanilla[GK_SET.SKIN_ITEM_KEY] ~= GK_SET.SKIN_VANILLA_FALLBACK
+        or LA_BRIDGE.backend_to_vanilla[GK_SET.SHIELD_SKIN_KEY] ~= GK_SET.SHIELD_BASE_KEY then
+        return "network-safe vanilla fallback contract drifted"
+    end
+    if not (mod._cos.custom_skin_keys and mod._cos.custom_skin_keys[GK_SET.SHIELD_SKIN_KEY]) then
+        return "custom shield wire-null registration missing"
+    end
+    for kind, paths in pairs(GK_SET.TEXTURES) do
+        for _, path in ipairs(paths) do
+            local ok, resident = pcall(Application.can_get, "texture", path)
+            if not (ok and resident) then return "missing texture " .. tostring(kind) .. ":" .. path end
+        end
+    end
+end
+_rt_register("issue629_grail_knight_set_contract", _issue629_grail_knight_set_contract)
+
+mod:command("verify_gk_set", "Verify the #629 Grail Knight cosmetic-set resource and registration contract", function()
+    local err = _issue629_grail_knight_set_contract()
+    if err then
+        mod:echo("[cos:629] FAIL — see log")
+        pcall(printf, "[cos:629] verify FAIL reason=%s", tostring(err))
+    else
+        mod:echo("[cos:629] PASS — resources and registrations ready")
+        pcall(printf, "[cos:629] verify PASS vanilla_geometry=true resources=true bridge=true")
+    end
+end)
+
 _rt_register("unit_to_backend_id_populated", function()
     -- The map should exist as a weak-keyed setmetatable table. Population only
     -- happens after the first wield, so an empty map is normal at fresh load.
@@ -10442,8 +10598,18 @@ _rt_register("glow_manual_editor_button_377", function()
     end
     local anchor = type(GlowPicker.toggle_anchor) == "function"
         and GlowPicker.toggle_anchor(96, 20) or nil
-    if not anchor or anchor[1] ~= 1164 or anchor[2] ~= 380 or anchor[3] ~= 20 then
+    if not anchor or anchor[1] ~= 1164 or anchor[2] ~= 376 or anchor[3] ~= 20 then
         return "manual editor toggle is not aligned to the panel bottom-right"
+    end
+    local frame = type(GlowPicker.frame_style) == "function"
+        and GlowPicker.frame_style(96, 38, 3) or nil
+    local sizes = frame and frame.texture_sizes
+    if GlowPicker.FRAME_TEXTURE ~= "menu_frame_12"
+        or not frame or frame.texture_size[1] ~= 64 or frame.texture_size[2] ~= 64
+        or not sizes or sizes.corner[1] ~= 11 or sizes.corner[2] ~= 11
+        or sizes.vertical[1] ~= 5 or sizes.vertical[2] ~= 1
+        or sizes.horizontal[1] ~= 1 or sizes.horizontal[2] ~= 5 then
+        return "ornate glow frame contract drifted"
     end
 end)
 

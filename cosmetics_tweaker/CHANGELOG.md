@@ -1,5 +1,31 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.120-dev - 2026-07-15 - #377/#629 Cosmetics presentation and Grail Knight set
+
+### Added
+
+- Added a matching Pureheart helm, Gallant of Parravon outfit, and Shield of
+  Honour Renewed recolor in purpure, azure, white, and blackened silver.
+- Reused the exact vanilla helmet, first-/third-person outfit attachments, and
+  shield units. Only per-instance textures change, preserving native rigging,
+  animation, physics, camera fade, preview, and husk behavior.
+- Added network-safe vanilla fallbacks plus bounded appearance replay for
+  Cosmetics peers; custom asset identities are never sent to unmodded peers.
+
+### Changed
+
+- Moved the persistent Edit Glow control down four pixels and replaced its
+  plain border with the same `menu_frame_12` ornate frame used by CIM.
+- Applied that exact 64x64 nine-slice frame contract to the glow popup and its
+  Apply and Close controls, with renderer-safe shared frame construction.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.120-dev`, inspect the glow controls, then enable
+**Grail Knight: Purpure and Azure Set** and equip all three pieces. Verify first
+person, owner third person, inventory mannequin, score screen, and a second
+player's remote-husk view.
+
 ## 0.9.119-dev - 2026-07-15 - #377 Edit Glow panel alignment [verify-fix]
 
 ### Fixed

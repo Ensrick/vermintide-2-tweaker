@@ -14,6 +14,30 @@ local loc = {
     cos_encarmine_hat_description = {
         en = "A red-and-gold Foot Knight helm with a black plume, created for Tweaker: Cosmetics.",
     },
+    cos_gk_purpure_azure_enabled = {
+        en = "Grail Knight: Purpure and Azure Set",
+    },
+    cos_gk_purpure_azure_enabled_tooltip = {
+        en = "Adds a matching Pureheart helm, Gallant of Parravon outfit, and Shield of Honour Renewed recolor for Grail Knight. The set reuses the original game's models, rigging, physics, and fade behavior.",
+    },
+    cos_gk_purpure_azure_hat_name = {
+        en = "Pureheart Helm (Purpure and Azure)",
+    },
+    cos_gk_purpure_azure_hat_description = {
+        en = "The Pureheart helm in purpure, azure, white, and blackened silver.",
+    },
+    cos_gk_purpure_azure_skin_name = {
+        en = "Gallant of Parravon (Purpure and Azure)",
+    },
+    cos_gk_purpure_azure_skin_description = {
+        en = "A Grail Knight panoply in purpure, azure, white, and blackened silver.",
+    },
+    cos_gk_purpure_azure_shield_name = {
+        en = "Shield of Honour Renewed (Purpure and Azure)",
+    },
+    cos_gk_purpure_azure_shield_description = {
+        en = "The Shield of Honour Renewed bearing matching purpure and azure heraldry.",
+    },
     mod_description = {
         en = "Unlock hats and weapon skins per career on every hero, plus size and grip tweaks for individual weapons.",
     },

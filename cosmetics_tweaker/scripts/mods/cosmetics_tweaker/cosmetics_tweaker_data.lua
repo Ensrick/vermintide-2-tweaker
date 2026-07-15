@@ -123,6 +123,12 @@ local widgets = {
                 default_value = true,
                 tooltip       = "cos_encarmine_hat_enabled_tooltip",
             },
+            {
+                setting_id    = "cos_gk_purpure_azure_enabled",
+                type          = "checkbox",
+                default_value = true,
+                tooltip       = "cos_gk_purpure_azure_enabled_tooltip",
+            },
             -- v0.9.47-dev: collapsed the redundant "Weapon Model Tweaks" wrapper;
             -- the lone toggles sit directly under this group now.
             {
@@ -167,13 +173,31 @@ return {
     options = { widgets = widgets },
 
     custom_gui_textures = {
-        textures = { "cos_glow_badge", "icon_knight_hat_0006_encarmine" },
+        textures = {
+            "cos_glow_badge",
+            "icon_knight_hat_0006_encarmine",
+            "icon_cos_gk_purpure_azure_hat",
+            "icon_cos_gk_purpure_azure_skin",
+            "icon_cos_gk_purpure_azure_shield",
+        },
         ui_renderer_injections = {
             { "hero_view", "materials/ui/cos_glow_badge" },
             { "ingame_ui", "materials/ui/icon_knight_hat_0006_encarmine" },
             { "hero_view", "materials/ui/icon_knight_hat_0006_encarmine" },
             { "loading_view", "materials/ui/icon_knight_hat_0006_encarmine" },
             { "popup_manager", "materials/ui/icon_knight_hat_0006_encarmine" },
+            { "ingame_ui", "materials/ui/icon_cos_gk_purpure_azure_hat" },
+            { "ingame_ui", "materials/ui/icon_cos_gk_purpure_azure_skin" },
+            { "ingame_ui", "materials/ui/icon_cos_gk_purpure_azure_shield" },
+            { "hero_view", "materials/ui/icon_cos_gk_purpure_azure_hat" },
+            { "hero_view", "materials/ui/icon_cos_gk_purpure_azure_skin" },
+            { "hero_view", "materials/ui/icon_cos_gk_purpure_azure_shield" },
+            { "loading_view", "materials/ui/icon_cos_gk_purpure_azure_hat" },
+            { "loading_view", "materials/ui/icon_cos_gk_purpure_azure_skin" },
+            { "loading_view", "materials/ui/icon_cos_gk_purpure_azure_shield" },
+            { "popup_manager", "materials/ui/icon_cos_gk_purpure_azure_hat" },
+            { "popup_manager", "materials/ui/icon_cos_gk_purpure_azure_skin" },
+            { "popup_manager", "materials/ui/icon_cos_gk_purpure_azure_shield" },
         },
     },
 }

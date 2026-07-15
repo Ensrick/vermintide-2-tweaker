@@ -306,6 +306,9 @@ local _custom_loc = {}
 for key, value in pairs(COS.encarmine_item_localization or {}) do
     _custom_loc[key] = value
 end
+for key, value in pairs(COS.gk_set_item_localization or {}) do
+    _custom_loc[key] = value
+end
 for _, spec in ipairs(_la_shield_skin_specs) do
     _custom_loc[spec.skin_key .. "_name"] = spec.display_name
 end

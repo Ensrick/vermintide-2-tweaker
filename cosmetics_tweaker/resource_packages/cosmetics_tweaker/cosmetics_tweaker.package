@@ -14,6 +14,9 @@ lua = [
 material = [
 	"materials/ui/cos_glow_badge"
 	"materials/ui/icon_knight_hat_0006_encarmine"
+	"materials/ui/icon_cos_gk_purpure_azure_hat"
+	"materials/ui/icon_cos_gk_purpure_azure_skin"
+	"materials/ui/icon_cos_gk_purpure_azure_shield"
 	"units/cosmetics_tweaker/encarmine_hat/encarmine_armored"
 	"units/cosmetics_tweaker/encarmine_hat/encarmine_cloth"
 ]
@@ -21,7 +24,11 @@ material = [
 texture = [
 	"gui/1080p/single_textures/cosmetics_tweaker/cos_glow_badge"
 	"gui/1080p/single_textures/cosmetics_tweaker/icon_knight_hat_0006_encarmine"
+	"gui/1080p/single_textures/cosmetics_tweaker/icon_cos_gk_purpure_azure_hat"
+	"gui/1080p/single_textures/cosmetics_tweaker/icon_cos_gk_purpure_azure_skin"
+	"gui/1080p/single_textures/cosmetics_tweaker/icon_cos_gk_purpure_azure_shield"
 	"textures/cosmetics_tweaker/encarmine_hat/*"
+	"textures/cosmetics_tweaker/grail_knight_set/*"
 ]
 
 unit = [

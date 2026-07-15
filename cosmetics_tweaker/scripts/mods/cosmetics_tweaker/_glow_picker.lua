@@ -74,6 +74,28 @@ GlowPicker.identity_key = _identity_key
 -- the panel area sits empty for rune-family items.
 local PANEL_W, PANEL_H = 600, 620
 local TOP_INSET        = 80   -- distance from screen top to panel top
+local TOGGLE_Y_NUDGE   = -4   -- #377 follow-up: user-confirmed button was a few pixels high
+
+-- Proven CIM/GUT ornate nine-slice frame contract. This texture is resident on
+-- the popup/hero renderers used below; keeping one constructor prevents the
+-- persistent toggle, panel, Apply, and Close controls from drifting apart.
+GlowPicker.FRAME_TEXTURE = "menu_frame_12"
+GlowPicker.FRAME_TEX_SIZE = { 64, 64 }
+GlowPicker.FRAME_TEX_SIZES = {
+    corner = { 11, 11 },
+    vertical = { 5, 1 },
+    horizontal = { 1, 5 },
+}
+
+function GlowPicker.frame_style(width, height, z, color)
+    return {
+        texture_size = GlowPicker.FRAME_TEX_SIZE,
+        texture_sizes = GlowPicker.FRAME_TEX_SIZES,
+        color = color or { 255, 255, 255, 255 },
+        offset = { 0, 0, z or 3 },
+        area_size = { width, height },
+    }
+end
 
 -- #377: the persistent Edit Glow toggle belongs to the panel geometry even
 -- while the panel is closed. Return its lower-right-aligned origin in the
@@ -83,7 +105,7 @@ function GlowPicker.toggle_anchor(button_width, z)
     button_width = tonumber(button_width) or 0
     local panel_right = (1920 + PANEL_W) * 0.5
     local panel_bottom = 1080 - TOP_INSET - PANEL_H
-    return { panel_right - button_width, panel_bottom, z or 20 }
+    return { panel_right - button_width, panel_bottom + TOGGLE_Y_NUDGE, z or 20 }
 end
 
 local function _make_scenegraph_definition()
@@ -486,19 +508,16 @@ local function _widget_panel_bg()
         element = {
             passes = {
                 { pass_type = "rect",   style_id = "rect" },
-                { pass_type = "border", style_id = "border" },
+                { pass_type = "texture_frame", style_id = "frame", texture_id = "frame" },
             },
         },
-        content = {},
+        content = { frame = GlowPicker.FRAME_TEXTURE },
         style = {
             rect = {
                 size  = { PANEL_W, PANEL_H },
                 color = { 245, 18, 18, 24 },  -- dark panel
             },
-            border = {
-                thickness = 2,
-                color     = { 255, 200, 170, 90 },  -- warm parchment edge
-            },
+            frame = GlowPicker.frame_style(PANEL_W, PANEL_H, 3),
         },
         offset    = { 0, 0, 0 },
         scenegraph_id = "glow_picker_panel",
@@ -593,10 +612,12 @@ local function _widget_close_button()
                 { pass_type = "rect", style_id = "rect" },
                 -- X glyph
                 { pass_type = "text", style_id = "text", text_id = "text" },
+                { pass_type = "texture_frame", style_id = "frame", texture_id = "frame" },
             },
         },
         content = {
             text     = "X",
+            frame    = GlowPicker.FRAME_TEXTURE,
             hotspot  = {},
         },
         style = {
@@ -613,6 +634,7 @@ local function _widget_close_button()
                 offset     = { 0, 0, 2 },
                 size       = { 36, 36 },
             },
+            frame = GlowPicker.frame_style(36, 36, 3),
         },
         offset    = { 0, 0, 2 },
         scenegraph_id = "glow_picker_close_btn",
@@ -625,14 +647,14 @@ local function _widget_apply_button()
             passes = {
                 { content_id = "hotspot", pass_type = "hotspot" },
                 { pass_type = "rect", style_id = "rect" },
-                { pass_type = "border", style_id = "border" },
                 { pass_type = "text", style_id = "text", text_id = "text" },
+                { pass_type = "texture_frame", style_id = "frame", texture_id = "frame" },
             },
         },
-        content = { text = "Apply", hotspot = {} },
+        content = { text = "Apply", frame = GlowPicker.FRAME_TEXTURE, hotspot = {} },
         style = {
             rect = { size = { 180, 42 }, color = { 210, 55, 75, 35 } },
-            border = { thickness = 2, color = { 255, 210, 180, 90 } },
+            frame = GlowPicker.frame_style(180, 42, 3),
             text = {
                 font_size = 22, font_type = "hell_shark_header",
                 horizontal_alignment = "center", vertical_alignment = "center",
@@ -651,7 +673,7 @@ local function _update_apply_widget()
     local dirty = GlowPicker._dirty == true
     widget.content.text = dirty and "Apply" or "Applied"
     widget.style.rect.color = dirty and { 230, 55, 105, 45 } or { 150, 45, 45, 45 }
-    widget.style.border.color = dirty and { 255, 230, 195, 95 } or { 140, 120, 120, 120 }
+    widget.style.frame.color = dirty and { 255, 255, 255, 255 } or { 150, 180, 180, 180 }
     widget.style.text.text_color = dirty and { 255, 245, 235, 205 } or { 160, 180, 180, 180 }
 end
 
