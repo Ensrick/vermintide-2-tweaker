@@ -1,5 +1,27 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.122-dev - 2026-07-15 - #612 Encarmine donor material ownership
+
+### Fixed
+
+- Corrected the Encarmine Laurel override after in-game verification showed
+  that armor and plume textures were reversed. The donor's geometry array is
+  not its runtime mesh order: runtime meshes 1-3 reference the native helmet
+  material, while meshes 4-6 reference the native feather material.
+- Added a semantic compiled-scene contract that follows each runtime mesh's
+  `geometry_index` to the donor material slot (`es_k_hat_base` versus
+  `es_k_hat_feather`) before selecting the Encarmine texture family. This keeps
+  the vanilla Laurel rig, plume physics, alpha, camera fade, normals, tangents,
+  LODs, and controller behavior unchanged.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.122-dev`, then verify the Encarmine armor texture
+is on the helmet and the cloth texture is on the plume in inventory preview,
+live third person, score/lobby presentation, and on a remote client. Confirm the
+plume still renders on both sides, jiggles, respects alpha and camera fade, and
+that the vanilla Laurel helm remains unchanged.
+
 ## 0.9.121-dev - 2026-07-15 - #200/#612/#629 cosmetic surface parity
 
 ### Fixed

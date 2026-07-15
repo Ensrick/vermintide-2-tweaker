@@ -17,14 +17,47 @@ M.CUSTOM_UNIT = M.BASE_UNIT
 -- registration. Replacing the unit dropped those contracts and caused the
 -- faceted armor, alpha-card haze, missing jiggle, and camera-fade regression.
 M.RENDER_MODE = "vanilla_laurel_material_instance_override"
+M.DONOR_MATERIALS = {
+    armor = {
+        slot = "1903313B",
+        resource = "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_base",
+    },
+    plume = {
+        slot = "BD15BFF9",
+        resource = "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_feather",
+    },
+    shadow = {
+        slot = "5ED8F236",
+        resource = "shaders/characters/character_shadow",
+    },
+}
+-- Unit.mesh order is NOT geometry-array order. Each runtime mesh stores a
+-- one-based geometry_index; the donor's mesh list references geometries in
+-- reverse. Resolve the role through geometry_index -> geometry material slot,
+-- never by visually guessing a contiguous numeric range.
+M.DONOR_MESH_BINDINGS = {
+    [0] = { geometry_index = 8, role = "shadow", material_slot = "5ED8F236" },
+    [1] = { geometry_index = 7, role = "armor",  material_slot = "1903313B" },
+    [2] = { geometry_index = 6, role = "armor",  material_slot = "1903313B" },
+    [3] = { geometry_index = 5, role = "armor",  material_slot = "1903313B" },
+    [4] = { geometry_index = 4, role = "plume",  material_slot = "BD15BFF9" },
+    [5] = { geometry_index = 3, role = "plume",  material_slot = "BD15BFF9" },
+    [6] = { geometry_index = 2, role = "plume",  material_slot = "BD15BFF9" },
+    [7] = { geometry_index = 1, role = "shadow", material_slot = "5ED8F236" },
+}
+local function mesh_indices_for(role)
+    local indices = {}
+    for mesh_index = 0, 7 do
+        local binding = M.DONOR_MESH_BINDINGS[mesh_index]
+        if binding and binding.role == role then indices[#indices + 1] = mesh_index end
+    end
+    return indices
+end
 M.LAUREL_SCENE_CONTRACT = {
     mesh_count = 8,
-    -- Unit.mesh follows the compiled geometry order. The Laurel resource is
-    -- shadow, feather x3, armor x3, shadow; swapping these two ranges paints
-    -- armor pixels onto the plume and plume pixels onto the helmet.
-    plume_mesh_indices = { 1, 2, 3 },
-    armor_mesh_indices = { 4, 5, 6 },
-    shadow_mesh_indices = { 0, 7 },
+    armor_mesh_indices = mesh_indices_for("armor"),
+    plume_mesh_indices = mesh_indices_for("plume"),
+    shadow_mesh_indices = mesh_indices_for("shadow"),
     lod_steps = 3,
     rig_bones = 13,
     dynamic_plume_bones = 6,
@@ -50,7 +83,7 @@ M.PLUME_TEXTURES = {
     normal = "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_normal",
     combined = "textures/cosmetics_tweaker/encarmine_hat/encarmine_cloth_combined",
 }
-M.MATERIAL_RESPONSE_REVISION = 5
+M.MATERIAL_RESPONSE_REVISION = 6
 M.DONOR_ALPHA_CONTRACT = true
 M.DONOR_NORMAL_TANGENT_CONTRACT = true
 M.DONOR_CONTROLLER_CONTRACT = true

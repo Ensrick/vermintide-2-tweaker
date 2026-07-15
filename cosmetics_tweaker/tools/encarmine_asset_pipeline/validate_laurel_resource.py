@@ -66,6 +66,26 @@ def main() -> None:
     if actual_slots != contract["geometry_material_slots"]:
         raise RuntimeError(f"geometry material contract drift: {actual_slots}")
 
+    role_by_slot = {
+        "1903313B": "armor",
+        "BD15BFF9": "plume",
+        "5ED8F236": "shadow",
+    }
+    runtime_mesh_materials = []
+    for mesh_index, mesh in enumerate(unit.meshes):
+        geometry_index = mesh.geometry_index
+        slots = actual_slots[geometry_index - 1]
+        if len(slots) != 1 or slots[0] not in role_by_slot:
+            raise RuntimeError(
+                f"mesh {mesh_index} geometry {geometry_index} has unknown donor slots {slots}"
+            )
+        slot = slots[0]
+        runtime_mesh_materials.append([
+            mesh_index, geometry_index, slot, role_by_slot[slot],
+        ])
+    if runtime_mesh_materials != contract["runtime_mesh_materials"]:
+        raise RuntimeError(f"runtime mesh/material role drift: {runtime_mesh_materials}")
+
     if len(unit.lod_objects) != len(contract["lod_objects"]):
         raise RuntimeError("LOD object count drift")
     for actual, expected in zip(unit.lod_objects, contract["lod_objects"]):

@@ -43,8 +43,14 @@ $luaPath = Join-Path $repoRoot 'cosmetics_tweaker\scripts\mods\cosmetics_tweaker
 $lua = [System.IO.File]::ReadAllText($luaPath, [System.Text.Encoding]::UTF8)
 foreach ($needle in @(
     'units/beings/player/empire_soldier_knight/headpiece/es_k_hat_07',
-    'plume_mesh_indices = { 1, 2, 3 }',
-    'armor_mesh_indices = { 4, 5, 6 }',
+    'resource = "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_base"',
+    'resource = "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_feather"',
+    '[1] = { geometry_index = 7, role = "armor",  material_slot = "1903313B" }',
+    '[3] = { geometry_index = 5, role = "armor",  material_slot = "1903313B" }',
+    '[4] = { geometry_index = 4, role = "plume",  material_slot = "BD15BFF9" }',
+    '[6] = { geometry_index = 2, role = "plume",  material_slot = "BD15BFF9" }',
+    'armor_mesh_indices = mesh_indices_for("armor")',
+    'plume_mesh_indices = mesh_indices_for("plume")',
     'texture_map_c0ba2942',
     'texture_map_59cd86b9',
     'texture_map_b788717c'

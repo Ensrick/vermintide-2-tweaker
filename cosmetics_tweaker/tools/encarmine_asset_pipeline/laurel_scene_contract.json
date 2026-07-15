@@ -25,6 +25,16 @@
     ["1903313B"],
     ["5ED8F236"]
   ],
+  "runtime_mesh_materials": [
+    [0, 8, "5ED8F236", "shadow"],
+    [1, 7, "1903313B", "armor"],
+    [2, 6, "1903313B", "armor"],
+    [3, 5, "1903313B", "armor"],
+    [4, 4, "BD15BFF9", "plume"],
+    [5, 3, "BD15BFF9", "plume"],
+    [6, 2, "BD15BFF9", "plume"],
+    [7, 1, "5ED8F236", "shadow"]
+  ],
   "lod_objects": [
     {
       "name": "0C5BC110",

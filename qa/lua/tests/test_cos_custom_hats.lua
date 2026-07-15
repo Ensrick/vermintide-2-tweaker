@@ -148,11 +148,11 @@ return function(H, repo_root)
             for index = 1, 6 do H.equal(mesh_counts[index], 3) end
             for _, call in ipairs(calls) do
                 if call.mesh_index >= 1 and call.mesh_index <= 3 then
-                    H.truthy(call.texture:find("encarmine_cloth_", 1, true),
-                        "Laurel plume mesh received an armor texture")
-                elseif call.mesh_index >= 4 and call.mesh_index <= 6 then
                     H.truthy(call.texture:find("encarmine_armored_", 1, true),
                         "Laurel armor mesh received a plume texture")
+                elseif call.mesh_index >= 4 and call.mesh_index <= 6 then
+                    H.truthy(call.texture:find("encarmine_cloth_", 1, true),
+                        "Laurel plume mesh received an armor texture")
                 end
             end
 
@@ -198,21 +198,56 @@ return function(H, repo_root)
             H.equal(contract.mesh_count, 8)
             H.equal(#contract.armor_mesh_indices, 3)
             H.equal(#contract.plume_mesh_indices, 3)
-            H.equal(contract.plume_mesh_indices[1], 1)
-            H.equal(contract.plume_mesh_indices[3], 3)
-            H.equal(contract.armor_mesh_indices[1], 4)
-            H.equal(contract.armor_mesh_indices[3], 6)
+            H.equal(contract.armor_mesh_indices[1], 1)
+            H.equal(contract.armor_mesh_indices[3], 3)
+            H.equal(contract.plume_mesh_indices[1], 4)
+            H.equal(contract.plume_mesh_indices[3], 6)
             H.equal(#contract.shadow_mesh_indices, 2)
             H.equal(contract.shadow_mesh_indices[1], 0)
             H.equal(contract.shadow_mesh_indices[2], 7)
             H.equal(contract.lod_steps, 3)
             H.equal(contract.rig_bones, 13)
             H.equal(contract.dynamic_plume_bones, 6)
-            H.equal(hats.MATERIAL_RESPONSE_REVISION, 5)
+            H.equal(hats.MATERIAL_RESPONSE_REVISION, 6)
             H.truthy(hats.DONOR_ALPHA_CONTRACT)
             H.truthy(hats.DONOR_NORMAL_TANGENT_CONTRACT)
             H.truthy(hats.DONOR_CONTROLLER_CONTRACT)
             H.truthy(hats.DONOR_FADE_CONTRACT)
+        end)
+    end)
+
+    H.test("Encarmine resolves runtime mesh roles from donor material identity", function()
+        isolated(function(hats)
+            local expected = {
+                [0] = { 8, "shadow", "5ED8F236" },
+                [1] = { 7, "armor",  "1903313B" },
+                [2] = { 6, "armor",  "1903313B" },
+                [3] = { 5, "armor",  "1903313B" },
+                [4] = { 4, "plume",  "BD15BFF9" },
+                [5] = { 3, "plume",  "BD15BFF9" },
+                [6] = { 2, "plume",  "BD15BFF9" },
+                [7] = { 1, "shadow", "5ED8F236" },
+            }
+            H.equal(hats.DONOR_MATERIALS.armor.slot, "1903313B")
+            H.equal(hats.DONOR_MATERIALS.armor.resource,
+                "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_base")
+            H.equal(hats.DONOR_MATERIALS.plume.slot, "BD15BFF9")
+            H.equal(hats.DONOR_MATERIALS.plume.resource,
+                "units/beings/player/empire_soldier_knight/headpiece/es_k_hat_feather")
+            for mesh_index = 0, 7 do
+                local binding = hats.DONOR_MESH_BINDINGS[mesh_index]
+                local want = expected[mesh_index]
+                H.truthy(binding, "missing semantic donor binding")
+                H.equal(binding.geometry_index, want[1])
+                H.equal(binding.role, want[2])
+                H.equal(binding.material_slot, want[3])
+                H.equal(binding.material_slot, hats.DONOR_MATERIALS[binding.role].slot)
+                if binding.role == "armor" then
+                    H.truthy(hats.ARMOR_TEXTURES.diffuse:find("encarmine_armored_", 1, true))
+                elseif binding.role == "plume" then
+                    H.truthy(hats.PLUME_TEXTURES.diffuse:find("encarmine_cloth_", 1, true))
+                end
+            end
         end)
     end)
 
@@ -256,6 +291,9 @@ return function(H, repo_root)
         H.truthy(source:find("unit.meshes", 1, true))
         H.truthy(source:find("unit.lod_objects", 1, true))
         H.truthy(source:find("geometry.materials", 1, true))
+        H.truthy(source:find("geometry_index - 1", 1, true))
+        H.truthy(source:find("role_by_slot", 1, true))
+        H.truthy(source:find("runtime_mesh_materials", 1, true))
         H.truthy(source:find("ENCARMINE_LAUREL_COMPILED_CONTRACT=OK", 1, true))
 
         local contract = assert(io.open(repo_root
@@ -264,6 +302,9 @@ return function(H, repo_root)
         contract:close()
         H.truthy(contract_source:find('"mesh_objects"', 1, true))
         H.truthy(contract_source:find('"geometry_material_slots"', 1, true))
+        H.truthy(contract_source:find('"runtime_mesh_materials"', 1, true))
+        H.truthy(contract_source:find('[1, 7, "1903313B", "armor"]', 1, true))
+        H.truthy(contract_source:find('[4, 4, "BD15BFF9", "plume"]', 1, true))
         H.truthy(contract_source:find('"lod_objects"', 1, true))
         H.truthy(contract_source:find('"dynamic_plume_bones": 6', 1, true))
     end)

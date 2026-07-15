@@ -42,9 +42,13 @@ Both native materials expose the same slots:
 | normal | `texture_map_59cd86b9` |
 | combined | `texture_map_b788717c` |
 
-The compiled geometry order is shadow, plume x3, armor x3, shadow. Therefore
-plume meshes are indices 1-3 and armor meshes are 4-6. Indices 0 and 7 are
-shadow geometry and must not be repainted.
+The compiled geometry array is shadow, plume x3, armor x3, shadow, but
+`Unit.mesh` does not expose that array order: every mesh record carries a
+one-based `geometry_index`, and Laurel references the geometry array in reverse.
+Following those references gives runtime meshes 1-3 -> armor material
+`1903313B`, meshes 4-6 -> plume material `BD15BFF9`, and meshes 0/7 -> shadow
+material `5ED8F236`. The validator derives and compares this semantic mapping;
+never infer paint roles from the geometry array position alone.
 
 ## Rebuild plume diffuse
 
