@@ -340,7 +340,7 @@ return {
         en = "[untested] Character Preview Lighting",
     },
     gut_inventory_backdrop_tooltip = {
-        en = "Adjusts only the lighting of the inventory character preview while keeping the vanilla scene, camera, and background unchanged. Vanilla restores the game's exact original exposure; Dim uses 65%, and Dark uses 40%.",
+        en = "Adjusts only the lighting of the inventory character preview while keeping the vanilla scene, camera, and background unchanged. Vanilla restores the game's exact original exposure; Dim uses 65%%, and Dark uses 40%%.",
     },
     -- Dropdown option labels (VMF localizes each option's text; raw keys here).
     gut_inv_backdrop_opt_vanilla = { en = "Vanilla" },
