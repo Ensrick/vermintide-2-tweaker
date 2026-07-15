@@ -1595,15 +1595,11 @@ local data = {
                 },
             },
 ]==]
-            -- v0.12.140-dev: enable_dev_anim_picker is now a MASTER TOGGLE — its
-            -- picker rows are appended as its `sub_widgets` after the static
-            -- tree (below), so VMF reveals the whole picker menu LIVE on toggle (no
-            -- restart). See the append block below.
             -- (enable_debug_logging removed v0.12.176-dev — #169)
         },
     },
 }
-
+-- WT_DEV_OVERLAY_BEGIN:dev-tool-widgets
 -- Dev tooling widget trees (appended after the static widget tree).
 --
 -- v0.12.140-dev: the 3P Anim-Set Chooser is now a MASTER-TOGGLE → sub_widgets
@@ -1635,6 +1631,7 @@ data.options.widgets[#data.options.widgets + 1] = _picker_checkbox
 -- (or nil when its dynamic catalog is empty); nil-check before appending.
 local _hp_tree = _wt_dev_hold_pose_data.build_widget_tree()
 if _hp_tree then data.options.widgets[#data.options.widgets + 1] = _hp_tree end
+-- WT_DEV_OVERLAY_END:dev-tool-widgets
 
 -- #368: VMF builds this file before CWV performs its deferred in-keep clone
 -- registration, so the menu uses WT's bounded definition catalog. The runtime

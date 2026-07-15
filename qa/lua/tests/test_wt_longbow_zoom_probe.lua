@@ -1,5 +1,5 @@
 return function(H, repo_root)
-    local path = repo_root .. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_longbow_zoom_probe.lua"
+    local path = repo_root .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_longbow_zoom_probe.lua"
     local Probe = assert(loadfile(path))()
 
     H.test("WT longbow zoom probe targets only non-Huntsman Kruber", function()

@@ -4,7 +4,8 @@
 
 - Removed the live 3P Animation Picker and Hold-Pose tuner modules, widgets, handlers, commands, dynamic status decoration, and tuning-only diagnostics from the public beta. They remain available in the separate friends-only `wt_dev` stream.
 - Preserved every baked animation remap, grip/scale/rotation transform, cross-career availability control, weapon tweak, and read-only support command owned by the public mod.
-- Extended `qa/check_wt_stream_parity.ps1` to reject public dev-tool files/symbols/status tags, non-read-only commands, and orphan visible settings while allowing only documented dev-overlay differences.
+- Removed the bounded #290 Billhook and #316 Longbow live probes from the public runtime; their evidence owners and offline probe test now live only in the friends-only development stream.
+- Extended `qa/check_wt_stream_parity.ps1` to reject public dev-tool files/symbols/status tags, issue-specific live probes, non-read-only commands, and orphan visible settings. Every accepted stream difference is now enclosed by a uniquely paired overlay marker; the old whole-file exemptions are gone.
 - Added `/wt_regression_test` check `issue635_public_beta_dev_surface_absent` for the public runtime export boundary.
 - Removed the retired Kruber Longbow zoom-controls claim from the Workshop feature list; the native draw behavior remains owned by the shipped #316 animation fix, not a user-facing zoom setting.
 
