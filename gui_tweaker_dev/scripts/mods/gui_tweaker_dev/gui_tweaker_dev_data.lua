@@ -20,13 +20,12 @@ local GUT_SCOREBOARD_SORT_OPTIONS = {
     { text = "gut_scoreboard_sort_kills", value = "kills_total" },
 }
 
--- Inventory character-preview backdrop (#522). Values are keys into the
--- BACKDROPS catalog in _gut_inventory_backdrop.lua ("vanilla" = no swap);
--- the rt check cross-verifies the pairing.
+-- Inventory character-preview lighting (#522). The runtime module applies a
+-- world-local post-blend exposure multiplier without changing packages/levels.
 local GUT_INV_BACKDROP_OPTIONS = {
     { text = "gut_inv_backdrop_opt_vanilla", value = "vanilla" },
-    { text = "gut_inv_backdrop_opt_dark",    value = "dark_camp" },
-    { text = "gut_inv_backdrop_opt_victory", value = "victory_camp" },
+    { text = "gut_inv_backdrop_opt_dim",     value = "dim" },
+    { text = "gut_inv_backdrop_opt_dark",    value = "dark" },
 }
 
 -- UI-mod compatibility patches (UI Tweaks Temporal Fix + buff-bar end-time crash
@@ -481,12 +480,9 @@ local options_data = {
             -- ================================================================
             -- Inventory (#522)
             -- ================================================================
-            -- Character-preview backdrop dropdown: swaps the environment behind
-            -- the hero in the inventory preview pane. Vanilla default; the two
-            -- alternates are the game's own standalone-packaged menu scenes
-            -- (dark camp = the chest-opening backdrop, victory camp = the
-            -- mission-won scene), residency-gated by vanilla's own
-            -- load/has_loaded machinery. See _gut_inventory_backdrop.lua.
+            -- Character-preview lighting: preserves the vanilla scene and
+            -- adjusts only its preview-world exposure. See
+            -- _gut_inventory_backdrop.lua.
             {
                 setting_id  = "gut_inventory_group",
                 type        = "group",

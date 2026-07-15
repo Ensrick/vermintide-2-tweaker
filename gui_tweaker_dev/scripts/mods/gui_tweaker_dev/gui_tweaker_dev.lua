@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.275-dev"
+local MOD_VERSION = "0.2.277-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -3318,15 +3318,11 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mission_hero_select")
 -- chains mod.on_game_state_changed (preview-package arm). See _gut_mission_map.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_mission_map")
 
--- Inventory character-preview backdrop dropdown (#522): swaps the environment
--- behind the hero in the inventory preview pane (vanilla / dark camp / victory
--- camp). One singleton pre-hook on HeroWindowCharacterPreview.create_ui_elements
--- (preflight-verified: gut hooks that class nowhere else) mutates the cached
--- viewport def's level/package/env triplet BEFORE vanilla reads it, so vanilla's
--- own managed load + has_loaded gate + symmetric unload handle residency end to
--- end -- no new mount path, no crash path (alternates are the game's standalone
--- end-screen level packages; existence pre-checked via can_get("package")).
--- Chains mod.on_disabled (def restore). See _gut_inventory_backdrop.lua.
+-- Inventory character-preview lighting (#522): preserves the vanilla preview
+-- scene and installs one zero-allocation exposure callback on only
+-- HeroWindowCharacterPreview.world_previewer.world. The exact prior callback is
+-- chained/restored on Vanilla, exit, and disable. No package/level swap remains.
+-- See _gut_inventory_backdrop.lua.
 do  -- do-block: locals release back to the chunk (Lua 5.1 200-local ceiling)
     local ok_invbd, invbd = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_inventory_backdrop")
     if ok_invbd and type(invbd) == "table" and type(invbd.rt_checks) == "table" then

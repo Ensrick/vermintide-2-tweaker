@@ -331,21 +331,21 @@ return {
     },
 
     -- ============================================================
-    -- Inventory (#522): character-preview backdrop dropdown.
+    -- Inventory (#522): character-preview lighting dropdown.
     -- ============================================================
     gut_inventory_group = {
         en = "[untested] Inventory",
     },
     gut_inventory_backdrop = {
-        en = "[untested] Character Preview Backdrop",
+        en = "[untested] Character Preview Lighting",
     },
     gut_inventory_backdrop_tooltip = {
-        en = "Chooses the scene shown behind your character in the inventory preview. Vanilla is the game's default stage. Dark Camp is the darker campfire scene the chest-opening screen uses. Victory Camp is the celebration scene from the mission-won screen. Applies the next time the inventory opens; if a scene is unavailable, the vanilla backdrop is used.",
+        en = "Adjusts only the lighting of the inventory character preview while keeping the vanilla scene, camera, and background unchanged. Vanilla restores the game's exact original exposure; Dim uses 65%, and Dark uses 40%.",
     },
     -- Dropdown option labels (VMF localizes each option's text; raw keys here).
     gut_inv_backdrop_opt_vanilla = { en = "Vanilla" },
-    gut_inv_backdrop_opt_dark    = { en = "Dark Camp (chest-opening scene)" },
-    gut_inv_backdrop_opt_victory = { en = "Victory Camp (mission-won scene)" },
+    gut_inv_backdrop_opt_dim     = { en = "Dim" },
+    gut_inv_backdrop_opt_dark    = { en = "Dark" },
 
     -- ============================================================
     -- Main Menu & Startup (migrated from general_tweaker 2026-06-29, #190)
