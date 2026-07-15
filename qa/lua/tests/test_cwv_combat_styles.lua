@@ -35,6 +35,60 @@ return function(H, repo_root)
 		H.equal(policy.next_style("cwv_es_infantry_spear", "infantry"), "hunter")
 	end)
 
+	H.test("CWV console equipment row exposes a non-overlapping authored style control", function()
+		local runtime = {
+			describe = function(_, item)
+				if item and item.name == "es_2h_heavy_spear" and item.backend_id then
+					local style_id, style, family_id, member = policy.style(item.name, "hunter")
+					return { item_key = item.name, identity = item.backend_id, style_id = style_id,
+						style = style, family_id = family_id, member = member }
+				end
+			end,
+		}
+		local grid = {
+			element = { passes = {} },
+			content = { rows = 2, columns = 1 },
+			style = {
+				customize_hotspot_1_1 = { size = { 58, 58 }, offset = { 100, 210, 30 } },
+				customize_item_hover_1_1 = { size = { 58, 58 }, offset = { 100, 210, 30 } },
+				customize_hotspot_2_1 = { size = { 58, 58 }, offset = { 100, 110, 30 } },
+				customize_item_hover_2_1 = { size = { 58, 58 }, offset = { 100, 110, 30 } },
+			},
+		}
+		grid.content.item_1_1 = { name = "es_2h_heavy_spear", backend_id = "tuskgor_uuid" }
+		grid.content.item_2_1 = { name = "es_handgun", backend_id = "handgun_uuid" }
+
+		local installed, rows = policy.decorate_console_grid(grid, runtime)
+		H.equal(installed, true)
+		H.equal(rows, 2)
+		H.equal(#grid.element.passes, 6)
+		H.equal(grid.content.cwv_style_icon, "icon_switch")
+		H.equal(grid.style.customize_hotspot_1_1.offset[1], 36)
+		H.equal(grid.style.customize_item_hover_1_1.offset[1], 36)
+		H.equal(grid.style.cwv_style_hotspot_1_1.offset[1], 100)
+		H.truthy(grid.style.customize_hotspot_1_1.offset[1]
+			+ grid.style.customize_hotspot_1_1.size[1]
+			< grid.style.cwv_style_hotspot_1_1.offset[1])
+
+		local first_hotspot_pass = grid.element.passes[1]
+		grid.content.cwv_style_hotspot_1_1.parent = grid.content
+		H.equal(first_hotspot_pass.content_check_function(grid.content.cwv_style_hotspot_1_1), true)
+		H.equal(grid.content.cwv_style_hotspot_1_1.cwv_next_style_label,
+			"Switch to: Infantry Combat Style")
+		grid.content.cwv_style_hotspot_2_1.parent = grid.content
+		H.equal(grid.element.passes[4].content_check_function(grid.content.cwv_style_hotspot_2_1), false)
+
+		grid.content.cwv_style_hotspot_1_1.on_pressed = true
+		local item, suffix, row = policy.consume_console_style_press(grid.content, runtime)
+		H.equal(item.backend_id, "tuskgor_uuid")
+		H.equal(suffix, "_1_1")
+		H.equal(row.family_id, "spear")
+		H.equal(grid.content.cwv_style_hotspot_1_1.on_pressed, false)
+		local pass_count = #grid.element.passes
+		H.equal(policy.decorate_console_grid(grid, runtime), false)
+		H.equal(#grid.element.passes, pass_count)
+	end)
+
 	H.test("CWV Combat Style persistence is exact-instance and compact", function()
 		local store = policy.normalize_store(nil)
 		local changed = policy.set(store, "greatsword_a", "es_2h_sword", "longsword")
@@ -176,6 +230,10 @@ return function(H, repo_root)
 		H.truthy(module:find('if op == "query" then runtime:publish_loadout(sender_peer_id, "query_reply"); return end', 1, true))
 		H.equal(module:find('if op == "query" then runtime:request_states', 1, true), nil)
 		H.truthy(module:find('"Switch to: " ..', 1, true))
+		H.truthy(module:find("hero_window_loadout_console_definitions", 1, true))
+		H.truthy(module:find('mod:hook("HeroWindowLoadoutConsole", "_handle_input"', 1, true))
+		H.truthy(module:find('icon = "icon_switch"', 1, true))
+		H.truthy(module:find('"cwv_style_hotspot" .. suffix', 1, true))
 		H.truthy(main:find("policy.plan_legacy_migrations(saved", 1, true))
 		H.truthy(main:find('_om._migrate_legacy_style_items = function()', 1, true))
 		H.truthy(module:find('cwv_es_longsword_blackguard = {', 1, true))

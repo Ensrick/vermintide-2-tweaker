@@ -1,5 +1,31 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.425-dev - 2026-07-15 - #620 equipment-row Combat Style control [verify-fix-coop]
+
+- Fixed the missing Combat Style control on the actual console-style equipment
+  screen. The earlier implementation only patched `HeroWindowLoadout`; VT2
+  builds the reported vertical rows through `HeroWindowLoadoutConsole` and its
+  dynamic native loadout-grid definition.
+- Added the resident `icon_switch` placeholder beside the existing gear icon
+  only for exact weapon instances with authored Combat Styles. The style button
+  owns the gear's former position while both gear visual states move 64 pixels
+  left, preserving separate non-overlapping actions and hitboxes.
+- Tuskgor Spear now exposes the authored Hunter -> Infantry cycle from its
+  equipment row. A successful click persists against the exact backend UUID,
+  rebuilds the equipped instance once when applicable, and refreshes the native
+  loadout without duplicating its renderer.
+- Added engine-free regression coverage for source-native decoration,
+  authored-only visibility, Hunter/Infantry labeling, click consumption,
+  idempotence, gear preservation, and hitbox separation, plus runtime install
+  and layout assertions.
+
+**Co-op verify:** Equip a Tuskgor Spear, open the equipment screen, confirm the
+switch icon appears beside (and does not replace) the working gear icon, then
+click it and confirm the next label/state is Infantry. Enter a mission, verify
+the Infantry moveset locally and on the other peer, leave/rejoin, and confirm
+the exact spear instance retained its style. Repeat with an ordinary Handgun
+and confirm no style button appears.
+
 ## 0.1.424-dev - 2026-07-15 - #604 Crowbill transform delivery [verify-fix-coop]
 
 - Fixed the shipped `0.1.423-dev` no-op: its Dawi tune existed only under the

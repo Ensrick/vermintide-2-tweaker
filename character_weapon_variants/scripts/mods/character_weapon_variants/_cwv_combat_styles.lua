@@ -14,6 +14,12 @@ M.KERILLIAN_TEMPLATE = "cwv_combat_style_kerillian_greatsword"
 M.KERILLIAN_SPEED_MULT = 0.85
 M.KERILLIAN_STAGGER_MULT = 1.15
 M.KERILLIAN_CLEAVE_MULT = 1.15
+M.CONSOLE_STYLE_BUTTON = {
+	icon = "icon_switch",
+	icon_size = { 50, 45 },
+	hitbox_size = { 58, 58 },
+	cog_shift_x = -64,
+}
 
 M.FAMILIES = {
 	greatsword = {
@@ -140,6 +146,154 @@ function M.next_style(item_key, current)
 		end
 	end
 	return member.order[1], M.FAMILIES[family_id].styles[member.order[1]], family_id
+end
+
+local function copy_triplet(value)
+	return { value[1] or 0, value[2] or 0, value[3] or 0 }
+end
+
+local function copy_pair(value)
+	return { value[1] or 0, value[2] or 0 }
+end
+
+-- Native console loadout rows place the customization cog immediately left of
+-- the item row. The style button owns that original position and the cog moves
+-- 64 px left, leaving a six-pixel gap between two 58 px hitboxes. Keeping this
+-- arithmetic pure makes the non-overlap contract engine-free testable.
+function M.console_style_layout(cog_offset)
+	if type(cog_offset) ~= "table" then return nil end
+	local style_hitbox = copy_triplet(cog_offset)
+	local cog = copy_triplet(cog_offset)
+	cog[1] = cog[1] + M.CONSOLE_STYLE_BUTTON.cog_shift_x
+	local icon = copy_triplet(style_hitbox)
+	icon[1] = icon[1] + math.floor((M.CONSOLE_STYLE_BUTTON.hitbox_size[1]
+		- M.CONSOLE_STYLE_BUTTON.icon_size[1]) * 0.5)
+	icon[2] = icon[2] + math.floor((M.CONSOLE_STYLE_BUTTON.hitbox_size[2]
+		- M.CONSOLE_STYLE_BUTTON.icon_size[2]) * 0.5)
+	icon[3] = icon[3] + 1
+	return { cog_offset = cog, style_hitbox_offset = style_hitbox, icon_offset = icon }
+end
+
+local function console_row(runtime, parent_content, suffix)
+	local item = type(parent_content) == "table" and parent_content["item" .. suffix]
+	if not item or type(runtime) ~= "table" or type(runtime.describe) ~= "function" then return nil end
+	local ok, row = pcall(runtime.describe, runtime, item, item.backend_id)
+	return ok and row or nil
+end
+
+-- Decorate the definition returned by UIWidgets.create_loadout_grid_console.
+-- This is deliberately definition-level: no copied window renderer, no global
+-- item-row replacement, and no control on items without authored style data.
+function M.decorate_console_grid(widget_def, runtime)
+	if type(widget_def) ~= "table" or widget_def.cwv_combat_style_decorated then return false end
+	local element = widget_def.element
+	local passes = element and element.passes
+	local content = widget_def.content
+	local style = widget_def.style
+	if type(passes) ~= "table" or type(content) ~= "table" or type(style) ~= "table"
+			or type(runtime) ~= "table" or type(runtime.describe) ~= "function" then
+		return false
+	end
+
+	local rows = tonumber(content.rows) or 0
+	local columns = tonumber(content.columns) or 0
+	local decorated = 0
+	content.cwv_style_icon = M.CONSOLE_STYLE_BUTTON.icon
+	content.cwv_style_icon_hover = M.CONSOLE_STYLE_BUTTON.icon
+
+	for i = 1, rows do
+		for k = 1, columns do
+			local suffix = "_" .. tostring(i) .. "_" .. tostring(k)
+			local customize_hotspot = "customize_hotspot" .. suffix
+			local customize_hover = "customize_item_hover" .. suffix
+			local cog_style = style[customize_hotspot]
+			local cog_hover_style = style[customize_hover]
+			local layout = cog_style and M.console_style_layout(cog_style.offset)
+			if layout and cog_hover_style and type(cog_hover_style.offset) == "table" then
+				-- Preserve the native gear action; only reposition both visual states.
+				cog_style.offset = copy_triplet(layout.cog_offset)
+				cog_hover_style.offset = copy_triplet(layout.cog_offset)
+
+				local hotspot_name = "cwv_style_hotspot" .. suffix
+				local icon_name = "cwv_style_icon" .. suffix
+				local hover_name = "cwv_style_icon_hover" .. suffix
+				local row_suffix = suffix
+				passes[#passes + 1] = {
+					pass_type = "hotspot", content_id = hotspot_name, style_id = hotspot_name,
+					content_check_function = function(child_content)
+						local parent = child_content and child_content.parent
+						local row = console_row(runtime, parent, row_suffix)
+						if row and child_content then
+							local _, next_style = M.next_style(row.item_key, row.style_id)
+							child_content.cwv_next_style_label = "Switch to: "
+								.. tostring(next_style and next_style.label or row.style.label)
+						end
+						return row ~= nil
+					end,
+				}
+				passes[#passes + 1] = {
+					pass_type = "texture", texture_id = "cwv_style_icon", style_id = icon_name,
+					content_check_function = function(parent_content)
+						local row = console_row(runtime, parent_content, row_suffix)
+						local hotspot = parent_content and parent_content[hotspot_name]
+						return row ~= nil and hotspot and not hotspot.is_hover
+					end,
+				}
+				passes[#passes + 1] = {
+					pass_type = "texture", texture_id = "cwv_style_icon_hover", style_id = hover_name,
+					content_check_function = function(parent_content)
+						local row = console_row(runtime, parent_content, row_suffix)
+						local hotspot = parent_content and parent_content[hotspot_name]
+						return row ~= nil and hotspot and hotspot.is_hover
+					end,
+				}
+
+				content[hotspot_name] = { drag_texture_size = copy_pair(M.CONSOLE_STYLE_BUTTON.hitbox_size) }
+				style[hotspot_name] = {
+					horizontal_alignment = "left", vertical_alignment = "center",
+					size = copy_pair(M.CONSOLE_STYLE_BUTTON.hitbox_size),
+					offset = copy_triplet(layout.style_hitbox_offset),
+				}
+				style[icon_name] = {
+					horizontal_alignment = "left", vertical_alignment = "center",
+					color = { 255, 150, 150, 150 },
+					size = copy_pair(M.CONSOLE_STYLE_BUTTON.icon_size),
+					texture_size = copy_pair(M.CONSOLE_STYLE_BUTTON.icon_size),
+					offset = copy_triplet(layout.icon_offset),
+				}
+				style[hover_name] = {
+					horizontal_alignment = "left", vertical_alignment = "center",
+					color = { 255, 255, 255, 255 },
+					size = copy_pair(M.CONSOLE_STYLE_BUTTON.icon_size),
+					texture_size = copy_pair(M.CONSOLE_STYLE_BUTTON.icon_size),
+					offset = copy_triplet(layout.icon_offset),
+				}
+				decorated = decorated + 1
+			end
+		end
+	end
+
+	if decorated == 0 then return false end
+	widget_def.cwv_combat_style_decorated = true
+	return true, decorated
+end
+
+function M.consume_console_style_press(content, runtime)
+	if type(content) ~= "table" then return nil end
+	for i = 1, tonumber(content.rows) or 0 do
+		for k = 1, tonumber(content.columns) or 0 do
+			local suffix = "_" .. tostring(i) .. "_" .. tostring(k)
+			local hotspot = content["cwv_style_hotspot" .. suffix]
+			if hotspot and (hotspot.on_pressed or hotspot.on_release) then
+				hotspot.on_pressed = false
+				hotspot.on_release = false
+				local item = content["item" .. suffix]
+				local row = console_row(runtime, content, suffix)
+				if row then return item, suffix, row end
+			end
+		end
+	end
+	return nil
 end
 
 function M.normalize_store(value)
@@ -475,21 +629,20 @@ end
 -- no copied view or custom renderer is introduced.
 function M.install_loadout_ui(mod, runtime)
 	if M._ui_installed or type(runtime) ~= "table" then return false end
-	local ok, definitions = pcall(local_require,
+	local desktop_ok, definitions = pcall(local_require,
 		"scripts/ui/views/hero_view/windows/definitions/hero_window_loadout_definitions")
-	if not ok or type(definitions) ~= "table" then return false end
-	local scenegraph = definitions.scenegraph_definition
-	local widgets = definitions.widgets
-	if type(scenegraph) ~= "table" or type(widgets) ~= "table" then return false end
+	local scenegraph = desktop_ok and definitions and definitions.scenegraph_definition
+	local widgets = desktop_ok and definitions and definitions.widgets
 
-	scenegraph.cwv_combat_style_button = scenegraph.cwv_combat_style_button or {
+	if type(scenegraph) == "table" and type(widgets) == "table" then
+		scenegraph.cwv_combat_style_button = scenegraph.cwv_combat_style_button or {
 		parent = "loadout_background",
 		horizontal_alignment = "center",
 		vertical_alignment = "bottom",
 		size = { 390, 46 },
 		position = { 0, 122, 30 },
 	}
-	widgets.cwv_combat_style_button = widgets.cwv_combat_style_button or {
+		widgets.cwv_combat_style_button = widgets.cwv_combat_style_button or {
 		scenegraph_id = "cwv_combat_style_button",
 		element = { passes = {
 			{ pass_type = "hotspot", content_id = "button_hotspot", content_check_function = function(content) return content.visible end },
@@ -509,7 +662,8 @@ function M.install_loadout_ui(mod, runtime)
 				horizontal_alignment = "center", vertical_alignment = "center",
 				text_color = { 255, 0, 0, 0 }, offset = { 2, 0, 3 }, size = { 390, 46 } },
 		},
-	}
+		}
+	end
 
 	local function selected(window)
 		local parent = window and window.parent
@@ -533,34 +687,73 @@ function M.install_loadout_ui(mod, runtime)
 		end
 	end
 
-	mod:hook("HeroWindowLoadout", "_populate_loadout", function(func, self, ...)
-		local result = func(self, ...)
-		refresh(self)
-		return result
-	end)
-	mod:hook("HeroWindowLoadout", "_handle_input", function(func, self, ...)
-		local r1, r2, r3, r4 = func(self, ...)
-		refresh(self)
-		local widget = self._widgets_by_name and self._widgets_by_name.cwv_combat_style_button
-		local hotspot = widget and widget.content and widget.content.button_hotspot
-		if widget and widget.content.visible and hotspot and hotspot.on_release then
-			hotspot.on_release = false
-			local item = selected(self)
-			local changed = item and runtime:cycle_item(item, item.backend_id,
-				"inventory_button", true)
-			if changed then
-				if self.parent then
-					self.parent.loadout_sync_id = (self.parent.loadout_sync_id or 0) + 1
-				end
-				pcall(function() self:_play_sound("play_gui_equipment_selection_click") end)
-			end
+	if type(scenegraph) == "table" and type(widgets) == "table" then
+		mod:hook("HeroWindowLoadout", "_populate_loadout", function(func, self, ...)
+			local result = func(self, ...)
 			refresh(self)
-		end
-		return r1, r2, r3, r4
-	end)
+			return result
+		end)
+		mod:hook("HeroWindowLoadout", "_handle_input", function(func, self, ...)
+			local r1, r2, r3, r4 = func(self, ...)
+			refresh(self)
+			local widget = self._widgets_by_name and self._widgets_by_name.cwv_combat_style_button
+			local hotspot = widget and widget.content and widget.content.button_hotspot
+			if widget and widget.content.visible and hotspot and hotspot.on_release then
+				hotspot.on_release = false
+				local item = selected(self)
+				local changed = item and runtime:cycle_item(item, item.backend_id,
+					"inventory_button", true)
+				if changed then
+					if self.parent then
+						self.parent.loadout_sync_id = (self.parent.loadout_sync_id or 0) + 1
+					end
+					pcall(function() self:_play_sound("play_gui_equipment_selection_click") end)
+				end
+				refresh(self)
+			end
+			return r1, r2, r3, r4
+		end)
+	end
 
-	M._ui_installed = true
-	return true
+	local console_ok, console_definitions = pcall(local_require,
+		"scripts/ui/views/hero_view/windows/definitions/hero_window_loadout_console_definitions")
+	local console_installed = false
+	if console_ok and type(console_definitions) == "table"
+			and type(console_definitions.create_loadout_grid_func) == "function" then
+		local original_create_grid = console_definitions.create_loadout_grid_func
+		console_definitions.create_loadout_grid_func = function(...)
+			local widget_def = original_create_grid(...)
+			M.decorate_console_grid(widget_def, runtime)
+			return widget_def
+		end
+
+		mod:hook("HeroWindowLoadoutConsole", "_handle_input", function(func, self, ...)
+			local widget = self._widgets_by_name and self._widgets_by_name.loadout_grid
+			local item, suffix, row = widget and M.consume_console_style_press(widget.content, runtime)
+			if item then
+				local changed, err = runtime:cycle_item(item, item.backend_id,
+					"equipment_style_button", true)
+				if changed then
+					if self.parent then
+						self.parent.loadout_sync_id = (self.parent.loadout_sync_id or 0) + 1
+					end
+					pcall(function() self:_play_sound("play_gui_equipment_selection_click") end)
+					pcall(printf, "[cwv:620] equipment style button item=%s family=%s row=%s",
+						tostring(row.identity), tostring(row.family_id), tostring(suffix))
+				else
+					pcall(printf, "[cwv:620] equipment style button deferred item=%s reason=%s",
+						tostring(row.identity), tostring(err))
+				end
+				return
+			end
+			return func(self, ...)
+		end)
+		console_installed = true
+	end
+
+	M._ui_installed = (type(scenegraph) == "table" and type(widgets) == "table") or console_installed
+	M._console_ui_installed = console_installed
+	return M._ui_installed
 end
 
 return M

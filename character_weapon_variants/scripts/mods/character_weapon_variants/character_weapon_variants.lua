@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.424-dev"
+local MOD_VERSION = "0.1.425-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -14230,6 +14230,13 @@ _rt_register("issue620_per_instance_combat_styles", function()
 	end
 	if policy._ui_installed ~= true then
 		return "Combat Style loadout control is not installed"
+	end
+	if policy._console_ui_installed ~= true then
+		return "Combat Style console equipment-row control is not installed"
+	end
+	local layout = policy.console_style_layout({ 100, 200, 30 })
+	if not layout or layout.cog_offset[1] ~= 36 or layout.style_hitbox_offset[1] ~= 100 then
+		return "Combat Style console equipment-row layout drifted"
 	end
 end)
 
