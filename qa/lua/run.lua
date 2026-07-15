@@ -95,6 +95,7 @@ local suites = {
     "test_cwv_remote_audio",
     "test_cwv_remote_identity",
     "test_cwv_old_musket_presentation",
+    "test_cwv_old_musket_preview",
     "test_cwv_old_musket_interrupt",
     "test_cwv_anim_picker",
     "test_cwv_acquisition",

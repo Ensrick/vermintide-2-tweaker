@@ -1,5 +1,11 @@
 # Crafting in Modded Changelog
 
+## 0.8.81-dev (2026-07-15): #474 shared authored-preview resource gate
+
+- CIM Athanor now asks an enabled provider for its canonical preview descriptor before resolving the inherited vanilla item. Old Musket therefore uses CWV's exact custom unit, package anchor, material, textures, transform, and fallback instead of a CIM-specific model guess.
+- Extracted an engine-free forge preview resource policy. Standalone vanilla packages and resident master-bundle units (including Loremaster shields) are both valid; missing custom and fallback resources fail closed without spawning an unsafe unit.
+- Added regression coverage for Old Musket custom/fallback readiness, Loremaster resident custom units, vanilla package controls, and absent or incompatible companion mods.
+
 ## 0.8.80-dev (2026-07-15): #628 canonical synthetic items and safe salvage [verify-fix]
 
 - Replaced CIM's screen-specific modded-item exceptions with one normalized synthetic-item contract. Provider mods own complete `ItemMasterList` definitions; CIM now owns one schema-versioned acquired instance carrying its exact backend id, item key, provider, slot, rarity, properties, traits, illusion, and persistence metadata. Athanor crafting, standard crafting, SaveWeapon import, mirror restore, legacy MIL import, inventory filtering, and deletion consume that same contract.

@@ -1,5 +1,12 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.427-dev - 2026-07-15 - #474 canonical Old Musket Athanor preview
+
+- Added the Old Musket to CWV's generic custom-unit preview bridge. Its resident custom unit now borrows one balanced vanilla Handgun package lease instead of depending on an unavailable standalone Workshop package.
+- Defined one canonical preview descriptor for item/skin identity, custom 3P unit, package anchor, material, three textures, stance transform, and safe vanilla fallback. The ordinary Cosmetics/item browser and CIM Athanor now consume the same LootItemUnitPreviewer path.
+- CIM's forge crash guard consumes that descriptor before inspecting the inherited `es_handgun` entry. Custom-ready and fallback-ready states render safely; missing fallback resources fail closed.
+- Added Lua coverage for visible/textured Old Musket previews, CIM UUID identity, package readiness, safe fallback, missing companion/resource behavior, a resident Loremaster shield control, and a vanilla weapon control.
+
 ## 0.1.426-dev - 2026-07-15 - #620 atomic Combat Style transitions [verify-fix-coop]
 
 - Fixed the equipment-row switch crash. Every authored target style now owns

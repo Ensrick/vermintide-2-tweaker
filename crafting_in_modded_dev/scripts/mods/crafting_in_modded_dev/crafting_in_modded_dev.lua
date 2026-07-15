@@ -16,6 +16,8 @@ Major sections (search by name to jump):
 ]]
 
 local mod = get_mod("cim_dev")
+local _FORGE_PREVIEW_POLICY = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_forge_preview_policy")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- ============================================================
@@ -48,7 +50,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.80-dev"
+local MOD_VERSION = "0.8.81-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -2108,9 +2110,37 @@ end)
 -- inventory) are untouched. Default to UNSAFE on any resolution error — losing
 -- a cosmetic preview always beats a CTD.
 local _forge_preview_warned = {}
+local function _forge_authored_preview_mode(item, can_get)
+    local cwv = get_mod("character_weapon_variants")
+    local resolver = cwv and cwv._cwv_resolve_preview_descriptor
+    local policy = cwv and cwv._cwv_preview_descriptor
+    if type(resolver) ~= "function" or type(policy) ~= "table"
+            or type(policy.resource_mode) ~= "function" then
+        return nil, "no_authored_descriptor", false
+    end
+    local ok, descriptor = pcall(resolver, item)
+    if not ok or type(descriptor) ~= "table" then
+        return nil, ok and "not_authored" or "descriptor_error", false
+    end
+    local mode, reason = _FORGE_PREVIEW_POLICY.authored_mode(
+        descriptor, policy.resource_mode, can_get)
+    return mode, reason, true
+end
+mod._cim_forge_authored_preview_mode = _forge_authored_preview_mode
+
 local function _forge_preview_unsafe(item)
     local ok, unsafe = pcall(function()
         if not item then return true end
+
+        -- #474: CWV owns the Old Musket's canonical item/skin -> unit/package/
+        -- material/transform descriptor.  CIM consumes that contract instead
+        -- of independently guessing from the inherited es_handgun entry.  A
+        -- missing custom unit is allowed only when the same descriptor proves
+        -- the vanilla fallback; the CWV preview bridge performs that rewrite.
+        local authored_mode, _, authored = _forge_authored_preview_mode(
+            item, Application and Application.can_get)
+        if authored then return authored_mode == nil end
+
         local item_key = item.key or (item.data and item.data.key)
         if not item_key then return true end
         local master = rawget(ItemMasterList, item_key)
@@ -2141,7 +2171,9 @@ local function _forge_preview_unsafe(item)
                 -- A discrete streaming package exists (every vanilla weapon ships a
                 -- <unit>_3p .package): load_package resolves it and the later
                 -- World.spawn_unit succeeds once loaded.
-                if Application.can_get("package", p) then return false end
+                local loadable = _FORGE_PREVIEW_POLICY.unit_loadable(p,
+                    Application and Application.can_get)
+                if loadable then return false end
                 -- #481 forge-preview-la-unit-resident: no standalone _3p package,
                 -- but the 3p UNIT resource is already resident. This is the
                 -- Loremaster's Armoury case. LA bundles its custom shield/weapon
@@ -2157,7 +2189,6 @@ local function _forge_preview_unsafe(item)
                 -- so a resident 3p unit is loadable. A genuinely absent CW/deus unit
                 -- (the Trollhammer case) is resident in neither form, so it still
                 -- returns missing and stays skipped.
-                if Application.can_get("unit", p) then return false end
                 return true
             end
             if item_units.is_ammo_weapon then

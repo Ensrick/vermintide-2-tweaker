@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.426-dev"
+local MOD_VERSION = "0.1.427-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -71,7 +71,9 @@ mod._cwv_crowbill_presentation = _om.crowbill_presentation
 mod._cwv_crowbill_runtime = _om.crowbill_runtime
 _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus_identity")
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
-_om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family })
+_om.old_musket_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_preview")
+mod._cwv_preview_descriptor = _om.old_musket_preview
+_om.mod_unit_preview.install({ _om.greataxe, _om.crowbill_family, _om.old_musket_preview })
 _om.mace_hammer_identity_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_hammer_identity")
 _om.mace_hammer_identity = _om.mace_hammer_identity_policy.new()
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_pair_state").install(mod, _om)
@@ -5943,13 +5945,13 @@ _om._track_old_musket_unit = function(unit, perspective, mode)
 	end
 end
 
-local _OLD_MUSKET_TEXTURE_BINDINGS = {
-	{ "texture_map_c0ba2942", "textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo" },
-	{ "texture_map_59cd86b9", "textures/cwv_es_musket_custom/cwv_es_musket_custom_normal" },
-	{ "texture_map_0205ba86", "textures/cwv_es_musket_custom/cwv_es_musket_custom_metallic" },
-}
-local _OLD_MUSKET_PREVIEW_MATERIAL_3P =
-	"units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p"
+local _OLD_MUSKET_TEXTURE_BINDINGS = {}
+for _, binding in ipairs(_om.old_musket_preview.TEXTURES) do
+	_OLD_MUSKET_TEXTURE_BINDINGS[#_OLD_MUSKET_TEXTURE_BINDINGS + 1] = {
+		binding.slot, binding.texture,
+	}
+end
+local _OLD_MUSKET_PREVIEW_MATERIAL_3P = _om.old_musket_preview.PREVIEW_MATERIAL
 local _old_musket_paint_diag_seen = {}
 
 local function _old_musket_paint_diag_once(reason, detail)
@@ -6051,6 +6053,25 @@ _om._old_musket_transform_components = function(perspective, mode)
 	end
 	return pos, rot, scale
 end
+
+-- #474: item/skin identity, render resources and preview transform now resolve
+-- through one descriptor. Both the normal item-customization pane and CIM's
+-- Athanor are LootItemUnitPreviewer consumers, so neither surface may invent a
+-- second Old-Musket model/material/pose recipe.
+_om._old_musket_preview_descriptor = function(item)
+	local mode = "ranged"
+	local data = item and item.data
+	if data and data.mod_data and data.mod_data.cwv_musket_stance == "melee" then
+		mode = "melee"
+	elseif item and item.backend_id and _om._old_musket_modes_by_backend then
+		mode = _om._old_musket_modes_by_backend[item.backend_id] or mode
+	end
+	local pos, rot, scale = _om._old_musket_transform_components("3p", mode)
+	return _om.old_musket_preview.resolve(item, mode, {
+		position = pos, rotation = rot, scale = scale,
+	})
+end
+mod._cwv_resolve_preview_descriptor = _om._old_musket_preview_descriptor
 
 _om._apply_old_musket_transform = function(unit, perspective, mode)
 	if not unit or not Unit.alive(unit) then return end
@@ -13484,16 +13505,17 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 		local decision = _om.combat_styles:transform_decision(item_data, item.backend_id)
 		if decision ~= nil then def = decision or nil end
 	end
-	if not def then return units end
+	local preview_descriptor = _om._old_musket_preview_descriptor(item)
+	if not def and not preview_descriptor then return units end
 
 	-- LootItemUnitPreviewer (illusion / cosmetic browser) spawns 3P-style models;
 	-- prefer _3p override if set, else unified.
-	local scale  = _resolve_field(def, "right_hand_scale_3p")  or _resolve_field(def, "left_hand_scale_3p")
-	          or _resolve_field(def, "right_hand_scale")     or _resolve_field(def, "left_hand_scale")
-	local offset = _resolve_field(def, "right_hand_offset_3p") or _resolve_field(def, "left_hand_offset_3p")
-	          or _resolve_field(def, "right_hand_offset")    or _resolve_field(def, "left_hand_offset")
-	local rotation = _resolve_field(def, "right_hand_rotation_3p") or _resolve_field(def, "left_hand_rotation_3p")
-	          or _resolve_field(def, "right_hand_rotation")    or _resolve_field(def, "left_hand_rotation")
+	local scale  = def and (_resolve_field(def, "right_hand_scale_3p")  or _resolve_field(def, "left_hand_scale_3p")
+	          or _resolve_field(def, "right_hand_scale")     or _resolve_field(def, "left_hand_scale"))
+	local offset = def and (_resolve_field(def, "right_hand_offset_3p") or _resolve_field(def, "left_hand_offset_3p")
+	          or _resolve_field(def, "right_hand_offset")    or _resolve_field(def, "left_hand_offset"))
+	local rotation = def and (_resolve_field(def, "right_hand_rotation_3p") or _resolve_field(def, "left_hand_rotation_3p")
+	          or _resolve_field(def, "right_hand_rotation")    or _resolve_field(def, "left_hand_rotation"))
 	if scale or offset or rotation then
 		for _, unit in ipairs(units) do
 			if def.crowbill_model_key then
@@ -13506,7 +13528,7 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	end
 	-- #604: LootItemUnitPreviewer backs the item browser/customization pane.
 	-- It uses the same committed base*local-flip resolver as world equipment.
-	if def.crowbill_mode_family and _om._apply_crowbill_presentation then
+	if def and def.crowbill_mode_family and _om._apply_crowbill_presentation then
 		local browser_identity = _om._crowbill_render_identity(item_data, def,
 			item.backend_id or def.item_key .. ":item_browser")
 		for _, unit in ipairs(units) do
@@ -13520,17 +13542,25 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
 	-- vanilla material shell, so its three authored textures must be rebound
 	-- after every spawn just as they are for owner equipment and HeroPreviewer.
 	-- The target planner rejects vanilla resource fallbacks before any write.
-	local musket_targets = _om._old_musket_preview_texture_targets(def, units, spawn_data)
+	local musket_def = preview_descriptor and {
+		item_key = preview_descriptor.item_key,
+		right_hand_unit = preview_descriptor.unit,
+	} or def
+	local musket_targets = _om._old_musket_preview_texture_targets(musket_def, units, spawn_data)
+	local preview_mode = preview_descriptor and preview_descriptor.mode or "ranged"
 	local applied = 0
 	for _, unit in ipairs(musket_targets) do
 		if _is_unit(unit) then
 			local ok = _om._apply_old_musket_textures(unit, true)
 			if ok then applied = applied + 1 end
+			_om._track_old_musket_unit(unit, "3p", preview_mode)
+			_om._apply_old_musket_transform(unit, "3p", preview_mode)
 		end
 	end
 	if #musket_targets > 0 then
-		pcall(printf, "[cwv:617] Old Musket preview textures applied: item=%s targets=%d applied=%d",
-			tostring(cwv_key or weapon_key), #musket_targets, applied)
+		pcall(printf, "[cwv:617] Old Musket preview textures applied: item=%s mode=%s targets=%d applied=%d descriptor=true",
+			tostring(cwv_key or weapon_key), tostring(preview_mode),
+			#musket_targets, applied)
 	end
 
 	return units
