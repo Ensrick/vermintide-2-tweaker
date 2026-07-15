@@ -44,7 +44,7 @@
         @{ Dir = 'career_tweaker';             ModId = 'crt';                        WorkshopId = '3716286199'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Career Tweaker' }
         @{ Dir = 'enemy_tweaker';              ModId = 'enemy_tweaker';              WorkshopId = '3716780252'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Enemy Tweaker' }
         @{ Dir = 'character_weapon_variants';  ModId = 'character_weapon_variants';  WorkshopId = '3716869446'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Character Weapon Variants' }
-        @{ Dir = 'character_dialogue';         ModId = 'character_dialogue';         WorkshopId = '3765055148'; Visibility = 'private';      Stream = 'single'; Public = $false; Name = 'Character Dialogue' }
+        @{ Dir = 'character_dialogue';         ModId = 'character_dialogue';         WorkshopId = '3765055148'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Character Dialogue' }
         @{ Dir = 'crafting_in_modded';         ModId = 'cim';                        WorkshopId = '3721038774'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'Crafting In Modded' }
         @{ Dir = 'crafting_in_modded_dev';     ModId = 'cim_dev';                    WorkshopId = '3733366851'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'Crafting In Modded (Dev)' }
         @{ Dir = 'event_tweaker';              ModId = 'event_tweaker';              WorkshopId = '3721290755'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Event Tweaker' }
