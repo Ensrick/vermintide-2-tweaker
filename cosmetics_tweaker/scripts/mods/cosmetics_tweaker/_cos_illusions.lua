@@ -300,6 +300,12 @@ mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins", fu
 end)
 
 local _custom_loc = {}
+-- Item UI calls the game's global Localize(), not VMF's per-mod localizer.
+-- Fold custom-hat strings into this module's existing single Localize owner;
+-- a second hook would create order-dependent localization and fails lint.
+for key, value in pairs(COS.encarmine_item_localization or {}) do
+    _custom_loc[key] = value
+end
 for _, spec in ipairs(_la_shield_skin_specs) do
     _custom_loc[spec.skin_key .. "_name"] = spec.display_name
 end

@@ -22,6 +22,7 @@ return function(H, repo_root)
                 backend_entries = entries
             end,
             info = function() end,
+            warning = function() end,
         }
         _G.get_mod = function(name)
             if name == "cosmetics_tweaker" then return mod end
@@ -72,14 +73,31 @@ return function(H, repo_root)
             H.truthy(entry)
             H.equal(entry.template, "es_hats_no_ear_moustache")
             H.equal(entry.inventory_icon, "icon_knight_hat_0006_encarmine")
-            H.equal(entry.unit, hats.CUSTOM_UNIT)
+            H.equal(entry.unit, hats.BASE_UNIT)
+            H.equal(entry.localized_name, "Encarmine Helmet")
+            H.equal(entry.localized_description,
+                "A red-and-gold Foot Knight helm with a black plume, created for Tweaker: Cosmetics.")
+            H.equal(hats.ITEM_LOCALIZATION.cos_encarmine_hat_name, "Encarmine Helmet")
             H.equal(entry.required_dlc, nil)
             H.equal(entry.can_wield[1], "es_knight")
             H.equal(bridge.backend_to_vanilla.cos_encarmine_hat, "knight_hat_0006")
             H.equal(bridge.backend_to_armoury.cos_encarmine_hat, hats.VARIANT_KEY)
+            H.equal(bridge.unit_path_to_clones[hats.BASE_UNIT], nil)
             H.truthy(bridge.registered)
             H.equal(bridge.la_registered, false)
             H.equal(get_backend_entries()[1].mod_data.backend_id, "cos_encarmine_hat")
+        end)
+    end)
+
+    H.test("Encarmine enabled path fails closed before PackageManager", function()
+        isolated(function(hats, bridge)
+            H.truthy(hats.register_all(bridge))
+            H.equal(hats.CUSTOM_UNIT, hats.BASE_UNIT)
+            H.equal(hats.CANDIDATE_CUSTOM_UNIT == hats.CUSTOM_UNIT, false)
+            H.equal(ItemMasterList.cos_encarmine_hat.unit, hats.BASE_UNIT)
+            local resolved = hats.resolve_variant(hats.VARIANT_KEY)
+            H.equal(resolved.new_units[1], hats.BASE_UNIT)
+            H.truthy(resolved.is_vanilla_unit)
         end)
     end)
 

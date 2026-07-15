@@ -1,5 +1,18 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.111-dev - 2026-07-15 - #612 critical Encarmine equip crash guard [in-progress]
+
+### Fixed
+
+- Confirmed the v0.9.110 crash at the exact engine boundary: equipping the persisted `cos_encarmine_hat` asks `PackageManager` to load `units/cosmetics_tweaker/encarmine_hat/encarmine_hat`, whose compiled package references missing resource `#ID[bd55dca31255aaec]`. The resulting engine fatal bypasses Lua `pcall` and crashes the hero preview.
+- Failed the item closed to the inventory-package-listed vanilla Laurel Helm unit on every enabled/disabled, preview, bridge, and persisted-item path. The custom unit remains a diagnostic candidate only and cannot reach `PackageManager` until its complete runtime dependency closure is proven.
+- Added the item's name and description to the game's global `Localize()` surface and replaced the cloned Laurel Helm cached localization fields, preventing raw `<cos_encarmine_hat_name>` or stale Laurel Helm text.
+- Added offline regression coverage proving that even the enabled item resolves only to the safe base unit before PackageManager while its stable network/backend identity remains registered.
+
+### Verification
+
+Launch with the helmet already selected, open Foot Knight's inventory and cosmetics screens, then equip the Encarmine item. The game must not crash and the item must display as `Encarmine Helmet`; this guard build intentionally renders the vanilla Laurel Helm while the custom resource contract is repaired.
+
 ## 0.9.110-dev - 2026-07-14 - #612 Encarmine Helmet [verify-fix-coop]
 
 - Added the Encarmine Helmet as an independent Foot Knight cosmetic: a red-and-gold derivative of the hidden vanilla Laurel Helm mesh, with a black plume and authored icon. Its two mesh slots reuse the vanilla hat material contract and receive separate per-unit armor/cloth textures, avoiding global material mutation. It has no DLC ownership requirement.

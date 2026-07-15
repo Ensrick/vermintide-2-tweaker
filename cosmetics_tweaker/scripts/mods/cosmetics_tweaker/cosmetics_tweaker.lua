@@ -74,7 +74,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.110-dev"
+local MOD_VERSION = "0.9.111-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -377,6 +377,7 @@ end
 mod._cos = mod._cos or {}
 mod._cos.U = U
 mod._cos.LA_BRIDGE = LA_BRIDGE
+mod._cos.encarmine_item_localization = CUSTOM_HATS.ITEM_LOCALIZATION
 mod._cos.flush_log = _flush_log
 mod._cos.skin_requires_unowned_dlc = _skin_requires_unowned_dlc
 -- custom_skin_keys: the illusions module fills it at registration; the wire-safety
@@ -10296,9 +10297,15 @@ _rt_register("issue612_encarmine_hat_contract", function()
     if LA_BRIDGE.backend_to_vanilla[CUSTOM_HATS.ITEM_KEY] ~= CUSTOM_HATS.BASE_KEY then
         return "Encarmine vanilla wire fallback missing"
     end
+    if item.unit ~= CUSTOM_HATS.BASE_UNIT or CUSTOM_HATS.CUSTOM_UNIT ~= CUSTOM_HATS.BASE_UNIT then
+        return "Encarmine unsafe custom package route is active"
+    end
+    if CUSTOM_HATS.CANDIDATE_CUSTOM_UNIT == CUSTOM_HATS.CUSTOM_UNIT then
+        return "Encarmine candidate unit escaped fail-closed quarantine"
+    end
     if Application and Application.can_get
-        and not Application.can_get("unit", CUSTOM_HATS.CUSTOM_UNIT) then
-        return "Encarmine compiled unit is not resident"
+        and not Application.can_get("unit", CUSTOM_HATS.BASE_UNIT) then
+        return "Encarmine safe vanilla unit is not resident"
     end
 end)
 
