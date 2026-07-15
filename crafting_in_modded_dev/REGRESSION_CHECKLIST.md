@@ -38,13 +38,13 @@ Last updated: 2026-07-14.
 
 | Field | Value |
 |---|---|
-| Symptom | Each crafted CWV weapon appears to add another 300-power base/blacksmith choice in the standard Craft Item grid. |
-| Root cause | CWV clones inherit the base weapon `.key`/`.name`; acquisition selectors were deduplicated with an ad hoc key scan rather than exact CIM/CWV identity. |
-| Fix version(s) | cim_dev 0.8.72-dev |
+| Symptom | Each crafted CWV weapon appears to add another 300-power base/blacksmith choice, or every CWV Blacksmith selector is absent when the Craft Item page is opened directly. |
+| Root cause | CWV clones inherit the base weapon `.key`/`.name`, requiring exact selector identity. After acquisition moved wholly to CIM, the selector cache was also activated by a post-`on_enter` hook even though vanilla builds the initial recipe page inside `on_enter`; all synthetic rows therefore missed that first query. |
+| Fix version(s) | cim_dev 0.8.72-dev (bounded identity), 0.8.76-dev (pre-enter catalog availability) |
 | Category | SOLO |
-| Repro | Open the standard Craft Item grid, craft Imperial Longsword twice, then leave and reopen the grid. |
-| Expected post-fix | Exactly one Imperial Longsword selector remains; the two separate Modded-rarity crafts appear only in ordinary inventory. |
-| Detection | Offline `test_cim_cwv_template_selector.lua` passes and `/cim_regression_test` passes `issue524_cwv_selector_bounded`. |
+| Repro | Open the standard Craft Item page directly and inspect Dual Axes, Infantry Spear, Crowbill, and Greataxe; craft Imperial Longsword twice, then leave and reopen the grid. |
+| Expected post-fix | Every career-owned CWV family has exactly one authored-icon Blacksmith selector; the two separate Modded-rarity crafts appear only in ordinary inventory. |
+| Detection | Offline `test_cim_cwv_template_selector.lua` and `test_cim_cwv_template_catalog.lua` pass; `/cim_regression_test` passes `issue524_cwv_selector_bounded` and `issue524_all_cwv_blacksmith_selectors`. |
 
 ---
 

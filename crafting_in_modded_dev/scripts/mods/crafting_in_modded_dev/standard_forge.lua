@@ -23,7 +23,9 @@ and reverts everything. This matches how the Athanor handles property/trait edit
 
 local mod = get_mod("cim_dev")
 local template_selector = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_template_selector")
+local template_catalog = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_template_catalog")
 mod._cim_template_selector = template_selector
+mod._cim_template_catalog = template_catalog
 
 -- ============================================================
 -- Lifecycle: track when the standard forge UI is open
@@ -221,19 +223,32 @@ mod:hook("HeroWindowItemCustomization", "_update_property_option", function(func
     end
 end)
 
+local function _pack_results(...)
+    return { n = select("#", ...), ... }
+end
+
 for _, klass in ipairs({ "HeroWindowItemCustomization", "HeroWindowCrafting", "HeroWindowCraftingConsole" }) do
     local class_for_dump = klass
-    mod:hook_safe(klass, "on_enter", function(self)
+    -- #524: this MUST be a wrapping pre-hook. Both vanilla crafting windows
+    -- call `_change_recipe_page` from inside on_enter, and that page asks the
+    -- backend for `can_craft_with` rows immediately. A hook_safe callback runs
+    -- only after the original returns, which made every synthetic Blacksmith
+    -- selector miss the initial page build (all 34 CWV definitions existed,
+    -- but none could appear). Activate and rebuild before vanilla enters; keep
+    -- diagnostics after it so their widget inspection still sees complete UI.
+    mod:hook(klass, "on_enter", function(func, self, ...)
         mod._cim_standard_forge_active = true
         if mod._cim_rebuild_template_cache then
             mod._cim_rebuild_template_cache()
         end
+        local results = _pack_results(func(self, ...))
         -- Debug autodump (no-op unless debug_mode setting is ON). Single
-        -- consolidated callback per (class, method) — VMF silently drops a
-        -- sibling hook_safe registration. See feedback_vmf_hook_safe_no_chain.
+        -- consolidated callback per (class, method) -- VMF silently drops a
+        -- sibling hook registration. See feedback_vmf_hook_safe_no_chain.
         if mod._cim_autodump_forge_open then
             pcall(mod._cim_autodump_forge_open, class_for_dump, self)
         end
+        return unpack(results, 1, results.n)
     end)
     mod:hook_safe(klass, "on_exit", function(self)
         mod._cim_standard_forge_active = false
@@ -1259,12 +1274,15 @@ end)
 -- _CRAFTABLE_SLOT_TYPES is declared at the top of the file (near _is_active)
 -- so `_make_craft_synth`'s closure can reference it without a forward-ref bug.
 local _template_cache = {}
+local _template_cache_report = { total = 0, cwv = 0, career = nil }
 
 local function _build_template_cache()
-    _template_cache = {}
-    if not ItemMasterList then return end
     local career_name = _local_career_name()
-    if not career_name then return end
+    if not ItemMasterList or not career_name then
+        _template_cache = {}
+        _template_cache_report = { total = 0, cwv = 0, career = career_name }
+        return
+    end
 
     -- Templates inherit the player's chosen base power level so the craft
     -- preview ("X power" widget) shows what the resulting item will actually
@@ -1272,40 +1290,31 @@ local function _build_template_cache()
     -- "5 power" in the preview while the craft result was 300.
     local base_power = _cim_base_power()
     local real_names = _cim_real_display_names()
-    for key, data in pairs(ItemMasterList) do
-        if type(data) == "table"
-            and data.slot_type and _CRAFTABLE_SLOT_TYPES[data.slot_type]
-            and data.can_wield and table.contains(data.can_wield, career_name)
-            and data.item_type ~= "weapon_skin"
-            and data.rarity ~= "magic" and data.rarity ~= "promo"
-            and not _item_requires_unowned_dlc(key)
-            and not _cim_versus_shadowed(data, real_names) then
-            local bid = "cim_template_" .. key
-            _template_cache[bid] = {
-                backend_id = bid,
-                cim_acquisition_template = true,
-                cim_acquisition_key = key,
-                key = key,
-                ItemId = key,
-                ItemInstanceId = bid,
-                rarity = "default",
-                data = data,
-                properties = {},
-                traits = {},
-                power_level = base_power,
-                CustomData = {
-                    power_level = tostring(base_power),
-                    rarity = "default",
-                    properties = "{}",
-                    traits = "[]",
-                },
-            }
-        end
-    end
+    local report
+    _template_cache, report = template_catalog.build({
+        item_master_list = ItemMasterList,
+        career_name = career_name,
+        craftable_slot_types = _CRAFTABLE_SLOT_TYPES,
+        base_power = base_power,
+        requires_unowned_dlc = _item_requires_unowned_dlc,
+        versus_shadowed = _cim_versus_shadowed,
+        real_names = real_names,
+    })
+    _template_cache_report = {
+        total = report.total,
+        cwv = report.cwv,
+        career = career_name,
+    }
+    printf("[cim:524] acquisition_templates total=%d cwv=%d career=%s",
+        report.total, report.cwv, tostring(career_name))
 end
 
 mod._cim_template_lookup = function(backend_id)
     return _template_cache[backend_id]
+end
+
+mod._cim_template_cache_report = function()
+    return _template_cache_report
 end
 
 -- Exposed for the consolidated `on_enter` hook above to invoke at call time.

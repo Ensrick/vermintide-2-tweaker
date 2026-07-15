@@ -48,7 +48,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.75-dev"
+local MOD_VERSION = "0.8.76-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -6360,6 +6360,52 @@ _rt_register("issue524_cwv_selector_bounded", function()
     selector.inject(rows, { synthetic })
     if #rows ~= 2 or rows[1] ~= crafted or rows[2] ~= synthetic then
         return "crafted CWV instance changed the one-selector acquisition bound"
+    end
+end)
+
+_rt_register("issue524_all_cwv_blacksmith_selectors", function()
+    local catalog = mod._cim_template_catalog
+    if type(catalog) ~= "table" or type(catalog.build) ~= "function" then
+        return "#524 pure template catalog is not loaded"
+    end
+    if not ItemMasterList then return "skip: ItemMasterList not ready" end
+
+    local definitions = {}
+    local careers = {}
+    for key, data in pairs(ItemMasterList) do
+        if type(data) == "table" and data.cwv_definition == true then
+            definitions[key] = data
+            for _, career in ipairs(data.can_wield or {}) do careers[career] = true end
+        end
+    end
+    if not next(definitions) then return "skip: CWV definitions not registered (run in keep with CWV)" end
+
+    for career in pairs(careers) do
+        local cache = catalog.build({
+            item_master_list = definitions,
+            career_name = career,
+            craftable_slot_types = { melee = true, ranged = true },
+            base_power = 300,
+        })
+        for key, data in pairs(definitions) do
+            local owns = false
+            for _, candidate in ipairs(data.can_wield or {}) do
+                if candidate == career then owns = true; break end
+            end
+            local selector = cache["cim_template_" .. key]
+            if owns and (not selector or selector.cim_acquisition_key ~= key
+                or selector.data ~= data or selector.rarity ~= "default") then
+                return "#524 missing/incorrect Blacksmith selector: " .. key .. " for " .. career
+            end
+            if not owns and selector then
+                return "#524 selector crossed career ownership: " .. key .. " for " .. career
+            end
+        end
+    end
+
+    local live = mod._cim_template_cache_report and mod._cim_template_cache_report()
+    if mod._cim_standard_forge_active and (not live or (live.cwv or 0) == 0) then
+        return "#524 live forge cache contains no CWV selectors"
     end
 end)
 

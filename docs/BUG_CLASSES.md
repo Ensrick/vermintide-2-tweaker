@@ -1680,3 +1680,40 @@ Related coverage: CWV `cwv_wire_safe_thrown_variant_installed` and offline
 ### Related Issues / commits
 - WOC v0.1.12-dev (#595); offline `test_woc_wire_policy.lua`; repository gate
   `check_dofile_package_coverage.ps1`.
+
+## 46. Post-hook initializes state after vanilla already consumed it
+
+**First seen:** 2026-07-14 (CIM issue #524; fixed v0.8.76-dev)
+**Canonical Issue:** [#524](https://github.com/Ensrick/vermintide-2-tweaker/issues/524)
+**Lives in:** lifecycle hooks where vanilla constructs a child page, queries a
+backend list, or snapshots state inside `on_enter`.
+
+### Symptoms
+- Registration logs prove every mod definition exists, yet the initial page is
+  missing every injected row with no Lua error.
+- Closing/reopening or changing pages may alter the result because the mod's
+  state becomes active only after the first query.
+- Offline policy tests pass: the data transformation is correct, but it never
+  ran at the consumer boundary that produced the visible page.
+
+### Diagnosis pattern
+1. Read the vanilla lifecycle function, not only the hooked helper. If it calls
+   the consumer (for example `_change_recipe_page`) before returning, a
+   `hook_safe` callback is too late to provide prerequisites for that call.
+2. Compare timestamps: the visible window enter precedes the mod's activation
+   or cache-build evidence, while producer registration already succeeded.
+3. Distinguish state preparation from post-render observation. The former must
+   precede `func`; widget dumps may remain after it.
+
+### Fix template
+- Replace the existing singleton `hook_safe` with one wrapping `mod:hook` on the
+  same `(Class, method)` pair; do not add a second hook.
+- Activate and build prerequisites before calling the original. Preserve every
+  vanilla return with an explicit count, then run observation-only diagnostics
+  after the original returns.
+- Add ordering coverage that fails if activation/cache rebuild moves after the
+  original call, plus a runtime assertion over the entire injected catalog.
+
+### Related Issues / commits
+- CIM v0.8.76-dev (#524); offline `test_cim_cwv_template_catalog.lua`; runtime
+  `issue524_all_cwv_blacksmith_selectors`.

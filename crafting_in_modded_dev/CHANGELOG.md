@@ -1,5 +1,16 @@
 # Crafting in Modded Changelog
 
+## 0.8.76-dev (2026-07-14): #524 restore all CWV Blacksmith selectors [verify-fix]
+
+- Fixed every CWV Blacksmith/base selector disappearing from the standard Craft Item grid, including Dual Axes, Infantry Spear, Imperial/Dawi Crowbill, and Kruber Greataxe. CWV registered all 34 craftable definitions in the reported session, but CIM activated its forge/cache only after vanilla `HeroWindowCraftingConsole.on_enter` had already built the initially selected recipe page.
+- Converted the existing singleton lifecycle hook into a pre-enter wrapper: CIM now marks the forge active and rebuilds the exact-career selector catalog before vanilla requests `can_craft_with` rows. The post-enter diagnostic remains after UI construction.
+- Extracted one pure selector-catalog builder. Each synthetic row keeps the exact CWV ItemMasterList definition as `data`, so the provider's authored icon (including the paired Dual Axes icons), model, skin family, career ownership, and DLC policy remain canonical. Selectors are session-only and never auto-grant or replace existing persisted crafts.
+- Added engine-free lifecycle/catalog/DLC tests and `/cim_regression_test` check `issue524_all_cwv_blacksmith_selectors`, which enumerates every registered CWV family across every authored career and rejects missing, crossed-owner, or identity-losing selectors.
+
+### Test method
+
+Open the standard Craft Item page on Kruber and confirm Blacksmith/base rows are present for Dual Axes, Infantry Spear, Imperial Crowbill, and Greataxe, using their authored icons. Craft one, reopen the page, and confirm exactly one base selector remains while the crafted instance remains separately in inventory. Run `/cim_regression_test`; require `issue524_cwv_selector_bounded` and `issue524_all_cwv_blacksmith_selectors` PASS.
+
 ## 0.8.75-dev (2026-07-14): #598 safe modded TAB frames [verify-fix-coop]
 
 - Restored CIM's modded rarity frame/background in the hold-TAB equipment preview through a same-mod, schema-gated boolean presentation side channel. Vanilla loadout RPCs continue to transmit the safe `unique` rarity.
