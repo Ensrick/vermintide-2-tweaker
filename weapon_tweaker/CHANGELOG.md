@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.263-beta (2026-07-15) - #616 Hold-Pose third-person live delivery [verify-fix]
+
+- Fixed the setting callback boundary that saved third-person position, rotation, and scale edits without applying them. Active-channel edits now perform one immediate one-shot write, including in keep screens where the mission update hook may not run.
+- Kept the master and per-channel bypasses non-destructive. An edit made while bypassed remains saved and emits one bounded `saved_not_applied` diagnostic explaining the master/channel state; it does not silently defeat the off toggle.
+- Grouped all existing third-person controls beneath a **Third Person** collapsible parallel to **First Person**, without changing setting IDs or persisted values.
+- Added offline and runtime regression coverage for exact 1P/3P dispatch, immediate delivery, bypass semantics, and the collapsible hierarchy.
+
+Enable the Hold-Pose master and Third Person channel, wield a weapon in the keep, then change one offset, one rotation, and one scale value. Each must move immediately and the log must report `[wt:616] tuner edit delivered ... channel=third_person`. Turn the master off and edit again: the pose must remain canonical and the log must report `saved_not_applied`; turn it back on and confirm the saved values return. Run `/wt_regression_test` and confirm `issue616_hold_pose_live_edit_delivery` passes.
+
 ## 0.12.262-beta (2026-07-15) - public beta rollup
 
 - Cut the current active Tweaker: Weapons line as a public beta. This is a release-track promotion of the already-built, committed, and uploaded `0.12.261-dev` payload; it does not introduce another gameplay change between the final dev candidate and this beta.

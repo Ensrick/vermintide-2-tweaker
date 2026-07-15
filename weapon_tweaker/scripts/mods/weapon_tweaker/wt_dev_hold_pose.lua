@@ -471,6 +471,43 @@ local function _channel_policy_values(master_enabled, enable_1p, enable_3p)
 end
 M._channel_policy_values = _channel_policy_values
 
+-- Route settings to the render channel they author.  This is deliberately
+-- exact: the unprefixed RH/LH sliders belong to local third person, while the
+-- `fp_` sliders belong to first person.  Keeping this classifier pure gives
+-- the offline suite a regression seam for the setting-to-render contract.
+local function _setting_channel(setting_id)
+    if type(setting_id) ~= "string" then return nil end
+    if setting_id == "wt_dev_hp_target_slot" then return "both" end
+    if setting_id:match("^wt_dev_hp_fp_[rl]h_") then return "first_person" end
+    if setting_id:match("^wt_dev_hp_[rl]h_") then return "third_person" end
+    return nil
+end
+M._setting_channel = _setting_channel
+
+M._live_delivery_contract = {
+    setting_dispatch = "channel_exact",
+    immediate_apply = true,
+    bypass_preserves_values = true,
+    bypass_does_not_apply = true,
+}
+
+local _edit_diag_seen = {}
+local _edit_diag_total = 0
+local _EDIT_DIAG_CAP = 48
+
+local function _edit_diag(setting_id, channel, outcome, applied)
+    local token = table.concat({ tostring(setting_id), tostring(channel), tostring(outcome), tostring(applied) }, "|")
+    if _edit_diag_seen[token] or _edit_diag_total >= _EDIT_DIAG_CAP then return end
+    _edit_diag_seen[token] = true
+    _edit_diag_total = _edit_diag_total + 1
+    pcall(printf,
+        "[wt:616] tuner edit %s setting=%s channel=%s applied=%s master=%s 1p=%s 3p=%s",
+        tostring(outcome), tostring(setting_id), tostring(channel), tostring(applied),
+        tostring(mod:get("wt_dev_hp_enabled") == true),
+        tostring(mod:get("wt_dev_hp_enable_1p") == true),
+        tostring(mod:get("wt_dev_hp_enable_3p") ~= false))
+end
+
 -- Apply each hand's pose from ITS OWN sliders, independently. No hand
 -- dropdown, no "both" mode — RH sliders drive the right-hand unit, LH sliders
 -- drive the left-hand unit, each gated by its own defer-to-baked guard.
@@ -598,165 +635,45 @@ function M.build_widget_tree()
                 options = source_node_options,
             },
             {
-                setting_id = "wt_dev_hp_enable_3p",
-                type = "checkbox",
-                default_value = true,
-            },
-            -- RIGHT-hand pose sliders (drive the right_unit_3p independently).
-            {
-                setting_id = "wt_dev_hp_rh_group",
+                setting_id = "wt_dev_hp_3p_group",
                 type = "group",
                 sub_widgets = {
                     {
-                        setting_id = "wt_dev_hp_rh_offset_x",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -1.0, 1.0 },
-                        decimals_number = 3,  -- 1mm step (floor; numeric widget has no step field)
-                        unit_text = " m",
+                        setting_id = "wt_dev_hp_enable_3p",
+                        type = "checkbox",
+                        default_value = true,
                     },
+                    -- RIGHT-hand pose sliders (drive right_unit_3p independently).
                     {
-                        setting_id = "wt_dev_hp_rh_offset_y",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -1.0, 1.0 },
-                        decimals_number = 3,
-                        unit_text = " m",
+                        setting_id = "wt_dev_hp_rh_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "wt_dev_hp_rh_offset_x", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_rh_offset_y", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_rh_offset_z", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_rh_rot_pitch", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_rh_rot_yaw", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_rh_rot_roll", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_rh_scale_x", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                            { setting_id = "wt_dev_hp_rh_scale_y", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                            { setting_id = "wt_dev_hp_rh_scale_z", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                        },
                     },
+                    -- LEFT-hand pose sliders (drive left_unit_3p independently).
                     {
-                        setting_id = "wt_dev_hp_rh_offset_z",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -1.0, 1.0 },
-                        decimals_number = 3,
-                        unit_text = " m",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_rh_rot_pitch",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -180.0, 180.0 },
-                        decimals_number = 1,  -- 0.1 deg step (floor)
-                        unit_text = " deg",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_rh_rot_yaw",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -180.0, 180.0 },
-                        decimals_number = 1,
-                        unit_text = " deg",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_rh_rot_roll",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -180.0, 180.0 },
-                        decimals_number = 1,
-                        unit_text = " deg",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_rh_scale_x",
-                        type = "numeric",
-                        default_value = 1,
-                        range = { 0.01, 3.0 },
-                        decimals_number = 3,
-                        unit_text = " x",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_rh_scale_y",
-                        type = "numeric",
-                        default_value = 1,
-                        range = { 0.01, 3.0 },
-                        decimals_number = 3,
-                        unit_text = " x",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_rh_scale_z",
-                        type = "numeric",
-                        default_value = 1,
-                        range = { 0.01, 3.0 },
-                        decimals_number = 3,
-                        unit_text = " x",
-                    },
-                },
-            },
-            -- LEFT-hand pose sliders (drive the left_unit_3p independently).
-            {
-                setting_id = "wt_dev_hp_lh_group",
-                type = "group",
-                sub_widgets = {
-                    {
-                        setting_id = "wt_dev_hp_lh_offset_x",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -1.0, 1.0 },
-                        decimals_number = 3,  -- 1mm step (floor; numeric widget has no step field)
-                        unit_text = " m",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_lh_offset_y",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -1.0, 1.0 },
-                        decimals_number = 3,
-                        unit_text = " m",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_lh_offset_z",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -1.0, 1.0 },
-                        decimals_number = 3,
-                        unit_text = " m",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_lh_rot_pitch",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -180.0, 180.0 },
-                        decimals_number = 1,  -- 0.1 deg step (floor)
-                        unit_text = " deg",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_lh_rot_yaw",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -180.0, 180.0 },
-                        decimals_number = 1,
-                        unit_text = " deg",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_lh_rot_roll",
-                        type = "numeric",
-                        default_value = 0,
-                        range = { -180.0, 180.0 },
-                        decimals_number = 1,
-                        unit_text = " deg",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_lh_scale_x",
-                        type = "numeric",
-                        default_value = 1,
-                        range = { 0.01, 3.0 },
-                        decimals_number = 3,
-                        unit_text = " x",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_lh_scale_y",
-                        type = "numeric",
-                        default_value = 1,
-                        range = { 0.01, 3.0 },
-                        decimals_number = 3,
-                        unit_text = " x",
-                    },
-                    {
-                        setting_id = "wt_dev_hp_lh_scale_z",
-                        type = "numeric",
-                        default_value = 1,
-                        range = { 0.01, 3.0 },
-                        decimals_number = 3,
-                        unit_text = " x",
+                        setting_id = "wt_dev_hp_lh_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "wt_dev_hp_lh_offset_x", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_lh_offset_y", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_lh_offset_z", type = "numeric", default_value = 0, range = { -1.0, 1.0 }, decimals_number = 3, unit_text = " m" },
+                            { setting_id = "wt_dev_hp_lh_rot_pitch", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_lh_rot_yaw", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_lh_rot_roll", type = "numeric", default_value = 0, range = { -180.0, 180.0 }, decimals_number = 1, unit_text = " deg" },
+                            { setting_id = "wt_dev_hp_lh_scale_x", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                            { setting_id = "wt_dev_hp_lh_scale_y", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                            { setting_id = "wt_dev_hp_lh_scale_z", type = "numeric", default_value = 1, range = { 0.01, 3.0 }, decimals_number = 3, unit_text = " x" },
+                        },
                     },
                 },
             },
@@ -833,6 +750,7 @@ function M.loc_keys()
         wt_dev_hp_target_slot = { en = "Target slot" },
         wt_dev_hp_target_kind = { en = "Linking-table kind (for dump)" },
         wt_dev_hp_source_node = { en = "Source node (3P body bone)" },
+        wt_dev_hp_3p_group       = { en = "Third Person" },
         wt_dev_hp_enable_3p      = { en = "Enable third-person tuner" },
         wt_dev_hp_rh_group       = { en = "Right hand" },
         wt_dev_hp_rh_offset_x    = { en = "RH Offset X (metres)" },
@@ -854,7 +772,7 @@ function M.loc_keys()
         wt_dev_hp_lh_scale_x     = { en = "LH Scale X (absolute)" },
         wt_dev_hp_lh_scale_y     = { en = "LH Scale Y (absolute)" },
         wt_dev_hp_lh_scale_z     = { en = "LH Scale Z (absolute)" },
-        wt_dev_hp_1p_group          = { en = "First-person transform" },
+        wt_dev_hp_1p_group          = { en = "First Person" },
         wt_dev_hp_enable_1p         = { en = "Enable first-person tuner" },
         wt_dev_hp_fp_rh_group       = { en = "First-person right hand" },
         wt_dev_hp_fp_rh_offset_x    = { en = "1P RH Offset X (metres)" },
@@ -1003,6 +921,29 @@ function M.on_setting_changed(setting_id)
         else
             local applied = _apply_channel("third_person")
             pcall(printf, "[wt:616] tuner enabled channel=third_person values_restored=true applied=%s", tostring(applied))
+        end
+    else
+        local channel = _setting_channel(setting_id)
+        if channel == "both" then
+            if mod:get("wt_dev_hp_enabled") == true then
+                local applied = _apply_pose_all()
+                _edit_diag(setting_id, channel, "delivered", applied)
+            else
+                _edit_diag(setting_id, channel, "saved_not_applied", false)
+            end
+        elseif channel then
+            if _channel_enabled(channel) then
+                -- Settings-screen numeric edits are explicit one-shot apply
+                -- events.  This keeps tuning responsive in the keep where the
+                -- StateInGameRunning per-frame hook is not guaranteed to run.
+                local applied = _apply_channel(channel)
+                _edit_diag(setting_id, channel, "delivered", applied)
+            else
+                -- Bypass is non-destructive: retain the authored value and
+                -- say why it is not currently visible instead of silently
+                -- pretending the unit was updated.
+                _edit_diag(setting_id, channel, "saved_not_applied", false)
+            end
         end
     end
 end

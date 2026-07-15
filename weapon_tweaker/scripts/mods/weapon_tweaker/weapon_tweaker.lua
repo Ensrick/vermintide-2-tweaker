@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.262-beta"
+local MOD_VERSION = "0.12.263-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -5597,6 +5597,34 @@ _rt_register("issue616_hold_pose_channel_bypass_restore", function()
     if not one_off.preserves_settings or not one_off.restores_baseline_on_bypass
             or contract.bypass ~= "restore_channel_baseline_without_erasing_settings" then
         return "bypass erases values or fails to restore the canonical baseline"
+    end
+end)
+
+_rt_register("issue616_hold_pose_live_edit_delivery", function()
+    local classify = _wt_dev_hold_pose and _wt_dev_hold_pose._setting_channel
+    local delivery = _wt_dev_hold_pose and _wt_dev_hold_pose._live_delivery_contract
+    if type(classify) ~= "function" or type(delivery) ~= "table" then
+        return "Hold-Pose live edit delivery contract missing"
+    end
+    if classify("wt_dev_hp_rh_offset_y") ~= "third_person"
+            or classify("wt_dev_hp_lh_rot_roll") ~= "third_person"
+            or classify("wt_dev_hp_rh_scale_x") ~= "third_person" then
+        return "third-person position/rotation/scale edit routing drifted"
+    end
+    if classify("wt_dev_hp_fp_rh_offset_y") ~= "first_person"
+            or classify("wt_dev_hp_fp_lh_rot_roll") ~= "first_person"
+            or classify("wt_dev_hp_fp_rh_scale_x") ~= "first_person" then
+        return "first-person position/rotation/scale edit routing drifted"
+    end
+    if classify("wt_dev_hp_target_slot") ~= "both"
+            or classify("wt_dev_hp_enabled") ~= nil then
+        return "Hold-Pose non-transform setting routing is not exact"
+    end
+    if delivery.setting_dispatch ~= "channel_exact"
+            or delivery.immediate_apply ~= true
+            or delivery.bypass_preserves_values ~= true
+            or delivery.bypass_does_not_apply ~= true then
+        return "Hold-Pose immediate/bypass delivery semantics drifted"
     end
 end)
 

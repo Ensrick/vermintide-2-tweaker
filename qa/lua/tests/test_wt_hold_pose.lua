@@ -101,6 +101,55 @@ return function(H, repo_root)
         end
     end)
 
+    H.test("WT #616 3P tuner is a peer collapsible beside First Person", function()
+        local tree = HoldPose.build_widget_tree()
+        local third_person = widget_by_id(tree, "wt_dev_hp_3p_group")
+        local first_person = widget_by_id(tree, "wt_dev_hp_1p_group")
+        H.truthy(third_person, "Third Person group missing")
+        H.truthy(first_person, "First Person group missing")
+        H.equal(third_person.type, "group")
+        H.equal(first_person.type, "group")
+        H.truthy(widget_by_id(third_person, "wt_dev_hp_enable_3p"))
+        H.truthy(widget_by_id(third_person, "wt_dev_hp_rh_group"))
+        H.truthy(widget_by_id(third_person, "wt_dev_hp_lh_group"))
+        H.equal(widget_by_id(first_person, "wt_dev_hp_rh_group"), nil,
+            "3P controls leaked into the First Person group")
+
+        local loc = HoldPose.loc_keys()
+        H.equal(loc.wt_dev_hp_3p_group.en, "Third Person")
+        H.equal(loc.wt_dev_hp_1p_group.en, "First Person")
+    end)
+
+    H.test("WT #616 numeric edits dispatch immediately to the exact render channel", function()
+        local classify = HoldPose._setting_channel
+        for _, hand in ipairs({ "rh", "lh" }) do
+            for _, component in ipairs({ "offset_x", "rot_yaw", "scale_z" }) do
+                H.equal(classify("wt_dev_hp_" .. hand .. "_" .. component), "third_person")
+                H.equal(classify("wt_dev_hp_fp_" .. hand .. "_" .. component), "first_person")
+            end
+        end
+        H.equal(classify("wt_dev_hp_target_slot"), "both")
+        H.equal(classify("wt_dev_hp_enabled"), nil)
+        H.equal(classify("unrelated_setting"), nil)
+
+        local contract = HoldPose._live_delivery_contract
+        H.equal(contract.setting_dispatch, "channel_exact")
+        H.equal(contract.immediate_apply, true)
+        H.equal(contract.bypass_preserves_values, true)
+        H.equal(contract.bypass_does_not_apply, true)
+
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        local handler_start = assert(source:find("function M.on_setting_changed", 1, true))
+        local handler_end = assert(source:find("function M.on_disabled", handler_start, true))
+        local handler = source:sub(handler_start, handler_end - 1)
+        H.truthy(handler:find("local applied = _apply_channel(channel)", 1, true),
+            "numeric edit does not perform an immediate one-shot apply")
+        H.truthy(handler:find('"saved_not_applied"', 1, true),
+            "bypassed edit has no explicit diagnostic")
+    end)
+
     H.test("WT #616 1P settings persist through bypass and reset independently", function()
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
