@@ -24,6 +24,7 @@ M.SHIELD_SKIN_KEY = "cos_gk_purpure_azure_shield"
 M.SHIELD_VARIANT_KEY = "cos_gk_purpure_azure_shield_variant"
 M.SHIELD_BASE_KEY = "es_sword_shield_breton_skin_03"
 M.SHIELD_BASE_UNIT = "units/weapons/player/wpn_emp_gk_shield_05/wpn_emp_gk_shield_05"
+M.SHIELD_BASE_UNIT_3P = M.SHIELD_BASE_UNIT .. "_3p"
 
 M.ICONS = {
     hat = "icon_cos_gk_purpure_azure_hat",
@@ -77,6 +78,10 @@ local ARMOR_1P_SLOTS = {
     "texture_map_64cc5eb8", -- diffuse
     "texture_map_b788717c", -- combined/MAB
     "texture_map_861dbfdc", -- normal
+}
+local ARMOR_MATERIAL_NAMES = {
+    "mtr_outfit",
+    "mtr_outfit_ds",
 }
 
 M.registered = false
@@ -144,11 +149,12 @@ function M.resolve_variant(key)
         return { kind = "texture", swap_hand = "armor", new_units = { M.SKIN_TP_UNIT }, textures = M.TEXTURES.skin_3p,
             textures_fps = M.TEXTURES.skin_1p, fps_units = { M.SKIN_FP_UNIT }, cos_authored = true }
     elseif key == M.SHIELD_VARIANT_KEY then
-        -- The same vanilla shield unit is valid on both owner/preview (1P) and
-        -- husk/score (3P) surfaces.  Keep both entries explicit so the shared
-        -- offhand resolver never guesses a non-existent "_3p" sibling.
+        -- HeroPreviewer/GearUtils receive the base 1P path and spawn its explicit
+        -- `_3p` sibling for inventory heroes, local bodies, and remote husks.
+        -- Declaring the 1P path twice makes the shared mesh-safety guard reject
+        -- the real `_3p` unit before paint, even though the texture preview works.
         return { kind = "texture", swap_hand = "left_hand_unit",
-            new_units = { M.SHIELD_BASE_UNIT, M.SHIELD_BASE_UNIT },
+            new_units = { M.SHIELD_BASE_UNIT, M.SHIELD_BASE_UNIT_3P },
             textures = M.TEXTURES.shield, cos_authored = true }
     end
     return nil
@@ -180,6 +186,47 @@ local function resources_ready(textures)
     return true
 end
 
+-- The Grail Knight 3P attachment contains outfit, face, eyes, teeth, and hair
+-- meshes. Their material instances can expose the same hashed texture parameter
+-- names, so Unit.set_texture_for_materials paints Markus's face as collateral.
+-- Target only the two outfit materials proven by the extracted Gallant 1P/3P
+-- donor scenes. Census first and write second: any scene/material drift fails
+-- closed without partially repainting the character.
+local function apply_armor_materials(unit, slots, textures)
+    if not (Unit and Unit.num_meshes and Unit.mesh
+        and Mesh and Mesh.has_material and Mesh.material
+        and Material and Material.set_texture) then
+        return false
+    end
+    local ok_count, mesh_count = pcall(Unit.num_meshes, unit)
+    if not ok_count or type(mesh_count) ~= "number" then return false end
+    local targets, seen = {}, {}
+    for mesh_index = 0, mesh_count - 1 do
+        local ok_mesh, mesh = pcall(Unit.mesh, unit, mesh_index)
+        if not ok_mesh or not mesh then return false end
+        for _, material_name in ipairs(ARMOR_MATERIAL_NAMES) do
+            local ok_has, has = pcall(Mesh.has_material, mesh, material_name)
+            if not ok_has then return false end
+            if has then
+                local ok_material, material = pcall(Mesh.material, mesh, material_name)
+                if not ok_material or not material then return false end
+                targets[#targets + 1] = material
+                seen[material_name] = true
+            end
+        end
+    end
+    for _, material_name in ipairs(ARMOR_MATERIAL_NAMES) do
+        if not seen[material_name] then return false end
+    end
+    for _, material in ipairs(targets) do
+        for i = 1, 3 do
+            local ok = pcall(Material.set_texture, material, slots[i], textures[i])
+            if not ok then return false end
+        end
+    end
+    return true
+end
+
 function M.apply_variant_to_unit(key_or_variant, unit, surface)
     local variant = type(key_or_variant) == "table" and key_or_variant or M.resolve_variant(key_or_variant)
     if not (variant and unit and Unit and Unit.alive and Unit.alive(unit)) then return false end
@@ -195,9 +242,13 @@ function M.apply_variant_to_unit(key_or_variant, unit, surface)
         slots = is_1p and ARMOR_1P_SLOTS or ARMOR_3P_SLOTS
     end
     if not resources_ready(textures) then return false end
-    for i = 1, 3 do
-        local ok = pcall(Unit.set_texture_for_materials, unit, slots[i], textures[i])
-        if not ok then return false end
+    if variant.swap_hand == "armor" then
+        if not apply_armor_materials(unit, slots, textures) then return false end
+    else
+        for i = 1, 3 do
+            local ok = pcall(Unit.set_texture_for_materials, unit, slots[i], textures[i])
+            if not ok then return false end
+        end
     end
     local token = tostring(variant.swap_hand) .. "|" .. tostring(surface or "unknown")
     if not M._diag_seen[token] then
@@ -218,6 +269,27 @@ function M.apply_armor_to_owner(owner_unit, surface)
     local fp_ext = ScriptUnit.has_extension(owner_unit, "first_person_system")
     local fp = fp_ext and fp_ext.get_first_person_mesh_unit and fp_ext:get_first_person_mesh_unit()
     if fp then applied = M.apply_variant_to_unit(M.SKIN_VARIANT_KEY, fp, "first_person") or applied end
+    return applied
+end
+
+-- Inventory character previews do not have PlayerUnitCosmeticExtension, so
+-- their body mesh must be painted from HeroPreviewer's own canonical skin data.
+-- Cache the mesh identity, not a one-shot boolean: reopening the view or changing
+-- careers creates a new mesh and therefore replays exactly once on that surface.
+function M.apply_armor_to_hero_preview(previewer)
+    if not previewer then return false end
+    local cosmetics = rawget(_G, "Cosmetics")
+    local custom = cosmetics and cosmetics[M.SKIN_ITEM_KEY]
+    local loading = previewer._hero_loading_package_data
+    local skin_data = previewer.character_unit_skin_data or (loading and loading.skin_data)
+    if not (custom and skin_data and (skin_data == custom or skin_data.name == M.SKIN_ITEM_KEY)) then
+        return false
+    end
+    local mesh = previewer.mesh_unit
+    if not (mesh and Unit and Unit.alive and Unit.alive(mesh)) then return false end
+    if previewer._cos_gk_armor_applied_mesh == mesh then return true end
+    local applied = M.apply_variant_to_unit(M.SKIN_VARIANT_KEY, mesh, "hero_preview")
+    if applied then previewer._cos_gk_armor_applied_mesh = mesh end
     return applied
 end
 
