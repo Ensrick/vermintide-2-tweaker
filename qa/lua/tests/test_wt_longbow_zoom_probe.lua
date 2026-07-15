@@ -17,8 +17,9 @@ return function(H, repo_root)
         H.truthy(rec)
         H.equal(nil, probe:observe(rec, 10.21, false, nil))
         local result = probe:observe(rec, 10.22, true, "zoom_in")
-        H.equal("zoomed", result.outcome)
+        H.equal("camera_zoomed", result.outcome)
         H.equal("zoom_in", result.zoom_mode)
+        H.equal("unverified", result.visible_draw)
         H.equal(nil, probe:observe(rec, 10.30, true, "zoom_in"))
     end)
 
@@ -30,5 +31,28 @@ return function(H, repo_root)
         H.equal(nil, probe:finish(one, 1.2, "duplicate"))
         H.truthy(probe:arm("longbow_empire_template", "es_knight", "es_longbow", 2, 2.22))
         H.equal(nil, probe:arm("longbow_empire_template", "es_knight", "es_longbow", 3, 3.22))
+    end)
+
+    H.test("WT #316 preserves Kruber draw_bow on owner and husk while retaining Saltz crossbow", function()
+        local function read(relative)
+            local file = assert(io.open(repo_root .. relative, "rb"))
+            local source = file:read("*a")
+            file:close()
+            return source
+        end
+        local main = read("/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua")
+        local core = read("/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap.lua")
+        for _, career in ipairs({ "es_mercenary", "es_knight", "es_questingknight" }) do
+            H.truthy(main:find("longbow_empire_template." .. career .. "%s*=%s*false"),
+                career .. " must explicitly preserve the native draw event")
+        end
+        H.truthy(main:find("longbow_empire_template.wh_%s*=%s*_SALTZ_LONGBOW_CROSSBOW_ANIM_REMAP_3P"),
+            "Saltzpyre crossbow substitution was removed")
+        H.truthy(core:find('mod:traced_hook("SimpleInventoryExtension", "wield"', 1, true),
+            "owner 3P state seam missing")
+        H.truthy(core:find('mod:safe_hook("SimpleHuskInventoryExtension", "wield"', 1, true),
+            "remote husk state seam missing")
+        H.truthy(core:find("if _local_fp_unit and unit == _local_fp_unit then", 1, true),
+            "first-person bypass missing")
     end)
 end

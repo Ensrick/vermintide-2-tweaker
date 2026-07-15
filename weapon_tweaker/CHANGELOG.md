@@ -1,5 +1,38 @@
 # Weapon Tweaker Changelog
 
+## 0.12.264-beta (2026-07-15) - #316 Kruber Longbow native draw playback [verify-fix-coop]
+
+- Fixed the live-evidence regression where Mercenary successfully entered
+  `ActionAim` zoom but WT replaced `draw_bow` with the generic `to_zoom` body
+  event, suppressing the visible bow draw. Mercenary, Foot Knight, and Grail
+  Knight now explicitly preserve Kruber's native `draw_bow` event; Huntsman is
+  unchanged as the native control.
+- Kept Saltzpyre's Longbow-to-Crossbow presentation substitution intact,
+  including its `draw_bow -> to_zoom` and firing-event translations. The
+  first-person unit still bypasses WT's 3P funnel entirely.
+- Applied the same policy through the existing per-unit animation funnel used
+  by both the local owner body and remote husks. No per-frame work, new RPC, or
+  shared-template mutation was added.
+- Corrected #316's bounded diagnostic language: a successful camera/status zoom
+  now reports `camera_zoomed` with `visible_draw=unverified`, so zoom state can
+  never again be mistaken for proof that a body clip visibly played.
+- Moved **Enable Hold-Pose Tuner** to the first row inside its group, before the
+  target controls and First/Third Person collapsibles. Its tooltip now states
+  that OFF bypasses all position, rotation, and scale changes while preserving
+  every saved value; bypass semantics and defaults are unchanged.
+- Added offline and runtime coverage for all three Kruber careers, native
+  Huntsman isolation, Saltzpyre preservation, owner/husk state seams,
+  first-person exclusion, non-overclaiming diagnostics, and tuner control order.
+
+**Co-op verify:** As Mercenary, Foot Knight, and Grail Knight, equip Kruber's
+Longbow, hold aim through zoom, and confirm the visible draw/aim pose both on
+the owner's local third-person body and from the other player's view. Repeat on
+Huntsman as the unchanged native control. Then equip the same Longbow on a
+non-Priest Saltzpyre career and confirm its Crossbow model/animations still
+work. First-person aim/zoom must remain unchanged. The log should show
+`[wt:316] ... remap=native_draw_bow` and camera results with
+`visible_draw=unverified`.
+
 ## 0.12.263-beta (2026-07-15) - #616 Hold-Pose third-person live delivery [verify-fix]
 
 - Fixed the setting callback boundary that saved third-person position, rotation, and scale edits without applying them. Active-channel edits now perform one immediate one-shot write, including in keep screens where the mission update hook may not run.

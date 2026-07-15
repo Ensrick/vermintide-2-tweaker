@@ -19,6 +19,8 @@ return function(H, repo_root)
 
     H.test("WT #616 Hold-Pose exposes independent identity scale controls", function()
         local tree = HoldPose.build_widget_tree()
+		H.equal(tree.sub_widgets[1].setting_id, "wt_dev_hp_enabled")
+		H.equal(tree.sub_widgets[2].setting_id, "wt_dev_hp_target_slot")
         for _, hand in ipairs({ "rh", "lh" }) do
             for _, axis in ipairs({ "x", "y", "z" }) do
                 local widget = widget_by_id(tree, "wt_dev_hp_" .. hand .. "_scale_" .. axis)
@@ -42,6 +44,10 @@ return function(H, repo_root)
         H.equal(widget_by_id(tree, "wt_dev_hp_enable_3p").default_value, true)
         H.equal(widget_by_id(tree, "wt_dev_hp_enable_1p").default_value, false)
         H.equal(widget_by_id(tree, "wt_dev_hp_enabled").default_value, false)
+		local loc = HoldPose.loc_keys()
+		H.equal(loc.wt_dev_hp_enabled.en, "Enable Hold-Pose Tuner")
+		H.equal(loc.wt_dev_hp_enabled_description.en,
+			"OFF bypasses all position, rotation, and scale changes while preserving every saved value.")
     end)
 
     H.test("WT #616 Hold-Pose scale plan is absolute and non-compounding", function()

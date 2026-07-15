@@ -603,6 +603,13 @@ function M.build_widget_tree()
         type = "group",
         sub_widgets = {
             {
+                -- Master bypass is intentionally first and outside both render
+                -- channel collapsibles so the tuner can be disabled at a glance.
+                setting_id = "wt_dev_hp_enabled",
+                type = "checkbox",
+                default_value = false,
+            },
+            {
                 setting_id = "wt_dev_hp_target_slot",
                 type = "dropdown",
                 default_value = "auto",
@@ -611,11 +618,6 @@ function M.build_widget_tree()
                     { text = "Ranged",                   value = "slot_ranged" },
                     { text = "Melee",                    value = "slot_melee" },
                 },
-            },
-            {
-                setting_id = "wt_dev_hp_enabled",
-                type = "checkbox",
-                default_value = false,
             },
             {
                 setting_id = "wt_dev_hp_target_kind",
@@ -746,7 +748,8 @@ end
 function M.loc_keys()
     return {
         wt_dev_hold_pose      = { en = "Dev: Weapon Hold Pose Tuner" },
-        wt_dev_hp_enabled     = { en = "Enable Weapon Hold-Pose Tuner" },
+        wt_dev_hp_enabled     = { en = "Enable Hold-Pose Tuner" },
+        wt_dev_hp_enabled_description = { en = "OFF bypasses all position, rotation, and scale changes while preserving every saved value." },
         wt_dev_hp_target_slot = { en = "Target slot" },
         wt_dev_hp_target_kind = { en = "Linking-table kind (for dump)" },
         wt_dev_hp_source_node = { en = "Source node (3P body bone)" },

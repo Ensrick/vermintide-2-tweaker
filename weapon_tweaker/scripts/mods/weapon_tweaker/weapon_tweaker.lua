@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.263-beta"
+local MOD_VERSION = "0.12.264-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -1511,7 +1511,7 @@ local _SP_LONGBOW_CROSSBOW_WIELD_3P = {
     wh_zealot       = "to_crossbow",
 }
 
-local _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P = {
+local _SALTZ_LONGBOW_CROSSBOW_ANIM_REMAP_3P = {
     attack_shoot_fast       = "attack_shoot",
     attack_shoot_fast_last  = "attack_shoot_last",
     draw_bow                = "to_zoom",       -- charged-shot aim hold; crossbow uses to_zoom
@@ -1539,28 +1539,27 @@ local function _patch_longbow_empire_template_for_saltzpyre()
     -- es_ (Kruber native) keeps its own draw_bow / attack_shoot_fast. Keyed by the
     -- actions' fired 3P event (= their anim_event; these actions carry no native
     -- anim_event_3p, so anim_event IS what fires).
-    -- The Empire longbow is native to es_HUNTSMAN only (can_wield). On the OTHER
-    -- Kruber careers it is a CROSS-CAREER unlock whose 3P longbow aim state does not
-    -- drive the native `draw_bow`, so the charged aim/zoom (action_two, kind="aim",
-    -- anim_event="draw_bow") must render via the universal `to_zoom` — exactly as it
-    -- did before v0.12.191, when the (now-removed) global mutation applied to_zoom to
-    -- everyone. Native Huntsman keeps `draw_bow` (that was #210). Keyed by FULL career
-    -- name so es_huntsman is excluded from the crossbow remap. (#210 follow-up.)
+    -- #316 live evidence disproved the old cross-career assumption: Mercenary reached
+    -- ActionAim zoom, but `draw_bow -> to_zoom` suppressed the visible bow draw. All
+    -- Kruber careers render on the Empire Soldier skeleton and consume its native
+    -- `draw_bow` vocabulary. Keep explicit false entries for Merc/FK/GK so local 3P
+    -- and remote husks both pass the real event through. Huntsman remains the native
+    -- control. Saltzpyre's model substitution still needs the crossbow remap below.
     _3p_template_remaps.longbow_empire_template = _3p_template_remaps.longbow_empire_template or {}
-    _3p_template_remaps.longbow_empire_template.es_mercenary      = _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P
-    _3p_template_remaps.longbow_empire_template.es_knight         = _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P
-    _3p_template_remaps.longbow_empire_template.es_questingknight = _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P
-    _3p_template_remaps.longbow_empire_template.wh_               = _SP_LONGBOW_CROSSBOW_ANIM_REMAP_3P
-    _dbg("[wt:tpl_patch] event=applied template=longbow_empire_template career_overrides=%d (wield) + runtime remap for cross-career es_ (Merc/FK/GK) + wh_; native es_huntsman untouched",
+    _3p_template_remaps.longbow_empire_template.es_mercenary      = false
+    _3p_template_remaps.longbow_empire_template.es_knight         = false
+    _3p_template_remaps.longbow_empire_template.es_questingknight = false
+    _3p_template_remaps.longbow_empire_template.wh_               = _SALTZ_LONGBOW_CROSSBOW_ANIM_REMAP_3P
+    _dbg("[wt:tpl_patch] event=applied template=longbow_empire_template career_overrides=%d (wield) + native draw passthrough for es_ Merc/FK/GK + runtime crossbow remap for wh_; native es_huntsman untouched",
         n_career_overrides)
 end
 
 _patch_longbow_empire_template_for_saltzpyre()
 
 -- #316 diagnostic: camera zoom is owner-only and source-driven by ActionAim,
--- while the career-scoped `draw_bow -> to_zoom` substitution above is a 3P
--- presentation concern. The old issue has no log, so observe three actual
--- non-Huntsman Kruber aim attempts without changing either behavior. Each
+-- while visible body playback is a separate 3P presentation concern. Observe
+-- three non-Huntsman Kruber aim attempts after the native draw fix. The result
+-- reports camera state and keeps visible playback explicitly unverified; each
 -- attempt emits at most two raw-console rows (start + result/early finish).
 mod:hook_safe("ActionAim", "client_owner_start_action", function(self, new_action, t)
     local item_master_list = rawget(_G, "ItemMasterList")
@@ -1575,7 +1574,8 @@ mod:hook_safe("ActionAim", "client_owner_start_action", function(self, new_actio
             anim_event = new_action and new_action.anim_event,
             default_zoom = new_action and new_action.default_zoom,
             zoom_condition = new_action and type(new_action.zoom_condition_function) or "nil",
-            remap = type(remap) == "table" and remap.draw_bow or nil,
+            remap = remap == false and "native_draw_bow"
+                or (type(remap) == "table" and remap.draw_bow or nil),
         })
     if not record then return end
     _wt316_zoom_records[self] = record
@@ -1595,10 +1595,10 @@ mod:hook_safe("ActionAim", "client_owner_post_update", function(self, dt, t)
     local result = _wt316_zoom_probe:observe(record, t, zooming, status and status.zoom_mode)
     if not result then return end
     _wt316_zoom_records[self] = nil
-    pcall(printf, "[wt:316] aim-result attempt=%d/%d career=%s outcome=%s elapsed=%.3f zooming=%s zoom_mode=%s",
+    pcall(printf, "[wt:316] aim-result attempt=%d/%d career=%s outcome=%s elapsed=%.3f zooming=%s zoom_mode=%s visible_draw=%s",
         record.attempt, _wt316_zoom_probe.max_attempts, tostring(record.career),
         tostring(result.outcome), result.elapsed, tostring(result.zooming),
-        tostring(result.zoom_mode))
+        tostring(result.zoom_mode), tostring(result.visible_draw))
 end)
 
 mod:hook_safe("ActionAim", "finish", function(self, reason)
@@ -5662,8 +5662,8 @@ _rt_register("issue316_kruber_longbow_zoom_contract", function()
     local scoped = _3p_template_remaps.longbow_empire_template or {}
     for _, career in ipairs({ "es_mercenary", "es_knight", "es_questingknight" }) do
         local remap = scoped[career]
-        if type(remap) ~= "table" or remap.draw_bow ~= "to_zoom" then
-            return "non-Huntsman longbow aim remap missing for " .. career
+        if remap ~= false then
+            return "non-Huntsman Kruber no longer preserves native draw_bow for " .. career
         end
         if not _WT316_ZOOM_PROBE.is_target("longbow_empire_template", career) then
             return "zoom diagnostic target scope missing " .. career
@@ -5674,6 +5674,11 @@ _rt_register("issue316_kruber_longbow_zoom_contract", function()
     end
     if scoped.es_huntsman ~= nil and scoped.es_huntsman ~= false then
         return "native Huntsman draw_bow is no longer exempt"
+    end
+    local saltz = scoped.wh_
+    if type(saltz) ~= "table" or saltz.draw_bow ~= "to_zoom"
+            or saltz.attack_shoot_fast ~= "attack_shoot" then
+        return "Saltzpyre crossbow presentation remap drifted"
     end
     if _wt316_zoom_probe.max_attempts ~= 3 then
         return "zoom diagnostic is not capped at three attempts"

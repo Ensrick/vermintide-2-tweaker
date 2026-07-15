@@ -46,10 +46,14 @@ function M.new(max_attempts)
         if now < record.due_at then return nil end
         record.done = true
         return {
-            outcome = zooming and "zoomed" or "not_zoomed",
+            -- Camera/status state cannot acknowledge body-clip playback. Keep
+            -- that boundary explicit so successful zoom never closes a visible
+            -- 3P animation regression by itself again.
+            outcome = zooming and "camera_zoomed" or "camera_not_zoomed",
             elapsed = now - record.started_at,
             zooming = zooming == true,
             zoom_mode = zoom_mode,
+            visible_draw = "unverified",
         }
     end
 
