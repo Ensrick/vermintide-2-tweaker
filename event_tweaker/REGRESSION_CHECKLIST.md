@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-11 (v0.4.26-dev module split: detection pointers updated to the `_evt_*` file names; see DEVELOPMENT.md "File map").
+Last updated: 2026-07-15 (v0.4.33-dev issue 626 dormant-event mission boundary).
 
 ---
 ## Multiplayer / Network Sync
@@ -77,6 +77,24 @@ Last updated: 2026-07-11 (v0.4.26-dev module split: detection pointers updated t
 | Repro | 1. In the keep with mutators/preset selected, hold Tab: "Active Mutators (N)" block renders on the right panel, icon+name per row, no panel crash. 2. With `ct_dev` also active + `preview_starting_boons` on: both the Starting-Boons and Active-Mutators blocks render together, stacked, no overlap. 3. Coop with a non-ET peer + a curse checked: that curse shows greyed "(skipped: a peer lacks the mod)", NOT in the active list. 4. `/event_preview_mutators` lists the same active + skipped names. |
 | Expected post-fix | Preview draws in its OWN `begin_pass`/`end_pass` with every `draw_widget` pcall-wrapped (icon + name separate widgets); `preview_selection()` is side-effect-free; floor-dropped curses render greyed, never active. |
 | Detection | Runtime: `/event_tweaker_regression_test` check `issue532_mutator_preview_wired` (marker `EVT_MUTATOR_PREVIEW_532_MARKER` + `mod._evt.preview_selection` returns two tables + `mod._evt_mutator_display` + `preview_active_mutators` boolean). Source: two `hook_safe` on distinct `IngamePlayerListUI` methods (`_setup_deed_reward_data` build, `_draw` guarded pass) in `_evt_preview.lua`. |
+
+
+---
+
+### et-event-mission-allowlist — dormant event missions stay bounded and peer-loadable
+
+**[MULTIPLAYER] [INTEGRATION]**
+
+| Field | Value |
+|-------|-------|
+| Symptom | Feast/A Quiet Drink are absent after opt-in; an unrelated/future campaign level appears; a normal campaign act changes; or host/client fails to load a selected event mission. |
+| Root cause | The hidden-area presentation seam or view-local act filter drifted, the closed allowlist widened, or a mission was advertised without its existing level/package/network contract. Broad writes to global campaign/network tables also leak into unrelated selection and lifecycle paths. |
+| Mod(s) | event_tweaker |
+| Fix version(s) | candidate event_tweaker v0.4.33-dev (issue 626; not fixed until deployed and verified) |
+| Category | INTEGRATION |
+| Repro | 1. Host enables both Dormant Event Missions and has a client join. 2. Open Own Game: the built-in event area contains exactly `dlc_dwarf_fest` and `dlc_celebrate_crawl`. 3. Start each mission once and confirm both peers load. 4. Return to Own Game and confirm a normal Helmgart control mission/act is unchanged. 5. Disable/re-enable Event Tweaker and reopen the views; repeat one controller-path entry if available. |
+| Expected post-fix | Exactly the two enabled allowlisted missions appear; individually disabled entries do not. No unrelated/future level is admitted, Quick Play/global campaign pools remain untouched, both peers load through vanilla level transition, and view re-entry/mod re-enable does not leave stale area state. |
+| Detection | Offline: `test_event_mission_allowlist` covers both enabled missions, individual selection, untouched control-act identity, closed contents, and fail-closed contract validation. Runtime: `/event_mission_probe` reports `contract=OK`; `/event_tweaker_regression_test` passes `issue626_event_mission_allowlist_contract`; engine log emits `[event-missions:626] menu applied` with exactly the selected IDs. Source: `_evt_missions.lua` contains four unique menu hooks and no writes to global campaign/network arrays; `event_tweaker_missions.lua` contains the exact two-entry allowlist. |
 
 
 ---
@@ -398,6 +416,7 @@ Last updated: 2026-07-11 (v0.4.26-dev module split: detection pointers updated t
 - et-weave-only-mutator-gate
 - et-boss-event-mutator-guard
 - et-mutator-preview-own-pass
+- et-event-mission-allowlist
 - feedback-deploy-vs-upload-distinction
 - feedback-mod-version-format
 - feedback-pre-deploy-checklist

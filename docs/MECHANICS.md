@@ -245,6 +245,22 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
   `network_manager:game()`, returning nil during title/teardown states.
   [src: scripts/managers/player/player_manager.lua:580-596]
 
+## Domain: Mission selection / level packages
+
+- DLC `package_name` resources are loaded during boot and each DLC's
+  `additional_settings` list is required afterward; level definitions from those
+  settings can therefore exist even when their area is hidden from mission
+  selection. [src: scripts/boot.lua:358-369,387; scripts/settings/dlc_settings.lua:58-68,533-540]
+- Desktop and controller Own Game area views omit `AreaSettings` entries with
+  `exclude_from_area_selection`; their mission views then derive an instance-local
+  `_levels_by_act` map from `UnlockableLevels`. This makes temporary area exposure
+  plus view-local act filtering a narrower availability seam than rewriting the
+  generated campaign/unlock tables. [src: scripts/ui/views/start_game_view/windows/start_game_window_area_selection.lua:91-95; scripts/ui/views/start_game_view/windows/start_game_window_area_selection_console_v2.lua:100-105; scripts/ui/views/start_game_view/windows/start_game_window_mission_selection.lua:108-129; scripts/ui/views/start_game_view/windows/start_game_window_mission_selection_console.lua:98-125]
+- Level transition loads every path in `LevelSettings[level_key].packages`
+  asynchronously under the level key as reference name, and unloads under the same
+  reference on transition. A menu-only availability feature should leave this
+  package ownership with vanilla. [src: scripts/game_state/components/level_transition_handler.lua:518-572]
+
 ## Domain: VMF framework
 
 - VMF silently DROPS the second `mod:hook` / `mod:hook_safe` on the same

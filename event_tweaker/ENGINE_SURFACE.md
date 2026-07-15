@@ -9,7 +9,7 @@ the four issue-guard mechanics) or `CLAUDE.md` (workflow guardrails) - it names
 each engine seam, cites the vanilla behavior, and links out. Decompile paths are
 relative to `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`; `evt` line
 numbers name their `_evt_*` module. `§N` = a `docs/BUG_CLASSES.md` class; `#N` /
-"issue N" = a GitHub issue. Grep-verified 2026-07-12 against the decompile.
+"issue N" = a GitHub issue. Grep-verified 2026-07-15 against the decompile.
 
 `evt` is a host-side injector: it fabricates live-event backend responses so the
 lobby runs any combination of vanilla/DLC mutators (and a themed keep) without
@@ -23,10 +23,10 @@ husks).
 
 ## Hook table
 
-10 registration sites (per `CLAUDE.md`; `tools/mod-lint/lint-mod.ps1` enforces one
-hook per (Class, method) mod-wide), grouped into 4 rows-of-concern. `[hook]` = full
+16 registration sites (`tools/mod-lint/lint-mod.ps1` enforces one hook per
+(Class, method) mod-wide), grouped by concern. `[hook]` = full
 wrapper (`mod:hook`, can rewrite args/returns); `[safe]` = `mod:hook_safe`
-(post-callback, no override). All 10 are string-form (each target class has a single
+(post-callback, no override). All 16 are string-form (each target class has a single
 implementation reached through `__index`, so no derived-class split). Note: two of
 the four issue guards (#413 weave, #455 boss-events) are NOT hooks - they enforce at
 the `add()` injection chokepoint / by wrapping mutator-template dispatch fields, and
@@ -60,7 +60,14 @@ are covered in the subsystem notes, not this table.
 
 | Class.method (kind) | Vanilla behavior | Why evt hooks it | Trap / invariant |
 |---|---|---|---|
-| `ConflictDirector.init` [safe] `_evt_diagnostics.lua:137` | Fires once per level as the conflict director initializes; by this point `CurrentIntensitySettings` / `CurrentPacing` hold the post-mutator values the director will pace against [src: `conflict_director.lua` init, read fields `:219`] | Issue 393 post-init snapshot: printf the intensity/pacing fields + the injected mutator list to prove whether an injected mutator's writes survived or were stomped (`:137`) | Read-only diagnostic, no behavior change; printf only (users run mod-logs OFF), pcall-wrapped. Diagnostics are always-on in dev, never a menu toggle (memory `feedback_diagnostics_never_toggles`). enemy_tweaker also touches `ConflictDirector` - no collision (VMF hook-drop is per-mod) |
+| `Pacing.update` [safe] `_evt_diagnostics.lua:148` | Runs after conflict-director init wrappers have returned and the live `Pacing` object owns the settled intensity/pacing values [src: `scripts/managers/conflict_director/pacing.lua`, method `update`] | Issue 393 one-shot-per-instance snapshot: printf the settled globals and cached director thresholds to classify the result as `intact` or `settings_stomp` (`:148`) | Read-only diagnostic, no behavior change; printf only (users run mod-logs OFF), pcall-wrapped and weak-key deduped. Diagnostics are always-on in dev, never a menu toggle |
+
+### Dormant event mission menu (issue 626; host menu, vanilla level transition)
+
+| Class.method (kind) | Vanilla behavior | Why evt hooks it | Trap / invariant |
+|---|---|---|---|
+| `StartGameWindowAreaSelection._setup_area_widgets` [hook] and `StartGameWindowAreaSelectionConsoleV2._setup_area_widgets` [hook] `_evt_missions.lua` | Desktop/controller area menus iterate `AreaSettings` and omit entries whose `exclude_from_area_selection` is true [src: desktop `:91-95`; console V2 `:100-105`] | If either allowlisted mission is enabled and the full stock contract validates, temporarily expose `AreaSettings.celebrate` while vanilla builds widgets | Restore the previous bit even when vanilla raises. Never permanently unhide an area or rewrite its labels/video/acts. VMF disables/re-enables hooks with the mod |
+| `StartGameWindowMissionSelection._setup_level_acts` [hook] and `StartGameWindowMissionSelectionConsole._setup_level_acts` [hook] `_evt_missions.lua` | Build instance-local `_levels_by_act` from global `UnlockableLevels` [src: desktop `:108-129`; console `:98-125`] | After vanilla builds the map, replace only `act_celebrate` with enabled entries from the exact two-level allowlist | Preserve unrelated act tables by identity. Never write `GameActs`, `UnlockableLevels`, `UnlockableLevelsByGameMode`, `MapPresentationActs`, or `NetworkLookup`. Fail closed unless existing level/package/area/act/network contracts are complete; vanilla `LevelTransitionHandler` remains package owner [src: `level_transition_handler.lua:518-572`] |
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for evt's cases)
 
@@ -160,7 +167,7 @@ added, or a cited vanilla line drifts after a game patch, edit the affected row 
 the SAME commit. This doc complements, and must not duplicate, `DEVELOPMENT.md`
 (module contracts + the guard mechanics in full) and `CLAUDE.md` (workflow) - when a
 guard's mechanic changes, `DEVELOPMENT.md` is the primary and this doc's row is the
-follow-on edit. Line numbers are against the 2026-07-12 decompile - match crash logs
+follow-on edit. Line numbers are against the 2026-07-15 decompile - match crash logs
 by function name, not line. A few `MutatorHandler`/`StateIngame`/`CameraManager`
 targets carry `[unverified]` exact lines (class + method grep-confirmed; the interior
 line was not pinned this pass) - replace the tag with a citation when next touched.

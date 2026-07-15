@@ -15,6 +15,15 @@ Plus one orthogonal switch:
 
 3. **`suppress_live_event`** (v0.4.10-dev+, default off). When on, the three hooks below drop Fatshark's `original` response *before* merging our own. Lets the host neutralize whatever event Fatshark is currently serving (Skulls 2026 keep + Geheimnisnacht 2026 ritual sites + event lighting + tab-menu modifier list, etc.) without waiting for the live event to roll over. The preset and per-mutator checkboxes still stack on top.
 
+And one bounded mission-menu feature:
+
+4. **Dormant Event Missions** (issue 626, opt-in). Shows only `dlc_dwarf_fest`
+   and `dlc_celebrate_crawl` in Own Game. It temporarily exposes the stock
+   `celebrate` area while vanilla builds the area widgets, then replaces only the
+   menu instance's `act_celebrate` level list from a closed two-entry allowlist.
+   It does not add either level to Quick Play or mutate the global campaign,
+   unlock, presentation, or network lookup tables.
+
 ## "Other Mutators" — dynamic discovery (ported from Deed Mutators Selector)
 
 `v0.4.14-dev` absorbed the one worthwhile feature of **Deed Mutators Selector** (Workshop `3579882542`): iterate the live `MutatorTemplates` global and surface every mutator the engine flags player-facing (`display_name`+`description`), instead of a hand-curated list. The "Other Mutators" group auto-includes the package-free Chaos Wastes / Deus mutators not in a curated category. Three exclusions keep it adventure-safe (`_is_adventure_safe_mutator(name, tmpl)`): `hide_from_player_ui` (Fatshark-hidden Deus pacing knobs), a non-empty `packages` field (those go to Cursed Adventure), and `_CURSE_BROKEN_IN_ADVENTURE` (weave/deus-only crashers). Labels are pulled from the game's own `Localize` (no fabrication), registered dynamically in the loc file. Wired across all three files; `Curses.BROKEN_IN_ADVENTURE` (`event_tweaker_curses.lua`) is the shared blacklist.
@@ -73,6 +82,11 @@ access) because the data file evaluates before the script.
 Cursed Adventure curse catalog: `MANAGED_CURSES`, `BROKEN_IN_ADVENTURE`,
 `CURSE_TO_GOD`. require'd by `_evt_selection` / `_evt_diagnostics` /
 `_evt_cursed_adventure` AND `_data.lua` / `_localization.lua`.
+
+**`event_tweaker_missions.lua` — shared require'd LOGIC (same early-load rules).**
+Issue 626's closed mission allowlist, engine-contract validator, and pure
+view-local `act_celebrate` filter. require'd by `_evt_missions.lua` and
+`event_tweaker_data.lua`, so it has no `get_mod`, manager/global reads, or writes.
 
 **`_evt_log.lua` — manifest position 1.**
 Two-channel debug helpers (PROJECT_STANDARDS § 3.6) + the settings fingerprint the
@@ -149,26 +163,38 @@ greyed "(skipped: a peer lacks the mod)"; on a client the header carries a
 "host decides" caveat (et never syncs the host's picks). ct files are read-only
 reference; no ct file is touched.
 
-**`_evt_backend_hooks.lua` — manifest position 9.**
+**`_evt_missions.lua` — manifest position 9 (issue 626 dormant event missions).**
+Four menu hooks cover desktop/controller area and mission-selection views. The
+area wrapper temporarily clears only `AreaSettings.celebrate.exclude_from_area_selection`
+and restores it even when vanilla raises. The mission wrapper replaces only the
+view instance's `_levels_by_act.act_celebrate` list from the two-entry allowlist;
+unrelated act tables retain identity. It validates the existing level, package,
+act, area, and network-lookup contract before advertising either mission, logs
+`[event-missions:626]`, exposes `/event_mission_probe`, and registers
+`issue626_event_mission_allowlist_contract`. VMF owns hook disable/re-enable, and
+each view rebuilds from vanilla state on re-entry, so there is no persistent
+mission state or lifecycle callback to restore.
+
+**`_evt_backend_hooks.lua` — manifest position 10.**
 The three live-event backend hooks (see Architecture below). No exports; consumes
 the selection surface.
 
-**`_evt_guard386_pacing.lua` — manifest position 10.**
+**`_evt_guard386_pacing.lua` — manifest position 11.**
 Issue 386 scalar-pacing sanitizer: `hook_safe` on
 `MutatorHandler.conflict_director_updated_settings`. Registers check
 `issue386_sanitize_pacing_scalar_to_table`. Public surface:
 `mod._et386_sanitize_pacing_scalars(pacing, difficulty)`.
 
-**`_evt_diagnostics.lua` — manifest position 11.**
+**`_evt_diagnostics.lua` — manifest position 12.**
 Read-only surfaces: `/event_probe`, `/event_active`, `/event_clear`, and the issue
-393 diagnostics-armed `ConflictDirector.init` post-init snapshot. No exports.
+393 diagnostics-armed first-`Pacing.update` settled snapshot. No exports.
 
-**`_evt_apply.lua` — manifest position 12.**
+**`_evt_apply.lua` — manifest position 13.**
 Mid-game preset application (level reload plumbing), `/event_apply`, and
 `mod.on_setting_changed` — VMF allows exactly ONE assignment mod-wide and it lives
 here; never assign it in another file. No `mod._evt` exports.
 
-**`_evt_cursed_adventure.lua` — manifest position 13 (last).**
+**`_evt_cursed_adventure.lua` — manifest position 14 (last).**
 Curse package preload hooks (`MutatorHandler._activate_mutator`/`_deactivate_mutator`/
 `init`, `StateIngame.on_exit`) + the per-frame `CameraManager.shading_callback` sky
 tint. All runtime state is file-local; the per-frame hook must never read
@@ -207,13 +233,59 @@ if applicable) in the same commit.
 
 ## Architecture
 
-Three hooks (in `_evt_backend_hooks.lua`), all on backend classes. Single chokepoint per concern — every consumer of the hooked function sees the override consistently.
+The three live-event hooks in `_evt_backend_hooks.lua` remain the single
+chokepoint for mutator injection. Issue 626's four menu hooks form a separate,
+presentation-only path and never feed the live-event backend.
 
 | Hook | Purpose | Why this entry point | suppress_live_event behavior |
 | :--- | :--- | :--- | :--- |
 | `BackendInterfaceLiveEventsPlayfab:get_special_events` | Inject `{name, weekly_event = "append", mutators}` so `GameModeBase.append_live_event_mutators` (`game_mode_base.lua:264`) picks up our mutators on every mission load. | Single class, no derived classes — string-form `mod:hook` patches the prototype that all instances see via `__index`. `GameModeBase.append_live_event_mutators` is the canonical mutator-activation path; mutator IDs flow from there into `mutator_handler.lua:85` `initialize_mutators` and out via `rpc_activate_mutator_client` to clients. | Drops Fatshark's entries before merge → also short-circuits the `DialogueSystem.on_add_extension` read at `dialogue_system.lua:196-212` so live-event ambient dialogue stops. |
 | `BackendInterfaceLiveEventsPlayfab:get_active_events` | Inject the preset's event-name string (e.g. `"geheimnisnacht_2021"`). | `mutator_geheimnisnacht_2021.lua:58-86` calls `live_events_interface:get_active_events()` and does `string.find(live_event, "geheimnisnacht_%d+")` on each entry to decide which 5 maps spawn ritual sites (year-specific lists in `geheimnisnacht_utils.lua:5-41`). Without this hook, the mutator activates but spawns nothing. Skulls does NOT inspect this list — its mutator's `server_start_function` is self-contained. | Drops Fatshark's strings → `string.find` finds no `"geheimnisnacht_%d+"` match → ritual-site engine stays dormant on missions. |
 | `BackendManagerPlayFab:get_level_variation_data` | Merge `hub_level = "inn_level_halloween"` / `"inn_level_skulls"` into the returned table. | `AdventureMechanism.get_starting_level` (`adventure_mechanism.lua:625`) reads `Managers.backend:get_level_variation_data().hub_level` and loads that level. Vanilla seasonal events ship pre-decorated keep level files — `inn_level_halloween`, `inn_level_skulls`, `inn_level_celebrate`, `inn_level_sonnstill` — defined in `scripts/settings/level_settings.lua:152-196`. Decorations are baked geometry, not runtime spawns. Mutators can't do this because `GameModeBase` skips hubs. | When suppress is on AND no preset hub_level, forces `merged.hub_level = "inn_level"` (matches `adventure_mechanism.lua:7 HUB_LEVEL_NAME`) so the keep reverts to plain inn. |
+
+### Dormant event mission boundary (issue 626)
+
+Current decompile `c5e4968b1fbb00c49884e56d640ef990a9c04dd0` already owns
+both missions end to end. `DLCSettings.celebrate` and `.dwarf_fest` declare their
+boot packages/additional settings (`scripts/settings/dlc_settings.lua:58-68,
+533-540`), and `Boot:setup` loads every DLC `package_name` then requires those
+settings (`scripts/boot.lua:358-369,387`). The level definitions name
+`act_celebrate`, are unlockable/not-quickplayable, and own the actual level package
+lists (`levels/honduras_dlcs/celebrate/level_settings_celebrate.lua:3-26`;
+`levels/honduras_dlcs/dwarf_fest/level_settings_dwarf_fest.lua:3-25`).
+
+Vanilla's level-unlock pass derives `GameActs`, `UnlockableLevels`,
+`UnlockableLevelsByGameMode`, and `MapPresentationActs` from valid level settings
+(`scripts/settings/level_unlock_settings.lua:101-129`), and network boot derives
+level/mission/act/unlockable lookups (`scripts/network_lookup/network_lookup.lua:
+1239-1259`). The missing boundary is presentation: both event areas are hidden;
+the stock `celebrate` area already points at `act_celebrate`. Desktop/controller
+area views skip `exclude_from_area_selection` areas (`start_game_window_area_selection.lua:
+91-95`; console V2 `:100-105`), and mission views build their instance-local
+`_levels_by_act` from `UnlockableLevels` (`start_game_window_mission_selection.lua:
+108-129`; console `:98-125`). Once a selected level starts,
+`LevelTransitionHandler._load_level_packages` loads its stock `LevelSettings.packages`
+and unloads them by the same level-key reference (`level_transition_handler.lua:
+518-572`). Event Tweaker therefore changes only the temporary/view-local menu
+boundary and leaves package loading and campaign/network ownership to vanilla.
+
+### Feast comparison and clean-room provenance
+
+Behavioral reference: Workshop item `3557074106`, “The Feast of Grimnir” by
+ChadMasodin; public source repository `ChadMasodin/Vermintide-2-Mods`, inspected at
+commit `b30f9a3a7db98c10719ef612b86c37e544258bb2` (v1.0). The repository has no
+declared license (`LICENSE`/`COPYING` absent and GitHub license metadata null), so
+it was used only to identify behavior. No Lua, video/material asset, identifiers
+invented by that mod, or implementation structure was copied.
+
+The reference permanently edits `AreaSettings`/`ActSettings`/`LevelSettings`,
+adds legacy fallbacks to `GameActs`, `UnlockableLevels`,
+`UnlockableLevelsByGameMode`, `MapPresentationActs`, and `NetworkLookup`, loads a
+custom menu-video package, and guards its one-time writes with persistent state.
+The independent Event Tweaker implementation instead follows the current
+decompile contract above: a closed allowlist, a temporary area bit around vanilla
+widget construction, a view-local act list, fail-closed contract diagnostics, no
+custom assets/packages, and no global campaign or network mutation.
 
 The curated catalog and presets live in the shared require'd module `event_tweaker_catalog.lua` (v0.4.26-dev; previously two hand-synced copies with a "keep in sync" warning):
 

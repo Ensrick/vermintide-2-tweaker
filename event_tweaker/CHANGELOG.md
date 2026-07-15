@@ -1,5 +1,15 @@
 # Tweaker: Events — Changelog
 
+## 0.4.33-dev (2026-07-15) - issue #626 allowlisted dormant event missions [not deployed]
+
+- Added opt-in Own Game entries for the two source-audited dormant event levels: The Feast of Grimnir (`dlc_dwarf_fest`) and A Quiet Drink (`dlc_celebrate_crawl`). The runtime adapter temporarily exposes the stock `celebrate` area only while vanilla builds the area widgets, and replaces only the view-local `act_celebrate` mission list. It does not mutate `GameActs`, `UnlockableLevels`, `UnlockableLevelsByGameMode`, `MapPresentationActs`, or `NetworkLookup`, and a future mission sharing the act remains excluded until explicitly audited and allowlisted.
+- Fail-closed contract checks require both stock `LevelSettings` entries, non-empty level package lists, the stock area/act, and the existing level/mission/act/unlockable network lookups before either mission is advertised. `/event_mission_probe` and `[event-missions:626]` engine log lines report the selected allowlist and any missing boundary. Vanilla `LevelTransitionHandler._load_level_packages` remains the sole level-package owner.
+- Added desktop and controller mission-menu hooks with automatic VMF disable/re-enable behavior, temporary-area restoration on Lua errors, an in-game regression check, and five offline Lua 5.1 tests covering both enabled missions, an untouched control act, individual selection, complete contract acceptance, and fail-closed missing-lookup behavior.
+- Clean-room provenance: behavioral inspection used The Feast of Grimnir Workshop item `3557074106` / public source commit `b30f9a3a7db98c10719ef612b86c37e544258bb2` only to identify the menu boundary. That repository declares no license, so no Feast Lua or custom video/material asset was copied. The implementation is independently derived from the current VT2 decompile.
+- `MOD_VERSION` `0.4.32-dev` -> `0.4.33-dev`. Not built/deployed in this pass because the canonical event_tweaker output bundle was pre-existing foreign/shared-tree work and could not be overwritten safely.
+
+Verify with two players: host enables both Dormant Event Missions, opens Own Game, and starts each once with a client connected. Both missions must load for both peers; a normal Helmgart control mission must remain present and unchanged. Run `/event_mission_probe`; the host log should show `contract=OK` and `[event-missions:626] menu applied` with exactly the two selected IDs. Do not mark fixed until this passes in-game.
+
 ## 0.4.32-dev (2026-07-14) - issue #393 settled high-intensity diagnostics [not deployed]
 
 - Moved the issue-393 snapshot from the ambiguous `ConflictDirector.init` post-hook to the first `Pacing.update`, after all cross-mod init wrappers have returned. The bounded probe emits one log-only line per mission and now classifies the result as `intact` or `settings_stomp`, including both live globals and the director's cached horde/special/mini-patrol thresholds.

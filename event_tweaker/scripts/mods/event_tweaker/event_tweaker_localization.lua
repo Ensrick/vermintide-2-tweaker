@@ -50,6 +50,14 @@ local loc = {
     -- Events: <peer>. ...". Kept short so the one-line notice stays readable.
     peer_parity_curse_feature_label = en("Cursed Adventure curses"),
 
+    -- Issue 626: option titles remain issue-tagged until the candidate is built,
+    -- shipped, and verified in-game. The group is navigation-only, so untagged.
+    cat_event_missions = en("Dormant Event Missions"),
+    mission_dlc_dwarf_fest = en("[Issue 626] The Feast of Grimnir"),
+    mission_dlc_dwarf_fest_tooltip = en("Show The Feast of Grimnir in Own Game under the built-in event area. Uses the game's existing level definition and packages; Event Tweaker does not add it to Quick Play or unrelated campaign pools."),
+    mission_dlc_celebrate_crawl = en("[Issue 626] A Quiet Drink"),
+    mission_dlc_celebrate_crawl_tooltip = en("Show A Quiet Drink in Own Game under the built-in event area. Uses the game's existing level definition and packages; Event Tweaker does not add it to Quick Play or unrelated campaign pools."),
+
     -- Difficulty modifiers
     mut_no_ammo                    = en("[working] No Ammo"),
     mut_no_ammo_tooltip            = en("Ranged weapons start empty, so you cannot use them."),

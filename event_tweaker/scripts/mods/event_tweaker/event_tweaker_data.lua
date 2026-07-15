@@ -5,6 +5,7 @@ local mod = get_mod("event_tweaker")
 -- event_tweaker_curses.lua and event_tweaker_catalog.lua.
 local Curses  = require("scripts/mods/event_tweaker/event_tweaker_curses")
 local Catalog = require("scripts/mods/event_tweaker/event_tweaker_catalog")
+local Missions = require("scripts/mods/event_tweaker/event_tweaker_missions")
 
 -- Curated mutator catalog — the single shared copy in event_tweaker_catalog.lua
 -- (v0.4.26-dev retired the hand-synced duplicate that used to live here).
@@ -108,6 +109,27 @@ local widgets = {
         tooltip       = "preview_active_mutators_tooltip",
     },
 }
+
+-- Issue 626: dormant first-party event missions. This group is backed by the
+-- same closed allowlist the runtime adapter consumes; a future level cannot
+-- appear merely because Fatshark assigns it to act_celebrate.
+do
+    local sub = {}
+    for i = 1, #Missions.ALLOWLIST do
+        local entry = Missions.ALLOWLIST[i]
+        sub[#sub + 1] = {
+            setting_id = entry.setting_id,
+            type = "checkbox",
+            default_value = false,
+            tooltip = entry.setting_id .. "_tooltip",
+        }
+    end
+    widgets[#widgets + 1] = {
+        setting_id = "cat_event_missions",
+        type = "group",
+        sub_widgets = sub,
+    }
+end
 
 for i = 1, #CATEGORIES do
     local cat = CATEGORIES[i]
