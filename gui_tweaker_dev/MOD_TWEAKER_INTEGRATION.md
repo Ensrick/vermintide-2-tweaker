@@ -8,7 +8,7 @@
 ## The two-line rule
 
 1. **A top-level Mod Tweaker TAB is ONLY for one of the author's OWN Tweaker-series mods**
-   (the `_MY_MODS` whitelist in `_mod_tweaker_view.lua`): `gut`, `wt`, `ct`, `cim`, `gt`,
+   (the shared `AUTHOR_MOD_IDS` policy in `_mod_tweaker_disabled_sections.lua`): `gut`, `wt`, `ct`, `cim`, `gt`,
    `crt`, `cosmetics_tweaker`, `character_weapon_variants`, `enemy_tweaker`, `event_tweaker`,
    `mp`, `bt`, `dynamic_cosmetic_portraits` (+ their `_dev` ids). Each is a distinct mod the
    user ships; each earns one tab.
@@ -16,14 +16,14 @@
    NEVER a top-level collapsible.** Its options fold **into the appropriate existing gut
    category collapsible**, as rows (or a sub-`group`) within that category.
 
-If you are about to add a non-author mod id to `_MY_MODS`, STOP — that is the exact mistake
+If you are about to add a non-author mod id to `AUTHOR_MOD_IDS`, STOP — that is the exact mistake
 #339 corrects.
 
 ## How the Mod Tweaker is structured
 
 The Mod Tweaker view (`_mod_tweaker_view.lua`) mirrors the vanilla VT2 options menu:
 
-- **Top tab strip** — one tab per `_MY_MODS` entry (auto-discovered from VMF). Picking a tab
+- **Top tab strip** — one tab per authored-mod policy entry (auto-discovered from VMF). Picking a tab
   shows that mod's options.
 - **Within a tab** — the mod's options are organized into **category collapsibles** (native
   VMF `group` widgets with an expand/collapse arrow). This
@@ -35,10 +35,10 @@ etc. Integrated third-party options belong inside one of these.
 
 ## The correct precedent: UI Tweaks / HideBuffs (#312)
 
-HideBuffs ("UI Tweaks") is deliberately **NOT** in `_MY_MODS`. Its options render as ordinary
+HideBuffs ("UI Tweaks") is deliberately **NOT** in `AUTHOR_MOD_IDS`. Its options render as ordinary
 gut checkboxes inside the HUD group (`gut_hide_hud_ui_group` > "UI Tweaks"), keeping HideBuffs'
 setting_ids verbatim. **This is the model every third-party integration follows.** Re-adding
-HideBuffs to `_MY_MODS` would resurrect the duplicate tab — don't.
+HideBuffs to `AUTHOR_MOD_IDS` would resurrect the duplicate tab — don't.
 
 **Sync to the stock mod (#312, `_bridge_uitweaks_to_stock`, marker `[UITWEAKS-BRIDGE-312]`).**
 gut and the stock UI Tweaks (HideBuffs) mod persist those verbatim ids in **separate** VMF
@@ -66,7 +66,7 @@ remain available.
 CKC's options must appear **inside Interface / HUD**, editable in the Mod Tweaker's own menu,
 following the UI Tweaks model:
 
-- **Do NOT** whitelist `"Crosshair Kill Confirmation"` in `_MY_MODS` (that is the current
+- **Do NOT** whitelist `"Crosshair Kill Confirmation"` in `AUTHOR_MOD_IDS` (that is the current
   bug — it produces a top-level CKC tab).
 - Surface CKC's options as rows / a sub-`group` under the HUD category. Because CKC is a live
   external mod, read/write the CKC mod's own settings through its `:set`/`:get` API.
@@ -79,11 +79,11 @@ following the UI Tweaks model:
 
 ```
 Is this one of the author's own Tweaker-series mods (shipped by us, in the Tweaker family)?
-  YES -> it may have its own top-level tab (add to _MY_MODS).
+  YES -> it may have its own top-level tab (add to AUTHOR_MOD_IDS).
   NO  -> it is a third-party integration:
          - fold its options into the appropriate EXISTING gut category collapsible
            (crosshair/HUD stuff -> Interface/HUD; etc.)
-         - NEVER add it to _MY_MODS
+         - NEVER add it to AUTHOR_MOD_IDS
          - NEVER give it a top-level collapsible of its own
          - do not modify vanilla Options to provide a shortcut into the integration
 ```
@@ -99,7 +99,7 @@ others OFF (a radio group over ordinary checkboxes; all-off is a valid "None" st
   NOT invent a new widget type -- you keep normal `checkbox` widgets and register the
   exclusivity separately. For the collapsible look the issue mock-up shows, wrap the members
   in a native VMF `group` widget in your `_data.lua`; gut renders the group and enforces the
-  exclusivity. No custom widget, no `_MY_MODS` change.
+  exclusivity. No custom widget, no `AUTHOR_MOD_IDS` change.
 - **Declare it from your own mod** via the gut public API (data-driven -- gut needs no code
   change per group):
 
@@ -244,7 +244,8 @@ synthetic Equipment tab opts out because its sections have a deliberate sequence
 
 ## Regression guard
 
-`_mod_tweaker_view.lua` / the gut regression suite must assert: no third-party (non-author)
-mod id appears in `_MY_MODS`, and CKC's options resolve under the HUD category. See #339. The
+`_mod_tweaker_disabled_sections.lua` / the gut regression suite must assert: no third-party
+(non-author) mod id appears in `AUTHOR_MOD_IDS`, and CKC's options resolve under the HUD
+category. See #339. The
 `mod_tweaker_exclusive_group_api` check (#446) asserts the exclusive-group registry + the
 view's `_enforce_exclusive` sweep stay wired.

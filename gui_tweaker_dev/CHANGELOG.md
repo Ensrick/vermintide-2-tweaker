@@ -1,5 +1,28 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.279-dev (2026-07-15) -- #636 Weapons Dev Equipment section [verify-fix]
+
+- Restored Tweaker: Weapons Dev to Mod Tweaker's Equipment > Weapons
+  collapsible. Its `wt_dev` registration was valid, but both Mod Tweaker
+  presentations filtered it out because their duplicated discovery and Equipment
+  alias tables recognized only the public-beta `wt` stream.
+- Centralized authored-mod discovery and stable/dev Equipment aliases in one pure
+  policy shared by the keep sub-state and standalone view, preventing another
+  stream-specific drift.
+- Preserved every WT Dev row, including Weapon Availability, Development Animation
+  Picker, and Development Weapon Hold-Pose Tuner. The friends-only Workshop
+  identity and dev-only surface remain unchanged.
+- Added offline and runtime regressions for alias selection, exact row retention,
+  Weapons collapsible synthesis, and both presentation paths.
+
+### Solo verify
+
+Enable Tweaker: GUI Dev, Tweaker: Weapons Dev, and CWV while leaving public-beta
+WT disabled or absent. Open Mod Tweaker in the keep and in a mission. Confirm
+Equipment contains a Weapons collapsible with the WT Dev rows and nested CWV
+section. Run `/gut_regression_test`; `issue636_wt_dev_equipment_collapsible` must
+pass.
+
 ## 0.2.278-dev (2026-07-15) -- #605 Character Dialogue browser [verify-fix]
 
 - Replaced Character Dialogue's flat dropdown and detached action rows with one

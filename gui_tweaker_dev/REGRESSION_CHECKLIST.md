@@ -182,6 +182,18 @@ Last updated: 2026-07-14.
 | Expected post-fix | CWV and UI Tweaks retain their normal grey section header with `Disabled in VMF` on hover. Disabled sections do not expand, expose rows, stage values, participate in profiles/DEFAULT, or receive Apply writes. Re-enabling restores the same section in place. |
 | Detection | Offline `test_mod_tweaker_disabled_sections.lua`; `/gut_regression_test`: `issue318_disabled_integrations_keep_normal_sections`; solo visual/hover confirmation required after deployment. |
 
+### issue636-wt-dev-equipment-collapsible — Weapons Dev rows disappear
+
+| Field | Value |
+|-------|-------|
+| Symptom | With the friends-only Tweaker: Weapons Dev stream enabled, Mod Tweaker has no accessible Weapons section even though the mod is registered and running. |
+| Root cause | Both Mod Tweaker presentations duplicated an authored-mod whitelist and Equipment role map that knew only the public-beta `wt` namespace, so VMF's `wt_dev` widget list was filtered out before Equipment synthesis. |
+| Fix version(s) | gui_tweaker_dev v0.2.279-dev (#636) |
+| Category | UNIT / UI INTEGRATION / CROSS-MOD |
+| Repro | Enable Tweaker: GUI Dev, Tweaker: Weapons Dev, and CWV; leave public-beta WT disabled or absent. Open Mod Tweaker in the keep and in a mission. |
+| Expected post-fix | Equipment contains one Weapons collapsible populated by the enabled `wt_dev` rows, including Weapon Availability, Development Animation Picker, and Development Weapon Hold-Pose Tuner. CWV remains nested beneath Weapons. The `wt_dev` identity, friends-only Workshop visibility, and preview remain unchanged. |
+| Detection | Offline `test_mod_tweaker_disabled_sections.lua`; `/gut_regression_test`: `issue636_wt_dev_equipment_collapsible`; solo visual confirmation required after deployment. |
+
 ### issue572-search-magnifier-focus-geometry — icon crowds text or remains while typing
 
 | Field | Value |
