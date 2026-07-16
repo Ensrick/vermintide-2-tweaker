@@ -334,3 +334,24 @@ the rejected compiler paths live in `tools/BLIGHTREAPER_ASSET_PIPELINE.md`.
 The canonical held transform is uniform XYZ scale `{0.9, 0.9, 0.9}`, Euler XYZ
 rotation `{-90, -90, -90}`, and offset `{0, 0, -0.3}`, applied at spawn through
 the shared appearance primitive on both 1P/3P gameplay and preview consumers.
+
+### Blightreaper audio boundary (2026-07-16, issue #633)
+
+The inspect whisper and ambient trophy loop have different residency contracts.
+`nds_skull_inspect` is owned by `wwise/event_geheimnisnacht` in
+`resource_packages/dlcs/geheimnisnacht_2021`; vanilla declares that package in
+`DLCSettings` and loads every such `package_name` under the boot reference
+(`scripts/settings/dlc_settings.lua:274-283`, `scripts/boot.lua:358-363`). WOC
+therefore attaches that event to the exact local 1P Blightreaper during the
+existing `ActionInspect` action and stops only its returned playing id at every
+action, equipment, world, and mod lifecycle edge.
+
+`emitter_trophy_evil_sword` is found only in `wwise/level_hub`. That is a
+level-scoped keep bank, not a proven mission-resident package. Do not add it to
+automatic wield/spawn playback, do not call `Managers.package:load` for the
+bank, and do not send the event over a custom RPC. `/woc_audio_probe` is the
+bounded evidence path: three explicit attempts maximum, eight seconds each,
+attached to the local 3P weapon through `WwiseUtils.trigger_unit_event`. Promote
+ambient playback only after logs prove residency in representative missions and
+a source-backed package contract supports same-WOC peers without exposing an
+unknown event/resource to peers that lack WOC.

@@ -77,6 +77,14 @@ this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
 | `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` [hook] | Spawns and links inventory, lobby, and score/end-screen equipment | Apply the canonical transform to the exact spawned WOC unit | Weak per-unit guard bounds duplicate traversal; no per-frame writes. |
 | `LootItemUnitPreviewer.load_package` / `spawn_units` / `_unload_packages` [hook] | Owns item, illusion, Athanor, and crafting-preview package leases and units | Borrow/unload one vanilla lease per custom key and transform returned WOC units | Never load the WOC unit path through PackageManager; the master package owns residency. |
 
+### Blightreaper audio ownership (#633)
+
+| Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
+|---|---|---|---|
+| `ActionInspect.client_owner_start_action` / `finish` [hook] | The cloned elf Sword uses `ActionTemplates.action_inspect`; start owns local first-person state and finish releases it [src: `scripts/settings/equipment/weapon_templates/1h_swords_wood_elf.lua:1290`; `scripts/unit_extensions/weapons/actions/action_inspect.lua:21-56`] | Start `nds_skull_inspect` only on the positively tracked local WOC 1P unit and stop its exact playing id on finish | The donor package is boot-loaded through `DLCSettings.geheimnisnacht_2021.package_name` [src: `scripts/settings/dlc_settings.lua:274-283`; `scripts/boot.lua:358-363`]. Missing package/API/unit fails closed; vanilla inspect is untouched. |
+| `GearUtils.destroy_equipment` [hook] | Destroys wielded 1P/3P units during inventory teardown [src: `scripts/unit_extensions/default_player_unit/inventory/gear_utils.lua:348-370`] | Stop any WOC-owned inspect/probe playing id before its unit is destroyed | Sole WOC hook on this pair. Game-state exit, disable/unload, dead-unit detection, and an eight-second cap close the remaining lifecycle edges. |
+| VMF `/woc_audio_probe` [explicit diagnostic] | `WwiseUtils.trigger_unit_event` creates an auto source attached to a unit and applies the sound environment [src: `scripts/helpers/wwise_utils.lua:13-57`] | Attempt `emitter_trophy_evil_sword` on the local 3P Blightreaper for at most eight seconds and three commands | The event belongs to level-scoped `wwise/level_hub`; mission residency is unproven. No force-load, automatic playback, or network traffic exists. Other peers are intentionally unaffected until a resident contract is proven. |
+
 ## Subsystem notes (how the vanilla flow runs end-to-end, for WOC's cases)
 
 Each note is the minimum needed to read the hooks above; the owning `docs/engine`

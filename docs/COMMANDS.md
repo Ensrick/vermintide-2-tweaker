@@ -145,6 +145,11 @@ portrait_diag, portrait_dump, test_portrait
 event_probe, event_active, event_clear, event_apply
 ```
 
+### `WOC` (weapons_of_chaos)
+```
+woc_regression_test, woc_audio_contract, woc_audio_probe
+```
+
 ### `bt` (buff_tweaker)
 
 **(RETIRED 2026-06 — bt archived to `_archive/buff_tweaker_v0.1.12-alpha/`; these commands no longer register. `get_mod("bt")` is always nil. Block kept for historical reference.)**

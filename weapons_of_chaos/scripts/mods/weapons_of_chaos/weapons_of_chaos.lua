@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.18-dev"
+local MOD_VERSION = "0.1.19-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -146,10 +146,22 @@ local TEMPLATE = _moveset.TEMPLATE
 local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_policy")
 local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview")
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
+local _audio_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_audio")
 local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
 local _wa = _pulse_lib.new(_appearance, _appearance_lib.new())
+local _audio = type(_audio_lib) == "table" and type(_audio_lib.new) == "function"
+	and _audio_lib.new() or {
+		observe_spawn = function() end,
+		start_inspect = function() end,
+		finish_inspect = function() end,
+		stop_equipment = function() end,
+		stop_all = function() end,
+		update = function() end,
+		probe_ambient = function() end,
+		describe = function() end,
+	}
 mod._woc_inventory_icons = _inventory_icons
 _cursed.install({
 	Colors = rawget(_G, "Colors"),
@@ -821,9 +833,58 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 		if unit_1p then
 			_wa.apply(unit_1p, _appearance.TRANSFORM, "1p", "inventory-spawn")
 		end
+		_audio.observe_spawn(unit_3p, unit_1p, owner_unit_1p, owner_unit_3p)
 	end
 	return unit_3p, ammo_3p, unit_1p, ammo_1p
 end)
+
+-- #633: ActionInspect is the exact action used by the cloned elf Sword graph.
+-- Attach the boot-resident ritual-skull whisper only to a positively tracked
+-- local WOC 1P unit. The helper owns and stops only its returned playing id.
+mod:hook("ActionInspect", "client_owner_start_action", function(func, self, ...)
+	local result = func(self, ...)
+	_audio.start_inspect(self)
+	return result
+end)
+
+mod:hook("ActionInspect", "finish", function(func, self, reason, ...)
+	_audio.finish_inspect(self, reason or "inspect-finish")
+	return func(self, reason, ...)
+end)
+
+-- Equipment destruction is an independent edge from ActionInspect.finish on
+-- level transitions and forced inventory teardown. Merge here as the sole WOC
+-- hook on (GearUtils, destroy_equipment).
+mod:hook("GearUtils", "destroy_equipment", function(func, world, equipment, ...)
+	_audio.stop_equipment(equipment, "equipment-destroy")
+	return func(world, equipment, ...)
+end)
+
+mod:command("woc_audio_contract",
+	"Log Blightreaper inspect and ambient audio provenance",
+	function() _audio.describe() end)
+
+mod:command("woc_audio_probe",
+	"Probe the native keep-trophy event for 8 seconds (maximum 3 runs)",
+	function() _audio.probe_ambient() end)
+
+mod.update = function(dt)
+	_audio.update(dt)
+end
+
+mod.on_game_state_changed = function(status, state_name)
+	if status == "exit" then
+		_audio.stop_all("game-state-exit:" .. tostring(state_name))
+	end
+end
+
+mod.on_disabled = function()
+	_audio.stop_all("mod-disabled")
+end
+
+mod.on_unload = function()
+	_audio.stop_all("mod-unload")
+end
 
 if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 	mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
@@ -1032,6 +1093,30 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 				return string.format("%s pulse texture is not resident: %s",
 					perspective, tostring(binding.texture))
 			end
+		end
+	end
+end)
+
+_rt_register("issue633_blightreaper_audio_contract", function()
+	if type(_audio_lib) ~= "table" or type(_audio_lib.new) ~= "function" then
+		return "Blightreaper audio helper is unavailable"
+	end
+	if _audio_lib.INSPECT_EVENT ~= "nds_skull_inspect"
+			or _audio_lib.INSPECT_BANK ~= "wwise/event_geheimnisnacht"
+			or _audio_lib.INSPECT_PACKAGE
+				~= "resource_packages/dlcs/geheimnisnacht_2021" then
+		return "ritual-skull inspect event/bank/package evidence drifted"
+	end
+	if _audio_lib.AMBIENT_EVENT ~= "emitter_trophy_evil_sword"
+			or _audio_lib.AMBIENT_BANK ~= "wwise/level_hub" then
+		return "keep-trophy ambient event/bank evidence drifted"
+	end
+	local package_manager = Managers and Managers.package
+	if package_manager and type(package_manager.has_loaded) == "function" then
+		local ok, loaded = pcall(package_manager.has_loaded, package_manager,
+			_audio_lib.INSPECT_PACKAGE, "boot")
+		if ok and loaded ~= true then
+			return "boot-owned ritual-skull inspect package is not loaded"
 		end
 	end
 end)

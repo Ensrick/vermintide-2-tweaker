@@ -1,5 +1,36 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.19-dev (2026-07-16) - #633 Blightreaper inspect audio [diagnostics-armed]
+
+- Added the native `nds_skull_inspect` whisper to Blightreaper's existing
+  local one-handed-sword inspect action. Playback is attached to the exact WOC
+  first-person unit and owns only the playing id returned by Wwise.
+- Bound cleanup to inspect release/interruption, repeated inspect, equipment
+  destruction, dead-unit/timeout detection, game-state exit, mod disable, and
+  mod unload. The eight-second cap is a final leak guard.
+- Locked provenance to the boot-loaded Geheimnisnacht package. Missing package,
+  API, or unit state fails closed without affecting an ordinary Sword inspect.
+- Recovered `emitter_trophy_evil_sword` from the level-scoped `wwise/level_hub`
+  bank, but did not claim mission residency or force-load that bank. Added the
+  explicit `/woc_audio_probe` command: at most three eight-second attempts,
+  spatially attached to the local third-person Blightreaper, with owned cleanup
+  and no RPC. `/woc_audio_contract` records the exact functional/diagnostic
+  boundary in the log.
+- Added offline and runtime coverage for provenance, ownership, package
+  failure, every cleanup edge, spatial probe targeting, hard caps, singleton
+  hooks, bundle closure, and the no-force-load/no-network invariant.
+
+### Verification
+
+Confirm `[WOC] v0.1.19-dev loaded`. Hold weapon inspect with Blightreaper and
+confirm the whisper starts, then releases on button-up, weapon swap, repeated
+inspect, and mission transition. Confirm a normal one-handed Sword remains
+unchanged. Run `/woc_regression_test` and require
+`issue633_blightreaper_audio_contract` PASS. Run `/woc_audio_contract`, then
+run `/woc_audio_probe` once in the keep and once in a mission and retain every
+`[WOC:633]` line. The ambient feature is diagnostic, not yet a verified fix;
+do not expect other peers to hear it until mission residency is proven.
+
 ## 0.1.18-dev (2026-07-16) - #613 Blightreaper presentation scale [verify-fix-coop]
 
 - Reduced the authored Blightreaper model uniformly to `0.9` scale on X, Y,
