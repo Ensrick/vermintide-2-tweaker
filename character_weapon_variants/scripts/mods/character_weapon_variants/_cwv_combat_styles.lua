@@ -12,6 +12,7 @@ M.SCHEMA = 1
 M.MAX_TOKEN = 96
 M.INPUT_DESCRIPTION_CAPACITY = 7
 M.KERILLIAN_TEMPLATE = "cwv_combat_style_kerillian_greatsword"
+M.BRETONNIAN_GREATSWORD_TEMPLATE = "cwv_combat_style_bretonnian_greatsword"
 M.EMPIRE_SPEAR_SHIELD_TEMPLATE = "cwv_combat_style_empire_spear_shield"
 M.ELVEN_SPEAR_SHIELD_TEMPLATE = "cwv_combat_style_elven_spear_shield"
 M.DIAGNOSTIC_EVENT_CAP = 32
@@ -20,8 +21,11 @@ M.IMPERIAL_DAMAGE_MULT = 0.85
 M.IMPERIAL_STAGGER_MULT = 0.85
 M.IMPERIAL_CLEAVE_MULT = 1.15
 M.KERILLIAN_SPEED_MULT = 0.85
-M.KERILLIAN_STAGGER_MULT = 1.15
-M.KERILLIAN_CLEAVE_MULT = 1.15
+M.KERILLIAN_DAMAGE_MULT = 1.075
+M.KERILLIAN_STAGGER_MULT = 1.25
+M.KERILLIAN_CLEAVE_MULT = 1.25
+M.BRETONNIAN_GREATSWORD_STAGGER_MULT = 1.25
+M.BRETONNIAN_GREATSWORD_CLEAVE_MULT = 0.75
 M.CONSOLE_STYLE_BUTTON = {
 	icon = "icon_switch",
 	icon_size = { 42, 38 },
@@ -106,7 +110,11 @@ M.FAMILIES = {
 	greatsword = {
 		styles = {
 			greatsword = { label = "Greatsword Combat Style", template = "two_handed_swords_template_1",
-				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword" },
+				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword",
+				receivers = {
+					es_bastard_sword = { template = M.BRETONNIAN_GREATSWORD_TEMPLATE },
+				},
+			},
 			longsword = { label = "Longsword Combat Style", template = "imperial_longsword_template",
 				presentation = { transform_key = "imperial_longsword" },
 				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword" },
@@ -116,12 +124,13 @@ M.FAMILIES = {
 				label = "Kerillian Greatsword Combat Style",
 				template = M.KERILLIAN_TEMPLATE,
 				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword_we",
-				modifiers = { attack_speed = M.KERILLIAN_SPEED_MULT, stagger = M.KERILLIAN_STAGGER_MULT, cleave = M.KERILLIAN_CLEAVE_MULT },
+				modifiers = { attack_speed = M.KERILLIAN_SPEED_MULT, damage = M.KERILLIAN_DAMAGE_MULT,
+					stagger = M.KERILLIAN_STAGGER_MULT, cleave = M.KERILLIAN_CLEAVE_MULT },
 			},
 		},
 		members = {
 			es_2h_sword = { default = "greatsword", order = { "greatsword", "longsword", "bretonnian", "kerillian" } },
-			es_bastard_sword = { default = "bretonnian", order = { "bretonnian", "kerillian", "greatsword", "longsword" } },
+			es_bastard_sword = { default = "bretonnian", order = { "bretonnian", "greatsword", "kerillian" } },
 			cwv_es_longsword = { default = "longsword", order = { "longsword", "bretonnian", "kerillian", "greatsword" } },
 			cwv_es_longsword_blackguard = { default = "longsword", order = { "longsword", "bretonnian", "kerillian", "greatsword" } },
 		},
@@ -264,7 +273,7 @@ function M.package(item_key, stored_style)
 		family_id = family_id,
 		member = member,
 		style = style,
-		template = style.template,
+		template = receiver and receiver.template or style.template,
 		resource = style.resource,
 		required_dlc = style.required_dlc,
 		presentation = style.presentation,
@@ -300,6 +309,28 @@ function M.next_style(item_key, current, owns_dlc)
 	return nil
 end
 
+function M.style_ordinal(item_key, current, owns_dlc)
+	local style_id, _, _, member = M.style(item_key, current)
+	if not style_id then return nil end
+	local _, family = M.member(item_key)
+	local available = {}
+	for _, candidate in ipairs(member.order) do
+		local row = family.styles[candidate]
+		if M.style_available(row, owns_dlc) then available[#available + 1] = candidate end
+	end
+	for index, candidate in ipairs(available) do
+		if candidate == style_id then return index, #available end
+	end
+	return nil
+end
+
+function M.moveset_indicator(item_key, current, owns_dlc, compact)
+	local index, total = M.style_ordinal(item_key, current, owns_dlc)
+	if not index then return nil end
+	return compact and string.format("%d / %d", index, total)
+		or string.format("Moveset %d / %d", index, total)
+end
+
 function M.remap_event(item_key, stored_style, career, source_event)
 	if type(career) ~= "string" or type(source_event) ~= "string" then return nil end
 	local package = M.package(item_key, stored_style)
@@ -332,7 +363,9 @@ function M.validate_catalogue()
 				return false, "invalid presentation " .. tostring(family_id) .. ":" .. tostring(style_id)
 			end
 			for member_key, receiver in pairs(style.receivers or {}) do
-				if not family.members[member_key] or not M.REMAPS[receiver.remap_key] then
+				local remap_valid = receiver.remap_key == nil or M.REMAPS[receiver.remap_key] ~= nil
+				local template_valid = receiver.template == nil or valid_token(receiver.template)
+				if not family.members[member_key] or not remap_valid or not template_valid then
 					return false, "invalid receiver remap " .. tostring(family_id) .. ":" .. tostring(style_id)
 				end
 			end
@@ -422,6 +455,7 @@ function M.decorate_console_grid(widget_def, runtime)
 				local hotspot_name = "cwv_style_hotspot" .. suffix
 				local icon_name = "cwv_style_icon" .. suffix
 				local hover_name = "cwv_style_icon_hover" .. suffix
+				local status_name = "cwv_style_status" .. suffix
 				local row_suffix = suffix
 				passes[#passes + 1] = {
 					pass_type = "hotspot", content_id = hotspot_name, style_id = hotspot_name,
@@ -457,8 +491,26 @@ function M.decorate_console_grid(widget_def, runtime)
 						return row ~= nil and hotspot and hotspot.is_hover
 					end,
 				}
+				passes[#passes + 1] = {
+					pass_type = "text", text_id = status_name, style_id = status_name,
+					content_check_function = function(parent_content)
+						local row = console_row(runtime, parent_content, row_suffix)
+						local status_key = "cwv_style_status" .. row_suffix
+						if row then
+							if type(runtime.moveset_indicator) == "function" then
+								parent_content[status_key] = runtime:moveset_indicator(
+									row.item_key, row.style_id, true) or ""
+							else
+								parent_content[status_key] = M.moveset_indicator(
+									row.item_key, row.style_id, nil, true) or ""
+							end
+						end
+						return row ~= nil
+					end,
+				}
 
 				content[hotspot_name] = { drag_texture_size = copy_pair(M.CONSOLE_STYLE_BUTTON.hitbox_size) }
+				content[status_name] = ""
 				content.cwv_style_rows[suffix] = {
 					original_cog_offset = copy_triplet(layout.original_cog_offset),
 					original_hover_offset = copy_triplet(cog_hover_style.offset),
@@ -481,6 +533,15 @@ function M.decorate_console_grid(widget_def, runtime)
 					size = copy_pair(M.CONSOLE_STYLE_BUTTON.icon_size),
 					texture_size = copy_pair(M.CONSOLE_STYLE_BUTTON.icon_size),
 					offset = copy_triplet(layout.icon_offset),
+				}
+				style[status_name] = {
+					font_type = "hell_shark", font_size = 14,
+					horizontal_alignment = "center", vertical_alignment = "center",
+					text_color = { 235, 225, 215, 190 },
+					size = { 58, 20 },
+					offset = { layout.style_hitbox_offset[1] - 4,
+						layout.style_hitbox_offset[2] + M.CONSOLE_STYLE_BUTTON.hitbox_size[2],
+						layout.style_hitbox_offset[3] + 2 },
 				}
 				decorated = decorated + 1
 			end
@@ -605,6 +666,48 @@ local function build_modified_template(donor, clone, clone_damage_profile, prefi
 	return template
 end
 
+function M.attack_range_signature(template)
+	local seen = {}
+	for _, action_group in pairs(type(template) == "table" and template.actions or {}) do
+		for _, action in pairs(type(action_group) == "table" and action_group or {}) do
+			if type(action) == "table" and type(action.damage_profile) == "string"
+					and type(action.range_mod) == "number" then
+				seen[action.range_mod] = true
+			end
+		end
+	end
+	local result = {}
+	for value in pairs(seen) do result[#result + 1] = value end
+	table.sort(result)
+	return result
+end
+
+local function same_numeric_list(left, right)
+	if #left ~= #right then return false end
+	for index, value in ipairs(left) do
+		if math.abs(value - right[index]) > 0.000001 then return false end
+	end
+	return true
+end
+
+function M.build_bretonnian_greatsword_template(weapons, clone, clone_damage_profile)
+	local donor = weapons and weapons.two_handed_swords_template_1
+	local receiver = weapons and weapons.bastard_sword_template
+	if type(donor) ~= "table" then return nil, "Kruber Greatsword template missing" end
+	if type(receiver) ~= "table" then return nil, "Bretonnian Longsword template missing" end
+	local donor_ranges = M.attack_range_signature(donor)
+	local receiver_ranges = M.attack_range_signature(receiver)
+	if #donor_ranges == 0 or not same_numeric_list(donor_ranges, receiver_ranges) then
+		return nil, "Greatsword/Bretonnian attack-range signature drift"
+	end
+	return build_modified_template(donor, clone, clone_damage_profile,
+		"cwv_style_bretonnian_gs_", 1, {
+			damage = 1,
+			stagger = M.BRETONNIAN_GREATSWORD_STAGGER_MULT,
+			cleave = M.BRETONNIAN_GREATSWORD_CLEAVE_MULT,
+		})
+end
+
 -- Imperial Longsword is the native Kruber Greatsword action graph with the
 -- authored longsword balance and presentation. It must never inherit the
 -- Bretonnian Longsword graph, which is the next, separate family entry (#644).
@@ -624,7 +727,8 @@ function M.build_kerillian_template(weapons, clone, clone_damage_profile)
 	if type(donor) ~= "table" then return nil, "Kerillian Greatsword template missing" end
 	local template, err = build_modified_template(donor, clone, clone_damage_profile,
 		"cwv_style_kerillian_gs_", M.KERILLIAN_SPEED_MULT,
-		{ damage = 1, stagger = M.KERILLIAN_STAGGER_MULT, cleave = M.KERILLIAN_CLEAVE_MULT })
+		{ damage = M.KERILLIAN_DAMAGE_MULT, stagger = M.KERILLIAN_STAGGER_MULT,
+			cleave = M.KERILLIAN_CLEAVE_MULT })
 	if not template then return nil, err end
 	-- The donor's first-person state machine remains exact. Only the 3P wield
 	-- event is receiver-localized for Kruber; action redirects remain available
@@ -715,6 +819,10 @@ function M.install(mod, deps)
 		return M.next_style(item_key_value, current, deps.owns_dlc)
 	end
 
+	function runtime:moveset_indicator(item_key_value, current, compact)
+		return M.moveset_indicator(item_key_value, current, deps.owns_dlc, compact)
+	end
+
 	function runtime:resolve_template(item, backend_id)
 		local row = self:describe(item, backend_id)
 		local weapons = rawget(_G, "Weapons")
@@ -727,9 +835,8 @@ function M.install(mod, deps)
 		local key = context and item_key(item, backend_id)
 		local family_id = key and M.member(key)
 		if not (context and family_id == context.family_id) then return nil end
-		local family = M.FAMILIES[family_id]
-		local style = family and family.styles[context.style_id]
-		return style and weapons and weapons[style.template] or nil
+		local package = M.package(key, context.style_id)
+		return package and weapons and weapons[package.template] or nil
 	end
 
 	function runtime:begin_husk_wield(inventory, slot_name)
@@ -1058,6 +1165,31 @@ function M.install_loadout_ui(mod, runtime)
 				text_color = { 255, 0, 0, 0 }, offset = { 2, 0, 3 }, size = { 390, 46 } },
 		},
 		}
+		scenegraph.cwv_combat_style_status = scenegraph.cwv_combat_style_status or {
+			parent = "loadout_background",
+			horizontal_alignment = "center",
+			vertical_alignment = "bottom",
+			size = { 390, 24 },
+			position = { 0, 172, 31 },
+		}
+		widgets.cwv_combat_style_status = widgets.cwv_combat_style_status or {
+			scenegraph_id = "cwv_combat_style_status",
+			element = { passes = {
+				{ pass_type = "text", text_id = "status_text", style_id = "status_text",
+					content_check_function = function(content) return content.visible end },
+				{ pass_type = "text", text_id = "status_text", style_id = "status_text_shadow",
+					content_check_function = function(content) return content.visible end },
+			} },
+			content = { visible = false, status_text = "" },
+			style = {
+				status_text = { font_type = "hell_shark", font_size = 17,
+					horizontal_alignment = "center", vertical_alignment = "center",
+					text_color = { 235, 225, 215, 190 }, offset = { 0, 1, 2 }, size = { 390, 24 } },
+				status_text_shadow = { font_type = "hell_shark", font_size = 17,
+					horizontal_alignment = "center", vertical_alignment = "center",
+					text_color = { 190, 0, 0, 0 }, offset = { 1, 0, 1 }, size = { 390, 24 } },
+			},
+		}
 	end
 
 	local function selected(window)
@@ -1071,10 +1203,13 @@ function M.install_loadout_ui(mod, runtime)
 	local function refresh(window)
 		local widget = window and window._widgets_by_name
 			and window._widgets_by_name.cwv_combat_style_button
+		local status_widget = window and window._widgets_by_name
+			and window._widgets_by_name.cwv_combat_style_status
 		if not widget then return end
 		local item = selected(window)
 		local row = item and runtime:describe(item, item.backend_id)
 		widget.content.visible = row ~= nil
+		if status_widget then status_widget.content.visible = row ~= nil end
 		if row then
 			local _, next_style
 			if type(runtime.next_style) == "function" then
@@ -1084,6 +1219,10 @@ function M.install_loadout_ui(mod, runtime)
 			end
 			widget.content.button_text = "Switch to: " .. (next_style and next_style.label or row.style.label)
 			widget.content.button_hotspot.disable_button = false
+			if status_widget then
+				status_widget.content.status_text = runtime:moveset_indicator(
+					row.item_key, row.style_id) or ""
+			end
 		end
 	end
 

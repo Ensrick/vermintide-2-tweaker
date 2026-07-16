@@ -32,6 +32,11 @@ return function(H, repo_root)
 		H.equal(next_id, "greatsword")
 		H.equal(policy.style("cwv_es_longsword"), "longsword")
 		H.equal(policy.style("es_bastard_sword"), "bretonnian")
+		H.equal(policy.next_style("es_bastard_sword", "bretonnian"), "greatsword")
+		H.equal(policy.next_style("es_bastard_sword", "greatsword"), "kerillian")
+		H.equal(policy.next_style("es_bastard_sword", "kerillian"), "bretonnian")
+		H.equal(policy.package("es_bastard_sword", "greatsword").template,
+			policy.BRETONNIAN_GREATSWORD_TEMPLATE)
 		H.equal(policy.style("es_2h_hammer"), "kruber")
 		H.equal(policy.next_style("es_2h_hammer", "kruber"), "warrior_priest")
 		H.equal(policy.next_style("wh_2h_hammer", "warrior_priest"), "kruber")
@@ -42,6 +47,14 @@ return function(H, repo_root)
 		H.equal(policy.next_style("es_deus_01", "empire", function() return true end), "elven")
 		H.equal(policy.style("we_1h_spears_shield"), "elven")
 		H.equal(policy.next_style("we_1h_spears_shield", "elven", function() return true end), "empire")
+	end)
+
+	H.test("CWV inventory indicator follows each exact member cycle", function()
+		H.equal(policy.moveset_indicator("es_bastard_sword", "bretonnian"), "Moveset 1 / 3")
+		H.equal(policy.moveset_indicator("es_bastard_sword", "greatsword"), "Moveset 2 / 3")
+		H.equal(policy.moveset_indicator("es_bastard_sword", "kerillian", nil, true), "3 / 3")
+		H.equal(policy.moveset_indicator("es_2h_sword", "greatsword"), "Moveset 1 / 4")
+		H.equal(policy.moveset_indicator("es_handgun", "greatsword"), nil)
 	end)
 
 	H.test("CWV reciprocal style catalogue is complete and unproven families fail closed", function()
@@ -112,6 +125,9 @@ return function(H, repo_root)
 						style = style, family_id = family_id, member = member }
 				end
 			end,
+			moveset_indicator = function(_, item_key, style_id, compact)
+				return policy.moveset_indicator(item_key, style_id, nil, compact)
+			end,
 		}
 		local grid = {
 			element = { passes = {} },
@@ -129,7 +145,7 @@ return function(H, repo_root)
 		local installed, rows = policy.decorate_console_grid(grid, runtime)
 		H.equal(installed, true)
 		H.equal(rows, 2)
-		H.equal(#grid.element.passes, 6)
+		H.equal(#grid.element.passes, 8)
 		H.equal(grid.content.cwv_style_icon, "icon_switch")
 		-- Decoration is layout-neutral until the populated item rows are known.
 		H.equal(grid.style.customize_hotspot_1_1.offset[1], 100)
@@ -153,8 +169,11 @@ return function(H, repo_root)
 		H.equal(first_hotspot_pass.content_check_function(grid.content.cwv_style_hotspot_1_1), true)
 		H.equal(grid.content.cwv_style_hotspot_1_1.cwv_next_style_label,
 			"Switch to: Infantry Combat Style")
+		local first_status_pass = grid.element.passes[4]
+		H.equal(first_status_pass.content_check_function(grid.content), true)
+		H.equal(grid.content.cwv_style_status_1_1, "1 / 2")
 		grid.content.cwv_style_hotspot_2_1.parent = grid.content
-		H.equal(grid.element.passes[4].content_check_function(grid.content.cwv_style_hotspot_2_1), false)
+		H.equal(grid.element.passes[5].content_check_function(grid.content.cwv_style_hotspot_2_1), false)
 		H.equal(grid.content.cwv_style_hotspot_2_1.cwv_visible, false)
 
 		grid.content.cwv_style_hotspot_1_1.on_pressed = true
@@ -341,13 +360,57 @@ return function(H, repo_root)
 		H.truthy(math.abs(template.actions.action_one.light.anim_time_scale - 1.02) < 0.000001)
 		H.truthy(math.abs(template.actions.action_one.heavy.anim_time_scale - 0.68) < 0.000001)
 		H.equal(template.actions.action_one.light.damage_profile, "cwv_style_kerillian_gs_elf_light")
-		H.equal(calls.elf_light.modifiers.damage, 1)
-		H.equal(calls.elf_light.modifiers.stagger, 1.15)
-		H.equal(calls.elf_light.modifiers.cleave, 1.15)
+		H.equal(calls.elf_light.modifiers.damage, 1.075)
+		H.equal(calls.elf_light.modifiers.stagger, 1.25)
+		H.equal(calls.elf_light.modifiers.cleave, 1.25)
 		H.equal(template.wield_anim_career_3p.es_mercenary, "to_bastard_sword")
 		H.equal(donor.actions.action_one.light.anim_time_scale, 1.2)
 		H.equal(donor.actions.action_one.light.damage_profile, "elf_light")
 		H.equal(donor.wield_anim_career_3p, nil)
+	end)
+
+	H.test("CWV Bretonnian Greatsword style tunes power and preserves native reach", function()
+		local greatsword = {
+			actions = { action_one = {
+				light = { graph = "kruber_greatsword", range_mod = 1.65,
+					anim_time_scale = 1.2, damage_profile = "greatsword_light" },
+				heavy = { graph = "kruber_greatsword", range_mod = 1.5,
+					anim_time_scale = 0.8, damage_profile = "greatsword_heavy" },
+			} },
+			wield_anim = "to_2h_sword",
+		}
+		local bretonnian = {
+			actions = { action_one = {
+				light = { graph = "bretonnian", range_mod = 1.65, damage_profile = "bret_light" },
+				heavy = { graph = "bretonnian", range_mod = 1.5, damage_profile = "bret_heavy" },
+			} },
+		}
+		local calls = {}
+		local template, err = policy.build_bretonnian_greatsword_template({
+			two_handed_swords_template_1 = greatsword,
+			bastard_sword_template = bretonnian,
+		}, clone, function(source, prefix, modifiers)
+			calls[source] = clone(modifiers)
+			return prefix .. source
+		end)
+		H.truthy(template, err)
+		H.equal(template.actions.action_one.light.graph, "kruber_greatsword")
+		H.equal(template.actions.action_one.light.range_mod, 1.65)
+		H.equal(template.actions.action_one.heavy.range_mod, 1.5)
+		H.equal(template.actions.action_one.light.anim_time_scale, 1.2)
+		H.equal(calls.greatsword_light.damage, 1)
+		H.equal(calls.greatsword_light.stagger, 1.25)
+		H.equal(calls.greatsword_light.cleave, 0.75)
+		H.equal(greatsword.actions.action_one.light.damage_profile, "greatsword_light")
+		H.equal(bretonnian.actions.action_one.light.damage_profile, "bret_light")
+
+		bretonnian.actions.action_one.light.range_mod = 1.6
+		template, err = policy.build_bretonnian_greatsword_template({
+			two_handed_swords_template_1 = greatsword,
+			bastard_sword_template = bretonnian,
+		}, clone, function() end)
+		H.equal(template, nil)
+		H.truthy(err:find("attack%-range signature drift"))
 	end)
 
 	H.test("CWV Imperial Longsword style derives from Kruber Greatsword, not Bretonnian", function()

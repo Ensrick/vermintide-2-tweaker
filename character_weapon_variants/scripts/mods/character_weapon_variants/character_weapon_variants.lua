@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.432-dev"
+local MOD_VERSION = "0.1.433-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -11623,13 +11623,26 @@ local _ES_MACE_SWORD_TWEAK_DEF = {
 -- damage/power rows, so no vanilla or sibling style table is ever mutated.
 do
 	local policy = _om.combat_style_policy
+	local bretonnian_greatsword, bretonnian_greatsword_err =
+		policy.build_bretonnian_greatsword_template(Weapons,
+			function(value) return table.clone(value, true) end, _clone_damage_profile)
+	if bretonnian_greatsword then
+		Weapons[policy.BRETONNIAN_GREATSWORD_TEMPLATE] = bretonnian_greatsword
+		mod:info("[cwv:648] registered Bretonnian receiver Greatsword style (stagger=%.0f%% cleave=%.0f%%; native Bretonnian reach)",
+			policy.BRETONNIAN_GREATSWORD_STAGGER_MULT * 100,
+			policy.BRETONNIAN_GREATSWORD_CLEAVE_MULT * 100)
+	else
+		mod:warning("[cwv:648] Bretonnian receiver Greatsword style unavailable: %s",
+			tostring(bretonnian_greatsword_err))
+	end
+
 	local kerillian, err = policy.build_kerillian_template(Weapons,
 		function(value) return table.clone(value, true) end, _clone_damage_profile)
 	if kerillian then
 		Weapons[policy.KERILLIAN_TEMPLATE] = kerillian
-		mod:info("[cwv:620] registered Kerillian Greatsword style (speed=%.0f%% stagger=%.0f%% cleave=%.0f%%)",
-			policy.KERILLIAN_SPEED_MULT * 100, policy.KERILLIAN_STAGGER_MULT * 100,
-			policy.KERILLIAN_CLEAVE_MULT * 100)
+		mod:info("[cwv:648] registered Kerillian Greatsword style (speed=%.0f%% damage=%.1f%% stagger=%.0f%% cleave=%.0f%%)",
+			policy.KERILLIAN_SPEED_MULT * 100, policy.KERILLIAN_DAMAGE_MULT * 100,
+			policy.KERILLIAN_STAGGER_MULT * 100, policy.KERILLIAN_CLEAVE_MULT * 100)
 	else
 		mod:warning("[cwv:620] Kerillian Greatsword style unavailable: %s", tostring(err))
 	end
@@ -14339,7 +14352,7 @@ _rt_register("issue620_per_instance_combat_styles", function()
 	end
 	local expected = {
 		es_2h_sword = { "greatsword", "longsword", "bretonnian", "kerillian" },
-		es_bastard_sword = { "bretonnian", "kerillian", "greatsword", "longsword" },
+		es_bastard_sword = { "bretonnian", "greatsword", "kerillian" },
 		cwv_es_longsword = { "longsword", "bretonnian", "kerillian", "greatsword" },
 		es_2h_hammer = { "kruber", "warrior_priest" },
 		es_2h_heavy_spear = { "hunter", "infantry" },
@@ -14357,6 +14370,12 @@ _rt_register("issue620_per_instance_combat_styles", function()
 	end
 	if type(rawget(Weapons, policy.KERILLIAN_TEMPLATE)) ~= "table" then
 		return "Kerillian Combat Style template is not registered"
+	end
+	if type(rawget(Weapons, policy.BRETONNIAN_GREATSWORD_TEMPLATE)) ~= "table" then
+		return "Bretonnian receiver Greatsword Combat Style template is not registered"
+	end
+	if runtime:moveset_indicator("es_bastard_sword", "greatsword") ~= "Moveset 2 / 3" then
+		return "Bretonnian Longsword moveset indicator drifted"
 	end
 	local imperial = rawget(Weapons, "imperial_longsword_template")
 	local greatsword = rawget(Weapons, "two_handed_swords_template_1")

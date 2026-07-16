@@ -1,5 +1,35 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.433-dev - 2026-07-16 - #648 Bretonnian Longsword combat styles [verify-fix]
+
+- Reduced Bretonnian Longsword's cycle to three intentional movesets:
+  Bretonnian, Kruber Greatsword, and Kerillian Greatsword. Its Kruber
+  Greatsword package now deep-clones the donor with unchanged damage/timing,
+  25% more stagger, and 25% less cleave. Registration verifies that the donor's
+  `{1.5, 1.65}` attack-range signature still matches native Bretonnian reach.
+- Retuned the Kerillian Greatsword package to 15% slower attacks, 7.5% more
+  damage, 25% more stagger, and 25% more cleave. Donor templates and shared
+  damage profiles remain immutable.
+- Added small unboxed active-moveset text above the inventory swap control.
+  Desktop shows `Moveset 1 / 3`; controller grids show compact `1 / 3`. The
+  ordinal is computed from the same DLC-filtered cycle used by the transition,
+  so the label cannot disagree with the equipped package.
+- Added offline coverage for both donor clones, exact balance multipliers,
+  source reach drift, three-step cycling, receiver-specific template routing,
+  desktop/controller indicator policy, and unsupported-row isolation. Extended
+  runtime `issue620_per_instance_combat_styles` coverage for the registered
+  receiver template and indicator.
+
+**Verification (solo; confirm `[cwv:LOAD] v0.1.433-dev` first):**
+
+1. Select Bretonnian Longsword in inventory. Confirm the unboxed label above
+   the swap button reads `Moveset 1 / 3`, then advances exactly once through
+   `2 / 3`, `3 / 3`, and back to `1 / 3` with each click.
+2. In combat, compare style 2 to Kruber Greatsword for matched reach, stronger
+   stagger, and lower cleave; compare style 3 to Kerillian Greatsword for the
+   requested slower, stronger package.
+3. Run `/cwv_regression_test`; `issue620_per_instance_combat_styles` must PASS.
+
 ## 0.1.432-dev - 2026-07-16 - #604 Dawi Crowbill relative 3P scale [verify-fix-coop]
 
 - Corrected Dawi Crowbill Model 01's `0.5` tune from an absolute unit-root

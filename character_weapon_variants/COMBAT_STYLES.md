@@ -9,15 +9,22 @@ properties, traits, and CWV identity do not change.
 
 | Family | Supported items | Cycle (rotated to native style first) |
 |---|---|---|
-| Greatsword | Native Empire Greatsword and Bretonnian Longsword; migrated Imperial/Black Guard UUIDs | Greatsword, Imperial Longsword, Bretonnian, Kerillian |
+| Greatsword | Native Empire Greatsword and Bretonnian Longsword; migrated Imperial/Black Guard UUIDs | Empire: Greatsword, Imperial Longsword, Bretonnian, Kerillian. Bretonnian: Bretonnian, Greatsword, Kerillian. |
 | Greathammer | Kruber Greathammer, Warrior Priest Greathammer, CWV Sigmarite Greathammer | Kruber, Warrior Priest |
 | Tuskgor Spear | Native Kruber Tuskgor Spear; migrated legacy Infantry Spear UUIDs | Hunter, Infantry |
 | Spear and Shield | Native Kruber Chaos Wastes Spear and Shield and Kerillian Spear and Shield | Kruber, Elven |
 
 Kerillian Greatsword style deep-clones the donor template and every referenced
-damage profile before applying its package: 15% slower attack actions, 15%
-more stagger, 15% more cleave, and unchanged damage. No donor or shared power
+damage profile before applying its package: 15% slower attack actions, 25%
+more stagger, 25% more cleave, and 7.5% more damage. No donor or shared power
 table is mutated.
+
+On Bretonnian Longsword, the Kruber Greatsword style uses a receiver-specific
+clone with unchanged damage and attack timing, 25% more stagger, and 25% less
+cleave than native Greatsword. Its attack reach remains the donor's authored
+`range_mod` signature `{1.5, 1.65}`, which currently exactly matches native
+Bretonnian Longsword. Registration fails closed if those source signatures
+ever diverge rather than silently shipping the wrong reach.
 
 Imperial Longsword style deep-clones Kruber's native
 `two_handed_swords_template_1` action graph, not the Bretonnian
@@ -44,12 +51,14 @@ otherwise rebuilds the currently wielded slot once through vanilla
 back before a best-effort repair.
 
 The inventory control appears only when the selected loadout item belongs to a
-supported family and reads `Switch to: <next style>`. One physical mouse click
-produces both VMF press and release flags, but press is observation-only and
-the handler consumes exactly one release edge, so it commits exactly one
-transition. The optional `Cycle Combat Style` hotkey applies to the wielded
-supported instance in the keep or a mission and advances through the same
-member order as the button.
+supported family and reads `Switch to: <next style>`. Small unboxed text above
+it displays the active ordinal (`Moveset 1 / 3` on desktop, compact `1 / 3` on
+controller grids), derived from the same DLC-filtered member order as the
+transition itself. One physical mouse click produces both VMF press and release
+flags, but press is observation-only and the handler consumes exactly one
+release edge, so it commits exactly one transition. The optional `Cycle Combat
+Style` hotkey applies to the wielded supported instance in the keep or a
+mission and advances through the same member order as the button.
 
 The retired `cwv_es_infantry_spear`, `cwv_es_longsword`, and
 `cwv_es_longsword_blackguard` master rows are promo restore bridges and hidden
