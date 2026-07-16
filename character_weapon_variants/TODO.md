@@ -1,5 +1,9 @@
 # Character Weapon Variants — To-Do
 
+> **REFERENCE ONLY — not current status.** Unchecked and completed entries may
+> be stale. GitHub Issues is the sole current tracker; retain this file only for
+> design evidence that is not yet captured in an issue.
+
 ## #343 Smoke Bomb implementation gates
 
 - [ ] Resolve the existing bomb-slot registration quarantine first: the v0.1.352/.353 Tuskgor experiment made all CWV variants disappear despite no registration exception. Do not add another `ItemMasterList`/`NetworkLookup`/`Pickups.grenades` member until that mutation is isolated.

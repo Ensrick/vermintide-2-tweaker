@@ -1,5 +1,9 @@
 # Cosmetics Tweaker — Feature To-Do
 
+> **REFERENCE ONLY — not current status.** Unchecked and completed entries may
+> be stale. GitHub Issues is the sole current tracker; retain this file only for
+> design evidence that is not yet captured in an issue.
+
 ## Open investigation
 - [x] **`unlock_all_frames` toggle — RESOLVED, verified in-game (user confirmed 2026-05-16).** Fix shipped v0.7.100-dev (re-targeted `_create_fake_inventory_items` + `get_unlocked_cosmetics` hooks from `PlayFabMirrorBase` to `PlayFabMirrorAdventure` per `feedback_vt2_class_hook_derived.md`). All open verification sub-bullets below are closed.
 

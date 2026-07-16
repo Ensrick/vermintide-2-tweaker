@@ -807,13 +807,15 @@ Per-mod `CHANGELOG.md`. Top entry first (descending chronology). Format:
 Don't bury fixes in version "highlights" — list every meaningful change so
 future-me can find it via grep.
 
-### 6.5 Dev vs stable stream (public-Workshop mods only)
+### 6.5 Dev vs stable promotion streams
 
-Established 2026-05-26. The five public-Workshop mods — `chaos_wastes_tweaker`
+Established 2026-05-26. Five mod families — `chaos_wastes_tweaker`
 (`ct`), `crafting_in_modded` (`cim`), `general_tweaker` (`gt`),
 `gui_tweaker` (`gut`), `verminious_dreams_lighting` — are split into two parallel directories each:
-`<mod>/` (stable, public Workshop) and `<mod>-dev/` (friends-only Workshop).
-All other mods are single-stream and this section does not apply to them.
+`<mod>/` (stable promotion target) and `<mod>-dev/` (friends-only development
+item). Stable-item visibility is read from its current `itemV2.cfg`; it is not
+implied by this stream shape. Weapon Tweaker's public-beta/friends-only parity
+mirror is a separate contract, and all other mods are single-stream.
 See `CLAUDE.md` § "Dev/stable split workflow" for the full rationale and the
 Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was added to the split after this section's 2026-05-26 authoring and had been undercounted here as four.]**
 
@@ -827,7 +829,7 @@ Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was a
   uploads always target the friends-only item with `visibility = "friends_only"`
   in the dev clone's `itemV2.cfg`. They never use `--allow-public`.
 - **Stable receives release merges only.** When a chunk of dev work is ready
-  to ship to public, it gets promoted via the checklist below — never by
+  for the stable stream, it gets promoted via the checklist below — never by
   editing the stable directory in parallel with dev.
 
 **Promote-to-stable checklist** (binding when merging dev work down to stable):
@@ -838,7 +840,7 @@ Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was a
    must be an independent, audit-able copy of the released code.
 2. **Set MOD_VERSION to the version the user names for the release** in
    `<mod>/scripts/mods/<mod>/<mod>.lua`. It MAY keep a pre-release suffix —
-   a public beta/alpha on the stable item is a legitimate, user-chosen state
+   a beta/alpha on the stable item is a legitimate, user-chosen state
    (e.g. ct promoted 2026-07-03 as `0.7.130-beta`; gut stable runs as a
    public alpha). Strip the suffix only when the user names a clean version
    (then per § 6.1: `0.7.66-dev` in dev becomes `0.7.66`, or bump to
@@ -849,14 +851,15 @@ Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was a
    if it helps the reader (`merge of dev 0.7.62-dev..0.7.66-dev`).
 4. **`VMBLauncher.exe build <stable-mod>`** — confirm clean compile against
    the stable tree.
-5. **`VMBLauncher.exe deploy <stable-mod>`** — push to PC-A + PC-B and
-   smoke-test in-game from the stable bundle. The dev bundle may be live in
-   the same install (different mod_id) — that's fine, but the test you're
-   running here is "does the stable build behave correctly on its own".
-6. **Fresh per-build ship signal from the user** (§ 5.1, § 5.1a, the
-   per-build approval rule). "Ship it" from earlier in the session does NOT
-   carry forward to a stable push. Stable uploads are visible to public
-   subscribers irreversibly on flag — re-confirm before each push.
+5. **`VMBLauncher.exe deploy <stable-mod>`** — deploy locally and to every
+   enabled remote target, then smoke-test in-game from the stable bundle. A
+   disabled remote is intentionally out of scope and must not be reported as
+   updated. The dev bundle may be live in the same install (different mod_id) —
+   that's fine, but the test is "does the stable build behave correctly alone".
+6. **Apply the suffix approval rule in § 6.6.** A clean MOD_VERSION needs a
+   fresh per-build ship signal naming the version. A user-chosen pre-release
+   suffix ships the full pipeline without another prompt, including on a public
+   item. Workshop visibility does not change this approval rule.
 7. **Upload via `ship.ps1 -Mod <stable> -AllowPublic`** (or `VMBLauncher.exe
    upload <stable-mod> --allow-public`) — the visibility-regression guard lives
    in `VMBLauncher.exe upload`, which both call. (The old per-mod `upload_*.ps1`
@@ -897,15 +900,16 @@ long ago the user said "ship it". This is the single source of truth for ship
 approval; where earlier text conflicts, this section wins.
 
 **Pre-release-versioned mods (`-dev` / `-alpha` / `-beta` / `-rc<N>`) cover
-EVERY active mod in the repo, including single-stream PUBLIC ones like
-`wt`, `cosmetics_tweaker`, `enemy`, `event`, `crt`:** every update ships the FULL pipeline
-with NO per-build approval. The full pipeline is:
+EVERY active mod in the repo, including single-stream items whose current cfg is
+public:** every update ships the FULL pipeline with NO per-build approval. The
+full pipeline is:
 
-1. `tools\ship\ship.ps1 -Mod <name>` builds, deploys to PC-A + PC-B, uploads
-   to the Workshop item, publishes the GitHub release, and verifies the deploy
-   hashes plus the `workshop_log.txt` upload status. Add `-AllowPublic` when the
-   mod's `itemV2.cfg` is public. Use `-NoRemote` ONLY when PC-B is unreachable,
-   and say so in the report.
+1. `tools\ship\ship.ps1 -Mod <name>` builds, deploys locally and to every
+   enabled remote target, uploads to the Workshop item, publishes the GitHub
+   release, and verifies deploy hashes plus `workshop_log.txt`. Add
+   `-AllowPublic` when `itemV2.cfg` is public. Use `-NoRemote` only to skip an
+   otherwise-enabled remote for that invocation, and identify the skipped
+   target in the report. No flag is needed when no remote is enabled.
 2. `git add` / `git commit` / `git push` the source change. The source commit
    is PART of the ship, not an optional follow-up.
 
@@ -915,8 +919,8 @@ deploy, so the upload is the ONLY path that reaches the user's game; and
 uncommitted shipped work piles up silently (three sessions' worth was found
 uncommitted on 2026-07-01), so the commit + push is mandatory.
 
-**Clean-versioned stable / public promotions (no pre-release suffix, public
-`ct` / `cim` / `gt` / `gut` / `verminious_dreams_lighting` at promotion):**
+**Clean-versioned stable promotions (no pre-release suffix, regardless of the
+stable item's current visibility):**
 require a FRESH, explicit, per-build ship signal from the user that names the
 version. "Ship it" said earlier does NOT carry forward. Default for these is
 build + deploy only; treat the upload like `git push --force`. Full promote
@@ -965,7 +969,7 @@ The complete list of canonical docs and where each lives.
 | `docs/CROSS_MOD_ARCHITECTURE.md` | Yes | How mods interact at runtime (LA bridge, co-install detection) | New cross-mod surface; new bridge pattern |
 | `CHANGELOG.md` (repo root) | Yes | Repo-aggregate release notes | Per-mod CHANGELOG entries that affect multiple mods or the toolchain |
 | `docs/REGRESSION_CHECKLIST.md` (repo-wide) | Yes | Master list of repo-wide regression signatures | New crash class survives more than one fix attempt |
-| `STATUS.md` | Yes | The single what-now board (replaced `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md`, retired to stubs 2026-07-08, issue #432) | Session bookends; GitHub Issues §11 is source of truth for pending work |
+| `STATUS.md` | Yes | Dated session history; never a current deployment, version, or verification instruction | Preserve historical evidence only; GitHub Issues §11 is the sole current status authority |
 | `docs/WEAPON_CATALOG.md` / `ITEM_LIST.md` / `ANIMATION_RESEARCH.md` | Yes | Reference catalogs | When the underlying data changes (new weapon, new skeleton probe) |
 | `docs/VMF_RECIPES.md` / `docs/COMMANDS.md` | Yes | Cross-mod reference (VMF gotchas, command inventory) | New VMF burn class; new chat command in any mod |
 | `DEVELOPMENT.md` (repo root) | Yes | Historical architecture reference | Pre-dates CLAUDE.md; still authoritative for topics it covers |
@@ -976,18 +980,18 @@ The complete list of canonical docs and where each lives.
 |---|---|---|
 | `CHANGELOG.md` | **Mandatory, every mod** | Per-mod version history (§6.4 format) |
 | `REGRESSION_CHECKLIST.md` | **Mandatory, every mod** | Per-mod subset of repo-wide checklist + mod-specific regressions |
-| `CODE_REVIEW.md` | **Mandatory for public-Workshop mods** (`ct`, `gt`, `cosmetics_tweaker`, `verminious_dreams_lighting`); optional for friends-only | Snapshot architectural review |
+| `CODE_REVIEW.md` | **Mandatory for every mod whose current `itemV2.cfg` says `visibility = "public"`**; optional otherwise | Snapshot architectural review |
 | `CLAUDE.md` (per-mod) | Optional | Workflow guardrails specific to that mod (only when the mod has non-obvious gates — see `dynamic_cosmetic_portraits/CLAUDE.md`) |
 | `DEVELOPMENT.md` (per-mod) | Optional | Mod-specific architecture (use when the mod has system-level docs that don't fit in the main lua's header docstring) |
 | `RECIPES.md`, `<TOPIC>_PLAYBOOK.md`, `DEFINITION_OF_DONE.md`, `ENGINE_SURFACE.md` | Optional | Reference docs for recurring authoring tasks within the mod (`ENGINE_SURFACE.md` = the mod's per-hook map onto vanilla engine behavior, companion to `docs/engine/`; template lives in `character_weapon_variants/`. All 7 high-contact mods carry one as of 2026-07-12 - the series index is the "Per-mod surface docs" table at the bottom of `docs/engine/README.md`) |
 | `TODO.md` | **Discouraged** | Use GitHub Issues per §11 instead |
 | `POSTMORTEMS.md` | Created on first incident | Rolled-up post-incident records — see §7.3 |
 
-The "public" / "friends-only" distinction is the `visibility` field in
-`itemV2.cfg`. Friends-only mods (`wt`, `crt`, `cwv`, `cim`, etc.) ship without a
-public CODE_REVIEW because they aren't user-facing in the same way. The list
-above pins the currently-public mods explicitly — if you change a mod's
-visibility, also create/remove CODE_REVIEW.md.
+The `visibility` field in each active mod's `itemV2.cfg` is the only authority
+for public/friends-only/private state. Do not maintain a copied mod list here;
+it drifts as soon as the user changes Workshop visibility. If a cfg changes to
+`public`, create or refresh `CODE_REVIEW.md` in the same change. If it moves away
+from public, retain the review as dated history rather than deleting evidence.
 
 ### 7.2 Per-mod required structure
 
@@ -1252,11 +1256,12 @@ they bind the same as the rest of section 7.
    eternal and is the staleness the audit kept finding. A current-state
    reference doc SHOULD carry a `Status as of YYYY-MM-DD` masthead and bump it
    whenever its body is touched.
-4. **Status lives only in STATUS.md and GitHub Issues.** Per section 11, pending
-   and what-now state has exactly two homes. No other doc restates issue status
-   or a task queue; it cites the issue number. The retired `TODO.md` /
-   `WORK_ITEMS.md` / `TESTING_STATUS.md` quartet is the worked example of what
-   status-fragmentation rots into - do not recreate that shape anywhere.
+4. **Current status lives only in GitHub Issues.** `STATUS.md` is dated session
+   history, not a second live board. No other doc restates issue status or a
+   task queue; it cites the issue number. Existing `TODO.md`, `WORK_ITEMS.md`,
+   and `TESTING_STATUS.md` content is historical/reference material only and
+   must carry that banner. This is the worked example of what status
+   fragmentation rots into - do not recreate that shape anywhere.
 5. **Retire by the section 7.10 lifecycle, never by silent delete or silent
    edit.** Superseded -> stubbed -> archived. A moved doc leaves a pointer stub
    whose link stays resolvable (`qa/check_stale_docs.ps1` scan 3 flags a stub
@@ -1581,8 +1586,39 @@ reads issues as a test queue across multiple agents; padding wastes his tokens.
 - **Cut entirely:** restating the title, "Grounding"/background narrative,
   hedging (`[unverified]` on a hypothesis line is enough), meta-commentary,
   multi-paragraph hypothesis walkthroughs.
-- **Comments follow the same rule:** version stamp + what shipped + how to test,
-  nothing else.
+- **Routine ship comments follow the same rule:** version stamp + what shipped +
+  how to test. The evidence/fallback comment below is the explicit exception.
+
+### Three empirical fallback paths (binding, user directive 2026-07-16)
+
+Every open issue must document three next attempts that remain available if the
+current fix or diagnostic fails. Keep them in one compact issue comment rather
+than inflating the issue body. A fallback is a testable path forward, not a claim
+that its root cause is true: every entry names the evidence that would trigger
+it, the bounded change/probe, and the observation that would falsify it.
+
+```markdown
+**Fallback 1**
+- **Evidence/trigger:** `<observed log/repro/source condition>`
+- **Change:** `<bounded corrective change or diagnostic probe>`
+- **Falsifier:** `<result that rules this path out>`
+
+**Fallback 2**
+- **Evidence/trigger:** `<observed log/repro/source condition>`
+- **Change:** `<bounded corrective change or diagnostic probe>`
+- **Falsifier:** `<result that rules this path out>`
+
+**Fallback 3**
+- **Evidence/trigger:** `<observed log/repro/source condition>`
+- **Change:** `<bounded corrective change or diagnostic probe>`
+- **Falsifier:** `<result that rules this path out>`
+```
+
+Do not invent a third root cause to fill the template. If current evidence
+cannot justify another corrective change, write `insufficient evidence` in the
+trigger and make the **Change** a bounded probe that distinguishes candidate
+paths. Promote that entry to a proposed fix only after the probe supplies the
+named evidence.
 
 ### Labels (canonical taxonomy — do NOT invent new status labels)
 
@@ -1929,7 +1965,7 @@ Per the chest-of-trials root-cause analysis (`DORMANT_BOON_RARITY` indexed by cl
 
 ---
 
-*Last updated: 2026-07-12 - sec. 7.11 doc-process subsection added (issue #432 process durability: one owner per topic, cite don't restate, date state claims, status only in STATUS.md/Issues, retire per sec. 7.10). Prior update 2026-07-01 - sec. 6.5/6.6 ship doctrine rewritten (dev builds
+*Last updated: 2026-07-16 - reconciled cfg-owned visibility, suffix-owned ship approval, enabled-remote deployment, GitHub-only current status, and empirical issue fallback comments. Prior update 2026-07-12 - sec. 7.11 doc-process subsection added (issue #432 process durability: one owner per topic, cite don't restate, date state claims, retire per sec. 7.10). Prior update 2026-07-01 - sec. 6.5/6.6 ship doctrine rewritten (dev builds
 pre-authorized for the full pipeline + git commit/push; stable promotions need a
 fresh per-build signal), sec. 8.5a gate semantics (errors block, warnings
 report), sec. 14 card gained the approval axis + AFTER-shipping steps.

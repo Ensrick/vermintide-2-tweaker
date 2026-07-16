@@ -1,5 +1,9 @@
 # Career Tweaker — TODO
 
+> **REFERENCE ONLY — not current status.** Unchecked and completed entries may
+> be stale. GitHub Issues is the sole current tracker; retain this file only for
+> design evidence that is not yet captured in an issue.
+
 ## Deferred / planned
 
 - [ ] **Restore the old level-5 THP talents (icons, names, descriptions).** The level-5

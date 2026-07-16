@@ -1,11 +1,11 @@
-# STATUS — Vermintide 2 Tweaker monorepo
+# STATUS — historical session record
 
-> **The single "what now" board.** Claude reads this at the start of every session
-> (the standup) and updates it at the end. Together with GitHub Issues it is the
-> ONLY status surface: `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md` were
-> retired to pointer stubs 2026-07-08 (issue #432; full copies in git history +
-> `_archive/docs/2026-07-08_432_consolidation/`).
-> **Last updated: 2026-07-12.**
+> **SUPERSEDED AS A CURRENT BOARD (2026-07-16).** GitHub Issues is the sole
+> current work, lifecycle, verification, and priority authority. This file was
+> last maintained on 2026-07-12 and is retained as dated session evidence only.
+> Do not execute its old version, deployment, PC-B, Steam-restart, or verification
+> instructions as current doctrine; use `CLAUDE.md`, `PROJECT_STANDARDS.md`, and
+> the affected issue instead.
 
 ## 📌 2026-07-11/12 SESSIONS — critical-issue campaign (multi-agent) + one-at-a-time continuation
 

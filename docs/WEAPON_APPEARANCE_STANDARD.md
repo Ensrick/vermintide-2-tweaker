@@ -47,6 +47,28 @@ are separate acceptance cells even when two cells eventually reuse one spawn
 primitive. Never infer that an inventory preview works because owner 3P works,
 or that a score preview works because the inventory preview works.
 
+The four paths above are **unit-spawn paths**, not a complete list of UI data
+consumers. Inventory rows and tooltips, the equipment/customization picker,
+Athanor, Hold-Tab/player-list cards, lobby cards, and score/team screens are
+**presentation adapters**. An adapter may share a spawn primitive with another
+surface while receiving a different item-identity shape. It therefore has its
+own acceptance cell and must consume the canonical presentation descriptor in
+§2 rather than re-derive an icon, name, rarity, skin, or offhand choice.
+
+### Identity available to presentation adapters
+
+| Identity shape | Where it is available | Binding rule |
+|---|---|---|
+| **Exact instance** | Backend inventory, crafting, equipment, and customization paths that carry `backend_id` / `ItemInstanceId` | Resolve persisted per-instance choices from that exact ID. Do not silently substitute the currently equipped item. |
+| **Network/loadout snapshot** | Hold-Tab and other remote-player surfaces reconstructed from `Managers.player:player_loadouts()` | The snapshot has no backend instance ID. Resolve only from wire evidence plus an explicitly synchronized/cacheable `(wearer peer, slot)` presentation identity. If that evidence is absent or ambiguous, preserve the reconstructed vanilla presentation. |
+| **Preview slot** | Inventory hero, lobby, score/team, and other preview worlds | The adapter must declare whether it received an exact instance or only a slot snapshot. A slot name alone is not proof of an exact item instance. |
+
+The Hold-Tab constraint is source-backed: `rpc_sync_loadout_slot` reconstructs
+the stored loadout item from RPC data without a backend instance ID, and the
+player-list UI then calls `UIUtils.get_ui_information_from_item(item)` on that
+reconstructed item. `[src: scripts/managers/player/player_manager.lua:69-78]`
+`[src: scripts/ui/views/ingame_player_list_ui_v2.lua:1450,1504-1536]`
+
 **Load-bearing facts (do not relearn the hard way):**
 
 - Paths 1 & 2 are SEPARATE ROOT CLASSES with no inheritance
@@ -79,7 +101,7 @@ or that a score preview works because the inventory preview works.
 
 ---
 
-## §2 The six appearance concerns (the interface)
+## §2 The six rendered-unit concerns and UI presentation (the interface)
 
 Every render path resolves these six concerns. This is the interface; the code
 module that owns each is named. New code calls the module — it never re-derives.
@@ -97,15 +119,45 @@ Plus a cross-cutting concern:
 
 | **Sync** | make the variant identity survive the network so husks resolve it | net-safe marker on the equipment/loadout wire | §5, issue #392 |
 
+UI consumers add one more cross-cutting concern. It is not a seventh unit-spawn
+mutation; it is the identity rendered around the unit:
+
+| Concern | Owns | Source of truth |
+|---|---|---|
+| **UI presentation** | primary and offhand display-name keys/text, their composition order, icon ownership, rarity/background, renderer-capability proof, and vanilla fallback | the same resolved item/variant/illusion identity used by the six concerns above |
+
 ### Presentation descriptor boundary
 
 The concern resolvers above produce one immutable **presentation descriptor**
-for an exact item instance. The descriptor carries resolved per-hand units,
-textures/material overrides, perspective transforms, pose, residency proof,
-and a safe fallback. Inventory, illusion browser, Athanor, lobby, score, owner,
-bot, and husk code are adapters: they translate the same descriptor into their
-surface's spawn and renderer API. They do not independently rediscover item
-identity, active illusion, or transform policy.
+for the strongest identity the caller actually has: exact instance, synchronized
+loadout snapshot, or preview slot. The descriptor carries:
+
+- resolved per-hand units, textures/material overrides, perspective transforms,
+  pose, residency proof, and ammo policy;
+- primary/offhand display identity and composition order;
+- inventory/HUD icon ownership plus rarity/background policy;
+- the evidence used to resolve the item (`backend_id`, or wearer/slot snapshot);
+- required mod/capability and renderer/resource proofs; and
+- a wire-safe, resident vanilla fallback for every optional field.
+
+Inventory, illusion browser, Athanor, Hold-Tab, lobby, score, owner, bot, and
+husk code are adapters: they translate the same descriptor into their surface's
+spawn or renderer API. They do not independently rediscover item identity,
+active illusion, icon ownership, display name, or transform policy.
+
+Descriptor fields have a single-writer rule. A surface adapter consumes the
+first authoritative resolved value for a field; a later hook must not replace
+it with a separately re-derived primary skin, vanilla display name, or slot
+default. Optional providers may fill fields that are still unset, but provider
+order and ownership are cross-mod API and must be documented in
+`docs/CROSS_MOD_ARCHITECTURE.md`.
+
+Custom presentation is conditional. If the observer lacks the owning mod or
+declared capability, the item identity is not present on the wire, or the
+specific renderer lacks the required icon/material/resource, the adapter must
+leave the resident vanilla presentation intact (or omit an optional overlay).
+It must not emit a custom unit, skin, localization key, icon, material, or
+package path and hope that the receiving renderer can resolve it.
 
 Renderer material closure is deliberately not a global boolean. A texture can
 be resident while absent from the specific `Gui` used by `ui_top_renderer` or a
@@ -352,6 +404,23 @@ in-game; compile is not verification `[bugclass: CLAUDE.md #10]`).
 
 A row that passes for the owner but fails for the husk is the #392 class. A cell
 that passes in-world but fails in preview is the #237 class.
+
+UI presentation has a separate matrix because these adapters do not all spawn a
+unit and do not all receive an exact backend instance:
+
+| Adapter / surface | Identity evidence | Primary + offhand name | Icon owner | Rarity/background | No-parity/resource fallback |
+|---|---|:---:|:---:|:---:|:---:|
+| Inventory row + tooltip | exact instance | ☐ | ☐ | ☐ | ☐ |
+| Equipment/customization picker | exact instance | ☐ | ☐ | ☐ | ☐ |
+| Athanor/crafting browser | exact instance or declared preview identity | ☐ | ☐ | ☐ | ☐ |
+| Hold-Tab/player list | wearer + slot snapshot; no backend ID | ☐ | ☐ | ☐ | ☐ |
+| Inventory character preview | declared exact instance or preview slot | ☐ | ☐ | ☐ | ☐ |
+| Lobby character/card | declared exact instance or snapshot | ☐ | ☐ | ☐ | ☐ |
+| Score/team preview | declared exact instance or snapshot | ☐ | ☐ | ☐ | ☐ |
+
+For every row, include one unmodified vanilla control and one observer lacking
+the optional provider/resource. A correct fallback leaves vanilla data intact;
+an empty, unknown, red-placeholder, or custom-resource error is a failure.
 
 ---
 

@@ -82,8 +82,11 @@ Five mod families have separate stable and development directories:
 | `verminious_dreams_lighting` | `verminious_dreams_lighting_dev` |
 
 All in-flight changes for these families go into the `_dev` directory. Stable
-directories receive deliberate promotions only. `weapon_tweaker` is the active
-single stream; `weapon_tweaker_dev` is stale and must not be edited. The legacy
+directories receive deliberate promotions only. Weapon Tweaker is a separate
+paired-beta case: `weapon_tweaker` is the active public beta and
+`weapon_tweaker_dev` is its friends-only runtime-parity mirror. Changes must
+preserve distinct VMF/settings/Workshop identity while
+`qa/check_wt_stream_parity.ps1` permits no gameplay-code drift. The legacy
 `tweaker` directory is frozen.
 
 The complete stream and promotion rules live in

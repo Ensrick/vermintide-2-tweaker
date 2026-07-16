@@ -1,5 +1,9 @@
 # Dynamic Cosmetic Portraits — Feature To-Do
 
+> **REFERENCE ONLY — not current status.** Unchecked and completed entries may
+> be stale. GitHub Issues is the sole current tracker; retain this file only for
+> design evidence that is not yet captured in an issue.
+
 ## Currently shipped (Kruber Mercenary, 11 portraits)
 
 ### Hats (9)

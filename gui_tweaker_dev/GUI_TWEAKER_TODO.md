@@ -1,6 +1,8 @@
 # GUI Tweaker (gut) — Tracked Status
 
-Canonical running list of everything requested for the gut Mod Tweaker / GUI work, with honest status. Updated every time an item moves. If it's not here, it's at risk of being forgotten — so it goes here.
+> **REFERENCE ONLY — not current status.** This list is a historical request and
+> design record. GitHub Issues is the sole current tracker; labels and issue
+> comments, not these checkboxes, determine live status.
 
 Legend: [x] done · [~] in progress · [ ] TODO · [-] blocked/parked
 

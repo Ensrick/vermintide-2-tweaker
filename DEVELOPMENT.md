@@ -1225,8 +1225,8 @@ does not.
   hooks. VT2's `class()` copies parent methods at definition time, so
   hooks on `HeroPreviewer` silently never fire on the keep inventory
   previewer instance. Burned in weapon_tweaker v0.12.16 → fixed v0.12.17.
-  See CLAUDE.md § Three Weapon Rendering Paths for the class-derivation
-  rule.
+  See `docs/WEAPON_APPEARANCE_STANDARD.md` §1 for the class-derivation
+  rule and canonical path contract.
 - A diagnostic log printing `slot.right` / `slot.left` value alongside
   the resolved `slot_index` catches this in one equip cycle. Skip-branch
   logging on each early-return is what made v0.1.84 obvious.
@@ -1299,14 +1299,16 @@ VT2 shield weapons use **two independent units**:
 
 They are spawned separately, attached to different skeleton nodes (`j_rightweaponattach` / `j_leftweaponattach`), and can be scaled, offset, or swapped independently.
 
-### Three Rendering Paths
+### Weapon Appearance Path Ownership
 
 > Owner doc: `docs/WEAPON_APPEARANCE_STANDARD.md` §1 (consolidated 2026-07-08,
 > issue #432). It defines FOUR render paths - owner in-world, husk (remote),
 > inventory preview, illusion browser - with hook targets, per-hand unit access,
-> and the load-bearing facts (derived-class hooking, string-vs-numeric slot
-> keying, `_spawn_item_unit` no-hand-indicator, spawn-order, career-detection
-> caveat). Do not restate the table here; the subsections below reference it.
+> the presentation descriptor and UI adapters, and the load-bearing facts
+> (derived-class hooking, string-vs-numeric slot keying, `_spawn_item_unit`
+> no-hand-indicator, spawn-order, career-detection caveat). Do not restate the
+> path table here; the subsections below describe only their historical hook
+> coverage and must not be treated as the complete acceptance surface.
 
 ### Weapon Scale Overrides (`_unit_path_scale_overrides`)
 
@@ -1327,11 +1329,15 @@ Schema:
 - **`factor`**: a `function(get)` returning `{x,y,z}|number|nil` (toggle off → return nil), a literal `{x,y,z}` table, or a uniform number. Functions are called every apply, so live setting toggles take effect on next equip.
 - **`hand`**: restricts to one hand. `"right"` only scales the weapon hand (used to keep paired shields at native scale); `"left"` only the shield/offhand; `nil` scales both.
 
-#### Coverage across the three rendering paths
+#### Historical scale-hook coverage
 
-The scale system runs in **all three** hooks (see "Three Rendering Paths" above):
+This scale subsystem installs the three hooks below. That is an implementation
+inventory, not the canonical rendering-path count: remote-husk behavior and UI
+presentation adapters remain separate acceptance cells in
+`docs/WEAPON_APPEARANCE_STANDARD.md`.
+
 1. `GearUtils.create_equipment` — `_scale_units(result, item_data, result.skin)` resolves paths via `_resolve_render_unit_path`.
-2. `MenuWorldPreviewer._spawn_item` — `_spawn_item_post` walks `self._item_info_by_slot`, bridges to `_equipment_units` via `info.spawn_data[1].slot_index`, then reads `right_path`/`left_path` directly from `info.spawn_data[i].unit_name` (looking for `sd.right_hand` / `sd.left_hand` flags). No item_data lookup, no skin-resolution chain. **Hook MenuWorldPreviewer directly, NOT HeroPreviewer** — see Three Rendering Paths above for the class-copy reason.
+2. `MenuWorldPreviewer._spawn_item` — `_spawn_item_post` walks `self._item_info_by_slot`, bridges to `_equipment_units` via `info.spawn_data[1].slot_index`, then reads `right_path`/`left_path` directly from `info.spawn_data[i].unit_name` (looking for `sd.right_hand` / `sd.left_hand` flags). No item_data lookup, no skin-resolution chain. **Hook MenuWorldPreviewer directly, NOT HeroPreviewer** — see the owner standard for the class-copy reason.
 3. `LootItemUnitPreviewer.spawn_units` — reads paths from the `spawn_data` argument (`spawn_data[1].unit_name` = left, `spawn_data[2].unit_name` = right; spawn order is fixed by `_load_item_units`). No item_data lookup either.
 
 **No `cwv_variant` gate is needed on the menu paths** because a cwv variant's `spawn_data.unit_name` is always its variant model, never the base weapon's path. The truth-source approach makes the gate redundant — see `feedback_cwv_clone_name_clobber.md`. The in-game `GearUtils` path also doesn't need the scale gate (unit-path matching alone is sufficient there too); but it DOES still gate offset/tint/LA-paint on `not item_data.cwv_variant` because those are item-name-keyed and a cwv item inherits the base's `name`.
@@ -1353,7 +1359,7 @@ local _shield_swap_map = {
 
 The swap hooks `BackendUtils.get_item_units` to replace `left_hand_unit` in the returned table **before** the unit is spawned. This is the cleanest approach because:
 1. It runs before package loading — the game loads the correct package for the swapped unit
-2. It covers all three rendering paths automatically (they all call `BackendUtils.get_item_units`)
+2. It centralizes the three historical consumers listed above; this alone does not prove remote-husk or UI-presentation parity
 3. No destroy/respawn complexity
 
 **Important:** Hook `BackendUtils` by table reference (`mod:hook(BackendUtils, "get_item_units", ...)`), NOT by string name (`mod:hook("BackendUtils", ...)`). Guard with a nil check since `BackendUtils` may not be loaded at mod init time on some code paths.

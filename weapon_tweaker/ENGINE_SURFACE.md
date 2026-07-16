@@ -260,5 +260,7 @@ is added, or a cited vanilla line drifts after a game patch, edit the affected
 row in the SAME commit. Line numbers are against the 2026-07-12 decompile and
 mod source - match crash logs by function name, not line. Structural template is
 `character_weapon_variants/ENGINE_SURFACE.md`; keep the section shape (hook table
--> subsystem notes -> dead ends) stable. ACTIVE dir is `weapon_tweaker/`; never
-cite `weapon_tweaker_dev/` (stale abandoned clone).
+-> subsystem notes -> dead ends) stable. `weapon_tweaker/` is the public-beta
+primary and `weapon_tweaker_dev/` is its friends-only runtime-parity mirror.
+Preserve their distinct VMF/settings namespaces and Workshop presentation;
+`qa/check_wt_stream_parity.ps1` permits no gameplay-code drift.

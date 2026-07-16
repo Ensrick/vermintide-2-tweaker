@@ -69,7 +69,10 @@ $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\
 
 `VMBLauncher.exe deploy` copies the bundle to the local Steam Workshop folder
 (`steamapps/workshop/content/552500/3721036701/`), verifies bundle hashes,
-and auto-pushes to PC-B. Workshop ID **3721036701**, visibility `private`.
+and pushes to every remote target currently enabled in VMBLauncher settings.
+A disabled target is not updated and must not be reported as updated. Workshop
+ID **3721036701**; current cfg visibility is `friends_only`, with
+`itemV2.cfg` remaining the sole authority.
 (The legacy `deploy_all.ps1` shim that used to cover this was removed
 2026-05-21 — use `VMBLauncher.exe deploy <mod>` or `tools\ship\ship.ps1` directly.)
 

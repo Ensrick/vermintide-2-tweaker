@@ -1,5 +1,9 @@
 # Chaos Wastes Tweaker — Feature To-Do
 
+> **REFERENCE ONLY — not current status.** Unchecked and completed entries may
+> be stale. GitHub Issues is the sole current tracker; retain this file only for
+> design evidence that is not yet captured in an issue.
+
 Planned features for ct. See `PER_BOON_SCALING_BOONS_PLAN.md` and `FORTUNES_OF_WAR_PLAN.md` for detailed designs of in-flight families.
 
 ## Altar cost configuration

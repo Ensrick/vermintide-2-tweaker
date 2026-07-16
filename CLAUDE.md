@@ -75,7 +75,9 @@ technical entry point; from here, follow the tree to the topic-specific referenc
 - `docs/CROSS_MOD_ARCHITECTURE.md` - how `weapon_tweaker`, `cosmetics_tweaker`, `character_weapon_variants`, and `modded_progression` interact at runtime; LA bridge pattern; co-installed-mod detection.
 
 **Tier 2 - repo-wide topical:**
-- `STATUS.md` - the single what-now board; with GitHub Issues it replaced `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md` (retired to pointer stubs 2026-07-08, issue #432).
+- `STATUS.md` - dated session history only. GitHub Issues is the sole current
+  work/status authority; old deployment, version, and verification instructions
+  in STATUS are historical evidence, not commands to execute.
 - `ITEM_LIST.md` - full weapon key catalog from `ItemMasterList`.
 - `docs/WEAPON_CATALOG.md` - repo-level weapon catalog (model paths, ownership, cross-character status).
 - `ANIMATION_RESEARCH.md` - skeleton event probe results across the six character bodies.
@@ -96,9 +98,10 @@ technical entry point; from here, follow the tree to the topic-specific referenc
 - `chaos_wastes_tweaker/`:
   - `DEVELOPMENT.md` - engine gotchas: dormant buff registration, deus rarities, adventure mutator compat, NetworkedFlowStateManager leak, jewelry traits as boons, walk-through interactable, graph-snapshot RPC.
   - `chaos_wastes_tweaker_dev/ENGINE_SURFACE.md` - the mod's engine contact surface (documents the ACTIVE dev stream `ct_dev`): 102 hook sites + 4 RPC channels across the Deus run layer, buff/boon registration + `NetworkLookup` wire safety (#426 five-gate beacon), mutators/curses (the `tweak_pack_spawning_settings` arity P0, #470 rank-8 hole), Adventure-maps-in-CW (lobby-hash, flow-state leak, graph snapshot), and economy/traits, with `docs/engine/` links and paid-for dead ends. Read before adding a hook or auditing a crash class.
-  - `TODO.md` - planned features (altar cost config, CW inventory).
+  - `TODO.md` - historical/reference design notes only; current work is tracked
+    in GitHub Issues.
 - `cosmetics_tweaker/`:
-  - `DEVELOPMENT.md` - three weapon rendering paths + cosmetic-specific recipes.
+  - `DEVELOPMENT.md` - historical weapon-render hook details + cosmetic-specific recipes; the canonical path and UI-presentation contract is `docs/WEAPON_APPEARANCE_STANDARD.md`.
   - `LA_SYNC_MODEL.md` - full LA bridge architecture + section 6 gotcha catalogue (kind=texture/unit hats and shields, husk RPC race, offhand preload, hook_safe shadow).
   - `GLOW_SYSTEM.md` - MaterialSettingsTemplates engine reference + override mechanism.
   - `ENGINE_SURFACE.md` - the mod's engine contact surface: every vanilla (Class, method) cosmetics_tweaker hooks, mapped to what the engine does there, with `docs/engine/` links and the paid-for dead ends (LA bridge, glow, Material-Hijack #282, CosmeticUtils sync, hat spawning). Read before adding a hook or auditing a crash class.
@@ -176,20 +179,32 @@ CHANGELOG is the source of truth.
 
 ## Dev/stable split workflow
 
-**Why + what's split.** The five public-Workshop mods (`ct`, `cim`, `gt`, `verminious_dreams_lighting`, `gut`) run two parallel Workshop items each: dev = friends-only, stable = public. Public subscribers want a stable bundle; the friends cohort wants visibility into in-flight work. Shipping every dev iteration to the public item cost ~80 cim subs in a few days in May 2026, hence the split. Everything else is single-stream (already friends-only or unpublished: `wt`, `cosmetics_tweaker`, `cwv`, `enemy`, `event`, `crt`, `dcp`, `mp`, `WOC`). (`bt` is retired - see the Mod Directory.)
+**Why + what's split.** Five families (`ct`, `cim`, `gt`, `gut`,
+`verminious_dreams_lighting`) use separate promotion streams: the `_dev` item is
+friends-only and the stable item receives deliberate promotions. Stable-stream
+visibility is not part of the stream contract and is read only from that mod's
+current `itemV2.cfg`. Shipping every dev iteration to the public cim item cost
+~80 subscribers in May 2026, hence the split.
+
+`weapon_tweaker` is a separate special case: `weapon_tweaker` is the active
+public beta and `weapon_tweaker_dev` is its friends-only **runtime-parity
+mirror**. It is not a stale clone and it is not the source side of the five
+promotion pairs; `qa/check_wt_stream_parity.ps1` permits no gameplay drift.
+Every other active mod is single-stream. Never infer visibility from a stream
+name, directory suffix, or version suffix.
 
 | Stable directory | Stable mod_id | Stable Workshop ID | Dev directory | Dev mod_id | Dev Workshop ID |
 |---|---|---|---|---|---|
-| `chaos_wastes_tweaker/` | `ct` | 3712929235 (public) | `chaos_wastes_tweaker_dev/` | `ct_dev` | 3733366926 (friends-only) |
-| `crafting_in_modded/` | `cim` | 3721038774 (public) | `crafting_in_modded_dev/` | `cim_dev` | 3733366851 (friends-only) |
-| `general_tweaker/` | `gt` | 3713619122 (public) | `general_tweaker_dev/` | `gt_dev` | 3733367409 (friends-only) |
-| `gui_tweaker/` | `gut` | 3732144878 (public alpha) | `gui_tweaker_dev/` | `gut_dev` | 3751024698 (friends-only) |
-| `verminious_dreams_lighting/` | `verminious_dreams_lighting` | 3727221800 (public) | `verminious_dreams_lighting_dev/` | `verminious_dreams_lighting_dev` | 3733366748 (friends-only) |
+| `chaos_wastes_tweaker/` | `ct` | 3712929235 | `chaos_wastes_tweaker_dev/` | `ct_dev` | 3733366926 |
+| `crafting_in_modded/` | `cim` | 3721038774 | `crafting_in_modded_dev/` | `cim_dev` | 3733366851 |
+| `general_tweaker/` | `gt` | 3713619122 | `general_tweaker_dev/` | `gt_dev` | 3733367409 |
+| `gui_tweaker/` | `gut` | 3732144878 | `gui_tweaker_dev/` | `gut_dev` | 3751024698 |
+| `verminious_dreams_lighting/` | `verminious_dreams_lighting` | 3727221800 | `verminious_dreams_lighting_dev/` | `verminious_dreams_lighting_dev` | 3733366748 |
 
 **Where work happens.**
 
 - **`<mod>-dev/`** - all new feature work, in-flight fixes, experiments. Build/deploy/upload from here during the dev loop. MOD_VERSION carries the `-dev` (or `-alpha`/`-beta`) suffix.
-- **`<mod>/`** - stable releases only. When dev work matures and the user signs off on a release, cherry-pick or merge the changes into the stable dir, set MOD_VERSION to whatever the user names for the release (it MAY keep a pre-release suffix - e.g. ct promoted as `0.7.130-beta`, a public beta; strip the suffix only when the user names a clean version), then `build` + `deploy` + `upload` to the public Workshop item. The stable directory should never contain in-flight `-dev` work between releases.
+- **`<mod>/`** - stable releases only. When dev work matures and the user signs off on a release, cherry-pick or merge the changes into the stable dir, set MOD_VERSION to whatever the user names for the release (it MAY keep a pre-release suffix - e.g. ct promoted as `0.7.130-beta`, a public beta; strip the suffix only when the user names a clean version), then `build` + `deploy` + `upload` to the stable Workshop item under the suffix approval rule below. The stable directory should never contain in-flight `-dev` work between releases.
 
 **Promotion tracking & safe port.** `docs/PROMOTION_PROCESS.md` is the full procedure. Run `tools/promote/promotion-status.ps1` before any public ship (and in CI) to catch a crash fix stranded in dev — the #278 failure mode where the fix sat in `cim_dev` while public kept crashing. Port a full rollup with `tools/promote/promote.ps1` (DryRun by default; identity-preserving; skips dev-only files). **When you promote a crash fix, cite its issue number in the public CHANGELOG entry** so the tracker stays exact (as cim v0.8.34 does for #278).
 
@@ -202,7 +217,7 @@ CHANGELOG is the source of truth.
 **Upload doctrine** - governed by the "Ship doctrine" section under Build Commands (the MOD_VERSION suffix decides). Two split-mod-specific gates:
 
 - **Dev uploads** target the friends-only Workshop item (`visibility = "friends_only"` in the dev clone's `itemV2.cfg`) and carry the `-dev` suffix, so they ship the full pipeline every build with NO ask. Dev clones must NEVER be promoted to public visibility under any circumstance; the launcher does not take `--allow-public` for them.
-- **Stable uploads** target the public Workshop item. Two INDEPENDENT gates apply (user ruling 2026-07-04, closed #328): `-AllowPublic` keys off the item's `itemV2.cfg` visibility (`public` needs the flag, whatever the version says), and the fresh per-build ship signal keys off a CLEAN (no-suffix) MOD_VERSION only. A pre-release-suffixed build living on the stable/public item (e.g. ct `0.7.130-beta`) ships per the suffix rule - full pipeline, no ask. Workshop visibility is user-dictated per item; it is NEVER inferred from the version, directory, or stream, and no guard may couple the two.
+- **Stable uploads** target the stable Workshop item at whatever visibility its current `itemV2.cfg` declares. Two INDEPENDENT gates apply (user ruling 2026-07-04, closed #328): `-AllowPublic` keys off `visibility = "public"`, and the fresh per-build ship signal keys off a CLEAN (no-suffix) MOD_VERSION only. A pre-release-suffixed build living on a stable/public item (e.g. ct `0.7.130-beta`) ships per the suffix rule - full pipeline, no ask. Workshop visibility is user-dictated per item; it is NEVER inferred from the version, directory, or stream, and no guard may couple the two.
 - **GitHub release** is part of the canonical `ship.ps1` path, run for either stream so `vt2-mod-updater` consumers stay in sync (Workshop propagation to the friends cohort is unreliable).
 
 ## Build Commands
@@ -217,10 +232,10 @@ $exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\
 & $exe info   general_tweaker                        # cfg + bundle state
 & $exe doctor                                        # diagnostics
 & $exe build  general_tweaker                        # VMB build -> bundleV2/
-& $exe deploy general_tweaker                        # hash-verified copy to Workshop folder + PC-B
+& $exe deploy general_tweaker                        # hash-verified local copy + every enabled remote target
 & $exe upload general_tweaker                        # stage + push via ugc_tool
 & $exe upload chaos_wastes_tweaker --allow-public    # only required for public-visibility mods
-& $exe all    general_tweaker                        # build + deploy + upload (incl. PC-B)
+& $exe all    general_tweaker                        # build + deploy + upload (enabled remotes included)
 ```
 
 Same code as the GUI buttons; streams VMB output live to stdout; exit codes 0/1/2/3. **Read `tools/vmb-launcher/CLAUDE.md` for the full doctrine** - verbs, flags, preflight gates, visibility-public safety, remote-deploy config, the PowerShell pipeline-truncation quirk, GUI/headless detection rule.
@@ -232,28 +247,28 @@ Same code as the GUI buttons; streams VMB output live to stdout; exit codes 0/1/
 **`-dev` / `-alpha` / `-beta` suffix (= every currently active mod):** EVERY update ships the FULL pipeline with NO per-build approval. Run:
 
 ```powershell
-.\tools\ship\ship.ps1 -Mod <name>     # build + deploy (PC-A + PC-B) + upload + GitHub release + verify
+.\tools\ship\ship.ps1 -Mod <name>     # build + local/enabled-remote deploy + upload + GitHub release + verify
 ```
 
-Then `git add` + commit + push the source. Add `-AllowPublic` when the mod's `itemV2.cfg` has `visibility = public`. Add `-NoRemote` ONLY if PC-B is unreachable, and say so in your report. Local-deploy-only is NOT a valid test path: Steam re-syncs the subscribed Workshop bundle over any local deploy, so the user only ever runs the last UPLOADED build. Uploading is the only thing that reaches them.
+Then `git add` + commit + push the source. Add `-AllowPublic` when the mod's `itemV2.cfg` has `visibility = public`. Add `-NoRemote` only when intentionally skipping an otherwise-enabled remote target, and say which target was skipped. If no remote target is enabled, no override is needed; report that the deploy was local-only. Local-deploy-only is NOT a valid **ship** path: Steam re-syncs the subscribed Workshop bundle over any local deploy, so the user only ever runs the last UPLOADED build. Uploading is the only thing that reaches them.
 
-**Clean version, no suffix (= stable / public promotion):** requires a fresh, explicit, per-build ship signal from the user naming the version (e.g. "ship cim v0.8.34 now"). A "ship it" from earlier does NOT carry forward. Default for these is `build` + `deploy` only; treat upload like `git push --force`. This guards public subscribers - reflex uploads of unstable mid-fix builds cost ~80 cim subscribers in May 2026.
+**Clean version, no suffix (including stable promotions):** requires a fresh, explicit, per-build ship signal from the user naming the version (e.g. "ship cim v0.8.34 now"). A "ship it" from earlier does NOT carry forward. Default for these is `build` + `deploy` only; treat upload like `git push --force`. This guards subscribers - reflex uploads of unstable mid-fix builds cost ~80 cim subscribers in May 2026.
 
 | Intent | Verbs |
 |---|---|
 | Update a `-dev`/`-alpha`/`-beta` build (any active mod) | `ship.ps1 -Mod <name>`, then commit + push source. No ask. |
-| ...on a public-visibility mod (wt/cosmetics/et/crt, or a public stable item) | add `-AllowPublic` |
-| ...with PC-B unreachable | add `-NoRemote` and SAY SO in the report |
+| ...when the target mod's current `itemV2.cfg` says `visibility = "public"` | add `-AllowPublic` |
+| ...while intentionally skipping an enabled remote | add `-NoRemote` and SAY WHICH target was skipped |
 | Confirm a build only compiles | `VMBLauncher.exe build <mod>` |
-| Promote a clean stable version | ONLY on a fresh per-build ship signal naming the version; then `ship.ps1 -Mod <mod> -AllowPublic` |
+| Promote a clean stable version | ONLY on a fresh per-build ship signal naming the version; then `ship.ps1 -Mod <mod>` plus `-AllowPublic` iff the cfg is public |
 
-`ship.ps1` flags: `-AllowPublic` (public itemV2.cfg visibility), `-NoRemote` (skip PC-B), `-SkipGitHub`. Dev clones are `friends_only` and never take `-AllowPublic`. `ship.ps1` also runs `publish-release.ps1` (the GitHub release feeding [vt2-mod-updater](https://github.com/Ensrick/vt2-mod-updater), the source of truth that keeps the friends cohort synced where Workshop propagation is unreliable). For a session that touched several mods, run `.\tools\publish-release\publish-release.ps1` once at the end - it packages every mod's current bundle, auto-skips unpublished mods, and writes a `vt2updater_version.txt` sidecar per zip.
+`ship.ps1` flags: `-AllowPublic` (public itemV2.cfg visibility), `-NoRemote` (skip all enabled remote targets for that invocation), `-SkipGitHub`. Dev clones are `friends_only` and never take `-AllowPublic`. `ship.ps1` also runs `publish-release.ps1` (the GitHub release feeding [vt2-mod-updater](https://github.com/Ensrick/vt2-mod-updater), the source of truth that keeps the friends cohort synced where Workshop propagation is unreliable). For a session that touched several mods, run `.\tools\publish-release\publish-release.ps1` once at the end - it packages every mod's current bundle, auto-skips unpublished mods, and writes a `vt2updater_version.txt` sidecar per zip.
 
 **Post-ship verification (both load-bearing - `ugc_tool` prints success even on failure):**
 1. `C:\Program Files (x86)\Steam\logs\workshop_log.txt` must show `Uploaded new content` for the item. For `friends_only`/`private` items the public Steam API returns blank fields, so if in doubt eyeball the Workshop page in Steam.
 2. `ship.ps1` hash-verifies the deploy against the Workshop content folder. If that verify fails with a hash mismatch AFTER a confirmed upload, it is a Steam reconcile race: re-run `VMBLauncher.exe deploy <mod> --no-remote` once and treat the ship as successful. Do NOT lecture the user about restarting Steam unless the log shows they are actually running a stale build.
 
-**Every deploy hits PC-B automatically.** As of launcher v0.4.0, `deploy` (and `all`/`ship.ps1`) push the bundle to every enabled `RemoteDeployTargets` entry in `%APPDATA%\VMBLauncher\settings.json` right after the local Workshop-folder copy. The standard PC-B target auto-populates on first run from `~/.ssh/config`. Iterative VT2 debugging must keep the test client in lockstep with the host; local-only deploys silently masked four days of host/client sync bugs in May 2026. Skip the remote push for one invocation with `-NoRemote`/`--no-remote`; disable a target persistently by flipping `Enabled` to `false` in settings.json.
+**Every deploy hits every enabled remote target automatically.** As of launcher v0.4.0, `deploy` (and `all`/`ship.ps1`) push the bundle to each enabled `RemoteDeployTargets` entry in `%APPDATA%\VMBLauncher\settings.json` right after the local Workshop-folder copy. A disabled target is intentionally out of scope and must not be reported as updated. For co-op debugging, enable the tester target before deploying so host and client stay in lockstep. Skip otherwise-enabled remotes for one invocation with `-NoRemote`/`--no-remote`; disable a target persistently with `Enabled = false` in settings.
 
 `ship.ps1` is the canonical build/deploy/upload path; the visibility-regression guard (verify `itemV2.cfg` visibility before a `--allow-public` push) lives in `VMBLauncher.exe upload`, which `ship.ps1` calls. The legacy per-mod `upload_*.ps1` wrappers were removed 2026-07-07 (archived externally to `../_vt2-tweaker-archive/`); the earlier `deploy_*.ps1` wrappers were removed 2026-05-21. Do not author new `.ps1` wrappers; extend the launcher / `ship.ps1` instead. Use `VMBLauncher.exe deploy <mod>` for a bare deploy.
 
@@ -263,7 +278,7 @@ Then `git add` + commit + push the source. Add `-AllowPublic` when the mod's `it
 
 ### Legacy raw pipelines (archived - DO NOT USE)
 
-The `node vmb.js build <mod> --no-workshop --cwd` invocations and the raw Stingray SDK compile pipeline that previously lived in this section are no longer the supported path. Use `VMBLauncher.exe build <mod>` for VMB mods and `VMBLauncher.exe all <mod>` for full pipeline. The launcher already wraps `node vmb.js` internally, so if you're tempted to invoke `node` directly you're skipping hash verification, remote PC-B push, BOM handling on staged cfgs, and the rest of the protective layers documented in `tools/vmb-launcher/CLAUDE.md`.
+The `node vmb.js build <mod> --no-workshop --cwd` invocations and the raw Stingray SDK compile pipeline that previously lived in this section are no longer the supported path. Use `VMBLauncher.exe build <mod>` for VMB mods and `VMBLauncher.exe all <mod>` for full pipeline. The launcher already wraps `node vmb.js` internally, so if you're tempted to invoke `node` directly you're skipping hash verification, enabled-remote deployment, BOM handling on staged cfgs, and the rest of the protective layers documented in the launcher repository.
 
 The one exception is the deprecated `tweaker` mod (Workshop ID 3704660429) - it pre-dates the VMB migration and only builds via raw SDK. Treat it as frozen: don't iterate on it, don't try to graft it onto the launcher.
 
@@ -357,19 +372,14 @@ VMF provides `mod:hook(class, method, func)` and `mod:hook_safe(class, method, f
 
 **`rawget` for fragile globals.** Cold reads of `ItemMasterList[key]` and `NetworkLookup.weapon_skins[key]` will throw if a peer hasn't fully populated the table yet (CW peer-late-join, host-only DLC ownership, gated registration mismatch). Use `rawget(ItemMasterList, key)` / `rawget(NetworkLookup.weapon_skins, key)` and nil-check before dereferencing - full failure-mode table and the gated-registration crash class are in `DEVELOPMENT.md` "Known Errors" section.
 
-### Three Weapon Rendering Paths
+### Weapon Appearance Paths and UI Presentation
 
-> Owner doc: `docs/WEAPON_APPEARANCE_STANDARD.md` §1 - the normative contract. It
-> defines FOUR paths (the husk/remote path is separate from the owner in-world
-> path) plus the concern-by-path matrix. The table below is the quick summary only.
-
-Any weapon visual override must cover all three:
-
-| Path | Hook Target | Hand Access |
-|------|-------------|-------------|
-| In-game (keep/mission) | `GearUtils.create_equipment` (or `GearUtils.spawn_inventory_unit`) | `result.left_unit_1p`, `.right_unit_1p`, `.left_unit_3p`, `.right_unit_3p` |
-| Inventory character preview | **`MenuWorldPreviewer.equip_item` / `MenuWorldPreviewer._spawn_item`** (NOT HeroPreviewer - see below) | `self._equipment_units[slot].left` / `.right` |
-| Illusion/skin browser | `LootItemUnitPreviewer.spawn_units` | `self._spawned_units` array (left=index 1, right=index 2) |
+`docs/WEAPON_APPEARANCE_STANDARD.md` is the sole normative contract. It defines
+four independent unit-spawn paths (owner, remote husk, inventory preview, and
+illusion browser), the presentation-descriptor boundary, and the additional UI
+adapters such as Hold-Tab, Athanor, lobby, and score/team views. Do not maintain
+a second path table here. A visual or identity change must use that descriptor
+and pass every applicable verification cell in the owner document.
 
 `MenuWorldPreviewer._spawn_item_unit` fires once per unit with **no hand indicator** - do not use it for per-hand operations.
 
@@ -486,7 +496,8 @@ For weapon DLCs (Bogenhafen / Karak Azgaraz / Lake), grep `scripts/settings/dlcs
 - `DEVELOPMENT.md` - detailed technical reference (hooking rules, animation system, shield swap architecture, known errors, Stingray / Lua engine quirks, dead ends).
 - `docs/VMF_RECIPES.md` - repo-wide Vermintide Mod Framework gotchas: `hook_safe` no-chain, multi-return collapse, `network_send` recipients (`"server"` silently dropped), 500-char RPC string cap, dropdown options table mutation, widget setting_id uniqueness, mod `_localization.lua` not registered into global `Localize`, `custom_gui_textures` format. Every entry includes burn history.
 - `docs/COMMANDS.md` - snapshot of every `mod:command(...)` across the monorepo (chat commands invoked as `/<name>`).
-- `STATUS.md` - the single what-now board (replaced `TODO.md` / `WORK_ITEMS.md` / `TESTING_STATUS.md`, retired 2026-07-08, issue #432; pending work lives in GitHub Issues)
+- `STATUS.md` - dated session history only; GitHub Issues is the sole current
+  pending/verification/status authority.
 - `ITEM_LIST.md` - full weapon key catalog from ItemMasterList
 - `docs/WEAPON_CATALOG.md` - repo-root weapon catalog: model paths, owning character, cross-character port status, illusion family membership. Use alongside `ITEM_LIST.md` when wiring a new weapon-side feature.
 - `ANIMATION_RESEARCH.md` - skeleton event probe results across the six character bodies
@@ -499,13 +510,13 @@ For weapon DLCs (Bogenhafen / Karak Azgaraz / Lake), grep `scripts/settings/dlcs
 - `character_weapon_variants/J_LEFTWEAPONATTACH_INVESTIGATION.md` - post-mortem for the ~20-version dual-wield rig saga. Read once before adding any dual-wield variant.
 - `character_weapon_variants/CHANGELOG.md` - version history for the Character Weapon Variants mod. Best source of "why we do X" - most recipes have a CHANGELOG entry behind every load-bearing rule.
 - `character_weapon_variants/CODE_REVIEW.md` - snapshot architectural review for CWV. (Per-doc currency/staleness is tracked in `PROJECT_STANDARDS.md` section 7.1, the canonical doc index - not version-stickered here, since those stickers drift.)
-- `character_weapon_variants/TODO.md` - feature roadmap for cross-character weapon variants
-- `cosmetics_tweaker/TODO.md` - feature roadmap for cosmetics-specific work
+- `character_weapon_variants/TODO.md` - historical/reference design notes; not a current tracker
+- `cosmetics_tweaker/TODO.md` - historical/reference design notes; not a current tracker
 - `dynamic_cosmetic_portraits/CLAUDE.md` - **READ THIS BEFORE TOUCHING PORTRAITS.** Workflow guardrails + the canonical asset-generation script.
 - `dynamic_cosmetic_portraits/tools/add_portrait.ps1` - the only correct way to generate a new portrait's `.png` / `.texture` / `.material` files. Call it as `.\tools\add_portrait.ps1 -SourcePng "<110x130 PNG>" -HatKey "kruber_<key>"`. Free-handing the assets has broken multiple shipped versions; do not skip the script.
 - `dynamic_cosmetic_portraits/CHANGELOG.md` - version history. v0.1.0 -> v0.1.3 documents every variant of the asset-pipeline mistake - read before reinventing.
 - `dynamic_cosmetic_portraits/DEVELOPMENT.md` - full portrait-authoring workflow + career_settings swap architecture + dead ends not to retry.
-- `dynamic_cosmetic_portraits/TODO.md` - portrait roadmap (which hats/careers/characters are next).
+- `dynamic_cosmetic_portraits/TODO.md` - historical portrait coverage/reference notes; not a current tracker.
 - `dynamic_cosmetic_portraits/CHARACTER_COSMETIC_CATALOG.md` - every `slot_hat`/`slot_skin` item key -> in-game display name across all 5 characters (sourced from `cosmetics_tweaker/_cos_probe.txt`). **Consult this whenever wiring a new portrait - it's the only reliable mapping from a key to a player-facing name.**
 - `event_tweaker/CLAUDE.md` - workflow guardrails for the `_evt_*` module split: injection guards are load-bearing, catalogs are single-source, one hook per (Class, method). Read before touching the mod.
 - `event_tweaker/CHANGELOG.md` - version history for the Tweaker: Events mod.

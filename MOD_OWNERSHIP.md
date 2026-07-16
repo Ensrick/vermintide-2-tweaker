@@ -1,8 +1,9 @@
 ﻿# MOD_OWNERSHIP.md
 
-Single source of truth for **who maintains each mod** and **whether someone is
-currently mid-edit on it**. Read this before starting substantive work on any
-mod — and check `.in_progress/` for sentinel files claiming a live session.
+Single source of truth for **who maintains each mod** and its durable stream or
+lifecycle role. Read this before starting substantive work on any mod. Live
+edit claims exist only in `.in_progress/`; this committed file must not duplicate
+ephemeral in-flight state.
 
 > **Why this exists.** Today's session had four coordination collisions:
 > parallel agents collided on `crafting_in_modded` (broken build blocked
@@ -12,39 +13,43 @@ mod — and check `.in_progress/` for sentinel files claiming a live session.
 > two simultaneous agents). The fix is awareness, not enforcement — see
 > `CLAUDE.md` § "Multi-agent coordination" for the workflow.
 
-## Status legend
+## Live edit status
 
-- **stable** — no active work; safe to start a new task.
-- **in-flight** — someone is mid-edit. Check `.in_progress/<mod>.md` for the
-  claim. Coordinate with the listed owner before touching the same files.
-- **frozen** — deprecated / archived. Do not modify (legacy `tweaker/`, etc.).
-- **blocked** — waiting on something external (engine fix, upstream, decision).
+`Get-ChildItem .in_progress\*.md -Exclude README.md` is the sole live claim
+view. No sentinel means no recorded claim; it does not prove another process is
+idle, so inspect `git status` and coordinate before overlapping files. GitHub
+Issues owns current feature/bug lifecycle and priority.
 
 ## Ownership table
 
-| Mod | Owner | Status | In-progress branch/session | Last updated |
-|-----|-------|--------|----------------------------|--------------|
-| weapon_tweaker | Ensrick | stable | — | 2026-06-05 |
-| chaos_wastes_tweaker | Ensrick | stable | — | 2026-05-25 |
-| chaos_wastes_tweaker_dev | Ensrick | in-flight | dev clone (split 2026-05-26) | 2026-05-26 |
-| general_tweaker | Ensrick | stable | — | 2026-05-25 |
-| general_tweaker_dev | Ensrick | in-flight | dev clone (split 2026-05-26) | 2026-07-05 |
-| gui_tweaker | Ensrick | stable | — | 2026-05-25 |
-| gui_tweaker_dev | Ensrick | in-flight | dev clone (fork 2026-06-24) | 2026-07-05 |
-| cosmetics_tweaker | Ensrick | stable | — | 2026-05-25 |
-| dynamic_cosmetic_portraits | Ensrick | stable | — | 2026-05-25 |
-| career_tweaker | Ensrick | stable | — | 2026-05-25 |
-| enemy_tweaker | Ensrick | stable | — | 2026-05-25 |
-| character_weapon_variants | Ensrick | stable | — | 2026-05-25 |
-| crafting_in_modded | Ensrick | stable | — | 2026-05-25 |
-| crafting_in_modded_dev | Ensrick | in-flight | dev clone (split 2026-05-26) | 2026-05-26 |
-| event_tweaker | Ensrick | stable | — | 2026-05-25 |
-| modded_progression | Ensrick | stable | — | 2026-05-25 |
-| verminious_dreams_lighting | Ensrick | stable | — | 2026-05-25 |
-| verminious_dreams_lighting_dev | Ensrick | in-flight | dev clone (split 2026-05-26) | 2026-05-26 |
-| tweaker (legacy) | Ensrick | frozen | — | 2026-05-25 |
+| Mod | Owner | Durable role |
+|-----|-------|--------------|
+| weapon_tweaker | Ensrick | public-beta primary |
+| weapon_tweaker_dev | Ensrick | friends-only runtime-parity mirror |
+| chaos_wastes_tweaker | Ensrick | promotion stable |
+| chaos_wastes_tweaker_dev | Ensrick | promotion development |
+| general_tweaker | Ensrick | promotion stable |
+| general_tweaker_dev | Ensrick | promotion development |
+| gui_tweaker | Ensrick | promotion stable |
+| gui_tweaker_dev | Ensrick | promotion development |
+| cosmetics_tweaker | Ensrick | single stream |
+| dynamic_cosmetic_portraits | Ensrick | single stream |
+| career_tweaker | Ensrick | single stream |
+| enemy_tweaker | Ensrick | single stream |
+| character_weapon_variants | Ensrick | single stream |
+| crafting_in_modded | Ensrick | promotion stable |
+| crafting_in_modded_dev | Ensrick | promotion development |
+| event_tweaker | Ensrick | single stream |
+| character_dialogue | Ensrick | single stream |
+| modded_progression | Ensrick | single stream |
+| verminious_dreams_lighting | Ensrick | promotion stable |
+| verminious_dreams_lighting_dev | Ensrick | promotion development |
+| weapons_of_chaos | Ensrick | single stream |
+| tweaker (legacy) | Ensrick | frozen; do not modify |
 
-> **NOTE:** The five `_dev` rows above (ct/gt/gut/cim/vdl) are the dev-stream clones of public Workshop mods (see `CLAUDE.md` § "Dev/stable split workflow"). Stable-row Workshop IDs stay public; dev rows ship to separate friends-only Workshop items. In-flight work happens in the `_dev` directory only; the stable directory receives merged-down releases.
+Workshop visibility is deliberately absent: each mod's current `itemV2.cfg` is
+the only authority for public/friends-only/private state. See `CLAUDE.md` §
+"Dev/stable split workflow" for promotion and WT parity rules.
 
 > **NOTE:** `la_prefix_patch` (retired 2026-05-25; absorbed into cosmetics_tweaker; archived to `_archive/la_prefix_patch_v0.3.6-dev/`).
 >
@@ -58,10 +63,8 @@ When you start substantive multi-step work on a mod:
 
 1. Drop a sentinel file at `.in_progress/<mod>.md` (template in
    `.in_progress/README.md`).
-2. Flip this table's **Status** column for that row to `in-flight` and fill
-   the **In-progress branch/session** column with your session ID or branch.
-3. When work finishes (commit landed, build green, ready to ship), delete the
-   sentinel and flip the row back to `stable`.
+2. When work finishes (commit landed, build green, ready to ship), delete the
+   sentinel. Do not edit this durable ownership table for an ephemeral claim.
 
 `.in_progress/*.md` are gitignored — they're an ephemeral coordination signal,
 not committed history. The README is the only tracked file in there.
@@ -69,8 +72,8 @@ not committed history. The README is the only tracked file in there.
 ## How to check before starting
 
 ```powershell
-# 1. Read this table to see who owns the mod.
-# 2. List sentinels:
+# 1. Read this table to see who owns the mod and which stream it belongs to.
+# 2. List the live sentinels:
 Get-ChildItem .in_progress\*.md -Exclude README.md
 # 3. Run the QA check (also runs as part of qa/run_all.ps1):
 .\qa\check_in_progress.ps1
@@ -82,6 +85,6 @@ session ID inside the sentinel) before editing.
 ## Single-human-owner footnote
 
 Right now every mod is owned by Ensrick (the maintainer). The table column
-exists so the convention generalises: future contributors / friends / agent
-teams with delegated authority over a specific mod can be listed here, and
-the in-flight sentinel mechanism handles the per-session claim layer on top.
+exists so the convention generalises: future contributors, friends, or agent
+teams with delegated authority over a specific mod can be listed here. The
+in-flight sentinel mechanism remains the separate per-session claim layer.

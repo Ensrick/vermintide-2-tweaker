@@ -78,7 +78,7 @@ sender-side substitution on it (BUG_CLASSES 31).
 |---|---|---|
 | Fix 6 verified contradictions (e.g. `[confirmed working]` canonical in TESTING_STATUS but rejected by LOCALIZATION_STANDARD/loc-tags gate; CHECKS.md says name_integrity "NOT wired" while run_all wires it; mechanics_citations documented advisory but runs blocking) | #432 | S |
 | Fix 8 verified stale claims (8-vs-16 oversized files, 16-vs-20 cfgs, la_prefix_patch listed live but folded into cosmetics, etc.) | #432 | S |
-| Collapse the status quartet (TODO/WORK_ITEMS/STATUS/TESTING_STATUS) per PROJECT_STANDARDS §11: GitHub Issues are the sole tracker; keep STATUS.md as the single what-now board | #432 | M |
+| Collapse the status quartet (TODO/WORK_ITEMS/STATUS/TESTING_STATUS) per PROJECT_STANDARDS §11. Historical outcome kept STATUS as a board; superseded 2026-07-16 because it had not been maintained since 2026-07-12. GitHub Issues is now the sole current tracker and STATUS is dated history. | #432 | M |
 | De-duplicate overlap clusters: hooking rules (5 places), engine quirks (4), localization (4), WEAPONS.md into WEAPON_CATALOG.md, build doctrine (2) - one owner doc per topic, others cite it | #432 | M |
 | Move topic references from root into `docs/` (VMF_RECIPES, LOCALIZATION_STANDARD, WEAPON_CATALOG, CROSS_MOD_ARCHITECTURE, COMMANDS, REGRESSION_CHECKLIST...) | #432 | S |
 | Write the missing standards: deprecation/retirement lifecycle, cross-mod public-API compat contract, module-header requirement gate | #432 | M |

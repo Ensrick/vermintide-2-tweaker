@@ -53,9 +53,8 @@ intermediate states, "don't touch X until I'm done", etc.
 
 ## Integration points
 
-- **`MOD_OWNERSHIP.md`** (repo root) — flip the affected row's `Status` column
-  to `in-flight` and fill in your session/branch ID alongside dropping the
-  sentinel file.
+- **`MOD_OWNERSHIP.md`** (repo root) — durable maintainer and stream/lifecycle
+  ownership only. Do not duplicate this ephemeral claim there.
 - **`qa/check_in_progress.ps1`** — wired into `qa/run_all.ps1`. Scans this
   directory, warns on stale sentinels (>24h old), and cross-checks staged
   files against claimed mods.

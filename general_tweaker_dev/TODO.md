@@ -1,5 +1,9 @@
 # General Tweaker — TODO / idea backlog
 
+> **REFERENCE ONLY — not current status.** Unchecked and completed entries may
+> be stale. GitHub Issues is the sole current tracker; retain this file only for
+> design evidence that is not yet captured in an issue.
+
 Ideas captured here are **not yet scoped or implemented** — investigation pointers
 only. Confirm every internal against the decompiled source
 (`C:\Users\danjo\source\repos\Vermintide-2-Source-Code`) before writing code; nothing

@@ -224,13 +224,15 @@ UPLOAD - a local deploy alone is silently clobbered.
 
   - Add `-AllowPublic` whenever the mod's `itemV2.cfg` visibility is public —
     a mechanical launcher gate, applies regardless of version suffix (#328).
-  - Add `-NoRemote` ONLY if PC-B is unreachable (and say so).
+  - Add `-NoRemote` only to skip an otherwise-enabled remote target for that
+    invocation, and identify the skipped target. No flag is needed when no
+    remote target is enabled.
 - [ ] **APPROVAL RULE:**
   - **`-dev` / `-alpha` / `-beta`-versioned mods: ship with NO asking, every
     update.** This is how the user tests. Includes single-stream public mods
     like wt / cosmetics_tweaker / crt whose `MOD_VERSION` carries `-dev`.
-  - **Clean-versioned STABLE public releases (public ct / gt / cim / gut / vdl
-    with no pre-release suffix): DO NOT upload without a fresh, per-build ship
+  - **Clean-versioned STABLE releases (no pre-release suffix, regardless of the
+    stable item's current visibility): DO NOT upload without a fresh, per-build ship
     signal from the user naming the version.** "Ship it" earlier does not carry
     forward. Default for these is `build` + `deploy`, never `upload`. Treat a
     stable public upload like `git push --force`.
@@ -280,9 +282,12 @@ UPLOAD - a local deploy alone is silently clobbered.
     status tag (`[untested]`/`[Issue N]` -> `[verify-fix]`) in the same pass
     (issue #301; `LOCALIZATION_STANDARD.md` §13) - unless another session owns
     that file right now, in which case note it and leave the tag to them.
-- [ ] **Remind the user to fully restart Steam** (tray -> Exit, reopen) if they
-  are subscribed to the item - Steam re-pulls a self-authored upload only on a
-  full Steam restart, not a game relaunch and not via deploy.
+- [ ] **Refresh by tester role.** The author on PC-A tests the hash-verified
+  local deploy without restarting Steam. Volunteer testers unsubscribe and
+  resubscribe through the designated dev collection, then confirm the loaded
+  version in the newest console log. Suggest a Steam restart only after source,
+  bundle, and loaded-version evidence are all current and the problem persists
+  (`PROJECT_STANDARDS.md` §14a); never use restart as the first explanation.
 
 ---
 

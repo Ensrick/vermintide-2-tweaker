@@ -1,6 +1,6 @@
 # Verminious Dreams Lighting — Development Notes
 
-Architecture and live-tuning workflow for `verminious_dreams_lighting`.
+Architecture and live-tuning workflow for `verminious_dreams_lighting_dev`.
 Read alongside `CHANGELOG.md` (history) and `REGRESSION_CHECKLIST.md`
 (pre-release gates).
 
@@ -12,10 +12,10 @@ VMB mod, **renamed + republished 2026-05-16**. Predecessor
 `lighting_tweaker` (Workshop 3727161095) was deleted by the user;
 archived at `old-backup/lighting_tweaker_20260516/` for reference.
 
-- Internal ID: `verminious_dreams_lighting` (command prefix: `vdl_`)
-- Workshop ID: **3727221800** (public alpha since 2026-05-16; was
-  friends_only earlier same day)
-- Visibility: **public**
+- Internal ID: `verminious_dreams_lighting_dev` (command prefix: `vdl_`)
+- Workshop ID: **3733366748**
+- Visibility: **friends_only** per the current `itemV2.cfg` (the cfg remains the
+  sole authority)
 
 ## Mission
 

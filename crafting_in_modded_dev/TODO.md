@@ -1,5 +1,9 @@
 # Crafting in Modded — To-Do
 
+> **REFERENCE ONLY — not current status.** Unchecked and completed entries may
+> be stale. GitHub Issues is the sole current tracker; retain this file only for
+> design evidence that is not yet captured in an issue.
+
 ## Import items from "SaveWeapon" mod
 
 > — SHIPPED 2026-07-07 (implemented as the `/cim_import_saved_weapons` chat command + VMF "Import" button; see `saveweapon_import.lua`. The design notes below are retained as historical reference.)

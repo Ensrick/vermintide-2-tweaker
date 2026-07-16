@@ -1,8 +1,14 @@
 # Localization Standard — VT2 Tweaker Monorepo
 
-Canonical convention for every `*_localization.lua` file across the tweaker monorepo. Establishes the rules that prevent the `<<crashify-exception>>` bug class, documents the patterns that work, and lists which mods currently conform.
+Canonical convention for every `*_localization.lua` file across the tweaker
+monorepo. Establishes the rules that prevent the `<<crashify-exception>>` bug
+class and documents the patterns that work. Current conformance is measured by
+`qa/check_localization.ps1`; this document does not maintain a copied status list.
 
-**Snapshot:** 2026-05-21. See [`AUDIT_section_c.md`](./AUDIT_section_c.md) for the full localization sweep (13 P0 unescaped `%`, 8 P1 missing keys, 1247 P2 orphans) and [`AUDIT_2026_05_21.md`](./AUDIT_2026_05_21.md) for the master audit and the documentation gaps this doc closes.
+**Origin snapshot:** 2026-05-21. The two source audit files previously cited
+here (`AUDIT_section_c.md` and `AUDIT_2026_05_21.md`) are not present in the
+current repository. Their durable rules are incorporated below; do not retain
+broken links or use their historical counts as current conformance data.
 
 Cross-language release policy and the versioned readiness audit live in
 [`TRANSLATION_READINESS_444.md`](./TRANSLATION_READINESS_444.md). Until English
@@ -266,22 +272,28 @@ Section C P1 caught 8 of these (one resolved in Fix 4, 7 remain — see audit fo
 All localization files MUST be saved as **UTF-8 without BOM**.
 
 - Stingray's Lua loader handles BOM-less UTF-8 fine.
-- Every localization file in the monorepo is currently BOM-less (verified Section C, lines 134-152).
+- The 2026-05-21 audit snapshot reported every localization file as BOM-less.
+  That is historical evidence, not a current conformance claim; run
+  `qa/check_localization.ps1` for the present tree.
 - The BOM is NOT required, but mixing files (some BOM, some not) makes diff/grep noisy.
 
 ### PowerShell 5.1 gotcha — `Get-Content -Raw` defaults to Windows-1252
 
-PS 5.1's `Get-Content -Raw` does NOT default to UTF-8 — it uses Windows-1252 and silently mangles em-dashes, bullets, accented characters, smart quotes. Full recipe in `tools/vmb-launcher/CLAUDE.md § PowerShell 5.1 Get-Content -Raw is NOT UTF-8`. If a tool script needs to read a localization file from PS 5.1, use the explicit decode pattern:
+PS 5.1's `Get-Content -Raw` does NOT default to UTF-8 — it uses Windows-1252 and silently mangles em-dashes, bullets, accented characters, smart quotes. If a tool script needs to read a localization file from PS 5.1, use the explicit decode pattern:
 
 ```powershell
 $text = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
 ```
 
-PS 7+ defaults to UTF-8 and is fine. The repo's `_tools/` scripts should use the explicit decode pattern regardless, since contributors may invoke them under either shell.
+PS 7+ defaults to UTF-8 and is fine. The repo's `tools/` scripts should use the explicit decode pattern regardless, since contributors may invoke them under either shell.
 
 ---
 
 ## 8. Migration plan — current conformance & next steps
+
+> **HISTORICAL SNAPSHOT (2026-05-21), not a current work queue.** GitHub Issues
+> owns current migration status. Use `qa/check_localization.ps1` for current
+> conformance; the rows and counts below explain the origin of the rules only.
 
 ### Mods currently conforming (post-Fix 1, 2026-05-21)
 
@@ -306,7 +318,9 @@ Per Section C P1, these have missing `mod_description` or other missing keys:
 - `event_tweaker` — missing `mod_description`
 - `material_hijack_patched` — missing `mod_description`
 - `modded_progression` — missing several keys (RESOLVED in Fix 4 for `starting_state_description`; verify others)
-- `verminious_dreams_lighting` — missing `mod_description` (Section C reported; verify post-Fix 4 since AUDIT_2026_05_21.md says claim may be stale)
+- `verminious_dreams_lighting` — the 2026-05-21 sweep reported a missing
+  `mod_description`; this may already be stale and must be rechecked by the
+  current QA script before action.
 
 ### Mods with high orphan-key counts (Section C P2)
 
@@ -325,7 +339,9 @@ Most of these are likely false positives from `_data.lua` implicit-resolution pa
 3. **Phase 3 — `_lz()` wrapper retirement** (optional, low value). Convert `general_tweaker`'s `_gt_lobby_failed_join_reveal.lua` (the `_lz()` user, absorbed from the retired `lobby_tweaker`) to direct `mod:localize` calls so the orphan-key audit becomes reliable for that mod.
 4. **Phase 4 — orphan-key sweep** (post-Phase 2 only). Once `_description`→`_tooltip` is settled, re-run the audit. Delete confirmed orphans per-mod. Expect 50-80% of current "orphans" to evaporate after Phase 2.
 
-**Do NOT migrate as part of this doc's commit.** This file establishes the standard. Migration is follow-up work to be tracked in `AUDIT_2026_05_21.md`'s P1 list.
+**Do NOT treat this snapshot as an active migration list.** This file establishes
+the standard. Any still-reproducible finding belongs in GitHub Issues with
+current `qa/check_localization.ps1` evidence.
 
 ---
 
@@ -797,8 +813,9 @@ carry no tag:
 
 ## Cross-references
 
-- [`AUDIT_section_c.md`](./AUDIT_section_c.md) — full localization sweep with the P0/P1/P2/P3 findings this standard is built around.
-- [`AUDIT_2026_05_21.md`](./AUDIT_2026_05_21.md) — master audit; "Documentation gaps surfaced" section lists the gaps this doc closes.
+- `qa/check_localization.ps1` — current executable conformance check.
+- Historical May 2026 audit findings are incorporated into this standard; the
+  original audit files are absent from the current tree.
 - Memory: `feedback_ps5_getcontent_utf8.md` — UTF-8 / PowerShell 5.1 reading.
 - `DEVELOPMENT.md` § "Localize description strings run through `string.format`" — the
   HOOKED-`_G.Localize` variant of the §1 `%%` rule: overrides returned from a `Localize`

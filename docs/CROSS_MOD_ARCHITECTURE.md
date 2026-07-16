@@ -314,12 +314,79 @@ If the vanilla hat is equipped (no clone), the bridge suppresses any LA queue en
 
 ---
 
+## Cross-mod weapon presentation contract
+
+`docs/WEAPON_APPEARANCE_STANDARD.md` owns the descriptor and adapter contract.
+This section owns only cross-mod responsibility and precedence. It is normative;
+an independent hook that produces a different icon, name, model, or fallback for
+one UI surface is a contract violation, not a second source of truth.
+
+### Provider and consumer ownership
+
+- **character_weapon_variants** provides the authored variant's base item
+  identity: item key, per-hand units, base display metadata, and base icons.
+- **cosmetics_tweaker** provides a player's persisted cosmetic overrides when
+  it can prove the target identity: primary/offhand illusion, composed
+  primary-plus-offhand label, icon ownership, glow, and related resources.
+- **crafting_in_modded / Athanor, inventory/customization UI, Hold-Tab, lobby,
+  and score/team UI are consumers/adapters.** They render the resolved
+  descriptor; they do not replace it by independently looking up the active
+  slot's primary skin or vanilla item metadata.
+- **weapon_tweaker** changes availability and animation behavior. Its presence
+  alone is not authority to replace a cosmetic or authored-variant presentation.
+
+For each descriptor field, precedence is:
+
+1. a validated exact-instance cosmetic override from the field's owning
+   provider;
+2. the authored CWV or vanilla item/skin value represented by the available
+   item identity; then
+3. a resident, wire-safe vanilla fallback.
+
+This is field precedence, not whole-descriptor replacement. For example, a
+shield override may own the icon and offhand name while the authored primary
+weapon still owns its primary name and right-hand unit. Once a provider has
+resolved a field, a later consumer hook must not clobber it with a second lookup.
+
+### Exact instance versus loadout snapshot
+
+Inventory/crafting/customization paths may carry `backend_id` or
+`ItemInstanceId`; those consumers may read per-instance persistence. Hold-Tab
+does not. Vanilla stores its remote entry from `rpc_sync_loadout_slot` and renders
+the reconstructed `player_loadouts()` item, which contains no backend instance
+ID. `[src: scripts/managers/player/player_manager.lua:69-78]`
+`[src: scripts/ui/views/ingame_player_list_ui_v2.lua:1450,1504-1536]`
+
+A snapshot adapter may use only synchronized item evidence plus an explicitly
+bounded `(wearer peer, slot)` presentation cache. It must not resolve the local
+player's current backend item or guess an instance from the slot. If no matching
+snapshot presentation exists, it leaves vanilla's reconstructed name/icon in
+place.
+
+### Capability, wire, and resource fallback
+
+Before emitting a custom presentation field, the adapter must prove all three:
+
+1. **mod/capability parity** — the observer has the provider/capability needed
+   to understand the field;
+2. **wire identity** — the synchronized identity is sufficient for that field;
+3. **renderer resource closure** — the target renderer has the required
+   unit/texture/icon/material/package registered and resident.
+
+Failure of any proof selects the vanilla fallback or omits an optional overlay.
+Never send or inject a custom item key, localization key, unit, skin, icon,
+material, or package path into a peer/renderer that has not proved it can resolve
+that resource. A consumer may degrade presentation; it may not turn an optional
+cosmetic into a missing-resource crash.
+
+---
+
 ## Multiplayer Compatibility Matrix
 
 | Scenario | Visual Result |
 |----------|--------------|
 | All players have character_weapon_variants | Everyone sees correct models — real items sync via network |
-| Host has character_weapon_variants, client doesn't | Client sees missing/unknown item — **mod required for all players** |
+| Host has character_weapon_variants, client doesn't | Current real-item wire remains mod-required unless a parity-safe fallback is proved. Do not claim compatibility or transmit a custom identity to an absent provider; the required safe result is the vanilla fallback described above. |
 | Player A has cosmetics_tweaker, Player B doesn't | Offhand swaps are client-local only (player A sees their choice, player B sees vanilla) |
 | Player A has cosmetics_tweaker + LA bridge, Player B doesn't | LA clone textures are client-local. Clone backend_ids never reach the server (loadout cache), so Player B sees the vanilla hat |
 | Player A has weapon_tweaker, Player B doesn't | Cross-career weapons visible to both (items exist in backend), but animations may look wrong to player B |
