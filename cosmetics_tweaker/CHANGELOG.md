@@ -1,5 +1,26 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.130-dev - 2026-07-15 - #629 finalized Grail set icons
+
+### Changed
+
+- Replaced the three vanilla donor placeholders with the user-authored icons for
+  `Couronne de la Lune`, `Midnight Purpure and Azure`, and
+  `The Blood-Bloomed Bouclier`.
+- Kept the existing icon keys, GUI materials, renderer injections, item
+  registration, and resource-package entries so every inventory and cosmetic
+  selection surface consumes the same canonical artwork.
+- Hardened the offline Grail set asset contract against accidentally restoring
+  the donor icons by checking each authored PNG's signature and exact output
+  size.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.130-dev`. Inspect the helmet and outfit in the
+Grail Knight cosmetics screen, then inspect the shield from a compatible
+Kruber weapon's independent offhand row. Confirm all three use the new
+purple-and-navy artwork in inventory, cosmetic selection, and preview popups.
+
 ## 0.9.129-dev - 2026-07-15 - #641 independent component names / #639 approved Grail copy
 
 ### Changed

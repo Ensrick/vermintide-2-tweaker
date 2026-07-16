@@ -259,8 +259,21 @@ return function(H, repo_root)
             if png then png:close() end
             read("cosmetics_tweaker/textures/cosmetics_tweaker/grail_knight_set/" .. name .. ".texture")
         end
+        local authored_icon_sizes = {
+            hat = 12797,
+            skin = 12711,
+            shield = 11762,
+        }
         for _, icon in ipairs({ "hat", "skin", "shield" }) do
             local key = "icon_cos_gk_purpure_azure_" .. icon
+            local png_path = repo_root .. "/cosmetics_tweaker/gui/1080p/single_textures/cosmetics_tweaker/" .. key .. ".png"
+            local png = io.open(png_path, "rb")
+            H.truthy(png, "missing " .. key .. ".png")
+            if png then
+                H.equal(png:read(8), "\137PNG\r\n\26\n", key .. " must remain a PNG")
+                H.equal(png:seek("end"), authored_icon_sizes[icon], key .. " reverted from the authored icon")
+                png:close()
+            end
             read("cosmetics_tweaker/gui/1080p/single_textures/cosmetics_tweaker/" .. key .. ".texture")
             read("cosmetics_tweaker/materials/ui/" .. key .. ".material")
             H.truthy(package_file:find('"materials/ui/' .. key .. '"', 1, true))

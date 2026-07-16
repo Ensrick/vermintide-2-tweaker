@@ -13,7 +13,7 @@ Last updated: 2026-07-15.
 |---|---|
 | Symptom | The Purpure/Azure outfit applied in live third person but the inventory-screen character model showed the donor outfit even though the log recorded `surface=hero_preview`. |
 | Root cause | The preview replay painted and cached `mesh_unit` on its hidden spawn frame. On the following update, vanilla `_update_units_visibility` called `_set_character_visibility(true)` and restored `skin_data.material_changes`; the same-mesh cache then suppressed every corrective repaint. |
-| Fix version | cosmetics_tweaker v0.9.129-dev |
+| Fix version | cosmetics_tweaker v0.9.130-dev |
 | Expected | Hidden or not-yet-visible meshes are never cached. The first visible frame paints once after vanilla's material restore; hide/show, view reopen, and career respawn invalidate and replay once without per-frame writes. |
 | Detection | Offline `test_cos_grail_knight_set.lua` simulates hidden spawn, visible transition, same-mesh steady state, hide/show, and new-mesh respawn. `/cos_regression_test` passes `issue629_grail_knight_set_contract`. |
 | Tracking | GitHub issue #629. |
@@ -146,7 +146,7 @@ Last updated: 2026-07-15.
 | Symptom | Dual-weapon offhands reused a whole-illusion name, while shields lacked the same explicit component naming boundary. |
 | Root cause | #583 separated mesh ownership by hand but presentation records retained a whole source name or an unrelated shield-pool label. |
 | Mod(s) | cosmetics_tweaker; character_weapon_variants when installed |
-| Fix version | cosmetics_tweaker v0.9.129-dev |
+| Fix version | cosmetics_tweaker v0.9.130-dev |
 | Category | PRESENTATION / LOCALIZATION |
 | Repro | Open dual-weapon and weapon+shield customization screens, hover each component row entry, and run `/cos_offhand_name_inventory`. |
 | Expected post-fix | Offhand weapons and shields resolve independent names one by one. Unauthored rows retain deterministic source names. The hover label composes the identical-model primary illusion name first and the component name second. Old saves and peer payloads remain valid. |
