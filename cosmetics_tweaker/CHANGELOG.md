@@ -26,7 +26,7 @@
 
 ### Verification
 
-With host and client on Cosmetics `0.9.132-dev` and CIM dev `0.8.85-dev`, equip
+With host and client on Cosmetics `0.9.132-dev` and CIM dev `0.8.86-dev`, equip
 an independently customized shield and inspect the item in inventory and while
 holding Tab on both peers. The title must read `Primary Weapon + Shield Name`
 and the icon must be the shield-owned icon. Repeat with a dual weapon: the
