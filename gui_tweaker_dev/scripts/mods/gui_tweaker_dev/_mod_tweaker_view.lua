@@ -276,10 +276,11 @@ local function _format_keybind_value(val)
     return table.concat(parts, " + ")
 end
 
--- (#123) Keybind capture: collect the currently-held keyboard buttons by VT2 name and
--- return the VMF combo array {modifiers..., main_key} once a non-modifier key is held,
+-- (#123) Keybind capture: collect the currently-held keyboard/mouse buttons by VT2 name
+-- and return the VMF combo array {main_key, modifiers...} once a non-modifier key is held,
 -- else nil. Names come straight from Keyboard.button_name (the same naming VMF matches
--- against), modifiers first. Mouse/gamepad ignored. NOTE: exact name normalisation
+-- against), modifiers first. Gamepad ignored; mouse buttons 1-5 ARE captured (issue 631,
+-- see _MOUSE_KEYID). NOTE: exact name normalisation
 -- ("left ctrl" vs "ctrl") is verified on dev — if a bind does not fire in-game, a single
 -- native-menu rebind ([gut-keybind-probe] VMF) reveals VMF's exact stored format to match.
 -- VMF stores binds as { primary_key, modifier... } — the MAIN key FIRST, then
@@ -291,6 +292,29 @@ local _KB_MOD_NORMALIZE = {
     ["left ctrl"]  = "ctrl",  ["right ctrl"]  = "ctrl",
     ["left alt"]   = "alt",   ["right alt"]   = "alt",
 }
+-- (issue 631) Mouse buttons 1-5 as keybind primaries. The strings are VMF's own MOUSE
+-- key-ids and the indices are VMF's own button indices, taken verbatim from
+-- Vermintide-Mod-Framework/scripts/mods/vmf/modules/core/keybindings.lua:120-124
+-- (PRIMARY_BINDABLE_KEYS.MOUSE). Storing e.g. {"mouse extra 1"} therefore resolves back
+-- through KEYS_INFO to the MOUSE input-check functions at dispatch
+-- (keybindings.lua:161-179, :311-314) — Mouse.pressed / Mouse.button — so the bind fires.
+-- Held state is read the way the game's own code does (Mouse.button(idx) > 0, e.g. VT2
+-- decompile scripts/managers/debug/debug_manager.lua:299). Mouse 1=left(0) 2=right(1)
+-- 3=middle(2) 4=extra 1(3) 5=extra 2(4). Wheel (idx 10-13) is excluded: the issue asks
+-- only for the 5 buttons, and a wheel tick has no held/release phase to capture or to
+-- release-detect at dispatch.
+local _MOUSE_KEYID = {
+    [0] = "mouse left",
+    [1] = "mouse right",
+    [2] = "mouse middle",
+    [3] = "mouse extra 1",
+    [4] = "mouse extra 2",
+}
+-- Returns (combo, primary_is_mouse). primary_is_mouse lets the caller defer committing a
+-- mouse bind until the button is RELEASED (VMF does the same, vmf_options_view.lua:3734-
+-- 3751): committing a mouse primary on press would let the left-click that ENTERS capture
+-- self-bind Mouse 1, and let the release fall through to the hotspot enter / right-click-
+-- clear branches. A keyboard primary has no such overlap, so it still commits on press.
 local function _poll_keybind_combo()
     local n = 256
     local ok_n, cnt = pcall(function() return Keyboard.num_buttons() end)
@@ -310,10 +334,26 @@ local function _poll_keybind_combo()
             end
         end
     end
+    -- (issue 631) Mouse button as primary when no keyboard main key is held. Keyboard wins
+    -- ties, mirroring VMF capture which checks Keyboard.any_pressed() before Mouse.any_pressed()
+    -- (vmf_options_view.lua:3702-3712). Held keyboard ctrl/alt/shift still combine with a mouse
+    -- primary (VMF supports modifier+mouse). Scanned low-to-high so left-click wins if two
+    -- buttons are somehow held at once.
+    local primary_is_mouse = false
+    if not main then
+        for idx = 0, 4 do
+            local ok_m, down = pcall(Mouse.button, idx)
+            if ok_m and type(down) == "number" and down > 0 then
+                main = _MOUSE_KEYID[idx]
+                primary_is_mouse = true
+                break
+            end
+        end
+    end
     if not main then return nil end
     local combo = { main }                                  -- VMF: primary key FIRST
     for _, m in ipairs(mods) do combo[#combo + 1] = m end   -- then normalised modifiers
-    return combo
+    return combo, primary_is_mouse
 end
 
 -- (#123) Apply a keybind change THE WAY VMF DOES (vmf_options_view ~734): save the value,
@@ -2379,6 +2419,7 @@ function ModTweakerView:update(dt, t)
         if self._capturing_keybind then
             local row = self._capturing_keybind
             self._capturing_keybind = nil
+            self._kb_mouse_pending = nil   -- (issue 631) drop any deferred mouse hold on ESC-clear
             self:stage_set(row._category, row._setting_id, {})   -- (#123) STAGE the clear; applies on APPLY
             row.content.value_text = _format_keybind_value({})
             _play_click()
@@ -2960,6 +3001,7 @@ function ModTweakerView:_handle_input(input_service)
                 if not self._search_focused then
                     if self._editing_row then self:_commit_edit(self._editing_row) end
                     self._capturing_keybind = nil
+                    self._kb_mouse_pending = nil   -- (issue 631) drop any deferred mouse hold when focusing search
                     self._search_focused = true
                     self._search_caret_t = 0
                     _play_click()
@@ -3297,11 +3339,32 @@ function ModTweakerView:_handle_input(input_service)
                     if Managers.chat and Managers.chat.block_chat_input_for_one_frame then
                         pcall(function() Managers.chat:block_chat_input_for_one_frame() end)
                     end
-                    local combo = _poll_keybind_combo()
-                    if combo then
+                    local combo, primary_is_mouse = _poll_keybind_combo()
+                    if combo and primary_is_mouse then
+                        -- (issue 631) Mouse primary: HOLD, do not commit yet. Snapshot the combo
+                        -- (modifiers re-read each frame) and show a live preview; commit only when
+                        -- the button is released (the `combo == nil` branch below). This keeps the
+                        -- capture branch active for the release frame so its `return` consumes the
+                        -- click, so binding Mouse 1 can't re-enter capture and Mouse 2 can't hit the
+                        -- right-click-clear below — the same release-committed model VMF uses.
+                        self._kb_mouse_pending = combo
+                        row.content.value_text = _format_keybind_value(combo)
+                    elseif combo then
+                        -- Keyboard primary: commit immediately (unchanged, verified path).
                         self._capturing_keybind = nil
+                        self._kb_mouse_pending = nil
                         self:stage_set(row._category, row._setting_id, combo)   -- (#123) STAGE; registers on APPLY
                         row.content.value_text = _format_keybind_value(combo)
+                        _play_click()
+                        return
+                    elseif self._kb_mouse_pending then
+                        -- (issue 631) The held mouse primary was released this frame (poll no longer
+                        -- sees it): commit the snapshot and consume the release.
+                        local pending = self._kb_mouse_pending
+                        self._kb_mouse_pending = nil
+                        self._capturing_keybind = nil
+                        self:stage_set(row._category, row._setting_id, pending)   -- (#123) STAGE; registers on APPLY
+                        row.content.value_text = _format_keybind_value(pending)
                         _play_click()
                         return
                     end
@@ -3314,6 +3377,7 @@ function ModTweakerView:_handle_input(input_service)
                 elseif c.hotspot and (c.hotspot.on_release or c.hotspot.on_left_release) then
                     if self._editing_row then self:_commit_edit(self._editing_row) end
                     self._capturing_keybind = row
+                    self._kb_mouse_pending = nil   -- (issue 631) fresh capture, drop any stale mouse hold
                     row.content.value_text = "PRESS A KEY..."
                     _play_click()
                     return

@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.267-dev (2026-07-16) - issue 611 Weapon Availability master toggles
+
+- Runtime-parity refresh of the public beta's issue 611 master toggles. Each receiving character's Melee and Ranged group starts with "Enable All &lt;Character&gt; Melee/Ranged Weapons" masters, one per source character present; a master enables or disables its whole set in one click, and deselecting any covered weapon flips its master OFF while leaving the rest as-is.
+- Source character is read from each weapon's display label (dev status tags stripped first), so ports whose owner differs from the key prefix group under the character the player sees. Child sets are built after the sort and Career Weapon Variants strip, and each master is reconciled to its children at load.
+- Added `/wt_regression_test` check `issue611_master_toggle_wiring` covering the master/children maps, the reverse index, per-child source-label grouping, and localization ownership.
+
 ## 0.12.266-dev (2026-07-15) - #635 preserve the development overlay
 
 - Kept the live 3P Animation Picker, Hold-Pose tuner, port-status decoration, tuning diagnostics, and their regression coverage in the friends-only `wt_dev` stream while the public beta removes them.

@@ -1408,4 +1408,29 @@ for key, entry in pairs(loc) do
 end
 -- WT_DEV_OVERLAY_END:dev-status-decoration
 
+-- issue 611: master "Enable All <Source> <Slot> Weapons" toggle labels. The
+-- label depends only on (source character, slot); the receiving character lives
+-- in the setting id (wtmaster_<recv>_<slot>_<src>) so the label reads cleanly
+-- inside its receiving character's Melee / Ranged group. Generated across every
+-- receiving x slot x source combination; only the combinations that actually
+-- have weapons get a widget built in _wt_master_toggles.build_widgets, so the
+-- extra keys are inert owners for the ones that do exist.
+local _wtmaster_char_display = {
+    bardin = "Bardin",
+    kerillian = "Kerillian",
+    kruber = "Kruber",
+    saltzpyre = "Saltzpyre",
+    sienna = "Sienna",
+}
+local _wtmaster_slot_display = { melee = "Melee", ranged = "Ranged" }
+for recv in pairs(_wtmaster_char_display) do
+    for slot, slot_label in pairs(_wtmaster_slot_display) do
+        for src, src_label in pairs(_wtmaster_char_display) do
+            loc["wtmaster_" .. recv .. "_" .. slot .. "_" .. src] = {
+                en = "Enable All " .. src_label .. " " .. slot_label .. " Weapons",
+            }
+        end
+    end
+end
+
 return loc

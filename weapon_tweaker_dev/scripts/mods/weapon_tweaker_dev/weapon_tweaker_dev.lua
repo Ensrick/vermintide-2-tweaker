@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.266-dev"
+local MOD_VERSION = "0.12.267-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -297,6 +297,16 @@ local clear_career_action_injections  = mod._wt.clear_career_action_injections
 mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_trait_pools")
 local apply_trait_filters = mod._wt.apply_trait_filters
 local revert_trait_pools  = mod._wt.revert_trait_pools
+
+-- issue 611: Weapon Availability master toggles. _data.lua already built the
+-- master widgets and recorded mod._wt_master_children / mod._wt_child_to_master
+-- at load; here we install the open-menu repaint hook and seed each master to
+-- the current state of its children so a returning user's saved values render a
+-- truthful "all on" checkbox. The cascade + auto-off handlers are dispatched
+-- from mod.on_setting_changed below.
+local _wt_master_toggles = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_master_toggles")
+_wt_master_toggles.install_refresh_hook(mod)
+_wt_master_toggles.seed(mod)
 
 -- Read-only diagnostic dump/probe chat commands + the wield-time weapon-data
 -- dump hook (leaf consumers of game globals only; no entry-state dependency).
@@ -4118,10 +4128,23 @@ mod.on_disabled = function()
 end
 
 mod.on_setting_changed = function(setting_id)
-    if setting_id and (setting_id:find("^unlock_") or setting_id == "debug") then
+    if setting_id and setting_id:find("^wtmaster_") then
+        -- issue 611: a master toggle was clicked. Cascade its new value to every
+        -- child availability toggle (notify = false), then re-apply the unlocks
+        -- once. Children set with notify = false do not re-enter this handler.
+        _wt_master_toggles.on_master_changed(mod, setting_id)
         apply_weapon_unlocks()
         patch_career_actions_on_weapons()
         weapon_backend.refresh_on_setting_change(mod)
+    elseif setting_id and (setting_id:find("^unlock_") or setting_id == "debug") then
+        apply_weapon_unlocks()
+        patch_career_actions_on_weapons()
+        weapon_backend.refresh_on_setting_change(mod)
+        -- issue 611 auto-off: recompute the owning master so deselecting one
+        -- weapon flips its "Enable All ..." toggle OFF while the rest stay as-is.
+        if setting_id:find("^unlock_") then
+            _wt_master_toggles.on_child_changed(mod, setting_id)
+        end
     elseif setting_id and (setting_id:find("^trait_") or setting_id:find("^cw_trait_")) then
         apply_trait_filters()
     -- WT_DEV_OVERLAY_BEGIN:dev-tool-setting-lifecycle
@@ -5135,6 +5158,49 @@ _rt_register("issue408_availability_rows_sorted_by_name", function()
     if leaves == 0 or rows == 0 then
         return string.format("no availability rows inspected (leaves=%d rows=%d)", leaves, rows)
     end
+end)
+
+_rt_register("issue611_master_toggle_wiring", function()
+    -- issue 611: the Weapon Availability master ("Enable All ...") toggles are
+    -- built by _data.lua at load. Verify the wiring the runtime cascade / auto-off
+    -- handlers depend on: master->children and the child->master reverse index are
+    -- present and consistent, every child is a real unlock row grouped under the
+    -- SOURCE character its display label names (not its key prefix), every master
+    -- has a localization owner, and at least one master exists.
+    local mc = mod._wt_master_children
+    local c2m = mod._wt_child_to_master
+    if type(mc) ~= "table" or type(c2m) ~= "table" then
+        return "master toggle maps not built (mod._wt_master_children/_child_to_master)"
+    end
+    local master_count = 0
+    for master_id, children in pairs(mc) do
+        master_count = master_count + 1
+        if type(master_id) ~= "string" or master_id:sub(1, 9) ~= "wtmaster_" then
+            return "master id has wrong prefix: " .. tostring(master_id)
+        end
+        local src = master_id:match("^wtmaster_%w+_%a+_(%w+)$")
+        if not src then return "master id not parseable: " .. master_id end
+        if type(children) ~= "table" or #children == 0 then
+            return "master has no children: " .. master_id
+        end
+        local raw = mod._wt_loc_raw
+        if not (type(raw) == "table" and type(raw[master_id]) == "table"
+                and type(raw[master_id].en) == "string") then
+            return "master lacks localization owner: " .. master_id
+        end
+        for _, child in ipairs(children) do
+            if type(child) ~= "string" or child:sub(1, 7) ~= "unlock_" then
+                return "master child is not an unlock row: " .. tostring(child)
+            end
+            if c2m[child] ~= master_id then
+                return "child->master reverse map broken for " .. child
+            end
+            if _wt_master_toggles.source_char_of(mod, child) ~= src then
+                return "child source char disagrees with master for " .. child
+            end
+        end
+    end
+    if master_count == 0 then return "no master toggles were built" end
 end)
 
 _rt_register("widget_unlock_map_consistency", function()

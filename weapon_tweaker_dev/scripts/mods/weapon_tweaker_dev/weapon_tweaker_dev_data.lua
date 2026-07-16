@@ -1765,4 +1765,16 @@ if _cwv_present then
     strip(data.options.widgets)
 end
 
+-- issue 611: build the per-(receiving character, slot, source character) master
+-- "Enable All ... Weapons" toggles. Runs LAST so the master child sets reflect
+-- the final visible tree (post availability sort + post CWV strip). The module
+-- records mod._wt_master_children / mod._wt_child_to_master for the runtime
+-- cascade + auto-off handlers wired in weapon_tweaker.lua.
+local _wt_master_toggles = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_master_toggles")
+local _wt_masters_built = _wt_master_toggles.build_widgets(mod, data)
+if not mod._wt611_master_build_logged then
+    mod._wt611_master_build_logged = true
+    printf("[wt:611] built %d Weapon Availability master toggles", _wt_masters_built)
+end
+
 return data

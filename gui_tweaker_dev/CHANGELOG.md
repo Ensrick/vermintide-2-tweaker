@@ -1,5 +1,41 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.280-dev (2026-07-16) -- issue 631 Mouse-button keybinds in Mod Tweaker [verify-fix]
+
+- Mod Tweaker hotkey rows now accept mouse buttons (Mouse 1-5), not just
+  keyboard keys. Root cause: the Mod Tweaker reimplements keybind capture
+  (`_poll_keybind_combo` in `_mod_tweaker_view.lua`, added with issue 123 to make
+  those rows rebindable), and that reimplementation polled only `Keyboard`. VMF's
+  keybind dispatch already resolves mouse key-ids, and VMF's own options view
+  already captures mouse, so the gap was purely on gut's capture side.
+- Added a mouse-index -> VMF-key-id map taken verbatim from VMF's
+  `PRIMARY_BINDABLE_KEYS.MOUSE` (Mouse 1=`mouse left` .. Mouse 5=`mouse extra 2`),
+  so a stored bind resolves back through VMF's `KEYS_INFO` to the mouse
+  input-check functions at dispatch. Wheel is intentionally excluded (the issue
+  asks only for the 5 buttons; a wheel tick has no held/release phase).
+- Mouse binds are RELEASE-committed (mirroring VMF), so the left-click that enters
+  capture cannot self-bind Mouse 1 and a Mouse 2 bind cannot fall through to the
+  right-click-clear branch. Keyboard capture is unchanged (commits on press-hold).
+- Ctrl/Alt/Shift held on the keyboard still combine with a mouse primary. Added
+  runtime regression `issue631_keybind_mouse_capture`.
+
+### Verification
+
+1. Enable Tweaker: GUI Dev. In the keep, open Mod Tweaker and go to a tab with a
+   keybind row (e.g. Tweaker: GUI Dev's own `Free Camera Hotkey`, or any mod's
+   hotkey).
+2. Click the keybind value to enter capture ("PRESS A KEY..."). Press a mouse
+   side button (Mouse 4 or Mouse 5). The row should show `MOUSE EXTRA 1` /
+   `MOUSE EXTRA 2` and stay in that state (no re-prompt, no clear). Click APPLY.
+3. Repeat for Mouse 3 (middle -> `MOUSE MIDDLE`), Mouse 2 (right -> `MOUSE RIGHT`),
+   and Mouse 1 (left -> `MOUSE LEFT`); each must bind cleanly without re-opening
+   the prompt or wiping the value.
+4. Hold Ctrl and press Mouse 4: the row should read `MOUSE EXTRA 1 + CTRL`.
+5. Trigger the bound mouse button in-game and confirm the hotkey's action fires.
+6. Right-click a keybind row while NOT capturing still clears it; ESC while
+   capturing still unbinds.
+7. Run `/gut_regression_test`; `issue631_keybind_mouse_capture` must pass.
+
 ## 0.2.279-dev (2026-07-15) -- #636 Weapons Dev Equipment section [verify-fix]
 
 - Restored Tweaker: Weapons Dev to Mod Tweaker's Equipment > Weapons

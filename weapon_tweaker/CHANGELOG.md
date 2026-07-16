@@ -1,5 +1,22 @@
 # Weapon Tweaker Changelog
 
+## 0.12.266-beta (2026-07-16) - issue 611 Weapon Availability master toggles
+
+- Added "Enable All &lt;Character&gt; Melee/Ranged Weapons" master toggles to Weapon Availability. Each receiving character's Melee and Ranged group now starts with one master per source character that contributes weapons, so a whole source character's melee or ranged set can be turned on or off in a single click.
+- Turning a master ON enables every availability toggle it covers; turning it OFF disables them all. Deselecting any single covered weapon flips its master back to OFF automatically while leaving the other weapons as they are (issue 611 behavior).
+- Source character is read from each weapon's display label, not its internal key, so ports whose owner differs from the key prefix (for example the Flail shown as "Saltzpyre: Flail") group under the character the player actually sees.
+- Masters cover exactly the weapons visible beneath them: the child sets are built after the alphabetical sort and the Career Weapon Variants strip, so a master never claims a hidden row and the auto-off math stays exact. Each master's checkbox is reconciled to its children at load, so saved availability choices render a truthful master state.
+- Added `/wt_regression_test` check `issue611_master_toggle_wiring` covering the master/children maps, the child-to-master reverse index, per-child source-label grouping, and localization ownership.
+
+**Verification (in-game):**
+1. Enable Tweaker: Weapons (and VMF). Open the F4 mod options, then Tweaker: Weapons, then Weapon Availability, then Bardin, then Melee.
+2. Confirm the group starts with master rows such as "Enable All Kruber Melee Weapons", "Enable All Kerillian Melee Weapons", "Enable All Saltzpyre Melee Weapons", "Enable All Sienna Melee Weapons" above the per-career subgroups.
+3. Check "Enable All Kerillian Melee Weapons". Confirm every Kerillian-labelled melee weapon under each Bardin career subgroup becomes checked in the same frame.
+4. Uncheck one of those Kerillian melee weapons (for example "Kerillian: Glaive"). Confirm the master flips to OFF while the other Kerillian melee weapons stay checked.
+5. Re-check every Kerillian melee weapon by hand and confirm the master flips back to ON on the last one.
+6. Uncheck "Enable All Kerillian Melee Weapons" and confirm all its covered weapons clear.
+7. Reopen the menu (or restart) and confirm the master states match their weapons (a master reads ON only when all its weapons are ON). Enter a mission on a Bardin career and confirm the enabled cross-character weapons are wieldable and the disabled ones are not.
+
 ## 0.12.265-beta (2026-07-15) - #635 public beta surface cleanup
 
 - Removed the live 3P Animation Picker and Hold-Pose tuner modules, widgets, handlers, commands, dynamic status decoration, and tuning-only diagnostics from the public beta. They remain available in the separate friends-only `wt_dev` stream.

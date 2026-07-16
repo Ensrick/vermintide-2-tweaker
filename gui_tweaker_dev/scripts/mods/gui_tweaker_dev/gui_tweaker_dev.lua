@@ -4,7 +4,7 @@ local mod = get_mod("gut_dev")
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.279-dev"
+local MOD_VERSION = "0.2.280-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2252,6 +2252,41 @@ _rt_register("mod_tweaker_keybind_render", function()
     local routed_needle = ': " .. _format_keybind' .. "_value(val)"
     if not txt:find(routed_needle, 1, true) then
         return "#95 regression: the keybind/table branch does not call _format_keybind_value(val)"
+    end
+end)
+
+-- (issue 631) Mouse buttons 1-5 must be capturable as keybind primaries. The Mod Tweaker's
+-- keybind capture (_poll_keybind_combo) originally polled only Keyboard, so mouse binds could
+-- never be set even though VMF dispatch already resolves "mouse *" key-ids. Source guard on
+-- _mod_tweaker_view.lua: the VMF-vocabulary mouse map must be present, the poll must read
+-- Mouse.button, and the caller must DEFER the commit (release-committed, so Mouse 1/2 can't
+-- self-trigger the enter/clear hotspots). Split needles avoid self-match; no-op when source
+-- unreadable (retail io sandbox, #511).
+_rt_register("issue631_keybind_mouse_capture", function()
+    local ok_view, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+    if not ok_view or type(View) ~= "table" or type(View._handle_input) ~= "function" then
+        return  -- can't reach the view module; skip
+    end
+    local ok, info = pcall(debug.getinfo, View._handle_input, "S")
+    if not ok or type(info) ~= "table" or not info.source then return end
+    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
+    if not txt then return end
+    -- (a) the VMF-vocabulary mouse key-id map must exist (dispatch resolves these names).
+    if not txt:find("_MOUSE" .. "_KEYID", 1, true) then
+        return "issue 631 regression: _MOUSE_KEYID map is absent (mouse binds would not capture)"
+    end
+    if not txt:find("mouse extra 1", 1, true) then
+        return "issue 631 regression: VMF mouse key-id 'mouse extra 1' missing from the mouse map"
+    end
+    -- (b) the capture poll must actually read the mouse device.
+    if not txt:find("Mouse" .. ".button, idx", 1, true) then
+        return "issue 631 regression: _poll_keybind_combo no longer polls Mouse.button (keyboard-only capture)"
+    end
+    -- (c) mouse binds must be RELEASE-committed via the deferred-hold field, else the entering
+    -- left-click self-binds Mouse 1 / the release wipes Mouse 2 through the clear branch.
+    if not txt:find("_kb_mouse" .. "_pending", 1, true) then
+        return "issue 631 regression: deferred mouse commit (_kb_mouse_pending) is gone (Mouse 1/2 would misfire)"
     end
 end)
 
