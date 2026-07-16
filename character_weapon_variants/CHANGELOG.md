@@ -1,5 +1,39 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.431-dev - 2026-07-16 - #645 reciprocal Combat Style registry [diagnostics-armed]
+
+- Replaced Combat Style's hard-coded remap and transform decisions with a
+  validated, bounded descriptor registry. Each style now owns its template,
+  first-person resource, DLC gate, presentation key, and per-member receiver
+  remap key. Invalid descriptors fail QA and cannot become equipment choices.
+- Added the first fully source-backed reciprocal family: native Kruber Chaos
+  Wastes Spear and Shield and Kerillian Spear and Shield can each select the
+  other's complete combat style. The donor templates are deep-cloned only for
+  receiver-specific third-person wield routes; native balance and first-person
+  actions remain unchanged. The two proven action translations are resolved at
+  CWV's existing pre-RPC animation seam so remote playback receives the same
+  bounded event. `grass` and `scorpion` ownership gates are retained.
+- Kept one-handed axes, Glaive/Great Axe, Empire/Elven one-handed swords, and
+  Elf/Tuskgor spears out of the functional catalogue. Automatic `[cwv:645]`
+  diagnostics observe distinct owner-side 3P action events at the existing
+  pre-RPC seam, deduplicate them, and stop at 32 records per candidate family
+  per session. They never load an unproven resource or change gameplay.
+- Added offline catalogue, donor-immutability, DLC, reciprocal-remap, fail-closed,
+  and diagnostic-cap coverage plus runtime
+  `issue645_reciprocal_style_descriptors`.
+
+**Evidence collection (two players; confirm `[cwv:LOAD] v0.1.431-dev` first):**
+
+1. Equip Kruber's Chaos Wastes Spear and Shield, select the Elven style, and
+   walk its light, heavy, push, and special actions while a second player
+   watches; then repeat on Kerillian's Spear and Shield with the Kruber style.
+   Each click/hotkey must advance once, both peers must see moving attacks, and
+   switching back must restore the native style.
+2. Wield one candidate from each unproven family and walk its attacks. The log
+   may contain `[cwv:645]` owner-event rows, but no family may gain a Combat
+   Style button. Each candidate family must stop at 32 rows.
+3. Run `/cwv_regression_test`; `issue645_reciprocal_style_descriptors` must PASS.
+
 ## 0.1.430-dev - 2026-07-16 - #644 Combat Style cycle parity [verify-fix]
 
 - Fixed one equipment-menu click advancing two Combat Styles. The custom VMF

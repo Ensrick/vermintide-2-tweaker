@@ -100,7 +100,7 @@ Infantry Spear adds no hook. It deep-clones `two_handed_spears_elf_template_1`, 
 |---|---|---|
 | `cwv_item_identity` schema 1 | `{ slot, item_key }` | Positive owner identity for a vanilla-base equipment wire shape (#396). Only melee/ranged slots and real non-`skin_only` definitions are accepted; resolution also requires `def.base_weapon == received item_data.name`. Empty `item_key` clears the slot. VMF delivers the channel only to CWV peers. |
 | `cwv_exact_pair_state_v1` schema 1 | `{ owner_peer, slot, exact_skin }` | Carries the validated generated Sword+Mace skin only between CWV peers (#567). It never enters vanilla lookup tables, publishes only on lifecycle edges, and may cache until the remote husk exists. |
-| `cwv_combat_style_v1` schema 1 | `{ op, slot, family_id, style_id }` | Carries only bounded known Combat Style state between CWV peers (#620). Publishes on transition/wield/gameplay entry and direct hot-join query reply; a query reply never emits another query, and no template, backend id, custom lookup id, or per-frame pose crosses the wire. |
+| `cwv_combat_style_v1` schema 1 | `{ op, slot, family_id, style_id }` | Carries only bounded known Combat Style state between CWV peers (#620/#645). Publishes on transition/wield/gameplay entry and direct hot-join query reply; a query reply never emits another query, and no template, backend id, custom lookup id, or per-frame pose crosses the wire. Reciprocal families resolve their template/resource/DLC/presentation/remap through the validated descriptor registry before this unchanged transport. |
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for cwv's cases)
 

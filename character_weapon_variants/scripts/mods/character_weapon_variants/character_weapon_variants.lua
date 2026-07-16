@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.430-dev"
+local MOD_VERSION = "0.1.431-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -1755,6 +1755,7 @@ end
 -- Track local player's wielded melee weapon key + career for cheap lookup
 -- on every network-bound 3P animation. Updated only on melee wield.
 local _cross_access_local_weapon_key = nil
+local _cross_access_local_style_item = nil
 local _cross_access_local_career     = nil
 
 -- CONSOLIDATED wield hook. VMF's `mod:hook_safe` does NOT chain on the same
@@ -1780,6 +1781,7 @@ mod:hook_safe("SimpleInventoryExtension", "wield", function(self, slot_name)
 			if local_player and local_player.player_unit == self.owner_unit then
 				local slot_data = self:get_slot_data(slot_name)
 				local wielded_item = slot_data and slot_data.item_data
+				_cross_access_local_style_item = wielded_item
 				_cross_access_local_weapon_key = wielded_item and wielded_item.key or nil
 				if _om.combat_styles and _om.combat_styles.effective_remap_key then
 					_cross_access_local_weapon_key = _om.combat_styles:effective_remap_key(wielded_item)
@@ -1848,7 +1850,14 @@ mod:hook("WeaponUnitExtension", "_play_3p_anim", function(func, self, event_3p, 
 	if owner_unit ~= _local_3p_body_unit() then
 		return func(self, event_3p, event, owner_unit, looping_event, anim_time_scale)
 	end
-	local target = _om._cross_access_target_event(
+	if _om.combat_styles and _om.combat_styles.observe_candidate_action then
+		_om.combat_styles:observe_candidate_action(
+			_cross_access_local_weapon_key, _cross_access_local_career, event_3p)
+	end
+	local target = _om.combat_styles and _om.combat_styles.remap_event
+		and _om.combat_styles:remap_event(_cross_access_local_style_item, nil,
+			_cross_access_local_career, event_3p)
+	target = target or _om._cross_access_target_event(
 		_cross_access_local_weapon_key, _cross_access_local_career, event_3p
 	)
 	if not target then
@@ -11599,6 +11608,18 @@ do
 		mod:warning("[cwv:620] Kerillian Greatsword style unavailable: %s", tostring(err))
 	end
 
+	local spear_shield_templates, spear_shield_err = policy.build_spear_shield_templates(Weapons,
+		function(value) return table.clone(value, true) end)
+	if spear_shield_templates then
+		for template_name, template in pairs(spear_shield_templates) do
+			Weapons[template_name] = template
+		end
+		mod:info("[cwv:645] registered reciprocal Spear and Shield styles (Kruber<->Elven)")
+	else
+		mod:warning("[cwv:645] reciprocal Spear and Shield styles unavailable: %s",
+			tostring(spear_shield_err))
+	end
+
 	-- A style can replace the first-person state machine even though the base
 	-- item's career packages did not load it (Tuskgor Hunter -> Infantry is the
 	-- concrete case). Own one reference per curated vanilla resource and invoke
@@ -11636,11 +11657,22 @@ do
 		cwv_key_for_item = function(backend_id, item_data)
 			return _om._cwv_key_for_item(backend_id, item_data)
 		end,
-		imperial_transform = {
-			item_key = "cwv_style_imperial_longsword",
-			right_hand_scale = _type_transforms.cwv_imperial_longsword.right_hand_scale,
-			right_hand_offset = _type_transforms.cwv_imperial_longsword.right_hand_offset,
+		presentations = {
+			imperial_longsword = {
+				item_key = "cwv_style_imperial_longsword",
+				right_hand_scale = _type_transforms.cwv_imperial_longsword.right_hand_scale,
+				right_hand_offset = _type_transforms.cwv_imperial_longsword.right_hand_offset,
+			},
 		},
+		owns_dlc = function(dlc_name)
+			local unlock = Managers and Managers.unlock
+			if not unlock or type(unlock.is_dlc_unlocked) ~= "function" then return false end
+			local ok, owned = pcall(unlock.is_dlc_unlocked, unlock, dlc_name)
+			return ok and owned == true
+		end,
+		-- Temporary, bounded #645 evidence. Removed when the remaining candidate
+		-- family is promoted or explicitly declined; the policy caps each family.
+		diagnostics_enabled = function() return true end,
 		acquire_style_resource = acquire_style_resource,
 		peer_for_owner = function(owner_unit)
 			local pm = Managers and Managers.player
@@ -14341,6 +14373,41 @@ _rt_register("issue620_per_instance_combat_styles", function()
 			or layout.style_hitbox_offset[1] ~= 104 or layout.style_hitbox_offset[2] ~= 235 then
 		return "Combat Style console equipment-row layout drifted"
 	end
+end)
+
+_rt_register("issue645_reciprocal_style_descriptors", function()
+	local policy = _om.combat_style_policy
+	local runtime = _om.combat_styles
+	if type(policy) ~= "table" or type(runtime) ~= "table" then
+		return "Combat Style policy/runtime is not installed"
+	end
+	local valid, catalogue_err = policy.validate_catalogue()
+	if not valid then return catalogue_err end
+	for _, template_name in ipairs({ policy.EMPIRE_SPEAR_SHIELD_TEMPLATE,
+			policy.ELVEN_SPEAR_SHIELD_TEMPLATE }) do
+		if type(rawget(Weapons, template_name)) ~= "table" then
+			return "reciprocal Spear and Shield template missing: " .. tostring(template_name)
+		end
+	end
+	local empire = policy.package("we_1h_spears_shield", "empire")
+	local elven = policy.package("es_deus_01", "elven")
+	if not empire or empire.remap_key ~= "deus_to_spear_shield"
+			or not elven or elven.remap_key ~= "spear_shield_to_deus" then
+		return "reciprocal Spear and Shield remap descriptors drifted"
+	end
+	if policy.remap_event("we_1h_spears_shield", "empire", "we_maidenguard",
+			"attack_swing_up") ~= "attack_swing_stab_lh"
+			or policy.remap_event("es_deus_01", "elven", "es_knight",
+				"attack_swing_stab_lh") ~= "attack_swing_stab" then
+		return "reciprocal Spear and Shield event translations drifted"
+	end
+	for _, item_key in ipairs({ "dr_1h_axe", "wh_1h_axe", "we_1h_axe",
+			"we_2h_axe", "dr_2h_axe", "es_1h_sword", "we_1h_sword", "we_spear" }) do
+		if policy.member(item_key) ~= nil or policy.diagnostic_candidate(item_key) == nil then
+			return "unproven family escaped fail-closed diagnostics: " .. item_key
+		end
+	end
+	if policy.DIAGNOSTIC_EVENT_CAP > 32 then return "#645 diagnostic cap is unbounded" end
 end)
 
 _rt_register("issue317_career_scoped_animation_picker", function()

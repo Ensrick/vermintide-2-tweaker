@@ -12,6 +12,9 @@ M.SCHEMA = 1
 M.MAX_TOKEN = 96
 M.INPUT_DESCRIPTION_CAPACITY = 7
 M.KERILLIAN_TEMPLATE = "cwv_combat_style_kerillian_greatsword"
+M.EMPIRE_SPEAR_SHIELD_TEMPLATE = "cwv_combat_style_empire_spear_shield"
+M.ELVEN_SPEAR_SHIELD_TEMPLATE = "cwv_combat_style_elven_spear_shield"
+M.DIAGNOSTIC_EVENT_CAP = 32
 M.IMPERIAL_SPEED_MULT = 1.15
 M.IMPERIAL_DAMAGE_MULT = 0.85
 M.IMPERIAL_STAGGER_MULT = 0.85
@@ -25,6 +28,41 @@ M.CONSOLE_STYLE_BUTTON = {
 	hitbox_size = { 50, 45 },
 	cog_shift_y = -27,
 	style_shift_y = 35,
+}
+
+-- A remap key names one bounded, source-audited event translation. Styles
+-- reference these keys from their per-member receiver descriptors; the cycle
+-- controller never guesses from character prefixes or template names.
+M.REMAPS = {
+	spear_shield_to_deus = {
+		events = { attack_swing_stab_lh = "attack_swing_stab" },
+	},
+	deus_to_spear_shield = {
+		events = { attack_swing_up = "attack_swing_stab_lh" },
+	},
+}
+
+-- These families are deliberately not members of FAMILIES. They are the
+-- bounded diagnostic allow-list for #645: owner-side 3P action events can be
+-- captured without exposing a partial style, changing a template, or putting
+-- an unverified resource on PackageManager's asynchronous queue.
+M.DIAGNOSTIC_CANDIDATES = {
+	one_handed_axes = {
+		members = { dr_1h_axe = true, wh_1h_axe = true, we_1h_axe = true },
+		reason = "receiver remaps and transforms unproven",
+	},
+	glaive_great_axe = {
+		members = { we_2h_axe = true, dr_2h_axe = true },
+		reason = "different resources; reciprocal remaps unproven",
+	},
+	one_handed_swords = {
+		members = { es_1h_sword = true, we_1h_sword = true },
+		reason = "Empire and Elven action graphs need reciprocal remap evidence",
+	},
+	elf_tuskgor_spears = {
+		members = { we_spear = true, es_2h_heavy_spear = true },
+		reason = "spear and polearm resources need reciprocal remap evidence",
+	},
 }
 
 -- HeroWindowLoadoutConsole constructs MenuInputDescriptionUI with exactly
@@ -70,7 +108,7 @@ M.FAMILIES = {
 			greatsword = { label = "Greatsword Combat Style", template = "two_handed_swords_template_1",
 				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword" },
 			longsword = { label = "Longsword Combat Style", template = "imperial_longsword_template",
-				transform = "imperial_longsword",
+				presentation = { transform_key = "imperial_longsword" },
 				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword" },
 			bretonnian = { label = "Bretonnian Combat Style", template = "bastard_sword_template",
 				resource = "units/beings/player/first_person_base/state_machines/melee/bastard_sword" },
@@ -113,6 +151,32 @@ M.FAMILIES = {
 		},
 		members = {
 			es_2h_heavy_spear = { default = "hunter", order = { "hunter", "infantry" } },
+		},
+	},
+	spear_shield = {
+		styles = {
+			empire = {
+				label = "Kruber Spear and Shield Combat Style",
+				template = M.EMPIRE_SPEAR_SHIELD_TEMPLATE,
+				resource = "units/beings/player/first_person_base/state_machines/melee/es_deus_01",
+				required_dlc = "grass",
+				receivers = {
+					we_1h_spears_shield = { remap_key = "deus_to_spear_shield" },
+				},
+			},
+			elven = {
+				label = "Elven Spear and Shield Combat Style",
+				template = M.ELVEN_SPEAR_SHIELD_TEMPLATE,
+				resource = "units/beings/player/first_person_base/state_machines/melee/1h_spear_shield",
+				required_dlc = "scorpion",
+				receivers = {
+					es_deus_01 = { remap_key = "spear_shield_to_deus" },
+				},
+			},
+		},
+		members = {
+			es_deus_01 = { default = "empire", order = { "empire", "elven" } },
+			we_1h_spears_shield = { default = "elven", order = { "elven", "empire" } },
 		},
 	},
 }
@@ -188,16 +252,105 @@ function M.style(item_key, stored_style)
 	return style_id, family.styles[style_id], family_id, member
 end
 
-function M.next_style(item_key, current)
+-- Resolve one immutable catalogue style for a concrete family member. A
+-- receiver override may select a remap key, but cannot replace arbitrary
+-- fields or introduce a resource outside the authored style row.
+function M.package(item_key, stored_style)
+	local style_id, style, family_id, member = M.style(item_key, stored_style)
+	if not style_id then return nil end
+	local receiver = type(style.receivers) == "table" and style.receivers[item_key] or nil
+	return {
+		style_id = style_id,
+		family_id = family_id,
+		member = member,
+		style = style,
+		template = style.template,
+		resource = style.resource,
+		required_dlc = style.required_dlc,
+		presentation = style.presentation,
+		remap_key = receiver and receiver.remap_key or style.remap_key,
+	}
+end
+
+function M.style_available(style, owns_dlc)
+	if type(style) ~= "table" then return false end
+	if not style.required_dlc then return true end
+	return type(owns_dlc) == "function" and owns_dlc(style.required_dlc) == true
+end
+
+function M.next_style(item_key, current, owns_dlc)
 	local style_id, _, family_id, member = M.style(item_key, current)
 	if not style_id then return nil end
 	for index, candidate in ipairs(member.order) do
 		if candidate == style_id then
-			local next_id = member.order[index % #member.order + 1]
-			return next_id, M.FAMILIES[family_id].styles[next_id], family_id
+			for offset = 1, #member.order do
+				local next_id = member.order[(index - 1 + offset) % #member.order + 1]
+				local next_row = M.FAMILIES[family_id].styles[next_id]
+				if M.style_available(next_row, owns_dlc) then
+					return next_id, next_row, family_id
+				end
+			end
+			return style_id, M.FAMILIES[family_id].styles[style_id], family_id
 		end
 	end
-	return member.order[1], M.FAMILIES[family_id].styles[member.order[1]], family_id
+	for _, candidate in ipairs(member.order) do
+		local row = M.FAMILIES[family_id].styles[candidate]
+		if M.style_available(row, owns_dlc) then return candidate, row, family_id end
+	end
+	return nil
+end
+
+function M.remap_event(item_key, stored_style, career, source_event)
+	if type(career) ~= "string" or type(source_event) ~= "string" then return nil end
+	local package = M.package(item_key, stored_style)
+	local remap = package and package.remap_key and M.REMAPS[package.remap_key]
+	return remap and remap.events and remap.events[source_event] or nil
+end
+
+function M.diagnostic_candidate(item_key)
+	if type(item_key) ~= "string" then return nil end
+	for candidate_id, candidate in pairs(M.DIAGNOSTIC_CANDIDATES) do
+		if candidate.members[item_key] then return candidate_id, candidate end
+	end
+	return nil
+end
+
+-- Static catalogue validation is intentionally stricter than runtime use. A
+-- malformed descriptor fails QA instead of becoming a partially visible UI
+-- choice whose resource or animation behavior is missing.
+function M.validate_catalogue()
+	for family_id, family in pairs(M.FAMILIES) do
+		if type(family.styles) ~= "table" or type(family.members) ~= "table" then
+			return false, "invalid family " .. tostring(family_id)
+		end
+		for style_id, style in pairs(family.styles) do
+			if not valid_token(style_id) or type(style.label) ~= "string"
+					or not valid_token(style.template) or type(style.resource) ~= "string" then
+				return false, "incomplete style " .. tostring(family_id) .. ":" .. tostring(style_id)
+			end
+			if style.presentation and not valid_token(style.presentation.transform_key) then
+				return false, "invalid presentation " .. tostring(family_id) .. ":" .. tostring(style_id)
+			end
+			for member_key, receiver in pairs(style.receivers or {}) do
+				if not family.members[member_key] or not M.REMAPS[receiver.remap_key] then
+					return false, "invalid receiver remap " .. tostring(family_id) .. ":" .. tostring(style_id)
+				end
+			end
+		end
+		for member_key, member in pairs(family.members) do
+			if not family.styles[member.default] or type(member.order) ~= "table" or #member.order < 2 then
+				return false, "invalid member " .. tostring(member_key)
+			end
+			local seen = {}
+			for _, style_id in ipairs(member.order) do
+				if seen[style_id] or not family.styles[style_id] then
+					return false, "invalid order " .. tostring(member_key)
+				end
+				seen[style_id] = true
+			end
+		end
+	end
+	return true
 end
 
 local function copy_triplet(value)
@@ -276,7 +429,12 @@ function M.decorate_console_grid(widget_def, runtime)
 						local parent = child_content and child_content.parent
 						local row = console_row(runtime, parent, row_suffix)
 						if row and child_content then
-							local _, next_style = M.next_style(row.item_key, row.style_id)
+							local _, next_style
+							if type(runtime.next_style) == "function" then
+								_, next_style = runtime:next_style(row.item_key, row.style_id)
+							else
+								_, next_style = M.next_style(row.item_key, row.style_id)
+							end
 							child_content.cwv_next_style_label = "Switch to: "
 								.. tostring(next_style and next_style.label or row.style.label)
 						end
@@ -478,12 +636,43 @@ function M.build_kerillian_template(weapons, clone, clone_damage_profile)
 	return template
 end
 
+-- Both donor templates are cloned byte-for-byte apart from receiver-specific
+-- 3P wield routing. Action-event translation remains in the descriptor
+-- registry above, so first-person actions and all native balance data stay
+-- exact. Source: 1h_spears_shield.lua:1484-1485 and es_deus_01.lua:1749-1750.
+function M.build_spear_shield_templates(weapons, clone)
+	if type(weapons) ~= "table" or type(clone) ~= "function" then
+		return nil, "template dependencies missing"
+	end
+	local empire_source = weapons.es_deus_01_template
+	local elven_source = weapons.one_handed_spears_shield_template
+	if type(empire_source) ~= "table" then return nil, "Kruber Spear and Shield template missing" end
+	if type(elven_source) ~= "table" then return nil, "Elven Spear and Shield template missing" end
+
+	local empire = clone(empire_source)
+	empire.wield_anim_career_3p = empire.wield_anim_career_3p or {}
+	for _, career in ipairs({ "we_waywatcher", "we_maidenguard", "we_shade", "we_thornsister" }) do
+		empire.wield_anim_career_3p[career] = "to_1h_spear_shield"
+	end
+
+	local elven = clone(elven_source)
+	elven.wield_anim_career_3p = elven.wield_anim_career_3p or {}
+	for _, career in ipairs({ "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }) do
+		elven.wield_anim_career_3p[career] = "to_es_deus_01"
+	end
+
+	return {
+		[M.EMPIRE_SPEAR_SHIELD_TEMPLATE] = empire,
+		[M.ELVEN_SPEAR_SHIELD_TEMPLATE] = elven,
+	}
+end
+
 function M.install(mod, deps)
 	deps = deps or {}
 	local store = M.normalize_store(mod:get(M.SETTING_KEY))
 	local remote = {}
-	local imperial_transform = deps.imperial_transform
-	local runtime = { store = store, remote = remote, pending = {} }
+	local presentations = type(deps.presentations) == "table" and deps.presentations or {}
+	local runtime = { store = store, remote = remote, pending = {}, diagnostic_counts = {}, diagnostic_seen = {} }
 
 	local function item_identity(item, backend_id)
 		local data = item and (item.data or item)
@@ -511,15 +700,25 @@ function M.install(mod, deps)
 		local identity = item_identity(item, backend_id)
 		if not key or not identity then return nil end
 		local saved = self.store.items[identity]
-		local style_id, style, family_id, member = M.style(key, saved)
+		local package = M.package(key, saved)
+		local style_id, style, family_id, member = package.style_id, package.style,
+			package.family_id, package.member
 		return { item_key = key, identity = identity, style_id = style_id, style = style,
-			family_id = family_id, member = member, item_data = item.data or item }
+			family_id = family_id, member = member, package = package, item_data = item.data or item }
+	end
+
+	function runtime:owns_style(style)
+		return M.style_available(style, deps.owns_dlc)
+	end
+
+	function runtime:next_style(item_key_value, current)
+		return M.next_style(item_key_value, current, deps.owns_dlc)
 	end
 
 	function runtime:resolve_template(item, backend_id)
 		local row = self:describe(item, backend_id)
 		local weapons = rawget(_G, "Weapons")
-		if row then return weapons and weapons[row.style.template] or nil end
+		if row then return weapons and weapons[row.package.template] or nil end
 		-- Remote husk items intentionally have no backend id. The consolidated
 		-- husk-wield wrapper supplies a strictly synchronous owner+slot context so
 		-- the same BackendUtils seam can select that peer's received style without
@@ -550,7 +749,8 @@ function M.install(mod, deps)
 	function runtime:transform_decision(item, backend_id)
 		local row = self:describe(item, backend_id)
 		if not row then return nil end
-		if row.style.transform == "imperial_longsword" then return imperial_transform end
+		local key = row.package.presentation and row.package.presentation.transform_key
+		if key then return presentations[key] or false end
 		return false
 	end
 
@@ -562,12 +762,40 @@ function M.install(mod, deps)
 		return row and row.item_key or nil
 	end
 
+	function runtime:remap_event(item, backend_id, career, source_event)
+		local row = self:describe(item, backend_id)
+		if not row then return nil end
+		local remap = row.package.remap_key and M.REMAPS[row.package.remap_key]
+		return remap and remap.events and remap.events[source_event] or nil
+	end
+
+	function runtime:observe_candidate_action(item_key_value, career, source_event)
+		if type(deps.diagnostics_enabled) ~= "function" or not deps.diagnostics_enabled() then
+			return false
+		end
+		local candidate_id, candidate = M.diagnostic_candidate(item_key_value)
+		if not candidate_id or type(source_event) ~= "string" then return false end
+		local count = self.diagnostic_counts[candidate_id] or 0
+		local key = candidate_id .. ":" .. tostring(career) .. ":" .. source_event
+		if count >= M.DIAGNOSTIC_EVENT_CAP or self.diagnostic_seen[key] then return false end
+		self.diagnostic_seen[key] = true
+		self.diagnostic_counts[candidate_id] = count + 1
+		pcall(printf,
+			"[cwv:645] candidate=%s item=%s career=%s owner_event=%s sample=%d/%d reason=%s",
+			candidate_id, tostring(item_key_value), tostring(career), source_event,
+			count + 1, M.DIAGNOSTIC_EVENT_CAP, candidate.reason)
+		return true
+	end
+
 	function runtime:remote_transform(owner_unit, slot_name)
 		if type(deps.peer_for_owner) ~= "function" then return nil end
 		local peer_id = deps.peer_for_owner(owner_unit)
 		local row = peer_id and remote[peer_id] and remote[peer_id][slot_name]
-		if not row or row.family_id ~= "greatsword" then return nil end
-		return row.style_id == "longsword" and imperial_transform or false
+		if not row then return nil end
+		local family = M.FAMILIES[row.family_id]
+		local style = family and family.styles[row.style_id]
+		local key = style and style.presentation and style.presentation.transform_key
+		return key and presentations[key] or false
 	end
 
 	local function persist()
@@ -685,7 +913,9 @@ function M.install(mod, deps)
 		if self.pending[row.identity] then return false, "transition pending" end
 		local resolved, style = M.style(row.item_key, desired)
 		if resolved ~= desired then return false, "unsupported style" end
-		local resource = style and style.resource
+		if not self:owns_style(style) then return false, "required DLC unavailable" end
+		local package = M.package(row.item_key, desired)
+		local resource = package and package.resource
 		if not (rebuild and resource) then
 			local changed, err = self:set_item_style(item, backend_id, desired, reason, rebuild)
 			if type(complete) == "function" then complete(changed, err) end
@@ -726,7 +956,8 @@ function M.install(mod, deps)
 	function runtime:cycle_item(item, backend_id, reason, rebuild, complete)
 		local row = self:describe(item, backend_id)
 		if not row then return false, "unsupported item" end
-		local next_id = M.next_style(row.item_key, row.style_id)
+		local next_id = self:next_style(row.item_key, row.style_id)
+		if not next_id or next_id == row.style_id then return false, "no available alternate style" end
 		return self:request_item_style(item, backend_id, next_id, reason, rebuild, complete)
 	end
 
@@ -845,7 +1076,12 @@ function M.install_loadout_ui(mod, runtime)
 		local row = item and runtime:describe(item, item.backend_id)
 		widget.content.visible = row ~= nil
 		if row then
-			local _, next_style = M.next_style(row.item_key, row.style_id)
+			local _, next_style
+			if type(runtime.next_style) == "function" then
+				_, next_style = runtime:next_style(row.item_key, row.style_id)
+			else
+				_, next_style = M.next_style(row.item_key, row.style_id)
+			end
 			widget.content.button_text = "Switch to: " .. (next_style and next_style.label or row.style.label)
 			widget.content.button_hotspot.disable_button = false
 		end

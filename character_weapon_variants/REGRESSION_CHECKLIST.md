@@ -13,7 +13,7 @@ Last updated: 2026-07-16.
 | Fix version(s) | CWV v0.1.422-dev; v0.1.430-dev (#644 input/donor parity) |
 | Repro | Select supported Greatsword, Greathammer, and Tuskgor Spear instances, cycle with the contextual `Switch to:` button, then use the hotkey. For Greatsword, click once per style and confirm exact `Imperial -> Bretonnian -> Kerillian -> Greatsword` progression; repeat by hotkey. Restart and hot join with a second CWV peer; include pre-#620 Infantry Spear, Imperial Longsword, and Black Guard UUIDs. Open CIM's Athanor on Dual Axes. |
 | Expected post-fix | Each exact instance retains its style. One physical equipment-button click consumes exactly one release edge and commits one transition; button and hotkey orders are identical. Greatswords expose four packages, with Imperial derived from Kruber Greatsword plus authored balance/transform rather than duplicating Bretonnian. Greathammers expose two and Tuskgor Hunter/Infantry. Foot Knight has Tuskgor by default. Legacy UUIDs become their native item+style without illusion/forged-field loss, and retired rows are absent from new crafting/WT. All render surfaces agree without stale transforms, active-attack switches, per-frame RPCs, query loops, or missing-icon crashes. |
-| Detection | Offline `test_cwv_combat_styles.lua` passes `CWV equipment click commits once and matches one hotkey cycle` plus `CWV Imperial Longsword style derives from Kruber Greatsword, not Bretonnian`; `/cwv_regression_test` passes `issue620_per_instance_combat_styles`; transition-only `[cwv:620] style commit/tx/rx` evidence is bounded. |
+| Detection | Offline `test_cwv_combat_styles.lua` passes the cycle, descriptor, DLC, reciprocal Spear and Shield, and bounded-diagnostic checks; `/cwv_regression_test` passes `issue620_per_instance_combat_styles` and `issue645_reciprocal_style_descriptors`; transition-only `[cwv:620]` state and capped `[cwv:645]` candidate evidence remain bounded. |
 
 ---
 
@@ -64,7 +64,7 @@ Last updated: 2026-07-16.
 - [ ] Tuskgor's added shield-free illusions render only the spear half in inventory, illusion preview, first person, local third person, and a remote husk.
 - [ ] Infantry style retains #596's 15% slower attack chains, 15% stagger/cleave, and 7.5% damage; block/push remain elf-spear baseline. Hunter is native Tuskgor.
 - [ ] A legacy Infantry UUID migrates in place to Tuskgor+Infantry with illusion and forged payload intact.
-- [ ] `/cwv_regression_test` passes both `cwv_issue596_infantry_spear_contract` and `issue620_per_instance_combat_styles`; offline spear/style suites pass.
+- [ ] `/cwv_regression_test` passes `cwv_issue596_infantry_spear_contract`, `issue620_per_instance_combat_styles`, and `issue645_reciprocal_style_descriptors`; offline spear/style suites pass.
 
 ---
 

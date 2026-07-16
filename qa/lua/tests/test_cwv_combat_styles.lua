@@ -38,6 +38,40 @@ return function(H, repo_root)
 		H.equal(policy.style("es_2h_heavy_spear"), "hunter")
 		H.equal(policy.next_style("es_2h_heavy_spear", "hunter"), "infantry")
 		H.equal(policy.style("cwv_es_infantry_spear"), nil)
+		H.equal(policy.style("es_deus_01"), "empire")
+		H.equal(policy.next_style("es_deus_01", "empire", function() return true end), "elven")
+		H.equal(policy.style("we_1h_spears_shield"), "elven")
+		H.equal(policy.next_style("we_1h_spears_shield", "elven", function() return true end), "empire")
+	end)
+
+	H.test("CWV reciprocal style catalogue is complete and unproven families fail closed", function()
+		local valid, err = policy.validate_catalogue()
+		H.equal(valid, true, err)
+		local package = policy.package("es_deus_01", "elven")
+		H.equal(package.template, policy.ELVEN_SPEAR_SHIELD_TEMPLATE)
+		H.equal(package.resource,
+			"units/beings/player/first_person_base/state_machines/melee/1h_spear_shield")
+		H.equal(package.required_dlc, "scorpion")
+		H.equal(package.remap_key, "spear_shield_to_deus")
+		H.equal(policy.remap_event("es_deus_01", "elven", "es_knight", "attack_swing_stab_lh"),
+			"attack_swing_stab")
+		H.equal(policy.remap_event("we_1h_spears_shield", "empire", "we_maidenguard", "attack_swing_up"),
+			"attack_swing_stab_lh")
+		for _, item_key in ipairs({ "dr_1h_axe", "wh_1h_axe", "we_1h_axe",
+				"we_2h_axe", "dr_2h_axe", "es_1h_sword", "we_1h_sword", "we_spear" }) do
+			H.equal(policy.member(item_key), nil)
+			H.truthy(policy.diagnostic_candidate(item_key))
+		end
+	end)
+
+	H.test("CWV reciprocal style DLC gates skip unavailable donors", function()
+		local own_grass_only = function(name) return name == "grass" end
+		local next_id = policy.next_style("es_deus_01", "empire", own_grass_only)
+		H.equal(next_id, "empire")
+		next_id = policy.next_style("we_1h_spears_shield", "elven", own_grass_only)
+		H.equal(next_id, "empire")
+		local own_all = function() return true end
+		H.equal(policy.next_style("es_deus_01", "empire", own_all), "elven")
 	end)
 
 	H.test("CWV Combat Style input descriptions never exceed the vanilla widget pool", function()
@@ -350,6 +384,24 @@ return function(H, repo_root)
 			bretonnian.actions.action_one.light.graph, false)
 	end)
 
+	H.test("CWV Spear and Shield styles clone donors with reciprocal receiver wield routes", function()
+		local empire = { wield_anim = "to_es_deus_01", actions = { action_one = { marker = "empire" } } }
+		local elven = { wield_anim = "to_1h_spear_shield", actions = { action_one = { marker = "elven" } } }
+		local built, err = policy.build_spear_shield_templates({
+			es_deus_01_template = empire,
+			one_handed_spears_shield_template = elven,
+		}, clone)
+		H.truthy(built, err)
+		H.equal(built[policy.EMPIRE_SPEAR_SHIELD_TEMPLATE].wield_anim, "to_es_deus_01")
+		H.equal(built[policy.EMPIRE_SPEAR_SHIELD_TEMPLATE].wield_anim_career_3p.we_maidenguard,
+			"to_1h_spear_shield")
+		H.equal(built[policy.ELVEN_SPEAR_SHIELD_TEMPLATE].wield_anim, "to_1h_spear_shield")
+		H.equal(built[policy.ELVEN_SPEAR_SHIELD_TEMPLATE].wield_anim_career_3p.es_knight,
+			"to_es_deus_01")
+		H.equal(empire.wield_anim_career_3p, nil)
+		H.equal(elven.wield_anim_career_3p, nil)
+	end)
+
 	H.test("CWV Combat Style runtime resolves exact IDs and legacy defaults", function()
 		local saved
 		local fake_mod = {
@@ -364,7 +416,9 @@ return function(H, repo_root)
 			cwv_key_for_item = function(backend_id)
 				return backend_id == "legacy_cwv" and "cwv_es_longsword" or nil
 			end,
-			imperial_transform = { item_key = "imperial_test", right_hand_scale = { 1, 0.8, 0.9 } },
+			presentations = {
+				imperial_longsword = { item_key = "imperial_test", right_hand_scale = { 1, 0.8, 0.9 } },
+			},
 		})
 		local a = runtime:describe({ backend_id = "uuid_a", name = "es_2h_sword" })
 		H.equal(a.style_id, "kerillian")
@@ -379,6 +433,26 @@ return function(H, repo_root)
 		H.equal(changed, true)
 		H.equal(saved.key, policy.SETTING_KEY)
 		H.equal(saved.value.items.uuid_b, "longsword")
+	end)
+
+	H.test("CWV #645 diagnostics are deduplicated, capped, and never expose candidate styles", function()
+		local old_printf = _G.printf
+		local logs = {}
+		_G.printf = function(fmt, ...)
+			logs[#logs + 1] = string.format(fmt, ...)
+		end
+		local runtime = policy.install({ get = function() end, set = function() end }, {
+			diagnostics_enabled = function() return true end,
+		})
+		H.equal(runtime:observe_candidate_action("we_2h_axe", "we_maidenguard", "attack_a"), true)
+		H.equal(runtime:observe_candidate_action("we_2h_axe", "we_maidenguard", "attack_a"), false)
+		for index = 2, policy.DIAGNOSTIC_EVENT_CAP + 3 do
+			runtime:observe_candidate_action("we_2h_axe", "we_maidenguard", "attack_" .. index)
+		end
+		H.equal(#logs, policy.DIAGNOSTIC_EVENT_CAP)
+		H.equal(runtime:observe_candidate_action("es_2h_sword", "es_knight", "attack"), false)
+		H.equal(policy.member("we_2h_axe"), nil)
+		_G.printf = old_printf
 	end)
 
 	H.test("CWV Combat Style wire accepts only bounded known state", function()

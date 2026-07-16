@@ -15,8 +15,8 @@ local loc = {
 	cwv_interaction_ammunition_javelin = {
 		en = "Tuskgor Javelin",  -- pickup popup text when looking at a stuck javelin
 	},
-	cwv_cycle_combat_style_hotkey = { en = "[verify-fix-coop] [Issue 620] Cycle Combat Style" },
-	cwv_cycle_combat_style_hotkey_tooltip = { en = "Cycles the wielded supported weapon's saved Combat Style. The style belongs to that exact weapon instance and changes only when no attack is active. Greatswords cycle Greatsword, Imperial Longsword, Bretonnian, and Kerillian; Greathammers cycle Kruber and Warrior Priest; Tuskgor Spear cycles Hunter and Infantry." },
+	cwv_cycle_combat_style_hotkey = { en = "[diagnostics-armed] [Issue 645] Cycle Combat Style" },
+	cwv_cycle_combat_style_hotkey_tooltip = { en = "Cycles the wielded supported weapon's saved Combat Style. The style belongs to that exact weapon instance and changes only when no attack is active. Greatswords cycle Greatsword, Imperial Longsword, Bretonnian, and Kerillian; Greathammers cycle Kruber and Warrior Priest; Tuskgor Spear cycles Hunter and Infantry; Kruber and Elven Spear and Shield cycle each other's style when the corresponding DLC is owned." },
 	cwv_cycle_combat_style_controller = { en = "Switch Combat Style" },
 
 	-- ============================================================
