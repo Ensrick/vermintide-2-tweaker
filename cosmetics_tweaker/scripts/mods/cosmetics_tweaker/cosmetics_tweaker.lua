@@ -48,6 +48,7 @@ local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 local CUSTOM_HATS = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_custom_hats")
 local GK_SET = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_grail_knight_set")
 local CWV_FAMILY_CONTRACT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_family_contract")
+local OFFHAND_NAMES = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_names")
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
 local GLOW_BADGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_badge_policy")
@@ -1568,6 +1569,19 @@ local _SHIELD_POOLS_BY_ITEM_TYPE = {
     },
 }
 
+local function _decorate_shield_option(option)
+    if type(option) ~= "table" then return option end
+    local identity = option.component_identity or option.la_armoury_key
+        or option.intended_unit or option.unit or option.vanilla_skin
+    return OFFHAND_NAMES.decorate(option, identity, "left_hand_unit", option.name,
+        nil, function(key) return mod:localize(key) end, "shield",
+        option.localization_key)
+end
+
+for _, pool in pairs(_SHIELD_POOLS_BY_ITEM_TYPE) do
+    for _, option in ipairs(pool) do _decorate_shield_option(option) end
+end
+
 -- Inventory-icon ownership follows the independently customized shield for
 -- these exact item types. Keep this presentation policy separate from the
 -- DLC/unlock filters used while building the selectable pools.
@@ -1677,7 +1691,8 @@ if GK_SET and GK_SET.offhand_option then
     for _, item_type in ipairs(LA_BRIDGE.kruber_shield_item_types or {}) do
         local hands = _offhand_options[item_type]
         if hands and hands.left_hand_unit then
-            hands.left_hand_unit[#hands.left_hand_unit + 1] = GK_SET.offhand_option()
+            hands.left_hand_unit[#hands.left_hand_unit + 1] =
+                _decorate_shield_option(GK_SET.offhand_option())
         end
     end
 end
@@ -1834,11 +1849,43 @@ local _DUAL_WIELD_POOLS = {
     },
 }
 
+local function _source_illusion_name(skin_key, data)
+    local L = rawget(_G, "Localize")
+    local display_key = data and data.display_name
+    local candidates = {}
+    if display_key then candidates[#candidates + 1] = display_key end
+    if skin_key then candidates[#candidates + 1] = skin_key .. "_name" end
+    if L then
+        for _, key in ipairs(candidates) do
+            if type(key) == "string" and key ~= "" then
+                local ok, localized = pcall(L, key)
+                if ok and type(localized) == "string" and localized ~= ""
+                        and localized ~= key and localized ~= "<" .. key .. ">" then
+                    return localized, display_key
+                end
+            end
+        end
+    end
+    return OFFHAND_NAMES.readable_source_name(skin_key), display_key
+end
+
+local function _decorate_dual_component(option, skin_key, hand_field, data)
+    local source_name, display_key = _source_illusion_name(skin_key, data)
+    if hand_field == "left_hand_unit" then
+        return OFFHAND_NAMES.decorate(option, skin_key, hand_field, source_name,
+            display_key, function(key) return mod:localize(key) end)
+    end
+    option.name = source_name
+    option.source_skin_key = skin_key
+    option.source_display_key = display_key
+    return option
+end
+
 -- Build offhand options from a skin_combination table. Reads either
 -- `left_hand_unit` (native dual-wield tables) or `right_hand_unit`
 -- (borrowed single-hand tables) per the `unit_field` arg. Returns the
 -- canonical `{ name, unit, rarity }` shape consumed by the picker.
-local function _build_offhand_options_from_skin_table(skin_table_name, unit_field)
+local function _build_offhand_options_from_skin_table(skin_table_name, unit_field, hand_field)
     if not WeaponSkins or not WeaponSkins.skin_combinations then return nil end
     local sct = WeaponSkins.skin_combinations[skin_table_name]
     if not sct then return nil end
@@ -1858,7 +1905,6 @@ local function _build_offhand_options_from_skin_table(skin_table_name, unit_fiel
         end
     end
 
-    local L = rawget(_G, "Localize")
     local seen = {}
     local out = {}
     local rarity_order = { "plentiful", "common", "rare", "exotic", "unique", "bogenhafen", "promotion" }
@@ -1879,20 +1925,14 @@ local function _build_offhand_options_from_skin_table(skin_table_name, unit_fiel
                 local unit_path = s and s[unit_field]
                 if unit_path and not seen[unit_path] then
                     seen[unit_path] = true
-                    local name = skin_key
-                    if s.display_name and L then
-                        local ok, localized = pcall(L, s.display_name)
-                        if ok and localized and localized ~= "" and localized ~= s.display_name then
-                            name = localized
-                        end
-                    end
-                    out[#out + 1] = {
-                        name   = name,
+                    local option = {
                         unit   = unit_path,
                         rarity = s.rarity or rarity,
                         skin_key = skin_key,
                         inventory_icon = s.inventory_icon,
                     }
+                    out[#out + 1] = _decorate_dual_component(
+                        option, skin_key, hand_field, s)
                 end
             end
         end
@@ -1905,7 +1945,7 @@ do
     -- ownership relation. This covers modded asymmetric pairs whose generated
     -- pair table intentionally couples the hands and therefore cannot supply
     -- independent picker rows. Stable rarity/key sorting keeps UI order fixed.
-    local function _build_offhand_options_from_matching_item(matching_item_key, unit_field)
+    local function _build_offhand_options_from_matching_item(matching_item_key, unit_field, hand_field)
         if type(ItemMasterList) ~= "table" then return nil end
         unit_field = unit_field or "right_hand_unit"
 
@@ -1933,7 +1973,6 @@ do
             return a.skin_key < b.skin_key
         end)
 
-        local L = rawget(_G, "Localize")
         local seen = {}
         local out = {}
         for _, candidate in ipairs(candidates) do
@@ -1941,20 +1980,14 @@ do
             local unit_path = entry[unit_field]
             if not seen[unit_path] then
                 seen[unit_path] = true
-                local name = candidate.skin_key
-                if entry.display_name and L then
-                    local ok, localized = pcall(L, entry.display_name)
-                    if ok and localized and localized ~= "" and localized ~= entry.display_name then
-                        name = localized
-                    end
-                end
-                out[#out + 1] = {
-                    name = name,
+                local option = {
                     unit = unit_path,
                     rarity = entry.rarity,
                     skin_key = candidate.skin_key,
                     inventory_icon = entry.inventory_icon,
                 }
+                out[#out + 1] = _decorate_dual_component(
+                    option, candidate.skin_key, hand_field, entry)
             end
         end
         return out
@@ -2014,9 +2047,11 @@ do
                 local source_kind = spec.skin_table and "skin_table" or "matching_item"
                 local pool
                 if spec.matching_item_key then
-                    pool = _build_offhand_options_from_matching_item(spec.matching_item_key, spec.unit_field)
+                    pool = _build_offhand_options_from_matching_item(
+                        spec.matching_item_key, spec.unit_field, hand_field)
                 else
-                    pool = _build_offhand_options_from_skin_table(spec.skin_table, spec.unit_field)
+                    pool = _build_offhand_options_from_skin_table(
+                        spec.skin_table, spec.unit_field, hand_field)
                 end
                 if pool and #pool > 0 then
                     _offhand_options[item_type][hand_field] = pool
@@ -2066,6 +2101,34 @@ do
             end
         end
         return built
+    end
+
+    -- #641: generated inventory for incrementally authoring independent
+    -- offhand-weapon and shield names. It is derived from the same selectable
+    -- pools the picker renders, so non-selectable source skins cannot leak in.
+    mod._cos.offhand_name_policy = OFFHAND_NAMES
+    mod._cos.offhand_name_inventory = function()
+        mod._discover_cwv_dual_offhand_pools()
+        local records = {}
+        for item_type, pools in pairs(_offhand_options) do
+            for hand_field, pool in pairs(pools) do
+                for _, option in ipairs(pool or {}) do
+                    if option.component_kind and option.component_identity then
+                        records[#records + 1] = {
+                            item_type = item_type,
+                            hand_field = hand_field,
+                            component_kind = option.component_kind,
+                            component_identity = option.component_identity,
+                            source_skin_key = option.source_skin_key,
+                            source_name = option.name,
+                            localization_key = option.component_localization_key,
+                            status = option.component_name_source,
+                        }
+                    end
+                end
+            end
+        end
+        return OFFHAND_NAMES.inventory_rows(records)
     end
 end
 
@@ -2694,6 +2757,7 @@ local function _merge_la_offhand_options()
                         rarity          = "promo",
                         -- v0.9.9.1 REVERT: dropped la_opt.icon passthrough.
                     }
+                    _decorate_shield_option(target[#target])
                 end
             end
         end
@@ -3178,6 +3242,7 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
         initial_skin = WeaponSkins.default_skins[item.key]
     end
     _refresh_glow_editor_button(self, initial_skin)
+    self._ct_primary_skin = initial_skin
     _refresh_illusion_glow_badges(self)
 
     _dbg("[offhand] _setup_illusions called, item=%s", tostring(item and item.key))
@@ -3262,6 +3327,8 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
             widget.content.offhand_hand = hand_field
             widget.content.offhand_unit = opt.unit
             widget.content.offhand_name = opt.name
+            widget.content.offhand_component_kind = opt.component_kind
+            widget.content.offhand_component_identity = opt.component_identity
             widget.content.locked = false
             widget.content.rarity = rarity
             hand_widgets[#hand_widgets + 1] = widget
@@ -3414,6 +3481,42 @@ mod:hook_safe("HeroWindowItemCustomization", "_handle_input", function(self, inp
         if hover_skin then
             _trace("INPUT HOVER illusion-grid skin=%s bid=%s (vanilla label-only)",
                 tostring(hover_skin), tostring(self._item_backend_id))
+        end
+    end
+
+    local primary_skin = hover_skin
+    if not primary_skin then
+        for i = 1, #il do
+            local content = il[i] and il[i].content
+            local hotspot = content and content.button_hotspot
+            if (hotspot and hotspot.is_selected) or (content and content.equipped) then
+                primary_skin = content.skin_key
+                break
+            end
+        end
+    end
+    primary_skin = primary_skin or self._ct_primary_skin
+    local primary_data = primary_skin and WeaponSkins and WeaponSkins.skins
+        and WeaponSkins.skins[primary_skin]
+    primary_data = type(primary_data) == "table" and (primary_data.data or primary_data) or nil
+    local primary_name = primary_skin and _source_illusion_name(primary_skin, primary_data) or nil
+
+    -- #641 consolidated into the existing _handle_input hook: vanilla writes
+    -- the main illusion's name before this post-hook runs. When an independent
+    -- component cell is hovered, compose the current primary illusion's
+    -- existing name first and the independently resolved offhand/shield name
+    -- second. No hover means vanilla remains authoritative.
+    for _, widget in ipairs(self._ct_offhand_widgets or {}) do
+        local content = widget.content
+        local hotspot = content and content.button_hotspot
+        if hotspot and hotspot.is_hover and content.offhand_name then
+            local base = self._weapon_illusion_base_widgets_by_name
+            local name_widget = base and base.illusions_name
+            if name_widget and name_widget.content then
+                name_widget.content.text = OFFHAND_NAMES.compose(
+                    primary_name, content.offhand_name)
+            end
+            break
         end
     end
 end)
@@ -11200,6 +11303,46 @@ _rt_register("independent_dual_offhands_583", function()
             or type(mod._store_offhand_mesh_recv) ~= "function"
             or type(mod._offhand_mesh_by_peer) ~= "table" then
         return "bounded direct-unit peer replay path incomplete"
+    end
+end)
+
+_rt_register("issue641_independent_offhand_names", function()
+    if type(OFFHAND_NAMES) ~= "table" or OFFHAND_NAMES.SCHEMA_VERSION ~= 1 then
+        return "offhand name policy/schema missing"
+    end
+    local key = OFFHAND_NAMES.localization_key(
+        "wh_dual_hammer_skin_01", "left_hand_unit")
+    if key ~= "cos_offhand_weapon_wh_dual_hammer_skin_01_left_name" then
+        return "stable offhand localization key drifted: " .. tostring(key)
+    end
+    local source_name, _, source_kind = OFFHAND_NAMES.resolve(
+        "wh_dual_hammer_skin_01", "left_hand_unit", "Source Illusion",
+        function(k) return "<" .. k .. ">" end)
+    if source_name ~= "Source Illusion" or source_kind ~= "source" then
+        return "missing authored name did not fall back to source illusion"
+    end
+    local authored_name, _, authored_kind = OFFHAND_NAMES.resolve(
+        "wh_dual_hammer_skin_01", "left_hand_unit", "Source Illusion",
+        function() return "Named Offhand" end)
+    if authored_name ~= "Named Offhand" or authored_kind ~= "authored" then
+        return "authored offhand localization did not win"
+    end
+    if type(mod._cos.offhand_name_inventory) ~= "function" then
+        return "generated naming inventory unavailable"
+    end
+    for _, option in ipairs(_SHIELD_POOLS_BY_ITEM_TYPE.es_1h_sword_shield) do
+        if option.component_kind ~= "shield"
+                or type(option.component_localization_key) ~= "string" then
+            return "shield lacks independent naming schema"
+        end
+    end
+    local composed = OFFHAND_NAMES.compose("Primary Illusion", "Shield Illusion")
+    if composed ~= "Primary Illusion + Shield Illusion" then
+        return "primary/secondary composition order drifted"
+    end
+    if GK_SET.ITEM_LOCALIZATION.cos_gk_purpure_azure_shield_name
+            ~= "The Blood-Bloomed Bouclier" then
+        return "confirmed Purpure/Azure shield name missing"
     end
 end)
 

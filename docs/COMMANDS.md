@@ -90,7 +90,7 @@ ct_status
 ### `cos` (cosmetics_tweaker)
 ```
 flush_log, dump_glows, dump_skin_rarities, dump_all_names, check_vmf,
-probe_hat, probe_cosmetics, frames_status, la_offhand_dump,
+probe_hat, probe_cosmetics, cos_offhand_name_inventory, frames_status, la_offhand_dump,
 offhand_debug, glow_status, glow_trace, glow_dump, glow_probe,
 glow_scan, glow_scan_stop, glow_restore, la_dump, la_trace,
 la_force, la_attach, la_loadout, la_hats

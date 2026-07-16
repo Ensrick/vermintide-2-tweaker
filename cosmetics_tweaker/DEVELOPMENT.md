@@ -49,6 +49,7 @@ exactly once from the manifest.
 | `_cos_custom_hats.lua` | Authored hat registry (#612): stable item/backend identity, custom-unit resolver, default-enabled availability toggle, and vanilla peer fallback metadata. It reuses the shared bounded appearance registry but remains independent of Loremaster's Armoury installation. |
 | `_cos_wire.lua` | Phase 4a #421 weapon-skin wire boundary. Captures `mod._cos.custom_skin_keys` after `_cos_illusions`, exports the established `mod._cos_wire_null_custom_skins` helper and `mod._cos_skin_wire_surfaces` registry, and owns the three vanilla `rpc_add_equipment` sender hooks (`SimpleInventoryExtension.game_object_initialized`, `SimpleInventoryExtension._spawn_resynced_loadout`, `GearUtils.hot_join_sync`). The custom-key null is unconditional, scoped to the vanilla continuation, and restores local slot state afterward. |
 | `_cos_offhand_preload_lifecycle.lua` | Pure generation-scoped ownership/readiness ledger for #565 async offhand packages. It has no engine or mod dependencies so shared-handle callbacks retained after unload can be reproduced offline. The entry owns all PackageManager calls and bounded diagnostics. |
+| `_cos_offhand_names.lua` | Pure #641 component display-name policy: independent offhand-weapon/shield keys, deterministic source fallback, primary-first label composition, presentation-only decoration, and deduplicated inventory rows. |
 | `_cos_weapon_pose_policy.lua` / `_cos_weapon_poses.lua` | #485 pure authored-pose catalog plus the local modded-realm SocialWheelUI adapter. Replaces only the gathered pose rows; never grants backend ownership or mutates ItemMasterList. Missing-parent fallback is bounded diagnostics pending compatibility proof. |
 | `_la_shield_parity.lua` | Pure #266 availability policy: the single complete Kruber native/CWV shield item-type catalogue and its weapon-agnostic fan-out helper. `_la_bridge.lua` consumes it; it owns no render or engine surface. |
 
@@ -102,6 +103,12 @@ their internals alone.
   apply helpers already live in `_cos_render.lua` and their glow apply helpers in
   `_cos_glow.lua`); grep ALL files for an existing hook on the `(Class, method)` before
   adding one (VMF drops the second — NON-NEGOTIABLE 8).
+- **New independent offhand-weapon or shield display-name rule** →
+  `_cos_offhand_names.lua`; keep component/hand identity separate from unit paths,
+  persistence, and networking. Add player-authored English strings to
+  `cosmetics_tweaker_localization.lua` using the key emitted by
+  `/cos_offhand_name_inventory`. Existing shield registries remain the fallback
+  source until a final independent name is authored.
 - **New cross-module value** → export onto `mod._cos` in the owning module (which must
   be earlier in the manifest than its consumers) and localize it at the consumer's top.
 
@@ -141,6 +148,29 @@ the `wh_dual_hammer_skin_*` records carry both hand fields and
 `wh_dual_hammer_skins` supplies the rarity buckets. The owning item type is
 `wh_dual_hammer` in `item_master_list_bless.lua`. Do not infer hand meshes from
 display names or inventory icons; source the authored hand field.
+
+### Independent component names (#641)
+
+Visual ownership and display-name ownership use the same component boundary.
+The normal illusion row retains the primary/right-hand source name. Every
+selectable dual-weapon left-hand option carries its source skin identity plus a
+stable `cos_offhand_weapon_<source>_left_name` localization key resolved by
+`_cos_offhand_names.lua`. If that independent key has no authored string, the
+picker deterministically displays the localized source illusion name; it never
+falls through to the raw skin key during normal runtime resolution.
+
+Shield options carry a separate `cos_shield_<identity>_left_name` key (or an
+explicit existing custom-shield localization key) and fall back to their
+existing shield-specific name. Hover labels are composed as
+`Primary Illusion + Offhand/Shield`: the primary half is reused from the source
+illusion for the primary model currently being previewed, never invented as a
+monolithic weapon-pair name.
+
+This policy is presentation-only. Persistence continues to store the exact
+backend item, hand field, and unit path, and networking continues to send the
+bounded direct-mesh payload. Run
+`/cos_offhand_name_inventory` for the live deduplicated naming queue; authoring
+instructions and the key schema are in `OFFHAND_ILLUSION_NAMES.md`.
 
 Committed direct meshes persist as `offhands[backend_id][left_hand_unit].unit_path`.
 Restore and remote husk application accept the path only when it remains in the

@@ -82,7 +82,7 @@ return function(H, repo_root)
         H.truthy(module:find("new_units = { M.SHIELD_BASE_UNIT, M.SHIELD_BASE_UNIT_3P }", 1, true))
         H.equal(module:find("add_skin_to_combination(M.SHIELD_SKIN_KEY", 1, true), nil)
         H.truthy(entry:find("for _, item_type in ipairs(LA_BRIDGE.kruber_shield_item_types or {})", 1, true))
-        H.truthy(entry:find("hands.left_hand_unit[#hands.left_hand_unit + 1] = GK_SET.offhand_option()", 1, true))
+        H.truthy(entry:find("_decorate_shield_option(GK_SET.offhand_option())", 1, true))
         for _, family in ipairs({
             "es_1h_sword_shield", "es_1h_mace_shield",
             "es_1h_sword_shield_breton", "es_deus_01",

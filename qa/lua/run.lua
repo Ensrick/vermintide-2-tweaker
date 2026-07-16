@@ -178,6 +178,7 @@ local suites = {
     "test_ct_progressive_elite_policy",
     "test_ct_resume_policy",
     "test_cos_offhand_preload_lifecycle",
+    "test_cos_offhand_names",
     "test_cos_dual_offhands",
     "test_cos_la_shield_parity",
     "test_cos_la_instance_policy",

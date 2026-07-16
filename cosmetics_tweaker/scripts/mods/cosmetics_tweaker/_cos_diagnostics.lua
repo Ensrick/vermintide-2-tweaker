@@ -2,9 +2,10 @@
 --
 -- Owns the pure-diagnostic commands split out of the god file in the v0.9.77-dev
 -- Phase 1 OOP decomposition: /flush_log, /dump_glows, /dump_skin_rarities,
--- /dump_all_names, /check_vmf, /probe_hat, /probe_cosmetics. All read engine
--- globals (WeaponSkins / ItemMasterList / MaterialSettingsTemplates / Managers)
--- and never mutate mod state. No behavior change from the pre-split god file.
+-- /dump_all_names, /check_vmf, /probe_hat, /probe_cosmetics, and #641's
+-- /cos_offhand_name_inventory. All read engine globals (WeaponSkins /
+-- ItemMasterList / MaterialSettingsTemplates / Managers) or immutable picker
+-- catalogues and never mutate saved/equipped cosmetic state.
 --
 -- Owned by: cosmetics_tweaker.lua entry point. Consumed via: mod:dofile.
 -- Shared state: reads mod._cos.flush_log (the entry keeps _flush_log because the
@@ -19,6 +20,35 @@ local _is_unit_alive = function(u) return type(u) == "userdata" and pcall(Unit.a
 mod:command("flush_log", "Force-flush the engine console log to disk", function()
     _flush_log()
     mod:echo("[flush_log] attempted")
+end)
+
+-- #641: emit the live, deduplicated offhand-weapon and shield naming queue. Runtime
+-- WeaponSkins includes DLC and sibling-mod additions that a checked-in static
+-- list cannot reliably predict, so the selectable picker pools are the source
+-- of truth. Output is TSV for direct copy into a spreadsheet or text editor.
+mod:command("cos_offhand_name_inventory", "Dump independent offhand illusion localization keys", function()
+    local provider = COS.offhand_name_inventory
+    if type(provider) ~= "function" then
+        pcall(printf, "[cosmetics:offhand-names] unavailable: picker pools not initialized")
+        _flush_log()
+        return
+    end
+
+    local rows = provider()
+    local function cell(value)
+        local cleaned = tostring(value or ""):gsub("[\r\n\t]", " ")
+        return cleaned
+    end
+    pcall(printf, "[cosmetics:offhand-names] schema=1 count=%d", #rows)
+    pcall(printf, "[cosmetics:offhand-names] component_kind\tcomponent_identity\thand_field\tlocalization_key\tcurrent_name\tstatus\titem_types")
+    for _, row in ipairs(rows) do
+        pcall(printf, "[cosmetics:offhand-names] %s\t%s\t%s\t%s\t%s\t%s\t%s",
+            cell(row.component_kind), cell(row.component_identity), cell(row.hand_field),
+            cell(row.localization_key), cell(row.source_name),
+            cell(row.status), cell(table.concat(row.item_types or {}, ",")))
+    end
+    _flush_log()
+    mod:echo("[cosmetics] wrote %d offhand naming rows to the console log", #rows)
 end)
 
 -- Dump every weapon skin that has a material_settings_name (a glow template),

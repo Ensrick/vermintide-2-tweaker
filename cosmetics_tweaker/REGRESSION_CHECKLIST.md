@@ -139,6 +139,19 @@ Last updated: 2026-07-15.
 | Detection | `/cos_regression_test` passes `independent_dual_offhands_583`, `cos_la_offhand_persistence_roundtrip`, and `issue483_cwv_sword_mace_individualized_cosmetics`. Direct peer replay remains one last-choice queue entry per `(backend_id, hand)`, uses the existing RPC schema, and is replayed by the bounded acknowledged state pull. |
 | Tracking | GitHub issue #583. |
 
+### independent-offhand-names -- weapon and shield component localization
+
+| Field | Value |
+|-------|-------|
+| Symptom | Dual-weapon offhands reused a whole-illusion name, while shields lacked the same explicit component naming boundary. |
+| Root cause | #583 separated mesh ownership by hand but presentation records retained a whole source name or an unrelated shield-pool label. |
+| Mod(s) | cosmetics_tweaker; character_weapon_variants when installed |
+| Category | PRESENTATION / LOCALIZATION |
+| Repro | Open dual-weapon and weapon+shield customization screens, hover each component row entry, and run `/cos_offhand_name_inventory`. |
+| Expected post-fix | Offhand weapons and shields resolve independent names one by one. Unauthored rows retain deterministic source names. The hover label composes the identical-model primary illusion name first and the component name second. Old saves and peer payloads remain valid. |
+| Detection | Offline `test_cos_offhand_names` covers stable namespaces, authored/source fallback, identical-model primary reuse, primary-first composition, presentation-only decoration, and deduplication. `/cos_regression_test` passes `issue641_independent_offhand_names`. |
+| Tracking | GitHub issue #641. |
+
 ### cwv-dawi-mace-appearance-contract -- primary, dual, and shield ownership
 
 | Field | Value |
