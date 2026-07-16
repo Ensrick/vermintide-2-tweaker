@@ -11,11 +11,23 @@ return {
 	is_togglable    = true,
 	custom_gui_textures = {
 		textures = {
+			"icon_bg_cursed",
 			"icon_wpn_blightreaper",
 		},
 		ui_renderer_injections = {
-			{ "ingame_ui", "materials/ui/icon_wpn_blightreaper" },
-			{ "hero_view", "materials/ui/icon_wpn_blightreaper" },
+			-- `icon_bg_cursed` is an item-card rarity background. Inject it into
+			-- the same ten renderer creators proven by CIM's `icon_bg_modded`.
+			-- The authored weapon icon keeps its narrower four-renderer contract.
+			{ "ingame_ui", "materials/ui/icon_bg_cursed", "materials/ui/icon_wpn_blightreaper" },
+			{ "ingame_ui_settings", "materials/ui/icon_bg_cursed" },
+			{ "hero_view", "materials/ui/icon_bg_cursed", "materials/ui/icon_wpn_blightreaper" },
+			{ "hero_view_state_loot", "materials/ui/icon_bg_cursed" },
+			{ "hero_view_state_store", "materials/ui/icon_bg_cursed" },
+			{ "hero_view_state_weave_forge", "materials/ui/icon_bg_cursed" },
+			{ "start_game_state_settings_overview", "materials/ui/icon_bg_cursed" },
+			{ "level_end_view_base", "materials/ui/icon_bg_cursed" },
+			{ "level_end_view_versus", "materials/ui/icon_bg_cursed" },
+			{ "ui_manager", "materials/ui/icon_bg_cursed" },
 			{ "loading_view", "materials/ui/icon_wpn_blightreaper" },
 			{ "popup_manager", "materials/ui/icon_wpn_blightreaper" },
 		},

@@ -12,6 +12,7 @@ lua = [
 ]
 
 material = [
+	"materials/ui/icon_bg_cursed"
 	"materials/ui/icon_wpn_blightreaper"
 	"units/woc_blightreaper/blightreaper"
 ]
@@ -22,6 +23,7 @@ unit = [
 ]
 
 texture = [
+	"gui/1080p/single_textures/weapons_of_chaos/icon_bg_cursed"
 	"gui/1080p/single_textures/weapons_of_chaos/icon_wpn_blightreaper"
 	"textures/woc_blightreaper/blightreaper_albedo"
 	"textures/woc_blightreaper/blightreaper_emissive"

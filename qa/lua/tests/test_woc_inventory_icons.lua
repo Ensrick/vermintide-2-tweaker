@@ -26,8 +26,9 @@ return function(H, repo_root)
 	H.test("WOC packages and injects the authored Blightreaper icon", function()
 		H.truthy(data:find('"icon_wpn_blightreaper"', 1, true))
 		for _, renderer in ipairs({ "ingame_ui", "hero_view", "loading_view", "popup_manager" }) do
-			H.truthy(data:find('"' .. renderer
-				.. '", "materials/ui/icon_wpn_blightreaper"', 1, true), renderer)
+			local row = data:match('{%s*"' .. renderer .. '"[^\n]*}')
+			H.truthy(row, renderer .. " injection row")
+			H.truthy(row:find('"materials/ui/icon_wpn_blightreaper"', 1, true), renderer)
 		end
 		H.truthy(package:find('"materials/ui/icon_wpn_blightreaper"', 1, true))
 		H.truthy(package:find(
@@ -37,6 +38,47 @@ return function(H, repo_root)
 		local signature = png:read(8)
 		png:close()
 		H.equal(signature, "\137PNG\13\10\26\10")
+	end)
+
+	H.test("WOC packages Cursed rarity background in the ten proven renderers", function()
+		H.truthy(data:find('"icon_bg_cursed"', 1, true))
+		local renderers = {
+			"ingame_ui",
+			"ingame_ui_settings",
+			"hero_view",
+			"hero_view_state_loot",
+			"hero_view_state_store",
+			"hero_view_state_weave_forge",
+			"start_game_state_settings_overview",
+			"level_end_view_base",
+			"level_end_view_versus",
+			"ui_manager",
+		}
+		for _, renderer in ipairs(renderers) do
+			local row = data:match('{%s*"' .. renderer .. '"[^\n]*}')
+			H.truthy(row, renderer .. " injection row")
+			H.truthy(row:find('"materials/ui/icon_bg_cursed"', 1, true), renderer)
+		end
+
+		H.truthy(package:find('"materials/ui/icon_bg_cursed"', 1, true))
+		H.truthy(package:find(
+			'"gui/1080p/single_textures/weapons_of_chaos/icon_bg_cursed"', 1, true))
+
+		local png = assert(io.open(root
+			.. "gui/1080p/single_textures/weapons_of_chaos/icon_bg_cursed.png", "rb"))
+		local bytes = png:read("*a")
+		png:close()
+		H.equal(bytes:sub(1, 8), "\137PNG\13\10\26\10")
+		H.equal(#bytes, 12562, "authored Cursed PNG byte count drifted")
+
+		local material = read(root .. "materials/ui/icon_bg_cursed.material")
+		local texture = read(root
+			.. "gui/1080p/single_textures/weapons_of_chaos/icon_bg_cursed.texture")
+		H.truthy(material:find("icon_bg_cursed", 1, true))
+		H.truthy(material:find(
+			"gui/1080p/single_textures/weapons_of_chaos/icon_bg_cursed", 1, true))
+		H.truthy(texture:find(
+			'filename = "gui/1080p/single_textures/weapons_of_chaos/icon_bg_cursed"', 1, true))
 	end)
 
 	H.test("WOC item owns custom icon and resident Athanor fallback", function()
