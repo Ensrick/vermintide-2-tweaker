@@ -1,5 +1,19 @@
 # Crafting in Modded Changelog
 
+## 0.8.85-dev (2026-07-16): #629/#639/#641 Cosmetics Tab presentation precedence [verify-fix-coop]
+
+- Hold-Tab now asks the installed Cosmetics mod for its locally resolved
+  component presentation before applying CIM's exact-primary-skin correction.
+- A shield-owned composite icon and name take precedence over the primary skin;
+  dual weapons retain the primary icon while accepting the composite name.
+- The provider is optional and renderer-local. Missing Cosmetics, peer state,
+  parity, or icon resources leaves the existing vanilla/CIM fallback unchanged;
+  no new RPC or custom resource identity is transmitted.
+- Lua coverage proves provider precedence and the unchanged no-provider path.
+
+Verify with Cosmetics `0.9.132-dev` using the two-player method in its matching
+changelog entry. The hold-Tab icon must not revert after CIM's post-update hook.
+
 ## 0.8.84-dev (2026-07-16): issue 524 render-seam diagnostics [diagnostics-armed]
 
 - Symptom: the native Craft Item picker still shows duplicate weapon rows

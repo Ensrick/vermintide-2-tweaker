@@ -1,5 +1,39 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.132-dev - 2026-07-16 - #629/#639/#641 combined item presentation [verify-fix-coop]
+
+### Fixed
+
+- Inventory, equipment tooltips, and hold-Tab loadout snapshots now use one
+  component presentation descriptor. Weapon-and-shield items compose the
+  standalone primary weapon name with the independently named shield and use
+  the shield-owned icon. Dual weapons compose the independently named offhand
+  while retaining the primary weapon icon.
+- Hold-Tab no longer assumes a backend instance ID that vanilla does not send
+  in its loadout RPC. It resolves presentation from the existing parity-gated
+  peer/slot cosmetic cache. No custom resource or localization key is added to
+  the vanilla wire payload.
+- CIM's post-vanilla Tab correction now gives the Cosmetics descriptor
+  precedence instead of overwriting it with the primary skin icon.
+- Missing peer state, mod parity, option metadata, or renderer-local icon
+  resources fail closed to vanilla presentation.
+
+### Regression coverage
+
+- Lua coverage proves shield and dual icon ownership, standalone-primary name
+  selection, peer-cache and no-cache behavior, renderer-resource fallback, and
+  CIM provider precedence/no-clobber behavior.
+
+### Verification
+
+With host and client on Cosmetics `0.9.132-dev` and CIM dev `0.8.85-dev`, equip
+an independently customized shield and inspect the item in inventory and while
+holding Tab on both peers. The title must read `Primary Weapon + Shield Name`
+and the icon must be the shield-owned icon. Repeat with a dual weapon: the
+title must include its independently named offhand but the icon must remain
+primary-owned. A peer without the required mod/resource must receive only the
+resident vanilla fallback.
+
 ## 0.9.131-dev - 2026-07-16 - issue 610 native glow defaults + Restore to Default
 
 ### Fixed
