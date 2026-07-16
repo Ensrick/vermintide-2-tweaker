@@ -43,7 +43,7 @@ staged, and uploaded; sibling mods are never rebuilt, restaged, or re-uploaded:
   manifest reachable = hard fail (run a full publish once first). Filtered mode therefore needs
   network even with `-DryRun`.
 - If the tag's release already exists, the staged zip(s) + merged manifest are
-  `gh release upload --clobber`-ed; sibling assets are untouched.
+  clobbered through the resolved numeric release/asset IDs; sibling assets are untouched.
 - If the tag's release does not exist yet (first ship of a new day), the sibling zips are
   **carried forward** from the latest release (downloaded, sha256-verified against their carried
   manifest entries, re-uploaded), because vt2-mod-updater resolves every `asset_filename`
@@ -54,6 +54,24 @@ staged, and uploaded; sibling mods are never rebuilt, restaged, or re-uploaded:
 Known residual: two concurrent filtered publishes race on `manifest.json` (last clobber wins,
 computed from the manifest each fetched at its own start). The pre-filter behavior had the same
 race across *all* assets; serialize ships if it ever matters.
+
+### Degraded release-by-tag endpoint (issue #651)
+
+Filtered publishing resolves the canonical `GET /releases/tags/{tag}` route first. A 404, network
+error, 408, 429, or 5xx response triggers at most five 100-release list pages and requires a
+case-sensitive exact `tag_name` match. This confirms a true 404 before creation and prevents a
+route-specific false 404 from creating a duplicate. Multiple matches, a failed list request, or
+five full pages without a match are **unavailable**, not absent; the tool refuses to create or
+mutate anything while release identity is uncertain.
+
+Once resolved, `manifest.json` and carry-forward zips download through their asset IDs. Existing
+filtered assets are deleted by exact name/asset ID and uploaded through the numeric release ID,
+with `manifest.json` last. The broken tag route is never reused, sibling assets remain untouched,
+and staged provenance/hash validation still runs before mutation. Offline coverage:
+
+```powershell
+.\qa\check_github_release_fallback.ps1 -SelfTest
+```
 
 ## When to run
 

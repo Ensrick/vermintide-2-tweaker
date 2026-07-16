@@ -486,6 +486,12 @@ function Invoke-ShipSelfTest {
     $pubTxt = if (Test-Path $pubPath) { [System.IO.File]::ReadAllText($pubPath, [System.Text.Encoding]::UTF8) } else { '' }
     Assert ($pubTxt -match '(?m)^\s*\[string\[\]\]\$Mods\b') "publish-release.ps1 declares [string[]]`$Mods (issues #436/#493)"
     Assert (-not ($pubTxt -cmatch '(?m)^\s*\$mods\s*=')) "publish-release.ps1 never assigns lowercase `$mods (param-stomp guard, 2026-07-13)"
+    Assert ($pubTxt -match 'Resolve-GitHubReleaseByTag' -and $pubTxt -match 'Publish-GitHubReleaseAssetsById') "publish-release owns exact-tag fallback and release-id mutation (issue #651)"
+    $shipSource = [System.IO.File]::ReadAllText($PSCommandPath, [System.Text.Encoding]::UTF8)
+    $legacyTagProbe = 'gh release ' + 'view $tag'
+    $legacyTagUpload = 'gh release ' + 'upload $tag'
+    Assert ($shipSource.IndexOf($legacyTagProbe, [System.StringComparison]::Ordinal) -lt 0) "ship wrapper has no duplicate release-by-tag existence probe (issue #651)"
+    Assert ($shipSource.IndexOf($legacyTagUpload, [System.StringComparison]::Ordinal) -lt 0) "ship wrapper delegates existing-release mutation to release-id tooling (issue #651)"
 
     # Issue #647: multiple worktrees share one VMBLauncher settings file. The
     # ship wrapper must bind ProjectRoot only for the launcher window, restore
@@ -809,31 +815,13 @@ if (-not $SkipGitHub) {
     # ago -- re-building here would race mid-ship source edits; the GitHub asset
     # must be byte-identical to the bundle that just went to the Workshop.
     #
-    # `gh release create` (inside publish-release.ps1) FAILS if the tag already
-    # exists. Detect that up front: if the release exists, stage assets via -DryRun
-    # (which skips the create) and clobber-upload them instead. The probe goes
-    # through Invoke-NativeProbe (issue #489): a missing release writes to native
-    # stderr, which under redirection + EAP=Stop used to KILL the ship on PS 5.1.
-    $releaseExists = ((Invoke-NativeProbe { gh release view $tag --repo Ensrick/vermintide-2-tweaker --json name }) -eq 0)
-
+    # publish-release owns exact-tag resolution and mutation.  Its issue #651
+    # path distinguishes absent/unavailable/degraded states, falls back through
+    # a bounded releases-list lookup on transient tag-route failure, and updates
+    # an existing release through its numeric id.  Do not duplicate a tag probe
+    # here: a 503 must never be misclassified as "release absent" by ship.ps1.
     try {
-        if ($releaseExists) {
-            Write-Host "    release $tag exists -- staging $Mod (-Mods -SkipBuild -DryRun) then 'gh release upload --clobber'" -ForegroundColor Yellow
-            & $pubScript -Tag $tag -Mods $Mod -SkipBuild -DryRun
-            $stage  = Join-Path $repoRoot '.release-stage'
-            $assets = @(Get-ChildItem (Join-Path $stage '*.zip') -ErrorAction Stop | ForEach-Object { $_.FullName })
-            $manifest = Join-Path $stage 'manifest.json'
-            if (Test-Path $manifest) { $assets += $manifest }
-            if ($assets.Count -eq 0) { Fail "publish-release.ps1 -DryRun staged no assets at $stage" }
-            & gh release upload $tag @assets --clobber --repo Ensrick/vermintide-2-tweaker
-            if ($LASTEXITCODE -ne 0) { Fail "gh release upload --clobber failed for tag $tag (exit $LASTEXITCODE)" }
-        }
-        else {
-            # First ship under this tag: publish-release creates the release,
-            # carrying sibling zips forward from the latest release untouched
-            # (the vt2-mod-updater resolves every asset against ONE release).
-            & $pubScript -Tag $tag -Mods $Mod -SkipBuild
-        }
+        & $pubScript -Tag $tag -Mods $Mod -SkipBuild
     }
     catch {
         Fail "publish-release.ps1 failed: $($_.Exception.Message)"

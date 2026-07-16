@@ -49,24 +49,15 @@ if (-not (Test-Path -LiteralPath $manifestHelpers)) {
     throw "Release-manifest helpers not found at $manifestHelpers."
 }
 . $manifestHelpers
+$githubReleaseHelpers = Join-Path $PSScriptRoot 'github-release-api.ps1'
+if (-not (Test-Path -LiteralPath $githubReleaseHelpers)) {
+    throw "GitHub release helpers not found at $githubReleaseHelpers."
+}
+. $githubReleaseHelpers
 $sourceCommit = Get-ReleaseSourceCommit -RepoRoot $repoRoot
 $builderVersion = Get-VmbLauncherVersion -LauncherPath $launcher
 
 $ghRepo = 'Ensrick/vermintide-2-tweaker'
-
-# Native gh call whose failure is an expected branch, or whose stdout we want
-# captured (issue #489 guard, same as tools/ship/ship.ps1's Invoke-NativeProbe):
-# under stream redirection Windows PowerShell 5.1 wraps native stderr into
-# ErrorRecords, and with the script-global $ErrorActionPreference = 'Stop' the
-# first stderr line (e.g. `gh release view` on a not-yet-created tag) becomes a
-# TERMINATING error. Scope EAP to Continue, discard stderr; callers read stdout
-# from the return value and the verdict from $LASTEXITCODE.
-function Invoke-GhQuiet {
-    param([scriptblock]$Command)
-    $prev = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    try { return (& $Command 2>$null) } finally { $ErrorActionPreference = $prev }
-}
 
 # Mod inventory: single source of truth at tools/mod-inventory.psd1 (shared with
 # tools/mod-lint/lint-mod.ps1 + qa/check_cfg.ps1). Each entry maps to this
@@ -197,6 +188,21 @@ function Read-Visibility {
     return ''
 }
 
+function Read-GitHubReleaseManifest {
+    param(
+        [Parameter(Mandatory = $true)]$Release,
+        [Parameter(Mandatory = $true)][string]$DownloadDirectory
+    )
+    $manifestAsset = Get-GitHubReleaseAsset -Release $Release -Name 'manifest.json'
+    if (-not $manifestAsset) { return $null }
+    $manifestFile = Join-Path $DownloadDirectory 'manifest.json'
+    if (Test-Path -LiteralPath $manifestFile) { Remove-Item -LiteralPath $manifestFile }
+    Save-GitHubReleaseAsset -Repo $ghRepo -Asset $manifestAsset -Destination $manifestFile
+    try { $parsed = Get-Content $manifestFile -Raw | ConvertFrom-Json } catch { return $null }
+    if (-not $parsed -or -not $parsed.mods) { return $null }
+    return [pscustomobject]@{ Manifest = $parsed; Release = $Release }
+}
+
 # ---- Base manifest (filtered mode only) ----
 # A filtered publish must never emit a manifest that FORGETS sibling mods: the
 # vt2-mod-updater treats manifest.json as the complete mod set. Sibling entries
@@ -206,22 +212,46 @@ function Read-Visibility {
 # (first ship under a new day's tag). No base manifest -> hard fail.
 $baseManifest = $null
 $baseTag      = $null
+$baseRelease  = $null
+$targetRelease = $null
+$targetReleaseResult = $null
+$releaseExists = $false
 if ($filterActive) {
     $dlDir = Join-Path $stage '.base-manifest'
     New-Item -ItemType Directory -Force -Path $dlDir | Out-Null
-    $candidates = @($Tag)
-    $latestTag = "$(Invoke-GhQuiet { gh release view --repo $ghRepo --json tagName --jq '.tagName' })".Trim()
-    if ($LASTEXITCODE -eq 0 -and $latestTag -and $latestTag -ne $Tag) { $candidates += $latestTag }
-    foreach ($cand in $candidates) {
-        $mf = Join-Path $dlDir 'manifest.json'
-        if (Test-Path $mf) { Remove-Item $mf -Force }
-        $null = Invoke-GhQuiet { gh release download $cand --repo $ghRepo --pattern manifest.json --dir $dlDir --clobber }
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $mf)) { continue }
-        try { $parsed = Get-Content $mf -Raw | ConvertFrom-Json } catch { $parsed = $null }
-        if ($parsed -and $parsed.mods) { $baseManifest = $parsed; $baseTag = $cand; break }
+
+    $targetReleaseResult = Resolve-GitHubReleaseByTag -Repo $ghRepo -Tag $Tag
+    Write-Host "  release lookup: $($targetReleaseResult.Message)" -ForegroundColor DarkGray
+    if ($targetReleaseResult.State -eq 'Unavailable') {
+        throw "Release lookup unavailable: $($targetReleaseResult.Message). Refusing to create or mutate a release while existence is uncertain."
+    }
+    $releaseExists = ($targetReleaseResult.State -eq 'Found')
+    if ($releaseExists) { $targetRelease = $targetReleaseResult.Release }
+
+    $candidateReleases = @()
+    $loadedBase = $null
+    if ($targetRelease) {
+        $candidateReleases += $targetRelease
+        $loadedBase = Read-GitHubReleaseManifest -Release $targetRelease -DownloadDirectory $dlDir
+    }
+    # Existing target releases normally supply their own base manifest. Query
+    # the latest list entry only when the target is absent or lacks a usable
+    # manifest, so a separate list outage cannot break the healthy tag route.
+    if (-not $loadedBase) {
+        $latestRelease = Get-GitHubLatestReleaseFromList -Repo $ghRepo
+        if ($latestRelease -and (-not $targetRelease -or "$($latestRelease.id)" -ne "$($targetRelease.id)")) {
+            $candidateReleases += $latestRelease
+            $loadedBase = Read-GitHubReleaseManifest -Release $latestRelease -DownloadDirectory $dlDir
+        }
+    }
+    if ($loadedBase) {
+        $baseManifest = $loadedBase.Manifest
+        $baseRelease = $loadedBase.Release
+        $baseTag = "$($baseRelease.tag_name)"
     }
     if (-not $baseManifest) {
-        throw "-Mods needs an existing release manifest to carry sibling entries (tried: $($candidates -join ', ')). Offline, or no prior release exists? Run a FULL publish-release (no -Mods) once, then retry."
+        $triedTags = @($candidateReleases | ForEach-Object { $_.tag_name })
+        throw "-Mods needs an existing release manifest to carry sibling entries (tried: $($triedTags -join ', ')). No duplicate release was created. Run a FULL publish-release (no -Mods) once, then retry."
     }
     Write-Host "  base manifest: $baseTag ($(@($baseManifest.mods).Count) entries)" -ForegroundColor DarkGray
 }
@@ -307,7 +337,6 @@ foreach ($m in $releaseSet) {
 }
 
 # ---- Filtered mode: merge with the base manifest + plan the release action ----
-$releaseExists = $false
 $carriedIdSet  = @{}
 if ($filterActive) {
     # Merge: staged entries win; every other entry carries over VERBATIM from
@@ -337,11 +366,6 @@ if ($filterActive) {
     Write-Host ""
     Write-Host "Manifest merge: $restagedCount restaged from this run, $($carriedIdSet.Count) carried verbatim from $baseTag (issues #436/#493)." -ForegroundColor Yellow
 
-    # Does the target release exist? Decides clobber-upload vs create (+ asset
-    # carry-forward). Probe guarded per issue #489 - never assume the tag exists.
-    $null = Invoke-GhQuiet { gh release view $Tag --repo $ghRepo --json name }
-    $releaseExists = ($LASTEXITCODE -eq 0)
-
     if (-not $releaseExists -and -not $DryRun) {
         # Creating a NEW release under a filter: it must still be SELF-CONTAINED
         # (vt2-mod-updater resolves every asset_filename against ONE release), so
@@ -351,8 +375,7 @@ if ($filterActive) {
         # with a warning - a FULL publish restores it.
         Write-Host ""
         Write-Host "==> Release $Tag does not exist yet -- carrying $($carriedIdSet.Count) sibling asset(s) forward from $baseTag" -ForegroundColor Cyan
-        $baseAssetNames = @(Invoke-GhQuiet { gh release view $baseTag --repo $ghRepo --json assets --jq '.assets[].name' })
-        if ($LASTEXITCODE -ne 0) { throw "carry-forward: could not list assets on base release $baseTag (gh exit $LASTEXITCODE)" }
+        $baseAssetNames = @($baseRelease.assets | ForEach-Object { $_.name })
         $keptMods = @()
         foreach ($entry in $manifestMods) {
             $id = "$($entry.mod_id)"
@@ -364,8 +387,8 @@ if ($filterActive) {
             }
             $zipDest = Join-Path $stage $fname
             if (Test-Path $zipDest) { Remove-Item $zipDest -Force }
-            $null = Invoke-GhQuiet { gh release download $baseTag --repo $ghRepo --pattern $fname --dir $stage --clobber }
-            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zipDest)) { throw "carry-forward: download of '$fname' from $baseTag failed" }
+            $baseAsset = Get-GitHubReleaseAsset -Release $baseRelease -Name $fname
+            Save-GitHubReleaseAsset -Repo $ghRepo -Asset $baseAsset -Destination $zipDest
             $gotHash  = (Get-FileHash -Algorithm SHA256 -Path $zipDest).Hash.ToLowerInvariant()
             $wantHash = "$($entry.sha256)"
             if ($wantHash -and $gotHash -ne $wantHash) {
@@ -421,9 +444,8 @@ if ($filterActive -and $releaseExists) {
     # Filtered update of an existing release: replace ONLY the staged zip(s) +
     # the merged manifest. Sibling assets on the release are never touched.
     Write-Host ""
-    Write-Host "==> gh release upload --clobber $Tag ($($assetPaths.Count) asset(s))" -ForegroundColor Cyan
-    gh release upload $Tag @assetPaths --clobber --repo $ghRepo
-    if ($LASTEXITCODE -ne 0) { throw "gh release upload --clobber failed (exit $LASTEXITCODE)" }
+    Write-Host "==> GitHub release-id upload/clobber $($targetRelease.id) ($($assetPaths.Count) asset(s))" -ForegroundColor Cyan
+    Publish-GitHubReleaseAssetsById -Repo $ghRepo -Release $targetRelease -AssetPaths $assetPaths
     Write-Host ""
     Write-Host "Release updated: https://github.com/$ghRepo/releases/tag/$Tag" -ForegroundColor Green
     return

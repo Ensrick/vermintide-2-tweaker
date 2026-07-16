@@ -1943,3 +1943,28 @@ once during boot, then consumed later without an exact-path capability check.
 - Do not `pcall` or default arbitrary lookup failures globally. Add an offline
   identity/immutability test and an in-game regression check for the guarded
   consumer. GUT dev's `_gut_guard649_mission_completion.lua` is the reference.
+
+## 55. Release-by-tag route failure is not release absence
+
+**First confirmed:** 2026-07-16 (filtered WOC/GUT Dev release, issue #651).
+**Lives in:** release tooling that uses a tag-route exit code as the complete
+release-existence decision.
+
+### Symptoms
+- `GET /releases/tags/<exact-tag>` and `gh release view <tag>` return HTTP 503.
+- `GET /releases?per_page=N` still returns that exact tag, its release ID, and
+  all assets, including `manifest.json`.
+- Source, bundle, local deploy, and Workshop hashes are current; only the
+  filtered GitHub asset update aborts or is misclassified as a missing release.
+
+### Fix template
+- Try the canonical exact-tag route first. Confirm 404 and transient failures
+  through a bounded number of list pages using a case-sensitive exact
+  `tag_name`. Ambiguous matches or a full-page bound exhaustion are unavailable,
+  never absent, so no release may be created.
+- Download through resolved release-asset IDs. Replace only requested assets by
+  exact asset ID and upload through the numeric release ID, with the merged
+  manifest last. Do not reuse the failed tag route.
+- Preserve staged bundle/provenance/hash checks before mutation. Test normal,
+  404, transient fallback, exact match, pagination/exhaustion, ambiguity, asset
+  selection, asset-ID download, and release-ID upload entirely offline.
