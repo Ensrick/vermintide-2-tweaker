@@ -1,5 +1,37 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.129-dev - 2026-07-15 - #641 independent component names / #639 approved Grail copy
+
+### Changed
+
+- Added stable, separately qualified localization identities for offhand-weapon
+  and shield illusion components. Unauthored component names fall back to the
+  localized source illusion instead of exposing an internal key.
+- Composed customization hover copy as `Primary + Offhand/Shield`, while
+  leaving primary illusion names under vanilla row-one ownership.
+- Added `/cos_offhand_name_inventory`, which emits the live deduplicated naming
+  queue for incremental authoring across vanilla, DLC, and installed CWV pools.
+- Preserved the #639 approved names and descriptions for `Couronne de la Lune`,
+  `Midnight Purpure and Azure`, and `The Blood-Bloomed Bouclier` when combining
+  the localization and component-name changes in this release.
+
+### Compatibility
+
+- Component names remain presentation-only. Saved choices still use exact
+  backend item, hand, source skin, and unit identity; peer replay continues to
+  use the existing bounded direct-mesh and authored-shield payloads.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.129-dev`. Open a native dual weapon, a CWV dual
+weapon when installed, and a weapon-and-shield customization screen. Hover the
+component row and confirm the label reads `Primary + Offhand/Shield`; unauthored
+rows must show localized source names, never raw keys. Run
+`/cos_offhand_name_inventory` and `/cos_regression_test`; the latter must pass
+`issue641_independent_offhand_names` and `issue629_grail_knight_set_contract`.
+Inspect all three Purpure/Azure set items and confirm the #639 approved names
+and descriptions remain exact across inventory and cosmetic-selection views.
+
 ## 0.9.128-dev - 2026-07-15 - #639 Grail Knight set localization
 
 ### Changed
