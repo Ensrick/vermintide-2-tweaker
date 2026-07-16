@@ -1,6 +1,6 @@
 # Open issue empirical contingency register
 
-Generated from the live GitHub issue body, comments, labels, and URL at `2026-07-16T15:53:42.7133964Z`. This is a recovery register, not a root-cause claim. Each path states the evidence that must trigger it and the observation that falsifies it. `Insufficient evidence` entries deliberately request a bounded probe instead of inventing a fix.
+Generated from the live GitHub issue body, comments, labels, and URL at `2026-07-16T15:56:07.4052738Z`. This is a recovery register, not a root-cause claim. Each path states the evidence that must trigger it and the observation that falsifies it. `Insufficient evidence` entries deliberately request a bounded probe instead of inventing a fix.
 
 Open issues audited: **295**.
 
@@ -6033,7 +6033,7 @@ Open issues audited: **295**.
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/546](https://github.com/Ensrick/vermintide-2-tweaker/issues/546)
 - Current labels: `enhancement, audit, tooling, verify-fix, 1-major`
-- Evidence class: `network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, backend_realm_isolation`
+- Evidence class: `custom_unit_behavioral_contract, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, backend_realm_isolation`
 - Current action: solo in-game verification
 
 **Fallback 1**
@@ -6954,7 +6954,7 @@ Open issues audited: **295**.
 - **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
 - **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
 
-## #625 - Reconcile 114 unmerged agent branches
+## #625 - Reconcile unmerged agent branches
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/625](https://github.com/Ensrick/vermintide-2-tweaker/issues/625)
 - Current labels: `enhancement, tooling, 1-major, not-started`
