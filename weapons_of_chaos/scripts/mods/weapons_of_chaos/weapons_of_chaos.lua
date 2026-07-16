@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.15-dev"
+local MOD_VERSION = "0.1.16-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -144,8 +144,10 @@ local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_po
 local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview")
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
 local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse")
+local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
 local _wa = _pulse_lib.new(_appearance, _appearance_lib.new())
+mod._woc_inventory_icons = _inventory_icons
 if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" then
 	-- Packaging failures must not become startup crashes. Preserve ordinary
 	-- vanilla loadout syncs, but fail closed for explicit WOC identities because
@@ -163,6 +165,7 @@ if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" t
 end
 
 local HELD_UNIT = _appearance.UNIT_1P
+local INVENTORY_ICON = _inventory_icons.ICON
 
 -- Package lookup aliases are forward-only. WOC-capable peers retain the
 -- authored unit locally; peers without WOC continue decoding the vanilla sword
@@ -239,9 +242,12 @@ local function _build_entry(base, backend_id)
 	entry.can_wield       = _careers
 	entry.template        = TEMPLATE
 	entry.item_type       = ITEM_KEY            -- own type so Localize(item_type) -> "Blightreaper"
-
-	-- hud_icon / inventory_icon are inherited from the es_1h_sword clone
-	-- (reused on purpose — no new icon atlas, no missing-material crash).
+	entry.inventory_icon  = INVENTORY_ICON
+	-- CIM's Athanor top renderer is not one of WOC's injected Gui renderers.
+	-- Preserve the cloned vanilla sword icon as an explicit resident fallback;
+	-- never submit the private WOC material to an unproven Gui.
+	entry.cim_inventory_icon_fallback = base.inventory_icon
+	-- hud_icon remains the inherited generic sword HUD material.
 
 	-- Drop the DLC gate: this is a new mod item reusing base-package meshes;
 	-- per-career DLC ownership is enforced by the game's own equip check.
@@ -440,6 +446,24 @@ _rt_register("issue637_unique_immutable_relic_inventory", function()
 	local live = all[BACKEND_ID]
 	if not _relic_policy.is_instance(live) or live.rarity ~= _relic_policy.RARITY then
 		return "MoreItemsLibrary live row did not retain the immutable promo marker"
+	end
+end)
+
+_rt_register("issue613_blightreaper_inventory_icon_contract", function()
+	if not mod:get("enable_blightreaper") then return "skip: Blightreaper is disabled" end
+	if not _registered then return "WOC relic registration has not completed" end
+	local entry = rawget(ItemMasterList, ITEM_KEY)
+	if type(entry) ~= "table" or entry.inventory_icon ~= INVENTORY_ICON then
+		return "Blightreaper provider row does not own the authored inventory icon"
+	end
+	if type(entry.cim_inventory_icon_fallback) ~= "string"
+			or entry.cim_inventory_icon_fallback == "" then
+		return "Blightreaper provider row lacks a resident Athanor fallback icon"
+	end
+	local athanor_icon, custom = _inventory_icons.resolve(
+		entry.inventory_icon, "athanor_top", entry.cim_inventory_icon_fallback)
+	if not custom or athanor_icon ~= entry.cim_inventory_icon_fallback then
+		return "Blightreaper custom icon did not fail closed outside injected renderers"
 	end
 end)
 

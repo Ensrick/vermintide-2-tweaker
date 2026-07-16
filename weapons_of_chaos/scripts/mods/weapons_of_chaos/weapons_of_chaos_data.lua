@@ -9,6 +9,17 @@ return {
 	name           = "Weapons of Chaos",
 	description     = mod:localize("mod_description"),
 	is_togglable    = true,
+	custom_gui_textures = {
+		textures = {
+			"icon_wpn_blightreaper",
+		},
+		ui_renderer_injections = {
+			{ "ingame_ui", "materials/ui/icon_wpn_blightreaper" },
+			{ "hero_view", "materials/ui/icon_wpn_blightreaper" },
+			{ "loading_view", "materials/ui/icon_wpn_blightreaper" },
+			{ "popup_manager", "materials/ui/icon_wpn_blightreaper" },
+		},
+	},
 	options = {
 		widgets = {
 			{

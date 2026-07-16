@@ -132,6 +132,7 @@ local suites = {
     "test_cim_tab_preview",
     "test_woc_wire_policy",
     "test_woc_relic_policy",
+	"test_woc_inventory_icons",
     "test_woc_appearance_policy",
 	"test_woc_blightreaper_pulse",
     "test_dcp_portrait_materials",

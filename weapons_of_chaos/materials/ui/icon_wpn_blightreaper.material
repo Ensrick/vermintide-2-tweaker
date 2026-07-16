@@ -1,0 +1,8 @@
+icon_wpn_blightreaper = {
+	material_contexts = { surface_material = "" }
+	shader = "gui:DIFFUSE_MAP"
+	textures = {
+		diffuse_map = "gui/1080p/single_textures/weapons_of_chaos/icon_wpn_blightreaper"
+	}
+	variables = { }
+}

@@ -42,6 +42,7 @@ this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
 | Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
 |---|---|---|---|
 | `_G.Localize` [hook,tbl] `:168` | Global loc-key -> string lookup; the inventory UI Localizes an item's `display_name` / `description` / `item_type` keys | Supply the Blightreaper display name/description/type labels for `woc_*` keys (`:168`) | VMF `_localization.lua` is NOT auto-registered into the global `Localize` (`docs/VMF_RECIPES.md`); a raw pass-through for every non-`woc_` key. `item_type` is set to `ITEM_KEY` so `Localize(item_type)` yields the item's display label, not the base weapon's |
+| VMF `custom_gui_textures` [data contract] | Injects a private GUI material only into explicitly named renderers | Register the authored `icon_wpn_blightreaper` material for inventory/equipment renderers | `_woc_inventory_icons.lua` owns the renderer allow-list. The WOC item retains its cloned vanilla icon in `cim_inventory_icon_fallback`; Athanor and any unproven renderer fail closed. Non-WOC peers receive only the vanilla-keyed loadout identity and never the custom resource name. |
 
 ### Registration timing (owner doc: `docs/engine/08`)
 

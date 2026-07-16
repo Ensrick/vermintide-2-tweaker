@@ -20,6 +20,13 @@ foreach ($path in @($Unpacker, $CompressionDictionary)) {
 }
 $rootBundle = Join-Path $BundleRoot 'dcea08518941f940.mod_bundle'
 if (-not (Test-Path -LiteralPath $rootBundle -PathType Leaf)) { Fail "root bundle missing: $rootBundle" }
+$iconSource = Join-Path $repoRoot 'weapons_of_chaos\gui\1080p\single_textures\weapons_of_chaos\icon_wpn_blightreaper.png'
+$expectedIconSha256 = '07A59F76D0ECED0B42F143EF47B7D8EC87E1E542E14901E05CCE4E6C94F7A910'
+if (-not (Test-Path -LiteralPath $iconSource -PathType Leaf)) { Fail "authored icon source missing: $iconSource" }
+$actualIconSha256 = (Get-FileHash -LiteralPath $iconSource -Algorithm SHA256).Hash
+if ($actualIconSha256 -ne $expectedIconSha256) {
+    Fail "authored icon source drifted: expected=$expectedIconSha256 actual=$actualIconSha256"
+}
 $listing = @(& $Unpacker --dict NUL --zstd-dict $CompressionDictionary list $rootBundle 2>&1)
 if ($LASTEXITCODE -ne 0) { Fail "unpacker failed: $($listing -join ' ')" }
 $text = $listing -join "`n"
@@ -31,6 +38,9 @@ $required = [ordered]@{
     'E4C641E0BD963F8B.lua'       = 'appearance policy'
     '6E2356C79259A523.lua'       = 'preview consumers'
     '23C6E7C1A71A2157.lua'       = 'unique relic policy'
+    '1C2ACC8620933DF0.lua'       = 'inventory icon renderer policy'
+    '4FF265AF5A4F674D.material'  = 'authored inventory icon material'
+    '2F41525708BE414A.texture'   = 'authored inventory icon texture'
 }
 foreach ($resource in $required.Keys) {
     if ($text -notmatch "(?im)^$([regex]::Escape($resource))\b") { Fail "compiled root missing $($required[$resource]) ($resource)" }
@@ -46,4 +56,4 @@ if (-not $SkipWorkshop) {
     }
 }
 $status = if ($SkipWorkshop) { 'skipped' } else { "$matched file(s) exact" }
-Write-Host "[check_woc_blightreaper_bundle_contract] OK - 7 compiled resources, Workshop=$status"
+Write-Host "[check_woc_blightreaper_bundle_contract] OK - 10 compiled resources, Workshop=$status"

@@ -1,5 +1,31 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.16-dev (2026-07-16) - #613 authored Blightreaper icon [verify-fix-coop]
+
+- Added the supplied transparent 80x80 Blightreaper inventory icon as a
+  WOC-owned GUI texture and material.
+- Assigned the custom icon only to the WOC provider row. The inherited generic
+  sword HUD icon remains unchanged.
+- Injected the private material into the four proven inventory/equipment
+  renderers. CIM's Athanor top renderer receives the cloned vanilla sword icon
+  through `cim_inventory_icon_fallback`, so an unproven custom material never
+  reaches `Gui.bitmap_uv`.
+- Preserved the existing vanilla-key wire identity. Peers without WOC do not
+  receive the custom icon name or resource and continue to render the vanilla
+  sword fallback.
+- Added offline and runtime coverage for packaging, renderer ownership,
+  Athanor fallback, and non-WOC pass-through behavior.
+
+### Verification
+
+Confirm `[WOC] v0.1.16-dev loaded`. Inspect Blightreaper in the local inventory,
+equipment, and item-preview surfaces. With CIM Dev active, open the Athanor
+selector and confirm it remains stable and uses a resident fallback where the
+private material is unavailable. With a second player, confirm each WOC-enabled
+player sees the authored icon on their own Blightreaper while a peer without WOC
+continues to receive only vanilla-safe item identity, without errors or missing
+materials.
+
 ## 0.1.15-dev (2026-07-15) - #613 native Blightreaper pulse
 
 ### Fixed
