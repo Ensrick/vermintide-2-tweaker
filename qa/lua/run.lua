@@ -188,6 +188,7 @@ local suites = {
     "test_cos_offhand_preload_lifecycle",
     "test_cos_offhand_names",
     "test_cos_item_presentation",
+    "test_cos_composite_icons",
     "test_cos_dual_offhands",
     "test_cos_la_shield_parity",
     "test_cos_la_instance_policy",

@@ -1,0 +1,6 @@
+icon_cos_empire_mace_shield_primary_01 = {
+	material_contexts = { surface_material = "" }
+	shader = "gui:DIFFUSE_MAP"
+	textures = { diffuse_map = "gui/1080p/single_textures/cosmetics_tweaker/icon_cos_empire_mace_shield_primary_01" }
+	variables = { }
+}

@@ -50,6 +50,12 @@ local GK_SET = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_grail_knight_set"
 local CWV_FAMILY_CONTRACT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_family_contract")
 local OFFHAND_NAMES = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_names")
 local ITEM_PRESENTATION = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_item_presentation")
+local COMPOSITE_ICON_CATALOG = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_composite_icon_catalog")
+local COMPOSITE_ICON_FACTORY = mod:dofile(
+    "scripts/mods/cosmetics_tweaker/_cos_composite_icons")
+local COMPOSITE_ICONS = COMPOSITE_ICON_FACTORY.new(COMPOSITE_ICON_CATALOG)
+mod._cos_composite_icons = COMPOSITE_ICONS
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
 local GLOW_BADGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_badge_policy")
@@ -77,7 +83,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.132-dev"
+local MOD_VERSION = "0.9.133-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -815,6 +821,8 @@ local _GLOW_BADGE_TEXTURE = "cos_glow_badge"
 local _glow_badge_texture_missing_logged = false
 local _glow_badge_grids = setmetatable({}, { __mode = "k" })
 local _glow_badge_customization_windows = setmetatable({}, { __mode = "k" })
+local _composite_icon_grids = setmetatable({}, { __mode = "k" })
+local _cos_refresh_composite_descriptor
 
 local function _glow_badge_texture_available()
     local available = UIAtlasHelper and UIAtlasHelper.has_texture_by_name
@@ -921,6 +929,124 @@ local function _enrich_item_grid_glow_badges(self)
     _glow_badge_grids[self] = true
 end
 
+-- #650 inventory/equipment proof adapter. ItemGridUI owns both surfaces, so a
+-- single shared enrichment consumes the public exact-instance descriptor. The
+-- two authored passes are inserted directly after the native item-icon pass:
+-- native rarity/background -> primary -> offhand -> glow -> native frame.
+-- Crafting and Hold-Tab deliberately remain native until they can provide the
+-- same exact backend identity and renderer-local material proof.
+local function _enrich_item_grid_composite_icons(self)
+    local widget = self and self._widget
+    if not widget or widget._ct_composite_icons_enriched then return end
+    local passes = widget.element and widget.element.passes
+    local content, style = widget.content, widget.style
+    if type(passes) ~= "table" or type(content) ~= "table"
+            or type(style) ~= "table" then return end
+
+    local insertions = {}
+    for row = 1, content.rows or 0 do
+        for column = 1, content.columns or 0 do
+            local suffix = "_" .. row .. "_" .. column
+            local icon_name = "item_icon" .. suffix
+            local icon_style = style[icon_name]
+            if type(icon_style) == "table" then
+                for index, pass in ipairs(passes) do
+                    if pass.style_id == icon_name and pass.pass_type == "texture" then
+                        insertions[#insertions + 1] = {
+                            index = index,
+                            suffix = suffix,
+                            icon_style = icon_style,
+                        }
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    for insertion_index = #insertions, 1, -1 do
+        local insertion = insertions[insertion_index]
+        local suffix = insertion.suffix
+        local offhand_name = "ct_composite_offhand" .. suffix
+        local glow_name = "ct_composite_glow" .. suffix
+        table.insert(passes, insertion.index + 1, {
+            pass_type = "texture",
+            texture_id = offhand_name,
+            style_id = offhand_name,
+            content_check_function = function(pass_content)
+                return pass_content[offhand_name] ~= nil
+            end,
+        })
+        table.insert(passes, insertion.index + 2, {
+            pass_type = "texture",
+            texture_id = glow_name,
+            style_id = glow_name,
+            content_check_function = function(pass_content)
+                return pass_content[glow_name] ~= nil
+            end,
+        })
+        local icon_style = insertion.icon_style
+        style[offhand_name] = {
+            size = _copy_vec(icon_style.size, { 80, 80 }),
+            offset = _copy_vec(icon_style.offset, { 0, 0, 2 }),
+            color = { 255, 255, 255, 255 },
+        }
+        style[glow_name] = {
+            size = _copy_vec(icon_style.size, { 80, 80 }),
+            offset = _copy_vec(icon_style.offset, { 0, 0, 2 }),
+            color = { 255, 255, 255, 255 },
+        }
+        style[offhand_name].offset[3] = (style[offhand_name].offset[3] or 0) + 1
+        style[glow_name].offset[3] = (style[glow_name].offset[3] or 0) + 2
+        content[offhand_name] = nil
+        content[glow_name] = nil
+    end
+    widget._ct_composite_icons_enriched = true
+    _composite_icon_grids[self] = true
+end
+
+local function _refresh_item_grid_composite_icons(self)
+    _enrich_item_grid_composite_icons(self)
+    local widget = self and self._widget
+    local content, style = widget and widget.content, widget and widget.style
+    if not content or not style then return end
+    self._ct_composite_icon_cells = self._ct_composite_icon_cells or {}
+    for row = 1, content.rows or 0 do
+        for column = 1, content.columns or 0 do
+            local suffix = "_" .. row .. "_" .. column
+            local item = content["item" .. suffix]
+            if type(item) == "table" and _cos_refresh_composite_descriptor then
+                _cos_refresh_composite_descriptor(item)
+            end
+            local descriptor = type(item) == "table"
+                and item._cos_composite_icon_descriptor or nil
+            local offhand_name = "ct_composite_offhand" .. suffix
+            local glow_name = "ct_composite_glow" .. suffix
+            if style[offhand_name] then
+                content[offhand_name] = descriptor and descriptor.offhand_texture or nil
+                content[glow_name] = descriptor and descriptor.glow_texture or nil
+                local icon_name = "item_icon" .. suffix
+                local identity = item and (item.backend_id or item.ItemInstanceId
+                    or item.key or item) or nil
+                local resolved_icon, cell_state = COMPOSITE_ICONS.resolve_cell(
+                    self._ct_composite_icon_cells[suffix], {
+                        identity = identity,
+                        current_icon = content[icon_name],
+                        descriptor = descriptor,
+                    })
+                self._ct_composite_icon_cells[suffix] = cell_state
+                content[icon_name] = resolved_icon
+                if descriptor and descriptor.glow_color then
+                    style[glow_name].color = {
+                        descriptor.glow_color[1], descriptor.glow_color[2],
+                        descriptor.glow_color[3], descriptor.glow_color[4],
+                    }
+                end
+            end
+        end
+    end
+end
+
 local function _refresh_item_grid_glow_badges(self)
     _enrich_item_grid_glow_badges(self)
     local widget = self and self._widget
@@ -939,10 +1065,12 @@ local function _refresh_item_grid_glow_badges(self)
             end
         end
     end
+    _refresh_item_grid_composite_icons(self)
 end
 
 mod:hook_safe("ItemGridUI", "init", function(self)
     _enrich_item_grid_glow_badges(self)
+    _refresh_item_grid_composite_icons(self)
 end)
 mod:hook_safe("ItemGridUI", "add_item_to_slot_index", function(self)
     _refresh_item_grid_glow_badges(self)
@@ -955,7 +1083,9 @@ end)
 -- inventory/customization surface once; sliders and dirty previews never call
 -- this seam, so there is no per-frame persistence decode or UI churn.
 mod._cos_glow_badges_refresh = function(backend_id, slot_data, revision)
+    COMPOSITE_ICONS.invalidate(backend_id)
     for grid in pairs(_glow_badge_grids) do _refresh_item_grid_glow_badges(grid) end
+    for grid in pairs(_composite_icon_grids) do _refresh_item_grid_composite_icons(grid) end
     for window in pairs(_glow_badge_customization_windows) do
         _refresh_illusion_glow_badges(window)
         _refresh_glow_editor_button(window,
@@ -1541,6 +1671,7 @@ local _SHIELD_POOLS_BY_ITEM_TYPE = {
         { name = "Empire Shield (Gold)",   unit = "units/weapons/player/wpn_empire_shield_05/wpn_emp_shield_05" },
         { name = "GK Shield (Blue)",       unit = "units/weapons/player/wpn_emp_gk_shield_03/wpn_emp_gk_shield_03" },
         { name = "GK Shield (Red)",        unit = "units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02" },
+        { name = "GK Shield (Red, Runed)", unit = "units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02_runed_01" },
         { name = "GK Shield (Green)",      unit = "units/weapons/player/wpn_emp_gk_shield_04/wpn_emp_gk_shield_04" },
         { name = "GK Shield (White)",      unit = "units/weapons/player/wpn_emp_gk_shield_05/wpn_emp_gk_shield_05" },
         { name = "GK Shield (Blessed)",    unit = "units/weapons/player/wpn_emp_gk_shield_01/wpn_emp_gk_shield_01" },
@@ -2901,6 +3032,65 @@ local function _cos_ui_icon_available(icon)
         and UIAtlasHelper.has_texture_by_name(icon) == true
 end
 
+local function _cos_active_skin(item, backend_id)
+    local skin = backend_id and LA_PERSIST
+        and LA_PERSIST.get_saved_illusion(backend_id) or nil
+    if not skin or skin == "" then skin = item and item.skin end
+    local item_key = item and (item.key
+        or (item.data and (item.data.name or item.data.key)))
+    if (not skin or skin == "") and item_key and WeaponSkins
+            and WeaponSkins.default_skins then
+        skin = WeaponSkins.default_skins[item_key]
+    end
+    return skin
+end
+
+-- Shared #650 descriptor publication seam. The ItemGrid adapter consumes this
+-- field, while future crafting/Hold-Tab adapters can call the public compositor
+-- only when they possess the same exact backend instance identity.
+_cos_refresh_composite_descriptor = function(item, record)
+    if type(item) ~= "table" then return nil end
+    item._cos_composite_icon_descriptor = nil
+    local backend_id = item.backend_id or item.ItemInstanceId
+    if backend_id == nil then return nil end
+    local item_data = item.data or (item.key and ItemMasterList
+        and rawget(ItemMasterList, item.key))
+    local item_type = item_data and item_data.item_type
+    local skin = _cos_active_skin(item, backend_id)
+    if not skin then return nil end
+
+    if record == nil and LA_PERSIST then
+        local live = _offhand_selection[backend_id]
+        local saved = LA_PERSIST.get_saved_offhands_for(backend_id)
+        record = live and live.left_hand_unit
+            or (saved and saved.left_hand_unit)
+    end
+    local offhand_unit = type(record) == "table"
+        and (record.unit_path or record.unit or record.intended_unit) or nil
+    local offhand_armoury_key = type(record) == "table"
+        and (record.armoury_key or record.la_armoury_key) or nil
+    if not offhand_unit and not offhand_armoury_key then
+        local skin_record = WeaponSkins and WeaponSkins.skins
+            and WeaponSkins.skins[skin]
+        local skin_data = type(skin_record) == "table"
+            and (skin_record.data or skin_record) or nil
+        offhand_unit = skin_data and skin_data.left_hand_unit
+    end
+    local glow_state = GlowPicker.committed_state_for(backend_id, { skin = skin })
+    local descriptor = COMPOSITE_ICONS.resolve({
+        backend_id = backend_id,
+        exact_instance = true,
+        item_type = item_type,
+        skin = skin,
+        offhand_unit = offhand_unit,
+        offhand_armoury_key = offhand_armoury_key,
+        glow_state = glow_state,
+        local_resource_available = _cos_ui_icon_available,
+    })
+    item._cos_composite_icon_descriptor = descriptor
+    return descriptor
+end
+
 local function _cos_localized_name(key)
     if type(key) ~= "string" or key == "" then return nil end
     local L = rawget(_G, "Localize")
@@ -3049,6 +3239,10 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
             inventory_icon, display_name = _cos_resolve_presentation(item,
                 inventory_icon, display_name, ownership, record,
                 LA_PERSIST.get_saved_illusion(backend_id))
+            -- Publish for the exact ItemGrid cell only. UIUtils also feeds
+            -- crafting and Hold-Tab, whose widgets do not own the shield/glow
+            -- passes; their returned vanilla/owned icon must stay unchanged.
+            _cos_refresh_composite_descriptor(item, record)
         end
         return inventory_icon, display_name, description, store_icon
     end)
@@ -10769,6 +10963,30 @@ _rt_register("cos_rpc_schema_present", function()
     end
     if COS_RPC_SCHEMA < 1 then
         return "COS_RPC_SCHEMA < 1"
+    end
+end)
+
+_rt_register("issue650_composite_icon_contract", function()
+    if mod._cos_composite_icons ~= COMPOSITE_ICONS then
+        return "public composite-icon API missing"
+    end
+    local descriptor = COMPOSITE_ICONS.resolve({
+        backend_id = "issue650-runtime-proof",
+        exact_instance = true,
+        item_type = "es_1h_mace_shield",
+        skin = "es_1h_mace_shield_skin_03_runed_01",
+        offhand_unit = "units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02_runed_01",
+        glow_state = { rune = { r = 64, g = 128, b = 255, intensity = 1 } },
+        local_resource_available = function() return true end,
+    })
+    if not descriptor
+            or descriptor.primary_texture ~= "icon_cos_empire_mace_shield_primary_01"
+            or descriptor.offhand_texture ~= "icon_cos_breton_shield_02"
+            or descriptor.glow_texture ~= "icon_cos_breton_shield_rune_glow"
+            or table.concat(descriptor.glow_color or {}, ",") ~= "255,64,128,255"
+            or table.concat(descriptor.layer_order or {}, ",")
+                ~= "native_background,primary_weapon,offhand,glow_mask,native_frame" then
+        return "Mace + Shield layered proof descriptor drifted"
     end
 end)
 

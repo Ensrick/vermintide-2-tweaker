@@ -4,7 +4,19 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-15.
+Last updated: 2026-07-16.
+
+---
+## Layered weapon item-card icons (#650)
+
+| Field | Value |
+|---|---|
+| Identity | A custom descriptor requires the exact backend instance, mapped primary skin, and exact saved offhand unit/armoury key. Missing or mixed-peer identity stays native. |
+| Order | Native rarity/background -> authored primary -> authored offhand -> optional glow mask -> native frame. |
+| Glow | Only `wpn_emp_gk_shield_02_runed_01` is rune-eligible; tint is the durable Apply state's exact rune RGB bytes and requires saved intensity above zero. A non-runed shield remains unlit even when the item has saved rune state. |
+| Cell reuse | Removing a descriptor or reusing a grid cell restores the new item's native icon and clears both optional passes. |
+| Scope | Inventory/equipment `ItemGridUI` is the proof adapter. Crafting and Hold-Tab stay native pending exact identity and renderer-material proof. |
+| Detection | Offline `test_cos_composite_icons.lua`; `/cos_regression_test` passes `issue650_composite_icon_contract`. Tracking: GitHub issue #650. |
 
 ---
 ## Grail Knight inventory hero replay (#629)

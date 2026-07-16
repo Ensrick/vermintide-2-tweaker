@@ -1,5 +1,40 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.133-dev - 2026-07-16 - #650 layered Mace + Shield icon proof [verify-fix]
+
+### Added
+
+- Inventory and equipment item grids can now render an exact-instance layered
+  icon descriptor in the order native rarity/background, primary weapon,
+  offhand shield, optional glow mask, then native frame. The first Mace +
+  Shield picker primary (`es_1h_mace_shield_skin_03`) and the authored
+  Bretonnian shield cutouts form the initial
+  catalog; unmapped primaries and shields retain the native icon.
+- The Bretonnian rune overlay is eligible only for the exact
+  `wpn_emp_gk_shield_02_runed_01` offhand identity. Its tint reads the durable
+  Apply transaction's exact rune RGB and requires positive saved intensity;
+  ordinary Bretonnian shields and dormant rune state never inherit it.
+- `_cos_composite_icons.lua` exposes the engine-free descriptor and cache/cell
+  restoration policy for later crafting and Hold-Tab adapters. Those surfaces
+  intentionally remain native until they carry exact identity and local
+  renderer-material proof.
+
+### Regression coverage
+
+- Offline coverage pins layer order, exact RGB conversion, renderer-resource
+  fallback, exact-instance isolation, rune-only gating, cache refresh, and
+  native-icon restoration when a grid cell is reused. `/cos_regression_test`
+  adds `issue650_composite_icon_contract`.
+
+### Verification
+
+Select the first Mace + Shield primary and a mapped Bretonnian shield. The
+inventory/equipment card must preserve its native rarity and frame while the
+mace sits behind the shield. Select the exact runed Bretonnian shield, Apply a
+rune color, and confirm only that shield gains the same RGB overlay without
+reopening the game. Switch the same grid cell to an unmapped item and confirm
+its native icon is restored. Tracking: GitHub issue #650.
+
 ## 0.9.132-dev - 2026-07-16 - #629/#639/#641 combined item presentation [verify-fix-coop]
 
 ### Fixed
