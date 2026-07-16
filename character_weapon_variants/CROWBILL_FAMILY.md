@@ -80,6 +80,14 @@ Imperial Crowbill Model 05 has one accepted presentation tune: scale
 shared appearance map. Owner first person and every sibling model remain at
 their authored transforms.
 
+Dawi Crowbill Model 01 has one accepted 3P/presentation tune: multiply the
+settled local attachment scale by `{0.5, 0.5, 0.5}`, then apply Euler rotation
+`{-90, -90, -90}`. This is deliberately not an absolute scale of `0.5`:
+attachment and preview producers can author a smaller baseline, so replacing
+that baseline can enlarge the mesh. CWV captures the baseline once per spawned
+unit, computes an absolute half-size target, and gives the target to the durable
+transform owner. Owner first person and all Imperial models remain unchanged.
+
 ## Appearance and pose verification
 
 Every replacement model or hammer-mode change must explicitly pass each cell:

@@ -85,11 +85,14 @@ M.MODELS = {
         right_hand_unit = "units/cwv_crowbill/dawi_01/dawi_01",
         inventory_icon = M.PLACEHOLDER_ICON,
         hud_icon = "weapon_generic_icon_falken",
-        -- User-reviewed Hold-Pose tune for Dawi Model 01. The request was not
-        -- perspective-limited: held 1P, owner/bot/husk 3P and every preview
-        -- consume the same canonical transform.
-        right_hand_scale = { 0.5, 0.5, 0.5 },
-        right_hand_rotation = { -90, -90, -90 },
+        -- User-reviewed Hold-Pose tune for Dawi Model 01. "Half its current
+        -- size" is a multiplier of the settled attachment scale, not an
+        -- absolute root scale: some 3P attachment paths begin below 0.5, and
+        -- overwriting them with absolute 0.5 enlarges the weapon. Inventory,
+        -- lobby, score/team and item previews are 3P presentation surfaces.
+        -- First person retains the authored model scale and orientation.
+        right_hand_scale_multiplier_3p = { 0.5, 0.5, 0.5 },
+        right_hand_rotation_3p = { -90, -90, -90 },
     },
     {
         variant_key = "cwv_es_imperial_crowbill",

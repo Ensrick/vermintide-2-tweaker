@@ -113,6 +113,7 @@ local suites = {
     "test_cwv_crowbill_runtime",
     "test_cwv_crowbill_presentation",
 	"test_cwv_durable_transform",
+	"test_cwv_relative_scale",
     "test_cwv_dawi_maces",
     "test_cwv_crowbill_family",
     "test_cwv_axe_balance",

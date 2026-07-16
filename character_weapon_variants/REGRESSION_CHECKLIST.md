@@ -39,6 +39,17 @@ Last updated: 2026-07-16.
 
 ---
 
+## #604 Dawi Crowbill relative 3P scale
+
+| Field | Check |
+|---|---|
+| Fix version(s) | CWV v0.1.432-dev |
+| Repro | Equip Dawi Crowbill Model 01, then inspect owner 3P, inventory and item/Athanor previews, and a remote client's view. Compare owner 1P and one Imperial Crowbill. |
+| Expected post-fix | Each 3P/presentation unit is half its own settled attachment scale and uses Euler `{-90,-90,-90}`. A non-unit baseline is never replaced by absolute `{0.5,0.5,0.5}`. Durable replay preserves the first target without compounding. Owner 1P and Imperial models remain unchanged. |
+| Detection | Bounded `[cwv:604] transform delivered` rows report `baseline_scale`, `scale_multiplier=(0.500,0.500,0.500)`, and an axis-wise half-size `target_scale`; offline relative-scale tests and `/cwv_regression_test` `issue604_dawi_crowbill_model01_transform` pass. |
+
+---
+
 ## #482 Persisted UUID variant identity survives legacy records
 
 | Field | Check |

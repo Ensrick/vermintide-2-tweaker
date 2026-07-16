@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.431-dev"
+local MOD_VERSION = "0.1.432-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -11194,6 +11194,8 @@ for _, def in ipairs(_variant_definitions) do
 			or _resolve_field(def, "left_hand_offset_1p")
 			or _resolve_field(def, "right_hand_scale_3p")
 			or _resolve_field(def, "left_hand_scale_3p")
+			or _resolve_field(def, "right_hand_scale_multiplier_3p")
+			or _resolve_field(def, "left_hand_scale_multiplier_3p")
 			or _resolve_field(def, "right_hand_offset_3p")
 			or _resolve_field(def, "left_hand_offset_3p")
 			or _resolve_field(def, "right_hand_rotation")
@@ -11271,6 +11273,7 @@ for _, model in ipairs(_om.crowbill_family.usable_models()) do
 	transform_def.right_hand_offset_1p = model.right_hand_offset_1p
 	transform_def.right_hand_rotation_1p = model.right_hand_rotation_1p
 	transform_def.right_hand_scale_3p = model.right_hand_scale_3p
+	transform_def.right_hand_scale_multiplier_3p = model.right_hand_scale_multiplier_3p
 	transform_def.right_hand_offset_3p = model.right_hand_offset_3p
 	transform_def.right_hand_rotation_3p = model.right_hand_rotation_3p
 	_skin_transform_map[model.key] = transform_def
@@ -11480,6 +11483,18 @@ local _DURABLE_TRANSFORM_LIBRARY = mod:dofile(
 	"scripts/mods/character_weapon_variants/_cwv_durable_transform")
 local _durable_crowbill_first_tick = setmetatable({}, { __mode = "k" })
 local _durable_crowbill_owner
+local _RELATIVE_SCALE_LIBRARY = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_relative_scale")
+local _crowbill_relative_scale_owner = _RELATIVE_SCALE_LIBRARY.new({
+	read_scale = function(unit)
+		if not (unit and Unit.alive(unit)) then return nil end
+		local ok, current = pcall(Unit.local_scale, unit, 0)
+		if not ok or not current then return nil end
+		local elements_ok, x, y, z = pcall(Vector3.to_elements, current)
+		if not elements_ok then return nil end
+		return { x, y, z }
+	end,
+})
 local function _triplet_text(value)
 	if type(value) ~= "table" then return "nil" end
 	return string.format("%.3f,%.3f,%.3f", value[1] or 0, value[2] or 0, value[3] or 0)
@@ -11489,6 +11504,16 @@ local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, 
 	local prefix = hand == "left" and "left_hand_" or "right_hand_"
 	local scale = _resolve_field(def, prefix .. "scale_" .. perspective)
 		or _resolve_field(def, prefix .. "scale")
+	local scale_multiplier = _resolve_field(def, prefix .. "scale_multiplier_" .. perspective)
+		or _resolve_field(def, prefix .. "scale_multiplier")
+	local scale_baseline
+	if scale_multiplier and unit then
+		local resolved, baseline = _crowbill_relative_scale_owner:resolve(unit, scale_multiplier)
+		if resolved then
+			scale = resolved
+			scale_baseline = baseline
+		end
+	end
 	local offset = _resolve_field(def, prefix .. "offset_" .. perspective)
 		or _resolve_field(def, prefix .. "offset")
 	local rotation = _resolve_field(def, prefix .. "rotation_" .. perspective)
@@ -11530,10 +11555,11 @@ local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, 
 			local counts = _om._cwv_crowbill_transform_delivery.counts
 			counts[surface] = (counts[surface] or 0) + 1
 			pcall(printf,
-				"[cwv:604] transform delivered surface=%s perspective=%s hand=%s variant=%s model=%s unit=%s skin=%s scale=(%s) offset=(%s) rotation=(%s) applied=%s count=%d/64",
+				"[cwv:604] transform delivered surface=%s perspective=%s hand=%s variant=%s model=%s unit=%s skin=%s baseline_scale=(%s) scale_multiplier=(%s) target_scale=(%s) offset=(%s) rotation=(%s) applied=%s count=%d/64",
 				tostring(surface), tostring(perspective), tostring(hand),
 				tostring(def.item_key), tostring(def.crowbill_model_key),
-				tostring(unit_name), tostring(skin), _triplet_text(scale),
+				tostring(unit_name), tostring(skin), _triplet_text(scale_baseline),
+				_triplet_text(scale_multiplier), _triplet_text(scale),
 				_triplet_text(offset), _triplet_text(rotation), tostring(applied),
 				_crowbill_transform_diag_total)
 		end
@@ -12345,10 +12371,12 @@ do
 		local scale, offset, rotation
 		if hand == "right" then
 			scale    = _resolve_field(def, "right_hand_scale_3p")    or _resolve_field(def, "right_hand_scale")
+				or _resolve_field(def, "right_hand_scale_multiplier_3p")
 			offset   = _resolve_field(def, "right_hand_offset_3p")   or _resolve_field(def, "right_hand_offset")
 			rotation = _resolve_field(def, "right_hand_rotation_3p") or _resolve_field(def, "right_hand_rotation")
 		else
 			scale    = _resolve_field(def, "left_hand_scale_3p")    or _resolve_field(def, "left_hand_scale")
+				or _resolve_field(def, "left_hand_scale_multiplier_3p")
 			offset   = _resolve_field(def, "left_hand_offset_3p")   or _resolve_field(def, "left_hand_offset")
 			rotation = _resolve_field(def, "left_hand_rotation_3p") or _resolve_field(def, "left_hand_rotation")
 		end
@@ -16521,19 +16549,22 @@ _rt_register("issue604_dawi_crowbill_model01_transform", function()
 		if model.key == "cwv_dr_dawi_crowbill_skin" then target = model; break end
 	end
 	if not target
-			or not same_triplet(target.right_hand_scale, { 0.5, 0.5, 0.5 })
-			or not same_triplet(target.right_hand_rotation, { -90, -90, -90 })
+			or not same_triplet(target.right_hand_scale_multiplier_3p, { 0.5, 0.5, 0.5 })
+			or not same_triplet(target.right_hand_rotation_3p, { -90, -90, -90 })
 			or target.right_hand_offset
-			or target.right_hand_rotation_3p or target.right_hand_rotation_1p then
+			or target.right_hand_scale or target.right_hand_rotation
+			or target.right_hand_scale_1p or target.right_hand_rotation_1p then
 		return "#604 Dawi Crowbill Model 01 reviewed transform drifted"
 	end
 	local applied = _skin_transform_map[target.key]
 	if not applied
-			or not same_triplet(applied.right_hand_scale, target.right_hand_scale)
-			or not same_triplet(applied.right_hand_rotation, target.right_hand_rotation)
+			or not same_triplet(applied.right_hand_scale_multiplier_3p,
+				target.right_hand_scale_multiplier_3p)
+			or not same_triplet(applied.right_hand_rotation_3p, target.right_hand_rotation_3p)
 			or applied.right_hand_offset
-			or applied.right_hand_rotation_3p or applied.right_hand_rotation_1p then
-		return "#604 Dawi Model 01 transform is not on the canonical all-surface map"
+			or applied.right_hand_scale or applied.right_hand_rotation
+			or applied.right_hand_scale_1p or applied.right_hand_rotation_1p then
+		return "#604 Dawi Model 01 transform is not isolated to the canonical 3P map"
 	end
 	local unit_def = _crowbill_transform_by_unit[target.right_hand_unit]
 	local unit_3p_def = _crowbill_transform_by_unit[target.right_hand_unit .. "_3p"]

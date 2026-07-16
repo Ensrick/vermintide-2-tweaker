@@ -1,5 +1,23 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.432-dev - 2026-07-16 - #604 Dawi Crowbill relative 3P scale [verify-fix-coop]
+
+- Corrected Dawi Crowbill Model 01's `0.5` tune from an absolute unit-root
+  scale to a multiplier of each spawned 3P/presentation unit's settled scale.
+  The previous absolute write could enlarge an attachment whose authored local
+  scale was already below `0.5`.
+- Captures the baseline once per unit, computes one absolute half-size target,
+  and gives that target to the existing durable owner. Reapplication is
+  idempotent across owner/bot/remote 3P and inventory/lobby/score/Athanor
+  previews. First person and every Imperial Crowbill remain unchanged.
+- Expanded bounded `[cwv:604]` evidence with baseline, multiplier, and target
+  scale values; added offline and runtime regression coverage for the relative
+  scale contract.
+
+**DoD:** Re-walked U-4 shared appearance fan-out, G-CUSTOM-ILLUSION model
+identity, owner/bot/husk 3P, every 3P preview, first-person isolation, bounded
+diagnostics, and U-8 build hygiene. Co-op visual confirmation remains pending.
+
 ## 0.1.431-dev - 2026-07-16 - #645 reciprocal Combat Style registry [diagnostics-armed]
 
 - Replaced Combat Style's hard-coded remap and transform decisions with a
