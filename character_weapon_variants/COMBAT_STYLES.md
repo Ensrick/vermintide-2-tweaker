@@ -18,6 +18,14 @@ damage profile before applying its package: 15% slower attack actions, 15%
 more stagger, 15% more cleave, and unchanged damage. No donor or shared power
 table is mutated.
 
+Imperial Longsword style deep-clones Kruber's native
+`two_handed_swords_template_1` action graph, not the Bretonnian
+`bastard_sword_template`. It applies 15% faster attack actions, 15% less
+damage, 15% less stagger, and 15% more cleave while retaining the Imperial
+model transform. This makes the four entries semantically ordered as native
+Greatsword, Imperial-tuned Greatsword, Bretonnian Longsword, and Kerillian
+Greatsword rather than placing the Bretonnian graph twice in succession.
+
 Infantry style reuses #596's cloned Kerillian spear package: 15% slower attack
 actions, 15% more stagger, 15% more cleave, and 7.5% more damage. Hunter style
 is the untouched native Tuskgor template. CWV adds Foot Knight to the native
@@ -35,8 +43,12 @@ otherwise rebuilds the currently wielded slot once through vanilla
 back before a best-effort repair.
 
 The inventory control appears only when the selected loadout item belongs to a
-supported family and reads `Switch to: <next style>`. The optional `Cycle Combat Style`
-hotkey applies to the wielded supported instance in the keep or a mission.
+supported family and reads `Switch to: <next style>`. One physical mouse click
+produces both VMF press and release flags, but press is observation-only and
+the handler consumes exactly one release edge, so it commits exactly one
+transition. The optional `Cycle Combat Style` hotkey applies to the wielded
+supported instance in the keep or a mission and advances through the same
+member order as the button.
 
 The retired `cwv_es_infantry_spear`, `cwv_es_longsword`, and
 `cwv_es_longsword_blackguard` master rows are promo restore bridges and hidden

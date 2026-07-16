@@ -1,5 +1,36 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.430-dev - 2026-07-16 - #644 Combat Style cycle parity [verify-fix]
+
+- Fixed one equipment-menu click advancing two Combat Styles. The custom VMF
+  hotspot exposes both `on_pressed` and `on_release`; the handler accepted both,
+  so a single physical click could commit two transitions while the hotkey
+  committed only one. Press is now observation-only and exactly one release
+  edge is consumed and cleared.
+- Corrected Imperial Longsword's style provenance. It previously cloned
+  `bastard_sword_template` and loaded the Bretonnian state machine, so the
+  authored four-style Greatsword cycle contained two consecutive Bretonnian
+  action graphs. It now deep-clones Kruber's native
+  `two_handed_swords_template_1`, loads the native `2h_sword` state machine,
+  and preserves its authored 115% speed, 85% damage, 85% stagger, 115% cleave,
+  and Imperial presentation transform. Bretonnian remains the next separate
+  action graph.
+- Added offline coverage for one click = one commit, equipment-button/hotkey
+  parity, the exact `Greatsword -> Imperial -> Bretonnian -> Kerillian` cycle,
+  and Imperial donor immutability. Extended runtime
+  `issue620_per_instance_combat_styles` coverage to assert single release-edge
+  consumption and Kruber Greatsword donor/resource provenance.
+
+**Verification (solo; confirm `[cwv:LOAD] v0.1.430-dev` first):**
+
+1. Equip a native Kruber Greatsword and click the equipment-row style button
+   once per step. It must advance exactly one style in this order: Imperial
+   Longsword, Bretonnian, Kerillian, Greatsword.
+2. Repeat with the `Cycle Combat Style` hotkey. It must produce the identical
+   one-step order, with Imperial using Kruber's Greatsword attacks rather than
+   repeating Bretonnian attacks.
+3. Run `/cwv_regression_test`; `issue620_per_instance_combat_styles` must PASS.
+
 ## 0.1.429-dev - 2026-07-16 - issue 474 Old Musket presentation surface audit + fan-out guard [verify-fix-coop]
 
 Issue 474's real complaint is process, not one weapon: "if we're using consistent

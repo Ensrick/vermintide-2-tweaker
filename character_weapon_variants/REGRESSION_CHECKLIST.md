@@ -4,16 +4,16 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-15.
+Last updated: 2026-07-16.
 
 ## #620 Per-instance Combat Styles
 
 | Field | Check |
 |---|---|
-| Fix version(s) | CWV v0.1.422-dev |
-| Repro | Select supported Greatsword, Greathammer, and Tuskgor Spear instances, cycle with the contextual `Switch to:` button, then use the hotkey. Restart and hot join with a second CWV peer; include pre-#620 Infantry Spear, Imperial Longsword, and Black Guard UUIDs. Open CIM's Athanor on Dual Axes. |
-| Expected post-fix | Each exact instance retains its style. Greatswords expose four packages, Greathammers two, and Tuskgor Hunter/Infantry. Foot Knight has Tuskgor by default. Legacy UUIDs become their native item+style without illusion/forged-field loss, and retired rows are absent from new crafting/WT. All render surfaces agree without stale transforms, active-attack switches, per-frame RPCs, query loops, or missing-icon crashes. |
-| Detection | Offline `test_cwv_combat_styles.lua` passes; `/cwv_regression_test` passes `issue620_per_instance_combat_styles`; transition-only `[cwv:620] style commit/tx/rx` evidence is bounded. |
+| Fix version(s) | CWV v0.1.422-dev; v0.1.430-dev (#644 input/donor parity) |
+| Repro | Select supported Greatsword, Greathammer, and Tuskgor Spear instances, cycle with the contextual `Switch to:` button, then use the hotkey. For Greatsword, click once per style and confirm exact `Imperial -> Bretonnian -> Kerillian -> Greatsword` progression; repeat by hotkey. Restart and hot join with a second CWV peer; include pre-#620 Infantry Spear, Imperial Longsword, and Black Guard UUIDs. Open CIM's Athanor on Dual Axes. |
+| Expected post-fix | Each exact instance retains its style. One physical equipment-button click consumes exactly one release edge and commits one transition; button and hotkey orders are identical. Greatswords expose four packages, with Imperial derived from Kruber Greatsword plus authored balance/transform rather than duplicating Bretonnian. Greathammers expose two and Tuskgor Hunter/Infantry. Foot Knight has Tuskgor by default. Legacy UUIDs become their native item+style without illusion/forged-field loss, and retired rows are absent from new crafting/WT. All render surfaces agree without stale transforms, active-attack switches, per-frame RPCs, query loops, or missing-icon crashes. |
+| Detection | Offline `test_cwv_combat_styles.lua` passes `CWV equipment click commits once and matches one hotkey cycle` plus `CWV Imperial Longsword style derives from Kruber Greatsword, not Bretonnian`; `/cwv_regression_test` passes `issue620_per_instance_combat_styles`; transition-only `[cwv:620] style commit/tx/rx` evidence is bounded. |
 
 ---
 

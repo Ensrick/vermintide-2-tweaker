@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.429-dev"
+local MOD_VERSION = "0.1.430-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -418,10 +418,8 @@ local _variant_definitions = {
 		description     = "Standard-issue Imperial longsword of the Reikland state regiments. Forged in their thousands by the smithies of Altdorf - serviceable steel for the men who hold the line against beast and greenskin alike.",
 		character       = "empire_soldier",
 		careers         = _es_all_careers,
-		-- QUESTION: model is from two_handed_swords_template_1 (Kruber greatsword) but
-		-- this entry uses imperial_longsword_template (cloned from bastard_sword_template).
-		-- Mismatched model+moveset is intentional per CHANGELOG v0.1.25, but worth
-		-- documenting in DEVELOPMENT.md.
+		-- #644: the Imperial Longsword model and style template both use Kruber's
+		-- native Greatsword action graph; its balance and transform remain distinct.
 		right_hand_unit = "units/weapons/player/wpn_empire_2h_sword_04_t1/wpn_2h_sword_04_t1",
 		inventory_icon  = "icon_wpn_empire_2h_sword_04_t1",
 		hud_icon        = "weapon_generic_icon_sword",
@@ -1883,7 +1881,7 @@ end)
 _cwv_networked_3p_remap_installed = true
 
 -- ============================================================
--- Imperial Longsword template (modified bastard_sword_template)
+-- Imperial Longsword template (modified Kruber Greatsword template)
 -- -15% damage, +15% speed, +15% cleave, -15% stagger
 -- ============================================================
 
@@ -2099,51 +2097,29 @@ end
 -- shared `_clone_damage_profile` helper stays OUTSIDE (declared above) because
 -- later weapon families reference it too.
 do  -- #284: scope imperial-longsword (2H + shield) template locals off the top-level chunk (>200-local limit)
-local _IL_DAMAGE_MULT  = 0.85
-local _IL_SPEED_MULT   = 1.15
-local _IL_CLEAVE_MULT  = 1.15
-local _IL_STAGGER_MULT = 0.85
+local _IL_DAMAGE_MULT  = _om.combat_style_policy.IMPERIAL_DAMAGE_MULT
+local _IL_SPEED_MULT   = _om.combat_style_policy.IMPERIAL_SPEED_MULT
+local _IL_CLEAVE_MULT  = _om.combat_style_policy.IMPERIAL_CLEAVE_MULT
+local _IL_STAGGER_MULT = _om.combat_style_policy.IMPERIAL_STAGGER_MULT
 
 local function _create_imperial_longsword_template()
-	if not Weapons or not Weapons.bastard_sword_template then
-		mod:warning("bastard_sword_template not found — Imperial Longsword stat modifications unavailable")
+	if not Weapons or not Weapons.two_handed_swords_template_1 then
+		mod:warning("two_handed_swords_template_1 not found — Imperial Longsword stat modifications unavailable")
 		return
 	end
 	if Weapons.imperial_longsword_template then return end
 
-	-- CLARIFY: table.clone(t, true) is recursive (deep clone) per
-	-- foundation/scripts/util/table.lua — it walks every nested table value.
-	-- skip_metatable=true is required because Weapon templates contain functions
-	-- (anim_end_event_condition_func) which would otherwise trip the metatable
-	-- assertion. Sub-tables (action_one.default.allowed_chain_actions, buff_data,
-	-- weapon_sway_settings, etc.) are all freshly-allocated copies, so mutating
-	-- this clone is safe for the original bastard_sword_template.
-	local template = table.clone(Weapons.bastard_sword_template, true)
-
-	-- CLARIFY: Two-level loop is sufficient. anim_time_scale and damage_profile
-	-- live at the sub-action level (template.actions.action_one.default.*), not
-	-- in deeper structures like allowed_chain_actions.
-	if template.actions then
-		for _, action_group in pairs(template.actions) do
-			if type(action_group) == "table" then
-				for _, sub_action in pairs(action_group) do
-					if type(sub_action) == "table" then
-						if sub_action.anim_time_scale then
-							sub_action.anim_time_scale = sub_action.anim_time_scale * _IL_SPEED_MULT
-						end
-						if sub_action.damage_profile then
-							sub_action.damage_profile = _clone_damage_profile(sub_action.damage_profile, "cwv_il_", {
-								damage = _IL_DAMAGE_MULT, stagger = _IL_STAGGER_MULT, cleave = _IL_CLEAVE_MULT,
-							})
-						end
-					end
-				end
-			end
-		end
+	-- #644: the Imperial style is deliberately derived from native Greatsword.
+	-- Bretonnian Longsword remains the next distinct action graph in the family.
+	local template, err = _om.combat_style_policy.build_imperial_template(Weapons,
+		function(value) return table.clone(value, true) end, _clone_damage_profile)
+	if not template then
+		mod:warning("Imperial Longsword template unavailable: %s", tostring(err))
+		return
 	end
 
 	Weapons.imperial_longsword_template = template
-	mod:info("Created imperial_longsword_template (dmg=%.0f%% spd=%.0f%% cleave=%.0f%% stagger=%.0f%%)",
+	mod:info("[cwv:644] registered Imperial Longsword style from Kruber Greatsword (dmg=%.0f%% spd=%.0f%% cleave=%.0f%% stagger=%.0f%%)",
 		_IL_DAMAGE_MULT * 100, _IL_SPEED_MULT * 100, _IL_CLEAVE_MULT * 100, _IL_STAGGER_MULT * 100)
 end
 
@@ -14321,6 +14297,27 @@ _rt_register("issue620_per_instance_combat_styles", function()
 	end
 	if type(rawget(Weapons, policy.KERILLIAN_TEMPLATE)) ~= "table" then
 		return "Kerillian Combat Style template is not registered"
+	end
+	local imperial = rawget(Weapons, "imperial_longsword_template")
+	local greatsword = rawget(Weapons, "two_handed_swords_template_1")
+	local longsword_style = policy.FAMILIES.greatsword.styles.longsword
+	if type(imperial) ~= "table" or type(greatsword) ~= "table"
+			or imperial.wield_anim ~= greatsword.wield_anim
+			or longsword_style.resource ~= "units/beings/player/first_person_base/state_machines/melee/2h_sword" then
+		return "Imperial Longsword style is not derived from the Kruber Greatsword graph"
+	end
+	local probe_item = { backend_id = "issue644_release_probe", name = "es_2h_sword" }
+	local probe_content = {
+		rows = 1, columns = 1, item_1_1 = probe_item,
+		cwv_style_hotspot_1_1 = { cwv_visible = true, on_pressed = true },
+	}
+	if policy.consume_console_style_press(probe_content, runtime) ~= nil then
+		return "Combat Style equipment button still commits on press"
+	end
+	probe_content.cwv_style_hotspot_1_1.on_release = true
+	if policy.consume_console_style_press(probe_content, runtime) ~= probe_item
+			or policy.consume_console_style_press(probe_content, runtime) ~= nil then
+		return "Combat Style equipment button does not consume exactly one release edge"
 	end
 	for _, legacy_key in ipairs({ "cwv_es_longsword", "cwv_es_longsword_blackguard" }) do
 		local def = _find_def(legacy_key)

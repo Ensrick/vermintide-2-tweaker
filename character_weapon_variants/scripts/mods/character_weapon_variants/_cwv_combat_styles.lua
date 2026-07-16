@@ -12,6 +12,10 @@ M.SCHEMA = 1
 M.MAX_TOKEN = 96
 M.INPUT_DESCRIPTION_CAPACITY = 7
 M.KERILLIAN_TEMPLATE = "cwv_combat_style_kerillian_greatsword"
+M.IMPERIAL_SPEED_MULT = 1.15
+M.IMPERIAL_DAMAGE_MULT = 0.85
+M.IMPERIAL_STAGGER_MULT = 0.85
+M.IMPERIAL_CLEAVE_MULT = 1.15
 M.KERILLIAN_SPEED_MULT = 0.85
 M.KERILLIAN_STAGGER_MULT = 1.15
 M.KERILLIAN_CLEAVE_MULT = 1.15
@@ -67,7 +71,7 @@ M.FAMILIES = {
 				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword" },
 			longsword = { label = "Longsword Combat Style", template = "imperial_longsword_template",
 				transform = "imperial_longsword",
-				resource = "units/beings/player/first_person_base/state_machines/melee/bastard_sword" },
+				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword" },
 			bretonnian = { label = "Bretonnian Combat Style", template = "bastard_sword_template",
 				resource = "units/beings/player/first_person_base/state_machines/melee/bastard_sword" },
 			kerillian = {
@@ -369,12 +373,18 @@ function M.consume_console_style_press(content, runtime)
 		for k = 1, tonumber(content.columns) or 0 do
 			local suffix = "_" .. tostring(i) .. "_" .. tostring(k)
 			local hotspot = content["cwv_style_hotspot" .. suffix]
-			if hotspot and hotspot.cwv_visible and (hotspot.on_pressed or hotspot.on_release) then
+			if hotspot and hotspot.cwv_visible then
+				-- VMF exposes both edges for one physical click. Cycling on either
+				-- edge advances twice, so press is observation-only and release is
+				-- the single consumed commit edge (#644).
+				local released = hotspot.on_release == true
 				hotspot.on_pressed = false
-				hotspot.on_release = false
-				local item = content["item" .. suffix]
-				local row = console_row(runtime, content, suffix)
-				if row then return item, suffix, row end
+				if released then hotspot.on_release = false end
+				if released then
+					local item = content["item" .. suffix]
+					local row = console_row(runtime, content, suffix)
+					if row then return item, suffix, row end
+				end
 			end
 		end
 	end
@@ -414,9 +424,8 @@ function M.valid_wire(schema, op, slot_name, family_id, style_id)
 		and family ~= nil and family.styles[style_id] ~= nil
 end
 
-function M.build_kerillian_template(weapons, clone, clone_damage_profile)
-	local donor = weapons and weapons.two_handed_swords_wood_elf_template
-	if type(donor) ~= "table" then return nil, "Kerillian Greatsword template missing" end
+local function build_modified_template(donor, clone, clone_damage_profile, prefix, speed, modifiers)
+	if type(donor) ~= "table" then return nil, "donor template missing" end
 	if type(clone) ~= "function" or type(clone_damage_profile) ~= "function" then
 		return nil, "clone dependencies missing"
 	end
@@ -426,16 +435,39 @@ function M.build_kerillian_template(weapons, clone, clone_damage_profile)
 			for _, action in pairs(action_group) do
 				if type(action) == "table" then
 					if type(action.anim_time_scale) == "number" then
-						action.anim_time_scale = action.anim_time_scale * M.KERILLIAN_SPEED_MULT
+						action.anim_time_scale = action.anim_time_scale * speed
 					end
 					if type(action.damage_profile) == "string" then
-						action.damage_profile = clone_damage_profile(action.damage_profile,
-							"cwv_style_kerillian_gs_", { damage = 1, stagger = M.KERILLIAN_STAGGER_MULT, cleave = M.KERILLIAN_CLEAVE_MULT })
+						action.damage_profile = clone_damage_profile(action.damage_profile, prefix, modifiers)
 					end
 				end
 			end
 		end
 	end
+	return template
+end
+
+-- Imperial Longsword is the native Kruber Greatsword action graph with the
+-- authored longsword balance and presentation. It must never inherit the
+-- Bretonnian Longsword graph, which is the next, separate family entry (#644).
+function M.build_imperial_template(weapons, clone, clone_damage_profile)
+	local donor = weapons and weapons.two_handed_swords_template_1
+	if type(donor) ~= "table" then return nil, "Kruber Greatsword template missing" end
+	return build_modified_template(donor, clone, clone_damage_profile, "cwv_il_",
+		M.IMPERIAL_SPEED_MULT, {
+		damage = M.IMPERIAL_DAMAGE_MULT,
+		stagger = M.IMPERIAL_STAGGER_MULT,
+		cleave = M.IMPERIAL_CLEAVE_MULT,
+	})
+end
+
+function M.build_kerillian_template(weapons, clone, clone_damage_profile)
+	local donor = weapons and weapons.two_handed_swords_wood_elf_template
+	if type(donor) ~= "table" then return nil, "Kerillian Greatsword template missing" end
+	local template, err = build_modified_template(donor, clone, clone_damage_profile,
+		"cwv_style_kerillian_gs_", M.KERILLIAN_SPEED_MULT,
+		{ damage = 1, stagger = M.KERILLIAN_STAGGER_MULT, cleave = M.KERILLIAN_CLEAVE_MULT })
+	if not template then return nil, err end
 	-- The donor's first-person state machine remains exact. Only the 3P wield
 	-- event is receiver-localized for Kruber; action redirects remain available
 	-- to CWV/WT's existing network-bound animation funnel.

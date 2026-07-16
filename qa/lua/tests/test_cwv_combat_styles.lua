@@ -16,6 +16,12 @@ return function(H, repo_root)
 		H.equal(current, "greatsword")
 		H.equal(style.template, "two_handed_swords_template_1")
 		H.equal(family, "greatsword")
+		local family_policy = policy.FAMILIES.greatsword
+		H.equal(family_policy.styles.longsword.template, "imperial_longsword_template")
+		H.equal(family_policy.styles.longsword.resource,
+			"units/beings/player/first_person_base/state_machines/melee/2h_sword")
+		H.equal(family_policy.styles.bretonnian.template, "bastard_sword_template")
+		H.equal(family_policy.styles.kerillian.template, policy.KERILLIAN_TEMPLATE)
 		local next_id = policy.next_style("es_2h_sword", current)
 		H.equal(next_id, "longsword")
 		next_id = policy.next_style("es_2h_sword", next_id)
@@ -118,14 +124,67 @@ return function(H, repo_root)
 		H.equal(grid.content.cwv_style_hotspot_2_1.cwv_visible, false)
 
 		grid.content.cwv_style_hotspot_1_1.on_pressed = true
-		local item, suffix, row = policy.consume_console_style_press(grid.content, runtime)
+		local item = policy.consume_console_style_press(grid.content, runtime)
+		H.equal(item, nil)
+		H.equal(grid.content.cwv_style_hotspot_1_1.on_pressed, false)
+		grid.content.cwv_style_hotspot_1_1.on_release = true
+		local suffix, row
+		item, suffix, row = policy.consume_console_style_press(grid.content, runtime)
 		H.equal(item.backend_id, "tuskgor_uuid")
 		H.equal(suffix, "_1_1")
 		H.equal(row.family_id, "spear")
-		H.equal(grid.content.cwv_style_hotspot_1_1.on_pressed, false)
+		H.equal(grid.content.cwv_style_hotspot_1_1.on_release, false)
+		H.equal(policy.consume_console_style_press(grid.content, runtime), nil)
 		local pass_count = #grid.element.passes
 		H.equal(policy.decorate_console_grid(grid, runtime), false)
 		H.equal(#grid.element.passes, pass_count)
+	end)
+
+	H.test("CWV equipment click commits once and matches one hotkey cycle", function()
+		local function make_runtime(identity)
+			local commits = 0
+			local fake_mod = {
+				get = function() return nil end,
+				set = function() commits = commits + 1 end,
+			}
+			local runtime = policy.install(fake_mod, {
+				acquire_style_resource = function(_, callback)
+					callback(true)
+					return true
+				end,
+			})
+			return runtime, { backend_id = identity, name = "es_2h_sword" },
+				function() return commits end
+		end
+
+		local button_runtime, button_item, button_commits = make_runtime("button_greatsword")
+		local hotkey_runtime, hotkey_item, hotkey_commits = make_runtime("hotkey_greatsword")
+		local content = {
+			rows = 1, columns = 1,
+			item_1_1 = button_item,
+			cwv_style_hotspot_1_1 = { cwv_visible = true },
+		}
+		local expected = { "longsword", "bretonnian", "kerillian", "greatsword" }
+		for index, style_id in ipairs(expected) do
+			local hotspot = content.cwv_style_hotspot_1_1
+			hotspot.on_pressed = true
+			H.equal(policy.consume_console_style_press(content, button_runtime), nil)
+			H.equal(button_commits(), index - 1)
+			hotspot.on_release = true
+			local clicked = policy.consume_console_style_press(content, button_runtime)
+			H.equal(clicked, button_item)
+			local accepted = button_runtime:cycle_item(clicked, nil, "equipment_style_button", true)
+			H.equal(accepted, true)
+			H.equal(button_commits(), index)
+			H.equal(policy.consume_console_style_press(content, button_runtime), nil)
+			H.equal(button_commits(), index)
+
+			accepted = hotkey_runtime:cycle_item(hotkey_item, nil, "hotkey", true)
+			H.equal(accepted, true)
+			H.equal(hotkey_commits(), index)
+			H.equal(button_runtime:describe(button_item).style_id, style_id)
+			H.equal(hotkey_runtime:describe(hotkey_item).style_id, style_id)
+		end
 	end)
 
 	H.test("CWV style transition cannot commit before its resource is ready", function()
@@ -255,6 +314,40 @@ return function(H, repo_root)
 		H.equal(donor.actions.action_one.light.anim_time_scale, 1.2)
 		H.equal(donor.actions.action_one.light.damage_profile, "elf_light")
 		H.equal(donor.wield_anim_career_3p, nil)
+	end)
+
+	H.test("CWV Imperial Longsword style derives from Kruber Greatsword, not Bretonnian", function()
+		local greatsword = {
+			actions = { action_one = {
+				light = { graph = "kruber_greatsword", anim_time_scale = 1.2,
+					damage_profile = "greatsword_light" },
+			} },
+			wield_anim = "to_2h_sword",
+		}
+		local bretonnian = {
+			actions = { action_one = { light = { graph = "bretonnian_longsword" } } },
+			wield_anim = "to_bastard_sword",
+		}
+		local calls = {}
+		local template = policy.build_imperial_template({
+			two_handed_swords_template_1 = greatsword,
+			bastard_sword_template = bretonnian,
+		}, clone, function(source, prefix, modifiers)
+			calls[source] = { prefix = prefix, modifiers = clone(modifiers) }
+			return prefix .. source
+		end)
+		H.truthy(template)
+		H.equal(template.actions.action_one.light.graph, "kruber_greatsword")
+		H.equal(template.wield_anim, "to_2h_sword")
+		H.truthy(math.abs(template.actions.action_one.light.anim_time_scale - 1.38) < 0.000001)
+		H.equal(template.actions.action_one.light.damage_profile, "cwv_il_greatsword_light")
+		H.equal(calls.greatsword_light.modifiers.damage, 0.85)
+		H.equal(calls.greatsword_light.modifiers.stagger, 0.85)
+		H.equal(calls.greatsword_light.modifiers.cleave, 1.15)
+		H.equal(greatsword.actions.action_one.light.anim_time_scale, 1.2)
+		H.equal(greatsword.actions.action_one.light.damage_profile, "greatsword_light")
+		H.equal(template.actions.action_one.light.graph ==
+			bretonnian.actions.action_one.light.graph, false)
 	end)
 
 	H.test("CWV Combat Style runtime resolves exact IDs and legacy defaults", function()
