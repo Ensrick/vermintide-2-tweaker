@@ -1,5 +1,29 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.15-dev (2026-07-15) - #613 native Blightreaper pulse
+
+### Fixed
+
+- Replaced the static authored Blightreaper material path with a resident
+  base-game runed Empire-sword shader donor and WOC-owned albedo, normal,
+  packed, noise, emissive-mask, and color-mask textures.
+- Applied the native-style gold intensity and pulse variables through the same
+  bounded appearance path used by owner first person, local/remote third
+  person, inventory/lobby heroes, and item previews. Application is event
+  driven at unit spawn/replay; it does not add a per-frame update or RPC.
+- Added fail-closed donor/texture residency checks and bounded diagnostics so a
+  missing compiled resource cannot crash startup or silently paint unrelated
+  units.
+
+### Verification
+
+Confirm `[WOC] Weapons of Chaos v0.1.15-dev loading`, then craft/equip the
+Blightreaper and verify the animated gold pulse in first person, local third
+person, inventory character preview, item preview, and on a remote client.
+Confirm ordinary Empire swords remain unchanged. Audio/inspect whispers remain
+tracked separately in #633; this release does not fabricate an audio contract
+that is absent from the extracted weapon unit.
+
 ## 0.1.14-dev (2026-07-15) - #637 unique immutable WOC relics [verify-fix]
 
 ### Unique relic inventory (#637)
