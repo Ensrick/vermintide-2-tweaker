@@ -504,6 +504,10 @@ end
 local _deus_setup_active = false
 local _deus_pending_relics = 0
 
+local function _pack_results(...)
+	return { n = select("#", ...), ... }
+end
+
 -- Vanilla setup reads the canonical backend item by id, then immediately maps
 -- item.key through DeusStartingWeaponTypeMapping. Expose a non-mutating WOC-key
 -- shadow only inside that synchronous setup window. The mapping itself still
@@ -522,12 +526,11 @@ mod:hook("DeusMechanism", "_setup_run", function(func, self, ...)
 		rawget(_G, "DeusWeapons"))
 	_deus_setup_active = true
 	_deus_pending_relics = 0
-	local results = { pcall(func, self, ...) }
+	local results = _pack_results(pcall(func, self, ...))
 	_deus_setup_active = false
 	_deus_pending_relics = 0
-	local ok = table.remove(results, 1)
-	if not ok then error(results[1]) end
-	return unpack(results)
+	if not results[1] then error(results[2]) end
+	return unpack(results, 2, results.n)
 end)
 
 mod:hook("DeusWeaponGeneration", "generate_item_from_item_key",
