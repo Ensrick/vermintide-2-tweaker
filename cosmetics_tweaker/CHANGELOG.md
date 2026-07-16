@@ -1,5 +1,24 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.126-dev - 2026-07-15 - #629 authored outfit correction
+
+### Changed
+
+- Replaced the Purpure/Azure Grail Knight third-person outfit diffuse with the
+  author's latest revision, correcting the remaining incorrectly colored cloth
+  swath while retaining the finished purpure, azure, white, and
+  blackened-silver treatment.
+- Preserved the donor outfit unit, material bindings, face/skin/hair surfaces,
+  normal and combined maps, first-person texture, rig, and custom icon. This
+  revision changes only the authored third-person outfit diffuse.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.126-dev`. Equip the Purpure/Azure outfit and
+verify the corrected cloth on the inventory character preview, live third
+person, lobby/team presentation, and a remote client. Confirm Markus's face and
+the existing helmet and shield remain correct through a mission transition.
+
 ## 0.9.125-dev - 2026-07-15 - #629 authored shield texture refresh
 
 ### Changed
