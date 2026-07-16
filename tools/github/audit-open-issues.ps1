@@ -8,6 +8,7 @@
 param(
     [string]$Repository = "Ensrick/vermintide-2-tweaker",
     [string]$OutputPath,
+    [string]$MarkdownPath,
     [switch]$SelfTest
 )
 
@@ -181,6 +182,46 @@ function Get-RecommendedAction($Issue) {
     return "scope against source, then implement or arm diagnostics"
 }
 
+function Get-EmpiricalFallbacks($Issue) {
+    $labels = Get-LabelNames $Issue
+    $lifecycle = @($labels | Where-Object { $LifecycleLabels -contains $_ }) | Select-Object -First 1
+    $number = [int]$Issue.number
+
+    if ($lifecycle -eq "verify-fix-coop") {
+        return @(
+            [ordered]@{ trigger = "The posted host/client verification for #$number fails and paired logs identify the first divergent peer/state."; change = "Repair that first owner/husk/RPC/lookup divergence at the existing issue-scoped boundary."; falsifier = "Both peers log identical authoritative state before the visible failure." },
+            [ordered]@{ trigger = "Paired evidence shows authority or replay occurs on the wrong peer/lifecycle edge."; change = "Move ownership to the source-backed vanilla authority and transmit only bounded lookup-safe identity/state."; falsifier = "Authority, sender authentication, and lifecycle replay are already identical on both peers." },
+            [ordered]@{ trigger = "Failure occurs only when a peer lacks the mod, capability, lookup entry, or renderer resource."; change = "Parity-gate the optional feature and select a resident vanilla fallback for that peer."; falsifier = "The failing peer proves positive parity and local resource closure." }
+        )
+    }
+    if ($lifecycle -eq "verify-fix") {
+        return @(
+            [ordered]@{ trigger = "The issue's posted build-specific verification fails at a named invariant or surface."; change = "Repair the first failed invariant in the current implementation, scoped to that surface."; falsifier = "The invariant passes while the reported symptom remains." },
+            [ordered]@{ trigger = "Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract."; change = "Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior."; falsifier = "The custom and vanilla boundary inputs/outputs are identical." },
+            [ordered]@{ trigger = "The loaded version/hash or canonical ancestry does not contain the claimed fix."; change = "Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior."; falsifier = "The failing log and deployed hash prove the current canonical commit was running." }
+        )
+    }
+    if ($lifecycle -eq "diagnostics-armed") {
+        return @(
+            [ordered]@{ trigger = "The issue's bounded armed repro records a first state divergence."; change = "Repair only the layer named by that trace."; falsifier = "The trace remains healthy through the observed symptom." },
+            [ordered]@{ trigger = "Captured runtime state differs from the issue's cited vanilla/decompiled consumer contract."; change = "Repair the first contract mismatch and retain the probe as regression evidence."; falsifier = "Captured state matches the source contract at every sampled boundary." },
+            [ordered]@{ trigger = "Insufficient evidence: the current probe is silent or cannot distinguish the remaining candidates."; change = "Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix."; falsifier = "The existing probe already identifies one causal boundary." }
+        )
+    }
+    if ($lifecycle -eq "Fixed") {
+        return @(
+            [ordered]@{ trigger = "The documented closure test fails on the current named build."; change = "Repair the first regressed invariant covered by the existing issue regression."; falsifier = "The current closure test passes; close the stale issue instead." },
+            [ordered]@{ trigger = "The symptom returns after a known-good version."; change = "Bisect the documented introduction/fix range and patch the first regressing commit."; falsifier = "No commit in that range changes the failing path." },
+            [ordered]@{ trigger = "The current repair cannot be made safe on the present tree."; change = "Roll back the isolated issue fix and restore the last user-verified vanilla/mod behavior while preparing a current-tree repair."; falsifier = "The fix cannot be isolated without removing unrelated verified work." }
+        )
+    }
+    return @(
+        [ordered]@{ trigger = "The issue body and cited source establish a bounded acceptance contract."; change = "Implement that contract on current canonical source with a truth-table regression."; falsifier = "Source/runtime evidence contradicts a required premise in the accepted contract." },
+        [ordered]@{ trigger = "Insufficient evidence: no runtime trace yet distinguishes the candidate engine/UI/inventory boundaries."; change = "Add a minimal repro and bounded trace at the named boundary, then repair only the first observed divergence."; falsifier = "Existing evidence already identifies the divergent boundary." },
+        [ordered]@{ trigger = "The requested path is blocked by absent provenance/license, resource residency, or external service authority."; change = "Retain a resident vanilla fallback or keep the feature disabled until the missing evidence/authority exists."; falsifier = "The required provenance, resource closure, and authority are all positively proved." }
+    )
+}
+
 function Get-UmbrellaIssues($Lessons) {
     $refs = New-Object System.Collections.Generic.List[int]
     $appearance = @(
@@ -229,6 +270,7 @@ function Invoke-Audit($Issues) {
             risk_tier = Get-RiskTier $issue
             verification_scope = Get-VerificationScope $issue
             recommended_next_action = Get-RecommendedAction $issue
+            fallbacks = @(Get-EmpiricalFallbacks $issue)
             findings = $findings
             clean = ($findings.Count -eq 0)
         }
@@ -251,7 +293,7 @@ function Invoke-Audit($Issues) {
     }
 
     return [PSCustomObject][ordered]@{
-        schema = 2
+        schema = 3
         generated_utc = [DateTime]::UtcNow.ToString("o")
         repository = $Repository
         open_issue_count = $rows.Count
@@ -261,6 +303,38 @@ function Invoke-Audit($Issues) {
         note = "Regex lesson matches are a review queue, not proof of root cause or fix status."
         issues = $rows
     }
+}
+
+function Convert-AuditToMarkdown($Report) {
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# Open issue empirical contingency register")
+    $lines.Add("")
+    $lines.Add("Generated from the live GitHub issue body, comments, labels, and URL at ``$($Report.generated_utc)``. This is a recovery register, not a root-cause claim. Each path states the evidence that must trigger it and the observation that falsifies it. ``Insufficient evidence`` entries deliberately request a bounded probe instead of inventing a fix.")
+    $lines.Add("")
+    $lines.Add("Open issues audited: **$($Report.open_issue_count)**.")
+    foreach ($issue in @($Report.issues)) {
+        $title = ([string]$issue.title).Trim()
+        $labels = @($issue.labels) -join ", "
+        $lessons = @($issue.applicable_lessons) -join ", "
+        $lines.Add("")
+        $lines.Add("## #$($issue.number) - $title")
+        $lines.Add("")
+        $lines.Add("- Tracker: [$($issue.url)]($($issue.url))")
+        $lines.Add("- Current labels: ``$labels``")
+        $lines.Add("- Evidence class: ``$lessons``")
+        $lines.Add("- Current action: $($issue.recommended_next_action)")
+        $index = 0
+        foreach ($fallback in @($issue.fallbacks)) {
+            $index++
+            $lines.Add("")
+            $lines.Add("**Fallback $index**")
+            $lines.Add("")
+            $lines.Add("- **Evidence/trigger:** $($fallback.trigger)")
+            $lines.Add("- **Change:** $($fallback.change)")
+            $lines.Add("- **Falsifier:** $($fallback.falsifier)")
+        }
+    }
+    return $lines -join [Environment]::NewLine
 }
 
 function Invoke-SelfTest {
@@ -292,6 +366,14 @@ function Invoke-SelfTest {
     if ($result.issues[0].verification_scope -ne "coop") { throw "coop verification scope drift" }
     if ($result.issues[0].recommended_next_action -ne "two-player in-game verification") { throw "coop action drift" }
     if ($result.issues[1].risk_tier -notin @("low", "moderate", "high", "critical")) { throw "risk classification drift" }
+    foreach ($row in @($result.issues)) {
+        if (@($row.fallbacks).Count -ne 3) { throw "issue $($row.number) fallback count drift" }
+        foreach ($fallback in @($row.fallbacks)) {
+            if (-not $fallback.trigger -or -not $fallback.change -or -not $fallback.falsifier) {
+                throw "issue $($row.number) incomplete fallback"
+            }
+        }
+    }
     Write-Host "[audit-open-issues -SelfTest] OK"
 }
 
@@ -323,5 +405,18 @@ if ($OutputPath) {
     Write-Host "[audit-open-issues] wrote $($report.open_issue_count) issues to $OutputPath"
     Write-Host "[audit-open-issues] clean=$($report.clean_issue_count) findings=$($report.open_issue_count - $report.clean_issue_count)"
 } else {
-    Write-Output $rendered
+    if (-not $MarkdownPath) { Write-Output $rendered }
+}
+
+if ($MarkdownPath) {
+    $parent = Split-Path -Parent $MarkdownPath
+    if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    [System.IO.File]::WriteAllText(
+        $MarkdownPath,
+        (Convert-AuditToMarkdown $report) + [Environment]::NewLine,
+        (New-Object System.Text.UTF8Encoding($false))
+    )
+    Write-Host "[audit-open-issues] wrote contingency register to $MarkdownPath"
 }
