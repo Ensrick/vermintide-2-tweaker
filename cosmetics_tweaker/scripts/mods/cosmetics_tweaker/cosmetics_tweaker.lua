@@ -76,7 +76,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.130-dev"
+local MOD_VERSION = "0.9.131-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -10864,6 +10864,28 @@ _rt_register("glow_picker_apply_transaction_574", function()
     if rune_a == rune_b then return "different illusions share a persistence identity" end
     if rune_a == copy_a then return "different inventory items share a persistence identity" end
     if not GlowPicker.CHAT_DIAGNOSTICS_LOG_ONLY then return "Apply diagnostic may reach chat" end
+end)
+
+_rt_register("glow_picker_native_defaults_610", function()
+    -- #610: opening the editor must display the illusion's NATIVE glow, never a
+    -- fixed magenta placeholder, and unknown templates must fail closed.
+    if type(GlowPicker.hdr_to_display) ~= "function" then return "native HDR->display helper missing" end
+    if type(GlowPicker.native_state_for) ~= "function" then return "native resolver seam missing" end
+    if type(GlowPicker.restore_default) ~= "function" then return "Restore to Default action missing" end
+    if type(mod._repaint_native_glow_on_wielded) ~= "function" then return "native repaint helper missing" end
+    -- purple_glow {3,1,9} at rune brightness 9 must round-trip to (85,28,255) @ 1.0.
+    local d = GlowPicker.hdr_to_display({ x = 3, y = 1, z = 9 }, 9)
+    if not d or d.r ~= 85 or d.g ~= 28 or d.b ~= 255 then
+        return "purple_glow native reconstruction drifted"
+    end
+    if math.abs((d.intensity or 0) - 1.0) > 0.001 then return "native intensity drifted" end
+    -- The reconstruction must never reproduce the old magenta placeholder.
+    if d.r == 200 and d.g == 60 and d.b == 255 then return "native still resolves to magenta placeholder" end
+    -- Unknown skin has no registered template -> fail closed (nil), no colour.
+    if GlowPicker.native_state_for({ skin = "cos_rt_unknown_skin_610" }) ~= nil then
+        return "unknown template did not fail closed"
+    end
+    return nil
 end)
 
 _rt_register("glow_picker_render_fanout_574", function()

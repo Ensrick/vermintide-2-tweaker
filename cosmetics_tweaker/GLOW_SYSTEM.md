@@ -26,6 +26,9 @@ and where to extend.
 | Selection and wield never auto-open the editor | ✅ (v0.9.103-dev) |
 | Persistent in-view manual editor button | ✅ (v0.9.103-dev) |
 | Committed exact-item + illusion badges in inventory/illusion grids | ✅ (v0.9.103-dev) |
+| Editor shows the illusion's NATIVE glow when no override (never magenta) | ✅ (v0.9.125-dev, issue 610) |
+| Opening/closing/switching never paints or persists | ✅ (v0.9.125-dev, issue 610) |
+| Restore to Default (clear override, reapply native, drop badge) | ✅ (v0.9.125-dev, issue 610) |
 | Toggle the per-item glow off entirely | ❌ (M3) |
 | Hide vanilla glow-cousin items from cosmetic menu | ❌ (M3) |
 | Cross-slot inheritance (main weapon glow → compatible shield) | ❌ (M3) |
@@ -153,6 +156,25 @@ lazily on first `open_for(...)` call. It includes:
 * `slider_r / slider_g / slider_b / slider_intensity` — 4 sliders for
   the rune component. Each slider has color-hinted thumb (red slider →
   reddish thumb), label on left, track in middle, value text on right.
+* `restore_btn` — bottom-left "Restore Default" (issue 610). Enabled only
+  when a committed override exists; clears the per-item + per-variant
+  override, rebroadcasts the cleared coop payload, repaints the native
+  template on the live weapon, and drops the badge.
+
+### Native-default resolution (issue 610)
+
+`open_for` no longer seeds a fixed placeholder color. When there is no
+committed override it resolves the illusion's OWN glow from
+`MaterialSettingsTemplates[skin.material_settings_name]` and shows those values
+via `_hdr_to_display` (normalize brightest channel → 255; intensity =
+native_magnitude / var_brightness, where the var-brightness constants mirror
+`_cos_glow.lua` `_GLOW_VAR_BRIGHTNESS`: rune 9, color_glow_high 4,
+color_smoke_high 0.22, color_dots 8.35). A magic component reconstructs from its
+primary channel (glow_high / smoke_high / dots). Unknown/absent templates fail
+closed to neutral white @ intensity 0 — never magenta. Critically, opening does
+NOT push the display state into `mod._per_item_glow_runtime`; the runtime paint
+entry is created only by an explicit slider edit (`_live_preview`) or Apply, so
+opening/closing/switching cannot paint or persist.
 
 Slider widget anatomy (`_widget_slider` in `_glow_picker.lua`):
 

@@ -39,9 +39,15 @@ return function(H, repo_root)
 
     H.test("Cosmetics glow close rolls preview back to committed state", function()
         H.truthy(picker:find("function GlowPicker.close()", 1, true))
-        H.truthy(picker:find("mod._per_item_glow_runtime[backend_id] = GlowPicker._committed_glow_state", 1, true))
-        H.truthy(picker:find("and _clone(GlowPicker._committed_glow_state) or nil", 1, true))
+        -- #610: close() reads the committed state into a local and rolls the
+        -- runtime paint entry back to it (or nil when the item had no override).
+        H.truthy(picker:find("local committed = GlowPicker._committed_glow_state", 1, true))
+        H.truthy(picker:find("mod._per_item_glow_runtime[backend_id] = committed and _clone(committed) or nil", 1, true))
         H.truthy(picker:find("pcall(mod._reapply_glow_on_wielded)", 1, true))
+        -- #610: cancelling a preview on an item with NO committed override repaints
+        -- the illusion's native template directly so the glow visibly rolls back.
+        H.truthy(picker:find("if not committed and mod._repaint_native_glow_on_wielded then", 1, true))
+        H.truthy(picker:find("pcall(mod._repaint_native_glow_on_wielded, native_mat)", 1, true))
     end)
 
     H.test("Cosmetics glow replay is host-authoritative and locally bounded", function()

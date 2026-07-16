@@ -48,6 +48,8 @@ GlowPicker._committed_glow_state  = nil
 GlowPicker._dirty                 = false
 GlowPicker._built                 = false     -- scenegraph + widgets allocated once
 GlowPicker._commit_revision       = 0
+GlowPicker._has_override          = false     -- #610: true only when a committed override exists
+GlowPicker._native_mat            = nil       -- #610: selected illusion's material_settings_name
 
 local function _clone(value)
     if type(value) ~= "table" then return value end
@@ -172,6 +174,15 @@ local function _make_scenegraph_definition()
             vertical_alignment   = "bottom",
             size     = { 180, 42 },
             position = { 0, 18, 2 },
+        },
+        -- #610 Restore to Default: clears the per-item override and repaints the
+        -- illusion's native glow. Bottom-left so it never crowds the sliders.
+        glow_picker_restore_btn = {
+            parent = "glow_picker_panel",
+            horizontal_alignment = "left",
+            vertical_alignment   = "bottom",
+            size     = { 176, 42 },
+            position = { 18, 18, 2 },
         },
         -- v0.9.6 M2: 4 slider rows for R, G, B, intensity. Each row is
         -- 360x24 (label 80 + gap 10 + track 200 + gap 10 + value 60).
@@ -677,6 +688,45 @@ local function _update_apply_widget()
     widget.style.text.text_color = dirty and { 255, 245, 235, 205 } or { 160, 180, 180, 180 }
 end
 
+-- #610 Restore to Default is meaningful only when a committed override exists;
+-- grey it out otherwise so it can never persist or paint a no-op.
+local function _update_restore_widget()
+    local widget = GlowPicker._widgets_by_name and GlowPicker._widgets_by_name.restore_btn
+    if not widget then return end
+    local enabled = GlowPicker._has_override == true
+    local hotspot = widget.content and widget.content.hotspot
+    if hotspot then hotspot.disable_button = not enabled end
+    widget.style.rect.color = enabled and { 210, 70, 55, 30 } or { 120, 45, 45, 45 }
+    widget.style.frame.color = enabled and { 255, 255, 255, 255 } or { 140, 170, 170, 170 }
+    widget.style.text.text_color = enabled and { 255, 235, 225, 200 } or { 140, 170, 170, 170 }
+end
+
+local function _widget_restore_button()
+    return {
+        element = {
+            passes = {
+                { content_id = "hotspot", pass_type = "hotspot" },
+                { pass_type = "rect", style_id = "rect" },
+                { pass_type = "text", style_id = "text", text_id = "text" },
+                { pass_type = "texture_frame", style_id = "frame", texture_id = "frame" },
+            },
+        },
+        content = { text = "Restore Default", frame = GlowPicker.FRAME_TEXTURE, hotspot = {} },
+        style = {
+            rect = { size = { 176, 42 }, color = { 210, 70, 55, 30 } },
+            frame = GlowPicker.frame_style(176, 42, 3),
+            text = {
+                font_size = 16, font_type = "hell_shark_header",
+                horizontal_alignment = "center", vertical_alignment = "center",
+                text_color = { 255, 235, 225, 200 }, offset = { 0, 0, 2 },
+                size = { 176, 42 },
+            },
+        },
+        offset = { 0, 0, 2 },
+        scenegraph_id = "glow_picker_restore_btn",
+    }
+end
+
 -- --------------------------------------------------------
 -- Build / teardown (idempotent; survives across screen re-enters)
 -- --------------------------------------------------------
@@ -725,6 +775,7 @@ local function _build()
         { "subtitle",    _widget_subtitle      },
         { "close_btn",   _widget_close_button  },
         { "apply_btn",   _widget_apply_button  },
+        { "restore_btn", _widget_restore_button },
         -- RUNE family (4 sliders)
         { "slider_r",         function() return _widget_slider("glow_picker_slider_r",         "Red",       0,   255, 0, thumb_r) end },
         { "slider_g",         function() return _widget_slider("glow_picker_slider_g",         "Green",     0,   255, 0, thumb_g) end },
@@ -804,7 +855,7 @@ local function _build()
     by_name.slider_dots_i.content.on_change    = _make_on_change("dots",  "intensity")
 
     GlowPicker._built = true
-    _log_only("[glow_picker:_build] DONE — 24 widgets ready (RGB sliders + explicit Apply transaction)")
+    _log_only("[glow_picker:_build] DONE — widgets ready (RGB sliders + Apply + Restore Default transaction)")
     return true
 end
 
@@ -854,6 +905,103 @@ function GlowPicker.classify(slot_data)
     return suffix_check(skin)
         or suffix_check(right3p)
         or suffix_check(left3p)
+end
+
+-- #610: native-glow resolution. Opening the editor on an untouched illusion
+-- must show that illusion's OWN glow, never a fixed placeholder colour (the
+-- old magenta 200/60/255 default made every weapon read as forced pink and
+-- could be applied/persisted by accident). We reconstruct the picker's
+-- 0-255 + intensity display model from the illusion's MaterialSettingsTemplate
+-- so a re-apply reproduces the native HDR magnitude faithfully.
+--
+-- Native shader-var brightness must match the paint pipeline in _cos_glow.lua
+-- (_GLOW_VAR_BRIGHTNESS): rune=9, color_glow_high=4, color_smoke_high=0.22,
+-- color_dots=8.35. The picker collapses each magic component onto one control,
+-- so a component reconstructs from its primary channel (glow_high / smoke_high
+-- / dots).
+local _NATIVE_BRIGHTNESS = {
+    rune_emissive_color = 9,
+    color_glow_high     = 4,
+    color_smoke_high    = 0.22,
+    color_dots          = 8.35,
+}
+
+-- Convert an HDR vector3 template entry {x,y,z} into {r,g,b,intensity}:
+-- normalize so the brightest channel maps to 255, set intensity so the picker's
+-- paint (scale = brightness * intensity / 255) reproduces the native magnitude.
+local function _hdr_to_display(entry, brightness)
+    if type(entry) ~= "table" then return nil end
+    local x = tonumber(entry.x) or 0
+    local y = tonumber(entry.y) or 0
+    local z = tonumber(entry.z) or 0
+    local m = math.max(x, y, z)
+    if m <= 0 then return { r = 0, g = 0, b = 0, intensity = 0 } end
+    local intensity = m / (brightness or 1)
+    if intensity > 5 then intensity = 5 elseif intensity < 0 then intensity = 0 end
+    return {
+        r = math.floor(x / m * 255 + 0.5),
+        g = math.floor(y / m * 255 + 0.5),
+        b = math.floor(z / m * 255 + 0.5),
+        intensity = intensity,
+    }
+end
+GlowPicker.hdr_to_display = _hdr_to_display
+
+-- Resolve the illusion's native glow into the picker's display model. Returns
+-- (display_state, material_settings_name). Fails closed (nil) when the skin has
+-- no registered template so an unknown family NEVER invents a colour (#610).
+local function _resolve_native(slot_data, family)
+    local skin = type(slot_data) == "table" and slot_data.skin or nil
+    if type(skin) ~= "string" or skin == "" then return nil, nil end
+    local skins = rawget(_G, "WeaponSkins")
+    local entry = skins and skins.skins and skins.skins[skin]
+    local mat = entry and entry.material_settings_name
+    if type(mat) ~= "string" or mat == "" then return nil, nil end
+    local templates = rawget(_G, "MaterialSettingsTemplates")
+    local template = templates and templates[mat]
+    if type(template) ~= "table" then return nil, mat end
+    if family == "magic" then
+        local lower = _hdr_to_display(template.color_glow_high, _NATIVE_BRIGHTNESS.color_glow_high)
+        local upper = _hdr_to_display(template.color_smoke_high, _NATIVE_BRIGHTNESS.color_smoke_high)
+        local dots  = _hdr_to_display(template.color_dots, _NATIVE_BRIGHTNESS.color_dots)
+        if not (lower or upper or dots) then return nil, mat end
+        return { lower = lower, upper = upper, dots = dots }, mat
+    end
+    local rune = _hdr_to_display(template.rune_emissive_color, _NATIVE_BRIGHTNESS.rune_emissive_color)
+    if not rune then return nil, mat end
+    return { rune = rune }, mat
+end
+
+-- Read-only seam for regression coverage and callers that want the native
+-- display state without opening the editor.
+function GlowPicker.native_state_for(slot_data)
+    local family = GlowPicker.classify(slot_data) or "rune"
+    local state = _resolve_native(slot_data, family)
+    return state, family
+end
+
+-- Shape a family-correct display state from any base table (persisted override,
+-- resolved native, or nil). Missing components fall back to neutral white at
+-- intensity 0 -- a fail-closed "no visible override", never magenta.
+local function _display_component(src, dr, dg, db, di)
+    local t = type(src) == "table" and src or nil
+    return {
+        r = (t and tonumber(t.r)) or dr,
+        g = (t and tonumber(t.g)) or dg,
+        b = (t and tonumber(t.b)) or db,
+        intensity = (t and tonumber(t.intensity)) or di,
+    }
+end
+local function _shape_display_state(base, family)
+    base = type(base) == "table" and base or {}
+    if family == "magic" then
+        return {
+            lower = _display_component(base.lower, 255, 255, 255, 0),
+            upper = _display_component(base.upper, 255, 255, 255, 0),
+            dots  = _display_component(base.dots,  255, 255, 255, 0),
+        }
+    end
+    return { rune = _display_component(base.rune, 255, 255, 255, 0) }
 end
 
 -- v0.9.6 M2: persistence helpers. Single VMF setting `glow_per_item`
@@ -1013,47 +1161,24 @@ function GlowPicker.open_for(backend_id, slot_data)
 
     -- Load persisted state (multi-component shape supported).
     local persisted = _persisted_state_for(backend_id, slot_data)
-    local item_data = persisted or {}
+    local has_override = persisted ~= nil
+    GlowPicker._has_override = has_override
     GlowPicker._committed_glow_state = persisted and _clone(persisted) or nil
     GlowPicker._dirty = false
 
-    if family == "magic" then
-        GlowPicker._current_glow_state = {
-            lower = {
-                r         = (item_data.lower and item_data.lower.r)         or 180,
-                g         = (item_data.lower and item_data.lower.g)         or 100,
-                b         = (item_data.lower and item_data.lower.b)         or 255,
-                intensity = (item_data.lower and item_data.lower.intensity) or 1.0,
-            },
-            upper = {
-                r         = (item_data.upper and item_data.upper.r)         or 220,
-                g         = (item_data.upper and item_data.upper.g)         or 180,
-                b         = (item_data.upper and item_data.upper.b)         or 255,
-                intensity = (item_data.upper and item_data.upper.intensity) or 1.0,
-            },
-            dots = {
-                r         = (item_data.dots and item_data.dots.r)         or 255,
-                g         = (item_data.dots and item_data.dots.g)         or 255,
-                b         = (item_data.dots and item_data.dots.b)         or 255,
-                intensity = (item_data.dots and item_data.dots.intensity) or 1.0,
-            },
-        }
-    else
-        GlowPicker._current_glow_state = {
-            rune = {
-                r         = (item_data.rune and item_data.rune.r)         or 200,
-                g         = (item_data.rune and item_data.rune.g)         or  60,
-                b         = (item_data.rune and item_data.rune.b)         or 255,
-                intensity = (item_data.rune and item_data.rune.intensity) or 1.0,
-            },
-        }
-    end
+    -- #610: with no committed override, display the illusion's NATIVE glow
+    -- (never a magenta placeholder). native_mat is retained so Restore Default
+    -- can repaint the untouched template on the live weapon.
+    local native, native_mat = _resolve_native(slot_data, family)
+    GlowPicker._native_mat = native_mat
+    GlowPicker._current_glow_state = _shape_display_state(persisted or native, family)
     _sync_sliders_from_state()
 
     -- v0.9.8: assemble family-specific draw list. Magic shows 12
     -- sliders + 3 section labels; rune shows 4 sliders.
     local by_name = GlowPicker._widgets_by_name
-    local widgets = { by_name.panel_bg, by_name.title, by_name.subtitle, by_name.close_btn, by_name.apply_btn }
+    local widgets = { by_name.panel_bg, by_name.title, by_name.subtitle,
+        by_name.close_btn, by_name.apply_btn, by_name.restore_btn }
     if family == "magic" then
         widgets[#widgets+1] = by_name.label_lower
         widgets[#widgets+1] = by_name.slider_lower_r
@@ -1078,11 +1203,17 @@ function GlowPicker.open_for(backend_id, slot_data)
     end
     GlowPicker._widgets = widgets
     _update_apply_widget()
+    _update_restore_widget()
 
-    -- Push runtime override so live preview applies immediately.
+    -- #610: only a committed override drives a live paint. Opening on an
+    -- untouched item must NOT push the display state (native/neutral) into the
+    -- runtime map, or the weapon would be repainted merely by opening the
+    -- editor. The runtime entry is (re)created only on an explicit slider edit
+    -- (_live_preview) or Apply.
     mod._per_item_glow_runtime = mod._per_item_glow_runtime or {}
     if backend_id then
-        mod._per_item_glow_runtime[backend_id] = GlowPicker._current_glow_state
+        mod._per_item_glow_runtime[backend_id] = has_override
+            and GlowPicker._current_glow_state or nil
     end
 
     -- Update subtitle to reflect the current item
@@ -1108,6 +1239,7 @@ function GlowPicker.apply()
     _save_per_item_glow(all_data)
     GlowPicker._committed_glow_state = _clone(committed)
     GlowPicker._dirty = false
+    GlowPicker._has_override = true
     mod._per_item_glow_runtime = mod._per_item_glow_runtime or {}
     mod._per_item_glow_identity_runtime = mod._per_item_glow_identity_runtime or {}
     mod._per_item_glow_runtime[backend_id] = _clone(committed)
@@ -1130,7 +1262,68 @@ function GlowPicker.apply()
             GlowPicker._current_slot_data, GlowPicker._commit_revision)
     end
     _update_apply_widget()
+    _update_restore_widget()
     _apply_log_only("[glow_picker:apply] committed identity=%s family=%s emit=1", identity, tostring(GlowPicker._current_family))
+    return true
+end
+
+-- #610 Restore to Default: drop this exact item + illusion's override,
+-- rebroadcast the cleared coop payload, repaint the native template on the live
+-- weapon, and reset the sliders to native. Opening/closing/switching never
+-- reach here -- only this explicit action clears a persisted override.
+function GlowPicker.restore_default()
+    if not GlowPicker._open or GlowPicker._has_override ~= true then return false end
+    local backend_id = GlowPicker._current_backend_id
+    local identity = GlowPicker._current_identity
+    if backend_id == nil or identity == nil then return false end
+    local slot_data = GlowPicker._current_slot_data
+    local family = GlowPicker._current_family or "rune"
+
+    -- Drop the persisted override for this exact identity (and the legacy
+    -- backend-id-only key for one-time compatibility).
+    local all_data = _load_per_item_glow()
+    if all_data[identity] ~= nil then all_data[identity] = nil end
+    if all_data[backend_id] ~= nil then all_data[backend_id] = nil end
+    _save_per_item_glow(all_data)
+
+    -- Clear the runtime override so no per-item paint is selected anywhere.
+    if mod._per_item_glow_runtime then mod._per_item_glow_runtime[backend_id] = nil end
+    if mod._per_item_glow_identity_runtime then mod._per_item_glow_identity_runtime[backend_id] = nil end
+
+    -- Clear the active coop payload and broadcast the cleared state so remote
+    -- peers stop painting this weapon's override.
+    if mod._active_per_item_glow_identity == identity then
+        mod._active_per_item_glow = nil
+        mod._active_per_item_glow_identity = nil
+        mod._active_per_item_glow_skin = nil
+        mod._active_per_item_glow_slot = nil
+        mod._active_per_item_glow_item_name = nil
+        mod._active_per_item_glow_item_template = nil
+        if mod._emit_per_item_glow then pcall(mod._emit_per_item_glow) end
+    end
+
+    -- Reset display to native, discard dirty, disable Apply/Restore.
+    GlowPicker._committed_glow_state = nil
+    GlowPicker._dirty = false
+    GlowPicker._has_override = false
+    local native = _resolve_native(slot_data, family)
+    GlowPicker._current_glow_state = _shape_display_state(native, family)
+    _sync_sliders_from_state()
+
+    -- Immediately repaint the untouched native template on the live weapon;
+    -- otherwise the last override colour lingers until the next weapon spawn.
+    if mod._repaint_native_glow_on_wielded then
+        pcall(mod._repaint_native_glow_on_wielded, GlowPicker._native_mat)
+    end
+
+    -- The committed override is gone, so refresh the grids to drop the badge.
+    GlowPicker._commit_revision = GlowPicker._commit_revision + 1
+    if mod._cos_glow_badges_refresh then
+        pcall(mod._cos_glow_badges_refresh, backend_id, slot_data, GlowPicker._commit_revision)
+    end
+    _update_apply_widget()
+    _update_restore_widget()
+    _apply_log_only("[glow_picker:restore] cleared identity=%s family=%s", identity, tostring(family))
     return true
 end
 
@@ -1139,11 +1332,18 @@ function GlowPicker.close()
     -- Close/cancel discards uncommitted preview edits and repaints the last
     -- applied value (or vanilla when this identity had no saved override).
     local backend_id = GlowPicker._current_backend_id
+    local committed = GlowPicker._committed_glow_state
+    local native_mat = GlowPicker._native_mat
     if backend_id ~= nil then
         mod._per_item_glow_runtime = mod._per_item_glow_runtime or {}
-        mod._per_item_glow_runtime[backend_id] = GlowPicker._committed_glow_state
-            and _clone(GlowPicker._committed_glow_state) or nil
+        mod._per_item_glow_runtime[backend_id] = committed and _clone(committed) or nil
         if mod._reapply_glow_on_wielded then pcall(mod._reapply_glow_on_wielded) end
+        -- #610: cancelling a preview on an item with NO committed override must
+        -- visibly roll back. Reapplying the (absent) override no-ops, so repaint
+        -- the native template directly to undo any live-preview paint.
+        if not committed and mod._repaint_native_glow_on_wielded then
+            pcall(mod._repaint_native_glow_on_wielded, native_mat)
+        end
     end
     GlowPicker._open               = false
     GlowPicker._current_backend_id = nil
@@ -1152,6 +1352,8 @@ function GlowPicker.close()
     GlowPicker._current_glow_state = nil
     GlowPicker._committed_glow_state = nil
     GlowPicker._current_family     = nil
+    GlowPicker._native_mat         = nil
+    GlowPicker._has_override       = false
     GlowPicker._dirty              = false
 end
 
@@ -1179,6 +1381,13 @@ function GlowPicker.handle_input(input_service)
         apply_hotspot.on_release = false
         GlowPicker.apply()
         return true
+    end
+    local restore = by_name.restore_btn
+    local restore_hotspot = restore and restore.content and restore.content.hotspot
+    if restore_hotspot and restore_hotspot.on_release then
+        restore_hotspot.on_release = false
+        if GlowPicker._has_override == true then GlowPicker.restore_default() end
+        return true  -- swallow even when disabled so it can't leak to the screen
     end
     -- v0.9.3.7: dim removed → clicks OUTSIDE the panel should pass through
     -- to the cosmetic screen behind. Previously we swallowed all left-

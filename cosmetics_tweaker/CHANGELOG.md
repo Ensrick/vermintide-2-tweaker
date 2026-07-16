@@ -1,5 +1,55 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.131-dev - 2026-07-16 - issue 610 native glow defaults + Restore to Default
+
+### Fixed
+
+- Opening Customize Glow on an untouched illusion no longer shows a fixed
+  magenta/pink color or forces the weapon pink (issue 610). The editor now reads
+  each illusion's native glow from its MaterialSettingsTemplate and shows those
+  values. The reconstruction normalizes the brightest channel to 255 and derives
+  intensity from the native HDR magnitude, so a later Apply reproduces the
+  original glow faithfully (e.g. purple_glow 3/1/9 shows as 85/28/255 at 1.0).
+- Opening the editor no longer paints or persists anything. The per-item runtime
+  paint entry is created only on an explicit slider edit or Apply, so merely
+  opening, closing, or switching illusions can never mark state dirty, apply a
+  color, or write an override.
+- Cancelling a preview on an item with no committed override now repaints the
+  native template on the live weapon, so closing without Apply visibly rolls the
+  glow back instead of leaving the preview color.
+- Illusions whose template is unknown or absent (baked magic meshes, Stylish
+  no-template runed skins) fail closed to neutral white at intensity 0 instead
+  of inventing a color.
+
+### Added
+
+- Restore to Default button in the glow editor. It clears the per-item and
+  per-variant override for the exact item plus illusion, rebroadcasts the
+  cleared coop payload to remote peers, repaints the native template on the live
+  weapon, and drops the inventory/illusion badge. It is greyed out when no
+  committed override exists.
+
+### Note
+
+This entry was authored as 0.9.125-dev in a parallel workstream and renumbered
+to 0.9.131-dev when merged on top of the 0.9.126 - 0.9.130 Grail set line; the
+brief 01:49 Workshop upload of the unmerged build is superseded by this one.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.131-dev`. On the cosmetic-change screen select a
+glow-capable illusion (a runed Veteran skin and a Shyish-Infused magic skin) and
+press EDIT GLOW: the sliders must show that illusion's own color and the weapon
+must keep its native glow (no pink). Change a slider and Apply: only that item
+plus illusion should show the tinted badge. Press Restore Default: the override
+clears, the badge disappears, and the weapon returns to native glow. Cancel a
+preview (close without Apply): the weapon rolls back to native. Run
+`/cos_regression_test`; `glow_picker_native_defaults_610` and
+`glow_manual_editor_button_377` must pass. Two-player: after Restore Default the
+remote client's copy of that weapon returns to native on the wearer's next
+re-wield. Also spot-check the 0.9.126 - 0.9.130 Grail set work still present
+(Purpure/Azure icons and component illusion names).
+
 ## 0.9.130-dev - 2026-07-15 - #629 finalized Grail set icons
 
 ### Changed

@@ -1,5 +1,42 @@
 # Crafting in Modded Changelog
 
+## 0.8.84-dev (2026-07-16): issue 524 render-seam diagnostics [diagnostics-armed]
+
+- Symptom: the native Craft Item picker still shows duplicate weapon rows
+  (reported: two throwing-axes, a javelin cloned off them, two Blightreapers)
+  despite ten catalog-policy ships. Every prior `[cim:524]` probe reported only
+  CIM's synthetic CATALOG (`acquisition_templates eligible/families/suppressed`)
+  and the offline `issue524_*` checks exercise `catalog.build`/`inject` with
+  hand-built inputs, so nothing ever observed the list vanilla actually renders.
+- Armed a render-seam probe at the one seam that produces the rendered list,
+  `standard_forge mod._cim_inject_templates` (after `template_selector.inject`).
+  New module `_cim_diag_524.lua` dumps the FINAL injected list once per distinct
+  menu-open: a header (`render picker=... rendered=N families=F hard_dups=H
+  soft_dups=S`), then, only when a duplicate exists, `render_dup` (>1 row sharing
+  one canonical weapon family = a real dedup miss), `render_softdup` (>1 distinct
+  family sharing one item_type = two authored definitions that look alike), and
+  per-row `render_row` lines naming each implicated key. Every row is tagged by
+  SOURCE (synthetic / vanilla-default / crafted-modded / legacy-cwv), so a
+  crafted instance leaking past vanilla's `rarity=="default"` filter is explicit.
+- No behavior change: this is diagnosis before mitigating. Vanilla `can_craft_with`
+  (backend_interface_common.lua:498-510) admits only `rarity=="default"`, and CIM
+  writes crafts as `rarity="modded"`, so the source of the visible duplicate must
+  be read from a live picker before any policy is touched.
+- Engine printf, prefix `[cim:524]`, always-on in dev, bounded (caps + a
+  signature throttle so a recipe re-query does not repeat the dump). Added
+  runtime check `issue524_render_diagnostics_armed` so the probe cannot be
+  stripped while #524 is open.
+
+### Test method
+
+Open the native Craft Item picker on a career with CWV/WOC weapons and browse
+Blacksmith choices; if any weapon looks duplicated, note which. Then read the
+newest console log for `[cim:524] render ...`: the header gives the rendered row
+count and how many hard/soft duplicates were found, `render_dup`/`render_softdup`
+name the colliding families/item_types, and `render_row` names each offending key
+and its SOURCE. Attach that block to issue 524. Run `/cim_regression_test` and
+require `issue524_render_diagnostics_armed` PASS.
+
 ## 0.8.83-dev (2026-07-15): #637 immutable WOC relic boundary
 
 - CIM now treats WOC's provider-owned `woc_unique_relic` marker as a hard

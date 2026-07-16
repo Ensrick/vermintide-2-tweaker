@@ -137,6 +137,12 @@ return function(H, repo_root)
         H.truthy(source:find("_cim_template_selector", 1, true))
         H.truthy(source:find("_cim_template_catalog", 1, true))
         H.truthy(catalog_source:find("cim_acquisition_template = true", 1, true))
-        H.truthy(source:find("return template_selector.inject(items, _template_cache)", 1, true))
+        -- The pure policy call must stay wired with the template-cache identity and
+        -- its result must be what production renders. v0.8.84-dev (issue 524) wraps
+        -- the former one-liner: the inject result is captured as `result`, handed to
+        -- the render-seam probe (observation-only, pcall'd), then returned unchanged,
+        -- so the rendered-list identity is still exactly the selector's output.
+        H.truthy(source:find("local result = template_selector.inject(items, _template_cache)", 1, true))
+        H.truthy(source:find("return result", 1, true))
     end)
 end

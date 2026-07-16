@@ -50,7 +50,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.83-dev"
+local MOD_VERSION = "0.8.84-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -278,6 +278,12 @@ end
 mod._cim244_property_value_policy = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_property_value_policy")
 mod.CIM244_PROPERTY_VALUE_POLICY_MARKER_v0_8_74 = true
+
+-- #524 render-seam diagnostic (issue-keyed, tier c). Dumps the FINAL native
+-- Craft Item picker list at the inject seam so a single log proves which rows the
+-- user actually sees and where each came from. Loaded before standard_forge,
+-- which calls it from mod._cim_inject_templates. Always-on in dev, engine printf.
+mod._cim_diag_524 = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_diag_524")
 
 -- Standard Keep crafting — same Athanor pattern: mutations are session-only because
 -- we block PlayFab commits while the forge is open. v0.2.0 crashed because we left
@@ -6622,6 +6628,27 @@ _rt_register("issue524_native_craft_families_deduplicated", function()
     })
     if report.total ~= 1 or report.suppressed ~= 1 or not cache.cim_template_rt_sword then
         return "#524 native preview/helper aliases no longer collapse to one craft family"
+    end
+end)
+
+_rt_register("issue524_render_diagnostics_armed", function()
+    -- The three checks above exercise catalog.build / inject with synthetic
+    -- inputs. None observes the list vanilla actually renders at menu-open, which
+    -- is precisely the blind spot behind ten failed #524 ships. This check fails
+    -- if the render-seam probe (_cim_diag_524 + its inject-seam call) is stripped
+    -- while #524 is open, so the rendered-list evidence stays armed.
+    local diag = mod._cim_diag_524
+    if type(diag) ~= "table" or type(diag.dump) ~= "function" then
+        return "#524 render-seam diagnostic (_cim_diag_524.dump) not loaded"
+    end
+    if mod._cim524_render_probe_wired ~= true then
+        return "#524 render-seam probe not wired into the inject seam"
+    end
+    -- The probe classifies rows via the selector's canonical_family; that shared
+    -- helper must stay exposed or the dump would mislabel every family.
+    local selector = mod._cim_template_selector
+    if type(selector) ~= "table" or type(selector.canonical_family) ~= "function" then
+        return "#524 render probe lost its canonical_family classifier"
     end
 end)
 

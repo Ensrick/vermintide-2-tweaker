@@ -436,6 +436,39 @@ mod._reapply_glow_on_wielded = function()
     end
 end
 
+-- #610 Restore-to-Default helper. Repaints the illusion's NATIVE material
+-- template vectors directly onto the currently-wielded units so clearing a
+-- per-item override immediately shows the untouched glow (vanilla otherwise
+-- only re-applies the template on the next weapon spawn). No-op for baked magic
+-- meshes with no registered template (mat_name nil / unknown) -- those recover
+-- their glow on the next natural re-wield.
+mod._repaint_native_glow_on_wielded = function(mat_name)
+    local templates = rawget(_G, "MaterialSettingsTemplates")
+    local template = type(mat_name) == "string" and templates and templates[mat_name] or nil
+    if type(template) ~= "table" then return false end
+    local pm = Managers and Managers.player
+    local lp = mod._local_player_safe and mod._local_player_safe(pm)
+    local pu = lp and lp.player_unit
+    if not (pu and Unit.alive(pu) and ScriptUnit and ScriptUnit.has_extension) then return false end
+    local ext = ScriptUnit.has_extension(pu, "inventory_system")
+    local slot_data = ext and ext.get_wielded_slot_data and ext:get_wielded_slot_data()
+    if not slot_data then return false end
+    local painted = false
+    for _, field in ipairs({ "right_unit_1p", "right_unit_3p", "left_unit_1p", "left_unit_3p" }) do
+        local u = slot_data[field]
+        if u and _is_unit(u) then
+            for var_name, e in pairs(template) do
+                if type(e) == "table" and e.type == "vector3" then
+                    pcall(Unit.set_vector3_for_materials, u, var_name,
+                        Vector3(tonumber(e.x) or 0, tonumber(e.y) or 0, tonumber(e.z) or 0))
+                end
+            end
+            painted = true
+        end
+    end
+    return painted
+end
+
 -- Repaint a wearer's already-spawned weapon units when an authoritative peer
 -- update arrives; otherwise the RGB would not become visible until a re-wield.
 mod._reapply_glow_for_peer = function(peer_id)

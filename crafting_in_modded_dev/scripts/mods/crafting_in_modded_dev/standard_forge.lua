@@ -1372,6 +1372,10 @@ mod._cim390_inject_key_keyed = true
 -- #592: CWV contributes definitions, never owned blacksmith items. Therefore
 -- CIM's one key-keyed synthetic template is the sole acquisition selector.
 mod._cim592_cwv_registration_only = true
+-- #524: the render-seam probe is wired into the inject seam below. The armed
+-- regression check asserts both this flag and the diag module stay present, so
+-- the rendered-list evidence can't be silently stripped while #524 is open.
+mod._cim524_render_probe_wired = true
 mod._cim_inject_templates = function(items, filter)
     if not _is_active() then return items end
     if type(filter) ~= "string" or not filter:find("can_craft_with", 1, true) then
@@ -1379,7 +1383,21 @@ mod._cim_inject_templates = function(items, filter)
     end
     if not next(_template_cache) then _build_template_cache() end
 
-    return template_selector.inject(items, _template_cache)
+    local pre_inject = type(items) == "table" and #items or 0
+    local result = template_selector.inject(items, _template_cache)
+    -- #524 render-seam probe: dump the FINAL rendered list (what the user sees),
+    -- classified per row + grouped for hard/soft duplicates. The catalog probe
+    -- above ([cim:524] acquisition_templates) only sees CIM's synthetic list, not
+    -- this injected result. Bounded + throttled inside the module; pcall so a
+    -- diagnostic can never break the picker.
+    if mod._cim_diag_524 then
+        pcall(mod._cim_diag_524.dump, result, {
+            career = _local_career_name(),
+            pre_inject = pre_inject,
+            picker = "native_craft_item",
+        })
+    end
+    return result
 end
 
 -- The Craft Item recipe's synth (`_make_craft_synth`) looks up the input via
