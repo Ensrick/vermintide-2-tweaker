@@ -1732,11 +1732,11 @@ if _cwv_present then
     strip(data.options.widgets)
 end
 
--- issue 611: build the per-(receiving character, slot, source character) master
--- "Enable All ... Weapons" toggles. Runs LAST so the master child sets reflect
--- the final visible tree (post availability sort + post CWV strip). The module
--- records mod._wt_master_children / mod._wt_child_to_master for the runtime
--- cascade + auto-off handlers wired in weapon_tweaker.lua.
+-- issue 611 follow-up: build one "Enable All ... Weapons" master per receiving
+-- CAREER/slot/source-character bucket. Runs LAST so every master's bounded child
+-- set reflects the final visible career leaf (post sort + post CWV strip). The
+-- module records the forward/reverse maps consumed by the cascade + derived-state
+-- handlers in weapon_tweaker.lua.
 local _wt_master_toggles = mod:dofile("scripts/mods/weapon_tweaker/_wt_master_toggles")
 local _wt_masters_built = _wt_master_toggles.build_widgets(mod, data)
 if not mod._wt611_master_build_logged then

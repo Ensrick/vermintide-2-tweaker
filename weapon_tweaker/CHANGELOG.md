@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.267-beta (2026-07-16) - #611 [verify-fix] per-career master scope
+
+- Moved every Weapon Availability master inside an individual receiving career's Melee or Ranged subgroup. A master now changes only that career, never the other careers of the same character.
+- Fixed the source order to Kruber, Bardin, Kerillian, Saltzpyre, Sienna in every career/slot leaf. Missing source buckets are omitted without disturbing the remaining order.
+- Preserved targeted derived state: changing one weapon recomputes only its corresponding career/slot/source master. Turning a master on or off still cascades only its bounded child set.
+- Styled master labels with GUI Tweaker's established `font_button_normal` warm-tan color through VMF's proven checkbox-widget factory; ordinary weapon rows remain white.
+- Expanded `/wt_regression_test` check `issue611_master_toggle_wiring` and added offline `test_wt_master_toggles.lua` coverage for career isolation, source order, targeted child recompute, master cascade, seeding, and style-hook wiring.
+
+**Verification (in-game):**
+1. Open Weapon Availability > Kruber > Melee > Mercenary. Confirm the masters are inside Mercenary and ordered Kruber, Bardin, Kerillian, Saltzpyre, Sienna (omitting any empty source), with warm-tan labels.
+2. Turn on Mercenary's **Enable All Kerillian Melee Weapons**. Confirm only Kerillian-labelled rows in Mercenary change; Huntsman, Foot Knight, and Grail Knight remain unchanged.
+3. Turn one covered Mercenary weapon off. Confirm only Mercenary's Kerillian master turns off and every unrelated master retains its state.
+4. Repeat in one Ranged career subgroup, reopen the menu, and run `/wt_regression_test`; expect `issue611_master_toggle_wiring` PASS.
+
 ## 0.12.266-beta (2026-07-16) - issue 611 Weapon Availability master toggles
 
 - Added "Enable All &lt;Character&gt; Melee/Ranged Weapons" master toggles to Weapon Availability. Each receiving character's Melee and Ranged group now starts with one master per source character that contributes weapons, so a whole source character's melee or ranged set can be turned on or off in a single click.

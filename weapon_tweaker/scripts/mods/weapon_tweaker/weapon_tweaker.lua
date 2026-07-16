@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.266-beta"
+local MOD_VERSION = "0.12.267-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -279,12 +279,10 @@ mod:dofile("scripts/mods/weapon_tweaker/_wt_trait_pools")
 local apply_trait_filters = mod._wt.apply_trait_filters
 local revert_trait_pools  = mod._wt.revert_trait_pools
 
--- issue 611: Weapon Availability master toggles. _data.lua already built the
--- master widgets and recorded mod._wt_master_children / mod._wt_child_to_master
--- at load; here we install the open-menu repaint hook and seed each master to
--- the current state of its children so a returning user's saved values render a
--- truthful "all on" checkbox. The cascade + auto-off handlers are dispatched
--- from mod.on_setting_changed below.
+-- issue 611: _data.lua builds the career/slot/source-scoped master widgets and
+-- records their exact forward/reverse maps. Install the proven VMF checkbox
+-- styling + repaint hooks, then derive every master from its own career's saved
+-- children. Cascade and targeted child recompute dispatch below.
 local _wt_master_toggles = mod:dofile("scripts/mods/weapon_tweaker/_wt_master_toggles")
 _wt_master_toggles.install_refresh_hook(mod)
 _wt_master_toggles.seed(mod)
@@ -5048,14 +5046,31 @@ end)
 _rt_register("issue611_master_toggle_wiring", function()
     -- issue 611: the Weapon Availability master ("Enable All ...") toggles are
     -- built by _data.lua at load. Verify the wiring the runtime cascade / auto-off
-    -- handlers depend on: master->children and the child->master reverse index are
-    -- present and consistent, every child is a real unlock row grouped under the
-    -- SOURCE character its display label names (not its key prefix), every master
-    -- has a localization owner, and at least one master exists.
+    -- handlers depend on: master->children and child->master are consistent;
+    -- each master is scoped to one exact receiving career/slot; source order is
+    -- Kruber/Bardin/Kerillian/Saltzpyre/Sienna in every leaf; every child belongs
+    -- to that receiving career and to the SOURCE character named by its label.
     local mc = mod._wt_master_children
     local c2m = mod._wt_child_to_master
-    if type(mc) ~= "table" or type(c2m) ~= "table" then
-        return "master toggle maps not built (mod._wt_master_children/_child_to_master)"
+    local leaf_orders = mod._wt_master_order_by_leaf
+    if type(mc) ~= "table" or type(c2m) ~= "table" or type(leaf_orders) ~= "table" then
+        return "master toggle maps not built (children/reverse/leaf-order)"
+    end
+    local leaf_count = 0
+    for leaf_id, masters in pairs(leaf_orders) do
+        leaf_count = leaf_count + 1
+        local prior_rank = 0
+        for _, master_id in ipairs(masters) do
+            local career, slot, src = _wt_master_toggles.parse_master_id(master_id)
+            if not career or leaf_id ~= slot .. "_" .. career then
+                return "master escaped its receiving career leaf: " .. tostring(master_id)
+            end
+            local rank = _wt_master_toggles.source_order_index(src)
+            if not rank or rank <= prior_rank then
+                return "source order is not Kruber/Bardin/Kerillian/Saltzpyre/Sienna in " .. leaf_id
+            end
+            prior_rank = rank
+        end
     end
     local master_count = 0
     for master_id, children in pairs(mc) do
@@ -5063,8 +5078,10 @@ _rt_register("issue611_master_toggle_wiring", function()
         if type(master_id) ~= "string" or master_id:sub(1, 9) ~= "wtmaster_" then
             return "master id has wrong prefix: " .. tostring(master_id)
         end
-        local src = master_id:match("^wtmaster_%w+_%a+_(%w+)$")
-        if not src then return "master id not parseable: " .. master_id end
+        local career, slot, src = _wt_master_toggles.parse_master_id(master_id)
+        if not career or not slot or not src then
+            return "master id not parseable: " .. master_id
+        end
         if type(children) ~= "table" or #children == 0 then
             return "master has no children: " .. master_id
         end
@@ -5080,12 +5097,19 @@ _rt_register("issue611_master_toggle_wiring", function()
             if c2m[child] ~= master_id then
                 return "child->master reverse map broken for " .. child
             end
+            local career_prefix = "unlock_" .. career .. "_"
+            if child:sub(1, #career_prefix) ~= career_prefix then
+                return "master contains another receiving career: " .. child
+            end
             if _wt_master_toggles.source_char_of(mod, child) ~= src then
                 return "child source char disagrees with master for " .. child
             end
         end
     end
-    if master_count == 0 then return "no master toggles were built" end
+    if master_count == 0 or leaf_count == 0 then
+        return string.format("no master toggles were built (masters=%d leaves=%d)",
+            master_count, leaf_count)
+    end
 end)
 
 _rt_register("widget_unlock_map_consistency", function()

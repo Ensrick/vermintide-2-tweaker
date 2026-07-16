@@ -82,6 +82,7 @@ local suites = {
     "test_wt_bolt_staff_overcharge",
     "test_wt_longbow_zoom_probe",
     "test_wt_flamestorm_fx",
+    "test_wt_master_toggles",
     "test_wt_bardin_coverage",
     "test_wt_port_status",
     "test_wt_kruber_coverage",

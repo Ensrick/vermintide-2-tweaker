@@ -4,7 +4,20 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-07-16.
+
+---
+
+## #611 - per-career availability masters
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.267-beta / WT Dev 0.12.268-dev (not shipped) |
+| Placement | Masters appear inside each existing `melee_<career>` / `ranged_<career>` leaf, above that career's weapons; none remain at the receiving-character slot level. |
+| Scope | Toggling one master changes only its exact receiving career, slot, and source-character children. Other careers remain untouched. |
+| Derived state | Changing one child recomputes only its reverse-mapped master. It turns on only when every child in that one bucket is on. |
+| Order/style | Every leaf orders present sources Kruber, Bardin, Kerillian, Saltzpyre, Sienna. Master text uses GUI Tweaker's `font_button_normal` warm tan; weapon rows remain unchanged. |
+| Automated | Offline `test_wt_master_toggles.lua`; `/wt_regression_test`: `issue611_master_toggle_wiring`; stream parity gate. |
 
 ---
 ## Multiplayer / Network Sync

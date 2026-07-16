@@ -1350,13 +1350,10 @@ for _, variant in ipairs(_cwv_catalog) do
     end
 end
 
--- issue 611: master "Enable All <Source> <Slot> Weapons" toggle labels. The
--- label depends only on (source character, slot); the receiving character lives
--- in the setting id (wtmaster_<recv>_<slot>_<src>) so the label reads cleanly
--- inside its receiving character's Melee / Ranged group. Generated across every
--- receiving x slot x source combination; only the combinations that actually
--- have weapons get a widget built in _wt_master_toggles.build_widgets, so the
--- extra keys are inert owners for the ones that do exist.
+-- issue 611 follow-up: master labels depend only on source character + slot;
+-- the receiving CAREER lives in `wtmaster_<career>_<slot>_<source>`. Generate
+-- owners for all 20 careers; build_widgets creates only the combinations that
+-- have visible weapons inside that exact career leaf.
 local _wtmaster_char_display = {
     bardin = "Bardin",
     kerillian = "Kerillian",
@@ -1365,10 +1362,10 @@ local _wtmaster_char_display = {
     sienna = "Sienna",
 }
 local _wtmaster_slot_display = { melee = "Melee", ranged = "Ranged" }
-for recv in pairs(_wtmaster_char_display) do
+for career in pairs(_cwv_career_labels) do
     for slot, slot_label in pairs(_wtmaster_slot_display) do
         for src, src_label in pairs(_wtmaster_char_display) do
-            loc["wtmaster_" .. recv .. "_" .. slot .. "_" .. src] = {
+            loc["wtmaster_" .. career .. "_" .. slot .. "_" .. src] = {
                 en = "Enable All " .. src_label .. " " .. slot_label .. " Weapons",
             }
         end

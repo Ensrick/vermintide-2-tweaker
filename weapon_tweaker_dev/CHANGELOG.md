@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.268-dev (2026-07-16) - #611 [verify-fix] per-career master parity
+
+- Mirrored the public beta's redesigned Weapon Availability masters into the friends-only runtime stream without changing the development overlay.
+- Masters now live inside each receiving career's Melee/Ranged subgroup, affect only that career, and appear in the fixed source order Kruber, Bardin, Kerillian, Saltzpyre, Sienna.
+- Changing one child recomputes only its corresponding career/slot/source master. Master labels use GUI Tweaker's established warm-tan dropdown-heading color through VMF's supported checkbox-widget style.
+- Kept `_wt_master_toggles.lua` byte-identical between beta and dev and expanded offline plus `/wt_regression_test` coverage for scope, order, cascade, targeted recompute, seeding, and styling.
+
 ## 0.12.267-dev (2026-07-16) - issue 611 Weapon Availability master toggles
 
 - Runtime-parity refresh of the public beta's issue 611 master toggles. Each receiving character's Melee and Ranged group starts with "Enable All &lt;Character&gt; Melee/Ranged Weapons" masters, one per source character present; a master enables or disables its whole set in one click, and deselecting any covered weapon flips its master OFF while leaving the rest as-is.

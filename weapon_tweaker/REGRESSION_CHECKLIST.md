@@ -1,5 +1,18 @@
 # Regression Checklist — weapon_tweaker
 
+## #611 - per-career availability masters
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.267-beta / WT Dev 0.12.268-dev (not shipped) |
+| Placement | Masters appear inside each existing `melee_<career>` / `ranged_<career>` leaf, above that career's weapons; none remain at the receiving-character slot level. |
+| Scope | Toggling one master changes only its exact receiving career, slot, and source-character children. Other careers remain byte-for-byte untouched. |
+| Derived state | Changing one child recomputes only its reverse-mapped master. It turns on only when every child in that one bucket is on. |
+| Order/style | Every leaf orders present sources Kruber, Bardin, Kerillian, Saltzpyre, Sienna. Master text uses GUI Tweaker's `font_button_normal` warm tan; weapon rows remain unchanged. |
+| Automated | Offline `test_wt_master_toggles.lua`; `/wt_regression_test`: `issue611_master_toggle_wiring`. |
+
+---
+
 ## #620 - CWV Tuskgor Foot Knight conditional default
 
 | Field | Check |

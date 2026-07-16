@@ -737,6 +737,17 @@ skeletons.
 
 ## QA tooling
 
+### Issue #611 availability-master ownership
+
+`_wt_master_toggles.lua` is the shared beta/dev owner for Weapon Availability
+batch controls. It constructs one master per receiving-career, slot, and source
+character bucket inside the existing career leaf; preserves source order Kruber,
+Bardin, Kerillian, Saltzpyre, Sienna; and maintains a reverse child index so one
+child change recomputes only its own master. Its checkbox-factory hook changes
+only `wtmaster_` label text to GUI Tweaker's established `font_button_normal`
+warm tan. Keep this module byte-identical to the public-beta copy; the stream
+parity gate enforces the remaining normalized runtime mirror.
+
 ### Widget-tree reorder verifier — `_qa_wt_reorder.py`
 
 When QA-ing a VMF widget reorder pass (shuffling `setting_id = "unlock_*"` rows in `weapon_tweaker_data.lua` and the matching keys in `weapon_tweaker_localization.lua`), use the verifier script at the repo root: `C:\Users\danjo\source\repos\vermintide-2-tweaker\_qa_wt_reorder.py`.
