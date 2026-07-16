@@ -1858,3 +1858,27 @@ integration, ship, and ancestry reconciliation step.
   never bulk-merge stale mod versions.
 - Ship only from canonical source, then verify the Workshop manifest and the
   tester's `[<mod>:LOAD]` version. Issue #625 owns the backlog reconciliation.
+
+## 52. Text descriptor normalization trips binary deploy verification
+
+**First confirmed:** 2026-07-16 (Weapon Tweaker Dev ship, issue #646).
+**Lives in:** release/deploy tooling that compares VMB output with Steam's
+local Workshop copy.
+
+### Symptoms
+- Every compiled `.mod_bundle` hash matches, but the lone `.mod` descriptor is
+  larger in the Workshop folder and fails the final deploy gate.
+- Byte inspection shows exactly one added carriage return before each newline;
+  decoded descriptor text is otherwise identical.
+- One bounded redeploy produces the same mismatch because Steam rewrites the
+  descriptor representation again.
+
+### Fix template
+- Keep byte-exact SHA-256 comparison for `.mod_bundle` and every non-descriptor
+  artifact.
+- For the exact `.mod` extension only, normalize CRLF pairs to LF before the
+  comparison. Preserve standalone carriage returns, encoding markers, and all
+  other bytes so a real descriptor change still fails.
+- Test equivalent LF/CRLF descriptors, changed text, standalone CR, and a
+  bundle containing the same newline-only byte difference. Issue #646 owns the
+  canonical `ship.ps1` implementation.

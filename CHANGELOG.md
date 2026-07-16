@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-16 - Descriptor line-ending deploy verification
+
+Issue #646 narrows the canonical ship verifier's equivalence rule to textual `.mod` descriptors: Steam's LF-to-CRLF rewrite no longer fails an otherwise current deployment. Compiled `.mod_bundle` files and every other artifact remain byte-exact. The ship self-test covers LF/CRLF equivalence, real descriptor edits, standalone carriage returns, and bundle newline changes. No Workshop deployment is part of this tooling change.
+
 ## 2026-07-15 - Enemy lingering-damage lifetime guard
 
 Tweaker: Enemies v0.7.51-dev / issue #640 guards personal-handicap owner and breed classification with `Unit.alive` after a despawned Globadier remained referenced by its poison area and crashed native `Unit.get_data`. Neutral Personal difficulty factors now skip attacker classification entirely; active factors preserve vanilla damage when no living hostile source can be established. Engine-free adversarial coverage and runtime regression `issue640_personal_handicap_unit_lifetime` cover nil, live, deleted, and lingering-source paths. No deployment is part of this commit.

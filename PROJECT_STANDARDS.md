@@ -939,7 +939,11 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
 **Post-ship checks (both streams):**
 - Confirm `Uploaded new content` in `workshop_log.txt`. `ugc_tool` prints
   "Upload finished" even when nothing transferred.
-- A deploy-verify hash MISMATCH after a CONFIRMED upload is a Steam reconcile
+- Deploy verification is byte-exact for compiled `.mod_bundle` files and all
+  non-descriptor artifacts. For textual `.mod` descriptors only, LF and CRLF
+  line endings compare as equivalent because Steam may normalize them after a
+  deploy; every other descriptor byte remains significant (issue #646).
+- A real deploy-verify mismatch after a CONFIRMED upload is a Steam reconcile
   race, not a ship failure: do one local re-deploy, then continue.
 - Test refresh (user ruling 2026-07-13): the author on PC-A uses the
   hash-verified local deploy without restarting Steam. Volunteer testers

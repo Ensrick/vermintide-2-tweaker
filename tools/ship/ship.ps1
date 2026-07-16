@@ -93,6 +93,56 @@ function Invoke-NativeProbe {
     return $LASTEXITCODE
 }
 
+# Compare one built artifact with its deployed copy (issue #646). Steam may
+# rewrite the textual VMB descriptor from LF to CRLF after deployment. That is
+# representation-equivalent, but every other byte remains significant. Normalize
+# only CRLF pairs and only for the exact `.mod` extension; `.mod_bundle` and all
+# other artifacts retain the byte-exact SHA-256 contract.
+function Get-DescriptorComparableHash {
+    param([string]$Path)
+
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    $normalized = New-Object byte[] $bytes.Length
+    $writeIndex = 0
+    for ($readIndex = 0; $readIndex -lt $bytes.Length; $readIndex++) {
+        if (($bytes[$readIndex] -eq 13) -and
+            (($readIndex + 1) -lt $bytes.Length) -and
+            ($bytes[$readIndex + 1] -eq 10)) {
+            continue
+        }
+        $normalized[$writeIndex] = $bytes[$readIndex]
+        $writeIndex++
+    }
+
+    if ($writeIndex -ne $normalized.Length) {
+        $trimmed = New-Object byte[] $writeIndex
+        if ($writeIndex -gt 0) {
+            [System.Buffer]::BlockCopy($normalized, 0, $trimmed, 0, $writeIndex)
+        }
+        $normalized = $trimmed
+    }
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([System.BitConverter]::ToString($sha.ComputeHash($normalized))).Replace('-', '')
+    }
+    finally {
+        $sha.Dispose()
+    }
+}
+
+function Test-DeployFileEquivalent {
+    param([string]$SourcePath, [string]$DeployedPath)
+
+    if ([System.IO.Path]::GetExtension($SourcePath) -ieq '.mod') {
+        return ((Get-DescriptorComparableHash -Path $SourcePath) -eq
+                (Get-DescriptorComparableHash -Path $DeployedPath))
+    }
+
+    return ((Get-FileHash -LiteralPath $SourcePath -Algorithm SHA256).Hash -eq
+            (Get-FileHash -LiteralPath $DeployedPath -Algorithm SHA256).Hash)
+}
+
 # Dev-stream = MOD_VERSION carries a release-track suffix. Only dev-stream
 # ships auto-label; a clean stable promotion re-ships already-labeled work.
 function Test-DevStreamVersion {
@@ -254,6 +304,45 @@ function Invoke-ShipSelfTest {
     Assert ((Invoke-NativeProbe { cmd /c "exit 0" }) -eq 0) "native probe returns 0 on success"
     Assert ($ErrorActionPreference -eq 'Stop') "native probe restores ErrorActionPreference to Stop"
 
+    # Issue #646: Steam normalizes textual `.mod` descriptors to CRLF. The
+    # deploy gate accepts that one representation difference without weakening
+    # the byte-exact contract for compiled bundles or hiding real text changes.
+    $compareDir = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-ship-646-" + [guid]::NewGuid().ToString('N'))
+    [System.IO.Directory]::CreateDirectory($compareDir) | Out-Null
+    try {
+        $lfMod = Join-Path $compareDir 'source.mod'
+        $crlfMod = Join-Path $compareDir 'deployed.mod'
+        $changedMod = Join-Path $compareDir 'changed.mod'
+        $standaloneCrBaseMod = Join-Path $compareDir 'standalone-cr-base.mod'
+        $standaloneCrMod = Join-Path $compareDir 'standalone-cr.mod'
+        $lfBundle = Join-Path $compareDir 'source.mod_bundle'
+        $crlfBundle = Join-Path $compareDir 'deployed.mod_bundle'
+
+        $lfText = "name = `"example`";`npackage = `"example`";`n"
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($lfMod, $lfText, $utf8NoBom)
+        [System.IO.File]::WriteAllText($crlfMod, $lfText.Replace("`n", "`r`n"), $utf8NoBom)
+        [System.IO.File]::WriteAllText($changedMod, $lfText.Replace('example";', 'different";'), $utf8NoBom)
+        [System.IO.File]::WriteAllBytes($standaloneCrBaseMod, [byte[]](110, 97, 109, 101, 120, 10))
+        [System.IO.File]::WriteAllBytes($standaloneCrMod, [byte[]](110, 97, 109, 101, 13, 120, 10))
+        [System.IO.File]::WriteAllBytes($lfBundle, [byte[]](65, 10, 66))
+        [System.IO.File]::WriteAllBytes($crlfBundle, [byte[]](65, 13, 10, 66))
+
+        Assert (Test-DeployFileEquivalent $lfMod $crlfMod) "LF/CRLF-only .mod descriptor difference is equivalent (issue #646)"
+        Assert (-not (Test-DeployFileEquivalent $lfMod $changedMod)) "real .mod descriptor content change still fails"
+        Assert (-not (Test-DeployFileEquivalent $standaloneCrBaseMod $standaloneCrMod)) "standalone CR is not normalized away"
+        Assert (-not (Test-DeployFileEquivalent $lfBundle $crlfBundle)) ".mod_bundle comparison remains byte-exact"
+        Assert (Test-DeployFileEquivalent $lfBundle $lfBundle) "byte-identical bundle still passes"
+    }
+    finally {
+        if (Test-Path $compareDir) {
+            Get-ChildItem -LiteralPath $compareDir -File | ForEach-Object {
+                Remove-Item -LiteralPath $_.FullName
+            }
+            Remove-Item -LiteralPath $compareDir
+        }
+    }
+
     # Issues #436/#493 interface contract + the 2026-07-13 param-stomp incident:
     # step 3 passes `-Mods $Mod` to publish-release.ps1, so that script MUST
     # declare the [string[]]$Mods parameter -- and must never assign to a
@@ -279,10 +368,10 @@ function Invoke-ShipSelfTest {
 
     Write-Host ""
     if ($script:__stpass) {
-        Write-Host "[ship.ps1 -SelfTest] OK -- step-6 labeling logic intact." -ForegroundColor Green
+        Write-Host "[ship.ps1 -SelfTest] OK -- ship helper contracts intact." -ForegroundColor Green
         return 0
     } else {
-        Write-Host "[ship.ps1 -SelfTest] FAILED -- labeling-logic regression." -ForegroundColor Red
+        Write-Host "[ship.ps1 -SelfTest] FAILED -- ship helper regression." -ForegroundColor Red
         return 2
     }
 }
@@ -492,7 +581,7 @@ if (-not $SkipGitHub) {
 }
 
 # ---------------------------------------------------------------------------
-# Step 4: VERIFY DEPLOY -- SHA256-compare every bundleV2 file to the deploy folder
+# Step 4: VERIFY DEPLOY -- byte-exact bundles; newline-normalized .mod descriptor
 # ---------------------------------------------------------------------------
 Write-Host ""
 Write-Host "==> Verifying deploy (SHA256 bundleV2 vs Workshop content folder)" -ForegroundColor Cyan
@@ -504,6 +593,7 @@ if (-not (Test-Path $deployDir)) {
 
 $mismatches = @()
 $checked    = 0
+$normalizedDescriptors = 0
 foreach ($f in Get-ChildItem $bundleDir -File) {
     $target = Join-Path $deployDir $f.Name
     if (-not (Test-Path $target)) {
@@ -514,7 +604,13 @@ foreach ($f in Get-ChildItem $bundleDir -File) {
     $dstHash = (Get-FileHash -Algorithm SHA256 -Path $target).Hash
     $checked++
     if ($srcHash -ne $dstHash) {
-        $mismatches += "  $($f.Name): src $($srcHash.Substring(0,12)).. != deploy $($dstHash.Substring(0,12)).."
+        if (Test-DeployFileEquivalent -SourcePath $f.FullName -DeployedPath $target) {
+            $normalizedDescriptors++
+            Write-Host "  OK -- $($f.Name): descriptor differs only by LF/CRLF line endings." -ForegroundColor DarkGreen
+        }
+        else {
+            $mismatches += "  $($f.Name): src $($srcHash.Substring(0,12)).. != deploy $($dstHash.Substring(0,12)).."
+        }
     }
 }
 
@@ -524,7 +620,10 @@ if (-not $deployOk) {
     $mismatches | ForEach-Object { Write-Host $_ -ForegroundColor Red }
     Fail "Deploy verification failed: $($mismatches.Count) file(s) differ between $bundleDir and $deployDir."
 }
-Write-Host "  OK -- $checked file(s) hash-match the deploy folder." -ForegroundColor Green
+$normalizationNote = if ($normalizedDescriptors -gt 0) {
+    "; $normalizedDescriptors textual .mod descriptor(s) line-ending-equivalent"
+} else { '' }
+Write-Host ("  OK -- {0} file(s) verified (bundles byte-exact{1})." -f $checked, $normalizationNote) -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
 # Step 5: VERIFY UPLOAD -- scan recent workshop_log.txt for this published_id
@@ -725,7 +824,7 @@ Write-Host "==================== SHIP SUCCESS ====================" -ForegroundC
 Write-Host ("  Mod          : {0}" -f $Mod)
 Write-Host ("  Version      : v{0}" -f $modVersion)
 Write-Host ("  Published ID : {0}" -f $publishedId)
-Write-Host ("  Deploy hash  : OK ({0} file(s) match)" -f $checked)
+Write-Host ("  Deploy hash  : OK ({0} file(s) verified; {1} normalized descriptor(s))" -f $checked, $normalizedDescriptors)
 Write-Host ("  Upload       : {0}" -f $uploadHuman)
 Write-Host ("  GitHub       : {0}" -f $githubStatus)
 $labelsHuman = if ($labelSummary.Count -gt 0) { $labelSummary -join '; ' } else { 'none' }
