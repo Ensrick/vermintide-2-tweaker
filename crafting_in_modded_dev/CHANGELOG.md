@@ -1,5 +1,50 @@
 # Crafting in Modded Changelog
 
+## 0.8.86-dev (2026-07-16): issue 628 unify synthetic identity across salvage and crafting [verify-fix]
+
+- Root cause of the residual issue 628 divergence: two hand-written identity
+  resolvers classified a synthetic item differently. The standard-forge
+  acquisition selector (`_cim_template_selector.canonical_key`) is cwv_key-first
+  and backend-id-aware, but the salvage eligibility filter's resolver
+  (`_cim_synthetic_item_contract` `instance_key`) preferred `ItemId`/`key` and
+  had no `cwv_<key>_NNN` fallback. They provably disagree for any CWV row
+  presented with its inherited BASE `.key`/`.name` - which is exactly what CWV's
+  `_build_entry` keeps (base weapon on `.key`/`.name`, variant only on
+  `.cwv_key`, so vanilla equip/preview fallbacks resolve;
+  character_weapon_variants.lua:10318-10330). For such an item the salvage filter
+  resolved the base weapon, mismatched the variant-keyed CIM record in
+  `validate_instance`, and the crafted weapon never appeared in Salvage.
+- Made `_cim_synthetic_item_contract` the single owner of canonical synthetic
+  identity via `canonical_item_key` (acquisition key, then `data.cwv_key`, then
+  the `cwv_<key>_NNN` backend-id band, then `ItemId`/`key`/`data.key`). Salvage
+  eligibility now reads through it, and the standard-forge acquisition selector
+  is injected with the same resolver at load, so craft, inventory, standard
+  forge, and salvage classify one identity. Vanilla items and the existing
+  CIM-crafted mirror path resolve identically to before.
+- Added a runtime check `issue628_identity_resolvers_unified` that proves the
+  selector delegates to the contract (no drifted copy) and that a base-keyed CWV
+  instance still resolves to its variant. Extended the engine-free suites: the
+  contract test now covers `canonical_item_key` priority and a base-keyed CWV
+  salvage instance staying eligible while equipped/loadout/favorite exclusions
+  still reject it; the selector test proves it delegates to an injected resolver.
+- Note: authored as 0.8.85-dev in a parallel workstream and renumbered to
+  0.8.86-dev when merged on top of the Cosmetics Tab presentation entry below.
+
+### Verification
+
+1. With CIM + CWV enabled, craft Dawi Mace, Dawi Mace and Shield, and Dawi Dual
+   Maces through CIM's standard forge. Confirm each Modded item is in inventory.
+2. Unequip each from every current and saved loadout and clear any favorite mark.
+   Open the standard Salvage page: every unequipped, non-favorited crafted Dawi
+   Mace must now appear as a salvage candidate.
+3. Equip one, favorite another, and add a third to a saved loadout; reopen
+   Salvage and confirm those three are excluded while any remaining free copy
+   still appears.
+4. Salvage one free copy, restart, and confirm only that exact instance is gone
+   and the others survive.
+5. Run `/cim_regression_test` and require `issue628_identity_resolvers_unified`,
+   `issue628_provider_contract`, and `issue628_saved_instance_contract` PASS.
+
 ## 0.8.85-dev (2026-07-16): #629/#639/#641 Cosmetics Tab presentation precedence [verify-fix-coop]
 
 - Hold-Tab now asks the installed Cosmetics mod for its locally resolved

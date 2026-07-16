@@ -28,6 +28,17 @@ local template_catalog = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_te
 mod._cim_template_selector = template_selector
 mod._cim_template_catalog = template_catalog
 
+-- issue 628: unify synthetic identity. The salvage filter and this acquisition
+-- selector must classify a synthetic (CIM-crafted / CWV-definition) item the
+-- same way, or a crafted CWV weapon whose live `.key` is its inherited base
+-- weapon appears in one screen but not the other. The contract owns the one
+-- canonical resolver; hand it to the selector (contract loads first, entry
+-- line 263 < standard_forge line 291).
+local _contract = mod._cim_synthetic_item_contract
+if _contract and _contract.canonical_item_key then
+    template_selector.set_canonical_key_resolver(_contract.canonical_item_key)
+end
+
 -- ============================================================
 -- Lifecycle: track when the standard forge UI is open
 -- ============================================================

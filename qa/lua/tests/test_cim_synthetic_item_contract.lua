@@ -182,6 +182,49 @@ return function(H, repo_root)
         H.equal(skins.keep_me, "skin_keep")
     end)
 
+    H.test("CIM #628 canonical identity unifies base-keyed CWV rows", function()
+        -- Variant encoded only in the backend id (legacy CWV blacksmith shape).
+        H.equal(contract.canonical_item_key({
+            backend_id = "cwv_es_longsword_100", key = "es_bastard_sword",
+        }), "cwv_es_longsword")
+        -- The self-identifying data.cwv_key wins over the inherited base key.
+        H.equal(contract.canonical_item_key({
+            backend_id = "opaque",
+            data = { key = "es_bastard_sword", cwv_key = "cwv_es_longsword" },
+        }), "cwv_es_longsword")
+        -- A synthetic selector's exact craft key wins over everything.
+        H.equal(contract.canonical_item_key({
+            cim_acquisition_key = "cwv_dr_dawi_dual_maces", key = "dr_dual_hammers",
+        }), "cwv_dr_dawi_dual_maces")
+        -- Ordinary vanilla identity is unchanged.
+        H.equal(contract.canonical_item_key({
+            ItemId = "es_1h_sword", key = "es_1h_sword",
+        }), "es_1h_sword")
+    end)
+
+    H.test("CIM #628 base-keyed CWV instance stays salvage-eligible", function()
+        local row = master("cwv_variant")
+        local record = assert(contract.normalize_record("cwv_es_longsword_100", {
+            item_key = "cwv_es_longsword",
+            rarity = "modded",
+        }, row))
+        -- The live mirror item presents CWV's inherited BASE key; the variant
+        -- survives only in the backend-id band. Before the identity unification
+        -- the salvage filter resolved this to "es_bastard_sword" and rejected it
+        -- as not-owned, so the crafted weapon never reached the Salvage grid.
+        local item = {
+            backend_id = "cwv_es_longsword_100",
+            key = "es_bastard_sword",
+            rarity = "modded",
+            data = { slot_type = "melee", key = "es_bastard_sword" },
+        }
+        H.truthy(contract.is_salvage_eligible(item, record, {}))
+        H.equal(contract.is_salvage_eligible(item, record, { is_equipped = true }), false)
+        H.equal(contract.is_salvage_eligible(item, record,
+            { is_equipped_by_any_loadout = true }), false)
+        H.equal(contract.is_salvage_eligible(item, record, { is_favorite = true }), false)
+    end)
+
     H.test("CIM #628 production paths consume the shared contract", function()
         local function read(name)
             local file = assert(io.open(root .. name, "rb"))
@@ -193,11 +236,18 @@ return function(H, repo_root)
         local forge = read("standard_forge.lua")
         local filter = read("_cim_inventory_filter.lua")
         local importer = read("saveweapon_import.lua")
+        local selector = read("_cim_template_selector.lua")
         H.truthy(entry:find("contract.build_mirror_payload(normalized", 1, true))
         H.truthy(forge:find("contract.build_mirror_payload(record", 1, true))
         H.truthy(importer:find("contract.build_mirror_payload(record", 1, true))
         H.truthy(forge:find("mod._cim277_delete_owned_ids(owned)", 1, true))
         H.truthy(filter:find("contract.is_salvage_eligible", 1, true))
         H.equal(filter:find("REGARDLESS of equip / loadout / favorite", 1, true), nil)
+        -- issue 628 identity unification: the acquisition selector must read the
+        -- contract's one canonical resolver, injected at standard_forge load.
+        H.truthy(selector:find("function M.set_canonical_key_resolver", 1, true))
+        H.truthy(forge:find(
+            "template_selector.set_canonical_key_resolver(_contract.canonical_item_key)",
+            1, true))
     end)
 end

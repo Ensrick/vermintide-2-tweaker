@@ -176,9 +176,42 @@ function M.build_mirror_payload(record, master, json_encode)
     }, nil, normalized
 end
 
+-- issue 628: the ONE canonical identity for a synthetic item, owned here and
+-- consumed by every CIM surface (salvage eligibility below AND the standard-forge
+-- acquisition selector via `_cim_template_selector.set_canonical_key_resolver`).
+-- Before this, the salvage path resolved identity as `ItemId or key or cwv_key`
+-- while the craft selector used a cwv_key-first, backend-id-aware resolver. They
+-- disagreed for any CWV row presented with its inherited BASE `.key`/`.name`
+-- (CWV's `_build_entry` deliberately keeps them the base weapon for vanilla
+-- equip/preview fallbacks and stamps the variant only on `.cwv_key`,
+-- character_weapon_variants.lua:10318-10330). A variant-keyed salvage record then
+-- failed the `item_key` check and the crafted weapon never appeared in Salvage.
+-- Resolution priority (highest first):
+--   1. `cim_acquisition_key` -- the exact craft key on a synthetic selector row.
+--   2. `data.cwv_key` -- the self-identifying variant marker.
+--   3. `cwv_<key>_NNN` backend-id band -- legacy CWV blacksmith instances that
+--      encoded the variant only in the backend id.
+--   4. `ItemId` / `key` / `data.key` -- ordinary vanilla identity.
+function M.canonical_item_key(item)
+    if type(item) ~= "table" then return nil end
+    if type(item.cim_acquisition_key) == "string" then
+        return item.cim_acquisition_key
+    end
+    local data = type(item.data) == "table" and item.data or nil
+    if data and type(data.cwv_key) == "string" then
+        return data.cwv_key
+    end
+    local backend_id = item.backend_id or item.ItemInstanceId
+    if type(backend_id) == "string" then
+        local cwv_key = backend_id:match("^(cwv_.-)_%d%d%d$")
+        if cwv_key then return cwv_key end
+    end
+    local key = item.ItemId or item.key or (data and data.key)
+    return type(key) == "string" and key or nil
+end
+
 local function instance_key(item)
-    return item and (item.ItemId or item.key or (item.data and item.data.cwv_key)
-        or (item.data and item.data.key))
+    return item and M.canonical_item_key(item)
 end
 
 function M.validate_instance(item, record)

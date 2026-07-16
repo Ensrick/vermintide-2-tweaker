@@ -50,7 +50,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.85-dev"
+local MOD_VERSION = "0.8.86-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -588,6 +588,41 @@ _rt_register("issue628_saved_instance_contract", function()
                 or type(record.item_key) ~= "string" then
             return "malformed saved instance: " .. tostring(backend_id)
         end
+    end
+end)
+
+-- issue 628: the acquisition selector and salvage filter must resolve one
+-- canonical identity. Prove the selector actually delegates to the contract's
+-- resolver (not a drifted copy), and that a CWV row presented with its inherited
+-- BASE `.key` still resolves to its variant so it stays salvageable.
+_rt_register("issue628_identity_resolvers_unified", function()
+    local contract = mod._cim_synthetic_item_contract
+    local selector = mod._cim_template_selector
+    if type(contract) ~= "table" or type(contract.canonical_item_key) ~= "function" then
+        return "contract canonical_item_key is missing"
+    end
+    if type(selector) ~= "table" or type(selector.canonical_key) ~= "function" then
+        return "template selector is missing"
+    end
+    local shapes = {
+        { backend_id = "cwv_es_longsword_100", key = "es_bastard_sword" },
+        { backend_id = "opaque", data = { key = "es_bastard_sword", cwv_key = "cwv_es_longsword" } },
+        { ItemId = "cwv_dr_dawi_mace", key = "cwv_dr_dawi_mace",
+          data = { cwv_key = "cwv_dr_dawi_mace", slot_type = "melee" } },
+        { cim_acquisition_key = "cwv_dr_dawi_dual_maces", key = "dr_dual_hammers" },
+        { ItemId = "es_1h_sword", key = "es_1h_sword" },
+    }
+    for i = 1, #shapes do
+        local item = shapes[i]
+        local c = contract.canonical_item_key(item)
+        local s = selector.canonical_key(item)
+        if c ~= s then
+            return "selector/contract identity drift: contract=" .. tostring(c)
+                .. " selector=" .. tostring(s)
+        end
+    end
+    if contract.canonical_item_key(shapes[1]) ~= "cwv_es_longsword" then
+        return "base-keyed CWV instance did not resolve to its variant"
     end
 end)
 

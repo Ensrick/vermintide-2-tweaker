@@ -1,5 +1,81 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.429-dev - 2026-07-16 - issue 474 Old Musket presentation surface audit + fan-out guard [verify-fix-coop]
+
+Issue 474's real complaint is process, not one weapon: "if we're using consistent
+and proper abstraction... we shouldn't have individual weapons breaking the norms".
+This pass is the formal review that complaint asked for. It walks every Old Musket
+render surface, confirms each already routes through ONE shared resolver set, and
+locks that fan-out with a regression guard so a future refactor cannot silently
+drop a surface again. No behavior changed - the behavioral fixes below already
+shipped across 0.1.377 .. 0.1.427-dev and remain co-op-unverified.
+
+**Surface audit (all confirmed routing through the shared resolvers):**
+
+- Owner 1P and 3P in-world: the spawn hook binds textures + full stance transform
+  through `_om._apply_old_musket_transform(_, "1p"/"3p", _mode)` (character_weapon_variants.lua ~5425-5432).
+- Remote husk 3P: `GearUtils.link_units` husk path applies the same painter +
+  transform, with stance read from the bounded presentation channel via
+  `_om._old_musket_mode_for_owner(owner_unit_3p, wielded_slot)`, NOT the wire
+  (the wire deliberately carries base `es_handgun`) (~12376-12391).
+- Inventory / hero character preview (`MenuWorldPreviewer` / `HeroPreviewer`):
+  transform + a career-aware stance wield-anim replay via
+  `Unit.animation_event(self.character_unit, wield_event)` (~13331-13371).
+- Illusion browser + CIM Athanor (`LootItemUnitPreviewer.spawn_units`): one
+  `_om._old_musket_preview_descriptor(item)` supplies unit/material/textures/pose;
+  transform applied through the same applicator (~13569-13625).
+- Remote fire audio: the compiled `player_combat_weapon_rifle_fire` report is a
+  valid Wwise event but is absent from `NetworkLookup.sound_events` [confirmed:
+  string appears nowhere in the decompiled source], so the native husk-audio RPC
+  cannot encode it; the bounded CWV channel triggers it locally on each observer
+  via `WwiseUtils.trigger_unit_event` (~4111-4141, 6204-6234).
+
+**Change in this build:**
+
+- Added `_rt_register("issue474_old_musket_presentation_surface_coverage")`: an
+  in-keep executable guard that every shared presentation entrypoint exists and
+  that all three positive-identity forms (item key / skin key / backend id)
+  resolve to the same custom unit plus a full stance transform triplet.
+- Added the offline source-pattern test "Old Musket presentation fans out to
+  every render surface via the shared resolver" in
+  `qa/lua/tests/test_cwv_old_musket_presentation.lua`, asserting each of the four
+  surface call sites plus the preview wield-anim replay are present.
+- No runtime presentation code changed; this is a hardening + audit pass only.
+
+**Out of scope for this pass (reported to the manager, not fixed here):**
+
+- Deployment of 0.1.427-dev+ to the Workshop and the paired-peer verification of
+  the mode channel + Athanor descriptor. Those are ship/verify steps, not CWV code.
+- The CIM Athanor CONSUMER half of the descriptor bridge lives in
+  `crafting_in_modded` (out of this task's territory). CWV owns and ships the
+  descriptor; CIM must consume it.
+- Residual open risk: the husk 3P melee ANIMATION state (the observer seeing the
+  spear moveset rather than the ranged idle). The transform + wield-anim replay
+  are wired, but full husk melee-moveset parity needs in-game paired confirmation
+  and may require weapon_tweaker-side `anim_event_3p` work; not patched blind.
+
+**Verification (2 players; confirm `[cwv:LOAD] v0.1.429-dev` first):**
+
+1. Sub-issue 1/2 (husk shows base handgun): host equips the Old Musket in the
+   ranged slot; observer must see the custom musket mesh, not the vanilla Handgun.
+   Repeat after a hot join and after a mission transition.
+2. Sub-issue 3 (offsets not applied on client): with the custom mesh visible on
+   the observer, confirm the pose/scale/rotation match the host's, in both slots.
+3. Melee stance across peers: host toggles to melee; observer must see the melee
+   mesh + pose. Toggle back to ranged and confirm it reverts on the observer.
+4. Inventory / hero preview: open the loadout screen in each stance; the preview
+   must show the correct mesh, saved offsets, and the stance wield animation.
+5. Remote fire audio: observer must hear the musket report when the host fires.
+6. Regression guard: run `/cwv_regression_test`; the
+   `issue474_old_musket_presentation_surface_coverage` line must read PASS.
+
+**DoD:** Walked U-4 (scale/grip fan-out across owner 1P/3P, husk, bot, inventory,
+lobby/score, item/Athanor previews), U-7 (forward-reference audit of the new
+`_rt_register` - all `_om.*` symbols verified defined before the test site), U-8
+(build hygiene), and G-CUSTOM-ILLUSION (one descriptor, one material/texture set).
+G-3P-ANIM husk melee-moveset parity is explicitly DEFERRED (needs paired in-game
+data). Live co-op verification of the behavioral fixes remains owed on issue 474.
+
 ## 0.1.428-dev - 2026-07-15 - #604 durable Crowbill transforms [verify-fix-coop]
 
 - **#620 P0 menu crash:** bounded the Combat Style controller legend to the

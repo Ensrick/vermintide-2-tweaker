@@ -59,6 +59,36 @@ return function(H, repo_root)
         H.truthy(hook:find('[cwv:617] Old Musket preview textures applied', 1, true))
     end)
 
+    H.test("Old Musket presentation fans out to every render surface via the shared resolver", function()
+        -- issue 474: the recurring failure class was one render surface drifting
+        -- off the shared resolver (husk shows the base handgun, inventory preview
+        -- drops the stance pose, the Athanor shows nothing). Assert every surface
+        -- routes through the single applicator/descriptor set so a refactor cannot
+        -- silently drop one again.
+
+        -- (1) owner in-world spawn: both 1P and 3P through the shared applicator.
+        H.truthy(source:find('_om._apply_old_musket_transform(v_w1p, "1p", _mode)', 1, true))
+        H.truthy(source:find('_om._apply_old_musket_transform(v_w3p, "3p", _mode)', 1, true))
+
+        -- (2) remote husk 3P: stance resolved from the bounded channel, not the wire.
+        H.truthy(source:find('pcall(_om._apply_old_musket_transform, weapon_unit_3p, "3p", mode)', 1, true))
+        H.truthy(source:find('_om._old_musket_mode_for_owner(owner_unit_3p, wielded_slot)', 1, true))
+
+        -- (3) inventory / hero character preview: transform + stance wield-anim replay.
+        H.truthy(source:find('_om._apply_old_musket_transform(slot.right, "3p", _stance)', 1, true))
+        H.truthy(source:find('pcall(Unit.animation_event, self.character_unit, wield_event)', 1, true))
+
+        -- (4) illusion browser + CIM Athanor (LootItemUnitPreviewer): shared descriptor.
+        H.truthy(source:find('_om._apply_old_musket_transform(unit, "3p", preview_mode)', 1, true))
+        H.truthy(source:find('_om._old_musket_preview_descriptor(item)', 1, true))
+
+        -- The transform components come from ONE source for every surface.
+        H.truthy(source:find('_om._old_musket_transform_components(perspective, mode)', 1, true))
+
+        -- The in-keep executable half of this guard ships in the bundle too.
+        H.truthy(source:find('issue474_old_musket_presentation_surface_coverage', 1, true))
+    end)
+
     H.test("Old Musket texture C-call fails closed", function()
         H.truthy(source:find('Old Musket paint SKIP reason=%s detail=%s chat=false', 1, true))
         H.truthy(source:find('return false, 0\n\tend\n\tif preview_world then', 1, true))

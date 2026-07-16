@@ -3,6 +3,17 @@
 
 local M = {}
 
+-- issue 628: canonical item identity is owned by `_cim_synthetic_item_contract`
+-- so the standard-forge acquisition selector and the salvage eligibility filter
+-- classify a synthetic item the same way. standard_forge injects the contract's
+-- resolver at load; the inline body in `canonical_key` is the exact same policy,
+-- kept as the fallback so this module stays pure and standalone-loadable for the
+-- unit tests.
+local _canonical_key_resolver = nil
+function M.set_canonical_key_resolver(fn)
+    _canonical_key_resolver = type(fn) == "function" and fn or nil
+end
+
 local function _rarity(item)
     if type(item) ~= "table" then return nil end
     return item.rarity
@@ -23,6 +34,9 @@ end
 
 function M.canonical_key(item)
     if type(item) ~= "table" then return nil end
+    -- When the contract resolver is injected (runtime), it is the single owner
+    -- of synthetic identity; both this selector and salvage read through it.
+    if _canonical_key_resolver then return _canonical_key_resolver(item) end
 
     -- New selectors carry an exact acquisition key. CWV definitions also
     -- carry cwv_key because their inherited .key/.name must remain the base

@@ -127,6 +127,21 @@ return function(H, repo_root)
         H.equal(rows[2], zulu)
     end)
 
+    H.test("canonical_key delegates to the injected contract resolver", function()
+        local seen = {}
+        Selector.set_canonical_key_resolver(function(item)
+            seen[#seen + 1] = item
+            return "resolved:" .. tostring(item and item.key)
+        end)
+        H.equal(Selector.canonical_key({ key = "anything" }), "resolved:anything")
+        H.equal(#seen, 1)
+        -- Clearing restores the standalone inline policy for any later test.
+        Selector.set_canonical_key_resolver(nil)
+        H.equal(Selector.canonical_key({
+            backend_id = "cwv_es_longsword_001", key = "es_bastard_sword",
+        }), "cwv_es_longsword")
+    end)
+
     H.test("production wires the pure policy and explicit selector identity", function()
         local file = assert(io.open(root .. "standard_forge.lua", "rb"))
         local source = file:read("*a")

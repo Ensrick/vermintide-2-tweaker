@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.428-dev"
+local MOD_VERSION = "0.1.429-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -14764,6 +14764,61 @@ _rt_register("issue474_old_musket_hot_join_identity_and_remote_fire", function()
 					or scale[1] == nil or scale[2] == nil or scale[3] == nil then
 				return perspective .. "/" .. mode .. " does not preserve the full saved transform"
 			end
+		end
+	end
+end)
+
+_rt_register("issue474_old_musket_presentation_surface_coverage", function()
+	-- issue 474 root cause was PROCESS, not a single weapon: the Old Musket
+	-- display kept regressing because one render surface at a time drifted off
+	-- the shared resolver (husk showed the base handgun, inventory preview
+	-- dropped the stance pose, the Athanor showed nothing). This guard asserts
+	-- the single shared presentation contract is intact so a future refactor
+	-- cannot silently strip a surface again. The per-surface CALL SITES are
+	-- pattern-verified offline in
+	-- qa/lua/tests/test_cwv_old_musket_presentation.lua ("... fans out to every
+	-- render surface ..."); this in-keep half asserts every shared entrypoint
+	-- those surfaces call actually exists and resolves.
+	local shared = {
+		"_apply_old_musket_transform",       -- owner 1P/3P, husk, both previews
+		"_track_old_musket_unit",            -- live-tune bucket membership
+		"_apply_old_musket_textures",        -- the one UV painter for every surface
+		"_old_musket_transform_components",  -- the single pos/rot/scale source
+		"_old_musket_mode_for_owner",        -- husk stance from the bounded channel
+		"_old_musket_record_and_publish",    -- owner -> channel publish
+		"_old_musket_preview_descriptor",    -- one item/skin -> unit/mat/pose descriptor
+		"_old_musket_preview_texture_targets", -- LootItemUnitPreviewer paint planner
+	}
+	for _, name in ipairs(shared) do
+		if type(_om[name]) ~= "function" then
+			return "shared Old Musket presentation resolver missing: _om." .. name
+		end
+	end
+	-- Cross-mod bridge entrypoint the Cosmetics/CIM-Athanor previewers consume.
+	if type(mod._cwv_resolve_preview_descriptor) ~= "function" then
+		return "preview-bridge entrypoint mod._cwv_resolve_preview_descriptor missing"
+	end
+	local policy = _om.old_musket_preview
+	if type(policy) ~= "table" or type(policy.resolve) ~= "function"
+			or type(policy.resource_mode) ~= "function" then
+		return "shared Old Musket preview policy (resolve/resource_mode) missing"
+	end
+	-- All three positive-identity forms a surface can hold (item key, skin key,
+	-- backend id) must resolve to the SAME custom unit plus a full stance
+	-- transform triplet from the ONE descriptor. A surface that resolves any of
+	-- these to nil is exactly the base-handgun regression this issue chased.
+	for _, probe in ipairs({
+		{ data = { cwv_key = "cwv_es_musket_old" } },
+		{ skin = "cwv_es_musket_old_skin" },
+		{ backend_id = "cwv_es_musket_old_002" },
+	}) do
+		local d = _om._old_musket_preview_descriptor(probe)
+		if type(d) ~= "table" or type(d.unit) ~= "string"
+				or (d.mode ~= "ranged" and d.mode ~= "melee")
+				or type(d.transform) ~= "table"
+				or type(d.transform.position) ~= "table"
+				or type(d.transform.scale) ~= "table" then
+			return "preview descriptor incomplete for a positive Old Musket identity form"
 		end
 	end
 end)
