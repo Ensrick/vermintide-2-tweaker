@@ -723,6 +723,8 @@ _rt_register("issue366_ale_independent_stack_decay", function()
     end
 end)
 
+-- Keep the registered name stable: regression names and order are a frozen
+-- tester-facing surface even though the target changed from 1.0s to 0.75s.
 _rt_register("issue367_ale_one_second_drink", function()
     local defs = balance and balance.BALANCE_MODS
     local rework = defs and defs.rework_dr_ranger_ale_one_second_drink
@@ -734,8 +736,13 @@ _rt_register("issue367_ale_one_second_drink", function()
         local template = WeaponTemplates and WeaponTemplates.bardin_survival_ale
         local action = template and template.actions and template.actions.action_one
             and template.actions.action_one.default
-        if not action or action.total_time ~= 1.9 or action.anim_time_scale ~= 1.9 then
-            return "enabled Ranger ale action did not resolve to one second"
+        local resolved_duration = action and action.anim_time_scale
+            and action.total_time / action.anim_time_scale
+        if not action or action.total_time ~= 1.9
+           or type(action.anim_time_scale) ~= "number"
+           or math.abs(action.anim_time_scale - (1.9 / 0.75)) > 0.000001
+           or math.abs(resolved_duration - 0.75) > 0.000001 then
+            return "enabled Ranger ale action did not resolve to 0.75 seconds"
         end
     end
 end)

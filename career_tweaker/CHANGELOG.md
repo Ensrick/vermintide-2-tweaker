@@ -1,5 +1,14 @@
 # Career Tweaker Changelog
 
+## 0.4.1-beta - 2026-07-16 - #367 faster Ranger ale drink [verify-fix]
+
+- Renamed the setting to **Ranger Veteran: Faster Ale Drinking Animation** and made its tooltip state the exact 0.75-second target.
+- Changed the target from one second to 0.75 seconds. The stock action remains authored at 1.9 seconds; the rework now derives `anim_time_scale` as `1.9 / 0.75`, so `WeaponUnitExtension` resolves the action lock and first-person/third-person playback through the same scale.
+- Added bounded apply evidence with the stock duration, target duration, and resolved scale. Toggle-off and mod-disable still restore the exact previous scale or exact nil absence.
+- Strengthened offline duration/localization coverage and updated live runtime check `issue367_ale_one_second_drink` to assert the 0.75-second contract while preserving its registered tester-facing name.
+
+**Solo verify:** enable **Faster Ale Drinking Animation** under Talent Reworks > Ranger Veteran, drink an ale, and confirm the visible drink and control lock end together in about 0.75 seconds and the buff is granted once. Disable it and confirm the stock 1.9-second drink returns. Run `/crt_regression_test` and require `PASS: issue367_ale_one_second_drink`; the log should also contain `[crt:367] applied Ranger ale speed: stock=1.90s target=0.75s anim_time_scale=2.533333`.
+
 ## 0.4.0-beta - 2026-07-15 - public beta rollup
 
 - Promoted the tested Career balance and rework line through 0.3.75-dev, including the Foot Knight feature suite, rework-family masters, Ranger ale improvements, Zealot Flagellation, Handmaiden reworks, peer-parity hardening, localization corrections, and retired Big Rebalance cleanup.

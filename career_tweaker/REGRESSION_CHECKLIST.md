@@ -27,9 +27,9 @@ Last updated: 2026-07-15.
 | Field | Value |
 |-------|-------|
 | Source boundary | `bardin_survival_ale.actions.action_one.default` authors `total_time=1.9`; `WeaponUnitExtension` divides both completion and animation playback by the action's `anim_time_scale`. |
-| Expected | Default-off leaves the exact vanilla action. Enabled sets only `anim_time_scale=1.9`, producing a one-second action and matching 1P/3P animation while preserving the standard consume/buff path. |
+| Expected | Default-off leaves the exact vanilla action. Enabled derives `anim_time_scale=1.9/0.75` (2.533333...), producing a 0.75-second action and matching 1P/3P animation while preserving the standard consume/buff path. |
 | Restore | Toggle-off and mod-disable restore either the exact prior scale or exact nil absence; an unexpected action shape remains untouched. |
-| Detection | Offline `test_crt_ale_animation.lua`; runtime `/crt_regression_test` check `issue367_ale_one_second_drink`; solo timing/buff check in CHANGELOG 0.3.73-dev. |
+| Detection | Offline `test_crt_ale_animation.lua`; runtime `/crt_regression_test` check `issue367_ale_one_second_drink` (registered name retained for output stability); apply marker `[crt:367]`; solo timing/buff check in CHANGELOG 0.4.1-beta. |
 
 ---
 ## Rework-family master controls (#445)

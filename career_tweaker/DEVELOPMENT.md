@@ -102,6 +102,22 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
    silently drops the 2nd hook on a pair). Put the hook in the module that owns
    the behavior. Add a `/crt_regression_test` target-present check for it.
 
+## Ranger ale action-speed contract (#367)
+
+The ale's live action remains the vanilla `bardin_survival_ale.actions.action_one.default`
+shape with `total_time = 1.9` [src:
+`scripts/settings/equipment/weapon_templates/bardin_survival_ale.lua:5-23`]. The
+opt-in rework changes only `anim_time_scale`, deriving it as `1.9 / 0.75`.
+`WeaponUnitExtension.start_action` divides `total_time` by the action scale and
+passes the corresponding animation scale to both third-person and first-person
+playback [src:
+`scripts/unit_extensions/weapons/weapon_unit_extension.lua:486-489,580-600`].
+Keep the stock duration canonical, preserve the `one_time_consumable` path, and
+restore either the exact prior scale or exact nil absence. Coverage lives in
+`qa/lua/tests/test_crt_ale_animation.lua` and runtime check
+`issue367_ale_one_second_drink`; that historical registered name stays stable
+even though its assertion now targets 0.75 seconds.
+
 ## Foot Knight #619 authority and compatibility
 
 - The custom buff templates are process-local and deliberately absent from `NetworkLookup`. On the host, the runtime reconciles every human and bot unit because damage and bot behavior are authoritative there. On clients, it reconciles only the local player for movement and combat prediction. No vanilla RPC carries a custom identifier.

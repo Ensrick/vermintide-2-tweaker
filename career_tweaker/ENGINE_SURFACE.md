@@ -127,10 +127,10 @@ Its two-second stacks set `refresh_durations=false`, so every kill retains its o
 expiry rather than refreshing the full stack group. #367 is another reversible
 table mutation: the Ranger ale's stock action authors `total_time=1.9` [src:
 `scripts/settings/equipment/weapon_templates/bardin_survival_ale.lua:5-23`], and
-crt sets only `anim_time_scale=1.9`. `WeaponUnitExtension` divides both action
+crt sets only `anim_time_scale=1.9/0.75`. `WeaponUnitExtension` divides both action
 completion and 1P/3P animation playback by that scale [src:
-`scripts/unit_extensions/weapons/weapon_unit_extension.lua:486-489,577-590`],
-so neither presentation nor the `ActionOneTimeConsumable.finish` buff grant can
+`scripts/unit_extensions/weapons/weapon_unit_extension.lua:486-489,580-600`],
+producing a 0.75-second action so neither presentation nor the `ActionOneTimeConsumable.finish` buff grant can
 lead the other. The balance restore path returns the prior field or exact nil.
 
 ### Networked buffs + peer parity (owner: `docs/engine/03`; project `project_vt2_cross_peer_wire_safety`)

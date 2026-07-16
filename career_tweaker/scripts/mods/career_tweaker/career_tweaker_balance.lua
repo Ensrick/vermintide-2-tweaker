@@ -471,10 +471,11 @@ local BALANCE_MODS = {
     },
     -- Ranger Veteran ale (#367): WeaponUnitExtension divides both action
     -- completion and the 1P/3P animation by `anim_time_scale`
-    -- (weapon_unit_extension.lua:486-489, 577-590). The stock action has
-    -- total_time=1.9 and no authored scale, so 1.9 compresses the complete
-    -- drink to exactly one second without letting gameplay finish ahead of the
-    -- visible animation. The standard buff/RPC path remains untouched.
+    -- (weapon_unit_extension.lua:486-489, 580-600). The stock action has
+    -- total_time=1.9 and no authored scale. Deriving the scale as stock / 0.75
+    -- makes the complete drink last 0.75 seconds without letting gameplay
+    -- finish ahead of the visible animation. The standard buff/RPC path is
+    -- untouched.
     rework_dr_ranger_ale_one_second_drink = {
         character = "bardin",
         career = "dr_ranger",
@@ -483,10 +484,15 @@ local BALANCE_MODS = {
             local template = WeaponTemplates and WeaponTemplates.bardin_survival_ale
             local action = template and template.actions and template.actions.action_one
                 and template.actions.action_one.default
-            if not action or tonumber(action.total_time) ~= 1.9 then return end
+            local stock_duration = action and tonumber(action.total_time)
+            local target_duration = 0.75
+            if stock_duration ~= 1.9 then return end
             saved.ale_anim_time_scale_had_value = action.anim_time_scale ~= nil
             saved.ale_anim_time_scale_original = action.anim_time_scale
-            action.anim_time_scale = 1.9
+            action.anim_time_scale = stock_duration / target_duration
+            pcall(printf,
+                "[crt:367] applied Ranger ale speed: stock=%.2fs target=%.2fs anim_time_scale=%.6f",
+                stock_duration, target_duration, action.anim_time_scale)
         end,
         custom_restore = function(saved)
             local template = WeaponTemplates and WeaponTemplates.bardin_survival_ale
