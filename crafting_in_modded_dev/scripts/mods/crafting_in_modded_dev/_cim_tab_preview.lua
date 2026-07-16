@@ -37,12 +37,31 @@ local function _apply_player_weapon_icons(self)
                         return UIAtlasHelper and UIAtlasHelper.has_texture_by_name
                             and UIAtlasHelper.has_texture_by_name(texture) == true
                     end)
+                local cosmetic_descriptor
+                local cosmetics = get_mod("cosmetics_tweaker")
+                local provider = cosmetics and cosmetics._cos
+                    and cosmetics._cos.resolve_peer_item_presentation
+                if type(provider) == "function" then
+                    local base_icon, base_display_name = UIUtils.get_ui_information_from_item(item)
+                    local ok, descriptor = pcall(provider, player_data.peer_id,
+                        slot_name, item, base_icon, base_display_name)
+                    if ok then cosmetic_descriptor = descriptor end
+                end
+                local resolved_icon, resolved_name =
+                    Core.choose_presentation(icon, cosmetic_descriptor)
+                item._cos_presentation_display_name = resolved_name
                 if authoritative then
                     item.skin = skin
-                    if icon then
-                        content[slot_name] = icon
+                    if resolved_icon then
+                        content[slot_name] = resolved_icon
                         corrected = corrected + 1
                     end
+                elseif cosmetic_descriptor and resolved_icon then
+                    -- Component state can be authoritative even when the
+                    -- primary skin has no local icon. Its own icon was already
+                    -- renderer-gated by Cosmetics; never copy a wire resource.
+                    content[slot_name] = resolved_icon
+                    corrected = corrected + 1
                 elseif (reason == "skin_icon_unavailable"
                         or reason == "skin_icon_resource_unavailable") and skin
                         and not reported_unknown_skins[skin] then

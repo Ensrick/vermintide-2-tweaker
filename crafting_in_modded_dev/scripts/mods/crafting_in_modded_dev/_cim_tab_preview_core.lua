@@ -46,4 +46,15 @@ Core.resolve_rarity = function(wire_rarity, cim_metadata_capable, is_modded)
     return wire_rarity
 end
 
+-- A locally resolved Cosmetics descriptor is authoritative for presentation
+-- only. It is produced from Cosmetics' parity-gated peer cache and must win
+-- over the primary-skin icon above; nil keeps the existing safe result.
+Core.choose_presentation = function(primary_icon, cosmetic_descriptor)
+    if type(cosmetic_descriptor) ~= "table" then
+        return primary_icon, nil, "primary_skin"
+    end
+    return cosmetic_descriptor.icon or primary_icon,
+        cosmetic_descriptor.display_name, "cosmetics_components"
+end
+
 return Core

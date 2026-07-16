@@ -124,6 +124,32 @@ function M.compose(primary_name, secondary_name)
     return primary_name .. " + " .. secondary_name
 end
 
+function M.presentation_key(primary_name, secondary_name)
+    local combined = M.compose(primary_name, secondary_name)
+    if not combined then return nil end
+    return "cos_component_presentation_" .. _stable_hash(combined), combined
+end
+
+function M.match_option(record, options)
+    if type(record) ~= "table" then return nil end
+    for _, option in ipairs(options or {}) do
+        if type(option) == "table" and not option.follow_main then
+            if record.armoury_key and option.la_armoury_key == record.armoury_key then
+                return option
+            end
+            if record.unit_path and (option.unit == record.unit_path
+                    or option.intended_unit == record.unit_path) then
+                return option
+            end
+            if record.vanilla_key and (option.skin_key == record.vanilla_key
+                    or option.vanilla_skin == record.vanilla_key) then
+                return option
+            end
+        end
+    end
+    return nil
+end
+
 -- Deterministically reuse an existing illusion name for an identical primary
 -- model.  `records` entries are { key, primary_unit, name }; the key is used
 -- only to make selection stable when several illusions share the same mesh.
@@ -135,7 +161,16 @@ function M.primary_name_for_unit(primary_unit, records)
             matches[#matches + 1] = record
         end
     end
-    table.sort(matches, function(a, b) return tostring(a.key) < tostring(b.key) end)
+    table.sort(matches, function(a, b)
+        if (a.is_pair == true) ~= (b.is_pair == true) then
+            -- The combined item name must reuse the independently named
+            -- primary weapon when the same right-hand mesh has a standalone
+            -- illusion.  A pair's display name already contains its shield or
+            -- offhand and would otherwise produce "Pair + Component".
+            return a.is_pair ~= true
+        end
+        return tostring(a.key) < tostring(b.key)
+    end)
     return matches[1] and _trim(matches[1].name) or nil
 end
 

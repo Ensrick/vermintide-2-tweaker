@@ -49,6 +49,7 @@ local CUSTOM_HATS = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_custom_hats"
 local GK_SET = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_grail_knight_set")
 local CWV_FAMILY_CONTRACT = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cwv_family_contract")
 local OFFHAND_NAMES = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_offhand_names")
+local ITEM_PRESENTATION = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_item_presentation")
 local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
 local GLOW_BADGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_badge_policy")
@@ -384,6 +385,7 @@ mod._cos.U = U
 mod._cos.LA_BRIDGE = LA_BRIDGE
 mod._cos.encarmine_item_localization = CUSTOM_HATS.ITEM_LOCALIZATION
 mod._cos.gk_set_item_localization = GK_SET.ITEM_LOCALIZATION
+mod._cos.presentation_localization = mod._cos.presentation_localization or {}
 mod._cos.flush_log = _flush_log
 mod._cos.skin_requires_unowned_dlc = _skin_requires_unowned_dlc
 -- custom_skin_keys: the illusions module fills it at registration; the wire-safety
@@ -2893,6 +2895,103 @@ mod._la_restore_offhand_selections = function()
         n, miss) end
 end
 
+local function _cos_ui_icon_available(icon)
+    return type(icon) == "string" and icon ~= ""
+        and UIAtlasHelper and UIAtlasHelper.has_texture_by_name
+        and UIAtlasHelper.has_texture_by_name(icon) == true
+end
+
+local function _cos_localized_name(key)
+    if type(key) ~= "string" or key == "" then return nil end
+    local L = rawget(_G, "Localize")
+    if type(L) ~= "function" then return key end
+    local ok, value = pcall(L, key)
+    if ok and type(value) == "string" and value ~= ""
+            and value ~= key and value ~= "<" .. key .. ">" then
+        return value
+    end
+    return key
+end
+
+local function _cos_presentation_ownership(item_type)
+    if mod._independent_dual_item_types
+            and mod._independent_dual_item_types[item_type] then return "dual" end
+    if _SHIELD_ICON_OWNER_ITEM_TYPES[item_type] then return "shield" end
+    return nil
+end
+
+local function _cos_option_for_record(item_type, record)
+    if type(record) ~= "table" then return nil end
+    if record.name and (record.unit or record.intended_unit or record.la_armoury_key) then
+        return record
+    end
+    local pools = mod._ensure_independent_dual_pool
+        and mod._ensure_independent_dual_pool(item_type) or _offhand_options[item_type]
+    local option = OFFHAND_NAMES.match_option(record,
+        pools and pools.left_hand_unit)
+    if not option then return nil end
+    if not option.inventory_icon and (option.unit or option.intended_unit) then
+        local recovered = _inventory_icon_for_offhand_unit(
+            option.unit or option.intended_unit, nil)
+        if recovered then
+            local copy = {}
+            for key, value in pairs(option) do copy[key] = value end
+            copy.inventory_icon = recovered
+            option = copy
+        end
+    end
+    return option
+end
+
+local function _cos_primary_component_name(item, display_name, ownership, saved_illusion)
+    local fallback = _cos_localized_name(display_name)
+    if ownership ~= "shield" then return fallback end
+    local skin_key = saved_illusion or (item and item.skin)
+    local skin = skin_key and WeaponSkins and WeaponSkins.skins
+        and WeaponSkins.skins[skin_key]
+    local data = type(skin) == "table" and (skin.data or skin) or nil
+    local primary_unit = data and data.right_hand_unit
+    if not primary_unit then return fallback end
+    local records = {}
+    for key, candidate in pairs(WeaponSkins.skins or {}) do
+        local cdata = type(candidate) == "table" and (candidate.data or candidate) or nil
+        if cdata and cdata.right_hand_unit == primary_unit and cdata.display_name then
+            records[#records + 1] = {
+                key = type(key) == "string" and key or candidate.name,
+                primary_unit = primary_unit,
+                name = _cos_localized_name(cdata.display_name),
+                is_pair = cdata.left_hand_unit ~= nil,
+            }
+        end
+    end
+    return OFFHAND_NAMES.primary_name_for_unit(primary_unit, records) or fallback
+end
+
+local function _cos_publish_presentation_name(primary_name, secondary_name)
+    local key, combined = OFFHAND_NAMES.presentation_key(primary_name, secondary_name)
+    if not key then return nil end
+    mod._cos.presentation_localization[key] = combined
+    return key
+end
+
+local function _cos_resolve_presentation(item, base_icon, display_name,
+        ownership, record, saved_illusion)
+    local option = _cos_option_for_record(item and item.data and item.data.item_type, record)
+    if not option then return base_icon, display_name, false end
+    local primary = _cos_primary_component_name(item, display_name, ownership, saved_illusion)
+    local descriptor = ITEM_PRESENTATION.resolve({
+        base_icon = base_icon,
+        primary_name = primary,
+        secondary_option = option,
+        ownership = ownership,
+        local_resource_available = _cos_ui_icon_available,
+    })
+    if not descriptor.changed then return base_icon, display_name, false end
+    local name_key = _cos_publish_presentation_name(
+        descriptor.primary_name, descriptor.secondary_name)
+    return descriptor.icon, name_key or display_name, true
+end
+
 -- #376 exact-instance icon seam. Vanilla passes the full backend item into
 -- UIUtils and resolves the first return from item.skin / WeaponSkins
 -- (ui_utils.lua:219-260). LA's real authored icon lives instead at
@@ -2902,6 +3001,9 @@ end
 if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
     mod:hook(UIUtils, "get_ui_information_from_item", function(func, item)
         local inventory_icon, display_name, description, store_icon = func(item)
+        if item and item._cos_presentation_display_name then
+            display_name = item._cos_presentation_display_name
+        end
         local backend_id = item and (item.backend_id or item.ItemInstanceId)
         if backend_id and mod._la_instance_policy and LA_PERSIST then
             local la = get_mod("Loremasters-Armoury")
@@ -2940,6 +3042,13 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
                 la and la.SKIN_LIST,
                 ownership)
             if icon then inventory_icon = icon end
+            _migrate_legacy_offhand_selection(backend_id)
+            local live_hands = _offhand_selection[backend_id]
+            local record = live_hands and live_hands.left_hand_unit
+                or (saved_offhands and saved_offhands.left_hand_unit)
+            inventory_icon, display_name = _cos_resolve_presentation(item,
+                inventory_icon, display_name, ownership, record,
+                LA_PERSIST.get_saved_illusion(backend_id))
         end
         return inventory_icon, display_name, description, store_icon
     end)
@@ -8001,6 +8110,52 @@ mod:network_register("cos_la_apply", function(sender_peer_id, schema_version, pa
         end
     end
 end)
+
+-- #641/#629 contextual Hold-Tab adapter. Remote loadout snapshots deliberately
+-- have no backend_id, so exact-instance persistence cannot identify their
+-- independently selected hand. Reuse the existing parity-gated peer caches;
+-- never add component names or resource paths to a vanilla/network payload.
+mod._cos.resolve_peer_item_presentation = function(wearer_peer, ui_slot_name,
+        item, base_icon, base_display_name)
+    local item_data = item and item.data
+    local item_type = item_data and item_data.item_type
+    local ownership = _cos_presentation_ownership(item_type)
+    if not (wearer_peer and ownership) then return nil end
+
+    local candidate_keys, seen = {}, {}
+    local function add(value)
+        if type(value) == "string" and value ~= "" and not seen[value] then
+            seen[value] = true
+            candidate_keys[#candidate_keys + 1] = value
+        end
+    end
+    add(ui_slot_name)
+    add(item_data and item_data.template)
+    add(item_data and item_data.name)
+    add(item_data and item_data.key)
+    add(item_type)
+    add(item and item.name)
+    add(item and item.key)
+
+    local record = ITEM_PRESENTATION.find_peer_record(wearer_peer,
+        candidate_keys, _la_equips_by_peer, mod._offhand_mesh_by_peer)
+    if not record then return nil end
+
+    if base_icon == nil or base_display_name == nil then
+        local icon, name = UIUtils.get_ui_information_from_item(item)
+        base_icon = base_icon or icon
+        base_display_name = base_display_name or name
+    end
+    local icon, display_name, changed = _cos_resolve_presentation(item,
+        base_icon, base_display_name, ownership, record, nil)
+    if not changed then return nil end
+    return {
+        icon = icon,
+        display_name = display_name,
+        ownership = ownership,
+        source = "peer_cache",
+    }
+end
 
 -- ============================================================
 -- v0.9.0-dev: per-peer GLOW broadcast channel.

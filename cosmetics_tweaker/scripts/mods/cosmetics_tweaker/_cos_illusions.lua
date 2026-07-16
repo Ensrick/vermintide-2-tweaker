@@ -328,6 +328,9 @@ mod:hook(_G, "Localize", function(func, key, ...)
     -- the illusion wins. Today there's no overlap (ct_* vs *_LA_*).
     local custom = _custom_loc[key]
     if custom then return custom end
+    local presentation = COS.presentation_localization
+        and COS.presentation_localization[key]
+    if presentation then return presentation end
     local la_loc = LA_BRIDGE.localization[key]
     if la_loc then return la_loc end
     return func(key, ...)

@@ -45,4 +45,19 @@ return function(H, repo_root)
         H.equal(icon, nil)
         H.equal(reason, "skin_icon_resource_unavailable")
     end)
+
+    H.test("CIM Tab does not clobber Cosmetics component presentation", function()
+        local icon, name, source = core.choose_presentation("primary_icon", {
+            icon = "shield_icon",
+            display_name = "combined_name_key",
+        })
+        H.equal(icon, "shield_icon")
+        H.equal(name, "combined_name_key")
+        H.equal(source, "cosmetics_components")
+
+        icon, name, source = core.choose_presentation("primary_icon", nil)
+        H.equal(icon, "primary_icon")
+        H.equal(name, nil)
+        H.equal(source, "primary_skin")
+    end)
 end

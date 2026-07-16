@@ -55,6 +55,25 @@ return function(H, repo_root)
         H.equal(policy.primary_name_for_unit("units/missing", records), nil)
         H.equal(policy.compose("Existing Primary Name", "Named Shield"),
             "Existing Primary Name + Named Shield")
+        records[1].is_pair = false
+        records[2].is_pair = true
+        H.equal(policy.primary_name_for_unit("units/primary", records), "Second Name")
+        records[1].name = "Standalone Primary"
+        records[2].name = "Pair Name"
+        H.equal(policy.primary_name_for_unit("units/primary", records), "Standalone Primary")
+    end)
+
+    H.test("component records resolve by authored key, mesh, or source skin", function()
+        local options = {
+            { name = "Shield A", la_armoury_key = "la_a" },
+            { name = "Shield B", unit = "units/shield_b", skin_key = "skin_b" },
+        }
+        H.equal(policy.match_option({ armoury_key = "la_a" }, options), options[1])
+        H.equal(policy.match_option({ unit_path = "units/shield_b" }, options), options[2])
+        H.equal(policy.match_option({ vanilla_key = "skin_b" }, options), options[2])
+        local key, combined = policy.presentation_key("Sword", "Shield A")
+        H.truthy(key:find("cos_component_presentation_", 1, true) == 1)
+        H.equal(combined, "Sword + Shield A")
     end)
 
     H.test("decorated weapon and shield records remain presentation-only", function()
