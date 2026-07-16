@@ -129,6 +129,8 @@ and loadout collection borrow the verified runed Empire sword package lease
 while the WOC master bundle owns the actual unit residency.
 
 The canonical presentation transform is applied once per spawned unit through
-the synchronized `_lib_weapon_appearance.lua` consumer: Euler XYZ
-`{-90, -90, -90}` degrees and offset `{0, 0, -0.3}`. Do not duplicate these
-values in individual preview hooks or drive them per frame.
+the synchronized `_lib_weapon_appearance.lua` consumer: uniform XYZ scale
+`{0.9, 0.9, 0.9}`, Euler XYZ rotation `{-90, -90, -90}` degrees, and offset
+`{0, 0, -0.3}`. Both the explicit first- and third-person units consume that
+same policy. Do not duplicate these values in individual preview hooks or drive
+them per frame.

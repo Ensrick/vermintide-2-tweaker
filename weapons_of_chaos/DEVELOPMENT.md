@@ -239,6 +239,8 @@ verbatim; only the mesh source differs.
   will almost certainly need tuning (enemy meshes are sized and origin-set for
   enemy skeletons). CWV's `_type_transforms` / scale+grip-offset machinery is
   the tool; apply on the **3P units only** (`feedback_cross_char_transforms_3p_only`).
+  The authored Blightreaper is an explicit exception: its reviewed canonical
+  transform applies to its separate 1P and 3P units as one presentation policy.
 
 - **Lua module packaging.** Every literal
   `mod:dofile("scripts/mods/weapons_of_chaos/<module>")` target must also appear
@@ -329,6 +331,6 @@ spawned WOC unit, then replaces every texture and restores the trophy's exact
 gold/intensity/pulse values. Missing resources fail closed before Stingray C
 calls; there is no polling or RPC. Full hashes, bindings, source citations, and
 the rejected compiler paths live in `tools/BLIGHTREAPER_ASSET_PIPELINE.md`.
-The canonical held transform is Euler XYZ
-`{-90, -90, -90}` plus `{0, 0, -0.3}`, applied at spawn through the shared
-appearance primitive on gameplay and preview consumers.
+The canonical held transform is uniform XYZ scale `{0.9, 0.9, 0.9}`, Euler XYZ
+rotation `{-90, -90, -90}`, and offset `{0, 0, -0.3}`, applied at spawn through
+the shared appearance primitive on both 1P/3P gameplay and preview consumers.

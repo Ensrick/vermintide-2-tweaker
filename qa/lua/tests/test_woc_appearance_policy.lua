@@ -53,7 +53,10 @@ return function(H, repo_root)
 		H.truthy(source:find('"textures/woc_blightreaper/blightreaper_packed"', 1, true))
 	end)
 
-	H.test("WOC #613 pins canonical transform", function()
+	H.test("WOC #613 pins canonical all-perspective transform", function()
+		H.equal(policy.TRANSFORM.scale[1], 0.9)
+		H.equal(policy.TRANSFORM.scale[2], 0.9)
+		H.equal(policy.TRANSFORM.scale[3], 0.9)
 		H.equal(policy.TRANSFORM.rotation[1], -90)
 		H.equal(policy.TRANSFORM.rotation[2], -90)
 		H.equal(policy.TRANSFORM.rotation[3], -90)
@@ -77,5 +80,9 @@ return function(H, repo_root)
 		H.truthy(preview_source:find('mod:hook("HeroPreviewer", "_spawn_item"', 1, true))
 		H.truthy(preview_source:find('mod:hook("MenuWorldPreviewer", "_spawn_item"', 1, true))
 		H.truthy(preview_source:find('mod:hook("LootItemUnitPreviewer", "spawn_units"', 1, true))
+		H.truthy(preview_source:find(
+			'local perspective = name == policy.UNIT_3P and "3p" or "1p"', 1, true))
+		H.truthy(preview_source:find(
+			'appearance.apply(unit, policy.TRANSFORM, perspective, surface)', 1, true))
 	end)
 end

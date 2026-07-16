@@ -21,6 +21,7 @@ M.PULSE_VARIABLES = {
 	{ name = "pulse", value = { 1, 0.5 } },
 }
 M.TRANSFORM = {
+	scale = { 0.9, 0.9, 0.9 },
 	offset = { 0, 0, -0.3 },
 	rotation = { -90, -90, -90 },
 }

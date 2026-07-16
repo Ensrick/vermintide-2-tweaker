@@ -14,7 +14,7 @@ vanilla behavior, and links out. Decompile paths are relative to
 `WOC` lets player characters wield ENEMY weapons and named keep-trophy artifacts
 via the duplicate-item approach modeled on `character_weapon_variants`: it clones
 a player base weapon template into a new MoreItemsLibrary item and swaps the held
-mesh to a different `.unit`. As of v0.1.17-dev there is ONE item - the Blightreaper
+mesh to a different `.unit`. As of v0.1.18-dev there is ONE item - the Blightreaper
 (private 75%-speed Kerillian Sword actions, all careers), rendered with the authored Blightreaper mesh
 because the intended keep-trophy prop is not runtime-loadable (see dead ends). Its
 engine contact includes display/registration/wire safety plus the four canonical
@@ -71,7 +71,7 @@ this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
 
 | Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
 |---|---|---|---|
-| `GearUtils.spawn_inventory_unit` [hook,tbl] | Spawns explicit 3P and optional 1P units, links them, and returns `(weapon_3p, ammo_3p, weapon_1p, ammo_1p)` [src: `scripts/unit_extensions/default_player_unit/inventory/gear_utils.lua:155-255`] | Re-key positively identified WOC husks, then apply the same canonical transform once to returned owner/bot/husk units | Capture and return all four values; never bail from vanilla. Same-WOC identity is bounded to loadout-sync edges, not per frame. |
+| `GearUtils.spawn_inventory_unit` [hook,tbl] | Spawns explicit 3P and optional 1P units, links them, and returns `(weapon_3p, ammo_3p, weapon_1p, ammo_1p)` [src: `scripts/unit_extensions/default_player_unit/inventory/gear_utils.lua:155-255`] | Re-key positively identified WOC husks, then apply the same canonical `0.9` XYZ scale, `{-90,-90,-90}` rotation, and `{0,0,-0.3}` offset once to returned 1P and 3P owner/bot/husk units | Capture and return all four values; never bail from vanilla. Same-WOC identity is bounded to loadout-sync edges, not per frame. |
 | `WeaponUtils.get_weapon_packages` [hook,tbl] | Collects weapon unit paths for package preparation | Replace only WOC unit package identities with resident vanilla lease aliases | Spawn data remains WOC-owned; numeric reverse network lookup remains vanilla. |
 | `HeroPreviewer._load_packages` / `MenuWorldPreviewer._load_packages` [hook] | Loads character-preview equipment packages | Borrow the vanilla lease and fall back only when `Application.can_get("unit", custom)` fails | Both classes are required because VT2 copy-inherits methods before mods load. |
 | `HeroPreviewer._spawn_item` / `MenuWorldPreviewer._spawn_item` [hook] | Spawns and links inventory, lobby, and score/end-screen equipment | Apply the canonical transform to the exact spawned WOC unit | Weak per-unit guard bounds duplicate traversal; no per-frame writes. |
@@ -171,7 +171,9 @@ in-file header - do not re-discover these.
   skeleton [src: `scripts/settings/ai_inventory_templates.lua`], not the player
   weapon attach system. The cloned player `template` supplies the player-side
   attach, but grip offset / scale / rotation almost always need tuning, applied on
-  3P units only (memory `feedback_cross_char_transforms_3p_only`).
+  3P units only (memory `feedback_cross_char_transforms_3p_only`). The authored
+  Blightreaper is an explicit exception: its reviewed canonical transform is
+  shared by its separate 1P and 3P units.
 - **A duplicate-item mod that copies the item layer but not the wire layer ships a
   latent non-peer CTD.** `WOC` reproduced CWV's `ItemMasterList` / MIL / display
   machinery yet omitted CWV's `sync_loadout_slot` net-safe hook; the result was

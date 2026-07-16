@@ -1,5 +1,30 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.18-dev (2026-07-16) - #613 Blightreaper presentation scale [verify-fix-coop]
+
+- Reduced the authored Blightreaper model uniformly to `0.9` scale on X, Y,
+  and Z while preserving its existing `{-90, -90, -90}` rotation and
+  `{0, 0, -0.3}` offset.
+- Kept the transform in the canonical appearance policy. The same exact scale,
+  rotation, and offset therefore apply to first person, owner third person,
+  bots, same-WOC remote husks, inventory/lobby/score character previews, and
+  item/crafting/illusion/Athanor previews.
+- Preserved the forward-only vanilla package aliases and vanilla sword fallback
+  for peers without WOC; no custom transform or resource identity crosses to
+  those peers.
+- Extended offline and live regression contracts to lock the uniform scale,
+  the unchanged rotation/offset, and both explicit 1P/3P consumers.
+
+### Verification
+
+Confirm `[WOC] v0.1.18-dev loaded`. Equip Blightreaper and verify it is about
+10% smaller in first person, owner third person, and the inventory character
+preview while retaining the same grip position. With a second WOC player,
+verify the same scale and `Z = -0.3` placement on the remote husk. Check the
+score/team and item/Athanor previews, then run `/woc_regression_test` and require
+`issue613_blightreaper_appearance_contract` PASS with zero failures. A peer
+without WOC must still see only the stable vanilla-sword fallback.
+
 ## 0.1.17-dev (2026-07-16) - #632 Cursed Blightreaper combat identity [verify-fix-coop]
 
 - Replaced the inherited Kruber Sword behavior with a private deep clone of

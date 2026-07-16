@@ -5,7 +5,10 @@ return function(H, repo_root)
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse.lua")
 
 	local function fixture(missing)
-		local calls = { materials = {}, textures = {}, variables = {}, transforms = 0 }
+		local calls = {
+			materials = {}, textures = {}, variables = {}, transforms = 0,
+			transform_specs = {},
+		}
 		local unit = {}
 		local api = {
 			unit = {
@@ -32,6 +35,7 @@ return function(H, repo_root)
 		local transform = {
 			apply = function(value, spec)
 				calls.transforms = calls.transforms + 1
+				calls.transform_specs[#calls.transform_specs + 1] = spec
 				return value == unit and spec == policy.TRANSFORM
 			end,
 		}
@@ -72,6 +76,20 @@ return function(H, repo_root)
 		H.equal(#calls.materials, 1)
 		H.equal(#calls.textures, 6)
 		H.equal(calls.transforms, 1)
+	end)
+
+	H.test("WOC #613 sends the exact 0.9 transform through 1P and 3P pulse paths", function()
+		for _, perspective in ipairs({ "1p", "3p" }) do
+			local runtime, unit, calls = fixture()
+			local ok, reason = runtime.apply(
+				unit, policy.TRANSFORM, perspective, "perspective-contract")
+			H.truthy(ok, perspective)
+			H.equal(reason, "applied")
+			H.equal(calls.transforms, 1)
+			H.equal(calls.transform_specs[1], policy.TRANSFORM)
+			H.deep_equal(calls.transform_specs[1].scale, { 0.9, 0.9, 0.9 })
+			H.deep_equal(calls.transform_specs[1].offset, { 0, 0, -0.3 })
+		end
 	end)
 
 	H.test("WOC #613 fails closed before C material writes", function()

@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.17-dev"
+local MOD_VERSION = "0.1.18-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -1001,11 +1001,13 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 			tostring(_appearance_alias_count))
 	end
 	local transform = _appearance.TRANSFORM
-	if not transform or transform.rotation[1] ~= -90
+	if not transform or transform.scale[1] ~= 0.9
+			or transform.scale[2] ~= 0.9 or transform.scale[3] ~= 0.9
+			or transform.rotation[1] ~= -90
 			or transform.rotation[2] ~= -90 or transform.rotation[3] ~= -90
 			or transform.offset[1] ~= 0 or transform.offset[2] ~= 0
 			or transform.offset[3] ~= -0.3 then
-		return "canonical rotation/offset contract drifted"
+		return "canonical scale/rotation/offset contract drifted"
 	end
 	local ok_1p, resident_1p = pcall(Application.can_get, "unit", HELD_UNIT)
 	local ok_3p, resident_3p = pcall(Application.can_get, "unit", _appearance.UNIT_3P)
