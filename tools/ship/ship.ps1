@@ -93,6 +93,138 @@ function Invoke-NativeProbe {
     return $LASTEXITCODE
 }
 
+function Invoke-NativeCapture {
+    param([scriptblock]$Command)
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $lines = @(& $Command 2>&1 | ForEach-Object { $_.ToString() })
+        $code = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $prev
+    }
+    return [pscustomobject]@{ ExitCode = $code; Lines = $lines }
+}
+
+# Run one action with VMBLauncher's machine-global ProjectRoot bound to the
+# repository that owns this copy of ship.ps1 (issue #647). Multiple git
+# worktrees share %APPDATA%\VMBLauncher\settings.json; trusting its last GUI
+# value let a ship launched from worktree A build stale source from worktree B.
+# Preserve the file byte-for-byte and restore it in finally on both success and
+# failure. Callers validate the bound identity before invoking `all`.
+function Invoke-WithBoundLauncherProjectRoot {
+    param(
+        [string]$SettingsPath,
+        [string]$ProjectRoot,
+        [scriptblock]$Action,
+        [string]$MutexName = 'Local\Ensrick.VT2Tweaker.VMBLauncher.ProjectRoot'
+    )
+
+    $mutex = New-Object System.Threading.Mutex($false, $MutexName)
+    $hasMutex = $false
+    try {
+        try { $hasMutex = $mutex.WaitOne([System.TimeSpan]::FromSeconds(30)) }
+        catch [System.Threading.AbandonedMutexException] { $hasMutex = $true }
+        if (-not $hasMutex) {
+            throw "Another ship owns the VMBLauncher ProjectRoot binding lock. Wait for it to finish, then retry."
+        }
+
+        if (-not (Test-Path -LiteralPath $SettingsPath)) {
+            throw "VMBLauncher settings not found: $SettingsPath"
+        }
+
+        $originalBytes = [System.IO.File]::ReadAllBytes($SettingsPath)
+        $restoreFailure = $null
+        try {
+            $originalText = [System.Text.Encoding]::UTF8.GetString($originalBytes)
+            try { $settings = $originalText | ConvertFrom-Json }
+            catch { throw "VMBLauncher settings are not valid JSON: $SettingsPath ($($_.Exception.Message))" }
+
+            if ($null -eq $settings) {
+                throw "VMBLauncher settings decoded to null: $SettingsPath"
+            }
+            if ($settings.PSObject.Properties.Name -contains 'ProjectRoot') {
+                $settings.ProjectRoot = $ProjectRoot
+            }
+            else {
+                $settings | Add-Member -NotePropertyName ProjectRoot -NotePropertyValue $ProjectRoot
+            }
+
+            $boundText = $settings | ConvertTo-Json -Depth 20
+            $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+            [System.IO.File]::WriteAllText($SettingsPath, $boundText, $utf8NoBom)
+
+            $roundTrip = ([System.IO.File]::ReadAllText($SettingsPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json).ProjectRoot
+            $expected = [System.IO.Path]::GetFullPath($ProjectRoot).TrimEnd('\', '/')
+            $actual = if ($roundTrip) { [System.IO.Path]::GetFullPath([string]$roundTrip).TrimEnd('\', '/') } else { '' }
+            if (-not [string]::Equals($actual, $expected, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "VMBLauncher ProjectRoot binding failed: expected '$expected', read back '$actual'."
+            }
+
+            & $Action
+        }
+        finally {
+            try {
+                [System.IO.File]::WriteAllBytes($SettingsPath, $originalBytes)
+                $restored = [System.IO.File]::ReadAllBytes($SettingsPath)
+                if ($restored.Length -ne $originalBytes.Length) {
+                    throw "restored byte length $($restored.Length) != original $($originalBytes.Length)"
+                }
+                for ($i = 0; $i -lt $originalBytes.Length; $i++) {
+                    if ($restored[$i] -ne $originalBytes[$i]) {
+                        throw "restored byte mismatch at offset $i"
+                    }
+                }
+            }
+            catch {
+                $restoreFailure = $_.Exception.Message
+            }
+            if ($restoreFailure) {
+                throw "CRITICAL: could not restore VMBLauncher settings exactly after temporary ProjectRoot binding: $restoreFailure"
+            }
+        }
+    }
+    finally {
+        if ($hasMutex) {
+            try { $mutex.ReleaseMutex() } catch { }
+        }
+        $mutex.Dispose()
+    }
+}
+
+# Pure identity comparison used by the live preflight and offline fixtures.
+# Path, version, source commit, and Workshop id must all describe the invoking
+# checkout before VMBLauncher is allowed to build/deploy/upload (issue #647).
+function Test-ShipIdentityValues {
+    param(
+        [string]$ExpectedModDir,
+        [string]$ResolvedModDir,
+        [string]$ExpectedVersion,
+        [string]$ResolvedVersion,
+        [string]$ExpectedCommit,
+        [string]$ResolvedCommit,
+        [string]$ExpectedPublishedId,
+        [string]$ResolvedPublishedId
+    )
+
+    $expectedPath = [System.IO.Path]::GetFullPath($ExpectedModDir).TrimEnd('\', '/')
+    $resolvedPath = [System.IO.Path]::GetFullPath($ResolvedModDir).TrimEnd('\', '/')
+    if (-not [string]::Equals($expectedPath, $resolvedPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return @{ Ok = $false; Message = "root mismatch: invoking '$expectedPath', launcher resolved '$resolvedPath'" }
+    }
+    if ($ExpectedVersion -ne $ResolvedVersion) {
+        return @{ Ok = $false; Message = "version mismatch: invoking '$ExpectedVersion', launcher resolved '$ResolvedVersion'" }
+    }
+    if ($ExpectedCommit -ne $ResolvedCommit) {
+        return @{ Ok = $false; Message = "source mismatch: invoking commit '$ExpectedCommit', launcher resolved '$ResolvedCommit'" }
+    }
+    if ($ExpectedPublishedId -ne $ResolvedPublishedId) {
+        return @{ Ok = $false; Message = "published_id mismatch: invoking '$ExpectedPublishedId', launcher resolved '$ResolvedPublishedId'" }
+    }
+    return @{ Ok = $true; Message = 'bound identity matches invoking checkout' }
+}
+
 # Compare one built artifact with its deployed copy (issue #646). Steam may
 # rewrite the textual VMB descriptor from LF to CRLF after deployment. That is
 # representation-equivalent, but every other byte remains significant. Normalize
@@ -355,6 +487,80 @@ function Invoke-ShipSelfTest {
     Assert ($pubTxt -match '(?m)^\s*\[string\[\]\]\$Mods\b') "publish-release.ps1 declares [string[]]`$Mods (issues #436/#493)"
     Assert (-not ($pubTxt -cmatch '(?m)^\s*\$mods\s*=')) "publish-release.ps1 never assigns lowercase `$mods (param-stomp guard, 2026-07-13)"
 
+    # Issue #647: multiple worktrees share one VMBLauncher settings file. The
+    # ship wrapper must bind ProjectRoot only for the launcher window, restore
+    # the original bytes on success/failure, and reject any identity mismatch.
+    $bindingDir = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-ship-647-" + [guid]::NewGuid().ToString('N'))
+    [System.IO.Directory]::CreateDirectory($bindingDir) | Out-Null
+    try {
+        $settingsPath = Join-Path $bindingDir 'settings.json'
+        $mutexProbePath = Join-Path $bindingDir 'mutex-probe.ps1'
+        $testMutexName = 'Local\Ensrick.VT2Tweaker.ShipSelfTest.' + [guid]::NewGuid().ToString('N')
+        $originalSettings = "{`r`n  `"ProjectRoot`": `"C:\\old-root`",`r`n  `"Sentinel`": `"preserve exactly`"`r`n}`r`n"
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($settingsPath, $originalSettings, $utf8NoBom)
+        $mutexProbeSource = @'
+param([string]$Name, [string]$Expected)
+$m = New-Object System.Threading.Mutex($false, $Name)
+$got = $false
+try {
+    try { $got = $m.WaitOne(0) }
+    catch [System.Threading.AbandonedMutexException] { $got = $true }
+    $state = if ($got) { 'free' } else { 'busy' }
+    if ($state -ne $Expected) { exit 2 }
+    exit 0
+}
+finally {
+    if ($got) { try { $m.ReleaseMutex() } catch { } }
+    $m.Dispose()
+}
+'@
+        [System.IO.File]::WriteAllText($mutexProbePath, $mutexProbeSource, $utf8NoBom)
+        $originalSettingsBytes = [System.IO.File]::ReadAllBytes($settingsPath)
+
+        $seenPath = Join-Path $bindingDir 'seen-root.txt'
+        Invoke-WithBoundLauncherProjectRoot -SettingsPath $settingsPath -ProjectRoot $bindingDir -MutexName $testMutexName -Action {
+            $seenBoundRoot = ([System.IO.File]::ReadAllText($settingsPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json).ProjectRoot
+            [System.IO.File]::WriteAllText($seenPath, [string]$seenBoundRoot, $utf8NoBom)
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $mutexProbePath -Name $testMutexName -Expected busy
+            if ($LASTEXITCODE -ne 0) { throw 'named ship mutex was not held during the bound action' }
+        }
+        $seenBoundRoot = [System.IO.File]::ReadAllText($seenPath, [System.Text.Encoding]::UTF8)
+        Assert ($seenBoundRoot -eq $bindingDir) "launcher action sees the invoking worktree root (issue #647)"
+        $afterSuccess = [System.IO.File]::ReadAllBytes($settingsPath)
+        Assert (($afterSuccess.Length -eq $originalSettingsBytes.Length) -and
+                (([System.BitConverter]::ToString($afterSuccess)) -eq ([System.BitConverter]::ToString($originalSettingsBytes)))) "global launcher settings restore byte-exactly after success"
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $mutexProbePath -Name $testMutexName -Expected free
+        Assert ($LASTEXITCODE -eq 0) "named ship mutex releases after successful action"
+
+        $threwExpected = $false
+        try {
+            Invoke-WithBoundLauncherProjectRoot -SettingsPath $settingsPath -ProjectRoot $bindingDir -MutexName $testMutexName -Action {
+                throw 'fixture action failure'
+            }
+        }
+        catch { $threwExpected = ($_.Exception.Message -match 'fixture action failure') }
+        Assert $threwExpected "bound launcher action propagates its failure"
+        $afterFailure = [System.IO.File]::ReadAllBytes($settingsPath)
+        Assert (($afterFailure.Length -eq $originalSettingsBytes.Length) -and
+                (([System.BitConverter]::ToString($afterFailure)) -eq ([System.BitConverter]::ToString($originalSettingsBytes)))) "global launcher settings restore byte-exactly after failure"
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $mutexProbePath -Name $testMutexName -Expected free
+        Assert ($LASTEXITCODE -eq 0) "named ship mutex releases after failed action"
+
+        $identity = Test-ShipIdentityValues 'C:\repo\mod' 'c:\repo\mod' '1.2.3-dev' '1.2.3-dev' 'abc123' 'abc123' '42' '42'
+        Assert $identity.Ok "matching root/version/source/id identity passes"
+        Assert (-not (Test-ShipIdentityValues 'C:\repo-a\mod' 'C:\repo-b\mod' '1.2.3-dev' '1.2.3-dev' 'abc123' 'abc123' '42' '42').Ok) "different worktree root aborts"
+        Assert (-not (Test-ShipIdentityValues 'C:\repo\mod' 'C:\repo\mod' '1.2.3-dev' '1.2.2-dev' 'abc123' 'abc123' '42' '42').Ok) "different MOD_VERSION aborts"
+        Assert (-not (Test-ShipIdentityValues 'C:\repo\mod' 'C:\repo\mod' '1.2.3-dev' '1.2.3-dev' 'abc123' 'def456' '42' '42').Ok) "different source commit aborts"
+        Assert (-not (Test-ShipIdentityValues 'C:\repo\mod' 'C:\repo\mod' '1.2.3-dev' '1.2.3-dev' 'abc123' 'abc123' '42' '43').Ok) "different published_id aborts"
+    }
+    finally {
+        if (Test-Path $bindingDir) {
+            Get-ChildItem -LiteralPath $bindingDir -File | ForEach-Object { Remove-Item -LiteralPath $_.FullName }
+            Remove-Item -LiteralPath $bindingDir
+        }
+    }
+
     # Issue #591: this is an ordering invariant, not merely a documentation
     # promise. Both offline gates must execute before the launcher can perform
     # its first build/deploy/upload action.
@@ -422,6 +628,12 @@ if (Test-Path $luaPath) {
     if ($luaTxt -match 'MOD_VERSION\s*=\s*"([^"]+)"') { $modVersion = $matches[1] }
     if ($luaTxt -match '\[(\w+):LOAD\]')              { $loadTag = $matches[1] }
 }
+
+$commitProbe = Invoke-NativeCapture { & git -C $repoRoot rev-parse HEAD }
+if ($commitProbe.ExitCode -ne 0 -or $commitProbe.Lines.Count -eq 0) {
+    Fail "Cannot resolve the invoking checkout's source commit at $repoRoot. Shipping requires a git worktree identity (issue #647)."
+}
+$sourceCommit = ([string]$commitProbe.Lines[-1]).Trim()
 
 # ---------------------------------------------------------------------------
 # Promotion red gate (issue #327): shipping one of the five STABLE split dirs
@@ -504,13 +716,62 @@ if ($NoRemote)    { $launcherArgs += '--no-remote' }
 
 Write-Host ""
 Write-Host "==> VMBLauncher $($launcherArgs -join ' ')" -ForegroundColor Cyan
-# Do NOT pipe the launcher's output through Select-Object/head -- that trips the
-# PowerShell broken-pipe quirk that reports $LASTEXITCODE = -1 on a clean exit
-# (see tools/vmb-launcher/CLAUDE.md). Let it stream straight to the console.
-& $launcher @launcherArgs
-$launcherExit = $LASTEXITCODE
-if ($launcherExit -ne 0) {
-    Fail "VMBLauncher 'all $Mod' exited $launcherExit (build/deploy/upload failed -- see output above)."
+# Do NOT pipe the launcher's pipeline output through Select-Object/head -- that
+# trips the PowerShell broken-pipe quirk that reports $LASTEXITCODE = -1 on a
+# clean exit. VMBLauncher keeps its established `all` semantics; the wrapper
+# only binds and validates the shared ProjectRoot before allowing it to run.
+$launcherSettings = Join-Path $env:APPDATA 'VMBLauncher\settings.json'
+try {
+    Invoke-WithBoundLauncherProjectRoot -SettingsPath $launcherSettings -ProjectRoot $repoRoot -Action {
+        # Ask the launcher which mod it resolved while the temporary binding is
+        # active. Abort before `all` (therefore before deploy/upload) if root,
+        # version, source commit, or Workshop identity differs from Step 1.
+        $info = Invoke-NativeCapture { & $launcher info $Mod --no-banner }
+        if ($info.ExitCode -ne 0) {
+            throw "VMBLauncher identity probe failed (exit $($info.ExitCode)): $($info.Lines -join ' | ')"
+        }
+        $resolvedModDir = $null
+        foreach ($line in $info.Lines) {
+            if ($line -match '^Mod folder:\s*(.+?)\s*$') { $resolvedModDir = $matches[1]; break }
+        }
+        if (-not $resolvedModDir) {
+            throw "VMBLauncher identity probe did not report 'Mod folder': $($info.Lines -join ' | ')"
+        }
+
+        $resolvedLuaPath = Join-Path $resolvedModDir "scripts\mods\$Mod\$Mod.lua"
+        $resolvedCfgPath = Join-Path $resolvedModDir 'itemV2.cfg'
+        if (-not (Test-Path -LiteralPath $resolvedLuaPath) -or -not (Test-Path -LiteralPath $resolvedCfgPath)) {
+            throw "VMBLauncher resolved incomplete source at '$resolvedModDir'."
+        }
+        $resolvedLua = [System.IO.File]::ReadAllText($resolvedLuaPath, [System.Text.Encoding]::UTF8)
+        $resolvedVersion = if ($resolvedLua -match 'MOD_VERSION\s*=\s*"([^"]+)"') { $matches[1] } else { '(unknown)' }
+        $resolvedCfg = [System.IO.File]::ReadAllText($resolvedCfgPath, [System.Text.Encoding]::UTF8)
+        $resolvedPublishedId = if ($resolvedCfg -match 'published_id\s*=\s*(\d+)L') { $matches[1] } else { '(unknown)' }
+        $resolvedRoot = Split-Path $resolvedModDir -Parent
+        $resolvedCommitProbe = Invoke-NativeCapture { & git -C $resolvedRoot rev-parse HEAD }
+        $resolvedCommit = if ($resolvedCommitProbe.ExitCode -eq 0 -and $resolvedCommitProbe.Lines.Count -gt 0) {
+            ([string]$resolvedCommitProbe.Lines[-1]).Trim()
+        } else { '(unknown)' }
+
+        $identity = Test-ShipIdentityValues `
+            -ExpectedModDir $modDir -ResolvedModDir $resolvedModDir `
+            -ExpectedVersion $modVersion -ResolvedVersion $resolvedVersion `
+            -ExpectedCommit $sourceCommit -ResolvedCommit $resolvedCommit `
+            -ExpectedPublishedId $publishedId -ResolvedPublishedId $resolvedPublishedId
+        if (-not $identity.Ok) {
+            throw "Ship identity invariant FAILED: $($identity.Message). No build/deploy/upload was attempted."
+        }
+        Write-Host "  OK -- ProjectRoot, MOD_VERSION, source commit, and published_id match the invoking checkout." -ForegroundColor Green
+
+        & $launcher @launcherArgs
+        $launcherExit = $LASTEXITCODE
+        if ($launcherExit -ne 0) {
+            throw "VMBLauncher 'all $Mod' exited $launcherExit (build/deploy/upload failed -- see output above)."
+        }
+    }
+}
+catch {
+    Fail $_.Exception.Message
 }
 
 # ---------------------------------------------------------------------------

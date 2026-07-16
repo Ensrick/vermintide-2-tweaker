@@ -46,8 +46,20 @@ git check-ignore .vmbrc
 
 VMBLauncher stores machine-specific paths and deployment targets outside this
 repository at `%APPDATA%\VMBLauncher\settings.json`. Set its ProjectRoot to the
-clone directory containing `.vmbrc`. Use `VMBLauncher.exe doctor` to validate
-VMB, SDK, Steam, Workshop, and project paths.
+usual clone directory containing `.vmbrc`. Use `VMBLauncher.exe doctor` to
+validate VMB, SDK, Steam, Workshop, and project paths.
+
+`tools/ship/ship.ps1` does not trust that global ProjectRoot during a ship.
+Multiple git worktrees share the same launcher settings, so the wrapper
+temporarily binds ProjectRoot to the repository containing the invoked script,
+asks VMBLauncher to report the resolved mod folder, and compares the root,
+`MOD_VERSION`, git commit, and `published_id` with that invoking checkout. Any
+mismatch aborts before `VMBLauncher all` can build, deploy, or upload. The
+original settings file is restored byte-for-byte in a `finally` block on both
+success and failure. A named OS mutex covers binding, validation, the complete
+launcher action, and restoration so parallel worktree ships cannot race the
+shared file (issue #647). This is a wrapper guard; VMBLauncher's normal `all`
+build/deploy/upload semantics are unchanged.
 
 Remote hosts are also local settings. Configure `RemoteDeployTargets` in the
 launcher settings and SSH aliases in `~/.ssh/config`; never place hostnames,

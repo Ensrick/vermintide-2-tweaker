@@ -1882,3 +1882,31 @@ local Workshop copy.
 - Test equivalent LF/CRLF descriptors, changed text, standalone CR, and a
   bundle containing the same newline-only byte difference. Issue #646 owns the
   canonical `ship.ps1` implementation.
+
+## 53. Shared launcher root crosses git worktrees
+
+**First confirmed:** 2026-07-16 (Weapon Tweaker Dev ship, issue #647).
+**Lives in:** release wrappers that invoke VMBLauncher while several git
+worktrees share `%APPDATA%\VMBLauncher\settings.json`.
+
+### Symptoms
+- A ship banner and Workshop title name the new version, but a tester loads the
+  preceding version after resubscribing.
+- The command ran from an issue worktree while VMBLauncher's global
+  `ProjectRoot` still named another checkout.
+- Local post-ship checks can compare against the invoking checkout even though
+  VMBLauncher built and uploaded files from the configured checkout.
+
+### Fix template
+- At the wrapper boundary, temporarily bind the launcher's ProjectRoot to the
+  repository that owns the invoked ship script. Do not change VMB's build,
+  deploy, or upload semantics.
+- Before invoking the full pipeline, require the launcher-resolved mod folder,
+  source `MOD_VERSION`, git commit, and `published_id` to match the invoking
+  checkout. Abort before any build/deploy/upload action on a mismatch.
+- Preserve the machine-global settings bytes and restore them in `finally` on
+  success and failure. Hold a named OS mutex across binding, the launcher
+  action, and restoration so concurrent ships cannot swap the root underneath
+  each other. Test two distinct worktree roots, every identity field, action
+  failure, mutex cleanup, and byte-exact restoration. Issue #647 owns the
+  wrapper gate.

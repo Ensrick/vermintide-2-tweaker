@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-16 - Worktree-bound ship pipeline
+
+Issue #647 binds the canonical ship wrapper's existing VMBLauncher `all`
+pipeline to the checkout that owns the invoked script. A named OS mutex
+serializes the shared ProjectRoot setting; root, `MOD_VERSION`, git commit, and
+`published_id` must match before the pipeline starts; and the original global
+settings bytes are restored on success or failure. Offline fixtures cover
+parallel-lock ownership, cleanup, byte-exact restoration, and each mismatch.
+No Workshop deployment is part of this tooling change.
+
 ## 2026-07-16 - Descriptor line-ending deploy verification
 
 Issue #646 narrows the canonical ship verifier's equivalence rule to textual `.mod` descriptors: Steam's LF-to-CRLF rewrite no longer fails an otherwise current deployment. Compiled `.mod_bundle` files and every other artifact remain byte-exact. The ship self-test covers LF/CRLF equivalence, real descriptor edits, standalone carriage returns, and bundle newline changes. No Workshop deployment is part of this tooling change.
