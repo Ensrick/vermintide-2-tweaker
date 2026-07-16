@@ -29,6 +29,9 @@ license decision is pending, and do not add the UUID-labelled AI model without
 provenance. Final custom models may replace the placeholder unit paths after
 license, attribution, conversion, package-residency, preview, and multiplayer
 wire-safety review; they must not change the canonical item or skin-table keys.
+The candidate hashes, geometry inspection, exact blockers, and resumable
+integration contract are recorded in
+[`tools/DAWI_MACE_ASSET_AUDIT.md`](tools/DAWI_MACE_ASSET_AUDIT.md).
 
 Canonical skin tables are `<item_key>_skins`. Cosmetics owns exact-hand
 persistence, independent dual/offhand selection, icon ownership, and peer

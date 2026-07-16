@@ -43,6 +43,26 @@ return function(H, repo_root)
 		H.equal(source:find("units/cwv_", 1, true), nil)
 	end)
 
+	H.test("CWV #602 blocked model candidates stay audited and unpackaged", function()
+		local audit = read(repo_root
+			.. "/character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md")
+		H.truthy(audit:find("7cc646d8e8084a5fb2961855bca284e8", 1, true))
+		H.truthy(audit:find(
+			"6D4CF23FF13C38AEED071DD3899FDF2DB6303C501C8EEEC04923923395C2CABF",
+			1, true))
+		H.truthy(audit:find(
+			"16054F14B2A9E3CFB98915BD027C89AD9F74D76976AAE080689F6C2D376FC655",
+			1, true))
+		H.truthy(audit:find("500,000 polygons", 1, true))
+		H.truthy(audit:find("issue #628", 1, true))
+
+		local package = read(repo_root
+			.. "/character_weapon_variants/resource_packages/character_weapon_variants/character_weapon_variants.package")
+		H.equal(package:lower():find("tower_mace", 1, true), nil)
+		H.equal(package:lower():find("uuid_model", 1, true), nil)
+		H.equal(package:find("units/cwv_dr_dawi_mace", 1, true), nil)
+	end)
+
 	H.test("CWV #602 Bardin defaults and WT optional ownership are exact", function()
 		H.equal(#policy.ALL_CAREERS, 20)
 		H.equal(#policy.NATIVE_ONE_HANDED, 3)
