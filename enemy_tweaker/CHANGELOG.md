@@ -1,5 +1,11 @@
 # Enemy Tweaker Changelog
 
+## 0.7.51-dev (2026-07-15): #640 deleted lingering-damage source guard [not deployed]
+
+- Guarded every personal-handicap `Unit.get_data` and player-owner lookup with `Unit.alive`. Crash session `404228a8-e78a-4431-b59b-58a74079edfe` retained a deleted Globadier as a poison area's `source_attacker_unit`; Stingray's native assertion bypassed the old `pcall`.
+- Neutral Auto/off and at-or-below-host factors now bypass attacker owner/hostility classification. Active handicaps preserve vanilla damage when no living hostile source can be established, while living hostile attackers still scale normally.
+- Added engine-free nil/live/deleted and lingering-Globadier adversarial coverage plus runtime regression `issue640_personal_handicap_unit_lifetime` under `/et_regression_test`.
+
 ## 0.7.50-dev (2026-07-14): #219 orphan localization cleanup [verify-fix]
 
 - Removed the unused `br_per_breed_overrides_group` label. The retired Big Rebalance block has no live data-tree consumer.

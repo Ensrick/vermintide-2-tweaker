@@ -8,6 +8,7 @@ local mod = get_mod("enemy_tweaker")
 local ET = mod._et
 local Policy = ET.PersonalHandicapPolicy
 local HostilePolicy = ET.HealthMultiplierCore
+local UnitPolicy = ET.PersonalHandicapUnits
 local RPC = "et_personal_handicap"
 local SETTING = "personal_difficulty"
 local SEND_RETRIES = 3
@@ -99,33 +100,58 @@ local function _host_difficulty()
     return manager and manager:get_difficulty() or nil
 end
 
-local function _is_hostile_ai(unit)
-    if unit == nil then return false end
-    local ok, breed = pcall(Unit.get_data, unit, "breed")
-    return ok and HostilePolicy.is_hostile_breed(breed)
-end
-
-local function _owner(unit)
-    return unit and Managers.player:owner(unit) or nil
-end
+local UnitAccess = UnitPolicy.new({
+    -- Crash GUID 404228a8 (issue #640): a Globadier poison AreaDamageExtension
+    -- retained source_attacker_unit after the Globadier despawned. Stingray's
+    -- Unit.get_data asserted on that non-nil deleted reference and bypassed
+    -- pcall. Vanilla itself uses Unit.alive before consuming buffered units
+    -- (area_damage_extension.lua:368); use the same lifetime gate before every
+    -- native Unit read and PlayerManager owner lookup here. Rejecting an invalid
+    -- classifier preserves vanilla damage rather than suppressing func below.
+    unit_alive = Unit.alive,
+    breed = function(unit) return Unit.get_data(unit, "breed") end,
+    owner = function(unit)
+        local player_manager = Managers.player
+        return player_manager and player_manager:owner(unit) or nil
+    end,
+    is_hostile_breed = HostilePolicy.is_hostile_breed,
+})
+local _printf = rawget(_G, "printf") or function() end
+_printf("[et:640] applied: Unit.alive guards owner=true breed=true neutral_bypass=true")
 
 mod:hook(DamageUtils, "apply_buffs_to_damage", function(func, current_damage,
         attacked_unit, attacker_unit, damage_source, victim_units, damage_type,
         buff_attack_type, first_hit, source_attacker_unit)
     if _is_server() and type(current_damage) == "number" and current_damage > 0 then
-        local attacked_player = _owner(attacked_unit)
-        -- Explosions/projectiles may carry the hero or enemy on
-        -- source_attacker_unit while attacker_unit is the transient damage unit.
-        local attacker_player = _owner(attacker_unit) or _owner(source_attacker_unit)
-        local hostile_attacker = _is_hostile_ai(attacker_unit) or _is_hostile_ai(source_attacker_unit)
-        -- Personal difficulty is enemy combat only. Player-v-player friendly fire,
-        -- self/environmental damage, bots, and pet damage remain vanilla.
-        if attacked_player and not attacker_player and hostile_attacker then
+        local attacked_player = UnitAccess.owner(attacked_unit)
+        if attacked_player then
             local incoming = Policy.factors(_host_difficulty(), _preset_for_player(attacked_player))
-            current_damage = Policy.scale_damage(current_damage, incoming)
-        elseif attacker_player and not attacked_player and _is_hostile_ai(attacked_unit) then
-            local _, outgoing = Policy.factors(_host_difficulty(), _preset_for_player(attacker_player))
-            current_damage = Policy.scale_damage(current_damage, outgoing)
+            -- Neutral presets must not inspect attacker units. Besides avoiding
+            -- needless work, this closes #640 even when a lingering area effect
+            -- retains a deleted source while Personal difficulty is Auto/off.
+            if incoming ~= 1 then
+                -- Explosions/projectiles may carry the hero or enemy on
+                -- source_attacker_unit while attacker_unit is the transient unit.
+                local attacker_player = UnitAccess.owner(attacker_unit)
+                    or UnitAccess.owner(source_attacker_unit)
+                -- Personal difficulty is enemy combat only. Player-v-player
+                -- friendly fire, self/environmental damage, bots, and pets stay
+                -- vanilla. An invalid/deleted source cannot establish hostility.
+                if not attacker_player then
+                    current_damage = UnitPolicy.scale_if_hostile(current_damage,
+                        incoming, UnitAccess, attacker_unit, source_attacker_unit,
+                        Policy.scale_damage)
+                end
+            end
+        else
+            local attacker_player = UnitAccess.owner(attacker_unit)
+                or UnitAccess.owner(source_attacker_unit)
+            if attacker_player then
+                local _, outgoing = Policy.factors(_host_difficulty(),
+                    _preset_for_player(attacker_player))
+                current_damage = UnitPolicy.scale_if_hostile(current_damage,
+                    outgoing, UnitAccess, attacked_unit, nil, Policy.scale_damage)
+            end
         end
     end
     -- Feed the adjusted base through vanilla exactly once so damage-taken/dealt
@@ -149,6 +175,58 @@ ET.rt_register("issue61_personal_handicap_authoritative", function()
         return "Champion-to-Cataclysm policy drift"
     end
     if type(ET.personal_handicap_update) ~= "function" then return "update driver missing" end
+end)
+
+ET.rt_register("issue640_personal_handicap_unit_lifetime", function()
+    local live_player = { state = "live", breed = { race = "hero" } }
+    local live_proxy = { state = "live", breed = nil }
+    local live_enemy = { state = "live", breed = { race = "skaven" } }
+    local deleted_globadier = { state = "deleted", breed = { race = "skaven" } }
+    local owner_marker = {}
+    local calls = { alive = 0, owner = 0, breed = 0 }
+    local access = UnitPolicy.new({
+        unit_alive = function(unit)
+            calls.alive = calls.alive + 1
+            return unit.state == "live"
+        end,
+        owner = function(unit)
+            calls.owner = calls.owner + 1
+            return unit == live_player and owner_marker or nil
+        end,
+        breed = function(unit)
+            calls.breed = calls.breed + 1
+            return unit.breed
+        end,
+        is_hostile_breed = HostilePolicy.is_hostile_breed,
+    })
+
+    if access.owner(nil) ~= nil or access.is_hostile_ai(nil) then
+        return "nil unit reached classifier"
+    end
+    if access.owner(live_player) ~= owner_marker then return "live owner not resolved" end
+    if not access.is_hostile_ai(live_enemy) then return "live hostile not resolved" end
+    local native_before_deleted = calls.owner + calls.breed
+    if access.owner(deleted_globadier) ~= nil
+            or access.is_hostile_ai(deleted_globadier) then
+        return "deleted Globadier classified"
+    end
+    if calls.owner + calls.breed ~= native_before_deleted then
+        return "deleted Globadier reached native owner/breed access"
+    end
+
+    local alive_before_off = calls.alive
+    local unchanged = UnitPolicy.scale_if_hostile(40, 1, access, live_proxy,
+        deleted_globadier, Policy.scale_damage)
+    if unchanged ~= 40 or calls.alive ~= alive_before_off then
+        return "Auto/off path inspected attacker units"
+    end
+
+    local lingering = UnitPolicy.scale_if_hostile(40, 1.25, access, live_proxy,
+        deleted_globadier, Policy.scale_damage)
+    if lingering ~= 40 then return "deleted lingering source changed damage" end
+    local hostile = UnitPolicy.scale_if_hostile(40, 1.25, access, live_enemy,
+        deleted_globadier, Policy.scale_damage)
+    if hostile ~= 50 then return "live hostile scaling failed" end
 end)
 
 _queue_local_request(true)

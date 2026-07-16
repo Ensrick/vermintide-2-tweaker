@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-14.
+Last updated: 2026-07-15.
 
 ---
 ## Personal difficulty combat handicap (#61)
@@ -14,8 +14,9 @@ Last updated: 2026-07-14.
 | Authority | Client sends only its preset; host keys by authenticated `sender_peer_id` and applies damage. Wrong schema or non-host receiver is inert. |
 | Scope | Direct hostile-AI incoming/outgoing damage only. Friendly fire, environment/self damage, bots, pets, healing, spawns, AI, and enemy health remain vanilla. |
 | Bounds | Auto or target <= host is 1.0x/1.0x; one rank is 1.08x incoming/0.95x outgoing; two or more ranks cap at 1.25x/0.85x. |
-| Offline | `test_et_personal_handicap` covers policy bounds, damage math, authenticated RPC/static authority, hostile-AI gate, settings, and no lookup/buff registration. |
-| Runtime | `/et_regression_test`: `issue61_personal_handicap_authoritative` passes. |
+| Unit lifetime | Before owner or breed lookup, nil/deleted units fail the `Unit.alive` gate. A lingering area effect with no living hostile source preserves vanilla damage; a neutral factor does not inspect attacker units. |
+| Offline | `test_et_personal_handicap` covers policy bounds, damage math, authenticated RPC/static authority, nil/live/deleted unit boundaries, lingering Globadier source behavior, settings, and no lookup/buff registration. |
+| Runtime | `/et_regression_test`: `issue61_personal_handicap_authoritative` and `issue640_personal_handicap_unit_lifetime` pass. |
 | Lifecycle | `verify-fix-coop` only. Host Champion, client Cataclysm; verify both damage directions, then Auto, friendly fire, barrel/fall, bot, and pet controls. |
 
 ---

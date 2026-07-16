@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-15 - Enemy lingering-damage lifetime guard
+
+Tweaker: Enemies v0.7.51-dev / issue #640 guards personal-handicap owner and breed classification with `Unit.alive` after a despawned Globadier remained referenced by its poison area and crashed native `Unit.get_data`. Neutral Personal difficulty factors now skip attacker classification entirely; active factors preserve vanilla damage when no living hostile source can be established. Engine-free adversarial coverage and runtime regression `issue640_personal_handicap_unit_lifetime` cover nil, live, deleted, and lingering-source paths. No deployment is part of this commit.
+
 ## 2026-07-15 - Encarmine plume and material correction
 
 Tweaker: Cosmetics v0.9.115-dev / issue #612 makes the authored plume alpha-aware and two-sided, corrects the zero-roughness/near-solid-metal response-map decode, and lifts the carmine diffuse while preserving UV layout. Asset hashes, a reproducible Blender exporter, and face/material contract tests harden the visual fix; two-player verification is required.

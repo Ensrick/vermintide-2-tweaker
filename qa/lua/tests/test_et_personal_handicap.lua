@@ -2,6 +2,9 @@ return function(H, repo_root)
     local policy_path = repo_root
         .. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_personal_handicap_policy.lua"
     local Policy = assert(loadfile(policy_path))()
+    local units_path = repo_root
+        .. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_personal_handicap_units.lua"
+    local UnitPolicy = assert(loadfile(units_path))()
 
     local function read(path)
         local file = assert(io.open(path, "rb"))
@@ -36,8 +39,89 @@ return function(H, repo_root)
         H.truthy(runtime:find("schema ~= ET.rpc_schema", 1, true))
         H.truthy(runtime:find("Managers.player.is_server", 1, true))
         H.truthy(runtime:find("HostilePolicy.is_hostile_breed", 1, true))
+        H.truthy(runtime:find("issue640_personal_handicap_unit_lifetime", 1, true))
         H.equal(runtime:find("NetworkLookup", 1, true), nil)
         H.equal(runtime:find("BuffTemplates", 1, true), nil)
+    end)
+
+    H.test("Enemy Tweaker unit boundary rejects nil and deleted units", function()
+        local live_player = { state = "live", kind = "player" }
+        local live_enemy = { state = "live", kind = "enemy" }
+        local deleted_enemy = { state = "deleted", kind = "enemy" }
+        local owner_marker = {}
+        local calls = { alive = 0, owner = 0, breed = 0 }
+        local access = UnitPolicy.new({
+            unit_alive = function(unit)
+                calls.alive = calls.alive + 1
+                return unit.state == "live"
+            end,
+            owner = function(unit)
+                calls.owner = calls.owner + 1
+                return unit.kind == "player" and owner_marker or nil
+            end,
+            breed = function(unit)
+                calls.breed = calls.breed + 1
+                return unit.kind == "enemy" and { race = "skaven" } or nil
+            end,
+            is_hostile_breed = function(breed)
+                return breed ~= nil and breed.race == "skaven"
+            end,
+        })
+
+        H.equal(access.owner(nil), nil)
+        H.equal(access.is_hostile_ai(nil), false)
+        H.equal(calls.alive, 0, "nil must not reach Unit.alive")
+        H.equal(access.owner(live_player), owner_marker)
+        H.equal(access.is_hostile_ai(live_enemy), true)
+
+        local owner_before = calls.owner
+        local breed_before = calls.breed
+        H.equal(access.owner(deleted_enemy), nil)
+        H.equal(access.is_hostile_ai(deleted_enemy), false)
+        H.equal(calls.owner, owner_before, "deleted unit must not reach owner")
+        H.equal(calls.breed, breed_before, "deleted unit must not reach Unit.get_data")
+    end)
+
+    H.test("Enemy Tweaker lingering Globadier source is lifetime safe", function()
+        local area_proxy = { state = "live", breed = nil }
+        local deleted_globadier = {
+            state = "deleted",
+            breed = { race = "skaven" },
+        }
+        local live_globadier = {
+            state = "live",
+            breed = { race = "skaven" },
+        }
+        local calls = { alive = 0, breed = 0 }
+        local access = UnitPolicy.new({
+            unit_alive = function(unit)
+                calls.alive = calls.alive + 1
+                return unit.state == "live"
+            end,
+            owner = function() return nil end,
+            breed = function(unit)
+                calls.breed = calls.breed + 1
+                return unit.breed
+            end,
+            is_hostile_breed = function(breed)
+                return breed ~= nil and breed.race == "skaven"
+            end,
+        })
+
+        local alive_before_off = calls.alive
+        H.equal(UnitPolicy.scale_if_hostile(40, 1, access, area_proxy,
+            deleted_globadier, Policy.scale_damage), 40)
+        H.equal(calls.alive, alive_before_off,
+            "Auto/off must bypass attacker classification")
+
+        local breed_before_deleted = calls.breed
+        H.equal(UnitPolicy.scale_if_hostile(40, 1.25, access, area_proxy,
+            deleted_globadier, Policy.scale_damage), 40)
+        H.equal(calls.breed, breed_before_deleted + 1,
+            "only the live area proxy may reach breed lookup")
+
+        H.equal(UnitPolicy.scale_if_hostile(40, 1.25, access, area_proxy,
+            live_globadier, Policy.scale_damage), 50)
     end)
 
     H.test("Enemy Tweaker personal handicap setting is explicit about bounded scope", function()

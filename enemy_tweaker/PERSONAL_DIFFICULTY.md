@@ -36,6 +36,17 @@ The host applies the factor once on entry to
 introduced. Peers must run the same Enemy Tweaker version for client requests to
 arrive; a missing/mismatched peer safely remains at host difficulty.
 
+## Unit lifetime boundary
+
+Area damage stores `source_attacker_unit` when its extension is initialized and
+forwards that reference on later buffered ticks [src:
+`scripts/unit_extensions/weapons/area_damage/area_damage_extension.lua:32,373`].
+The source enemy can already be deleted by then. Personal difficulty therefore
+checks `Unit.alive` before every owner or breed lookup. A nil/deleted source cannot
+establish hostile identity, so the hook preserves vanilla damage. Auto/off and
+at-or-below-host factors skip attacker classification completely. Crash session
+`404228a8-e78a-4431-b59b-58a74079edfe` and issue #640 establish this boundary.
+
 ## Verification
 
 Lifecycle: `verify-fix-coop` (mutually exclusive with `verify-fix`).
@@ -46,4 +57,7 @@ Lifecycle: `verify-fix-coop` (mutually exclusive with `verify-fix`).
    1.25x result. Confirm the client's direct damage to an ordinary enemy is 0.85x.
 4. Set the client to Champion or Auto and confirm both paths return to vanilla.
 5. Confirm friendly fire, a barrel/fall, a bot, and a necromancer pet stay vanilla.
-6. Run `/et_regression_test`; `issue61_personal_handicap_authoritative` must pass.
+6. Kill a Poison Wind Globadier while standing in its lingering poison and
+   confirm later poison ticks do not crash after the Globadier despawns.
+7. Run `/et_regression_test`; `issue61_personal_handicap_authoritative` and
+   `issue640_personal_handicap_unit_lifetime` must pass.
