@@ -86,6 +86,11 @@ local ARMOR_MATERIAL_NAMES = {
 
 M.registered = false
 M._diag_seen = {}
+M.PREVIEW_REPLAY_CONTRACT = {
+    apply_after_visibility = true,
+    invalidate_while_hidden = true,
+    cache_identity = "mesh_unit",
+}
 
 local function enabled()
     if not (mod and type(mod.get) == "function") then return true end
@@ -274,8 +279,11 @@ end
 
 -- Inventory character previews do not have PlayerUnitCosmeticExtension, so
 -- their body mesh must be painted from HeroPreviewer's own canonical skin data.
--- Cache the mesh identity, not a one-shot boolean: reopening the view or changing
--- careers creates a new mesh and therefore replays exactly once on that surface.
+-- Vanilla spawns the mesh hidden, then `_set_character_visibility(true)` applies
+-- `skin_data.material_changes` on the following update. Painting and caching on
+-- the spawn frame therefore loses our textures to that later vanilla write.
+-- Wait until the mesh is visible, and invalidate the mesh cache while hidden so
+-- any later hide/show cycle replays after vanilla restores its donor materials.
 function M.apply_armor_to_hero_preview(previewer)
     if not previewer then return false end
     local cosmetics = rawget(_G, "Cosmetics")
@@ -286,7 +294,14 @@ function M.apply_armor_to_hero_preview(previewer)
         return false
     end
     local mesh = previewer.mesh_unit
-    if not (mesh and Unit and Unit.alive and Unit.alive(mesh)) then return false end
+    if not (mesh and Unit and Unit.alive and Unit.alive(mesh)) then
+        previewer._cos_gk_armor_applied_mesh = nil
+        return false
+    end
+    if previewer.character_unit_hidden_after_spawn or previewer.character_unit_visible ~= true then
+        previewer._cos_gk_armor_applied_mesh = nil
+        return false
+    end
     if previewer._cos_gk_armor_applied_mesh == mesh then return true end
     local applied = M.apply_variant_to_unit(M.SKIN_VARIANT_KEY, mesh, "hero_preview")
     if applied then previewer._cos_gk_armor_applied_mesh = mesh end

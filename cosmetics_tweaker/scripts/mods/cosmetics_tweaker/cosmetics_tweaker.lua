@@ -75,7 +75,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.126-dev"
+local MOD_VERSION = "0.9.127-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -10576,6 +10576,13 @@ local function _issue629_grail_knight_set_contract()
     end
     if not (mod._cos.custom_skin_keys and mod._cos.custom_skin_keys[GK_SET.SHIELD_SKIN_KEY]) then
         return "custom shield wire-null registration missing"
+    end
+    local preview_contract = GK_SET.PREVIEW_REPLAY_CONTRACT
+    if type(preview_contract) ~= "table"
+        or preview_contract.apply_after_visibility ~= true
+        or preview_contract.invalidate_while_hidden ~= true
+        or preview_contract.cache_identity ~= "mesh_unit" then
+        return "inventory hero visibility/replay contract drifted"
     end
     for kind, paths in pairs(GK_SET.TEXTURES) do
         for _, path in ipairs(paths) do

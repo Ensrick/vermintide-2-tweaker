@@ -1,5 +1,27 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.127-dev - 2026-07-15 - #629 inventory-preview lifecycle fix
+
+### Fixed
+
+- Deferred the Purpure/Azure outfit material override until the inventory hero
+  preview has completed its hidden-to-visible transition. The vanilla preview
+  no longer restores the donor outfit material one frame after the custom
+  outfit was applied.
+- Invalidated the bounded preview cache while the mannequin is hidden so a
+  subsequent hide/show or respawn reapplies the outfit exactly once, without
+  per-frame material writes.
+- Added lifecycle regression coverage for hidden spawn, first visibility,
+  steady state, hide/show, and replacement mesh behavior.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.127-dev`. Equip the Purpure/Azure outfit and
+open the inventory character preview. Verify the custom outfit remains visible
+after the mannequin appears, after changing tabs or heroes, and after closing
+and reopening inventory. Issue #629 still requires co-op verification for its
+remote-player presentation surfaces.
+
 ## 0.9.126-dev - 2026-07-15 - #629 authored outfit correction
 
 ### Changed

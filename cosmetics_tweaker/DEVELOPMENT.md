@@ -159,6 +159,17 @@ LA paint and mesh override must apply on three independent render paths:
 | In-game body | `GearUtils.create_equipment` | `result.skin` set | spawns both 1p and 3p halves |
 | Inventory/equipment menu character preview | `HeroPreviewer:_spawn_item` and `MenuWorldPreviewer:_spawn_item` (via `_spawn_item_post`) | `_equip_skin_by_item[previewer][item_name]` populated by `equip_item` hook | `item_name` is the WEAPON master key (not a skin entry) — we MUST capture the `skin` arg from `equip_item` for has_skin to work |
 
+Authored full-body skin textures have one additional ordering boundary. The
+previewer spawns `mesh_unit` hidden and sets
+`character_unit_hidden_after_spawn = true`; on a later update,
+`_update_units_visibility` calls `_set_character_visibility(true)`, which
+reapplies `skin_data.material_changes` to that same mesh
+([src: `world_hero_previewer.lua:98-105,204-254,367-379,543-585`]). A custom
+texture replay must therefore wait until `character_unit_visible == true`
+before caching the mesh. Hiding invalidates that cache so a later show can
+replay after vanilla's material restore. A successful spawn-frame paint or log
+line is not evidence that the visible inventory mannequin retained the texture.
+
 ### Mesh resolution (`intended_unit`)
 For LA options, the target mesh comes from `variant.new_units[1]` in LA's SKIN_LIST. This is the **only** reliable source — texture-path regex and lex-sorted icon keys both produced visibly wrong meshes in earlier versions.
 

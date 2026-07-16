@@ -77,6 +77,8 @@ return function(H, repo_root)
     H.test("Grail Knight outfit replays on each inventory hero mesh", function()
         H.truthy(module:find("function M.apply_armor_to_hero_preview(previewer)", 1, true))
         H.truthy(module:find("previewer.character_unit_skin_data or (loading and loading.skin_data)", 1, true))
+        H.truthy(module:find("previewer.character_unit_hidden_after_spawn", 1, true))
+        H.truthy(module:find("previewer.character_unit_visible ~= true", 1, true))
         H.truthy(module:find("previewer._cos_gk_armor_applied_mesh == mesh", 1, true))
         H.truthy(module:find("previewer._cos_gk_armor_applied_mesh = mesh", 1, true))
         H.truthy(entry:find("GK_SET.apply_armor_to_hero_preview(self)", 1, true))
@@ -105,14 +107,35 @@ return function(H, repo_root)
             local previewer = {
                 character_unit_skin_data = custom_skin,
                 mesh_unit = mesh_a,
+                character_unit_hidden_after_spawn = true,
+                character_unit_visible = false,
             }
+            H.equal(set.apply_armor_to_hero_preview(previewer), false)
+            H.equal(writes, 0, "spawn-hidden mesh must not be cached before vanilla visibility reset")
+            previewer.character_unit_hidden_after_spawn = false
+            previewer.character_unit_visible = true
             H.truthy(set.apply_armor_to_hero_preview(previewer))
             H.equal(writes, 6)
             H.truthy(set.apply_armor_to_hero_preview(previewer))
             H.equal(writes, 6, "same preview mesh should not repaint every frame")
-            previewer.mesh_unit = mesh_b
+            previewer.character_unit_visible = false
+            H.equal(set.apply_armor_to_hero_preview(previewer), false)
+            H.equal(writes, 6)
+            previewer.character_unit_visible = true
             H.truthy(set.apply_armor_to_hero_preview(previewer))
-            H.equal(writes, 12, "view/career respawn must repaint its new mesh once")
+            H.equal(writes, 12, "hide/show must repaint after vanilla restores donor materials")
+            previewer.mesh_unit = mesh_b
+            previewer.character_unit_hidden_after_spawn = true
+            previewer.character_unit_visible = false
+            H.equal(set.apply_armor_to_hero_preview(previewer), false)
+            H.equal(writes, 12)
+            previewer.character_unit_hidden_after_spawn = false
+            previewer.character_unit_visible = true
+            H.truthy(set.apply_armor_to_hero_preview(previewer))
+            H.equal(writes, 18, "view/career respawn must repaint its new mesh once")
+            H.equal(set.PREVIEW_REPLAY_CONTRACT.apply_after_visibility, true)
+            H.equal(set.PREVIEW_REPLAY_CONTRACT.invalidate_while_hidden, true)
+            H.equal(set.PREVIEW_REPLAY_CONTRACT.cache_identity, "mesh_unit")
         end)
     end)
 
