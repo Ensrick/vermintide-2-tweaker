@@ -18,25 +18,25 @@ local loc = {
         en = "Grail Knight: Purpure and Azure Set",
     },
     cos_gk_purpure_azure_enabled_tooltip = {
-        en = "Adds a matching Pureheart helm, Gallant of Parravon outfit, and Shield of Honour Renewed recolor for Grail Knight. The set reuses the original game's models, rigging, physics, and fade behavior.",
+        en = "Adds the matching Couronne de la Lune, Midnight Purpure and Azure, and The Blood-Bloomed Bouclier cosmetics for Grail Knight. The set reuses the original game's models, rigging, physics, and fade behavior.",
     },
     cos_gk_purpure_azure_hat_name = {
-        en = "Pureheart Helm (Purpure and Azure)",
+        en = "Couronne de la Lune",
     },
     cos_gk_purpure_azure_hat_description = {
-        en = "The Pureheart helm in purpure, azure, white, and blackened silver.",
+        en = "Its silvered crest recalls moonrise over Couronne, where Grail Knights keep vigil beneath the Lady's gaze and remember the vows that raised them above mortal knighthood.",
     },
     cos_gk_purpure_azure_skin_name = {
-        en = "Gallant of Parravon (Purpure and Azure)",
+        en = "Midnight Purpure and Azure",
     },
     cos_gk_purpure_azure_skin_description = {
-        en = "A Grail Knight panoply in purpure, azure, white, and blackened silver.",
+        en = "Once worn by a Bretonnian knight whose ardour burned brighter than good sense. Mortally wounded, he bequeathed his colours to Kruber, declaring the Grail Knight of Ubersreik worthy to bear them.",
     },
     cos_gk_purpure_azure_shield_name = {
-        en = "Shield of Honour Renewed (Purpure and Azure)",
+        en = "The Blood-Bloomed Bouclier",
     },
     cos_gk_purpure_azure_shield_description = {
-        en = "The Shield of Honour Renewed bearing matching purpure and azure heraldry.",
+        en = "Kruber claims the blazon's four roses commemorate four maidens rescued, its gouttes de sang the blood spilled in their defence. The Ubersreik Five suspect the tale grows taller with every telling, but know better than to question his honesty within earshot.",
     },
     mod_description = {
         en = "Unlock hats and weapon skins per career on every hero, plus size and grip tweaks for individual weapons.",

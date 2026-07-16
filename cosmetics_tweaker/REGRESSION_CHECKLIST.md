@@ -13,7 +13,7 @@ Last updated: 2026-07-15.
 |---|---|
 | Symptom | The Purpure/Azure outfit applied in live third person but the inventory-screen character model showed the donor outfit even though the log recorded `surface=hero_preview`. |
 | Root cause | The preview replay painted and cached `mesh_unit` on its hidden spawn frame. On the following update, vanilla `_update_units_visibility` called `_set_character_visibility(true)` and restored `skin_data.material_changes`; the same-mesh cache then suppressed every corrective repaint. |
-| Fix version | cosmetics_tweaker v0.9.127-dev |
+| Fix version | cosmetics_tweaker v0.9.128-dev |
 | Expected | Hidden or not-yet-visible meshes are never cached. The first visible frame paints once after vanilla's material restore; hide/show, view reopen, and career respawn invalidate and replay once without per-frame writes. |
 | Detection | Offline `test_cos_grail_knight_set.lua` simulates hidden spawn, visible transition, same-mesh steady state, hide/show, and new-mesh respawn. `/cos_regression_test` passes `issue629_grail_knight_set_contract`. |
 | Tracking | GitHub issue #629. |

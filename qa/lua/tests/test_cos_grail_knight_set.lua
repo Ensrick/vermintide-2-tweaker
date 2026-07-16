@@ -8,6 +8,7 @@ return function(H, repo_root)
 
     local module = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_grail_knight_set.lua")
     local entry = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
+    local localization = read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker_localization.lua")
     local package_file = read("cosmetics_tweaker/resource_packages/cosmetics_tweaker/cosmetics_tweaker.package")
 
     local function with_loaded_module(callback)
@@ -40,6 +41,24 @@ return function(H, repo_root)
         H.truthy(module:find('M.SHIELD_BASE_UNIT = "units/weapons/player/wpn_emp_gk_shield_05/wpn_emp_gk_shield_05"', 1, true))
         H.equal(module:find("World.spawn_unit", 1, true), nil)
         H.equal(module:find("CUSTOM_UNIT", 1, true), nil)
+    end)
+
+    H.test("Grail Knight set keeps authored names and descriptions synchronized", function()
+        local expected = {
+            cos_gk_purpure_azure_hat_name = "Couronne de la Lune",
+            cos_gk_purpure_azure_hat_description = "Its silvered crest recalls moonrise over Couronne, where Grail Knights keep vigil beneath the Lady's gaze and remember the vows that raised them above mortal knighthood.",
+            cos_gk_purpure_azure_skin_name = "Midnight Purpure and Azure",
+            cos_gk_purpure_azure_skin_description = "Once worn by a Bretonnian knight whose ardour burned brighter than good sense. Mortally wounded, he bequeathed his colours to Kruber, declaring the Grail Knight of Ubersreik worthy to bear them.",
+            cos_gk_purpure_azure_shield_name = "The Blood-Bloomed Bouclier",
+            cos_gk_purpure_azure_shield_description = "Kruber claims the blazon's four roses commemorate four maidens rescued, its gouttes de sang the blood spilled in their defence. The Ubersreik Five suspect the tale grows taller with every telling, but know better than to question his honesty within earshot.",
+        }
+        with_loaded_module(function(set)
+            for key, value in pairs(expected) do
+                H.equal(set.ITEM_LOCALIZATION[key], value, "runtime fallback drifted for " .. key)
+                H.truthy(localization:find('en = "' .. value .. '"', 1, true),
+                    "VMF localization drifted for " .. key)
+            end
+        end)
     end)
 
     H.test("Grail Knight set uses per-unit texture bindings and wire fallbacks", function()

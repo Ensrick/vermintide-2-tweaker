@@ -1,5 +1,23 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.128-dev - 2026-07-15 - #639 Grail Knight set localization
+
+### Changed
+
+- Finalized the three Purpure/Azure set names: `Couronne de la Lune`,
+  `Midnight Purpure and Azure`, and `The Blood-Bloomed Bouclier`.
+- Replaced the temporary color summaries with the approved lore-friendly
+  descriptions for the moonlit Couronne helm, the bequeathed Bretonnian
+  panoply, and Kruber's four-rose, gouttes-de-sang shield tale.
+- Kept the VMF localization table and item-registration fallback table in exact
+  agreement, with regression coverage for all six player-facing strings.
+
+### Verification
+
+Confirm `[cosmetics:LOAD] v0.9.128-dev`. Inspect all three set items in the
+inventory and cosmetic-selection views. Each must show its finalized name and
+description without donor text, raw localization keys, or a repeated title.
+
 ## 0.9.127-dev - 2026-07-15 - #629 inventory-preview lifecycle fix
 
 ### Fixed

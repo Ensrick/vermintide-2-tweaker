@@ -56,12 +56,12 @@ M.TEXTURES = {
 }
 
 M.ITEM_LOCALIZATION = {
-    cos_gk_purpure_azure_hat_name = "Pureheart Helm (Purpure and Azure)",
-    cos_gk_purpure_azure_hat_description = "The Pureheart helm in purpure, azure, white, and blackened silver.",
-    cos_gk_purpure_azure_skin_name = "Gallant of Parravon (Purpure and Azure)",
-    cos_gk_purpure_azure_skin_description = "A Grail Knight panoply in purpure, azure, white, and blackened silver.",
-    cos_gk_purpure_azure_shield_name = "Shield of Honour Renewed (Purpure and Azure)",
-    cos_gk_purpure_azure_shield_description = "The Shield of Honour Renewed bearing matching purpure and azure heraldry.",
+    cos_gk_purpure_azure_hat_name = "Couronne de la Lune",
+    cos_gk_purpure_azure_hat_description = "Its silvered crest recalls moonrise over Couronne, where Grail Knights keep vigil beneath the Lady's gaze and remember the vows that raised them above mortal knighthood.",
+    cos_gk_purpure_azure_skin_name = "Midnight Purpure and Azure",
+    cos_gk_purpure_azure_skin_description = "Once worn by a Bretonnian knight whose ardour burned brighter than good sense. Mortally wounded, he bequeathed his colours to Kruber, declaring the Grail Knight of Ubersreik worthy to bear them.",
+    cos_gk_purpure_azure_shield_name = "The Blood-Bloomed Bouclier",
+    cos_gk_purpure_azure_shield_description = "Kruber claims the blazon's four roses commemorate four maidens rescued, its gouttes de sang the blood spilled in their defence. The Ubersreik Five suspect the tale grows taller with every telling, but know better than to question his honesty within earshot.",
 }
 
 local DEFAULT_SLOTS = {
