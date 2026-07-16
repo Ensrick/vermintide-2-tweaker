@@ -1,5 +1,13 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Mission Select custom-career statistics (#649)
+
+- [ ] With a custom career whose `completed_career_levels` definition is absent, open Custom Game > Helmgart; the mission list opens without a StatisticsDatabase crash.
+- [ ] Fully defined profiles delegate to the exact vanilla method with their original table identity.
+- [ ] The compatibility path shallow-copies only the profile container, omits only careers missing an exact level/difficulty definition, and never mutates the live profile or its career rows.
+- [ ] StatisticsDatabase is not hooked or protected globally; errors for defined paths still propagate.
+- [ ] `/verify_gut_mission_completion` reports `guard=true` and `PASS`; `/gut_regression_test` passes `issue649_mission_completion_definition_guard`; offline `test_gut_mission_completion_policy.lua` passes.
+
 ## Foot Knight secondary melee compatibility (#619)
 
 - [ ] With Career Tweaker's secondary-melee toggle enabled, GUT restores an `es_knight` saved loadout containing melee weapons in both `slot_melee` and `slot_ranged`.

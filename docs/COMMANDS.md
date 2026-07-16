@@ -69,6 +69,7 @@ reset_modded_loadouts,         -- wipe the modded loadout store (optional career
 gut_loadout_status,            -- dump the modded loadout store state to chat + console (native loadouts #375 diagnostic)
 scrub_official_loadouts,       -- repair modded/dangling weapon+frame ids in OFFICIAL loadouts (#402; 'apply' to write, default report-only)
 gut_regression_test, gut_lua_mem,
+verify_gut_mission_completion, -- verify the #649 Mission Select missing-career-stat guard
 gut_scoreboard_probe,            -- bounded live scoreboard capability snapshot (#272)
 export_settings,                -- dump a TOML settings snapshot to the log (#517; no retail read-back)
 gut_video_profile_name,         -- name one of the five native Video profile slots (#292)

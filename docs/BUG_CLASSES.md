@@ -1910,3 +1910,36 @@ worktrees share `%APPDATA%\VMBLauncher\settings.json`.
   each other. Test two distinct worktree roots, every identity field, action
   failure, mutex cleanup, and byte-exact restoration. Issue #647 owns the
   wrapper gate.
+
+## 54. Late registry extension misses boot-time derived definitions
+
+**First confirmed:** 2026-07-16 (Mission Select crash, issue #649).
+**Lives in:** a runtime-extensible catalog whose dependent table is generated
+once during boot, then consumed later without an exact-path capability check.
+
+### Symptoms
+- A screen works with vanilla careers but crashes immediately after another mod
+  adds a career/profile entry.
+- The fatal names a missing derived leaf rather than the visible menu data. In
+  #649 it was `completed_career_levels,pusfume,military,cataclysm_3`.
+- The live career exists, but the dependent definition has no row for it.
+
+### Diagnosis pattern
+1. Find the consumer's exact lookup path and the point where the parent catalog
+   is extended.
+2. Trace how the dependent registry is generated. Vanilla populates
+   `completed_career_levels` by iterating the then-current `CareerSettings`
+   [src: `statistics_definitions.lua:556-576`], while Mission Select later
+   iterates all live `profile.careers` [src:
+   `start_game_window_mission_selection_console.lua:503-524`].
+3. Confirm the missing exact leaf in the crash locals; do not infer failure from
+   the custom entry's presence alone.
+
+### Fix template
+- Guard the narrow consumer, not the shared database/lookup API. Delegate
+  unchanged when every exact path exists.
+- For a presentation-only enumeration, shallow-filter only entries lacking the
+  complete derived capability, preserving source identity and all valid rows.
+- Do not `pcall` or default arbitrary lookup failures globally. Add an offline
+  identity/immutability test and an in-game regression check for the guarded
+  consumer. GUT dev's `_gut_guard649_mission_completion.lua` is the reference.

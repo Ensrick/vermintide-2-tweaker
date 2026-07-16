@@ -1,5 +1,35 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.281-dev (2026-07-16) -- #649 Helmgart Mission Select crash [verify-fix]
+
+- Fixed the immediate crash when opening the Helmgart chapter while a late-
+  registered custom career is present. The attached log failed on
+  `completed_career_levels,pusfume,military,cataclysm_3` inside vanilla
+  `StartGameWindowMissionSelectionConsole._profile_difficulty_index_completed`.
+- Vanilla builds `completed_career_levels` definitions from the careers that
+  exist when `statistics_definitions.lua` executes. The console mission window
+  later iterates every live profile career without checking that exact
+  definition path, so an externally added career can reach a fatal missing-stat
+  lookup.
+- Added one presentation-scoped guard on that method. Fully defined profiles
+  delegate unchanged. When a career lacks any exact level/difficulty leaf, a
+  shallow profile view omits only that career and delegates the original vanilla
+  calculation; the source profile, StatisticsDatabase, and every unrelated
+  error path remain unchanged. An all-undefined profile retains vanilla's first-
+  career icon fallback without querying a nonexistent stat.
+- Added bounded `[gut:649]` evidence, `/verify_gut_mission_completion`, runtime
+  check `issue649_mission_completion_definition_guard`, and four Lua 5.1 tests
+  covering identity preservation, exact-leaf filtering, immutability, and
+  metatable preservation.
+
+### Solo verify
+
+Confirm `[gut:LOAD] v0.2.281-dev`, open the keep mission map, choose Custom Game,
+then open Helmgart. The mission list must open without a StatisticsDatabase
+crash. Run `/verify_gut_mission_completion`; it must report `guard=true` and
+`PASS` (listing `pusfume` under undefined careers is expected when that external
+career is active). Run `/gut_regression_test`; the issue #649 check must pass.
+
 ## 0.2.280-dev (2026-07-16) -- issue 631 Mouse-button keybinds in Mod Tweaker [verify-fix]
 
 - Mod Tweaker hotkey rows now accept mouse buttons (Mouse 1-5), not just
