@@ -30,9 +30,9 @@ Last updated: 2026-07-14.
 - [ ] The option defaults off; only the host sees the extra second wheel page, and disabling it removes that page on the next open.
 - [ ] Attack Now uses the host's last living enemy ping for exactly 10 seconds and never adds a custom network event or lookup entry.
 - [ ] Group Up and Cover Me override follow assignment for 8 and 12 seconds, then return to the configured vanilla/GT follow mode.
-- [ ] Wait parks only the nearest bot within 4 m of the crosshair position for 15 seconds; expiry clears only the matching GT-owned hold token.
+- [ ] Wait copies the social wheel's aimed world position, parks the selected bot within 4 m of it for 30 seconds, and never falls back to the player's feet; expiry clears only the matching GT-owned hold token.
 - [ ] Revive, rescue, combat safety, scripted holds, and clients' social-wheel events remain authoritative and unmodified.
-- Detection: offline `test_gt_bot_command_policy.lua`; `/gt_regression_test` check `issue359_bot_command_wheel`.
+- Detection: offline `test_gt_bot_command_policy.lua`; `/gt_regression_test` checks `issue359_bot_command_wheel` and `issue600_wait_aim_and_duration`.
 
 ## Godmode HUD indicator (#381)
 

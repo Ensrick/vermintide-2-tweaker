@@ -1,5 +1,16 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.240-dev (2026-07-15) -- #600 aimed Wait order [verify-fix]
+
+- Corrected **Wait** on the bot command wheel to preserve the wheel's own raycast world position and move the selected bot there. Adventure mode deliberately disables world-marker pings, so the previous post-chat lookup had no position and fell back to the player's feet.
+- Copied the live social-wheel context into a fresh `Vector3Box` inside GT's existing singleton `SocialWheelUI._open_menu` hook, consumed it once when **Wait** executes, and removed the player-position fallback. A command with no valid aimed world point now fails closed instead of parking at the player.
+- Increased the bounded hold from 15 to 30 seconds. The apply trace now records the selected bot, aimed coordinates, radius, duration, and `source=wheel_aim` under `[gt:600]`.
+- Added engine-free regression coverage and `/gt_regression_test` check `issue600_wait_aim_and_duration`.
+
+### Solo verify
+
+Host an Adventure mission with at least one bot, enable **Bot command wheel**, aim at navigable ground several metres away, and choose **Wait**. The nearest bot should move to that aimed point, remain held around it for 30 seconds, then resume following. Run `/gt_regression_test` and confirm `issue600_wait_aim_and_duration` passes; the log should contain one `[gt:600] wait applied` row with `source=wheel_aim` and `duration=30.0`.
+
 ## v0.2.239-dev (2026-07-14) -- #247 keep-slot bot takeover [verify-fix-coop]
 
 - Replaced the hard-disabled owner-destructive swap with a source-backed keep-slot transaction for Adventure, Chaos Wastes, and Weaves. The human `Player`, peer/profile assignment, and party slot remain authoritative while one temporary same-profile bot uses a free slot or safely replaces one remembered native bot.

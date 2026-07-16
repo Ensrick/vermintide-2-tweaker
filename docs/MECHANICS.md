@@ -144,6 +144,12 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 - VMF RPC string payloads are capped at 500 chars by a Stingray hardcap; chunk
   longer payloads. [memory: reference_vmf_rpc_string_cap]
 
+## Domain: Bot commands / social wheel
+
+- Adventure configures `ping_mode.world_markers = false`; when the social wheel closes, even a context with a raycast position therefore takes the social-message path instead of `ping_world_position_attempt`, so `PingSystem._pinged_units` receives no new world position for that command. [src: scripts/settings/game_mode_settings.lua:41-45; scripts/ui/social_wheel/social_wheel_ui.lua:1513-1521]
+- The social-wheel context still carries the position produced by `ContextAwarePingExtension._check_raycast`, boxed before the menu opens; a mod that needs that Adventure aim point must copy the live box because the extension reuses its `_ping_position` box. [src: scripts/unit_extensions/default_player_unit/ping/context_aware_ping_extension.lua:209-362,438-492]
+- `AIBotGroupExtension.set_hold_position` boxes a supplied position, and `_assign_destination_points` makes it the bot's `follow_position`; clearing the hold removes both the position and radius. [src: scripts/entity_system/systems/ai/ai_bot_group_system.lua:32-53,1109-1122]
+
 ## Domain: Spawning / Conflict-Director
 
 - `HordeCompositionsPacing` entries each carry a `loaded_probs` field built from

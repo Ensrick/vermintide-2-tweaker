@@ -6,10 +6,12 @@ local policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_command_poli
 -- host decodes the existing event after vanilla handles its chat/VO surface.
 -- Bot brains are server-owned, so clients neither see the page nor mutate AI.
 mod._GT359_BOT_COMMAND_WHEEL_MARKER = "gt-359-existing-versus-events-host-bot-orders"
+mod._GT600_WAIT_AIM_MARKER = "gt-600-wheel-context-position-not-player-origin"
 
 local PAGE_MARKER = "gt359_bot_command_page"
 local _last_enemy_by_pinger = {}
 local _holds = {}
+local _wait_aim_by_pinger = {}
 local _cover
 local _hold_token = 0
 
@@ -131,6 +133,9 @@ end
 function mod._gt359_clear_commands()
     _cover = nil
     _clear_our_holds()
+    for pinger_unit in pairs(_wait_aim_by_pinger) do
+        _wait_aim_by_pinger[pinger_unit] = nil
+    end
     local settings = rawget(_G, "SocialWheelSettings")
     if settings then
         _set_page(settings.general, false)
@@ -164,19 +169,24 @@ local function _hold_nearest(system, pinger_unit, position, t)
     ext:set_hold_position(position, policy.HOLD_RADIUS_M)
     ext.data._gt359_hold_token = _hold_token
     _holds[bot_unit] = { token = _hold_token, until_t = t + policy.HOLD_DURATION_S }
+    local engine_printf = rawget(_G, "printf")
+    if engine_printf then
+        engine_printf(
+            "[gt:600] wait applied: bot=%s target=(%.2f,%.2f,%.2f) radius=%.1f duration=%.1f source=wheel_aim",
+            tostring(bot_unit), position.x, position.y, position.z,
+            policy.HOLD_RADIUS_M, policy.HOLD_DURATION_S
+        )
+    end
     return true
 end
 
-local function _wait_position(ping_system, pinger_unit)
-    local rec = ping_system and ping_system._pinged_units and ping_system._pinged_units[pinger_unit]
-    local p = rec and rec.position
-    if type(p) == "table" and p[1] and p[2] and p[3] then
-        return Vector3(p[1], p[2], p[3])
-    end
-    return Unit.alive(pinger_unit) and Unit.world_position(pinger_unit, 0) or nil
+local function _wait_position(pinger_unit)
+    local boxed_position = _wait_aim_by_pinger[pinger_unit]
+    _wait_aim_by_pinger[pinger_unit] = nil
+    return boxed_position and boxed_position:unbox() or nil
 end
 
-local function _execute_command(ping_system, command, pinger_unit, t)
+local function _execute_command(command, pinger_unit, t)
     local system = _bot_system()
     if not system then return false end
 
@@ -188,7 +198,15 @@ local function _execute_command(ping_system, command, pinger_unit, t)
         end
         return false
     elseif command == "hold_here" then
-        return _hold_nearest(system, pinger_unit, _wait_position(ping_system, pinger_unit), t)
+        local position = _wait_position(pinger_unit)
+        if not position then
+            local engine_printf = rawget(_G, "printf")
+            if engine_printf then
+                engine_printf("[gt:600] wait rejected: reason=no-wheel-aim")
+            end
+            return false
+        end
+        return _hold_nearest(system, pinger_unit, position, t)
     elseif command == "group_up" then
         _arm_cover(pinger_unit, t + policy.GROUP_DURATION_S)
         return true
@@ -204,6 +222,21 @@ end
 mod:hook("SocialWheelUI", "_open_menu", function(func, self, ...)
     local settings = rawget(_G, "SocialWheelSettings")
     local wanted = _enabled() and _is_host()
+    local player = self._player
+    local pinger_unit = player and player.player_unit
+    if pinger_unit then
+        -- Adventure deliberately disables world-marker pings, so its social
+        -- wheel sends only the event and PingSystem never receives the aimed
+        -- position. Preserve the wheel's already-raycast context while it is
+        -- live. Copy into a fresh Vector3Box because the source box is reused.
+        -- Source: game_mode_settings.lua:41-45; social_wheel_ui.lua:669-824,
+        -- 1518-1521; context_aware_ping_extension.lua:209-362, 446-492.
+        _wait_aim_by_pinger[pinger_unit] = nil
+        local current_context = self._current_context
+        if wanted and Unit.alive(pinger_unit) and current_context and current_context.position then
+            _wait_aim_by_pinger[pinger_unit] = Vector3Box(current_context.position:unbox())
+        end
+    end
     local changed = settings and (
         _set_page(settings.general, wanted)
         or _set_page(settings.general_gamepad, wanted)
@@ -237,7 +270,7 @@ mod:hook_safe("PingSystem", "_handle_chat", function(self, ping_type, event_id, 
     local t = command and mechanism ~= "versus" and _game_time() or nil
     if not t then return end
 
-    local ok = _execute_command(self, command, pinger_unit, t)
+    local ok = _execute_command(command, pinger_unit, t)
     local engine_printf = rawget(_G, "printf")
     if engine_printf then
         engine_printf("[gt:359] command=%s applied=%s duration=bounded", command, tostring(ok))
@@ -316,5 +349,14 @@ mod._gt_rt_register("issue359_bot_command_wheel", function()
                 and rawget(lookup.social_wheel_events, event_name)) then
             return "vanilla social-wheel event unavailable: " .. event_name
         end
+    end
+end)
+
+mod._gt_rt_register("issue600_wait_aim_and_duration", function()
+    if mod._GT600_WAIT_AIM_MARKER ~= "gt-600-wheel-context-position-not-player-origin" then
+        return "issue 600 aimed-position provenance marker missing"
+    end
+    if policy.HOLD_DURATION_S ~= 30 then
+        return "issue 600 wait duration is not 30 seconds"
     end
 end)

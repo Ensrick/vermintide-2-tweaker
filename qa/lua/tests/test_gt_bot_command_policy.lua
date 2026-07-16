@@ -20,7 +20,7 @@ return function(H, repo_root)
         H.equal(P.ATTACK_DURATION_S, 10)
         H.equal(P.GROUP_DURATION_S, 8)
         H.equal(P.COVER_DURATION_S, 12)
-        H.equal(P.HOLD_DURATION_S, 15)
+        H.equal(P.HOLD_DURATION_S, 30)
         H.equal(P.HOLD_RADIUS_M, 4)
     end)
 
@@ -62,5 +62,19 @@ return function(H, repo_root)
         H.equal(wheel:find("network_register", 1, true), nil)
         H.equal(wheel:find("NetworkLookup.social_wheel_events%[.*%]%s*=", 1), nil)
         H.truthy(fixes:find("_gt359_apply_follow_override", 1, true) ~= nil)
+    end)
+
+    H.test("GT #600 Wait captures wheel aim without player-position fallback", function()
+        local wheel_path = repo_root
+            .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_command_wheel.lua"
+        local f = assert(io.open(wheel_path, "rb"))
+        local wheel = f:read("*a")
+        f:close()
+
+        H.truthy(wheel:find("gt-600-wheel-context-position-not-player-origin", 1, true) ~= nil)
+        H.truthy(wheel:find("Vector3Box(current_context.position:unbox())", 1, true) ~= nil)
+        H.truthy(wheel:find("_wait_aim_by_pinger[pinger_unit] = nil", 1, true) ~= nil)
+        H.equal(wheel:find("Unit.world_position(pinger_unit, 0)", 1, true), nil)
+        H.truthy(wheel:find("issue600_wait_aim_and_duration", 1, true) ~= nil)
     end)
 end

@@ -35,8 +35,8 @@ return {
     -- The chat line itself when a bot's guard breaks (code-referenced).
     gt_bot_guard_break_chat = { en = "A bot's guard was broken!" },
 
-    gt_bot_command_wheel = { en = "[verify-fix] [Issue 359] Bot command wheel" },
-    gt_bot_command_wheel_tooltip = { en = "Adds Attack Now, Group Up, Cover Me, and Wait as a second page of the mission social wheel for the host. Attack Now prioritizes the last enemy you pinged for 10 seconds; Group Up and Cover Me temporarily gather bots around you; Wait parks the nearest bot around the aimed point for 15 seconds. Normal safety, combat, and rescue behavior still takes priority where required." },
+    gt_bot_command_wheel = { en = "[verify-fix] [Issue 359 & 600] Bot command wheel" },
+    gt_bot_command_wheel_tooltip = { en = "Adds Attack Now, Group Up, Cover Me, and Wait as a second page of the mission social wheel for the host. Attack Now prioritizes the last enemy you pinged for 10 seconds; Group Up and Cover Me temporarily gather bots around you; Wait parks the nearest bot around the aimed point for 30 seconds. Normal safety, combat, and rescue behavior still takes priority where required." },
 
     -- Bot Behavior Improvements master toggle + nested sub-toggles (#297,
     -- v0.2.182-dev). The master gates everything; each fix below is now
