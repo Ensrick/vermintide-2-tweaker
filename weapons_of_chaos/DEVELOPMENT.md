@@ -20,7 +20,10 @@ definition is registered once at a deterministic backend id and marked
 all present and future WOC items; consumers must use the marker rather than a
 screen name, rarity guess, or a special case for Blightreaper.
 
-The provider definition uses `promo` rarity and has no skin combination table.
+The provider definition uses WOC's local `cursed` rarity and has no skin
+combination table. Sender-side loadout shadows use vanilla `promo`; Chaos Wastes
+serialization uses vanilla `unique`. A peer without WOC therefore never receives
+the custom rarity identifier.
 MoreItemsLibrary overwrites live mod-item rarity with `default` during
 `add_mod_items_to_local_backend`, so registration must also stamp the actual
 backend row and its `CustomData` after MIL returns. Definition-only writes do
@@ -33,6 +36,20 @@ transaction. Equipped, saved-loadout, or uncertain duplicates are retained and
 retried later; the canonical id is structurally excluded from deletion.
 CIM consumes the same provider marker to reject relic acquisition and mutation
 at its catalogue and central craft-dispatch boundaries.
+
+Blightreaper is fixed at 600 power in ordinary play and 900 in Chaos Wastes.
+Its combat template is a private deep clone of `we_one_hand_sword_template_1`;
+attack `anim_time_scale` values are multiplied by 0.75 without mutating the elf
+Sword donor or cloning damage profiles. Its client equipment proc applies only
+the native `arrow_poison_dot` through `BuffSyncType.All`, which preserves the
+Hagbane damage and poisoned FX for host- and client-owned hits. Chaos Wastes
+serializes the vanilla `deus_es_1h_sword`/`unique` pair plus an ignored
+`woc=blightreaper` token, restores the Cursed identity only on WOC peers, and
+blocks tempering at both rarity comparison and upgrade execution boundaries.
+If a non-WOC authority removes the unknown token during a native
+deserialize/serialize pass, WOC also recognizes the exact 900/unique donor
+signature; the source-defined vanilla ceiling is 700, so this cannot collide
+with a generated Chaos Wastes weapon.
 
 All paths/line citations below are against the decompiled source at
 `C:/Users/danjo/source/repos/Vermintide-2-Source-Code` (referred to as `src/`).

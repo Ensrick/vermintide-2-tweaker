@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.16-dev"
+local MOD_VERSION = "0.1.17-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -12,9 +12,9 @@ mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 -- each weapon is a real inventory item cloned from a player base weapon
 -- template, with its `right_hand_unit` swapped to a different `.unit` mesh.
 --
--- FIRST ITEM: "Blightreaper" — Markus Kruber's one-handed sword
--- (`es_1h_sword` / `one_handed_swords_template_1`), equippable by every career
--- of all five heroes.
+-- FIRST ITEM: "Blightreaper" — a unique relic with Kerillian's one-handed
+-- Sword action graph, slowed to 75%, equippable by every career of all five
+-- heroes. Its vanilla `es_1h_sword` transport identity remains mixed-peer safe.
 --
 -- HELD MESH: the sword placed beside the Bögenhafen mission cage was extracted
 -- from the level bundle and re-authored as explicit WOC-owned 1P and 3P units.
@@ -138,8 +138,11 @@ end)
 local ITEM_KEY    = "woc_blightreaper"
 local BACKEND_ID  = ITEM_KEY .. "_001"
 local BASE_WEAPON = "es_1h_sword"                       -- Kruber 1H sword (clone source)
-local TEMPLATE    = "one_handed_swords_template_1"      -- 1H sword moveset / hit detection
 local _wire_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_wire_policy")
+local _moveset = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_moveset")
+local _power = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_power")
+local _cursed = mod:dofile("scripts/mods/weapons_of_chaos/_woc_cursed_rarity")
+local TEMPLATE = _moveset.TEMPLATE
 local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_policy")
 local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview")
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
@@ -148,6 +151,14 @@ local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventor
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
 local _wa = _pulse_lib.new(_appearance, _appearance_lib.new())
 mod._woc_inventory_icons = _inventory_icons
+_cursed.install({
+	Colors = rawget(_G, "Colors"),
+	UISettings = rawget(_G, "UISettings"),
+	RaritySettings = rawget(_G, "RaritySettings"),
+	RarityIndex = rawget(_G, "RarityIndex"),
+	ORDER_RARITY = rawget(_G, "ORDER_RARITY"),
+	NetworkLookup = rawget(_G, "NetworkLookup"),
+})
 if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" then
 	-- Packaging failures must not become startup crashes. Preserve ordinary
 	-- vanilla loadout syncs, but fail closed for explicit WOC identities because
@@ -212,6 +223,7 @@ local _display_names = {
 	[ITEM_KEY .. "_name"]        = mod:localize("woc_blightreaper_name"),
 	[ITEM_KEY .. "_description"] = mod:localize("woc_blightreaper_description"),
 	[ITEM_KEY]                   = mod:localize("woc_blightreaper_name"),  -- item_type label
+	[_cursed.DISPLAY_KEY]        = "Cursed",
 }
 
 mod:hook(_G, "Localize", function(func, key)
@@ -259,13 +271,13 @@ local function _build_entry(base, backend_id)
 		ItemInstanceId = backend_id,
 		CustomData = {
 			traits      = "[]",
-			power_level = "300",
+			power_level = tostring(_power.NORMAL_POWER),
 			properties  = "{}",
 			rarity      = _relic_policy.RARITY,
 		},
 		rarity      = _relic_policy.RARITY,
 		traits      = {},
-		power_level = 300,
+		power_level = _power.NORMAL_POWER,
 		properties  = {},
 	}
 	-- No skin pre-applied: the item renders from entry.right_hand_unit. WOC
@@ -281,6 +293,61 @@ end
 
 local _registered = false
 local _relic_definitions = {}
+local _moveset_report
+
+-- The equipment buff is local to the wielder, so its WOC-only name never
+-- crosses NetworkLookup. Its proc applies the game's native Hagbane DOT with
+-- BuffSyncType.All; every peer therefore receives a boot-stable
+-- `arrow_poison_dot` id and the native poisoned status FX.
+local function _install_blightreaper_poison()
+	local templates = rawget(_G, "BuffTemplates")
+	local procs = rawget(_G, "ProcFunctions")
+	if type(templates) ~= "table" or type(procs) ~= "table" then
+		return false, "buff_tables_unavailable"
+	end
+	if type(procs[_moveset.POISON_PROC]) ~= "function" then
+		procs[_moveset.POISON_PROC] = function(owner_unit, buff, params)
+			local hit_unit = type(params) == "table" and params[1]
+			local attack_type = type(params) == "table" and params[2]
+			if attack_type ~= "light_attack" and attack_type ~= "heavy_attack" then return end
+			if not (owner_unit and hit_unit and ALIVE[owner_unit] and HEALTH_ALIVE[hit_unit]) then return end
+			local side = Managers and Managers.state and Managers.state.side
+			if not side or not side:is_enemy(owner_unit, hit_unit) then return end
+			if not ScriptUnit.has_extension(hit_unit, "buff_system") then return end
+			local career = ScriptUnit.has_extension(owner_unit, "career_system")
+			local buff_system = Managers.state.entity and Managers.state.entity:system("buff_system")
+			local sync_types = rawget(_G, "BuffSyncType")
+			if not career or not buff_system or not sync_types then return end
+			buff_system:add_buff_synced(hit_unit, _moveset.DOT_TEMPLATE, sync_types.All, {
+				power_level = career:get_career_power_level(),
+				attacker_unit = owner_unit,
+				-- `damage_source` is itself a NetworkLookup. Keep it vanilla;
+				-- ITEM_KEY would be just as unsafe here as in loadout transport.
+				damage_source = "buff",
+			})
+		end
+	end
+	return _moveset.install_poison_buff(templates)
+end
+
+local function _install_blightreaper_moveset()
+	if _moveset_report and _moveset_report.installed then return true end
+	local poison_ok, poison_reason = _install_blightreaper_poison()
+	if not poison_ok then
+		printf("[WOC:632] Blightreaper poison unavailable: %s", tostring(poison_reason))
+		return false
+	end
+	_moveset_report = _moveset.install(Weapons,
+		function(value) return table.clone(value, true) end)
+	if not _moveset_report.installed then
+		printf("[WOC:632] Blightreaper moveset unavailable: %s",
+			tostring(_moveset_report.skipped))
+		return false
+	end
+	mod:info("[WOC:632] private Kerillian Sword template ready (attacks=%d poison=%s speed=75%%)",
+		_moveset_report.attacks or 0, _moveset.DOT_TEMPLATE)
+	return true
+end
 
 local function _backend_items()
 	return Managers and Managers.backend and Managers.backend:get_interface("items")
@@ -296,7 +363,9 @@ local function _stamp_live_relic(items, entry)
 		live = type(all) == "table" and all[BACKEND_ID] or nil
 	end
 	if not live then return false end
-	return _relic_policy.enforce_instance(live, entry, BACKEND_ID)
+	local enforced = _relic_policy.enforce_instance(live, entry, BACKEND_ID)
+	if enforced then _power.stamp(live, false) end
+	return enforced
 end
 
 local function _equip_state(items, backend_id)
@@ -362,6 +431,21 @@ local function _register_blightreaper()
 		_dbg("Blightreaper disabled via setting; skipping registration")
 		return
 	end
+	-- The mod chunk can be evaluated before Morris' rarity tables finish
+	-- loading. Re-run this idempotent registration at the in-game boundary so
+	-- the Cursed presentation and lookup survive that load order.
+	local rarity_ok, rarity_reason = _cursed.install({
+		Colors = rawget(_G, "Colors"),
+		UISettings = rawget(_G, "UISettings"),
+		RaritySettings = rawget(_G, "RaritySettings"),
+		RarityIndex = rawget(_G, "RarityIndex"),
+		ORDER_RARITY = rawget(_G, "ORDER_RARITY"),
+		NetworkLookup = rawget(_G, "NetworkLookup"),
+	})
+	if not rarity_ok then
+		_dbg("Blightreaper Cursed rarity deferred: %s", tostring(rarity_reason))
+		return
+	end
 
 	local mil = get_mod("MoreItemsLibrary")
 	if not mil then
@@ -374,6 +458,7 @@ local function _register_blightreaper()
 		mod:warning("Base weapon '%s' not found in ItemMasterList — Blightreaper cannot be registered", BASE_WEAPON)
 		return
 	end
+	if not _install_blightreaper_moveset() then return end
 
 	local entry = _build_entry(base, BACKEND_ID)
 	mil:add_mod_items_to_local_backend({ entry }, "weapons_of_chaos")
@@ -388,6 +473,11 @@ local function _register_blightreaper()
 	-- bypasses the crashify __index metamethod on the missing key.
 	if ItemMasterList and not rawget(ItemMasterList, ITEM_KEY) then
 		ItemMasterList[ITEM_KEY] = entry
+	end
+	local deus_ok, deus_reason = _power.install_deus(ItemMasterList,
+		rawget(_G, "DeusStartingWeaponTypeMapping"), rawget(_G, "DeusWeapons"))
+	if not deus_ok then
+		_dbg("Blightreaper Deus identity deferred: %s", tostring(deus_reason))
 	end
 
 	-- Inject into NetworkLookup.item_names so item-name RPCs serialize. rawset:
@@ -407,6 +497,101 @@ local function _register_blightreaper()
 	mod:info("[WOC] registered Blightreaper (%s) as backend item %s", ITEM_KEY, BACKEND_ID)
 end
 
+-- ============================================================
+-- Chaos Wastes fixed-power identity
+-- ============================================================
+
+local _deus_setup_active = false
+local _deus_pending_relics = 0
+
+-- Vanilla setup reads the canonical backend item by id, then immediately maps
+-- item.key through DeusStartingWeaponTypeMapping. Expose a non-mutating WOC-key
+-- shadow only inside that synchronous setup window. The mapping itself still
+-- resolves to the vanilla elf-Sword Deus row.
+mod:hook("BackendInterfaceItemPlayfab", "get_item_from_id", function(func, self, backend_id)
+	local item = func(self, backend_id)
+	if _deus_setup_active and _power.is_relic(item) then
+		_deus_pending_relics = _deus_pending_relics + 1
+		return _power.setup_identity(item)
+	end
+	return item
+end)
+
+mod:hook("DeusMechanism", "_setup_run", function(func, self, ...)
+	_power.install_deus(ItemMasterList, rawget(_G, "DeusStartingWeaponTypeMapping"),
+		rawget(_G, "DeusWeapons"))
+	_deus_setup_active = true
+	_deus_pending_relics = 0
+	local results = { pcall(func, self, ...) }
+	_deus_setup_active = false
+	_deus_pending_relics = 0
+	local ok = table.remove(results, 1)
+	if not ok then error(results[1]) end
+	return unpack(results)
+end)
+
+mod:hook("DeusWeaponGeneration", "generate_item_from_item_key",
+		function(func, deus_item_key, ...)
+			local restore = _deus_setup_active and _deus_pending_relics > 0
+				and deus_item_key == _power.VANILLA_DEUS_KEY
+			local item = func(deus_item_key, ...)
+			if restore and type(item) == "table" then
+				_deus_pending_relics = _deus_pending_relics - 1
+				_power.restore_deus_item(item, _power.SERIALIZATION_MARKER,
+					rawget(ItemMasterList, ITEM_KEY))
+			end
+			return item
+		end)
+
+	mod:hook("DeusWeaponGeneration", "serialize_weapon", function(func, item)
+		return _power.serialize_deus_weapon(item, function(wire_item)
+			return func(wire_item)
+		end)
+	end)
+
+	mod:hook("DeusWeaponGeneration", "deserialize_weapon", function(func, serialized)
+		return _power.deserialize_deus_weapon(serialized, function(wire_string)
+			return func(wire_string)
+		end, rawget(ItemMasterList, ITEM_KEY))
+	end)
+
+	mod:hook("DeusWeaponGeneration", "upgrade_item", function(func, item, ...)
+		if _power.should_block_upgrade(item) then return item end
+		return func(item, ...)
+	end)
+
+-- Setup overwrites generated starter power with the difficulty default before
+-- granting it. Stamp at the grant boundary so the backend row and the run
+-- controller's shared item table both retain 900/Cursed.
+mod:hook("BackendInterfaceDeusBase", "grant_deus_weapon", function(func, self, item)
+	if _power.is_relic(item) then _power.stamp_deus(item) end
+	return func(self, item)
+end)
+
+mod:hook("DeusChestExtension", "can_be_unlocked", function(func, self)
+	local weapon = self._get_wielded_weapon and self:_get_wielded_weapon()
+	if _power.should_block_upgrade(weapon) then return false end
+	return func(self)
+end)
+
+-- RarityUtils.get_lower_rarities sees every registered rarity. Without this
+-- repair, a Deus upgrade can write `cursed` into pool_excludes even though the
+-- base weapon pool has no cursed bucket; the next chest then indexes nil.
+mod:hook("DeusRunController", "get_weapon_pool", function(func, self, ...)
+	local ok_base, base_pool = pcall(self.get_base_weapon_pool, self)
+	local state = self._run_state
+	if ok_base and type(base_pool) == "table" and state
+			and type(state.get_own_weapon_pool_excludes) == "function" then
+		local excludes = state:get_own_weapon_pool_excludes()
+		local removed = _cursed.scrub_unknown_pool_rarities(base_pool, excludes)
+		if #removed > 0 and type(state.set_own_weapon_pool_excludes) == "function" then
+			state:set_own_weapon_pool_excludes(excludes)
+			mod:info("[WOC:632] scrubbed Cursed Deus rarity exclude")
+		end
+	end
+	return func(self, ...)
+end)
+
 -- StateInGameRunning.on_enter fires on entering the keep AND each mission load;
 -- the `_registered` guard makes re-fires a no-op (CWV registration-timing pattern).
 mod:hook_safe("StateInGameRunning", "on_enter", function()
@@ -419,12 +604,30 @@ mod:hook_safe("StateInGameRunning", "on_enter", function()
 	end
 end)
 
+-- Kerillian's sword events are authored for the elf skeleton. Reuse Weapon
+-- Tweaker's proven non-elf remap at the single pre-RPC animation boundary so
+-- owner 3P, bots, and remote husks all receive the same vanilla animation id.
+mod:hook("WeaponUnitExtension", "_play_3p_anim",
+		function(func, self, event_3p, event, owner_unit, looping_event, anim_time_scale)
+			local lookup = self.current_action_settings and self.current_action_settings.lookup_data
+			local template_name = lookup and lookup.item_template_name
+			if template_name == TEMPLATE then
+				local career_name
+				local career = owner_unit and ScriptUnit.has_extension(owner_unit, "career_system")
+				if career and type(career.career_name) == "function" then
+					career_name = career:career_name()
+				end
+				event_3p = _moveset.remap_3p(event_3p, career_name, template_name)
+			end
+			return func(self, event_3p, event, owner_unit, looping_event, anim_time_scale)
+		end)
+
 _rt_register("issue637_unique_immutable_relic_inventory", function()
 	if not mod:get("enable_blightreaper") then return "skip: Blightreaper is disabled" end
 	if not _registered then return "WOC relic registration has not completed" end
 	local entry = rawget(ItemMasterList, ITEM_KEY)
 	if not _relic_policy.is_definition(entry) or entry.rarity ~= _relic_policy.RARITY then
-		return "canonical provider row is not marked as an immutable promo relic"
+		return "canonical provider row is not marked as an immutable Cursed relic"
 	end
 	local items = _backend_items()
 	local all
@@ -445,7 +648,7 @@ _rt_register("issue637_unique_immutable_relic_inventory", function()
 	end
 	local live = all[BACKEND_ID]
 	if not _relic_policy.is_instance(live) or live.rarity ~= _relic_policy.RARITY then
-		return "MoreItemsLibrary live row did not retain the immutable promo marker"
+		return "MoreItemsLibrary live row did not retain the immutable Cursed marker"
 	end
 end)
 
@@ -467,6 +670,44 @@ _rt_register("issue613_blightreaper_inventory_icon_contract", function()
 	end
 end)
 
+_rt_register("issue632_blightreaper_cursed_combat_contract", function()
+	if not mod:get("enable_blightreaper") then return "skip: Blightreaper is disabled" end
+	if not _registered then return "WOC relic registration has not completed" end
+	local entry = rawget(ItemMasterList, ITEM_KEY)
+	local template = rawget(Weapons, TEMPLATE)
+	local donor = rawget(Weapons, _moveset.SOURCE_TEMPLATE)
+	if type(entry) ~= "table" or entry.template ~= TEMPLATE then
+		return "item is not bound to the private elf-Sword template"
+	end
+	if type(template) ~= "table" or type(donor) ~= "table" or template == donor then
+		return "private elf-Sword clone is missing or aliases its donor"
+	end
+	if not (template.buffs and template.buffs[_moveset.POISON_BUFF_TEMPLATE]) then
+		return "native Hagbane poison equipment buff is not attached"
+	end
+	local procs = rawget(_G, "ProcFunctions")
+	if type(procs) ~= "table" or type(procs[_moveset.POISON_PROC]) ~= "function" then
+		return "client-safe Hagbane poison proc is unavailable"
+	end
+	local live = _backend_items() and _backend_items():get_item_from_id(BACKEND_ID)
+	if not live or live.power_level ~= _power.NORMAL_POWER
+			or live.rarity ~= _cursed.NAME then
+		return string.format("live relic expected 600/Cursed, got power=%s rarity=%s",
+			tostring(live and live.power_level), tostring(live and live.rarity))
+	end
+	local rarity_settings = rawget(_G, "RaritySettings")
+	local ui_settings = rawget(_G, "UISettings")
+	if not (rarity_settings and rarity_settings.cursed
+			and rarity_settings.cursed.order == _cursed.ORDER
+			and ui_settings and ui_settings.item_rarity_textures
+			and ui_settings.item_rarity_textures.cursed == _cursed.TEXTURE) then
+		return "Cursed rarity presentation registry is incomplete"
+	end
+	local remaps = 0
+	for _ in pairs(_moveset.THIRD_PERSON_REMAP) do remaps = remaps + 1 end
+	if remaps ~= 6 then return "non-elf 3P remap set is not exactly six events" end
+end)
+
 -- ============================================================
 -- Wire-safety: never crash a non-WOC peer (issue 278 / issue 371)
 -- ============================================================
@@ -483,7 +724,8 @@ end)
 -- only for this call); remote loadout panels show the base weapon, consistent with what
 -- the husk already renders (the clone keeps entry.name = BASE_WEAPON). Byte-identical to
 -- CWV's issue-278 fix (character_weapon_variants.lua:10166). No skin/rarity axis to fix:
--- WOC applies no skin (weapon_skin_id "n/a") and rarity = "default" (a vanilla index).
+-- WOC applies no skin (weapon_skin_id "n/a"). Its local Cursed rarity is also
+-- replaced with the vanilla promo id in the transient wire shadow.
 --
 -- Prefix-match "woc_" so EVERY present/future WOC item is crash-safe. All current items
 -- clone BASE_WEAPON; if a future item clones a different base, resolve the base per-key
@@ -502,7 +744,8 @@ local function _wire_safe_item(item)
 	local base_resolvable = rawget(ItemMasterList, BASE_WEAPON)
 		and NetworkLookup and NetworkLookup.item_names
 		and rawget(NetworkLookup.item_names, BASE_WEAPON)
-	return _wire_policy.safe_item(item, BASE_WEAPON, base_resolvable)
+	return _wire_policy.safe_item(item, BASE_WEAPON, base_resolvable,
+		_relic_policy.WIRE_RARITY)
 end
 
 local _blightreaper_sync_seen = false
@@ -581,8 +824,7 @@ end)
 
 if rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot then
 	mod:hook(LoadoutUtils, "sync_loadout_slot", function(func, player, slot_name, item, sync_to_specific_peer_id)
-		local is_blightreaper = item and
-			(item.backend_id == BACKEND_ID or item.ItemInstanceId == BACKEND_ID)
+		local is_blightreaper = _power.is_relic(item)
 		if is_blightreaper then
 			_blightreaper_sync_seen = true
 		end
@@ -617,7 +859,7 @@ _rt_register("wire_woc_never_leaves_woc_key", function()
 	if not (rawget(_G, "LoadoutUtils") and type(LoadoutUtils.sync_loadout_slot) == "function") then
 		return "LoadoutUtils.sync_loadout_slot missing -- wire hook cannot install"
 	end
-	local fake = { key = "woc_test", ItemId = "woc_test", power_level = 300 }
+	local fake = { key = "woc_test", ItemId = "woc_test", power_level = 600, rarity = "cursed" }
 	local out = _wire_safe_item(fake)
 	-- The native base + lookup are boot data, so a live game must produce the
 	-- exact vanilla-keyed shadow. nil remains reserved for a genuinely broken
@@ -628,6 +870,9 @@ _rt_register("wire_woc_never_leaves_woc_key", function()
 	if out.key ~= BASE_WEAPON or out.ItemId ~= BASE_WEAPON then
 		return string.format("expected exact base identity %s, got key=%s ItemId=%s",
 			BASE_WEAPON, tostring(out.key), tostring(out.ItemId))
+	end
+	if out.rarity ~= _relic_policy.WIRE_RARITY or fake.rarity ~= _relic_policy.RARITY then
+		return "Cursed rarity did not degrade to promo on the shadow only"
 	end
 	if fake.key ~= "woc_test" or fake.ItemId ~= "woc_test" then
 		return "live item was mutated -- shadow must be a copy"
@@ -662,8 +907,13 @@ _rt_register("issue509_registered_blightreaper_wire_contract", function()
 		return string.format("backend item is not vanilla-wire keyed: key=%s ItemId=%s",
 			tostring(live.key), tostring(live.ItemId))
 	end
-	if _wire_safe_item(live) ~= live then
-		return "vanilla-keyed live Blightreaper was unnecessarily rewritten"
+	local wire = _wire_safe_item(live)
+	if type(wire) ~= "table" or wire == live or wire.key ~= BASE_WEAPON
+			or wire.rarity ~= _relic_policy.WIRE_RARITY then
+		return "Cursed live Blightreaper did not produce a vanilla promo wire shadow"
+	end
+	if live.rarity ~= _relic_policy.RARITY then
+		return "wire substitution mutated the local Cursed rarity"
 	end
 	if not _blightreaper_sync_seen then
 		return "skip: equip Blightreaper once, then rerun for live hook evidence"

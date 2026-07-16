@@ -9,14 +9,28 @@ return function(H, repo_root)
 	end)
 
 	H.test("WOC wire policy substitutes explicit mod keys without mutation", function()
-		local live = { key = "woc_blightreaper", ItemId = "woc_blightreaper", power_level = 300 }
+		local live = { key = "woc_blightreaper", ItemId = "woc_blightreaper", power_level = 600, rarity = "cursed" }
 		local shadow = policy.safe_item(live, "es_1h_sword", true)
 		H.truthy(shadow and shadow ~= live)
 		H.equal(shadow.key, "es_1h_sword")
 		H.equal(shadow.ItemId, "es_1h_sword")
-		H.equal(shadow.power_level, 300)
+		H.equal(shadow.power_level, 600)
+		H.equal(shadow.rarity, "promo")
+		H.equal(live.rarity, "cursed")
 		H.equal(live.key, "woc_blightreaper")
 		H.equal(live.ItemId, "woc_blightreaper")
+	end)
+
+	H.test("WOC wire policy shadows marker-owned vanilla keys and Cursed rarity", function()
+		local live = {
+			key = "es_1h_sword", ItemId = "es_1h_sword", rarity = "cursed",
+			woc_unique_relic = true,
+		}
+		local shadow = policy.safe_item(live, "es_1h_sword", true, "promo")
+		H.truthy(shadow ~= live)
+		H.equal(shadow.key, "es_1h_sword")
+		H.equal(shadow.rarity, "promo")
+		H.equal(live.rarity, "cursed")
 	end)
 
 	H.test("WOC wire policy fails closed without a resolvable vanilla base", function()

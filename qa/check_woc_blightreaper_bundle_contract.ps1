@@ -27,6 +27,13 @@ $actualIconSha256 = (Get-FileHash -LiteralPath $iconSource -Algorithm SHA256).Ha
 if ($actualIconSha256 -ne $expectedIconSha256) {
     Fail "authored icon source drifted: expected=$expectedIconSha256 actual=$actualIconSha256"
 }
+$cursedSource = Join-Path $repoRoot 'weapons_of_chaos\gui\1080p\single_textures\weapons_of_chaos\icon_bg_cursed.png'
+$expectedCursedSha256 = '497DC8CC0A00870ED407334F2DEBA82F945144404156DA93BB936A93E9C3ACE4'
+if (-not (Test-Path -LiteralPath $cursedSource -PathType Leaf)) { Fail "Cursed rarity source missing: $cursedSource" }
+$actualCursedSha256 = (Get-FileHash -LiteralPath $cursedSource -Algorithm SHA256).Hash
+if ($actualCursedSha256 -ne $expectedCursedSha256) {
+    Fail "Cursed rarity source drifted: expected=$expectedCursedSha256 actual=$actualCursedSha256"
+}
 $listing = @(& $Unpacker --dict NUL --zstd-dict $CompressionDictionary list $rootBundle 2>&1)
 if ($LASTEXITCODE -ne 0) { Fail "unpacker failed: $($listing -join ' ')" }
 $text = $listing -join "`n"
@@ -41,6 +48,11 @@ $required = [ordered]@{
     '1C2ACC8620933DF0.lua'       = 'inventory icon renderer policy'
     '4FF265AF5A4F674D.material'  = 'authored inventory icon material'
     '2F41525708BE414A.texture'   = 'authored inventory icon texture'
+    '85FFE5B17B07C852.lua'       = 'elf Sword moveset and non-elf animation remaps'
+    '18F18F2FBAFE534B.lua'       = 'fixed normal and Chaos Wastes power policy'
+    'D69ADFDA94A46689.lua'       = 'Cursed rarity registration'
+    'E7CC3CDF46733B5D.material'  = 'Cursed rarity background material'
+    '39B0D0569925E305.texture'   = 'Cursed rarity background texture'
 }
 foreach ($resource in $required.Keys) {
     if ($text -notmatch "(?im)^$([regex]::Escape($resource))\b") { Fail "compiled root missing $($required[$resource]) ($resource)" }
@@ -56,4 +68,4 @@ if (-not $SkipWorkshop) {
     }
 }
 $status = if ($SkipWorkshop) { 'skipped' } else { "$matched file(s) exact" }
-Write-Host "[check_woc_blightreaper_bundle_contract] OK - 10 compiled resources, Workshop=$status"
+Write-Host "[check_woc_blightreaper_bundle_contract] OK - 15 compiled resources, Workshop=$status"

@@ -14,8 +14,8 @@ vanilla behavior, and links out. Decompile paths are relative to
 `WOC` lets player characters wield ENEMY weapons and named keep-trophy artifacts
 via the duplicate-item approach modeled on `character_weapon_variants`: it clones
 a player base weapon template into a new MoreItemsLibrary item and swaps the held
-mesh to a different `.unit`. As of v0.1.14-dev there is ONE item - the Blightreaper
-(Kruber 1H sword, all careers), rendered with the authored Blightreaper mesh
+mesh to a different `.unit`. As of v0.1.17-dev there is ONE item - the Blightreaper
+(private 75%-speed Kerillian Sword actions, all careers), rendered with the authored Blightreaper mesh
 because the intended keep-trophy prop is not runtime-loadable (see dead ends). Its
 engine contact includes display/registration/wire safety plus the four canonical
 weapon-render consumers: gameplay inventory spawn, character preview, item
@@ -32,7 +32,7 @@ registration itself is NOT a hook - it is direct `rawset`/assignment inside the
 
 `_woc_relic_policy.lua` is the engine-free inventory authority for issue #637.
 It marks every WOC provider definition and actual MIL backend row as one
-immutable `promo` relic, plans duplicate reconciliation by exact backend id,
+immutable local `cursed` relic, plans duplicate reconciliation by exact backend id,
 and never admits the deterministic canonical id to its deletion set. CIM dev
 consumes this marker at its provider validator and sole crafting dispatcher;
 this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
@@ -54,7 +54,18 @@ this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
 
 | Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
 |---|---|---|---|
-| `LoadoutUtils.sync_loadout_slot` [hook,tbl] | Encodes `item.key` as `NetworkLookup.item_names[item_key]` for direct, host-broadcast, client-to-server, and hot-join sync [src: `scripts/helpers/loadout_utils.lua:12-53`; decode at `:69-83`] | Observe the exact Blightreaper backend item for live #509 evidence; preserve its inherited vanilla identity, while `_woc_wire_policy.lua` substitutes any future explicit `woc_` key with a vanilla `BASE_WEAPON` shadow | ROW-OF-CONCERN. Native parsing stamps the cloned base entry `key/name = es_1h_sword` [src: `scripts/settings/equipment/item_master_list.lua:109-112`], and MIL uses `item.key` for backend `ItemId/key`, so the current item already sends a boot-stable identity. WOC still appends `ITEM_KEY` locally for explicit-key consumers; any future `woc_` item must never emit that order-dependent id. The policy is unconditional, shallow-copy/non-mutating, and fails closed if the base index is unavailable. |
+| `LoadoutUtils.sync_loadout_slot` [hook,tbl] | Encodes `item.key` and rarity as local `NetworkLookup` integers for direct, host-broadcast, client-to-server, and hot-join sync [src: `scripts/helpers/loadout_utils.lua:12-53`; decode at `:69-83`] | Observe exact live equip and replace every marker-owned WOC item with a vanilla `BASE_WEAPON` / `promo` shadow | ROW-OF-CONCERN. Both `ITEM_KEY` and `cursed` are order-dependent local appends. Neither may reach a peer without WOC. The policy is unconditional, shallow-copy/non-mutating, and fails closed if the base index is unavailable. |
+
+### Combat, poison, and Chaos Wastes identity (#632)
+
+| Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
+|---|---|---|---|
+| `WeaponUnitExtension._play_3p_anim` [hook] | Sends and plays one vanilla animation event plus attack-speed variable | Apply the six proven elf-Sword redirects for non-elf skeletons before vanilla sends the event | 1P is untouched; no custom animation id or per-frame pose traffic. |
+| Local equipment `on_hit` proc | The wielder's buff extension emits light/heavy hit events | Apply native `arrow_poison_dot` with `BuffSyncType.All` | Vanilla `apply_dot_on_hit` is server-only and would fail for a client owner; the WOC proc sends only a native buff id. |
+| `DeusMechanism._setup_run` + item lookup/generation [hook] | Converts backend item keys through `DeusStartingWeaponTypeMapping`, generates starter weapons, then overwrites their power | Recognize the marker-owned relic through a scoped non-mutating key shadow and restore 900/Cursed at grant | Never serialize a custom Deus key. Pending setup identity is synchronous and cleared on success or error. |
+| `DeusWeaponGeneration.serialize_weapon` / `deserialize_weapon` [hook,tbl] | Serializes a comma-delimited item key, power, rarity, traits and properties; ignores unknown fields on read | Send vanilla `deus_es_1h_sword`/`unique` plus `woc=blightreaper`; restore only on WOC peers | Non-WOC readers ignore the marker and remain safe. If a non-WOC authority strips it while reserializing, the exact 900/unique donor signature is recoverable; vanilla generation is source-bounded to 700. |
+| `DeusChestExtension.can_be_unlocked` + `DeusWeaponGeneration.upgrade_item` [hook] | Compares rarity order, charges, then creates an upgraded weapon | Reject tempering both before purchase and at execution | Cursed order 7 is already above vanilla altar rarities; explicit identity guard protects against future table changes. |
+| `DeusRunController.get_weapon_pool` [hook] | Applies saved rarity-keyed pool exclusions | Remove only WOC's `cursed` key when absent from the base pool | Prevents a subsequent chest from indexing `weapon_pool.cursed == nil` without mutating another mod's rarity state. |
 
 ### Appearance and preview parity (owner docs: `docs/engine/05`, `docs/engine/06`, `docs/engine/09`)
 
@@ -98,7 +109,7 @@ against the live backend mirror rather than relying only on static source.
 
 MIL then unconditionally writes `backend_item.rarity` and
 `backend_item.CustomData.rarity` to `default`. WOC deliberately repairs the
-actual stored row to `promo` after registration and stamps
+actual stored row to `cursed` after registration and stamps
 `woc_unique_relic`; otherwise the native/CIM selectors would mistake the relic
 for a Blacksmith template. `issue637_unique_immutable_relic_inventory` proves
 one canonical row and zero removable/deferred duplicates at runtime.
@@ -111,11 +122,9 @@ index (`#tbl + 1`, `:264`), via `rawset` because the table has an error-throwing
 `woc_` key gets is not stable across peers - a host with WOC and a client without
 it disagree, and the client's decode hits the strict `__index`
 [src: `network_lookup.lua:2362`] -> CTD (issue 278 class). The `sync_loadout_slot`
-hook (table above) is the defense-in-depth boundary: current MIL-created
-Blightreaper rows pass through by identity because they inherit `es_1h_sword`;
-any explicit present/future `woc_` row is substituted with a `BASE_WEAPON`
-shadow before encode. `WOC` applies no skin and rarity `"promo"` (a vanilla
-index), so unlike CWV there is no skin/rarity axis to substitute, only the item-name axis
+hook (table above) is the defense-in-depth boundary: every marker-owned
+Blightreaper row is substituted with a `BASE_WEAPON` + `promo` shadow before
+encode. `WOC` applies no skin; the local `cursed` rarity never crosses this RPC
 (`docs/engine/03` §31; project `project_vt2_cross_peer_wire_safety`).
 
 ### Held-mesh derivation and preview residency (owner: `docs/engine/06`)

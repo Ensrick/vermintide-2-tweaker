@@ -8,7 +8,8 @@
 local M = {}
 
 M.MARKER = "woc_unique_relic"
-M.RARITY = "promo"
+M.RARITY = "cursed"
+M.WIRE_RARITY = "promo"
 
 local function identity(item)
 	if type(item) ~= "table" then return nil end

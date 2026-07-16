@@ -1,5 +1,42 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.17-dev (2026-07-16) - #632 Cursed Blightreaper combat identity [verify-fix-coop]
+
+- Replaced the inherited Kruber Sword behavior with a private deep clone of
+  Kerillian's one-handed Sword action graph. Only attack action timing is scaled
+  to 75%; the donor template and every vanilla damage profile remain untouched.
+- Applied Weapon Tweaker's six proven elf-Sword third-person remaps at the
+  pre-RPC animation boundary for every non-Kerillian career.
+- Added the native `arrow_poison_dot` Hagbane effect on light and heavy melee
+  hits. The wielder sends only the vanilla DOT identifier, so its damage and
+  visible poisoned status work for hosts and clients without custom combat RPCs.
+- Added WOC's Cursed rarity and the supplied byte-exact green rarity background.
+  Local WOC peers render Cursed; mixed-peer loadout traffic remains the vanilla
+  `es_1h_sword` / `promo` shadow.
+- Fixed Blightreaper power at 600 outside Chaos Wastes and 900 inside an
+  expedition. Chaos Wastes serialization carries only the vanilla
+  `deus_es_1h_sword` / `unique` identity plus an ignored WOC marker; WOC peers
+  restore the Cursed relic locally. If a non-WOC authority strips that unknown
+  marker, the otherwise impossible 900/unique identity restores it safely
+  (vanilla Chaos Wastes weapons top out at 700).
+- Made Blightreaper ineligible for tempering and scrubbed only WOC's own Cursed
+  key from Deus weapon-pool excludes before vanilla can index a missing pool.
+- Registered every Deus and third-person hook by delayed VMF class name so
+  lazy engine script order cannot silently omit the feature for a session.
+- Added offline and runtime regression coverage for action cloning, attack
+  speed, poison transport, 3P remaps, rarity registration and asset packaging,
+  600/900 power, vanilla-safe serialization, and temper blocking.
+
+### Verification
+
+Confirm `[WOC] v0.1.17-dev loaded`. In Adventure, verify Blightreaper shows a
+Cursed background, 600 power, Kerillian Sword attacks at 75% speed, and visible
+Hagbane poison/DOT on struck enemies. Repeat as both host and client on a
+non-Kerillian career and verify the remote third-person attacks animate. Start a
+Chaos Wastes expedition with it equipped: verify 900 power, unchanged maximum
+quality, no temper purchase, and no replacement by an ordinary sword. A peer
+without WOC must receive only the vanilla sword fallback without errors.
+
 ## 0.1.16-dev (2026-07-16) - #613 authored Blightreaper icon [verify-fix-coop]
 
 - Added the supplied transparent 80x80 Blightreaper inventory icon as a
