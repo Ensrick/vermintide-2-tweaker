@@ -50,12 +50,15 @@ local loc = {
     -- Events: <peer>. ...". Kept short so the one-line notice stays readable.
     peer_parity_curse_feature_label = en("Cursed Adventure curses"),
 
-    -- Issue 626: option titles remain issue-tagged until the candidate is built,
-    -- shipped, and verified in-game. The group is navigation-only, so untagged.
+    -- Issue 626: built (v0.4.34-dev) but not yet confirmed in-game, so the option
+    -- titles carry the [untested] status tag per LOCALIZATION_STANDARD § 13.1 (the
+    -- same tag the sibling issue-532 preview and Cursed Adventure entries use);
+    -- they escalate to [working] once the user verifies the missions load in a
+    -- lobby. The group is navigation-only, so it stays untagged.
     cat_event_missions = en("Dormant Event Missions"),
-    mission_dlc_dwarf_fest = en("[Issue 626] The Feast of Grimnir"),
+    mission_dlc_dwarf_fest = en("[untested] The Feast of Grimnir"),
     mission_dlc_dwarf_fest_tooltip = en("Show The Feast of Grimnir in Own Game under the built-in event area. Uses the game's existing level definition and packages; Event Tweaker does not add it to Quick Play or unrelated campaign pools."),
-    mission_dlc_celebrate_crawl = en("[Issue 626] A Quiet Drink"),
+    mission_dlc_celebrate_crawl = en("[untested] A Quiet Drink"),
     mission_dlc_celebrate_crawl_tooltip = en("Show A Quiet Drink in Own Game under the built-in event area. Uses the game's existing level definition and packages; Event Tweaker does not add it to Quick Play or unrelated campaign pools."),
 
     -- Difficulty modifiers
