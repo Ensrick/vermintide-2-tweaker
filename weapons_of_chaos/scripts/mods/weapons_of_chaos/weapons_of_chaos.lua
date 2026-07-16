@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.19-dev"
+local MOD_VERSION = "0.1.20-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -148,6 +148,7 @@ local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
 local _audio_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_audio")
 local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse")
+local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
 local _wa = _pulse_lib.new(_appearance, _appearance_lib.new())
@@ -189,6 +190,13 @@ end
 
 local HELD_UNIT = _appearance.UNIT_1P
 local INVENTORY_ICON = _inventory_icons.ICON
+
+-- Assigned after the mixed-peer identity sideband is defined.  The state hook
+-- lives earlier in the file, so forward functions let it stay the singleton
+-- owner of StateInGameRunning.on_enter (#632 / no-duplicate-hook doctrine).
+local _start_spirit_runtime = function() end
+local _stop_spirit_runtime = function() end
+local _mark_blight_poison = function() end
 
 -- Package lookup aliases are forward-only. WOC-capable peers retain the
 -- authored unit locally; peers without WOC continue decoding the vanilla sword
@@ -337,6 +345,10 @@ local function _install_blightreaper_poison()
 				-- ITEM_KEY would be just as unsafe here as in loadout transport.
 				damage_source = "buff",
 			})
+			-- Host-owned hits are marked directly.  Client-owned hits reach the
+			-- host through the native rpc_add_buff_synced_params hook below, so no
+			-- custom per-hit RPC or mod-only network lookup crosses the wire.
+			_mark_blight_poison(hit_unit, owner_unit)
 		end
 	end
 	return _moveset.install_poison_buff(templates)
@@ -616,7 +628,15 @@ mod:hook_safe("StateInGameRunning", "on_enter", function()
 		local entry = _relic_definitions[1] and _relic_definitions[1].master
 		_stamp_live_relic(_backend_items(), entry)
 		_reconcile_relic_inventory()
+		_start_spirit_runtime()
 	end
+end)
+
+-- The event manager and network-unit spawner are state-owned.  Delete bounded
+-- live spirits and unregister before StateInGameRunning tears those systems
+-- down; retaining them into the next level would be a dead-world fault.
+mod:hook_safe("StateInGameRunning", "on_exit", function()
+	_stop_spirit_runtime("state_exit")
 end)
 
 -- Kerillian's sword events are authored for the elf skeleton. Reuse Weapon
@@ -794,6 +814,293 @@ mod:network_register("woc_blightreaper_identity", function(sender_peer_id, schem
 	end
 end)
 
+-- ============================================================
+-- Native Shyish death spirits (#632)
+-- ============================================================
+
+local _spirit_state = {
+	active = {},
+	count = 0,
+	event_manager = nil,
+	poison_sources = setmetatable({}, { __mode = "k" }),
+	spawned = 0,
+	converted = 0,
+	dropped = 0,
+}
+local _spirit_diag_budget = 16
+
+local function _spirit_now()
+	local time = Managers and Managers.time
+	if not time or type(time.time) ~= "function" then return 0 end
+	local ok, value = pcall(time.time, time, "game")
+	return ok and tonumber(value) or 0
+end
+
+local function _spirit_diag(fmt, ...)
+	if _spirit_diag_budget <= 0 then return end
+	_spirit_diag_budget = _spirit_diag_budget - 1
+	pcall(printf, "[WOC:632] " .. fmt, ...)
+end
+
+local function _player_peer_id(unit)
+	local player
+	pcall(function() player = Managers.player:owner(unit) end)
+	if not player then return nil end
+	return player.peer_id or (player.network_id and player:network_id())
+end
+
+local function _wielded_relic(unit)
+	if not unit or not Unit.alive(unit) then return false, nil end
+	local inventory = ScriptUnit.has_extension(unit, "inventory_system")
+	if not inventory then return false, nil end
+	local slot
+	if type(inventory.get_wielded_slot_name) == "function" then
+		local ok
+		ok, slot = pcall(inventory.get_wielded_slot_name, inventory)
+		if not ok then slot = nil end
+	end
+	if slot ~= "slot_melee" and slot ~= "slot_ranged" then return false, slot end
+	local slot_data
+	if type(inventory.get_wielded_slot_data) == "function" then
+		pcall(function() slot_data = inventory:get_wielded_slot_data() end)
+	end
+	if slot_data and _power.is_relic(slot_data.item_data) then return true, slot end
+	local peer_id = _player_peer_id(unit)
+	local remote = peer_id and _remote_blightreaper[peer_id]
+	return remote and remote[slot] == true or false, slot
+end
+
+_mark_blight_poison = function(hit_unit, owner_unit)
+	local network = Managers and Managers.state and Managers.state.network
+	if not (network and network.is_server and hit_unit and owner_unit
+		and Unit.alive(hit_unit) and Unit.alive(owner_unit)) then return end
+	_spirit_state.poison_sources[hit_unit] = {
+		owner = owner_unit,
+		t = _spirit_now(),
+	}
+end
+
+-- Client-owned Hagbane applications already traverse this native RPC with the
+-- native buff-template id and attacker params.  Observe it after vanilla has
+-- accepted the buff; do not add traffic and do not transmit WOC lookup ids.
+-- Pre-flight: WOC has no other hook on (BuffSystem,rpc_add_buff_synced_params).
+mod:hook_safe("BuffSystem", "rpc_add_buff_synced_params", function(self, channel_id,
+		target_unit_id, template_name_id)
+	local network = Managers and Managers.state and Managers.state.network
+	if not (network and network.is_server) then return end
+	local template_name = NetworkLookup and NetworkLookup.buff_templates
+		and NetworkLookup.buff_templates[template_name_id]
+	if template_name ~= _moveset.DOT_TEMPLATE then return end
+	local peer_id = rawget(_G, "CHANNEL_TO_PEER_ID") and CHANNEL_TO_PEER_ID[channel_id]
+	local player = peer_id and Managers.player.player_from_peer_id
+		and Managers.player:player_from_peer_id(peer_id)
+	local owner_unit = player and player.player_unit
+	local is_relic = owner_unit and _wielded_relic(owner_unit)
+	local target_unit = self.unit_storage and self.unit_storage:unit(target_unit_id)
+	if is_relic and target_unit then _mark_blight_poison(target_unit, owner_unit) end
+end)
+
+local function _spirit_delete(entry, reason, explode)
+	local unit = entry and entry.unit
+	if unit and Unit.alive(unit) then
+		local entity = Managers and Managers.state and Managers.state.entity
+		if explode and entity then
+			local position = Unit.local_position(unit, 0)
+			local rotation = Unit.world_rotation(unit, 0)
+			local area = entity:system("area_damage_system")
+			local audio = entity:system("audio_system")
+			if area then area:create_explosion(unit, position, rotation,
+				_spirits.EXPLOSION, 1, "undefined", 0, false) end
+			if audio then audio:play_audio_unit_event(_spirits.EXPLODE_SOUND, unit) end
+		end
+		local spawner = Managers and Managers.state and Managers.state.unit_spawner
+		if spawner then spawner:mark_for_deletion(unit) end
+	end
+	if entry then _spirit_state.active[entry] = nil end
+	_spirit_state.count = math.max(_spirit_state.count - 1, 0)
+	if reason and reason ~= "hit" and reason ~= "expired" then
+		_spirit_diag("spirit removed reason=%s active=%d", tostring(reason), _spirit_state.count)
+	end
+end
+
+local function _spawn_spirit(killed_unit, target_unit, attribution)
+	if _spirit_state.count >= _spirits.MAX_ACTIVE then
+		_spirit_state.dropped = _spirit_state.dropped + 1
+		_spirit_diag("spirit cap reached active=%d dropped=%d",
+			_spirit_state.count, _spirit_state.dropped)
+		return false
+	end
+	local can_get = rawget(_G, "Application") and Application.can_get
+	local ok_resident, resident = can_get and pcall(can_get, "unit", _spirits.UNIT)
+	if not ok_resident or resident ~= true then
+		_spirit_state.dropped = _spirit_state.dropped + 1
+		_spirit_diag("native Shyish unit not resident; spawn skipped")
+		return false
+	end
+	local spawner = Managers and Managers.state and Managers.state.unit_spawner
+	local entity = Managers and Managers.state and Managers.state.entity
+	local network = Managers and Managers.state and Managers.state.network
+	local killed_pos
+	if killed_unit and Unit.alive(killed_unit) then
+		pcall(function() killed_pos = Unit.local_position(killed_unit, 0) end)
+	end
+	if not killed_pos and killed_unit and rawget(_G, "POSITION_LOOKUP") then
+		killed_pos = POSITION_LOOKUP[killed_unit]
+	end
+	if not (spawner and entity and network and network.is_server and killed_pos
+		and target_unit and Unit.alive(target_unit)) then
+		_spirit_state.dropped = _spirit_state.dropped + 1
+		_spirit_diag("spawn prerequisites unavailable attribution=%s", tostring(attribution))
+		return false
+	end
+	local spawn_position = killed_pos + Vector3(0, 0, _spirits.SPAWN_OFFSET_Z)
+	local spirit_unit = spawner:spawn_network_unit(_spirits.UNIT,
+		_spirits.UNIT_TEMPLATE, {}, spawn_position)
+	if not spirit_unit then
+		_spirit_state.dropped = _spirit_state.dropped + 1
+		_spirit_diag("native spawn returned nil attribution=%s", tostring(attribution))
+		return false
+	end
+	local entry = {
+		unit = spirit_unit,
+		target = target_unit,
+		delay = _spirits.DELAY_TIME,
+		chase = _spirits.CHASE_TIME,
+	}
+	_spirit_state.active[entry] = true
+	_spirit_state.count = _spirit_state.count + 1
+	_spirit_state.spawned = _spirit_state.spawned + 1
+	local audio = entity:system("audio_system")
+	if audio then
+		audio:play_audio_position_event(_spirits.RELEASE_SOUND, spawn_position)
+		audio:play_audio_unit_event(_spirits.LOOP_SOUND, spirit_unit)
+	end
+	_spirit_diag("spirit spawned attribution=%s active=%d total=%d",
+		tostring(attribution), _spirit_state.count, _spirit_state.spawned)
+	return true
+end
+
+local function _on_blightreaper_kill(killing_blow, _, killed_unit)
+	local network = Managers and Managers.state and Managers.state.network
+	if not (network and network.is_server and type(killing_blow) == "table"
+		and killed_unit) then return end
+	local indexes = rawget(_G, "DamageDataIndex")
+	if type(indexes) ~= "table" then return end
+	local owner_unit = killing_blow[indexes.SOURCE_ATTACKER_UNIT]
+		or killing_blow[indexes.ATTACKER]
+	if not owner_unit or not Unit.alive(owner_unit) then return end
+	local wielding = _wielded_relic(owner_unit)
+	local poison = _spirit_state.poison_sources[killed_unit]
+	local poison_match = poison and poison.owner == owner_unit
+	local poison_age = poison and (_spirit_now() - poison.t) or nil
+	local damage_type = killing_blow[indexes.DAMAGE_TYPE]
+	local attributable, reason = _spirits.kill_is_attributable(
+		wielding, damage_type, poison_match, poison_age)
+	_spirit_state.poison_sources[killed_unit] = nil
+	if attributable then _spawn_spirit(killed_unit, owner_unit, reason) end
+end
+
+function mod:_woc_on_blightreaper_kill(killing_blow, breed, killed_unit)
+	_on_blightreaper_kill(killing_blow, breed, killed_unit)
+end
+
+_start_spirit_runtime = function()
+	local network = Managers and Managers.state and Managers.state.network
+	local events = Managers and Managers.state and Managers.state.event
+	if not (network and network.is_server and events) then return end
+	if _spirit_state.event_manager == events then return end
+	if _spirit_state.event_manager then
+		pcall(_spirit_state.event_manager.unregister,
+			_spirit_state.event_manager, "on_player_killed_enemy", mod)
+	end
+	events:register(mod, "on_player_killed_enemy", "_woc_on_blightreaper_kill")
+	_spirit_state.event_manager = events
+	_spirit_diag_budget = 16
+	_spirit_diag("native Shyish listener armed cap=%d convert=%d delay=%.1f chase=%.1f/%.1f",
+		_spirits.MAX_ACTIVE, _spirits.CONVERT_AMOUNT, _spirits.DELAY_TIME,
+		_spirits.CHASE_SPEED, _spirits.CHASE_TIME)
+end
+
+_stop_spirit_runtime = function(reason)
+	local events = _spirit_state.event_manager
+	if events then pcall(events.unregister, events, "on_player_killed_enemy", mod) end
+	_spirit_state.event_manager = nil
+	local doomed = {}
+	for entry in pairs(_spirit_state.active) do doomed[#doomed + 1] = entry end
+	for i = 1, #doomed do _spirit_delete(doomed[i], reason or "stop", false) end
+	_spirit_state.poison_sources = setmetatable({}, { __mode = "k" })
+end
+
+local function _update_spirits(dt)
+	if _spirit_state.count == 0 then return end
+	local doomed = {}
+	for entry in pairs(_spirit_state.active) do
+		local unit, target = entry.unit, entry.target
+		if not (unit and Unit.alive(unit) and target and Unit.alive(target)) then
+			doomed[#doomed + 1] = { entry, "dead_unit", false }
+		else
+			entry.delay = math.max(entry.delay - dt, 0)
+			if entry.delay == 0 then
+				local target_pos = POSITION_LOOKUP[target]
+				if not target_pos then
+					doomed[#doomed + 1] = { entry, "target_position_missing", false }
+				else
+					local position = Unit.local_position(unit, 0)
+					local destination = target_pos + Vector3.up()
+					local delta = destination - position
+					local distance_sq = Vector3.length_squared(delta)
+					if distance_sq <= _spirits.HIT_DISTANCE * _spirits.HIT_DISTANCE then
+						local health = ScriptUnit.has_extension(target, "health_system")
+						if health and type(health.convert_to_temp) == "function"
+								and type(health.current_permanent_health) == "function" then
+							local amount = _spirits.convert_amount(
+								health:current_permanent_health())
+							if amount > 0 then health:convert_to_temp(amount) end
+							_spirit_state.converted = _spirit_state.converted + 1
+							_spirit_diag("spirit hit converted=%d amount=%d",
+								_spirit_state.converted, amount)
+						end
+						doomed[#doomed + 1] = { entry, "hit", true }
+					else
+						entry.chase = math.max(entry.chase - dt, 0)
+						local direction = Vector3.normalize(delta)
+						Unit.set_local_position(unit, 0,
+							position + direction * (dt * _spirits.CHASE_SPEED))
+						if entry.chase == 0 then
+							doomed[#doomed + 1] = { entry, "expired", true }
+						end
+					end
+				end
+			end
+		end
+	end
+	for i = 1, #doomed do
+		_spirit_delete(doomed[i][1], doomed[i][2], doomed[i][3])
+	end
+end
+
+_rt_register("issue632_blightreaper_shyish_spirit_contract", function()
+	if _spirits.UNIT ~= "units/fx/vfx_animation_death_spirit_02"
+		or _spirits.UNIT_TEMPLATE ~= "position_synched_dummy_unit" then
+		return "native Shyish network-unit contract drifted"
+	end
+	if _spirits.CONVERT_AMOUNT ~= 5 or _spirits.DELAY_TIME ~= 3
+		or _spirits.CHASE_SPEED ~= 1 or _spirits.CHASE_TIME ~= 6 then
+		return "rank-one Shyish conversion/chase values drifted"
+	end
+	if _spirits.MAX_ACTIVE ~= 32 then return "active spirit cap drifted" end
+	local direct = _spirits.kill_is_attributable(true, "light_attack", false, nil)
+	local dot = _spirits.kill_is_attributable(false, "arrow_poison_dot", true, 3)
+	local stale = _spirits.kill_is_attributable(false, "arrow_poison_dot", true, 5)
+	if not direct or not dot or stale then return "direct/DOT attribution policy regressed" end
+	local audio = _spirits.audio_contract()
+	if audio.release ~= "Play_winds_death_gameplay_spirit_release"
+		or audio.loop ~= "Play_winds_death_gameplay_spirit_loop"
+		or audio.explode ~= "Play_winds_death_gameplay_spirit_explode" then
+		return "native Shyish audio contract drifted"
+	end
+end)
+
 local function _husk_peer_id(owner_unit_3p)
 	if not owner_unit_3p then return nil end
 	local player
@@ -870,6 +1177,8 @@ mod:command("woc_audio_probe",
 
 mod.update = function(dt)
 	_audio.update(dt)
+	local network = Managers and Managers.state and Managers.state.network
+	if network and network.is_server then _update_spirits(dt) end
 end
 
 mod.on_game_state_changed = function(status, state_name)

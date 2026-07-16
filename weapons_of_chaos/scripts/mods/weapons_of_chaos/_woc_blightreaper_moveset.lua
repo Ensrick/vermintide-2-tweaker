@@ -14,6 +14,29 @@ M.DOT_TEMPLATE = "arrow_poison_dot"
 M.POISON_BUFF_TEMPLATE = "woc_blightreaper_poison_on_hit"
 M.POISON_PROC = "woc_blightreaper_apply_hagbane_poison"
 
+-- Blightreaper is a heavy cursed relic, not an elven/Empire sword.  Impact
+-- presentation is copied from Bardin's Greataxe sweeps
+-- (`2h_axes.lua`:194-198, 333-337, 474-477, 619-622, 765-768, 911-915).
+-- Its action timings and damage geometry remain the Elf Sword graph. Greataxe
+-- swing events cannot be substituted safely because their charge timing and
+-- baked sweep geometry belong to the 2H Axe graph. Instead, translate each
+-- Sword event to the action-by-action native 1H Axe event at the same action
+-- index (`1h_swords.lua` versus `1h_axes.lua`). This removes the sword swing
+-- presentation without transplanting a mechanically different action graph.
+M.GREATAXE_IMPACT_SOUND = "axe_2h_hit"
+M.GREATAXE_HIT_EFFECT = "melee_hit_axes_2h"
+M.AXE_ARMOUR_IMPACT_SOUND = "blunt_hit_armour"
+M.ONE_HAND_AXE_SWING_REMAP = {
+	attack_swing_charge_left = "attack_swing_charge_left_diagonal",
+	attack_swing_charge_right_pose = "attack_swing_charge_right_diagonal_pose",
+	attack_swing_charge_left_pose = "attack_swing_charge_left_diagonal_pose",
+	attack_swing_heavy = "attack_swing_heavy_down",
+	attack_swing_heavy_right = "attack_swing_heavy_down_right",
+	attack_swing_right = "attack_swing_right_diagonal",
+	attack_swing_down = "attack_swing_left",
+	attack_swing_right_diagonal = "attack_swing_down_right",
+}
+
 M.THIRD_PERSON_REMAP = {
 	attack_swing_stab = "attack_swing_down",
 	attack_swing_charge_down = "attack_swing_charge_left_diagonal",
@@ -63,6 +86,13 @@ function M.install(weapons, clone)
 						sub_action_name = sub_action_name,
 					}
 					if is_attack(sub_action) then
+						if sub_action.kind == "sweep" then
+							sub_action.impact_sound_event = M.GREATAXE_IMPACT_SOUND
+							sub_action.no_damage_impact_sound_event = M.AXE_ARMOUR_IMPACT_SOUND
+							sub_action.hit_effect = M.GREATAXE_HIT_EFFECT
+						end
+						local axe_event = M.ONE_HAND_AXE_SWING_REMAP[sub_action.anim_event]
+						if axe_event then sub_action.anim_event = axe_event end
 						sub_action.anim_time_scale = (sub_action.anim_time_scale or 1)
 							* M.SPEED_MULTIPLIER
 						report.attacks = report.attacks + 1

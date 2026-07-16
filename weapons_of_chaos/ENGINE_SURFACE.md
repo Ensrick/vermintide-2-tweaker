@@ -14,7 +14,7 @@ vanilla behavior, and links out. Decompile paths are relative to
 `WOC` lets player characters wield ENEMY weapons and named keep-trophy artifacts
 via the duplicate-item approach modeled on `character_weapon_variants`: it clones
 a player base weapon template into a new MoreItemsLibrary item and swaps the held
-mesh to a different `.unit`. As of v0.1.18-dev there is ONE item - the Blightreaper
+mesh to a different `.unit`. As of v0.1.20-dev there is ONE item - the Blightreaper
 (private 75%-speed Kerillian Sword actions, all careers), rendered with the authored Blightreaper mesh
 because the intended keep-trophy prop is not runtime-loadable (see dead ends). Its
 engine contact includes display/registration/wire safety plus the four canonical
@@ -48,7 +48,7 @@ this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
 
 | Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
 |---|---|---|---|
-| `StateInGameRunning.on_enter` [safe] `:275` | Fires on entering the keep AND each mission load [src: `scripts/game_state/state_ingame/state_ingame_running.lua` on_enter] | Run `_register_blightreaper()` - the backend + `ItemMasterList` + `NetworkLookup` injection, deferred here because the backend is nil at mod init (`:275`) | One-shot `_registered` guard makes re-fires a no-op (CWV registration-timing pattern); registration is also gated on the `enable_blightreaper` setting and on `MoreItemsLibrary` being present |
+| `StateInGameRunning.on_enter` / `on_exit` [safe] | Fires on entering/leaving the keep and each mission [src: `scripts/game_state/state_ingame/state_ingame_running.lua`] | Register the item once; arm the host kill listener on entry and remove its listener/network units/weak attribution records on exit | Registration remains one-shot; spirit state is mission-scoped and never survives teardown. |
 
 ### Wire safety - never crash a non-WOC peer (row-of-concern: issue 422 / issue 278) (owner doc: `docs/engine/03`)
 
@@ -60,8 +60,11 @@ this avoids separate Forge/Athanor/Salvage/Illusion UI patches.
 
 | Class.method (kind) | Vanilla behavior at the seam | Why WOC hooks it | Trap / invariant |
 |---|---|---|---|
-| `WeaponUnitExtension._play_3p_anim` [hook] | Sends and plays one vanilla animation event plus attack-speed variable | Apply the six proven elf-Sword redirects for non-elf skeletons before vanilla sends the event | 1P is untouched; no custom animation id or per-frame pose traffic. |
+| Private combat-template clone [data contract] | Elf Sword supplies timings, sweeps, and animation events; Greataxe supplies `axe_2h_hit`, `melee_hit_axes_2h`, and `blunt_hit_armour` [src: `scripts/settings/equipment/weapon_templates/1h_swords.lua`; `1h_axes.lua`; `2h_axes.lua`] | Keep sword mechanics at 75% speed, replace sweep impact presentation with Greataxe, and map each sword swing to the same-index safe 1H Axe event | Never transplant 2H Axe animation events into the sword graph: their authored timings and sweep geometry differ. Native Greataxe push itself retains the sword push impact contract. |
+| `WeaponUnitExtension._play_3p_anim` [hook] | Sends and plays one vanilla animation event plus attack-speed variable | Apply the six proven elf-Sword redirects for non-elf skeletons before vanilla sends the event | No custom animation id or per-frame pose traffic. |
 | Local equipment `on_hit` proc | The wielder's buff extension emits light/heavy hit events | Apply native `arrow_poison_dot` with `BuffSyncType.All` | Vanilla `apply_dot_on_hit` is server-only and would fail for a client owner; the WOC proc sends only a native buff id. |
+| `BuffSystem.rpc_add_buff_synced_params` [safe] | Host accepts a client-created native buff and unpacks attacker params [src: `scripts/entity_system/systems/buff/buff_system.lua:957-1010`] | On the host only, observe accepted `arrow_poison_dot` from a client currently wielding Blightreaper and retain one weak victim/owner marker | Observation adds no RPC and no lookup id. Marker TTL is four seconds (native poison lasts three) and is cleared on kill or state exit. |
+| `on_player_killed_enemy` event + `mod.update` [event/update] | Death reactions publish the killing blow; Shyish's `mutator_death` spawns `vfx_animation_death_spirit_02`, waits/chases, and converts health through damage/heal [src: `scripts/unit_extensions/generic/death_reactions.lua:677`; `scripts/settings/mutators/mutator_death.lua:7-115,190-224`] | Attribute direct and poison kills to the exact wielder, spawn the native network unit on host, reproduce rank-one movement/audio/FX, and convert green health with the native health extension | Host only; 32 active cap; O(active) update; 16 log lines; no force-load; leave one green health; delete all units at state exit. |
 | `DeusMechanism._setup_run` + item lookup/generation [hook] | Converts backend item keys through `DeusStartingWeaponTypeMapping`, generates starter weapons, then overwrites their power | Recognize the marker-owned relic through a scoped non-mutating key shadow and restore 900/Cursed at grant | Never serialize a custom Deus key. Pending setup identity is synchronous and cleared on success or error. |
 | `DeusWeaponGeneration.serialize_weapon` / `deserialize_weapon` [hook,tbl] | Serializes a comma-delimited item key, power, rarity, traits and properties; ignores unknown fields on read | Send vanilla `deus_es_1h_sword`/`unique` plus `woc=blightreaper`; restore only on WOC peers | Non-WOC readers ignore the marker and remain safe. If a non-WOC authority strips it while reserializing, the exact 900/unique donor signature is recoverable; vanilla generation is source-bounded to 700. |
 | `DeusChestExtension.can_be_unlocked` + `DeusWeaponGeneration.upgrade_item` [hook] | Compares rarity order, charges, then creates an upgraded weapon | Reject tempering both before purchase and at execution | Cursed order 7 is already above vanilla altar rarities; explicit identity guard protects against future table changes. |

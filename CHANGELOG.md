@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-16 - Blightreaper Shyish spirits and axe presentation
+
+Weapons of Chaos v0.1.20-dev / issue #632 adds the missing host-authoritative
+native Shyish spirit lifecycle for direct and Hagbane poison kills, including
+bounded client poison attribution through the existing native buff RPC, native
+audio/FX, and green-health-to-THP conversion. It also replaces inherited sword
+strike presentation with Greataxe impacts and same-index safe one-handed Axe
+swing events. Offline and live contracts cover attribution, bounds, teardown,
+source-backed audio, and conversion policy. Co-op in-game verification remains
+required; no Workshop deployment is part of this commit.
+
 ## 2026-07-16 - Worktree-bound ship pipeline
 
 Issue #647 binds the canonical ship wrapper's existing VMBLauncher `all`

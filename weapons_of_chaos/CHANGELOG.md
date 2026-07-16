@@ -1,5 +1,43 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.20-dev (2026-07-16) - #632 Blightreaper Shyish spirits and axe audio [verify-fix-coop]
+
+- Added the missing host-authoritative kill listener. Direct Blightreaper kills
+  now spawn the native Shyish death-spirit unit at the victim, wait three
+  seconds, chase the wielder for up to six seconds, then convert up to five
+  green health to temporary health while retaining the native one-green-health
+  floor, release/loop/explode audio, and explosion FX.
+- Attributed client-owned Hagbane damage-over-time kills without a custom RPC.
+  The host observes the already-native `arrow_poison_dot` synchronized-buff RPC
+  and retains one weak, four-second victim-to-owner marker. Host-owned poison is
+  marked at the same proc. Swapping weapons before the poison kill therefore
+  does not lose the owning Blightreaper.
+- Bounded runtime work to 32 active spirits, O(active spirits) host-only
+  updates, 16 diagnostic lines per mission, and full cleanup on state exit.
+  Missing native Shyish residency fails closed instead of force-loading a DLC
+  package; the observed boot already has `resource_packages/dlcs/scorpion`.
+- Replaced inherited sword strike presentation. Every damaging sweep now uses
+  the native Greataxe `axe_2h_hit`, `melee_hit_axes_2h`, and
+  `blunt_hit_armour` contract. Sword swing events are translated action by
+  action to their safe native one-handed Axe counterparts because transplanting
+  two-handed Greataxe events would change baked timing and sweep geometry.
+- Added pure attribution/conversion/audio policy tests, production-boundary
+  tests, expanded moveset tests, and live regression
+  `issue632_blightreaper_shyish_spirit_contract`.
+
+### Verification
+
+Confirm `[WOC] v0.1.20-dev loaded` with two WOC-enabled players. Test a direct
+kill as host and client, then let Blightreaper's poison land the killing blow
+after swapping away. Each kill must release one visible spirit from the corpse;
+after the three-second pause it must follow that exact wielder, preserve at
+least one green health, and convert at most five green health to THP on contact.
+Verify release/loop/explode audio and that weapon strikes use axe rather than
+sword swing/impact presentation. Run `/woc_regression_test` and require
+`issue632_blightreaper_shyish_spirit_contract` PASS. In the log require bounded
+`[WOC:632]` listener/spawn/hit evidence and no missing-resource, RPC, or Lua
+errors.
+
 ## 0.1.19-dev (2026-07-16) - #633 Blightreaper inspect audio [diagnostics-armed]
 
 - Added the native `nds_skull_inspect` whisper to Blightreaper's existing

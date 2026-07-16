@@ -40,9 +40,25 @@ at its catalogue and central craft-dispatch boundaries.
 Blightreaper is fixed at 600 power in ordinary play and 900 in Chaos Wastes.
 Its combat template is a private deep clone of `we_one_hand_sword_template_1`;
 attack `anim_time_scale` values are multiplied by 0.75 without mutating the elf
-Sword donor or cloning damage profiles. Its client equipment proc applies only
-the native `arrow_poison_dot` through `BuffSyncType.All`, which preserves the
-Hagbane damage and poisoned FX for host- and client-owned hits. Chaos Wastes
+Sword donor or cloning damage profiles. Damaging sweeps use Greataxe hit audio
+and effects, while each sword swing event is translated to the corresponding
+one-handed Axe event at the same action index; two-handed Greataxe events are
+not safe substitutes for the sword action graph's timing and sweep geometry.
+Its client equipment proc applies only the native `arrow_poison_dot` through
+`BuffSyncType.All`, which preserves the Hagbane damage and poisoned FX for host-
+and client-owned hits.
+
+The host listens to `on_player_killed_enemy` and spawns the already-resident
+native Shyish spirit unit from `mutator_death.lua`. Direct kills resolve from
+the wielded relic. Poison kills resolve from a weak, four-second victim/owner
+marker; a client marker is recovered by observing the existing native
+`rpc_add_buff_synced_params` transport, so WOC adds no combat RPC. Spirits use
+rank-one Shyish values (3-second delay, speed 1, 6-second chase, up to 5 green
+health converted to THP while retaining 1 green health), are capped at 32, and
+are deleted on state exit. Never force-load Scorpion: logs prove its package is
+boot-loaded, and missing unit residency must fail closed.
+
+Chaos Wastes
 serializes the vanilla `deus_es_1h_sword`/`unique` pair plus an ignored
 `woc=blightreaper` token, restores the Cursed identity only on WOC peers, and
 blocks tempering at both rarity comparison and upgrade execution boundaries.

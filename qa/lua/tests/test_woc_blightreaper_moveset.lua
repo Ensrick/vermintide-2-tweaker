@@ -20,12 +20,14 @@ return function(H, repo_root)
 				action_one = {
 					default = {
 						kind = "melee_start",
+						anim_event = "attack_swing_charge_left",
 						anim_time_scale = 2,
 						damage_profile = "light_slashing_smiter",
 						lookup_data = { item_template_name = "donor" },
 					},
 					light_attack = {
 						kind = "sweep",
+						anim_event = "attack_swing_heavy",
 						damage_profile = "light_slashing_smiter",
 					},
 					block = {
@@ -63,6 +65,16 @@ return function(H, repo_root)
 		H.equal(installed.name, moveset.TEMPLATE)
 		H.equal(installed.actions.action_one.default.anim_time_scale, 1.5)
 		H.equal(installed.actions.action_one.light_attack.anim_time_scale, 0.75)
+		H.equal(installed.actions.action_one.default.anim_event,
+			"attack_swing_charge_left_diagonal")
+		H.equal(installed.actions.action_one.light_attack.anim_event,
+			"attack_swing_heavy_down")
+		H.equal(installed.actions.action_one.light_attack.impact_sound_event,
+			"axe_2h_hit")
+		H.equal(installed.actions.action_one.light_attack.hit_effect,
+			"melee_hit_axes_2h")
+		H.equal(installed.actions.action_one.light_attack.no_damage_impact_sound_event,
+			"blunt_hit_armour")
 		H.equal(installed.actions.action_one.block.anim_time_scale, 0.8)
 		H.equal(installed.actions.action_two.push.anim_time_scale, 1.4)
 		H.truthy(installed.buffs[moveset.POISON_BUFF_TEMPLATE] ~= nil)
@@ -82,6 +94,28 @@ return function(H, repo_root)
 				})
 			end
 		end
+	end)
+
+	H.test("WOC Blightreaper audio uses Greataxe impacts and 1H Axe-safe swings", function()
+		H.equal(moveset.GREATAXE_IMPACT_SOUND, "axe_2h_hit")
+		H.equal(moveset.GREATAXE_HIT_EFFECT, "melee_hit_axes_2h")
+		H.equal(moveset.AXE_ARMOUR_IMPACT_SOUND, "blunt_hit_armour")
+		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_charge_left,
+			"attack_swing_charge_left_diagonal")
+		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_charge_right_pose,
+			"attack_swing_charge_right_diagonal_pose")
+		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_charge_left_pose,
+			"attack_swing_charge_left_diagonal_pose")
+		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_heavy,
+			"attack_swing_heavy_down")
+		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_heavy_right,
+			"attack_swing_heavy_down_right")
+		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_right,
+			"attack_swing_right_diagonal")
+		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_down,
+			"attack_swing_left")
+		H.equal(moveset.ONE_HAND_AXE_SWING_REMAP.attack_swing_right_diagonal,
+			"attack_swing_down_right")
 	end)
 
 	H.test("WOC Blightreaper install is idempotent and fails closed", function()
