@@ -9,8 +9,8 @@ param(
     [string]$Repository = "Ensrick/vermintide-2-tweaker",
     [string]$OutputPath,
     [string]$MarkdownPath,
-    # Minimum review slots per open issue. Every medium/high-confidence
-    # relation is retained even when that exceeds this weak-match floor.
+    # Minimum review slots per open issue. Every high-confidence relation is
+    # retained even when that exceeds this weaker-match floor.
     [ValidateRange(1, 20)]
     [int]$MaxClosedMatches = 5,
     [switch]$SelfTest
@@ -648,9 +648,9 @@ function Get-RelatedClosedIssues($OpenProfile, $RelationContext) {
     }
 
     $sorted = @($candidates | ForEach-Object { $_ } | Sort-Object -Property @{ Expression = 'score'; Descending = $true }, @{ Expression = 'closed_at'; Descending = $true }, @{ Expression = 'number'; Descending = $true })
-    $evidenceBacked = @($sorted | Where-Object { $_.confidence -in @('high', 'medium') })
+    $evidenceBacked = @($sorted | Where-Object { $_.confidence -eq 'high' })
     $weakSlots = [Math]::Max(0, $MaxClosedMatches - $evidenceBacked.Count)
-    $weakReview = @($sorted | Where-Object { $_.confidence -eq 'low' } | Select-Object -First $weakSlots)
+    $weakReview = @($sorted | Where-Object { $_.confidence -ne 'high' } | Select-Object -First $weakSlots)
     return @($evidenceBacked + $weakReview | Sort-Object -Property @{ Expression = 'score'; Descending = $true }, @{ Expression = 'closed_at'; Descending = $true }, @{ Expression = 'number'; Descending = $true })
 }
 
@@ -826,7 +826,7 @@ function Invoke-SelfTest {
     if ($result.issues[1].risk_tier -notin @("low", "moderate", "high", "critical")) { throw "risk classification drift" }
     if ($result.closed_issue_count -ne 8) { throw "closed fixture count drift" }
     $related = @($result.issues[0].related_closed_issues)
-    if ($related.Count -lt 7) { throw "medium/high relations were truncated by the weak-match floor" }
+    if ($related.Count -lt 7) { throw "high-confidence relations were truncated by the weak-match floor" }
     foreach ($number in @(90, 92, 93, 94, 95, 96, 97)) {
         if (@($related | Where-Object { $_.number -eq $number }).Count -ne 1) {
             throw "evidence-backed relation #$number was not retained"
