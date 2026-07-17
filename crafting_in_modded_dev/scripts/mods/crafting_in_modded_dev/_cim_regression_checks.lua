@@ -1800,6 +1800,70 @@ _rt_register("heroview_hdr_not_forcebuilt_in_mission", function()
     end
 end)
 
+_rt_register("issue83_dynamic_forge_widget_material_closure", function()
+    local policy = mod._cim83_forge_widget_policy
+    if type(policy) ~= "table" or type(policy.sanitize_widgets) ~= "function" then
+        return "#83 dynamic forge widget policy missing"
+    end
+
+    -- Keep must return before consulting even the pure sanitizer. Temporarily
+    -- install a spy to prove the production helper is an exact no-op there.
+    local production = mod._cim83_sanitize_dynamic_forge_widgets
+    if type(production) ~= "function" then
+        return "#83 production dynamic-widget sanitizer missing"
+    end
+    local saved_policy = mod._cim83_forge_widget_policy
+    local policy_called = false
+    mod._cim83_forge_widget_policy = {
+        sanitize_widgets = function()
+            policy_called = true
+            return {}
+        end,
+    }
+    local ok_keep, keep_result = pcall(production, {}, true)
+    mod._cim83_forge_widget_policy = saved_policy
+    if not ok_keep or keep_result ~= nil or policy_called then
+        return "Keep path consulted or ran the mission-only widget policy"
+    end
+
+    -- Mirrors the post-_setup_weapon_stats shape. This widget is reachable only
+    -- through `_scrollbars.stats.list_widgets`, so static create_ui_elements
+    -- pruning cannot see it. Suppressing the raw arch pass must not suppress its
+    -- safe slot icon, text, or hotspot siblings.
+    local arch_pass = { pass_type = "rotated_texture", style_id = "arch",
+        texture_id = "arch_texture" }
+    local slot_pass = { pass_type = "texture", style_id = "slot",
+        texture_id = "slot_texture" }
+    local text_pass = { pass_type = "text", style_id = "title", text_id = "title" }
+    local hotspot_pass = { pass_type = "hotspot", content_id = "hotspot" }
+    local window = { _scrollbars = { stats = { list_widgets = { {
+        element = { passes = { arch_pass, slot_pass, text_pass, hotspot_pass } },
+        content = {
+            arch_texture = "icon_block_arch_masked",
+            slot_texture = "icon_block",
+            title = "Block angle",
+            hotspot = {},
+        },
+        style = { arch = {}, slot = { masked = true }, title = {} },
+    } } } } }
+    local widgets = window._scrollbars.stats.list_widgets
+    local report = policy.sanitize_widgets(widgets, function(texture)
+        return texture == "icon_block"
+    end)
+    local passes = widgets[1].element.passes
+    if report.suppressed ~= 1 or passes[1].content_check_function() ~= false then
+        return "non-resident dynamic block-arch pass was not suppressed"
+    end
+    if passes[2].content_check_function ~= nil
+            or passes[3].content_check_function ~= nil
+            or passes[4].content_check_function ~= nil then
+        return "safe texture/text/hotspot sibling was modified"
+    end
+    if arch_pass.content_check_function ~= nil then
+        return "shared source pass mutated instead of instance-local clone-on-write"
+    end
+end)
+
 _rt_register("hdr_glow_widgets_suppressed_in_mission", function()
     -- v0.8.17-dev (weave_menu_* "Material not found in Gui" cascade): after Fix B
     -- drops the in-mission HDR worlds, the forge's HDR glow widgets fall through to

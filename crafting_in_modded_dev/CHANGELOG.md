@@ -1,5 +1,26 @@
 # Crafting in Modded Changelog
 
+## 0.8.92-dev (2026-07-17): #83 dynamic Athanor material closure
+
+- Closed the post-construction gap in CIM's in-mission forge safety. Vanilla
+  `_setup_weapon_stats` creates late stat widgets after `create_ui_elements`;
+  every texture-bearing pass in those scrollbar lists is now proven against the
+  exact `ui_top_renderer` Gui before it can draw.
+- A non-resident texture pass is disabled instance-locally. Its text, hotspot,
+  and renderer-proven texture siblings remain active, and clone-on-write keeps a
+  shared widget definition or later Keep instance untouched.
+- Added engine-free and `/cim_regression_test` coverage for the exact observed
+  `icon_block_arch_masked` rotated-texture crash plus a future raw-material row.
+- The repeated `scenegraph["window"]["scale"]` warning is non-causal: vanilla's
+  console forge definition authors `window.scale = "fit"`, and the warning is
+  emitted by its legacy scenegraph merge on every entry. The fatal two seconds
+  later is the distinct missing-material draw path.
+
+**Verification:** run `/cim_regression_test` and require
+`issue83_dynamic_forge_widget_material_closure` PASS. Then open CIM in a mission,
+select a melee weapon with block angle, and confirm the stats list remains usable
+without a `Material 'icon_block_arch_masked' not found in Gui` fatal.
+
 ## 0.8.91-dev (2026-07-17): #428 canonical copied debug helper [tooling]
 
 - Replaced the entry file's behavior-identical `_dbg` / `_dbg_alert` definitions
