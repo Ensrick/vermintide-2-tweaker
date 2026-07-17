@@ -471,6 +471,7 @@ return function(H, repo_root)
 	H.test("CWV Combat Style runtime resolves exact IDs and legacy defaults", function()
 		local saved
 		local registered
+		local remote_rebuilds = 0
 		local fake_mod = {
 			get = function(_, key)
 				if key == policy.SETTING_KEY then
@@ -497,6 +498,12 @@ return function(H, repo_root)
 			peer_for_owner = function(owner)
 				return owner == "remote_owner" and "peer_a" or nil
 			end,
+			rebuild_remote = function(peer_id, slot_name)
+				H.equal(peer_id, "peer_a")
+				H.equal(slot_name, "slot_melee")
+				remote_rebuilds = remote_rebuilds + 1
+				return true, "rewielded"
+			end,
 		})
 		local a = runtime:describe({ backend_id = "uuid_a", name = "es_2h_sword" })
 		H.equal(a.style_id, "kerillian")
@@ -511,8 +518,21 @@ return function(H, repo_root)
 		H.equal(receiver_transform.right_hand_scale, nil)
 		H.equal(receiver_transform.right_hand_scale_3p[2], 0.8)
 		H.equal(receiver_transform.right_hand_offset_3p[3], -0.065)
+		H.equal(runtime:effective_template_name({ backend_id = "uuid_a", name = "es_2h_sword" }),
+			policy.KERILLIAN_TEMPLATE)
+		H.equal(fake_mod.get_effective_combat_style_template_name(
+			{ backend_id = "uuid_c", name = "es_2h_sword" }),
+			"bastard_sword_template")
 		H.equal(registered.channel, policy.CHANNEL)
 		registered.callback("peer_a", policy.SCHEMA, "state", "slot_melee", "greatsword", "bretonnian")
+		H.equal(remote_rebuilds, 1)
+		registered.callback("peer_a", policy.SCHEMA, "state", "slot_melee", "greatsword", "bretonnian")
+		H.equal(remote_rebuilds, 1)
+		H.equal(runtime:effective_template_name({ name = "es_2h_sword" }, nil,
+			"remote_owner", "slot_melee"), "bastard_sword_template")
+		H.equal(runtime:effective_template_name({ backend_id = "foreign_uuid",
+			name = "es_2h_sword" }, nil, "remote_owner", "slot_melee"),
+			"bastard_sword_template")
 		H.equal(runtime:remote_transform("remote_owner", "slot_melee",
 			{ name = "es_2h_sword" }).item_key, "greatsword_bret_test")
 		H.equal(runtime:remote_transform("remote_owner", "slot_melee",
@@ -522,6 +542,68 @@ return function(H, repo_root)
 		H.equal(changed, true)
 		H.equal(saved.key, policy.SETTING_KEY)
 		H.equal(saved.value.items.uuid_b, "longsword")
+	end)
+
+	H.test("CWV remote style refresh fails closed before a partial empty-slot wield", function()
+		local ready, reason = policy.remote_refresh_readiness({
+			wielded_slot = "slot_melee",
+			_equipment = { wielded_slot = "slot_melee", slots = {} },
+		}, "slot_melee")
+		H.equal(ready, false)
+		H.equal(reason, "slot not ready")
+
+		ready, reason = policy.remote_refresh_readiness({
+			_equipment = {
+				wielded_slot = "slot_melee",
+				slots = { slot_melee = { item_data = { name = "es_sword_shield" } } },
+			},
+		}, "slot_melee")
+		H.equal(ready, true)
+		H.equal(reason, "ready")
+
+		ready, reason = policy.remote_refresh_readiness({
+			wielded_slot = "slot_ranged",
+			_equipment = {
+				wielded_slot = "slot_ranged",
+				slots = { slot_melee = { item_data = { name = "es_sword_shield" } } },
+			},
+		}, "slot_melee")
+		H.equal(ready, false)
+		H.equal(reason, "slot not wielded")
+	end)
+
+	H.test("CWV owner style transition performs one bounded slot rebuild", function()
+		local old_managers, old_unit, old_script_unit = _G.Managers, _G.Unit, _G.ScriptUnit
+		local ok, err = pcall(function()
+			local item = { backend_id = "owner_style_uuid", name = "es_2h_sword" }
+			local equipment = {
+				wielded_slot = "slot_melee",
+				slots = { slot_melee = { item_data = item } },
+			}
+			local counts = { destroy = 0, add = 0, wield = 0 }
+			local inventory = {
+				equipment = function() return equipment end,
+				destroy_slot = function() counts.destroy = counts.destroy + 1 end,
+				add_equipment = function() counts.add = counts.add + 1 end,
+				wield = function() counts.wield = counts.wield + 1 end,
+			}
+			local player_unit = {}
+			_G.Managers = { player = { local_player = function() return { player_unit = player_unit } end } }
+			_G.Unit = { alive = function() return true end }
+			_G.ScriptUnit = { extension = function() return inventory end }
+
+			local runtime = policy.install({ get = function() end, set = function() end }, {
+				acquire_style_resource = function(_, complete) complete(true); return true end,
+			})
+			local accepted = runtime:cycle_item(item, nil, "test-owner-rebuild", true)
+			H.equal(accepted, true)
+			H.equal(counts.destroy, 1)
+			H.equal(counts.add, 1)
+			H.equal(counts.wield, 1)
+			H.equal(runtime:describe(item).style_id, "kerillian")
+		end)
+		_G.Managers, _G.Unit, _G.ScriptUnit = old_managers, old_unit, old_script_unit
+		if not ok then error(err) end
 	end)
 
 	H.test("CWV #645 diagnostics are deduplicated, capped, and never expose candidate styles", function()

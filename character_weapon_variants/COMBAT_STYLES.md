@@ -59,6 +59,26 @@ otherwise rebuilds the currently wielded slot once through vanilla
 `destroy_slot -> add_equipment -> wield`. A failed rebuild rolls persistence
 back before a best-effort repair.
 
+CWV also publishes the narrow dot-call contract
+`get_effective_combat_style_template_name(item, backend_id, owner_unit, slot_name)`.
+It returns only the active donor template name for a proven local exact instance
+or for a remote `(peer, slot, family, style)` state already received by CWV.
+Weapon Tweaker consumes this value when populating its per-unit 3P animation
+state. WT validates that the returned name is registered in `Weapons` and falls
+back to `item.template` when CWV is absent, disabled, unsupported, raises, or
+returns an unknown name. WT does not mirror the family/style catalogue.
+
+On each changed remote style edge, CWV performs at most one husk re-wield. The
+refresh first proves that the synchronized slot is still wielded and already
+contains item data. If the style edge won the race against the ordinary
+equipment RPC, CWV keeps the existing render intact and caches the edge for the
+next natural wield instead of entering vanilla's partial empty-slot wield path.
+That path stops weapon FX/attached units and updates wield state even though
+`_wield_slot` rejects the missing item before rebuilding equipment. The
+bounded `[cwv:620] style husk refresh` row reports the effective donor template
+and whether right/left 3P units survived the refresh.
+[src: `scripts/unit_extensions/default_player_unit/inventory/simple_husk_inventory_extension.lua:316-326,641-658,761-775`]
+
 The inventory control appears only when the selected loadout item belongs to a
 supported family and reads `Switch to: <next style>`. Small unboxed text above
 it displays the active ordinal (`Moveset 1 / 3` on desktop, compact `1 / 3` on

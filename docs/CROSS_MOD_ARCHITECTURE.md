@@ -144,6 +144,14 @@ toggles default ON when CWV is installed and cover CWV's own variant items per c
 
 ### Interface points
 - **weapon_tweaker:** independent — wt does NOT defer to CWV's items (that "defer" model is retired, Issue #368). Both mods may cover the same weapon+receiver; wt is the availability control surface and, when installed alongside CWV, exposes a compatible item master plus authored-career toggles for every catalogued `cwv_variant` item (CWV itself has no availability controls). See the "weapon_tweaker ↔ character_weapon_variants" section at the top of this doc.
+- **Combat Style animation handoff:** CWV alone owns active style and donor-template
+  selection. Its optional
+  `get_effective_combat_style_template_name(item, backend_id, owner_unit, slot_name)`
+  contract supplies WT with a template name for owner or synchronized remote-husk
+  wield state. WT validates the name against `Weapons`, then selects its existing
+  per-template 3P remap. Missing, disabled, failed, unsupported, or unregistered
+  providers fall back to the item's native template; WT never duplicates style
+  family mappings.
 - **cosmetics_tweaker:** cosmetics detects CWV directly and discovers authored
   dual-family offhand pools. CWV's companion-detection return values remain
   diagnostic-only.

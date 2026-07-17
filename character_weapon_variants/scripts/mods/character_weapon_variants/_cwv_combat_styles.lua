@@ -662,6 +662,28 @@ function M.valid_wire(schema, op, slot_name, family_id, style_id)
 		and family ~= nil and family.styles[style_id] ~= nil
 end
 
+-- A style edge may arrive before the ordinary equipment-slot RPC has finished
+-- populating the husk. Calling SimpleHuskInventoryExtension:wield in that gap
+-- enters vanilla's wield path (stopping FX/attached units and updating wield
+-- state) even though `_wield_slot` rejects the empty item. Do not start that
+-- partial transition; let the next natural wield consume the cached style.
+function M.remote_refresh_readiness(inventory, slot_name)
+	if type(inventory) ~= "table" or type(slot_name) ~= "string" then
+		return false, "inventory unavailable"
+	end
+	local equipment = inventory._equipment or inventory.equipment
+	if type(equipment) ~= "table" or type(equipment.slots) ~= "table" then
+		return false, "equipment unavailable"
+	end
+	local wielded_slot = inventory.wielded_slot or equipment.wielded_slot
+	if wielded_slot ~= slot_name then return false, "slot not wielded" end
+	local slot = equipment.slots[slot_name]
+	if type(slot) ~= "table" or type(slot.item_data) ~= "table" then
+		return false, "slot not ready"
+	end
+	return true, "ready"
+end
+
 local function build_modified_template(donor, clone, clone_damage_profile, prefix, speed, modifiers)
 	if type(donor) ~= "table" then return nil, "donor template missing" end
 	if type(clone) ~= "function" or type(clone_damage_profile) ~= "function" then
@@ -856,6 +878,29 @@ function M.install(mod, deps)
 		if not (context and family_id == context.family_id) then return nil end
 		local package = M.package(key, context.style_id)
 		return package and weapons and weapons[package.template] or nil
+	end
+
+	-- Cross-mod contract for WT's 3P remap owner. Return only CWV's authored
+	-- active donor template name; the consumer owns validation and native
+	-- fallback. Owner items resolve through their exact backend identity. Husk
+	-- items resolve their bounded synchronized (peer, slot, family, style) edge
+	-- against the concrete item being rendered.
+	function runtime:effective_template_name(item, backend_id, owner_unit, slot_name)
+		-- Prefer a synchronized remote edge whenever this render owner identifies
+		-- one. An incidental backend-like field on a remote payload must not make
+		-- this viewer's unrelated persistence/default style authoritative.
+		if type(slot_name) == "string" and type(deps.peer_for_owner) == "function" then
+			local peer_id = deps.peer_for_owner(owner_unit)
+			local remote_row = peer_id and remote[peer_id] and remote[peer_id][slot_name]
+			local key = remote_row and item_key(item, backend_id)
+			local family_id = key and M.member(key)
+			if remote_row and family_id == remote_row.family_id then
+				local package = M.package(key, remote_row.style_id)
+				if package then return package.template end
+			end
+		end
+		local row = self:describe(item, backend_id)
+		return row and row.package.template or nil
 	end
 
 	function runtime:begin_husk_wield(inventory, slot_name)
@@ -1150,8 +1195,21 @@ function M.install(mod, deps)
 			remote[sender_peer_id][slot_name] = { family_id = family_id, style_id = style_id }
 			pcall(printf, "[cwv:620] style rx peer=%s slot=%s family=%s style=%s",
 				tostring(sender_peer_id), slot_name, family_id, style_id)
-			if type(deps.rebuild_remote) == "function" then deps.rebuild_remote(sender_peer_id, slot_name) end
+			if type(deps.rebuild_remote) == "function" then
+				local ok, refreshed, detail = pcall(deps.rebuild_remote, sender_peer_id, slot_name)
+				pcall(printf, "[cwv:620] style husk refresh peer=%s slot=%s refreshed=%s detail=%s",
+					tostring(sender_peer_id), tostring(slot_name),
+					tostring(ok and refreshed == true), tostring(ok and detail or refreshed))
+			end
 		end)
+	end
+
+	-- Stable dot-call API: cwv.get_effective_combat_style_template_name(item,
+	-- backend_id, owner_unit, slot_name). Do not expose the policy catalogue;
+	-- sibling consumers must not duplicate or infer style knowledge.
+	mod.get_effective_combat_style_template_name = function(item, backend_id,
+			owner_unit, slot_name)
+		return runtime:effective_template_name(item, backend_id, owner_unit, slot_name)
 	end
 
 	return runtime

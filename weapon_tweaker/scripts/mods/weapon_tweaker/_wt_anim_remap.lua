@@ -43,6 +43,8 @@ local _dbg                = WT.dbg
 local MOD_VERSION         = WT.MOD_VERSION
 local weapon_unlock_map   = WT.weapon_unlock_map
 local _build_3p_template_remaps = WT.build_3p_template_remaps
+local _cwv_effective_template = mod:dofile(
+    "scripts/mods/weapon_tweaker/_wt_cwv_effective_template")
 
 local _anim_redirect = {
     to_repeating_crossbow            = "to_repeating_crossbow_elf",
@@ -400,7 +402,7 @@ end
 -- to be holding the same weapon on the same career.
 --
 -- Each entry tracks:
---   template      = item_data.template at last wield
+--   template      = effective active-style donor template at last wield
 --   key           = item_data.key at last wield
 --   remap         = currently active _3p_*_remap table (or `false` for a
 --                   deliberate "no remap" from _3p_remap_triggers.X.we_ = false)
@@ -948,7 +950,10 @@ local function _populate_unit_state_from_wield(self, slot_name)
     if not item_data then return end
     local s = _state_for(unit)
     if s then
-        s.template = item_data.template
+        local ok, cwv = pcall(get_mod, "character_weapon_variants")
+        cwv = ok and cwv or nil
+        s.template = _cwv_effective_template.resolve(item_data, cwv,
+            rawget(_G, "Weapons"), unit, slot_name)
         s.key = item_data.key
     end
 end

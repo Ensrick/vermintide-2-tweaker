@@ -11733,16 +11733,32 @@ do
 		end,
 		rebuild_remote = function(peer_id, slot_name)
 			local pm = Managers and Managers.player
+			if not pm then return false, "player manager unavailable" end
 			local ok, player = pm and pcall(pm.player_from_peer_id, pm, peer_id, 1)
 			player = ok and player or nil
+			if not player then return false, "player unavailable" end
 			local unit = player and player.player_unit
-			if not (unit and Unit.alive(unit)) then return false end
+			if not (unit and Unit.alive(unit)) then return false, "player unit unavailable" end
 			local iok, inventory = pcall(ScriptUnit.extension, unit, "inventory_system")
-			if iok and inventory and inventory.wielded_slot == slot_name
-					and type(inventory.wield) == "function" then
-				return pcall(inventory.wield, inventory, slot_name)
+			if not iok or not inventory or type(inventory.wield) ~= "function" then
+				return false, "inventory extension unavailable"
 			end
-			return false
+			local ready, reason = policy.remote_refresh_readiness(inventory, slot_name)
+			if not ready then return false, reason end
+			local wok, wield_err = pcall(inventory.wield, inventory, slot_name)
+			if not wok then return false, tostring(wield_err) end
+			local equipment = inventory._equipment or inventory.equipment
+			local slot = equipment and equipment.slots and equipment.slots[slot_name]
+			local right = equipment and equipment.right_hand_wielded_unit_3p
+			local left = equipment and equipment.left_hand_wielded_unit_3p
+			local right_live = right and Unit.alive(right) or false
+			local left_live = left and Unit.alive(left) or false
+			local effective = _om.combat_styles
+				and _om.combat_styles:effective_template_name(
+					slot and slot.item_data, nil, unit, slot_name) or nil
+			local detail = string.format("rewielded template=%s right_3p=%s left_3p=%s",
+				tostring(effective), tostring(right_live), tostring(left_live))
+			return right_live or left_live, detail
 		end,
 	})
 	mod.cycle_combat_style = function()
