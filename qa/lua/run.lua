@@ -173,6 +173,7 @@ local suites = {
     "test_cos_wire",
     "test_peer_parity_transition",
     "test_ct_boon_catalog",
+    "test_ct_boon_split",
     "test_ct_umbrella_policy",
     "test_ct_cot_early_reward",
     "test_ct_cot_cost",

@@ -4,6 +4,18 @@ Engine gotchas, crash modes, and load-bearing patterns specific to `chaos_wastes
 
 This file is for HOW the CW-side internals work (so we don't re-burn the same crash twice). Operational rules (no rm -rf, version bump, deploy doctrine, etc.) live in `PROJECT_STANDARDS.md` and the repo root.
 
+## Boon runtime module contracts
+
+The entry manifest owns orchestration; boon behavior is split by state owner and loaded once, in this order:
+
+1. `_ct_boon_balance.lua` owns reversible mutations of vanilla boon tables and defeat-recovery state access. New vanilla-boon numeric/save-and-restore work belongs here.
+2. `_ct_boon_registry.lua` owns deterministic `NetworkLookup` registration, boon pool insertion/removal, dormant/Skulls scaffolding, and miracle registration. New lookup or rarity-pool work belongs here.
+3. `_ct_meta_trait_boons.lua` owns CT-authored meta/trait boons, peer-parity stripping, resource hooks, buff observation, and Endless Bombs lifecycle hooks. New CT boon behavior belongs here.
+
+`chaos_wastes_tweaker_dev.lua` constructs a short-lived `mod._ct_boon_runtime_context`, calls each module exactly once at the original contiguous block's load point, then clears the context. Modules localize their dependencies during load and expose only bounded return tables. They must not `dofile` one another, move hooks to a later lifecycle callback, or take ownership of settings/RPC state already owned by the entry file. Preserve this order because registry consumers in the meta module require both earlier contracts and hook registration order is observable.
+
+The structural guard is `qa/lua/tests/test_ct_boon_split.lua`; the repository size ratchet is `qa/check_file_sizes.ps1`. The entry file must remain below its frozen 13,938-line baseline, and no extracted module may cross the 2,500-line hard limit.
+
 ## Buff registration: dormant boons need dual-table writes
 
 When ct injects a previously-dormant CW boon into the active loot pool at runtime (e.g. the `activate_dormant_*` toggles), the buff template **must** be registered in BOTH:

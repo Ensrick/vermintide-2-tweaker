@@ -136,7 +136,7 @@ local function register(Harness, repo_root)
     end)
 
     Harness.test("ct hot-join preflight precedes native sync and has bounded fallback", function()
-        local path = repo_root .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
+        local path = repo_root .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua"
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()

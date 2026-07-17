@@ -4,7 +4,17 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-16.
+Last updated: 2026-07-17.
+
+### boon-runtime module ownership - issue #2
+
+| Field | Value |
+|---|---|
+| Symptom | The dev entry file regrows past its frozen size baseline, or a boon extraction changes hook order, duplicates a hook, loses mutable save/restore state, or hides a source contract from QA. |
+| Root cause | Moving a lexical block without an explicit dependency/state contract, or teaching a sibling module to load another sibling independently. |
+| Expected post-fix | Entry loads balance, registry, then meta/trait exactly once at the original load point; the short-lived context is cleared; entry stays below 13,938 lines; every module stays below 2,500 lines. |
+| Detection | `qa/check_file_sizes.ps1`; `qa/check_lua_unit_tests.ps1` including `test_ct_boon_split`; strict mod lint must report 115 hooks, zero duplicates, and zero forward/late-local warnings. |
+| Manual risk | Engine-free tests cannot prove every VT2 lifecycle callback. Before promotion, run `/ct_regression_test`, change one vanilla boon tweak and one CT trait boon setting, then start a solo expedition and confirm both reapply without duplicate-hook warnings. |
 
 ### modded-boon pre-roster hot-join parity - issue #426
 

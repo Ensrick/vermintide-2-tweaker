@@ -1,5 +1,13 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.292-dev (2026-07-17) - #2 boon-runtime file-size extraction
+
+- Reduced the dev entry file from 17,480 physical lines to 13,629, below its frozen 13,938-line regression baseline, without raising or suppressing the repository size gate.
+- Extracted the original contiguous boon runtime at its existing load point into three explicit owners: `_ct_boon_balance.lua` for reversible vanilla-boon mutations and defeat recovery, `_ct_boon_registry.lua` for lookup/pool/miracle registration, and `_ct_meta_trait_boons.lua` for CT boons, peer parity, and buff hooks.
+- Preserved hook registration order, singleton hook ownership, mutable state ownership, and Lua 5.1 lexical behavior through a short-lived entry-owned dependency context. Each module is loaded exactly once and remains below the 2,500-line hard ceiling.
+- Updated source-contract tests that previously assumed all boon behavior lived in the entry file, and added focused checks for the frozen line baseline, one-load dependency order, and bounded module exports.
+- Validation: 907 Lua 5.1 tests pass; strict mod lint reports 115 hooks with no duplicate, forward-reference, late-local, save/restore, or network-bound errors. The monorepo size gate still reports unrelated pre-existing regressions outside this change; CT's entry-file ratchet now passes.
+
 ## 0.7.291-dev (2026-07-16) - #426 close the pre-roster hot-join wire race [verify-fix-coop]
 
 - Source-confirmed the residual in the original parity gate: vanilla calls `GameNetworkManager.hot_join_sync(peer_id)` before `PlayerManager:add_remote_player`, so the poll-only beacon could not see a late joiner before BuffSystem and Deus SharedState serialized live CT buff/power-up lookup ids.

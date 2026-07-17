@@ -4,6 +4,7 @@ return function(H, repo_root)
     local data_path = base .. "chaos_wastes_tweaker_dev_data.lua"
     local loc_path = base .. "chaos_wastes_tweaker_dev_localization.lua"
     local main_path = base .. "chaos_wastes_tweaker_dev.lua"
+    local meta_path = base .. "_ct_meta_trait_boons.lua"
 
     local function read(path)
         local file = assert(io.open(path, "rb"))
@@ -87,7 +88,7 @@ return function(H, repo_root)
     end)
 
     H.test("CT #406 uses one canonical power-up registration path", function()
-        local source = read(main_path)
+        local source = read(main_path) .. read(meta_path)
         H.truthy(source:find('power_ups.ct_kill_heal = {', 1, true))
         H.truthy(source:find('inject_dormant_boon("ct_kill_heal", "exotic")', 1, true))
         H.truthy(source:find('if not (Managers and Managers.player and Managers.player.is_server) then return end', 1, true))

@@ -3,6 +3,7 @@ return function(H, repo_root)
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
     local module_path = base .. "_ct_bomb_cooldown_display.lua"
     local main_path = base .. "chaos_wastes_tweaker_dev.lua"
+    local balance_path = base .. "_ct_boon_balance.lua"
 
     local function read(path)
         local file = assert(io.open(path, "rb"))
@@ -129,7 +130,7 @@ return function(H, repo_root)
     end)
 
     H.test("CT #357 display follows the allowed gate without changing gameplay timing", function()
-        local main = read(main_path)
+        local main = read(balance_path) .. read(main_path)
         local stamp = assert(main:find("buff._ct_last_bubble_t = t", 1, true))
         local notify = assert(main:find(
             "mod._ct_bomb_cooldown_display.notify_allowed(owner_unit, name, interval)",
