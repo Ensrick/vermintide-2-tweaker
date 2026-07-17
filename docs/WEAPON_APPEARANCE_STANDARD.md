@@ -668,12 +668,22 @@ as `covered`, `deferred`, or `not-applicable`. Covered cells require evidence
 text and a mapping to an existing named offline test; non-covered cells require
 an explicit reason. Owner and test paths are repo-rooted and must exist.
 
+The canonical surface vocabulary is owner 1P, owner 3P, bot 3P, remote husk
+3P, inventory preview, cosmetic preview, Athanor preview, ordinary crafting
+preview, lobby preview, score screen, and Hold-Tab. The canonical replay-edge
+vocabulary is instance load, initial spawn, equip, wield, customization change,
+style change, mission transition, respawn, hot join, peer ready, parity ready,
+rejoin, preview open, preview reopen, lobby/score creation, and mod-disable
+restore. These lists are duplicated deliberately as immutable minima in the
+checker: changing the manifest alone cannot shrink the contract universe.
+
 `qa/check_appearance_contracts.ps1` runs in Quick and full QA and fails closed
-on a missing surface, missing replay edge, absent test list, covered cell with
-no test mapping, or stale named-test reference. Its self-test plants each of
-those failures. A contract must declare `Claim = 'structural-only'`: this gate
-proves census completeness and source-level evidence wiring, not retained
-rendered state, multiplayer observation, or in-game verification.
+on a contracted canonical vocabulary, missing surface, missing replay edge,
+absent test list, covered cell with no test mapping, or stale named-test
+reference. Its self-test plants each failure class. A contract must declare
+`Claim = 'structural-only'`: this gate proves census completeness and
+source-level evidence wiring, not retained rendered state, multiplayer
+observation, or in-game verification.
 
 The initial registry entry records only #660's migrated CWV exact-unit-identity
 slice. It deliberately records respawn as deferred and does not register the

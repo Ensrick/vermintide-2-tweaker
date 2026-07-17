@@ -735,6 +735,10 @@ commit. The entry must declare every canonical render surface and lifecycle
 replay edge, including honest `deferred` or `not-applicable` cells with reasons,
 and map every `covered` cell to an existing named offline test.
 
+The checker owns immutable minimum surface, replay-edge, and concern
+vocabularies. The manifest may add cells but may not shrink those minima; a
+manifest and its contracts deleting the same required cell must fail CI.
+
 `qa/check_appearance_contracts.ps1` is a blocking Quick/full gate. Passing it
 means only that the architectural census and referenced structural tests are
 complete. It never means a renderer, transition, retained engine state, or
