@@ -1,5 +1,48 @@
 # Crafting in Modded Changelog
 
+## 0.8.91 (2026-07-17) - PUBLIC RELEASE: full dev rollup (0.8.34 to 0.8.91)
+
+Promotes the entire dev line since the 0.8.34 wire-safety hotfix. New crafting-flow
+features, a large batch of forge and CWV crafted-identity fixes, and the always-on
+craft-path instrumentation (issue 682) now ship to the public build.
+
+### Features
+- Newly crafted weapons auto-equip by default (issue 562).
+- Forge freedom toggles: allow any trait and property on any weapon, and allow Chaos
+  Wastes traits on crafted weapons (issue 414, issue 44).
+- Modded salvage autofill for the standard bench (issue 618).
+- /forge_delete_all bulk cleanup command (issue 277).
+- Keep forge stays interactable in the modded realm (issue 624).
+- Optional Weapons of Chaos Poisoned Edge trait (issue 655).
+- Base Power level slider is now honored on new crafts.
+- Accessory craft button gives clear success feedback.
+- In-mission Athanor crafting, behind a GUI Tweaker opt-in (issue 83).
+- Settings sorted A to Z, with plain-English option descriptions.
+
+### Fixes
+- Athanor shows literal property values (issue 244).
+- Hold-Tab illusion icon renders correctly (issue 246, issue 598, issue 629, issue 641).
+- Vanilla illusion choices persist on modded items (issue 563).
+- CWV crafted items keep their variant identity and render as the variant (issue 390,
+  issue 392, issue 524, issue 592, issue 628, issue 484).
+- Console craft no longer errors on a nil recipe (issue 407).
+- CWV Blacksmith selector fixed (issue 524).
+- Athanor icon closure no longer crashes (issue 617).
+- Hover popup fixed (issue 521).
+- Cost and trait display corrected (issue 238, issue 239).
+- Modded upgrade copy fixed (issue 263).
+- Weapons of Chaos relic is immutable where required (issue 637).
+- Old Musket preview gate fixed (issue 474, issue 481).
+
+### Instrumentation
+- The always-on craft-path probes from the dev line now ship in stable (issue 682).
+
+### Files
+- Full source port (9 updated Lua files + 20 new feature modules) with identity
+  re-stamped to cim / crafting_in_modded; MOD_VERSION set to 0.8.91; the
+  store_tag_icon_weapon_modded material/texture added to the resource package.
+  itemV2.cfg published_id and public visibility unchanged.
+
 ## 0.8.34 (2026-07-07) — HOTFIX: default cim host CTDs non-cim clients on any crafted-item equip (issue 278)
 
 Targeted crash hotfix promoted from cim_dev v0.8.54-dev — ONLY the wire-safety fix

@@ -14,6 +14,9 @@
 #
 # BYPASS: set env VT2_PROMOTION=1 for a legitimate promotion pass (the one time
 # stable dirs are supposed to change). The check then exits 0 with a note.
+# CI has no env-var path (issue 689): a promotion PR instead sanctions each
+# promoted stable dir with a commit trailer "VT2-Promotion: <stable-dir>"
+# anywhere in the PR's commit range; unsanctioned stable dirs still block.
 #
 # Change set sources (union):
 #   * staged   — `git diff --cached` (what a commit will contain; pre-commit)
@@ -139,6 +142,28 @@ $hits = Get-StableDirHits -Paths $changed
 if ($hits.Count -eq 0) {
     Write-Host "[check_dev_only_edits] OK — no edits to split-mod stable directories." -ForegroundColor Green
     exit 0
+}
+
+# CI promotion sanction (issue 689): pre-commit uses env VT2_PROMOTION=1, but a
+# PR's qa-gate run cannot. A promotion PR instead carries a commit trailer
+# "VT2-Promotion: <stable-dir>" in its range; each named dir is allowed while
+# any OTHER stable dir still blocks.
+$ciBase = $env:GITHUB_BASE_REF
+if (-not $Staged -and $ciBase) {
+    $sanctioned = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($line in (Invoke-GitLines @('log', '--format=%(trailers:key=VT2-Promotion,valueonly)', "origin/$ciBase..HEAD"))) {
+        $v = "$line".Trim().TrimEnd('/')
+        if ($v) { [void]$sanctioned.Add($v) }
+    }
+    if ($sanctioned.Count -gt 0) {
+        $unsanctioned = @($hits | Where-Object { -not $sanctioned.Contains(($_ -split '/')[0]) })
+        if ($unsanctioned.Count -eq 0) {
+            Write-Host "[check_dev_only_edits] stable-dir edits covered by VT2-Promotion trailer(s): $($sanctioned -join ', ') — promotion PR. Skipping." -ForegroundColor DarkYellow
+            exit 0
+        }
+        Write-Host "[check_dev_only_edits] VT2-Promotion trailer(s) cover $($sanctioned -join ', ') but OTHER stable dirs are also edited:" -ForegroundColor Red
+        $hits = $unsanctioned
+    }
 }
 
 Write-Host "[check_dev_only_edits] ERRORS — changes touch split-mod STABLE directories (edit the `*_dev/` twin instead; stable is write-by-promotion-only):" -ForegroundColor Red

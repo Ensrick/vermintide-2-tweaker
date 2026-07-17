@@ -1,5 +1,9 @@
 # Career Tweaker Changelog
 
+## 0.4.5-beta - 2026-07-17 - #687 Foot Knight tooltip CTD hotfix
+
+- Fixed a crash-to-desktop when hovering the reworked Foot Knight ROCK/TEAMWORK talent descriptions: the 0.4.4-beta extraction moved the `CRT_DESC_OVERRIDES` enabled-predicates into `_career_tweaker_balance_hooks.lua` but left the `foot_knight_policy` module declaration behind in the catalogue, so the hooks file dereferenced a nil global on first tooltip draw (`attempt to index global 'foot_knight_policy'`). The hooks module now instantiates the engine-free policy module itself, matching `_crt_foot_knight.lua`.
+
 ## 0.4.4-beta - 2026-07-17 - #540 balance hook-module extraction [tooling]
 
 - Extracted the hook-only crit policy, talent-description localizer, and hot-join wire filter from the oversized balance catalogue into `_career_tweaker_balance_hooks.lua`. The catalogue remains the single owner of rework definitions and apply/restore state; the extracted module installs the same four hooks once and preserves `mod._crt_hellborgs_crit_hook_installed`.

@@ -1,0 +1,14 @@
+store_tag_icon_weapon_modded = {
+	material_contexts = {
+		surface_material = ""
+	}
+
+	shader = "gui:DIFFUSE_MAP"
+
+	textures = {
+		diffuse_map = "gui/1080p/single_textures/cim/store_tag_icon_weapon_modded"
+	}
+
+	variables = {
+	}
+}
