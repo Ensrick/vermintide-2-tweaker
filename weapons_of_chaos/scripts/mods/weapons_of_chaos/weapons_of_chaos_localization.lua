@@ -13,10 +13,10 @@ return {
 		en = "A grim trophy from the Bogenhafen keep. Its cursed edge carries plague, bites through armour, and draws the death wind behind every kill.",
 	},
 	woc_intrinsic_crit_property = {
-		en = "+15% Critical Strike Chance",
+		en = "+15%% Critical Strike Chance",
 	},
 	woc_power_vs_order_property = {
-		en = "+50% Power vs. Order",
+		en = "+50%% Power vs. Order",
 	},
 
 	-- Settings
