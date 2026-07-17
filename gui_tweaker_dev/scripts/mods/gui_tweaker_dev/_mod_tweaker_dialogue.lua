@@ -167,7 +167,7 @@ function DialogueUI.build(view, category, defs)
     end
     view._dialogue_focus_sequence = math.clamp(
         view._dialogue_focus_sequence or window.first, 1, math.max(1, window.logical_count))
-    view._dialogue_focus_control = math.clamp(view._dialogue_focus_control or 1, 1, 3)
+    view._dialogue_focus_control = math.clamp(view._dialogue_focus_control or 1, 1, 2)
     view:_recompute_scroll_bounds()
     view._scroll_y = math.clamp(view._scroll_y or 0, 0, view._max_scroll)
     return true
@@ -207,8 +207,6 @@ local function activate_line(view, row, value, control)
         local next_value = current == nil and true or current == true and false or nil
         value.set_line_state(event, next_value)
         row.content.state_text = state_text(next_value)
-    elseif control == 2 then
-        value.play(event)
     else
         value.toggle_pause(event)
     end
@@ -233,16 +231,10 @@ function DialogueUI.handle_row(view, row)
         activate_line(view, row, value, 1)
         return true
     end
-    if once(row, "play", released(content.play_hotspot)) then
+    if once(row, "media", released(content.media_hotspot)) then
         view._dialogue_focus_id = row._dialogue_row_id
         view._dialogue_focus_sequence, view._dialogue_focus_control = row._dialogue_sequence, 2
         activate_line(view, row, value, 2)
-        return true
-    end
-    if once(row, "pause", released(content.pause_hotspot)) then
-        view._dialogue_focus_id = row._dialogue_row_id
-        view._dialogue_focus_sequence, view._dialogue_focus_control = row._dialogue_sequence, 3
-        activate_line(view, row, value, 3)
         return true
     end
     return false
@@ -288,7 +280,7 @@ function DialogueUI.handle_controller(view, input_service)
         if input_service:get("move_left", true) then
             view._dialogue_focus_control = math.max(1, control - 1); return true
         elseif input_service:get("move_right", true) then
-            view._dialogue_focus_control = math.min(3, control + 1); return true
+            view._dialogue_focus_control = math.min(2, control + 1); return true
         end
     end
     if input_service:get("confirm", true) then
@@ -316,19 +308,30 @@ function DialogueUI.refresh_row(row, view)
     if not row._is_dialogue_line then return end
     local value = api()
     if not value then return end
-    local event, paused = value.preview_state()
+    local event, paused = view._dialogue_preview_event, view._dialogue_preview_paused
     local active = event == row._dialogue_event
     row.content.state_text = state_text(value.get_line_state(row._dialogue_event))
-    row.content.play_text = active and (paused and "PAUSED" or "PLAYING") or "PLAY"
-    row.content.pause_text = active and paused and "RESUME" or "PAUSE"
-    for index, style_id in ipairs({ "state_text", "play_text", "pause_text" }) do
-        local color = row.style and row.style[style_id] and row.style[style_id].text_color
+    row.content.media_is_playing = active and not paused
+    row.content.progress_visible = active
+    local progress = active and (view._dialogue_preview_progress or 0) or 0
+    local progress_style = row.style and row.style.progress_fill
+    if progress_style then
+        progress_style.size[1] = (row.style._dialogue_progress_width or 0) * math.clamp(progress, 0, 1)
+    end
+    local state_color = row.style and row.style.state_text and row.style.state_text.text_color
+    if state_color then
+        if selected and (view._dialogue_focus_control or 1) == 1 then
+            state_color[1], state_color[2], state_color[3], state_color[4] = 255, 255, 168, 0
+        else
+            state_color[1], state_color[2], state_color[3], state_color[4] = 255, 160, 146, 101
+        end
+    end
+    local focused_media = selected and (view._dialogue_focus_control or 1) == 2
+    for _, style_id in ipairs({ "play_glyph", "pause_bar_left", "pause_bar_right" }) do
+        local color = row.style and row.style[style_id] and row.style[style_id].color
         if color then
-            if selected and index == (view._dialogue_focus_control or 1) then
-                color[1], color[2], color[3], color[4] = 255, 255, 168, 0
-            else
-                color[1], color[2], color[3], color[4] = 255, 160, 146, 101
-            end
+            if focused_media then color[1], color[2], color[3], color[4] = 255, 255, 168, 0
+            else color[1], color[2], color[3], color[4] = 255, 160, 146, 101 end
         end
     end
 end
@@ -337,6 +340,9 @@ function DialogueUI.refresh_window(view)
     if not view._dialogue_category then return false end
     local value = api()
     if not value then return false end
+    view._dialogue_preview_event, view._dialogue_preview_paused,
+        view._dialogue_preview_playing_id, view._dialogue_preview_progress,
+        view._dialogue_preview_duration, view._dialogue_preview_elapsed = value.preview_state()
     local first = math.max(1, math.floor((view._scroll_y or 0) / (value.browser_row_height or 32)) + 1 - 2)
     if first ~= view._dialogue_virtual_first then
         view:_build_rows(view._categories[view._selected])

@@ -1,5 +1,26 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.282-dev (2026-07-16) -- #605 Dialogue media controls [not-started]
+
+- Replaced the separate Play and Pause/Resume text buttons on every virtual
+  dialogue row with one fixed media button. It uses a code-native right-facing
+  triangle while stopped or paused and two vertical bars only while playing.
+- Added a compact active-row progress track. Tweaker: GUI polls Character
+  Dialogue's single preview snapshot once per frame, then updates only the
+  visible owner row's fill width; it does not query Wwise per row or rebuild the
+  34,327-entry catalogue.
+- Reduced controller navigation to the row's two actual controls: dialogue
+  eligibility state and the play/pause toggle. Rebuilt or inactive rows reset
+  to the play glyph and an empty progress fill.
+
+### Solo verify
+
+Open Mod Tweaker > Dialogue, expand a character, and play a resident line. The
+same button must switch triangle -> pause bars -> triangle as play/pause state
+changes. Progress must advance, freeze on pause, resume from the same position,
+and reset on row replacement or view cleanup. Mouse and controller focus must
+stay on that same fixed button. Run `/gut_regression_test`.
+
 ## 0.2.281-dev (2026-07-16) -- #649 Helmgart Mission Select crash [verify-fix]
 
 - Fixed the immediate crash when opening the Helmgart chapter while a late-

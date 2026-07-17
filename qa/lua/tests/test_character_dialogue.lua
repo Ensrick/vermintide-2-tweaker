@@ -50,6 +50,20 @@ return function(Harness, repo_root)
         Harness.equal(34327, count)
     end)
 
+    Harness.test("cd catalogue carries authored clip durations", function()
+        local entries = dofile(repo_root .. "/character_dialogue/scripts/mods/character_dialogue/character_dialogue_catalogue.lua")
+        local index = browser.build_index(entries)
+        local timed = 0
+        for i = 1, #entries do
+            Harness.truthy(type(entries[i][5]) == "number" and entries[i][5] > 0,
+                "missing authored duration for " .. tostring(entries[i][1]))
+            timed = timed + 1
+        end
+        Harness.equal(34327, timed)
+        Harness.equal(entries[1][5], browser.duration_for(index, entries[1][1], 4.5))
+        Harness.equal(4.5, browser.duration_for(index, "not_catalogued", 4.5))
+    end)
+
     Harness.test("cd browser groups by speaker and searches without flattening", function()
         local entries = {
             { "pes_hello", "subtitle_one", "heroes", "empire_soldier_keep" },
@@ -90,12 +104,13 @@ return function(Harness, repo_root)
 
     Harness.test("cd pages have stable identity and a hard allocation cap", function()
         local entries = {}
-        for i = 1, 100 do entries[i] = { "pes_line_" .. i, "s" .. i, "g", "empire_soldier" } end
+        for i = 1, 100 do entries[i] = { "pes_line_" .. i, "s" .. i, "g", "empire_soldier", i / 10 } end
         local page, total = browser.page(entries, "kruber", "", 10, 9999)
         Harness.equal(100, total)
         Harness.equal(browser.PAGE_LIMIT, #page)
         Harness.equal("pes_line_11", page[1].id)
         Harness.equal(page[1].event, page[1].id)
+        Harness.equal(1.1, page[1].duration)
         local index = browser.build_index(entries)
         local indexed, indexed_total = browser.index_page(index, "kruber", "", 10, 9999)
         Harness.equal(total, indexed_total)
@@ -129,6 +144,10 @@ return function(Harness, repo_root)
         Harness.equal(false, state.paused)
         state, stop_old = preview.transition(state, "stop")
         Harness.equal(nil, state.event); Harness.equal(true, stop_old)
+        Harness.equal(0, preview.progress(0, 4))
+        Harness.equal(0.5, preview.progress(2, 4))
+        Harness.equal(1, preview.progress(20, 4))
+        Harness.equal(0, preview.progress(2, 0))
     end)
 
     Harness.test("cd Mod Tweaker integration is grouped virtual media UI", function()
@@ -141,8 +160,11 @@ return function(Harness, repo_root)
         Harness.truthy(source:find("DialogueUI%.stop%(%)"), "view lifecycle cleanup missing")
         Harness.truthy(ui:find("create_dialogue_row"), "one-row media controls missing")
         Harness.truthy(ui:find("state_hotspot"), "per-line state control missing")
-        Harness.truthy(ui:find("play_hotspot"), "same-row play control missing")
-        Harness.truthy(ui:find("pause_hotspot"), "same-row pause control missing")
+        Harness.truthy(ui:find("media_hotspot"), "single same-row media control missing")
+        Harness.equal(nil, ui:find("play_hotspot", 1, true), "detached play control remains")
+        Harness.equal(nil, ui:find("pause_hotspot", 1, true), "detached pause control remains")
+        Harness.truthy(ui:find("media_is_playing"), "media glyph state missing")
+        Harness.truthy(ui:find("progress_fill"), "active-row progress update missing")
         Harness.truthy(ui:find("value%.stop%(%)"), "collapse cleanup missing")
         local zero_pos = ui:find("if line_count == 0 then", 1, true)
         local stop_pos = zero_pos and ui:find("value.stop()", zero_pos, true)
@@ -154,6 +176,19 @@ return function(Harness, repo_root)
         Harness.truthy(ui:find('get%("move_up"'), "controller vertical focus missing")
         Harness.truthy(ui:find('get%("move_left"'), "controller control focus missing")
         Harness.truthy(ui:find('get%("confirm"'), "controller activation missing")
+    end)
+
+    Harness.test("cd polls one Wwise owner with exact elapsed milliseconds", function()
+        local cd_path = repo_root .. "/character_dialogue/scripts/mods/character_dialogue/character_dialogue.lua"
+        local f = assert(io.open(cd_path, "rb")); local cd = f:read("*a"); f:close()
+        local ui_path = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue.lua"
+        f = assert(io.open(ui_path, "rb")); local ui = f:read("*a"); f:close()
+        Harness.truthy(cd:find("WwiseWorld%.get_playing_elapsed"), "exact Wwise elapsed poll missing")
+        Harness.truthy(cd:find("elapsed_ms / 1000", 1, true), "Wwise milliseconds are not converted to seconds")
+        Harness.truthy(cd:find("WwiseWorld%.is_playing"), "Wwise completion authority missing")
+        Harness.truthy(ui:find("value%.preview_state%(%)"), "single frame-level preview poll missing")
+        local _, polls = ui:gsub("preview_state", "")
+        Harness.equal(1, polls, "preview state must be polled once, not per visible row")
     end)
 
     Harness.test("cd owns the browser API and does not allocate a 34k dropdown", function()

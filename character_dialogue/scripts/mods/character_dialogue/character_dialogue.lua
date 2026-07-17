@@ -1,5 +1,5 @@
 local mod = get_mod("character_dialogue")
-local MOD_VERSION = "0.1.2-dev"
+local MOD_VERSION = "0.1.3-dev"
 -- Fatshark keeps DialogueQueries local to dialogue_system.lua; it is not a
 -- global like TagQueryDatabase.  Resolve the canonical module before asking
 -- VMF to install the hook, otherwise VMF receives nil and emits a startup
@@ -26,9 +26,13 @@ mod:echo(string.format("[character_dialogue] v%s loaded", MOD_VERSION))
 local overrides = mod:get("line_overrides")
 if type(overrides) ~= "table" then overrides = {} end
 
-local preview = { world = nil, playing_id = nil, event = nil, paused = false }
+local preview = {
+    world = nil, playing_id = nil, event = nil, paused = false,
+    elapsed = 0, duration = 0,
+}
 local catalogue_cache
 local catalogue_index_cache
+local catalogue_index
 local browser_group_cache = { query = nil, groups = nil }
 
 local function clone_table(source)
@@ -64,6 +68,7 @@ local function stop_preview()
     local next_state = PreviewPolicy.transition(preview, "stop")
     preview.world, preview.playing_id = nil, nil
     preview.event, preview.paused = next_state.event, next_state.paused
+    preview.elapsed, preview.duration = 0, 0
     return true
 end
 
@@ -80,6 +85,9 @@ local function play_preview(event)
     end
     preview.world, preview.playing_id = wwise_world, playing_id
     preview.event, preview.paused = next_state.event, next_state.paused
+    local fallback = DialogueSettings and DialogueSettings.sound_event_default_length or 4.5
+    preview.elapsed = 0
+    preview.duration = Browser.duration_for(catalogue_index(), event, fallback)
     printf("[character_dialogue:preview] play event=%s id=%s", event, tostring(playing_id))
     return true
 end
@@ -108,7 +116,7 @@ local function catalogue()
     return catalogue_cache or {}
 end
 
-local function catalogue_index()
+catalogue_index = function()
     if not catalogue_index_cache then
         catalogue_index_cache = Browser.build_index(catalogue())
         log("browser index built entries=%d", catalogue_index_cache.total or -1)
@@ -119,6 +127,28 @@ end
 local function toggle_pause(event)
     if preview.event ~= event then return play_preview(event) end
     return preview.paused and resume_preview() or pause_preview()
+end
+
+-- Poll exactly once per Mod Tweaker frame. Wwise returns elapsed milliseconds;
+-- generated dialogue durations are seconds. While paused we intentionally do
+-- not query is_playing because paused-event semantics are engine-owned and the
+-- progress contract is simply to freeze the last trustworthy position.
+local function poll_preview()
+    if preview.playing_id and not preview.paused then
+        if WwiseWorld.is_playing then
+            local ok, playing = pcall(WwiseWorld.is_playing, preview.world, preview.playing_id)
+            if ok and not playing then stop_preview() end
+        end
+        if preview.playing_id and WwiseWorld.get_playing_elapsed then
+            local ok, elapsed_ms = pcall(WwiseWorld.get_playing_elapsed, preview.world, preview.playing_id)
+            if ok and type(elapsed_ms) == "number" and elapsed_ms >= 0 then
+                preview.elapsed = math.min(preview.duration, elapsed_ms / 1000)
+            end
+        end
+    end
+    return preview.event, preview.paused, preview.playing_id,
+        PreviewPolicy.progress(preview.elapsed, preview.duration),
+        preview.duration, preview.elapsed
 end
 
 local function register_mod_tweaker()
@@ -171,7 +201,7 @@ mod:hook(TagQueryDatabase, "iterate_query", function(func, self, t)
 end)
 
 mod.character_dialogue_api = {
-    version = 2,
+    version = 3,
     catalogue = catalogue,
     browser_groups = function(query)
         query = type(query) == "string" and query or ""
@@ -195,7 +225,7 @@ mod.character_dialogue_api = {
     resume = resume_preview,
     toggle_pause = toggle_pause,
     stop = stop_preview,
-    preview_state = function() return preview.event, preview.paused, preview.playing_id end,
+    preview_state = poll_preview,
 }
 
 mod:command("cd_play", "Preview a dialogue event locally. Usage: /cd_play <event>", function(event)
@@ -221,13 +251,17 @@ mod:command("cd_regression_test", "Character Dialogue self-check", function()
     local groups = Browser.groups(entries, "")
     local grouped = 0
     for i = 1, #groups do grouped = grouped + groups[i].count end
-    local browsable = 0
-    for i = 1, #entries do if Browser.is_browsable(entries[i]) then browsable = browsable + 1 end end
+    local browsable, timed = 0, 0
+    for i = 1, #entries do
+        if Browser.is_browsable(entries[i]) then browsable = browsable + 1 end
+        if type(entries[i][5]) == "number" and entries[i][5] > 0 then timed = timed + 1 end
+    end
+    if timed ~= #entries then failures = failures + 1 end
     if grouped ~= browsable then failures = failures + 1 end
     local page = Browser.page(entries, "kruber", "", 0, Browser.PAGE_LIMIT)
     if #page > Browser.PAGE_LIMIT then failures = failures + 1 end
-    mod:echo("Character Dialogue v%s: catalogue=%d browsable=%d grouped=%d visible_cap=%d overrides=%d failures=%d",
-        MOD_VERSION, #entries, browsable, grouped, #page, table.size(overrides), failures)
+    mod:echo("Character Dialogue v%s: catalogue=%d timed=%d browsable=%d grouped=%d visible_cap=%d overrides=%d failures=%d",
+        MOD_VERSION, #entries, timed, browsable, grouped, #page, table.size(overrides), failures)
 end)
 
 mod.on_all_mods_loaded = function() register_mod_tweaker() end

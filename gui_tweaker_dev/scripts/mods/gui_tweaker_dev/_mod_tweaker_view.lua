@@ -3865,8 +3865,7 @@ function ModTweakerView:_draw(dt, input_service)
                 if c.dec then c.dec.on_release = nil; c.dec.on_left_release = nil end
                 if c.inc then c.inc.on_release = nil; c.inc.on_left_release = nil end
                 if c.state_hotspot then c.state_hotspot.on_release = nil; c.state_hotspot.on_left_release = nil end
-                if c.play_hotspot then c.play_hotspot.on_release = nil; c.play_hotspot.on_left_release = nil end
-                if c.pause_hotspot then c.pause_hotspot.on_release = nil; c.pause_hotspot.on_left_release = nil end
+                if c.media_hotspot then c.media_hotspot.on_release = nil; c.media_hotspot.on_left_release = nil end
             end
         end
     end

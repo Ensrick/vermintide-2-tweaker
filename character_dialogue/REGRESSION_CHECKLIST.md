@@ -2,7 +2,10 @@
 
 - `/cd_regression_test` reports zero failures and 34,327 unique catalogue entries.
 - Dialogue tab opens without loading the catalogue before first use.
-- Search/select a resident line, then Play, Pause/Resume, and Stop.
+- Search/select a resident line. Its one media button shows a play triangle,
+  becomes two pause bars while playing, and returns to play while paused.
+- The active row's progress bar advances from the Wwise playback position,
+  freezes while paused, and resets after replacement, stop, or cleanup.
 - Leaving Mod Tweaker or changing worlds stops the local preview.
 - Disable one line in a multi-line group: it is not selected naturally.
 - Disable every line in one group: the response is suppressed without a nil-index error.

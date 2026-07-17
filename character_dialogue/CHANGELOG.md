@@ -1,5 +1,26 @@
 # Character Dialogue Changelog
 
+## 0.1.3-dev (2026-07-16) - #605 [not-started]
+
+- Extended the offline-generated 34,327-event catalogue with Fatshark's
+  authored `sound_events_duration` value for every stable Wwise event ID.
+- Added one bounded preview snapshot poll using `WwiseWorld.is_playing` and
+  `WwiseWorld.get_playing_elapsed`. The engine elapsed value is converted from
+  milliseconds to seconds, clamped to the authored duration, frozen while
+  paused, and reset on every existing preview cleanup boundary.
+- Advanced the Character Dialogue browser API to version 3 so Tweaker: GUI dev
+  can render exact active-clip progress without scanning or rebuilding the
+  catalogue per frame.
+
+### Solo verify
+
+Open Mod Tweaker > Dialogue and play one resident line. Confirm its triangle
+changes to two pause bars and its progress bar advances. Click the same button
+to pause; the triangle returns and progress freezes. Click again to resume,
+then play another row and confirm the old row resets immediately. Collapse the
+character or close the view and confirm playback and progress both reset. Run
+`/cd_regression_test`; failures must be zero.
+
 ## 0.1.2-dev (2026-07-15) - #605 [verify-fix]
 
 - Replaced the 34,327-option flat dropdown with a Character Dialogue-owned,

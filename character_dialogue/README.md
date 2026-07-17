@@ -9,3 +9,8 @@ py -3 tools/dialogue/generate_catalogue.py --source C:\path\to\Vermintide-2-Sour
 ```
 
 Preview playback is local-only. Natural dialogue selection remains host-authoritative and sends only vanilla dialogue IDs/indexes through the existing engine RPC.
+
+Each generated catalogue tuple also carries Fatshark's authored clip duration.
+The Dialogue tab combines that duration with `WwiseWorld.get_playing_elapsed`
+for its active-row progress bar; Wwise playback state remains the completion
+authority. Preview position is never inferred for every catalogue row.

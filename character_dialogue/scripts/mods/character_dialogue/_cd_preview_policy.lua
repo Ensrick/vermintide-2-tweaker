@@ -1,6 +1,12 @@
 -- Engine-free single-owner preview state machine.
 local Preview = {}
 
+function Preview.progress(elapsed, duration)
+    duration = tonumber(duration) or 0
+    if duration <= 0 then return 0 end
+    return math.max(0, math.min(1, (tonumber(elapsed) or 0) / duration))
+end
+
 function Preview.transition(state, action, event)
     state = state or {}
     if action == "stop" then return { event = nil, paused = false }, state.event ~= nil end

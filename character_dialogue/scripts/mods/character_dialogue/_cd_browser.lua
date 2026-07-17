@@ -90,7 +90,7 @@ end
 -- tuple references (not cloned rows/widgets), so subsequent scroll-window page
 -- requests never rescan unrelated speakers.
 function Browser.build_index(entries)
-    local index = { total = 0 }
+    local index = { total = 0, by_event = {} }
     for i = 1, #Browser.GROUPS do index[Browser.GROUPS[i].id] = {} end
     for i = 1, #(entries or {}) do
         local tuple = entries[i]
@@ -98,6 +98,7 @@ function Browser.build_index(entries)
             local speaker = Browser.speaker_for(tuple)
             local bucket = index[speaker] or index.other
             bucket[#bucket + 1] = tuple
+            index.by_event[tuple[1]] = tuple
             index.total = index.total + 1
         end
     end
@@ -127,7 +128,7 @@ function Browser.page(entries, speaker, query, offset, limit)
             if total >= offset and #out < limit then
                 out[#out + 1] = {
                     id = tuple[1], event = tuple[1], subtitle = tuple[2],
-                    dialogue_group = tuple[3], source = tuple[4], speaker = speaker,
+                    dialogue_group = tuple[3], source = tuple[4], duration = tuple[5], speaker = speaker,
                 }
             end
             total = total + 1
@@ -147,13 +148,23 @@ function Browser.index_page(index, speaker, query, offset, limit)
             if total >= offset and #out < limit then
                 out[#out + 1] = {
                     id = tuple[1], event = tuple[1], subtitle = tuple[2],
-                    dialogue_group = tuple[3], source = tuple[4], speaker = speaker,
+                    dialogue_group = tuple[3], source = tuple[4], duration = tuple[5], speaker = speaker,
                 }
             end
             total = total + 1
         end
     end
     return out, total
+end
+
+-- Generated durations come from each dialogue group's sound_events_duration.
+-- Fatshark uses DialogueSettings.sound_event_default_length when a generated
+-- entry has no duration, so callers provide that exact engine fallback.
+function Browser.duration_for(index, event, fallback)
+    local tuple = index and index.by_event and index.by_event[event]
+    local duration = tuple and tonumber(tuple[5]) or 0
+    if duration <= 0 then duration = tonumber(fallback) or 0 end
+    return math.max(0, duration)
 end
 
 -- Pure virtual-window planner used by the renderer and tests. Group headers are

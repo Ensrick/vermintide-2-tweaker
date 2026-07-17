@@ -1,5 +1,14 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Character Dialogue media controls (#605)
+
+- [ ] Every visible dialogue row has one fixed media button, not separate Play and Pause buttons.
+- [ ] Stopped/paused displays a play triangle; active playback displays two pause bars.
+- [ ] The active-row progress track advances, freezes while paused, resumes, and resets on replacement/cleanup.
+- [ ] Wwise preview state is polled once per frame, never once per visible row; virtual row count remains bounded.
+- [ ] Mouse/controller focus remains on the same media button across play/pause changes.
+- [ ] `/cd_regression_test`, `/gut_regression_test`, and offline `test_character_dialogue.lua` pass.
+
 ## Mission Select custom-career statistics (#649)
 
 - [ ] With a custom career whose `completed_career_levels` definition is absent, open Custom Game > Helmgart; the mission list opens without a StatisticsDatabase crash.
@@ -50,7 +59,7 @@
 
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md) for Tweaker: GUI dev.
 
-Last updated: 2026-07-14.
+Last updated: 2026-07-16.
 
 ## Cosmetics-only in-mission customization mount (#89)
 
