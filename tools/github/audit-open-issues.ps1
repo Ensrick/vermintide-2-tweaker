@@ -112,7 +112,17 @@ function Test-CommentRequiresCoop($Issue) {
     # Historical comments often contain superseded test plans.  The newest
     # explicit test/verification comment is authoritative for current scope.
     $text = Get-LatestTestComment $Issue
-    if ($text -match '(?i)test[- ]method\s*\(?(?:[^\r\n)]{0,40})\bsolo\b|verify solo|solo verification|host solo|solo host|solo diagnostic|no (?:second|2nd) player|co-?op (?:is )?not required|\b(?:one|1) tester\b') {
+    # Prefer an explicit method-header scope over incidental prose.  In
+    # particular, "a solo host cannot reproduce this" is co-op evidence, not a
+    # solo test declaration, while a solo diagnostic may mention that a later
+    # implementation will require co-op verification.
+    if ($text -match '(?im)^\s*(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*solo\s*\)') {
+        return $false
+    }
+    if ($text -match '(?im)^\s*(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*co-?op\s*\)') {
+        return $true
+    }
+    if ($text -match '(?i)verify solo|solo verification|no (?:second|2nd) player|co-?op (?:is )?not required|\b(?:one|1) tester\b') {
         return $false
     }
     return $text -match '(?i)two[^\r\n]{0,40}(?:players|testers|humans)|2\+? (?:players|testers|humans)|needs? 2 (?:players|testers|humans)|host\s*\+\s*client|host and client|second player|both peers|remote peer|non-mod peer|co-?op(?:/perspective)? (?:verification|diagnostics?)'
@@ -866,6 +876,18 @@ function Invoke-SelfTest {
         comments = @([PSCustomObject]@{ body = "## Co-op diagnostics method`nHost with two humans. Expected: bounded evidence." })
     }
     if (-not (Test-CommentRequiresCoop $coopWording)) { throw "co-op diagnostics/two-humans wording was missed" }
+    $scopedCoopWording = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "**Test method (co-op):** Both players confirm the result. Expected: PASS." })
+    }
+    if (-not (Test-CommentRequiresCoop $scopedCoopWording)) { throw "explicit co-op method header was missed" }
+    $scopedSoloWording = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "**Diagnostic method (solo):** Capture the bounded probe. Rendered parity will later require co-op verification." })
+    }
+    if (Test-CommentRequiresCoop $scopedSoloWording) { throw "explicit solo method header was overridden by future co-op prose" }
+    $soloCannotRepro = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "Test method corrected: a solo host cannot reproduce this reliable queue; use a remote peer. Expected: no crash." })
+    }
+    if (-not (Test-CommentRequiresCoop $soloCannotRepro)) { throw "negative solo wording hid remote-peer evidence" }
     Write-Host "[audit-open-issues -SelfTest] OK"
 }
 
