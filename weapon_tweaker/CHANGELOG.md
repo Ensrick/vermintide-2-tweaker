@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.270-beta (2026-07-17) - #664 Executioner's Sword light headshots [verify-fix]
+
+- Added the default-off **Executioner's Sword: +30% Light Headshot Damage** option under Weapon Tweaks. Every light sweep, including the push follow-up, deals exactly 1.30x its otherwise-final damage when VT2 classifies the hit zone as a headshot.
+- Kept body hits, both heavy attacks, attack speed, stagger, cleave, critical chance, and armor interaction unchanged. The policy follows `two_handed_swords_executioner_template_1`, so every career using that effective template receives the same behavior.
+- Cloned the shared light damage profile into `wt_executioner_light_headshot_130`; registration is unconditional and deterministic, while the action repoint remains live-toggle and peer-parity gated through #431. Disabling the option or losing WT peer parity restores the exact original profile pointers.
+- Added offline coverage in `test_cwv_axe_balance.lua` plus `/wt_regression_test` check `issue664_executioner_light_headshot_boundary` for exact 1.30x headshots, body/heavy isolation, every-light scope, registration/fallback, parity hold, idempotence, and exact restoration.
+
+**Verification (in-game):** Enable the option, use an Executioner's Sword light chain against a repeatable enemy/dummy headshot and body-shot control, then disable it and repeat. Every light headshot should be exactly 30% higher; body hits and both heavies must match the disabled result. Run `/wt_regression_test` and expect `issue664_executioner_light_headshot_boundary` PASS.
+
 ## 0.12.269-beta (2026-07-17) - #611 [verify-fix] gear-style availability masters
 
 - Replaced each career/slot's flat source-character master plus duplicated weapon rows with the established advanced-options pattern: the visible master checkbox selects or clears the whole source set, and its gear opens the exact individual weapon choices.

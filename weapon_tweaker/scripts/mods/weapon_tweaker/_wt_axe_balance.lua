@@ -1,4 +1,4 @@
--- Issues #601/#621/#622/#623: isolated Weapon Tweaks balance policies.
+-- Issues #601/#621/#622/#623/#664: isolated Weapon Tweaks balance policies.
 -- Engine-free; optional/late templates are discovered on every bounded apply.
 local M = {}
 
@@ -8,11 +8,16 @@ M.DUAL_AXES_CLEAVE_SETTING = "wt_dual_axes_cleave"
 M.ONE_HAND_AXE_CLEAVE_SETTING = "wt_one_hand_axe_cleave_nerf"
 M.COG_HAMMER_HEAVY_SPEED_SETTING = "wt_cog_hammer_heavy_speed_nerf"
 M.MACE_SWORD_SPEED_SETTING = "wt_mace_sword_speed_nerf"
+M.EXECUTIONER_LIGHT_HEADSHOT_SETTING = "wt_executioner_light_headshot_bonus"
 M.LIGHT_CRIT_FLOOR = 0.10
 M.CLEAVE_MULT = 1.10
 M.CLEAVE_NERF_MULT = 0.90
 M.SLOW_TIME_MULT = 1.10
 M.SLOW_ANIM_MULT = 1 / M.SLOW_TIME_MULT
+M.EXECUTIONER_HEADSHOT_MULT = 1.30
+M.EXECUTIONER_TEMPLATE = "two_handed_swords_executioner_template_1"
+M.EXECUTIONER_SOURCE_PROFILE = "medium_slashing_linesman_executioner"
+M.EXECUTIONER_BONUS_PROFILE = "wt_executioner_light_headshot_130"
 M.GREATAXE_TEMPLATES = { "two_handed_axes_template_1", "cwv_greataxe_template" }
 M.DUAL_AXES_TEMPLATES = { "dual_wield_axes_template_1" }
 M.COG_HAMMER_TEMPLATE = "two_handed_cog_hammers_template_1"
@@ -51,6 +56,16 @@ local function is_direct(action)
         and (type(action.damage_profile) == "string"
         or type(action.damage_profile_left) == "string"
         or type(action.damage_profile_right) == "string")
+end
+
+function M.scale_executioner_headshot_damage(damage, multiplier_type, profile)
+    local multiplier = type(profile) == "table"
+        and profile._wt_executioner_light_headshot_multiplier
+    if type(damage) == "number" and multiplier_type == "headshot"
+            and type(multiplier) == "number" then
+        return damage * multiplier
+    end
+    return damage
 end
 
 -- Capability/provenance boundary for #621. All three vanilla single-axe
@@ -121,6 +136,7 @@ function M.new()
         one_hand_generated_profiles = {},
         cog_speed_originals = setmetatable({}, { __mode = "k" }),
         mace_sword_speed_originals = setmetatable({}, { __mode = "k" }),
+        executioner_profile_originals = setmetatable({}, { __mode = "k" }),
     }
 
     local function apply_crit(self, enabled, weapons, keys, originals, flag)
@@ -281,6 +297,44 @@ function M.new()
         apply_action_speed(enabled, weapons and weapons[M.MACE_SWORD_TEMPLATE],
             M.MACE_SWORD_NERFED_ACTIONS, self.mace_sword_speed_originals)
         self.mace_sword_speed_enabled = not not enabled
+    end
+
+    -- #664: the vanilla Executioner's Sword routes all four light sweeps through
+    -- medium_slashing_linesman_executioner, while both heavies use
+    -- heavy_slashing_smiter_executioner. Clone the light profile so the exact
+    -- 1.30x final-headshot rule can be recognized without mutating a shared
+    -- vanilla profile. Registration is unconditional; only the action repoint
+    -- is setting/parity gated (PROJECT_STANDARDS 9.3 / issue #431).
+    function state:apply_executioner_light_headshot(enabled, weapons, profiles, clone,
+            register, fallback_map, parity_allowed)
+        local source = profiles and profiles[M.EXECUTIONER_SOURCE_PROFILE]
+        if type(source) ~= "table" then return 0 end
+        local custom = profiles[M.EXECUTIONER_BONUS_PROFILE]
+        if type(custom) ~= "table" then
+            custom = clone(source)
+            custom._wt_executioner_light_headshot_multiplier = M.EXECUTIONER_HEADSHOT_MULT
+            profiles[M.EXECUTIONER_BONUS_PROFILE] = custom
+        end
+        if fallback_map then
+            fallback_map[M.EXECUTIONER_BONUS_PROFILE] = M.EXECUTIONER_SOURCE_PROFILE
+        end
+        if register then register(M.EXECUTIONER_BONUS_PROFILE) end
+
+        local template = weapons and weapons[M.EXECUTIONER_TEMPLATE]
+        local count = 0
+        each_sub_action(template, function(name, action)
+            if not is_light(name, action) or type(action.damage_profile) ~= "string" then return end
+            local original = self.executioner_profile_originals[action]
+            if not original then
+                original = action.damage_profile
+                self.executioner_profile_originals[action] = original
+            end
+            action.damage_profile = enabled and parity_allowed == true
+                and M.EXECUTIONER_BONUS_PROFILE or original
+            count = count + 1
+        end)
+        self.executioner_headshot_enabled = enabled and parity_allowed == true
+        return count
     end
     return state
 end

@@ -282,6 +282,70 @@ return function(H, repo_root)
 		H.equal(native_actions.heavy_attack.anim_time_scale, 1.035)
 	end)
 
+	H.test("WT #664 Executioner's Sword applies exact 1.30x only to light headshots", function()
+		local source = {
+			charge_value = "light_attack", marker = "vanilla",
+			default_target = { power_distribution = { attack = 0.075, impact = 0.05 } },
+			targets = { { power_distribution = { attack = 0.2, impact = 0.25 } } },
+		}
+		local profiles = { medium_slashing_linesman_executioner = source }
+		local light_left = { kind = "sweep", damage_profile = "medium_slashing_linesman_executioner" }
+		local light_right = { kind = "sweep", damage_profile = "medium_slashing_linesman_executioner" }
+		local bopp = { kind = "sweep", damage_profile = "medium_slashing_linesman_executioner" }
+		local heavy = { kind = "sweep", damage_profile = "heavy_slashing_smiter_executioner" }
+		local template = { actions = { action_one = {
+			light_attack_left = light_left, light_attack_right = light_right,
+			light_attack_bopp = bopp, heavy_attack_left = heavy,
+			push = { kind = "push_stagger" }, default = { kind = "melee_start" },
+		} } }
+		local registered, fallback = {}, {}
+		local state = policy.new()
+		local count = state:apply_executioner_light_headshot(true, {
+			two_handed_swords_executioner_template_1 = template,
+		}, profiles, clone, function(key) registered[key] = true end, fallback, true)
+		H.equal(count, 3)
+		H.equal(light_left.damage_profile, policy.EXECUTIONER_BONUS_PROFILE)
+		H.equal(light_right.damage_profile, policy.EXECUTIONER_BONUS_PROFILE)
+		H.equal(bopp.damage_profile, policy.EXECUTIONER_BONUS_PROFILE)
+		H.equal(heavy.damage_profile, "heavy_slashing_smiter_executioner")
+		local custom = profiles[policy.EXECUTIONER_BONUS_PROFILE]
+		H.equal(custom.marker, "vanilla")
+		H.equal(source._wt_executioner_light_headshot_multiplier, nil)
+		H.equal(registered[policy.EXECUTIONER_BONUS_PROFILE], true)
+		H.equal(fallback[policy.EXECUTIONER_BONUS_PROFILE], policy.EXECUTIONER_SOURCE_PROFILE)
+		H.equal(policy.scale_executioner_headshot_damage(100, "headshot", custom), 130)
+		H.equal(policy.scale_executioner_headshot_damage(100, "torso", custom), 100)
+		H.equal(policy.scale_executioner_headshot_damage(100, "headshot", source), 100)
+
+		state:apply_executioner_light_headshot(true, {
+			two_handed_swords_executioner_template_1 = template,
+		}, profiles, clone, nil, fallback, true)
+		H.equal(light_left.damage_profile, policy.EXECUTIONER_BONUS_PROFILE)
+		state:apply_executioner_light_headshot(false, {
+			two_handed_swords_executioner_template_1 = template,
+		}, profiles, clone, nil, fallback, true)
+		H.equal(light_left.damage_profile, "medium_slashing_linesman_executioner")
+		H.equal(light_right.damage_profile, "medium_slashing_linesman_executioner")
+		H.equal(bopp.damage_profile, "medium_slashing_linesman_executioner")
+	end)
+
+	H.test("WT #664 Executioner's Sword profile waits for peer parity and remains cross-career template scoped", function()
+		local profiles = { medium_slashing_linesman_executioner = {
+			charge_value = "light_attack", default_target = {}, targets = {},
+		} }
+		local action = { kind = "sweep", damage_profile = "medium_slashing_linesman_executioner" }
+		local template = { actions = { action_one = { light_attack_left = action } } }
+		local state = policy.new()
+		state:apply_executioner_light_headshot(true, {
+			two_handed_swords_executioner_template_1 = template,
+		}, profiles, clone, nil, {}, false)
+		H.equal(action.damage_profile, "medium_slashing_linesman_executioner")
+		state:apply_executioner_light_headshot(true, {
+			two_handed_swords_executioner_template_1 = template,
+		}, profiles, clone, nil, {}, true)
+		H.equal(action.damage_profile, policy.EXECUTIONER_BONUS_PROFILE)
+	end)
+
 	H.test("WT #601 settings default on and compose with canonical lifecycle", function()
 		local data = read(repo_root
 			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_data.lua")
@@ -310,6 +374,7 @@ return function(H, repo_root)
 			policy.ONE_HAND_AXE_CLEAVE_SETTING,
 			policy.COG_HAMMER_HEAVY_SPEED_SETTING,
 			policy.MACE_SWORD_SPEED_SETTING,
+			policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING,
 		}) do
 			local at = assert(data:find('setting_id = "' .. id .. '"', 1, true))
 			local row = data:sub(at, at + 220)
@@ -320,6 +385,8 @@ return function(H, repo_root)
 		H.truthy(source:find("apply_one_hand_axe_cleave", 1, true))
 		H.truthy(source:find("apply_cog_heavy_speed", 1, true))
 		H.truthy(source:find("apply_mace_sword_speed", 1, true))
+		H.truthy(source:find("apply_executioner_light_headshot", 1, true))
+		H.truthy(source:find("scale_executioner_headshot_damage", 1, true))
 		local parity = read(repo_root
 			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt431_damage_profile_parity.lua")
 		H.truthy(parity:find("mod._wt_apply_axe_balance", 1, true))

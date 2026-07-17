@@ -1,5 +1,17 @@
 # Regression Checklist — weapon_tweaker
 
+## #664 - Executioner's Sword light headshot damage
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.268-beta / WT Dev 0.12.269-dev (not shipped) |
+| Exact scope | Every `light_attack_*` sweep on `two_handed_swords_executioner_template_1`, including the push follow-up, uses the private profile while enabled and peer parity is confirmed. Both heavies and utility actions retain their authored profiles. |
+| Damage | Repeatable light headshots are exactly 1.30x the disabled result. Body hits and both heavies are identical off/on; speed, stagger, cleave, crit, and armor data remain byte-for-byte cloned from vanilla. |
+| Lifecycle | On/off/on does not stack. Disable and WT peer-parity loss restore exact original profile keys; parity recovery reapplies once. Cross-career users share the same effective template transaction. |
+| Automated | Offline `test_cwv_axe_balance.lua`; `/wt_regression_test`: `issue664_executioner_light_headshot_boundary`. |
+
+---
+
 ## #611 - per-career availability masters
 
 | Field | Check |

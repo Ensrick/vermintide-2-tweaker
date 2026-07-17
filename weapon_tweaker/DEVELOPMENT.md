@@ -1,5 +1,25 @@
 # Weapon Tweaker — Development Notes
 
+## Executioner's Sword light-headshot transaction (Issue #664)
+
+The native template has four light sweeps, including the push follow-up, and all
+four point to `medium_slashing_linesman_executioner`; its two heavy sweeps point
+to `heavy_slashing_smiter_executioner` [src:
+`scripts/settings/equipment/weapon_templates/2h_swords_executioner.lua:230-961`].
+The light profile is shared data, so WT never edits it. `_wt_axe_balance.lua`
+deep-clones it as `wt_executioner_light_headshot_130`, marks only that private
+clone, and repoints only light actions through the existing bounded restore and
+#431 peer-parity transaction.
+
+VT2 calculates complete damage, including armor, buffs, and stagger, before
+`DamageUtils.calculate_damage` returns [src:
+`scripts/helpers/damage_utils.lua:449-569`]. Its canonical headshot classifier
+is `DamageUtils.get_breed_damage_multiplier_type` [src:
+`scripts/helpers/damage_utils.lua:54-61`]. WT's single preflight-audited hook
+multiplies the returned damage by `1.30` only when both the private profile
+marker and the engine's `headshot` classification are present. This makes the
+requested total-damage delta exact without changing body or heavy profile data.
+
 ## Isolated weapon balance transactions (Issues #601/#621/#622/#623)
 
 Weapon Tweaker owns the three default-on controls under `Weapon Tweaks`:

@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.271-dev (2026-07-17) - #664 Executioner's Sword light-headshot parity [verify-fix]
+
+- Mirrored public beta 0.12.270's default-off **Executioner's Sword: +30% Light Headshot Damage** toggle into the friends-only development stream without changing the dev animation/hold-pose overlay.
+- Every Executioner's Sword light sweep uses a private, deterministic, #431 parity-gated profile and receives an exact 1.30x final-damage multiplier only when VT2 classifies the hit as a headshot. Body hits, heavies, speed, stagger, cleave, critical chance, and armor interaction remain unchanged.
+- Added the shared offline and `/wt_regression_test` coverage for every-light scope, exact multiplier, profile isolation, parity hold, repeated-toggle idempotence, and exact restoration.
+
+**Verification (in-game):** Compare light headshots, body hits, and both heavies with the option off/on/off, then run `/wt_regression_test`. Only light headshots should rise by exactly 30%, and `issue664_executioner_light_headshot_boundary` should PASS.
+
 ## 0.12.270-dev (2026-07-17) - #611 [verify-fix] gear-style availability master parity
 
 - Mirrored beta's advanced-options Weapon Availability masters into the friends-only dev stream without changing the animation/pose tuning overlay.

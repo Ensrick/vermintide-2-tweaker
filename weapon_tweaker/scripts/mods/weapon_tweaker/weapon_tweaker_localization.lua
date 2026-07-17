@@ -1066,6 +1066,8 @@ local loc = {
     wt_dual_axes_cleave_description = { en = "On by default. Direct Dual Axes attacks have 10%% more cleave. Pushes, stagger, damage, and other weapons are unchanged." },
     wt_dual_axes_light_crit = { en = "Dual Axes: +10%% Light Critical Chance" },
     wt_dual_axes_light_crit_description = { en = "On by default. Dual Axes light attacks have at least 10 percentage points of additional critical chance. Stronger authored bonuses are preserved." },
+    wt_executioner_light_headshot_bonus = { en = "Executioner's Sword: +30%% Light Headshot Damage" },
+    wt_executioner_light_headshot_bonus_description = { en = "Executioner's Sword light attacks deal exactly 30%% more damage on headshots. Body hits, heavy attacks, speed, stagger, cleave, critical chance, and armor interaction are unchanged. Multiplayer: the bonus is active only while every player in the lobby runs this mod." },
     wt_greataxe_light_crit = { en = "Greataxe: +10%% Light Critical Chance" },
     wt_greataxe_light_crit_description = { en = "On by default. Greataxe light attacks have at least 10 percentage points of additional critical chance. If CWV is installed, its Kruber Greataxe is included automatically." },
     wt_one_hand_axe_cleave_nerf = { en = "1H Axe: 10%% Less Cleave" },
@@ -1087,7 +1089,7 @@ local loc = {
 
     -- issue 431: label used by the peer-parity beacon's chat notices
     -- ("Peer-parity: disabled <label> ...") when a player without wt joins.
-    wt431_custom_damage_profiles_label = { en = "the custom damage profile tweaks (Brace rework, Bret sword and shield buff, Priest punch buff)" },
+    wt431_custom_damage_profiles_label = { en = "the custom damage profile tweaks (Brace rework, Bret sword and shield buff, Executioner's Sword headshots, Priest punch buff)" },
 
     -- (enable_debug_logging removed v0.12.176-dev — #169; diagnostics route through VMF mod:debug)
 

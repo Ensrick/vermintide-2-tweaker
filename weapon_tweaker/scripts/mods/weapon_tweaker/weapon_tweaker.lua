@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.269-beta"
+local MOD_VERSION = "0.12.270-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -4067,7 +4067,8 @@ mod.on_setting_changed = function(setting_id)
             or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING
             or setting_id == _wt_axe_balance_policy.ONE_HAND_AXE_CLEAVE_SETTING
             or setting_id == _wt_axe_balance_policy.COG_HAMMER_HEAVY_SPEED_SETTING
-            or setting_id == _wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING then
+            or setting_id == _wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING
+            or setting_id == _wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING then
         mod._wt_apply_axe_balance(setting_id, false)
     end
 end
@@ -4124,8 +4125,46 @@ do
             _wt_axe_balance:apply_mace_sword_speed(
                 enabled(_wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING, false), Weapons)
         end
+        if not setting_id or setting_id == _wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING then
+            if type(DamageProfileTemplates) == "table" then
+                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
+                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
+                    and mod._wt431_profiles_allowed() == true
+                local count = _wt_axe_balance:apply_executioner_light_headshot(
+                    enabled(_wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING, false),
+                    Weapons, DamageProfileTemplates,
+                    function(value) return table.clone(value, true) end, register_profile,
+                    mod._wt431_custom_profile_fallback, parity_allowed)
+                pcall(printf, "[wt:664] applied: executioner_light_actions=%d enabled=%s parity=%s multiplier=%.2f",
+                    count, tostring(enabled(_wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING, false)),
+                    tostring(parity_allowed), _wt_axe_balance_policy.EXECUTIONER_HEADSHOT_MULT)
+            end
+        end
     end
     mod._wt_apply_axe_balance(nil, false)
+end
+
+-- #664 hook pre-flight: repository grep on 2026-07-17 found no other WT hook
+-- on DamageUtils.calculate_damage. Vanilla computes and returns the complete
+-- post-armor, post-buff, post-stagger damage at damage_utils.lua:449-569; the
+-- private light profile marker therefore gives an exact 1.30x headshot result
+-- without changing body shots, heavies, cleave, stagger, crit, or armor data.
+if rawget(_G, "DamageUtils") then
+    mod:hook(DamageUtils, "calculate_damage", function(func, damage_output, target_unit,
+            attacker_unit, hit_zone_name, original_power_level, boost_curve,
+            boost_damage_multiplier, is_critical_strike, damage_profile, ...)
+        local damage, second = func(damage_output, target_unit, attacker_unit,
+            hit_zone_name, original_power_level, boost_curve, boost_damage_multiplier,
+            is_critical_strike, damage_profile, ...)
+        if type(damage) == "number" and target_unit then
+            local breed = AiUtils.unit_breed(target_unit)
+            local multiplier_type = DamageUtils.get_breed_damage_multiplier_type(breed, hit_zone_name)
+            damage = _wt_axe_balance_policy.scale_executioner_headshot_damage(
+                damage, multiplier_type, damage_profile)
+        end
+        if second ~= nil then return damage, second end
+        return damage
+    end)
 end
 
 _rt_register("issue621_one_hand_axe_cleave_boundary", function()
@@ -4208,6 +4247,55 @@ _rt_register("issue623_native_mace_sword_speed_boundary", function()
     if native.light_attack_left_diagonal.anim_time_scale ~= 0.945
             or native.heavy_attack.anim_time_scale ~= 1.035 then
         return "#623 disable did not restore authored scales"
+    end
+end)
+
+_rt_register("issue664_executioner_light_headshot_boundary", function()
+    local source_profile = {
+        charge_value = "light_attack", marker = "source",
+        default_target = { power_distribution = { attack = 0.075, impact = 0.05 } },
+        targets = { { power_distribution = { attack = 0.2, impact = 0.25 } } },
+    }
+    local profiles = { medium_slashing_linesman_executioner = source_profile }
+    local light_a = { kind = "sweep", damage_profile = "medium_slashing_linesman_executioner" }
+    local light_b = { kind = "sweep", damage_profile = "medium_slashing_linesman_executioner" }
+    local heavy = { kind = "sweep", damage_profile = "heavy_slashing_smiter_executioner" }
+    local body = { actions = { action_one = {
+        light_attack_left = light_a, light_attack_bopp = light_b,
+        heavy_attack_left = heavy, push = { kind = "push_stagger" },
+    } } }
+    local fallback, registered = {}, {}
+    local state = _wt_axe_balance_policy.new()
+    local count = state:apply_executioner_light_headshot(true, {
+        two_handed_swords_executioner_template_1 = body,
+    }, profiles, function(value) return table.clone(value, true) end,
+        function(key) registered[key] = true end, fallback, true)
+    local custom = profiles.wt_executioner_light_headshot_130
+    if count ~= 2 or light_a.damage_profile ~= "wt_executioner_light_headshot_130"
+            or light_b.damage_profile ~= "wt_executioner_light_headshot_130" then
+        return "#664 did not repoint every and only light sweep"
+    end
+    if heavy.damage_profile ~= "heavy_slashing_smiter_executioner"
+            or custom.marker ~= "source"
+            or custom._wt_executioner_light_headshot_multiplier ~= 1.30
+            or source_profile._wt_executioner_light_headshot_multiplier ~= nil then
+        return "#664 custom profile isolation or 1.30 multiplier drifted"
+    end
+    if _wt_axe_balance_policy.scale_executioner_headshot_damage(100, "headshot", custom) ~= 130
+            or _wt_axe_balance_policy.scale_executioner_headshot_damage(100, "torso", custom) ~= 100
+            or _wt_axe_balance_policy.scale_executioner_headshot_damage(100, "headshot", source_profile) ~= 100 then
+        return "#664 exact headshot/body/heavy damage boundary drifted"
+    end
+    if fallback.wt_executioner_light_headshot_130 ~= "medium_slashing_linesman_executioner"
+            or not registered.wt_executioner_light_headshot_130 then
+        return "#664 deterministic registration/fallback missing"
+    end
+    state:apply_executioner_light_headshot(false, {
+        two_handed_swords_executioner_template_1 = body,
+    }, profiles, function(value) return table.clone(value, true) end, nil, fallback, true)
+    if light_a.damage_profile ~= "medium_slashing_linesman_executioner"
+            or light_b.damage_profile ~= "medium_slashing_linesman_executioner" then
+        return "#664 disable did not restore exact source profiles"
     end
 end)
 
