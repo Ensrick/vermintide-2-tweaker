@@ -551,6 +551,9 @@ CHANGELOG footer add-on when this gate applies:
 - [ ] The changed appearance concern is registered in
   `qa/appearance_contracts.psd1`; every canonical surface and replay edge is
   explicitly covered, deferred, or not-applicable.
+- [ ] The checker-owned canonical vocabularies have not been contracted. New
+  engine surfaces/edges are added to both the standard and checker before a
+  contract claims completeness.
 - [ ] Every covered cell maps to a named offline test and
   `qa/check_appearance_contracts.ps1` passes.
 - [ ] Treat that pass as structural evidence only. Live owner/peer observation

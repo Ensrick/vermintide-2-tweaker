@@ -16,6 +16,27 @@ $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot '..' }
 if (-not $ManifestPath) { $ManifestPath = Join-Path $PSScriptRoot 'appearance_contracts.psd1' }
 
+# This vocabulary is the architecture boundary, not manifest-owned data.  If the
+# manifest were allowed to define the boundary by itself, deleting a required
+# surface/edge from both the vocabulary and every contract would still pass.
+# Keep this list aligned with docs/WEAPON_APPEARANCE_STANDARD.md.
+$CANONICAL_SURFACES = @(
+    'owner_1p', 'owner_3p', 'bot_3p', 'remote_husk_3p',
+    'inventory_preview', 'cosmetic_preview', 'athanor_preview',
+    'crafting_preview', 'lobby_preview', 'score_screen', 'hold_tab'
+)
+$CANONICAL_REPLAY_EDGES = @(
+    'instance_load', 'initial_spawn', 'equip', 'wield',
+    'customization_change', 'style_change', 'mission_transition', 'respawn',
+    'hot_join', 'peer_ready', 'parity_ready', 'rejoin',
+    'preview_open', 'preview_reopen', 'lobby_score_create',
+    'mod_disable_restore'
+)
+$CANONICAL_CONCERNS = @(
+    'unit_identity', 'transform', 'material', 'glow', 'pose',
+    'effective_template', 'icon', 'name'
+)
+
 function Test-MapKey($Map, [string]$Key) {
     return $null -ne $Map -and $Map -is [System.Collections.IDictionary] -and $Map.Contains($Key)
 }
@@ -36,7 +57,13 @@ function Get-UniqueErrors([object[]]$Values, [string]$Label) {
     return $errors.ToArray()
 }
 
-function Test-AppearanceManifest($Manifest, [string]$Root) {
+function Test-AppearanceManifest(
+    $Manifest,
+    [string]$Root,
+    [string[]]$RequiredSurfaces = @(),
+    [string[]]$RequiredReplayEdges = @(),
+    [string[]]$RequiredConcerns = @()
+) {
     $errors = [System.Collections.Generic.List[string]]::new()
     if ($null -eq $Manifest -or $Manifest -isnot [System.Collections.IDictionary]) {
         return @('manifest root must be a data-file map')
@@ -56,6 +83,21 @@ function Test-AppearanceManifest($Manifest, [string]$Root) {
     if ($surfaces.Count -eq 0) { $errors.Add('SurfaceVocabulary must not be empty') }
     if ($edges.Count -eq 0) { $errors.Add('ReplayEdgeVocabulary must not be empty') }
     if ($concernNames.Count -eq 0) { $errors.Add('ConcernVocabulary must not be empty') }
+    foreach ($required in $RequiredSurfaces) {
+        if ($surfaces -notcontains $required) {
+            $errors.Add("SurfaceVocabulary omits canonical surface '$required'")
+        }
+    }
+    foreach ($required in $RequiredReplayEdges) {
+        if ($edges -notcontains $required) {
+            $errors.Add("ReplayEdgeVocabulary omits canonical replay edge '$required'")
+        }
+    }
+    foreach ($required in $RequiredConcerns) {
+        if ($concernNames -notcontains $required) {
+            $errors.Add("ConcernVocabulary omits canonical concern '$required'")
+        }
+    }
 
     $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
     $contractIds = @{}
@@ -188,6 +230,9 @@ function Test-AppearanceManifest($Manifest, [string]$Root) {
 function New-SelfTestManifest(
     [switch]$DropSurface,
     [switch]$DropEdge,
+    [switch]$DropVocabularySurface,
+    [switch]$DropVocabularyEdge,
+    [switch]$DropVocabularyConcern,
     [switch]$DropTests,
     [switch]$UnmappedCoveredSurface,
     [switch]$MissingTestName
@@ -214,11 +259,17 @@ function New-SelfTestManifest(
             ReplayEdges = @('equip')
         })
     }
+    $surfaceVocabulary = @('owner', 'preview')
+    if ($DropVocabularySurface) { $surfaceVocabulary = @('owner') }
+    $edgeVocabulary = @('equip', 'join')
+    if ($DropVocabularyEdge) { $edgeVocabulary = @('equip') }
+    $concernVocabulary = @('unit_identity')
+    if ($DropVocabularyConcern) { $concernVocabulary = @('other') }
     return @{
         SchemaVersion = 1
-        SurfaceVocabulary = @('owner', 'preview')
-        ReplayEdgeVocabulary = @('equip', 'join')
-        ConcernVocabulary = @('unit_identity')
+        SurfaceVocabulary = $surfaceVocabulary
+        ReplayEdgeVocabulary = $edgeVocabulary
+        ConcernVocabulary = $concernVocabulary
         DispositionVocabulary = @('covered', 'deferred', 'not-applicable')
         Contracts = @(@{
             Id = 'fixture.contract'
@@ -246,13 +297,19 @@ function Invoke-SelfTest {
             @{ Name = 'complete manifest passes'; Manifest = New-SelfTestManifest; Needle = $null },
             @{ Name = 'missing surface fails'; Manifest = New-SelfTestManifest -DropSurface; Needle = "lacks declared surface 'preview'" },
             @{ Name = 'missing replay edge fails'; Manifest = New-SelfTestManifest -DropEdge; Needle = "lacks declared replay edge 'join'" },
+            @{ Name = 'contracted surface vocabulary fails'; Manifest = New-SelfTestManifest -DropVocabularySurface; Needle = "omits canonical surface 'preview'" },
+            @{ Name = 'contracted replay vocabulary fails'; Manifest = New-SelfTestManifest -DropVocabularyEdge; Needle = "omits canonical replay edge 'join'" },
+            @{ Name = 'contracted concern vocabulary fails'; Manifest = New-SelfTestManifest -DropVocabularyConcern; Needle = "omits canonical concern 'unit_identity'" },
             @{ Name = 'missing tests fails'; Manifest = New-SelfTestManifest -DropTests; Needle = 'has no Tests' },
             @{ Name = 'covered surface without mapped test fails'; Manifest = New-SelfTestManifest -UnmappedCoveredSurface; Needle = "covered surface 'preview' has no test mapping" },
             @{ Name = 'missing named test fails'; Manifest = New-SelfTestManifest -MissingTestName; Needle = 'test name not found' }
         )
         $failed = 0
         foreach ($case in $cases) {
-            $found = @(Test-AppearanceManifest $case.Manifest $temp)
+            $found = @(Test-AppearanceManifest $case.Manifest $temp `
+                -RequiredSurfaces @('owner', 'preview') `
+                -RequiredReplayEdges @('equip', 'join') `
+                -RequiredConcerns @('unit_identity'))
             $ok = if ($null -eq $case.Needle) {
                 $found.Count -eq 0
             } else {
@@ -284,7 +341,10 @@ try {
     $resolvedRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
     $resolvedManifest = (Resolve-Path -LiteralPath $ManifestPath).Path
     $manifest = Import-PowerShellDataFile -LiteralPath $resolvedManifest
-    $failures = @(Test-AppearanceManifest $manifest $resolvedRoot)
+    $failures = @(Test-AppearanceManifest $manifest $resolvedRoot `
+        -RequiredSurfaces $CANONICAL_SURFACES `
+        -RequiredReplayEdges $CANONICAL_REPLAY_EDGES `
+        -RequiredConcerns $CANONICAL_CONCERNS)
 } catch {
     Write-Host "[check_appearance_contracts] ERROR - $($_.Exception.Message)" -ForegroundColor Red
     exit 2
