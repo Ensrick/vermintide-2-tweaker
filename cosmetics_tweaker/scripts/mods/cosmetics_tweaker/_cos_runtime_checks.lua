@@ -18,6 +18,7 @@ function M.install(mod, rt_register, deps)
     local _MULTI_MOUNT_ITEM_TYPES = deps.multi_mount_item_types
     local _DUAL_WIELD_POOLS = deps.dual_wield_pools
     local OFFHAND_NAMES = deps.offhand_names
+    local ITEM_PRESENTATION = deps.item_presentation
     local _SHIELD_POOLS_BY_ITEM_TYPE = deps.shield_pools_by_item_type
     local _dbg = deps.dbg
     local _dbg_alert = deps.dbg_alert
@@ -1117,6 +1118,12 @@ _rt_register("issue641_independent_offhand_names", function()
     if key ~= "cos_offhand_weapon_wh_dual_hammer_skin_01_left_name" then
         return "stable offhand localization key drifted: " .. tostring(key)
     end
+    local description_key = OFFHAND_NAMES.description_localization_key(
+        "wh_dual_hammer_skin_01", "left_hand_unit")
+    if description_key
+            ~= "cos_offhand_weapon_wh_dual_hammer_skin_01_left_description" then
+        return "stable offhand description key drifted: " .. tostring(description_key)
+    end
     local source_name, _, source_kind = OFFHAND_NAMES.resolve(
         "wh_dual_hammer_skin_01", "left_hand_unit", "Source Illusion",
         function(k) return "<" .. k .. ">" end)
@@ -1129,13 +1136,41 @@ _rt_register("issue641_independent_offhand_names", function()
     if authored_name ~= "Named Offhand" or authored_kind ~= "authored" then
         return "authored offhand localization did not win"
     end
+    local source_description, _, description_kind = OFFHAND_NAMES.resolve_description(
+        "wh_dual_hammer_skin_01", "left_hand_unit", "Source description",
+        function(k) return "<" .. k .. ">" end)
+    if source_description ~= "Source description" or description_kind ~= "source" then
+        return "missing authored description did not fall back to source component"
+    end
+    local legacy = ITEM_PRESENTATION.resolve({
+        secondary_option = { name = "Legacy Shield" }, ownership = "shield" })
+    if type(legacy.secondary_description) ~= "string" then
+        return "name-only legacy component leaked the primary description"
+    end
+    local native_routed = false
+    for _, pool in pairs(_offhand_options) do
+        for _, option in ipairs(pool) do
+            if option.source_description_key then
+                if option.component_description_source ~= "source"
+                        or option.description == option.source_description_key then
+                    return "vanilla source description did not use _G.Localize"
+                end
+                native_routed = true
+                break
+            end
+        end
+        if native_routed then break end
+    end
+    if not native_routed then return "no production source-description option found" end
     if type(mod._cos.offhand_name_inventory) ~= "function" then
         return "generated naming inventory unavailable"
     end
     for _, option in ipairs(_SHIELD_POOLS_BY_ITEM_TYPE.es_1h_sword_shield) do
         if option.component_kind ~= "shield"
-                or type(option.component_localization_key) ~= "string" then
-            return "shield lacks independent naming schema"
+                or type(option.component_localization_key) ~= "string"
+                or type(option.description) ~= "string"
+                or type(option.component_description_localization_key) ~= "string" then
+            return "shield lacks independent name/description schema"
         end
     end
     local composed = OFFHAND_NAMES.compose("Primary Illusion", "Shield Illusion")

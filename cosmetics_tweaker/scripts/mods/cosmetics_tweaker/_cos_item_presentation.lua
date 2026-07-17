@@ -40,6 +40,7 @@ function M.resolve(args)
         icon = args.base_icon,
         primary_name = args.primary_name,
         secondary_name = nil,
+        secondary_description = nil,
         ownership = args.ownership,
         changed = false,
     }
@@ -48,6 +49,16 @@ function M.resolve(args)
 
     if type(option.name) == "string" and option.name ~= "" then
         out.secondary_name = option.name
+        out.changed = true
+    end
+    local component_description = option.description
+    if (type(component_description) ~= "string" or component_description == "")
+            and out.secondary_name then
+        component_description = "An independently selected "
+            .. out.secondary_name .. " cosmetic component."
+    end
+    if type(component_description) == "string" and component_description ~= "" then
+        out.secondary_description = component_description
         out.changed = true
     end
     if args.ownership == "shield" then

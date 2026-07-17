@@ -167,14 +167,14 @@ Last updated: 2026-07-16.
 
 | Field | Value |
 |-------|-------|
-| Symptom | Dual-weapon offhands reused a whole-illusion name, while shields lacked the same explicit component naming boundary. |
-| Root cause | #583 separated mesh ownership by hand but presentation records retained a whole source name or an unrelated shield-pool label. |
+| Symptom | Dual-weapon offhands reused a whole-illusion name, while shields lacked the same explicit component naming boundary; independently selected shields could still show the primary weapon's flavor text. |
+| Root cause | #583 separated mesh ownership by hand but presentation records retained a whole source name or an unrelated shield-pool label. The centralized item-card descriptor carried only icon/name and left vanilla's primary description unchanged. |
 | Mod(s) | cosmetics_tweaker; character_weapon_variants when installed |
 | Fix version | cosmetics_tweaker v0.9.130-dev |
 | Category | PRESENTATION / LOCALIZATION |
 | Repro | Open dual-weapon and weapon+shield customization screens, hover each component row entry, and run `/cos_offhand_name_inventory`. |
-| Expected post-fix | Offhand weapons and shields resolve independent names one by one. Unauthored rows retain deterministic source names. The hover label composes the identical-model primary illusion name first and the component name second. Old saves and peer payloads remain valid. |
-| Detection | Offline `test_cos_offhand_names` covers stable namespaces, authored/source fallback, identical-model primary reuse, primary-first composition, presentation-only decoration, and deduplication. `/cos_regression_test` passes `issue641_independent_offhand_names`. |
+| Expected post-fix | Offhand weapons and shields resolve independent names and descriptions one by one. Unauthored rows retain deterministic source text. The hover label composes the identical-model primary illusion name first and the component name second; item flavor text comes from the selected component, never the primary. Old saves and peer payloads remain valid. |
+| Detection | Offline `test_cos_offhand_names` and `test_cos_item_presentation` cover stable namespaces, authored/source/generated description fallback, identical-model primary reuse, primary-first composition, component flavor ownership, presentation-only decoration, and deduplication. `/cos_regression_test` passes `issue641_independent_offhand_names`. |
 | Tracking | GitHub issue #641. |
 
 ### cwv-dawi-mace-appearance-contract -- primary, dual, and shield ownership
