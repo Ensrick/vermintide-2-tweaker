@@ -41,7 +41,7 @@ local loc = {
     cat_events     = en("[working] Live-Event Mutators (raw)"),
     -- Dynamic groups (ported from Deed Mutators Selector + Cursed Adventure).
     cat_other      = en("[untested] Other Mutators (Chaos Wastes / Deus / misc)"),
-    cat_cursed     = en("[untested] Cursed Adventure: CW / Be'lakor curses (ALL players need the mod)"),
+    cat_cursed     = en("[untested] Cursed Adventure: CW / Be'lakor curses (locks new joins)"),
     cursed_lighting         = en("[untested] Cursed-sky lighting"),
     cursed_lighting_tooltip = en("Tints the mission's sky, sun, and fog with the active curse's Chaos god color (Khorne red, Nurgle green, Tzeentch blue, Belakor purple, Slaanesh pink). This is purely visual, only affects your own screen, and clears on its own when no curse is active."),
     -- issue 430: name used INSIDE the peer-parity chat notice (not a settings-UI
@@ -245,7 +245,7 @@ do
             loc[key]               = en("[untested] Curse: " .. _safe(dn, c.id) .. flag)
             loc[key .. "_tooltip"] = en("[" .. c.id .. "] " .. _safe(de, c.id)
                 .. ". Chaos Wastes curse on a standard adventure map (god: " .. tostring(c.god)
-                .. "). Needs ALL players to run the mod (clients load the curse package too)."
+                .. "). Needs ALL current players to run the mod (clients load the curse package too). Selecting a package-bearing curse closes the lobby to new joins until it is unselected, because admitting a late peer before package proof can crash that peer."
                 .. (c.experimental and " Experimental: may be inert in adventure (no Deus economy/mission flow to pay off)." or ""))
         end
     end

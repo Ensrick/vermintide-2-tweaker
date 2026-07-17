@@ -34,6 +34,10 @@ local _dbg_alert = ET.dbg_alert
 
 local Curses        = require("scripts/mods/event_tweaker/event_tweaker_curses")
 local _CURSE_TO_GOD = Curses.CURSE_TO_GOD
+local _MANAGED_CURSE = {}
+for i = 1, #Curses.MANAGED_CURSES do
+    _MANAGED_CURSE[Curses.MANAGED_CURSES[i].id] = true
+end
 
 local ET_CURSE_PKG_REF = "event_tweaker_curse_package"
 local _loaded_curse_packages = {}   -- pkg_name -> true (our refs to balance)
@@ -64,6 +68,18 @@ local function _refresh_active_curse_god()
     end
     table.sort(candidates)
     _active_curse_god = candidates[1] and _CURSE_TO_GOD[candidates[1]] or nil
+    if ET.set_curse_session_active then
+        local package_curse_active = false
+        if active then
+            for name in pairs(active) do
+                if _MANAGED_CURSE[name] then
+                    package_curse_active = true
+                    break
+                end
+            end
+        end
+        ET.set_curse_session_active(package_curse_active)
+    end
 end
 
 local function _maybe_preload_curse_package(name)
@@ -91,6 +107,11 @@ end
 -- Hook BOTH the per-mutator activate (host loop + client RPC) and deactivate
 -- so the package is ready before activation and the god cache stays current.
 mod:hook("MutatorHandler", "_activate_mutator", function(func, self, name, ...)
+    if _MANAGED_CURSE[name] and ET.set_curse_session_active then
+        -- Close the join boundary before the mutator's start function can spawn
+        -- its first package-owned network unit.
+        ET.set_curse_session_active(true)
+    end
     _maybe_preload_curse_package(name)
     local a, b = func(self, name, ...)
     if _CURSE_TO_GOD[name] then _refresh_active_curse_god() end
@@ -131,6 +152,9 @@ mod:hook_safe("MutatorHandler", "init", function(self, mutators)
         end
     end
     for name in pairs(names) do
+        if _MANAGED_CURSE[name] and ET.set_curse_session_requested then
+            ET.set_curse_session_requested(true)
+        end
         _maybe_preload_curse_package(name)
     end
 end)
@@ -148,6 +172,7 @@ mod:hook_safe("StateIngame", "on_exit", function(self)
         end
     end
     _active_curse_god = nil
+    if ET.set_curse_session_active then ET.set_curse_session_active(false) end
 end)
 
 -- Per-god multiplicative sky/atmosphere tints (copied verbatim from

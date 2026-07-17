@@ -160,9 +160,9 @@ Last updated: 2026-07-15 (v0.4.33-dev issue 626 dormant-event mission boundary).
 | Mod(s) | event_tweaker |
 | Fix version(s) | event_tweaker v0.4.14-dev |
 | Category | INTEGRATION |
-| Repro | 1. Host an adventure mission with a Cursed Adventure curse (e.g. `mut_curse_blood_storm`) checked; have a friend (also running the mod) join as client. 2. Play until the curse spawns. Both must NOT crash. 3. Toggle `mut_curse_belakor_totems`, `/event_apply`. 4. Confirm the sky tints to the curse's god color and reverts on mission exit. 5. Confirm `curse_bolt_of_change` / `curse_belakors_shadows` / `curse_empathy` appear in NO group. |
-| Expected post-fix | No "Resource not found" on host or client; broken curses absent from every group; tint applies in adventure only (not double-applied in a real CW run) and reverts. |
-| Detection | Source: `mod:hook("MutatorHandler", "_activate_mutator", ...)` present in `_evt_cursed_adventure.lua` + sync load (4th arg `false`); `BROKEN_IN_ADVENTURE` (`event_tweaker_curses.lua`) contains the 3 names and they're absent from `MANAGED_CURSES`; preload + lighting paths gated on `current_mechanism_name() == "adventure"`. Boot log: no `Attempting to rehook active hook`. |
+| Repro | 1. Assemble two players with Event Tweaker before selecting a Cursed Adventure curse. 2. Select Blood Storm and start Adventure; a third player without Event Tweaker attempts to hot-join. 3. The third player must not enter or crash. 4. Return to keep, uncheck every Cursed Adventure curse, and confirm the third player can join. 5. With a non-ET player already present, select a curse and load; it must be skipped. 6. Confirm `curse_bolt_of_change` / `curse_belakors_shadows` / `curse_empathy` appear in no group. |
+| Expected post-fix | Existing all-ET players run the curse without `Resource not found`; no new peer reaches game-object sync while a package-bearing curse is selected/active; an already-present non-ET peer makes the curse inert; unselecting reopens vanilla joinability; broken curses remain absent. |
+| Detection | Offline `test_event_curse_join_policy`; runtime `/event_tweaker_regression_test` passes all four `issue430_*` checks. Source: singleton `GameModeBase.is_joinable` hook in `_evt_guard430_curse_parity.lua`; request lock occurs before final safety evaluation; active lock occurs before `_maybe_preload_curse_package` and the vanilla mutator start; sync package load remains fourth arg `false`. Log: `[et:430] cursed-session hot-join contract LOCKED/OPEN`, no `Attempting to rehook active hook`. |
 
 
 ---
@@ -417,6 +417,7 @@ Last updated: 2026-07-15 (v0.4.33-dev issue 626 dormant-event mission boundary).
 - et-boss-event-mutator-guard
 - et-mutator-preview-own-pass
 - et-event-mission-allowlist
+- et-cursed-adventure-package-preload
 - feedback-deploy-vs-upload-distinction
 - feedback-mod-version-format
 - feedback-pre-deploy-checklist

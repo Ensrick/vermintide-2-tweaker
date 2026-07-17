@@ -58,6 +58,7 @@ local notify_weave_drop   = ET.notify_weave_drop
 -- issue 430 curse wire-safety floor (manifest order: _evt_guard430_curse_parity
 -- is dofile'd before this module, so the export exists here).
 local curse_wire_safe     = ET.curse_wire_safe
+local set_curse_requested = ET.set_curse_session_requested
 
 local function active_preset()
     local pick = mod:get("event_preset")
@@ -140,6 +141,12 @@ local function selected_curse_mutators()
             out[#out + 1] = c.id
         end
     end
+    -- Lock the session BEFORE evaluating the final safety predicate. Vanilla's
+    -- Connecting state consults GameModeBase.is_joinable before it can advance
+    -- toward GameSession.add_peer/game-object replication. If the selection is
+    -- rejected below, release the lock immediately because nothing unsafe will
+    -- be injected.
+    if set_curse_requested then set_curse_requested(#out > 0) end
     -- issue 430: UNCONDITIONAL sender-side crash floor. These curses spawn
     -- network-replicated husks from a resource package that ONLY peers running
     -- event_tweaker preload (_evt_cursed_adventure.lua). A non-ET peer that
@@ -154,7 +161,8 @@ local function selected_curse_mutators()
     -- The beacon (_evt_guard430_curse_parity) chat-notifies which peer lacks the
     -- mod; this printf is the log-only trail, mirroring the issue 413 drop.
     if #out > 0 and not (curse_wire_safe and curse_wire_safe()) then
-        pcall(printf, "[et:430] dropped %d Cursed Adventure curse(s): a lobby peer lacks event_tweaker (would CTD on the curse husk from an unloaded package)", #out)
+        pcall(printf, "[et:430] dropped %d Cursed Adventure curse(s): peer parity or the closed pre-session peer set was not proven (unsafe package replication)", #out)
+        if set_curse_requested then set_curse_requested(false) end
         return {}
     end
     return out

@@ -43,14 +43,16 @@ local mod = get_mod("event_tweaker")
 -- and the curses are dropped for that mission. The beacon's own debounced chat
 -- notice names the missing peer (register_gated_feature below drives its label).
 --
--- HOT-JOIN NOTE. get_special_events is re-consulted at every level-load, so the
--- floor blocks injection at mission start AND declines to re-inject on the next
--- mission while a non-ET peer remains. The one irreducible residual — a non-ET
--- peer HOT-JOINING mid-mission into an already-cursed run, where the curse units
--- are already spawned and game-object sync replicates the husks — cannot be
--- closed by a host-only mod (identical boundary to the issue 413 weave guard:
--- hot_join_sync re-broadcasts to late joiners). The beacon's continuous poll +
--- notice surfaces that case so the host knows to have the joiner install the mod.
+-- HOT-JOIN CONTRACT. A roster beacon is too late for a new peer: vanilla adds
+-- the peer to GameSession (which starts game-object replication) before
+-- PlayerManager.add_remote_player makes it visible to the beacon. While a
+-- package-bearing curse is selected or active, GameModeBase.is_joinable is
+-- therefore forced false. PeerStates.Connecting checks that method before it
+-- sends rpc_notify_connected, well before GameSession.add_peer. Existing peers
+-- still need positive parity, and any already-pending, not-yet-represented peer
+-- makes the selection fail closed. This deliberately blocks ALL hot joins for
+-- the cursed session; an ET-capable peer is not admitted through a race-prone
+-- exception. Uncheck the curses to reopen the lobby.
 --
 -- Owned by: event_tweaker.lua entry point (dofile'd before _evt_selection, which
 -- localizes ET.curse_wire_safe at its top). Consumed via mod._evt export:
@@ -60,9 +62,60 @@ local mod = get_mod("event_tweaker")
 
 local ET = mod._evt
 local rt_register = ET.rt_register
+local JoinPolicy = require("scripts/mods/event_tweaker/event_tweaker_curse_join_policy")
 
 local ET_PEER_PARITY_CHANNEL = "et_peer_parity_present"
 local ET_PEER_PARITY_SCHEMA  = 1
+
+local _curse_requested = false
+local _curse_active = false
+local _curse_session_locked = false
+
+local function _refresh_session_lock()
+    local locked = _curse_requested or _curse_active
+    if locked ~= _curse_session_locked then
+        _curse_session_locked = locked
+        pcall(printf, "[et:430] cursed-session hot-join contract %s (selected=%s active=%s)",
+            locked and "LOCKED" or "OPEN", tostring(_curse_requested), tostring(_curse_active))
+    end
+end
+
+local function _set_curse_requested(value)
+    _curse_requested = value == true
+    _refresh_session_lock()
+end
+
+local function _set_curse_active(value)
+    _curse_active = value == true
+    _refresh_session_lock()
+end
+local function _pending_remote_peer()
+    local managers = rawget(_G, "Managers")
+    local pm = managers and managers.player
+    local network_manager = managers and managers.state and managers.state.network
+    local server = network_manager and network_manager.network_server
+    if not (pm and type(pm.player_from_peer_id) == "function"
+            and server and type(server.peer_state_machines) == "table") then
+        return nil
+    end
+
+    local ok_peer, local_peer_id = pcall(function() return Network.peer_id() end)
+    if not ok_peer then return nil end
+
+    return JoinPolicy.has_pending_remote(server.peer_state_machines, local_peer_id,
+        function(peer_id) return pm:player_from_peer_id(peer_id) end)
+end
+
+ET.set_curse_session_requested = _set_curse_requested
+ET.set_curse_session_active = _set_curse_active
+ET.curse_session_locked = function() return _curse_session_locked end
+
+-- Pre-flight completed before adding a new hook: event_tweaker had no existing
+-- GameModeBase.is_joinable hook. Adventure inherits this implementation.
+mod:hook("GameModeBase", "is_joinable", function(func, self, ...)
+    local vanilla_joinable = func(self, ...)
+    return JoinPolicy.allow_join(vanilla_joinable, _curse_session_locked)
+end)
 
 -- Build + install the beacon. pcall-guarded end to end: a lib-load, factory, or
 -- install failure must leave curse_wire_safe() reading false (fail-safe: curses
@@ -125,7 +178,14 @@ local function _curse_wire_safe()
     local pp = mod._et_peer_parity
     if not pp then return false end
     local ok, res = pcall(pp.all_peers_have, pp)
-    return ok and res == true
+    if not ok or res ~= true then return false end
+
+    -- PlayerManager is populated only after vanilla completes game-object sync.
+    -- Refuse to arm while NetworkServer already knows a remote peer that the
+    -- parity roster cannot yet see. nil is also unsafe: the host did not prove
+    -- the pre-session set was closed.
+    local pending = _pending_remote_peer()
+    return JoinPolicy.can_arm(true, pending)
 end
 
 ET.curse_wire_safe = _curse_wire_safe
@@ -170,4 +230,15 @@ rt_register("issue430_curse_floor_classify", function()
     if classify({ p1 = true }, {}) ~= false then return "un-acked peer (lacks ET) must classify unsafe" end
     if classify({ p1 = true }, { p1 = true }) ~= true then return "all-acked lobby must classify safe" end
     if classify({ p1 = true, p2 = true }, { p1 = true }) ~= false then return "partially-acked lobby must classify unsafe" end
+end)
+
+rt_register("issue430_hotjoin_session_contract", function()
+    if type(ET.set_curse_session_requested) ~= "function" then return "curse session request setter missing" end
+    if type(ET.set_curse_session_active) ~= "function" then return "curse session active setter missing" end
+    if type(ET.curse_session_locked) ~= "function" then return "curse session lock accessor missing" end
+    if JoinPolicy.allow_join(true, true) ~= false then return "locked cursed session must reject joins" end
+    if JoinPolicy.allow_join(true, false) ~= true then return "open session must preserve vanilla joinability" end
+    if JoinPolicy.can_arm(true, nil) ~= false then return "unknown pending-peer state must fail closed" end
+    if JoinPolicy.can_arm(true, true) ~= false then return "pending peer must block curse arming" end
+    if JoinPolicy.can_arm(true, false) ~= true then return "confirmed closed peer set should arm" end
 end)

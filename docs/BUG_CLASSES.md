@@ -1968,3 +1968,41 @@ release-existence decision.
 - Preserve staged bundle/provenance/hash checks before mutation. Test normal,
   404, transient fallback, exact match, pagination/exhaustion, ambiguity, asset
   selection, asset-ID download, and release-ID upload entirely offline.
+
+## 56. Roster parity is observed after game-object replication starts
+
+**First confirmed:** 2026-07-16 (Event Tweaker issue #430 hot-join residual).
+**Lives in:** features that replicate package-owned units while peer capability
+is inferred from `PlayerManager` or a mod handshake triggered by player creation.
+
+### Symptoms
+- Initial all-modded players run the feature, but a late peer without the mod
+  hard-crashes while joining.
+- A roster beacon eventually reports the incompatible peer, but only after the
+  engine has started synchronizing existing game objects.
+- Package preload at a mod-owned activation callback protects peers running the
+  mod, not a peer that has no such callback.
+
+### Diagnosis pattern
+1. Trace the peer state machine, game-session admission, and roster insertion as
+   separate boundaries. In VT2, `GameSession.add_peer` occurs at
+   `peer_states.lua:393`, while `PlayerManager:add_remote_player` occurs at
+   `:450`; the latter cannot authorize the former.
+2. Identify the first package-owned game object and prove whether every joining
+   peer has loaded its package before game-session admission.
+3. Audit deactivation/stop contracts for every feature member. A missing general
+   stop function means late teardown is not proof that all replicated units are
+   gone.
+
+### Fix template
+- Prefer vanilla-resident units/templates so no peer capability is required.
+- Otherwise enforce a session contract before `GameSession.add_peer`: reject or
+  defer joins while unsafe objects may exist, and separately fail closed when a
+  server-known peer is not yet represented in the roster.
+- If neither pre-admission containment nor complete synchronous teardown is
+  proven, keep the package-bearing feature inert. A warning after roster
+  insertion is diagnostics, not crash safety.
+- Test initial mixed parity, a peer already pending at activation, mid-session
+  hot join, lock release, unknown network state, and unchanged vanilla
+  non-joinability. Event Tweaker's `event_tweaker_curse_join_policy.lua` is the
+  reference.

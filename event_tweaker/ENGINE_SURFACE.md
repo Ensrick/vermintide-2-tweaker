@@ -23,10 +23,10 @@ husks).
 
 ## Hook table
 
-16 registration sites (`tools/mod-lint/lint-mod.ps1` enforces one hook per
+17 registration sites (`tools/mod-lint/lint-mod.ps1` enforces one hook per
 (Class, method) mod-wide), grouped by concern. `[hook]` = full
 wrapper (`mod:hook`, can rewrite args/returns); `[safe]` = `mod:hook_safe`
-(post-callback, no override). All 16 are string-form (each target class has a single
+(post-callback, no override). All 17 are string-form (each target class has a single
 implementation reached through `__index`, so no derived-class split). Note: two of
 the four issue guards (#413 weave, #455 boss-events) are NOT hooks - they enforce at
 the `add()` injection chokepoint / by wrapping mutator-template dispatch fields, and
@@ -50,9 +50,10 @@ are covered in the subsystem notes, not this table.
 
 | Class.method (kind) | Vanilla behavior | Why evt hooks it | Trap / invariant |
 |---|---|---|---|
+| `GameModeBase.is_joinable` [hook] `_evt_guard430_curse_parity.lua` | Returns true for Adventure. `PeerStates.Connecting` consults it before sending `rpc_notify_connected`; only much later does `WaitingForEnterGame` call `GameSession.add_peer`, which begins game-object replication [src: `game_mode_base.lua:570-572`; `peer_states.lua:114-120`, `:389-395`] | Return false while a managed package-bearing curse is selected or active, preventing a new peer from reaching replication without package proof | Preserve a vanilla false result. The lock is armed before selection can inject and again before the mutator start function. Do not special-case ET peers: the ordinary VMF roster handshake occurs after `PlayerManager.add_remote_player` (`peer_states.lua:450`), too late to authorize game-object sync |
 | `MutatorHandler._activate_mutator` [hook] `_evt_cursed_adventure.lua:93` | The per-mutator activation chokepoint, hit on the HOST (via `activate_mutators`) AND every CLIENT (via `rpc_activate_mutator_client` -> `_activate_mutator`) [src: `mutator_handler.lua:782` (client RPC path)] | SYNC-load each curse's resource `packages` entry BEFORE `func` runs the mutator's `start_function`; refresh the god-lighting cache (`:93`) | Package-bearing CW/Deus curses normally crash in Adventure because only `DeusRunState.set_event_mutators` loads their package [src: `deus_run_state.lua:438-453`]; the mechanics themselves use standard managers. Idempotent (`has_loaded` + `_loaded_curse_packages`). All four curse hooks no-op unless mechanism is `"adventure"` so real CW runs are untouched |
 | `MutatorHandler._deactivate_mutator` [hook] `_evt_cursed_adventure.lua:104` | Per-mutator deactivation [src: `mutator_handler.lua`, `[unverified]` exact line] | Keep the active-god lighting cache current on deactivate (`:104`) | Distinct method from `_activate_mutator` - no hook collision |
-| `MutatorHandler.init` [safe] `_evt_cursed_adventure.lua:119` | Constructs the handler; knows the mutator list at construction (host: the `mutators` arg; client: the network-synced `_initialized_mutator_map`, populated before game objects) [src: `mutator_handler.lua`, init `[unverified]` exact line] | Hot-join safety: a mid-mission joiner instantiates already-spawned curse husks during game-object sync, which happens BEFORE the activate RPC, so `_activate_mutator`'s load would be too late - preload here too (`:119`) | Belt-and-suspenders with `_activate_mutator`. `_initialized_mutator_map` shape is engine-internal, so harvest any string key OR value as a candidate name |
+| `MutatorHandler.init` [safe] `_evt_cursed_adventure.lua:119` | Constructs the handler; on the server it initializes the supplied mutator names, while a client reads the network state's initialized map [src: `mutator_handler.lua:27-55`] | Defense-in-depth preload for an Event-Tweaker peer during normal level construction/transition; also reassert the cursed-session lock when a managed name is present | Not a hot-join authorization boundary. A non-ET peer has no hook, and game-object replication precedes the ordinary VMF roster handshake. `_initialized_mutator_map` shape is engine-internal, so harvest any string key or value as a candidate name |
 | `StateIngame.on_exit` [safe] `_evt_cursed_adventure.lua:141` | Fires on leaving the in-game state (keep or mission) [src: `scripts/game_states/ingame/state_ingame.lua`, `[unverified]` exact line] | Ref-balanced `Managers.package:unload` per peer + clear the god cache on mission exit (`:141`) | Only drop a `_loaded_curse_packages` entry whose `unload` pcall actually succeeded - a divergent-ref failure must keep the entry so it isn't orphaned/leaked (`docs/engine/05` refcount model) |
 | `CameraManager.shading_callback` [safe] `_evt_cursed_adventure.lua:193` | Per-frame shading callback; vanilla wraps its whole body in `if self._world == world` (UI/preview/end-screen worlds also drive it) [src: `scripts/managers/camera/camera_manager.lua`, `[unverified]` exact line] | Multiply per-god ShadingEnvironment vars for the active curse's sky/atmosphere tint (`:193`) | PER-FRAME row: must mirror the `self._world == world` guard, and must NEVER read `mod._evt` or any cross-file indirection - all reads are file-local upvalues, zero table allocations per frame (`CLAUDE.md`). Reverts for free (engine re-seeds the shading_env every frame); gated on mechanism `"adventure"` so ct owns real CW tinting |
 
@@ -86,10 +87,10 @@ broadcasts to clients (who need NO mod). Because everything an injected name tou
 runs on an unmodded client, crash-safety is enforced at `add()` - which is why a new
 injection route that bypasses `add()` silently bypasses every guard.
 
-### The four injected-mutator crash guards - two hooks, two not (owner: `docs/engine/07`)
+### The four injected-mutator crash guards (owner: `docs/engine/07`)
 
-Only ONE guard (issue 386, above) is a `mod:hook`. The other three are enforced
-without hooking a vanilla method, and are load-bearing regardless:
+Issue 386 uses a mutator-handler hook; issue 430 uses the joinability hook above.
+Issues 413 and 455 enforce without hooking a vanilla method. All are load-bearing:
 - **Issue 413 (weave-only mutators)** - the 7 Winds-of-Magic mutators
   (`shadow`/`heavens`/`light`/`death`/`beasts`/`fire`/`life`) assume a Weave context;
   outside one, `Managers.weave:get_active_wind_settings()` is nil and the weave
@@ -117,13 +118,15 @@ can be surfaced.
 
 ### Cursed Adventure inverts the host-only model (owner: `docs/engine/05`)
 
-Unlike the rest of the mod, the curse group needs EVERY peer running event_tweaker,
-because a client instantiates replicated curse husks (`spawn_network_unit`) from a
-package the base game only loads inside a Deus run. The load is doubled deliberately:
-`_activate_mutator` covers the normal-join + host case, and `init` covers the
-hot-join race (game-object sync precedes the activate RPC). Unload is ref-balanced on
-`StateIngame.on_exit`. This is the standard `docs/engine/05` refcount discipline -
-load guarded by `has_loaded`, unload only the entries whose unload succeeded.
+Unlike the rest of the mod, the curse group needs every current peer running
+event_tweaker because a client instantiates replicated curse units from packages the
+base game loads only in Deus. `_activate_mutator` and `init` preload for peers that
+already have the mod. They do not make a late non-ET peer safe: vanilla adds that
+peer to `GameSession` at `peer_states.lua:393`, but only exposes it through
+`PlayerManager` at `:450`. The issue-430 lock therefore returns false from
+`GameModeBase.is_joinable` for the complete selected/active cursed session, before
+the connecting state can advance. An already-pending server peer also fails the
+selection preflight. Unload remains ref-balanced on `StateIngame.on_exit`.
 
 ## What the engine will NOT let us do (dead ends, already paid for)
 

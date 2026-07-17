@@ -68,6 +68,7 @@ local suites = {
     "test_et_boss_ideas",
     "test_event_high_intensity_probe",
     "test_event_mission_allowlist",
+    "test_event_curse_join_policy",
     "test_gut_all_languages_diagnostics",
     "test_mod_tweaker_search",
     "test_mod_tweaker_numeric_editor",
