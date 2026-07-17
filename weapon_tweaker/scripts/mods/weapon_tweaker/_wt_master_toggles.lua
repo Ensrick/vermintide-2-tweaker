@@ -67,17 +67,12 @@ function M.source_order_index(src_char)
 end
 
 -- Parse the source character key from a child row's raw English label
--- ("Character: Weapon"). Strips any leading dev-status tag defensively.
+-- ("Character: Weapon").
 local function _source_char_of(mod, child_id)
     local raw = mod._wt_loc_raw
     local entry = type(raw) == "table" and raw[child_id]
     local label = type(entry) == "table" and entry.en
     if type(label) ~= "string" then return nil end
-    while true do
-        local clean, n = label:gsub("^%s*%b[]%s*", "", 1)
-        label = clean
-        if n == 0 then break end
-    end
     local name = label:match("^([^:]+):")
     if not name then return nil end
     name = name:gsub("%s+$", "")

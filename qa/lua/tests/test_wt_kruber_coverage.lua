@@ -30,15 +30,15 @@ return function(H, repo_root)
         local by_key = {}
         for _, row in ipairs(rows) do by_key[row.weapon_key] = row end
 
-        H.equal(by_key.we_deus_01.status, "[needs animations]")
-        H.equal(by_key.we_deus_01.redirect, "[Empire Longbow]")
+        H.equal(by_key.we_deus_01.state, "needs_animations")
+        H.equal(by_key.we_deus_01.redirect, "Empire Longbow")
         H.equal(by_key.we_deus_01.picker_visible, false)
-        H.equal(by_key.wh_crossbow.status, "[needs animations]")
+        H.equal(by_key.wh_crossbow.state, "needs_animations")
         H.equal(by_key.wh_crossbow.redirect, nil)
-        H.equal(by_key.wh_dual_wield_axe_falchion.status, "[needs animations]")
+        H.equal(by_key.wh_dual_wield_axe_falchion.state, "needs_animations")
         H.equal(by_key.wh_dual_wield_axe_falchion.redirect, nil)
-        H.equal(by_key.we_javelin.status, "[untested]")
-        H.equal(by_key.we_life_staff.status, "[untested]")
+        H.equal(by_key.we_javelin.state, "untested")
+        H.equal(by_key.we_life_staff.state, "untested")
     end)
 
     H.test("WT #109 automatic and on-demand diagnostics are wired", function()

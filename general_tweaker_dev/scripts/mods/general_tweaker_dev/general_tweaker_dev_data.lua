@@ -59,7 +59,7 @@ local _data = {
         widgets = {
             -- ============================================================
             -- Bots -- AI teammate behavior fixes (see _gt_bot_fixes.lua).
-            -- Loose options A->Z by display label (status tags ignored). All
+            -- Loose options A->Z by display label. All
             -- default OFF; host-side only (bots exist on the host), no network
             -- registration so they can't affect non-modded peers. (The former
             -- Bot Teleport Lab nested group was removed in v0.2.175-dev -- its
@@ -70,7 +70,7 @@ local _data = {
                 setting_id  = "gt_bot_options_group",
                 type        = "group",
                 sub_widgets = {
-                    -- Loose options, A->Z by display label (status tags ignored):
+                    -- Loose options, A->Z by display label:
                     {
                         setting_id    = "gt_ai_afk_takeover",
                         type          = "checkbox",

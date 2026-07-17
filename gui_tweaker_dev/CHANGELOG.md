@@ -1,5 +1,17 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.286-dev (2026-07-17) -- #694 clean player-facing labels
+
+- Mod Tweaker now removes legacy leading verification/status prefixes when it
+  resolves labels from sibling Workshop mods. This compatibility boundary lets
+  one GUI update clean the menu during a staggered sibling-mod rollout without
+  mutating those mods' localization tables.
+- The keep sub-state and in-mission view consume one pure label policy. Functional
+  qualifiers such as `[Host Only]`, `[Client]`, `[WARNING]`, `[EXP]`, and `(CWV)`
+  remain visible.
+- Added engine-free regression coverage for forbidden prefixes, preserved
+  functional qualifiers, and both presentation paths.
+
 ## 0.2.285-dev (2026-07-17) -- #402 deterministic official-loadout repair commit
 
 - `/scrub_official_loadouts apply` now requests one immediate backend commit after a bounded repair and reports the engine callback result instead of asking the player to idle and hope the cloud write completes.

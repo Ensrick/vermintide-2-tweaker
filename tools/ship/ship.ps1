@@ -887,8 +887,8 @@ $sourceCommit = ([string]$commitProbe.Lines[-1]).Trim()
 
 # ---------------------------------------------------------------------------
 # Promotion red gate (issue #327): shipping one of the five STABLE split dirs
-# must pass qa/check_promotion.ps1 BLOCKING (no dev status tags in the stable
-# localization, no unsanctioned pre-release suffix, version monotonic vs the
+# must pass qa/check_promotion.ps1 BLOCKING (defense-in-depth against player-facing
+# lifecycle metadata, unsanctioned pre-release suffixes, and version monotonicity vs the
 # stable CHANGELOG). Advisory scans warned for weeks while two promotions each
 # leaked a checklist step to public subscribers - hence a hard gate. A
 # user-NAMED suffixed public version (issue #328 ruling) ships with

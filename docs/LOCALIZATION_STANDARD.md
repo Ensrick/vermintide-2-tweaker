@@ -603,13 +603,12 @@ silently not resolving):
   -- in the consumer's label resolver (NO mod:localize):
   local entry = mod._wt_loc_raw and mod._wt_loc_raw["unlock_" .. career .. "_" .. weapon_key]
   if type(entry) == "table" and entry.en then
-      return (entry.en:gsub("^%s*%b[]%s*", ""))   -- strip any computed "[...]" status tag
+      return entry.en
   end
   ```
 
-  The raw read has no load-order dependency. Note the published table is the SAME
-  reference the loc file may later mutate in place (e.g. a status-tag post-process loop),
-  so reads after that see tags — strip them.
+  The raw read has no load-order dependency. The published table is the SAME
+  reference VMF later registers, so consumers and the menu share one label source.
 
 ### 12.3 — Tests that guard this (wt `/wt_regression_test`)
 
@@ -634,183 +633,98 @@ Memory: `reference_vmf_localize_before_registration`, `feedback_use_documented_l
 
 ---
 
-## 13. Dev status tags (issue #301)
+## 13. No lifecycle metadata in player-facing localization (issue #694)
 
-Origin: GitHub issue #301 ("New Doctrine on Issues/Localization!"). **Dev builds** carry
-a short status tag as a PREFIX of each option's `en` title string so the user can see,
-right in the in-game VMF options panel, which features still need testing, which have open
-issues, and which are confirmed working. Tags are a live-status surface, not decoration —
-they get rewritten in the same pass whenever an issue is opened/closed, diagnostics are
-armed/removed, or a feature is added/overhauled.
+Player-facing localization is product UI, not an issue tracker. This applies to
+**stable, beta, and development streams alike**. Option titles, group titles,
+tooltips, descriptions, generated localization entries, and runtime-decorated
+labels must not expose engineering lifecycle or GitHub issue state.
 
-**Tags exist ONLY in dev builds.** A dev build is one whose `MOD_VERSION` carries a
-pre-release suffix (`-dev` / `-alpha` / `-beta` / `-rc<N>`). Clean-versioned public/stable
-releases (no suffix) carry NO tags — see § 13.5.
+### 13.1 Forbidden lifecycle/status decoration
 
-### 13.1 — Tag vocabulary (the seven sanctioned tags)
+Do not add square-bracket or parenthesized status markers such as:
 
-Exact spelling and casing as listed — lowercase tags, capital `I` in `[Issue N]` — so
-grep/QA tooling can find them. Never invent a new tag.
+- `[working]`, `[confirmed working]`, `[untested]`, `[fixed]`, `[unverified]`;
+- `[Issue N]`, `[verify-fix]`, `[verify-fix-coop]`;
+- `[diag]`, `[diagnostics-armed]`, `[crash]`;
+- `[needs animations]`, `[needs offsets]`;
+- `[WIP]`, `(Experimental)`, `(Work in Progress)`, `(Testing)`, or similar.
 
-| Tag | Meaning | Removed / replaced when |
-|---|---|---|
-| `[untested]` | Feature not yet confirmed working in-game, including an older feature with no recoverable verification evidence. | The user confirms it works (→ `[working]`), or an issue emerges (→ `[Issue N]`). |
-| `[Issue N]` | An open issue relates to the feature (bug or not). E.g. `[Issue 491]`. | The issue closes (tags updated in the SAME session). |
-| `[working]` | User-confirmed working, either directly or through a closed issue whose resolution records in-game verification. Absence of an open issue is not evidence. | The feature changes significantly (→ `[untested]`) or an issue touching it opens (→ `[Issue N]`). |
-| `[diag]` | Diagnostic logging is in place for the feature (almost always paired with an open issue). | The diagnostics are removed. |
-| `[crash]` | Feature has open issue(s) investigating a crash it may have caused. | No such open crash issue remains. |
-| `[verify-fix]` | A potential fix is in place and must be verified in-game. Co-occurs with the `[Issue N]` of the issue being verified. | The fix is confirmed (→ `[working]`) or fails (stays `[Issue N]`). |
-| `[needs animations]` | **`weapon_tweaker` weapon-availability entries only** — the item lacks 3rd-person animations. Should pair with either an open issue to add it to the dev animation picker, or its presence in the picker. | The item gets 3P animations wired. |
-| `[needs animations → <target>]` | **wt-only extension** (§ 13.8). The `[needs animations]` variant that also names the mapped target receiver whose 3P anims the port borrows, e.g. `[needs animations → Greathammer]`. Emitted at load, not hand-authored. | Same as `[needs animations]`. |
-| `[needs offsets]` | **wt-only extension** (§ 13.8). The 3P port renders but its grip offsets are still missing. Emitted at load, not hand-authored. | The grip offset is baked. |
+The rule applies whether a tag is hand-authored, generated at load, or appended
+by a helper. Do not replace one lifecycle vocabulary with another. GitHub labels
+and issues are the current status authority; changelogs record shipped work; logs
+and internal diagnostic structures may carry engineering detail.
 
-The last two rows are `weapon_tweaker`-only extensions; see § 13.8 for the runtime emitter
-that owns them. `qa/check_loc_tags.ps1` accepts all nine forms.
+### 13.2 Functional qualifiers remain valid
 
-**Mutually exclusive:** `[crash]`, `[working]`, `[untested]` are mutually exclusive — a
-feature is exactly one of "confirmed working", "unconfirmed/untested", or "under crash
-investigation" at a time. Never combine two of these three.
+A qualifier is valid when it tells the player what the option **does, owns, or
+requires**, rather than whether developers consider it complete. Examples:
 
-### 13.2 — Multiple tags and multiple issue numbers
+- `(CWV)` / `(Mod Boon)` ownership or source-mod qualifiers;
+- `[Host Only]`, `[Client]`, slot, DLC, category, or realm requirements;
+- `[WARNING]` safety warnings;
+- `[Big Rebalance]`, `[Events]`, and `[EXP]` gameplay/category labels;
+- units and gameplay-state text such as `(seconds)` or live lobby
+  `[present]`/`[pending]` output.
 
-- **Multiple tags** on one option are allowed, space-separated, e.g.
-  `[untested] [Issue 497]` or `[verify-fix] [Issue 491]` (the `[verify-fix]` case should
-  always name its issue).
-- **Multiple issue numbers inside ONE `[Issue ...]` tag** use these exact formats:
-  - Two: `[Issue 501 & 427]`
-  - Three or more: `[Issue 501, 427 & 418]` (comma-separated, final pair joined by `&`).
+When uncertain, ask: would the qualifier still be useful and true after every
+related GitHub issue is closed? If not, it is lifecycle metadata and belongs
+outside localization.
 
-### 13.3 — Placement and formatting
+### 13.3 Internal diagnostic state is not UI decoration
 
-- **Prefix of the `en` title string.** Each tag in its own square brackets, a single space
-  between consecutive tags, and a single space between the last tag and the display name:
+A subsystem may retain bounded internal state such as `working`,
+`needs_animations`, `needs_offsets`, or `untested` when tooling uses it to choose
+picker membership, log an audit, or route work. Keep it as an enum/data field,
+not a bracketed display tag, and never concatenate it into an `en` string.
+Weapon Tweaker's 3P port coverage follows this pattern: `wt_port_status.lua`
+feeds diagnostics and picker membership while Weapon Availability labels remain
+plain player-facing names.
 
-  ```lua
-  noclip_enabled = { en = "[working] Noclip" },
-  gt_ai_afk_takeover = { en = "[Issue 247] AFK Bot Takeover" },
-  gt_bot_behavior_improvements = { en = "[Issue 297, 300, 139 & 142] Bot Behavior Improvements" },
-  ```
+Log prefixes such as `[diag]` are permitted when they are actually emitted to
+the log and not reused as menu localization. GitHub lifecycle-label automation
+(`not-started`, `verify-fix`, `verify-fix-coop`, `diagnostics-armed`, `Fixed`)
+remains unchanged.
 
-  This matches the existing convention in `general_tweaker_dev`.
-- **Tag ONLY behavioral option TITLE strings** — entries whose loc key matches a widget
-  `setting_id` in the mod's `_data.lua. A checkbox master toggle with `sub_widgets` is a
-  feature and is tagged normally. A pure `type = "group"` navigation container has no
-  behavior and MUST remain untagged, regardless of its children's status. Never tag:
-  tooltip / description bodies (`*_tooltip`, `*_description`), dropdown value labels, chat /
-  log / popup message strings, or pure text entries with no backing widget.
-- **Tags live only in the localization DATA file**, as raw authored strings — never
-  pre-localized (§ 12.2), no em dashes, `%` escaped as `%%` (§ 1). All existing repo loc
-  rules still apply.
-- **Every behavioral feature / menu option in a dev build should carry a tag.** New,
-  overhauled, or never-confirmed feature ⇒ `[untested]`; `[working]` requires direct user
-  confirmation or a closed issue recording verification (otherwise use the relevant
-  issue/diag/crash tag).
-  Two exemptions (§ 13.8): pure navigation container groups, and known issue clusters with
-  no menu widget to hang a tag on. Inert blocks take their tracking `[Issue N]` (§ 13.8).
+### 13.4 QA enforcement
 
-### 13.4 — Tags are updated in the same pass as the change
+`qa/check_loc_tags.ps1` is a **blocking** repository-wide gate in
+`qa/run_all.ps1`. It scans every active mod stream (excluding the frozen legacy
+`tweaker/`) for forbidden lifecycle tokens in localization sources, dynamic
+`en` construction, and known status-decoration helpers. Its self-test protects
+both the forbidden vocabulary and the functional-qualifier allow-list.
 
-Tags are a live status surface, so they move whenever the underlying state moves — and that
-update happens in the SAME session/commit as the triggering change, never batched for later:
+For a large migration, run:
 
-- **Opening an issue** that touches a feature ⇒ add `[Issue N]` (and drop `[working]`).
-- **Closing an issue** ⇒ remove its number from the feature's `[Issue ...]` tag and re-tag
-  appropriately (`[working]` only when the closure records verification; `[untested]`
-  otherwise). Updating the tag is part of closing.
-- **Arming / removing diagnostics** ⇒ add / drop `[diag]`.
-- **Landing a candidate fix** ⇒ add `[verify-fix]` (keep `[Issue N]`); on in-game
-  confirmation, drop both for `[working]`.
-- **Adding or significantly overhauling a feature** ⇒ `[untested]`.
+```powershell
+pwsh -NoProfile -File qa/check_loc_tags.ps1 -MigrationBase origin/master
+```
 
-`[Issue N]` must reference an OPEN issue in `Ensrick/vermintide-2-tweaker`. A tag naming a
-closed issue is stale and must be corrected.
+The migration proof compares the localization key sequence and every English
+localization value against the merge base. Each new value must equal the old
+value after removing only lifecycle/status decoration. This catches accidental
+renames, dropped keys, count drift, or unrelated text edits hidden in a large
+mechanical cleanup.
 
-**Mechanized (issue #326):** `qa/check_issue_tag_sync.ps1` (advisory, in `run_all`) enforces
-this section against GitHub — it warns on stale `[Issue N]` tags (closed / non-existent
-issues), on `[verify-fix]`/`[diag]` tags whose paired issue lacks the matching
-`verify-fix`/`diagnostics-armed` label, and on the reverse (a labeled open issue with no
-matching loc tag — legitimate when the fix has no menu surface, § 13.3/13.8). The ship-time
-half lives in `tools/ship/ship.ps1` step 6, which auto-adds the status label from the shipped
-CHANGELOG entry.
+`qa/check_issue_status_labels.ps1` and `tools/ship/ship.ps1` continue to enforce
+GitHub/changelog lifecycle state. The former localization-to-GitHub sync check
+was retired because localization is no longer a lifecycle surface.
 
-### 13.5 — Stable strips ALL tags (promotion is the strip point)
+### 13.5 Staggered Workshop rollout
 
-Tags are dev-only. **Promotion to a clean (no-suffix) stable version strips every tag** as
-part of the promote-to-stable checklist (`PROJECT_STANDARDS.md` § 6.5). A stable/public
-build must never render a `[untested]` / `[Issue N]` / etc. prefix to a subscriber.
+The development Mod Tweaker presentation also removes recognized legacy
+prefixes at its existing sibling-label resolver. This bounded compatibility
+policy cleans labels from an older sibling bundle without mutating that mod's
+localization table or adding another UI hook, and it preserves every functional
+qualifier listed in § 13.2. Stable receives the same policy only through the
+normal promotion process.
 
-**Cautionary example (known violation):** stable `crafting_in_modded` currently ships seven
-`[untested]` tags — a promotion leak that escaped the strip step. It is tracked for cleanup
-at the next `cim` promotion. `qa/check_loc_tags.ps1` (see § 13.7) exists specifically to
-catch this class going forward: it warns on any tag found in a stable mod directory.
-
-### 13.6 — Sorting ignores tags
-
-Alphabetical sorting of options (`feedback_sort_categories_alphabetically`) uses the display
-name AFTER stripping the leading tag run as the sort key. `[working] Noclip` sorts under "N",
-not "[". Strip the leading `%b[]` run (and any following spaces) before comparing.
-
-### 13.7 — QA: `qa/check_loc_tags.ps1`
-
-A warning-only, non-blocking scan (`qa/CHECKS.md` row 19e) that walks every
-`*_localization.lua` and reports:
-
-- **Stable leak** — any sanctioned tag present in a stable mod directory
-  (`chaos_wastes_tweaker`, `crafting_in_modded`, `general_tweaker`, `gui_tweaker`,
-  `verminious_dreams_lighting` — the unsuffixed siblings of the `_dev` dirs).
-- **Unknown vocabulary** — a tag-like leading bracket group (lowercase- or `Issue`-leading)
-  that is not one of the seven sanctioned tags. Uppercase-leading brackets (`[CW]`,
-  `[Big Rebalance]`, `[WARNING]`) are treated as legitimate display-name prefixes and left
-  alone; `gut`'s `<...>` angle markers are not brackets and are ignored.
-- **Mutex violation** — `[crash]`, `[working]`, `[untested]` combined on one option.
-- **Tagged navigation group** — any status tag on a loc key whose `_data.lua` widget is
-  `type = "group"`. This mechanically enforces the §13.3/13.8 exemption. Run with
-  `-EvidenceAudit` to additionally inventory non-group `[working]` entries that require
-  confirmation evidence during the #335 retro-audit; add `-SummaryOnly` for counts without
-  the intentionally large per-entry inventory.
-
-It never fails the gate (see § 13.5 for the leak it is designed to surface). Run it after any
-loc tag edit. It accepts the § 13.1 vocabulary plus the § 13.8 `weapon_tweaker` extensions.
-
-### 13.8 — Extensions & exemptions (from the 2026-07-04 live audit)
-
-**`weapon_tweaker` runtime tag emitter.** wt's ~939 `unlock_*` Weapon-Availability rows are
-tagged AT LOAD by the loop in `weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua`
-(~lines 1285-1333): for every `unlock_*` entry it strips any leading `[...]` run
-(`_strip_leading_tag`, `gsub("^%s*%b[]%s*", "")`) and re-prepends the tag computed by
-`wt_port_status.lua`'s `tag(career, weapon_key)` (fed by the state tables that module derives
-from `weapon_tweaker/ANIMATION_COVERAGE.md`). So **any hand-typed tag on an `unlock_*` row is
-discarded by design** — do not maintain those tags by hand; edit the coverage state instead.
-The tag casing was normalized to the #301 lowercase doctrine forms in wt v0.12.204-dev
-(`weapon_tweaker_localization.lua:1323`). The emitter emits the #301 lowercase vocabulary plus
-two **wt-only extensions**:
-
-- `[needs offsets]` — the port renders but its 3P grip offsets are still missing.
-- `[needs animations → <target>]` — the wt variant of `[needs animations]`, carrying the
-  mapped target receiver weapon after the arrow (e.g. `[needs animations → Greathammer]`).
-
-Because these live only in the emitter's runtime output — not in the static
-`_localization.lua` — `qa/check_loc_tags.ps1` normally never encounters them; it accepts both
-as sanctioned vocabulary regardless, so a normalized or stray static occurrence is never
-mis-flagged.
-
-**Inert-feature convention.** When an ENTIRE block of options is inert because a dependency
-was retired/removed — current case: the Big Rebalance `br_*` toggles gated on the retired
-`buff_tweaker` — tag those rows with the governing tracking ISSUE (`[Issue 321]` here), NOT
-`[working]`/`[untested]`. Inert features can't be tested, and a blanket `[untested]` would
-drown the real testing radar. Re-tag or remove per § 13.4 when the dependency returns or the
-block is deleted.
-
-**Exemptions from the every-option-tagged rule (§ 13.3).** Two kinds of option legitimately
-carry no tag:
-
-- **Pure navigation container groups** — a `group` widget that only nests other options and
-  has no behavior of its own.
-- **Known issue clusters with no menu widget** to hang a tag on (e.g. the cosmetics LA
-  rendering/crash cluster). Those are tracked in GitHub only; there is no loc string to tag.
+The blocking gate carries exact-line exceptions for pre-existing prose in
+write-frozen split stable streams. Their development twins are already clean;
+the exceptions disappear with the next approved promotion and cannot authorize
+new wording or new debt.
 
 ---
-
 ## Cross-references
 
 - `qa/check_localization.ps1` — current executable conformance check.
@@ -827,5 +741,4 @@ carry no tag:
 - `general_tweaker/scripts/mods/general_tweaker/general_tweaker_localization.lua` (see `gt_lobby_failnotify_required_header`, line ~398) + `_gt_lobby_failed_join_reveal.lua` (call site ~188-189) — canonical reference for Pattern A pre-format directives (`%%d` in localization, `string.format` at call site). Absorbed from the now-retired `lobby_tweaker`.
 - `general_tweaker/scripts/mods/general_tweaker/general_tweaker_localization.lua` — canonical reference for clean conventional formatting (`_tooltip` suffix, group/setting layout, mod_description).
 - `general_tweaker/scripts/mods/general_tweaker/general_tweaker_localization.lua` — clean, conventional reference for new mods. (The former `buff_tweaker` minimal example is retired/archived to `_archive/buff_tweaker_v0.1.12-alpha/`.)
-- `qa/check_loc_tags.ps1` — the § 13 dev-status-tag QA scan (stable leaks, unknown vocab, mutex combos). Documented in `qa/CHECKS.md` row 19e. GitHub issue #301.
-- `general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev_localization.lua` — canonical reference for the § 13 dev status-tag convention (`[working]` / `[untested]` / `[Issue N]` prefixes).
+- `qa/check_loc_tags.ps1` — blocking § 13 guard against player-facing lifecycle metadata (#694).

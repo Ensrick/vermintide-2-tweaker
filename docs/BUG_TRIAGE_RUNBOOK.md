@@ -279,7 +279,7 @@ UPLOAD - a local deploy alone is silently clobbered.
     issue the ship addressed (here: the primary Issue AND any it corroborates/fixes
     together).
   - If the fix touched a dev-build menu option, also move its `_localization.lua`
-    status tag (`[untested]`/`[Issue N]` -> `[verify-fix]`) in the same pass
+    GitHub lifecycle label (`not-started` -> `verify-fix`/`diagnostics-armed`) in the same pass
     (issue #301; `LOCALIZATION_STANDARD.md` §13) - unless another session owns
     that file right now, in which case note it and leave the tag to them.
 - [ ] **Refresh by tester role.** The author on PC-A tests the hash-verified

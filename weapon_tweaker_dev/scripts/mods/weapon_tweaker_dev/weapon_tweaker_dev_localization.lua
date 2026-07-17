@@ -1098,180 +1098,180 @@ local loc = {
     old setting identifiers remain documented. The corresponding widget tree
     and runtime were retired under #321/#433; none of these values are returned
     to VMF by the public beta.
-    br_master                                       = { en = "[Issue 321] [Big Rebalance]" },
+    br_master                                       = { en = "[Big Rebalance]" },
     br_master_description                           = { en = "An optional set of Big Rebalance weapon changes, all switched off by default. They only take effect if the Tweaker: Buffs mod is installed with its main toggle on and the game is then restarted." },
 
-    br_melee                                        = { en = "[Issue 321] Melee" },
-    br_melee_1h_hammer                              = { en = "[Issue 321] 1H Hammers" },
-    br_1h_hammer_dodge_count                        = { en = "[Issue 321] 1H hammers: 4 dodges across families" },
-    br_1h_hammer_light_down_speed                   = { en = "[Issue 321] 1H hammers: faster light-down animation" },
-    br_1h_hammer_heavy_gs_profile                   = { en = "[Issue 321] 1H hammers: heavy to gs_1h_heavy profile" },
-    br_1h_hammer_heavy_range                        = { en = "[Issue 321] 1H hammers: heavy range_mod 1.2" },
-    br_1h_hammer_tome_rework                        = { en = "[Issue 321] Tome-hammer (WP) rework (mega-toggle)" },
-    br_1h_hammer_wizard_rework                      = { en = "[Issue 321] BW 1H hammer rework (mega-toggle)" },
+    br_melee                                        = { en = "Melee" },
+    br_melee_1h_hammer                              = { en = "1H Hammers" },
+    br_1h_hammer_dodge_count                        = { en = "1H hammers: 4 dodges across families" },
+    br_1h_hammer_light_down_speed                   = { en = "1H hammers: faster light-down animation" },
+    br_1h_hammer_heavy_gs_profile                   = { en = "1H hammers: heavy to gs_1h_heavy profile" },
+    br_1h_hammer_heavy_range                        = { en = "1H hammers: heavy range_mod 1.2" },
+    br_1h_hammer_tome_rework                        = { en = "Tome-hammer (WP) rework (mega-toggle)" },
+    br_1h_hammer_wizard_rework                      = { en = "BW 1H hammer rework (mega-toggle)" },
 
-    br_melee_2h_hammer                              = { en = "[Issue 321] 2H Hammers" },
-    br_2h_hammer_emp                                = { en = "[Issue 321] 2H hammer (Emp/Dwf): light-leftup tuning" },
-    br_2h_hammer_priest                             = { en = "[Issue 321] 2H hammer (WP) rework (mega-toggle)" },
-    br_cog_rework                                   = { en = "[Issue 321] Cog hammer rework (mega-toggle, partial - speed/crit only)" },
+    br_melee_2h_hammer                              = { en = "2H Hammers" },
+    br_2h_hammer_emp                                = { en = "2H hammer (Emp/Dwf): light-leftup tuning" },
+    br_2h_hammer_priest                             = { en = "2H hammer (WP) rework (mega-toggle)" },
+    br_cog_rework                                   = { en = "Cog hammer rework (mega-toggle, partial - speed/crit only)" },
 
-    br_melee_1h_sword                               = { en = "[Issue 321] 1H Swords" },
-    br_1h_sword_template1_range                     = { en = "[Issue 321] 1H sword: 4 dodges + 1.4 range" },
-    br_flaming_sword_rework                         = { en = "[Issue 321] Flaming sword (WP) rework (mega-toggle)" },
-    br_falchion_heavy                               = { en = "[Issue 321] Falchion heavy profile + chain" },
-    br_we_1h_sword                                  = { en = "[Issue 321] WE 1H sword: heavy-up + light-last chains" },
+    br_melee_1h_sword                               = { en = "1H Swords" },
+    br_1h_sword_template1_range                     = { en = "1H sword: 4 dodges + 1.4 range" },
+    br_flaming_sword_rework                         = { en = "Flaming sword (WP) rework (mega-toggle)" },
+    br_falchion_heavy                               = { en = "Falchion heavy profile + chain" },
+    br_we_1h_sword                                  = { en = "WE 1H sword: heavy-up + light-last chains" },
 
-    br_melee_2h_sword                               = { en = "[Issue 321] 2H Swords" },
-    br_exec_sword_speed                             = { en = "[Issue 321] Executioner 2H light speed tuning" },
-    br_2h_sword_template1                           = { en = "[Issue 321] 2H sword template_1 tuning" },
-    br_bastard_sword                                = { en = "[Issue 321] Bastard sword: heavy-down + headshot SFX" },
-    br_we_2h_sword                                  = { en = "[Issue 321] WE 2H sword tuning (mega-toggle)" },
+    br_melee_2h_sword                               = { en = "2H Swords" },
+    br_exec_sword_speed                             = { en = "Executioner 2H light speed tuning" },
+    br_2h_sword_template1                           = { en = "2H sword template_1 tuning" },
+    br_bastard_sword                                = { en = "Bastard sword: heavy-down + headshot SFX" },
+    br_we_2h_sword                                  = { en = "WE 2H sword tuning (mega-toggle)" },
 
-    br_melee_polearm                                = { en = "[Issue 321] Spears / Halberds / 2H Polearms" },
-    br_2h_spear_emp                                 = { en = "[Issue 321] Empire 2H heavy spear (mega-toggle)" },
-    br_halberd_tb_profiles                          = { en = "[Issue 321] Halberd: new TB damage-profile chain" },
-    br_elf_spear_rework                             = { en = "[Issue 321] WE 2H spear rework (mega-toggle)" },
-    br_1h_spearshield_chain                         = { en = "[Issue 321] 1H spear-shield: stab chain rework" },
+    br_melee_polearm                                = { en = "Spears / Halberds / 2H Polearms" },
+    br_2h_spear_emp                                 = { en = "Empire 2H heavy spear (mega-toggle)" },
+    br_halberd_tb_profiles                          = { en = "Halberd: new TB damage-profile chain" },
+    br_elf_spear_rework                             = { en = "WE 2H spear rework (mega-toggle)" },
+    br_1h_spearshield_chain                         = { en = "1H spear-shield: stab chain rework" },
 
-    br_melee_dual                                   = { en = "[Issue 321] Daggers / Dual Weapons" },
-    br_dw_mace_sword                                = { en = "[Issue 321] Dual mace+sword rework (mega-toggle)" },
-    br_1h_dagger_pushstab                           = { en = "[Issue 321] 1H dagger: pushstab to default_right_heavy" },
-    br_dw_sword_dagger                              = { en = "[Issue 321] Dual sword+dagger no-crit + speed" },
-    br_dw_swords_speed                              = { en = "[Issue 321] Dual swords heavy speed" },
-    br_dw_daggers                                   = { en = "[Issue 321] Dual daggers tuning (mega-toggle)" },
+    br_melee_dual                                   = { en = "Daggers / Dual Weapons" },
+    br_dw_mace_sword                                = { en = "Dual mace+sword rework (mega-toggle)" },
+    br_1h_dagger_pushstab                           = { en = "1H dagger: pushstab to default_right_heavy" },
+    br_dw_sword_dagger                              = { en = "Dual sword+dagger no-crit + speed" },
+    br_dw_swords_speed                              = { en = "Dual swords heavy speed" },
+    br_dw_daggers                                   = { en = "Dual daggers tuning (mega-toggle)" },
 
-    br_melee_mace_axe                               = { en = "[Issue 321] Maces / Picks / Axes" },
-    br_1h_axe                                       = { en = "[Issue 321] 1H axe: light-last speed + heavy range" },
-    br_2h_pick                                      = { en = "[Issue 321] 2H pick rework (mega-toggle)" },
-    br_2h_axe                                       = { en = "[Issue 321] 2H axe tuning" },
-    br_dw_axes                                      = { en = "[Issue 321] Dual axes tuning (mega-toggle)" },
-    br_1h_flail_rework                              = { en = "[Issue 321] 1H flail rework (mega-toggle)" },
-    br_flaming_flail                                = { en = "[Issue 321] Flaming flail (BW) tuning" },
-    br_crowbill                                     = { en = "[Issue 321] Crowbill rework (mega-toggle)" },
-    br_glaive                                       = { en = "[Issue 321] Glaive heavy-down rework" },
+    br_melee_mace_axe                               = { en = "Maces / Picks / Axes" },
+    br_1h_axe                                       = { en = "1H axe: light-last speed + heavy range" },
+    br_2h_pick                                      = { en = "2H pick rework (mega-toggle)" },
+    br_2h_axe                                       = { en = "2H axe tuning" },
+    br_dw_axes                                      = { en = "Dual axes tuning (mega-toggle)" },
+    br_1h_flail_rework                              = { en = "1H flail rework (mega-toggle)" },
+    br_flaming_flail                                = { en = "Flaming flail (BW) tuning" },
+    br_crowbill                                     = { en = "Crowbill rework (mega-toggle)" },
+    br_glaive                                       = { en = "Glaive heavy-down rework" },
 
-    br_melee_shield                                 = { en = "[Issue 321] Shields / S+W / S+H" },
-    br_flail_shield                                 = { en = "[Issue 321] Flail+shield (mega-toggle)" },
-    br_axe_shield_crit                              = { en = "[Issue 321] Axe+shield light-bopp crit" },
-    br_1h_hammer_shield_heavy                       = { en = "[Issue 321] 1H hammer+shield: heavy-left to heavy_slashing_tank" },
-    br_sword_shield_emp                             = { en = "[Issue 321] Empire sword+shield rework (mega-toggle)" },
-    br_shield_slam_replace                          = { en = "[Issue 321] Replace shield-slam damage profiles" },
+    br_melee_shield                                 = { en = "Shields / S+W / S+H" },
+    br_flail_shield                                 = { en = "Flail+shield (mega-toggle)" },
+    br_axe_shield_crit                              = { en = "Axe+shield light-bopp crit" },
+    br_1h_hammer_shield_heavy                       = { en = "1H hammer+shield: heavy-left to heavy_slashing_tank" },
+    br_sword_shield_emp                             = { en = "Empire sword+shield rework (mega-toggle)" },
+    br_shield_slam_replace                          = { en = "Replace shield-slam damage profiles" },
     br_shield_slam_replace_description              = { en = "Gives shield slam attacks Big Rebalance's stronger stagger and shield-breaking. For the full effect, also enable the matching stagger option in the Tweaker: Enemies mod." },
 
-    br_ranged                                       = { en = "[Issue 321] Ranged" },
-    br_ranged_bow                                   = { en = "[Issue 321] Bows / Crossbows / Longbows" },
-    br_bow_weapon_type_flag                         = { en = "[Issue 321] Mark bow templates as weapon_type_bow" },
-    br_bow_ammo_caps                                = { en = "[Issue 321] Bow ammo caps (shortbow 65 / hagbane 35 / longbow 30)" },
-    br_shortbow_shotgun_rework                      = { en = "[Issue 321] Shortbow shotgun rework (mega-toggle)" },
-    br_longbow_emp_rework                           = { en = "[Issue 321] Empire longbow rework (mega-toggle)" },
-    br_repeater_xbow_elf                            = { en = "[Issue 321] Repeating xbow (elf) impact-profile swap" },
-    br_throwing_axes                                = { en = "[Issue 321] Throwing axes ammo + reload" },
-    br_moonbow_rework                               = { en = "[Issue 321] Moonbow / Trueflight Deus 01 rework (mega-toggle)" },
-    br_moonbow_cosmetic_puff                        = { en = "[Issue 321] Moonbow cosmetic puff (forwards to moonfire_cosmetic_puff)" },
+    br_ranged                                       = { en = "Ranged" },
+    br_ranged_bow                                   = { en = "Bows / Crossbows / Longbows" },
+    br_bow_weapon_type_flag                         = { en = "Mark bow templates as weapon_type_bow" },
+    br_bow_ammo_caps                                = { en = "Bow ammo caps (shortbow 65 / hagbane 35 / longbow 30)" },
+    br_shortbow_shotgun_rework                      = { en = "Shortbow shotgun rework (mega-toggle)" },
+    br_longbow_emp_rework                           = { en = "Empire longbow rework (mega-toggle)" },
+    br_repeater_xbow_elf                            = { en = "Repeating xbow (elf) impact-profile swap" },
+    br_throwing_axes                                = { en = "Throwing axes ammo + reload" },
+    br_moonbow_rework                               = { en = "Moonbow / Trueflight Deus 01 rework (mega-toggle)" },
+    br_moonbow_cosmetic_puff                        = { en = "Moonbow cosmetic puff (forwards to moonfire_cosmetic_puff)" },
 
-    br_ranged_gun                                   = { en = "[Issue 321] Guns" },
-    br_repeater_handgun                             = { en = "[Issue 321] Repeating handgun rework (mega-toggle)" },
-    br_engineer_deus_balanced                       = { en = "[Issue 321] BW Deus rework + Engineer balanced barrels" },
-    br_brace_of_pistols_clip                        = { en = "[Issue 321] Brace of pistols single-clip rework" },
-    br_dr_deus_ammo                                 = { en = "[Issue 321] DR Deus 01 reload time" },
-    br_steam_pistol                                 = { en = "[Issue 321] Heavy steam pistol ammo" },
-    br_grudgeraker_shotgun                          = { en = "[Issue 321] Grudgeraker shotgun-special rework (mega-toggle)" },
-    br_blunderbuss_shotgun                          = { en = "[Issue 321] Blunderbuss shotgun-special rework (mega-toggle)" },
-    br_drakepistol_speed_chains                     = { en = "[Issue 321] Drake pistol chain + speed (mega-toggle)" },
-    br_drakegun_dot_interval                        = { en = "[Issue 321] Drakegun damage-interval + FX" },
-    br_rakeshot_spread                              = { en = "[Issue 321] Rake shot spread table" },
-    br_handgun_xbow_reload                          = { en = "[Issue 321] Vanilla handgun/xbow ammo-per-reload = 2" },
-    br_repeater_pistol_reload                       = { en = "[Issue 321] VC repeating pistol reload = 12" },
+    br_ranged_gun                                   = { en = "Guns" },
+    br_repeater_handgun                             = { en = "Repeating handgun rework (mega-toggle)" },
+    br_engineer_deus_balanced                       = { en = "BW Deus rework + Engineer balanced barrels" },
+    br_brace_of_pistols_clip                        = { en = "Brace of pistols single-clip rework" },
+    br_dr_deus_ammo                                 = { en = "DR Deus 01 reload time" },
+    br_steam_pistol                                 = { en = "Heavy steam pistol ammo" },
+    br_grudgeraker_shotgun                          = { en = "Grudgeraker shotgun-special rework (mega-toggle)" },
+    br_blunderbuss_shotgun                          = { en = "Blunderbuss shotgun-special rework (mega-toggle)" },
+    br_drakepistol_speed_chains                     = { en = "Drake pistol chain + speed (mega-toggle)" },
+    br_drakegun_dot_interval                        = { en = "Drakegun damage-interval + FX" },
+    br_rakeshot_spread                              = { en = "Rake shot spread table" },
+    br_handgun_xbow_reload                          = { en = "Vanilla handgun/xbow ammo-per-reload = 2" },
+    br_repeater_pistol_reload                       = { en = "VC repeating pistol reload = 12" },
 
-    br_ranged_staff                                 = { en = "[Issue 321] Staves" },
-    br_staff_magma                                  = { en = "[Issue 321] Magma staff rework (mega-toggle)" },
-    br_staff_fireball                               = { en = "[Issue 321] Fireball staff rework (mega-toggle)" },
-    br_staff_conflag_spear                          = { en = "[Issue 321] Conflag / spark-spear zoom override" },
-    br_staff_beam_shotgun                           = { en = "[Issue 321] Beam staff shotgun-secondary rework" },
-    br_staff_flamethrower                           = { en = "[Issue 321] Sienna flamethrower damage-interval" },
-    br_staff_life_vortex                            = { en = "[Issue 321] Life staff vortex rework" },
+    br_ranged_staff                                 = { en = "Staves" },
+    br_staff_magma                                  = { en = "Magma staff rework (mega-toggle)" },
+    br_staff_fireball                               = { en = "Fireball staff rework (mega-toggle)" },
+    br_staff_conflag_spear                          = { en = "Conflag / spark-spear zoom override" },
+    br_staff_beam_shotgun                           = { en = "Beam staff shotgun-secondary rework" },
+    br_staff_flamethrower                           = { en = "Sienna flamethrower damage-interval" },
+    br_staff_life_vortex                            = { en = "Life staff vortex rework" },
 
-    br_ranged_career                                = { en = "[Issue 321] Career-Skill Weapons" },
-    br_gk_career_weapon                             = { en = "[Issue 321] Grail Knight career-ult sword tuning" },
-    br_engineer_crank_gun                           = { en = "[Issue 321] Engineer crank-gun rework (mega-toggle)" },
-    br_bardin_survival_ale                          = { en = "[Issue 321] Slayer survival ale drink anim 2x" },
-    br_we_ww_trueflight                             = { en = "[Issue 321 & 74] Way Watcher Trueflight + Piercing Shot (mega-toggle)" },
-    br_sienna_scholar_skullshot                     = { en = "[Issue 321] Scholar skullshot overcharge AOE" },
+    br_ranged_career                                = { en = "Career-Skill Weapons" },
+    br_gk_career_weapon                             = { en = "Grail Knight career-ult sword tuning" },
+    br_engineer_crank_gun                           = { en = "Engineer crank-gun rework (mega-toggle)" },
+    br_bardin_survival_ale                          = { en = "Slayer survival ale drink anim 2x" },
+    br_we_ww_trueflight                             = { en = "Way Watcher Trueflight + Piercing Shot (mega-toggle)" },
+    br_sienna_scholar_skullshot                     = { en = "Scholar skullshot overcharge AOE" },
     br_sienna_scholar_skullshot_description         = { en = "Adds an area explosion to the Pyromancer's ultimate shot. Because the effect is shared, it also changes Unchained's venting explosion." },
-    br_vc_bh_shotgun_profile                        = { en = "[Issue 321] Bounty Hunter shotgun (career) profile" },
-    br_vc_wp_nuke                                   = { en = "[Issue 321] Warrior Priest nuke explosion profile" },
-    br_slayer_leap_landing                          = { en = "[Issue 321] Slayer leap landing impact" },
+    br_vc_bh_shotgun_profile                        = { en = "Bounty Hunter shotgun (career) profile" },
+    br_vc_wp_nuke                                   = { en = "Warrior Priest nuke explosion profile" },
+    br_slayer_leap_landing                          = { en = "Slayer leap landing impact" },
 
-    br_dpt                                          = { en = "[Issue 321] Damage Profile Tuning" },
-    br_dpt_blunt                                    = { en = "[Issue 321] Shared Blunt / Hammer Profiles" },
-    br_dpt_light_blunt_tank                         = { en = "[Issue 321] Light blunt tank family (mega-toggle)" },
-    br_dpt_heavy_blunt_tank                         = { en = "[Issue 321] Heavy blunt tank family" },
-    br_dpt_heavy_blunt_smiter_charged               = { en = "[Issue 321] Heavy blunt smiter charged" },
-    br_dpt_burning_blunt                            = { en = "[Issue 321] Burning blunt / dagger-burn / med-burning-tank (mega-toggle)" },
+    br_dpt                                          = { en = "Damage Profile Tuning" },
+    br_dpt_blunt                                    = { en = "Shared Blunt / Hammer Profiles" },
+    br_dpt_light_blunt_tank                         = { en = "Light blunt tank family (mega-toggle)" },
+    br_dpt_heavy_blunt_tank                         = { en = "Heavy blunt tank family" },
+    br_dpt_heavy_blunt_smiter_charged               = { en = "Heavy blunt smiter charged" },
+    br_dpt_burning_blunt                            = { en = "Burning blunt / dagger-burn / med-burning-tank (mega-toggle)" },
 
-    br_dpt_slash                                    = { en = "[Issue 321] Shared Slashing / Linesman Profiles" },
-    br_dpt_light_slash_linesman_finesse             = { en = "[Issue 321] Light slash linesman finesse" },
-    br_dpt_light_slash_smiter                       = { en = "[Issue 321] Light slash smiter family (mega-toggle)" },
-    br_dpt_med_slash_tank_1h                        = { en = "[Issue 321] Medium slash tank 1h finesse + base (mega-toggle)" },
-    br_dpt_med_slash_linesman_executioner           = { en = "[Issue 321] Medium slash linesman executioner" },
-    br_dpt_heavy_slash_tank                         = { en = "[Issue 321] Heavy slash tank" },
-    br_dpt_med_slash_linesman_base                  = { en = "[Issue 321] Medium slash linesman base" },
-    br_dpt_med_slash_linesman_spear                 = { en = "[Issue 321] Medium slash linesman spear" },
-    br_dpt_heavy_slash_polearm                      = { en = "[Issue 321] Heavy slash polearm" },
-    br_dpt_axe_linesman                             = { en = "[Issue 321] Axe linesman family (mega-toggle)" },
-    br_dpt_med_slash_smiter_2h                      = { en = "[Issue 321] Medium slash smiter 2H + stab + 1h-stab" },
-    br_dpt_heavy_slash_smiter                       = { en = "[Issue 321] Heavy slash smiter family" },
-    br_dpt_med_spear_smiter_stab                    = { en = "[Issue 321] Medium spear smiter stab" },
-    br_dpt_light_slash_elf                          = { en = "[Issue 321] Light slash linesman elf" },
-    br_dpt_light_slash_line_dual_med                = { en = "[Issue 321] Light slash linesman dual medium" },
-    br_dpt_med_spear_thorn_skin_etc                 = { en = "[Issue 321] Thorn skin (Unchained) damage profile" },
+    br_dpt_slash                                    = { en = "Shared Slashing / Linesman Profiles" },
+    br_dpt_light_slash_linesman_finesse             = { en = "Light slash linesman finesse" },
+    br_dpt_light_slash_smiter                       = { en = "Light slash smiter family (mega-toggle)" },
+    br_dpt_med_slash_tank_1h                        = { en = "Medium slash tank 1h finesse + base (mega-toggle)" },
+    br_dpt_med_slash_linesman_executioner           = { en = "Medium slash linesman executioner" },
+    br_dpt_heavy_slash_tank                         = { en = "Heavy slash tank" },
+    br_dpt_med_slash_linesman_base                  = { en = "Medium slash linesman base" },
+    br_dpt_med_slash_linesman_spear                 = { en = "Medium slash linesman spear" },
+    br_dpt_heavy_slash_polearm                      = { en = "Heavy slash polearm" },
+    br_dpt_axe_linesman                             = { en = "Axe linesman family (mega-toggle)" },
+    br_dpt_med_slash_smiter_2h                      = { en = "Medium slash smiter 2H + stab + 1h-stab" },
+    br_dpt_heavy_slash_smiter                       = { en = "Heavy slash smiter family" },
+    br_dpt_med_spear_smiter_stab                    = { en = "Medium spear smiter stab" },
+    br_dpt_light_slash_elf                          = { en = "Light slash linesman elf" },
+    br_dpt_light_slash_line_dual_med                = { en = "Light slash linesman dual medium" },
+    br_dpt_med_spear_thorn_skin_etc                 = { en = "Thorn skin (Unchained) damage profile" },
 
-    br_dpt_pointy                                   = { en = "[Issue 321] Shared Pointy / Piercing Profiles" },
-    br_dpt_light_pointy_smiter                      = { en = "[Issue 321] Light pointy smiter family" },
-    br_dpt_med_pointy_smiter_flat_1h                = { en = "[Issue 321] Medium pointy smiter flat 1h" },
+    br_dpt_pointy                                   = { en = "Shared Pointy / Piercing Profiles" },
+    br_dpt_light_pointy_smiter                      = { en = "Light pointy smiter family" },
+    br_dpt_med_pointy_smiter_flat_1h                = { en = "Medium pointy smiter flat 1h" },
 
-    br_dpt_ranged                                   = { en = "[Issue 321] Ranged Shared Profiles" },
-    br_dpt_staff_fireball_charged                   = { en = "[Issue 321] Staff fireball charged profile" },
-    br_dpt_fireball_explosion                       = { en = "[Issue 321] Fireball explosion + glance" },
-    br_dpt_soul_rip                                 = { en = "[Issue 321] Soul rip armor" },
-    br_dpt_shot_machinegun_shieldbreak              = { en = "[Issue 321] Shot machinegun shotgun shield_break" },
-    br_dpt_shot_carbine                             = { en = "[Issue 321] Shot carbine headshot" },
-    br_dpt_crossbow_bolt_repeating                  = { en = "[Issue 321] Replace crossbow_bolt_repeating profile" },
-    br_dpt_dr_deus                                  = { en = "[Issue 321] DR Deus 01 profile family (mega-toggle)" },
-    br_dpt_thrown_javelin                           = { en = "[Issue 321] Thrown javelin (mega-toggle)" },
-    br_dpt_shot_sniper_pistol_dropoff               = { en = "[Issue 321] Sniper pistol dropoff" },
-    br_dpt_shot_duckfoot                            = { en = "[Issue 321] Duckfoot cleave" },
-    br_dpt_geiser                                   = { en = "[Issue 321] Geiser staff" },
-    br_dpt_drake_pistol                             = { en = "[Issue 321] Drake pistol profiles + blast (mega-toggle)" },
-    br_dpt_beam_shot                                = { en = "[Issue 321] Beam shot near-attack" },
-    br_dpt_fire_spear_3                             = { en = "[Issue 321] Fire spear 3 armor" },
-    br_dpt_arrow_machinegun                         = { en = "[Issue 321] Arrow machinegun + carbine_shortbow + sniper_kruber cleave" },
-    br_dpt_burning_dot_firegrenade                  = { en = "[Issue 321] Burning DOT firegrenade armor" },
-    br_dpt_frag_grenade                             = { en = "[Issue 321] Frag grenade attack" },
-    br_dpt_throwing_axe_hs                          = { en = "[Issue 321] Throwing axe headshot" },
+    br_dpt_ranged                                   = { en = "Ranged Shared Profiles" },
+    br_dpt_staff_fireball_charged                   = { en = "Staff fireball charged profile" },
+    br_dpt_fireball_explosion                       = { en = "Fireball explosion + glance" },
+    br_dpt_soul_rip                                 = { en = "Soul rip armor" },
+    br_dpt_shot_machinegun_shieldbreak              = { en = "Shot machinegun shotgun shield_break" },
+    br_dpt_shot_carbine                             = { en = "Shot carbine headshot" },
+    br_dpt_crossbow_bolt_repeating                  = { en = "Replace crossbow_bolt_repeating profile" },
+    br_dpt_dr_deus                                  = { en = "DR Deus 01 profile family (mega-toggle)" },
+    br_dpt_thrown_javelin                           = { en = "Thrown javelin (mega-toggle)" },
+    br_dpt_shot_sniper_pistol_dropoff               = { en = "Sniper pistol dropoff" },
+    br_dpt_shot_duckfoot                            = { en = "Duckfoot cleave" },
+    br_dpt_geiser                                   = { en = "Geiser staff" },
+    br_dpt_drake_pistol                             = { en = "Drake pistol profiles + blast (mega-toggle)" },
+    br_dpt_beam_shot                                = { en = "Beam shot near-attack" },
+    br_dpt_fire_spear_3                             = { en = "Fire spear 3 armor" },
+    br_dpt_arrow_machinegun                         = { en = "Arrow machinegun + carbine_shortbow + sniper_kruber cleave" },
+    br_dpt_burning_dot_firegrenade                  = { en = "Burning DOT firegrenade armor" },
+    br_dpt_frag_grenade                             = { en = "Frag grenade attack" },
+    br_dpt_throwing_axe_hs                          = { en = "Throwing axe headshot" },
 
-    br_hooks                                        = { en = "[Issue 321] Function Hooks" },
-    br_hook_flamethrower_cone                       = { en = "[Issue 321] ActionFlamethrower _select_targets rework" },
-    br_hook_beam_aim_toggle                         = { en = "[Issue 321] ActionBeam aim-toggle rework" },
-    br_hook_trueflight_start                       = { en = "[Issue 321 & 74] ActionTrueFlightBow start-action rework" },
-    br_hook_trueflight_fire                         = { en = "[Issue 321 & 74] ActionTrueFlightBow fire rework" },
-    br_hook_shield_slam                             = { en = "[Issue 321] ActionShieldSlam _hit rework (gate only)" },
+    br_hooks                                        = { en = "Function Hooks" },
+    br_hook_flamethrower_cone                       = { en = "ActionFlamethrower _select_targets rework" },
+    br_hook_beam_aim_toggle                         = { en = "ActionBeam aim-toggle rework" },
+    br_hook_trueflight_start                       = { en = "ActionTrueFlightBow start-action rework" },
+    br_hook_trueflight_fire                         = { en = "ActionTrueFlightBow fire rework" },
+    br_hook_shield_slam                             = { en = "ActionShieldSlam _hit rework (gate only)" },
     br_hook_shield_slam_description                 = { en = "Enables part of the shield slam rework. The full change also needs the Replace shield-slam damage profiles option here and the matching option in the Tweaker: Enemies mod." },
 
-    br_wield                                        = { en = "[Issue 321] Wield Permission Expansions" },
-    br_wield_es_2h_heavy_spear                      = { en = "[Issue 321] ES 2H heavy spear: add Merc + GK" },
-    br_wield_wh_1h_falchion                         = { en = "[Issue 321] WH falchion: add Zealot / BH / Captain / Priest" },
-    br_wield_wh_2h_sword                            = { en = "[Issue 321] WH 2h sword: add Zealot / BH / Captain / Priest" },
-    br_wield_wh_1h_axe                              = { en = "[Issue 321] WH 1h axe: add Zealot / BH / Captain / Priest" },
-    br_wield_wh_dw_axe_falchion                     = { en = "[Issue 321] WH DW axe-falchion: add Zealot / BH / Captain / Priest" },
+    br_wield                                        = { en = "Wield Permission Expansions" },
+    br_wield_es_2h_heavy_spear                      = { en = "ES 2H heavy spear: add Merc + GK" },
+    br_wield_wh_1h_falchion                         = { en = "WH falchion: add Zealot / BH / Captain / Priest" },
+    br_wield_wh_2h_sword                            = { en = "WH 2h sword: add Zealot / BH / Captain / Priest" },
+    br_wield_wh_1h_axe                              = { en = "WH 1h axe: add Zealot / BH / Captain / Priest" },
+    br_wield_wh_dw_axe_falchion                     = { en = "WH DW axe-falchion: add Zealot / BH / Captain / Priest" },
 
-    br_misc                                         = { en = "[Issue 321] Misc & Cross-Cutting" },
-    br_misc_chaos_raider_special_staggers           = { en = "[Issue 321] Chaos Raider special-attack stagger ignore array" },
+    br_misc                                         = { en = "Misc & Cross-Cutting" },
+    br_misc_chaos_raider_special_staggers           = { en = "Chaos Raider special-attack stagger ignore array" },
     br_misc_chaos_raider_special_staggers_description = { en = "Changes how Chaos Raiders ignore stagger during their special attacks. Included mainly for completeness; it fits better with the enemy tweaks." },
-    br_misc_tank_hit_mass_plague_monk               = { en = "[Issue 321] Plague monk tank hit-mass = 0.5" },
-    br_misc_status_dodge_count                      = { en = "[Issue 321] Generic dodge_count = 2 baseline" },
+    br_misc_tank_hit_mass_plague_monk               = { en = "Plague monk tank hit-mass = 0.5" },
+    br_misc_status_dodge_count                      = { en = "Generic dodge_count = 2 baseline" },
     br_misc_status_dodge_count_description          = { en = "Gives weapons without a set dodge count a baseline of two effective dodges. For the full change, also enable the matching option in the Tweaker: Enemies mod." },
-    br_misc_weapons_meta_init                       = { en = "[Issue 321] Weapons-table post-process init (recommended)" },
+    br_misc_weapons_meta_init                       = { en = "Weapons-table post-process init (recommended)" },
     br_misc_weapons_meta_init_description           = { en = "Applies the shared setup the other Big Rebalance options rely on, such as crosshair defaults and attack ranges. Recommended whenever any other Big Rebalance option is on." },
 
 ]==]
@@ -1284,7 +1284,7 @@ local loc = {
 -- `mod:localize` is unavailable during this pre-registration phase (#197).
 mod._wt_loc_raw = loc
 -- WT_DEV_OVERLAY_BEGIN:dev-tool-localization
-loc.enable_dev_anim_picker = { en = "[working] Dev: 3P Anim Picker (tuning only)" }
+loc.enable_dev_anim_picker = { en = "Dev: 3P Anim Picker (tuning only)" }
 loc.enable_dev_anim_picker_tooltip = { en = "Turns on the in-game third-person animation picker, which lists cross-character weapons that still need animation work and lets you choose each attack's third-person animation live, without a restart. Only the third-person view is affected; turn it off to hide the list." }
 
 -- Dev tooling loc keys: each dev module owns its own loc_keys() table; we
@@ -1297,26 +1297,6 @@ local _wt_dev_hold_pose_loc   = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_d
 for k, v in pairs(_wt_dev_anim_picker_loc.loc_keys()) do loc[k] = v end
 for k, v in pairs(_wt_dev_hold_pose_loc.loc_keys()) do loc[k] = v end
 
--- ---------------------------------------------------------------------------
--- v0.12.141-dev: COMPUTED Weapon-Availability STATUS TAGS (3P-only).
--- ---------------------------------------------------------------------------
--- The `unlock_*` labels above historically carried HAND-TYPED tag prefixes
--- ("[untested]" / "[confirmed working]" / bare). 299 of 947 entries were left
--- bare and several confirmed ports (Saltzpyre's Flail = es_1h_flail, Bardin's
--- Greataxe = dr_2h_axe) read "[untested]" or nothing. This pass REPLACES every
--- hand-typed prefix with a tag derived from the real per-(career, weapon) 3P
--- status (wt_port_status.lua — the same source the picker uses), so NO weapon
--- is untagged and the Availability menu stays in lockstep with the picker.
--- Vocabulary: [working] / [needs animations] / [needs offsets] / [untested].
--- 3P-only: status never reflects any 1P state (1P is universal — never touched).
-local _port_status = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_port_status")
-local _unlock_data = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_unlock_data")
-
--- Known careers (set form) so parse_unlock_id can find the career/weapon split.
-local _careers_set = {}
-if _unlock_data and _unlock_data.weapon_unlock_map then
-    for career in pairs(_unlock_data.weapon_unlock_map) do _careers_set[career] = true end
-end
 -- WT_DEV_OVERLAY_END:dev-tool-localization
 
 loc.cwv_variant_availability = { en = "Career Weapon Variants" }
@@ -1386,29 +1366,6 @@ for _, variant in ipairs(_cwv_catalog) do
         }
     end
 end
--- WT_DEV_OVERLAY_BEGIN:dev-status-decoration
--- Strip a leading "[...]" tag (any case) + following spaces from a label, so the
--- computed tag replaces the old hand-typed one instead of stacking on it.
-local function _strip_leading_tag(s)
-    return (s:gsub("^%s*%b[]%s*", ""))
-end
-
-for key, entry in pairs(loc) do
-    if type(key) == "string" and key:find("^unlock_") and type(entry) == "table" and entry.en then
-        local career, weapon_key = _port_status.parse_unlock_id(key, _careers_set)
-        if career and weapon_key then
-            local wt_version = mod._wt and mod._wt.MOD_VERSION or ""
-            local is_dev_build = wt_version:find("-dev", 1, true) ~= nil
-            local tag  = _port_status.decorate_tag(career, weapon_key, is_dev_build)
-            local base = _strip_leading_tag(entry.en)
-            -- #108: decorate_tag appends confirmed/pending 3P redirects and
-            -- shipped model substitutes only when MOD_VERSION carries `-dev`.
-            -- Release builds retain the base status tag byte-for-byte.
-            entry.en = tag .. " " .. base
-        end
-    end
-end
--- WT_DEV_OVERLAY_END:dev-status-decoration
 
 -- issue 611 follow-up: master labels depend only on source character + slot;
 -- the receiving CAREER lives in `wtmaster_<career>_<slot>_<source>`. Generate

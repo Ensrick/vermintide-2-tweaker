@@ -6,22 +6,22 @@ return {
         en = "Craft any weapon your career can use, with the properties and traits you choose. Open the Athanor (B key by default) to reach the modded crafting menu.",
     },
     forge_group = {
-        en = "[working] Athanor (Mod Weapon Crafting)",
+        en = "Athanor (Mod Weapon Crafting)",
     },
     forge_hotkey = {
-        en = "[verify-fix] [Issue 83] Open Athanor Crafting Menu",
+        en = "Open Athanor Crafting Menu",
     },
     forge_hotkey_description = {
-        en = "Opens the Athanor (the Winds of Magic forge) as a modded weapon crafting menu. Always works in the Keep and the Chaos Wastes hub. Inside missions it is experimental and follows the 'Allow crafting bench in mission' option in Tweaker: GUI's In-Mission Menus, the same toggle the Standard Crafting Bench uses.",
+        en = "Opens the Athanor (the Winds of Magic forge) as a modded weapon crafting menu. Always works in the Keep and the Chaos Wastes hub. Inside missions it follows the 'Allow crafting bench in mission' option in Tweaker: GUI's In-Mission Menus, the same toggle the Standard Crafting Bench uses.",
     },
     standard_crafting_hotkey = {
-        en = "[working] Open Standard Crafting Bench",
+        en = "Open Standard Crafting Bench",
     },
     standard_crafting_hotkey_description = {
         en = "Opens the standard Keep Smithy bench: salvage, craft, re-roll properties and traits, upgrade rarity, apply illusions, convert dust (not the Athanor). Works in the Keep and the Chaos Wastes; inside missions it follows the 'Allow crafting bench in mission' option in Tweaker: GUI's In-Mission Menus. You can also run /cim_craft_standard.",
     },
     auto_equip_new_weapons = {
-        en = "[verify-fix] [Issue 562] Automatically equip newly crafted weapons",
+        en = "Automatically equip newly crafted weapons",
     },
     auto_equip_new_weapons_description = {
         en = "ON (default): after a weapon is crafted successfully, equip that exact new item in the primary or secondary slot used to craft it. OFF: leave new weapons in the inventory without changing your equipped loadout. Accessories are unaffected.",
@@ -30,40 +30,40 @@ return {
     -- widget moved to gut's In-Mission Menus group; gut writes through to cim's
     -- setting, so the main-lua readers are unchanged.)
     base_power_level = {
-        en = "[untested] Base power level for new crafts",
+        en = "Base power level for new crafts",
     },
     base_power_level_description = {
         en = "Power level given to every weapon and jewelry item you craft at the Athanor or the standard bench (0 to 950 in steps of 50, default 300). Normal weapons cap at 300, though Chaos Wastes pickups can push higher.",
     },
     prefill_random_properties = {
-        en = "[untested] Pre-fill new crafts with random properties + trait",
+        en = "Pre-fill new crafts with random properties + trait",
     },
     prefill_random_properties_description = {
         en = "OFF (default): freshly crafted items start bare, with no properties or trait, ready for you to roll. ON: every craft starts with 2 random top-value properties and 1 random trait.",
     },
     movespeed_2pct_mode = {
-        en = "[untested] Movespeed: 5 bubbles at +2%% each (max +10%%)",
+        en = "Movespeed: 5 bubbles at +2%% each (max +10%%)",
     },
     movespeed_2pct_mode_description = {
         en = "OFF (default): the movement speed property gives +5%% and fills 1 bubble. ON: it can reach 5 bubbles at +2%% each for up to +10%%, but the full +10%% uses 5 of the trinket's 10 property slots instead of 1.",
     },
     allow_cw_traits = {
-        en = "[verify-fix] Allow Chaos Wastes traits on crafted weapons",
+        en = "Allow Chaos Wastes traits on crafted weapons",
     },
     allow_cw_traits_description = {
         en = "OFF (default): the forge hides the Chaos Wastes boon traits (like the extra-shot, shield-splinters and chain-lightning traits) that the normal crafting bench never offers. ON: slot-eligible boon traits become available to weapons you craft; melee-only and ranged-only traits stay in their vanilla weapon family. Affects traits only, not properties.",
     },
     allow_any_trait_property = {
-        en = "[untested] Allow any trait and property on any weapon",
+        en = "Allow any trait and property on any weapon",
     },
     allow_any_trait_property_description = {
         en = "OFF (default): a crafted item can only take traits and properties from its own type (a melee weapon gets melee traits, a necklace gets necklace traits, and so on). ON: every trait and every property becomes available on any weapon or accessory you craft. Includes the Chaos Wastes traits, so this covers the option above.",
     },
     inventory_group = {
-        en = "[working] Modded Inventory",
+        en = "Modded Inventory",
     },
     show_only_modded_weapons = {
-        en = "[untested] Show only modded weapons in inventory",
+        en = "Show only modded weapons in inventory",
     },
     show_only_modded_weapons_description = {
         en = "Hides normal weapons from your inventory and equip screens, leaving only modded ones. Crafting materials and cosmetics are unaffected.",
@@ -71,16 +71,16 @@ return {
     -- persist_modded_loadouts / restore_modded_loadout loc entries REMOVED
     -- 2026-06-30 with the toggles (loadout persistence moved to Tweaker: GUI).
     ignore_unloadable_items = {
-        en = "[untested] Ignore items from inactive mods (no chat spam)",
+        en = "Ignore items from inactive mods (no chat spam)",
     },
     ignore_unloadable_items_description = {
         en = "When ON, saved crafts that need an item from a mod you no longer have active are skipped quietly, without the usual chat messages. They return automatically if you re-enable that mod.",
     },
     import_group = {
-        en = "[working] Import",
+        en = "Import",
     },
     saveweapon_import_hotkey = {
-        en = "[untested] Import from SaveWeapon",
+        en = "Import from SaveWeapon",
     },
     saveweapon_import_hotkey_description = {
         en = "Press the assigned key (or run /cim_import_saved_weapons) to bring every weapon saved with the SaveWeapon mod into your modded inventory. Running it again skips anything already imported, and items from DLC you do not own are left out.",
