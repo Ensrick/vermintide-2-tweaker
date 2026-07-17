@@ -2381,15 +2381,8 @@ local _send_la_apply
 local _local_la_equips = setmetatable({}, { __mode = "k" })
 
 -- v0.8.55-dev: track the backend_id of the weapon currently being customized.
--- The HeroWindowItemCustomization screen owns this, but when the user cycles
--- main-hand illusions in the row-1 picker, vanilla `_on_illusion_index_pressed`
--- rebuilds the preview using the pending skin's IML entry — that entry has
--- no `backend_id`, so our `BackendUtils.get_item_units` hook (which reads
--- `_offhand_selection[backend_id]`) finds nothing and the shield preview
--- snaps back to the new skin's paired shield. Stashing the active backend_id
--- module-side lets the hook fall back to it whenever the call comes in with
--- backend_id == nil. Cleared on customization-screen exit so it doesn't leak
--- across screens.
+-- Pending weapon-skin rows omit backend_id. Keep the customization screen's
+-- exact item identity for the policy-gated preview fallback, then clear on exit.
 local _active_customization_backend_id = nil
 mod._active_customization_item_type = nil
 
@@ -2961,9 +2954,7 @@ mod._la_restore_offhand_selections = function()
         end
     end
     if needs_la and type(la_pools) ~= "table" then return end
-    -- Issue 695: retried per frame from mod.update until restore completes, so
-    -- probe _interfaces before get_interface - the miss path warns per call
-    -- (backend_manager_playfab.lua:203) and floods the pre-login log.
+    -- #695: avoid warning-producing get_interface calls before backend readiness.
     local backend_mgr = Managers and Managers.backend
     local backend_items = backend_mgr and backend_mgr._interfaces
         and backend_mgr._interfaces.items and backend_mgr:get_interface("items")
@@ -3623,8 +3614,7 @@ mod:hook("HeroWindowItemCustomization", "_setup_illusions", function(func, self,
 
     _dbg("[offhand] _setup_illusions called, item=%s", tostring(item and item.key))
 
-    -- v0.8.55-dev: stash for the BackendUtils.get_item_units hook fallback.
-    -- See note on `_active_customization_backend_id` declaration.
+    -- Stash the exact item identity for pending-skin preview reconstruction.
     _active_customization_backend_id = item and item.backend_id or nil
     mod._active_customization_item_type = _get_weapon_key_from_item(item)
     _trace("SCREEN setup_illusions item=%s set active_customization_bid=%s item_type=%s",
@@ -4702,21 +4692,8 @@ if BackendUtils then
             end
         end
 
-        -- Resolve the actual skin: caller may pass nil and rely on backend
-        -- lookup. Mirror BackendUtils' OWN resolution chain so we can decide
-        -- whether to apply the override:
-        --   1. explicit `skin` arg
-        --   2. explicit `backend_id` arg -> get_skin
-        --   3. `item_data.backend_id` (vanilla stamps this onto item_data
-        --      during equipment loadout resync) -> get_skin
-        -- Step 3 is critical for `GearUtils.create_equipment`, which calls
-        -- `BackendUtils.get_item_units(item_data, nil, nil, career_name)` —
-        -- both args nil — and relies on item_data.backend_id internally.
-        -- Without this our hook bailed at has_skin=false for every in-game
-        -- equip, so the user's row-2 selection never applied to the player
-        -- body and worse, never gated `wpn_*_runed_01` paths whose package
-        -- the engine hadn't preloaded → "Unit not found" crash in
-        -- world.spawn_unit. Documented in CHANGELOG v0.7.101-dev.
+        -- Mirror BackendUtils' skin resolution chain, including the backend_id
+        -- stamped on item_data during loadout resync (v0.7.101-dev).
         local resolved_skin = skin
         local item_type = item_data and item_data.item_type
         if item_type == "weapon_skin" and item_data.matching_item_key then
@@ -4734,25 +4711,8 @@ if BackendUtils then
             mod._la_instance_policy.resolve_preview_backend_id(
                 backend_id or (item_data and item_data.backend_id), item_type,
                 active_preview_bid, active_preview_item_type)
-        -- v0.8.55-dev: customization-screen preview-cycle path passes nil
-        -- for both `backend_id` AND item_data.backend_id (preview item is
-        -- the pending skin's IML entry, no backend stamped). Fall back to
-        -- the screen-level active backend_id so `_offhand_selection` lookup
-        -- still hits and the shield preview doesn't flip back to the new
-        -- skin's paired shield when user cycles main-hand illusions.
-        --
-        -- v0.9.0.13-hotfix: GATE THE FALLBACK on NOT being in a husk wield.
-        -- The fallback was a CROSS-BLEED catastrophe for multiplayer: HUSK
-        -- wields (other players' equips) call get_item_units with backend_id
-        -- nil and item_data.backend_id nil. Without this gate, the fallback
-        -- pulled in the LOCAL VIEWER's `_active_customization_backend_id`,
-        -- looked up THEIR offhand pick, and painted THEIR shield mesh onto
-        -- ANY peer's wielded weapon — including an elf player's spear+shield.
-        -- User report 2026-05-19: "the stupid shield now taking the place of
-        -- the 'elf's spear and shield' weapon's shield". The fallback is only
-        -- meaningful when the local user is cycling skins in the customization
-        -- screen — _current_husk_wield being SET means we're inside a husk's
-        -- wield, NOT a customization preview, so skip the fallback.
+        -- Pending-skin previews may use the exact active item only when the
+        -- family matches. Husk rendering never consumes this local fallback.
         if not effective_backend_id and not _current_husk_wield then
             _trace("RESOLVE preview identity rejected item_type=%s active_bid=%s active_item_type=%s state=%s",
                 tostring(item_type), tostring(_active_customization_backend_id),
@@ -4766,47 +4726,21 @@ if BackendUtils then
             end
         end
 
-        -- HARD GATE: only override when an illusion (skin) is actually
-        -- present. The base weapon template has no skin and the user's
-        -- expectation is that we ADD options on top of illusions, never
-        -- mutate the base/template visuals. Without this gate, picking
-        -- an LA option on a skinned weapon also leaks the LA mesh+texture
-        -- onto the base weapon (same item_type) in inventory and other
-        -- spawns. See user report 2026-05-01.
+        -- Base templates have no skin; offhand customization must not mutate them.
         if not resolved_skin or resolved_skin == "" then return result end
 
-        -- v0.8.32: read selection by backend_id (per-weapon-instance), not
-        -- by item_type. effective_backend_id resolved earlier in this hook
-        -- via the (skin arg | backend_id arg | item_data.backend_id) chain.
-        -- v0.9.9.4-dev: per-hand iteration. Each hand_field key in `sel`
-        -- writes to the matching `result[hand_field]` independently. Single-
-        -- mount weapons only have `left_hand_unit` populated (legacy
-        -- behavior); multi-mount weapons (rapier+pistol, dual-wields) may
-        -- have BOTH hands set.
+        -- Selections are per backend item and per hand, never item-type globals.
         if effective_backend_id then
             _migrate_legacy_offhand_selection(effective_backend_id)
         end
-        -- v0.9.41-dev (#150): while the customization screen is open, do NOT
-        -- apply the in-progress offhand mesh override to the LIVE in-keep /
-        -- in-mission body (create_equipment, flagged by _in_create_equipment).
-        -- Only the customization PREVIEWER should reflect the browse pick; the
-        -- live body commits on screen exit via the deferred broadcast +
-        -- pulse-wield. Without this, mousing/clicking illusions mutated the
-        -- equipped weapon on the player's own body. Detect "browsing this item"
-        -- via effective_backend_id == _active_customization_backend_id. The
-        -- previewer's own get_item_units call is NOT inside create_equipment, so
-        -- its override (the correct preview) still applies. Missions are
-        -- unaffected (screen closed → _active_customization_backend_id is nil).
+        -- #150: browsing changes only the preview; the live body commits on exit.
         local _suppress_browse_override = _in_create_equipment
             and _active_customization_backend_id ~= nil
             and effective_backend_id == _active_customization_backend_id
         if _suppress_browse_override then
             _dbg("[offhand] suppress browse-override on live body bid=%s (customization screen open)",
                 tostring(effective_backend_id))
-            -- v0.9.43-dev RESOLVE trace: the #150 live-body suppression fired.
-            -- This is the gate the teammate flagged as bypassed on hover — if
-            -- the bad paints route through loot_previewer (not create_equipment),
-            -- _in_create_equipment is FALSE here so this never fires for them.
+            -- Provenance for the live-body browse suppression gate.
             _trace("RESOLVE suppress-browse bid=%s (in_create_equipment + active_cust match) → live body mesh override SUPPRESSED",
                 tostring(effective_backend_id))
         end
@@ -4827,15 +4761,8 @@ if BackendUtils then
                 if type(opt) == "table"
                     and mod._la_instance_policy.selection_owned(opt, selected_pool) then
                     local override_unit = opt.unit or opt.intended_unit
-                    -- v0.9.45-dev (BUG 1/2): variant-aware resolution for kind=
-                    -- "unit" LA shields. For those picks resolve the override mesh
-                    -- + its 3P readiness through the SAME helper the husk path uses
-                    -- (_resolve_authored_offhand_mesh → new_units[1]/[2]) instead of
-                    -- _override_package_ready's `.."_3p"` suffix derivation, so the
-                    -- host's own body and the husk view can't disagree on whether
-                    -- the mesh is swappable. Non-LA picks AND kind="texture" LA
-                    -- picks (no custom mesh) keep the legacy _override_package_ready
-                    -- gate (their intended_unit is a vanilla mesh).
+                    -- LA unit variants share the husk path's authored 1P/3P
+                    -- resolution; vanilla and texture-only picks retain readiness.
                     local resolved_unit, resolved_ready
                     if opt.la_armoury_key then
                         local la_1p, _la_3p, la_ready = _resolve_authored_offhand_mesh(opt.la_armoury_key)
@@ -4859,12 +4786,7 @@ if BackendUtils then
                         resolved_unit = override_unit
                         resolved_ready = (override_unit and _override_package_ready(override_unit)) or false
                     end
-                    -- v0.9.43-dev RESOLVE trace: full provenance for the offhand
-                    -- mesh-override decision on the LOCAL/live body + previewer.
-                    -- `ready` now reflects the variant-aware resolution above;
-                    -- `suffix3p_ok` is still logged so the trace shows whether the
-                    -- old `.."_3p"` suffix would have resolved (they agree for
-                    -- today's shields, where new_units[2] == new_units[1].."_3p").
+                    -- Keep suffix readiness in the trace for legacy-path comparison.
                     local variant = opt.la_armoury_key
                         and _resolve_authored_offhand_variant(opt.la_armoury_key)
                     local cg = Application and Application.can_get
