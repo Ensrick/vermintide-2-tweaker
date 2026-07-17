@@ -1,5 +1,25 @@
 # Crafting in Modded Changelog
 
+## 0.8.90-dev (2026-07-17): #628 make normalization consume canonical identity [verify-fix]
+
+- Audited the synthetic-item construction and registration boundary against the
+  closed crafting, selector, inventory, Athanor, CWV, and WOC issue families.
+  The remaining deterministic split was inside the shared contract itself:
+  `normalize_record` accepted only `item_key` / `ItemId` / `key`, while salvage
+  and acquisition selection consumed the fuller canonical identity ladder.
+- Made normalization delegate to `canonical_item_key`, including the supplied
+  backend id for legacy `cwv_<key>_NNN` rows. Reconstructed UUID rows carrying
+  `CustomData.cim_acquisition_key`, nested `data.cwv_key` rows, and legacy
+  base-shaped CWV rows now produce the same exact acquisition identity as every
+  selector and salvage consumer.
+- Added engine-free and runtime regression coverage for all three previously
+  divergent shapes. Vanilla identity and the immutable WOC relic exclusion are
+  unchanged.
+
+**Verification:** run `/cim_regression_test` and require
+`issue628_identity_resolvers_unified` PASS, then repeat #628's existing solo
+craft, inventory, salvage, exact-delete, and restart matrix.
+
 ## 0.8.89-dev (2026-07-17): #540 extract regression registrations [tooling]
 
 - Moved the 74-check late `/cim_regression_test` block into the late-loaded

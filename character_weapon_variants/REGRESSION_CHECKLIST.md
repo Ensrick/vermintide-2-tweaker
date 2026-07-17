@@ -11,8 +11,8 @@ Last updated: 2026-07-17.
 | Field | Check |
 |---|---|
 | Scope | Architecture declarations only. This does not change a renderer, descriptor, replay coordinator, or peer transport and does not make #660 verification-ready. |
-| Registry | `qa/appearance_contracts.psd1` initially records the migrated CWV exact-unit-identity concern across owner 1P/3P, bot, remote husk, inventory preview, and item browser. Spawn/equip/transition/hot-join/parity edges are structurally covered; respawn remains explicitly deferred and preview-open is synchronous rather than a world replay edge. |
-| Detection | `qa/check_appearance_contracts.ps1` blocks when any registered concern omits a canonical surface, replay edge, or test list; a covered cell must map to an existing named test. `-SelfTest` plants all failure classes. Passing means registry/test wiring is complete, not that the in-game matrix passed. |
+| Registry | `qa/appearance_contracts.psd1` records the migrated CWV exact-unit-identity concern across the complete canonical census. Owner 1P/3P, bot, remote husk, inventory, cosmetic, and Athanor cells are structurally covered; ordinary crafting, lobby, score, Hold-Tab, persisted-load, customization/style, respawn, peer-ready/rejoin, lobby/score creation, and mod-disable restore remain explicitly deferred where no generic adapter exists. |
+| Detection | `qa/check_appearance_contracts.ps1` owns immutable minimum surface, replay-edge, and concern vocabularies. It blocks vocabulary contraction as well as a contract missing a cell/test; covered cells must map to existing named tests. `-SelfTest` plants all failure classes. Passing means registry/test wiring is complete, not that the in-game matrix passed. |
 
 ## #660 Canonical preview-unit descriptor slice
 
