@@ -19,12 +19,16 @@ M.RELEASE_SOUND = "Play_winds_death_gameplay_spirit_release"
 M.LOOP_SOUND = "Play_winds_death_gameplay_spirit_loop"
 M.EXPLODE_SOUND = "Play_winds_death_gameplay_spirit_explode"
 M.EXPLOSION = "death_spirit_bomb"
+M.DAMAGE_TYPE = "death_explosion"
+M.DAMAGE_SOURCE = "undefined"
+M.HEAL_TYPE = "mutator"
 
 -- Rank-one Shyish values from WindSettings.death.spirit_settings.  The weapon
 -- is not a Weave and therefore has no wind strength to index; the bounded
 -- rank-one values preserve the native behavior without consulting backend or
 -- run progression state.
-M.CONVERT_AMOUNT = 5
+M.SPIRIT_DAMAGE = 5
+M.CONVERT_AMOUNT = M.SPIRIT_DAMAGE
 M.DELAY_TIME = 3
 M.CHASE_SPEED = 1
 M.CHASE_TIME = 6
@@ -40,6 +44,17 @@ function M.package_contract(dlc_settings)
 		return nil, "dlc_package_contract_missing"
 	end
 	return M.PACKAGE, "source_backed"
+end
+
+function M.package_ready(package_manager)
+	if type(package_manager) ~= "table"
+			or type(package_manager.has_loaded) ~= "function" then
+		return false, "package_manager_missing"
+	end
+	local ok, loaded = pcall(package_manager.has_loaded, package_manager,
+		M.PACKAGE, M.PACKAGE_REFERENCE)
+	if not ok then return false, "package_query_rejected" end
+	return loaded == true, loaded == true and "loaded" or "load_pending"
 end
 
 function M.kill_is_attributable(wielding_relic, damage_type,
@@ -63,14 +78,21 @@ function M.audio_contract()
 	}
 end
 
--- Native Shyish leaves one permanent health when the spirit reaches its
--- target (`mutator_death.lua:update_spirits`). PlayerUnitHealthExtension's
--- conversion API preserves total health, so clamp the requested conversion
--- to that same one-green-health floor before calling it.
+-- Exact mutator_death.lua contact amount: damage five when that is below total
+-- health; otherwise damage permanent health minus one. The paired native
+-- `mutator` heal turns the accepted damage into temporary health.
+function M.contact_damage(current_permanent_health, current_temporary_health)
+	if type(current_permanent_health) ~= "number"
+			or type(current_temporary_health) ~= "number"
+			or current_permanent_health <= 0 then return 0 end
+	if M.SPIRIT_DAMAGE < current_permanent_health + current_temporary_health then
+		return M.SPIRIT_DAMAGE
+	end
+	return math.max(current_permanent_health - 1, 0)
+end
+
 function M.convert_amount(current_permanent_health)
-	if type(current_permanent_health) ~= "number" then return 0 end
-	return math.max(math.min(M.CONVERT_AMOUNT,
-		current_permanent_health - 1), 0)
+	return M.contact_damage(current_permanent_health, 0)
 end
 
 return M

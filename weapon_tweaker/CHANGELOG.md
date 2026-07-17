@@ -9,6 +9,22 @@
 
 **Solo verification:** Open Mod Tweaker > Weapons > Weapon Availability, then one career's Melee or Ranged group. Confirm only the source-character master rows are shown and each has a gear. Toggle a master on/off and confirm all children change. Open its gear, enable only some weapons, return, and confirm the selected weapons remain on while the master remains off. Enable the last child and confirm the master becomes on. Run `/wt_regression_test` and require `PASS: issue611_master_toggle_wiring`.
 
+## 0.12.268-beta (2026-07-16) - weapon-bound career ability integration [verify-fix]
+
+- Replaced first-row-only career-action injection with the same engine-free
+  provider-neutral integration used by Weapons of Chaos. Vanilla iterates every
+  `activated_ability` row against the currently wielded template; WT now does
+  the same for enabled native cross-character ports and live CWV templates.
+- Covered the complete current matrix: Ranger Veteran, Waywatcher (both normal
+  and piercing rows), Bounty Hunter, Pyromancer, Grail Knight, Outcast
+  Engineer, Sister of the Thorn, Warrior Priest, and Necromancer.
+- Preserved exact cleanup ownership: WT records and removes only rows it added;
+  an action already authored by a donor template is never removed. Missing
+  career settings or action templates emit one bounded integration error.
+- Added executable shared-helper tests for all ten actions, alternate rows,
+  existing-row identity, and incomplete providers. In-game confirmation remains
+  required; this change is not shipped by this commit.
+
 ## 0.12.267-beta (2026-07-16) - #611 [verify-fix] per-career master scope
 
 - Moved every Weapon Availability master inside an individual receiving career's Melee or Ranged subgroup. A master now changes only that career, never the other careers of the same character.

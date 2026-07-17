@@ -113,7 +113,8 @@ return function(H, repo_root)
             H.equal(contains(row.careers, "wh_priest"), false)
         end
         H.truthy(availability:find("variant.conditional_careers or {}", 1, true))
-        H.truthy(availability:find("_career_action_injections[item.template]", 1, true))
+        H.truthy(availability:find("_inject_career_actions(", 1, true))
+        H.truthy(availability:find("_career_weapon_actions.install", 1, true))
         H.truthy(data:find("if _cwv_present then", 1, true))
         for _, id in ipairs({
             "unlock_es_mercenary_dr_shield_axe", "unlock_es_huntsman_dr_shield_axe",

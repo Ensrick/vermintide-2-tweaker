@@ -39,7 +39,8 @@ if arg[1] == "--self-test" then
 end
 
 local suites = {
-    "test_shared_weapon_appearance",
+	"test_shared_weapon_appearance",
+	"test_shared_career_weapon_actions",
     "test_attack_labeler",
     "test_crt_ale_decay",
     "test_crt_ale_animation",

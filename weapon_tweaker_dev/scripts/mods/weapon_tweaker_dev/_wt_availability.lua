@@ -27,6 +27,8 @@ local _cwv_conditional   = WT.cwv_conditional_managed
 local _cwv_ownership     = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_cwv_ownership")
 local _cwv_variant_catalog = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_cwv_variant_catalog")
 local _cwv_availability_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_cwv_availability_policy")
+local _career_weapon_actions = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/_lib_career_weapon_actions")
 WT.cwv_variant_catalog = _cwv_variant_catalog
 WT.cwv_ownership         = _cwv_ownership
 WT.cwv_availability_policy = _cwv_availability_policy
@@ -207,9 +209,25 @@ end
 -- accumulate stale ability-action entries on weapon templates.
 local _career_action_injections = {}
 
+local function _inject_career_actions(template, template_key, career_name, failures)
+    local report = _career_weapon_actions.install(template, { career_name },
+        CareerSettings, ActionTemplates)
+    for _, action_name in ipairs(report.installed_names or {}) do
+        _career_action_injections[template_key] =
+            _career_action_injections[template_key] or {}
+        _career_action_injections[template_key][action_name] = true
+    end
+    for _, action_name in ipairs(report.missing_actions or {}) do
+        failures[action_name] = true
+    end
+    for _, career in ipairs(report.missing_careers or {}) do
+        failures["career:" .. tostring(career)] = true
+    end
+end
+
 -- CLARIFY: when a cross-career weapon is unlocked, that weapon's template
--- needs the unlocking career's ABILITY action (e.g. Foot Knight's shoulder
--- charge) so the ability still works while wielding the unlocked weapon.
+-- needs the unlocking career's ABILITY action (e.g. Ranger Veteran's smoke
+-- bomb) so the ability still works while wielding the unlocked weapon.
 -- Without this patch, activating the career ability on a cross-career weapon
 -- silently does nothing because the action isn't on that template.
 local function patch_career_actions_on_weapons()
@@ -225,29 +243,19 @@ local function patch_career_actions_on_weapons()
     end
     _career_action_injections = {}
     local has_cwv = _cwv_active()
+    local failures = {}
 
     for career, weapons in pairs(weapon_unlock_map) do
-        local cs = CareerSettings[career]
-        if cs then
-            local ability_list = cs.activated_ability
-            local ability = ability_list and ability_list[1]
-            local action_name = ability and ability.action_name
-            local action_template = action_name and ActionTemplates[action_name]
-            if action_template then
-                for _, weapon_key in ipairs(weapons) do
-                    local yields_to_cwv = _cwv_ownership.should_yield_native(
-                        career, weapon_key, has_cwv, _cwv_conditional,
-                        _cwv_replacement_ready(weapon_key))
-                    if not yields_to_cwv and mod:get("unlock_" .. career .. "_" .. weapon_key) then
-                        local item = rawget(ItemMasterList, weapon_key)
-                        local tmpl_key = item and item.template
-                        local tmpl = tmpl_key and Weapons[tmpl_key]
-                        if tmpl and tmpl.actions and not tmpl.actions[action_name] then
-                            tmpl.actions[action_name] = action_template
-                            _career_action_injections[tmpl_key] = _career_action_injections[tmpl_key] or {}
-                            _career_action_injections[tmpl_key][action_name] = true
-                        end
-                    end
+        for _, weapon_key in ipairs(weapons) do
+            local yields_to_cwv = _cwv_ownership.should_yield_native(
+                career, weapon_key, has_cwv, _cwv_conditional,
+                _cwv_replacement_ready(weapon_key))
+            if not yields_to_cwv and mod:get("unlock_" .. career .. "_" .. weapon_key) then
+                local item = rawget(ItemMasterList, weapon_key)
+                local tmpl_key = item and item.template
+                local tmpl = tmpl_key and Weapons[tmpl_key]
+                if tmpl and tmpl.actions then
+                    _inject_career_actions(tmpl, tmpl_key, career, failures)
                 end
             end
         end
@@ -263,21 +271,22 @@ local function patch_career_actions_on_weapons()
             if item and item.cwv_variant == true then
                 for _, career in ipairs(variant.careers or {}) do
                     if _cwv_availability_policy.is_enabled(_get_setting, variant.key, career) then
-                        local cs = CareerSettings[career]
-                        local ability = cs and cs.activated_ability and cs.activated_ability[1]
-                        local action_name = ability and ability.action_name
-                        local action_template = action_name and ActionTemplates[action_name]
                         local tmpl = item.template and Weapons[item.template]
-                        if action_template and tmpl and tmpl.actions and not tmpl.actions[action_name] then
-                            tmpl.actions[action_name] = action_template
-                            _career_action_injections[item.template] =
-                                _career_action_injections[item.template] or {}
-                            _career_action_injections[item.template][action_name] = true
+                        if tmpl and tmpl.actions then
+                            _inject_career_actions(
+                                tmpl, item.template, career, failures)
                         end
                     end
                 end
             end
         end
+    end
+    if next(failures) then
+        local names = {}
+        for name in pairs(failures) do names[#names + 1] = name end
+        table.sort(names)
+        mod:error("[wt:career-actions] incomplete weapon ability integration: %s",
+            table.concat(names, ","))
     end
 end
 
