@@ -198,14 +198,24 @@ loads `_TJB_HELD_UNIT` and its `_3p` under ref `"cwv_javelin_bomb"` inside the c
 +2 refs per command use. Fix: same has_loaded gate, or hoist to a `do ... end` one-shot with a local
 `_loaded` latch like the axe-shield block (`:4441-4444`).
 
-### 5.4 P2 - cosmetics offhand preload: 74 SYNC loads at boot
+### 5.4 Resolved P2 - cosmetics offhand preload lifecycle (#565)
 
-`cosmetics_tweaker.lua:2080-2090` sync-loads (async=false) every offhand/shield package at
-force-load-all time; the sync rationale ("races the user's Apply click") only applies to the
-on-demand path. Boot-time bulk preloads should be `async=true, prioritize=false` like every vanilla
-bulk loader (`level_transition_handler.lua:519-529`), keeping sync only for the just-before-Apply
-case. The dedupe set and the deliberate session retention (`:3253`, "no unload path") are already
-correct; only the blocking flag fights the engine.
+The pre-fix bulk path performed 74 Cosmetics-owned synchronous loads at startup and produced a
+repeatable ~1.58 s `Application::update` stall. The current path queues each load with
+`asynchronous=true, prioritize=false` (`cosmetics_tweaker.lua:1488-1502`), while the render gate
+requires both the 1P and 3P unit resources to pass `Application.can_get` before exposing an override
+(`:1625-1636`). An unfinished load therefore falls back to the base mesh instead of blocking startup
+or reaching `World.spawn_unit` early.
+
+Ownership is bounded rather than session-retained: the pure generation ledger deduplicates each
+package path, and each accepted acquisition takes one private `cosmetics_tweaker_offhand` reference
+(`:1427-1433`, `:1491-1502`). `mod.on_unload` calls `_release_offhand_packages`; release invalidates
+the generation first, then unloads the exact sorted ownership snapshot and drains any duplicate
+private references (`:1512-1573`). This ordering matters because vanilla can retain our callback on
+a shared in-flight handle after our reference is removed (`package_manager.lua:41-48,196-237`): a
+late callback must fail its generation token rather than resurrect cleared state. The contract is
+locked by `offhand_preload_async_bounded_565` and
+`qa/lua/tests/test_cos_offhand_preload_lifecycle.lua`.
 
 ### 5.5 P2 - wt / cwv one-shot boot force-loads: correct, keep as the template
 
