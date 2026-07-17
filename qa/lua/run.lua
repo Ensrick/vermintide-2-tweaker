@@ -196,6 +196,7 @@ local suites = {
     "test_ct_progressive_elite_policy",
     "test_ct_resume_policy",
     "test_cos_offhand_preload_lifecycle",
+    "test_cos_runtime_modules",
     "test_cos_offhand_names",
     "test_cos_item_presentation",
     "test_cos_composite_icons",

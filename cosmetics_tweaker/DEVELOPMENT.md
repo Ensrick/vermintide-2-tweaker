@@ -2,9 +2,9 @@
 
 Detailed technical reference for the `cosmetics_tweaker` mod. Read alongside `CHANGELOG.md` (version-by-version history) and `TODO.md` (open work).
 
-## Module map (v0.9.103-dev Phase 4a OOP split)
+## Module map (Phase 4b OOP split)
 
-`cosmetics_tweaker.lua` is still the primary file (~10,480 lines) — this is an
+`cosmetics_tweaker.lua` is still the primary file (~10,004 lines) — this is an
 IN-PROGRESS decomposition (OOP_REFACTOR_PLAN WS5), not a finished one. Phase 1
 carved out the three cleanest self-contained concerns; Phase 2 carved out the
 render-path scale/grip apply layer; Phase 3 carved out the glow apply subsystem.
@@ -12,7 +12,9 @@ The LA-bridge + husk, the HeroWindowItemCustomization offhand-picker UI suite, t
 per-peer glow broadcast RPC layer, and the render-path HOOKS themselves all still
 live in the entry file, pending later phases (run in fresh sessions). Phase 4a
 carved out the three #421 weapon-skin wire-safety senders as one indivisible
-network boundary. Note the split carried forward from Phase 2 and extended in Phase 3:
+network boundary. Phase 4b moved the lazy runtime-check registrations, glow-probe
+tools, and LA read-only commands behind explicit install contracts without moving
+their registration order. Note the split carried forward from Phase 2 and extended in Phase 3:
 the render HOOKS (`create_equipment` / `_spawn_item_post` /
 `LootItemUnitPreviewer.spawn_units`) stay in the entry, but the scale/grip apply
 helpers (Phase 2) and the glow apply / owner-peer helpers (Phase 3) they call moved
@@ -39,7 +41,10 @@ exactly once from the manifest.
 
 | Module | Owns / public surface (on `mod._cos` unless noted) |
 |---|---|
-| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest (`_la_prefix_embedded`, `_material_hijack_embedded`, `_moreitemslibrary_embedded`, `_cosmetic_unlocks`=`U`, `_la_bridge`, `_tpe`, `_glow_picker`, `_cos_glow_badge_policy`, `_la_persistence`, `_la_okri`, `_ui_dump`, `_cos_diag_lasync`), the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks (`on_game_state_changed`/`on_setting_changed`/`on_disabled`/`on_unload`), and everything not yet extracted: the render-path HOOKS (`create_equipment` / `_spawn_item_post` / `spawn_units`; their scale/grip apply helpers moved to `_cos_render` in Phase 2 and their glow apply/owner-peer helpers to `_cos_glow` in Phase 3), the per-peer glow broadcast RPC layer + `/glow_status`+`/glow_trace` commands (the glow APPLY pipeline moved to `_cos_glow`), LA-bridge integration + husk, offhand picker + customization UI, the #377 manual glow editor/badge presentation, the #282 MH release lifecycle, and the `/cos_regression_test` suite. |
+| `cosmetics_tweaker.lua` (entry) | MOD_VERSION (launcher parses it here — never move it), the load banner/echo, the top embed manifest, the `mod._cos` namespace setup + `_cos_*` manifest, the mod-wide lifecycle callbacks, the `/cos_regression_test` registry/command lifecycle, and everything not yet extracted: render-path hooks, per-peer glow broadcast RPCs, LA-bridge/husk integration, offhand/customization UI, the #377 editor/badge presentation, and #282 MH release lifecycle. |
+| `_cos_runtime_checks.lua` | Registers the 50 late runtime checks in historical order plus the single `/verify_gk_set` command. Receives every entry-private table/helper through one explicit dependency table; closures remain lazy so live state is inspected only when the registry runs. It owns no hooks, RPCs, or lifecycle callback. |
+| `_cos_glow_probe.lua` | Owns `/glow_dump`, `/glow_probe`, `/glow_scan`, `/glow_scan_stop`, `/glow_restore`, `/la_shield_glow_probe`, both bounded scan tick functions, and the exported `wielded_units_for_probe` helper consumed by the later manual picker command. It receives only player-safety, unit-liveness, and log-flush helpers. |
+| `_cos_la_commands.lua` | Owns the read-only LA diagnostic commands `/la_dump`, `/la_trace`, `/la_force`, `/la_attach`, `/la_loadout`, and `/la_hats`. Captures the already-loaded bridge plus career/log helpers; no hook or lifecycle ownership. |
 | `_cos_diagnostics.lua` | Read-only dump/probe chat commands (`/flush_log`, `/dump_glows`, `/dump_skin_rarities`, `/dump_all_names`, `/check_vmf`, `/probe_hat`, `/probe_cosmetics`). Reads `mod._cos.flush_log`; no exports. |
 | `_cos_illusions.lua` | Custom weapon-illusion + LA shield skin injection into `ItemMasterList`/`WeaponSkins`/`NetworkLookup` (`_custom_illusions`, `_la_shield_skin_specs`), the `get_unlocked_weapon_skins` unlock hook, the `_G.Localize` display-name hook. Populates `mod._cos.custom_skin_keys`; exports `mod._cos.custom_illusions`. |
 | `_cos_unlocks.lua` | Per-career cosmetic unlocks (`apply_cosmetic_unlocks` + `_CHARACTER_CAREERS`), Unlock-All portrait frames, vanilla-unobtainable cosmetic grants, the two `PlayFabMirrorAdventure` hooks, `/frames_status` + `/cosmetics_status`. Exports `mod._cos.apply_cosmetic_unlocks`. |
@@ -70,6 +75,11 @@ their internals alone.
 
 - **New diagnostic dump/probe command** → `_cos_diagnostics.lua`. Route through
   engine `printf` / `mod:info` (users run with mod logs OFF), `_flush_log` at the end.
+  Extend `_cos_glow_probe.lua` only for the existing wielded-material scan family,
+  and `_cos_la_commands.lua` only for commands that directly inspect `LA_BRIDGE`.
+- **New `/cos_regression_test` registration** → `_cos_runtime_checks.lua`. Add its
+  dependency to the install table if it needs entry-private state; never make the
+  module dofile another owner or eagerly snapshot runtime state.
 - **New custom illusion / weapon-skin or LA-shield injection** →
   `_cos_illusions.lua`. Register the key into `mod._cos.custom_skin_keys` so the
   wire-safety senders null it on the wire.

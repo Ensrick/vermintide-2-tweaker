@@ -13,7 +13,9 @@ return function(H, repo_root)
         file:close()
         return value
     end
-    local entry, gk = read(entry_path), read(gk_path)
+    local runtime_path = repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua"
+    local entry, gk = read(entry_path) .. read(runtime_path), read(gk_path)
 
     H.test("component localization keys are stable and independently qualified", function()
         H.equal(policy.SCHEMA_VERSION, 1)
