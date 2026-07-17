@@ -27,6 +27,7 @@ function M.install(mod, rt_register, deps)
     local OFFHAND_PRELOAD_LIFECYCLE = deps.offhand_preload_lifecycle
     local MH_EMBED = deps.mh_embed
     local CWV_PEER_IDENTITY = deps.cwv_peer_identity
+    local LA_INSTANCE_POLICY = deps.la_instance_policy
 
 -- ============================================================
 -- /regression_test checks (see scaffold near MOD_VERSION).
@@ -444,6 +445,38 @@ local function _issue629_grail_knight_set_contract()
     end
 end
 _rt_register("issue629_grail_knight_set_contract", _issue629_grail_knight_set_contract)
+
+_rt_register("issue481_athanor_exact_offhand_target", function()
+    if type(LA_INSTANCE_POLICY) ~= "table"
+        or type(LA_INSTANCE_POLICY.resolve_preview_backend_id) ~= "function"
+        or type(LA_INSTANCE_POLICY.resolve_preview_selection) ~= "function"
+        or type(LA_INSTANCE_POLICY.preview_target_matches) ~= "function" then
+        return "exact Athanor offhand policy unavailable"
+    end
+    local la_key = "Kruber_empire_shield_basic1"
+    local gk_key = "cos_gk_purpure_azure_shield_variant"
+    local records = {
+        la_bid = { left_hand_unit = { la_armoury_key = la_key } },
+        gk_bid = { left_hand_unit = { la_armoury_key = gk_key } },
+    }
+    local la_pool = { { la_armoury_key = la_key } }
+    local gk_pool = { { la_armoury_key = gk_key } }
+    if LA_INSTANCE_POLICY.resolve_preview_backend_id(nil, "es_sword_shield",
+            "gk_bid", "es_sword_shield_breton") ~= nil then
+        return "unrelated active customization item crossed preview families"
+    end
+    if not LA_INSTANCE_POLICY.resolve_preview_selection(records, "la_bid",
+            "left_hand_unit", la_pool)
+        or LA_INSTANCE_POLICY.resolve_preview_selection(records, "la_bid",
+            "left_hand_unit", gk_pool) ~= nil then
+        return "exact LA/Purpure selection ownership drifted"
+    end
+    local la_variant = { new_units = { "la_1p", "la_3p" } }
+    if not LA_INSTANCE_POLICY.preview_target_matches("la_3p", la_variant)
+        or LA_INSTANCE_POLICY.preview_target_matches("gk_3p", la_variant) then
+        return "spawn-data target validation drifted"
+    end
+end)
 
 mod:command("verify_gk_set", "Verify the #629 Grail Knight cosmetic-set resource and registration contract", function()
     local err = _issue629_grail_knight_set_contract()

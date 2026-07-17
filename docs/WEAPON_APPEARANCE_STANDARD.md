@@ -252,6 +252,14 @@ Both previewers spawn from a mutable, precomputed recipe (`spawn_data` /
 `units_to_spawn`), so the swap is **data mutation, not despawn/respawn**
 (weapon_tweaker's proven preview-swap pattern):
 
+The recipe remains the presentation authority after spawn. Pair each returned
+hand unit with its exact recipe entry (`spawn_data[i].unit_name`) before applying
+an authored material. Runtime `unit_name` metadata may be absent; absence is not
+permission to paint. A saved independent component must also be present in the
+exact item family's current hand pool, and it owns the target over a whole-skin
+fallback provider. Equal preview coordinates do not establish a shared target
+because sibling viewport worlds may intentionally reuse them (Cosmetics #481).
+
 1. Resolve the variant `def` by `backend_id` (`^(cwv_.-)_%d%d%d$`) via
    `_find_def` — a direct walk of `_variant_definitions`, so it resolves EVERY
    variant including those with no transform (registration-independent; see
