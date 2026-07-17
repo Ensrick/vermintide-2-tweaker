@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.269-dev (2026-07-17) - complete cross-career ability actions
+
+- Mirrored the public beta's provider-neutral career-action integration while
+  preserving the friends-only animation and hold-pose tooling overlay.
+- Every enabled native port and CWV template now receives every weapon-bound
+  activated-ability row, including Waywatcher's alternate piercing action;
+  incomplete providers emit one bounded runtime error instead of silently
+  leaving a weapon unable to activate an ultimate.
+
 ## 0.12.268-dev (2026-07-16) - #611 [verify-fix] per-career master parity
 
 - Mirrored the public beta's redesigned Weapon Availability masters into the friends-only runtime stream without changing the development overlay.

@@ -2076,3 +2076,39 @@ linked weapon node only at spawn.
 - Keep class 57's retained-state comparison for later animation drift. Test the
   atomic path and a fallback where one channel raises. WOC `0.1.25-dev` is the
   reference implementation.
+
+## 59. Private/cross-career weapon template omits career ability actions
+
+**First confirmed:** Weapons of Chaos Blightreaper and Weapon Tweaker
+cross-character ports (2026-07-16).
+**Lives in:** any private, cloned, or foreign weapon template usable by a career
+whose activated ability declares `action_name`.
+
+### Symptoms
+- The career bar is charged and the ability works with another weapon, but the
+  input silently does nothing while a particular weapon is wielded.
+- Several otherwise unrelated weapons fail for the same career.
+- Copying only `activated_ability[1]` appears to work until a career selects an
+  alternate row (Waywatcher's piercing action is the current two-row case).
+
+### Diagnosis pattern
+1. Read `CharacterStateHelper._get_chain_action_data`; vanilla iterates
+   `career_extension:ability_amount()` and checks every ability `action_name`
+   against the currently wielded item template.
+2. Enumerate `CareerSettings[career].activated_ability`, not a guessed list.
+   Current weapon-bound coverage is ten actions across Ranger Veteran,
+   Waywatcher (two), Bounty Hunter, Pyromancer, Grail Knight, Outcast Engineer,
+   Sister of the Thorn, Warrior Priest, and Necromancer.
+3. Verify each named `ActionTemplates` row exists and is present by identity on
+   every enabled private/cross-career template. Ability-class careers do not
+   need a fabricated weapon action.
+
+### Fix template
+- Use `tools/shared_lib/_lib_career_weapon_actions.lua`; collect every declared
+  row, preserve existing donor rows, and record only newly inserted rows for
+  reversible cleanup.
+- Missing career settings/action providers are integration failures: emit a
+  bounded runtime error and fail the offline matrix. Never silently skip them.
+- Test all ten current actions, the Waywatcher alternate, existing-row identity,
+  missing providers, setting reapply, and disable cleanup. WOC 0.1.26-dev, WT
+  0.12.268-beta, and WT-dev 0.12.269-dev are the reference consumers.

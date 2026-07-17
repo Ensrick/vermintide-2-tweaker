@@ -13,7 +13,16 @@ return function(H, repo_root)
 		H.equal(package, spirits.PACKAGE)
 		H.equal(reason, "source_backed")
 		H.equal(spirits.package_contract({}), nil)
+		local package_manager = {
+			has_loaded = function(_, package, reference)
+				return package == spirits.PACKAGE
+					and reference == spirits.PACKAGE_REFERENCE
+			end,
+		}
+		H.equal(spirits.package_ready(package_manager), true)
+		H.equal(spirits.package_ready({ has_loaded = function() return false end }), false)
 		H.equal(spirits.CONVERT_AMOUNT, 5)
+		H.equal(spirits.SPIRIT_DAMAGE, 5)
 		H.equal(spirits.DELAY_TIME, 3)
 		H.equal(spirits.CHASE_SPEED, 1)
 		H.equal(spirits.CHASE_TIME, 6)
@@ -24,10 +33,14 @@ return function(H, repo_root)
 			loop = "Play_winds_death_gameplay_spirit_loop",
 			explode = "Play_winds_death_gameplay_spirit_explode",
 		})
-		H.equal(spirits.convert_amount(10), 5)
-		H.equal(spirits.convert_amount(3), 2)
-		H.equal(spirits.convert_amount(1), 0)
-		H.equal(spirits.convert_amount(nil), 0)
+		H.equal(spirits.contact_damage(10, 0), 5)
+		H.equal(spirits.contact_damage(3, 0), 2)
+		H.equal(spirits.contact_damage(2, 4), 5)
+		H.equal(spirits.contact_damage(1, 0), 0)
+		H.equal(spirits.contact_damage(nil, 0), 0)
+		H.equal(spirits.DAMAGE_TYPE, "death_explosion")
+		H.equal(spirits.DAMAGE_SOURCE, "undefined")
+		H.equal(spirits.HEAL_TYPE, "mutator")
 	end)
 
 	H.test("WOC Blightreaper direct and Hagbane DOT kills attribute exactly", function()
@@ -65,7 +78,9 @@ return function(H, repo_root)
 			'events:register(mod, "on_player_killed_enemy"',
 			'"BuffSystem", "rpc_add_buff_synced_params"',
 			'spawner:spawn_network_unit(_spirits.UNIT',
-			'health:convert_to_temp(_spirits.CONVERT_AMOUNT)',
+			'_spirits.package_ready(packages)',
+			'damage_utils.add_damage_network(target, unit, amount',
+			'damage_utils.heal_network(target, target, dealt',
 			'if _spirit_state.count >= _spirits.MAX_ACTIVE then',
 			'if network and network.is_server then _update_spirits(dt) end',
 			'_audio.update(dt)',
@@ -75,6 +90,10 @@ return function(H, repo_root)
 		local _, update_count = source:gsub("mod%.update%s*=%s*function", "")
 		H.equal(update_count, 1, "WOC audio and spirit work must share one update callback")
 		H.equal(source:find('network_register("woc_blightreaper_spirit', 1, true), nil)
+		H.equal(source:find('Application.can_get, "unit", _spirits.UNIT', 1, true), nil,
+			"loaded native package is the spawn boundary; stale can_get blocked all spirits")
+		H.equal(source:find('convert_to_temp', 1, true), nil,
+			"contact must reproduce native death_explosion damage then mutator heal")
 
 		local package_path = repo_root
 			.. "/weapons_of_chaos/resource_packages/weapons_of_chaos/weapons_of_chaos.package"

@@ -377,6 +377,19 @@ only after animation drift. This weak owner prunes dead units, emits no RPC, and
 yields to an intentional non-identity WT development-tuner edit. A successful
 spawn-time `pcall` is not retention proof (issue #613, v0.1.24-dev).
 
+The inherited `entry.name` remains required for vanilla equip safety. Every
+exact Blightreaper backend instance is therefore canonicalized at
+`BackendUtils.get_item_units` before owner, husk, character-preview, or item
+preview recipes branch. This descriptor replay composes with, rather than
+replacing, the atomic durable transform above: the canonical producer selects
+the authored unit, then the returned unit receives the retained node-0 pose.
+Do not add a surface-local normal-Sword correction. Bounded unit debug-name,
+hash, and mesh-node diagnostics provide mission-transition evidence.
+
+Every future visual feature must extend the appearance matrix and its
+offline/live transition checks in the same change. Keep-only success without a
+mission-entry replay is structurally incomplete.
+
 ### Blightreaper combat and Shyish residency (2026-07-16, issues #632/#643)
 
 The private template retains Kerillian Sword's authored graph at 75% speed, but
@@ -390,14 +403,23 @@ The two inventory property rows are display-only no-op buffs; in particular,
 `+50% Power vs. Order` must never acquire a `stat_buff` or proc.
 
 The 2026-07-16 game log proved the Shyish listener and attribution ran, but each
-kill logged `native Shyish unit not resident; spawn skipped`. The SDK cannot
-compile that native unit directly, but the source-declared real package
+kill logged `native Shyish unit not resident; spawn skipped`. The stale
+`Application.can_get` test remained false even after the package load and was
+the earliest failure: no unit spawned, chased, contacted, or converted health.
+The SDK cannot compile that native unit directly, but the source-declared real package
 `resource_packages/dlcs/mutators_batch_04` hashes to installed bundle
 `64E79277358D543D`, which was verified to contain the unit and its FX
-dependencies. WOC acquires that package under one lifetime reference. Never
-pass the unit path itself to `Managers.package:load`. The existing
-`Application.can_get` guard remains useful defense against a failed request or
-stale build.
+dependencies. WOC acquires that package under one lifetime reference and gates
+spawn on `PackageManager.has_loaded(package, reference)`. Never pass the unit
+path itself to `Managers.package:load` and never restore the disproven
+`Application.can_get` gate.
+
+At contact, reproduce `mutator_death.lua`: choose rank-one damage five when it
+is below total health, otherwise permanent health minus one; call host-side
+`DamageUtils.add_damage_network` as `death_explosion`, then
+`DamageUtils.heal_network` with heal type `mutator` for accepted damage. That
+native pair creates THP; direct `convert_to_temp` is not the source-backed
+Shyish mechanic.
 
 ### Reusable WOC traits (2026-07-16, issue #655)
 

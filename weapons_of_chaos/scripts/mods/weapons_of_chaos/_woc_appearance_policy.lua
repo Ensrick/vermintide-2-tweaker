@@ -20,11 +20,25 @@ M.PULSE_VARIABLES = {
 	{ name = "intensity", value = 1.746000051498413 },
 	{ name = "pulse", value = { 1, 0.5 } },
 }
+-- Canonical linked-root pose. The durable owner resolves the offset against the
+-- linked baseline and writes scale/position/rotation atomically through the
+-- shared WeaponAppearance helper.
 M.TRANSFORM = {
 	scale = { 0.9, 0.9, 0.9 },
 	offset = { 0, 0, -0.3 },
 	rotation = { -90, -90, -90 },
 }
+
+function M.canonicalize_item_units(item_units, is_exact_relic)
+	if type(item_units) ~= "table" or is_exact_relic ~= true then
+		return item_units, false
+	end
+	local changed = item_units.right_hand_unit ~= M.UNIT_1P
+		or item_units.left_hand_unit ~= nil
+	item_units.right_hand_unit = M.UNIT_1P
+	item_units.left_hand_unit = nil
+	return item_units, changed
+end
 
 function M.is_custom_unit_name(name)
 	return name == M.UNIT_1P or name == M.UNIT_3P

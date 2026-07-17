@@ -1,5 +1,26 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.26-dev (2026-07-17) - #613/#632 mission replay, Shyish, and career actions [verify-fix-coop]
+
+- Preserved 0.1.25-dev's atomic `Unit.set_local_pose` linked-root transform and
+  durable retained-state owner. Added exact-relic `BackendUtils.get_item_units`
+  replay before owner, husk, character-preview, and item-preview recipes so a
+  mission transition cannot silently rebuild Blightreaper with the inherited
+  normal-Sword unit descriptor.
+- Added bounded requested/returned unit diagnostics without replacing the
+  atomic transform lifecycle or its WT-dev tuner-yield boundary.
+- Repaired Shyish at the earliest logged failure: the source-backed package's
+  loaded reference now gates spawn, and contact reproduces `mutator_death.lua`
+  with host `death_explosion` damage followed by a `mutator` heal for accepted
+  damage, yielding THP while preserving one green health.
+- Added all ten weapon-bound career ability actions used by the nine applicable
+  careers, including Waywatcher's alternate piercing row. WOC, WT beta, and
+  WT-dev share one provider-neutral integration helper and report incomplete
+  providers instead of silently disabling ultimates.
+- Added offline/live checks for canonical unit replay, package/contact
+  damage-heal behavior, and the complete career-action matrix. In-game and
+  two-peer confirmation remain required; this commit is not deployed.
+
 ## 0.1.25-dev (2026-07-17) - #613 atomic linked-root transform [verify-fix-coop]
 
 - Fixed the log-proven residual in `0.1.24-dev`: an immediate read after the
