@@ -177,7 +177,7 @@ display names or inventory icons; source the authored hand field.
 
 ### Independent component names (#641)
 
-Visual ownership and display-name ownership use the same component boundary.
+Visual ownership and item-card text ownership use the same component boundary.
 The normal illusion row retains the primary/right-hand source name. Every
 selectable dual-weapon left-hand option carries its source skin identity plus a
 stable `cos_offhand_weapon_<source>_left_name` localization key resolved by
@@ -191,6 +191,13 @@ existing shield-specific name. Hover labels are composed as
 `Primary Illusion + Offhand/Shield`: the primary half is reused from the source
 illusion for the primary model currently being previewed, never invented as a
 monolithic weapon-pair name.
+
+The same canonical component record owns flavor text. An authored component
+description wins; otherwise `_cos_offhand_names.lua` resolves the source
+illusion description and finally readable generated copy. The centralized
+`_cos_item_presentation.lua` descriptor publishes that component description
+through `UIUtils.get_ui_information_from_item`; it must never leave the primary
+weapon's description in place after resolving an independent component.
 
 This policy is presentation-only. Persistence continues to store the exact
 backend item, hand field, and unit path, and networking continues to send the

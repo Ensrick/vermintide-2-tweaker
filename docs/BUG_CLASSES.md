@@ -1762,7 +1762,7 @@ issues #420, #481, #617.
 Athanor, lobby, score, owner, bot, and husk surfaces.
 
 ### Symptoms
-- A model, texture, transform, pose, or glow is correct in one preview but
+- A model, texture, transform, pose, glow, icon, or component name/description is correct in one preview but
   missing or stale in another.
 - Fixes become a screen-by-screen game of whack-a-mole because each consumer
   reconstructs a partial item presentation.
@@ -1776,6 +1776,10 @@ Athanor, lobby, score, owner, bot, and husk surfaces.
   substitute.
 - Make every surface adapt that descriptor to its renderer/spawn API. A surface
   may not re-derive identity, illusion, or transform policy.
+- Treat item-card text as component-owned presentation: a selected offhand or
+  shield supplies its own name and description, while the primary supplies
+  only its side of a composed title. Never retain primary flavor text after an
+  independent component resolves (#641).
 - Test the full acceptance matrix in `WEAPON_APPEARANCE_STANDARD.md` plus the
   Athanor and customization panes. Include initial open, re-open, transition,
   hot join, and one unmodified control.

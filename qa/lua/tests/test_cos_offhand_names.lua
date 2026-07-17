@@ -24,6 +24,9 @@ return function(H, repo_root)
         H.equal(policy.localization_key("units/example/shield", "left_hand_unit", "shield"),
             policy.localization_key("units/example/shield", "left_hand_unit", "shield"))
         H.equal(policy.localization_key("x", "left_hand_unit", "primary_weapon"), nil)
+        H.equal(policy.description_localization_key(
+            "wh_dual_hammer_skin_01", "left_hand_unit"),
+            "cos_offhand_weapon_wh_dual_hammer_skin_01_left_description")
     end)
 
     H.test("authored component name wins without changing identity", function()
@@ -45,6 +48,61 @@ return function(H, repo_root)
             "wh_dual_hammer_skin_01", "left_hand_unit", "wh_dual_hammer_skin_01", missing)
         H.equal(name, "Dual Hammer 01")
         H.equal(source, "generated")
+    end)
+
+    H.test("component description prefers authored then source text", function()
+        local description, key, source = policy.resolve_description(
+            "units/example/shield", "left_hand_unit", "Source shield text",
+            function(k)
+                if k == "named_shield_description" then return "Authored shield text" end
+                return "<" .. k .. ">"
+            end, "shield", "named_shield_description", "source_shield_description",
+            "Named Shield")
+        H.equal(description, "Authored shield text")
+        H.equal(key, "named_shield_description")
+        H.equal(source, "authored")
+
+        description, key, source = policy.resolve_description(
+            "units/example/shield", "left_hand_unit", nil,
+            function(k) return "<" .. k .. ">" end,
+            "shield", "missing_component_description",
+            "source_shield_description", "Named Shield",
+            function(k)
+                if k == "source_shield_description" then return "Native shield text" end
+                return "<" .. k .. ">"
+            end)
+        H.equal(description, "Native shield text")
+        H.equal(key, "source_shield_description")
+        H.equal(source, "source")
+
+        description, _, source = policy.resolve_description(
+            "units/example/shield", "left_hand_unit", nil,
+            function(k) return "<" .. k .. ">" end,
+            "shield", nil, nil, "Named Shield")
+        H.equal(description,
+            "An independently selected Named Shield cosmetic component.")
+        H.equal(source, "generated")
+    end)
+
+    H.test("decorate routes authored and vanilla description owners separately", function()
+        local authored_calls, vanilla_calls = {}, {}
+        local option = policy.decorate({
+            source_description_key = "vanilla_illusion_description",
+        }, "skin_source", "left_hand_unit", "Source Offhand", nil,
+            function(key)
+                authored_calls[#authored_calls + 1] = key
+                return "<" .. key .. ">"
+            end, "weapon_offhand", nil,
+            function(key)
+                vanilla_calls[#vanilla_calls + 1] = key
+                return key == "vanilla_illusion_description"
+                    and "Vanilla illusion flavor." or "<" .. key .. ">"
+            end)
+        H.equal(option.description, "Vanilla illusion flavor.")
+        H.equal(option.component_description_source, "source")
+        H.equal(#authored_calls, 2)
+        H.equal(authored_calls[2], "cos_offhand_weapon_skin_source_left_description")
+        H.deep_equal(vanilla_calls, { "vanilla_illusion_description" })
     end)
 
     H.test("primary name is reused from an identical-model illusion", function()
@@ -93,6 +151,8 @@ return function(H, repo_root)
         H.equal(shield.name, "Existing Shield")
         H.equal(shield.unit, "units/example/shield")
         H.equal(shield.source_skin_key, nil)
+        H.equal(shield.description,
+            "An independently selected Existing Shield cosmetic component.")
     end)
 
     H.test("generated inventory separates weapon offhands from shields", function()
@@ -114,8 +174,13 @@ return function(H, repo_root)
         H.truthy(entry:find("_decorate_dual_component", 1, true))
         H.truthy(entry:find("_decorate_shield_option", 1, true))
         H.truthy(entry:find("OFFHAND_NAMES.compose", 1, true))
+        H.truthy(entry:find("OFFHAND_NAMES.description_presentation_key", 1, true))
+        H.truthy(entry:find("presentation_localization[description_key]", 1, true))
+        H.truthy(entry:find('nil, nil, rawget(_G, "Localize")', 1, true))
+        H.truthy(entry:find("description_key or base_description", 1, true))
         H.truthy(entry:find("mod._cos.offhand_name_inventory", 1, true))
         H.truthy(entry:find("issue641_independent_offhand_names", 1, true))
         H.truthy(gk:find('cos_gk_purpure_azure_shield_name = "The Blood-Bloomed Bouclier"', 1, true))
+        H.truthy(gk:find('description_key = "cos_gk_purpure_azure_shield_description"', 1, true))
     end)
 end
