@@ -832,6 +832,17 @@ _rt_register("issue619_foot_knight_contract", function()
        or policy.is_non_polearm_great_type("SPEAR_2H") then
         return "Foot Knight weapon capability taxonomy drifted"
     end
+    if policy.ROCK_DESCRIPTION_KEY ~= "markus_knight_passive_block_cost_aura_desc_2"
+       or policy.TEAMWORK_DESCRIPTION_KEY ~= "markus_knight_damage_taken_ally_proximity_desc_2" then
+        return "Foot Knight authored talent-description keys drifted"
+    end
+    for _, key in ipairs({ policy.ROCK_DESCRIPTION_KEY, policy.TEAMWORK_DESCRIPTION_KEY }) do
+        local expected = policy.talent_description(key,
+            function(setting_id) return mod:get(setting_id) end)
+        if expected ~= nil and Localize(key) ~= expected then
+            return "Foot Knight live talent description did not compose: " .. key
+        end
+    end
     local local_names = {
         "crt_fk_uninterruptible_heavies",
         "crt_fk_rock_dodge_distance",
@@ -848,6 +859,53 @@ _rt_register("issue619_foot_knight_contract", function()
         local lookup = rawget(_G, "NetworkLookup")
         if lookup and lookup.buff_templates and rawget(lookup.buff_templates, name) then
             return "local-only Foot Knight buff leaked into NetworkLookup: " .. name
+        end
+    end
+    local expected_icons = {
+        crt_fk_uninterruptible_heavies = "markus_knight_ability_invulnerability",
+        crt_fk_rock_dodge_distance = "markus_knight_passive_block_cost_aura",
+        crt_fk_rock_shield_power = "markus_knight_passive_power_increase",
+        crt_fk_teamwork_great_power = "markus_knight_passive_power_increase",
+        crt_fk_final_march = "markus_knight_movement_speed_on_incapacitated_allies",
+    }
+    for buff_name, icon in pairs(expected_icons) do
+        if not feature.buff_icons or feature.buff_icons[buff_name] ~= icon then
+            return "Foot Knight resident buff icon drifted: " .. buff_name
+        end
+        local template = BuffTemplates and rawget(BuffTemplates, buff_name)
+        local first = template and template.buffs and template.buffs[1]
+        if not first or first.icon ~= icon then
+            return "Foot Knight active-effect buff has no stable icon: " .. buff_name
+        end
+    end
+    local player_manager = Managers.player
+    local player = player_manager and player_manager.local_player
+        and player_manager:local_player()
+    local unit = player and player.player_unit
+    local buff_extension = unit and Unit.alive(unit)
+        and ScriptUnit.has_extension(unit, "buff_system")
+    if buff_extension then
+        local active = {}
+        local buffs = buff_extension:active_buffs()
+        for _, buff in ipairs(buffs or {}) do
+            local template = not buff.removed and buff.template
+            if template and template.name then active[template.name] = true end
+        end
+        if not mod:get("rework_es_knight_innate_uninterruptible_heavies")
+           and active.crt_fk_uninterruptible_heavies then
+            return "inactive heavy rework retained its icon buff"
+        end
+        if not mod:get("rework_es_knight_rock_shield_offense")
+           and (active.crt_fk_rock_dodge_distance or active.crt_fk_rock_shield_power) then
+            return "inactive Rock rework retained an icon buff"
+        end
+        if not mod:get("rework_es_knight_teamwork_great_weapon_offense")
+           and active.crt_fk_teamwork_great_power then
+            return "inactive Teamwork rework retained its icon buff"
+        end
+        if not mod:get("rework_es_knight_final_march")
+           and (active.crt_fk_final_march_power or active.crt_fk_final_march_dr) then
+            return "inactive Final March retained an icon buff"
         end
     end
     local dodge = BuffTemplates and BuffTemplates.crt_fk_rock_dodge_distance
@@ -872,15 +930,23 @@ _rt_register("issue619_foot_knight_contract", function()
         end
     end
     if mod:get("rework_es_knight_secondary_melee") then
-        local career = CareerSettings and CareerSettings.es_knight
-        local slot_map = career and career.item_slot_types_by_slot_name
-        local slot_types = slot_map and slot_map.slot_ranged or {}
-        local has_melee = false
-        for _, slot_type in ipairs(slot_types) do
-            if slot_type == "melee" then has_melee = true; break end
+        local carriers = { CareerSettings and CareerSettings.es_knight }
+        for _, profile in pairs(SPProfiles or {}) do
+            for _, career in ipairs(profile.careers or {}) do
+                if career.name == "es_knight" then carriers[#carriers + 1] = career end
+            end
         end
-        if not has_melee or slot_types[1] ~= "melee" or slot_types[2] ~= "ranged" then
-            return "enabled secondary-melee slot contract missing or out of native order"
+        for _, career in ipairs(carriers) do
+            local slot_map = career and career.item_slot_types_by_slot_name
+            local slot_types = slot_map and slot_map.slot_ranged or {}
+            local has_melee, has_ranged = false, false
+            for _, slot_type in ipairs(slot_types) do
+                if slot_type == "melee" then has_melee = true end
+                if slot_type == "ranged" then has_ranged = true end
+            end
+            if not has_melee or not has_ranged then
+                return "enabled secondary slot does not accept both melee and ranged"
+            end
         end
     end
     if mod:get("rework_es_knight_teamwork_great_weapon_offense") then

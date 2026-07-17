@@ -1,5 +1,6 @@
 local mod = get_mod("crt")
 mod._crt.dance_of_blades = mod:dofile("scripts/mods/career_tweaker/_crt_dance_of_blades")
+local foot_knight_policy = mod:dofile("scripts/mods/career_tweaker/_crt_foot_knight_policy")
 
 -- ============================================================
 -- crt_* buff name pre-registration (UNCONDITIONAL)
@@ -3479,8 +3480,10 @@ local _HELLBORGS_DESC_OVERRIDE =
 --     feedback_vt2_localize_string_format_pipeline.md).
 --   * If a vanilla desc uses %s/%d placeholders, replace them with concrete
 --     values or keep placeholders that match the rewritten description_values.
--- Single lookup table keyed by `<talent>_desc`; each entry pairs a setting id
--- with a static override string. ALL reworks share the same Localize hook
+-- Single lookup table keyed by each talent's authored `description` field.
+-- Most entries pair one setting id with a static override; composed mechanics
+-- may instead provide live `enabled` / `text` functions. ALL reworks share the
+-- same Localize hook
 -- below (per `feedback_vmf_hook_safe_no_chain.md` two hooks on _G.Localize
 -- would silently shadow).
 local CRT_DESC_OVERRIDES = {
@@ -3528,9 +3531,29 @@ local CRT_DESC_OVERRIDES = {
         text = "Grants 5%% critical strike chance to all allies at any distance.",
     },
     -- ------ Kruber: Foot Knight ------
-    ["markus_knight_passive_block_cost_aura_desc"] = {
-        setting = "rework_es_knight_protective_presence_10m_rock_20m",
-        text = "Increases the range of Protective Presence to 20 meters.",
+    ["markus_knight_passive_block_cost_aura_desc_2"] = {
+        enabled = function()
+            return foot_knight_policy.talent_description(
+                foot_knight_policy.ROCK_DESCRIPTION_KEY,
+                function(setting_id) return mod:get(setting_id) end) ~= nil
+        end,
+        text = function()
+            return foot_knight_policy.talent_description(
+                foot_knight_policy.ROCK_DESCRIPTION_KEY,
+                function(setting_id) return mod:get(setting_id) end)
+        end,
+    },
+    ["markus_knight_damage_taken_ally_proximity_desc_2"] = {
+        enabled = function()
+            return foot_knight_policy.talent_description(
+                foot_knight_policy.TEAMWORK_DESCRIPTION_KEY,
+                function(setting_id) return mod:get(setting_id) end) ~= nil
+        end,
+        text = function()
+            return foot_knight_policy.talent_description(
+                foot_knight_policy.TEAMWORK_DESCRIPTION_KEY,
+                function(setting_id) return mod:get(setting_id) end)
+        end,
     },
     ["markus_knight_free_pushes_on_block_desc"] = {
         setting = "rework_es_knight_counter_punch_stagger_stack",
@@ -3773,14 +3796,16 @@ mod:hook(_G, "Localize", function(func, key, ...)
     if type(key) == "string" then
         local extra = mod._crt and mod._crt.extra_desc_overrides
         local entry = CRT_DESC_OVERRIDES[key] or (extra and extra[key])
-        if entry and mod:get(entry.setting) then
+        local enabled = entry and ((entry.enabled and entry.enabled())
+            or (entry.setting and mod:get(entry.setting)))
+        if enabled then
             local text = entry.text
             -- Entries whose numbers depend on another toggle store a function
             -- (issue 443); resolve it per call so toggling updates live.
             if type(text) == "function" then
-                return text()
+                text = text()
             end
-            return text
+            if text ~= nil then return text end
         end
     end
     return func(key, ...)

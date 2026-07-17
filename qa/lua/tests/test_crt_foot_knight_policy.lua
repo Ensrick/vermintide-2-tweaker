@@ -52,6 +52,51 @@ return function(H, repo_root)
         shared, owns = Policy.plan_secondary_slot({ "ranged", "melee" }, false, false)
         H.deep_equal(shared, { "ranged", "melee" })
         H.equal(owns, false)
+
+        local repaired
+        repaired, owns = Policy.plan_secondary_slot({ "melee" }, true, false)
+        H.deep_equal(repaired, { "melee", "ranged" })
+        H.equal(owns, false)
+    end)
+
+    H.test("CRT #619 talent descriptions compose live toggles and restore vanilla", function()
+        local settings = {}
+        local rock_key = Policy.ROCK_DESCRIPTION_KEY
+        local teamwork_key = Policy.TEAMWORK_DESCRIPTION_KEY
+
+        -- All-off is the exact vanilla restoration contract: the production
+        -- Localize hook delegates when the pure resolver returns nil.
+        H.equal(Policy.talent_description(rock_key, settings), nil)
+        H.equal(Policy.talent_description(teamwork_key, settings), nil)
+
+        settings.rework_es_knight_protective_presence_10m_rock_20m = true
+        H.equal(Policy.talent_description(rock_key, settings),
+            "Increases the range of Protective Presence to 20 meters.")
+
+        -- Simulate a hot toggle while the menu is open: the next lookup must
+        -- compose both mechanics without retaining the previous static text.
+        settings.rework_es_knight_rock_shield_offense = true
+        local composed = Policy.talent_description(rock_key, settings)
+        H.truthy(composed:find("20 meters", 1, true))
+        H.truthy(composed:find("wielding a shield", 1, true))
+        H.truthy(composed:find("30%% more melee damage", 1, true))
+
+        settings.rework_es_knight_protective_presence_10m_rock_20m = false
+        local shield_only = Policy.talent_description(rock_key, settings)
+        H.truthy(shield_only:find("10 meters", 1, true))
+        H.equal(shield_only:find("20 meters", 1, true), nil)
+
+        settings.rework_es_knight_teamwork_great_weapon_offense = true
+        local teamwork = Policy.talent_description(teamwork_key, settings)
+        H.truthy(teamwork:find("within 10 meters", 1, true))
+        H.truthy(teamwork:find("non%-polearm great weapon"))
+        H.truthy(teamwork:find("Armored enemies and Monsters", 1, true))
+
+        -- Simulate closing/reopening after every toggle has returned off.
+        settings.rework_es_knight_rock_shield_offense = false
+        settings.rework_es_knight_teamwork_great_weapon_offense = false
+        H.equal(Policy.talent_description(rock_key, settings), nil)
+        H.equal(Policy.talent_description(teamwork_key, settings), nil)
     end)
 
     H.test("CRT #619 Final March distinguishes dead from disabled allies", function()
@@ -83,6 +128,31 @@ return function(H, repo_root)
         H.truthy(foot_source:find('BUFF_TEAMWORK_DR_CANCEL', 1, true))
         H.truthy(foot_source:find('multiplier = 0.10', 1, true))
         H.truthy(foot_source:find('markus_knight_passive_damage_reduction', 1, true))
+        H.truthy(foot_source:find('CareerSettings and CareerSettings.es_knight', 1, true))
+        H.truthy(foot_source:find('for profile_index, profile in pairs(SPProfiles or {})', 1, true))
+        H.truthy(foot_source:find('HeroWindowLoadoutInventory, "_create_item_categories"', 1, true))
+        H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_UNINTERRUPTIBLE]', 1, true))
+        H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_ROCK_DODGE]', 1, true))
+        H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_ROCK_POWER]', 1, true))
+        H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_TEAMWORK_POWER]', 1, true))
+        H.truthy(foot_source:find('icon = BUFF_ICONS[BUFF_FINAL_MARCH]', 1, true))
+        H.truthy(foot_source:find('if enabled and not id then', 1, true))
+        H.truthy(foot_source:find('elseif not enabled and id then', 1, true))
+        H.truthy(foot_source:find('while #ids > wanted do', 1, true))
+        H.truthy(foot_source:find('while #ids < wanted do', 1, true))
+        -- The internal +10% DR cancellation is bookkeeping, not a player
+        -- effect; it must never consume a buff-bar slot.
+        local cancel_start = assert(foot_source:find('_register_local_template(BUFF_TEAMWORK_DR_CANCEL', 1, true))
+        local cancel_end = assert(foot_source:find('_register_local_template(BUFF_TEAMWORK_POWER', cancel_start, true))
+        H.equal(foot_source:sub(cancel_start, cancel_end):find('icon =', 1, true), nil)
+        -- Final March has two stat sub-buffs but deliberately one HUD icon.
+        local final_start = assert(foot_source:find('_register_local_template(BUFF_FINAL_MARCH', cancel_end, true))
+        local final_end = assert(foot_source:find('local function _is_foot_knight', final_start, true))
+        local final_icons = 0
+        for _ in foot_source:sub(final_start, final_end):gmatch('icon =') do
+            final_icons = final_icons + 1
+        end
+        H.equal(final_icons, 1)
 
         local balance_path = repo_root
             .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua"
@@ -92,5 +162,28 @@ return function(H, repo_root)
         H.truthy(balance_source:find('{ buff = "markus_knight_passive",                 field = "range", value = 10 }', 1, true))
         H.truthy(balance_source:find('{ buff = "markus_knight_passive_block_cost_aura", field = "range", value = 20 }', 1, true))
         H.truthy(balance_source:find('{ buff = "markus_knight_passive_range",           field = "range", value = 20 }', 1, true))
+        H.truthy(balance_source:find('["markus_knight_passive_block_cost_aura_desc_2"]', 1, true))
+        H.truthy(balance_source:find('["markus_knight_damage_taken_ally_proximity_desc_2"]', 1, true))
+        H.equal(balance_source:find('["markus_knight_passive_block_cost_aura_desc"]', 1, true), nil)
     end)
+
+    local vanilla_path = repo_root
+        .. "/../Vermintide-2-Source-Code/scripts/managers/talents/talent_settings_markus.lua"
+    local vanilla_file = io.open(vanilla_path, "rb")
+    local vanilla_source
+    if vanilla_file then
+        vanilla_source = vanilla_file:read("*a")
+        vanilla_file:close()
+    end
+    H.test_if(vanilla_source ~= nil,
+        "CRT #619 buff icons are resident vanilla Foot Knight atlas keys", function()
+            for _, icon in ipairs({
+                "markus_knight_ability_invulnerability",
+                "markus_knight_passive_block_cost_aura",
+                "markus_knight_passive_power_increase",
+                "markus_knight_movement_speed_on_incapacitated_allies",
+            }) do
+                H.truthy(vanilla_source:find('icon = "' .. icon .. '"', 1, true), icon)
+            end
+        end)
 end

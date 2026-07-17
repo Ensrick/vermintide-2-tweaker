@@ -27,12 +27,23 @@ local BUFF_TEAMWORK_DR_CANCEL = "crt_fk_teamwork_innate_dr_cancel"
 local BUFF_TEAMWORK_POWER = "crt_fk_teamwork_great_power"
 local BUFF_FINAL_MARCH = "crt_fk_final_march"
 
+-- Resident vanilla Foot Knight atlas keys, sourced from
+-- talent_settings_markus.lua. Icons live on the stable effect buffs (not the
+-- 0.2s reconciler), so HUD widgets persist until the effect actually ends.
+local BUFF_ICONS = {
+    [BUFF_UNINTERRUPTIBLE] = "markus_knight_ability_invulnerability",
+    [BUFF_ROCK_DODGE] = "markus_knight_passive_block_cost_aura",
+    [BUFF_ROCK_POWER] = "markus_knight_passive_power_increase",
+    [BUFF_TEAMWORK_POWER] = "markus_knight_passive_power_increase",
+    [BUFF_FINAL_MARCH] = "markus_knight_movement_speed_on_incapacitated_allies",
+}
+
 local _states = setmetatable({}, { __mode = "k" })
 local _owned_live_ranges = setmetatable({}, { __mode = "k" })
 local _tick_accumulator = 0
 local _original_teamwork_range
-local _owns_secondary_melee_entry = false
-local _owned_secondary_slot_types
+local _owned_secondary_slot_types = setmetatable({}, { __mode = "k" })
+local _last_secondary_slot_diagnostic
 
 local function _register_local_template(name, body)
     if not BuffTemplates or rawget(BuffTemplates, name) ~= nil then return end
@@ -44,6 +55,7 @@ local function _register_templates()
         buffs = {
             {
                 name = BUFF_UNINTERRUPTIBLE,
+                icon = BUFF_ICONS[BUFF_UNINTERRUPTIBLE],
                 perks = { buff_perks.uninterruptible_heavy },
             },
         },
@@ -53,6 +65,7 @@ local function _register_templates()
         buffs = {
             {
                 name = BUFF_ROCK_POWER,
+                icon = BUFF_ICONS[BUFF_ROCK_POWER],
                 stat_buff = "power_level",
                 multiplier = 0.15,
                 max_stacks = 1,
@@ -64,6 +77,7 @@ local function _register_templates()
         buffs = {
             {
                 name = BUFF_ROCK_DODGE,
+                icon = BUFF_ICONS[BUFF_ROCK_DODGE],
                 apply_buff_func = "apply_movement_buff",
                 remove_buff_func = "remove_movement_buff",
                 multiplier = 0.90,
@@ -93,6 +107,7 @@ local function _register_templates()
         buffs = {
             {
                 name = BUFF_TEAMWORK_POWER,
+                icon = BUFF_ICONS[BUFF_TEAMWORK_POWER],
                 stat_buff = "power_level",
                 multiplier = 0.05,
                 max_stacks = 3,
@@ -104,6 +119,7 @@ local function _register_templates()
         buffs = {
             {
                 name = BUFF_FINAL_MARCH .. "_power",
+                icon = BUFF_ICONS[BUFF_FINAL_MARCH],
                 stat_buff = "power_level",
                 multiplier = 0.50,
                 duration = 60,
@@ -354,6 +370,68 @@ function M.tick(dt)
     end
 end
 
+local function _secondary_slot_carriers()
+    local carriers = {}
+    local seen = {}
+    local function add(career, label)
+        local slot_map = career and career.item_slot_types_by_slot_name
+        local slot_types = slot_map and slot_map.slot_ranged
+        if type(slot_types) == "table" and not seen[slot_types] then
+            seen[slot_types] = true
+            carriers[#carriers + 1] = { slot_types = slot_types, label = label }
+        end
+    end
+
+    -- Backend verification reads CareerSettings, while the hero inventory
+    -- builds its cached filter from SPProfiles. They alias in stock data, but
+    -- DLC reloads and other mods can replace either carrier independently.
+    add(CareerSettings and CareerSettings.es_knight, "CareerSettings.es_knight")
+    for profile_index, profile in pairs(SPProfiles or {}) do
+        for career_index, career in ipairs(profile.careers or {}) do
+            if career.name == "es_knight" then
+                add(career, string.format("SPProfiles[%s].careers[%s]",
+                    tostring(profile_index), tostring(career_index)))
+            end
+        end
+    end
+    return carriers, seen
+end
+
+local function _write_slot_plan(slot_types, planned)
+    for i = #slot_types, 1, -1 do slot_types[i] = nil end
+    for i = 1, #planned do slot_types[i] = planned[i] end
+end
+
+local function _reconcile_secondary_slots(enabled)
+    local carriers, current = _secondary_slot_carriers()
+
+    -- If a carrier array was replaced, abandon the detached member exactly as
+    -- the former single-carrier implementation did. Never delete another
+    -- owner's `melee` member from a replacement array.
+    for slot_types in pairs(_owned_secondary_slot_types) do
+        if not current[slot_types] then _owned_secondary_slot_types[slot_types] = nil end
+    end
+
+    local diagnostic_parts = {}
+    for i = 1, #carriers do
+        local carrier = carriers[i]
+        local slot_types = carrier.slot_types
+        local planned, owns = policy.plan_secondary_slot(
+            slot_types, enabled, _owned_secondary_slot_types[slot_types] == true)
+        _write_slot_plan(slot_types, planned)
+        _owned_secondary_slot_types[slot_types] = owns or nil
+        diagnostic_parts[#diagnostic_parts + 1] = carrier.label .. "={"
+            .. table.concat(slot_types, ",") .. "}"
+    end
+
+    local diagnostic = string.format("enabled=%s carriers=%d %s",
+        tostring(enabled), #carriers, table.concat(diagnostic_parts, " "))
+    if diagnostic ~= _last_secondary_slot_diagnostic then
+        _last_secondary_slot_diagnostic = diagnostic
+        pcall(printf, "[crt:619] secondary-slot %s", diagnostic)
+    end
+end
+
 function M.apply_settings()
     local template = BuffTemplates and rawget(BuffTemplates, "markus_knight_damage_taken_ally_proximity")
     local driver = template and template.buffs and template.buffs[1]
@@ -362,27 +440,7 @@ function M.apply_settings()
         driver.range = mod:get(SETTING_TEAMWORK_GREAT) and 10 or _original_teamwork_range
     end
 
-    -- Slayer and Grail Knight use this exact career-map contract in vanilla.
-    -- Preserve the live array identity because inventory/CIM views may retain
-    -- it, and remove only the `melee` member this module actually inserted.
-    local career = CareerSettings and CareerSettings.es_knight
-    local slot_map = career and career.item_slot_types_by_slot_name
-    local slot_types = slot_map and slot_map.slot_ranged
-    if type(slot_types) == "table" then
-        if _owns_secondary_melee_entry and slot_types ~= _owned_secondary_slot_types then
-            -- Another owner replaced the entire accepted-types array. We no
-            -- longer own any member in the new object and must not remove it.
-            _owns_secondary_melee_entry = false
-            _owned_secondary_slot_types = nil
-        end
-        local planned
-        planned, _owns_secondary_melee_entry = policy.plan_secondary_slot(
-            slot_types, mod:get(SETTING_SECONDARY_MELEE) == true,
-            _owns_secondary_melee_entry)
-        for i = #slot_types, 1, -1 do slot_types[i] = nil end
-        for i = 1, #planned do slot_types[i] = planned[i] end
-        _owned_secondary_slot_types = _owns_secondary_melee_entry and slot_types or nil
-    end
+    _reconcile_secondary_slots(mod:get(SETTING_SECONDARY_MELEE) == true)
 end
 
 function M.restore()
@@ -392,19 +450,8 @@ function M.restore()
         local driver = template and template.buffs and template.buffs[1]
         if driver then driver.range = _original_teamwork_range end
     end
-    local career = CareerSettings and CareerSettings.es_knight
-    local slot_map = career and career.item_slot_types_by_slot_name
-    local slot_types = slot_map and slot_map.slot_ranged
-    if type(slot_types) == "table" and _owns_secondary_melee_entry
-       and slot_types == _owned_secondary_slot_types then
-        local planned
-        planned, _owns_secondary_melee_entry = policy.plan_secondary_slot(
-            slot_types, false, _owns_secondary_melee_entry)
-        for i = #slot_types, 1, -1 do slot_types[i] = nil end
-        for i = 1, #planned do slot_types[i] = planned[i] end
-    end
-    _owns_secondary_melee_entry = false
-    _owned_secondary_slot_types = nil
+    _reconcile_secondary_slots(false)
+    _owned_secondary_slot_types = setmetatable({}, { __mode = "k" })
     for unit, state in pairs(_states) do
         local buff_extension = Unit.alive(unit) and ScriptUnit.has_extension(unit, "buff_system")
         if buff_extension then
@@ -463,6 +510,7 @@ function M.outgoing_damage_multiplier(attacker_unit, attacker_player, attacked_u
 end
 
 M.policy = policy
+M.buff_icons = BUFF_ICONS
 M.setting_ids = {
     SETTING_UNINTERRUPTIBLE,
     SETTING_AURA_RANGE,
@@ -474,5 +522,16 @@ M.setting_ids = {
 
 _register_templates()
 M.apply_settings()
+
+-- The inventory caches its OR-filter when categories are created. Reconcile
+-- the exact SPProfiles carrier immediately before every menu build so a reopen
+-- after a hot toggle cannot retain a ranged-only or melee-only stale filter.
+if HeroWindowLoadoutInventory and HeroWindowLoadoutInventory._create_item_categories then
+    mod:hook(HeroWindowLoadoutInventory, "_create_item_categories",
+        function(func, self, ...)
+            _reconcile_secondary_slots(mod:get(SETTING_SECONDARY_MELEE) == true)
+            return func(self, ...)
+        end)
+end
 
 return M

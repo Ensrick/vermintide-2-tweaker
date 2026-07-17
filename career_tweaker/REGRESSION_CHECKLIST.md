@@ -6,7 +6,7 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 > **Suite location:** `/crt_regression_test` lives in `scripts/mods/career_tweaker/_crt_regression.lua`. In 0.4.0-beta it also locks the casting/transposition and issue-probe exclusion boundary.
 
-Last updated: 2026-07-15.
+Last updated: 2026-07-17.
 
 ---
 ## Foot Knight feature suite (#619)
@@ -18,8 +18,10 @@ Last updated: 2026-07-15.
 | Tradeoffs | Rock toggle multiplies only dodge distance by 0.90. Teamwork toggle cancels only the native -0.10 damage-taken passive; aura DR, 5% ally stacks, and Final March DR remain. |
 | Authority/network | Host reconciles humans/bots; client reconciles local owner. Custom templates remain local-only and never enter `NetworkLookup` or a vanilla RPC. |
 | Final March | Requires a nonempty roster of other allies whose exact status is dead. Downed/disabled is false. One mission latch; 60 seconds; disabler stagger is server-only. |
-| Secondary slot | Mutates the live Foot Knight `slot_ranged` accepted-types array in place to `{ "melee", "ranged" }`; removes only its owned insertion and abandons ownership after foreign array replacement. |
-| Detection | Offline `test_crt_foot_knight_policy.lua`; runtime `/crt_regression_test` check `issue619_foot_knight_contract`; co-op walk in CHANGELOG 0.3.75-dev. |
+| Talent text | Rock uses the authored `_desc_2` key and composes range/shield toggles per lookup; Teamwork uses its authored `_desc_2` key. All-off delegates to vanilla localization exactly. |
+| Buff-bar feedback | Stable local effect buffs use resident vanilla Foot Knight icons. Rock/Teamwork conditional bonuses and Final March expose icons only for their active lifetime; Final March owns one icon-bearing sub-buff, and the internal Teamwork DR canceller has no icon. |
+| Secondary slot | Reconciles both backend `CareerSettings` and menu `SPProfiles` carriers in place to include `{ "melee", "ranged" }`; removes only its owned melee insertion and abandons ownership after foreign array replacement. Inventory category creation rechecks the carrier before caching its filter. |
+| Detection | Offline `test_crt_foot_knight_policy.lua`; runtime `/crt_regression_test` check `issue619_foot_knight_contract`; transition-only `[crt:619] secondary-slot` diagnostic; solo walk in CHANGELOG 0.4.2-beta. |
 
 ---
 ## Ranger Veteran ale action speed (#367)

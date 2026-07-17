@@ -1,5 +1,15 @@
 # Career Tweaker Changelog
 
+## 0.4.2-beta - 2026-07-17 - #619 Foot Knight live descriptions and secondary slot [verify-fix]
+
+- Corrected Rock of Reikland's rendered description key from the unused `_desc` lookup to the talent's authored `markus_knight_passive_block_cost_aura_desc_2`, and added the authored `markus_knight_damage_taken_ally_proximity_desc_2` lookup for That's Bloody Teamwork!.
+- Made Rock's description compose the range and shield-offense toggles on every localization call. Teamwork now describes its 10m ally radius, innate-DR tradeoff, and great-weapon bonuses. Turning all related toggles off delegates to the original localizer, restoring the exact vanilla text in every language.
+- Hardened the secondary slot across both canonical consumers: backend `CareerSettings` and inventory-menu `SPProfiles`. The accepted-types array remains mutated in place, menu reopen reconciles its cached filter, and enabled state repairs either missing member so both `melee` and `ranged` remain accepted.
+- Added buff-bar feedback using resident vanilla Foot Knight icons. Heavy immunity and Rock's dodge tradeoff stay visible while enabled; Rock shield power and Teamwork great-weapon power appear only while their weapon/ally conditions are active and retain stable stack widgets; Final March shows one timed icon for its 60-second effect. The internal Teamwork DR-cancellation buff remains hidden.
+- Added transition-only `[crt:619] secondary-slot` diagnostics plus offline coverage for hot-toggle composition, menu-reopen wiring, exact all-off localization delegation, dual-carrier reconciliation, and the ranged-preservation invariant.
+
+**Solo verify:** toggle Expanded Protective Presence, Rock shield offense, and Teamwork offense individually and together while reopening the Talents screen; require each description to update immediately and exact vanilla text to return when off. Confirm Rock/Teamwork conditional icons appear only with the qualifying weapon and allies, remain stable between 0.2s reconciler ticks, and disappear when the condition ends; trigger Final March and confirm one timed icon remains for its 60-second duration. Enable Secondary Melee, reopen Inventory, and confirm the secondary slot lists and equips both a melee weapon and Kruber's ranged weapons. Disable it and confirm ranged remains equipped/available while secondary melee disappears. Run `/crt_regression_test` and retain the `[crt:619] secondary-slot enabled=true ... {melee,ranged}` line.
+
 ## 0.4.1-beta - 2026-07-16 - #367 faster Ranger ale drink [verify-fix]
 
 - Renamed the setting to **Ranger Veteran: Faster Ale Drinking Animation** and made its tooltip state the exact 0.75-second target.

@@ -8,6 +8,13 @@
 
 local M = {}
 
+local SETTING_AURA_RANGE = "rework_es_knight_protective_presence_10m_rock_20m"
+local SETTING_ROCK_SHIELD = "rework_es_knight_rock_shield_offense"
+local SETTING_TEAMWORK_GREAT = "rework_es_knight_teamwork_great_weapon_offense"
+
+M.ROCK_DESCRIPTION_KEY = "markus_knight_passive_block_cost_aura_desc_2"
+M.TEAMWORK_DESCRIPTION_KEY = "markus_knight_damage_taken_ally_proximity_desc_2"
+
 local GREAT_WEAPON_TYPES = {
     AXE_2H = true,
     MACE_2H = true,
@@ -46,9 +53,11 @@ end
 function M.plan_secondary_slot(slot_types, enabled, owns_melee_entry)
     local planned = {}
     local has_melee = false
+    local has_ranged = false
     for i = 1, #(slot_types or {}) do
         planned[#planned + 1] = slot_types[i]
         if slot_types[i] == "melee" then has_melee = true end
+        if slot_types[i] == "ranged" then has_ranged = true end
     end
 
     local owns = owns_melee_entry == true
@@ -66,7 +75,48 @@ function M.plan_secondary_slot(slot_types, enabled, owns_melee_entry)
         end
         owns = false
     end
+
+    -- Foot Knight differs from native dual-melee careers: his secondary slot
+    -- must continue accepting bows/guns. Repair a stale or independently
+    -- replaced carrier instead of allowing the feature to collapse the slot
+    -- to melee-only. `ranged` is the vanilla member, so it remains on restore.
+    if enabled and not has_ranged then
+        planned[#planned + 1] = "ranged"
+    end
     return planned, owns
+end
+
+local function _setting_enabled(settings, setting_id)
+    if type(settings) == "function" then
+        return settings(setting_id) == true
+    end
+    return type(settings) == "table" and settings[setting_id] == true
+end
+
+-- Returns nil for the all-off state. The Localize hook treats nil as an exact
+-- instruction to delegate to vanilla, rather than attempting to duplicate a
+-- translated stock string inside CRT.
+function M.talent_description(key, settings)
+    if key == M.ROCK_DESCRIPTION_KEY then
+        local expanded = _setting_enabled(settings, SETTING_AURA_RANGE)
+        local shield = _setting_enabled(settings, SETTING_ROCK_SHIELD)
+        if not expanded and not shield then return nil end
+
+        local range = expanded and 20 or 10
+        local text = string.format(
+            "Increases the range of Protective Presence to %d meters.", range)
+        if shield then
+            text = text .. " Reduces dodge distance by 10%%. While wielding a shield, grants 15%% power and 30%% more melee damage to Monsters and Berserkers."
+        end
+        return text
+    end
+
+    if key == M.TEAMWORK_DESCRIPTION_KEY
+        and _setting_enabled(settings, SETTING_TEAMWORK_GREAT) then
+        return "Nearby allies reduce damage taken by 5%% each, up to 3 stacks, within 10 meters. Removes Foot Knight's innate 10%% damage reduction. While wielding a non-polearm great weapon, each nearby ally also grants 5%% power and 10%% more melee damage to Armored enemies and Monsters."
+    end
+
+    return nil
 end
 
 function M.all_other_allies_dead(dead_flags)
