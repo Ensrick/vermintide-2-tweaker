@@ -298,6 +298,25 @@ across all four paths (v0.1.369-dev). Conventions:
 Call `WA.apply(unit, { scale=, offset=, position=, rotation= })`. Never
 re-implement `Unit.set_local_scale/position/rotation` at a call site.
 
+**Animated retention boundary.** `WA.apply` owns pose math, but a successful
+one-shot write is not retained proof for an animated gameplay unit. Source
+shows that gear is linked at weapon node 0 before the mod's spawn hook; WT's
+captured runtime evidence shows animation can restore that linked node on the
+following update (`weapon_tweaker/OFFSETS.md`). For an authored transform large
+enough to require durable ownership:
+
+- capture the linked baseline and resolve one absolute target through `WA`;
+- weak-track only animated gameplay 1P/3P/bot/husk consumers, compare numeric
+  retained state, and reconstruct the target only after measured drift;
+- keep static preview surfaces one-shot, prune dead units, and send no
+  transform RPC or live-tuner stream; and
+- yield to an intentional non-identity development-tuner edit so two owners do
+  not fight.
+
+Temporary vectors/quaternions used across updates must be copied into Lua
+scalars/tables (or boxed), not retained as engine temporary values. WOC
+`_woc_durable_transform.lua` is the bounded reference implementation.
+
 ### §4.3 Texture — `_resolve_variant_textures` (Phase 2)
 
 - **Primitive:** `Unit.set_texture_for_materials` (per-UNIT, auto-cleaned on

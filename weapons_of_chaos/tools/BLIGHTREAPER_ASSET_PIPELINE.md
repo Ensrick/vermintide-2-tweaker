@@ -128,9 +128,19 @@ Never add a `Managers.package:load` call for the authored unit path. Previewers
 and loadout collection borrow the verified runed Empire sword package lease
 while the WOC master bundle owns the actual unit residency.
 
-The canonical presentation transform is applied once per spawned unit through
-the synchronized `_lib_weapon_appearance.lua` consumer: uniform XYZ scale
-`{0.9, 0.9, 0.9}`, Euler XYZ rotation `{-90, -90, -90}` degrees, and offset
-`{0, 0, -0.3}`. Both the explicit first- and third-person units consume that
-same policy. Do not duplicate these values in individual preview hooks or drive
-them per frame.
+The canonical presentation transform is uniform XYZ scale `{0.9, 0.9, 0.9}`,
+Euler XYZ rotation `{-90, -90, -90}` degrees, and linked-position offset
+`{0, 0, -0.3}`. Both explicit first- and third-person units consume that one
+policy through `_lib_weapon_appearance.lua`.
+
+Do not treat a successful spawn-time write as retained evidence. Vanilla links
+the weapon at node 0 before WOC receives it (`gear_utils.lua:155+` and
+`attachment_node_linking.lua:2726+`), then running weapon animation can restore
+that node's native pose. `_woc_durable_transform.lua` therefore captures the
+linked baseline, weak-tracks gameplay owner/husk units, compares the numeric
+retained pose, and reconstructs the absolute baseline-plus-offset pose only
+when drift is observed. Preview worlds remain event-driven and one-shot. The
+owner creates no RPC traffic and yields when the WT development tuner has an
+intentional non-identity edit. This is the same empirically established
+retention boundary documented in `weapon_tweaker/OFFSETS.md`; do not duplicate
+the values in surface hooks or stream tuner state.

@@ -6,6 +6,7 @@ lua = [
 	"scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse"
 	"scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits"
 	"scripts/mods/weapons_of_chaos/_woc_cursed_rarity"
+	"scripts/mods/weapons_of_chaos/_woc_durable_transform"
 	"scripts/mods/weapons_of_chaos/_woc_inventory_icons"
 	"scripts/mods/weapons_of_chaos/_lib_weapon_appearance"
 	"scripts/mods/weapons_of_chaos/_woc_mod_unit_preview"

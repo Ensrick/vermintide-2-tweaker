@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.23-dev"
+local MOD_VERSION = "0.1.24-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -150,12 +150,102 @@ local TEMPLATE = _moveset.TEMPLATE
 local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_policy")
 local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview")
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
+local _durable_transform_lib = mod:dofile(
+	"scripts/mods/weapons_of_chaos/_woc_durable_transform")
 local _audio_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_audio")
 local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse")
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
-local _wa = _pulse_lib.new(_appearance, _appearance_lib.new())
+local _weapon_appearance = _appearance_lib.new()
+local _transform_diag_budget = 32
+local function _unit_snapshot(unit)
+	if not unit or not Unit.alive(unit) then return nil end
+	local ok_pos, position = pcall(Unit.local_position, unit, 0)
+	local ok_scale, scale = pcall(Unit.local_scale, unit, 0)
+	local ok_rot, rotation = pcall(Unit.local_rotation, unit, 0)
+	if not ok_pos or not ok_scale or not ok_rot then return nil end
+	local ok_pe, px, py, pz = pcall(Vector3.to_elements, position)
+	local ok_se, sx, sy, sz = pcall(Vector3.to_elements, scale)
+	local ok_re, rx, ry, rz, rw = pcall(Quaternion.to_elements, rotation)
+	if not ok_pe or not ok_se or not ok_re then return nil end
+	return {
+		position = { px, py, pz },
+		scale = { sx, sy, sz },
+		rotation = { rx, ry, rz, rw },
+	}
+end
+local function _rotation_components(value)
+	local rotation = _weapon_appearance.to_quaternion(value)
+	if not rotation then return nil end
+	local ok, x, y, z, w = pcall(Quaternion.to_elements, rotation)
+	return ok and { x, y, z, w } or nil
+end
+local function _pose_text(snapshot)
+	if type(snapshot) ~= "table" then return "unavailable" end
+	local p, s, r = snapshot.position or {}, snapshot.scale or {}, snapshot.rotation or {}
+	return string.format("p={%.3f,%.3f,%.3f} s={%.3f,%.3f,%.3f} q={%.4f,%.4f,%.4f,%.4f}",
+		p[1] or 0, p[2] or 0, p[3] or 0,
+		s[1] or 0, s[2] or 0, s[3] or 0,
+		r[1] or 0, r[2] or 0, r[3] or 0, r[4] or 0)
+end
+
+-- The local dev tuner intentionally owns a non-identity live edit. Yield only
+-- for that exact channel/slot so WOC's durable baseline neither fights the
+-- tuner nor abandons the baked pose when the tool is merely installed.
+local function _dev_tuner_claims(record)
+	if record.surface ~= "owner-spawn" then return false end
+	local get_mod_fn = rawget(_G, "get_mod")
+	if type(get_mod_fn) ~= "function" then return false end
+	local ok_mod, wt = pcall(get_mod_fn, "wt_dev")
+	if not ok_mod or type(wt) ~= "table" or type(wt.get) ~= "function" then
+		return false
+	end
+	local function setting(key, fallback)
+		local ok, value = pcall(wt.get, wt, key)
+		return ok and value ~= nil and value or fallback
+	end
+	if setting("wt_dev_hp_enabled", false) ~= true
+			or setting("wt_dev_hp_live_apply", false) ~= true then return false end
+	local target_slot = setting("wt_dev_hp_target_slot", "auto")
+	if target_slot ~= "auto" and target_slot ~= "slot_melee" then return false end
+	local prefix
+	if record.perspective == "1p" then
+		if setting("wt_dev_hp_enable_1p", false) ~= true then return false end
+		prefix = "wt_dev_hp_fp_rh_"
+	else
+		if setting("wt_dev_hp_enable_3p", true) == false then return false end
+		prefix = "wt_dev_hp_rh_"
+	end
+	for _, suffix in ipairs({ "offset_x", "offset_y", "offset_z",
+			"rot_pitch", "rot_yaw", "rot_roll" }) do
+		if setting(prefix .. suffix, 0) ~= 0 then return true end
+	end
+	for _, suffix in ipairs({ "scale_x", "scale_y", "scale_z" }) do
+		if setting(prefix .. suffix, 1) ~= 1 then return true end
+	end
+	return false
+end
+
+local _transform_owner = _durable_transform_lib.new({
+	alive = function(unit) return unit and Unit.alive(unit) end,
+	read = _unit_snapshot,
+	rotation_components = _rotation_components,
+	apply = function(unit, spec) return _weapon_appearance.apply(unit, spec) end,
+	should_track = function(surface)
+		return surface == "owner-spawn" or surface == "husk-spawn"
+	end,
+	should_yield = _dev_tuner_claims,
+	diagnostic = function(kind, record, before, after)
+		if _transform_diag_budget <= 0 then return end
+		_transform_diag_budget = _transform_diag_budget - 1
+		pcall(printf,
+			"[WOC:613] transform proof kind=%s surface=%s perspective=%s before=%s after=%s target=%s durable=true node=0",
+			tostring(kind), tostring(record.surface), tostring(record.perspective),
+			_pose_text(before), _pose_text(after), _pose_text(record.target))
+	end,
+})
+local _wa = _pulse_lib.new(_appearance, _transform_owner)
 local _audio = type(_audio_lib) == "table" and type(_audio_lib.new) == "function"
 	and _audio_lib.new() or {
 		observe_spawn = function() end,
@@ -1260,9 +1350,11 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	local unit_3p, ammo_3p, unit_1p, ammo_1p = func(world, hand, item_template,
 		item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, ...)
 	if is_blightreaper then
-		_wa.apply(unit_3p, _appearance.TRANSFORM, "3p", "inventory-spawn")
+		local surface = _durable_transform_lib.classify_surface(
+			owner_unit_1p, owner_unit_3p)
+		_wa.apply(unit_3p, _appearance.TRANSFORM, "3p", surface)
 		if unit_1p then
-			_wa.apply(unit_1p, _appearance.TRANSFORM, "1p", "inventory-spawn")
+			_wa.apply(unit_1p, _appearance.TRANSFORM, "1p", surface)
 		end
 		_audio.observe_spawn(unit_3p, unit_1p, owner_unit_1p, owner_unit_3p)
 	end
@@ -1317,6 +1409,7 @@ mod:command("woc_audio_probe",
 	function() _audio.probe_ambient() end)
 
 mod.update = function(dt)
+	_transform_owner:step()
 	_audio.update(dt)
 	local network = Managers and Managers.state and Managers.state.network
 	if network and network.is_server then _update_spirits(dt) end
@@ -1324,15 +1417,18 @@ end
 
 mod.on_game_state_changed = function(status, state_name)
 	if status == "exit" then
+		_transform_owner:clear()
 		_audio.stop_all("game-state-exit:" .. tostring(state_name))
 	end
 end
 
 mod.on_disabled = function()
+	_transform_owner:clear()
 	_audio.stop_all("mod-disabled")
 end
 
 mod.on_unload = function()
+	_transform_owner:clear()
 	_audio.stop_all("mod-unload")
 end
 
@@ -1530,6 +1626,15 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 			or transform.offset[1] ~= 0 or transform.offset[2] ~= 0
 			or transform.offset[3] ~= -0.3 then
 		return "canonical scale/rotation/offset contract drifted"
+	end
+	local durable = _durable_transform_lib.CONTRACT
+	if not durable or durable.target_node ~= 0
+			or durable.position ~= "linked_baseline_plus_offset"
+			or durable.scale ~= "absolute"
+			or durable.rotation ~= "absolute_euler_xyz"
+			or durable.gameplay ~= "retained_check_then_reapply"
+			or durable.preview ~= "one_shot" or durable.transport ~= "none" then
+		return "durable transform-retention contract drifted"
 	end
 	local ok_1p, resident_1p = pcall(Application.can_get, "unit", HELD_UNIT)
 	local ok_3p, resident_3p = pcall(Application.can_get, "unit", _appearance.UNIT_3P)

@@ -143,6 +143,7 @@ local suites = {
 	"test_woc_inventory_icons",
     "test_woc_appearance_policy",
 	"test_woc_blightreaper_pulse",
+	"test_woc_durable_transform",
 	"test_woc_blightreaper_audio",
     "test_dcp_portrait_materials",
     "test_dcp_player_scope_probe",

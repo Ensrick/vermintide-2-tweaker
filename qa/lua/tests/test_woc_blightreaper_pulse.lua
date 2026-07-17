@@ -3,11 +3,19 @@ return function(H, repo_root)
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_appearance_policy.lua")
 	local pulse = dofile(repo_root
 		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse.lua")
+	local durable = dofile(repo_root
+		.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_durable_transform.lua")
+	local function copy(value)
+		local out = {}
+		for i = 1, #value do out[i] = value[i] end
+		return out
+	end
 
 	local function fixture(missing)
 		local calls = {
 			materials = {}, textures = {}, variables = {}, transforms = 0,
-			transform_specs = {},
+			transform_specs = {}, transform_perspectives = {},
+			transform_surfaces = {},
 		}
 		local unit = {}
 		local api = {
@@ -33,9 +41,11 @@ return function(H, repo_root)
 			printf = function() calls.diagnostics = (calls.diagnostics or 0) + 1 end,
 		}
 		local transform = {
-			apply = function(value, spec)
+			apply = function(_, value, spec, perspective, surface)
 				calls.transforms = calls.transforms + 1
 				calls.transform_specs[#calls.transform_specs + 1] = spec
+				calls.transform_perspectives[#calls.transform_perspectives + 1] = perspective
+				calls.transform_surfaces[#calls.transform_surfaces + 1] = surface
 				return value == unit and spec == policy.TRANSFORM
 			end,
 		}
@@ -87,9 +97,52 @@ return function(H, repo_root)
 			H.equal(reason, "applied")
 			H.equal(calls.transforms, 1)
 			H.equal(calls.transform_specs[1], policy.TRANSFORM)
+			H.equal(calls.transform_perspectives[1], perspective)
+			H.equal(calls.transform_surfaces[1], "perspective-contract")
 			H.deep_equal(calls.transform_specs[1].scale, { 0.9, 0.9, 0.9 })
 			H.deep_equal(calls.transform_specs[1].offset, { 0, 0, -0.3 })
 		end
+	end)
+
+	H.test("WOC #613 pulse forwards surface and perspective to durable owner", function()
+		local state = {
+			position = { 0, 0, 0 }, scale = { 1, 1, 1 },
+			rotation = { 0, 0, 0, 1 },
+		}
+		local owner_unit = {}
+		local owner = durable.new({
+			alive = function(value) return value == owner_unit end,
+			read = function()
+				return {
+					position = copy(state.position), scale = copy(state.scale),
+					rotation = copy(state.rotation),
+				}
+			end,
+			rotation_components = function() return { 0.5, -0.5, -0.5, 0.5 } end,
+			apply = function(_, spec)
+				state.position = copy(spec.position)
+				state.scale = copy(spec.scale)
+				state.rotation = { 0.5, -0.5, -0.5, 0.5 }
+				return true
+			end,
+			should_track = function(surface) return surface == "owner-spawn" end,
+		})
+		local runtime = pulse.new(policy, owner, {
+			unit = {
+				alive = function(value) return value == owner_unit end,
+				set_all_materials = function() end,
+				set_texture_for_materials = function() end,
+			},
+			application = { can_get = function() return true end },
+			script_unit = { set_material_variable = function() end },
+		})
+		local ok, reason = runtime.apply(
+			owner_unit, policy.TRANSFORM, "1p", "owner-spawn")
+		H.equal(ok, true)
+		H.equal(reason, "applied")
+		H.equal(owner:count(), 1)
+		H.deep_equal(state.position, { 0, 0, -0.3 })
+		H.deep_equal(state.scale, { 0.9, 0.9, 0.9 })
 	end)
 
 	H.test("WOC #613 fails closed before C material writes", function()

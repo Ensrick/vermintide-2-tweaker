@@ -89,7 +89,7 @@ function M.new(policy, transform_appearance, injected)
 
 		local transformed = transform_appearance
 			and transform_appearance.apply
-			and transform_appearance.apply(unit, transform)
+			and transform_appearance:apply(unit, transform, perspective, surface)
 		if transformed ~= true then return false, "transform-rejected" end
 
 		applied[unit] = true

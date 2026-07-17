@@ -1,5 +1,28 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.24-dev (2026-07-16) - #613 Blightreaper durable grip transform [verify-fix-coop]
+
+- Fixed the Blightreaper grip transform being reset after its successful
+  spawn-time application. Source and prior WT runtime evidence show that node 0
+  is the correct linked weapon node, but running weapon animation can restore
+  its native pose on the following update.
+- Kept one canonical transform for first person, local third person, bots, and
+  remote husks: absolute XYZ scale `0.9`, absolute Euler XYZ rotation `-90`,
+  and linked-position Z offset `-0.3`.
+- Added a weak gameplay owner that reads retained node-0 state and writes only
+  after numeric drift. Preview surfaces remain one-shot, no transform RPC is
+  sent, dead units are pruned, and an intentional WT live-tuner edit wins.
+- Replaced success-only diagnostics with bounded numeric before/after/target
+  proof and added offline coverage for owner 1P/3P, husks, animation resets,
+  previews, tuner ownership, and quaternion equivalence.
+
+Verification: with two players on WOC 0.1.24-dev, equip the Blightreaper and
+exercise attacks, swaps, and a mission transition. Confirm the `-0.3` grip,
+`0.9` scale, and `-90/-90/-90` rotation in owner first person, owner third
+person, and the peer's remote view; also confirm inventory preview. The log must
+show `[WOC:613] transform proof` with numeric before/after/target values and a
+retained or repaired result, never `drift-unrepaired`.
+
 ## 0.1.23-dev (2026-07-16) - #655 Blightreaper intrinsic and reusable traits [verify-fix-coop]
 
 - Added intrinsic `Poisoned Edge` and `Shyish Health Curse` trait rows to the

@@ -2006,3 +2006,36 @@ is inferred from `PlayerManager` or a mod handshake triggered by player creation
   hot join, lock release, unknown network state, and unchanged vanilla
   non-joinability. Event Tweaker's `event_tweaker_curse_join_policy.lua` is the
   reference.
+
+## 57. Successful one-shot weapon transform is reset by animation
+
+**First confirmed:** Weapon Tweaker hold-pose work; generalized for Weapons of
+Chaos issue #613 (2026-07-16).
+**Lives in:** custom or cross-character weapon presentation that writes the
+linked weapon node only at spawn.
+
+### Symptoms
+- The apply call and its `pcall` succeed, yet the grip, rotation, or scale soon
+  returns to the native pose.
+- A static preview can look correct while animated first/third-person gameplay
+  is wrong.
+- Repeating the same spawn hook does not prove what the renderer retained.
+
+### Diagnosis pattern
+1. Log numeric before, immediate-after, next-update, and target pose values;
+   success-only logging is insufficient.
+2. Verify the attachment target from source. VT2 links weapon node 0 in
+   `attachment_node_linking.lua`; changing nodes without evidence is not a fix.
+3. Exercise an animation before declaring retention. WT's empirical record is
+   in `weapon_tweaker/OFFSETS.md`.
+
+### Fix template
+- Keep one canonical transform descriptor. Capture the linked baseline and
+  construct the absolute baseline-plus-offset target through the shared weapon
+  appearance helper.
+- Weak-track only animated gameplay consumers (owner 1P/3P where applicable,
+  bots, and husks), compare retained state, and reapply only on measured drift.
+  Prune dead units; keep static previews one-shot and create no transform RPC.
+- Yield to explicit live development-tuner ownership so two writers do not
+  fight. Cover animation overwrite, all consumers, and quaternion sign
+  equivalence offline. WOC 0.1.24-dev is the reference implementation.

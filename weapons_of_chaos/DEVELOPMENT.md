@@ -360,8 +360,13 @@ gold/intensity/pulse values. Missing resources fail closed before Stingray C
 calls; there is no polling or RPC. Full hashes, bindings, source citations, and
 the rejected compiler paths live in `tools/BLIGHTREAPER_ASSET_PIPELINE.md`.
 The canonical held transform is uniform XYZ scale `{0.9, 0.9, 0.9}`, Euler XYZ
-rotation `{-90, -90, -90}`, and offset `{0, 0, -0.3}`, applied at spawn through
-the shared appearance primitive on both 1P/3P gameplay and preview consumers.
+rotation `{-90, -90, -90}`, and linked-position offset `{0, 0, -0.3}`. Static
+previews apply it once through the shared appearance primitive. Animated 1P/3P
+gameplay units use `_woc_durable_transform.lua`: capture the linked node-0
+baseline, compare retained numeric state, and reapply the resolved absolute pose
+only after animation drift. This weak owner prunes dead units, emits no RPC, and
+yields to an intentional non-identity WT development-tuner edit. A successful
+spawn-time `pcall` is not retention proof (issue #613, v0.1.24-dev).
 
 ### Blightreaper combat and Shyish residency (2026-07-16, issues #632/#643)
 
