@@ -259,9 +259,11 @@ found 74 Cosmetics-owned sync loads per launch and a repeatable ~1.58 s
 uses PackageManager's serialized async queue [src: `package_manager.lua:47-66`,
 `:274-292`]. Safety comes from `_override_package_ready`: both `<unit>` and
 `<unit>_3p` must pass `Application.can_get` before `BackendUtils.get_item_units`
-exposes the override, otherwise vanilla's base mesh remains in use. Each queued path
-takes one `cosmetics_tweaker` reference; `_release_offhand_packages` balances those
-references from `mod.on_unload` (#565).
+exposes the override, otherwise vanilla's base mesh remains in use. Each unique queued
+path takes one private `cosmetics_tweaker_offhand` reference. On unload,
+`_release_offhand_packages` invalidates the preload generation before releasing the
+exact ownership snapshot, so a callback retained by another package owner cannot
+repopulate cleared readiness state (#565).
 
 ### Material-Hijack embedded package loading + issue-282 refcount lifecycle (owner: `docs/engine/05`)
 
