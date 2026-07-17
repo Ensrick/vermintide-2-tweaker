@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.27-dev"
+local MOD_VERSION = "0.1.28-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -155,6 +155,29 @@ local _durable_transform_lib = mod:dofile(
 local _career_weapon_actions = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_lib_career_weapon_actions")
 local _career_action_owner = "weapons_of_chaos"
+local _registration_attempts = 0
+local _registration_diag_budget = 12
+local _registration_diag_seen = {}
+local _registration_last_gate = "not_attempted"
+local _registration_last_reason = "not_attempted"
+
+-- Registration may be retried only at StateInGameRunning.on_enter (never per
+-- frame). Log each distinct deferred gate once, with a hard session budget, so
+-- a load-order failure remains diagnosable without flooding the console/chat.
+local function _registration_deferred(gate, reason, detail)
+	_registration_last_gate = tostring(gate or "unknown")
+	_registration_last_reason = tostring(reason or "unknown")
+	local key = _registration_last_gate .. ":" .. _registration_last_reason
+	if not _registration_diag_seen[key] and _registration_diag_budget > 0 then
+		_registration_diag_seen[key] = true
+		_registration_diag_budget = _registration_diag_budget - 1
+		pcall(printf,
+			"[WOC:690] registration deferred attempt=%d gate=%s reason=%s detail=%s",
+			_registration_attempts, _registration_last_gate,
+			_registration_last_reason, tostring(detail or "none"))
+	end
+	return false
+end
 local _audio_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_audio")
 local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse")
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
@@ -504,46 +527,66 @@ local function _install_blightreaper_poison()
 end
 
 local function _install_blightreaper_moveset()
-	if _moveset_report and _moveset_report.installed then return true end
+	if _moveset_report and _moveset_report.installed
+			and _moveset_report.ability_actions
+			and _moveset_report.ability_actions.ok then
+		return true
+	end
 	local rows_ok, rows_reason = _moveset.install_intrinsic_property_rows(
 		rawget(_G, "WeaponProperties"), rawget(_G, "BuffTemplates"))
 	if not rows_ok then
-		printf("[WOC:632] Blightreaper property rows unavailable: %s", tostring(rows_reason))
-		return false
+		return false, "property_rows", rows_reason
 	end
 	local traits_ok, traits_reason = _moveset.install_intrinsic_trait_rows(
 		rawget(_G, "WeaponTraits"), rawget(_G, "BuffTemplates"))
 	if not traits_ok then
-		printf("[WOC:655] Blightreaper trait rows unavailable: %s", tostring(traits_reason))
-		return false
+		return false, "trait_rows", traits_reason
 	end
 	local poison_ok, poison_reason = _install_blightreaper_poison()
 	if not poison_ok then
-		printf("[WOC:632] Blightreaper poison unavailable: %s", tostring(poison_reason))
-		return false
+		return false, "poison", poison_reason
 	end
 	_moveset_report = _moveset.install(Weapons,
 		function(value) return table.clone(value, true) end)
 	if not _moveset_report.installed then
-		printf("[WOC:632] Blightreaper moveset unavailable: %s",
-			tostring(_moveset_report.skipped))
-		return false
+		return false, "moveset", _moveset_report.skipped
+	end
+	local required = _career_weapon_actions.collect(
+		_careers, rawget(_G, "CareerSettings"), rawget(_G, "ActionTemplates"))
+	if not required.ok then
+		_moveset_report.installed = false
+		return false, "career_action_providers", string.format(
+			"reason=%s missing_actions=%s missing_careers=%s",
+			tostring(required.skipped or "incomplete"),
+			table.concat(required.missing_actions or {}, ","),
+			table.concat(required.missing_careers or {}, ","))
+	end
+	local identity = _moveset.restore_inherited_career_action_identity(
+		Weapons[TEMPLATE], Weapons[_moveset.SOURCE_TEMPLATE], required)
+	_moveset_report.career_action_identity = identity
+	if not identity.ok then
+		_moveset_report.installed = false
+		return false, "career_action_identity", string.format(
+			"reason=%s conflicts=%s", tostring(identity.skipped or "provider_conflict"),
+			table.concat(identity.conflicting_names or {}, ","))
 	end
 	local abilities = _career_weapon_actions.install(
 		Weapons[TEMPLATE], _careers, rawget(_G, "CareerSettings"),
 		rawget(_G, "ActionTemplates"), _career_action_owner)
 	_moveset_report.ability_actions = abilities
 	if not abilities.ok then
-		printf("[WOC:632] Blightreaper career actions unavailable: %s actions=%s careers=%s",
-			tostring(abilities.skipped or "action_template_missing"),
+		_moveset_report.installed = false
+		return false, "career_action_install", string.format(
+			"reason=%s conflicts=%s missing_actions=%s missing_careers=%s",
+			tostring(abilities.skipped or "provider_conflict"),
+			table.concat(abilities.conflicting_names or {}, ","),
 			table.concat(abilities.missing_actions or {}, ","),
 			table.concat(abilities.missing_careers or {}, ","))
-		_moveset_report.installed = false
-		return false
 	end
-	mod:info("[WOC:632] private four-light Sword template ready (attacks=%d poison=%s crit=15%% speed=75%% executioner_audio=true career_actions=%d/%d)",
+	mod:info("[WOC:690] private four-light Sword template ready (attacks=%d poison=%s crit=15%% speed=75%% executioner_audio=true career_actions=%d/%d restored_inherited=%d)",
 		_moveset_report.attacks or 0, _moveset.DOT_TEMPLATE,
-		abilities.installed + abilities.existing, abilities.required)
+		abilities.installed + abilities.existing, abilities.required,
+		identity.restored or 0)
 	return true
 end
 
@@ -625,9 +668,9 @@ local function _register_blightreaper()
 	if _registered then
 		return
 	end
+	_registration_attempts = _registration_attempts + 1
 	if not mod:get("enable_blightreaper") then
-		_dbg("Blightreaper disabled via setting; skipping registration")
-		return
+		return _registration_deferred("setting", "disabled")
 	end
 	-- The mod chunk can be evaluated before Morris' rarity tables finish
 	-- loading. Re-run this idempotent registration at the in-game boundary so
@@ -641,22 +684,23 @@ local function _register_blightreaper()
 		NetworkLookup = rawget(_G, "NetworkLookup"),
 	})
 	if not rarity_ok then
-		_dbg("Blightreaper Cursed rarity deferred: %s", tostring(rarity_reason))
-		return
+		return _registration_deferred("cursed_rarity", rarity_reason)
 	end
 
 	local mil = get_mod("MoreItemsLibrary")
 	if not mil then
-		mod:warning("MoreItemsLibrary not found — Blightreaper cannot be registered (load MIL above WOC)")
-		return
+		return _registration_deferred("more_items_library", "mod_unavailable",
+			"load MoreItemsLibrary above WOC")
 	end
 
 	local base = rawget(ItemMasterList, BASE_WEAPON)
 	if not base then
-		mod:warning("Base weapon '%s' not found in ItemMasterList — Blightreaper cannot be registered", BASE_WEAPON)
-		return
+		return _registration_deferred("base_item", "missing", BASE_WEAPON)
 	end
-	if not _install_blightreaper_moveset() then return end
+	local moveset_ok, moveset_gate, moveset_reason = _install_blightreaper_moveset()
+	if not moveset_ok then
+		return _registration_deferred(moveset_gate, moveset_reason)
+	end
 
 	local entry = _build_entry(base, BACKEND_ID)
 	mil:add_mod_items_to_local_backend({ entry }, "weapons_of_chaos")
@@ -692,6 +736,8 @@ local function _register_blightreaper()
 	end
 
 	_registered = true
+	_registration_last_gate = "registered"
+	_registration_last_reason = "complete"
 	mod:info("[WOC] registered Blightreaper (%s) as backend item %s", ITEM_KEY, BACKEND_ID)
 end
 
@@ -1668,6 +1714,34 @@ _rt_register("issue509_registered_blightreaper_wire_contract", function()
 	end
 	if not _blightreaper_sync_seen then
 		return "skip: equip Blightreaper once, then rerun for live hook evidence"
+	end
+end)
+
+_rt_register("issue690_blightreaper_registration_gate_contract", function()
+	if not mod:get("enable_blightreaper") then
+		return "skip: Blightreaper setting is disabled"
+	end
+	if not _registered then
+		return string.format("registration deferred at gate=%s reason=%s attempts=%d",
+			tostring(_registration_last_gate), tostring(_registration_last_reason),
+			_registration_attempts)
+	end
+	if _registration_last_gate ~= "registered" then
+		return "registered flag and registration gate state disagree"
+	end
+	local identity = _moveset_report and _moveset_report.career_action_identity
+	if not (identity and identity.ok) then
+		return "inherited career-action identity was not reconciled"
+	end
+	local abilities = _moveset_report and _moveset_report.ability_actions
+	if not (abilities and abilities.ok) then
+		return "career-action ownership was not installed"
+	end
+	if #(abilities.conflicting_names or {}) > 0 then
+		return "career-action ownership retained a provider conflict"
+	end
+	if not rawget(ItemMasterList, ITEM_KEY) then
+		return "registered Blightreaper ItemMasterList row is missing"
 	end
 end)
 
