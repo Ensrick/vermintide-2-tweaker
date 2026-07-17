@@ -1,5 +1,11 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.138-dev - 2026-07-17 - runtime-owner decomposition
+
+- Extracted the glow diagnostic commands and tick APIs, Loremaster command surface, and all 50 ordered runtime checks from the oversized entry module into explicit dependency-injected owners.
+- Preserved command names, hook ownership, callback order, memory probe, Grail Knight verification API, and regression registration order without changing appearance behavior or transport.
+- Added executable Lua 5.1 ownership/order/duplicate contracts. The entry module is now below its frozen file-size ceiling.
+
 ## 0.9.137-dev - 2026-07-16 - #650 composed shield glow contract [verify-fix]
 
 ### Changed

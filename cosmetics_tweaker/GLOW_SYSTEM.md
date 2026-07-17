@@ -1,6 +1,6 @@
 # Glow System — cosmetics_tweaker
 
-State as of v0.9.137-dev (2026-07-16); glow sync is verified in co-op, while
+State as of v0.9.138-dev (2026-07-17); glow sync is verified in co-op, while
 the exact-instance Mace + Bretonnian runed-shield inheritance candidate awaits
 solo verification.
 
