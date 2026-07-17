@@ -61,6 +61,9 @@
 --   inst:install()                                   -- register the VMF channel + wire the update tick (once)
 --   inst:register_gated_feature(id, { on_enable=fn, on_disable=fn, label=loc_key })
 --   inst:all_peers_have()  -> bool                   -- true = safe to run gated features
+--   inst:require_peer(peer_id)                       -- synchronous pre-roster join fence
+--   inst:peer_has(peer_id) -> bool                   -- positive VMF acknowledgement only
+--   inst:forget_peer(peer_id)                        -- real disconnect; prevents stale-id reuse
 --   inst:tick(dt)                                    -- driven automatically by install(); safe to call manually too
 --   introspection for the host's regression suite:
 --     inst:is_installed() / inst:feature_count() / inst:applied_state() / inst.__classify
@@ -88,6 +91,7 @@ local function new_peer_parity(mod, opts)
     local _features       = {}          -- feature_id -> { on_enable, on_disable, label }
     local _feature_order  = {}          -- deterministic apply order
     local _acked          = {}          -- peer_id -> true (peer proven to run this mod)
+    local _pending        = {}          -- peer_id -> true (join sync began before PlayerManager exposed it)
     local _seen           = {}          -- peer_id -> true (last polled roster, for diffing)
     local _absent_since   = {}          -- acked peer temporarily absent from PlayerManager roster -> monotonic time
     local _applied        = "disabled"  -- fail-safe default; NEVER auto-starts enabled
@@ -135,18 +139,31 @@ local function new_peer_parity(mod, opts)
     -- never in _human_players, so human_players() is already humans-only.
     local function _other_human_peers()
         local out = {}
+        local visible = {}
+        local roster_known = false
         local pm = Managers and Managers.player
-        if not pm or type(pm.human_players) ~= "function" then return out end
-        local ok, humans = pcall(function() return pm:human_players() end)
-        if not ok or type(humans) ~= "table" then return out end
-        local me = _local_peer()
-        for _, player in pairs(humans) do
-            local pid = player and player.peer_id
-            if type(pid) == "string" and pid ~= me then
-                out[pid] = true
+        if pm and type(pm.human_players) == "function" then
+            local ok, humans = pcall(function() return pm:human_players() end)
+            if ok and type(humans) == "table" then
+                roster_known = true
+                local me = _local_peer()
+                for _, player in pairs(humans) do
+                    local pid = player and player.peer_id
+                    if type(pid) == "string" and pid ~= me then
+                        out[pid] = true
+                        visible[pid] = true
+                    end
+                end
             end
         end
-        return out
+        -- GameNetworkManager.hot_join_sync runs before PlayerManager adds the
+        -- remote player (peer_states.lua:432 vs :450). A host feature can call
+        -- require_peer() at that synchronous seam so the new peer is fail-closed
+        -- during the otherwise invisible pre-roster interval.
+        for pid in pairs(_pending) do
+            out[pid] = true
+        end
+        return out, roster_known, visible
     end
 
     local function _peer_name(peer_id)
@@ -189,7 +206,8 @@ local function new_peer_parity(mod, opts)
 
     function api:all_peers_have()
         local ok, res = pcall(function()
-            return _classify(_other_human_peers(), _acked)
+            local peers, roster_known = _other_human_peers()
+            return roster_known and _classify(peers, _acked)
         end)
         if not ok then return false end   -- fail-safe: no information -> not-all-have
         return res
@@ -279,6 +297,36 @@ local function new_peer_parity(mod, opts)
         end)
     end
 
+    -- Synchronous join-fence API --------------------------------------------
+    -- Polling remains the collision-free normal roster detector. These three
+    -- methods close the earlier engine seam where a hot-join full sync occurs
+    -- before PlayerManager can be polled. `require_peer` never waits: an
+    -- unacknowledged peer disables gated features immediately. The owning mod
+    -- then uses its vanilla-safe fallback before allowing the native sync.
+    function api:peer_has(peer_id)
+        return type(peer_id) == "string" and _acked[peer_id] == true
+    end
+
+    function api:require_peer(peer_id)
+        if type(peer_id) ~= "string" or peer_id == "" then return false end
+        _pending[peer_id] = true
+        if _acked[peer_id] ~= true then
+            _enable_at = nil
+            _force_disable()
+            _announce(0, peer_id)
+            return false
+        end
+        return true
+    end
+
+    function api:forget_peer(peer_id)
+        if type(peer_id) ~= "string" then return end
+        _pending[peer_id] = nil
+        _acked[peer_id] = nil
+        _seen[peer_id] = nil
+        _absent_since[peer_id] = nil
+    end
+
     function api:install()
         if _installed then return end
         if mod and type(mod.network_register) == "function" then
@@ -323,7 +371,7 @@ local function new_peer_parity(mod, opts)
         if _poll_accum < POLL_INTERVAL then return end
         _poll_accum = 0
 
-        local peers = _other_human_peers()
+        local peers, roster_known, visible = _other_human_peers()
 
         -- Roster diff: detect arrivals and bounded transition absences. The game
         -- removes still-connected humans from PlayerManager while changing
@@ -332,6 +380,12 @@ local function new_peer_parity(mod, opts)
         local new_peer = false
         for pid in pairs(peers) do
             if not _seen[pid] then new_peer = true end
+            -- Once PlayerManager exposes the joining peer, the ordinary roster
+            -- owns its lifetime. `forget_peer` handles a real disconnect before
+            -- a pending peer ever reaches this point.
+            if visible[pid] then
+                _pending[pid] = nil
+            end
             _absent_since[pid] = nil
         end
         for pid in pairs(_seen) do
@@ -357,7 +411,7 @@ local function new_peer_parity(mod, opts)
         for pid in pairs(peers) do
             if not _acked[pid] then missing[#missing + 1] = pid end
         end
-        local desired = (#missing == 0) and "enabled" or "disabled"
+        local desired = (roster_known and #missing == 0) and "enabled" or "disabled"
 
         if desired == "disabled" then
             _enable_at = nil
@@ -365,8 +419,8 @@ local function new_peer_parity(mod, opts)
             -- Debounced notice: only tell the user once the missing set has
             -- persisted past the grace window (so a cwv peer mid-handshake does
             -- not flash a spurious "disabled" line).
-            if _notify_at == nil then _notify_at = _clock + NOTIFY_GRACE end
-            if _clock >= _notify_at and _notified_state ~= "disabled" then
+            if roster_known and _notify_at == nil then _notify_at = _clock + NOTIFY_GRACE end
+            if roster_known and _notify_at and _clock >= _notify_at and _notified_state ~= "disabled" then
                 local names = {}
                 for _, pid in ipairs(missing) do names[#names + 1] = _peer_name(pid) end
                 _echo(string.format(

@@ -1,5 +1,16 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.291-dev (2026-07-16) - #426 close the pre-roster hot-join wire race [verify-fix-coop]
+
+- Source-confirmed the residual in the original parity gate: vanilla calls `GameNetworkManager.hot_join_sync(peer_id)` before `PlayerManager:add_remote_player`, so the poll-only beacon could not see a late joiner before BuffSystem and Deus SharedState serialized live CT buff/power-up lookup ids.
+- Added a synchronous pending-peer fence at the native hot-join boundary. A positively acknowledged CT peer passes unchanged. Unknown or non-CT peers immediately disable CT boons/miracles and strip player power-ups, party power-ups, persistent buff names, and live CT buffs before vanilla sync runs.
+- Expanded stripping from present PlayerManager rows to every synchronized SharedState row, closing the stale departed-player-key hole. The safe filtered arrays may sync; CT-only identifiers may not.
+- A real `GameNetworkManager.remove_peer` invalidates the VMF acknowledgement immediately, so a leave/rejoin with the same peer id cannot reuse stale proof. Level-transition-only PlayerManager gaps retain the existing bounded acknowledgement.
+- There is no join delay or indefinite wait. If the synchronous strip fails, CT does not call the unsafe native sync and requests the bounded vanilla kick fallback instead of risking another process. Saved settings are preserved and re-activate after confirmed parity.
+- Added engine-free coverage for missing peers, pre-roster unknown transitions, all-peer parity, and leave/rejoin freshness, plus a structural check that the fence and strip precede native sync.
+
+**Co-op verification:** host an in-progress expedition with a CT boon active, then hot-join once with current CT and once without CT. The CT peer should join normally; the non-CT peer should join without a CTD and the host log should show one `[ct:426] hot-join sync DEGRADED` row before native sync. Leave and rejoin without CT to prove the old acknowledgement is not reused.
+
 ## 0.7.290-dev (2026-07-14) - #533 native held-Tab collectible layout capture [diagnostics-armed]
 
 - Added automatic, observation-only capture when the native Chaos Wastes held-Tab view opens. It records the native collectible widgets, content/style, scenegraph parents, alignments, offsets, sizes, world/final screen bounds, resolution, UI scale, safe rect, controller, and provider needed to replace the current guessed injected layout.

@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.290-dev"
+local MOD_VERSION = "0.7.291-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -14605,57 +14605,90 @@ do
         -- all units. Buff removal uses remove_server_controlled_buff, whose RPC carries
         -- only an integer server_buff_id (buff_system.lua:340) and no-ops on peers
         -- without the buff (:437-454) - wire-safe by construction.
-        local function _ct_strip_modded_content()
-            local ok, err = pcall(function()
-                if not (Managers and Managers.player and Managers.player.is_server) then return end
-                local mechanism = Managers.mechanism and Managers.mechanism:game_mechanism()
-                local rc = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
-                local run_state = rc and rc._run_state
-                local pm = Managers.player
-                local stripped_pu, stripped_persist, stripped_buffs = 0, 0, 0
+        local function _ct_filter_wire_entries(values, persistent_names)
+            local filtered, removed = {}, 0
+            if type(values) ~= "table" then return filtered, removed end
+            for i = 1, #values do
+                local value = values[i]
+                local name = persistent_names and value or (type(value) == "table" and value.name)
+                local is_modded
+                if persistent_names then
+                    is_modded = mod._ct_is_ct_buff_template(name)
+                else
+                    is_modded = name ~= nil and _injected_dormants[name] ~= nil
+                end
+                if is_modded then
+                    removed = removed + 1
+                else
+                    filtered[#filtered + 1] = value
+                end
+            end
+            return filtered, removed
+        end
+        mod._ct_filter_wire_entries = _ct_filter_wire_entries
 
-                if rc and run_state and pm.human_and_bot_players then
-                    for _, p in pairs(pm:human_and_bot_players()) do
-                        local peer_id = p and p.peer_id
-                        local lpid = p and p.local_player_id and p:local_player_id()
-                        if peer_id and lpid then
-                            local profile_index, career_index = run_state:get_player_profile(peer_id, lpid)
-                            if profile_index and career_index then
-                                local pus = run_state:get_player_power_ups(peer_id, lpid, profile_index, career_index)
-                                if type(pus) == "table" and #pus > 0 then
-                                    local filtered, removed = {}, 0
-                                    for i = 1, #pus do
-                                        local pu = pus[i]
-                                        if pu and pu.name and _injected_dormants[pu.name] then
-                                            removed = removed + 1
-                                        else
-                                            filtered[#filtered + 1] = pu
-                                        end
-                                    end
-                                    if removed > 0 then
-                                        run_state:set_player_power_ups(peer_id, lpid, profile_index, career_index, filtered)
-                                        stripped_pu = stripped_pu + removed
-                                    end
-                                end
-                                if rc.get_player_persistent_buffs and rc.save_persistent_buffs then
-                                    local pers = rc:get_player_persistent_buffs(peer_id, lpid)
-                                    if type(pers) == "table" and #pers > 0 then
-                                        local fpers, premoved = {}, 0
-                                        for i = 1, #pers do
-                                            local bn = pers[i]
-                                            if mod._ct_is_ct_buff_template(bn) then
-                                                premoved = premoved + 1
-                                            else
-                                                fpers[#fpers + 1] = bn
+        -- Walk one SharedState server key's full composite-key tree. Full sync
+        -- serializes every row in `_server_state`, including rows whose players
+        -- are no longer enumerable through PlayerManager (shared_state.lua:
+        -- 683-708). The previous present-player-only strip left those stale rows
+        -- capable of exposing a CT NetworkLookup id to a late joiner.
+        local function _ct_each_server_state_row(run_state, key_type, visit)
+            local shared = run_state and run_state._shared_state
+            local key_state = shared and shared._server_state and shared._server_state[key_type]
+            if type(key_state) ~= "table" then return end
+            for peer_id, local_players in pairs(key_state) do
+                if type(local_players) == "table" then
+                    for local_player_id, profiles in pairs(local_players) do
+                        if type(profiles) == "table" then
+                            for profile_index, careers in pairs(profiles) do
+                                if type(careers) == "table" then
+                                    for career_index, parties in pairs(careers) do
+                                        if type(parties) == "table" then
+                                            for _, value in pairs(parties) do
+                                                visit(peer_id, local_player_id, profile_index, career_index, value)
                                             end
-                                        end
-                                        if premoved > 0 then
-                                            rc:save_persistent_buffs(peer_id, lpid, profile_index, career_index, fpers)
-                                            stripped_persist = stripped_persist + premoved
                                         end
                                     end
                                 end
                             end
+                        end
+                    end
+                end
+            end
+        end
+
+        local function _ct_strip_modded_content(reason)
+            local completed = false
+            local ok, err = pcall(function()
+                if not (Managers and Managers.player and Managers.player.is_server) then
+                    error("server PlayerManager unavailable")
+                end
+                local mechanism = Managers.mechanism and Managers.mechanism:game_mechanism()
+                local rc = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
+                local run_state = rc and rc._run_state
+                local stripped_pu, stripped_party, stripped_persist, stripped_buffs = 0, 0, 0, 0
+
+                if run_state then
+                    _ct_each_server_state_row(run_state, "power_ups", function(peer_id, lpid, profile_index, career_index, values)
+                        local filtered, removed = _ct_filter_wire_entries(values, false)
+                        if removed > 0 then
+                            run_state:set_player_power_ups(peer_id, lpid, profile_index, career_index, filtered)
+                            stripped_pu = stripped_pu + removed
+                        end
+                    end)
+                    _ct_each_server_state_row(run_state, "persistent_buffs", function(peer_id, lpid, profile_index, career_index, values)
+                        local filtered, removed = _ct_filter_wire_entries(values, true)
+                        if removed > 0 then
+                            run_state:set_player_persistent_buffs(peer_id, lpid, profile_index, career_index, filtered)
+                            stripped_persist = stripped_persist + removed
+                        end
+                    end)
+                    if run_state.get_party_power_ups and run_state.set_party_power_ups then
+                        local party = run_state:get_party_power_ups()
+                        local filtered, removed = _ct_filter_wire_entries(party, false)
+                        if removed > 0 then
+                            run_state:set_party_power_ups(filtered)
+                            stripped_party = removed
                         end
                     end
                     -- A stripped Isha buff must not re-arm/re-apply from stale flags.
@@ -14684,18 +14717,16 @@ do
                     end
                 end
 
-                -- KNOWN LIMIT: run-state keys of DEPARTED players are not enumerable from
-                -- here (human_and_bot_players covers present players only), so a ct player
-                -- who left after being granted a modded boon leaves an unstripped key that
-                -- a future joiner's full-state sync still carries. Documented in
-                -- DEVELOPMENT.md; surfaced in this line so a paired log can attribute it.
-                pcall(printf, "[ct:426] parity-loss strip: removed %d granted modded power-up(s), %d persistent buff name(s), %d live modded buff(s) from PRESENT players - lobby degraded to vanilla-safe state (departed-player run-state keys not covered)",
-                    stripped_pu, stripped_persist, stripped_buffs)
+                pcall(printf, "[ct:426] parity-loss strip reason=%s: removed %d player power-up(s), %d party power-up(s), %d persistent buff name(s), %d live buff(s) from the full synchronized state - lobby degraded to vanilla-safe state",
+                    tostring(reason or "parity_loss"), stripped_pu, stripped_party, stripped_persist, stripped_buffs)
+                completed = true
             end)
             if not ok then
-                pcall(printf, "[ct:426] parity-loss strip errored: %s", tostring(err))
+                pcall(printf, "[ct:426] parity-loss strip reason=%s errored: %s", tostring(reason or "parity_loss"), tostring(err))
             end
+            return ok and completed
         end
+        mod._ct_strip_modded_content = _ct_strip_modded_content
 
         -- Debounce: the beacon disables INSTANTLY when an un-acked peer appears (correct,
         -- crash-safe direction for the reversible gates above), but the strip is
@@ -14708,10 +14739,8 @@ do
         -- ANNOUNCE_EVERY = 10s cadence (review finding, pre-ship - 6s stripped a ct
         -- friend on one lost announce). 15s > announce retry (10s) + settle (2s) + poll
         -- slack, and still lands inside a joining player's map-load + first-fight window.
-        -- Honest residual: a non-ct peer's engine-level join sync can race ahead of
-        -- beacon detection - the gate PREVENTS the class for lobbies formed before the
-        -- run and shrinks the mid-run hot-join window; it cannot make an already-modded
-        -- run fully hot-join-proof.
+        -- The synchronous hot-join fence below handles the earlier pre-roster
+        -- engine seam; this grace remains only for non-join parity transitions.
         local STRIP_GRACE = 15.0
         local _clock = 0
         local _strip_deadline = nil
@@ -14744,6 +14773,58 @@ do
             -- settle in a lobby.
             _ct_eject_modded_pools()
 
+            -- Synchronous hot-join fence. Vanilla calls
+            -- GameNetworkManager.hot_join_sync(peer_id) BEFORE it adds the
+            -- remote player to PlayerManager (peer_states.lua:432 vs :450).
+            -- The poll-only beacon therefore cannot see the peer in time to
+            -- protect BuffSystem.hot_join_sync or the Deus SharedState request.
+            --
+            -- There is no wait/timeout here: an already-acked CT peer passes;
+            -- every unknown/missing peer immediately receives the vanilla-safe
+            -- degraded run after the full synchronized CT state is stripped.
+            -- If the strip itself errors, native hot-join sync is NOT called and
+            -- NetworkServer.kick_peer is the bounded fallback. A rejected join
+            -- is preferable to sending an unresolved NetworkLookup id and CTDing
+            -- the other process. Saved settings are never changed.
+            mod:hook("GameNetworkManager", "hot_join_sync", function(func, self, peer_id, ...)
+                if type(peer_id) ~= "string" then
+                    return func(self, peer_id, ...)
+                end
+
+                local confirmed = inst:peer_has(peer_id)
+                inst:require_peer(peer_id) -- immediate gate-off before any native sync
+
+                if not confirmed then
+                    local stripped = _ct_strip_modded_content("hot_join_unconfirmed:" .. peer_id)
+                    -- require_peer() synchronously drove on_disable, which arms
+                    -- the ordinary 15-second transition strip. This join has
+                    -- already been handled synchronously, so suppress that
+                    -- redundant second strip/log row.
+                    _strip_deadline = nil
+                    if not stripped then
+                        pcall(printf, "[ct:426] hot-join sync REJECTED peer=%s: CT state could not be made wire-safe", tostring(peer_id))
+                        local network_server = self and self.network_server
+                        if network_server and type(network_server.kick_peer) == "function" then
+                            pcall(network_server.kick_peer, network_server, peer_id)
+                        end
+                        return
+                    end
+                    pcall(printf, "[ct:426] hot-join sync DEGRADED peer=%s: no positive CT acknowledgement before native sync", tostring(peer_id))
+                end
+
+                return func(self, peer_id, ...)
+            end)
+
+            -- A real network departure invalidates the acknowledgement
+            -- immediately. PlayerManager-only level-transition gaps do not call
+            -- this method, so the existing bounded transition retention remains
+            -- intact; a leave/rejoin with the same Steam peer id cannot reuse the
+            -- previous session's proof.
+            mod:hook("GameNetworkManager", "remove_peer", function(func, self, peer_id, ...)
+                inst:forget_peer(peer_id)
+                return func(self, peer_id, ...)
+            end)
+
             -- Strip-debounce ticker, chained onto mod.update after install()'s wrap:
             -- chain is [this] -> [beacon wrapper] -> [ct's own update], then beacon tick,
             -- then this tick. NOT a new (Class, method) hook - plain function chaining.
@@ -14761,7 +14842,7 @@ do
                 _clock = _clock + (dt or 0)
                 if _strip_deadline and _clock >= _strip_deadline then
                     _strip_deadline = nil
-                    _ct_strip_modded_content()
+                    _ct_strip_modded_content("persistent_parity_loss")
                 end
             end
 
@@ -14796,6 +14877,31 @@ _rt_register("peer_parity_gate_classify", function()
     if classify({ p1 = true }, { p1 = true }) ~= true then return "all-acked lobby must classify safe" end
     if classify({ p1 = true, p2 = true }, { p1 = true }) ~= false then return "partially-acked lobby must classify unsafe" end
     if classify({}, { p_stale = true }) ~= true then return "stale ack with empty roster must classify safe" end
+    return nil
+end)
+
+_rt_register("issue426_hot_join_fence", function()
+    local pp = mod._ct_peer_parity
+    if not pp or type(pp.require_peer) ~= "function" then return "peer parity require_peer API missing" end
+    if type(pp.peer_has) ~= "function" then return "peer parity peer_has API missing" end
+    if type(pp.forget_peer) ~= "function" then return "peer parity forget_peer API missing" end
+    if type(mod._ct_strip_modded_content) ~= "function" then return "full-state CT strip missing" end
+    local filter = mod._ct_filter_wire_entries
+    if type(filter) ~= "function" then return "wire-state filter missing" end
+    local player_filtered, player_removed = filter({
+        { name = "ct_kill_heal" },
+        { name = "deus_larger_clip" },
+    }, false)
+    if player_removed ~= 1 or #player_filtered ~= 1 or player_filtered[1].name ~= "deus_larger_clip" then
+        return "player power-up filter does not remove exactly the CT entry"
+    end
+    local persistent_filtered, persistent_removed = filter({
+        "ct_miracle_of_ulric",
+        "natural_bond",
+    }, true)
+    if persistent_removed ~= 1 or #persistent_filtered ~= 1 or persistent_filtered[1] ~= "natural_bond" then
+        return "persistent-buff filter does not remove exactly the CT entry"
+    end
     return nil
 end)
 

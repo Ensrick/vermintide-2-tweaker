@@ -89,6 +89,7 @@ pair (repo `CLAUDE.md` NON-NEGOTIABLE 8), flagged in the trap column.
 | `DeusPowerUpUtils.generate_random_power_ups` [hook] `:2627` | Rolls the shrine/chest boon offer from `DeusPowerUpRarityPool` + `existing_power_ups_lut` [src: `deus_power_up_utils.lua:189`] | CONSOLIDATED master boon-roll hook: count override + disabled-boon enforcement + bomb-boon exclusivity + Belakor force-rarity | v0.7.77 CONSOLIDATION (two hooks caused "rehook active hook"); reads `args[6]`=availability_type, `args[8]`=forced_rarity positionally; injected boon rarity MUST be `{event,rare,exotic,unique}` or `existing_power_ups_lut[rarity]` is nil -> crash (DEVELOPMENT "Deus boon rarities") |
 | `_G deus_populate_graph` [hook] `:6395` | The deterministic CW node-graph generator; picks levels/curses/themes by INDEX into `LEVEL_AVAILABILITY.*` arrays | Host broadcasts resolved graph; clients overwrite in place (per-peer determinism fix) | Same seed x different arrays (ct's `inject_adventure_maps` mutates the arrays) = divergent picks; can't runtime-resync because array length folds into the lobby hash - hence the snapshot RPC (DEVELOPMENT "Graph-snapshot RPC") |
 | `_LobbyAux.create_network_hash` [hook,tbl] `:453` | Computes the lobby `combined_hash`; `num_levels` is the only field a Lua mod affects | ct's `inject_adventure_maps` raises `num_levels` (vanilla 582 -> ~774); shim lets a modded host still admit peers where safe | `LevelSettings` mutations are STICKY - can't be un-registered from Lua, only a game restart reverts `num_levels` (DEVELOPMENT "Lobby combined_hash"); the shim deliberately lets NON-ct peers join, which is exactly why the #426 wire-safety gate exists |
+| `GameNetworkManager.hot_join_sync` [hook] / `remove_peer` [hook] | The server synchronizes entity systems and game mode before `PeerStates` adds the remote player to `PlayerManager` [src: `game_network_manager.lua:838-851`; `peer_states.lua:432,450`]; real disconnect removes the peer [src: `game_network_manager.lua:814-830`] | #426 synchronously marks the pre-roster peer pending and requires a positive CT acknowledgement. Unknown/missing CT strips every synchronized CT power-up/persistent/live-buff row before vanilla sync; real leave invalidates the acknowledgement | No timeout: positive parity passes, unknown degrades immediately. Strip failure does not call unsafe native sync and requests `NetworkServer.kick_peer` [src: `network_server.lua:476-484`]. Saved settings remain unchanged. These are the only CT hooks on both exact pairs. |
 | `GameModeDeus.local_player_game_starts` [safe] `:5638` / `evaluate_end_conditions` [hook] `:10140` / `_get_coins_amount_and_type` [hook] `:7048` | CW game-mode: local start (applies theme light tint), end-condition eval, coin pickup amount/type | Curse light tinting on injected levels, end-condition tuning, coin economy | GameMode hooks need all three modes where relevant (memory `reference_vt2_mission_gamemode_hooks_three_modes`); `local_player_game_starts` iterates `Level.units` for reflection-probe tint [src: `game_mode_deus.lua:358-378`] |
 | `GameModeDeus.player_left_game_session` [hook] / `_add_bot` [safe] / `remove_bot` [hook] | Departure is the last point with the human's keyed Deus state; bot add creates a fresh profile row; `remove_bot` returns the exact bot selected for a joining player [src: `game_mode_deus.lua:204-235,540-607`; `deus_spawning.lua:397-405`] | #465 transfers boons, persistent buffs, coin, and both serialized CW weapons human->bot and bot->human; #466 seeds a newly created bot's independent economy ledger | Host-only and setting-gated; joining coin is the host's live balance; copied rows are marked initialized; CT-only identifiers are parity-filtered before direct SharedState writes; no custom RPC or polling |
 | `BulldozerPlayer.spawn` [safe] `:4211` | Local player spawn | Post-spawn re-apply hook for run-dependent state | `hook_safe`; local player only |
@@ -172,8 +173,8 @@ it -> CTD. This is a GAMEPLAY axis (the substitute would change what happens), s
 per the issue-371 map it cannot be substituted - the content must go INERT while
 any peer lacks ct (`docs/engine/03` §31, project `project_vt2_cross_peer_wire_safety`).
 
-The gate (v0.7.240-dev) is the shared peer-parity beacon (`_lib_peer_parity.lua`,
-a verbatim copy of the master; edit the master and re-copy). Five surfaces, all
+The gate (v0.7.240-dev; synchronous hot-join fence v0.7.291-dev) is the shared peer-parity beacon (`_lib_peer_parity.lua`,
+a verbatim copy of the master; edit the master and re-copy). Six surfaces, all
 tagged `[ct:426]`: (1) POOL eject/inject around `DeusPowerUpRarityPool` with a
 load-time initial eject; (2) the GRANT filter inside the consolidated
 `DeusRunController.add_power_ups` hook; (3) the STARTING-boon filter in
@@ -183,6 +184,12 @@ MUST exceed the beacon's 10s announce cadence: VMF's `network_send` silently ski
 peers whose VMF handshake is still in flight, so a ct friend's first announce can
 be lost and the retry is the only delivery - a shorter grace would nuke the
 lobby's boons on an ack-in-flight transient (DEVELOPMENT "Peer-parity wire safety").
+The sixth surface closes the earlier poll race: `GameNetworkManager.hot_join_sync`
+runs before `PlayerManager:add_remote_player` [src: `peer_states.lua:432,450`]. The
+shared helper's pending-peer fence disables immediately; unknown peers receive a
+full synchronized-state strip before native hot-join sync. A real `remove_peer`
+forgets the acknowledgement, while PlayerManager-only level transitions preserve
+the bounded same-session retention.
 
 ### Boon/power-up pool + dual-table registration (owner: `docs/engine/10`)
 

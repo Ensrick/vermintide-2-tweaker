@@ -8,6 +8,7 @@
                 "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_peer_parity.lua"
                 "event_tweaker/scripts/mods/event_tweaker/_lib_peer_parity.lua"
                 "weapon_tweaker/scripts/mods/weapon_tweaker/_lib_peer_parity.lua"
+                "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_peer_parity.lua"
             )
         }
         @{

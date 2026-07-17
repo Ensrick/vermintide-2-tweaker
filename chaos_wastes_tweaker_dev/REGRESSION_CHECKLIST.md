@@ -4,7 +4,19 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-14.
+Last updated: 2026-07-16.
+
+### modded-boon pre-roster hot-join parity - issue #426
+
+| Field | Value |
+|---|---|
+| Scope | CT-owned power-up and buff identifiers only; vanilla boons/miracles and saved settings are unchanged. |
+| Engine order | `GameNetworkManager.hot_join_sync(peer_id)` occurs before `PlayerManager:add_remote_player`, so the pending peer must enter the gate synchronously. |
+| Positive parity | A fresh VMF acknowledgement for the joining peer passes native sync without stripping. |
+| Unknown/mixed fallback | Immediately strip CT player/party power-ups, persistent buff names, and live CT buffs from the full synchronized state, then run vanilla sync. No wait. Strip failure rejects through the bounded vanilla kick path rather than sending a custom lookup id. |
+| Leave/rejoin | Real `remove_peer` forgets the ack. Same-id rejoin is unknown until a fresh acknowledgement; level-transition roster gaps retain the bounded same-session proof. |
+| Detection | Offline `test_peer_parity_transition.lua` covers missing, pre-roster unknown, all-acked, and leave/rejoin states plus hook order. `/ct_regression_test`: `peer_parity_beacon_installed`, `peer_parity_gate_classify`, `issue426_hot_join_fence`, `ct_wire_strip_name_predicate`. |
+| Lifecycle | `verify-fix-coop`; test one current-CT hot join and one no-CT hot join into an in-progress run with a CT boon active. |
 
 ### expedition save/resume readiness - issue #141
 
