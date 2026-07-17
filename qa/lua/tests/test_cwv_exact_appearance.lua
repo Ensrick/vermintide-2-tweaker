@@ -48,12 +48,138 @@ return function(H, repo_root)
         end
     end)
 
+    H.test("CWV #660 preview adapters consume one immutable unit descriptor", function()
+        local descriptor = assert(Policy.resolve_spawn_descriptor({
+            variant = {
+                item_key = "cwv_test",
+                right_hand_unit = "variant_right",
+                left_hand_unit = "variant_left",
+            },
+            base = {
+                right_hand_unit = "base_right",
+                left_hand_unit = "base_left",
+            },
+        }))
+        H.equal(descriptor.fingerprint,
+            "cwv_test|-|variant_right|variant_left")
+
+        local inventory = {
+            { right_hand = true, unit_name = "anything_right_3p" },
+            { left_hand = true, unit_name = "anything_left_3p" },
+            { right_hand = true, is_ammo_unit = true, unit_name = "ammo" },
+        }
+        local browser = {
+            { unit_name = "base_left_3p" },
+            { unit_name = "base_right_3p" },
+            { unit_name = "unrelated_3p" },
+        }
+        local resident = function(unit) return unit .. "_3p" end
+        H.equal(Policy.apply_spawn_descriptor(
+            descriptor, inventory, resident, Policy.SPAWN_ADAPTERS.inventory_mannequin), 2)
+        H.equal(Policy.apply_spawn_descriptor(
+            descriptor, browser, resident, Policy.SPAWN_ADAPTERS.athanor_preview), 2)
+        H.equal(inventory[1].unit_name, "variant_right_3p")
+        H.equal(inventory[2].unit_name, "variant_left_3p")
+        H.equal(inventory[3].unit_name, "ammo")
+        H.equal(browser[1].unit_name, "variant_left_3p")
+        H.equal(browser[2].unit_name, "variant_right_3p")
+        H.equal(browser[3].unit_name, "unrelated_3p")
+        H.equal(descriptor.fingerprint,
+            "cwv_test|-|variant_right|variant_left",
+            "surface adapters mutated the canonical descriptor")
+    end)
+
+    H.test("CWV #660 exact skin composes independent offhand on both preview adapters", function()
+        local descriptor = assert(Policy.resolve_spawn_descriptor({
+            explicit_skin = "skin_red",
+            weapon_skins = { skin_red = {
+                right_hand_unit = "skin_right",
+                left_hand_unit = "skin_left",
+            } },
+            variant = {
+                item_key = "cwv_test",
+                right_hand_unit = "variant_right",
+                left_hand_unit = "variant_left",
+            },
+            base = {
+                right_hand_unit = "base_right",
+                left_hand_unit = "base_left",
+            },
+        }))
+        local resident = function(unit) return unit .. "_3p" end
+        local inventory = {
+            { right_hand = true, unit_name = "variant_right_3p" },
+            { left_hand = true, unit_name = "cosmetics_offhand_3p" },
+        }
+        local browser = {
+            { unit_name = "variant_right_3p" },
+            { unit_name = "cosmetics_offhand_3p" },
+        }
+        H.equal(Policy.apply_spawn_descriptor(
+            descriptor, inventory, resident, "hand_flags"), 1)
+        H.equal(Policy.apply_spawn_descriptor(
+            descriptor, browser, resident, "base_identity"), 1)
+        H.equal(inventory[1].unit_name, "skin_right_3p")
+        H.equal(inventory[2].unit_name, "cosmetics_offhand_3p")
+        H.equal(browser[1].unit_name, "skin_right_3p")
+        H.equal(browser[2].unit_name, "cosmetics_offhand_3p")
+    end)
+
+    H.test("CWV #660 browser hand flags disambiguate identical base units", function()
+        local descriptor = assert(Policy.resolve_spawn_descriptor({
+            variant = {
+                item_key = "cwv_dual",
+                right_hand_unit = "right_authored",
+                left_hand_unit = "left_authored",
+            },
+            base = {
+                right_hand_unit = "same_base",
+                left_hand_unit = "same_base",
+            },
+        }))
+        local recipe = {
+            { left_hand = true, unit_name = "same_base_3p" },
+            { right_hand = true, unit_name = "same_base_3p" },
+        }
+        H.equal(Policy.apply_spawn_descriptor(
+            descriptor, recipe, function(unit) return unit .. "_3p" end,
+            "base_identity"), 2)
+        H.equal(recipe[1].unit_name, "left_authored_3p")
+        H.equal(recipe[2].unit_name, "right_authored_3p")
+    end)
+
+    H.test("CWV #660 unresolved explicit skin fails closed before variant fallback", function()
+        local descriptor, reason = Policy.resolve_spawn_descriptor({
+            explicit_skin = "missing_skin",
+            weapon_skins = {},
+            variant = { item_key = "cwv_test", right_hand_unit = "variant" },
+            base = { right_hand_unit = "base" },
+        })
+        H.equal(descriptor, nil)
+        H.equal(reason, "skin_unresolved")
+
+        descriptor, reason = Policy.resolve_spawn_descriptor({
+            backend_id = "cwv_test_001",
+            skin_from_backend = function() return "missing_backend_skin" end,
+            weapon_skins = {},
+            variant = { item_key = "cwv_test", right_hand_unit = "variant" },
+            base = { right_hand_unit = "base" },
+        })
+        H.equal(descriptor, nil)
+        H.equal(reason, "skin_unresolved")
+    end)
+
     H.test("CWV #579 adapters route unit and preview recipes through canonical policy", function()
         local source = read(main_path)
         for _, marker in ipairs({
             "_om.exact_appearance.resolve({",
             "_om.exact_appearance.apply_item_units(exact, result, true)",
-            "_om.exact_appearance.apply_spawn_data(",
+            "_om._cwv_resolve_spawn_descriptor = function",
+            "_om.exact_appearance.resolve_spawn_descriptor({",
+            "_om.exact_appearance.apply_spawn_descriptor(",
+            '"hand_flags"',
+            '"base_identity"',
+            'issue660_preview_descriptor_adapter_parity',
             'mod:hook("HeroPreviewer", "_spawn_item"',
             'mod:hook("MenuWorldPreviewer", "_spawn_item"',
             'mod:hook("LootItemUnitPreviewer", "spawn_units"',

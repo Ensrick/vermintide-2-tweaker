@@ -3,8 +3,10 @@
 **Status:** normative. This is the contract every weapon-appearance override in the
 monorepo must satisfy. It exists to kill one recurring bug class: *an attribute
 (mesh / transform / texture / ammo) is correct in ONE render path or for ONE
-observer and wrong in another.* Issues #237, #392, #394, #396, #397, #399, #401,
-#409, #415, #416, #204, #227 are all instances of it.
+observer and wrong in another.* Issues #149, #203, #204, #227, #233, #237,
+#392, #394, #396, #397, #399, #401, #409, #415, #416, #419, #474, #481,
+#482, #483, #579, #587, #598, #613, #629, #645, #650, #657, and #660 are
+instances of it.
 
 The rule the whole document enforces:
 
@@ -268,13 +270,25 @@ Both previewers spawn from a mutable, precomputed recipe (`spawn_data` /
    invisible-weapon sentinel, never ammo-unit entries. Idempotent by keyed
    assignment (`equip_item` fires twice per equip).
 
-**Registration vs resolution.** Two different lookups, do not conflate:
+**Registration vs resolution.** Two different lookups remain in the legacy
+runtime; they must agree and are not permission to omit a concern:
 - **Unit-swap** (this section) resolves via `_find_def` — registration-INDEPENDENT,
   so a transform-less cross-character melee variant still previews its own mesh.
 - **Transform apply** (§4.2) on paths 3 & 4 resolves via `_transform_map`
-  (`_resolve_preview_def`), which is gated: a def registers when it contributes
-  ANY transform field or `force_register = true`. A native-scale variant needs
-  no transform, so not being registered is correct — its mesh still swaps.
+  (`_resolve_preview_def`), which is gated. Since v0.1.371-dev (#417), every
+  unit-bearing definition is registered even when its transform is native. This
+  keeps mesh, transform, and future def-keyed concerns on the same identity;
+  `cwv_unit_bearing_variants_registered` locks the bridge until the legacy maps
+  are replaced by the canonical descriptor.
+
+As the first #660 migration slice, inventory-character preview and the
+illusion/Athanor browser call
+`_cwv_exact_appearance.resolve_spawn_descriptor` once, then translate that
+same immutable-by-convention unit descriptor with either the `hand_flags` or
+`base_identity` adapter. The adapter may mutate only engine `spawn_data`; it
+cannot resolve skin, backend identity, or variant units again. This removes the
+duplicated #237/#419 fallback loops. It does **not** establish owner, husk,
+transition, material, pose, icon, or name parity; those remain separate slices.
 
 ### §4.2 Transform — `WA` (WeaponAppearance)
 
@@ -357,9 +371,18 @@ UNCONDITIONALLY (host included), so it already covers the owner path — #415's
 absent Bretonnian shield on non-GK Empire careers is therefore NOT a residency
 gap but a ranged-slot offhand-attach issue (verify in-game before treating it as
 residency). The producer ref string and the `_3p`+`has_loaded` guard must live
-in a SINGLE shared constant + predicate, not re-inlined per site (issue #418):
-`_force_load_axe_shield_husk_units` currently omits the safety predicates that
-the data-driven pass and the preview swap both carry.
+in a SINGLE shared constant + predicate, not re-inlined per site (issue #418).
+The data-driven override pass and preview adapters share
+`_om.HUSK_OVERRIDE_REF` / `_resident_override_3p`.
+
+`_force_load_axe_shield_husk_units` is older and hand-authored, but current
+source and issue #280 history show that it serves a different crash floor: it
+loads the *vanilla base* Axe+Shield units for the no-skin wire path, while
+`_force_load_husk_override_units` deliberately loads only authored units that
+differ from the base. Do not delete the older writer merely because it is
+weapon-specific. Retire it only after a data-driven residency plan explicitly
+loads both required base fallbacks and authored overrides under one symmetric
+lifecycle, with a no-skin remote control proving the replacement.
 
 ### §4.6 Pose/animation
 
@@ -481,6 +504,81 @@ an empty, unknown, red-placeholder, or custom-resource error is a failure.
 | #419 | Units | 4 | illusion browser previews base mesh (path-3 swap not mirrored) |
 | #420 | Texture | all | WA not shared; Material.set_texture banned-primitive copies |
 | #617 | Texture | 4 | Old Musket custom unit spawned in Athanor/browser without its texture consumer |
+
+---
+
+## §7a Issue #660 empirical regression-family audit (2026-07-17)
+
+This crosscheck used the current GitHub issue state, issue closure comments,
+`git log`/`git blame`, and current source. It does not infer that a closed issue
+is broken merely because a later issue has a similar symptom. A closed fix is
+classified as **surface-local** only where its own acceptance evidence and diff
+name a narrower consumer, concern, provider, or lifecycle edge than the current
+open report.
+
+### Crosslinked families
+
+| Family | Closed/verified evidence | Open or residual evidence | Empirical boundary |
+|---|---|---|---|
+| Preview unit selection | #409, #617 | #148, #150, #227, #237, #419, #474, #481, #598, #613 | #237 added `_cwv_preview_meshswap_apply` in `06e9d50`; #419 later added the near-twin `_cwv_browser_meshswap_apply` in `3360f53`. The same unit concern was reconstructed once per preview engine. |
+| Husk model, transform, and residency | #270, #282, #397, #418, #475, #495, #580, #587 | #149, #154, #204, #233, #278, #279, #394-#401, #416, #421, #423, #474, #478, #483, #484, #491, #579, #583, #629, #645, #657 | #397 verified the CWV husk-transform route from `d1817a7`; #587 verified WT's separate baked-transform route. Neither is a provider-neutral descriptor/replay contract, so WOC, LA, paired hands, and Combat Styles still have independent paths. |
+| Transition, swap, and hot join | #234, #264, #265, #267, #268, #574 | #105, #149, #203, #233, #353, #354, #376, #395, #416, #474, #482, #483, #518, #579, #583, #629, #645, #657 | The LA fixes separately added post-spawn swap, revert broadcast, wearer-scoped reconciliation, and pull/ack. Glow #574 added its own transaction and state pull. There is no shared generation/fingerprint reconciler across providers. |
+| Exact instance and crafted identity | #390, #392, #563, #592, #620 | #226, #227, #237, #246, #278, #279, #353, #354, #376, #391, #417, #419, #474, #481, #482, #483, #491, #524, #579, #583, #598, #628, #637, #641, #645, #650, #657 | Backend UUID, stamped `cwv_key`, base `item_data.name`, selected skin, wearer/slot snapshot, and style state still enter different resolvers. #392 correctly closed blacksmith/base identity without claiming every presentation adapter. |
+| Transform/pose retention | #397, #409, #569, #587, #603, #606 | #109-#113, #168, #237, #269, #394, #400, #417, #420, #441, #474, #482, #604, #613, #645, #657 | Shared `WeaponAppearance` geometry landed in `3c82f93`, but per-provider ownership and lifecycle remained. WOC #613 proved successful per-channel writes could retain rotation while rejecting position/scale; `5bbb181` repaired the atomic primitive, not every consumer. |
+| Texture, glow, and per-hand composition | #234, #265, #514, #563, #574, #612, #617 | #48, #149, #150, #154, #203, #204, #227, #228, #233, #266, #373, #376, #377, #416, #419, #420, #421, #474, #481, #518, #565, #566, #579, #583, #610, #613, #629, #650 | #574 owns exact-item glow transactions; #612 owns donor-preserving hat materials; #617 owns one Athanor resource closure. Those verified fixes do not cover LA mesh/material pairing, composite shield glow, or every renderer. |
+| UI identity, icon, name, and score/lobby | #513, #514, #617, #639 | #227, #237, #246, #376, #419, #481, #598, #629, #638, #641, #650 | #513 isolated score-lineup wearer identity, while weapon appearance and offhand text stayed separate. Hold-Tab lacks backend IDs by source contract, so exact-instance UI logic cannot simply be reused there. |
+| Imported/custom-unit behavior and fallback | #270, #403, #418, #422, #612, #617, #654 | #227, #278, #279, #396, #421, #474, #478, #491, #604, #613, #627, #629, #633 | Residency, wire substitution, renderer material closure, donor physics/fade, and transform retention are separate contracts. A resident mesh does not prove a safe wire identity, valid material, retained pose, or donor behavior. |
+| Combat Style appearance | #620, #644, #648 | #645, #657 | Core selection/cycling and donor cloning were verified, but remote re-wield, model visibility, animation refresh, and mission replay are later lifecycle/adapter evidence. Closing the control feature did not verify this full matrix. |
+
+### Why the regressions recur
+
+1. **Identity is re-derived.** Current code still resolves through `_find_def`,
+   `_transform_map`, backend skin lookup, base+career husk heuristics, and
+   feature-specific peer stores. These are useful compatibility bridges, not a
+   single canonical instance descriptor.
+2. **Engine surfaces are genuinely separate.** Owner and husk inventory
+   extensions are different root classes; the two preview engines expose
+   different recipe shapes; Hold-Tab has no backend ID. Reusing a setter does
+   not automatically reuse identity or lifecycle.
+3. **Lifecycle replay is feature-owned.** LA, glow, Combat Styles, WOC, and CWV
+   each react to different subsets of equip, spawn, transition, preview-open,
+   peer-ready, and hot-join edges. No bounded reconciler currently proves that
+   one descriptor generation reached every applicable consumer.
+4. **Earlier tests often proved registration or call success.** #613 supplied
+   the concrete counterexample: target Z/scale were logged, one channel applied,
+   and immediate retained Z/scale remained native. Postconditions must compare
+   unit identity and full retained pose/material/template state.
+5. **Verified closure was usually correct but narrow.** The user verified the
+   reported reproduction for #397, #513, #574, #587, #603, #606, #612, #617,
+   #620, #639, #644, and #648. Those closures must remain recorded; they are not
+   evidence that another mod/provider/surface inherited the fix.
+
+### Current migration and three fallback paths
+
+The first code slice removes the #237/#419 duplicate unit resolvers. Both now
+consume one descriptor from `_cwv_exact_appearance` and differ only by their
+engine adapter. Offline coverage proves both adapters produce the same per-hand
+unit result, preserve an unrelated independently customized offhand, reject an
+unresolved explicit skin, leave ammo/unrelated rows unchanged, and do not mutate
+the descriptor. Runtime/in-game proof is still required.
+
+If this slice fails, use these evidence-driven fallbacks in order:
+
+1. Capture bounded pre/post recipes plus descriptor fingerprint on both preview
+   hooks and correct the pure adapter while retaining the single resolver.
+2. If one engine recipe carries an undocumented identity shape, add that shape
+   as a named adapter with a vanilla-source citation and a failing fixture; do
+   not restore a second identity resolver.
+3. If provider composition cannot be represented by the descriptor, split
+   provider-owned **resolution** from engine-owned **application** with an
+   explicit field-ownership merge contract, then keep one final descriptor and
+   one adapter per engine surface. Preserve vanilla presentation on ambiguity.
+
+Residual critical work remains: provider-neutral exact identity, owner/husk
+adapters, peer-ready and mission-transition replay, retained postconditions,
+UI adapters, and deletion of superseded writers after each migrated family.
+Until those land and the applicable co-op matrix passes, #660 remains
+`diagnostics-armed` with `coop-required`.
 
 ---
 

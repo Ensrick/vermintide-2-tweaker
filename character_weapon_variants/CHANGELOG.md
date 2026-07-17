@@ -1,5 +1,34 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.437-dev - 2026-07-17 - #660 canonical preview-unit descriptor [diagnostics-armed]
+
+- Replaced the separate #237 inventory-mannequin and #419 illusion/Athanor
+  fallback unit resolvers with one immutable-by-convention descriptor resolved
+  by `_cwv_exact_appearance`. The two engine surfaces now differ only in their
+  recipe adapter (`hand_flags` versus `base_identity`).
+- Preserved the existing fail-closed rules: unresolved explicit skins cannot
+  fall through to variant defaults, independent Cosmetics offhands are not
+  overwritten, ammo and unrelated recipe rows remain unchanged, and target
+  units still require the shared residency proof.
+- Added offline parity coverage for both adapters, exact-skin composition,
+  descriptor stability, unknown-skin fallback, and runtime route markers.
+- Expanded the normative appearance standard with an empirical open/closed
+  issue-family audit, the proven reasons surface-local fixes recur, and three
+  bounded fallback paths. This is the first preview slice of #660, not a claim
+  that owner, husk, transition, material, pose, icon, or name parity is done.
+
+**Verification (confirm `[cwv:LOAD] v0.1.437-dev` first):**
+
+1. In the inventory character preview and the illusion/Athanor browser, inspect
+   a transformed CWV weapon, a dual weapon with independently selected hands,
+   and an unmodified vanilla control. Both CWV previews must keep the same exact
+   hand models without changing the control.
+2. Reopen both previews and change one illusion. The model choice must not fall
+   back to the variant default or overwrite an independently selected offhand.
+3. Run `/cwv_regression_test`; `preview_meshswap_guards` and
+   `browser_meshswap_guards` must pass. Full #660 co-op/lifecycle verification
+   remains pending.
+
 ## 0.1.436-dev - 2026-07-17 - #645 Saltzpyre Greatsword Combat Styles [verify-fix-coop]
 
 - Added Saltzpyre's native `wh_2h_sword` to the canonical Greatsword Combat

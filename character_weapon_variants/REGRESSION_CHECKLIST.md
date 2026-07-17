@@ -4,7 +4,18 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-16.
+Last updated: 2026-07-17.
+
+## #660 Canonical preview-unit descriptor slice
+
+| Field | Check |
+|---|---|
+| Fix version(s) | CWV v0.1.437-dev (first preview-only migration slice; umbrella remains open) |
+| Repro | Inspect the same transformed or paired CWV instance in the inventory character preview and the illusion/Athanor browser. Include an independently selected offhand, an unknown/unavailable selected skin, repeated preview reopen, and one vanilla control. |
+| Expected post-fix | Both preview engines consume one descriptor and converge on its exact per-hand units. An unresolved selected skin, unrelated offhand, ammo row, unrelated recipe row, or vanilla control remains untouched. No claim is made here for owner/husk, transition, material, pose, icon, or name parity. |
+| Detection | Offline `test_cwv_exact_appearance.lua` proves both adapter shapes, exact-skin composition, same-base dual-hand disambiguation, fail-closed skin handling, and descriptor stability. `/cwv_regression_test` passes `issue660_preview_descriptor_adapter_parity`, `preview_meshswap_guards`, and `browser_meshswap_guards`. Runtime `[cwv:660]` lines correlate the descriptor fingerprint and surface only when a recipe actually changes. |
+
+---
 
 ## #423 Cloned damage profiles never reach an incompatible host
 

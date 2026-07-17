@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.436-dev"
+local MOD_VERSION = "0.1.437-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -10545,7 +10545,7 @@ _om._resident_override_3p = function(base_unit)
 end
 
 -- ============================================================
--- Preview mesh-swap (issue 237) — WEAPON_APPEARANCE_STANDARD §4.1
+-- Shared preview descriptor (issues 237/419/660) — WEAPON_APPEARANCE_STANDARD §4.1
 -- ============================================================
 -- Paths 3/4 (inventory preview + illusion browser) receive the variant's BASE
 -- weapon key and spawn the BASE mesh; the owner/husk paths swap at the data
@@ -10562,10 +10562,11 @@ end
 -- forced the override (skinless owner-style resolution), entry.unit_name already
 -- equals the target and the rewrite is a no-op.
 --
--- Reached from the MenuWorldPreviewer.equip_item hook via the `_om` upvalue
--- (forward-ref: this helper needs `_find_def`, declared just above, but the hook
--- sits far earlier in the file). `entry.unit_name` already carries the "_3p"
--- suffix (world_hero_previewer.lua:697/721), so we append it once here.
+-- Both preview engines now resolve identity and units exactly once here. Their
+-- wrappers only select the engine recipe adapter: MenuWorldPreviewer exposes
+-- right/left flags, while LootItemUnitPreviewer has rebound the recipe to the
+-- vanilla base-unit identity. This retires the duplicated #237/#419 fallback
+-- resolvers that drifted into two separate fixes for the same concern.
 --
 -- SAFETY: only vanilla `units/weapons/player/` meshes are swapped — a mod-bundled
 -- custom mesh (the Old Musket's units/cwv_*) has no per-unit `_3p` package and
@@ -10573,73 +10574,39 @@ end
 -- bespoke handling. The invisible-weapon sentinel is skipped. Ammo-unit entries
 -- are skipped (ranged variants carry their own handling). A user-selected
 -- illusion (non-empty `skin` arg) wins, mirroring the get_item_units guard.
+_om._cwv_resolve_spawn_descriptor = function(backend_id, item_data, explicit_skin, stored_skin)
+    local cwv_key = _om._cwv_key_for_item(backend_id, item_data)
+    local def = cwv_key and _find_def(cwv_key) or nil
+    if not def then return nil, nil, cwv_key, "variant_missing" end
+    local base = ItemMasterList and rawget(ItemMasterList, def.base_weapon)
+    local descriptor, reason = _om.exact_appearance.resolve_spawn_descriptor({
+        explicit_skin = explicit_skin,
+        stored_skin = stored_skin,
+        backend_id = backend_id,
+        weapon_skins = WeaponSkins and WeaponSkins.skins,
+        variant = def,
+        base = base,
+        skin_from_backend = function(bid)
+            local backend = Managers and Managers.backend
+            local iface = backend and backend:get_interface("items")
+            return iface and iface.get_skin and iface:get_skin(bid)
+        end,
+    })
+    return descriptor, def, cwv_key, reason
+end
+
 _om._cwv_preview_meshswap_apply = function(item_name, backend_id, skin, info)
-	-- #579: MenuWorldPreviewer's copied equip path does not reliably preserve the
-	-- callback's `skin` argument by the time this post-hook runs, but vanilla has
-	-- already committed the authoritative value to info.skin_name. The retest log
-	-- showed the selected runed axe package queued, then this fallback overwrote
-	-- both generated-skin hands with the def's default hatchets because `skin`
-	-- arrived nil. Trust either signal; a selected illusion owns the spawn recipe.
-	local effective_skin = skin
-	if (type(effective_skin) ~= "string" or effective_skin == "") and type(info) == "table" then
-		effective_skin = info.skin_name
-	end
-	local cwv_key = _om._cwv_key_for_item(backend_id, nil)
-	local def = cwv_key and _find_def(cwv_key) or nil
-	local appearance = def and _om.exact_appearance.resolve({
-		explicit_skin = effective_skin,
-		backend_id = backend_id,
-		weapon_skins = WeaponSkins and WeaponSkins.skins,
-		skin_from_backend = function(bid)
-			local backend = Managers and Managers.backend
-			local iface = backend and backend:get_interface("items")
-			return iface and iface.get_skin and iface:get_skin(bid)
-		end,
-	})
-	if appearance then
-		local swapped = _om.exact_appearance.apply_spawn_data(
-			appearance, info and info.spawn_data, _om._resident_override_3p, def)
-		if swapped > 0 then
-			printf("[cwv:579] preview exact-skin=%s swapped=%d R=%s L=%s",
-				appearance.skin, swapped, tostring(appearance.right_hand_unit),
-				tostring(appearance.left_hand_unit))
-		end
-		return
-	end
-	-- A named skin that is not locally resolvable must never fall through to
-	-- the variant default and erase its identity. Leave vanilla's recipe intact.
-	if type(effective_skin) == "string" and effective_skin ~= "" then return end
-	-- #482: shared ladder instead of the bare bid pattern -- an Athanor-crafted
-	-- instance (UUID bid) resolves via the backend item's stamped cwv_key, so
-	-- the inventory preview swaps to the variant mesh for crafted copies too.
-	if not cwv_key then return end
-	if not def then return end
-
-	-- Vanilla player mesh only, non-sentinel, resident-gated -- else World.spawn_unit
-	-- engine-fatals the inventory screen. Extracted to the shared guard (issue #418)
-	-- so this path and the illusion browser can't drift; keyed on _om.HUSK_OVERRIDE_REF.
-	local _swap_name = _om._resident_override_3p
-
-	local swapped = 0
-	for _, entry in ipairs(info.spawn_data) do
-		if not entry.is_ammo_unit then
-			local want
-			if entry.right_hand then
-				want = _swap_name(def.right_hand_unit)
-			elseif entry.left_hand then
-				want = _swap_name(def.left_hand_unit)
-			end
-			if want and entry.unit_name ~= want then
-				entry.unit_name = want
-				swapped = swapped + 1
-			end
-		end
-	end
-	if swapped > 0 then
-		printf("[cwv:237] preview mesh-swap key=%s bid=%s swapped=%d (R=%s L=%s)",
-			tostring(cwv_key), tostring(backend_id), swapped,
-			tostring(def.right_hand_unit), tostring(def.left_hand_unit))
-	end
+    local stored_skin = type(info) == "table" and info.skin_name or nil
+    local descriptor, def, cwv_key = _om._cwv_resolve_spawn_descriptor(
+        backend_id, nil, skin, stored_skin)
+    if not descriptor then return end
+    local swapped = _om.exact_appearance.apply_spawn_descriptor(
+        descriptor, info and info.spawn_data, _om._resident_override_3p, "hand_flags")
+    if swapped > 0 then
+        printf("[cwv:660] surface=inventory descriptor=%s key=%s bid=%s swapped=%d source=%s R=%s L=%s",
+            tostring(descriptor.fingerprint), tostring(cwv_key), tostring(backend_id), swapped,
+            tostring(descriptor.source), tostring(def.right_hand_unit), tostring(def.left_hand_unit))
+    end
 end
 mod._cwv_preview_meshswap_apply = _om._cwv_preview_meshswap_apply  -- exposed for /cwv regression (issue 237)
 
@@ -10669,53 +10636,18 @@ mod._cwv_preview_meshswap_apply = _om._cwv_preview_meshswap_apply  -- exposed fo
 -- data level already swapped simply don't match and pass through untouched
 -- (idempotent vs the get_item_units hook — no double-handling).
 _om._cwv_browser_meshswap_apply = function(item, spawn_data)
-	if not item or type(spawn_data) ~= "table" then return end
-	local skin = item.skin or (item.data and item.data.mod_data and item.data.mod_data.skin)
-	local cwv_key = _om._cwv_key_for_item(item.backend_id, item.data)
-	local def = cwv_key and _find_def(cwv_key) or nil
-	local appearance = def and _om.exact_appearance.resolve({
-		explicit_skin = skin,
-		backend_id = item.backend_id,
-		weapon_skins = WeaponSkins and WeaponSkins.skins,
-		skin_from_backend = function(bid)
-			local backend = Managers and Managers.backend
-			local iface = backend and backend:get_interface("items")
-			return iface and iface.get_skin and iface:get_skin(bid)
-		end,
-	})
-	if appearance then
-		_om.exact_appearance.apply_spawn_data(appearance, spawn_data,
-			_om._resident_override_3p, def)
-		return
-	end
-	if type(skin) == "string" and skin ~= "" then return end
-	if not cwv_key then return end
-	if not def then return end
-	local base = ItemMasterList and rawget(ItemMasterList, def.base_weapon)
-	if not base then return end
-
-	local swapped = 0
-	for i = 1, #spawn_data do
-		local entry = spawn_data[i]
-		local name = entry.unit_name
-		local want
-		if def.right_hand_unit and type(base.right_hand_unit) == "string"
-				and name == base.right_hand_unit .. "_3p" then
-			want = _om._resident_override_3p(def.right_hand_unit)
-		elseif def.left_hand_unit and type(base.left_hand_unit) == "string"
-				and name == base.left_hand_unit .. "_3p" then
-			want = _om._resident_override_3p(def.left_hand_unit)
-		end
-		if want and want ~= name then
-			entry.unit_name = want
-			swapped = swapped + 1
-		end
-	end
-	if swapped > 0 then
-		printf("[cwv:419] browser mesh-swap key=%s bid=%s swapped=%d (R=%s L=%s)",
-			tostring(cwv_key), tostring(item.backend_id), swapped,
-			tostring(def.right_hand_unit), tostring(def.left_hand_unit))
-	end
+    if not item or type(spawn_data) ~= "table" then return end
+    local stored_skin = item.data and item.data.mod_data and item.data.mod_data.skin
+    local descriptor, def, cwv_key = _om._cwv_resolve_spawn_descriptor(
+        item.backend_id, item.data, item.skin, stored_skin)
+    if not descriptor then return end
+    local swapped = _om.exact_appearance.apply_spawn_descriptor(
+        descriptor, spawn_data, _om._resident_override_3p, "base_identity")
+    if swapped > 0 then
+        printf("[cwv:660] surface=browser descriptor=%s key=%s bid=%s swapped=%d source=%s R=%s L=%s",
+            tostring(descriptor.fingerprint), tostring(cwv_key), tostring(item.backend_id), swapped,
+            tostring(descriptor.source), tostring(def.right_hand_unit), tostring(def.left_hand_unit))
+    end
 end
 mod._cwv_browser_meshswap_apply = _om._cwv_browser_meshswap_apply  -- exposed for /cwv regression (issue 419)
 
@@ -16514,6 +16446,48 @@ _rt_register("browser_meshswap_guards", function()
     sd = { { unit_name = UNTOUCHED } }
     apply({ backend_id = "cwv_es_greataxe_001", skin = "some_skin", data = nil }, sd)
     if sd[1].unit_name ~= UNTOUCHED then return "#419 guard: applied illusion (skin) must win, no rewrite" end
+end)
+
+_rt_register("issue660_preview_descriptor_adapter_parity", function()
+    local policy = _om.exact_appearance
+    if type(policy) ~= "table" or type(policy.resolve_spawn_descriptor) ~= "function"
+            or type(policy.apply_spawn_descriptor) ~= "function" then
+        return "#660 canonical preview descriptor/adapter API missing"
+    end
+    local descriptor, reason = policy.resolve_spawn_descriptor({
+        variant = {
+            item_key = "cwv_rt660",
+            right_hand_unit = "variant_right",
+            left_hand_unit = "variant_left",
+        },
+        base = {
+            right_hand_unit = "base_right",
+            left_hand_unit = "base_left",
+        },
+    })
+    if not descriptor then return "#660 descriptor failed: " .. tostring(reason) end
+    local fingerprint = descriptor.fingerprint
+    local inventory = {
+        { right_hand = true, unit_name = "base_right_3p" },
+        { left_hand = true, unit_name = "base_left_3p" },
+    }
+    local browser = {
+        { unit_name = "base_left_3p" },
+        { unit_name = "base_right_3p" },
+    }
+    local resolve = function(unit) return unit .. "_3p" end
+    local a = policy.apply_spawn_descriptor(descriptor, inventory, resolve, "hand_flags")
+    local b = policy.apply_spawn_descriptor(descriptor, browser, resolve, "base_identity")
+    if a ~= 2 or b ~= 2
+            or inventory[1].unit_name ~= "variant_right_3p"
+            or inventory[2].unit_name ~= "variant_left_3p"
+            or browser[1].unit_name ~= "variant_left_3p"
+            or browser[2].unit_name ~= "variant_right_3p" then
+        return "#660 preview adapters did not converge on the descriptor's exact hand units"
+    end
+    if descriptor.fingerprint ~= fingerprint then
+        return "#660 preview adapter mutated the canonical descriptor"
+    end
 end)
 
 _rt_register("give_refuses_skin_only", function()
