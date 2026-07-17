@@ -18,6 +18,7 @@ function M.install(mod, rt_register, deps)
     local _MULTI_MOUNT_ITEM_TYPES = deps.multi_mount_item_types
     local _DUAL_WIELD_POOLS = deps.dual_wield_pools
     local OFFHAND_NAMES = deps.offhand_names
+    local ITEM_PRESENTATION = deps.item_presentation
     local _SHIELD_POOLS_BY_ITEM_TYPE = deps.shield_pools_by_item_type
     local _dbg = deps.dbg
     local _dbg_alert = deps.dbg_alert
@@ -1146,6 +1147,21 @@ _rt_register("issue641_independent_offhand_names", function()
     if type(legacy.secondary_description) ~= "string" then
         return "name-only legacy component leaked the primary description"
     end
+    local native_routed = false
+    for _, pool in pairs(_offhand_options) do
+        for _, option in ipairs(pool) do
+            if option.source_description_key then
+                if option.component_description_source ~= "source"
+                        or option.description == option.source_description_key then
+                    return "vanilla source description did not use _G.Localize"
+                end
+                native_routed = true
+                break
+            end
+        end
+        if native_routed then break end
+    end
+    if not native_routed then return "no production source-description option found" end
     if type(mod._cos.offhand_name_inventory) ~= "function" then
         return "generated naming inventory unavailable"
     end

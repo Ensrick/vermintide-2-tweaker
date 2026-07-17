@@ -106,26 +106,26 @@ end
 -- If neither exists, generate readable component copy rather than leaking the
 -- primary weapon description or an internal localization key.
 function M.resolve_description(source_identity, hand_field, fallback_description,
-        localize, component_kind, explicit_key, source_key, fallback_name)
+        localize, component_kind, explicit_key, source_key, fallback_name,
+        source_localize)
     component_kind = component_kind or "weapon_offhand"
     local localization_key = explicit_key
         or M.description_localization_key(source_identity, hand_field, component_kind)
-    local candidates = { localization_key, source_key }
-    local seen = {}
-    if type(localize) == "function" then
-        for _, key in ipairs(candidates) do
-            if type(key) == "string" and key ~= "" and not seen[key] then
-                seen[key] = true
-                local ok, localized = pcall(localize, key)
-                if ok and not _is_missing_localization(localized, key) then
-                    return _trim(localized), key,
-                        key == localization_key and "authored" or "source"
-                end
-            end
+    if type(localize) == "function" and type(localization_key) == "string" then
+        local ok, localized = pcall(localize, localization_key)
+        if ok and not _is_missing_localization(localized, localization_key) then
+            return _trim(localized), localization_key, "authored"
+        end
+    end
+    if type(source_localize) == "function" and type(source_key) == "string" then
+        local ok, localized = pcall(source_localize, source_key)
+        if ok and not _is_missing_localization(localized, source_key) then
+            return _trim(localized), source_key, "source"
         end
     end
     local fallback = _trim(fallback_description)
-    if fallback and not seen[fallback] then
+    if fallback and not _is_missing_localization(fallback, localization_key)
+            and not _is_missing_localization(fallback, source_key) then
         return fallback, source_key or localization_key, "source"
     end
     local readable = _trim(fallback_name) or M.readable_source_name(source_identity)
@@ -134,7 +134,8 @@ function M.resolve_description(source_identity, hand_field, fallback_description
 end
 
 function M.decorate(option, source_identity, hand_field, fallback_name,
-        source_display_key, localize, component_kind, explicit_key)
+        source_display_key, localize, component_kind, explicit_key,
+        source_localize)
     if type(option) ~= "table" then return option end
     component_kind = component_kind or "weapon_offhand"
     local name, localization_key, resolution_source = M.resolve(
@@ -158,7 +159,8 @@ function M.decorate(option, source_identity, hand_field, fallback_name,
     end
     local description, description_key, description_source = M.resolve_description(
         source_identity, hand_field, option.description, localize, component_kind,
-        explicit_description_key, option.source_description_key, name)
+        explicit_description_key, option.source_description_key, name,
+        source_localize)
     option.description = description
     option.component_description_localization_key = description_key
     option.component_description_source = description_source

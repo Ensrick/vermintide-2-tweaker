@@ -17,6 +17,9 @@ after Tweaker: Cosmetics loads.
 - Flavor text belongs to the selected offhand or shield. Component-authored
   descriptions win, then the source illusion description, then readable
   generated component copy. The primary weapon description is never reused.
+- Localization ownership is explicit: authored `cos_*` keys resolve through
+  `mod:localize`, while vanilla source-illusion description keys resolve only
+  through `_G.Localize`. These resolvers are never substituted for each other.
 
 Changing a name changes presentation only. The saved selection, unit path,
 source skin key, exact backend-item identity, and network payload stay intact.

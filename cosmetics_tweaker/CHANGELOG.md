@@ -4,6 +4,7 @@
 
 - Extended the shared item-card component descriptor from icon/name to icon/name/description, so an independently selected shield or offhand no longer inherits the primary weapon's flavor text.
 - Component text resolves in one bounded order: authored component description, source illusion description, then readable component-safe fallback. It never exposes an internal localization key or falls back to primary-weapon copy.
+- Authored Cosmetics description keys resolve only through `mod:localize`, while vanilla source-illusion description keys resolve through `_G.Localize`; a production-boundary regression prevents those ownership paths from being conflated again.
 - Added the authored Blood-Bloomed Bouclier description to its canonical shield option and enrich persisted selections from that canonical pool before using stale saved metadata.
 - Preserved the existing singleton `UIUtils.get_ui_information_from_item` hook, all four vanilla return values, persistence schema, and RPC payloads. No new hook, wire field, or per-frame owner was added.
 

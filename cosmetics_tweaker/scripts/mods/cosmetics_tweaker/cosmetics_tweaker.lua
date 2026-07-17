@@ -1738,7 +1738,7 @@ local function _decorate_shield_option(option)
         or option.intended_unit or option.unit or option.vanilla_skin
     return OFFHAND_NAMES.decorate(option, identity, "left_hand_unit", option.name,
         nil, function(key) return mod:localize(key) end, "shield",
-        option.localization_key)
+        option.localization_key, rawget(_G, "Localize"))
 end
 
 for _, pool in pairs(_SHIELD_POOLS_BY_ITEM_TYPE) do
@@ -2036,8 +2036,8 @@ local function _decorate_dual_component(option, skin_key, hand_field, data)
     local source_name, display_key = _source_illusion_name(skin_key, data)
     option.source_description_key = data and data.description
     if hand_field == "left_hand_unit" then
-        return OFFHAND_NAMES.decorate(option, skin_key, hand_field, source_name,
-            display_key, function(key) return mod:localize(key) end)
+        return OFFHAND_NAMES.decorate(option, skin_key, hand_field, source_name, display_key,
+            function(key) return mod:localize(key) end, nil, nil, rawget(_G, "Localize"))
     end
     option.name = source_name
     option.source_skin_key = skin_key
@@ -10433,6 +10433,7 @@ _cos_runtime_checks.install(mod, _rt_register, {
     shield_icon_owner_item_types = _SHIELD_ICON_OWNER_ITEM_TYPES,
     offhand_options = _offhand_options, multi_mount_item_types = _MULTI_MOUNT_ITEM_TYPES,
     dual_wield_pools = _DUAL_WIELD_POOLS, offhand_names = OFFHAND_NAMES,
+    item_presentation = ITEM_PRESENTATION,
     shield_pools_by_item_type = _SHIELD_POOLS_BY_ITEM_TYPE,
     dbg = _dbg, dbg_alert = _dbg_alert, ui_dump = UI_DUMP,
     custom_skin_keys = _custom_skin_keys,
