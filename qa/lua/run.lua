@@ -204,6 +204,7 @@ local suites = {
     "test_cos_dual_offhands",
     "test_cos_la_shield_parity",
     "test_cos_la_instance_policy",
+    "test_cos_la_replay_policy",
     "test_cos_weapon_pose_policy",
     "test_gt_disconnect_grace",
     "test_gt_disable_enemy_spawns",

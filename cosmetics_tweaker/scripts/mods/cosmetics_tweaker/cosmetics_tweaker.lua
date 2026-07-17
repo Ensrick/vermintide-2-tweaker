@@ -60,6 +60,7 @@ local TPE = mod:dofile("scripts/mods/cosmetics_tweaker/_tpe")
 local GlowPicker = mod:dofile("scripts/mods/cosmetics_tweaker/_glow_picker")
 local GLOW_BADGE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_badge_policy")
 local LA_PERSIST = mod:dofile("scripts/mods/cosmetics_tweaker/_la_persistence")
+local LA_REPLAY_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_replay_policy")
 mod._la_instance_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_instance_policy")
 -- v0.9.49-dev (issue #186): disable Loremaster's Armoury's Okri's-Challenges /
 -- achievement-book entries (main_quest + 12 sub-quests) — display, tracking and
@@ -9493,17 +9494,7 @@ end
 -- Keep this helper engine-free so the runtime regression can exercise the
 -- precise readiness boundary.
 mod._la_rebroadcast_inventory_ready = function(inventory)
-    local equipment = type(inventory) == "table"
-        and (inventory._equipment or inventory.equipment) or nil
-    local slots = type(equipment) == "table" and equipment.slots or nil
-    if type(slots) ~= "table" then return false end
-    for _, slot_name in ipairs({ "slot_melee", "slot_ranged" }) do
-        local slot = slots[slot_name]
-        if type(slot) == "table" and type(slot.item_data) == "table" then
-            return true
-        end
-    end
-    return false
+    return LA_REPLAY_POLICY.inventory_ready(inventory)
 end
 
 -- VMF calls mod.update once per frame.
