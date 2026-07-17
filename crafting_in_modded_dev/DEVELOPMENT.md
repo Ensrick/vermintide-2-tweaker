@@ -6,9 +6,9 @@ Workshop 3733366851). The engine contact surface (every hooked vanilla
 doc is the code-layout map. Stable `crafting_in_modded/` is its read-only public
 twin - all in-flight work happens here (repo `CLAUDE.md` dev/stable split).
 
-## Module map (v0.8.55-dev, Phase 1 OOP split)
+## Module map (v0.8.89-dev, Phase 2 regression split)
 
-`crafting_in_modded_dev.lua` is still the primary file (~7,007 lines) - this is an
+`crafting_in_modded_dev.lua` is still the primary file (~6,165 lines) - this is an
 IN-PROGRESS decomposition (PROJECT_STANDARDS 2.2a), not a finished one. Phase 1
 carved out the three cleanest self-contained concerns; the craft-store + backend
 mirror, the cross-peer wire-safety region (issue 278/371), the LA equip-capture,
@@ -25,8 +25,8 @@ new module needs only its manifest dofile line + a row here.
 
 | Module | Owns / public surface |
 |---|---|
-| `crafting_in_modded_dev.lua` (entry) | MOD_VERSION (launcher parses it here - never move it), the boot banner + rehook-warning interceptor, the settings fingerprint/dump, the `/cim_regression_test` harness (`_RT_CHECKS` + `_rt_register` + all 57 check BODIES - they close over entry state / call the `mod._cim_*` helpers at runtime, the weapon_tweaker precedent), the dofile manifest, and everything NOT yet extracted: the craft-store + backend mirror (`_forge_*`, `_forged_weapons`, `mod._cim_register_craft`/`_get_craft`/`_is_modded_*`), cross-peer wire safety (issue 278/371, `sync_loadout_slot` + `cim_modded_slot` RPC), the LA equip-capture (dormant), the modded-loadout store + restore, the Athanor opener (`open_forge`/`open_standard_crafting`) + the whole Athanor UI + `~25` `BackendInterfaceWeavesPlayFab` economy hooks (gated on `_custom_forge_active`), the amulet/accessory craft buttons, bubble-cap math, the forge-freedom picker widener, and the `forge_dump*` / manual `/forge*` commands. Keeps the issue-88 `HeroView.on_enter` inventory-access hook (shares the entry-local `_cim_open_standard_inv_pending`). |
-| `_cim_regression`... (see note) | The regression HARNESS is inline in the entry (not yet a module). |
+| `crafting_in_modded_dev.lua` (entry) | MOD_VERSION (launcher parses it here - never move it), the boot banner + rehook-warning interceptor, the settings fingerprint/dump, the `/cim_regression_test` harness (`_RT_CHECKS`, `_rt_register`, runner), four initialization-time identity/contract checks that must remain beside their local helpers, the ordered dofile manifest, and everything NOT yet extracted: the craft-store + backend mirror (`_forge_*`, `_forged_weapons`, `mod._cim_register_craft`/`_get_craft`/`_is_modded_*`), cross-peer wire safety (issue 278/371, `sync_loadout_slot` + `cim_modded_slot` RPC), the LA equip-capture (dormant), the modded-loadout store + restore, the Athanor opener (`open_forge`/`open_standard_crafting`) + the whole Athanor UI + `~25` `BackendInterfaceWeavesPlayFab` economy hooks (gated on `_custom_forge_active`), the amulet/accessory craft buttons, bubble-cap math, the forge-freedom picker widener, and the `forge_dump*` / manual `/forge*` commands. Keeps the issue-88 `HeroView.on_enter` inventory-access hook (shares the entry-local `_cim_open_standard_inv_pending`). |
+| `_cim_regression_checks.lua` | The 74-check late `/cim_regression_test` block, in its frozen registration order. Loaded once at the end of the entry after production hooks/helpers exist. Receives narrow function/state accessors for entry locals that are reassigned; checks still consume the established flat `mod._cim_*` runtime API. |
 | `modded_rarities.lua` | Custom "modded" rarity registration (Colors/UISettings/RaritySettings/NetworkLookup table contacts), `_G.Localize` supply, deus weapon-pool scrub, Jewellery->Accessories relabel. Pre-existing. |
 | `standard_forge.lua` | The standard Keep crafting bench: material-clean craft/salvage/reroll synth into the backend mirror, the EAC choke-point `craft`/`_get_valid_recipe`/`enqueue` hooks, CraftPage requirement forcing, jewelry-slot pin, and manifest owner for the salvage-button extension. Pre-existing. |
 | `_cim_synthetic_item_contract.lua` | Pure #628 ownership boundary shared by Athanor, standard forge, SaveWeapon import, persistence/restore, inventory, and salvage. Validates eligible CWV/WOC provider definitions before UI; normalizes one schema-versioned exact CIM instance; builds its mirror payload; preserves vanilla salvage exclusions; partitions exact-owned ids for the #277 deletion transaction. Provider definitions remain provider-owned and blacksmith selectors never become acquired instances. |
@@ -64,14 +64,19 @@ new module needs only its manifest dofile line + a row here.
 - **New read-only diagnostic dump command** with no cim-state dependency ->
   `_cim_dump_commands.lua`. A dump that reads `_custom_forge_active` / `_forged_weapons`
   stays in the entry until those locals are promoted (Phase 2).
-- **New regression check** -> `_rt_register("name", fn)` inline in the entry next to the
-  code it probes (the harness is inline there). A check that SOURCE-SCANS a module's file
+- **New regression check** -> add `_rt_register("name", fn)` in
+  `_cim_regression_checks.lua` in the existing registration order. A check that SOURCE-SCANS a module's file
   must anchor `debug.getinfo` on a function DEFINED in that module (e.g.
   `mod._cim_sweep_leaked_hdr_worlds`), never on `_rt_register` (entry).
 - **New cross-file value** -> publish `mod._cim_<name>` in the owning module and reference
   it via the namespace at RUNTIME (call-time), so dofile order stays free. If an entry
   regression body must reference a moved local by its bare name, keep a
   `local <name> = mod._cim_<name>` alias in the entry (as `_is_in_keep` does).
+
+The regression installer is the one exception to the ordinary public surface:
+entry-local mutable stores are supplied through getter/setter closures so tests
+cannot retain stale tables after `_forge_load` or `_modded_loadout_load` reassigns
+them. Those closures are private installer context, not new `mod._cim_*` API.
 
 ### Deferred (why the big regions stayed in the entry)
 

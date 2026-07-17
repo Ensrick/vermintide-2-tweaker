@@ -138,6 +138,7 @@ local suites = {
     "test_cim_trait_slot_policy",
     "test_cim_property_value_policy",
     "test_cim_tab_preview",
+    "test_cim_regression_module",
     "test_woc_wire_policy",
 	"test_cim_external_trait_policy",
     "test_woc_relic_policy",

@@ -1,5 +1,22 @@
 # Crafting in Modded Changelog
 
+## 0.8.89-dev (2026-07-17): #540 extract regression registrations [tooling]
+
+- Moved the 74-check late `/cim_regression_test` block into the late-loaded
+  `_cim_regression_checks.lua` module while preserving every check name and the
+  complete 78-check registration order. Four contract checks remain colocated
+  with their initialization-time identity helpers in the entry.
+- Kept production hooks, the runner, and the established flat `mod._cim_*` API
+  unchanged. Reassigned forge/loadout stores cross the module boundary only
+  through private getter/setter closures, preventing stale table captures.
+- Reduced the CIM dev entry from 8,468 to 6,165 lines, below its frozen
+  7,636-line baseline without changing the baseline or suppressing the gate.
+- Added engine-free coverage that proves one manifest load, bounded entry size,
+  unique registrations, and the frozen first/last registration order.
+
+**Offline verification:** run `qa/check_file_sizes.ps1`,
+`qa/check_lua_unit_tests.ps1`, and `qa/run_all.ps1 -Quick`.
+
 ## 0.8.88-dev (2026-07-17): #484 persist crafted provider identity [verify-fix-coop]
 
 - Preserved `cim_acquisition_key`, `cim_provider`, and the CWV `cwv_key` in the

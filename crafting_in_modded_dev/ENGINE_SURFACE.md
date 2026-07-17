@@ -10,7 +10,7 @@ the named `crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/*.lua`
 module. `§N` = a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue.
 
 **Dev/stable relationship.** This documents `crafting_in_modded_dev` (`cim_dev`,
-MOD_VERSION `0.8.79-dev`, friends-only Workshop 3733366851), the ACTIVE working
+MOD_VERSION `0.8.89-dev`, friends-only Workshop 3733366851), the ACTIVE working
 stream. `crafting_in_modded/` (`cim`, public Workshop 3721038774) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action (`tools/promote/promote.ps1`), so
@@ -32,7 +32,7 @@ etc.) are carried from the cited `cim_dev` module comments + `CHANGELOG.md` +
 `docs/BUG_CLASSES.md` + the line-verified sibling `character_weapon_variants` and
 `cosmetics_tweaker` `ENGINE_SURFACE.md` docs, which cite the decompile in turn.
 
-**Module split (v0.8.55-dev, Phase 1 OOP).** Three concerns were lifted verbatim out
+**Module split (v0.8.89-dev).** Three concerns were lifted verbatim out
 of the entry into `_cim_*` modules (see `DEVELOPMENT.md` module map): the inventory/
 salvage grid filters -> **`_cim_inventory_filter.lua`**; every mid-mission render-safety
 guard (shading-env, HDR, glow/skilltree/bloom/upgrade-anim suppressors, gamepad/HDR
@@ -43,6 +43,12 @@ acquired-instance, mirror-payload, salvage-eligibility, and deletion-partition p
 consumed by both craft surfaces and the inventory adapter. Rows below cite the module file (name only) for moved hooks;
 everything else still lives in `crafting_in_modded_dev.lua`. Match crash logs by function
 name, not line - the module line numbers are fresh.
+
+The `/cim_regression_test` harness and four initialization-time contract checks
+remain in the entry; the 74-check late block lives in late-loaded
+`_cim_regression_checks.lua`. Its private installer receives accessors for
+reassigned entry-local stores; production hooks, flat `mod._cim_*` APIs, and
+the complete 78-check registration order are unchanged.
 
 `cim` is a **UI-heavy backend mod**: it makes the vanilla Keep crafting benches
 work in the modded realm (where the player has no crafting materials and the EAC

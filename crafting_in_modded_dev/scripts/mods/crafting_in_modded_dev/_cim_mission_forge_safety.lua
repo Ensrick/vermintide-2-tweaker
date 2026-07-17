@@ -15,7 +15,7 @@
 -- Extracted verbatim from crafting_in_modded_dev.lua (v0.8.55-dev OOP split,
 -- PROJECT_STANDARDS 2.2a). Publishes the mid-mission helpers on the established
 -- flat mod._cim_* namespace (cross-file surface consumed by cim_debug.lua's
--- on_enter re-suppression and the inline HDR regression checks in the entry).
+-- on_enter re-suppression and the HDR checks in `_cim_regression_checks.lua`).
 -- The issue-88 inventory-access HeroView.on_enter hook stays in the entry (it
 -- shares the entry-local _cim_open_standard_inv_pending with open_standard_crafting).
 --
