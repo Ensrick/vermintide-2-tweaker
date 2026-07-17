@@ -4,6 +4,15 @@ This list catalogues every documented past error in the monorepo. Before any rel
 
 The companion `regression-lint.ps1` (in `tools/lint/`) catches STATIC-category items at build time. The `/regression_test` chat command (added to most mods) catches UNIT/INTEGRATION items at runtime. This file covers MANUAL-category items that require human QA, plus the full historical record.
 
+`tools/github/audit-open-issues.ps1` is the issue-history companion to this
+checklist. It compares every live open issue with every closed issue using
+auditable signals: direct issue references, exact subsystem labels, the
+lifecycle/surface classes distilled from this checklist, exact code identifiers,
+and corpus-rare normalized terms. Each candidate records the points contributed
+by every signal and the closed issue's actual verification/closure evidence.
+The output is a manual review queue only: fuzzy similarity never proves a common
+root cause and never authorizes automatic reopening.
+
 Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 
 ---

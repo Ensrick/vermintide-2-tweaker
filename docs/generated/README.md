@@ -11,6 +11,8 @@ hand-maintained catalogs drift and then get trusted while stale).
 |------|------------|
 | `NAME_MAP.generated.json` | Machine-authoritative key → display-name map. One entry per internal key (vanilla weapon/skin/career/breed keys + mod-created cwv variants, cosmetics custom illusions, wt unlock entries). Schema below. |
 | `NAME_MAP.generated.md` | Human/Claude-readable view of the same data, grouped by source then kind. **Grep THIS instead of the legacy hand-maintained catalogs.** |
+| `OPEN_ISSUE_AUDIT.generated.json` | Live open-issue doctrine audit plus ranked closed-issue ancestry. Every relationship carries its exact score inputs and prior closure evidence; similarity is review-only and never auto-reopens an issue. |
+| `OPEN_ISSUE_CONTINGENCIES.generated.md` | Human-readable form of the open/closed audit. Every open issue retains three evidence-triggered fallback approaches and its top closed-history candidates. |
 
 ## Regenerate
 
@@ -18,6 +20,11 @@ hand-maintained catalogs drift and then get trusted while stale).
 # date is a required param — the build env has no reliable clock, so the
 # generation date is stamped from what you pass.
 pwsh -NoProfile -File tools/gen-name-map/gen-name-map.ps1 -GenDate 2026-05-30
+
+# Requires authenticated gh access. Reads issues only; never edits GitHub.
+pwsh -NoProfile -File tools/github/audit-open-issues.ps1 `
+  -OutputPath docs/generated/OPEN_ISSUE_AUDIT.generated.json `
+  -MarkdownPath docs/generated/OPEN_ISSUE_CONTINGENCIES.generated.md
 ```
 
 Deterministic + sorted output → regeneration produces a clean, reviewable diff.

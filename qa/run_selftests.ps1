@@ -40,6 +40,8 @@ $shipPs1 = Join-Path $repoRoot 'tools\ship\ship.ps1'
 if (Test-Path $shipPs1) { $targets += $shipPs1 }
 $protectMasterPs1 = Join-Path $repoRoot 'tools\github\protect-master.ps1'
 if (Test-Path $protectMasterPs1) { $targets += $protectMasterPs1 }
+$openIssueAuditPs1 = Join-Path $repoRoot 'tools\github\audit-open-issues.ps1'
+if (Test-Path $openIssueAuditPs1) { $targets += $openIssueAuditPs1 }
 
 $failed = @()
 foreach ($t in $targets) {

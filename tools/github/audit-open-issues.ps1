@@ -9,6 +9,8 @@ param(
     [string]$Repository = "Ensrick/vermintide-2-tweaker",
     [string]$OutputPath,
     [string]$MarkdownPath,
+    [ValidateRange(1, 20)]
+    [int]$MaxClosedMatches = 5,
     [switch]$SelfTest
 )
 
@@ -45,6 +47,31 @@ $LessonRules = [ordered]@{
 }
 
 $ToolingLabels = @("tooling", "documentation")
+
+# Labels in this set describe workflow, severity, or issue shape rather than a
+# code-owning subsystem.  Everything else is eligible as an exact subsystem
+# signal.  Exact labels are intentionally preferred over a hand-maintained
+# mapping so a newly-created mod label participates without a tool update.
+$NonSubsystemLabels = @(
+    "bug", "enhancement", "feature", "regression", "crash", "documentation",
+    "tooling", "not-started", "verify-fix", "verify-fix-coop",
+    "diagnostics-armed", "coop-required", "Fixed", "duplicate", "wontfix",
+    "invalid", "question", "help wanted", "good first issue", "waiting-user",
+    "0-critical", "1-major", "2-moderate", "3-minor", "4-low"
+)
+
+$TermStopWords = @(
+    "about", "after", "again", "against", "also", "another", "appear", "appears",
+    "because", "before", "being", "between", "both", "button", "change", "changed",
+    "changes", "check", "client", "clients", "could", "current", "does", "doesn",
+    "don", "during", "each", "enabled", "every", "from", "game", "have", "having",
+    "into", "issue", "issues", "just", "latest", "looks", "make", "menu", "missing",
+    "mod", "model", "more", "need", "needs", "normal", "only", "other", "player",
+    "players", "same", "setting", "settings", "should", "still", "than", "that",
+    "their", "them", "then", "there", "these", "thing", "this", "through", "toggle",
+    "using", "version", "weapon", "weapons", "when", "where", "which", "while", "with",
+    "work", "working", "works", "would", "wrong"
+)
 
 function Get-LabelNames($Issue) {
     return @($Issue.labels | ForEach-Object { [string]$_.name })
@@ -255,11 +282,361 @@ function Get-ApplicableLessons($Issue) {
     return @($lessonMatches)
 }
 
-function Invoke-Audit($Issues) {
+function Get-IssueEvidenceText($Issue, [bool]$IncludeComments = $true) {
+    $parts = New-Object System.Collections.Generic.List[string]
+    $parts.Add([string]$Issue.title)
+    $parts.Add([string]$Issue.body)
+    if ($IncludeComments) {
+        foreach ($comment in @($Issue.comments)) { $parts.Add([string]$comment.body) }
+    }
+    return $parts -join "`n"
+}
+
+function Get-UniqueStrings($Values) {
+    return @($Values | Where-Object { $_ } | ForEach-Object { [string]$_ } | Sort-Object -Unique)
+}
+
+function Get-IssueReferences($Issue) {
+    $refs = @()
+    foreach ($match in [regex]::Matches((Get-IssueEvidenceText $Issue $true), '(?<![A-Za-z0-9])#(?<number>\d{1,5})')) {
+        $number = [int]$match.Groups['number'].Value
+        if ($number -ne [int]$Issue.number) { $refs += $number }
+    }
+    return @($refs | Sort-Object -Unique)
+}
+
+function Get-CodeIdentifiers($Issue) {
+    $text = Get-IssueEvidenceText $Issue $true
+    $values = New-Object System.Collections.Generic.List[string]
+    $patterns = @(
+        '`(?<id>[^`\r\n]{3,100})`',
+        '(?<![A-Za-z0-9])(?<id>[A-Za-z0-9_./\\-]+\.(?:lua|ps1|psd1|json|md|dds|png|fbx|unit|material|mod_bundle))(?![A-Za-z0-9])',
+        '(?<![A-Za-z0-9])(?<id>[a-z][a-z0-9]*_[a-z0-9_]{2,})(?![A-Za-z0-9])',
+        '(?<![A-Za-z0-9])(?<id>[A-Z][A-Za-z0-9_]+\.[A-Za-z_][A-Za-z0-9_.]*)(?![A-Za-z0-9])'
+    )
+    foreach ($pattern in $patterns) {
+        foreach ($match in [regex]::Matches($text, $pattern)) {
+            $value = $match.Groups['id'].Value.Trim().ToLowerInvariant()
+            if ($value.Length -gt 100 -or $value -match '^https?://' -or $value -match '^[0-9a-f]{7,40}$') { continue }
+            $values.Add($value)
+        }
+    }
+    return @(Get-UniqueStrings $values)
+}
+
+function Get-NormalizedTermsFromText([string]$Text) {
+    $values = New-Object System.Collections.Generic.List[string]
+    foreach ($match in [regex]::Matches(([string]$Text).ToLowerInvariant(), '(?<![a-z0-9])[a-z][a-z0-9-]{3,39}(?![a-z0-9])')) {
+        $value = $match.Value.Trim('-')
+        if (-not $value -or $TermStopWords -contains $value -or $value -match '^v?\d') { continue }
+        $values.Add($value)
+    }
+    return @(Get-UniqueStrings $values)
+}
+
+function Get-SubsystemLabels($Issue) {
+    return @(Get-LabelNames $Issue | Where-Object {
+        $_ -and $NonSubsystemLabels -notcontains $_ -and $_ -notmatch '^\d+-'
+    } | Sort-Object -Unique)
+}
+
+function Get-ClosureEvidence($Issue) {
+    $rows = New-Object System.Collections.Generic.List[object]
+    $seenKinds = @{}
+    $sources = @()
+    $sources += [PSCustomObject]@{ body = [string]$Issue.body; url = [string]$Issue.url }
+    foreach ($comment in @($Issue.comments)) {
+        $sources += [PSCustomObject]@{ body = [string]$comment.body; url = [string]$comment.url }
+    }
+    [array]::Reverse($sources)
+
+    $patterns = [ordered]@{
+        user_confirmed_fixed = '(?i)user[- ]confirmed fixed|confirmed (?:fully )?(?:fixed|working)|verified (?:as )?fixed|tested and confirmed (?:fixed|working)|fully functional'
+        verification_passed = '(?i)(?:verification|test|repro).{0,40}(?:pass(?:ed)?|complete|no longer occurs)|live proof completed'
+        regression_coverage = '(?i)(?:offline|unit|regression|self[- ]test).{0,40}(?:pass(?:ed)?|cover(?:s|age)|guard|assert)'
+        source_commit_recorded = '(?i)(?:source )?commit\s+`?[0-9a-f]{7,40}`?'
+    }
+    foreach ($source in $sources) {
+        foreach ($entry in $patterns.GetEnumerator()) {
+            if ($seenKinds.ContainsKey($entry.Key)) { continue }
+            $match = [regex]::Match([string]$source.body, [string]$entry.Value)
+            if (-not $match.Success) { continue }
+            $excerpt = ([string]$source.body -replace '\s+', ' ').Trim()
+            if ($excerpt.Length -gt 180) { $excerpt = $excerpt.Substring(0, 177) + '...' }
+            $rows.Add([PSCustomObject][ordered]@{
+                kind = [string]$entry.Key
+                source_url = [string]$source.url
+                excerpt = $excerpt
+            })
+            $seenKinds[$entry.Key] = $true
+        }
+    }
+    if ((Get-LabelNames $Issue) -contains 'Fixed') {
+        $rows.Add([PSCustomObject][ordered]@{ kind = 'fixed_label'; source_url = [string]$Issue.url; excerpt = 'Closed issue carries the Fixed lifecycle label.' })
+    }
+    if ([string]$Issue.stateReason -eq 'COMPLETED') {
+        $rows.Add([PSCustomObject][ordered]@{ kind = 'completed_state_reason'; source_url = [string]$Issue.url; excerpt = 'GitHub stateReason is COMPLETED.' })
+    }
+    return @($rows | ForEach-Object { $_ })
+}
+
+function New-ValueLookup($Values) {
+    $lookup = @{}
+    foreach ($value in @($Values)) { $lookup[[string]$value] = $true }
+    return $lookup
+}
+
+function New-IssueProfile($Issue, [bool]$IsClosed) {
+    $subsystems = @(Get-SubsystemLabels $Issue)
+    $lessons = @(Get-ApplicableLessons $Issue | Where-Object { $_ -ne 'general_regression_and_verification_discipline' })
+    $references = @(Get-IssueReferences $Issue)
+    $identifiers = @(Get-CodeIdentifiers $Issue)
+    $titleTerms = @(Get-NormalizedTermsFromText ([string]$Issue.title))
+    $allTerms = @(Get-NormalizedTermsFromText (([string]$Issue.title) + "`n" + ([string]$Issue.body)))
+    return [PSCustomObject][ordered]@{
+        number = [int]$Issue.number
+        issue = $Issue
+        subsystem_labels = $subsystems
+        subsystem_lookup = New-ValueLookup $subsystems
+        lessons = $lessons
+        lesson_lookup = New-ValueLookup $lessons
+        references = $references
+        reference_lookup = New-ValueLookup $references
+        code_identifiers = $identifiers
+        code_identifier_lookup = New-ValueLookup $identifiers
+        title_terms = $titleTerms
+        title_term_lookup = New-ValueLookup $titleTerms
+        all_terms = $allTerms
+        all_term_lookup = New-ValueLookup $allTerms
+        closure_evidence = if ($IsClosed) { @(Get-ClosureEvidence $Issue) } else { @() }
+    }
+}
+
+function Get-Intersection($Left, $Right) {
+    if (@($Left).Count -eq 0 -or @($Right).Count -eq 0) { return @() }
+    $rightSet = if ($Right -is [System.Collections.IDictionary]) { $Right } else { New-ValueLookup $Right }
+    $result = @()
+    $seen = @{}
+    foreach ($value in @($Left)) {
+        $key = [string]$value
+        if ($rightSet.ContainsKey($key) -and -not $seen.ContainsKey($key)) {
+            $result += $value
+            $seen[$key] = $true
+        }
+    }
+    return $result
+}
+
+function Add-RelationIndexValue($Index, [string]$Key, [int]$IssueNumber) {
+    if (-not $Key) { return }
+    if (-not $Index.ContainsKey($Key)) { $Index[$Key] = @() }
+    # Each profile has already de-duplicated its own signals, so the same issue
+    # number cannot be added twice for one key. Avoid an O(n) `-notcontains`
+    # scan on every insertion; common labels/terms otherwise make live audits
+    # quadratic before ranking even starts.
+    $Index[$Key] += $IssueNumber
+}
+
+function New-RelationContext($OpenIssues, $ClosedIssues) {
+    $contextTimer = [System.Diagnostics.Stopwatch]::StartNew()
+    $openProfiles = @{}
+    $closedProfiles = @{}
+    $frequency = @{}
+    $allProfiles = @()
+    foreach ($issue in @($OpenIssues)) {
+        $profile = New-IssueProfile $issue $false
+        $openProfiles[[string]$profile.number] = $profile
+        $allProfiles += $profile
+        if (-not $SelfTest -and $allProfiles.Count % 100 -eq 0) { Write-Host "[audit-open-issues] profiled $($allProfiles.Count) issues in $([Math]::Round($contextTimer.Elapsed.TotalSeconds, 1))s" }
+    }
+    foreach ($issue in @($ClosedIssues)) {
+        $profile = New-IssueProfile $issue $true
+        $closedProfiles[[string]$profile.number] = $profile
+        $allProfiles += $profile
+        if (-not $SelfTest -and $allProfiles.Count % 100 -eq 0) { Write-Host "[audit-open-issues] profiled $($allProfiles.Count) issues in $([Math]::Round($contextTimer.Elapsed.TotalSeconds, 1))s" }
+    }
+    foreach ($profile in $allProfiles) {
+        foreach ($term in @($profile.all_terms)) {
+            if (-not $frequency.ContainsKey($term)) { $frequency[$term] = 0 }
+            $frequency[$term]++
+        }
+    }
+    if (-not $SelfTest) { Write-Host "[audit-open-issues] built term frequencies in $([Math]::Round($contextTimer.Elapsed.TotalSeconds, 1))s" }
+    $indexes = [ordered]@{
+        references = @{}
+        subsystem_labels = @{}
+        lessons = @{}
+        code_identifiers = @{}
+        terms = @{}
+    }
+    foreach ($profile in @($closedProfiles.Values)) {
+        foreach ($value in @($profile.references)) { Add-RelationIndexValue $indexes.references ([string]$value) $profile.number }
+        foreach ($value in @($profile.subsystem_labels)) { Add-RelationIndexValue $indexes.subsystem_labels ([string]$value) $profile.number }
+        foreach ($value in @($profile.lessons)) { Add-RelationIndexValue $indexes.lessons ([string]$value) $profile.number }
+        foreach ($value in @($profile.code_identifiers)) { Add-RelationIndexValue $indexes.code_identifiers ([string]$value) $profile.number }
+        foreach ($value in @($profile.all_terms)) { Add-RelationIndexValue $indexes.terms ([string]$value) $profile.number }
+    }
+    if (-not $SelfTest) { Write-Host "[audit-open-issues] built closed-history indexes in $([Math]::Round($contextTimer.Elapsed.TotalSeconds, 1))s" }
+    return [PSCustomObject][ordered]@{
+        open_profiles = $openProfiles
+        closed_profiles = $closedProfiles
+        term_frequency = $frequency
+        issue_count = $allProfiles.Count
+        indexes = $indexes
+    }
+}
+
+function Add-RelationReason($Reasons, [string]$Kind, [int]$Score, $Evidence) {
+    $Reasons.Add([PSCustomObject][ordered]@{
+        kind = $Kind
+        score = $Score
+        evidence = @($Evidence)
+    })
+}
+
+function Get-RelatedClosedIssues($OpenProfile, $RelationContext) {
+    $candidates = New-Object System.Collections.Generic.List[object]
+    $rareLimit = [Math]::Max(8, [Math]::Ceiling([double]$RelationContext.issue_count * 0.08))
+    $candidateNumbers = @{}
+
+    foreach ($reference in @($OpenProfile.references)) {
+        if ($RelationContext.closed_profiles.ContainsKey([string]$reference)) { $candidateNumbers[[string]$reference] = $true }
+        foreach ($number in @($RelationContext.indexes.references[[string]$reference])) { $candidateNumbers[[string]$number] = $true }
+    }
+    foreach ($number in @($RelationContext.indexes.references[[string]$OpenProfile.number])) { $candidateNumbers[[string]$number] = $true }
+    foreach ($value in @($OpenProfile.subsystem_labels)) {
+        foreach ($number in @($RelationContext.indexes.subsystem_labels[[string]$value])) { $candidateNumbers[[string]$number] = $true }
+    }
+    foreach ($value in @($OpenProfile.lessons)) {
+        foreach ($number in @($RelationContext.indexes.lessons[[string]$value])) { $candidateNumbers[[string]$number] = $true }
+    }
+    foreach ($value in @($OpenProfile.code_identifiers)) {
+        foreach ($number in @($RelationContext.indexes.code_identifiers[[string]$value])) { $candidateNumbers[[string]$number] = $true }
+    }
+    foreach ($value in @($OpenProfile.all_terms)) {
+        if (-not $RelationContext.term_frequency.ContainsKey($value) -or $RelationContext.term_frequency[$value] -gt $rareLimit) { continue }
+        foreach ($number in @($RelationContext.indexes.terms[[string]$value])) { $candidateNumbers[[string]$number] = $true }
+    }
+
+    foreach ($candidateNumber in @($candidateNumbers.Keys)) {
+        $closedProfile = $RelationContext.closed_profiles[[string]$candidateNumber]
+        if (-not $closedProfile) { continue }
+        $reasons = New-Object System.Collections.Generic.List[object]
+        $score = 0
+        $direct = $false
+
+        if (@($OpenProfile.references) -contains [int]$closedProfile.number) {
+            Add-RelationReason $reasons 'open_explicitly_references_closed' 120 @("#$($closedProfile.number)")
+            $score += 120
+            $direct = $true
+        }
+        if ($closedProfile.reference_lookup.ContainsKey([string]$OpenProfile.number)) {
+            Add-RelationReason $reasons 'closed_explicitly_references_open' 120 @("#$($OpenProfile.number)")
+            $score += 120
+            $direct = $true
+        }
+
+        $sharedRefs = @(Get-Intersection $OpenProfile.references $closedProfile.reference_lookup | Where-Object {
+            $_ -ne [int]$OpenProfile.number -and $_ -ne [int]$closedProfile.number
+        } | Select-Object -First 3)
+        if ($sharedRefs.Count -gt 0) {
+            $points = [Math]::Min(24, 8 * $sharedRefs.Count)
+            Add-RelationReason $reasons 'shared_explicit_references' $points @($sharedRefs | ForEach-Object { "#$_" })
+            $score += $points
+        }
+
+        $sharedSubsystems = @(Get-Intersection $OpenProfile.subsystem_labels $closedProfile.subsystem_lookup)
+        if ($sharedSubsystems.Count -gt 0) {
+            $points = [Math]::Min(60, 30 * $sharedSubsystems.Count)
+            Add-RelationReason $reasons 'shared_subsystem_labels' $points $sharedSubsystems
+            $score += $points
+        }
+
+        $sharedLessons = @(Get-Intersection $OpenProfile.lessons $closedProfile.lesson_lookup | Select-Object -First 4)
+        if ($sharedLessons.Count -gt 0) {
+            $points = [Math]::Min(32, 8 * $sharedLessons.Count)
+            Add-RelationReason $reasons 'shared_lifecycle_surface_classes' $points $sharedLessons
+            $score += $points
+        }
+
+        $sharedIdentifiers = @(Get-Intersection $OpenProfile.code_identifiers $closedProfile.code_identifier_lookup | Select-Object -First 3)
+        if ($sharedIdentifiers.Count -gt 0) {
+            $points = [Math]::Min(60, 20 * $sharedIdentifiers.Count)
+            Add-RelationReason $reasons 'shared_code_identifiers' $points $sharedIdentifiers
+            $score += $points
+        }
+
+        $sharedTitleTerms = @(Get-Intersection $OpenProfile.title_terms $closedProfile.title_term_lookup | Where-Object {
+            $RelationContext.term_frequency.ContainsKey($_) -and $RelationContext.term_frequency[$_] -le $rareLimit
+        } | Select-Object -First 4)
+        if ($sharedTitleTerms.Count -gt 0) {
+            $points = [Math]::Min(28, 7 * $sharedTitleTerms.Count)
+            Add-RelationReason $reasons 'shared_distinctive_title_terms' $points $sharedTitleTerms
+            $score += $points
+        }
+
+        $sharedTerms = @(Get-Intersection $OpenProfile.all_terms $closedProfile.all_term_lookup | Where-Object {
+            $RelationContext.term_frequency.ContainsKey($_) -and $RelationContext.term_frequency[$_] -le $rareLimit -and $sharedTitleTerms -notcontains $_
+        } | Select-Object -First 5)
+        if ($sharedTerms.Count -gt 0) {
+            $points = [Math]::Min(15, 3 * $sharedTerms.Count)
+            Add-RelationReason $reasons 'shared_distinctive_terms' $points $sharedTerms
+            $score += $points
+        }
+
+        # Closure evidence cannot create a relationship.  It only raises the
+        # review priority of an already-related candidate because it identifies
+        # a prior repair that was actually closed/verified rather than abandoned.
+        if ($score -gt 0 -and @($closedProfile.closure_evidence).Count -gt 0) {
+            $kinds = @($closedProfile.closure_evidence.kind | Sort-Object -Unique)
+            $points = [Math]::Min(12, 2 * $kinds.Count)
+            Add-RelationReason $reasons 'closure_verification_evidence' $points $kinds
+            $score += $points
+        }
+
+        if ($score -le 0) { continue }
+        $hasStrongCombination = $sharedSubsystems.Count -gt 0 -and (
+            $sharedLessons.Count -gt 0 -or $sharedIdentifiers.Count -gt 0 -or
+            $sharedTitleTerms.Count -gt 0 -or $sharedTerms.Count -gt 0
+        )
+        $confidence = if ($direct -or $score -ge 100) { 'high' } elseif ($score -ge 55 -or $hasStrongCombination) { 'medium' } else { 'low' }
+        $regressionSignal = if ($direct) {
+            'direct-history-reference'
+        } elseif ($hasStrongCombination -and @($closedProfile.closure_evidence).Count -gt 0) {
+            'same-subsystem-surface-after-verified-closure'
+        } elseif ($hasStrongCombination) {
+            'same-subsystem-surface'
+        } else {
+            'related-history-review-only'
+        }
+        $issue = $closedProfile.issue
+        $candidates.Add([PSCustomObject][ordered]@{
+            number = [int]$issue.number
+            title = [string]$issue.title
+            url = [string]$issue.url
+            closed_at = [string]$issue.closedAt
+            score = [int]$score
+            confidence = $confidence
+            regression_signal = $regressionSignal
+            reasons = @($reasons | ForEach-Object { $_ })
+            closure_evidence = @($closedProfile.closure_evidence)
+            review_policy = 'manual review only; never auto-reopen from similarity'
+        })
+    }
+
+    return @($candidates | ForEach-Object { $_ } | Sort-Object -Property @{ Expression = 'score'; Descending = $true }, @{ Expression = 'closed_at'; Descending = $true }, @{ Expression = 'number'; Descending = $true } | Select-Object -First $MaxClosedMatches)
+}
+
+function Invoke-Audit($Issues, $ClosedIssues = @()) {
+    $auditTimer = [System.Diagnostics.Stopwatch]::StartNew()
+    $relationContext = New-RelationContext $Issues $ClosedIssues
+    if (-not $SelfTest) { Write-Host "[audit-open-issues] indexed $(@($Issues).Count) open and $(@($ClosedIssues).Count) closed issues in $([Math]::Round($auditTimer.Elapsed.TotalSeconds, 1))s" }
     $rows = @()
+    $processed = 0
     foreach ($issue in @($Issues | Sort-Object -Property number)) {
         $findings = @(Get-IssueFindings $issue)
         $lessons = @(Get-ApplicableLessons $issue)
+        $related = @(Get-RelatedClosedIssues $relationContext.open_profiles[[string]$issue.number] $relationContext)
         $rows += [PSCustomObject][ordered]@{
             number = [int]$issue.number
             title = [string]$issue.title
@@ -270,9 +647,15 @@ function Invoke-Audit($Issues) {
             risk_tier = Get-RiskTier $issue
             verification_scope = Get-VerificationScope $issue
             recommended_next_action = Get-RecommendedAction $issue
+            related_closed_issues = $related
+            related_closed_status = if ($related.Count -gt 0) { 'ranked-evidence-review' } else { 'no-evidence-backed-closed-match' }
             fallbacks = @(Get-EmpiricalFallbacks $issue)
             findings = $findings
             clean = ($findings.Count -eq 0)
+        }
+        $processed++
+        if (-not $SelfTest -and $processed % 50 -eq 0) {
+            Write-Host "[audit-open-issues] ranked $processed/$(@($Issues).Count) open issues in $([Math]::Round($auditTimer.Elapsed.TotalSeconds, 1))s"
         }
     }
 
@@ -293,14 +676,18 @@ function Invoke-Audit($Issues) {
     }
 
     return [PSCustomObject][ordered]@{
-        schema = 3
+        schema = 4
         generated_utc = [DateTime]::UtcNow.ToString("o")
         repository = $Repository
         open_issue_count = $rows.Count
+        closed_issue_count = @($ClosedIssues).Count
         clean_issue_count = @($rows | Where-Object { $_.clean }).Count
+        open_issues_with_related_closed = @($rows | Where-Object { @($_.related_closed_issues).Count -gt 0 }).Count
+        open_issues_without_related_closed = @($rows | Where-Object { @($_.related_closed_issues).Count -eq 0 }).Count
+        high_confidence_relation_count = @($rows.related_closed_issues | ForEach-Object { @($_) } | Where-Object { $_.confidence -eq 'high' }).Count
         finding_counts = $counts
         lesson_counts = $lessonCounts
-        note = "Regex lesson matches are a review queue, not proof of root cause or fix status."
+        note = "All related-closed matches are a transparent review queue, never proof of root cause and never authority to auto-reopen. Closure evidence only boosts an independently-related candidate."
         issues = $rows
     }
 }
@@ -311,7 +698,9 @@ function Convert-AuditToMarkdown($Report) {
     $lines.Add("")
     $lines.Add("Generated from the live GitHub issue body, comments, labels, and URL at ``$($Report.generated_utc)``. This is a recovery register, not a root-cause claim. Each path states the evidence that must trigger it and the observation that falsifies it. ``Insufficient evidence`` entries deliberately request a bounded probe instead of inventing a fix.")
     $lines.Add("")
-    $lines.Add("Open issues audited: **$($Report.open_issue_count)**.")
+    $lines.Add("Open issues audited: **$($Report.open_issue_count)**. Closed issues compared: **$($Report.closed_issue_count)**. Open issues with at least one evidence-ranked closed candidate: **$($Report.open_issues_with_related_closed)**. High-confidence relations: **$($Report.high_confidence_relation_count)**.")
+    $lines.Add("")
+    $lines.Add("> Related-closed rankings are a manual review queue. They do not prove a shared root cause and must never auto-reopen an issue. Closure evidence only increases priority after an independent relationship signal exists.")
     foreach ($issue in @($Report.issues)) {
         $title = ([string]$issue.title).Trim()
         $labels = @($issue.labels) -join ", "
@@ -323,6 +712,28 @@ function Convert-AuditToMarkdown($Report) {
         $lines.Add("- Current labels: ``$labels``")
         $lines.Add("- Evidence class: ``$lessons``")
         $lines.Add("- Current action: $($issue.recommended_next_action)")
+        $lines.Add("- Closed-history status: ``$($issue.related_closed_status)``")
+        if (@($issue.related_closed_issues).Count -gt 0) {
+            $lines.Add("")
+            $lines.Add("**Ranked related closed issues (manual review)**")
+            $rank = 0
+            foreach ($closed in @($issue.related_closed_issues)) {
+                $rank++
+                $lines.Add("")
+                $lines.Add("$rank. [#$($closed.number) - $($closed.title)]($($closed.url)) - score ``$($closed.score)``, confidence ``$($closed.confidence)``, signal ``$($closed.regression_signal)``, closed ``$($closed.closed_at)``")
+                foreach ($reason in @($closed.reasons)) {
+                    $reasonEvidence = @($reason.evidence) -join ", "
+                    $lines.Add("   - ``$($reason.kind)`` (+$($reason.score)): $reasonEvidence")
+                }
+                if (@($closed.closure_evidence).Count -gt 0) {
+                    $closureKinds = @($closed.closure_evidence.kind | Sort-Object -Unique) -join ", "
+                    $lines.Add("   - Prior closure evidence: ``$closureKinds``")
+                }
+            }
+        } else {
+            $lines.Add("")
+            $lines.Add("No closed issue has an evidence-backed relation under the current exact-reference, subsystem, surface, identifier, and distinctive-term rules. Do not fabricate ancestry.")
+        }
         $index = 0
         foreach ($fallback in @($issue.fallbacks)) {
             $index++
@@ -340,9 +751,9 @@ function Convert-AuditToMarkdown($Report) {
 function Invoke-SelfTest {
     $fixture = @(
         [PSCustomObject]@{
-            number = 1; title = "Short title"; body = "**Symptom:** x"; url = "u1"
-            labels = @(@{ name = "bug" }, @{ name = "verify-fix-coop" })
-            comments = @(@{ body = "Test method: host + client. Expected: pass." })
+            number = 1; title = "Blightreaper husk transform"; body = "**Symptom:** remote husk drifts after #90. ``SimpleHuskInventoryExtension._wield_slot`` differs."; url = "u1"
+            labels = @(@{ name = "bug" }, @{ name = "verify-fix-coop" }, @{ name = "WOC" })
+            comments = @(@{ body = "Test method: host + client. Expected: remote peer keeps the Blightreaper transform." })
         },
         [PSCustomObject]@{
             number = 2; title = "This title contains far too many words for doctrine"; body = "## Broken\\nBody"; url = "u2"
@@ -355,7 +766,19 @@ function Invoke-SelfTest {
             comments = @(@{ body = "Shipped today." })
         }
     )
-    $result = Invoke-Audit $fixture
+    $closedFixture = @(
+        [PSCustomObject]@{
+            number = 90; title = "Blightreaper remote husk transform"; body = "Fixed ``SimpleHuskInventoryExtension._wield_slot`` lifecycle handling."; url = "c90"; closedAt = "2026-07-10T00:00:00Z"; stateReason = "COMPLETED"
+            labels = @(@{ name = "bug" }, @{ name = "Fixed" }, @{ name = "WOC" })
+            comments = @(@{ body = "User-confirmed fixed. Regression coverage passed."; url = "c90-comment" })
+        },
+        [PSCustomObject]@{
+            number = 91; title = "Unrelated release workflow"; body = "Publishing completed."; url = "c91"; closedAt = "2026-07-11T00:00:00Z"; stateReason = "COMPLETED"
+            labels = @(@{ name = "tooling" })
+            comments = @()
+        }
+    )
+    $result = Invoke-Audit $fixture $closedFixture
     if ($result.open_issue_count -ne 3) { throw "fixture count drift" }
     if (-not $result.issues[0].clean) { throw "valid coop issue was rejected" }
     if ($result.issues[1].findings -notcontains "lifecycle_count_0") { throw "missing lifecycle not found" }
@@ -366,6 +789,15 @@ function Invoke-SelfTest {
     if ($result.issues[0].verification_scope -ne "coop") { throw "coop verification scope drift" }
     if ($result.issues[0].recommended_next_action -ne "two-player in-game verification") { throw "coop action drift" }
     if ($result.issues[1].risk_tier -notin @("low", "moderate", "high", "critical")) { throw "risk classification drift" }
+    if ($result.closed_issue_count -ne 2) { throw "closed fixture count drift" }
+    $related = @($result.issues[0].related_closed_issues)
+    if ($related.Count -lt 1 -or $related[0].number -ne 90) { throw "directly referenced closed issue was not ranked first" }
+    if ($related[0].confidence -ne 'high') { throw "direct reference must be high confidence" }
+    if (@($related[0].reasons.kind) -notcontains 'open_explicitly_references_closed') { throw "direct reference reason missing" }
+    if (@($related[0].reasons.kind) -notcontains 'shared_subsystem_labels') { throw "subsystem reason missing" }
+    if (@($related[0].reasons.kind) -notcontains 'shared_code_identifiers') { throw "code identifier reason missing" }
+    if (@($related[0].closure_evidence.kind) -notcontains 'user_confirmed_fixed') { throw "closure evidence missing" }
+    if (@($result.issues[1].related_closed_issues | Where-Object { $_.number -eq 91 }).Count -ne 0) { throw "closure evidence created an unrelated relation" }
     foreach ($row in @($result.issues)) {
         if (@($row.fallbacks).Count -ne 3) { throw "issue $($row.number) fallback count drift" }
         foreach ($fallback in @($row.fallbacks)) {
@@ -387,9 +819,12 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 }
 
 $json = & gh issue list --repo $Repository --state open --limit 1000 --json number,title,body,labels,comments,url,updatedAt
-if ($LASTEXITCODE -ne 0) { throw "gh issue list failed." }
+if ($LASTEXITCODE -ne 0) { throw "gh open issue list failed." }
 $issues = @($json | ConvertFrom-Json)
-$report = Invoke-Audit $issues
+$closedJson = & gh issue list --repo $Repository --state closed --limit 1000 --json number,title,body,labels,comments,url,updatedAt,closedAt,stateReason
+if ($LASTEXITCODE -ne 0) { throw "gh closed issue list failed." }
+$closedIssues = @($closedJson | ConvertFrom-Json)
+$report = Invoke-Audit $issues $closedIssues
 $rendered = $report | ConvertTo-Json -Depth 8
 
 if ($OutputPath) {
