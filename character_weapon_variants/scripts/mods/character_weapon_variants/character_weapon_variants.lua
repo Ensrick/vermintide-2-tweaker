@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.440-dev"
+local MOD_VERSION = "0.1.441-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -340,6 +340,11 @@ end
 -- ============================================================
 -- Policy-backed catalog is isolated so the entry file remains orchestration.
 _om.variant_catalog = mod:dofile("scripts/mods/character_weapon_variants/_cwv_variant_catalog")({ om = _om })
+local _career_weapon_actions = mod:dofile(
+	"scripts/mods/character_weapon_variants/_lib_career_weapon_actions")
+local _cwv_career_weapon_actions = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_career_weapon_actions")
+local _career_action_owner = "character_weapon_variants"
 local _es_all_careers = _om.variant_catalog.es_all_careers
 local _wh_all_careers = _om.variant_catalog.wh_all_careers
 local _bw_all_careers = _om.variant_catalog.bw_all_careers
@@ -564,20 +569,6 @@ do
 		}) do
 			template.wield_anim_career_3p[career] = "to_polearm"
 		end
-		-- Foreign base templates do not necessarily carry Kruber's career
-		-- ability actions. Mirror the three authored careers at construction;
-		-- WT injects optional receivers only while their toggle is enabled.
-		for _, career in ipairs(infantry.DEFAULT_CAREERS) do
-			local settings = CareerSettings and CareerSettings[career]
-			local ability = settings and settings.activated_ability
-			ability = ability and ability[1]
-			local action_name = ability and ability.action_name
-			local action = action_name and ActionTemplates and ActionTemplates[action_name]
-			if action_name and action and not template.actions[action_name] then
-				template.actions[action_name] = action
-			end
-		end
-
 		Weapons[infantry.TEMPLATE_KEY] = template
 		-- CWV entries inherit `.name = we_spear`; inventory preview template
 		-- lookup therefore resolves the base table. Patch only Kruber's 3P
@@ -1465,14 +1456,6 @@ do
 		template.wield_anim_career_3p = template.wield_anim_career_3p or {}
 		for _, career in ipairs(greataxe.DEFAULT_CAREERS) do
 			template.wield_anim_career_3p[career] = "to_2h_hammer"
-			local settings = CareerSettings and CareerSettings[career]
-			local ability = settings and settings.activated_ability
-			ability = ability and ability[1]
-			local action_name = ability and ability.action_name
-			local action = action_name and ActionTemplates and ActionTemplates[action_name]
-			if action_name and action and not template.actions[action_name] then
-				template.actions[action_name] = action
-			end
 		end
 
 		Weapons[greataxe.TEMPLATE_KEY] = template
@@ -9429,6 +9412,22 @@ local function _auto_register_all()
 					ItemMasterList[key] = pending.entry
 				end
 			end
+		end
+
+		-- Every registered provider row must make every authored career action
+		-- available on its effective template.  Do this from the completed item
+		-- catalog instead of hand-copying activated_ability[1] in individual
+		-- constructors: Waywatcher has an alternate action row, and future
+		-- private templates otherwise silently bypass the shared contract.
+		local action_report = _cwv_career_weapon_actions.install(pending_defs,
+			ItemMasterList, Weapons, CareerSettings, ActionTemplates,
+			_career_weapon_actions, _career_action_owner)
+		if not action_report.ok then
+			mod:error("[cwv:661] incomplete career-action integration: %s",
+				table.concat(action_report, ","))
+		else
+			mod:info("[cwv:661] career-action integration ready templates=%d",
+				action_report.template_count)
 		end
 
 		-- Issue #567 root fix. The vanilla reverse-index is a lazy snapshot, not a

@@ -30,6 +30,7 @@
         @{
             Source = "_lib_career_weapon_actions.lua"
             Consumers = @(
+                "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_career_weapon_actions.lua"
                 "weapon_tweaker/scripts/mods/weapon_tweaker/_lib_career_weapon_actions.lua"
                 "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_career_weapon_actions.lua"
                 "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_career_weapon_actions.lua"

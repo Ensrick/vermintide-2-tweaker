@@ -2105,8 +2105,19 @@ whose activated ability declares `action_name`.
 
 ### Fix template
 - Use `tools/shared_lib/_lib_career_weapon_actions.lua`; collect every declared
-  row, preserve existing donor rows, and record only newly inserted rows for
-  reversible cleanup.
+  row and preserve existing donor rows by identity. Every provider claims the
+  shared row through that library; releasing one provider removes an injected
+  row only after the final claimant releases it and only when its value has not
+  been replaced. A local “I inserted this” boolean is insufficient when WT,
+  CWV, and WOC can consume the same template in different load orders.
+- Reconcile actions at the same lifecycle boundary as availability. In
+  particular, a deferred post-CWV `can_wield` pass must run the career-action
+  pass too; otherwise a late-created provider item becomes selectable while
+  its effective template still lacks the ability row.
+- Provider mods reconcile their completed item catalog through the shared
+  integration. Do not hand-copy `activated_ability[1]` in individual weapon
+  constructors: that misses alternate rows and lets the next private template
+  bypass the contract.
 - Missing career settings/action providers are integration failures: emit a
   bounded runtime error and fail the offline matrix. Never silently skip them.
 - Test all ten current actions, the Waywatcher alternate, existing-row identity,

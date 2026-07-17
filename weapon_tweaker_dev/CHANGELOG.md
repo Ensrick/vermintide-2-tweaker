@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.273-dev (2026-07-17) - #661 career-action reconciliation [verify-fix]
+
+- Reconciled every career action after the deferred post-CWV availability pass, including alternate ability rows.
+- Added identity-safe provider claims so WT cleanup cannot delete native, replaced, or still-required CWV/WOC action rows.
+- Expanded engine-free coverage for late registration, repeated reconciliation, release order, replacement, and conflicts.
+
+**Solo verify:** equip cross-character weapons on at least two careers, use every career ability before and after a weapon swap, and run `/wt_regression_test`. Abilities must remain usable and career-action checks must pass.
+
 ## 0.12.272-dev (2026-07-17) - runtime-check module boundary (#2) [tooling]
 
 - Moved the runtime regression and verification catalogue behind one explicit installer while preserving all dev-only checks, their order, and command ownership.

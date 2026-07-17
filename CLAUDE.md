@@ -250,13 +250,13 @@ Same code as the GUI buttons; streams VMB output live to stdout; exit codes 0/1/
 .\tools\ship\ship.ps1 -Mod <name>     # build + local/enabled-remote deploy + upload + GitHub release + verify
 ```
 
-Then `git add` + commit + push the source. Add `-AllowPublic` when the mod's `itemV2.cfg` has `visibility = public`. Add `-NoRemote` only when intentionally skipping an otherwise-enabled remote target, and say which target was skipped. If no remote target is enabled, no override is needed; report that the deploy was local-only. Local-deploy-only is NOT a valid **ship** path: Steam re-syncs the subscribed Workshop bundle over any local deploy, so the user only ever runs the last UPLOADED build. Uploading is the only thing that reaches them.
+Then `git add` + commit the source and generated bundle, push a feature branch, open a PR to protected `master`, wait for required `qa-gate`, and merge. Add `-AllowPublic` when the mod's `itemV2.cfg` has `visibility = public`. Add `-NoRemote` only when intentionally skipping an otherwise-enabled remote target, and say which target was skipped. If no remote target is enabled, no override is needed; report that the deploy was local-only. Local-deploy-only is NOT a valid **ship** path: Steam re-syncs the subscribed Workshop bundle over any local deploy, so the user only ever runs the last UPLOADED build. Uploading is the only thing that reaches them.
 
 **Clean version, no suffix (including stable promotions):** requires a fresh, explicit, per-build ship signal from the user naming the version (e.g. "ship cim v0.8.34 now"). A "ship it" from earlier does NOT carry forward. Default for these is `build` + `deploy` only; treat upload like `git push --force`. This guards subscribers - reflex uploads of unstable mid-fix builds cost ~80 cim subscribers in May 2026.
 
 | Intent | Verbs |
 |---|---|
-| Update a `-dev`/`-alpha`/`-beta` build (any active mod) | `ship.ps1 -Mod <name>`, then commit + push source. No ask. |
+| Update a `-dev`/`-alpha`/`-beta` build (any active mod) | `ship.ps1 -Mod <name>`, then commit source+bundle, push a branch, pass `qa-gate`, and merge the PR. No ask. |
 | ...when the target mod's current `itemV2.cfg` says `visibility = "public"` | add `-AllowPublic` |
 | ...while intentionally skipping an enabled remote | add `-NoRemote` and SAY WHICH target was skipped |
 | Confirm a build only compiles | `VMBLauncher.exe build <mod>` |
@@ -267,6 +267,13 @@ Then `git add` + commit + push the source. Add `-AllowPublic` when the mod's `it
 **Post-ship verification (both load-bearing - `ugc_tool` prints success even on failure):**
 1. `C:\Program Files (x86)\Steam\logs\workshop_log.txt` must show `Uploaded new content` for the item. For `friends_only`/`private` items the public Steam API returns blank fields, so if in doubt eyeball the Workshop page in Steam.
 2. `ship.ps1` hash-verifies the deploy against the Workshop content folder. If that verify fails with a hash mismatch AFTER a confirmed upload, it is a Steam reconcile race: re-run `VMBLauncher.exe deploy <mod> --no-remote` once and treat the ship as successful. Do NOT lecture the user about restarting Steam unless the log shows they are actually running a stale build.
+
+**Protected source landing (issue #540).** `master` requires the strict
+`qa-gate` context, applies the rule to administrators, forbids force-push and
+deletion, and requires conversation resolution. Do not attempt a direct push or
+disable protection to preserve the old workflow. A ship is source-consistent
+only after its source and generated bundle merge through the protected PR; the
+merge-triggered `master` QA run is the final remote confirmation.
 
 **Every deploy hits every enabled remote target automatically.** As of launcher v0.4.0, `deploy` (and `all`/`ship.ps1`) push the bundle to each enabled `RemoteDeployTargets` entry in `%APPDATA%\VMBLauncher\settings.json` right after the local Workshop-folder copy. A disabled target is intentionally out of scope and must not be reported as updated. For co-op debugging, enable the tester target before deploying so host and client stay in lockstep. Skip otherwise-enabled remotes for one invocation with `-NoRemote`/`--no-remote`; disable a target persistently with `Enabled = false` in settings.
 

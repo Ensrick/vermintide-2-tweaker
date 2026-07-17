@@ -1,5 +1,13 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.441-dev - 2026-07-17 - #661 complete career-action registration [verify-fix]
+
+- Replaced per-constructor `activated_ability[1]` copies with one completed-catalog pass that installs every authored ability row for every CWV career.
+- Joined the shared WT/CWV/WOC ownership contract so another provider's cleanup cannot remove a still-required action row.
+- Added alternate-row, late-registration, ownership, replacement, and conflict coverage.
+
+**Solo verify:** equip CWV weapons across at least two careers, use each career ability before and after weapon swaps, and run `/cwv_regression_test`. No `[cwv:661] incomplete` line may appear.
+
 ## 0.1.440-dev - 2026-07-17 - entry-module decomposition
 
 - Reduced the CWV entry module below its frozen 11,617-line baseline by moving

@@ -75,13 +75,14 @@ regressions without being permanently red.
 
 | Check | Baseline file | Frozen | Fails on |
 |---|---|---|---|
-| `check_file_sizes` | `qa/baselines/file_sizes.json` | 13 files over the 2500-line hard limit | a NEW hand-written Lua file crossing the hard limit, or a baselined file GROWING beyond its frozen line count. Generator-owned pure-data tables are recognized only by an `AUTO-GENERATED ... DO NOT HAND-EDIT` banner plus a top-level `return {`, matching PROJECT_STANDARDS §2.1's data exemption. Target-tier (1500–2500) overages stay plain warnings. |
-| `check_name_integrity` | `qa/baselines/name_integrity.json` | 14 errors (the no-VtSrc SUPERSET) | a NEW error only. The baseline is generated WITHOUT the decompiled `Vermintide-2-Source-Code` so it matches CI (which lacks the sibling repo); locally, with VtSrc present, fewer errors fire — all a subset. |
+| `check_file_sizes` | `qa/baselines/file_sizes.json` | 13 historical entries; 9 currently remain over the 2500-line hard limit | a NEW hand-written Lua file crossing the hard limit, or a baselined file GROWING beyond its frozen line count. Generator-owned pure-data tables are recognized only by an `AUTO-GENERATED ... DO NOT HAND-EDIT` banner plus a top-level `return {`, matching PROJECT_STANDARDS §2.1's data exemption. Target-tier (1500–2500) overages stay plain warnings. |
+| `check_name_integrity` | `qa/baselines/name_integrity.json` | 7 errors in the committed-oracle, no-VtSrc view | a NEW semantic error only. `qa/oracles/vanilla_loc_keys.json` preserves source-proven vanilla keys needed in CI, while the ratchet deliberately reruns without the optional source checkout. Check-2 identity excludes the diagnostic source path, so moving unchanged code between modules cannot manufacture a new error. |
 
 Regenerating a baseline is an **explicit** action (`<check>.ps1 -UpdateBaseline`),
 never automatic, and requires maintainer sign-off (it can only hide a real new
-violation). `check_name_integrity -UpdateBaseline` forces the no-VtSrc view so
-the committed baseline always matches CI regardless of the local checkout.
+violation). `check_name_integrity -UpdateBaseline` retains the committed vanilla
+oracle but forces the no-VtSrc view, so the baseline always matches CI regardless
+of the local checkout.
 
 ## Legend
 
@@ -332,10 +333,10 @@ metadata remain independent presentation/history surfaces.
 | `check_lua_unit_tests.ps1` | ✅ OK (2026-07-13) | Offline host-unit tier (issue #544): vendored Lua 5.1.5, dependency-free harness, and 3 initial production-helper tests for Bestiary & Armory attack-chain classification/sorting/label normalization. Runs in Quick + full QA. `-SelfTest` proves the harness pass path and planted-failure detection and is auto-discovered by `run_selftests.ps1`. Tier boundary and binary provenance live in `qa/lua/README.md`. |
 | `check_dofile_package_coverage.ps1` | ✅ OK (2026-07-14) | Blocking Quick gate added after WOC #595: every literal active-mod `mod:dofile` target exists as `.lua` source and is covered by the owning `.package` Lua list, exactly or by wildcard. Prevents source-only helpers from becoming Workshop `Resource not found` startup crashes. |
 | `check_branch_reconciliation_census.ps1` | ✅ OK (2026-07-17) | Offline issue #625 gate: validates the committed branch census schema, <=14-day freshness, current generator hash, unique tip/ref ownership, summary parity, and exact ancestry/patch-equivalence proofs without assuming CI has the maintainer's local refs. PS7 and PS5.1 self-tests cover valid, semantic-auto-classification, stale, duplicate-ref, and generator-drift fixtures. |
-| `check_name_integrity.ps1` | ⚠ baselined (issue #429) | 4 errors fire locally (VtSrc present); 14 in CI / no-VtSrc — all frozen in `qa/baselines/name_integrity.json` (the no-VtSrc superset), so the check is NON-BLOCKING on the pre-existing set and blocks only on a NEW error. Wired into `run_all` full (Standard). Self-test passes. |
+| `check_name_integrity.ps1` | ⚠ baselined (issue #429) | 7 semantic errors remain frozen in `qa/baselines/name_integrity.json`. The blocking ratchet always uses the committed vanilla oracle plus the no-VtSrc view, even when a maintainer has the optional source checkout; diagnostics still use the richer source inventory. Check-2 keys are path-insensitive, so module extraction does not look like a new localization defect. Self-test covers planted missing keys, source-file moves, and the offline menu-key oracle. |
 | `check_decisions_wired.ps1` | ⚠ exit 1 (2026-05-30, in run_all full pass) | 95 decisions parsed: 77 WIRED, 0 REGRESSION, 0 LEAK, 2 PENDING (`Kruber/dr_dual_wield_hammers` stale doc row, `Kruber/we_javelin` deferred-experimental), 78 ORPHAN (Saltzpyre/Kerillian decision sections stubbed — code ahead of doc), 1 UNCLASSIFIABLE. Self-test passes. |
 | `check_mechanics_citations.ps1` | ✅ OK (2026-05-30) | 45 cited factual bullets across 8 domains (`[src:]` decompiled-verified, `[memory:]`, `[bugclass:]`, `[dump:]`), 4 honest `[unverified]` gaps, 0 uncited. Self-test passes. Run the script for the live per-domain breakdown. |
-| `check_file_sizes.ps1` | ⚠ baselined (issue #429) | 13 files over the 2500-line hard limit, all frozen in `qa/baselines/file_sizes.json`; non-blocking until a NEW file crosses the limit or a baselined one grows. Target-tier overages remain plain warnings. |
+| `check_file_sizes.ps1` | ⚠ baselined (issue #429) | The baseline retains 13 historical entries so regrowth still fails; 9 files currently remain over the 2500-line hard limit. A NEW file crossing the limit or a baselined file growing still blocks. Target-tier overages remain plain warnings. |
 | `check_dev_only_edits.ps1` | ✅ OK (2026-07-08) | Dev/stable split guard (row 52b, issue #429). Standard in `run_all`, `-Staged` in pre-commit. Clean working tree = exit 0. Self-test passes. |
 | `check_logging.ps1` | ⚠ 56 findings (2026-07-08, first run) | Rows 58a/b/c (issue #429). echo=36 (§ 3.6 NEVER-context echoes — hook bodies, on_enabled/on_disabled, cim/gt/wt anim-log traces), per-frame=4 (cosmetics `mod.update` LA-sync `mod:info`), warn-chat=16 (every mod's `_dbg_alert` → `mod:warning`, the Issue #240 class — the migration-to-printf backlog). Advisory (never blocks). Self-test 5/5. |
 | `check_hook_test_coverage.ps1` | ✅ OK (2026-07-08, first run) | Row 24a (issue #429). Diff-scoped (default `HEAD~1..HEAD`, `-Staged`, or CI `origin/<base>...HEAD`). Over `HEAD~10..HEAD` all added hooks/NL-writes resolved covered (mods ship suites). Advisory in `run_all` + warn-only pre-commit step 4. Self-exits 0 on indeterminate diff. Self-test 7/7. |
@@ -364,11 +365,12 @@ pwsh -NoProfile -File qa/check_name_integrity.ps1 -SelfTest  # planted-fault pro
 oracle (so cwv/cosmetics runtime-registered names don't false-positive) — run the
 generator first for best results. It **is wired into `run_all.ps1`** (Standard)
 and, as of issue #429, **ratcheted**: the pre-existing errors are frozen in
-`qa/baselines/name_integrity.json` (the no-VtSrc superset, so the same file
-covers CI and local), and the check blocks only on a NEW error. The oracle is
-committed, so it resolves identically in CI and locally; only the decompiled
-`Vermintide-2-Source-Code` differs, which is exactly why the baseline is
-generated in the no-VtSrc view. (Not yet in the launcher's blocking upload
+`qa/baselines/name_integrity.json` (the committed-oracle, no-VtSrc view, so the
+same semantic keys cover CI and local), and the check blocks only on a NEW error.
+The runtime-name oracle and the source-proven vanilla-key oracle are committed;
+the optional decompiled checkout enriches diagnostics but cannot hide ratchet
+drift because the blocker reruns in CI's source-less view. Check-2 ratchet keys
+exclude source paths while diagnostics retain them. (Not yet in the launcher's blocking upload
 preflight; that would mirror the `QaScriptGate.RunAsync(mod, ...)` pattern in
 `tools/vmb-launcher/Services/ModRunner.cs`, exit 2 = block.)
 

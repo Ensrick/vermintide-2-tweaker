@@ -1,5 +1,12 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.27-dev (2026-07-17) - #661 shared career-action ownership [verify-fix]
+
+- Registered Blightreaper career actions through the shared WT/CWV/WOC claim contract so another provider cannot remove a still-required ability row.
+- Expanded the shared matrix for alternate rows, release order, external replacement, repeated reconciliation, and conflicts.
+
+**Solo verify:** equip the Blightreaper on at least two careers, use every career ability before and after a weapon swap, and run `/woc_regression_test`. The career-action check must pass.
+
 ## 0.1.26-dev (2026-07-17) - #613/#632 mission replay, Shyish, and career actions [verify-fix-coop]
 
 - Preserved 0.1.25-dev's atomic `Unit.set_local_pose` linked-root transform and
