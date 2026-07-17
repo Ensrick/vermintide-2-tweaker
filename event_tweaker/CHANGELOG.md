@@ -1,6 +1,6 @@
 # Tweaker: Events — Changelog
 
-## 0.4.35-dev (2026-07-16) - issue #430 hot-join crash containment [untested]
+## 0.4.35-dev (2026-07-16) - issue #430 hot-join crash containment [verify-fix-coop]
 
 - Closed the residual Cursed Adventure hot-join crash. The v0.4.29 peer-parity floor saw only `PlayerManager:human_players()`, but vanilla starts game-object replication at `GameSession.add_peer` (`peer_states.lua:393`) and adds the remote player to `PlayerManager` only after sync (`peer_states.lua:450`). A package-bearing curse could therefore already have replicated a custom unit before the roster beacon noticed the joining peer.
 - Added a pre-replication session contract: selecting or activating a managed package-bearing curse locks `GameModeBase.is_joinable`. Vanilla checks this at `PeerStates.Connecting` (`peer_states.lua:114-120`) before it sends `rpc_notify_connected`, so a new peer cannot advance to `GameSession.add_peer` while unsafe curse units exist. The lock preserves vanilla's `false` result and reopens only after no curse is selected or active. Existing peers still require positive Event Tweaker parity.
