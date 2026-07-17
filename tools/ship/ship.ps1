@@ -61,6 +61,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$launcherPathHelpers = Join-Path $PSScriptRoot '..\vmb-launcher-path.ps1'
+if (-not (Test-Path -LiteralPath $launcherPathHelpers -PathType Leaf)) {
+    throw "Shared VMBLauncher path helpers not found: $launcherPathHelpers"
+}
+. $launcherPathHelpers
+
 function Fail {
     param([string]$Message)
     Write-Host ""
@@ -120,28 +126,12 @@ function Test-ShipPathEqual {
 # A linked worktree's common directory is <primary>\.git.
 function Get-ShipPrimaryWorktreeRoot {
     param([string]$RepoRoot)
-    $probe = Invoke-NativeCapture { & git -C $RepoRoot rev-parse --path-format=absolute --git-common-dir }
-    if ($probe.ExitCode -ne 0 -or $probe.Lines.Count -eq 0) { return $null }
-    $common = ([string]$probe.Lines[-1]).Trim()
-    if ([string]::IsNullOrWhiteSpace($common)) { return $null }
-    $common = [System.IO.Path]::GetFullPath($common).TrimEnd('\', '/')
-    if ([System.IO.Path]::GetFileName($common) -ine '.git') { return $null }
-    $candidate = Split-Path $common -Parent
-    if (-not (Test-Path -LiteralPath $candidate -PathType Container)) { return $null }
-    return $candidate
+    return Get-VmbLauncherPrimaryWorktreeRoot -RepoRoot $RepoRoot
 }
 
 function Get-ShipConfiguredProjectRoot {
     param([string]$SettingsPath)
-    if (-not (Test-Path -LiteralPath $SettingsPath -PathType Leaf)) { return $null }
-    try {
-        $settings = [System.IO.File]::ReadAllText($SettingsPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
-    }
-    catch {
-        throw "VMBLauncher settings are not valid JSON: $SettingsPath ($($_.Exception.Message))"
-    }
-    if ($null -eq $settings -or [string]::IsNullOrWhiteSpace([string]$settings.ProjectRoot)) { return $null }
-    return [System.IO.Path]::GetFullPath([string]$settings.ProjectRoot)
+    return Get-VmbLauncherConfiguredProjectRoot -SettingsPath $SettingsPath
 }
 
 function Resolve-ShipLauncherPath {
@@ -152,39 +142,11 @@ function Resolve-ShipLauncherPath {
         [string]$PrimaryWorktreeRoot
     )
 
-    $relative = 'tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe'
-    if (-not [string]::IsNullOrWhiteSpace($ExplicitPath)) {
-        $explicitFull = [System.IO.Path]::GetFullPath($ExplicitPath)
-        if (-not (Test-Path -LiteralPath $explicitFull -PathType Leaf)) {
-            throw "VT2_SHIP_VMB_LAUNCHER points to a missing file: $explicitFull"
-        }
-        if ((Get-Item -LiteralPath $explicitFull).Length -le 0) {
-            throw "VT2_SHIP_VMB_LAUNCHER points to an empty file: $explicitFull"
-        }
-        return [pscustomobject]@{ Path = $explicitFull; Source = 'VT2_SHIP_VMB_LAUNCHER' }
-    }
-
-    $candidates = @(
-        [pscustomobject]@{ Path = (Join-Path $RepoRoot $relative); Source = 'invoking worktree' },
-        [pscustomobject]@{ Path = $(if ($ConfiguredProjectRoot) { Join-Path $ConfiguredProjectRoot $relative } else { $null }); Source = 'VMBLauncher configured ProjectRoot' },
-        [pscustomobject]@{ Path = $(if ($PrimaryWorktreeRoot) { Join-Path $PrimaryWorktreeRoot $relative } else { $null }); Source = 'primary git worktree' }
-    )
-    $seen = @{}
-    $attempted = @()
-    foreach ($candidate in $candidates) {
-        if ([string]::IsNullOrWhiteSpace([string]$candidate.Path)) { continue }
-        $full = [System.IO.Path]::GetFullPath([string]$candidate.Path)
-        $key = $full.ToLowerInvariant()
-        if ($seen.ContainsKey($key)) { continue }
-        $seen[$key] = $true
-        $attempted += $full
-        if ((Test-Path -LiteralPath $full -PathType Leaf) -and (Get-Item -LiteralPath $full).Length -gt 0) {
-            return [pscustomobject]@{ Path = $full; Source = $candidate.Source }
-        }
-    }
-    throw ("VMBLauncher.exe was not found in any approved machine-local location: " +
-           ($attempted -join '; ') +
-           ". Set VT2_SHIP_VMB_LAUNCHER to the published executable or publish it in the primary/configured worktree.")
+    return Resolve-ApprovedVmbLauncherPath `
+        -RepoRoot $RepoRoot `
+        -ConfiguredProjectRoot $ConfiguredProjectRoot `
+        -PrimaryWorktreeRoot $PrimaryWorktreeRoot `
+        -EnvironmentPath $ExplicitPath
 }
 
 function Test-ShipVmbRcForRoot {
@@ -674,6 +636,10 @@ function Invoke-ShipSelfTest {
     $pubPath = Join-Path $PSScriptRoot '..\publish-release\publish-release.ps1'
     $pubTxt = if (Test-Path $pubPath) { [System.IO.File]::ReadAllText($pubPath, [System.Text.Encoding]::UTF8) } else { '' }
     Assert ($pubTxt -match '(?m)^\s*\[string\[\]\]\$Mods\b') "publish-release.ps1 declares [string[]]`$Mods (issues #436/#493)"
+    Assert ($pubTxt -match '(?m)^\s*\[string\]\$LauncherPath\b' -and
+        $pubTxt -match '(?m)^\s*\[string\]\$LauncherSource\b' -and
+        $pubTxt -match '(?m)^\s*\[string\]\$LauncherApprovalAnchor\b') "publish-release.ps1 declares the exact launcher approval interface (issue #683)"
+    Assert ($pubTxt -match 'Resolve-ApprovedVmbLauncherPath') "publish-release.ps1 revalidates the shared approved-launcher contract (issue #683)"
     Assert (-not ($pubTxt -cmatch '(?m)^\s*\$mods\s*=')) "publish-release.ps1 never assigns lowercase `$mods (param-stomp guard, 2026-07-13)"
     Assert ($pubTxt -match 'Resolve-GitHubReleaseByTag' -and $pubTxt -match 'Publish-GitHubReleaseAssetsById') "publish-release owns exact-tag fallback and release-id mutation (issue #651)"
     $shipSource = [System.IO.File]::ReadAllText($PSCommandPath, [System.Text.Encoding]::UTF8)
@@ -1122,7 +1088,10 @@ if (-not $SkipGitHub) {
     # an existing release through its numeric id.  Do not duplicate a tag probe
     # here: a 503 must never be misclassified as "release absent" by ship.ps1.
     try {
-        & $pubScript -Tag $tag -Mods $Mod -SkipBuild
+        & $pubScript -Tag $tag -Mods $Mod -SkipBuild `
+            -LauncherPath $launcherResolution.Path `
+            -LauncherSource $launcherResolution.Source `
+            -LauncherApprovalAnchor $launcherResolution.ApprovalAnchor
     }
     catch {
         Fail "publish-release.ps1 failed: $($_.Exception.Message)"

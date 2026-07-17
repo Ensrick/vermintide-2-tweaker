@@ -19,11 +19,30 @@ builds without waiting on Workshop propagation.
                                             # mods (folder name or ModId, comma-separate for several)
 ```
 
+`ship.ps1` also supplies `-LauncherPath`, `-LauncherSource`, and
+`-LauncherApprovalAnchor` internally. That snapshot is the exact approved
+VMBLauncher dependency used for the Workshop phase; the release phase
+revalidates its path/provenance without rereading mutable global settings
+before recording the builder version. Do not hand-author those parameters for
+routine publishing.
+
 Requires:
 
 - `gh` CLI authenticated for `github.com` as `Ensrick`.
-- `VMBLauncher.exe` present (built via `tools/vmb-launcher/publish.ps1 -SkipOpen` first).
+- `VMBLauncher.exe` present in an approved location: this invoking checkout,
+  VMBLauncher's configured `ProjectRoot`, the primary git worktree, or the
+  explicit `VT2_SHIP_VMB_LAUNCHER` operator override. A set but invalid override
+  fails instead of silently falling back.
 - PowerShell 7+ (so `Compress-Archive` and `ConvertTo-Json` behave).
+
+Clean linked worktrees do not need the ignored launcher binary copied into
+their own tree. Standalone publishing uses the same resolver as `ship.ps1` and
+fails closed if no approved executable exists. The offline contract runs under
+both Windows PowerShell 5.1 and PowerShell 7:
+
+```powershell
+.\qa\check_vmb_launcher_path.ps1 -SelfTest
+```
 
 ## Two modes (issues #436 / #493)
 

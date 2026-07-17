@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-07-17 - Clean-worktree launcher provenance handoff
+
+Issue #683 centralizes VMBLauncher dependency discovery for the canonical ship
+and GitHub-release phases. `ship.ps1` now passes its exact approved executable
+path, provenance source, and approval anchor to `publish-release.ps1`; the
+release phase revalidates that immutable snapshot before recording the
+executable's real version. Direct
+release publishing uses the same invoking/configured/primary/environment
+candidate set and fails closed when no approved launcher exists. Offline
+PowerShell 5.1 and 7 fixtures cover clean external dependencies, invalid paths,
+provenance mismatch, missing candidates, and ship-to-release wiring. Full QA
+now runs that contract as an explicit blocking matrix under both PowerShell 7
+and Windows PowerShell 5.1, so hosted QA cannot pass without exercising the
+release-host compatibility boundary. Nothing was built, deployed, uploaded,
+or published by this tooling-only change.
+
 ## 2026-07-17 - Exact CWV identity for independent remote offhands
 
 Tweaker: Cosmetics v0.9.140-dev and CWV v0.1.444-dev re-derive the missing

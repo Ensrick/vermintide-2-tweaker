@@ -145,6 +145,11 @@ if ($Quick) {
 # check's own logic is broken - the gate must not trust a broken check, so
 # this is Standard policy (its exit 2 BLOCKS). Full pass only, not -Quick.
 Run-Check "run_selftests"      { & (Join-Path $here "run_selftests.ps1")      -Quiet:$Quiet }
+# The launcher resolver is a release boundary shared by pwsh 7 and Windows
+# PowerShell 5.1. Dynamic self-test discovery above covers the current host;
+# this dedicated blocking matrix makes both hosts mandatory in every full QA
+# run, including hosted CI. See CHECKS row 60g / issue #683.
+Run-Check "vmb_launcher_path_host_matrix" { & (Join-Path $here "run_vmb_launcher_path_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 Run-Check "check_localization" { & (Join-Path $here "check_localization.ps1") -Quiet:$Quiet }
 # check_loc_tags is advisory-only (dev status-tag doctrine, issue #301): it
 # surfaces stable-tag leaks, unknown-vocab tags, and mutex combos, but must
