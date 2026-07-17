@@ -1497,13 +1497,15 @@ function M.install(mod, _rt_register, deps)
                     end
                     if expected and CareerSettings and Weapons and ActionTemplates then
                         local cs = CareerSettings[career]
-                        local ability = cs and cs.activated_ability and cs.activated_ability[1]
-                        local action_name = ability and ability.action_name
                         local tmpl = variant.template and Weapons[variant.template]
-                        if action_name and ActionTemplates[action_name]
-                            and (not tmpl or not tmpl.actions or not tmpl.actions[action_name]) then
-                            return string.format("#593 CWV variant missing career action key=%s career=%s action=%s",
-                                key, career, action_name)
+                        for _, ability in ipairs((cs and cs.activated_ability) or {}) do
+                            local action_name = ability and ability.action_name
+                            if action_name and ActionTemplates[action_name]
+                                and (not tmpl or not tmpl.actions
+                                    or tmpl.actions[action_name] ~= ActionTemplates[action_name]) then
+                                return string.format("#593 CWV variant missing career action key=%s career=%s action=%s",
+                                    key, career, action_name)
+                            end
                         end
                     end
                 end

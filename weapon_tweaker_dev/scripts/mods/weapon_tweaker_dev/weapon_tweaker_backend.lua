@@ -138,7 +138,12 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
         if mod._wt368_deferred_availability then
             mod._wt368_deferred_availability = nil
             apply_weapon_unlocks()
-            mod:info("[wt:368] deferred final availability reconciliation applied")
+            -- CWV creates its private ItemMasterList/template rows from its own
+            -- StateInGameRunning callback.  Availability without the matching
+            -- action reconciliation leaves a late-created weapon wieldable but
+            -- unable to expose the current career's activated-ability action.
+            patch_career_actions_on_weapons()
+            mod:info("[wt:368] deferred final availability + career-action reconciliation applied")
         end
         -- Per-frame passive-charge restore (cross-character staves / Moonfire
         -- Bow). Self-gated on its VMF toggle (default OFF) and the local owned

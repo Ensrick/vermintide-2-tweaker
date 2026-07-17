@@ -154,6 +154,7 @@ local _durable_transform_lib = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_woc_durable_transform")
 local _career_weapon_actions = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_lib_career_weapon_actions")
+local _career_action_owner = "weapons_of_chaos"
 local _audio_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_audio")
 local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse")
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
@@ -530,7 +531,7 @@ local function _install_blightreaper_moveset()
 	end
 	local abilities = _career_weapon_actions.install(
 		Weapons[TEMPLATE], _careers, rawget(_G, "CareerSettings"),
-		rawget(_G, "ActionTemplates"))
+		rawget(_G, "ActionTemplates"), _career_action_owner)
 	_moveset_report.ability_actions = abilities
 	if not abilities.ok then
 		printf("[WOC:632] Blightreaper career actions unavailable: %s actions=%s careers=%s",

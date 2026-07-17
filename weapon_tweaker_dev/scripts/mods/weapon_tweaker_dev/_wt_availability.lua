@@ -29,6 +29,7 @@ local _cwv_variant_catalog = mod:dofile("scripts/mods/weapon_tweaker_dev/wt_cwv_
 local _cwv_availability_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_cwv_availability_policy")
 local _career_weapon_actions = mod:dofile(
     "scripts/mods/weapon_tweaker_dev/_lib_career_weapon_actions")
+local _career_action_owner = "weapon_tweaker:" .. tostring(mod)
 WT.cwv_variant_catalog = _cwv_variant_catalog
 WT.cwv_ownership         = _cwv_ownership
 WT.cwv_availability_policy = _cwv_availability_policy
@@ -209,19 +210,30 @@ end
 -- accumulate stale ability-action entries on weapon templates.
 local _career_action_injections = {}
 
+local function _release_career_action_claims()
+    for tmpl_key in pairs(_career_action_injections) do
+        local tmpl = Weapons and Weapons[tmpl_key]
+        if tmpl then
+            _career_weapon_actions.release(tmpl, _career_action_owner)
+        end
+    end
+    _career_action_injections = {}
+end
+
 local function _inject_career_actions(template, template_key, career_name, failures)
     local report = _career_weapon_actions.install(template, { career_name },
-        CareerSettings, ActionTemplates)
-    for _, action_name in ipairs(report.installed_names or {}) do
-        _career_action_injections[template_key] =
-            _career_action_injections[template_key] or {}
-        _career_action_injections[template_key][action_name] = true
+        CareerSettings, ActionTemplates, _career_action_owner)
+    if (report.claimed or 0) > 0 then
+        _career_action_injections[template_key] = true
     end
     for _, action_name in ipairs(report.missing_actions or {}) do
         failures[action_name] = true
     end
     for _, career in ipairs(report.missing_careers or {}) do
         failures["career:" .. tostring(career)] = true
+    end
+    for _, action_name in ipairs(report.conflicting_names or {}) do
+        failures["conflict:" .. tostring(action_name)] = true
     end
 end
 
@@ -233,15 +245,7 @@ end
 local function patch_career_actions_on_weapons()
     if not Weapons or not CareerSettings or not ActionTemplates or not ItemMasterList then return end
 
-    for tmpl_key, actions in pairs(_career_action_injections) do
-        local tmpl = Weapons[tmpl_key]
-        if tmpl and tmpl.actions then
-            for action_name in pairs(actions) do
-                tmpl.actions[action_name] = nil
-            end
-        end
-    end
-    _career_action_injections = {}
+    _release_career_action_claims()
     local has_cwv = _cwv_active()
     local failures = {}
 
@@ -326,16 +330,7 @@ local function clear_weapon_unlocks()
 end
 
 local function clear_career_action_injections()
-    if not Weapons then return end
-    for tmpl_key, actions in pairs(_career_action_injections) do
-        local tmpl = Weapons[tmpl_key]
-        if tmpl and tmpl.actions then
-            for action_name in pairs(actions) do
-                tmpl.actions[action_name] = nil
-            end
-        end
-    end
-    _career_action_injections = {}
+    _release_career_action_claims()
 end
 
 WT.apply_weapon_unlocks            = apply_weapon_unlocks
