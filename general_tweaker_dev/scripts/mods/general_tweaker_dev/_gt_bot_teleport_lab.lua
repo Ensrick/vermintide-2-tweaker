@@ -27,12 +27,10 @@ local mod = get_mod("gt_dev")
 -- AIBotGroupSystem._assign_destination_points". That pair is ALREADY hooked by
 -- FIX 9 in _gt_bot_fixes.lua, so a fresh hook would be silently dropped by VMF
 -- (and flagged by tools/mod-lint). D2 is therefore MERGED into the FIX 9 body
--- like every other injection point. The D2 dispatch sits at the TOP of the FIX 9
--- hook_safe body, so it reads the follow_unit vanilla just assigned; when the
--- user runs a non-default Bot-follow-mode (Follow Host / Split), FIX 9 rewrites
--- follow_unit LATER in the same tick, so with those modes D2 logs the
--- pre-override target -- the D1/D3/D4 observers (which read at should_teleport /
--- update time) show the final post-override value.
+-- like every other injection point. Issue #139's original D2 dispatch ran at the
+-- TOP and therefore logged vanilla's pre-override target, not the final target
+-- consumed by the leash. It now runs at every final exit from FIX 9, after the
+-- configured follow mode and dormant lab override have composed.
 --
 -- OUTPUT: everything logs via engine `printf` (tag `[gt:btlab:dNN]`) so it's
 -- visible even with VMF mod-logging OFF (the user runs logging off -- see
@@ -173,6 +171,26 @@ local function _dist_units(a, b)
     local pb = b and POSITION_LOOKUP[b]
     if pa and pb then return Vector3.distance(pa, pb) end
     return nil
+end
+
+-- Live position for an immediate event-side read. POSITION_LOOKUP is a cached
+-- system table and did not reflect BTBotTeleportToAllyAction's teleport until a
+-- later frame, which made every old D1 `from`/`to` pair identical. The action's
+-- unit is alive at both dispatches; pcall keeps a transient teardown read inert.
+local function _live_pos(unit)
+    if not (unit and ALIVE[unit]) then return nil end
+    local ok, wp = pcall(Unit.world_position, unit, 0)
+    if ok then return wp end
+    return nil
+end
+
+local function _unit_needs_aid_or_rescue(unit)
+    if not (unit and ALIVE[unit]) then return false end
+    local st = ScriptUnit.has_extension(unit, "status_system")
+    local predicate = mod._gt_status_needs_aid_or_rescue
+    if not (st and predicate) then return false end
+    local ok, result = pcall(predicate, st)
+    return ok and result and true or false
 end
 
 local function _segment_of(unit)
@@ -349,22 +367,17 @@ mod._gt_btlab_pf_dev = function(fmt, ...)
 end
 
 -- ============================================================================
--- D2  follow_tracker  --  merged into FIX 9's _assign_destination_points hook
+-- D2 / #139 chain follow tracker -- merged into FIX 9's assignment hook
 -- ----------------------------------------------------------------------------
--- Log each bot's follow_unit and, when it CHANGES, old -> new with both units'
--- player identity. Stores last-seen per bot so it only logs on change.
+-- Log the FINAL follow_unit after vanilla + follow-mode + lab overrides compose.
+-- On changes during an aid state, preserve the abandoned ally identity and the
+-- full veto/watchdog state. Stores last-seen per bot, so this is edge-triggered.
 -- ============================================================================
 mod._gt_btlab_track_follow = function(bot_ai_data)
     if not IS_DEV_STREAM then return end
     if type(bot_ai_data) ~= "table" then return end
     pcall(function()
-        -- #261: name the resolved follow MODE that drove the assignment
-        -- (default / follow_host / split), read from FIX 9's own resolver.
-        -- NOTE: this dispatch runs at the TOP of _assign_destination_points, so
-        -- in follow_host/split mode it reports the PRE-override target (vanilla's
-        -- pick); FIX 9 rewrites follow_unit later in the same tick. The final
-        -- post-split anchor is what the breach / tether probes read (via
-        -- _follow_unit(blackboard) at observe / teleport time).
+        -- #261: name the resolved follow MODE that drove the final assignment.
         local mode = (mod._gt_resolve_follow_mode and mod._gt_resolve_follow_mode()) or "?"
         for bot_unit, data in pairs(bot_ai_data) do
             if data then
@@ -372,8 +385,26 @@ mod._gt_btlab_track_follow = function(bot_ai_data)
                 local last = _follow_last[bot_unit]
                 if new_follow ~= last then
                     _follow_last[bot_unit] = new_follow
-                    _pf("[gt:btlab:d2] bot=%s mode=%s follow CHANGED %s -> %s",
-                        _unit_label(bot_unit), mode, _unit_label(last), _unit_label(new_follow))
+                    local bb = data.blackboard
+                    if bb then bb._gt139_final_follow = new_follow end
+                    local side_aid = mod._gt_any_side_teammate_needs_aid
+                        and mod._gt_any_side_teammate_needs_aid(bot_unit)
+                        or nil
+                    local last_aid = _unit_needs_aid_or_rescue(last)
+                    local next_aid = _unit_needs_aid_or_rescue(new_follow)
+                    -- No ordinary follow churn in this issue trace. A line is
+                    -- emitted only when the old/new target or side is in aid.
+                    if side_aid or last_aid or next_aid then
+                        _pf("[gt:139:chain] FOLLOW bot=%s mode=%s old=%s old_aid=%s new=%s new_aid=%s side_aid=%s need_type=%s bailout=%s bailout_unit=%s",
+                            _unit_label(bot_unit), mode, _unit_label(last), tostring(last_aid),
+                            _unit_label(new_follow), tostring(next_aid), _unit_label(side_aid),
+                            tostring(bb and bb.target_ally_need_type),
+                            tostring(bb and bb._gt492_bailout and true or false),
+                            _unit_label(bb and bb._gt492_bailout_unit))
+                    end
+                elseif data.blackboard then
+                    -- Keep the action-side identity fresh even when unchanged.
+                    data.blackboard._gt139_final_follow = new_follow
                 end
             end
         end
@@ -444,7 +475,7 @@ end
 mod._gt_btlab_pre_teleport = function(unit, blackboard) -- luacheck: ignore blackboard
     if not IS_DEV_STREAM then return nil end
     local ok, box = pcall(function()
-        local p = POSITION_LOOKUP[unit]
+        local p = _live_pos(unit)
         return p and Vector3Box(p) or nil
     end)
     return ok and box or nil
@@ -509,8 +540,8 @@ mod._gt_btlab_observe_teleport = function(self, unit, blackboard, pre_box, decis
         local follow  = _follow_unit(blackboard)
         local you     = _local_player_unit()
         local pre      = pre_box and pre_box:unbox()
-        local post     = POSITION_LOOKUP[unit]
-        local you_pos  = you and POSITION_LOOKUP[you]
+        local post     = _live_pos(unit)
+        local you_pos  = _live_pos(you)
 
         -- Trigger classification from the D1 decision recorder.
         local dec      = blackboard._gt_btlab_dec
@@ -1078,12 +1109,8 @@ mod._gt459_liveness_gated_lab = true
 -- the throw, so the HUD reported "created OK" but painted NOTHING (the invisible-HUD
 -- symptom on the #293/#295 retest). Unit.world_position is fresh every frame. Same
 -- POSITION_LOOKUP-stale class as the #337 recall crash + the _gt_debug_highlights spam.
-local function _live_pos(unit)
-    if not (unit and ALIVE[unit]) then return nil end
-    local ok, wp = pcall(Unit.world_position, unit, 0)
-    if ok then return wp end
-    return nil
-end
+-- `_live_pos` is defined with the common event helpers above because the
+-- execution-side teleport trace now uses the same fresh source.
 
 -- ============================================================================
 -- issue 534: SHARE the bot leash lines with other gt peers.

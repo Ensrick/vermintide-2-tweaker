@@ -1897,10 +1897,23 @@ mod:hook("BTConditions", "should_teleport", function (func, blackboard)
     -- picker has already dropped that aid pick, so this is the matching half. The
     -- gate stays contiguous (_gt_aid_priority_on() and _gt_any_side_teammate_needs_aid)
     -- for the singleton/gated regression checks.
-    if want and not blackboard._gt492_bailout and _gt_aid_priority_on() and _gt_any_side_teammate_needs_aid(blackboard.unit) then
+    local aid_unit = _gt_aid_priority_on()
+        and _gt_any_side_teammate_needs_aid(blackboard.unit)
+        or nil
+    if want and not blackboard._gt492_bailout and aid_unit then
+        local now = Managers.time and Managers.time.time and Managers.time:time("game")
+        local group_ext = blackboard.ai_bot_group_extension
+        local follow_unit = group_ext and group_ext.data and group_ext.data.follow_unit
+        local policy = mod._gt_teleport_loop_policy
+        if policy and policy.make_aid_veto_trace then
+            blackboard._gt139_last_veto = policy.make_aid_veto_trace(
+                now or 0, aid_unit, follow_unit, reason)
+        end
         if rawget(_G, "printf") and not blackboard._gt139_veto_latched then
             blackboard._gt139_veto_latched = true
-            printf("[gt_bot:139] teleport VETOED (was %s) -- teammate needs aid, bot paths to revive", tostring(reason))
+            printf("[gt:139:chain] VETO bot=%s reason=%s follow=%s aid=%s bailout=false need_type=%s",
+                _gt492_label(blackboard.unit), tostring(reason), _gt492_label(follow_unit),
+                _gt492_label(aid_unit), tostring(blackboard.target_ally_need_type))
         end
         blackboard._gt139_tp_reason = nil
         return false
@@ -2073,7 +2086,8 @@ mod:hook("BTBotTeleportToAllyAction", "run", function (func, self, unit, blackbo
     if p139_aid_unit and rawget(_G, "printf") then
         local ce = ScriptUnit.has_extension(unit, "career_system")
         local bot_career = (ce and ce.career_name and ce:career_name()) or "?"
-        local post = POSITION_LOOKUP[unit]
+        local post_ok, post = pcall(Unit.world_position, unit, 0)
+        if not post_ok then post = nil end
         local aid_post = POSITION_LOOKUP[p139_aid_unit]
         local post_dist = (post and aid_post) and Vector3.distance(post, aid_post) or -1
         local tx, ty, tz = -1, -1, -1
@@ -2082,6 +2096,33 @@ mod:hook("BTBotTeleportToAllyAction", "run", function (func, self, unit, blackbo
         end
         printf("[139:bot_tp] bot=%s dist_to_downed=%.1fm reason=%s post_dist=%.1fm target=%.1f,%.1f,%.1f t=%.2f",
             bot_career, p139_pre_dist or -1, p139_reason, post_dist, tx, ty, tz, t)
+    end
+    -- #139/#384 correlated execution record. The earlier probe printed a veto
+    -- without bot/ally identity and an execution without the veto/bailout state,
+    -- so two bots in one lobby could not be joined end-to-end. One row is emitted
+    -- only for an aid-adjacent teleport (live aid, a <=3 s veto record, or #492
+    -- bailout), never per frame. The selector's final follow target is stamped by
+    -- the consolidated _assign_destination_points diagnostics dispatch below.
+    if rawget(_G, "printf") and blackboard then
+        local policy = mod._gt_teleport_loop_policy
+        local veto = blackboard._gt139_last_veto
+        local veto_age, same_aid
+        if policy and policy.correlate_aid_veto then
+            veto_age, same_aid = policy.correlate_aid_veto(veto, t, p139_aid_unit)
+        end
+        if p139_aid_unit or veto_age ~= nil or blackboard._gt492_bailout then
+            local group_ext = blackboard.ai_bot_group_extension
+            local follow_unit = group_ext and group_ext.data and group_ext.data.follow_unit
+            printf("[gt:139:chain] TELEPORT bot=%s reason=%s selector_follow=%s action_follow=%s aid_now=%s veto_aid=%s veto_follow=%s veto_age=%s same_aid=%s bailout=%s bailout_unit=%s need_type=%s",
+                _gt492_label(unit), tostring(p139_reason),
+                _gt492_label(blackboard._gt139_final_follow), _gt492_label(follow_unit),
+                _gt492_label(p139_aid_unit), _gt492_label(veto and veto.aid_unit),
+                _gt492_label(veto and veto.follow_unit),
+                veto_age and string.format("%.2fs", veto_age) or "none",
+                tostring(same_aid), tostring(blackboard._gt492_bailout and true or false),
+                _gt492_label(blackboard._gt492_bailout_unit),
+                tostring(blackboard.target_ally_need_type))
+        end
     end
     -- Bot Teleport Lab dispatch (post): D1 full event line + D8 counter + D9 set
     -- + D10 snapshot. pcall-guarded + gated inside the lab fn.
@@ -2094,6 +2135,11 @@ mod:hook("BTBotTeleportToAllyAction", "run", function (func, self, unit, blackbo
 
     return result
 end)
+
+-- Diagnostics-only marker for the #139/#384 correlated chain. Runtime and
+-- engine-free tests require the veto identity, final selector identity, #492
+-- state, and actual teleport action to remain in one bounded event record.
+GT_BOT139_CORRELATED_AID_TRACE_MARKER_v0_2_243 = "gt-bot139-veto-selector-action-correlation"
 
 -- ----------------------------------------------------------------------------
 -- FIX 8: Don't fail the mission while a bot is still alive
@@ -2330,6 +2376,14 @@ local function _gt_apply_btlab_follow_override(bot_ai_data)
     end
 end
 
+-- Issue #139 diagnostics: call the lab only after every assignment layer has
+-- composed, so its identity is the exact follow_unit the leash/action consumes.
+local function _gt_trace_final_follow(bot_ai_data)
+    if mod._gt_btlab_track_follow then
+        mod._gt_btlab_track_follow(bot_ai_data)
+    end
+end
+
 -- FIX A (issue 383) marker: the split fix now writes data.follow_position (a
 -- vanilla-spacing fan point around the bot's OWN assigned human), not just
 -- data.follow_unit. If a refactor drops the follow_position recompute this
@@ -2384,17 +2438,9 @@ end
 mod._gt_fan_points_for_unit = _gt_fan_points_for_unit
 
 mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, bot_ai_data) -- luacheck: ignore self
-    -- Bot Teleport Lab (diagnostics) D2 follow-tracker dispatch. This pair is
-    -- ALREADY hooked (this FIX 9 hook_safe), so the lab CANNOT take a fresh hook
-    -- (VMF would silently drop it) -- it merges here. Placed at the TOP so it
-    -- fires for every follow-mode (incl. "default", which early-returns below);
-    -- it reads the follow_unit vanilla just assigned. NOTE: when the user runs
-    -- Follow-Host / Split mode, the block below REWRITES follow_unit later in
-    -- this same tick, so D2 logs the pre-override target for those modes (the
-    -- D1/D3/D4 observers show the final value). pcall-guarded + gated in the lab.
-    if mod._gt_btlab_track_follow then
-        mod._gt_btlab_track_follow(bot_ai_data)
-    end
+    -- Bot Teleport Lab D2 is merged into this singleton pair. It dispatches at
+    -- each FINAL exit below (after vanilla + orders + follow mode + lab override),
+    -- never here at the pre-override top; the old placement logged the wrong copy.
 
     -- Issue #359 temporary bot orders share this singleton post-assignment seam.
     -- Cover/Group Up must run after vanilla writes destinations and before the
@@ -2402,6 +2448,7 @@ mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, 
     -- time-bounded player order precedence for this tick.
     if mod._gt359_apply_follow_override
             and mod._gt359_apply_follow_override(self, bot_ai_data) then
+        _gt_trace_final_follow(bot_ai_data)
         return
     end
 
@@ -2410,18 +2457,31 @@ mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, 
     if mode == "default" then
         -- Lab F1/F5 still get to re-point follow_unit off vanilla's assignment.
         _gt_apply_btlab_follow_override(bot_ai_data)
+        _gt_trace_final_follow(bot_ai_data)
         return
     end
-    if type(bot_ai_data) ~= "table" then return end
+    if type(bot_ai_data) ~= "table" then
+        _gt_trace_final_follow(bot_ai_data)
+        return
+    end
 
     local side_manager = Managers.state and Managers.state.side
     local pm = Managers.player
-    if not (side_manager and pm) then return end
+    if not (side_manager and pm) then
+        _gt_trace_final_follow(bot_ai_data)
+        return
+    end
 
     local probe = next(bot_ai_data)
-    if not probe then return end
+    if not probe then
+        _gt_trace_final_follow(bot_ai_data)
+        return
+    end
     local side = side_manager.side_by_unit[probe]
-    if not side then return end
+    if not side then
+        _gt_trace_final_follow(bot_ai_data)
+        return
+    end
 
     local host = pm.local_player and pm:local_player()
     local host_unit = host and host.player_unit
@@ -2436,7 +2496,10 @@ mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, 
     -- (deliberately out of scope here -- issue 383 targets FIX 9 / split). Not
     -- stamping POSITION_LOOKUP[host] keeps bots off the host's shot line either way.
     if follow_host then
-        if not (host_unit and HEALTH_ALIVE[host_unit]) then return end   -- host dead/unit-less: leave vanilla
+        if not (host_unit and HEALTH_ALIVE[host_unit]) then
+            _gt_trace_final_follow(bot_ai_data)
+            return
+        end   -- host dead/unit-less: leave vanilla
         local n = 0
         for _, data in pairs(bot_ai_data) do
             if data and not data.hold_position then
@@ -2453,12 +2516,16 @@ mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, 
         end
         -- Lab F1/F5 override runs LAST (after the follow-host assignment).
         _gt_apply_btlab_follow_override(bot_ai_data)
+        _gt_trace_final_follow(bot_ai_data)
         return
     end
 
     local humans = _gt_split_humans_for_side(side, side_manager, host_unit)
     local num = #humans
-    if num == 0 then return end
+    if num == 0 then
+        _gt_trace_final_follow(bot_ai_data)
+        return
+    end
 
     -- Deterministic bot order so bot[i] -> human[i] is stable frame-to-frame.
     local bots = {}
@@ -2535,6 +2602,7 @@ mod:hook_safe("AIBotGroupSystem", "_assign_destination_points", function (self, 
 
     -- Lab F1/F5 override runs LAST (after the split round-robin assignment).
     _gt_apply_btlab_follow_override(bot_ai_data)
+    _gt_trace_final_follow(bot_ai_data)
 end)
 
 -- ----------------------------------------------------------------------------

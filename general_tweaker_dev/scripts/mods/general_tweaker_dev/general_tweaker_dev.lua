@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.243-dev"
+local MOD_VERSION = "0.2.244-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -2082,6 +2082,33 @@ _rt_register("gt_bot384_needs_aid_or_rescue_predicate", function()
             return string.format("_gt_status_needs_aid_or_rescue(%s): want=%s got=%s",
                 c.why, tostring(c.want), tostring(b(pred(c.s))))
         end
+    end
+end)
+
+_rt_register("issue139_aid_trace_correlation", function()
+    -- #139/#384 (v0.2.243-dev diagnostics): a veto and later action must retain
+    -- the same bot/ally identity for a short bounded window. This does not assert
+    -- an engine outcome; it locks the pure correlation seam and the production
+    -- marker that joins veto -> final selector -> teleport -> #492 state.
+    if GT_BOT139_CORRELATED_AID_TRACE_MARKER_v0_2_243
+            ~= "gt-bot139-veto-selector-action-correlation" then
+        return "bot #139 correlated trace marker absent"
+    end
+    local policy = mod._gt_teleport_loop_policy
+    if type(policy) ~= "table"
+            or type(policy.make_aid_veto_trace) ~= "function"
+            or type(policy.correlate_aid_veto) ~= "function" then
+        return "bot #139 aid trace policy unavailable"
+    end
+    local aid, follow = {}, {}
+    local trace = policy.make_aid_veto_trace(10, aid, follow, "vanilla_40m")
+    local age, same = policy.correlate_aid_veto(trace, 12, aid)
+    if age ~= 2 or same ~= true then
+        return "bot #139 same-ally veto correlation failed"
+    end
+    age, same = policy.correlate_aid_veto(trace, 20, aid)
+    if age ~= nil or same ~= nil then
+        return "bot #139 expired veto correlation remained live"
     end
 end)
 

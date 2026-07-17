@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-16.
+Last updated: 2026-07-17.
 
 ## Startup-safe infinite ammo (#662)
 
@@ -111,6 +111,14 @@ Last updated: 2026-07-16.
 - [ ] `/gt_regression_test` passes `issue549_godmode_power_and_ammo`.
 
 ---
+
+## Correlated aid/teleport diagnostics (#139, #384)
+
+- [ ] In a two-human split, an aid-adjacent final follow change emits one `[gt:139:chain] FOLLOW` row with bot, old/new follow, side aid, need type, and #492 state.
+- [ ] A blocked leash emits `[gt:139:chain] VETO` naming the same bot and aid ally; a teleport within three seconds emits one `TELEPORT` row with `veto_age`, `same_aid`, final selector/action follow, and bailout identity.
+- [ ] Ordinary follow churn and ordinary teleports with no aid, recent veto, or bailout do not emit `[gt:139:chain]` rows.
+- [ ] D1 `from`/`to` coordinates use immediate `Unit.world_position` and differ after a real snap; they no longer repeat the stale `POSITION_LOOKUP` value from the wrapped action.
+- [ ] `/gt_regression_test` passes `issue139_aid_trace_correlation`; offline `test_gt_teleport_loop_policy.lua` passes.
 
 ## Close-range no-path teleport retry bound (#385)
 

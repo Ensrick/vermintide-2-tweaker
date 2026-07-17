@@ -1,5 +1,17 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.244-dev (2026-07-17) -- correlated bot aid teleport diagnostics (#139, #384) [diag] [coop-required]
+
+- Replaced the structurally ambiguous issue-139 veto line with one bounded `[gt:139:chain]` event carrying the bot, preserved aid ally, final follow target, teleport reason, `target_ally_need_type`, and issue-492 bailout state. A later teleport by the same bot now reports the prior veto age and whether the aid identity is unchanged.
+- Moved the D2 follow trace to the final exit of the existing `_assign_destination_points` hook. It now records the exact post-vanilla/post-FIX-9 follow target consumed by the leash instead of the vanilla pre-override value that made two correctly split bots appear assigned to the same human.
+- Replaced execution-side `POSITION_LOOKUP` sampling with immediate `Unit.world_position` reads. The old source stayed stale until the next system tick and printed identical pre/post coordinates even when the following D3 sample proved the bot had moved.
+- Preserved the v0.2.212 aid/rescue veto and the #492 bailout behavior unchanged. This is diagnostics-only because the v0.2.241 two-player log proves the existing attribution is ambiguous: it contains a Victor veto at 05:31:10 followed by a Victor teleport at 05:31:11, but does not retain which aid state cleared or changed between them.
+- Added Lua 5.1 coverage for the three-second identity-correlation window and source wiring, plus `/gt_regression_test` check `issue139_aid_trace_correlation`.
+
+### Co-op diagnostic capture
+
+Host with two humans and bots, enable Bot Behavior Improvements, aid priority, Split follow mode, and a 15 m snap-back distance. Down or disable the human beside one bot while the other human remains over 15 m away. The next log should contain one connected `[gt:139:chain] FOLLOW` / `VETO` / `TELEPORT` sequence naming the same bot and aid ally; `TELEPORT` must show whether the state cleared, changed ally, or was deliberately released by `bailout=true`. Lifecycle intent: #139 remains `diagnostics-armed` + `coop-required`; #384 retains `verify-fix-coop` until this capture disproves the v0.2.212 behavior.
+
 ## v0.2.243-dev (2026-07-17) -- #659 human Necromancer keep skeletons [verify-fix]
 
 - Extended GT's existing Necromancer keep-pet policy to human owners. Fatshark's `_pets_forbidden_in_level` hub flag previously remained true for the local player, so `spawn_pet` returned before queuing any Raise Dead skeleton.
@@ -9,7 +21,6 @@
 ### Solo verify
 
 Enter the keep as Necromancer and use Raise Dead. Skeletons should spawn and the log should contain one `[gt:659] necromancer keep pets allowed owner=human` row. Run `/gt_regression_test` and confirm `necromancer_keep_pet_policy_659` passes.
-
 ## v0.2.242-dev (2026-07-16) -- startup-safe ammo reconciliation (#662)
 
 - Stopped the persisted Godmode unlimited-ammo child from calling `PlayerManager:local_player()` while the title/loading state has no network backend. The shared reconciler now uses a network-game-gated, `pcall`-contained `local_player_safe` policy and remains dormant until a real local player exists.
