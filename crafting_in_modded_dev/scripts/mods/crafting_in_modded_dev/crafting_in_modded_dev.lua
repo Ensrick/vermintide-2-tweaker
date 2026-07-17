@@ -6658,10 +6658,10 @@ _rt_register("issue524_cwv_selector_bounded", function()
         rarity = "default",
         power_level = 300,
         key = "es_bastard_sword",
-        data = { key = "es_bastard_sword", slot_type = "melee", item_type = "es_bastard_sword" },
+        data = { key = "es_bastard_sword", slot_type = "melee", item_type = "es_bastard_sword" }, -- name-integrity: non-rendered-test-data
     }
     legacy.data.slot_type = "melee"
-    legacy.data.item_type = "es_bastard_sword"
+    legacy.data.item_type = "es_bastard_sword" -- name-integrity: non-rendered-test-data
     legacy.power_level = 5
     rows = { legacy_300, legacy, synthetic }
     selector.inject(rows, { synthetic })

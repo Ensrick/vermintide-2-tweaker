@@ -83,7 +83,7 @@ mod._gt_rt_register("issue333_offline_twitch_policy", function()
     end
     if policy.category("twitch_give_potion", {}) ~= "items"
             or policy.category("twitch_spawn_rat_ogre", { boss = true }) ~= "spawns"
-            or policy.category("x", { description = "description_mutator_splitting_enemies" }) ~= "mutators"
+            or policy.category("x", { description = "description_mutator_splitting_enemies" }) ~= "mutators" -- name-integrity: non-rendered-test-data
             or policy.category("twitch_vote_speed", {}) ~= "buffs" then
         return "issue 333 vote classifier contract failed"
     end

@@ -145,6 +145,18 @@ function Parse-AssignedNames([string]$modDir) {
         # skip the loc + data files themselves (they DEFINE, not consume)
         if ($lf.Name -like '*_localization.lua' -or $lf.Name -like '*_data.lua') { continue }
         $text = Read-Utf8 $lf.FullName
+        # Check 2 owns values that can reach a player-facing Localize call. Runtime
+        # truth-table fixtures sometimes use item-shaped tables only as classifier
+        # inputs; require an explicit annotation for those non-rendered rows. Strip
+        # comments as well so documentation such as `display_name = "example"`
+        # cannot become a false localization failure.
+        $text = [regex]::Replace(
+            $text,
+            '(?m)^.*name-integrity:\s*non-rendered-test-data.*(?:\r?\n|$)',
+            ''
+        )
+        $text = [regex]::Replace($text, '(?s)--\[\[.*?\]\]', '')
+        $text = [regex]::Replace($text, '(?m)--[^\r\n]*', '')
         # Capture assignment + a trailing window so we can tell if the string is a
         # CONCAT FRAGMENT (`display_name = "foo_" .. id`). Concat fragments are NOT
         # complete keys and must be skipped — the full key is built at runtime.
@@ -345,6 +357,8 @@ return {
 local entry = {}
 entry.display_name = "planted_unresolvable_locless_key"
 entry.item_type = "weapon_skin"  -- vanilla loc key, should NOT error
+entry.description = "planted_annotated_fixture_key" -- name-integrity: non-rendered-test-data
+-- display_name = "planted_commented_example_key"
 "@
         [System.IO.File]::WriteAllText((Join-Path $scriptsDir "${modName}.lua"), $main, (New-Object System.Text.UTF8Encoding $false))
 
@@ -354,16 +368,18 @@ entry.item_type = "weapon_skin"  -- vanilla loc key, should NOT error
         $check1Fired = ($res.errors | Where-Object { $_ -match '\[check1\].*planted_missing_setting' }).Count -gt 0
         $check2Fired = ($res.errors | Where-Object { $_ -match '\[check2\].*planted_unresolvable_locless_key' }).Count -gt 0
         $check2FalsePos = ($res.errors | Where-Object { $_ -match '\[check2\].*weapon_skin' }).Count -gt 0
+        $annotatedFalsePos = ($res.errors | Where-Object { $_ -match 'planted_annotated_fixture_key|planted_commented_example_key' }).Count -gt 0
 
         Write-Host ""
         Write-Host ("  CHECK 1 (missing setting_id loc entry) fired:        {0}" -f ($check1Fired ? 'PASS' : 'FAIL')) -ForegroundColor ($check1Fired ? 'Green' : 'Red')
         Write-Host ("  CHECK 2 (unresolvable display_name) fired:           {0}" -f ($check2Fired ? 'PASS' : 'FAIL')) -ForegroundColor ($check2Fired ? 'Green' : 'Red')
         Write-Host ("  CHECK 2 did NOT false-positive on vanilla item_type: {0}" -f (-not $check2FalsePos ? 'PASS' : 'FAIL')) -ForegroundColor ((-not $check2FalsePos) ? 'Green' : 'Red')
+        Write-Host ("  CHECK 2 ignores annotated fixtures and comments:       {0}" -f (-not $annotatedFalsePos ? 'PASS' : 'FAIL')) -ForegroundColor ((-not $annotatedFalsePos) ? 'Green' : 'Red')
         Write-Host ""
         Write-Host "  Raised errors:" -ForegroundColor DarkGray
         foreach ($e in $res.errors) { Write-Host "    - $e" -ForegroundColor DarkGray }
 
-        if ($check1Fired -and $check2Fired -and -not $check2FalsePos) {
+        if ($check1Fired -and $check2Fired -and -not $check2FalsePos -and -not $annotatedFalsePos) {
             Write-Host "[check_name_integrity] SELF-TEST PASSED" -ForegroundColor Green
             return 0
         } else {

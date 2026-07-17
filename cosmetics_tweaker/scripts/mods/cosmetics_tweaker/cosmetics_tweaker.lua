@@ -11056,7 +11056,7 @@ _rt_register("issue650_composite_icon_contract", function()
     local descriptor = COMPOSITE_ICONS.resolve({
         backend_id = "issue650-runtime-proof",
         exact_instance = true,
-        item_type = "es_1h_mace_shield",
+        item_type = "es_1h_mace_shield", -- name-integrity: non-rendered-test-data
         skin = "es_1h_mace_shield_skin_03_runed_01",
         offhand_unit = "units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02_runed_01",
         glow_state = { rune = { r = 64, g = 128, b = 255, intensity = 1 } },
