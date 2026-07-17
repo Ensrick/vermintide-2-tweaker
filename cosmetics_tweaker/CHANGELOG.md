@@ -1,5 +1,13 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.139-dev - 2026-07-17 - persisted offhand peer-ready replay (#233/#267) [verify-fix-coop]
+
+- Kept the startup/state-change LA replay armed until the local inventory has a realized melee or ranged weapon slot. Previously the replay flag was consumed as soon as the player unit became alive, even when equipment was not ready, so a persisted pre-launch shield never entered the authoritative peer store and remained invisible to a joining client until a live cosmetic edit.
+- Preserved the existing bounded emit deduplication, acknowledged pull-on-ready RPC, exact-item persistence, and live-change transport. No new RPC, polling owner, or asset payload was added.
+- Extended the executable `cos_la_reconcile_and_pull_wired` runtime regression with empty-inventory and realized-weapon readiness cases.
+
+**Co-op verify:** equip an LA shield, close the game, relaunch, then have a second player join without opening customization or changing the shield. The joining player must see the persisted shield immediately. Repeat through keep-to-mission transition and hot join; no live edit or weapon swap may be required. Run `/cos_regression_test` and require `PASS: cos_la_reconcile_and_pull_wired`.
+
 ## 0.9.138-dev - 2026-07-17 - runtime-owner decomposition
 
 - Extracted the glow diagnostic commands and tick APIs, Loremaster command surface, and all 50 ordered runtime checks from the oversized entry module into explicit dependency-injected owners.

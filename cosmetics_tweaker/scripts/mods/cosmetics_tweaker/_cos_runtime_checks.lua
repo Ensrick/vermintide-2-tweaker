@@ -45,6 +45,18 @@ _rt_register("cos_la_reconcile_and_pull_wired", function()
     if type(mod._la_restore_offhand_selections) ~= "function" then
         return "mod._la_restore_offhand_selections missing (offhand persistence)"
     end
+    if type(mod._la_rebroadcast_inventory_ready) ~= "function" then
+        return "mod._la_rebroadcast_inventory_ready missing (persisted peer-ready replay)"
+    end
+    if mod._la_rebroadcast_inventory_ready(nil)
+        or mod._la_rebroadcast_inventory_ready({ _equipment = { slots = {} } }) then
+        return "persisted replay accepted inventory before weapon slots were ready"
+    end
+    if not mod._la_rebroadcast_inventory_ready({ _equipment = { slots = {
+        slot_melee = { item_data = { backend_id = "rt-persisted-item" } },
+    } } }) then
+        return "persisted replay rejected a realized weapon slot"
+    end
     if not (LA_PERSIST and type(LA_PERSIST.save_offhand) == "function"
         and type(LA_PERSIST.clear_offhand) == "function"
         and type(LA_PERSIST.get_saved_offhands) == "function") then
