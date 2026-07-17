@@ -140,7 +140,11 @@ return function(H, repo_root)
         H.truthy(main:find("issue604_dawi_crowbill_model01_transform", 1, true))
         H.truthy(main:find("transform delivered surface=", 1, true))
 		H.truthy(main:find("baseline_scale=", 1, true))
-		H.truthy(main:find("_crowbill_relative_scale_owner:resolve", 1, true))
+        H.truthy(main:find("_crowbill_relative_scale_owner:resolve", 1, true))
+        H.truthy(main:find("_cwv_select_husk_transform_def(hand, exact,", 1, true))
+        H.truthy(main:find("_cwv_husk_transform_apply_plan(hand, def, def_source)", 1, true))
+        H.truthy(main:find('def_source == "exact_unit_mismatch"', 1, true))
+        H.truthy(main:find("Dawi remote transform leaked into the untuned Imperial control", 1, true))
         H.truthy(main:find("TRANSFORM MISS surface=create_equipment", 1, true))
         H.truthy(main:find("_resolve_cwv_def(item_data, result.skin, result.right_hand_unit_name)", 1, true))
         for _, surface in ipairs({ "owner_1p", "owner_3p", "remote_husk",
@@ -148,6 +152,44 @@ return function(H, repo_root)
             H.truthy(main:find('"' .. surface .. '"', 1, true),
                 "missing transform delivery consumer: " .. surface)
         end
+    end)
+
+    H.test("Dawi remote husk selects the exact model and preserves an untuned control", function()
+        local policy = dofile(repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_transform_policy.lua")
+        local by_unit, by_variant = {}, {}
+        for _, model in ipairs(family.MODELS) do
+            local applied = {}
+            for key, value in pairs(model) do applied[key] = value end
+            applied.crowbill_model_key = model.key
+            by_unit[model.right_hand_unit] = applied
+            by_variant[model.variant_key] = by_variant[model.variant_key] or model
+        end
+        local bound = policy.bind({
+            find_def = function(key) return by_variant[key] end,
+            resolve_def = function() return nil end,
+            resolve_field = function(def, field) return def[field] end,
+            model_by_unit = by_unit,
+        })
+        local dawi = row_for(family.MODELS, "cwv_dr_dawi_crowbill_skin")
+        local exact = { variant_key = dawi.variant_key, right_hand_unit = dawi.right_hand_unit }
+        local selected, source = bound.select("right", exact, {}, nil, dawi.right_hand_unit)
+        local plan = bound.plan("right", selected, source)
+        H.equal(selected.crowbill_model_key, dawi.key)
+        H.equal(source, "exact_model")
+        H.deep_equal(plan.scale, { 0.5, 0.5, 0.5 })
+        H.deep_equal(plan.rotation, { -90, -90, -90 })
+        H.equal(plan.durable, true)
+        H.equal(bound.select("right", exact, {}, nil, family.PLACEHOLDER_UNIT), nil)
+
+        local control = row_for(family.MODELS, "cwv_es_imperial_crowbill_skin")
+        local control_def, control_source = bound.select("right", {
+            variant_key = control.variant_key, right_hand_unit = control.right_hand_unit,
+        }, {}, nil, control.right_hand_unit)
+        local control_plan = bound.plan("right", control_def, control_source)
+        H.equal(control_source, "exact_model")
+        H.equal(control_plan.should_apply, false)
+        H.equal(control_plan.durable, false)
     end)
 
     H.test("CWV Crowbill hammer-mode seam preserves the authored contract", function()

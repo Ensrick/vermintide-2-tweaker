@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.443-dev - 2026-07-17 - #604 remote Dawi transform selection [verify-fix-coop]
+
+- Made the production remote-husk transform boundary consume schema-2's exact
+  locally reconstructed Crowbill unit before the base-variant fallback. Dawi
+  Model 01 now reaches its canonical relative half-scale, `{-90,-90,-90}`
+  rotation, and durable replay marker on compatible remote peers.
+- Exact identity now fails closed when the reconstructed unit disagrees with
+  the post-rekey hand, preventing a custom transform from being written onto a
+  vanilla fallback mesh.
+- Extended the runtime regression at the production selection/apply boundary;
+  it covers the tuned Dawi model, a mismatched-unit safety case, and an untuned
+  Imperial Crowbill control that must remain unchanged.
+
 ## 0.1.442-dev - 2026-07-17 - #604 Dawi Crowbill perspective correction [verify-fix-coop]
 
 - Reconciled the still-valid part of the stranded `1c256ec` candidate onto the
