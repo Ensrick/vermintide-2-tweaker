@@ -30,6 +30,34 @@ Harness.test("#650 composite proof preserves declared layer order and exact RGB"
     Harness.equal(table.concat(descriptor.glow_color, ","), "255,64,128,255")
 end)
 
+Harness.test("#650 GOTWF skin_03 variant keeps the same authored mace layer", function()
+    local args = proof_args()
+    args.skin = "es_1h_mace_shield_skin_03_runed_05"
+    local descriptor = Factory.new(Catalog).resolve(args)
+    Harness.equal(descriptor.primary_texture, "icon_cos_empire_mace_shield_primary_01")
+    Harness.equal(descriptor.offhand_texture, "icon_cos_breton_shield_02")
+end)
+
+Harness.test("#650 first live picker primary uses the authored mace layer", function()
+    local args = proof_args()
+    args.skin = "es_1h_mace_shield_skin_02"
+    local descriptor = Factory.new(Catalog).resolve(args)
+    Harness.equal(descriptor.primary_texture, "icon_cos_empire_mace_shield_primary_01")
+    Harness.equal(descriptor.offhand_texture, "icon_cos_breton_shield_02")
+end)
+
+Harness.test("#650 detailed resolver exposes bounded diagnostic outcomes", function()
+    local compositor = Factory.new(Catalog)
+    local args = proof_args()
+    args.skin = "es_1h_mace_shield_skin_01"
+    local descriptor, reason = compositor.resolve_detailed(args)
+    Harness.equal(descriptor, nil)
+    Harness.equal(reason, "unmapped-primary")
+    descriptor, reason = compositor.resolve_detailed(proof_args())
+    Harness.truthy(descriptor)
+    Harness.equal(reason, "composed")
+end)
+
 Harness.test("#650 descriptors fail closed without exact instance or local assets", function()
     local compositor = Factory.new(Catalog)
     local args = proof_args()
@@ -110,7 +138,26 @@ Harness.test("#650 UIUtils publishes descriptors without leaking mace-only icons
     local source = file:read("*a")
     file:close()
     Harness.truthy(source:find("_cos_refresh_composite_descriptor%(item, record%)"))
+    Harness.truthy(source:find("_composite_icon_descriptor_by_item%[item%] = descriptor"))
+    Harness.equal(source:find("item%._cos_composite_icon_descriptor"), nil)
     Harness.equal(source:find("inventory_icon%s*=%s*composite%.inventory_icon"), nil)
+    Harness.truthy(source:find('content%["hotspot" %.%. suffix%]'))
+    Harness.truthy(source:find("hotspot_content%[icon_name%] = resolved_icon"))
+    Harness.equal(source:find("current_icon = content%[icon_name%]"), nil)
+end)
+
+Harness.test("#650 compositor is renderer-local and has no peer transport", function()
+    local paths = {
+        repo_root .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_composite_icons.lua",
+        repo_root .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_composite_icon_catalog.lua",
+    }
+    for _, path in ipairs(paths) do
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        Harness.equal(source:find("network_send", 1, true), nil)
+        Harness.equal(source:find("NetworkLookup", 1, true), nil)
+    end
 end)
 
 Harness.test("#650 grid passes are decorated before UIWidget pass_data initialization", function()

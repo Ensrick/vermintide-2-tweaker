@@ -83,7 +83,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.134-dev"
+local MOD_VERSION = "0.9.135-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -822,7 +822,32 @@ local _glow_badge_texture_missing_logged = false
 local _glow_badge_grids = setmetatable({}, { __mode = "k" })
 local _glow_badge_customization_windows = setmetatable({}, { __mode = "k" })
 local _composite_icon_grids = setmetatable({}, { __mode = "k" })
+-- Renderer-local only: never decorate the backend item with custom texture
+-- names that could be observed by a serializer or another mod's wire adapter.
+local _composite_icon_descriptor_by_item = setmetatable({}, { __mode = "k" })
 local _cos_refresh_composite_descriptor
+local _composite_icon_diag_seen = {}
+local _composite_icon_diag_count = 0
+
+-- Bounded #650 evidence. A compatible item produces at most one line per
+-- distinct skin/offhand/outcome tuple, so unsupported catalogue identities are
+-- diagnosable without turning inventory pagination into log spam.
+local function _composite_icon_diag(reason, args, descriptor)
+    if type(args) ~= "table" or args.item_type ~= "es_1h_mace_shield" then return end
+    local key = table.concat({
+        tostring(reason), tostring(args.skin), tostring(args.offhand_unit),
+        tostring(args.offhand_armoury_key),
+    }, "|")
+    if _composite_icon_diag_seen[key] or _composite_icon_diag_count >= 32 then return end
+    _composite_icon_diag_seen[key] = true
+    _composite_icon_diag_count = _composite_icon_diag_count + 1
+    mod:info("[cosmetics:650] descriptor %s bid=%s type=%s skin=%s offhand=%s armoury=%s primary=%s shield=%s",
+        tostring(reason), tostring(args.backend_id), tostring(args.item_type),
+        tostring(args.skin), tostring(args.offhand_unit),
+        tostring(args.offhand_armoury_key),
+        tostring(descriptor and descriptor.primary_texture),
+        tostring(descriptor and descriptor.offhand_texture))
+end
 
 local function _glow_badge_texture_available()
     local available = UIAtlasHelper and UIAtlasHelper.has_texture_by_name
@@ -1026,23 +1051,31 @@ local function _refresh_item_grid_composite_icons(self)
                 _cos_refresh_composite_descriptor(item)
             end
             local descriptor = type(item) == "table"
-                and item._cos_composite_icon_descriptor or nil
+                and _composite_icon_descriptor_by_item[item] or nil
             local offhand_name = "ct_composite_offhand" .. suffix
             local glow_name = "ct_composite_glow" .. suffix
             if style[offhand_name] then
                 content[offhand_name] = descriptor and descriptor.offhand_texture or nil
                 content[glow_name] = descriptor and descriptor.glow_texture or nil
                 local icon_name = "item_icon" .. suffix
+                -- ItemGridUI stores each native icon inside its hotspot's
+                -- content table (the native pass has content_id=hotspot_*).
+                -- Reading/writing widget.content[item_icon_*] is a no-op.
+                local hotspot_content = content["hotspot" .. suffix]
+                local current_icon = type(hotspot_content) == "table"
+                    and hotspot_content[icon_name] or nil
                 local identity = item and (item.backend_id or item.ItemInstanceId
                     or item.key or item) or nil
                 local resolved_icon, cell_state = COMPOSITE_ICONS.resolve_cell(
                     self._ct_composite_icon_cells[suffix], {
                         identity = identity,
-                        current_icon = content[icon_name],
+                        current_icon = current_icon,
                         descriptor = descriptor,
                     })
                 self._ct_composite_icon_cells[suffix] = cell_state
-                content[icon_name] = resolved_icon
+                if type(hotspot_content) == "table" then
+                    hotspot_content[icon_name] = resolved_icon
+                end
                 if descriptor and descriptor.glow_color then
                     style[glow_name].color = {
                         descriptor.glow_color[1], descriptor.glow_color[2],
@@ -3071,7 +3104,7 @@ end
 -- only when they possess the same exact backend instance identity.
 _cos_refresh_composite_descriptor = function(item, record)
     if type(item) ~= "table" then return nil end
-    item._cos_composite_icon_descriptor = nil
+    _composite_icon_descriptor_by_item[item] = nil
     local backend_id = item.backend_id or item.ItemInstanceId
     if backend_id == nil then return nil end
     local item_data = item.data or (item.key and ItemMasterList
@@ -3098,7 +3131,7 @@ _cos_refresh_composite_descriptor = function(item, record)
         offhand_unit = skin_data and skin_data.left_hand_unit
     end
     local glow_state = GlowPicker.committed_state_for(backend_id, { skin = skin })
-    local descriptor = COMPOSITE_ICONS.resolve({
+    local resolve_args = {
         backend_id = backend_id,
         exact_instance = true,
         item_type = item_type,
@@ -3107,8 +3140,10 @@ _cos_refresh_composite_descriptor = function(item, record)
         offhand_armoury_key = offhand_armoury_key,
         glow_state = glow_state,
         local_resource_available = _cos_ui_icon_available,
-    })
-    item._cos_composite_icon_descriptor = descriptor
+    }
+    local descriptor, reason = COMPOSITE_ICONS.resolve_detailed(resolve_args)
+    _composite_icon_diag(reason, resolve_args, descriptor)
+    _composite_icon_descriptor_by_item[item] = descriptor
     return descriptor
 end
 

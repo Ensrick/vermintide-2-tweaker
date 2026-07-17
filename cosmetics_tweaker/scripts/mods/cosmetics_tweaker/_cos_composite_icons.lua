@@ -43,16 +43,16 @@ function M.new(catalog)
     local cache = {}
     local api = {}
 
-    function api.resolve(args)
+    function api.resolve_detailed(args)
         args = type(args) == "table" and args or {}
         local backend_id = args.backend_id
         if backend_id == nil or tostring(backend_id) == ""
                 or args.exact_instance ~= true then
-            return nil
+            return nil, "missing-exact-instance"
         end
         if not (catalog.compatible_item_types
                 and catalog.compatible_item_types[args.item_type]) then
-            return nil
+            return nil, "unsupported-item-type"
         end
         local primary = catalog.primary_by_skin and catalog.primary_by_skin[args.skin]
         local offhand = catalog.offhand_by_unit and catalog.offhand_by_unit[args.offhand_unit]
@@ -60,14 +60,21 @@ function M.new(catalog)
             offhand = catalog.offhand_by_armoury
                 and catalog.offhand_by_armoury[args.offhand_armoury_key]
         end
-        if type(primary) ~= "string" or type(offhand) ~= "table"
-                or type(offhand.texture) ~= "string" then
-            return nil
+        if type(primary) ~= "string" then
+            return nil, "unmapped-primary"
+        end
+        if type(offhand) ~= "table" or type(offhand.texture) ~= "string" then
+            return nil, "unmapped-offhand"
         end
         local available = args.local_resource_available
-        if type(available) ~= "function" or available(primary) ~= true
-                or available(offhand.texture) ~= true then
-            return nil
+        if type(available) ~= "function" then
+            return nil, "missing-resource-check"
+        end
+        if available(primary) ~= true then
+            return nil, "missing-primary-resource"
+        end
+        if available(offhand.texture) ~= true then
+            return nil, "missing-offhand-resource"
         end
 
         local glow_texture, glow_color
@@ -92,7 +99,7 @@ function M.new(catalog)
         }, "|")
         local key = tostring(backend_id)
         if cache[key] and cache[key].fingerprint == fingerprint then
-            return _copy_descriptor(cache[key])
+            return _copy_descriptor(cache[key]), "cache-hit"
         end
         local descriptor = {
             backend_id = backend_id,
@@ -105,7 +112,12 @@ function M.new(catalog)
             layer_order = _copy_array(catalog.layer_order),
         }
         cache[key] = descriptor
-        return _copy_descriptor(descriptor)
+        return _copy_descriptor(descriptor), "composed"
+    end
+
+    function api.resolve(args)
+        local descriptor = api.resolve_detailed(args)
+        return descriptor
     end
 
     function api.invalidate(backend_id)

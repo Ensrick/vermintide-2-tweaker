@@ -11,11 +11,11 @@ Last updated: 2026-07-16.
 
 | Field | Value |
 |---|---|
-| Identity | A custom descriptor requires the exact backend instance, mapped primary skin, and exact saved offhand unit/armoury key. Missing or mixed-peer identity stays native. |
+| Identity | A custom descriptor requires the exact backend instance, mapped primary skin (including GOTWF 2026 `skin_03_runed_05`), and exact saved offhand unit/armoury key. Missing or mixed-peer identity stays native and emits one bounded reason tuple. |
 | Order | Native rarity/background -> authored primary -> authored offhand -> optional glow mask -> native frame. |
 | Glow | Only `wpn_emp_gk_shield_02_runed_01` is rune-eligible; tint is the durable Apply state's exact rune RGB bytes and requires saved intensity above zero. A non-runed shield remains unlit even when the item has saved rune state. |
 | Cell reuse | Removing a descriptor or reusing a grid cell restores the new item's native icon and clears both optional passes. |
-| Scope | Inventory/equipment `ItemGridUI` is the proof adapter. Crafting and Hold-Tab stay native pending exact identity and renderer-material proof. |
+| Scope | Inventory/equipment `ItemGridUI` is the proof adapter. It must replace the native primary at `content[hotspot_*][item_icon_*]`; a top-level `content[item_icon_*]` write is inert. Crafting and Hold-Tab stay native pending exact identity and renderer-material proof. |
 | Detection | Offline `test_cos_composite_icons.lua`; `/cos_regression_test` passes `issue650_composite_icon_contract`. Tracking: GitHub issue #650. |
 
 ---

@@ -1,5 +1,39 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.135-dev - 2026-07-16 - #650 live Mace + Shield composition [verify-fix]
+
+### Fixed
+
+- The live inventory adapter now replaces the native combined weapon icon in
+  `content[hotspot_*][item_icon_*]`, matching `ItemGridUI`'s actual nested cell
+  storage. The previous top-level write did not feed the native texture pass.
+- The first live picker primary (`skin_02`) now uses the authored mace layer.
+  The layer also recognizes the 2026 GOTWF
+  `es_1h_mace_shield_skin_03_runed_05` variant, which was the active skin in the
+  failed verification log.
+- Compatible Mace + Shield items emit one bounded diagnostic per distinct
+  skin/offhand/outcome. An unmapped identity now explains its native fallback;
+  a working identity records `composed` or `cache-hit` without per-frame spam.
+- Composite descriptors remain in a renderer-local weak table instead of being
+  written onto backend item records. No custom texture name enters a loadout or
+  peer transport path; peers without Cosmetics retain native icons.
+
+### Regression coverage
+
+- Offline coverage pins the GOTWF primary mapping, reasoned fail-closed
+  outcomes, nested hotspot icon replacement, exact-instance cache behavior,
+  shield composition, rune RGB, and unsupported-cell native restoration.
+
+### Verification
+
+Equip Mace + Shield, Apply the skin-03 GOTWF rune primary and `GK Shield
+(Red)`, then reopen Equipment. The card must show the authored mace behind the
+red shield. With the runed version of that shield, Apply a recognizable RGB and
+confirm the neutral rune overlay takes that color. The log must contain one
+`[cosmetics:650] descriptor composed` (or `cache-hit`) line for the exact skin
+and shield; unsupported choices must state the fallback reason. Tracking:
+GitHub issue #650.
+
 ## 0.9.134-dev - 2026-07-16 - #650 item-grid pass-data crash guard [verify-fix]
 
 ### Fixed

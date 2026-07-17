@@ -17,11 +17,18 @@ return {
         es_1h_mace_shield = true,
     },
     primary_by_skin = {
-        -- #650 proof: the first picker option. The cutout is an exact pixel
-        -- match for icon_wpn_empire_shield_03_mace, owned by skin_03.
+        -- #650 proof: apply the first live picker primary (skin_02) to the
+        -- user-authored mace cutout. The skin_03 entries retain the same proof
+        -- layer for the exact mesh family used during the reported test.
+        es_1h_mace_shield_skin_02 = "icon_cos_empire_mace_shield_primary_01",
+        es_1h_mace_shield_skin_02_runed_01 = "icon_cos_empire_mace_shield_primary_01",
         es_1h_mace_shield_skin_03 = "icon_cos_empire_mace_shield_primary_01",
         es_1h_mace_shield_skin_03_runed_01 = "icon_cos_empire_mace_shield_primary_01",
         es_1h_mace_shield_skin_03_runed_02 = "icon_cos_empire_mace_shield_primary_01",
+        -- GOTWF 2026 reuses the exact skin_03 mace mesh. The first proof
+        -- omitted this live skin even though it is the variant used in the
+        -- reported verification session (backend 6F7F2C25A71FCC47).
+        es_1h_mace_shield_skin_03_runed_05 = "icon_cos_empire_mace_shield_primary_01",
     },
     offhand_by_unit = {
         ["units/weapons/player/wpn_emp_gk_shield_03/wpn_emp_gk_shield_03"] = {
