@@ -3,10 +3,13 @@ return function(H, repo_root)
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle.lua"
     local exact_path = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_appearance.lua"
+    local family_path = repo_root
+        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_crowbill_family.lua"
     local main_path = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
     local Policy = assert(loadfile(policy_path))()
     local Exact = assert(loadfile(exact_path))()
+    local CrowbillFamily = assert(loadfile(family_path))()
 
     local function read(path)
         local file = assert(io.open(path, "rb"))
@@ -95,6 +98,43 @@ return function(H, repo_root)
         local stored, state = lifecycle:descriptor("peer-a", "slot_melee", "vanilla_base")
         H.equal(state, "exact")
         H.equal(stored.fingerprint, d.fingerprint)
+    end)
+
+    H.test("CWV #604 skinless Dawi model survives exact remote reconstruction", function()
+        local model = assert(CrowbillFamily.model_for_variant("cwv_dr_dawi_crowbill"))
+        local function dawi_descriptor()
+            return assert(Exact.resolve_spawn_descriptor({
+                provider = "cwv",
+                variant = {
+                    item_key = "cwv_dr_dawi_crowbill",
+                    base_weapon = CrowbillFamily.SOURCE_ITEM,
+                    right_hand_unit = model.right_hand_unit,
+                },
+                base = { right_hand_unit = CrowbillFamily.PLACEHOLDER_UNIT },
+            }))
+        end
+        local owner = dawi_descriptor()
+        H.equal(owner.skin, nil)
+        H.equal(owner.right_hand_unit, model.right_hand_unit)
+
+        local lifecycle = Policy.new({
+            resolve_local = function() return owner, CrowbillFamily.SOURCE_ITEM end,
+            resolve_remote = function() return dawi_descriptor() end,
+            send = function() return true end,
+        })
+        local payload = assert(lifecycle:payload_for("slot_melee", {}))
+        H.equal(payload.item_key, "cwv_dr_dawi_crowbill")
+        H.equal(payload.base_item_key, CrowbillFamily.SOURCE_ITEM)
+        H.equal(payload.skin_key, "")
+        H.equal(payload.right_hand_unit, nil,
+            "custom unit path must be reconstructed locally, never transported")
+
+        local changed, remote, reason = lifecycle:accept(
+            "peer-dawi", Policy.SCHEMA, payload)
+        H.equal(changed, true)
+        H.equal(reason, "exact")
+        H.equal(remote.right_hand_unit, model.right_hand_unit)
+        H.equal(remote.fingerprint, owner.fingerprint)
     end)
 
     H.test("CWV #660 explicit native identity suppresses stale base-career guesses", function()

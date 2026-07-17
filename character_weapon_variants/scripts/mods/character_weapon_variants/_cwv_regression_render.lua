@@ -1071,21 +1071,23 @@ _rt_register("issue604_dawi_crowbill_model01_transform", function()
 	end
 	if not target
 			or not same_triplet(target.right_hand_scale_multiplier_3p, { 0.5, 0.5, 0.5 })
+			or not same_triplet(target.right_hand_rotation_1p, { -90, -90, -90 })
 			or not same_triplet(target.right_hand_rotation_3p, { -90, -90, -90 })
 			or target.right_hand_offset
 			or target.right_hand_scale or target.right_hand_rotation
-			or target.right_hand_scale_1p or target.right_hand_rotation_1p then
+			or target.right_hand_scale_1p then
 		return "#604 Dawi Crowbill Model 01 reviewed transform drifted"
 	end
 	local applied = _skin_transform_map[target.key]
 	if not applied
 			or not same_triplet(applied.right_hand_scale_multiplier_3p,
 				target.right_hand_scale_multiplier_3p)
+			or not same_triplet(applied.right_hand_rotation_1p, target.right_hand_rotation_1p)
 			or not same_triplet(applied.right_hand_rotation_3p, target.right_hand_rotation_3p)
 			or applied.right_hand_offset
 			or applied.right_hand_scale or applied.right_hand_rotation
-			or applied.right_hand_scale_1p or applied.right_hand_rotation_1p then
-		return "#604 Dawi Model 01 transform is not isolated to the canonical 3P map"
+			or applied.right_hand_scale_1p then
+		return "#604 Dawi Model 01 transform is not isolated to the canonical perspective map"
 	end
 	local unit_def = _crowbill_transform_by_unit[target.right_hand_unit]
 	local unit_3p_def = _crowbill_transform_by_unit[target.right_hand_unit .. "_3p"]

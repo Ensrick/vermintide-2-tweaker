@@ -1,5 +1,29 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.442-dev - 2026-07-17 - #604 Dawi Crowbill perspective correction [verify-fix-coop]
+
+- Reconciled the still-valid part of the stranded `1c256ec` candidate onto the
+  current schema-2 exact-appearance lifecycle: Dawi Crowbill Model 01 now owns
+  the requested `{-90,-90,-90}` first-person import correction in addition to
+  its existing third-person correction.
+- Kept the current #660 identity implementation instead of reviving the stale
+  candidate's item/model side channel. The current bounded descriptor already
+  carries provider, exact item, vanilla base, selected skin, and a locally
+  reconstructed model fingerprint; mismatched peers fail closed.
+- Extended offline and runtime checks so the first-person correction, the
+  settled 3P half-scale target, exact skinless model identity, and remote
+  descriptor reconstruction are tested together.
+
+**Co-op verify:** confirm `[cwv:LOAD] v0.1.442-dev` on both peers. Equip the
+skinless/default Dawi Crowbill, then check owner 1P, owner 3P, inventory/item
+previews, mission transition, remote husk, swap, respawn, and hot join. The
+custom Dawi model must persist; 1P and 3P must use `{-90,-90,-90}`, while only
+3P/presentation uses the settled half-scale target.
+
+**DoD:** Re-walked G-MESH-FAMILY and G-APPEARANCE identity, transform,
+owner/bot/husk, preview, transition, bounded-network, and fail-closed cells.
+Final retained-state and co-op verification remain deferred to #604.
+
 ## 0.1.441-dev - 2026-07-17 - #661 complete career-action registration [verify-fix]
 
 - Replaced per-constructor `activated_ability[1]` copies with one completed-catalog pass that installs every authored ability row for every CWV career.
