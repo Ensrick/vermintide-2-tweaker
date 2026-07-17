@@ -743,7 +743,11 @@ skeletons.
 batch controls. It constructs one master per receiving-career, slot, and source
 character bucket inside the existing career leaf; preserves source order Kruber,
 Bardin, Kerillian, Saltzpyre, Sienna; and maintains a reverse child index so one
-child change recomputes only its own master. Its checkbox-factory hook changes
+child change recomputes only its own master. Each master owns that bucket's
+weapon rows as `sub_widgets`: Mod Tweaker renders one bulk checkbox with a gear
+that opens independent manual choices, while search still reaches the nested
+weapons. Partial choices stay enabled with the derived master off; flat duplicate
+rows are forbidden by tests. Its checkbox-factory hook changes
 only `wtmaster_` label text to GUI Tweaker's established `font_button_normal`
 warm tan. Keep this module byte-identical to the public-beta copy; the stream
 parity gate enforces the remaining normalized runtime mirror.

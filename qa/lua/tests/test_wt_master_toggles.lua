@@ -63,7 +63,7 @@ return function(H, repo_root)
         return mod, data, values, writes, mercenary_leaf, huntsman_leaf, ranged_leaf
     end
 
-    H.test("WT #611 masters live inside exact career leaves in requested source order", function()
+    H.test("WT #611 masters are gear parents inside exact career leaves in requested source order", function()
         local mod, data, _, _, mercenary, huntsman, ranged = fixture()
         H.equal(Masters.build_widgets(mod, data), 9)
         local expected = {
@@ -75,7 +75,11 @@ return function(H, repo_root)
         }
         for index, id in ipairs(expected) do
             H.equal(mercenary.sub_widgets[index].setting_id, id)
+            H.truthy(type(mercenary.sub_widgets[index].sub_widgets) == "table",
+                "every master must expose an advanced-options child list")
         end
+        H.equal(#mercenary.sub_widgets, 5,
+            "flat weapon rows must move under their source master, not remain duplicated")
         H.equal(huntsman.sub_widgets[1].setting_id,
             "wtmaster_es_huntsman_melee_kruber")
         H.equal(huntsman.sub_widgets[2].setting_id,
@@ -88,6 +92,44 @@ return function(H, repo_root)
             { "unlock_es_mercenary_we_glaive" })
         H.deep_equal(mod._wt_master_children.wtmaster_es_huntsman_melee_kerillian,
             { "unlock_es_huntsman_we_glaive" })
+        H.equal(mercenary.sub_widgets[3].sub_widgets[1].setting_id,
+            "unlock_es_mercenary_we_glaive")
+        H.equal(mod._wt_master_widget_children.wtmaster_es_mercenary_melee_kerillian[1],
+            mercenary.sub_widgets[3].sub_widgets[1],
+            "runtime diagnostics must reference the exact nested widget node")
+    end)
+
+    H.test("WT #611 gear view allows partial selection while derived master stays off", function()
+        local mod, data, values, writes, mercenary = fixture()
+        Masters.build_widgets(mod, data)
+        local master = mercenary.sub_widgets[3]
+        H.equal(master.setting_id, "wtmaster_es_mercenary_melee_kerillian")
+        H.equal(master.sub_widgets[1].setting_id, "unlock_es_mercenary_we_glaive")
+
+        values.unlock_es_mercenary_we_glaive = true
+        values.wtmaster_es_mercenary_melee_kerillian = false
+        -- A one-child fixture becomes fully selected; prove the general partial
+        -- behavior with a second child in the same source bucket.
+        master.sub_widgets[2] = checkbox(
+            "unlock_es_mercenary_we_spear", "Kerillian: Spear", false)
+        mod._wt_master_children[master.setting_id][2] =
+            "unlock_es_mercenary_we_spear"
+        mod._wt_child_to_master.unlock_es_mercenary_we_spear = master.setting_id
+        values.unlock_es_mercenary_we_spear = false
+        Masters.on_child_changed(mod, "unlock_es_mercenary_we_glaive")
+        H.equal(values.unlock_es_mercenary_we_glaive, true,
+            "manual child selection must not be cleared by an off master")
+        H.equal(values.wtmaster_es_mercenary_melee_kerillian, false,
+            "a partial advanced-options selection must leave the master off")
+        H.equal(#writes, 0, "already-correct derived master must not churn writes")
+    end)
+
+    H.test("WT #611 preserves unknown future rows after gear masters", function()
+        local mod, data, _, _, mercenary = fixture()
+        local future = { setting_id = "future_weapon_note", type = "text" }
+        mercenary.sub_widgets[#mercenary.sub_widgets + 1] = future
+        Masters.build_widgets(mod, data)
+        H.equal(mercenary.sub_widgets[#mercenary.sub_widgets], future)
     end)
 
     H.test("WT #611 master cascade cannot cross a receiving career", function()
@@ -144,5 +186,22 @@ return function(H, repo_root)
             "unlock_es_mercenary_es_sword"), false)
         H.deep_equal(weapon_widget.style.text.text_color, { 255, 255, 255, 255 })
         _G.Colors = previous
+    end)
+
+    H.test("WT #611 advanced gear parents receive GUI Tweaker accent in both streams", function()
+        local paths = {
+            "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view.lua",
+            "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua",
+        }
+        for _, relative in ipairs(paths) do
+            local file = assert(io.open(repo_root .. relative, "rb"))
+            local source = file:read("*a")
+            file:close()
+            H.truthy(source:find("row._advanced_parent_accent = true", 1, true),
+                relative .. " must mark and style gear-parent rows")
+            H.truthy(source:find(
+                "accent[1], accent[2], accent[3], accent[4] = 255, 160, 146, 101",
+                1, true), relative .. " must use the warm-tan menu accent")
+        end
     end)
 end

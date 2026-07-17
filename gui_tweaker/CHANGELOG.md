@@ -1,5 +1,10 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.277 (2026-07-17) — #611 advanced-option master presentation
+
+- Gear/advanced-option parent rows now use the established warm-tan menu accent, clearly separating bulk/master controls from their individual child settings.
+- Disabled gear parents remain grey, and the rule applies consistently to every advanced-options parent rather than hard-coding one mod's setting IDs.
+
 ## 0.2.276 (2026-07-15) — #522 inventory preview lighting correction [untested]
 
 - Retired the nonfunctional alternate-level backdrop swap. Inventory keeps the exact vanilla preview package, level, geometry, camera, and background.

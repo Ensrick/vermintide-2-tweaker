@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.270-dev (2026-07-17) - #611 [verify-fix] gear-style availability master parity
+
+- Mirrored beta's advanced-options Weapon Availability masters into the friends-only dev stream without changing the animation/pose tuning overlay.
+- The visible master checkbox selects/clears its exact source-character set; its gear exposes the individual weapon rows for partial manual selection. Partial choices remain enabled while the derived master stays off.
+- Preserved per-career scope, melee/ranged separation, requested source order, and bounded repaint. Expanded offline and runtime contracts reject flat duplicates or missing gear children.
+
 ## 0.12.268-dev (2026-07-16) - #611 [verify-fix] per-career master parity
 
 - Mirrored the public beta's redesigned Weapon Availability masters into the friends-only runtime stream without changing the development overlay.
