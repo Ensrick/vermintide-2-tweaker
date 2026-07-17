@@ -58,6 +58,7 @@ local suites = {
     "test_mod_tweaker_transaction",
     "test_mod_tweaker_profiles",
     "test_mod_tweaker_tab_labels",
+    "test_gut_label_policy",
     "test_mod_tweaker_ordering",
     "test_mod_tweaker_disabled_sections",
     "test_gut_video_profiles",

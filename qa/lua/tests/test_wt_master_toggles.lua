@@ -21,7 +21,7 @@ return function(H, repo_root)
             checkbox("unlock_es_mercenary_wh_flail", "Saltzpyre: Flail", false),
         }
         local huntsman = {
-            checkbox("unlock_es_huntsman_we_glaive", "[working] Kerillian: Glaive", false),
+            checkbox("unlock_es_huntsman_we_glaive", "Kerillian: Glaive", false),
             checkbox("unlock_es_huntsman_es_sword", "Kruber: Sword", true),
         }
         local ranged = {

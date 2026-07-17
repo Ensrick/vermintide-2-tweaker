@@ -39,8 +39,9 @@ the relevant 1.0 release set is named.
 ## Translation workflow
 
 1. Freeze an English source revision and export its key/value catalog.
-2. Translate by key, preserving `[Issue N]`/development status prefixes, product
-   names, keybind notation, and every format token exactly.
+2. Translate by key, preserving functional qualifiers, product names, keybind
+   notation, and every format token exactly. Never introduce issue or
+   development-lifecycle status into player-facing text.
 3. Use Fatshark's language IDs verbatim; Brazilian Portuguese must use the quoted
    Lua key `["br-pt"]` because a hyphen is not valid in a bare identifier.
 4. Review terminology per mod and in context. Machine output is a draft, not a

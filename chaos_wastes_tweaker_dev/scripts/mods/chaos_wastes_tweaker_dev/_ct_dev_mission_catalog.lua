@@ -196,9 +196,9 @@ function _M.progress_key(i)    return "ctdm_p_" .. tostring(i) end
 function _M.build_loc_entries()
     local e = {}
 
-    -- Group + widget titles / tooltips. [untested] status tag per
-    -- LOCALIZATION_STANDARD s13 - drops to [working] once the user confirms in-game.
-    e.ctdm_group = { en = "[untested] Single Mission Loader" }
+    -- Group + widget titles / tooltips omit issue/lifecycle state. Verification
+    -- belongs in GitHub and the changelog, never in player-facing labels.
+    e.ctdm_group = { en = "Single Mission Loader" }
 
     e.ctdm_load = { en = "Load Selected Mission Now (hotkey)" }
     e.ctdm_load_tooltip = { en = "Host-only. Immediately starts the selected one-mission Chaos Wastes run. This hotkey works only while your character is physically inside the Pilgrimage Chamber reached through the Chaos Wastes door in the keep." }

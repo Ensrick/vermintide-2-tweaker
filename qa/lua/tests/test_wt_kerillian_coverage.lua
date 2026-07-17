@@ -34,12 +34,12 @@ return function(H, repo_root)
             "es_repeating_handgun", "wh_brace_of_pistols", "wh_crossbow",
             "wh_crossbow_repeater", "wh_deus_01", "wh_repeating_pistols",
         }) do
-            H.equal(by_key[key].status, "[needs animations]")
-            H.equal(by_key[key].redirect, "[Elf Repeater Crossbow]")
+            H.equal(by_key[key].state, "needs_animations")
+            H.equal(by_key[key].redirect, "Elf Repeater Crossbow")
             H.equal(by_key[key].picker_visible, false)
         end
         for _, key in ipairs({ "es_1h_mace", "es_longbow" }) do
-            H.equal(by_key[key].status, "[untested]")
+            H.equal(by_key[key].state, "untested")
             H.equal(by_key[key].redirect, nil)
             H.equal(by_key[key].picker_visible, false)
         end

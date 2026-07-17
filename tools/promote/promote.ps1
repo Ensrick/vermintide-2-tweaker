@@ -20,8 +20,8 @@
     What it does NOT do (deliberately, surfaced as warnings for a human):
       - Add dev-only files that have no public equivalent (e.g. _diag_probe.lua) unless
         -IncludeNew. Dev-only diagnostics must not silently land in public.
-      - Strip dev status tags ([untested] etc.) from the public *_localization.lua.
-        Review these per LOCALIZATION_STANDARD after the port (stable carries no dev tags).
+      - Reintroduce lifecycle/status tags. Every stream is already required to be
+        clean by LOCALIZATION_STANDARD section 13 and qa/check_loc_tags.ps1.
 
 .EXAMPLE
     pwsh tools/promote/promote.ps1 -Mod crafting_in_modded                    # DryRun plan
@@ -135,7 +135,7 @@ Write-Host "grep-clean: no dev identity in public source." -ForegroundColor Gree
 Write-Host ""
 Write-Host "NEXT (manual, deliberate):" -ForegroundColor Cyan
 Write-Host "  1. Write the public CHANGELOG entry -- CITE the issue number(s) for any crash fix."
-Write-Host "  2. Review public *_localization.lua: strip dev status tags ([untested] etc.); stable carries none."
+Write-Host "  2. Run qa/check_loc_tags.ps1: player-facing lifecycle metadata is forbidden in every stream."
 Write-Host "  3. Confirm itemV2.cfg identity (published_id, visibility) is unchanged."
 Write-Host "  4. promotion-status.ps1 -Mod $Mod   (crash issues should read OK)."
 Write-Host "  5. On the fresh ship signal:  ship.ps1 -Mod $Mod -AllowPublic"

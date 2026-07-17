@@ -16,8 +16,8 @@ local mod = get_mod("wt_dev")
 -- WT_DEV_OVERLAY_BEGIN:port-coverage-audits
 -- #109: audit the live Kruber unlock source rather than maintaining another
 -- hand-counted tracker.  This runs once at module load, writes only to the log,
--- and is also callable on demand.  "Hidden" means the port is correctly tagged
--- [needs animations] but lacks the static picker tables required to tune it.
+-- and is also callable on demand.  "Hidden" means the port is correctly classified
+-- needs_animations but lacks the static picker tables required to tune it.
 local function _audit_kruber_3p(log_rows)
     local wt = mod._wt or {}
     local status = wt.port_status
@@ -33,9 +33,9 @@ local function _audit_kruber_3p(log_rows)
         counts.picker_visible, counts.hidden_needs_animations)
     if log_rows then
         for _, row in ipairs(rows) do
-            if row.status ~= "[working]" then
-                mod:info("[wt:109] key=%s status=%s target=%s picker=%s",
-                    row.weapon_key, row.status, tostring(row.redirect),
+            if row.state ~= "working" then
+                mod:info("[wt:109] key=%s state=%s target=%s picker=%s",
+                    row.weapon_key, row.state, tostring(row.redirect),
                     tostring(row.picker_visible))
             end
         end
@@ -71,8 +71,8 @@ local function _audit_bardin_3p(log_rows)
         counts.picker_visible)
     if log_rows then
         for _, row in ipairs(rows) do
-            mod:info("[wt:110] key=%s status=%s target=%s model=%s",
-                row.weapon_key, row.status, tostring(row.redirect),
+            mod:info("[wt:110] key=%s state=%s target=%s model=%s",
+                row.weapon_key, row.state, tostring(row.redirect),
                 tostring(row.model_substitute))
         end
     end
@@ -106,9 +106,9 @@ local function _audit_kerillian_3p(log_rows)
         counts.picker_visible, counts.hidden_needs_animations)
     if log_rows then
         for _, row in ipairs(rows) do
-            if row.status ~= "[working]" then
-                mod:info("[wt:111] key=%s status=%s target=%s picker=%s",
-                    row.weapon_key, row.status, tostring(row.redirect),
+            if row.state ~= "working" then
+                mod:info("[wt:111] key=%s state=%s target=%s picker=%s",
+                    row.weapon_key, row.state, tostring(row.redirect),
                     tostring(row.picker_visible))
             end
         end
@@ -156,7 +156,7 @@ local function _audit_saltzpyre_3p(log_rows)
             if counts.total ~= baseline_counts.total then parity = false end
             for i, row in ipairs(rows) do
                 local base = baseline_rows[i]
-                if not base or base.weapon_key ~= row.weapon_key or base.status ~= row.status then
+                if not base or base.weapon_key ~= row.weapon_key or base.state ~= row.state then
                     parity = false
                     break
                 end
@@ -167,7 +167,7 @@ local function _audit_saltzpyre_3p(log_rows)
     local target_count = 0
     local no_target_count = 0
     for _, row in ipairs(baseline_rows) do
-        if row.status ~= "[working]" then
+        if row.state ~= "working" then
             if row.redirect then target_count = target_count + 1 else no_target_count = no_target_count + 1 end
         end
     end
@@ -178,9 +178,9 @@ local function _audit_saltzpyre_3p(log_rows)
         target_count, no_target_count)
     if log_rows then
         for _, row in ipairs(baseline_rows) do
-            if row.status ~= "[working]" then
-                mod:info("[wt:112] key=%s status=%s target=%s picker=%s model=%s",
-                    row.weapon_key, row.status, tostring(row.redirect),
+            if row.state ~= "working" then
+                mod:info("[wt:112] key=%s state=%s target=%s picker=%s model=%s",
+                    row.weapon_key, row.state, tostring(row.redirect),
                     tostring(row.picker_visible), tostring(row.model_substitute))
             end
         end
@@ -246,8 +246,8 @@ local function _audit_warrior_priest_3p(log_rows)
         counts.picker_visible, unexpected, missing)
     if log_rows then
         for _, row in ipairs(rows) do
-            mod:info("[wt:113] key=%s status=%s target=%s model=%s picker=%s",
-                row.weapon_key, row.status, tostring(row.redirect),
+            mod:info("[wt:113] key=%s state=%s target=%s model=%s picker=%s",
+                row.weapon_key, row.state, tostring(row.redirect),
                 tostring(row.model_substitute), tostring(row.picker_visible))
         end
     end

@@ -33,7 +33,7 @@
 #
 #   * LOCALIZATION-SWEEP ENTRIES ARE SKIPPED. A repo-wide loc doctrine pass
 #     (LOCALIZATION_STANDARD.md § 13, issue #301) produces a top entry whose
-#     header reads e.g. "Localization: applied dev status-tag doctrine (#301)".
+#     historical header reads e.g. "Localization: applied dev status-tag doctrine (#301)".
 #     Those entries are "tags-only change: no runtime/behavior effect" and they
 #     reference MANY open issues purely as tag CONTEXT (which feature each tag
 #     names), NOT as shipped work. Flagging them would drown the real signal, so
@@ -112,6 +112,8 @@ $ActiveMods = @(
 # ---- localization-sweep header detector (see HEURISTIC above) ----
 # A top-entry header matching any of these is a tags-only loc pass; its issue
 # refs are tag CONTEXT, not shipped work, so the entry is skipped.
+# Legacy CHANGELOG compatibility: old localization-sweep entries referenced issue
+# numbers only as context. This does not authorize status tags in current UI.
 $rxLocSweep = [regex]'(?i)(localization|loc sweep|status-tag doctrine|menu wording|localization audit|loc audit)'
 
 $rxVerHeader = [regex]'^\s*##\s+\S'

@@ -1,32 +1,26 @@
 --[[
 ============================================================================
- wt_port_status.lua — shared (career, weapon_key) -> 3P availability STATUS
+ wt_port_status.lua — shared (career, weapon_key) -> internal 3P port state
 ============================================================================
 
-Single source of truth for the in-game STATUS TAG shown on every
-"Weapon Availability" checkbox label AND (going forward) the 3P picker.
-Before v0.12.141-dev the Availability tags were hand-typed literal prefixes
-baked into each `unlock_*` string in weapon_tweaker_localization.lua — 299 of
-947 entries were left bare and several confirmed ports (Saltzpyre's Flail,
-Bardin's Greataxe) read `[untested]` or no tag at all. This module replaces the
-three divergent hand-typed vocabularies with ONE computed resolver so no weapon
-goes untagged and the Availability menu stays in lockstep with the picker.
+Single source of truth for internal 3P picker/audit state. Player-facing Weapon
+Availability labels deliberately do not expose this engineering lifecycle.
 
-3P-ONLY. Status describes the THIRD-person animation port only — 1P is
+3P-ONLY. State describes the THIRD-person animation port only — 1P is
 universal across all six characters and never needs cross-character work
-(feedback_1p_animations_universal). A tag never reflects any 1P state.
+(feedback_1p_animations_universal).
 
-TAG VOCABULARY (v0.12.204-dev #301: lowercase doctrine forms; aligned to
+INTERNAL STATE VOCABULARY (aligned to
 KRUBER_3P_ANIM_DECISIONS.md:14-20 + the picker):
-  [working]          — 3P confirmed (native, or a verified cross-character port).
-  [needs animations] — a wield SET redirect is chosen + works at set level, but
-                       the per-attack animation mapping is still pending.
-  [needs offsets]    — set chosen, 3P grip offset still needed.
-  [untested]         — no decision captured yet.
+  working          — 3P confirmed (native, or a verified cross-character port).
+  needs_animations — a wield SET redirect is chosen + works at set level, but
+                     the per-attack animation mapping is still pending.
+  needs_offsets    — set chosen, 3P grip offset still needed.
+  untested         — no decision captured yet.
 
 PROVENANCE of the confirmed/untested/offsets sets below: generated 2026-06-23
-from a parse of ANIMATION_COVERAGE.md (✅ WORKING / 🔁 native -> [Working];
-❓ -> [Untested]; rows tagged [Needs Offsets]/grip -> [Needs Offsets]) merged
+from a parse of ANIMATION_COVERAGE.md (✅ WORKING / 🔁 native -> working;
+❓ -> untested; rows marked as grip work -> needs_offsets) merged
 with KRUBER_3P_ANIM_DECISIONS.md CONFIRMED rows and the picker's
 _COVERAGE_CONFIRMED_KRUBER / _PORT_STATUS_LABEL. The code does NOT parse the
 .md at runtime (mod sandbox can't reliably io.open repo files) — these are the
@@ -34,14 +28,14 @@ generated mirror. When a COVERAGE row flips, regenerate or hand-edit here.
 
 RECEIVER BUCKETS mirror the .md sections. Saltzpyre = the three non-WP careers
 (wh_captain/wh_bountyhunter/wh_zealot); wh_priest is its own bucket (all native
-or priest-specific redirects -> all [Working] per ANIMATION_COVERAGE.md:181-185);
-Sienna has zero cross-character ports (all native -> [Working]).
+or priest-specific redirects -> working per ANIMATION_COVERAGE.md:181-185);
+Sienna has zero cross-character ports (all native -> working).
 ============================================================================
 --]]
 
 local M = {}
 
--- char_key -> { weapon_key = true } : ports CONFIRMED [Working] on that receiver
+-- char_key -> { weapon_key = true } : confirmed ports on that receiver
 -- (cross-character verified; natives are handled separately by the prefix rule).
 local _CONFIRMED = {
     kruber = {
@@ -191,20 +185,20 @@ local _CONFIRMED = {
 -- char_key -> { weapon_key = true } : decided set, 3P GRIP OFFSET still needed.
 -- bw_ghost_scythe BAKED v0.12.150-dev: its +0.569 Z 3P grip offset (es_-scoped)
 -- now lives in _weapon_grip_offsets.bw_ghost_scythe.es_ (weapon_tweaker.lua), so
--- the offset is applied, not pending — removed from _NEEDS_OFFSETS so M.tag stops
--- returning [Needs Offsets]. (The anim port is also baked into _3p_template_remaps
--- .staff_scythe.es_, and the key is moved to _CONFIRMED below -> [Working].)
+-- the offset is applied, not pending — removed from _NEEDS_OFFSETS so M.state
+-- returns working. (The anim port is also baked into _3p_template_remaps
+-- .staff_scythe.es_, and the key is moved to _CONFIRMED below.)
 -- we_2h_axe (Elven 2H Axe/Glaive) GRIP OFFSET SET v0.12.152-dev: DURABLE +0.285 Z
 -- es_-scoped grip offset (_weapon_grip_offsets.we_2h_axe.es_ = {0,0,0.285} +
 -- _DURABLE_GRIP_OFFSETS.we_2h_axe = true). v0.12.156-dev: the anim IS now BAKED
 -- too (career-scoped _3p_template_remaps.two_handed_axes_template_2.es_ ->
--- Greathammer), so the Glaive moved to _CONFIRMED above (tag now [Working]) and
+-- Greathammer), so the Glaive moved to _CONFIRMED above and
 -- was removed from _NEEDS_ANIMS / the picker below.
 local _NEEDS_OFFSETS = {
     kruber = {},
 }
 
--- char_key -> { weapon_key = true } : no decision captured yet -> [Untested].
+-- char_key -> { weapon_key = true } : no decision captured yet.
 local _UNTESTED = {
     kruber = { we_javelin = true, we_life_staff = true },
     -- #111: present in every Kerillian unlock list but absent from the coverage
@@ -213,27 +207,25 @@ local _UNTESTED = {
 }
 
 -- ===========================================================================
--- EXPLICIT [Needs Animations] allow-list (v0.12.142-dev) — picker membership.
+-- EXPLICIT needs_animations allow-list (v0.12.142-dev) — picker membership.
 -- ===========================================================================
 -- char_key -> { weapon_key = "<redirect-target display>" }. ONLY weapons in
 -- this table are surfaced in the 3P picker (item 4: "picker lists ONLY weapons
--- explicitly flagged [Needs Animations]"). The VALUE is the bracketed
--- redirect-target display name shown on the WEAPON AVAILABILITY menu (item 2:
--- e.g. "[Needs Animations → Greathammer]"). Sourced from the `SET=` annotations
+-- explicitly marked as needing animations). The VALUE is the redirect-target
+-- display name used by internal diagnostics. Sourced from the `SET=` annotations
 -- in ANIMATION_COVERAGE.md "## Receiver: KRUBER" (lines 61-85) + the
 -- KRUBER_3P_ANIM_DECISIONS.md "Set chosen" column. The code does NOT parse the
 -- .md at runtime — this is the generated mirror (same doctrine as _CONFIRMED).
 --
 -- Membership here is INTENTIONALLY a closed list, NOT a default: untested ports
 -- (Beam Staff bw_skullstaff_beam, Javelin, Deepwood Staff) are absent, so they
--- never leak into the picker, and M.tag's default-return is unchanged (the
--- Availability menu keeps tagging un-cataloged cross-character ports
--- [Needs Animations] — see M.tag below — so no ~100-port behavior shift).
+-- never leak into the picker, and M.state's default-return remains
+-- needs_animations, so no ~100-port behavior shift in audit classification.
 local _NEEDS_ANIMS = {
     -- v0.12.188-dev: the v0.12.157 Kruber staves/Coghammer/Greathammer/Rapier batch
     -- (10 ports) was BAKED career-scoped (es_) into _3p_template_remaps
     -- (weapon_tweaker.lua) from the user's persisted dev-picker picks and moved to
-    -- _CONFIRMED above. Only wh_hammer_book remains [Needs Animations] (no picks
+    -- _CONFIRMED above. Only wh_hammer_book remains pending (no picks
     -- captured yet — its 3P is a mesh-swap, not an anim remap; #181).
     kruber = {
         -- v0.12.201-dev: wh_hammer_book BAKED (es_) -> _CONFIRMED.kruber. Emptied.
@@ -486,29 +478,21 @@ local function _is_native(career, weapon_key)
     return false
 end
 
--- Public: status tag string for a (career, weapon_key) pair. NEVER returns nil.
--- Priority: native -> [working]; confirmed set -> [working]; needs-offsets ->
--- [needs offsets]; untested -> [untested]; otherwise a decided cross-character
--- port whose per-attack map is still pending -> [needs animations] (the common
--- 📋/🔧 COVERAGE state). Bare/[untested]/[confirmed working] hand-typed prefixes
--- in the loc strings are stripped + replaced by this (see the localization file).
--- v0.12.204-dev (#301): emitted vocabulary normalized to the lowercase doctrine
--- forms ([working]/[untested]/[needs animations]/[needs offsets]); the loc
--- consumer that splices "→ <target>" onto [needs animations] matches this casing.
-function M.tag(career, weapon_key)
-    if _is_native(career, weapon_key) then return "[working]" end
+-- Public: internal state for a (career, weapon_key) pair. NEVER returns nil.
+function M.state(career, weapon_key)
+    if _is_native(career, weapon_key) then return "working" end
     local recv = _char_key_for_career(career)
-    if not recv then return "[untested]" end
-    if _CONFIRMED[recv] and _CONFIRMED[recv][weapon_key] then return "[working]" end
-    if _NEEDS_OFFSETS[recv] and _NEEDS_OFFSETS[recv][weapon_key] then return "[needs offsets]" end
-    if _UNTESTED[recv] and _UNTESTED[recv][weapon_key] then return "[untested]" end
+    if not recv then return "untested" end
+    if _CONFIRMED[recv] and _CONFIRMED[recv][weapon_key] then return "working" end
+    if _NEEDS_OFFSETS[recv] and _NEEDS_OFFSETS[recv][weapon_key] then return "needs_offsets" end
+    if _UNTESTED[recv] and _UNTESTED[recv][weapon_key] then return "untested" end
     -- Default for a surviving cross-character port: a set is decided (the unlock
     -- map only carries ports with a chosen 3P target) but per-attack picks pend.
-    return "[needs animations]"
+    return "needs_animations"
 end
 
--- Public: bracketed redirect-target display name for a
--- (career, weapon_key) pair, e.g. "[Greathammer]", or nil when none is on file.
+-- Public: redirect-target display name for a
+-- (career, weapon_key) pair, e.g. "Greathammer", or nil when none is on file.
 -- Pending ports source `_NEEDS_ANIMS`; confirmed/baked ports source the #108
 -- display mirror so completing a port no longer discards its redirect label.
 function M.redirect_target(career, weapon_key)
@@ -519,8 +503,7 @@ function M.redirect_target(career, weapon_key)
     local target = (pending and pending[weapon_key])
         or (confirmed and confirmed[weapon_key])
         or (diagnostic and diagnostic[weapon_key])
-    if target then return "[" .. target .. "]" end
-    return nil
+    return target
 end
 
 -- Public (#108): raw display name of a shipped 3P model substitute.
@@ -530,28 +513,11 @@ function M.model_substitute(career, weapon_key)
     return row and row[weapon_key] or nil
 end
 
--- Public (#108): compose the verbose availability tag. Non-dev callers receive
--- the base status byte-for-byte; redirect/model annotations are dev tooling.
-function M.decorate_tag(career, weapon_key, is_dev_build)
-    local tag = M.tag(career, weapon_key)
-    if not is_dev_build then return tag end
-
-    local redirect = M.redirect_target(career, weapon_key)
-    local model = M.model_substitute(career, weapon_key)
-    if not redirect and not model then return tag end
-
-    local suffix = ""
-    if redirect then suffix = suffix .. " → " .. redirect:sub(2, -2) end
-    if model then suffix = suffix .. " - 3P model: " .. model end
-
-    return tag:sub(1, -2) .. suffix .. "]"
-end
-
--- Public (v0.12.142-dev): is (career, weapon_key) EXPLICITLY flagged
--- [Needs Animations]? The 3P picker gates membership on this (item 4) so it
+-- Public (v0.12.142-dev): is (career, weapon_key) explicitly flagged as needing
+-- animations? The 3P picker gates membership on this (item 4) so it
 -- lists ONLY weapons the user has flagged in _NEEDS_ANIMS — not every
 -- non-confirmed port (which is how untested weapons like Beam Staff used to
--- leak in via M.tag's default-return). NOTE: native ports + _NEEDS_OFFSETS
+-- leak in via M.state's default-return). NOTE: native ports + _NEEDS_OFFSETS
 -- ports can also appear in _NEEDS_ANIMS (bw_ghost_scythe is both); this returns
 -- the RAW membership, so the picker still wants its own native/offsets filter.
 function M.needs_anims(career, weapon_key)
@@ -581,12 +547,11 @@ function M.audit_cross_character(career, weapon_keys)
                 and not seen[weapon_key]
                 and not _is_native(career, weapon_key) then
             seen[weapon_key] = true
-            local tag = M.tag(career, weapon_key)
-            local state = tag:sub(2, -2):gsub(" ", "_")
+            local state = M.state(career, weapon_key)
             local picker_visible = M.needs_anims(career, weapon_key)
             local row = {
                 weapon_key = weapon_key,
-                status = tag,
+                state = state,
                 redirect = M.redirect_target(career, weapon_key),
                 model_substitute = M.model_substitute(career, weapon_key),
                 picker_visible = picker_visible,
@@ -595,7 +560,7 @@ function M.audit_cross_character(career, weapon_keys)
             counts.total = counts.total + 1
             counts[state] = (counts[state] or 0) + 1
             if picker_visible then counts.picker_visible = counts.picker_visible + 1 end
-            if tag == "[needs animations]" and not picker_visible then
+            if state == "needs_animations" and not picker_visible then
                 counts.hidden_needs_animations = counts.hidden_needs_animations + 1
             end
         end

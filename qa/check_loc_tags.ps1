@@ -1,496 +1,235 @@
-# check_loc_tags.ps1 — dev-build localization STATUS-TAG scan (issue #301).
+# check_loc_tags.ps1 -- block lifecycle/issue metadata in player-facing text (#694).
 #
-# Doctrine: LOCALIZATION_STANDARD.md § 13 "Dev status tags". Dev builds prefix
-# each option-TITLE `en` string with one or more status tags so the user can
-# see, in-game, what needs testing. The seven sanctioned tags are:
-#   [untested] [Issue N] [working] [diag] [crash] [verify-fix] [needs animations]
-# ([Issue ...] may carry multiple numbers: [Issue 501 & 427] / [Issue 501, 427 & 418].)
-# Plus two weapon_tweaker-only extensions (§ 13.8), also accepted here:
-#   [needs offsets]  and  [needs animations -> <target>]
-# — both emitted at load by wt_port_status.lua, not authored in the loc file.
+# Verification state belongs in GitHub labels, issues, changelogs, logs, and
+# internal diagnostic data. It must not decorate player-facing option titles or
+# tooltips in stable OR development mods. Functional qualifiers such as `(CWV)`,
+# `[Host Only]`, `[Client]`, `[WARNING]`, `[Big Rebalance]`, and category/unit
+# labels remain valid because they describe behavior or ownership.
 #
-# This is a WARNING-ONLY, NON-BLOCKING advisory scan. It reports three things:
-#
-#   (a) STABLE LEAK — any sanctioned tag present in a STABLE mod directory.
-#       Stable (clean-versioned public) builds must strip ALL tags at promotion
-#       (§ 13.5). The stable dirs are the unsuffixed siblings of the `_dev`
-#       clones: chaos_wastes_tweaker / crafting_in_modded / general_tweaker /
-#       gui_tweaker / verminious_dreams_lighting. Known live violation: stable
-#       `crafting_in_modded` carries 7 `[untested]` tags (a promotion leak,
-#       tracked for cleanup at the next cim promotion) — this check exists to
-#       surface exactly that class.
-#
-#   (b) UNKNOWN VOCAB — a *tag-like* leading bracket group that is NOT one of
-#       the seven sanctioned tags (a typo / invented tag). "No invented tags"
-#       (§ 13.1). E.g. `[confirmed working]` (should be `[working]`), `[fixed]`,
-#       `[issue 5]` (lowercase i — casing matters).
-#
-#   (c) MUTEX VIOLATION — `[crash]`, `[working]`, `[untested]` are mutually
-#       exclusive (§ 13.1); 2+ of them on one option is a contradiction.
-#
-#   (d) TAGGED NAVIGATION GROUP — a `_data.lua` widget with `type = "group"`
-#       is a pure container and must carry no status tag (§ 13.3/13.8, #335).
-#
-# With -EvidenceAudit, also inventory every non-group `[working]` entry whose
-# user/closed-issue evidence must be reviewed during #335. This is deliberately
-# opt-in because the initial inventory is large; a candidate is not itself proof
-# that the tag is wrong.
-#
-# HEURISTIC (documented so future edits stay conservative — issue #301 asked
-# for a deliberately low false-positive design):
-#
-#   * We only parse SINGLE-LITERAL entries of the three canonical loc forms:
-#         key            = { en = "VALUE" }
-#         key            = en("VALUE")
-#         loc.key        = { en = "VALUE" }
-#     (VALUE is one complete double-quoted literal.) This means dynamic /
-#     concatenated strings — ct_dev's runtime `entry.en = "[confirmed working] "
-#     .. entry.en` post-process loop, event_tweaker's `en("[" .. id .. "] " ..)`
-#     tooltip builder — are NOT captured. Good: those are runtime prepends /
-#     tooltip bodies, not authored option titles.
-#
-#   * From VALUE we read the LEADING RUN of `[...]` bracket groups (each
-#     separated by single spaces). Each group is classified:
-#       - KNOWN     — one of the seven sanctioned tags (exact case).
-#       - TAG-LIKE  — looks like it was MEANT to be a tag but isn't sanctioned:
-#                     inner text is lowercase-leading ([a-z][a-z0-9 -]*) OR
-#                     starts with "Issue" / "issue". These are flagged (b).
-#       - NOT-TAG   — anything else (UPPERCASE-leading category prefixes such as
-#                     `[CW]`, `[Big Rebalance]`, `[WARNING]`, `[Hacks]`,
-#                     `[Forced Aggro]`). Treated as a legitimate DISPLAY-NAME
-#                     prefix; it ENDS the tag run and is left alone.
-#     `gut`'s `<...>` angle markers are not square brackets, so they never enter
-#     the run at all (no crash, no false positive).
-#
-#   * STABLE mods are matched by directory NAME against a fixed list (the five
-#     unsuffixed `_dev` siblings). The underlying rule is the MOD_VERSION suffix
-#     (dev = has -dev/-alpha/-beta/-rc; stable = clean), but the name list is
-#     exact, cheap, and matches the doctrine's own enumeration in § 13.5.
-#
-# Exclusions: `_archive/`, `bundleV2/`, `.build/`, `.temp/`, `_test_fixtures/`,
-# upstream source clones, `_*_extract/` snapshots, and the frozen legacy
-# `tweaker/` mod. Active `weapon_tweaker_dev/` is scanned.
-#
-# Output mirrors qa/check_unpack_safety.ps1 / qa/check_vmf_widget_types.ps1.
-#
-# Exit codes:
-#   0 - clean (no tag issues)
-#   1 - one or more advisory WARNINGS (leak / unknown / mutex / group / evidence) — NEVER
-#       blocks the gate (wired into run_all.ps1 under -Policy 'Advisory').
-#   2 - hard error (a file failed to read). Also non-blocking under Advisory,
-#       but distinguishes a broken check from findings.
-#
-# Self-test: pass `-SelfTest` to run the synthetic fixtures under
-# `qa/_test_fixtures/loc_tags_*.lua` and assert finding counts per fixture.
-# Self-test exit 0 = wired correctly; exit 2 = regex/heuristic regression.
+# Exit codes: 0 clean, 2 violation/tool failure. Findings are blocking.
 
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
     [switch]$Quiet,
-    [switch]$EvidenceAudit,
-    [switch]$SummaryOnly,
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [string]$MigrationBase
 )
 
-$ErrorActionPreference = "Stop"
-$repoRoot = (Resolve-Path $RepoRoot).Path
+$ErrorActionPreference = 'Stop'
+$repoRoot = Split-Path $PSScriptRoot -Parent
 
-# ---- sanctioned tag vocabulary (§ 13.1, § 13.8) ----
-# Exact lowercase tags (case-sensitive). [Issue N] is validated separately by
-# format because it carries numbers. `needs offsets` and the `needs animations
-# -> <target>` variant are the two weapon_tweaker-only extensions (§ 13.8):
-# emitted at load by wt_port_status.lua (not authored in the static loc file),
-# but accepted here so a stray/normalized static occurrence is never mis-flagged.
-$KnownExactTags = @('untested', 'working', 'diag', 'crash', 'verify-fix', 'needs animations', 'needs offsets')
-$KnownExactSet = @{}
-foreach ($t in $KnownExactTags) { $KnownExactSet[$t] = $true }
+$script:lifecycleSquare = '(?i)\[(?:working|confirmed\s+working|untested|verify-fix(?:-coop)?|diagnostics-armed|diag|crash|needs\s+animations(?:\s*(?:->|→)[^\]]*)?|needs\s+offsets|issue\b[^\]]*|wip|work\s+in\s+progress|experimental|testing|prototype|fixed|unverified|not[- ]started)\]\s*'
+$script:lifecycleParen = '(?i)\s*\((?:working|confirmed\s+working|untested|fixed|unverified|verify-fix(?:-coop)?|diagnostics-armed|diag|crash|needs\s+animations|needs\s+offsets|wip|work\s+in\s+progress|experimental|testing|prototype|not[- ]started)\)'
+$script:lifecycleProse = '(?i)"[^"\r\n]*(?:\bexperimental\b|\buntested\b|\bunverified\b|\bnot\s+yet\s+confirmed\b|\bverify\s+(?:it|this)\s+in[- ]game\b|\bwork\s+in\s+progress\b)[^"\r\n]*"'
+$script:machinery = '(?i)\b(?:decorate_tag|localization_status_sync|loc_status_sync)\b|dev-status-decoration'
 
-# The three mutually-exclusive tags (§ 13.1).
-$MutexTags = @('crash', 'working', 'untested')
-
-# ---- stable mod dirs (§ 13.5) — the unsuffixed siblings of the _dev clones ----
-$StableModDirs = @(
-    'chaos_wastes_tweaker',
-    'crafting_in_modded',
-    'general_tweaker',
-    'gui_tweaker',
-    'verminious_dreams_lighting'
-)
-$StableSet = @{}
-foreach ($d in $StableModDirs) { $StableSet[$d] = $true }
-
-function Read-FileUtf8([string]$path) {
-    return [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
-}
-
-# ---- per-line loc-entry regexes ----
-# Each loc entry in this repo is authored on a single line. We anchor on a
-# bareword (or `loc.`-prefixed) key so dynamic assignments like `entry.en = ...`
-# and indexed assignments like `loc[key .. "_tooltip"] = ...` are NOT matched.
-# The value must be ONE complete double-quoted literal (handles \" escapes).
-$rxFormA = [regex]'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{\s*en\s*=\s*"((?:[^"\\]|\\.)*)"'
-$rxFormB = [regex]'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*en\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)'
-$rxFormC = [regex]'^\s*loc\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{\s*en\s*=\s*"((?:[^"\\]|\\.)*)"'
-# Multi-line table form (crafting_in_modded style):
-#     key = {
-#         en = "VALUE",
-#     },
-# A `key = {` (or `loc.key = {`) line that does NOT close on itself opens a
-# pending key; the following bare `en = "VALUE"` line binds to it.
-$rxKeyOpen    = [regex]'^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{\s*(--.*)?$'
-$rxLocKeyOpen = [regex]'^\s*loc\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{\s*(--.*)?$'
-$rxBareEn     = [regex]'^\s*en\s*=\s*"((?:[^"\\]|\\.)*)"'
-
-# Sanctioned [Issue ...] format (§ 13.2): capital-I "Issue ", then a number list
-# joined by ',' / '&' (spaces optional).
-$rxIssueKnown = [regex]'^Issue \d+(\s*[,&]\s*\d+)*$'
-# weapon_tweaker-only variant (§ 13.8): `needs animations <arrow> <target>`,
-# e.g. "needs animations -> Greathammer" (the emitter uses a U+2192 arrow). The
-# base `needs animations` is already in $KnownExactTags; this accepts any
-# suffix after it (the arrow + mapped target) WITHOUT matching the arrow byte,
-# so the source file stays pure ASCII. A typo like `needs animation` (no 's')
-# still falls through to the UNKNOWN path.
-$rxNeedsAnimVariant = [regex]'^needs animations(\s.*)?$'
-# "meant to be a tag" shapes: lowercase-leading, or (mis-cased) Issue-leading.
-$rxLowerTag   = [regex]'^[a-z][a-z0-9 \-]*$'
-$rxIssueLike  = [regex]'^[Ii]ssue\b'
-
-# Classify a single bracket-group inner text.
-#   'KNOWN'   -> sanctioned tag
-#   'UNKNOWN' -> tag-like but not sanctioned (flag as unknown vocab)
-#   'NOTTAG'  -> legitimate display-name prefix; ends the tag run
-function Classify-Tag([string]$inner) {
-    $t = $inner.Trim()
-    if ($KnownExactSet.ContainsKey($t))      { return 'KNOWN' }
-    if ($rxIssueKnown.IsMatch($t))           { return 'KNOWN' }
-    if ($rxNeedsAnimVariant.IsMatch($t))     { return 'KNOWN' }   # wt-only `needs animations -> <target>`
-    if ($rxLowerTag.IsMatch($t) -or $rxIssueLike.IsMatch($t)) { return 'UNKNOWN' }
-    return 'NOTTAG'
-}
-
-# Parse the LEADING RUN of bracket groups from a value string.
-# Returns @{ Known = @(inner...); Unknown = @(inner...) }.
-# Stops at the first NOT-TAG bracket group or the first non-bracket token.
-function Get-LeadingTagRun([string]$s) {
-    $known = @()
-    $unknown = @()
-    $i = 0
-    $n = $s.Length
-    while ($i -lt $n) {
-        # Skip spaces between (or before) tags. Mutex-cluster labels like
-        # "[untested]     (A) Foo" carry 4+ spaces before the "(A)"; that's fine
-        # — after the tag run we hit "(" and stop.
-        while ($i -lt $n -and $s[$i] -eq ' ') { $i++ }
-        if ($i -ge $n -or $s[$i] -ne '[') { break }
-        $close = $s.IndexOf(']', $i)
-        if ($close -lt 0) { break }
-        $inner = $s.Substring($i + 1, $close - $i - 1)
-        $cls = Classify-Tag $inner
-        if ($cls -eq 'KNOWN') {
-            $known += $inner.Trim()
-            $i = $close + 1
-        } elseif ($cls -eq 'UNKNOWN') {
-            $unknown += $inner.Trim()
-            $i = $close + 1
-        } else {
-            break   # NOT-TAG: display name begins here
-        }
-    }
-    return @{ Known = $known; Unknown = $unknown }
-}
-
-# ---- file collection ----
-function Get-ScanFiles {
-    param([string]$Root)
-    Get-ChildItem -Path $Root -Filter "*_localization.lua" -Recurse -File -ErrorAction SilentlyContinue `
-        | Where-Object {
-            $p = $_.FullName
-            $isUnderMod = $p -match "\\scripts\\mods\\"
-            $notExcluded = $p -notlike "*\_archive\*" `
-                       -and $p -notlike "*\bundleV2\*" `
-                       -and $p -notlike "*\.build\*" `
-                       -and $p -notlike "*\.temp\*" `
-                       -and $p -notlike "*\_tmp\*" `
-                       -and $p -notlike "*\.spawn_tweaks_ref\*" `
-                       -and $p -notlike "*\tweaker\*" `
-                       -and $p -notlike "*\_test_fixtures\*" `
-                       -and $p -notlike "*\sample_*\*" `
-                       -and $p -notlike "*\Vermintide-2-Source-Code\*" `
-                       -and $p -notlike "*\Darktide-Source-Code\*" `
-                       -and $p -notlike "*\_*_extract\*"
-            return $isUnderMod -and $notExcluded
-        }
-}
-
-# Mod dir = 3 levels up from <mod>/scripts/mods/<mod>/<mod>_localization.lua.
-function Get-ModDirName([string]$filePath) {
-    $dir = Split-Path $filePath -Parent
-    for ($i = 0; $i -lt 3; $i++) { $dir = Split-Path $dir -Parent }
-    return (Split-Path $dir -Leaf)
-}
-
-function Get-ModRoot([string]$filePath) {
-    $dir = Split-Path $filePath -Parent
-    for ($i = 0; $i -lt 3; $i++) { $dir = Split-Path $dir -Parent }
-    return $dir
-}
-
-# Extract literal group widget ids from the mod's data files. Widget tables in
-# this repo declare `setting_id` before `type`; allow four lines for aligned and
-# one-line forms, but stop on another type or a table close. Computed ids are
-# deliberately ignored rather than guessed.
-function Get-NavigationGroupIds([string]$modRoot) {
-    $ids = @{}
-    $dataFiles = @(Get-ChildItem -Path $modRoot -Filter "*data.lua" -Recurse -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notlike "*\bundleV2\*" -and $_.FullName -notlike "*\_archive\*" })
-    foreach ($file in $dataFiles) {
-        $lines = (Read-FileUtf8 $file.FullName) -split "`r?`n"
-        $pending = $null; $pendingLine = -99
-        for ($i = 0; $i -lt $lines.Count; $i++) {
-            $line = $lines[$i]
-            $sid = [regex]::Match($line, 'setting_id\s*=\s*"([^"]+)"')
-            if ($sid.Success) { $pending = $sid.Groups[1].Value; $pendingLine = $i }
-            if (-not $pending -or ($i - $pendingLine) -gt 4) { $pending = $null; continue }
-            $type = [regex]::Match($line, '\btype\s*=\s*"([^"]+)"')
-            if ($type.Success) {
-                if ($type.Groups[1].Value -eq 'group') { $ids[$pending] = $true }
-                $pending = $null
-            } elseif (($i - $pendingLine) -gt 0 -and $line -match '^\s*\}') {
-                $pending = $null
-            }
-        }
-    }
-    return $ids
-}
-
-# ---- per-text scan ----
-# Returns an array of finding rows: @{ Kind; Line; Key; Value; Detail }.
-# Kind in { leak, unknown, mutex, group, evidence }. $IsStable drives the leak check.
-function Scan-Text {
-    param([string]$Text, [bool]$IsStable, [hashtable]$NavigationGroupIds = @{}, [bool]$AuditEvidence = $false)
-    $rows = @()
-    $lines = $Text -split "`r?`n"
-    $pendingKey = $null   # multi-line table form: key seen, awaiting its `en =` line
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        $line = $lines[$i]
-        $key = $null; $val = $null
-
-        # 1) single-line forms: key = { en = "V" } / key = en("V") / loc.key = { en = "V" }
-        $m = $rxFormA.Match($line)
-        if (-not $m.Success) { $m = $rxFormB.Match($line) }
-        if (-not $m.Success) { $m = $rxFormC.Match($line) }
-        if ($m.Success) {
-            $key = $m.Groups[1].Value
-            $val = $m.Groups[2].Value
-            $pendingKey = $null
-        } else {
-            # 2) multi-line table open: `key = {` (or `loc.key = {`) -> remember key.
-            $ko = $rxKeyOpen.Match($line)
-            if (-not $ko.Success) { $ko = $rxLocKeyOpen.Match($line) }
-            if ($ko.Success) { $pendingKey = $ko.Groups[1].Value; continue }
-            # 3) bare `en = "V"` line inside a pending table -> bind to pending key.
-            $be = $rxBareEn.Match($line)
-            if ($be.Success -and $pendingKey) {
-                $key = $pendingKey
-                $val = $be.Groups[1].Value
-                $pendingKey = $null
-            } else {
-                continue
-            }
-        }
-
-        # Fast bail: only strings that start (after optional spaces) with '[' can
-        # carry a leading tag run.
-        if ($val -notmatch '^\s*\[') { continue }
-
-        $run = Get-LeadingTagRun $val
-        $known = $run.Known
-        $unknown = $run.Unknown
-
-        if ($known.Count -eq 0 -and $unknown.Count -eq 0) { continue }
-
-        # (a) stable leak — any sanctioned tag in a stable dir.
-        if ($IsStable -and $known.Count -gt 0) {
-            $rows += [pscustomobject]@{
-                Kind = 'leak'; Line = $i + 1; Key = $key; Value = $val
-                Detail = "sanctioned tag(s) [" + ($known -join '] [') + "] in a STABLE build (must be stripped at promotion)"
-            }
-        }
-
-        # (b) unknown vocab — tag-like leading group not in the sanctioned set.
-        if ($unknown.Count -gt 0) {
-            $rows += [pscustomobject]@{
-                Kind = 'unknown'; Line = $i + 1; Key = $key; Value = $val
-                Detail = "unknown tag vocabulary [" + ($unknown -join '] [') + "] (not one of the 7 sanctioned tags)"
-            }
-        }
-
-        # (c) mutex — 2+ of [crash]/[working]/[untested].
-        $mx = @($known | Where-Object { $MutexTags -ccontains $_ } | Select-Object -Unique)
-        if ($mx.Count -ge 2) {
-            $rows += [pscustomobject]@{
-                Kind = 'mutex'; Line = $i + 1; Key = $key; Value = $val
-                Detail = "mutually-exclusive tags combined: [" + ($mx -join '] [') + "]"
-            }
-        }
-
-        # (d) Pure group containers are navigation only and must not imply that
-        # their children share a single status.
-        if ($NavigationGroupIds.ContainsKey($key) -and ($known.Count -gt 0 -or $unknown.Count -gt 0)) {
-            $rows += [pscustomobject]@{
-                Kind = 'group'; Line = $i + 1; Key = $key; Value = $val
-                Detail = "status tag on pure type=group navigation container (strip every status tag)"
-            }
-        } elseif ($AuditEvidence -and ($known -ccontains 'working')) {
-            $rows += [pscustomobject]@{
-                Kind = 'evidence'; Line = $i + 1; Key = $key; Value = $val
-                Detail = "[working] requires direct user confirmation or a verified closed issue (#335 evidence review)"
-            }
-        }
-    }
-    return ,$rows
-}
-
-function Scan-File {
-    param([string]$Path, [bool]$IsStable, [hashtable]$NavigationGroupIds = @{}, [bool]$AuditEvidence = $false)
-    $text = Read-FileUtf8 $Path
-    return (Scan-Text -Text $text -IsStable $IsStable -NavigationGroupIds $NavigationGroupIds -AuditEvidence $AuditEvidence)
-}
-
-# ---- self-test ----
-function Invoke-SelfTest {
-    $fixDir = Join-Path $PSScriptRoot "_test_fixtures"
-    if (-not (Test-Path $fixDir)) {
-        Write-Host "[check_loc_tags -SelfTest] FAIL: $fixDir does not exist." -ForegroundColor Red
-        return 2
-    }
-
-    # Each case: fixture + IsStable + expected finding counts per Kind.
-    $cases = @(
-        @{ Path = "loc_tags_dev_ok.lua";     IsStable = $false; Leak = 0; Unknown = 0; Mutex = 0; Group = 1; Evidence = 3;
-           Desc = "dev build, all-valid tags + uppercase prefix + angle marker" },
-        @{ Path = "loc_tags_dev_ok.lua";     IsStable = $true;  Leak = 14; Unknown = 0; Mutex = 0; Group = 1; Evidence = 3;
-           Desc = "same file scanned as STABLE -> every sanctioned-tag entry (incl. wt-only + [Issue 321]) is a leak" },
-        @{ Path = "loc_tags_unknown.lua";    IsStable = $false; Leak = 0; Unknown = 4; Mutex = 2; Group = 0; Evidence = 1;
-           Desc = "dev build, unknown-vocab typos + mutex combos; uppercase prefixes ignored" }
+# Split stable streams are write-by-promotion-only. These exact legacy lines are
+# frozen debt until their already-clean development twins are promoted. Exact
+# text matching prevents the exception from admitting new prose in those files.
+$script:stableProseDebt = @{
+    'chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker_localization.lua' = @(
+        'inject_adventure_maps_tooltip = { en = "Experimental. Injected missions carry Chaos Wastes pickups and altars, and their tome and grimoire spots become Chests of Trials. Finale arenas, the Citadel of Eternity, and Belakor''s Temple are never replaced.\n\nHost-only. Requires game restart." },',
+        'ct_blessed_bots_tooltip = { en = "Gives every bot three Chaos Wastes survival boons in any game mode to keep them alive longer: they gain power and healing when all allies are down, gain speed and brief damage protection at low health, and make downed allies near them invulnerable. Host-only. Experimental." },'
     )
+    'crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded_localization.lua' = @(
+        'en = "Opens the Athanor (the Winds of Magic forge) as a modded weapon crafting menu. Always works in the Keep and the Chaos Wastes hub. Inside missions it is experimental and follows the ''Allow crafting bench in mission'' option in Tweaker: GUI''s In-Mission Menus, the same toggle the Standard Crafting Bench uses.",'
+    )
+    'general_tweaker/scripts/mods/general_tweaker/general_tweaker_localization.lua' = @(
+        'gt_bot_rescue_awaiting_tooltip = { en = "Vanilla bots ignore a teammate waiting to be rescued at a respawn point; this sends them to go free that ally. Works only when you are the host; experimental, so verify it in game." },'
+    )
+}
 
-    $allPass = $true
-    foreach ($c in $cases) {
-        $f = Join-Path $fixDir $c.Path
-        if (-not (Test-Path $f)) {
-            Write-Host "  X $($c.Path): missing fixture file" -ForegroundColor Red
-            $allPass = $false; continue
+function Test-StableProseDebt([string]$Relative, [string]$Line) {
+    $key = $Relative.Replace('\', '/')
+    $allowed = $script:stableProseDebt[$key]
+    return $null -ne $allowed -and $allowed -ccontains $Line.Trim()
+}
+
+function Remove-LifecycleDecoration([string]$Value) {
+    $value = [regex]::Replace($Value, $script:lifecycleSquare, '')
+    $value = [regex]::Replace($value, $script:lifecycleParen, '')
+    $value = $value.Replace('Inside missions it is experimental and follows', 'Inside missions it follows')
+    $value = $value.Replace('This is experimental: the weapon positions are rough, so restart the level after turning it on.', 'Weapon positions may be rough; restart the level after turning it on.')
+    $value = $value.Replace('; experimental, so verify it in game.', '.')
+    $value = $value.Replace('Experimental. ', '')
+    $value = $value.Replace(' Host-only. Experimental.', ' Host-only.')
+    return $value.Replace(' Experimental: may be inert in adventure (no Deus economy/mission flow to pay off).', ' Adventure limitation: may be inert without the Deus economy and mission flow.')
+}
+
+function Remove-LuaLineComment([string]$Line) {
+    $quote = [char]0
+    $escaped = $false
+    for ($i = 0; $i -lt $Line.Length - 1; $i++) {
+        $ch = $Line[$i]
+        if ($quote -ne [char]0) {
+            if ($escaped) { $escaped = $false; continue }
+            if ($ch -eq '\') { $escaped = $true; continue }
+            if ($ch -eq $quote) { $quote = [char]0 }
+            continue
         }
-        $groups = @{ nav_group = $true }
-        $rows = @(Scan-File -Path $f -IsStable $c.IsStable -NavigationGroupIds $groups -AuditEvidence $true)
-        $leak    = @($rows | Where-Object { $_.Kind -eq 'leak' }).Count
-        $unknown = @($rows | Where-Object { $_.Kind -eq 'unknown' }).Count
-        $mutex   = @($rows | Where-Object { $_.Kind -eq 'mutex' }).Count
-        $group    = @($rows | Where-Object { $_.Kind -eq 'group' }).Count
-        $evidence = @($rows | Where-Object { $_.Kind -eq 'evidence' }).Count
-        $ok = ($leak -eq $c.Leak) -and ($unknown -eq $c.Unknown) -and ($mutex -eq $c.Mutex) -and ($group -eq $c.Group) -and ($evidence -eq $c.Evidence)
-        $verdict = if ($ok) { "PASS" } else { "FAIL" }
-        $colour = if ($ok) { "Green" } else { "Red" }
-        Write-Host ("  [{0}] {1} (stable={2}) -- {3}" -f $verdict, $c.Path, $c.IsStable, $c.Desc) -ForegroundColor $colour
-        Write-Host ("        leak={0}/{1} unknown={2}/{3} mutex={4}/{5} group={6}/{7} evidence={8}/{9}" -f $leak, $c.Leak, $unknown, $c.Unknown, $mutex, $c.Mutex, $group, $c.Group, $evidence, $c.Evidence) -ForegroundColor DarkGray
-        if (-not $ok) { $allPass = $false }
+        if ($ch -eq '"' -or $ch -eq "'") { $quote = $ch; continue }
+        if ($ch -eq '-' -and $Line[$i + 1] -eq '-') { return $Line.Substring(0, $i) }
     }
+    return $Line
+}
 
-    Write-Host ""
-    if ($allPass) {
-        Write-Host "[check_loc_tags -SelfTest] OK -- all $($cases.Count) fixture verdicts match." -ForegroundColor Green
-        return 0
-    } else {
-        Write-Host "[check_loc_tags -SelfTest] FAILED -- regex / heuristic regression. Inspect fixtures + Scan-Text." -ForegroundColor Red
-        return 2
+function Get-ActiveLuaFiles {
+    foreach ($dir in Get-ChildItem $repoRoot -Directory) {
+        if ($dir.Name -eq 'tweaker' -or $dir.Name.StartsWith('_')) { continue }
+        $scripts = Join-Path $dir.FullName 'scripts\mods'
+        if (Test-Path $scripts) { Get-ChildItem $scripts -Recurse -File -Filter '*.lua' }
     }
 }
 
-# ---- main ----
-Write-Host "=== check_loc_tags ===" -ForegroundColor Cyan
+function Find-PlayerFacingLifecycleTags([System.IO.FileInfo[]]$Files) {
+    $findings = [System.Collections.Generic.List[object]]::new()
+    foreach ($file in $Files) {
+        $relative = [IO.Path]::GetRelativePath($repoRoot, $file.FullName)
+        $isLocalization = $file.Name -like '*_localization.lua'
+        $inLongComment = $false
+        $lineNumber = 0
+        foreach ($rawLine in [IO.File]::ReadLines($file.FullName)) {
+            $lineNumber++
+            $line = $rawLine
+            if ($inLongComment) {
+                $end = $line.IndexOf(']]')
+                if ($end -lt 0) { continue }
+                $line = $line.Substring($end + 2)
+                $inLongComment = $false
+            }
+            while ($line -match '--\[\[') {
+                $start = $line.IndexOf('--[[')
+                $end = $line.IndexOf(']]', $start + 4)
+                if ($end -lt 0) {
+                    $line = $line.Substring(0, $start)
+                    $inLongComment = $true
+                    break
+                }
+                $line = $line.Remove($start, $end + 2 - $start)
+            }
+            $line = Remove-LuaLineComment $line
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+
+            $isLocalizationConstruction = $isLocalization -or
+                $line -match '\ben\s*=' -or $line -match '\.en\s*=' -or
+                $line -match '\bloc\s*\[' -or $line -match 'locali[sz]e.*='
+            if ($isLocalizationConstruction -and
+                    ($line -match $script:lifecycleSquare -or $line -match $script:lifecycleParen)) {
+                $findings.Add([pscustomobject]@{
+                    File = $relative; Line = $lineNumber; Kind = 'player-facing lifecycle tag'; Text = $line.Trim()
+                })
+            }
+            if ($isLocalizationConstruction -and $line -match $script:lifecycleProse -and
+                    -not (Test-StableProseDebt $relative $line)) {
+                $findings.Add([pscustomobject]@{
+                    File = $relative; Line = $lineNumber; Kind = 'player-facing lifecycle prose'; Text = $line.Trim()
+                })
+            }
+            if ($line -match $script:machinery) {
+                $findings.Add([pscustomobject]@{
+                    File = $relative; Line = $lineNumber; Kind = 'status-decoration machinery'; Text = $line.Trim()
+                })
+            }
+        }
+    }
+    return $findings
+}
+
+function Get-EnglishValues([string]$Source) {
+    $values = [System.Collections.Generic.List[string]]::new()
+    $pattern = '(?s)\ben\s*(?:=|\()\s*"(?<value>(?:\\.|[^"\\])*)"'
+    foreach ($match in [regex]::Matches($Source, $pattern)) { $values.Add($match.Groups['value'].Value) }
+    return $values
+}
+
+function Get-LocalizationKeys([string]$Source) {
+    $keys = [System.Collections.Generic.List[string]]::new()
+    $pattern = '(?m)^\s*(?<key>[A-Za-z_][A-Za-z0-9_]*|loc\s*\[[^\]]+\])\s*=\s*(?:\{\s*)?en\s*(?:=|\()'
+    foreach ($match in [regex]::Matches($Source, $pattern)) { $keys.Add($match.Groups['key'].Value) }
+    return $keys
+}
+
+function Test-Migration([string]$BaseRef) {
+    & git -C $repoRoot rev-parse --verify $BaseRef 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "migration base '$BaseRef' is unavailable" }
+    $mergeBase = (& git -C $repoRoot merge-base HEAD $BaseRef).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $mergeBase) { throw "cannot resolve merge-base for '$BaseRef'" }
+    $paths = @(& git -C $repoRoot diff --name-only $mergeBase -- '*_localization.lua')
+    if ($LASTEXITCODE -ne 0) { throw 'git diff failed during migration proof' }
+    $errors = [System.Collections.Generic.List[string]]::new()
+    foreach ($relative in $paths) {
+        if (-not $relative -or $relative -like 'tweaker/*') { continue }
+        $currentPath = Join-Path $repoRoot $relative
+        if (-not (Test-Path $currentPath)) { $errors.Add("$relative was removed"); continue }
+        $baseSource = (& git -C $repoRoot show "${mergeBase}:$relative") -join "`n"
+        if ($LASTEXITCODE -ne 0) { $errors.Add("$relative missing at $mergeBase"); continue }
+        $currentSource = [IO.File]::ReadAllText($currentPath)
+        $baseValues = @(Get-EnglishValues $baseSource)
+        $currentValues = @(Get-EnglishValues $currentSource)
+        if ($baseValues.Count -ne $currentValues.Count) {
+            $errors.Add("$relative English-value count changed: $($baseValues.Count) -> $($currentValues.Count)")
+            continue
+        }
+        for ($i = 0; $i -lt $baseValues.Count; $i++) {
+            $expected = Remove-LifecycleDecoration $baseValues[$i]
+            if ($expected -cne $currentValues[$i]) {
+                $errors.Add("$relative English value #$($i + 1) changed beyond lifecycle removal")
+                break
+            }
+        }
+        $baseKeys = @(Get-LocalizationKeys $baseSource)
+        $currentKeys = @(Get-LocalizationKeys $currentSource)
+        if (($baseKeys -join "`0") -cne ($currentKeys -join "`0")) {
+            $errors.Add("$relative localization keys/order changed")
+        }
+    }
+    return $errors
+}
+
+function Assert([bool]$Condition, [string]$Message) {
+    if (-not $Condition) { throw "self-test failed: $Message" }
+}
 
 if ($SelfTest) {
-    exit (Invoke-SelfTest)
-}
-
-$allRows = @()
-$hardError = $false
-
-$files = @(Get-ScanFiles -Root $repoRoot)
-foreach ($f in $files) {
-    $rel = $f.FullName.Substring($repoRoot.Length).TrimStart('\', '/')
-    $modName = Get-ModDirName $f.FullName
-    $groupIds = Get-NavigationGroupIds (Get-ModRoot $f.FullName)
-    $isStable = $StableSet.ContainsKey($modName)
-    if (-not $Quiet) {
-        $tag = if ($isStable) { "STABLE" } else { "dev" }
-        Write-Host "Checking $modName ($tag) — $rel" -ForegroundColor DarkGray
-    }
     try {
-        $rows = @(Scan-File -Path $f.FullName -IsStable $isStable -NavigationGroupIds $groupIds -AuditEvidence $EvidenceAudit)
+        Assert ((Remove-LifecycleDecoration '[working] [Issue 12 & 14] Feature') -ceq 'Feature') 'square lifecycle run'
+        Assert ((Remove-LifecycleDecoration 'Feature (Experimental)') -ceq 'Feature') 'parenthesized lifecycle qualifier'
+        foreach ($status in @('Fixed', 'diag', 'crash', 'needs animations', 'needs offsets')) {
+            Assert ((Remove-LifecycleDecoration "Feature ($status)") -ceq 'Feature') "parenthesized $status qualifier"
+        }
+        Assert ((Remove-LifecycleDecoration 'Experimental. Feature') -ceq 'Feature') 'lifecycle prose migration'
+        foreach ($allowed in @('(CWV) Axe', '[Host Only] Reset', '[Client] Preview', '[WARNING] Unsafe', '[Big Rebalance] Axe', '[Events] Maps', '[EXP] 12')) {
+            Assert ((Remove-LifecycleDecoration $allowed) -ceq $allowed) "functional qualifier '$allowed'"
+        }
+        Assert ((Remove-LuaLineComment 'en = "A -- B" -- comment') -ceq 'en = "A -- B" ') 'Lua comment stripping'
+        Write-Host '[check_loc_tags] SELF-TEST OK' -ForegroundColor Green
+        exit 0
     } catch {
-        Write-Host ("  X {0}: {1}" -f $rel, $_) -ForegroundColor Red
-        $hardError = $true
-        continue
-    }
-    foreach ($r in $rows) {
-        $allRows += ($r | Add-Member -NotePropertyName Mod -NotePropertyValue $modName -PassThru `
-                          | Add-Member -NotePropertyName Rel -NotePropertyValue $rel -PassThru)
+        Write-Host "[check_loc_tags] SELF-TEST FAILED -- $_" -ForegroundColor Red
+        exit 2
     }
 }
 
-Write-Host ""
-if ($hardError) {
-    Write-Host "[check_loc_tags] ERROR -- one or more files failed to scan." -ForegroundColor Red
+try {
+    $findings = @(Find-PlayerFacingLifecycleTags @(Get-ActiveLuaFiles))
+    $migrationErrors = @()
+    if ($MigrationBase) { $migrationErrors = @(Test-Migration $MigrationBase) }
+} catch {
+    Write-Host "[check_loc_tags] ERROR -- $_" -ForegroundColor Red
     exit 2
 }
 
-if ($allRows.Count -eq 0) {
-    Write-Host "[check_loc_tags] OK -- no dev status-tag issues (no stable leaks, unknown vocab, or mutex combos)." -ForegroundColor Green
-    exit 0
+if ($findings.Count -gt 0 -or $migrationErrors.Count -gt 0) {
+    Write-Host "[check_loc_tags] FAILED -- player-facing lifecycle metadata is forbidden." -ForegroundColor Red
+    foreach ($finding in $findings) {
+        Write-Host ("  {0}:{1} [{2}] {3}" -f $finding.File, $finding.Line, $finding.Kind, $finding.Text) -ForegroundColor Yellow
+    }
+    foreach ($migrationError in $migrationErrors) { Write-Host "  migration: $migrationError" -ForegroundColor Yellow }
+    exit 2
 }
 
-$leaks    = @($allRows | Where-Object { $_.Kind -eq 'leak' })
-$unknowns = @($allRows | Where-Object { $_.Kind -eq 'unknown' })
-$mutexes  = @($allRows | Where-Object { $_.Kind -eq 'mutex' })
-$groups   = @($allRows | Where-Object { $_.Kind -eq 'group' })
-$evidence = @($allRows | Where-Object { $_.Kind -eq 'evidence' })
-
-Write-Host ("[check_loc_tags] WARNINGS: {0} (stable leak: {1}, unknown vocab: {2}, mutex: {3}, tagged group: {4}, evidence review: {5}) -- advisory, non-blocking." `
-    -f $allRows.Count, $leaks.Count, $unknowns.Count, $mutexes.Count, $groups.Count, $evidence.Count) -ForegroundColor Yellow
-
-if ($SummaryOnly) { exit 1 }
-
-if ($leaks.Count -gt 0) {
-    Write-Host "  -- STABLE LEAK (tags must be stripped at promotion; LOCALIZATION_STANDARD.md § 13.5):" -ForegroundColor Yellow
-    foreach ($r in $leaks) {
-        Write-Host ("  ! {0}:{1}  {2}  {3}" -f $r.Rel, $r.Line, $r.Key, $r.Detail) -ForegroundColor Yellow
-    }
+if (-not $Quiet) {
+    $suffix = if ($MigrationBase) { "; migration semantics match $MigrationBase" } else { '' }
+    Write-Host "[check_loc_tags] OK -- no player-facing lifecycle/status tags$suffix." -ForegroundColor Green
 }
-if ($unknowns.Count -gt 0) {
-    Write-Host "  -- UNKNOWN VOCAB (typo / invented tag; § 13.1 'No invented tags'):" -ForegroundColor Yellow
-    foreach ($r in $unknowns) {
-        Write-Host ("  ! {0}:{1}  {2}  {3}" -f $r.Rel, $r.Line, $r.Key, $r.Detail) -ForegroundColor Yellow
-    }
-}
-if ($mutexes.Count -gt 0) {
-    Write-Host "  -- MUTEX (crash/working/untested are mutually exclusive; § 13.1):" -ForegroundColor Yellow
-    foreach ($r in $mutexes) {
-        Write-Host ("  ! {0}:{1}  {2}  {3}" -f $r.Rel, $r.Line, $r.Key, $r.Detail) -ForegroundColor Yellow
-    }
-}
-if ($groups.Count -gt 0) {
-    Write-Host "  -- TAGGED NAVIGATION GROUP (pure type=group containers are untagged; § 13.3/13.8):" -ForegroundColor Yellow
-    foreach ($r in $groups) {
-        Write-Host ("  ! {0}:{1}  {2}  {3}" -f $r.Rel, $r.Line, $r.Key, $r.Detail) -ForegroundColor Yellow
-    }
-}
-if ($evidence.Count -gt 0) {
-    Write-Host "  -- WORKING EVIDENCE REVIEW (#335; candidate inventory, not an assertion of failure):" -ForegroundColor Yellow
-    foreach ($r in $evidence) {
-        Write-Host ("  ? {0}:{1}  {2}  {3}" -f $r.Rel, $r.Line, $r.Key, $r.Detail) -ForegroundColor Yellow
-    }
-}
-exit 1
+exit 0
