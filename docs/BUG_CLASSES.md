@@ -1067,6 +1067,12 @@ cosmetics_tweaker v0.9.66-dev (`_create_preview_widget` re-point + `_update_envi
 1. Grep the material name against `scripts/ui/views/ingame_ui_settings.lua` - the ingame `ui_renderer_function` / `ui_top_renderer_function` append whole material groups only inside `if is_in_inn then` (`:594-601` AreaSettings videos in ui_renderer_function, `:681-688` in ui_top_renderer_function; the same blocks add achievement atlas, inn singles, lock test, pose cosmetics, tutorial videos, DLC `ui_materials_in_inn`).
 2. If not there, grep DLC `*_ui_settings.lua` for `ui_materials_in_inn` (e.g. `store_ui_settings.lua:85`).
 3. Find the draw site (widget texture pass or `UIRenderer.draw_video`) and audit whether the widget can be skipped cleanly - every vanilla consumer of the widget field must nil-guard.
+4. Inventory every producer feeding the draw loop, not only
+   `create_ui_elements`. Scrollbar `list_widgets` and other local arrays may be
+   replaced after the static UI build. Issue #83's
+   `icon_block_arch_masked` widget was created by `_setup_weapon_stats` two
+   seconds before the fatal and never existed in the arrays covered by the
+   earlier static prune.
 
 ### Fix template
 Two layers, both idempotent (reference `_gut_gui_material_guard.lua`):
@@ -1084,8 +1090,16 @@ Two layers, both idempotent (reference `_gut_gui_material_guard.lua`):
 ```
 Layer 1 alone is not a fix (residency varies per mission - the pose atlas usually self-skips); layer 2 alone loses content the renderer could legally show (the store atlas IS resident and injects fine). Ship both.
 
+For dynamic list factories, put the guard immediately after the producer and
+prove each texture-bearing pass against the exact renderer that consumes that
+list. Disable only an unsafe pass; preserve its text/hotspot/safe-texture
+siblings. `UIWidget.init` clones content/style but retains the pass array, so
+mutation must clone-on-write or it can suppress sibling instances and later
+Keep widgets that share the definition. A broad `_draw`/`UIRenderer` `pcall` is
+too late and too wide.
+
 ### Reference fix
-gut_dev `_gut_gui_material_guard.lua` (pose atlas + store atlas + area videos in the one consolidated `UIRenderer.create` hook) + `_gut_mission_map.lua` video-widget skip guards, commit 1b2cea8 (v0.2.206-dev). Related but distinct: class 22 (shading-env VARIATION AV - env resident, variation name absent); `memory: reference_vt2_create_screen_gui_missing_material_crash` (create_screen_gui C-fatal at Gui CREATE time, pre-filter the material list).
+gut_dev `_gut_gui_material_guard.lua` (pose atlas + store atlas + area videos in the one consolidated `UIRenderer.create` hook) + `_gut_mission_map.lua` video-widget skip guards, commit 1b2cea8 (v0.2.206-dev). CIM `_cim_forge_widget_material_policy.lua` + `_setup_weapon_stats` producer hook (issue #83, v0.8.92-dev) is the dynamic-list reference. Related but distinct: class 22 (shading-env VARIATION AV - env resident, variation name absent); `memory: reference_vt2_create_screen_gui_missing_material_crash` (create_screen_gui C-fatal at Gui CREATE time, pre-filter the material list).
 
 ## 24. PlayerManager.remove_player fires on LEVEL TRANSITIONS, not just disconnects (peer-keyed caches wiped every map change)
 

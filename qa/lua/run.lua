@@ -136,6 +136,7 @@ local suites = {
     "test_cim_cwv_template_catalog",
     "test_cim_keep_forge_interaction",
     "test_cim_athanor_icon_policy",
+    "test_cim_mission_forge_widget_safety",
     "test_cim_salvage_autofill",
     "test_cim_synthetic_item_contract",
     "test_cim_trait_slot_policy",
