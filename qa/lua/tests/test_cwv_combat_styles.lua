@@ -38,6 +38,15 @@ return function(H, repo_root)
 		H.equal(policy.next_style("es_bastard_sword", "kerillian"), "bretonnian")
 		H.equal(policy.package("es_bastard_sword", "greatsword").template,
 			policy.BRETONNIAN_GREATSWORD_TEMPLATE)
+		H.equal(policy.style("wh_2h_sword"), "greatsword")
+		H.equal(policy.next_style("wh_2h_sword", "greatsword"), "kerillian")
+		H.equal(policy.next_style("wh_2h_sword", "kerillian"), "bretonnian")
+		H.equal(policy.next_style("wh_2h_sword", "bretonnian"), "greatsword")
+		local saltz_bret = policy.package("wh_2h_sword", "bretonnian")
+		H.equal(saltz_bret.template, policy.SALTZ_BRETONNIAN_TEMPLATE)
+		H.equal(saltz_bret.remap_key, "bretonnian_greatsword_to_saltz")
+		H.equal(policy.package("wh_2h_sword", "kerillian").remap_key,
+			"kerillian_greatsword_to_saltz")
 		H.equal(policy.style("es_2h_hammer"), "kruber")
 		H.equal(policy.next_style("es_2h_hammer", "kruber"), "warrior_priest")
 		H.equal(policy.next_style("wh_2h_hammer", "warrior_priest"), "kruber")
@@ -60,6 +69,34 @@ return function(H, repo_root)
 		H.equal(policy.moveset_indicator("es_handgun", "greatsword"), nil)
 	end)
 
+	H.test("CWV Saltzpyre Greatsword member drives equipment-row eligibility", function()
+		local runtime = policy.install({
+			get = function() return nil end,
+			set = function() end,
+		}, {})
+		local item = { name = "wh_2h_sword", backend_id = "saltz_greatsword_uuid" }
+		local row = runtime:describe(item)
+		H.truthy(row)
+		H.equal(row.family_id, "greatsword")
+		H.equal(row.style_id, "greatsword")
+		local grid = {
+			element = { passes = {} },
+			content = { rows = 1, columns = 1, item_1_1 = item },
+			style = {
+				customize_hotspot_1_1 = { size = { 58, 58 }, offset = { 100, 210, 30 } },
+				customize_item_hover_1_1 = { size = { 58, 58 }, offset = { 100, 210, 30 } },
+			},
+		}
+		H.equal(policy.decorate_console_grid(grid, runtime), true)
+		H.equal(policy.refresh_console_row_layout(grid, runtime), 1)
+		H.equal(grid.content.cwv_style_hotspot_1_1.cwv_visible, true)
+		grid.content.cwv_style_hotspot_1_1.parent = grid.content
+		H.equal(grid.element.passes[1].content_check_function(
+			grid.content.cwv_style_hotspot_1_1), true)
+		H.equal(grid.content.cwv_style_hotspot_1_1.cwv_next_style_label,
+			"Switch to: Kerillian Greatsword Combat Style")
+	end)
+
 	H.test("CWV reciprocal style catalogue is complete and unproven families fail closed", function()
 		local valid, err = policy.validate_catalogue()
 		H.equal(valid, true, err)
@@ -73,6 +110,10 @@ return function(H, repo_root)
 			"attack_swing_stab")
 		H.equal(policy.remap_event("we_1h_spears_shield", "empire", "we_maidenguard", "attack_swing_up"),
 			"attack_swing_stab_lh")
+		H.equal(policy.remap_event("wh_2h_sword", "kerillian", "wh_captain", "attack_swing_charge"),
+			"attack_swing_charge_left_diagonal")
+		H.equal(policy.remap_event("wh_2h_sword", "bretonnian", "wh_zealot", "attack_swing_up_left"),
+			"attack_swing_left_diagonal")
 		for _, item_key in ipairs({ "dr_1h_axe", "wh_1h_axe", "we_1h_axe",
 				"we_2h_axe", "dr_2h_axe", "es_1h_sword", "we_1h_sword", "we_spear" }) do
 			H.equal(policy.member(item_key), nil)
@@ -367,9 +408,30 @@ return function(H, repo_root)
 		H.equal(calls.elf_light.modifiers.stagger, 1.25)
 		H.equal(calls.elf_light.modifiers.cleave, 1.25)
 		H.equal(template.wield_anim_career_3p.es_mercenary, "to_bastard_sword")
+		H.equal(template.wield_anim_career_3p.wh_captain, "to_2h_sword")
+		H.equal(template.wield_anim_career_3p.wh_bountyhunter, "to_2h_sword")
+		H.equal(template.wield_anim_career_3p.wh_zealot, "to_2h_sword")
 		H.equal(donor.actions.action_one.light.anim_time_scale, 1.2)
 		H.equal(donor.actions.action_one.light.damage_profile, "elf_light")
 		H.equal(donor.wield_anim_career_3p, nil)
+	end)
+
+	H.test("CWV Saltzpyre Bretonnian style clones donor and owns receiver wield routes", function()
+		local donor = {
+			wield_anim = "to_bastard_sword",
+			actions = { action_one = { light = { anim_event = "attack_swing_up_left" } } },
+		}
+		local template, err = policy.build_saltz_bretonnian_template({
+			bastard_sword_template = donor,
+		}, clone)
+		H.truthy(template, err)
+		H.equal(template.wield_anim, "to_bastard_sword")
+		H.equal(template.wield_anim_career_3p.wh_captain, "to_2h_sword")
+		H.equal(template.wield_anim_career_3p.wh_bountyhunter, "to_2h_sword")
+		H.equal(template.wield_anim_career_3p.wh_zealot, "to_2h_sword")
+		H.equal(template.wield_anim_career_3p.wh_priest, nil)
+		H.equal(donor.wield_anim_career_3p, nil)
+		H.equal(template.actions.action_one.light.anim_event, "attack_swing_up_left")
 	end)
 
 	H.test("CWV Bretonnian Greatsword style tunes power and preserves native reach", function()

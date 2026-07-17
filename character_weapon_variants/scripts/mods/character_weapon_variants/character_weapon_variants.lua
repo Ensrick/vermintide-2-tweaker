@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.435-dev"
+local MOD_VERSION = "0.1.436-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -11648,6 +11648,17 @@ do
 		mod:warning("[cwv:620] Kerillian Greatsword style unavailable: %s", tostring(err))
 	end
 
+	local saltz_bretonnian, saltz_bretonnian_err =
+		policy.build_saltz_bretonnian_template(Weapons,
+			function(value) return table.clone(value, true) end)
+	if saltz_bretonnian then
+		Weapons[policy.SALTZ_BRETONNIAN_TEMPLATE] = saltz_bretonnian
+		mod:info("[cwv:645] registered Saltzpyre Greatsword receiver styles (Kerillian/Bretonnian)")
+	else
+		mod:warning("[cwv:645] Saltzpyre Bretonnian Greatsword style unavailable: %s",
+			tostring(saltz_bretonnian_err))
+	end
+
 	local spear_shield_templates, spear_shield_err = policy.build_spear_shield_templates(Weapons,
 		function(value) return table.clone(value, true) end)
 	if spear_shield_templates then
@@ -14376,6 +14387,7 @@ _rt_register("issue620_per_instance_combat_styles", function()
 	end
 	local expected = {
 		es_2h_sword = { "greatsword", "kerillian", "bretonnian" },
+		wh_2h_sword = { "greatsword", "kerillian", "bretonnian" },
 		es_bastard_sword = { "bretonnian", "greatsword", "kerillian" },
 		cwv_es_longsword = { "longsword", "bretonnian", "kerillian", "greatsword" },
 		es_2h_hammer = { "kruber", "warrior_priest" },
@@ -14397,6 +14409,22 @@ _rt_register("issue620_per_instance_combat_styles", function()
 	end
 	if type(rawget(Weapons, policy.BRETONNIAN_GREATSWORD_TEMPLATE)) ~= "table" then
 		return "Bretonnian receiver Greatsword Combat Style template is not registered"
+	end
+	if type(rawget(Weapons, policy.SALTZ_BRETONNIAN_TEMPLATE)) ~= "table" then
+		return "Saltzpyre Bretonnian Greatsword Combat Style template is not registered"
+	end
+	local saltz_bret = policy.package("wh_2h_sword", "bretonnian")
+	local saltz_elf = policy.package("wh_2h_sword", "kerillian")
+	if not saltz_bret or saltz_bret.template ~= policy.SALTZ_BRETONNIAN_TEMPLATE
+			or saltz_bret.remap_key ~= "bretonnian_greatsword_to_saltz"
+			or not saltz_elf or saltz_elf.remap_key ~= "kerillian_greatsword_to_saltz" then
+		return "Saltzpyre Greatsword receiver package drifted"
+	end
+	if policy.remap_event("wh_2h_sword", "kerillian", "wh_captain", "attack_swing_charge")
+			~= "attack_swing_charge_left_diagonal"
+			or policy.remap_event("wh_2h_sword", "bretonnian", "wh_zealot", "attack_swing_up_left")
+			~= "attack_swing_left_diagonal" then
+		return "Saltzpyre Greatsword receiver animation remap drifted"
 	end
 	if runtime:moveset_indicator("es_bastard_sword", "greatsword") ~= "Moveset 2 / 3" then
 		return "Bretonnian Longsword moveset indicator drifted"

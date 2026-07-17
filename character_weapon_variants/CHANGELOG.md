@@ -1,5 +1,29 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.436-dev - 2026-07-17 - #645 Saltzpyre Greatsword Combat Styles [verify-fix-coop]
+
+- Added Saltzpyre's native `wh_2h_sword` to the canonical Greatsword Combat
+  Style family, so the existing equipment-row style control and hotkey now
+  expose Greatsword, Kerillian, and Bretonnian styles for exact Saltzpyre
+  Greatsword instances.
+- Added receiver-specific Kerillian and Bretonnian packages for Witch Hunter
+  Captain, Bounty Hunter, and Zealot. They reuse Weapon Tweaker's proven
+  Saltzpyre wield routes and action-event translations through CWV's bounded
+  owner/peer animation funnel; Warrior Priest remains deliberately excluded.
+- Added offline catalogue, cycle, donor-clone, and event-remap coverage plus
+  runtime assertions that fail if the Saltzpyre member, custom template, or
+  receiver mappings drift.
+
+**Verification (two players; confirm `[cwv:LOAD] v0.1.436-dev` first):**
+
+1. Equip a native Greatsword on Witch Hunter Captain, Bounty Hunter, or Zealot.
+   The equipment row must show the style button and cycle Greatsword ->
+   Kerillian -> Bretonnian -> Greatsword once per click.
+2. Exercise wield, light, heavy, charge, block, and weapon swap in both foreign
+   styles. Owner third person and the other player's remote view must agree.
+3. Restart and hot join, then confirm the exact instance retains its style and
+   `/cwv_regression_test` passes `issue620_per_instance_combat_styles`.
+
 ## 0.1.435-dev - 2026-07-16 - #423 damage-profile wire gate fails closed [verify-fix-coop]
 
 - Hardened the existing client-to-host `rpc_attack_hit` gate so negative or

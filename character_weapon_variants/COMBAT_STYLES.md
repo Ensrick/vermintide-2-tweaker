@@ -9,7 +9,7 @@ properties, traits, and CWV identity do not change.
 
 | Family | Supported items | Cycle (rotated to native style first) |
 |---|---|---|
-| Greatsword | Native Empire Greatsword and Bretonnian Longsword; migrated Imperial/Black Guard UUIDs | Empire: Greatsword, Kerillian, Bretonnian. Bretonnian: Bretonnian, Greatsword, Kerillian. |
+| Greatsword | Native Kruber/Saltzpyre Greatswords and Bretonnian Longsword; migrated Imperial/Black Guard UUIDs | Empire/Saltzpyre: Greatsword, Kerillian, Bretonnian. Bretonnian: Bretonnian, Greatsword, Kerillian. |
 | Greathammer | Kruber Greathammer, Warrior Priest Greathammer, CWV Sigmarite Greathammer | Kruber, Warrior Priest |
 | Tuskgor Spear | Native Kruber Tuskgor Spear; migrated legacy Infantry Spear UUIDs | Hunter, Infantry |
 | Spear and Shield | Native Kruber Chaos Wastes Spear and Shield and Kerillian Spear and Shield | Kruber, Elven |
@@ -18,6 +18,15 @@ Kerillian Greatsword style deep-clones the donor template and every referenced
 damage profile before applying its package: 15% slower attack actions, 25%
 more stagger, 25% more cleave, and 7.5% more damage. No donor or shared power
 table is mutated.
+
+Saltzpyre's native Greatsword uses that same canonical three-style family. Its
+Kerillian and Bretonnian receiver descriptors reuse the source-backed wield
+and action-event translations already proven by Weapon Tweaker for Witch
+Hunter Captain, Bounty Hunter, and Zealot. Warrior Priest remains excluded
+because Greatsword is not an authored availability for that career. The
+translations flow through CWV's one bounded network animation funnel, so
+owner third person and remote husks receive the same event without per-frame
+state traffic.
 
 On Bretonnian Longsword, the Kruber Greatsword style uses a receiver-specific
 clone with unchanged damage and attack timing, 25% more stagger, and 25% less

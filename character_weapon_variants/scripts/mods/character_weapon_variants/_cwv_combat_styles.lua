@@ -13,6 +13,7 @@ M.MAX_TOKEN = 96
 M.INPUT_DESCRIPTION_CAPACITY = 7
 M.KERILLIAN_TEMPLATE = "cwv_combat_style_kerillian_greatsword"
 M.BRETONNIAN_GREATSWORD_TEMPLATE = "cwv_combat_style_bretonnian_greatsword"
+M.SALTZ_BRETONNIAN_TEMPLATE = "cwv_combat_style_saltz_bretonnian_greatsword"
 M.EMPIRE_SPEAR_SHIELD_TEMPLATE = "cwv_combat_style_empire_spear_shield"
 M.ELVEN_SPEAR_SHIELD_TEMPLATE = "cwv_combat_style_elven_spear_shield"
 M.DIAGNOSTIC_EVENT_CAP = 32
@@ -38,6 +39,33 @@ M.CONSOLE_STYLE_BUTTON = {
 -- reference these keys from their per-member receiver descriptors; the cycle
 -- controller never guesses from character prefixes or template names.
 M.REMAPS = {
+	kerillian_greatsword_to_saltz = {
+		events = {
+			attack_swing_charge = "attack_swing_charge_left_diagonal",
+			attack_swing_right = "attack_swing_right_diagonal",
+			attack_swing_left = "attack_swing_left_diagonal",
+			attack_swing_heavy = "attack_swing_heavy_left_diagonal",
+			attack_swing_heavy_right = "attack_swing_heavy_right_diagonal",
+		},
+	},
+	bretonnian_greatsword_to_saltz = {
+		events = {
+			attack_push = "attack_push",
+			attack_swing_charge_down_pose = "attack_swing_charge_diagonal_right",
+			attack_swing_charge_left_diagonal = "attack_swing_charge_diagonal_left",
+			attack_swing_charge_left_diagonal_pose = "attack_swing_charge_diagonal_left",
+			attack_swing_charge_right_diagonal_pose = "attack_swing_charge_diagonal_right",
+			attack_swing_down = "attack_swing_down_right",
+			attack_swing_down_right = "attack_swing_down_right",
+			attack_swing_heavy_down = "attack_swing_down_right",
+			attack_swing_heavy_left_diagonal = "attack_swing_heavy_left_diagonal",
+			attack_swing_heavy_right_diagonal = "attack_swing_heavy_right_diagonal",
+			attack_swing_right = "attack_swing_right_diagonal",
+			attack_swing_up_left = "attack_swing_left_diagonal",
+			parry_pose = "parry_pose",
+			swap_charge_stance = "attack_swing_charge_diagonal",
+		},
+	},
 	spear_shield_to_deus = {
 		events = { attack_swing_stab_lh = "attack_swing_stab" },
 	},
@@ -130,6 +158,10 @@ M.FAMILIES = {
 					es_2h_sword = {
 						presentation = { transform_key = "greatsword_bretonnian" },
 					},
+					wh_2h_sword = {
+						template = M.SALTZ_BRETONNIAN_TEMPLATE,
+						remap_key = "bretonnian_greatsword_to_saltz",
+					},
 				},
 			},
 			kerillian = {
@@ -138,6 +170,9 @@ M.FAMILIES = {
 				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword_we",
 				modifiers = { attack_speed = M.KERILLIAN_SPEED_MULT, damage = M.KERILLIAN_DAMAGE_MULT,
 					stagger = M.KERILLIAN_STAGGER_MULT, cleave = M.KERILLIAN_CLEAVE_MULT },
+				receivers = {
+					wh_2h_sword = { remap_key = "kerillian_greatsword_to_saltz" },
+				},
 			},
 		},
 		members = {
@@ -146,6 +181,7 @@ M.FAMILIES = {
 			-- action graph and therefore is not a second public moveset choice.
 			-- Keep Bretonnian third, matching the authored equipment ordinal.
 			es_2h_sword = { default = "greatsword", order = { "greatsword", "kerillian", "bretonnian" } },
+			wh_2h_sword = { default = "greatsword", order = { "greatsword", "kerillian", "bretonnian" } },
 			es_bastard_sword = { default = "bretonnian", order = { "bretonnian", "greatsword", "kerillian" } },
 			cwv_es_longsword = { default = "longsword", order = { "longsword", "bretonnian", "kerillian", "greatsword" } },
 			cwv_es_longsword_blackguard = { default = "longsword", order = { "longsword", "bretonnian", "kerillian", "greatsword" } },
@@ -763,6 +799,22 @@ function M.build_imperial_template(weapons, clone, clone_damage_profile)
 	})
 end
 
+-- Saltzpyre can own the native Greatsword through Weapon Tweaker, but the
+-- Bretonnian donor's wield event is not present on his standard career state
+-- machines. Clone the donor and select Saltzpyre's proven native Greatsword
+-- wield route; action-event translation remains descriptor-owned above.
+function M.build_saltz_bretonnian_template(weapons, clone)
+	local donor = weapons and weapons.bastard_sword_template
+	if type(donor) ~= "table" then return nil, "Bretonnian Longsword template missing" end
+	if type(clone) ~= "function" then return nil, "template clone dependency missing" end
+	local template = clone(donor)
+	template.wield_anim_career_3p = template.wield_anim_career_3p or {}
+	for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+		template.wield_anim_career_3p[career] = "to_2h_sword"
+	end
+	return template
+end
+
 function M.build_kerillian_template(weapons, clone, clone_damage_profile)
 	local donor = weapons and weapons.two_handed_swords_wood_elf_template
 	if type(donor) ~= "table" then return nil, "Kerillian Greatsword template missing" end
@@ -772,11 +824,14 @@ function M.build_kerillian_template(weapons, clone, clone_damage_profile)
 			cleave = M.KERILLIAN_CLEAVE_MULT })
 	if not template then return nil, err end
 	-- The donor's first-person state machine remains exact. Only the 3P wield
-	-- event is receiver-localized for Kruber; action redirects remain available
+	-- event is receiver-localized for Kruber and Saltzpyre; action redirects remain available
 	-- to CWV/WT's existing network-bound animation funnel.
 	template.wield_anim_career_3p = template.wield_anim_career_3p or {}
 	for _, career in ipairs({ "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }) do
 		template.wield_anim_career_3p[career] = "to_bastard_sword"
+	end
+	for _, career in ipairs({ "wh_captain", "wh_bountyhunter", "wh_zealot" }) do
+		template.wield_anim_career_3p[career] = "to_2h_sword"
 	end
 	return template
 end
