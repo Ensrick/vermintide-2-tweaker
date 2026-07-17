@@ -155,15 +155,16 @@
 | Negative control | Fire charged bolts before and after enabling the option. Their overcharge, damage, projectile behavior, and cadence remain vanilla. |
 | Authority | Owner-local scalar consumed at projectile fire; no RPC, custom lookup, or co-op verification required. |
 
-## #316 - Kruber Longbow zoom on non-Huntsman careers
+## #316 - Kruber Longbow draw animation on non-Huntsman careers
 
 | Field | Check |
 |---|---|
-| Diagnostic version | WT 0.12.233-dev (not deployed; current behavior candidate dates to 0.12.192-dev) |
+| Fixed version | WT 0.12.264-beta; the bounded owner-camera probe remains available in the friends-only development stream. |
 | Automated | `/wt_regression_test`: `issue316_kruber_longbow_zoom_contract` locks the vanilla `ActionAim` fingerprint, Mercenary/Foot Knight/Grail Knight native `draw_bow` handling, Huntsman exclusion, and Saltzpyre's crossbow presentation remap. The bounded lifecycle probe is development-stream-only. |
-| Solo visual | Equip Kruber's Longbow on Mercenary, Foot Knight, and Grail Knight. Hold aim for at least one second and confirm both first-person FOV zoom and the third-person aim pose. Huntsman is the native control. |
-| Log evidence | Public beta emits no issue-specific live probe rows. Use the friends-only development stream when bounded `[wt:316]` lifecycle evidence is required. |
-| Authority | Owner-only diagnostic; no RPC, remote-husk observation, or co-op verification is required. |
+| Co-op visual | With matching WT builds, equip Kruber's Longbow on Mercenary, Foot Knight, and Grail Knight. For each career, a second player observes partial draw, full draw/hold, release, return, weapon swap, and mission transition; reverse roles. Huntsman is the unchanged native control. |
+| Negative controls | First-person aim and camera zoom remain unchanged. Saltzpyre's non-Priest careers still use the Crossbow model and `to_zoom` presentation substitution. |
+| Log evidence | Public beta emits no issue-specific live probe rows. In the development stream, `[wt:316] ... remap=native_draw_bow` proves policy selection and camera rows deliberately report `visible_draw=unverified`; neither is accepted as proof that the owner or remote-husk clip visibly played. |
+| Authority | The fix uses WT's existing per-unit 3P event funnel for owner bodies and remote husks and adds no custom RPC. Visible remote playback still requires two-player verification, so `verify-fix-coop` is the sole verification label. |
 
 ## #585 - Moonfire energy bar clears after ranged replacement
 
