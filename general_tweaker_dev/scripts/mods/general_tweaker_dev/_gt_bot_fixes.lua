@@ -1,5 +1,6 @@
 local mod = get_mod("gt_dev")
 mod._gt_bot_heal_policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_heal_policy")
+mod._gt_bot_utility_policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_utility_policy")
 
 -- ============================================================================
 -- Bot Options -- AI teammate behavior fixes
@@ -32,6 +33,93 @@ local Managers = Managers
 local ALIVE = ALIVE
 local Vector3Box = Vector3Box
 local Breeds = Breeds
+
+-- ============================================================================
+-- UNGATED CRASH GUARD: malformed utility input must never reach arithmetic
+-- ============================================================================
+-- Vanilla Utility.get_action_utility subtracts every non-condition blackboard
+-- input without a nil/type guard (utility.lua:29-41). AISystem initializes the
+-- player-bot follow input `ally_distance` to math.huge (ai_system.lua:543-552),
+-- and vanilla's ally picker preserves that sentinel when it finds no target
+-- (player_bot_base.lua:843-1008). GT's ally-selection wrapper can legitimately
+-- suppress a target, so it must preserve the same distance sentinel below.
+--
+-- This hook is owned here, not by Creature Spawner: it protects the host bot-AI
+-- seam and is unrelated to spawning a custom breed. Valid input delegates to
+-- vanilla unchanged. The exact player-bot follow input is repaired to vanilla's
+-- math.huge sentinel; every other missing/non-numeric utility input returns zero
+-- utility for that action instead of inventing a generic +/-infinity value.
+local _gt_utility_guard_seen = {}
+local _gt_player_follow_considerations = UtilityConsiderations
+    and UtilityConsiderations.player_bot_default_follow
+
+if Utility then
+    mod:hook(Utility, "get_action_utility", function(func, breed_action, action_name, blackboard, ...)
+        local ready, detail = mod._gt_bot_utility_policy.prepare_utility_inputs(
+            breed_action,
+            action_name,
+            blackboard,
+            _gt_player_follow_considerations
+        )
+
+        if not ready then
+            local key = tostring(action_name) .. "|" .. tostring(detail)
+            if not _gt_utility_guard_seen[key] then
+                _gt_utility_guard_seen[key] = true
+                printf("[gt:utility-guard] action=%s failed closed: %s",
+                    tostring(action_name), tostring(detail))
+            end
+            return 0
+        end
+
+        if detail == "ally_distance" and not _gt_utility_guard_seen.ally_distance then
+            _gt_utility_guard_seen.ally_distance = true
+            printf("[gt:utility-guard] repaired player-bot follow ally_distance to vanilla math.huge sentinel")
+        end
+
+        return func(breed_action, action_name, blackboard, ...)
+    end)
+
+    printf("[gt:utility-guard] installed source-backed numeric-input guard")
+end
+
+if type(mod._gt_rt_register) == "function" then
+    mod._gt_rt_register("gt_bot_utility_nil_guard", function()
+        local follow = {
+            distance_to_target = {
+                blackboard_input = "ally_distance",
+                max_value = 40,
+                spline = { 0, 0.1, 1, 1 },
+            },
+        }
+        local breed_action = { action_weight = 1, considerations = follow }
+        local blackboard = { utility_actions = { follow = {} } }
+        local ready = mod._gt_bot_utility_policy.prepare_utility_inputs(
+            breed_action, "follow", blackboard, follow)
+
+        if not ready or blackboard.ally_distance ~= math.huge then
+            return "missing ally_distance was not restored to the vanilla sentinel"
+        end
+
+        local unrelated = {
+            action_weight = 1,
+            considerations = {
+                range = {
+                    blackboard_input = "unknown_range",
+                    max_value = 10,
+                    spline = { 0, 0, 1, 1 },
+                },
+            },
+        }
+        local unrelated_ready = mod._gt_bot_utility_policy.prepare_utility_inputs(
+            unrelated, "attack", { utility_actions = { attack = {} } }, follow)
+        if unrelated_ready then
+            return "unknown numeric input did not fail closed"
+        end
+
+        return true
+    end)
+end
 
 -- Source-pattern marker for the FIX 1 give-half completion (v0.2.138-dev). The
 -- /gt_regression_test "necro_potion_give_half_targeted_promote" check asserts
@@ -800,6 +888,10 @@ mod.GT_BOT300_RESCUE_RANGE_POLICY_MARKER_v0_2_221 = true
 
 mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit, blackboard, breed, t)
     local ally, real_dist, need_type, look_at = func(self, unit, blackboard, breed, t)
+    -- Vanilla returns math.huge when no ally wins. Preserve that producer
+    -- contract across every GT branch so _update_target_ally never writes nil
+    -- into the numeric `blackboard.ally_distance` utility input.
+    real_dist = mod._gt_bot_utility_policy.normalize_ally_distance(real_dist)
 
     -- Continue if the kept-separate awaiting-rescue toggle is on (FIX 3) OR the
     -- FIX 3b revive/rescue-priority feature is on (master + its
@@ -822,7 +914,7 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         -- drop the pick so _update_target_ally clears target_ally_need_type
         -- (player_bot_base.lua:721-723) and the bot re-evaluates teleport.
         if mod._gt492_should_suppress_pick and mod._gt492_should_suppress_pick(blackboard, ally) then
-            return nil, nil, nil, nil
+            return nil, math.huge, nil, nil
         end
         return ally, real_dist, need_type, look_at
     end
@@ -832,7 +924,7 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
     -- then let the policy scan below choose the best eligible HUMAN. The native
     -- can_heal_player condition and interact action still receive the final pick.
     if _gt_heal_allies_active and need_type == "in_need_of_heal" then
-        ally, real_dist, need_type, look_at = nil, nil, nil, nil
+        ally, real_dist, need_type, look_at = nil, math.huge, nil, nil
     end
 
     local side_manager = Managers.state.side

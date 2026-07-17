@@ -1,5 +1,16 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.241-dev (2026-07-16) -- bot follow utility crash guard [verify-fix]
+
+- Fixed the host crash in `Utility.get_action_utility` when a GT ally-selection branch left the player-bot `ally_distance` input nil and the native follow consideration immediately subtracted it.
+- Preserved the source-backed vanilla contract at the producer: every no-target result from GT's `_select_ally_by_utility` wrapper now carries `math.huge`, matching `AISystem.set_default_blackboard_values` and vanilla's selector sentinel.
+- Removed Creature Spawner's unrelated global Utility hook. Its attempted repair only rebound a local table and then called vanilla with the original nil state. Bot fixes now own one consolidated utility guard: the exact player follow input is restored to vanilla's sentinel, while any unrelated missing/non-numeric input gives that malformed action zero utility without feeding invented infinity values into unknown behavior.
+- Added engine-free tests for the follow repair, generic fail-closed path, valid condition/number behavior, and singleton hook ownership, plus `/gt_regression_test` check `gt_bot_utility_nil_guard`.
+
+### Solo verify
+
+Host a mission with bots and repeat the prior bot-follow/heal/rescue sequence. The mission must continue without `Utility.get_action_utility` reporting arithmetic on nil. Run `/gt_regression_test` and confirm `gt_bot_utility_nil_guard` passes; a recovered race produces at most one `[gt:utility-guard] repaired player-bot follow ally_distance` log row.
+
 ## v0.2.240-dev (2026-07-15) -- #600 aimed Wait order [verify-fix]
 
 - Corrected **Wait** on the bot command wheel to preserve the wheel's own raycast world position and move the selected bot there. Adventure mode deliberately disables world-marker pings, so the previous post-chat lookup had no position and fell back to the player's feet.

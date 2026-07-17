@@ -31,7 +31,7 @@ local mod = get_mod("gt_dev")
 --   LocomotionUtils.pos_on_mesh,
 --   GwNavQueries.inside_position_from_outside_position, Unit.create_actor
 --     (DISTINCT from Unit.get_data in _gt_hacks.lua — keyed per-method),
---   BTSkulkAroundAction.get_new_skulk_goal, Utility.get_action_utility,
+--   BTSkulkAroundAction.get_new_skulk_goal,
 --   BuffSystem.add_buff, World.spawn_unit, EnemyPackageLoader.request_breed.
 -- All hooks are table-form (mod:hook(ClassSymbol, ...)) — the classes are
 -- globals resolved at module load (after main), so they bind correctly.
@@ -1073,36 +1073,6 @@ if BTSkulkAroundAction then
         local player = Managers.player:local_player()
         local player_unit = player and player.player_unit
         return player_unit and Unit.local_position(player_unit, 0) or Vector3(0, 0, 0)
-    end)
-end
-
--- Instantiate blackboard utility-action data when missing — avoids the
--- "missing blackboard value" crash hammering when utility AI selects an
--- action whose considerations table hasn't been populated yet.
-if Utility then
-    mod:hook(Utility, "get_action_utility", function(func, breed_action, action_name, blackboard, ...)
-        local blackboard_action_data = blackboard.utility_actions and blackboard.utility_actions[action_name]
-        local considerations = breed_action.considerations
-        if blackboard_action_data and considerations then
-            for _, consideration in pairs(considerations) do
-                if type(consideration) == "table" then
-                    local input = consideration.blackboard_input
-                    local blackboard_value = blackboard_action_data[input] or blackboard[input]
-                    if not blackboard_value then
-                        blackboard_action_data = {
-                            last_time = -math.huge,
-                            time_since_last = math.huge,
-                            last_done_time = -math.huge,
-                            time_since_last_done = math.huge,
-                        }
-                        if not blackboard_action_data[input] then
-                            blackboard_action_data[input] = -math.huge
-                        end
-                    end
-                end
-            end
-        end
-        return func(breed_action, action_name, blackboard, ...)
     end)
 end
 

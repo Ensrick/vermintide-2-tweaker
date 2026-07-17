@@ -4,7 +4,16 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-14.
+Last updated: 2026-07-16.
+
+## Bot follow utility nil guard
+
+- [ ] Every GT no-ally/suppressed-ally return preserves vanilla's numeric `math.huge` distance sentinel; `_update_target_ally` never receives nil from GT's selector wrapper.
+- [ ] The exact `player_bot_default_follow` consideration repairs a missing `ally_distance` to `math.huge` before native arithmetic.
+- [ ] An unrelated missing or non-numeric utility input returns zero utility for only that malformed action; no generic infinity value is written and valid actions delegate unchanged.
+- [ ] Creature Spawner does not own or register `Utility.get_action_utility`; bot fixes contain the only GT hook for the pair.
+- [ ] `/gt_regression_test` passes `gt_bot_utility_nil_guard`.
+- Detection: offline `test_gt_bot_utility_policy.lua`; runtime check `gt_bot_utility_nil_guard`.
 
 ## Keep-slot bot takeover (#247)
 

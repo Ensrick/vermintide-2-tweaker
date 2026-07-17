@@ -198,6 +198,7 @@ local suites = {
     "test_gt_noclip_boundary_policy",
     "test_gt_stable_world_liveness",
     "test_gt_bot_heal_policy",
+    "test_gt_bot_utility_policy",
     "test_gt_bot_ale_policy",
     "test_gt_bot_command_policy",
     "test_gt_godmode_indicator",

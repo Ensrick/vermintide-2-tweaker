@@ -7,6 +7,16 @@ and traits from the transient vanilla loadout shadow. The live relic remains
 unchanged, while `woc_power_vs_order` can no longer reach
 `NetworkLookup.properties` during local, broadcast, or hot-join synchronization.
 
+## 2026-07-16 - General Tweaker bot utility crash guard
+
+Tweaker: General DEV v0.2.241-dev restores vanilla's `math.huge` no-ally
+sentinel at every GT ally-selection branch and validates non-condition utility
+inputs before native arithmetic. The old Creature Spawner-owned no-op guard is
+removed; the exact player-follow input is repaired while unknown malformed
+actions fail closed at zero utility. Offline and runtime regressions cover the
+producer, consumer, and singleton-hook boundaries. Solo in-game verification
+remains required; no deployment is part of this commit.
+
 ## 2026-07-16 - Blightreaper combat completion and Shyish residency
 
 Weapons of Chaos v0.1.21-dev adds the requested four-light chain and post-heavy
