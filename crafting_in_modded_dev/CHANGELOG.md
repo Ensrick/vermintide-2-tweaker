@@ -1,5 +1,14 @@
 # Crafting in Modded Changelog
 
+## 0.8.91-dev (2026-07-17): #428 canonical copied debug helper [tooling]
+
+- Replaced the entry file's behavior-identical `_dbg` / `_dbg_alert` definitions
+  with the standalone bundled copy of `tools/shared_lib/_lib_debug.lua`.
+- Registered CIM as an exact-copy consumer and added executable ownership tests,
+  preserving gated `mod:debug` diagnostics and guarded log-only `printf` alerts.
+- Synchronized the tester-visible Workshop description banner with `0.8.91-dev`;
+  version QA now blocks any new leading-description version drift.
+
 ## 0.8.90-dev (2026-07-17): #628 make normalization consume canonical identity [verify-fix]
 
 - Audited the synthetic-item construction and registration boundary against the
