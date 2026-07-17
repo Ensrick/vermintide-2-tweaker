@@ -881,8 +881,9 @@ Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was a
    wrappers were removed 2026-07-07, archived to `../_vt2-tweaker-archive/`.)
 8. **`.\tools\publish-release\publish-release.ps1`** — publishes the bundle
    to the GitHub release so `vt2-mod-updater` consumers stay in sync.
-9. **`git add` / `git commit` / `git push`** the stable source + version +
-   CHANGELOG changes. The source commit is PART of the ship, not a follow-up:
+9. **`git add` / `git commit`**, push a feature branch, open a PR to protected
+   `master`, require `qa-gate`, and merge the stable source + generated bundle +
+   version + CHANGELOG changes. The merged source is PART of the ship, not a follow-up:
    uncommitted shipped work piles up silently (three sessions' worth was found
    uncommitted on 2026-07-01).
 
@@ -925,8 +926,10 @@ full pipeline is:
    `-AllowPublic` when `itemV2.cfg` is public. Use `-NoRemote` only to skip an
    otherwise-enabled remote for that invocation, and identify the skipped
    target in the report. No flag is needed when no remote is enabled.
-2. `git add` / `git commit` / `git push` the source change. The source commit
-   is PART of the ship, not an optional follow-up.
+2. `git add` / `git commit` the source and generated bundle, push a feature
+   branch, then merge it through protected `master` only after `qa-gate` passes.
+   The merged source is PART of the ship, not an optional follow-up. Branch
+   protection applies to administrators and must not be bypassed for routine work.
 
 Do NOT downgrade a `-dev` update to deploy-only "to be safe". For a mod the
 user is subscribed to, Steam re-syncs the Workshop bundle over any local
