@@ -21,7 +21,8 @@
 # WHAT IT DOES
 #   For each active mod, it reads the TOP (most recent) `## <version>` entry of
 #   that mod's CHANGELOG.md, extracts every `#<N>` issue reference in that entry,
-#   asks GitHub whether issue N is OPEN, and - if OPEN with NEITHER status label
+#   asks GitHub whether issue N is OPEN, and - if OPEN with NEITHER worked status
+#   label and it is not a documentation/tooling-only issue
 #   - warns: "shipped work referenced in latest CHANGELOG entry but issue has no
 #   status label". Only the TOP entry is scanned: a stale label on an OLD entry
 #   is out of scope (it would have been labeled when it shipped), and scanning
@@ -154,6 +155,11 @@ function Get-LifecycleStateCount {
     return @($Labels | Where-Object { $LifecycleLabels -contains $_ }).Count
 }
 
+function Test-IsOfflineOnlyIssue {
+    param([string[]]$Labels)
+    return (($Labels -contains 'tooling') -or ($Labels -contains 'documentation'))
+}
+
 # ---- gh helpers (network) ----
 function Test-GhReady {
     $gh = Get-Command gh -ErrorAction SilentlyContinue
@@ -221,6 +227,9 @@ function Invoke-SelfTest {
     Assert ((Get-LifecycleStateCount @('bug', 'not-started', 'verify-fix')) -eq 2) "multiple lifecycle labels are detected"
     Assert ((Get-LifecycleStateCount @('tooling')) -eq 0) "tooling issue without not-started is lifecycle drift"
     Assert ((Get-LifecycleStateCount @('documentation')) -eq 0) "documentation issue without not-started is lifecycle drift"
+    Assert (Test-IsOfflineOnlyIssue @('enhancement', 'tooling', 'not-started')) "tooling issues are exempt from human worked-status warnings"
+    Assert (Test-IsOfflineOnlyIssue @('documentation', 'not-started')) "documentation issues are exempt from human worked-status warnings"
+    Assert (-not (Test-IsOfflineOnlyIssue @('bug', 'not-started'))) "runtime issues still require a worked status when shipped"
 
     Write-Host ""
     if ($script:__stpass) {
@@ -285,7 +294,7 @@ foreach ($c in ($candidates | Sort-Object Issue, Mod)) {
     if (-not $meta) { continue }                       # non-existent / unresolved number
     if ($meta.State -ne 'OPEN') { continue }           # only open issues matter
     $hasStatus = @($meta.Labels | Where-Object { $StatusLabels -contains $_ }).Count -gt 0
-    if (-not $hasStatus) {
+    if (-not $hasStatus -and -not (Test-IsOfflineOnlyIssue $meta.Labels)) {
         $findings += [pscustomobject]@{ Issue = $c.Issue; Mod = $c.Mod; Ver = $c.Ver; Labels = ($meta.Labels -join ',') }
     }
 }
