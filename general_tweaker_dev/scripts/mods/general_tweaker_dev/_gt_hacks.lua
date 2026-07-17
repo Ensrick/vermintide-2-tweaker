@@ -1,4 +1,5 @@
 local mod = get_mod("gt_dev")
+local NETWORK_READINESS = mod:dofile("scripts/mods/general_tweaker_dev/_gt_network_readiness")
 
 -- _gt_hacks.lua — the Janoti "Hacks" port groups B/C/D/F (medium cheat/QoL
 -- features). Co-located so the singleton audit is local. Every hook below is a
@@ -286,7 +287,8 @@ end
 -- it. Reload reserve consumption checks this exact buff on the owning machine
 -- [src: scripts/unit_extensions/generic/generic_ammo_user_extension.lua:160-176].
 local function _gt_reconcile_infinite_ammo()
-    local lp = Managers.player and Managers.player:local_player()
+    local lp = NETWORK_READINESS.local_player(Managers)
+    if not lp then return false end
     local local_unit = lp and lp.player_unit
     local local_should_have = _gt_infinite_ammo_active
         or _gt_godmode_unlimited_ammo_active()
@@ -309,8 +311,10 @@ local function _gt_reconcile_infinite_ammo()
             end
         end
     end
+    return true
 end
 mod._gt_reconcile_infinite_ammo = _gt_reconcile_infinite_ammo
+mod._gt_infinite_ammo_startup_safe = NETWORK_READINESS
 
 mod.gt_infinite_ammo_toggle = function()
     _gt_infinite_ammo_active = not _gt_infinite_ammo_active

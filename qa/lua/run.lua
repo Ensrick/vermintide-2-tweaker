@@ -207,6 +207,7 @@ local suites = {
     "test_gt_bot_ale_policy",
     "test_gt_bot_command_policy",
     "test_gt_godmode_indicator",
+    "test_gt_network_readiness",
     "test_gt_offline_twitch",
     "test_gt_lobby_failnotify_hardening",
     "test_gt_improved_bot_combat_controls",

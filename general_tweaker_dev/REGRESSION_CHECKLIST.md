@@ -6,6 +6,13 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-16.
 
+## Startup-safe infinite ammo (#662)
+
+- [ ] A persisted Godmode + Unlimited Ammo configuration produces no `Network backend has not been set` or `consumer 'infinite_ammo' raised` line before the Keep local player exists.
+- [ ] The reconciler uses only the pcall-contained `local_player_safe` policy; it does not call the unsafe `PlayerManager:local_player()` API.
+- [ ] Once ready, Godmode's ammo child remains local-only while `/infinite_ammo` remains host-wide; disabling either owner preserves the buff while the other still owns it.
+- Detection: offline `test_gt_network_readiness.lua`; runtime `/gt_regression_test` ownership check `issue549_godmode_power_and_ammo`.
+
 ## Bot follow utility nil guard
 
 - [ ] Every GT no-ally/suppressed-ally return preserves vanilla's numeric `math.huge` distance sentinel; `_update_target_ally` never receives nil from GT's selector wrapper.

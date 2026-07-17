@@ -1,5 +1,15 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.242-dev (2026-07-16) -- startup-safe ammo reconciliation (#662)
+
+- Stopped the persisted Godmode unlimited-ammo child from calling `PlayerManager:local_player()` while the title/loading state has no network backend. The shared reconciler now uses a network-game-gated, `pcall`-contained `local_player_safe` policy and remains dormant until a real local player exists.
+- Preserved both ownership paths after readiness: Godmode's child stays owner-local and `/infinite_ammo` retains its host-wide behavior. No new update consumer, hook, RPC, or retry loop was added.
+- Added engine-free coverage for missing network state, a throwing network transition, a throwing `local_player_safe`, the ready-player path, and the absence of the unsafe API in the reconciler.
+
+### Solo verify
+
+Launch with Godmode and its Unlimited Ammo child persisted on. From GT load through arrival in the Keep, the log must contain no `consumer 'infinite_ammo' raised` or `Network backend has not been set` line. Ammo/overcharge must become unlimited after the local player spawns; disabling Godmode must restore consumption. Run `/gt_regression_test` and confirm the existing #549 ownership check passes.
+
 ## v0.2.241-dev (2026-07-16) -- bot follow utility crash guard [verify-fix]
 
 - Fixed the host crash in `Utility.get_action_utility` when a GT ally-selection branch left the player-bot `ally_distance` input nil and the native follow consideration immediately subtracted it.
