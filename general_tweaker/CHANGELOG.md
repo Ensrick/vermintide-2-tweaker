@@ -1,5 +1,17 @@
 # General Tweaker Changelog
 
+## v0.2.177 (2026-07-17) -- Stable bot utility crash-floor promotion (#653)
+
+- Removed the obsolete Creature Spawner-owned `Utility.get_action_utility`
+  hook from the stable stream. It reassigned only a throwaway local table and
+  never repaired the blackboard input that vanilla utility arithmetic consumes.
+  Stable now leaves that utility boundary unchanged instead of claiming a
+  global repair it did not perform.
+- The source-backed dev stream remains the sole owner of the bot-scoped guard:
+  missing follow distance becomes vanilla's `math.huge` sentinel and unknown
+  malformed numeric inputs fail closed. The shared offline invariant prevents
+  either Creature Spawner stream from reclaiming this hook.
+
 ## v0.2.176 (2026-07-13) -- Stable world-liveness hardening (#490)
 
 - Ported the #459 native-world safety class to stable: cached debug draw handles are never dispatched through a destroyed/replaced world, all level-world lookups use `has_world`, and screen GUI creation uses resident `materials/fonts/gw_fonts` rather than the text-only Arial material.
