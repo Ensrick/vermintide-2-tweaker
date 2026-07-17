@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-17 - Exact CWV identity for independent remote offhands
+
+Tweaker: Cosmetics v0.9.140-dev and CWV v0.1.444-dev re-derive the missing
+remote half of issue #583 from paired-log evidence. CWV exposes its existing
+fingerprint-validated per-peer appearance descriptor, and Cosmetics uses that
+exact family when validating a received dual-offhand mesh. This replaces the
+observed false comparison against the vanilla base family without adding an
+RPC, unit-path payload, or permissive fallback. Co-op verification remains
+required; nothing was deployed.
+
 ## 2026-07-16 - Weapon lifecycle and career-action integration hardening
 
 Weapons of Chaos v0.1.26-dev retains the atomic linked-root pose introduced in

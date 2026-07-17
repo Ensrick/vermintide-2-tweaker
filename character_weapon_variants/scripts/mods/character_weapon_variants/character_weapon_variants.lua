@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.443-dev"
+local MOD_VERSION = "0.1.444-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -11369,6 +11369,8 @@ do
 	_om._cwv_identity_descriptor_for_peer = function(peer_id, slot_name, base_name)
 		return lifecycle:descriptor(peer_id, slot_name, base_name)
 	end
+
+	mod._cwv_peer_appearance = { schema = 1, resolve_peer = _om._cwv_identity_descriptor_for_peer }
 
 	_om._cwv_identity_def_for_peer = function(peer_id, slot_name, base_name)
 		local descriptor, state = lifecycle:descriptor(peer_id, slot_name, base_name)

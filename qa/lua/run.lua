@@ -203,6 +203,7 @@ local suites = {
     "test_cos_item_presentation",
     "test_cos_composite_icons",
     "test_cos_dual_offhands",
+    "test_cos_cwv_remote_identity",
     "test_cos_la_shield_parity",
     "test_cos_la_instance_policy",
     "test_cos_la_replay_policy",

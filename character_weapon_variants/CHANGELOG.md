@@ -1,5 +1,10 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.444-dev - 2026-07-17 - sibling-renderer exact identity contract (#583/#660) [verify-fix-coop]
+
+- Exposed CWV's existing fingerprint-validated remote appearance descriptor through a read-only sibling-renderer contract. Tweaker: Cosmetics uses the exact variant key to validate independently selected dual offhands after vanilla husk equipment reduces the item to its base key.
+- The contract adds no network channel or payload: it reads the same bounded `cwv_item_identity` lifecycle state already used by CWV's husk renderer and fails closed unless provider, exact item, base item, skin, and descriptor fingerprint were reconstructed locally.
+
 ## 0.1.443-dev - 2026-07-17 - #604 remote Dawi transform selection [verify-fix-coop]
 
 - Made the production remote-husk transform boundary consume schema-2's exact
