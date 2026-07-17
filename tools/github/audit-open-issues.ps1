@@ -26,6 +26,8 @@ $LifecycleLabels = @(
 
 $TypeLabels = @("bug", "enhancement", "feature")
 
+$SeverityLabels = @("0-critical", "1-major", "2-moderate", "3-low")
+
 # Broad evidence terms intentionally produce a review queue, not an automatic
 # implementation claim.  Each code names a concrete lesson paid for by prior
 # incidents; an issue may match several.  The full text (title/body/labels and
@@ -57,7 +59,7 @@ $NonSubsystemLabels = @(
     "tooling", "not-started", "verify-fix", "verify-fix-coop",
     "diagnostics-armed", "coop-required", "Fixed", "duplicate", "wontfix",
     "invalid", "question", "help wanted", "good first issue", "waiting-user",
-    "0-critical", "1-major", "2-moderate", "3-minor", "4-low"
+    "0-critical", "1-major", "2-moderate", "3-low", "3-minor", "4-low"
 )
 
 $TermStopWords = @(
@@ -118,6 +120,7 @@ function Get-IssueFindings($Issue) {
     $labels = Get-LabelNames $Issue
     $lifecycle = @($labels | Where-Object { $LifecycleLabels -contains $_ })
     $types = @($labels | Where-Object { $TypeLabels -contains $_ })
+    $severities = @($labels | Where-Object { $SeverityLabels -contains $_ })
     $findings = New-Object System.Collections.Generic.List[string]
 
     if ($lifecycle.Count -ne 1) {
@@ -125,6 +128,9 @@ function Get-IssueFindings($Issue) {
     }
     if ($types.Count -ne 1) {
         $findings.Add("type_count_$($types.Count)")
+    }
+    if ($severities.Count -ne 1) {
+        $findings.Add("severity_count_$($severities.Count)")
     }
     if (@($labels | Where-Object { $ToolingLabels -contains $_ }).Count -gt 0 -and
         @($lifecycle | Where-Object { $_ -ne "not-started" }).Count -gt 0) {
@@ -767,7 +773,7 @@ function Invoke-SelfTest {
     $fixture = @(
         [PSCustomObject]@{
             number = 1; title = "Blightreaper husk transform"; body = "**Symptom:** remote husk drifts after #90. ``SimpleHuskInventoryExtension._wield_slot`` differs."; url = "u1"
-            labels = @(@{ name = "bug" }, @{ name = "verify-fix-coop" }, @{ name = "WOC" })
+            labels = @(@{ name = "bug" }, @{ name = "verify-fix-coop" }, @{ name = "WOC" }, @{ name = "0-critical" })
             comments = @(@{ body = "Test method: host + client. Expected: remote peer keeps the Blightreaper transform." })
         },
         [PSCustomObject]@{
@@ -777,7 +783,7 @@ function Invoke-SelfTest {
         },
         [PSCustomObject]@{
             number = 3; title = "Missing method"; body = "**Symptom:** x"; url = "u3"
-            labels = @(@{ name = "feature" }, @{ name = "verify-fix" })
+            labels = @(@{ name = "feature" }, @{ name = "verify-fix" }, @{ name = "2-moderate" })
             comments = @(@{ body = "Shipped today." })
         }
     )
@@ -798,6 +804,7 @@ function Invoke-SelfTest {
     if (-not $result.issues[0].clean) { throw "valid coop issue was rejected" }
     if ($result.issues[1].findings -notcontains "lifecycle_count_0") { throw "missing lifecycle not found" }
     if ($result.issues[1].findings -notcontains "type_count_2") { throw "duplicate type not found" }
+    if ($result.issues[1].findings -notcontains "severity_count_0") { throw "missing severity not found" }
     if ($result.issues[1].findings -notcontains "literal_escaped_newline_in_body") { throw "escaped newline not found" }
     if ($result.issues[2].findings -notcontains "missing_test_method_comment") { throw "missing method not found" }
     if ($result.issues[0].applicable_lessons -notcontains "network_peer_parity") { throw "coop lesson not classified" }
