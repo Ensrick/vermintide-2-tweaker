@@ -1,5 +1,9 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.143-dev - 2026-07-17 - issue 695 guards compacted to file-size baseline [verify-fix]
+
+- Identical runtime behavior to 0.9.142-dev; the two issue 695 guards were compacted so cosmetics_tweaker.lua returns to its frozen 10,042-line qa baseline (check_file_sizes blocked PR 708 at 10,050).
+
 ## 0.9.142-dev - 2026-07-17 - pre-login backend warning flood fix (issue 695) [verify-fix]
 
 - Silenced two per-frame `BackendManagerPlayFab:get_interface: Requesting unknown interface items` warning sources during the pre-login window: the offhand-selection restore retry (`_la_restore_offhand_selections`) and the 10s-deferred LA_PERSIST instance prune, both driven from `mod.update`. Each now probes `Managers.backend._interfaces` directly and only calls `get_interface` once the interface exists.

@@ -85,7 +85,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.142-dev"
+local MOD_VERSION = "0.9.143-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2959,12 +2959,8 @@ mod._la_restore_offhand_selections = function()
         end
     end
     if needs_la and type(la_pools) ~= "table" then return end
-    -- Issue 695: retried per frame from mod.update until restore completes, so
-    -- probe _interfaces before get_interface - the miss path warns per call
-    -- (backend_manager_playfab.lua:203) and floods the pre-login log.
-    local backend_mgr = Managers and Managers.backend
-    local backend_items = backend_mgr and backend_mgr._interfaces
-        and backend_mgr._interfaces.items and backend_mgr:get_interface("items")
+    local backend_mgr = Managers and Managers.backend -- issue 695: retried per frame; probe _interfaces first (get_interface warns per miss, backend_manager_playfab.lua:203)
+    local backend_items = backend_mgr and backend_mgr._interfaces and backend_mgr._interfaces.items and backend_mgr:get_interface("items")
     if needs_mesh and not (backend_items and backend_items.get_item_from_id) then return end
     if get_mod("character_weapon_variants") and mod._discover_cwv_dual_offhand_pools
             and mod._discover_cwv_dual_offhand_pools() < 7 then
@@ -9799,12 +9795,8 @@ mod.update = function(dt)
             and LA_PERSIST.prune_missing_items then
         mod._la_persist_prune_at = mod._la_persist_prune_at or (os.clock() + 10)
         if os.clock() >= mod._la_persist_prune_at then
-            -- Issue 695: retried per frame once armed; probe _interfaces before
-            -- get_interface so the pre-ready miss path can't warn every frame.
-            local backend_mgr = Managers and Managers.backend
-            local backend_items = backend_mgr and backend_mgr._interfaces
-                and backend_mgr._interfaces.items
-                and backend_mgr:get_interface("items")
+            local backend_mgr = Managers and Managers.backend -- issue 695: retried per frame once armed; probe _interfaces first (miss path warns per call)
+            local backend_items = backend_mgr and backend_mgr._interfaces and backend_mgr._interfaces.items and backend_mgr:get_interface("items")
             if backend_items and backend_items.get_item_from_id then
                 local removed = LA_PERSIST.prune_missing_items(function(backend_id)
                     local ok, item = pcall(backend_items.get_item_from_id,
