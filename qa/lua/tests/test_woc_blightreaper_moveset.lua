@@ -131,7 +131,8 @@ return function(H, repo_root)
 			"blunt_hit_armour")
 		H.equal(installed.actions.action_one.block.anim_time_scale, 0.8)
 		H.equal(installed.actions.action_two.push.anim_time_scale, 1.4)
-		H.truthy(installed.buffs[moveset.POISON_BUFF_TEMPLATE] ~= nil)
+		H.equal(installed.buffs[moveset.POISON_BUFF_TEMPLATE], nil,
+			"template-level poison would duplicate the trait proc owner")
 		H.equal(installed.actions.action_one.default.damage_profile,
 			"light_slashing_smiter")
 		H.equal(installed.actions.action_one.light_attack.damage_profile,
@@ -281,5 +282,27 @@ return function(H, repo_root)
 		installed, reason = moveset.install_poison_buff(nil)
 		H.equal(installed, false)
 		H.equal(reason, "buff_templates_unavailable")
+	end)
+
+	H.test("WOC Blightreaper intrinsic traits own poison and Shyish presentation", function()
+		local weapon_traits = { traits = {} }
+		local buffs = {}
+		local ok, reason = moveset.install_intrinsic_trait_rows(weapon_traits, buffs)
+		H.equal(ok, true)
+		H.equal(reason, "installed")
+		local poison = weapon_traits.traits[moveset.POISON_TRAIT]
+		local curse = weapon_traits.traits[moveset.SHYISH_CURSE_TRAIT]
+		H.equal(poison.buff_name, moveset.POISON_BUFF_TEMPLATE)
+		H.equal(poison.icon, moveset.POISON_TRAIT_ICON)
+		H.equal(curse.icon, "mutator_icon_death_spirits")
+		H.equal(curse.crafting_disabled, true)
+		H.equal(buffs[moveset.SHYISH_CURSE_BUFF].buffs[1].stat_buff, nil)
+		H.deep_equal(moveset.intrinsic_traits(), {
+			moveset.POISON_TRAIT, moveset.SHYISH_CURSE_TRAIT,
+		})
+		H.truthy(moveset.item_has_trait({ traits = moveset.intrinsic_traits() },
+			moveset.POISON_TRAIT))
+		H.equal(moveset.item_has_trait({}, moveset.POISON_TRAIT), false)
+		H.equal(moveset.install_intrinsic_trait_rows(nil, buffs), false)
 	end)
 end

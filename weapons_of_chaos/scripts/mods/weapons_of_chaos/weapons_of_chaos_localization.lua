@@ -18,6 +18,18 @@ return {
 	woc_power_vs_order_property = {
 		en = "+50%% Power vs. Order",
 	},
+	woc_poisoned_edge_trait = {
+		en = "Poisoned Edge",
+	},
+	description_woc_poisoned_edge_trait = {
+		en = "Strikes apply Hagbane poison to enemies.",
+	},
+	woc_shyish_health_curse_trait = {
+		en = "Shyish Health Curse",
+	},
+	description_woc_shyish_health_curse_trait = {
+		en = "Kills release a death spirit that pursues the wielder and converts up to 5 permanent health to temporary health.",
+	},
 
 	-- Settings
 	enable_blightreaper = {

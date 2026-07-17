@@ -192,6 +192,17 @@ The `cwv_` prefix is therefore a compatibility contract, not a general
 - CIM's legacy `_modded_loadout_purge_stale` exception; and
 - this section plus both mods' regression coverage.
 
+### CIM ↔ WOC optional trait capability
+
+WOC owns `woc_poisoned_edge`, its `WeaponTraits` row, and its native Hagbane
+proc. CIM owns only discovery and saved-instance persistence. WOC offers the
+exact capability `woc.poison_trait.v1`; CIM validates the owner/capability/row
+before adding the trait to its melee pool. If WOC is absent, CIM parks the key
+outside the live item's `traits` array and restores it only after the provider
+returns. WOC's unconditional loadout shadow removes the active custom key before
+vanilla `NetworkLookup.traits` encoding, so this optional integration creates no
+hard dependency and no custom lookup id reaches an unmodded or non-WOC peer.
+
 ---
 
 ## Loremaster's Armoury Bridge (cosmetics_tweaker ↔ LA)

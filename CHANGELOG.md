@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-16 - Blightreaper intrinsic and reusable poison traits
+
+Weapons of Chaos v0.1.23-dev / CIM v0.8.87-dev implement issue #655. The
+Blightreaper now displays intrinsic Poisoned Edge and Shyish Health Curse trait
+rows, with poison owned by one reusable WOC proc and the Shyish row using the
+native death-spirit icon. CIM exposes Poisoned Edge to eligible melee weapons
+only through an exact WOC capability, parks it safely when WOC is absent, and
+WOC strips protected keys from transient vanilla loadout shadows so custom
+trait identifiers never reach peers without WOC. Offline coverage proves
+ownership, no double proc, load-order persistence, bounded pool insertion,
+wire immutability, and native icon selection.
+
 ## 2026-07-16 - Blightreaper property wire crash
 
 Weapons of Chaos v0.1.22-dev fixes issue #654 by stripping WOC-only properties

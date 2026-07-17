@@ -154,7 +154,7 @@ IDs clear this separate vanilla map because their craft record is authoritative.
 
 | Class.method (kind) | Vanilla behavior | Why cim hooks it | Trap / invariant |
 |---|---|---|---|
-| `LoadoutUtils.sync_loadout_slot` [hook,tbl] `crafting_in_modded_dev.lua:765` | SENDER: encodes a slot as `rpc_sync_loadout_slot` with `rarity_id=NetworkLookup.rarities[item.rarity]` [src: `loadout_utils.lua:13-42`] | UNCONDITIONALLY coerce `rarity="modded"` -> `"unique"` on the wire (restore host-local after), so a non-cim client can decode it | Wire safety is NEVER toggle-gated (#278/#371, §31; memory `reference_vt2_wire_safety_never_toggle_gated`). Bundling this behind `persist_modded_loadouts` (v0.8.15) crashed every vanilla client by default (#278, fixed v0.8.54-dev) |
+| `LoadoutUtils.sync_loadout_slot` [hook,tbl] `crafting_in_modded_dev.lua:765` | SENDER: encodes a slot as `rpc_sync_loadout_slot` with rarity/properties/traits mapped through local `NetworkLookup` tables [src: `loadout_utils.lua:13-42`] | UNCONDITIONALLY coerce `rarity="modded"` -> `"unique"` on the wire (restore host-local after), so a non-cim client can decode it; external providers remain responsible for shadow-stripping their protected keys | Wire safety is NEVER toggle-gated (#278/#371, §31). A custom external trait is parked while its provider is absent, so it never reaches the live item or this encoder; WOC additionally strips its active keys for peers without WOC. |
 | `[rpc] cim_modded_slot` (`mod:network_register`, `crafting_in_modded_dev.lua:838`) | - | cim<->cim side-channel: fire alongside each `sync_loadout_slot` so a cim CLIENT can restore "modded" chrome AFTER vanilla's decode | VMF delivers only to peers with the same mod-id + handler; a vanilla client has no handler and drops it silently. Schema-gated on `CIM_RPC_SCHEMA` (drop on mismatch, § rpc schema / VMF_RECIPES §10). Gated by `persist_modded_loadouts` (persistence-only, contributes nothing to wire safety) |
 | `DeusRunController.get_weapon_pool` [hook] `modded_rarities.lua:243` | Iterates `pool_excludes` and nils `weapon_pool[pool_rarity][group]` [src: `deus_run_controller.lua`] | Pre-hook: scrub any `pool_excludes` rarity key absent from the base deus weapon pool (cim's "modded" rarity order=4 pollutes it, then `weapon_pool["modded"]` is nil -> index crash on the NEXT chest) | Idempotent (re-runs every chest); repairs already-contaminated runs. This is why a custom rarity must never leak into `RarityUtils.get_lower_rarities` output on the CW path |
 | `_G.Localize` [hook] `modded_rarities.lua:154` | Global loc-key -> string lookup; the customization option requests `upgrade_description_text_<rarity>` [src: `hero_window_item_customization.lua:1255`] | Supply `rarity_display_name_modded`, `upgrade_description_text_modded`, and "Craft Accessories"/"Reroll Accessory *" recipe titles | VMF `_localization.lua` is NOT registered into global `Localize` (memory `reference_vmf_localize_before_registration`) |
@@ -195,7 +195,8 @@ power_level, rarity="modded", properties=<cjson>, traits=<cjson> } }`. The
 (`mod:set("forged_weapons")`), NOT PlayFab - `_forge_load` reads it at
 `_create_interfaces` and `add_item`s each `via_mirror` entry back on session
 restore. The per-entry save shape (`:296-320`) carries `item_key`, `properties`
-(dict), `traits` (array), `skin`, `power_level`, `rarity`, `rerolled_*_indices`
+(dict), `traits` (active array), `external_traits` (parked provider-owned array),
+`skin`, `power_level`, `rarity`, `rerolled_*_indices`
 (shuffle-bag state), and an OPAQUE `custom_glow` pass-through slot that
 `cosmetics_tweaker` owns and cim never interprets. Contrast a NATIVE item, whose
 identity/props/skin live in the PlayFab mirror and re-sync from the server on launch
@@ -203,6 +204,15 @@ identity/props/skin live in the PlayFab mirror and re-sync from the server on la
 husk-identity vector: the crafted item exists only in the local mirror + cim save,
 so a remote peer's husk resolves the BASE `item_data` (class 27) unless a net-safe
 signal reaches it.
+
+Issue #655's provider boundary is deliberately save/load asymmetric. On load,
+CIM merges active and parked traits and admits a provider-owned key only when
+the exact owner and capability are registered and available; otherwise the key
+stays in `external_traits` and is omitted from the live mirror payload. When WOC
+registers `woc.poison_trait.v1`, CIM re-partitions existing records, updates only
+newly activated exact instances, and adds the poison trait to the melee pool
+once. Removing a trait through Athanor or reroll clears its parked copy so it
+cannot resurrect later.
 
 ### The Athanor = the vanilla weave forge, repurposed (owner: `docs/engine/09`, `/10`)
 

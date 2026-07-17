@@ -50,7 +50,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.86-dev"
+local MOD_VERSION = "0.8.87-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -262,6 +262,8 @@ if not _ok_rr then mod:error("Failed to load modded_rarities: %s", tostring(_err
 -- Keep it on `mod` so split modules consume the same singleton at runtime.
 mod._cim_synthetic_item_contract = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_synthetic_item_contract")
+mod._cim_external_trait_policy = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_external_trait_policy")
 
 -- Pure source-backed mapping from the nine vanilla CW trait categories to
 -- their owning weapon slot. Load before standard_forge, which consumes it.
@@ -389,6 +391,31 @@ end
 local _more_items_lib = nil
 local _forge_pending = nil
 local _forged_weapons = {}
+local _external_trait_providers = {}
+
+local function _external_provider_availability()
+    local available = {}
+    for provider_id, spec in pairs(_external_trait_providers) do
+        local active = spec and spec.available == true
+        if spec and type(spec.is_available) == "function" then
+            local ok, result = pcall(spec.is_available)
+            active = ok and result == true
+        end
+        available[provider_id] = active
+    end
+    return available
+end
+
+local function _partition_external_traits(record, source_parked)
+    local policy = mod._cim_external_trait_policy
+    if type(record) ~= "table" or type(policy) ~= "table" then return false end
+    local combined = policy.merge_traits(record.traits, source_parked or record.external_traits)
+    local active, parked = policy.partition(combined, _external_provider_availability())
+    record.traits = active
+    record.trait = active[1]
+    record.external_traits = parked
+    return true
+end
 
 local function _forge_detect_mil()
     if _more_items_lib then return true end
@@ -412,6 +439,10 @@ local function _forge_save()
             properties = w.properties,
             trait = w.trait,
             traits = w.traits,
+            -- Provider-owned selections are parked here while their owner mod
+            -- is absent. They never enter the live backend item until the
+            -- provider re-registers its capability after all mods load.
+            external_traits = w.external_traits,
             skin = w.skin,
             power_level = w.power_level or 300,
             rarity = w.rarity,
@@ -464,6 +495,7 @@ local function _forge_load()
             custom_glow = w.custom_glow,
         })
         if normalized then
+            _partition_external_traits(normalized, w.external_traits)
             _forged_weapons[bid] = normalized
         else
             printf("[cim:628] rejected saved synthetic item bid=%s reason=%s",
@@ -486,6 +518,8 @@ mod._cim_register_craft = function(backend_id, weapon_data)
             tostring(backend_id), tostring(item_key), tostring(err))
         return false, err
     end
+    entry.external_traits = type(weapon_data) == "table" and weapon_data.external_traits or nil
+    _partition_external_traits(entry)
     _forged_weapons[backend_id] = entry
     _forge_save()
     return true, entry
@@ -517,6 +551,54 @@ end
 
 mod._cim_persist_crafts = function()
     _forge_save()
+end
+
+-- Cross-mod trait capability handshake (#655). Providers register only after
+-- every mod main file has run, so this is independent of launcher load order.
+-- CIM owns offering/persistence; the provider owns metadata and the proc.
+mod._cim_register_external_trait_provider = function(provider_id, spec)
+    local policy = mod._cim_external_trait_policy
+    local trait_key = type(spec) == "table" and spec.trait_key
+    local required = type(policy) == "table" and policy.REQUIRED_CAPABILITY_BY_PROVIDER
+        and policy.REQUIRED_CAPABILITY_BY_PROVIDER[provider_id]
+    if type(provider_id) ~= "string" or type(trait_key) ~= "string"
+            or not policy or policy.RESERVED_PROVIDER_BY_TRAIT[trait_key] ~= provider_id
+            or not required or spec.capability ~= required then
+        return false, "invalid_provider_contract"
+    end
+    local weapon_traits = rawget(_G, "WeaponTraits")
+    if not (weapon_traits and weapon_traits.traits
+            and rawget(weapon_traits.traits, trait_key)) then
+        return false, "provider_trait_row_missing"
+    end
+    _external_trait_providers[provider_id] = spec
+    local installed, reason = policy.add_combination(
+        weapon_traits.combinations, spec.category or "melee", trait_key)
+    if not installed then return false, reason end
+
+    local backend = Managers and Managers.backend
+    local items = backend and backend:get_interface("items")
+    local cjson_mod = rawget(_G, "cjson")
+    local activated = 0
+    for backend_id, record in pairs(_forged_weapons) do
+        local parked_before = #(record.external_traits or {})
+        _partition_external_traits(record)
+        if parked_before > #(record.external_traits or {}) then activated = activated + 1 end
+        local live
+        if items then pcall(function() live = items:get_item_from_id(backend_id) end) end
+        if live then
+            local traits = {}
+            for i, value in ipairs(record.traits or {}) do traits[i] = value end
+            live.traits = traits
+            if cjson_mod and live.CustomData then
+                live.CustomData.traits = cjson_mod.encode(traits)
+            end
+        end
+    end
+    _forge_save()
+    printf("[cim:655] external trait provider=%s capability=%s pool=%s activated=%d",
+        provider_id, spec.capability, tostring(reason), activated)
+    return true, reason, activated
 end
 
 mod._cim_is_modded_backend_id = function(backend_id)
@@ -4138,6 +4220,7 @@ local function _forge_apply_to_amulet(career_name)
                 saved.properties = new_props
                 saved.traits = new_traits
                 saved.trait = new_traits[1]
+                saved.external_traits = {}
                 _forge_save()
             end
         end
@@ -4181,6 +4264,7 @@ local function _forge_apply_to_item(career_name, item_backend_id)
         saved.properties = new_props
         saved.traits = new_traits
         saved.trait = new_traits[1]
+        saved.external_traits = {}
         _forge_save()
     end
 end

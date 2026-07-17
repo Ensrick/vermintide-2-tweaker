@@ -939,6 +939,7 @@ local function _reroll_traits(self, item_backend_ids)
     if saved then
         saved.traits = new_traits
         saved.trait = trait_key
+        saved.external_traits = {}
         saved.rerolled_trait_indices = new_seen
         if mod._cim_persist_crafts then mod._cim_persist_crafts() end
     end

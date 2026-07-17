@@ -22,16 +22,35 @@ function M.is_woc_item(item)
 		and (custom.woc_unique_relic == true or custom.woc_unique_relic == "true")
 end
 
-function M.safe_item(item, base_key, base_resolvable, wire_rarity)
+local function strip_protected_traits(item, protected_traits)
+	if type(item) ~= "table" or type(item.traits) ~= "table"
+			or type(protected_traits) ~= "table" then return item, false end
+	local kept, removed = {}, false
+	for _, trait_key in ipairs(item.traits) do
+		if protected_traits[trait_key] then
+			removed = true
+		else
+			kept[#kept + 1] = trait_key
+		end
+	end
+	if not removed then return item, false end
+	local shadow = {}
+	for key, value in pairs(item) do shadow[key] = value end
+	shadow.traits = #kept > 0 and kept or nil
+	return shadow, true
+end
+
+function M.safe_item(item, base_key, base_resolvable, wire_rarity, protected_traits)
+	local trait_safe_item = strip_protected_traits(item, protected_traits)
 	if not M.is_woc_item(item) then
-		return item
+		return trait_safe_item
 	end
 	if not base_resolvable or type(base_key) ~= "string" or base_key == "" then
 		return nil
 	end
 
 	local shadow = {}
-	for key, value in pairs(item) do shadow[key] = value end
+	for key, value in pairs(trait_safe_item) do shadow[key] = value end
 	shadow.key = base_key
 	shadow.ItemId = base_key
 	shadow.rarity = wire_rarity or "promo"

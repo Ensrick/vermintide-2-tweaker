@@ -8,6 +8,26 @@ return function(H, repo_root)
 		H.equal(policy.safe_item({}, "es_1h_sword", true) ~= nil, true)
 	end)
 
+	H.test("WOC wire policy strips protected traits from ordinary CIM items", function()
+		local live = {
+			key = "es_1h_sword", ItemId = "es_1h_sword",
+			traits = { "melee_attack_speed_on_crit", "woc_poisoned_edge" },
+		}
+		local shadow = policy.safe_item(live, "es_1h_sword", true, "promo", {
+			woc_poisoned_edge = true,
+		})
+		H.truthy(shadow ~= live)
+		H.deep_equal(shadow.traits, { "melee_attack_speed_on_crit" })
+		H.deep_equal(live.traits,
+			{ "melee_attack_speed_on_crit", "woc_poisoned_edge" })
+
+		local only_custom = { key = "es_1h_sword", traits = { "woc_poisoned_edge" } }
+		local clean = policy.safe_item(only_custom, "es_1h_sword", true, "promo", {
+			woc_poisoned_edge = true,
+		})
+		H.equal(clean.traits, nil)
+	end)
+
 	H.test("WOC wire policy substitutes explicit mod keys without mutation", function()
 		local live = {
 			key = "woc_blightreaper", ItemId = "woc_blightreaper",

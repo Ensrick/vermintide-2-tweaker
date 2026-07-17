@@ -1,5 +1,26 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.23-dev (2026-07-16) - #655 Blightreaper intrinsic and reusable traits [verify-fix-coop]
+
+- Added intrinsic `Poisoned Edge` and `Shyish Health Curse` trait rows to the
+  Blightreaper. Poisoned Edge is now the sole owner of the native Hagbane DOT,
+  eliminating the old template-plus-trait double-proc risk.
+- Used resident vanilla poison and Shyish death-spirit icons; the latter is the
+  exact `mutator_icon_death_spirits` material used by `mutator_death.lua`.
+- Exported only Poisoned Edge to CIM through exact capability
+  `woc.poison_trait.v1`, allowing other eligible melee weapons to select it when
+  both mods are installed. The Shyish curse remains intrinsic to Blightreaper.
+- Stripped WOC-protected traits from transient vanilla loadout shadows without
+  mutating live items, so no custom `NetworkLookup.traits` identifier reaches a
+  peer without WOC.
+- Added offline and live contracts for trait rows, icons, canonical proc
+  ownership, wire safety, and provider integration.
+
+Verification: with WOC+CIM, confirm both traits on Blightreaper and Poisoned
+Edge in CIM's melee trait picker. Poison must apply once on hit and Shyish
+spirits must occur only for Blightreaper kills. Verify once with a peer lacking
+WOC: neither equip, swap, transition, nor hot-join may crash that peer.
+
 ## 0.1.22-dev (2026-07-16) - #654 Blightreaper property wire crash
 
 - Fixed the reproduced `NetworkLookup.properties` crash when the Blightreaper

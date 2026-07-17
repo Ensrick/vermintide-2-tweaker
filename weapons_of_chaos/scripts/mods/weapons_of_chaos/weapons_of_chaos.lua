@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.22-dev"
+local MOD_VERSION = "0.1.23-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -140,6 +140,10 @@ local BACKEND_ID  = ITEM_KEY .. "_001"
 local BASE_WEAPON = "es_1h_sword"                       -- Kruber 1H sword (clone source)
 local _wire_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_wire_policy")
 local _moveset = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_moveset")
+local _WIRE_PROTECTED_TRAITS = {
+	[_moveset.POISON_TRAIT] = true,
+	[_moveset.SHYISH_CURSE_TRAIT] = true,
+}
 local _power = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_power")
 local _cursed = mod:dofile("scripts/mods/weapons_of_chaos/_woc_cursed_rarity")
 local TEMPLATE = _moveset.TEMPLATE
@@ -179,7 +183,7 @@ if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" t
 	-- sending one to a peer without WOC is a peer-fatal wire contract violation.
 	printf("[WOC:595] wire policy unavailable; explicit woc_ loadout sync will fail closed")
 	_wire_policy = {
-		safe_item = function(item)
+		safe_item = function(item, _, _, _, protected_traits)
 			local key = item and item.key
 			local custom = item and item.CustomData
 			local data = item and item.data
@@ -190,6 +194,19 @@ if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" t
 					and (custom.woc_unique_relic == true or custom.woc_unique_relic == "true")
 			if is_woc then
 				return nil
+			end
+			if type(item) == "table" and type(item.traits) == "table" then
+				local kept, removed = {}, false
+				for _, trait_key in ipairs(item.traits) do
+					if protected_traits and protected_traits[trait_key] then removed = true
+					else kept[#kept + 1] = trait_key end
+				end
+				if removed then
+					local shadow = {}
+					for field, value in pairs(item) do shadow[field] = value end
+					shadow.traits = #kept > 0 and kept or nil
+					return shadow
+				end
 			end
 			return item
 		end,
@@ -205,6 +222,7 @@ local INVENTORY_ICON = _inventory_icons.ICON
 local _start_spirit_runtime = function() end
 local _stop_spirit_runtime = function() end
 local _mark_blight_poison = function() end
+local _owner_has_wielded_trait = function() return false end
 local _spirit_package_requested = false
 local function _ensure_spirit_package()
 	if _spirit_package_requested then return true end
@@ -274,6 +292,10 @@ local _display_names = {
 	[_cursed.DISPLAY_KEY]        = "Cursed",
 	woc_intrinsic_crit_property  = mod:localize("woc_intrinsic_crit_property"),
 	woc_power_vs_order_property  = mod:localize("woc_power_vs_order_property"),
+	woc_poisoned_edge_trait = mod:localize("woc_poisoned_edge_trait"),
+	description_woc_poisoned_edge_trait = mod:localize("description_woc_poisoned_edge_trait"),
+	woc_shyish_health_curse_trait = mod:localize("woc_shyish_health_curse_trait"),
+	description_woc_shyish_health_curse_trait = mod:localize("description_woc_shyish_health_curse_trait"),
 }
 
 mod:hook(_G, "Localize", function(func, key)
@@ -320,13 +342,14 @@ local function _build_entry(base, backend_id)
 		backend_id     = backend_id,
 		ItemInstanceId = backend_id,
 		CustomData = {
-			traits      = "[]",
+			traits      = '["' .. _moveset.POISON_TRAIT .. '","'
+				.. _moveset.SHYISH_CURSE_TRAIT .. '"]',
 			power_level = tostring(_power.NORMAL_POWER),
 			properties  = '{"woc_intrinsic_crit":1,"woc_power_vs_order":1}',
 			rarity      = _relic_policy.RARITY,
 		},
 		rarity      = _relic_policy.RARITY,
-		traits      = {},
+		traits      = _moveset.intrinsic_traits(),
 		power_level = _power.NORMAL_POWER,
 		properties  = {
 			woc_intrinsic_crit = 1,
@@ -378,10 +401,13 @@ local function _install_blightreaper_poison()
 				-- ITEM_KEY would be just as unsafe here as in loadout transport.
 				damage_source = "buff",
 			})
-			-- Host-owned hits are marked directly.  Client-owned hits reach the
-			-- host through the native rpc_add_buff_synced_params hook below, so no
-			-- custom per-hit RPC or mod-only network lookup crosses the wire.
-			_mark_blight_poison(hit_unit, owner_unit)
+			-- Poisoned Edge is reusable; Shyish spirit attribution is not. Mark
+			-- only when the currently wielded item also owns the intrinsic curse.
+			-- Client-owned Blightreaper hits reach the host through the native
+			-- rpc_add_buff_synced_params observation below.
+			if _owner_has_wielded_trait(owner_unit, _moveset.SHYISH_CURSE_TRAIT) then
+				_mark_blight_poison(hit_unit, owner_unit)
+			end
 		end
 	end
 	return _moveset.install_poison_buff(templates)
@@ -393,6 +419,12 @@ local function _install_blightreaper_moveset()
 		rawget(_G, "WeaponProperties"), rawget(_G, "BuffTemplates"))
 	if not rows_ok then
 		printf("[WOC:632] Blightreaper property rows unavailable: %s", tostring(rows_reason))
+		return false
+	end
+	local traits_ok, traits_reason = _moveset.install_intrinsic_trait_rows(
+		rawget(_G, "WeaponTraits"), rawget(_G, "BuffTemplates"))
+	if not traits_ok then
+		printf("[WOC:655] Blightreaper trait rows unavailable: %s", tostring(traits_reason))
 		return false
 	end
 	local poison_ok, poison_reason = _install_blightreaper_poison()
@@ -756,8 +788,9 @@ _rt_register("issue632_blightreaper_cursed_combat_contract", function()
 	if type(template) ~= "table" or type(donor) ~= "table" or template == donor then
 		return "private elf-Sword clone is missing or aliases its donor"
 	end
-	if not (template.buffs and template.buffs[_moveset.POISON_BUFF_TEMPLATE]) then
-		return "native Hagbane poison equipment buff is not attached"
+	if not _moveset.item_has_trait(entry, _moveset.POISON_TRAIT)
+			or not _moveset.item_has_trait(entry, _moveset.SHYISH_CURSE_TRAIT) then
+		return "intrinsic poison/Shyish trait ownership is incomplete"
 	end
 	local actions = template.actions and template.actions.action_one
 	if not (actions and actions.light_attack_last and actions.light_attack_stab
@@ -849,7 +882,7 @@ local function _wire_safe_item(item)
 		and NetworkLookup and NetworkLookup.item_names
 		and rawget(NetworkLookup.item_names, BASE_WEAPON)
 	return _wire_policy.safe_item(item, BASE_WEAPON, base_resolvable,
-		_relic_policy.WIRE_RARITY)
+		_relic_policy.WIRE_RARITY, _WIRE_PROTECTED_TRAITS)
 end
 
 local _blightreaper_sync_seen = false
@@ -939,6 +972,26 @@ local function _wielded_relic(unit)
 	return remote and remote[slot] == true or false, slot
 end
 
+_owner_has_wielded_trait = function(unit, trait_key)
+	if not unit or not Unit.alive(unit) or type(trait_key) ~= "string" then return false end
+	local inventory = ScriptUnit.has_extension(unit, "inventory_system")
+	if not inventory then return false end
+	local slot_data
+	if type(inventory.get_wielded_slot_data) == "function" then
+		pcall(function() slot_data = inventory:get_wielded_slot_data() end)
+	end
+	local item_data = slot_data and slot_data.item_data
+	local backend_id = item_data and item_data.backend_id
+	local items = backend_id and _backend_items()
+	local item
+	if items then pcall(function() item = items:get_item_from_id(backend_id) end) end
+	if _moveset.item_has_trait(item, trait_key) then return true end
+	-- Blightreaper's same-mod remote identity cannot carry its custom trait on
+	-- vanilla loadout transport. Its exact relic identity is the bounded
+	-- semantic fallback for the intrinsic Shyish row only.
+	return trait_key == _moveset.SHYISH_CURSE_TRAIT and _wielded_relic(unit) or false
+end
+
 _mark_blight_poison = function(hit_unit, owner_unit)
 	local network = Managers and Managers.state and Managers.state.network
 	if not (network and network.is_server and hit_unit and owner_unit
@@ -964,7 +1017,8 @@ mod:hook_safe("BuffSystem", "rpc_add_buff_synced_params", function(self, channel
 	local player = peer_id and Managers.player.player_from_peer_id
 		and Managers.player:player_from_peer_id(peer_id)
 	local owner_unit = player and player.player_unit
-	local is_relic = owner_unit and _wielded_relic(owner_unit)
+	local is_relic = owner_unit
+		and _owner_has_wielded_trait(owner_unit, _moveset.SHYISH_CURSE_TRAIT)
 	local target_unit = self.unit_storage and self.unit_storage:unit(target_unit_id)
 	if is_relic and target_unit then _mark_blight_poison(target_unit, owner_unit) end
 end)
@@ -1058,7 +1112,7 @@ local function _on_blightreaper_kill(killing_blow, _, killed_unit)
 	local owner_unit = killing_blow[indexes.SOURCE_ATTACKER_UNIT]
 		or killing_blow[indexes.ATTACKER]
 	if not owner_unit or not Unit.alive(owner_unit) then return end
-	local wielding = _wielded_relic(owner_unit)
+	local wielding = _owner_has_wielded_trait(owner_unit, _moveset.SHYISH_CURSE_TRAIT)
 	local poison = _spirit_state.poison_sources[killed_unit]
 	local poison_match = poison and poison.owner == owner_unit
 	local poison_age = poison and (_spirit_now() - poison.t) or nil
@@ -1530,6 +1584,73 @@ _rt_register("issue633_blightreaper_audio_contract", function()
 		if ok and loaded ~= true then
 			return "boot-owned ritual-skull inspect package is not loaded"
 		end
+	end
+end)
+
+mod._woc_trait_api = {
+	capability = "woc.poison_trait.v1",
+	trait_key = _moveset.POISON_TRAIT,
+	category = "melee",
+	is_available = function()
+		if type(mod.is_enabled) ~= "function" then return true end
+		local ok, enabled = pcall(mod.is_enabled, mod)
+		return ok and enabled == true
+	end,
+}
+
+-- CIM owns the selection/persistence surface; WOC owns the trait row and proc.
+-- VMF calls this after every main file has run, so either launcher load order
+-- reaches the same capability handshake. Missing CIM is a normal no-op.
+local _previous_on_all_mods_loaded = mod.on_all_mods_loaded
+mod.on_all_mods_loaded = function(...)
+	if _previous_on_all_mods_loaded then _previous_on_all_mods_loaded(...) end
+	-- The reusable poison trait is a WOC capability, not contingent on the
+	-- Blightreaper acquisition toggle. Install its local row/proc before CIM
+	-- evaluates the provider contract.
+	local rows_ok, rows_reason = _moveset.install_intrinsic_trait_rows(
+		rawget(_G, "WeaponTraits"), rawget(_G, "BuffTemplates"))
+	local poison_ok, poison_reason = _install_blightreaper_poison()
+	if not rows_ok or not poison_ok then
+		printf("[WOC:655] reusable poison capability unavailable: rows=%s poison=%s",
+			tostring(rows_reason), tostring(poison_reason))
+		return
+	end
+	local cim = get_mod("cim_dev") or get_mod("cim")
+	if not cim or type(cim._cim_register_external_trait_provider) ~= "function" then
+		mod:info("[WOC:655] CIM trait capability absent; Poisoned Edge remains intrinsic")
+		return
+	end
+	local ok, installed, reason = pcall(cim._cim_register_external_trait_provider,
+		"WOC", mod._woc_trait_api)
+	if not ok or not installed then
+		printf("[WOC:655] CIM trait registration failed: %s",
+			tostring(ok and reason or installed))
+		return
+	end
+	mod:info("[WOC:655] CIM Poisoned Edge capability active (%s)", tostring(reason))
+end
+
+_rt_register("issue655_blightreaper_trait_contract", function()
+	local weapon_traits = rawget(_G, "WeaponTraits")
+	local traits = weapon_traits and weapon_traits.traits
+	local poison = traits and rawget(traits, _moveset.POISON_TRAIT)
+	local curse = traits and rawget(traits, _moveset.SHYISH_CURSE_TRAIT)
+	if not poison or poison.buff_name ~= _moveset.POISON_BUFF_TEMPLATE then
+		return "Poisoned Edge row does not own the Hagbane proc buff"
+	end
+	if not curse or curse.icon ~= _moveset.SHYISH_CURSE_ICON
+			or curse.crafting_disabled ~= true then
+		return "intrinsic Shyish curse row/icon contract drifted"
+	end
+	local live = _backend_items() and _backend_items():get_item_from_id(BACKEND_ID)
+	if live and (not _moveset.item_has_trait(live, _moveset.POISON_TRAIT)
+			or not _moveset.item_has_trait(live, _moveset.SHYISH_CURSE_TRAIT)) then
+		return "live Blightreaper is missing one intrinsic trait"
+	end
+	local lookup = NetworkLookup and NetworkLookup.traits
+	if lookup and (rawget(lookup, _moveset.POISON_TRAIT)
+			or rawget(lookup, _moveset.SHYISH_CURSE_TRAIT)) then
+		return "WOC-only trait key entered NetworkLookup.traits"
 	end
 end)
 

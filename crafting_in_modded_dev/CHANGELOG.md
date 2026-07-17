@@ -1,5 +1,19 @@
 # Crafting in Modded Changelog
 
+## 0.8.87-dev (2026-07-16): #655 optional WOC poison trait provider [verify-fix-coop]
+
+- Added an exact optional-provider capability boundary for WOC's reusable
+  `Poisoned Edge` melee trait. CIM validates provider id, capability, trait row,
+  and category before adding it to the Adventure trait pool.
+- Persisted provider-owned traits in a parked `external_traits` array whenever
+  the provider is absent. Parked keys never reach the live backend item and are
+  reactivated on the same saved instance when WOC returns.
+- Made registration and pool insertion idempotent and load-order safe. Explicit
+  Athanor replacement or standard reroll also clears the parked value so a
+  removed trait cannot resurrect.
+- Added pure regression coverage for absent-provider parking, exact-capability
+  reactivation, bounded pool insertion, and WOC wire-shadow integration.
+
 ## 0.8.86-dev (2026-07-16): issue 628 unify synthetic identity across salvage and crafting [verify-fix]
 
 - Root cause of the residual issue 628 divergence: two hand-written identity

@@ -44,9 +44,21 @@ Sword donor or cloning damage profiles. Damaging sweeps use Greataxe hit audio
 and effects, while each sword swing event is translated to the corresponding
 one-handed Axe event at the same action index; two-handed Greataxe events are
 not safe substitutes for the sword action graph's timing and sweep geometry.
-Its client equipment proc applies only the native `arrow_poison_dot` through
-`BuffSyncType.All`, which preserves the Hagbane damage and poisoned FX for host-
-and client-owned hits.
+Its `Poisoned Edge` trait owns the only equipment proc and applies the native
+`arrow_poison_dot` through `BuffSyncType.All`, which preserves the Hagbane
+damage and poisoned FX for host- and client-owned hits. `Shyish Health Curse`
+is a second intrinsic, non-rerollable display trait and is the explicit gate
+for the health-converting spirit effect. The two trait icons are resident
+vanilla materials: the Shade poison icon and `mutator_icon_death_spirits`, the
+same icon declared by `scripts/settings/mutators/mutator_death.lua`.
+
+CIM may offer `Poisoned Edge` to other melee weapons only after an exact
+`woc.poison_trait.v1` provider handshake. CIM parks that saved trait while WOC
+is absent, so no unresolved `WeaponTraits` key reaches a live backend item, and
+reactivates it when the provider returns. WOC strips both protected trait keys
+from transient vanilla loadout shadows before `NetworkLookup.traits` encoding;
+the live local item is never mutated and peers without WOC receive no custom
+lookup identifier.
 
 The host listens to `on_player_killed_enemy` and spawns the already-resident
 native Shyish spirit unit from `mutator_death.lua`. Direct kills resolve from
@@ -372,6 +384,17 @@ dependencies. WOC acquires that package under one lifetime reference. Never
 pass the unit path itself to `Managers.package:load`. The existing
 `Application.can_get` guard remains useful defense against a failed request or
 stale build.
+
+### Reusable WOC traits (2026-07-16, issue #655)
+
+Blightreaper declares `woc_poisoned_edge` and `woc_shyish_health_curse` on the
+item rather than attaching poison to its weapon template. This makes the trait
+row the canonical proc owner and prevents template-plus-trait double procs.
+Only the poison trait is exported to CIM; the Shyish curse remains an intrinsic
+Blightreaper identity. Registration is load-order safe: WOC installs its row
+unconditionally during `on_all_mods_loaded`, then offers the exact capability
+to CIM if present; CIM independently validates provider id, capability, trait
+row, and category before admitting it to the melee pool.
 
 ### Blightreaper audio boundary (2026-07-16, issue #633)
 

@@ -19,6 +19,13 @@ M.EXECUTIONER_WWISE_DEP = "wwise/two_handed_swords"
 M.DOT_TEMPLATE = "arrow_poison_dot"
 M.POISON_BUFF_TEMPLATE = "woc_blightreaper_poison_on_hit"
 M.POISON_PROC = "woc_blightreaper_apply_hagbane_poison"
+M.POISON_TRAIT = "woc_poisoned_edge"
+M.SHYISH_CURSE_TRAIT = "woc_shyish_health_curse"
+M.SHYISH_CURSE_BUFF = "woc_shyish_health_curse_display_only"
+M.POISON_TRAIT_ICON = "kerillian_shade_increased_damage_on_poisoned_or_bleeding_enemy"
+-- Proven boot-resident in gui_icons_atlas.lua:3392 and consumed by the native
+-- mutator_death.lua:6 UI. No WOC texture is exposed to another renderer.
+M.SHYISH_CURSE_ICON = "mutator_icon_death_spirits"
 M.CRIT_PROPERTY = "woc_intrinsic_crit"
 M.ORDER_PROPERTY = "woc_power_vs_order"
 M.CRIT_PROPERTY_BUFF = "properties_woc_intrinsic_crit_display_only"
@@ -136,6 +143,50 @@ function M.install_intrinsic_property_rows(weapon_properties, buff_templates)
 	return true, "installed"
 end
 
+-- Trait rows are the canonical owners of Blightreaper's two cursed effects.
+-- The poison row owns the existing on-hit equipment buff. The Shyish row is
+-- display-only because its host-authoritative kill listener is keyed by the
+-- equipped trait/relic identity instead of adding a second equipment proc.
+function M.install_intrinsic_trait_rows(weapon_traits, buff_templates)
+	if type(weapon_traits) ~= "table" or type(weapon_traits.traits) ~= "table"
+			or type(buff_templates) ~= "table" then
+		return false, "trait_tables_unavailable"
+	end
+	weapon_traits.traits[M.POISON_TRAIT] = weapon_traits.traits[M.POISON_TRAIT] or {
+		name = M.POISON_TRAIT,
+		buff_name = M.POISON_BUFF_TEMPLATE,
+		display_name = "woc_poisoned_edge_trait",
+		advanced_description = "description_woc_poisoned_edge_trait",
+		icon = M.POISON_TRAIT_ICON,
+		buffer = "client",
+	}
+	weapon_traits.traits[M.SHYISH_CURSE_TRAIT] = weapon_traits.traits[M.SHYISH_CURSE_TRAIT] or {
+		name = M.SHYISH_CURSE_TRAIT,
+		buff_name = M.SHYISH_CURSE_BUFF,
+		display_name = "woc_shyish_health_curse_trait",
+		advanced_description = "description_woc_shyish_health_curse_trait",
+		icon = M.SHYISH_CURSE_ICON,
+		buffer = "client",
+		crafting_disabled = true,
+	}
+	buff_templates[M.SHYISH_CURSE_BUFF] = buff_templates[M.SHYISH_CURSE_BUFF] or {
+		buffs = { { name = M.SHYISH_CURSE_BUFF } },
+	}
+	return true, "installed"
+end
+
+function M.intrinsic_traits()
+	return { M.POISON_TRAIT, M.SHYISH_CURSE_TRAIT }
+end
+
+function M.item_has_trait(item, trait_key)
+	if type(item) ~= "table" or type(item.traits) ~= "table" then return false end
+	for _, value in ipairs(item.traits) do
+		if value == trait_key then return true end
+	end
+	return false
+end
+
 function M.install(weapons, clone)
 	local report = { installed = false, attacks = 0, skipped = nil }
 	if type(weapons) ~= "table" or type(clone) ~= "function" then
@@ -176,8 +227,9 @@ function M.install(weapons, clone)
 		dependencies[#dependencies + 1] = M.EXECUTIONER_WWISE_DEP
 	end
 	template.wwise_dep_right_hand = dependencies
+	-- Poison is attached through the intrinsic item trait below. Keeping the
+	-- same buff on the template would give one effect two proc owners.
 	template.buffs = template.buffs or {}
-	template.buffs[M.POISON_BUFF_TEMPLATE] = {}
 	for action_name, group in pairs(template.actions or {}) do
 		if type(group) == "table" then
 			for sub_action_name, sub_action in pairs(group) do
