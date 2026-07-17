@@ -415,6 +415,15 @@ variant. This is issue #392, the true umbrella under #394/#396/#397/#399/#416.
 No appearance change is "done" until confirmed in EVERY applicable cell (user
 in-game; compile is not verification `[bugclass: CLAUDE.md #10]`).
 
+This is also a build-integration gate, not a reminder for manual cleanup. Every
+new visual feature must add one canonical descriptor, enumerate every applicable
+keep/mission/preview/husk consumer below, and register executable offline plus
+runtime assertions that reject a missing consumer or transition replay. A
+feature that survives its creation hook but has no mission-entry replay is
+structurally incomplete. Builds must fail when the descriptor, package coverage,
+unit resolver, per-surface adapter, or transition/runtime check is absent; do
+not wait for a user to rediscover that omission after each visual addition.
+
 | Observer / surface | Units/model | Transform | Texture | Pose/animation | Ammo |
 |--------------------|:-----------:|:---------:|:-------:|:--------------:|:----:|
 | Owner, keep local 3P | ☐ | ☐ | ☐ | ☐ | ☐ |

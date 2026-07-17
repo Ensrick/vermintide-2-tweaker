@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-16 - Weapon lifecycle and career-action integration hardening
+
+Weapons of Chaos v0.1.26-dev retains the atomic linked-root pose introduced in
+0.1.25-dev, canonicalizes the exact relic unit descriptor before every
+spawn/preview consumer, repairs native Shyish package/spawn/contact
+damage-to-THP behavior, and supplies every weapon-bound career action. Weapon Tweaker v0.12.268-beta
+and v0.12.269-dev use the same provider-neutral all-row action integration for
+native ports and CWV templates. Offline/live gates now reject missing lifecycle consumers,
+first-row-only ability handling, incomplete action providers, and runtime
+resource/contact drift. Co-op verification remains required; nothing was
+deployed.
+
 ## 2026-07-16 - Blightreaper intrinsic and reusable poison traits
 
 Weapons of Chaos v0.1.23-dev / CIM v0.8.87-dev implement issue #655. The

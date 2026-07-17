@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.25-dev"
+local MOD_VERSION = "0.1.26-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -152,6 +152,8 @@ local _preview = mod:dofile("scripts/mods/weapons_of_chaos/_woc_mod_unit_preview
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
 local _durable_transform_lib = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_woc_durable_transform")
+local _career_weapon_actions = mod:dofile(
+	"scripts/mods/weapons_of_chaos/_lib_career_weapon_actions")
 local _audio_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_audio")
 local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse")
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
@@ -159,6 +161,12 @@ local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventor
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
 local _weapon_appearance = _appearance_lib.new()
 local _transform_diag_budget = 32
+local _appearance_diag_budget = 32
+local function _appearance_diag(format, ...)
+	if _appearance_diag_budget <= 0 then return end
+	_appearance_diag_budget = _appearance_diag_budget - 1
+	pcall(printf, format, ...)
+end
 local function _unit_snapshot(unit)
 	if not unit or not Unit.alive(unit) then return nil end
 	local ok_pos, position = pcall(Unit.local_position, unit, 0)
@@ -200,7 +208,7 @@ end
 
 -- The local dev tuner intentionally owns a non-identity edit, including a
 -- one-shot /wt_dev_hp_apply while live apply is off. Yield only for that exact
--- channel/slot so WOC neither fights the tuner nor abandons the baked pose when
+-- channel/slot so WOC neither fights the tuner nor abandons the canonical pose when
 -- the tool is merely installed or every tuner value is identity.
 local function _dev_tuner_claims(record)
 	if record.surface ~= "owner-spawn" then return false end
@@ -520,8 +528,21 @@ local function _install_blightreaper_moveset()
 			tostring(_moveset_report.skipped))
 		return false
 	end
-	mod:info("[WOC:632] private four-light Sword template ready (attacks=%d poison=%s crit=15%% speed=75%% executioner_audio=true)",
-		_moveset_report.attacks or 0, _moveset.DOT_TEMPLATE)
+	local abilities = _career_weapon_actions.install(
+		Weapons[TEMPLATE], _careers, rawget(_G, "CareerSettings"),
+		rawget(_G, "ActionTemplates"))
+	_moveset_report.ability_actions = abilities
+	if not abilities.ok then
+		printf("[WOC:632] Blightreaper career actions unavailable: %s actions=%s careers=%s",
+			tostring(abilities.skipped or "action_template_missing"),
+			table.concat(abilities.missing_actions or {}, ","),
+			table.concat(abilities.missing_careers or {}, ","))
+		_moveset_report.installed = false
+		return false
+	end
+	mod:info("[WOC:632] private four-light Sword template ready (attacks=%d poison=%s crit=15%% speed=75%% executioner_audio=true career_actions=%d/%d)",
+		_moveset_report.attacks or 0, _moveset.DOT_TEMPLATE,
+		abilities.installed + abilities.existing, abilities.required)
 	return true
 end
 
@@ -774,6 +795,7 @@ end)
 -- StateInGameRunning.on_enter fires on entering the keep AND each mission load;
 -- the `_registered` guard makes re-fires a no-op (CWV registration-timing pattern).
 mod:hook_safe("StateInGameRunning", "on_enter", function()
+	_appearance_diag_budget = 32
 	_ensure_appearance_aliases()
 	_register_blightreaper()
 	if _registered then
@@ -1009,6 +1031,7 @@ local _spirit_state = {
 	spawned = 0,
 	converted = 0,
 	dropped = 0,
+	damage_index = 1,
 }
 local _spirit_diag_budget = 16
 
@@ -1134,11 +1157,12 @@ local function _spawn_spirit(killed_unit, target_unit, attribution)
 			_spirit_state.count, _spirit_state.dropped)
 		return false
 	end
-	local can_get = rawget(_G, "Application") and Application.can_get
-	local ok_resident, resident = can_get and pcall(can_get, "unit", _spirits.UNIT)
-	if not ok_resident or resident ~= true then
+	local packages = Managers and Managers.package
+	local package_ready, package_reason = _spirits.package_ready(packages)
+	if not package_ready then
 		_spirit_state.dropped = _spirit_state.dropped + 1
-		_spirit_diag("native Shyish unit not resident; spawn skipped")
+		_spirit_diag("native Shyish package not ready; spawn skipped reason=%s",
+			tostring(package_reason))
 		return false
 	end
 	local spawner = Managers and Managers.state and Managers.state.unit_spawner
@@ -1220,6 +1244,7 @@ _start_spirit_runtime = function()
 	end
 	events:register(mod, "on_player_killed_enemy", "_woc_on_blightreaper_kill")
 	_spirit_state.event_manager = events
+	_spirit_state.damage_index = 1
 	_spirit_diag_budget = 16
 	_spirit_diag("native Shyish listener armed cap=%d convert=%d delay=%.1f chase=%.1f/%.1f",
 		_spirits.MAX_ACTIVE, _spirits.CONVERT_AMOUNT, _spirits.DELAY_TIME,
@@ -1254,21 +1279,40 @@ local function _update_spirits(dt)
 					local destination = target_pos + Vector3.up()
 					local delta = destination - position
 					local distance_sq = Vector3.length_squared(delta)
+					local direction = Vector3.normalize(delta)
 					if distance_sq <= _spirits.HIT_DISTANCE * _spirits.HIT_DISTANCE then
 						local health = ScriptUnit.has_extension(target, "health_system")
-						if health and type(health.convert_to_temp) == "function"
-								and type(health.current_permanent_health) == "function" then
-							local amount = _spirits.convert_amount(
-								health:current_permanent_health())
-							if amount > 0 then health:convert_to_temp(amount) end
+						local damage_utils = rawget(_G, "DamageUtils")
+						if health and type(health.current_permanent_health) == "function"
+								and type(health.current_temporary_health) == "function"
+								and type(damage_utils) == "table"
+								and type(damage_utils.add_damage_network) == "function"
+								and type(damage_utils.heal_network) == "function" then
+							local permanent = health:current_permanent_health()
+							local temporary = health:current_temporary_health()
+							local amount = _spirits.contact_damage(permanent, temporary)
+							local dealt = 0
+							if amount > 0 then
+								dealt = damage_utils.add_damage_network(target, unit, amount,
+									"torso", _spirits.DAMAGE_TYPE, nil, direction,
+									_spirits.DAMAGE_SOURCE, nil, nil, nil, nil, nil, nil,
+									nil, nil, nil, nil, _spirit_state.damage_index) or 0
+								_spirit_state.damage_index = _spirit_state.damage_index + 1
+								if dealt > 0 then
+									damage_utils.heal_network(target, target, dealt,
+										_spirits.HEAL_TYPE)
+								end
+							end
 							_spirit_state.converted = _spirit_state.converted + 1
-							_spirit_diag("spirit hit converted=%d amount=%d",
-								_spirit_state.converted, amount)
+							_spirit_diag(
+								"spirit contact converted=%d requested=%d dealt=%.2f green=%.2f thp=%.2f",
+								_spirit_state.converted, amount, dealt, permanent, temporary)
+						else
+							_spirit_diag("spirit contact skipped; native damage/heal seam unavailable")
 						end
 						doomed[#doomed + 1] = { entry, "hit", true }
 					else
 						entry.chase = math.max(entry.chase - dt, 0)
-						local direction = Vector3.normalize(delta)
 						Unit.set_local_position(unit, 0,
 							position + direction * (dt * _spirits.CHASE_SPEED))
 						if entry.chase == 0 then
@@ -1289,15 +1333,25 @@ _rt_register("issue632_blightreaper_shyish_spirit_contract", function()
 		or _spirits.UNIT_TEMPLATE ~= "position_synched_dummy_unit" then
 		return "native Shyish network-unit contract drifted"
 	end
-	if _spirits.CONVERT_AMOUNT ~= 5 or _spirits.DELAY_TIME ~= 3
+	if _spirits.SPIRIT_DAMAGE ~= 5 or _spirits.DELAY_TIME ~= 3
 		or _spirits.CHASE_SPEED ~= 1 or _spirits.CHASE_TIME ~= 6 then
 		return "rank-one Shyish conversion/chase values drifted"
 	end
 	if _spirits.MAX_ACTIVE ~= 32 then return "active spirit cap drifted" end
+	local package_ready, package_reason = _spirits.package_ready(
+		Managers and Managers.package)
+	if not package_ready then
+		return "source-backed Shyish package is not loaded: " .. tostring(package_reason)
+	end
 	local direct = _spirits.kill_is_attributable(true, "light_attack", false, nil)
 	local dot = _spirits.kill_is_attributable(false, "arrow_poison_dot", true, 3)
 	local stale = _spirits.kill_is_attributable(false, "arrow_poison_dot", true, 5)
 	if not direct or not dot or stale then return "direct/DOT attribution policy regressed" end
+	if _spirits.contact_damage(10, 0) ~= 5
+			or _spirits.contact_damage(3, 0) ~= 2
+			or _spirits.contact_damage(2, 4) ~= 5 then
+		return "native damage-to-mutator-heal contact amount regressed"
+	end
 	local audio = _spirits.audio_contract()
 	if audio.release ~= "Play_winds_death_gameplay_spirit_release"
 		or audio.loop ~= "Play_winds_death_gameplay_spirit_loop"
@@ -1306,11 +1360,87 @@ _rt_register("issue632_blightreaper_shyish_spirit_contract", function()
 	end
 end)
 
+_rt_register("blightreaper_all_career_ability_actions", function()
+	if mod:get("enable_blightreaper") ~= true then return "skip:Blightreaper disabled" end
+	local abilities = _moveset_report and _moveset_report.ability_actions
+	if type(abilities) ~= "table" or abilities.ok ~= true then
+		return "career ability integration report is unavailable or incomplete"
+	end
+	if abilities.required ~= 10
+			or abilities.installed + abilities.existing ~= abilities.required then
+		return string.format("expected 10/10 weapon-bound career actions, got %s/%s",
+			tostring((abilities.installed or 0) + (abilities.existing or 0)),
+			tostring(abilities.required))
+	end
+	local template = Weapons and Weapons[TEMPLATE]
+	for _, action_name in ipairs(abilities.names or {}) do
+		if not (template and template.actions
+				and template.actions[action_name] == abilities.actions[action_name]) then
+			return "missing Blightreaper career action: " .. tostring(action_name)
+		end
+	end
+end)
+
 local function _husk_peer_id(owner_unit_3p)
 	if not owner_unit_3p then return nil end
 	local player
 	pcall(function() player = Managers.player:owner(owner_unit_3p) end)
 	return player and (player.peer_id or (player.network_id and player:network_id()))
+end
+
+local function _exact_relic_resolution(item_data, backend_id)
+	if backend_id == BACKEND_ID or _power.is_relic(item_data) then return true end
+	if not backend_id then return false end
+	local items = _backend_items()
+	local live
+	if items and type(items.get_item_from_id) == "function" then
+		pcall(function() live = items:get_item_from_id(backend_id) end)
+	end
+	return _power.is_relic(live)
+end
+
+-- #613: the clone deliberately retains its vanilla item name for equip safety.
+-- Resolve the exact immutable backend relic at the canonical unit-table
+-- producer so keep/mission, owner/husk, and preview consumers all receive the
+-- authored WOC unit before their spawn recipes branch. The durable owner then
+-- applies and retains the atomic linked-root pose on the returned units.
+if rawget(_G, "BackendUtils") and BackendUtils.get_item_units then
+	mod:hook(BackendUtils, "get_item_units",
+		function(func, item_data, backend_id, skin, career_name)
+			local item_units = func(item_data, backend_id, skin, career_name)
+			local exact = _exact_relic_resolution(item_data, backend_id)
+			if not exact or type(item_units) ~= "table" then return item_units end
+			local before = item_units.right_hand_unit
+			local _, changed = _appearance.canonicalize_item_units(item_units, true)
+			_appearance_diag(
+				"[WOC:613] canonical item units backend=%s career=%s before=%s after=%s skin=%s replay=%s",
+				tostring(backend_id), tostring(career_name), tostring(before),
+				tostring(item_units.right_hand_unit), tostring(item_units.skin or skin),
+				tostring(changed))
+			return item_units
+		end)
+end
+
+local function _returned_unit_identity(unit)
+	if not unit or not Unit.alive(unit) then return "nil-or-dead" end
+	local debug_name, name_hash, mesh_node = "unavailable", "unavailable", "missing"
+	if type(Unit.debug_name) == "function" then
+		local ok, value = pcall(Unit.debug_name, unit)
+		if ok then debug_name = tostring(value) end
+	end
+	if type(Unit.name_hash) == "function" then
+		local ok, value = pcall(Unit.name_hash, unit)
+		if ok then name_hash = tostring(value) end
+	end
+	if type(Unit.has_node) == "function" and type(Unit.node) == "function" then
+		local ok_has, has = pcall(Unit.has_node, unit, "blightreaper")
+		if ok_has and has then
+			local ok_node, value = pcall(Unit.node, unit, "blightreaper")
+			mesh_node = ok_node and tostring(value) or "lookup-rejected"
+		end
+	end
+	return string.format("debug=%s hash=%s mesh_node=%s",
+		debug_name, name_hash, mesh_node)
 end
 
 -- Remote husks resolve the intentionally vanilla wire item. Re-key the render
@@ -1343,6 +1473,11 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	if is_blightreaper then
 		local surface = _durable_transform_lib.classify_surface(
 			owner_unit_1p, owner_unit_3p)
+		_appearance_diag(
+			"[WOC:613] spawn identity surface=%s requested_1p=%s requested_3p=%s returned_1p={%s} returned_3p={%s}",
+			tostring(surface), tostring(item_units.right_hand_unit),
+			tostring(_appearance.UNIT_3P), _returned_unit_identity(unit_1p),
+			_returned_unit_identity(unit_3p))
 		_wa.apply(unit_3p, _appearance.TRANSFORM, "3p", surface)
 		if unit_1p then
 			_wa.apply(unit_1p, _appearance.TRANSFORM, "1p", surface)
@@ -1627,6 +1762,12 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 			or durable.gameplay ~= "retained_check_then_reapply"
 			or durable.preview ~= "one_shot" or durable.transport ~= "none" then
 		return "durable transform-retention contract drifted"
+	end
+	local probe = { right_hand_unit = BASE_WEAPON, left_hand_unit = "unexpected" }
+	local same, changed = _appearance.canonicalize_item_units(probe, true)
+	if same ~= probe or changed ~= true or probe.right_hand_unit ~= HELD_UNIT
+			or probe.left_hand_unit ~= nil then
+		return "canonical item-unit replay contract drifted"
 	end
 	local ok_1p, resident_1p = pcall(Application.can_get, "unit", HELD_UNIT)
 	local ok_3p, resident_3p = pcall(Application.can_get, "unit", _appearance.UNIT_3P)

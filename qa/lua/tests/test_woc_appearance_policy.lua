@@ -65,6 +65,20 @@ return function(H, repo_root)
 		H.equal(policy.TRANSFORM.offset[3], -0.3)
 	end)
 
+	H.test("WOC #613 canonicalizes only exact relic item-unit descriptors", function()
+		local vanilla = { right_hand_unit = "vanilla", left_hand_unit = "offhand" }
+		local same, changed = policy.canonicalize_item_units(vanilla, false)
+		H.equal(same, vanilla)
+		H.equal(changed, false)
+		H.equal(vanilla.right_hand_unit, "vanilla")
+
+		same, changed = policy.canonicalize_item_units(vanilla, true)
+		H.equal(same, vanilla)
+		H.equal(changed, true)
+		H.equal(vanilla.right_hand_unit, policy.UNIT_1P)
+		H.equal(vanilla.left_hand_unit, nil)
+	end)
+
 	H.test("WOC #613 runtime covers inventory, husk, character, and item previews", function()
 		local main = assert(io.open(repo_root
 			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua", "rb"))
@@ -73,6 +87,10 @@ return function(H, repo_root)
 			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_mod_unit_preview.lua", "rb"))
 		local preview_source = preview:read("*a"); preview:close()
 		H.truthy(main_source:find('mod:hook("GearUtils", "spawn_inventory_unit"', 1, true))
+		H.truthy(main_source:find('mod:hook(BackendUtils, "get_item_units"', 1, true))
+		H.truthy(main_source:find('_appearance.canonicalize_item_units(item_units, true)',
+			1, true))
+		H.truthy(main_source:find('[WOC:613] spawn identity', 1, true))
 		H.truthy(main_source:find('_wa.apply(unit_3p, _appearance.TRANSFORM, "3p"', 1, true))
 		H.truthy(main_source:find('_wa.apply(unit_1p, _appearance.TRANSFORM, "1p"', 1, true))
 		H.truthy(main_source:find('Application.can_get, "material", descriptor.material', 1, true))

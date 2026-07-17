@@ -49,6 +49,7 @@ $required = [ordered]@{
     '4FF265AF5A4F674D.material'  = 'authored inventory icon material'
     '2F41525708BE414A.texture'   = 'authored inventory icon texture'
     '85FFE5B17B07C852.lua'       = 'elf Sword moveset and non-elf animation remaps'
+    '5FFDFE4D5728A9CD.lua'       = 'complete cross-career ability action matrix'
     '7C94415705C67261.lua'       = 'inspect and ambient audio lifecycle'
     'A7F1E2C53A5EC803.lua'       = 'native Shyish spirit policy'
     '18F18F2FBAFE534B.lua'       = 'fixed normal and Chaos Wastes power policy'
@@ -70,4 +71,4 @@ if (-not $SkipWorkshop) {
     }
 }
 $status = if ($SkipWorkshop) { 'skipped' } else { "$matched file(s) exact" }
-Write-Host "[check_woc_blightreaper_bundle_contract] OK - 17 compiled resources, Workshop=$status"
+Write-Host "[check_woc_blightreaper_bundle_contract] OK - 18 compiled resources, Workshop=$status"
