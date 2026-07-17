@@ -55,7 +55,8 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
 | `career_tweaker_data.lua` | VMF widget tree (the settings UI). | returns the widget table | before script (VMF) |
 | `career_tweaker_localization.lua` | Localized strings. | returns the loc table | before data (VMF) |
 | `_crt_damage_classification.lua` | Pure #334/#472 damage-category policy: chip/AOE, self-DoT, and Focused Spirit's Ratling extension. Engine-free and unit-tested. | returns `{ is_chip_or_aoe, is_self_dot, focused_spirit_ignores }`, published as `mod._crt.damage_classification` | first script module, before balance |
-| `career_tweaker_balance.lua` | The BALANCE_MODS rework catalog + apply/restore engine, the crt_* buff pre-registration, AND the issue-425 wire-safety subsystem (parity gate, wire-safe proc/driver wrappers, hot-join replay filter). | returns `{ apply, restore, active_count, parity_gate_ok, wire_parity_live, network_unsafe_ids, BALANCE_MODS }`; sets `mod._crt_registered_buff_names`, `mod._crt_mod_registered_buff_names` | after damage classification (entry captures `balance`) |
+| `career_tweaker_balance.lua` | The BALANCE_MODS rework catalog + apply/restore engine, crt_* buff pre-registration, and issue-425 parity/wire-safe proc wrappers. It loads the hook module once after constructing the catalogue. | returns `{ apply, restore, active_count, parity_gate_ok, wire_parity_live, network_unsafe_ids, BALANCE_MODS }`; sets `mod._crt_registered_buff_names`, `mod._crt_mod_registered_buff_names` | after damage classification (entry captures `balance`) |
+| `_career_tweaker_balance_hooks.lua` | Hook-only boundary extracted from the balance catalogue: per-career `no_random_crits`, Hellborg crit penalty, centralized rework-description `Localize`, and the issue-425 hot-join replay filter. It owns no catalogue or apply/restore state. | installs four existing hooks; preserves `mod._crt_hellborgs_crit_hook_installed` | dofile'd exactly once by `career_tweaker_balance.lua` |
 | Big Rebalance (retired) | The unreachable port was deleted in 0.3.70-dev (#433). Recover historical source from git only as part of a new registration/parity design. | none | absent |
 | `career_tweaker_tourney.lua` | Tourney Balance Testing port (`trn_*` toggles). Same `{apply,restore,active_count}` contract. | returns the contract table | after balance |
 | `_crt_foot_knight_policy.lua` | Engine-free #619 capability, enemy-category, Final March, and secondary-slot composition policy. Shield/great-weapon behavior is template-capability based so compatible WT/CWV templates inherit it. | returns `{ is_shield_type, is_non_polearm_great_type, plan_secondary_slot, all_other_allies_dead, enemy_multiplier }`; published as `mod._crt.foot_knight.policy` | loaded by `_crt_foot_knight.lua` |
@@ -87,6 +88,10 @@ Manifest = the `mod:dofile` order in `career_tweaker.lua`. Data files
    `_CRT_BUFF_NAMES_EXPECTED` in `_crt_regression.lua` and, if it is
    `network_unsafe`, to `_CRT_NETWORK_UNSAFE_EXPECTED` there too - the catalog
    parity checks fail loudly if the two sides drift.
+   Rework talent text belongs in `_career_tweaker_balance_hooks.lua`'s
+   `CRT_DESC_OVERRIDES`; extend its existing `_G.Localize` hook rather than
+   registering another one. A new crit or hot-join policy must likewise merge
+   into that module's existing hook for the same target.
 3. **A new diagnostic / dump command** → `_crt_diagnostics.lua`.
 4. **A new regression check** → `_crt_regression.lua`. Register with `_rt_register`
    in the intended output position (registration order = in-game print order,

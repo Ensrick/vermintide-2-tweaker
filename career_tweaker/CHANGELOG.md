@@ -1,5 +1,11 @@
 # Career Tweaker Changelog
 
+## 0.4.4-beta - 2026-07-17 - #540 balance hook-module extraction [tooling]
+
+- Extracted the hook-only crit policy, talent-description localizer, and hot-join wire filter from the oversized balance catalogue into `_career_tweaker_balance_hooks.lua`. The catalogue remains the single owner of rework definitions and apply/restore state; the extracted module installs the same four hooks once and preserves `mod._crt_hellborgs_crit_hook_installed`.
+- Reduced `career_tweaker_balance.lua` from 4,475 to 3,890 lines without changing settings, buff definitions, hook targets, or lifecycle behavior. The package glob already includes the new module.
+- Added offline structure coverage that requires the load-once boundary, keeps the hook implementations out of the catalogue, and verifies all four hook targets remain present in the extracted module. Updated Foot Knight description coverage to consume the hook owner explicitly.
+
 ## 0.4.3-beta - 2026-07-17 - #663 stable multi-Foot-Knight auras [verify-fix-coop]
 
 - Replaced six source-blind Foot Knight aura drivers with one source-scoped claim coordinator. Vanilla searched the target by buff template alone, so one Foot Knight could remove or suppress the server-controlled instance supplied by another Foot Knight.

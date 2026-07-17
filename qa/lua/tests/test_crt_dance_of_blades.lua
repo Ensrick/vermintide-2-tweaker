@@ -46,9 +46,9 @@ return function(H, repo_root)
         end
         local data = read(repo_root .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_data.lua")
         local loc = read(repo_root .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_localization.lua")
-        local balance = read(repo_root .. "/career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua")
+        local hooks = read(repo_root .. "/career_tweaker/scripts/mods/career_tweaker/_career_tweaker_balance_hooks.lua")
         H.truthy(data:find('setting_id = "rework_we_maidenguard_dance_of_blades"', 1, true))
         H.truthy(loc:find("rework_we_maidenguard_dance_of_blades_description", 1, true))
-        H.truthy(balance:find('["kerillian_maidenguard_versatile_dodge_desc"]', 1, true))
+        H.truthy(hooks:find('["kerillian_maidenguard_versatile_dodge_desc"]', 1, true))
     end)
 end

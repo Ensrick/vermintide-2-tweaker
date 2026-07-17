@@ -51,6 +51,7 @@ local suites = {
     "test_crt_dance_of_blades",
     "test_crt_flagellation",
     "test_crt_foot_knight_policy",
+    "test_crt_balance_split",
     "test_crt_retired_big_rebalance",
     "test_crt_talent_selection",
     "test_mod_tweaker_transaction",

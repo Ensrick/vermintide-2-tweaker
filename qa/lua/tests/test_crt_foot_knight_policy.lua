@@ -217,12 +217,17 @@ return function(H, repo_root)
         local balance_file = assert(io.open(balance_path, "rb"))
         local balance_source = balance_file:read("*a")
         balance_file:close()
+        local hook_path = repo_root
+            .. "/career_tweaker/scripts/mods/career_tweaker/_career_tweaker_balance_hooks.lua"
+        local hook_file = assert(io.open(hook_path, "rb"))
+        local hook_source = hook_file:read("*a")
+        hook_file:close()
         H.truthy(balance_source:find('{ buff = "markus_knight_passive",                 field = "range", value = 10 }', 1, true))
         H.truthy(balance_source:find('{ buff = "markus_knight_passive_block_cost_aura", field = "range", value = 20 }', 1, true))
         H.truthy(balance_source:find('{ buff = "markus_knight_passive_range",           field = "range", value = 20 }', 1, true))
-        H.truthy(balance_source:find('["markus_knight_passive_block_cost_aura_desc_2"]', 1, true))
-        H.truthy(balance_source:find('["markus_knight_damage_taken_ally_proximity_desc_2"]', 1, true))
-        H.equal(balance_source:find('["markus_knight_passive_block_cost_aura_desc"]', 1, true), nil)
+        H.truthy(hook_source:find('["markus_knight_passive_block_cost_aura_desc_2"]', 1, true))
+        H.truthy(hook_source:find('["markus_knight_damage_taken_ally_proximity_desc_2"]', 1, true))
+        H.equal(hook_source:find('["markus_knight_passive_block_cost_aura_desc"]', 1, true), nil)
     end)
 
     local vanilla_path = repo_root
