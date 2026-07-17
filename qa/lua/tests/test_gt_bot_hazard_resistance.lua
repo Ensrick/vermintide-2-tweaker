@@ -47,7 +47,7 @@ return function(H, repo_root)
     end)
 
     H.test("GT #488 production composes singleton damage and cover hooks", function()
-        local main = read("general_tweaker_dev.lua")
+        local main = read("general_tweaker_dev.lua") .. read("_gt_regression_checks.lua")
         local hazard = read("_gt_bot_hazard_resistance.lua")
         local combat = read("_gt_improved_bot_combat.lua")
         H.truthy(main:find("_gt488_scale_bot_hazard_damage", 1, true))

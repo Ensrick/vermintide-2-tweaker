@@ -6,6 +6,21 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-17.
 
+## Runtime regression module boundaries
+
+- `general_tweaker_dev.lua` owns the runtime registry and command lifecycle;
+  `_gt_regression_checks.lua` receives that registry plus the few private
+  helpers its closures require, and registers checks in their historical
+  order. Keep checks lazy: engine globals assigned by later-loaded modules
+  must be resolved when a check runs, not while it is registered.
+- `_gt_bot_fixes.lua` owns hook installation and bot-fix state;
+  `_gt_bot_update_fixes.lua` owns the FIX1 per-frame update policies and the
+  single `PlayerBotBase.update` dispatcher. Do not install a second update
+  hook when adding a policy; route it through that dispatcher.
+- Detection: offline `test_gt_regression_module.lua` protects registry order,
+  dependency injection, and singleton bot-update ownership; the focused bot
+  tests concatenate the owning module when checking moved runtime signatures.
+
 ## Startup-safe infinite ammo (#662)
 
 - [ ] A persisted Godmode + Unlimited Ammo configuration produces no `Network backend has not been set` or `consumer 'infinite_ammo' raised` line before the Keep local player exists.

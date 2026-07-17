@@ -996,6 +996,19 @@ skeletons.
 
 ## QA tooling
 
+### Runtime regression registration — `_wt_runtime_checks.lua`
+
+`weapon_tweaker.lua` owns the regression registry and chat-command lifecycle.
+`_wt_runtime_checks.lua` receives the registry plus the private runtime
+tables/helpers that its closures inspect, then registers the checks in their
+historical order. The module also owns the single
+`/verify_wt_availability_sort` registration. Keep the public and dev copies
+normalized-identical outside paired `WT_DEV_OVERLAY` regions; the dev-only
+animation picker, hold-pose, and zoom checks belong inside those overlays.
+Runtime checks must stay lazy so later initialization can populate the tables
+they inspect. `test_wt_runtime_checks_module.lua` protects the check boundaries,
+counts, dependency contract, overlay delta, and singleton command ownership.
+
 ### Widget-tree reorder verifier — `_qa_wt_reorder.py`
 
 When QA-ing a VMF widget reorder pass (shuffling `setting_id = "unlock_*"` rows in `weapon_tweaker_data.lua` and the matching keys in `weapon_tweaker_localization.lua`), use the verifier script at the repo root: `C:\Users\danjo\source\repos\vermintide-2-tweaker\_qa_wt_reorder.py`.

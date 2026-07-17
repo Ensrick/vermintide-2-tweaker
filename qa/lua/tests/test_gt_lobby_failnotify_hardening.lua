@@ -9,6 +9,7 @@ return function(H, repo_root)
     local reveal = read("general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_lobby_failed_join_reveal.lua")
     local probes = read("general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_debug_probes.lua")
     local entry = read("general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua")
+        .. read("general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_regression_checks.lua")
 
     H.test("GT failed-join popup remains exclusively GT-owned", function()
         H.truthy(reveal:find("local function _take_over_enriched_popup", 1, true))
@@ -37,4 +38,3 @@ return function(H, repo_root)
         H.equal(probes:find("prev_update(self, dt)", 1, true), nil)
     end)
 end
-

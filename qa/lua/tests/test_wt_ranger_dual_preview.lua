@@ -30,6 +30,8 @@ return function(H, repo_root)
     H.test("Ranger Dual Axes corrects only the exact preview tuple", function()
         local main = read(repo_root
             .. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua")
+            .. read(repo_root
+                .. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_runtime_checks.lua")
         H.truthy(main:find("[wt:603] Ranger preview weapon=", 1, true))
         H.truthy(main:find("mod._wt603_preview_diag_seen[diag_key]", 1, true))
         H.truthy(main:find('weapon_key == "dr_dual_wield_axes"', 1, true))

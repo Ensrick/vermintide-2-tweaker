@@ -737,6 +737,19 @@ skeletons.
 
 ## QA tooling
 
+### Runtime regression registration — `_wt_runtime_checks.lua`
+
+`weapon_tweaker_dev.lua` owns the regression registry and chat-command
+lifecycle. `_wt_runtime_checks.lua` receives the registry plus the private
+runtime tables/helpers that its closures inspect, then registers the checks in
+their historical order. The module also owns the single
+`/verify_wt_availability_sort` registration. Keep the public and dev copies
+normalized-identical outside paired `WT_DEV_OVERLAY` regions; the dev-only
+animation picker, hold-pose, and zoom checks belong inside those overlays.
+Runtime checks must stay lazy so later initialization can populate the tables
+they inspect. `test_wt_runtime_checks_module.lua` protects the check boundaries,
+counts, dependency contract, overlay delta, and singleton command ownership.
+
 ### Issue #611 availability-master ownership
 
 `_wt_master_toggles.lua` is the shared beta/dev owner for Weapon Availability

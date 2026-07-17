@@ -12,6 +12,7 @@ return function(H, repo_root)
     local loc = read(root .. "weapon_tweaker_localization.lua")
     local availability = read(root .. "_wt_availability.lua")
     local entry = read(root .. "weapon_tweaker.lua")
+        .. read(root .. "_wt_runtime_checks.lua")
     local wield_patches = dofile(root .. "wt_wield_patches.lua")
     local careers = { "wh_captain", "wh_bountyhunter", "wh_zealot" }
 
