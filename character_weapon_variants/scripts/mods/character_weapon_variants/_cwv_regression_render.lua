@@ -1071,21 +1071,23 @@ _rt_register("issue604_dawi_crowbill_model01_transform", function()
 	end
 	if not target
 			or not same_triplet(target.right_hand_scale_multiplier_3p, { 0.5, 0.5, 0.5 })
+			or not same_triplet(target.right_hand_rotation_1p, { -90, -90, -90 })
 			or not same_triplet(target.right_hand_rotation_3p, { -90, -90, -90 })
 			or target.right_hand_offset
 			or target.right_hand_scale or target.right_hand_rotation
-			or target.right_hand_scale_1p or target.right_hand_rotation_1p then
+			or target.right_hand_scale_1p then
 		return "#604 Dawi Crowbill Model 01 reviewed transform drifted"
 	end
 	local applied = _skin_transform_map[target.key]
 	if not applied
 			or not same_triplet(applied.right_hand_scale_multiplier_3p,
 				target.right_hand_scale_multiplier_3p)
+			or not same_triplet(applied.right_hand_rotation_1p, target.right_hand_rotation_1p)
 			or not same_triplet(applied.right_hand_rotation_3p, target.right_hand_rotation_3p)
 			or applied.right_hand_offset
 			or applied.right_hand_scale or applied.right_hand_rotation
-			or applied.right_hand_scale_1p or applied.right_hand_rotation_1p then
-		return "#604 Dawi Model 01 transform is not isolated to the canonical 3P map"
+			or applied.right_hand_scale_1p then
+		return "#604 Dawi Model 01 transform is not isolated to the canonical perspective map"
 	end
 	local unit_def = _crowbill_transform_by_unit[target.right_hand_unit]
 	local unit_3p_def = _crowbill_transform_by_unit[target.right_hand_unit .. "_3p"]
@@ -1098,6 +1100,47 @@ _rt_register("issue604_dawi_crowbill_model01_transform", function()
 	if type(_om._cwv_resolve_crowbill_transform) ~= "function"
 			or type(_om._cwv_crowbill_transform_delivery) ~= "table" then
 		return "#604 Crowbill runtime delivery/diagnostic seam missing"
+	end
+	if type(_om._cwv_select_husk_transform_def) ~= "function"
+			or type(_om._cwv_husk_transform_apply_plan) ~= "function" then
+		return "#604 remote husk transform boundary missing"
+	end
+	local exact = {
+		variant_key = target.variant_key,
+		right_hand_unit = target.right_hand_unit,
+	}
+	local selected, source = _om._cwv_select_husk_transform_def("right", exact,
+		{ name = family.SOURCE_ITEM }, nil, target.right_hand_unit, nil)
+	local plan = _om._cwv_husk_transform_apply_plan("right", selected, source)
+	if selected ~= applied or source ~= "exact_model" or not plan
+			or plan.should_apply ~= true or plan.durable ~= true
+			or not same_triplet(plan.scale, { 0.5, 0.5, 0.5 })
+			or not same_triplet(plan.rotation, { -90, -90, -90 }) then
+		return "#604 exact Dawi husk does not select/apply its canonical durable 3P transform"
+	end
+	local mismatch = _om._cwv_select_husk_transform_def("right", exact,
+		{ name = family.SOURCE_ITEM }, nil, family.PLACEHOLDER_UNIT, nil)
+	if mismatch ~= nil then
+		return "#604 exact Dawi transform did not fail closed on post-rekey unit mismatch"
+	end
+	local control
+	for _, model in ipairs(family.MODELS) do
+		if model.variant_key == "cwv_es_imperial_crowbill"
+				and model.right_hand_scale == nil and model.right_hand_offset == nil
+				and model.right_hand_rotation == nil and model.right_hand_scale_3p == nil
+				and model.right_hand_rotation_3p == nil then
+			control = model
+			break
+		end
+	end
+	local control_def, control_source = control and _om._cwv_select_husk_transform_def(
+		"right", { variant_key = control.variant_key, right_hand_unit = control.right_hand_unit },
+		{ name = family.SOURCE_ITEM }, nil, control.right_hand_unit, nil)
+	local control_plan = _om._cwv_husk_transform_apply_plan("right", control_def, control_source)
+	if not control or not control_def or control_source ~= "exact_model" or not control_plan
+			or control_plan.should_apply ~= false or control_plan.durable ~= false
+			or control_plan.scale or control_plan.offset or control_plan.rotation then
+		return "#604 Dawi remote transform leaked into the untuned Imperial control"
 	end
 end)
 

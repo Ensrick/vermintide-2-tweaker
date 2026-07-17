@@ -90,8 +90,10 @@ M.MODELS = {
         -- absolute root scale: some 3P attachment paths begin below 0.5, and
         -- overwriting them with absolute 0.5 enlarges the weapon. Inventory,
         -- lobby, score/team and item previews are 3P presentation surfaces.
-        -- First person retains the authored model scale and orientation.
+        -- First person retains the authored model scale, but this imported FBX
+        -- needs the same explicit axis correction as its 3P counterpart.
         right_hand_scale_multiplier_3p = { 0.5, 0.5, 0.5 },
+        right_hand_rotation_1p = { -90, -90, -90 },
         right_hand_rotation_3p = { -90, -90, -90 },
     },
     {

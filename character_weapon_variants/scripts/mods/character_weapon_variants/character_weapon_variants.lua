@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.441-dev"
+local MOD_VERSION = "0.1.443-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -54,6 +54,7 @@ local _om = {}
 _om.infantry_spear = mod:dofile("scripts/mods/character_weapon_variants/_cwv_infantry_spear")
 _om.exact_appearance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_exact_appearance")
 _om.appearance_lifecycle_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_appearance_lifecycle")
+_om.husk_transform_policy = mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_transform_policy")
 _om.greataxe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe")
 _om.dawi_maces = mod:dofile("scripts/mods/character_weapon_variants/_cwv_dawi_maces")
 _om.crowbill_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_crowbill_family")
@@ -10487,6 +10488,14 @@ _om._cwv_resolve_crowbill_transform = function(skin, resolved_unit_name, variant
 	return nil, "miss"
 end
 
+-- #604 schema-2 exact identity must select the reconstructed model definition,
+-- not its transform-free base variant. Production and regression share this policy.
+_om._cwv_husk_transform_policy = _om.husk_transform_policy.bind({ find_def = _find_def,
+	resolve_def = _resolve_cwv_def, resolve_field = _resolve_field,
+	model_by_unit = _crowbill_transform_by_unit })
+_om._cwv_select_husk_transform_def = _om._cwv_husk_transform_policy.select
+_om._cwv_husk_transform_apply_plan = _om._cwv_husk_transform_policy.plan
+
 -- ============================================================
 -- Husk apply helpers  (issues 397/394/399) — assigned onto `_om`
 -- ============================================================
@@ -10994,8 +11003,9 @@ do
 			return
 		end
 		if exact and exact.skin then skin = exact.skin end
-		local def = style_decision or (exact and _find_def(exact.variant_key)
-			or _resolve_cwv_def(item_data, skin, resolved_unit_name))
+		local def, def_source = _om._cwv_select_husk_transform_def(hand, exact,
+			item_data, skin, resolved_unit_name, style_decision)
+		if def_source == "exact_unit_mismatch" then return end
 		if not def and skin == nil then
 			-- #392/#397 fallback, #475-hardened: base+career positive signal for
 			-- SKINLESS echoes only, can_wield evaluated LAZILY at wield time. A
@@ -11005,6 +11015,7 @@ do
 			local bc_career = _husk_career_name(owner_unit_3p)
 			local bc_def, bc_reason = _om._husk_resolve_display_def(item_data and item_data.name, bc_career, nil)
 			def = bc_def
+			if def then def_source = "base_career" end
 			if def then
 				_husk_log_once("bc_xform:" .. tostring(item_data and item_data.name) .. ":" .. tostring(bc_career) .. ":" .. tostring(hand),
 					"[cwv:474] husk transform resolved via base+career: base=%s career=%s def=%s hand=%s (skinless echo, pair not currently wieldable)",
@@ -11032,24 +11043,16 @@ do
 			end
 			return
 		end
-		local scale, offset, rotation
-		if hand == "right" then
-			scale    = _resolve_field(def, "right_hand_scale_3p")    or _resolve_field(def, "right_hand_scale")
-				or _resolve_field(def, "right_hand_scale_multiplier_3p")
-			offset   = _resolve_field(def, "right_hand_offset_3p")   or _resolve_field(def, "right_hand_offset")
-			rotation = _resolve_field(def, "right_hand_rotation_3p") or _resolve_field(def, "right_hand_rotation")
-		else
-			scale    = _resolve_field(def, "left_hand_scale_3p")    or _resolve_field(def, "left_hand_scale")
-				or _resolve_field(def, "left_hand_scale_multiplier_3p")
-			offset   = _resolve_field(def, "left_hand_offset_3p")   or _resolve_field(def, "left_hand_offset")
-			rotation = _resolve_field(def, "left_hand_rotation_3p") or _resolve_field(def, "left_hand_rotation")
-		end
-		if scale or offset or rotation then
+		local plan = _om._cwv_husk_transform_apply_plan(hand, def, def_source)
+		local scale = plan and plan.scale
+		local offset = plan and plan.offset
+		local rotation = plan and plan.rotation
+		if plan and plan.should_apply then
 			_apply_cwv_hand_transform(weapon_unit_3p, def, hand, "3p", "remote_husk",
 				resolved_unit_name, skin)
-			printf("[cwv husk-transform] applied hand=%s def=%s scale=%s offset=%s -- issues 397/394",
+			printf("[cwv husk-transform] applied hand=%s def=%s source=%s scale=%s offset=%s -- issues 397/394/604",
 				tostring(hand), tostring(def.item_key or def.item_type),
-				scale and "y" or "n", offset and "y" or "n")
+				tostring(plan.source), scale and "y" or "n", offset and "y" or "n")
 		end
 		-- #604 remote husks consume the same absolute presentation resolver as
 		-- owners and previews.  The render identity is bounded owner+slot state;
