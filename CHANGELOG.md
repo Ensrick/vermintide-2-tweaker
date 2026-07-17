@@ -10,8 +10,11 @@ executable's real version. Direct
 release publishing uses the same invoking/configured/primary/environment
 candidate set and fails closed when no approved launcher exists. Offline
 PowerShell 5.1 and 7 fixtures cover clean external dependencies, invalid paths,
-provenance mismatch, missing candidates, and ship-to-release wiring. Nothing
-was built, deployed, uploaded, or published by this tooling-only change.
+provenance mismatch, missing candidates, and ship-to-release wiring. Full QA
+now runs that contract as an explicit blocking matrix under both PowerShell 7
+and Windows PowerShell 5.1, so hosted QA cannot pass without exercising the
+release-host compatibility boundary. Nothing was built, deployed, uploaded,
+or published by this tooling-only change.
 
 ## 2026-07-17 - Exact CWV identity for independent remote offhands
 

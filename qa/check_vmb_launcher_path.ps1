@@ -132,8 +132,10 @@ try {
 
     $shipPath = Join-Path $repoRoot 'tools\ship\ship.ps1'
     $publishPath = Join-Path $repoRoot 'tools\publish-release\publish-release.ps1'
+    $runAllPath = Join-Path $repoRoot 'qa\run_all.ps1'
     $shipText = [System.IO.File]::ReadAllText($shipPath, [System.Text.Encoding]::UTF8)
     $publishText = [System.IO.File]::ReadAllText($publishPath, [System.Text.Encoding]::UTF8)
+    $runAllText = [System.IO.File]::ReadAllText($runAllPath, [System.Text.Encoding]::UTF8)
     Assert-Contract ($shipText.Contains('-LauncherPath $launcherResolution.Path') -and
         $shipText.Contains('-LauncherSource $launcherResolution.Source') -and
         $shipText.Contains('-LauncherApprovalAnchor $launcherResolution.ApprovalAnchor')) 'ship passes the exact approved launcher snapshot to release publishing'
@@ -142,6 +144,7 @@ try {
         $publishText -match '(?m)^\s*\[string\]\$LauncherApprovalAnchor\b') 'release publisher declares the launcher handoff parameters'
     Assert-Contract ($publishText.Contains('Resolve-ApprovedVmbLauncherPath') -and
         $publishText.Contains('Get-VmbLauncherVersion -LauncherPath $launcher')) 'release publisher revalidates the shared path before recording its version'
+    Assert-Contract ($runAllText -match '(?m)^Run-Check "vmb_launcher_path_host_matrix".*run_vmb_launcher_path_host_matrix\.ps1.*-Policy ''Blocking''\s*$') 'full QA invokes the dual-host launcher contract as a blocking check'
 }
 finally {
     $fixtureFull = [System.IO.Path]::GetFullPath($fixtureRoot)
