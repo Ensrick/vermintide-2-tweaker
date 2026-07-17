@@ -86,8 +86,8 @@ function Get-TitleWordCount([string]$Title) {
 function Test-HasMethodAndExpected($Issue) {
     $comments = @($Issue.comments | ForEach-Object { [string]$_.body })
     foreach ($comment in $comments) {
-        $hasMethod = $comment -match '(?i)test method|verification|verify:|steps?:|repro'
-        $hasExpected = $comment -match '(?i)expected|must pass|should pass|result:'
+        $hasMethod = $comment -match '(?i)test[- ]method|diagnostics? method|verification|verify(?::|\s+(?:after|this|in|with))|to verify|steps?:|next repro|repro(?:duce|duction)?'
+        $hasExpected = $comment -match '(?i)expected|must pass|should pass|result:|\bconfirm\b|\brequire\b.{0,24}\bpass|\bno (?:crash|error|warning|spam|desync)\b'
         if ($hasMethod -and $hasExpected) { return $true }
     }
     return $false
@@ -97,7 +97,7 @@ function Get-LatestTestComment($Issue) {
     $comments = @($Issue.comments)
     for ($index = $comments.Count - 1; $index -ge 0; $index--) {
         $body = [string]$comments[$index].body
-        if ($body -match '(?i)test method|verification|verify solo|solo diagnostic|needs? 2 players|two-player|host\s*\+\s*client|host and client|expected') {
+        if ($body -match '(?i)test[- ]method|diagnostics? method|verification|verify solo|solo diagnostic|co-?op diagnostics?|next repro|needs? 2 (?:players|testers|humans)|two-player|host\s*\+\s*client|host and client|expected') {
             return $body
         }
     }
@@ -108,10 +108,10 @@ function Test-CommentRequiresCoop($Issue) {
     # Historical comments often contain superseded test plans.  The newest
     # explicit test/verification comment is authoritative for current scope.
     $text = Get-LatestTestComment $Issue
-    if ($text -match '(?i)test method\s*\(?(?:[^\r\n)]{0,40})\bsolo\b|verify solo|solo diagnostic|\b(?:one|1) tester\b') {
+    if ($text -match '(?i)test[- ]method\s*\(?(?:[^\r\n)]{0,40})\bsolo\b|verify solo|solo verification|host solo|solo host|solo diagnostic|no (?:second|2nd) player|co-?op (?:is )?not required|\b(?:one|1) tester\b') {
         return $false
     }
-    return $text -match '(?i)two players|2 players|2\+ players|host\s*\+\s*client|host and client|second player|both peers|remote peer|non-mod peer|co-op verification'
+    return $text -match '(?i)two[^\r\n]{0,40}(?:players|testers|humans)|2\+? (?:players|testers|humans)|needs? 2 (?:players|testers|humans)|host\s*\+\s*client|host and client|second player|both peers|remote peer|non-mod peer|co-?op(?:/perspective)? (?:verification|diagnostics?)'
 }
 
 function Get-IssueFindings($Issue) {
@@ -618,8 +618,23 @@ function Get-RelatedClosedIssues($OpenProfile, $RelationContext) {
             score = [int]$score
             confidence = $confidence
             regression_signal = $regressionSignal
-            reasons = @($reasons | ForEach-Object { $_ })
-            closure_evidence = @($closedProfile.closure_evidence)
+            # Materialize fresh plain objects here. PowerShell can otherwise retain
+            # Generic.List pipeline wrappers deeply enough that ConvertTo-Json emits
+            # their display strings ("@{kind=...}") instead of structured evidence.
+            reasons = @($reasons | ForEach-Object {
+                [PSCustomObject][ordered]@{
+                    kind = [string]$_.kind
+                    score = [int]$_.score
+                    evidence = @($_.evidence | ForEach-Object { [string]$_ })
+                }
+            })
+            closure_evidence = @($closedProfile.closure_evidence | ForEach-Object {
+                [PSCustomObject][ordered]@{
+                    kind = [string]$_.kind
+                    source_url = [string]$_.source_url
+                    excerpt = [string]$_.excerpt
+                }
+            })
             review_policy = 'manual review only; never auto-reopen from similarity'
         })
     }
@@ -796,6 +811,16 @@ function Invoke-SelfTest {
     if (@($related[0].reasons.kind) -notcontains 'open_explicitly_references_closed') { throw "direct reference reason missing" }
     if (@($related[0].reasons.kind) -notcontains 'shared_subsystem_labels') { throw "subsystem reason missing" }
     if (@($related[0].reasons.kind) -notcontains 'shared_code_identifiers') { throw "code identifier reason missing" }
+    $roundTrip = $result | ConvertTo-Json -Depth 18 | ConvertFrom-Json
+    if ($roundTrip.issues[0].related_closed_issues[0].reasons[0] -is [string]) {
+        throw "JSON relation reasons were stringified"
+    }
+    if (-not $roundTrip.issues[0].related_closed_issues[0].reasons[0].kind) {
+        throw "JSON relation reason structure missing"
+    }
+    if ($roundTrip.issues[0].related_closed_issues[0].closure_evidence[0] -is [string]) {
+        throw "JSON closure evidence was stringified"
+    }
     if (@($related[0].closure_evidence.kind) -notcontains 'user_confirmed_fixed') { throw "closure evidence missing" }
     if (@($result.issues[1].related_closed_issues | Where-Object { $_.number -eq 91 }).Count -ne 0) { throw "closure evidence created an unrelated relation" }
     foreach ($row in @($result.issues)) {
@@ -806,6 +831,14 @@ function Invoke-SelfTest {
             }
         }
     }
+    $soloWording = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "Ready for solo verification; no second player is required. Expected: PASS." })
+    }
+    if (Test-CommentRequiresCoop $soloWording) { throw "explicit no-second-player wording was misclassified as co-op" }
+    $coopWording = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "## Co-op diagnostics method`nHost with two humans. Expected: bounded evidence." })
+    }
+    if (-not (Test-CommentRequiresCoop $coopWording)) { throw "co-op diagnostics/two-humans wording was missed" }
     Write-Host "[audit-open-issues -SelfTest] OK"
 }
 

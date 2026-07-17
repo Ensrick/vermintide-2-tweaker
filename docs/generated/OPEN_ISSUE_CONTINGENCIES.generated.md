@@ -1,17 +1,17 @@
 # Open issue empirical contingency register
 
-Generated from the live GitHub issue body, comments, labels, and URL at `2026-07-17T06:29:45.9054151Z`. This is a recovery register, not a root-cause claim. Each path states the evidence that must trigger it and the observation that falsifies it. `Insufficient evidence` entries deliberately request a bounded probe instead of inventing a fix.
+Generated from the live GitHub issue body, comments, labels, and URL at `2026-07-17T09:41:23.2576328Z`. This is a recovery register, not a root-cause claim. Each path states the evidence that must trigger it and the observation that falsifies it. `Insufficient evidence` entries deliberately request a bounded probe instead of inventing a fix.
 
-Open issues audited: **303**. Closed issues compared: **354**. Open issues with at least one evidence-ranked closed candidate: **303**. High-confidence relations: **991**.
+Open issues audited: **295**. Closed issues compared: **361**. Open issues with at least one evidence-ranked closed candidate: **295**. High-confidence relations: **1002**.
 
 > Related-closed rankings are a manual review queue. They do not prove a shared root cause and must never auto-reopen an issue. Closure evidence only increases priority after an independent relationship signal exists.
 
 ## #2 - Split oversized Lua modules and restore CI
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/2](https://github.com/Ensrick/vermintide-2-tweaker/issues/2)
-- Current labels: `enhancement, audit, refactor, tooling, verify-fix, 2-moderate`
+- Current labels: `enhancement, audit, refactor, tooling, 2-moderate, not-started`
 - Evidence class: `shared_preview_presentation_descriptor, custom_unit_behavioral_contract, asset_alpha_mip_material_contract, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract, custom_asset_contract, dynamic_localization_ui_contract, backend_realm_isolation`
-- Current action: solo in-game verification
+- Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
@@ -68,21 +68,21 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Fallback 1**
 
-- **Evidence/trigger:** The issue's posted build-specific verification fails at a named invariant or surface.
-- **Change:** Repair the first failed invariant in the current implementation, scoped to that surface.
-- **Falsifier:** The invariant passes while the reported symptom remains.
+- **Evidence/trigger:** The issue body and cited source establish a bounded acceptance contract.
+- **Change:** Implement that contract on current canonical source with a truth-table regression.
+- **Falsifier:** Source/runtime evidence contradicts a required premise in the accepted contract.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract.
-- **Change:** Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior.
-- **Falsifier:** The custom and vanilla boundary inputs/outputs are identical.
+- **Evidence/trigger:** Insufficient evidence: no runtime trace yet distinguishes the candidate engine/UI/inventory boundaries.
+- **Change:** Add a minimal repro and bounded trace at the named boundary, then repair only the first observed divergence.
+- **Falsifier:** Existing evidence already identifies the divergent boundary.
 
 **Fallback 3**
 
-- **Evidence/trigger:** The loaded version/hash or canonical ancestry does not contain the claimed fix.
-- **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
-- **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
+- **Evidence/trigger:** The requested path is blocked by absent provenance/license, resource residency, or external service authority.
+- **Change:** Retain a resident vanilla fallback or keep the feature disabled until the missing evidence/authority exists.
+- **Falsifier:** The required provenance, resource closure, and authority are all positively proved.
 
 ## #48 - cosmetics_tweaker: per-instance weavebound-glow customizer popup for Evengleam (Bretonian Longsword)
 
@@ -392,12 +392,12 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
 
-3. [#156 - ct_dev: Horn of Magnus (magnus_belakor_path1) sometimes spawns NO pickups (health/ammo/tomes/grimoires) when injected into CW](https://github.com/Ensrick/vermintide-2-tweaker/issues/156) - score `143`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 17:45:45`
+3. [#156 - ct_dev: Horn of Magnus (magnus_belakor_path1) sometimes spawns NO pickups (health/ammo/tomes/grimoires) when injected into CW](https://github.com/Ensrick/vermintide-2-tweaker/issues/156) - score `146`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 17:45:45`
    - `shared_explicit_references` (+8): #58
    - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
    - `shared_code_identifiers` (+60): _spawn_guaranteed_pickup, chaos_wastes_tweaker_dev, chaos_wastes_tweaker_dev.lua
-   - `shared_distinctive_terms` (+9): adventure, injected, pickup
+   - `shared_distinctive_terms` (+12): adventure, injected, pickup, show
    - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
 
@@ -1455,7 +1455,17 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-3. [#98 - ct_dev: duplicate-career map-vote chip lands on wrong CW node (current_node_key fallback)](https://github.com/Ensrick/vermintide-2-tweaker/issues/98) - score `215`, confidence `high`, signal `direct-history-reference`, closed `07/05/2026 18:31:31`
+3. [#122 - ct_dev: 'Show Both Chips for Duplicate Careers' — duplicate chip floats / lands on the wrong mission node](https://github.com/Ensrick/vermintide-2-tweaker/issues/122) - score `216`, confidence `high`, signal `direct-history-reference`, closed `07/04/2026 03:51:32`
+   - `open_explicitly_references_closed` (+120): #122
+   - `shared_explicit_references` (+8): #98
+   - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
+   - `shared_code_identifiers` (+20): ct_dev
+   - `shared_distinctive_terms` (+12): chip, map-node, node, show
+   - `closure_verification_evidence` (+2): completed_state_reason
+   - Prior closure evidence: `completed_state_reason`
+
+4. [#98 - ct_dev: duplicate-career map-vote chip lands on wrong CW node (current_node_key fallback)](https://github.com/Ensrick/vermintide-2-tweaker/issues/98) - score `215`, confidence `high`, signal `direct-history-reference`, closed `07/05/2026 18:31:31`
    - `open_explicitly_references_closed` (+120): #98
    - `shared_explicit_references` (+8): #122
    - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
@@ -1465,23 +1475,13 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+4): completed_state_reason, regression_coverage
    - Prior closure evidence: `completed_state_reason, regression_coverage`
 
-4. [#122 - ct_dev: 'Show Both Chips for Duplicate Careers' — duplicate chip floats / lands on the wrong mission node](https://github.com/Ensrick/vermintide-2-tweaker/issues/122) - score `213`, confidence `high`, signal `direct-history-reference`, closed `07/04/2026 03:51:32`
-   - `open_explicitly_references_closed` (+120): #122
-   - `shared_explicit_references` (+8): #98
-   - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
-   - `shared_code_identifiers` (+20): ct_dev
-   - `shared_distinctive_terms` (+9): chip, map-node, node
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
-
-5. [#291 - [crash] CW journey-complete CTD on Cataclysm 3 — vanilla statistics_util.lua:997 'compare number with nil' (difficulty_index nil), won Slaanesh Citadel](https://github.com/Ensrick/vermintide-2-tweaker/issues/291) - score `134`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 05:57:33`
+5. [#156 - ct_dev: Horn of Magnus (magnus_belakor_path1) sometimes spawns NO pickups (health/ammo/tomes/grimoires) when injected into CW](https://github.com/Ensrick/vermintide-2-tweaker/issues/156) - score `135`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 17:45:45`
    - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+60): ct_dev, dominant_god, is_server
-   - `shared_distinctive_terms` (+6): citadel, compare
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
+   - `shared_code_identifiers` (+60): base_level, ct_dev, magnus_nurgle_path1
+   - `shared_distinctive_terms` (+9): adventure, injected, show
+   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
+   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
 
 **Fallback 1**
 
@@ -1573,9 +1573,9 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #139 - gt_dev: bots teleport AWAY FROM* newly-downed player instead of reviving
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/139](https://github.com/Ensrick/vermintide-2-tweaker/issues/139)
-- Current labels: `bug, Tweaker: General, 0-critical, verify-fix-coop`
-- Evidence class: `custom_unit_behavioral_contract, asset_alpha_mip_material_contract, network_peer_parity, source_first_engine_contract, backend_realm_isolation`
-- Current action: two-player in-game verification
+- Current labels: `bug, Tweaker: General, diagnostics-armed, 0-critical, coop-required`
+- Evidence class: `custom_unit_behavioral_contract, asset_alpha_mip_material_contract, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract, backend_realm_isolation`
+- Current action: run documented repro and collect bounded diagnostics
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
@@ -1590,10 +1590,10 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, source_commit_recorded`
 
-2. [#492 - gt bots lock in aid branch, strand behind](https://github.com/Ensrick/vermintide-2-tweaker/issues/492) - score `256`, confidence `high`, signal `direct-history-reference`, closed `07/12/2026 21:46:28`
+2. [#492 - gt bots lock in aid branch, strand behind](https://github.com/Ensrick/vermintide-2-tweaker/issues/492) - score `264`, confidence `high`, signal `direct-history-reference`, closed `07/12/2026 21:46:28`
    - `closed_explicitly_references_open` (+120): #139
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, source_first_engine_contract, backend_realm_isolation
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
    - `shared_code_identifiers` (+60): _gt_bot_fixes.lua, btconditions.should_teleport, gt_bot
    - `shared_distinctive_title_terms` (+7): bots
    - `shared_distinctive_terms` (+9): down, revive, teleport
@@ -1609,40 +1609,38 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
 
-4. [#515 - gt bots: allow teleport past no-return thresholds](https://github.com/Ensrick/vermintide-2-tweaker/issues/515) - score `130`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 21:46:29`
+4. [#508 - gt_dev: debug_highlights error spam before backend ready](https://github.com/Ensrick/vermintide-2-tweaker/issues/508) - score `136`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 18:29:25`
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
-   - `shared_code_identifiers` (+60): btconditions.should_teleport, gt_dev, should_teleport
-   - `shared_distinctive_title_terms` (+14): bots, teleport
-   - `shared_distinctive_terms` (+6): distance, team
-   - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
-   - Prior closure evidence: `completed_state_reason, fixed_label`
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, backend_realm_isolation
+   - `shared_code_identifiers` (+60): /gt_regression_test, gt_dev, gt_regression_test
+   - `shared_distinctive_terms` (+6): logging, position
+   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
 
-5. [#320 - Bots using potions](https://github.com/Ensrick/vermintide-2-tweaker/issues/320) - score `127`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:31:35`
+5. [#304 - Keep dummy collision](https://github.com/Ensrick/vermintide-2-tweaker/issues/304) - score `130`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:21:23`
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+24): custom_unit_behavioral_contract, network_peer_parity, backend_realm_isolation
-   - `shared_code_identifiers` (+60): _gt_bot_fixes.lua, /gt_regression_test, gt_bot_fixes
-   - `shared_distinctive_title_terms` (+7): bots
-   - `closure_verification_evidence` (+6): completed_state_reason, source_commit_recorded, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, source_commit_recorded, user_confirmed_fixed`
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+60): /gt_regression_test, gt_regression_test, verify-fix
+   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
 
 **Fallback 1**
 
-- **Evidence/trigger:** The posted host/client verification for #139 fails and paired logs identify the first divergent peer/state.
-- **Change:** Repair that first owner/husk/RPC/lookup divergence at the existing issue-scoped boundary.
-- **Falsifier:** Both peers log identical authoritative state before the visible failure.
+- **Evidence/trigger:** The issue's bounded armed repro records a first state divergence.
+- **Change:** Repair only the layer named by that trace.
+- **Falsifier:** The trace remains healthy through the observed symptom.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Paired evidence shows authority or replay occurs on the wrong peer/lifecycle edge.
-- **Change:** Move ownership to the source-backed vanilla authority and transmit only bounded lookup-safe identity/state.
-- **Falsifier:** Authority, sender authentication, and lifecycle replay are already identical on both peers.
+- **Evidence/trigger:** Captured runtime state differs from the issue's cited vanilla/decompiled consumer contract.
+- **Change:** Repair the first contract mismatch and retain the probe as regression evidence.
+- **Falsifier:** Captured state matches the source contract at every sampled boundary.
 
 **Fallback 3**
 
-- **Evidence/trigger:** Failure occurs only when a peer lacks the mod, capability, lookup entry, or renderer resource.
-- **Change:** Parity-gate the optional feature and select a resident vanilla fallback for that peer.
-- **Falsifier:** The failing peer proves positive parity and local resource closure.
+- **Evidence/trigger:** Insufficient evidence: the current probe is silent or cannot distinguish the remaining candidates.
+- **Change:** Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix.
+- **Falsifier:** The existing probe already identifies one causal boundary.
 
 ## #141 - ct_dev (feature): save / resume a Chaos Wastes expedition
 
@@ -2401,15 +2399,16 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #161 - wt: polearm regression — Kerillian Spear + Kruber Halberd lost anims on Saltzpyre; add to dev picker + re-fix swing remap
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/161](https://github.com/Ensrick/vermintide-2-tweaker/issues/161)
-- Current labels: `bug, Tweaker: Chaos Wastes, verify-fix`
-- Evidence class: `source_first_engine_contract`
+- Current labels: `bug, Tweaker: Weapons, verify-fix`
+- Evidence class: `custom_unit_behavioral_contract, source_first_engine_contract`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#248 - wt: Executioner Sword (es_2h_sword_executioner) dev anims don't play on Saltzpyre - picker offers SOURCE event names, not Saltzpyre 2H-sword 3P vocab (#196 class)](https://github.com/Ensrick/vermintide-2-tweaker/issues/248) - score `230`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 20:58:51`
+1. [#248 - wt: Executioner Sword (es_2h_sword_executioner) dev anims don't play on Saltzpyre - picker offers SOURCE event names, not Saltzpyre 2H-sword 3P vocab (#196 class)](https://github.com/Ensrick/vermintide-2-tweaker/issues/248) - score `260`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 20:58:51`
    - `closed_explicitly_references_open` (+120): #161
+   - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+8): source_first_engine_contract
    - `shared_code_identifiers` (+60): es_halberd, two_handed_halberds_template_1, we_spear
    - `shared_distinctive_title_terms` (+21): anims, picker, saltzpyre
@@ -2417,7 +2416,8 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, user_confirmed_fixed`
 
-2. [#576 - wt: audit missing Saltzpyre animation-tuner ports; crowbill falsely confirmed](https://github.com/Ensrick/vermintide-2-tweaker/issues/576) - score `98`, confidence `medium`, signal `related-history-review-only`, closed `07/17/2026 05:24:28`
+2. [#576 - wt: audit missing Saltzpyre animation-tuner ports; crowbill falsely confirmed](https://github.com/Ensrick/vermintide-2-tweaker/issues/576) - score `128`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 05:24:28`
+   - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+8): source_first_engine_contract
    - `shared_code_identifiers` (+60): _confirmed.saltzpyre, _needs_anims.saltzpyre, confirmed.saltzpyre
    - `shared_distinctive_title_terms` (+7): saltzpyre
@@ -2425,26 +2425,28 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
 
-3. [#160 - wt: add Kruber Executioner Sword to Saltzpyre dev anim picker](https://github.com/Ensrick/vermintide-2-tweaker/issues/160) - score `71`, confidence `medium`, signal `related-history-review-only`, closed `07/03/2026 18:12:21`
+3. [#160 - wt: add Kruber Executioner Sword to Saltzpyre dev anim picker](https://github.com/Ensrick/vermintide-2-tweaker/issues/160) - score `101`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 18:12:21`
+   - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_code_identifiers` (+40): _needs_anims.saltzpyre, needs_anims.saltzpyre
    - `shared_distinctive_title_terms` (+14): picker, saltzpyre
    - `shared_distinctive_terms` (+15): anim, anims, attack, handed, patch
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-4. [#570 - Startup chat contains automatic CWV and CT state notices](https://github.com/Ensrick/vermintide-2-tweaker/issues/570) - score `48`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 19:59:11`
-   - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
-   - `shared_lifecycle_surface_classes` (+8): source_first_engine_contract
-   - `shared_distinctive_terms` (+6): changelog, were
-   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
+4. [#569 - wt: Saltzpyre weapons using Warrior Priest greathammer anims face backwards in 3P](https://github.com/Ensrick/vermintide-2-tweaker/issues/569) - score `73`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 23:17:14`
+   - `shared_subsystem_labels` (+30): Tweaker: Weapons
+   - `shared_lifecycle_surface_classes` (+16): custom_unit_behavioral_contract, source_first_engine_contract
+   - `shared_distinctive_title_terms` (+14): anims, saltzpyre
+   - `shared_distinctive_terms` (+3): remap
+   - `closure_verification_evidence` (+10): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed`
 
-5. [#262 - [crash] ct_dev: host NetworkedFlowStateManager 'Too many object states(512)' overflow during Chest of Trials + raised enemy caps](https://github.com/Ensrick/vermintide-2-tweaker/issues/262) - score `47`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 05:26:41`
-   - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
-   - `shared_lifecycle_surface_classes` (+8): source_first_engine_contract
-   - `shared_distinctive_terms` (+3): events
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
+5. [#597 - CWV: replace Poleaxe with Kruber Greataxe models](https://github.com/Ensrick/vermintide-2-tweaker/issues/597) - score `65`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 04:44:36`
+   - `shared_subsystem_labels` (+30): Tweaker: Weapons
+   - `shared_lifecycle_surface_classes` (+16): custom_unit_behavioral_contract, source_first_engine_contract
+   - `shared_distinctive_terms` (+9): attack, handed, swing
+   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
 
 **Fallback 1**
 
@@ -2744,7 +2746,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/178](https://github.com/Ensrick/vermintide-2-tweaker/issues/178)
 - Current labels: `bug, Tweaker: Weapons, verify-fix`
-- Evidence class: `general_regression_and_verification_discipline`
+- Evidence class: `bounded_transaction_lifecycle`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
@@ -2773,18 +2775,19 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-4. [#236 - wt: Deepwood Staff (we_life_staff) not available on Kruber - cannot test](https://github.com/Ensrick/vermintide-2-tweaker/issues/236) - score `77`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 21:50:16`
+4. [#179 - wt: Weapon Availability — group rows by source char in fixed order (Kruber, Bardin, Saltzpyre, Kerillian, Sienna)](https://github.com/Ensrick/vermintide-2-tweaker/issues/179) - score `82`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/02/2026 20:05:49`
+   - `shared_subsystem_labels` (+30): Tweaker: Weapons
+   - `shared_lifecycle_surface_classes` (+8): bounded_transaction_lifecycle
+   - `shared_code_identifiers` (+40): wt_wield_patches, wt_wield_patches.lua
+   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
+   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
+
+5. [#236 - wt: Deepwood Staff (we_life_staff) not available on Kruber - cannot test](https://github.com/Ensrick/vermintide-2-tweaker/issues/236) - score `77`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 21:50:16`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_code_identifiers` (+40): wt_wield_patches, wt_wield_patches.lua
    - `shared_distinctive_terms` (+3): patches
    - `closure_verification_evidence` (+4): completed_state_reason, regression_coverage
    - Prior closure evidence: `completed_state_reason, regression_coverage`
-
-5. [#179 - wt: Weapon Availability — group rows by source char in fixed order (Kruber, Bardin, Saltzpyre, Kerillian, Sienna)](https://github.com/Ensrick/vermintide-2-tweaker/issues/179) - score `74`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/02/2026 20:05:49`
-   - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_code_identifiers` (+40): wt_wield_patches, wt_wield_patches.lua
-   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
 
 **Fallback 1**
 
@@ -2913,13 +2916,13 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+4): completed_state_reason, regression_coverage
    - Prior closure evidence: `completed_state_reason, regression_coverage`
 
-5. [#195 - wt: Necromancy Staff soul_rip crash on cross-char wielder (FX force-load timing)](https://github.com/Ensrick/vermintide-2-tweaker/issues/195) - score `89`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 18:11:42`
+5. [#576 - wt: audit missing Saltzpyre animation-tuner ports; crowbill falsely confirmed](https://github.com/Ensrick/vermintide-2-tweaker/issues/576) - score `89`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 05:24:28`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
-   - `shared_code_identifiers` (+40): weapon_tweaker, weapon_tweaker.lua
-   - `shared_distinctive_terms` (+9): force-load, priest, reference
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
+   - `shared_lifecycle_surface_classes` (+16): appearance_surface_fanout, network_peer_parity
+   - `shared_code_identifiers` (+20): animation_coverage.md
+   - `shared_distinctive_terms` (+15): anim, animations, anims, handed, model-sub
+   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
 
 **Fallback 1**
 
@@ -3010,49 +3013,50 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/183](https://github.com/Ensrick/vermintide-2-tweaker/issues/183)
 - Current labels: `bug, Tweaker: Weapons, verify-fix`
-- Evidence class: `dynamic_localization_ui_contract, backend_realm_isolation`
+- Evidence class: `asset_alpha_mip_material_contract, dynamic_localization_ui_contract, backend_realm_isolation`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#179 - wt: Weapon Availability — group rows by source char in fixed order (Kruber, Bardin, Saltzpyre, Kerillian, Sienna)](https://github.com/Ensrick/vermintide-2-tweaker/issues/179) - score `192`, confidence `high`, signal `direct-history-reference`, closed `07/02/2026 20:05:49`
+1. [#179 - wt: Weapon Availability — group rows by source char in fixed order (Kruber, Bardin, Saltzpyre, Kerillian, Sienna)](https://github.com/Ensrick/vermintide-2-tweaker/issues/179) - score `200`, confidence `high`, signal `direct-history-reference`, closed `07/02/2026 20:05:49`
    - `open_explicitly_references_closed` (+120): #179
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+16): dynamic_localization_ui_contract, backend_realm_isolation
+   - `shared_lifecycle_surface_classes` (+24): asset_alpha_mip_material_contract, dynamic_localization_ui_contract, backend_realm_isolation
    - `shared_distinctive_title_terms` (+7): availability
    - `shared_distinctive_terms` (+15): bardin, cross-character, kerillian, order, ordering
    - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
 
-2. [#597 - CWV: replace Poleaxe with Kruber Greataxe models](https://github.com/Ensrick/vermintide-2-tweaker/issues/597) - score `71`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 04:44:36`
+2. [#197 - wt: 27x '(localize): localization file was not loaded' flood — picker resolves names via mod:localize before loc is registered](https://github.com/Ensrick/vermintide-2-tweaker/issues/197) - score `86`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:34:26`
+   - `shared_subsystem_labels` (+30): Tweaker: Weapons
+   - `shared_lifecycle_surface_classes` (+16): dynamic_localization_ui_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+20): weapon_display_name
+   - `shared_distinctive_title_terms` (+7): names
+   - `shared_distinctive_terms` (+9): keys, localization, sienna
+   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
+   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
+
+3. [#597 - CWV: replace Poleaxe with Kruber Greataxe models](https://github.com/Ensrick/vermintide-2-tweaker/issues/597) - score `71`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 04:44:36`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): dynamic_localization_ui_contract, backend_realm_isolation
    - `shared_distinctive_terms` (+15): availability, axes, bardin, localization, names
    - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
 
-3. [#594 - WT exposes Bardin Hammer+Shield to Saltzpyre](https://github.com/Ensrick/vermintide-2-tweaker/issues/594) - score `69`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 19:50:22`
+4. [#594 - WT exposes Bardin Hammer+Shield to Saltzpyre](https://github.com/Ensrick/vermintide-2-tweaker/issues/594) - score `69`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 19:50:22`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): dynamic_localization_ui_contract, backend_realm_isolation
    - `shared_distinctive_terms` (+15): availability, bardin, localization, rows, saltzpyre
    - `closure_verification_evidence` (+8): completed_state_reason, source_commit_recorded, user_confirmed_fixed, verification_passed
    - Prior closure evidence: `completed_state_reason, source_commit_recorded, user_confirmed_fixed, verification_passed`
 
-4. [#582 - WT: hide native Bardin Dual Axes](https://github.com/Ensrick/vermintide-2-tweaker/issues/582) - score `67`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:17:06`
+5. [#582 - WT: hide native Bardin Dual Axes](https://github.com/Ensrick/vermintide-2-tweaker/issues/582) - score `67`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:17:06`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): dynamic_localization_ui_contract, backend_realm_isolation
    - `shared_distinctive_terms` (+15): availability, axes, bardin, kerillian, rows
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, user_confirmed_fixed`
-
-5. [#197 - wt: 27x '(localize): localization file was not loaded' flood — picker resolves names via mod:localize before loc is registered](https://github.com/Ensrick/vermintide-2-tweaker/issues/197) - score `66`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:34:26`
-   - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+16): dynamic_localization_ui_contract, backend_realm_isolation
-   - `shared_distinctive_title_terms` (+7): names
-   - `shared_distinctive_terms` (+9): keys, localization, sienna
-   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
 
 **Fallback 1**
 
@@ -3076,13 +3080,29 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/184](https://github.com/Ensrick/vermintide-2-tweaker/issues/184)
 - Current labels: `enhancement, Tweaker: Weapons, diagnostics-armed`
-- Evidence class: `backend_realm_isolation`
+- Evidence class: `network_peer_parity, backend_realm_isolation`
 - Current action: run documented repro and collect bounded diagnostics
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#319 - Axe+Falchion on Kruber; Larger Issue FAILING TO GET ANIMATIONS PROPERLY FROM CONFIG](https://github.com/Ensrick/vermintide-2-tweaker/issues/319) - score `93`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:27:38`
+1. [#236 - wt: Deepwood Staff (we_life_staff) not available on Kruber - cannot test](https://github.com/Ensrick/vermintide-2-tweaker/issues/236) - score `96`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 21:50:16`
+   - `shared_subsystem_labels` (+30): Tweaker: Weapons
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
+   - `shared_code_identifiers` (+40): wt_unlock_data, wt_unlock_data.lua
+   - `shared_distinctive_terms` (+6): added, unlock
+   - `closure_verification_evidence` (+4): completed_state_reason, regression_coverage
+   - Prior closure evidence: `completed_state_reason, regression_coverage`
+
+2. [#160 - wt: add Kruber Executioner Sword to Saltzpyre dev anim picker](https://github.com/Ensrick/vermintide-2-tweaker/issues/160) - score `95`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 18:12:21`
+   - `shared_subsystem_labels` (+30): Tweaker: Weapons
+   - `shared_code_identifiers` (+40): anim_event, anim_event_3p
+   - `shared_distinctive_title_terms` (+14): anim, picker
+   - `shared_distinctive_terms` (+9): anims, tune, vocab
+   - `closure_verification_evidence` (+2): completed_state_reason
+   - Prior closure evidence: `completed_state_reason`
+
+3. [#319 - Axe+Falchion on Kruber; Larger Issue FAILING TO GET ANIMATIONS PROPERLY FROM CONFIG](https://github.com/Ensrick/vermintide-2-tweaker/issues/319) - score `93`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:27:38`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
    - `shared_code_identifiers` (+40): wt_unlock_data, wt_unlock_data.lua
@@ -3090,36 +3110,21 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
 
-2. [#594 - WT exposes Bardin Hammer+Shield to Saltzpyre](https://github.com/Ensrick/vermintide-2-tweaker/issues/594) - score `89`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 19:50:22`
+4. [#576 - wt: audit missing Saltzpyre animation-tuner ports; crowbill falsely confirmed](https://github.com/Ensrick/vermintide-2-tweaker/issues/576) - score `89`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 05:24:28`
+   - `shared_subsystem_labels` (+30): Tweaker: Weapons
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
+   - `shared_code_identifiers` (+20): anim_event_3p
+   - `shared_distinctive_terms` (+15): anim, anims, charge, cross-character, enumerate
+   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
+
+5. [#594 - WT exposes Bardin Hammer+Shield to Saltzpyre](https://github.com/Ensrick/vermintide-2-tweaker/issues/594) - score `89`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 19:50:22`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
    - `shared_code_identifiers` (+40): wt_unlock_data, wt_unlock_data.lua
    - `shared_distinctive_terms` (+3): unlock
    - `closure_verification_evidence` (+8): completed_state_reason, source_commit_recorded, user_confirmed_fixed, verification_passed
    - Prior closure evidence: `completed_state_reason, source_commit_recorded, user_confirmed_fixed, verification_passed`
-
-3. [#236 - wt: Deepwood Staff (we_life_staff) not available on Kruber - cannot test](https://github.com/Ensrick/vermintide-2-tweaker/issues/236) - score `88`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 21:50:16`
-   - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
-   - `shared_code_identifiers` (+40): wt_unlock_data, wt_unlock_data.lua
-   - `shared_distinctive_terms` (+6): added, unlock
-   - `closure_verification_evidence` (+4): completed_state_reason, regression_coverage
-   - Prior closure evidence: `completed_state_reason, regression_coverage`
-
-4. [#201 - wt: Deepwood Staff (we_life_staff) hard-crashes on non-Kerillian careers — finger-node rig (Unit.node fatal)](https://github.com/Ensrick/vermintide-2-tweaker/issues/201) - score `85`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 18:11:43`
-   - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
-   - `shared_code_identifiers` (+40): wt_unlock_data, wt_unlock_data.lua
-   - `shared_distinctive_terms` (+3): unlock
-   - `closure_verification_evidence` (+4): completed_state_reason, regression_coverage
-   - Prior closure evidence: `completed_state_reason, regression_coverage`
-
-5. [#187 - wt: remove redundant Bardin 1H Axe + 1H Hammer from Saltzpyre (identical to wh_1h_axe / wh_1h_hammer)](https://github.com/Ensrick/vermintide-2-tweaker/issues/187) - score `77`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/02/2026 19:14:38`
-   - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_code_identifiers` (+40): wt_unlock_data, wt_unlock_data.lua
-   - `shared_distinctive_terms` (+3): unlock
-   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
 
 **Fallback 1**
 
@@ -3279,7 +3284,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #203 - cosmetics_tweaker: LA offhand shield illusion DROPS on the local player's own body in-mission (mission-entry + primary<->secondary weapon swap)
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/203](https://github.com/Ensrick/vermintide-2-tweaker/issues/203)
-- Current labels: `bug, Tweaker: Cosmetics, diagnostics-armed`
+- Current labels: `bug, Tweaker: Cosmetics, diagnostics-armed, coop-required`
 - Evidence class: `network_peer_parity, canonical_identity_persistence, source_first_engine_contract, custom_asset_contract, backend_realm_isolation`
 - Current action: run documented repro and collect bounded diagnostics
 - Closed-history status: `ranked-evidence-review`
@@ -3492,7 +3497,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/209](https://github.com/Ensrick/vermintide-2-tweaker/issues/209)
 - Current labels: `bug, Tweaker: GUI, verify-fix`
-- Evidence class: `custom_unit_behavioral_contract`
+- Evidence class: `custom_unit_behavioral_contract, canonical_identity_persistence`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
@@ -3511,7 +3516,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 2. [#216 - gut 3P camera: create_screen_particles nil-return crashes overcharge screen effect + unguarded vortex-exit stop calls (set_particles_material_scalar / stop_spawning_particles nil id)](https://github.com/Ensrick/vermintide-2-tweaker/issues/216) - score `238`, confidence `high`, signal `direct-history-reference`, closed `07/02/2026 03:12:57`
    - `closed_explicitly_references_open` (+120): #209
    - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_code_identifiers` (+60): _gut_camera.lua, gut_camera, gut_dev
+   - `shared_code_identifiers` (+60): _gut_camera.lua, create_screen_particles, gut_camera
    - `shared_distinctive_title_terms` (+14): camera, screen
    - `shared_distinctive_terms` (+12): effect, extension, person, screen-space
    - `closure_verification_evidence` (+2): completed_state_reason
@@ -3525,17 +3530,17 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-4. [#275 - gut: The Enchanter's Lair (Drachenfels 3) - Skip Cutscenes auto-skips Nurgloth's phase cutscene, boss jumps to final phase and softlocks (health stuck at phase-1 amount)](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) - score `81`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 21:32:17`
+4. [#275 - gut: The Enchanter's Lair (Drachenfels 3) - Skip Cutscenes auto-skips Nurgloth's phase cutscene, boss jumps to final phase and softlocks (health stuck at phase-1 amount)](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) - score `89`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 21:32:17`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): custom_unit_behavioral_contract
+   - `shared_lifecycle_surface_classes` (+16): custom_unit_behavioral_contract, canonical_identity_persistence
    - `shared_code_identifiers` (+20): gut_dev
    - `shared_distinctive_terms` (+15): deferred, drives, migrated, reported, systems
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
 
-5. [#307 - Free Camera](https://github.com/Ensrick/vermintide-2-tweaker/issues/307) - score `81`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:37:39`
+5. [#307 - Free Camera](https://github.com/Ensrick/vermintide-2-tweaker/issues/307) - score `89`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:37:39`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): custom_unit_behavioral_contract
+   - `shared_lifecycle_surface_classes` (+16): custom_unit_behavioral_contract, canonical_identity_persistence
    - `shared_code_identifiers` (+20): gut_dev
    - `shared_distinctive_title_terms` (+7): camera
    - `shared_distinctive_terms` (+6): mode, person
@@ -4225,11 +4230,11 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-5. [#525 - Rename Modded Progression Tab](https://github.com/Ensrick/vermintide-2-tweaker/issues/525) - score `115`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 00:45:10`
+5. [#525 - Rename Modded Progression Tab](https://github.com/Ensrick/vermintide-2-tweaker/issues/525) - score `118`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 00:45:10`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `shared_distinctive_terms` (+9): direction, resolves, were
+   - `shared_distinctive_terms` (+12): direction, resolves, show, were
    - `closure_verification_evidence` (+12): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed`
 
@@ -4254,7 +4259,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #233 - cosmetics/LA: host's LA shield invisible to CLIENT at mission start - RECV lands but husk mesh never swapped, paint gate SKIPs
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/233](https://github.com/Ensrick/vermintide-2-tweaker/issues/233)
-- Current labels: `bug, Tweaker: Cosmetics, coop-required`
+- Current labels: `bug, Tweaker: Cosmetics, not-started, coop-required`
 - Evidence class: `custom_unit_behavioral_contract, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract, custom_asset_contract, backend_realm_isolation`
 - Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
@@ -4336,22 +4341,30 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #237 - cwv: elf Sword & Shield (cwv_we_sword_shield) renders as Kruber's sword+shield on the inventory character-preview model
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/237](https://github.com/Ensrick/vermintide-2-tweaker/issues/237)
-- Current labels: `bug, CWV, verify-fix`
-- Evidence class: `shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, source_first_engine_contract, custom_asset_contract, backend_realm_isolation`
-- Current action: solo in-game verification
+- Current labels: `bug, CWV, diagnostics-armed`
+- Evidence class: `shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, source_first_engine_contract, custom_asset_contract, backend_realm_isolation`
+- Current action: run documented repro and collect bounded diagnostics
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#418 - CWV: residency ref string duplicated, base-mesh risk](https://github.com/Ensrick/vermintide-2-tweaker/issues/418) - score `141`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 16:22:45`
+1. [#392 - CWV blacksmith/template items resolve to base weapon](https://github.com/Ensrick/vermintide-2-tweaker/issues/392) - score `141`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:47`
    - `shared_subsystem_labels` (+30): CWV
-   - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, custom_asset_contract
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, custom_asset_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+60): base_weapon, character_weapon_variants, character_weapon_variants.lua
+   - `shared_distinctive_terms` (+15): blacksmith, hand, instance, left, mesh
+   - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
+   - Prior closure evidence: `completed_state_reason, fixed_label`
+
+2. [#418 - CWV: residency ref string duplicated, base-mesh risk](https://github.com/Ensrick/vermintide-2-tweaker/issues/418) - score `141`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 16:22:45`
+   - `shared_subsystem_labels` (+30): CWV
+   - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence
    - `shared_code_identifiers` (+60): character_weapon_variants, character_weapon_variants.lua, cwv_preview_meshswap_apply
    - `shared_distinctive_terms` (+15): carry, inventory-preview, mesh, mesh-swap, require
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
 
-2. [#390 - CIM crafts CWV weapons as base vanilla item](https://github.com/Ensrick/vermintide-2-tweaker/issues/390) - score `141`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 15:10:16`
+3. [#390 - CIM crafts CWV weapons as base vanilla item](https://github.com/Ensrick/vermintide-2-tweaker/issues/390) - score `141`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 15:10:16`
    - `shared_subsystem_labels` (+30): CWV
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, source_first_engine_contract, custom_asset_contract, backend_realm_isolation
    - `shared_code_identifiers` (+60): build_entry, character_weapon_variants, character_weapon_variants.lua
@@ -4359,15 +4372,15 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
 
-3. [#397 - CWV transforms (offset/scale/rotation) not applied on husks](https://github.com/Ensrick/vermintide-2-tweaker/issues/397) - score `139`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 23:01:57`
+4. [#397 - CWV transforms (offset/scale/rotation) not applied on husks](https://github.com/Ensrick/vermintide-2-tweaker/issues/397) - score `139`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 23:01:57`
    - `shared_subsystem_labels` (+30): CWV
-   - `shared_lifecycle_surface_classes` (+32): appearance_surface_fanout, network_peer_parity, source_first_engine_contract, backend_realm_isolation
+   - `shared_lifecycle_surface_classes` (+32): appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, source_first_engine_contract
    - `shared_code_identifiers` (+60): base_weapon, character_weapon_variants, character_weapon_variants.lua
    - `shared_distinctive_terms` (+15): applies, capture, case, equipment, even
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-4. [#409 - cwv: Old Musket mis-posed on inventory preview only](https://github.com/Ensrick/vermintide-2-tweaker/issues/409) - score `139`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 17:42:40`
+5. [#409 - cwv: Old Musket mis-posed on inventory preview only](https://github.com/Ensrick/vermintide-2-tweaker/issues/409) - score `139`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 17:42:40`
    - `shared_subsystem_labels` (+30): CWV
    - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, source_first_engine_contract
    - `shared_code_identifiers` (+60): _cwv_spawn_item_post, character_weapon_variants, character_weapon_variants.lua
@@ -4375,31 +4388,23 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-5. [#392 - CWV blacksmith/template items resolve to base weapon](https://github.com/Ensrick/vermintide-2-tweaker/issues/392) - score `133`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:47`
-   - `shared_subsystem_labels` (+30): CWV
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, custom_asset_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+60): base_weapon, character_weapon_variants, character_weapon_variants.lua
-   - `shared_distinctive_terms` (+15): blacksmith, hand, instance, left, mesh
-   - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
-   - Prior closure evidence: `completed_state_reason, fixed_label`
-
 **Fallback 1**
 
-- **Evidence/trigger:** The issue's posted build-specific verification fails at a named invariant or surface.
-- **Change:** Repair the first failed invariant in the current implementation, scoped to that surface.
-- **Falsifier:** The invariant passes while the reported symptom remains.
+- **Evidence/trigger:** The issue's bounded armed repro records a first state divergence.
+- **Change:** Repair only the layer named by that trace.
+- **Falsifier:** The trace remains healthy through the observed symptom.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract.
-- **Change:** Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior.
-- **Falsifier:** The custom and vanilla boundary inputs/outputs are identical.
+- **Evidence/trigger:** Captured runtime state differs from the issue's cited vanilla/decompiled consumer contract.
+- **Change:** Repair the first contract mismatch and retain the probe as regression evidence.
+- **Falsifier:** Captured state matches the source contract at every sampled boundary.
 
 **Fallback 3**
 
-- **Evidence/trigger:** The loaded version/hash or canonical ancestry does not contain the claimed fix.
-- **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
-- **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
+- **Evidence/trigger:** Insufficient evidence: the current probe is silent or cannot distinguish the remaining candidates.
+- **Change:** Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix.
+- **Falsifier:** The existing probe already identifies one causal boundary.
 
 ## #241 - gt noclip: ledge-grab / out-of-bounds triggers still fire while noclipping
 
@@ -4966,11 +4971,11 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
 
-5. [#517 - gut: TOML config-read never worked in retail](https://github.com/Ensrick/vermintide-2-tweaker/issues/517) - score `56`, confidence `medium`, signal `related-history-review-only`, closed `07/13/2026 19:48:18`
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
+5. [#649 - Major Crash when Selecting Helmgart Campaign in Mission Select](https://github.com/Ensrick/vermintide-2-tweaker/issues/649) - score `58`, confidence `medium`, signal `related-history-review-only`, closed `07/17/2026 06:32:23`
+   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
    - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
+   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
 
 **Fallback 1**
 
@@ -5352,25 +5357,25 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, source_commit_recorded, user_confirmed_fixed`
 
-2. [#106 - gut (cutscene skip): "Blood in the Darkness" (Drachenfels, dlc_castle) cutscene stuck in Chaos Wastes — black bars + forced camera + loading icon, skip broken](https://github.com/Ensrick/vermintide-2-tweaker/issues/106) - score `251`, confidence `high`, signal `direct-history-reference`, closed `07/02/2026 17:30:10`
-   - `open_explicitly_references_closed` (+120): #106
-   - `shared_explicit_references` (+8): #140
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, source_first_engine_contract
-   - `shared_code_identifiers` (+60): event_on_activate, event_on_skip, flow_cb_cutscene_effect
-   - `shared_distinctive_terms` (+15): activate, auto-skip, camera, cutscene, cutscene-skip
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
-
-3. [#275 - gut: The Enchanter's Lair (Drachenfels 3) - Skip Cutscenes auto-skips Nurgloth's phase cutscene, boss jumps to final phase and softlocks (health stuck at phase-1 amount)](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) - score `233`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 21:32:17`
+2. [#275 - gut: The Enchanter's Lair (Drachenfels 3) - Skip Cutscenes auto-skips Nurgloth's phase cutscene, boss jumps to final phase and softlocks (health stuck at phase-1 amount)](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) - score `253`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 21:32:17`
    - `open_explicitly_references_closed` (+120): #275
    - `shared_explicit_references` (+16): #106, #140
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+24): custom_unit_behavioral_contract, network_peer_parity, source_first_engine_contract
-   - `shared_code_identifiers` (+20): event_on_skip
+   - `shared_code_identifiers` (+40): cs_01_skip, event_on_skip
    - `shared_distinctive_terms` (+15): activate, armed, auto-skip, cutscene, cutscenes
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
+
+3. [#106 - gut (cutscene skip): "Blood in the Darkness" (Drachenfels, dlc_castle) cutscene stuck in Chaos Wastes — black bars + forced camera + loading icon, skip broken](https://github.com/Ensrick/vermintide-2-tweaker/issues/106) - score `251`, confidence `high`, signal `direct-history-reference`, closed `07/02/2026 17:30:10`
+   - `open_explicitly_references_closed` (+120): #106
+   - `shared_explicit_references` (+8): #140
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, source_first_engine_contract
+   - `shared_code_identifiers` (+60): cs_01_skip, event_on_activate, event_on_skip
+   - `shared_distinctive_terms` (+15): activate, auto-skip, camera, cutscene, cutscene-skip
+   - `closure_verification_evidence` (+2): completed_state_reason
+   - Prior closure evidence: `completed_state_reason`
 
 4. [#525 - Rename Modded Progression Tab](https://github.com/Ensrick/vermintide-2-tweaker/issues/525) - score `125`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 00:45:10`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
@@ -5835,11 +5840,11 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Ranked related closed issues (manual review)**
 
-1. [#525 - Rename Modded Progression Tab](https://github.com/Ensrick/vermintide-2-tweaker/issues/525) - score `109`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 00:45:10`
+1. [#525 - Rename Modded Progression Tab](https://github.com/Ensrick/vermintide-2-tweaker/issues/525) - score `112`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 00:45:10`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `shared_distinctive_terms` (+3): standalone
+   - `shared_distinctive_terms` (+6): show, standalone
    - `closure_verification_evidence` (+12): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed`
 
@@ -5974,7 +5979,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `shared_explicit_references` (+8): #106
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, backend_realm_isolation
-   - `shared_code_identifiers` (+60): _skipped_cutscene_system == self, [gut:cutscene], dlc_dwarf_whaling
+   - `shared_code_identifiers` (+60): _gut_cutscenes.lua, _skipped_cutscene_system == self, [gut:cutscene]
    - `shared_distinctive_title_terms` (+28): dwarf, parting, plays, waves
    - `shared_distinctive_terms` (+15): auto-skip, closed, cutscene, cutscenes, despite
    - `closure_verification_evidence` (+6): completed_state_reason, source_commit_recorded, user_confirmed_fixed
@@ -5985,7 +5990,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `shared_explicit_references` (+16): #106, #140
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, backend_realm_isolation
-   - `shared_code_identifiers` (+60): [gut:cutscene], activate, active_camera
+   - `shared_code_identifiers` (+60): _gut_cutscenes.lua, [gut:cutscene], activate
    - `shared_distinctive_title_terms` (+7): cutscene
    - `shared_distinctive_terms` (+15): activate, always-on, armed, auto, auto-skip
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
@@ -5996,7 +6001,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `shared_explicit_references` (+8): #140
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, backend_realm_isolation
-   - `shared_code_identifiers` (+60): [gut:cutscene], active_camera, auto_skip
+   - `shared_code_identifiers` (+60): _gut_cutscenes.lua, [gut:cutscene], active_camera
    - `shared_distinctive_title_terms` (+14): camera, cutscene
    - `shared_distinctive_terms` (+15): activate, auto, auto-skip, cameras, cleanly
    - `closure_verification_evidence` (+2): completed_state_reason
@@ -6006,7 +6011,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `shared_explicit_references` (+16): #106, #140
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+8): bounded_transaction_lifecycle
-   - `shared_code_identifiers` (+60): active_camera, cutscenesystem, gui_tweaker_dev
+   - `shared_code_identifiers` (+60): _gut_cutscenes.lua, active_camera, cutscenesystem
    - `shared_distinctive_title_terms` (+7): cutscene
    - `shared_distinctive_terms` (+15): auto, auto-skip, cutscenes, done, fails
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed
@@ -6015,7 +6020,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 5. [#537 - gut: on_setting_changed re-latches skippable_cutscenes global](https://github.com/Ensrick/vermintide-2-tweaker/issues/537) - score `123`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:56:55`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, bounded_transaction_lifecycle
-   - `shared_code_identifiers` (+60): gui_tweaker_dev, gut_cutscenes, on_skip
+   - `shared_code_identifiers` (+60): _gut_cutscenes.lua, gui_tweaker_dev, gut_cutscenes
    - `shared_distinctive_terms` (+9): cutscene, cutscenes, skip
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
@@ -6646,17 +6651,17 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/290](https://github.com/Ensrick/vermintide-2-tweaker/issues/290)
 - Current labels: `bug, regression, Tweaker: Weapons, verify-fix, 1-major`
-- Evidence class: `custom_unit_behavioral_contract, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract`
+- Evidence class: `custom_unit_behavioral_contract, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract, backend_realm_isolation`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#319 - Axe+Falchion on Kruber; Larger Issue FAILING TO GET ANIMATIONS PROPERLY FROM CONFIG](https://github.com/Ensrick/vermintide-2-tweaker/issues/319) - score `367`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 03:27:38`
+1. [#319 - Axe+Falchion on Kruber; Larger Issue FAILING TO GET ANIMATIONS PROPERLY FROM CONFIG](https://github.com/Ensrick/vermintide-2-tweaker/issues/319) - score `375`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 03:27:38`
    - `open_explicitly_references_closed` (+120): #319
    - `closed_explicitly_references_open` (+120): #290
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, source_first_engine_contract
+   - `shared_lifecycle_surface_classes` (+24): canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
    - `shared_code_identifiers` (+60): /wt_regression_test, es_, user_settings
    - `shared_distinctive_terms` (+15): anim, animations, config, picker, proper
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
@@ -6671,26 +6676,26 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
 
-3. [#179 - wt: Weapon Availability — group rows by source char in fixed order (Kruber, Bardin, Saltzpyre, Kerillian, Sienna)](https://github.com/Ensrick/vermintide-2-tweaker/issues/179) - score `131`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/02/2026 20:05:49`
+3. [#179 - wt: Weapon Availability — group rows by source char in fixed order (Kruber, Bardin, Saltzpyre, Kerillian, Sienna)](https://github.com/Ensrick/vermintide-2-tweaker/issues/179) - score `139`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/02/2026 20:05:49`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+8): bounded_transaction_lifecycle
+   - `shared_lifecycle_surface_classes` (+16): bounded_transaction_lifecycle, backend_realm_isolation
    - `shared_code_identifiers` (+60): es_, we_, weapon_key
    - `shared_distinctive_title_terms` (+14): kerillian, saltzpyre
    - `shared_distinctive_terms` (+15): bardin, cross-character, flail, receiver, sienna
    - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
 
-4. [#593 - WT conditionally yields native Axe+Shield](https://github.com/Ensrick/vermintide-2-tweaker/issues/593) - score `129`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 04:45:08`
+4. [#536 - wt: wh careers missing empty-wield network patch](https://github.com/Ensrick/vermintide-2-tweaker/issues/536) - score `136`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 22:03:18`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, bounded_transaction_lifecycle
-   - `shared_code_identifiers` (+60): /wt_regression_test, 0.12.230-dev, wt_regression_test
-   - `shared_distinctive_terms` (+15): bardin, receiver, receivers, saltzpyre, stale
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract
+   - `shared_code_identifiers` (+60): /wt_regression_test, weapon_tweaker, weapon_tweaker.lua
+   - `shared_distinctive_terms` (+6): anim, saltzpyre
+   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
 
-5. [#248 - wt: Executioner Sword (es_2h_sword_executioner) dev anims don't play on Saltzpyre - picker offers SOURCE event names, not Saltzpyre 2H-sword 3P vocab (#196 class)](https://github.com/Ensrick/vermintide-2-tweaker/issues/248) - score `126`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 20:58:51`
+5. [#248 - wt: Executioner Sword (es_2h_sword_executioner) dev anims don't play on Saltzpyre - picker offers SOURCE event names, not Saltzpyre 2H-sword 3P vocab (#196 class)](https://github.com/Ensrick/vermintide-2-tweaker/issues/248) - score `134`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 20:58:51`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+8): source_first_engine_contract
+   - `shared_lifecycle_surface_classes` (+16): source_first_engine_contract, backend_realm_isolation
    - `shared_code_identifiers` (+60): anim_event_3p, two_handed_billhooks_template, we_spear
    - `shared_distinctive_title_terms` (+7): saltzpyre
    - `shared_distinctive_terms` (+15): almost, anim, animations, baked, billhook
@@ -6748,21 +6753,21 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
 
-4. [#352 - Implement Original Temporary Health Talent Names](https://github.com/Ensrick/vermintide-2-tweaker/issues/352) - score `99`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:21:26`
+4. [#649 - Major Crash when Selecting Helmgart Campaign in Mission Select](https://github.com/Ensrick/vermintide-2-tweaker/issues/649) - score `102`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:32:23`
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, source_first_engine_contract
+   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
+   - `shared_distinctive_terms` (+6): select, selecting
+   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
+
+5. [#352 - Implement Original Temporary Health Talent Names](https://github.com/Ensrick/vermintide-2-tweaker/issues/352) - score `99`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:21:26`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
    - `shared_distinctive_terms` (+3): include
    - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
-
-5. [#78 - gut Mod Tweaker: native settings-menu layout fidelity (title/tab overlap, dividers, justification, tab casing)](https://github.com/Ensrick/vermintide-2-tweaker/issues/78) - score `95`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 18:12:49`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+40): options_view, options_view.lua
-   - `shared_distinctive_terms` (+15): optionsview, renderer, rows, values, widgets
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
 
 **Fallback 1**
 
@@ -6859,40 +6864,42 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Ranked related closed issues (manual review)**
 
-1. [#275 - gut: The Enchanter's Lair (Drachenfels 3) - Skip Cutscenes auto-skips Nurgloth's phase cutscene, boss jumps to final phase and softlocks (health stuck at phase-1 amount)](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) - score `69`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 21:32:17`
+1. [#261 - gt_dev: split follow mode - bots pursue objectives outside the follow radius, then get leash-yanked; radius should constrain ALL bot behavior](https://github.com/Ensrick/vermintide-2-tweaker/issues/261) - score `85`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 22:09:26`
+   - `shared_subsystem_labels` (+30): Tweaker: General
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
+   - `shared_code_identifiers` (+20): gt_improved_bot_combat
+   - `shared_distinctive_terms` (+15): bots, combat, distance, slider, will
+   - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, source_commit_recorded`
+
+2. [#468 - Bots are wasting healing, this is supposed to be fixed already](https://github.com/Ensrick/vermintide-2-tweaker/issues/468) - score `77`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 19:35:02`
+   - `shared_subsystem_labels` (+30): Tweaker: General
+   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
+   - `shared_code_identifiers` (+20): gt_improved_bot_combat
+   - `shared_distinctive_terms` (+15): better, bots, combat, improvements, part
+   - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
+   - Prior closure evidence: `completed_state_reason, fixed_label`
+
+3. [#275 - gut: The Enchanter's Lair (Drachenfels 3) - Skip Cutscenes auto-skips Nurgloth's phase cutscene, boss jumps to final phase and softlocks (health stuck at phase-1 amount)](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) - score `69`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 21:32:17`
    - `shared_subsystem_labels` (+30): Tweaker: General
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
    - `shared_distinctive_terms` (+15): boss, even, option, stop, will
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
 
-2. [#523 - gt: bots actively heal hurt allies with kits](https://github.com/Ensrick/vermintide-2-tweaker/issues/523) - score `66`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 20:00:19`
+4. [#523 - gt: bots actively heal hurt allies with kits](https://github.com/Ensrick/vermintide-2-tweaker/issues/523) - score `66`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 20:00:19`
    - `shared_subsystem_labels` (+30): Tweaker: General
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
    - `shared_distinctive_terms` (+12): bots, improvements, users, will
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, user_confirmed_fixed, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, user_confirmed_fixed, verification_passed`
 
-3. [#261 - gt_dev: split follow mode - bots pursue objectives outside the follow radius, then get leash-yanked; radius should constrain ALL bot behavior](https://github.com/Ensrick/vermintide-2-tweaker/issues/261) - score `65`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 22:09:26`
-   - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
-   - `shared_distinctive_terms` (+15): bots, combat, distance, slider, will
-   - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, source_commit_recorded`
-
-4. [#515 - gt bots: allow teleport past no-return thresholds](https://github.com/Ensrick/vermintide-2-tweaker/issues/515) - score `62`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 21:46:29`
+5. [#515 - gt bots: allow teleport past no-return thresholds](https://github.com/Ensrick/vermintide-2-tweaker/issues/515) - score `62`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 21:46:29`
    - `shared_subsystem_labels` (+30): Tweaker: General
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
    - `shared_distinctive_terms` (+12): bots, distance, ignore, improvements
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
-
-5. [#359 - Add Command Wheel From Versus as a Means to Assign (Temporary) Bot Behavior During a Mission](https://github.com/Ensrick/vermintide-2-tweaker/issues/359) - score `59`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 20:11:08`
-   - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
-   - `shared_distinctive_terms` (+15): attack, bots, distance, ignore, improvements
-   - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, regression_coverage
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage`
 
 **Fallback 1**
 
@@ -7053,7 +7060,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #302 - Debug highlight options for
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/302](https://github.com/Ensrick/vermintide-2-tweaker/issues/302)
-- Current labels: `Tweaker: General, tooling, verify-fix, feature, 1-major`
+- Current labels: `Tweaker: General, verify-fix, feature, 1-major`
 - Evidence class: `custom_unit_behavioral_contract, asset_alpha_mip_material_contract, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract, custom_asset_contract, dynamic_localization_ui_contract, backend_realm_isolation`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
@@ -7122,7 +7129,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #303 - Freeze AI
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/303](https://github.com/Ensrick/vermintide-2-tweaker/issues/303)
-- Current labels: `Tweaker: General, tooling, verify-fix, feature, 1-major`
+- Current labels: `Tweaker: General, verify-fix, feature, 1-major`
 - Evidence class: `network_peer_parity, canonical_identity_persistence, source_first_engine_contract`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
@@ -7325,29 +7332,38 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/311](https://github.com/Ensrick/vermintide-2-tweaker/issues/311)
 - Current labels: `Tweaker: GUI, verify-fix, feature, 1-major`
-- Evidence class: `network_peer_parity`
+- Evidence class: `renderer_specific_material_closure, network_peer_parity`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#360 - Options Menu - Kill Confirm Crosshair -> Advanced Options Gear Icon Misaligned](https://github.com/Ensrick/vermintide-2-tweaker/issues/360) - score `87`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:06:41`
+1. [#313 - Integrate Crosshair Kill Confirmation mod options into GUT and the normal Options menu. ](https://github.com/Ensrick/vermintide-2-tweaker/issues/313) - score `97`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:32:21`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+8): network_peer_parity
+   - `shared_code_identifiers` (+20): gut_dev
+   - `shared_distinctive_title_terms` (+21): confirmation, crosshair, kill
+   - `shared_distinctive_terms` (+12): advanced, gear, icon, integrate
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+
+2. [#360 - Options Menu - Kill Confirm Crosshair -> Advanced Options Gear Icon Misaligned](https://github.com/Ensrick/vermintide-2-tweaker/issues/360) - score `95`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:06:41`
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+16): renderer_specific_material_closure, network_peer_parity
    - `shared_code_identifiers` (+20): gut_dev
    - `shared_distinctive_title_terms` (+14): crosshair, kill
    - `shared_distinctive_terms` (+9): advanced, gear, icon
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
 
-2. [#527 - UI Tweaks and Crosshair Kill Confirmation in Tweaker GUI position in the middle and bottom of options](https://github.com/Ensrick/vermintide-2-tweaker/issues/527) - score `79`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:56:59`
+3. [#527 - UI Tweaks and Crosshair Kill Confirmation in Tweaker GUI position in the middle and bottom of options](https://github.com/Ensrick/vermintide-2-tweaker/issues/527) - score `79`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:56:59`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_code_identifiers` (+20): gut_dev
    - `shared_distinctive_title_terms` (+21): confirmation, crosshair, kill
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
 
-3. [#339 - CRITICAL: integrated mods wrongly rendered as top-level Mod Tweaker tabs; must live inside category collapsibles](https://github.com/Ensrick/vermintide-2-tweaker/issues/339) - score `79`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:17:57`
+4. [#339 - CRITICAL: integrated mods wrongly rendered as top-level Mod Tweaker tabs; must live inside category collapsibles](https://github.com/Ensrick/vermintide-2-tweaker/issues/339) - score `79`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:17:57`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+8): network_peer_parity
    - `shared_code_identifiers` (+20): gut_dev
@@ -7355,21 +7371,13 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
 
-4. [#305 - Mission Selection during Mission](https://github.com/Ensrick/vermintide-2-tweaker/issues/305) - score `69`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 16:23:56`
+5. [#372 - CRASH (gut loadout manager): hovering a saved loadout in the keep fatals in vanilla get_ui_information_from_item (nil equipment item; gut should own modded loadouts)](https://github.com/Ensrick/vermintide-2-tweaker/issues/372) - score `74`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 16:30:35`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
+   - `shared_lifecycle_surface_classes` (+16): renderer_specific_material_closure, network_peer_parity
    - `shared_code_identifiers` (+20): gut_dev
-   - `shared_distinctive_terms` (+3): advanced
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded`
-
-5. [#175 - gut: save/load loadouts in MODDED realm via the game's native loadout system, modded-scoped (no effect on non-modded)](https://github.com/Ensrick/vermintide-2-tweaker/issues/175) - score `67`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/02/2026 22:39:57`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
-   - `shared_code_identifiers` (+20): gut_dev
-   - `shared_distinctive_terms` (+3): gear
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, user_confirmed_fixed`
+   - `shared_distinctive_terms` (+6): icon, interface
+   - `closure_verification_evidence` (+2): completed_state_reason
+   - Prior closure evidence: `completed_state_reason`
 
 **Fallback 1**
 
@@ -7418,27 +7426,29 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-3. [#307 - Free Camera](https://github.com/Ensrick/vermintide-2-tweaker/issues/307) - score `132`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:37:39`
+3. [#313 - Integrate Crosshair Kill Confirmation mod options into GUT and the normal Options menu. ](https://github.com/Ensrick/vermintide-2-tweaker/issues/313) - score `139`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:32:21`
+   - `shared_explicit_references` (+8): #339
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract
+   - `shared_code_identifiers` (+60): _my_mods, gut_dev, gut_regression_test
+   - `shared_distinctive_terms` (+3): features
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+
+4. [#307 - Free Camera](https://github.com/Ensrick/vermintide-2-tweaker/issues/307) - score `132`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:37:39`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+32): canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract, backend_realm_isolation
    - `shared_code_identifiers` (+60): gut_dev, uploaded new content, workshop_log
    - `closure_verification_evidence` (+10): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed`
 
-4. [#539 - Mid-mission Customize crashes: gsub on nil ItemId](https://github.com/Ensrick/vermintide-2-tweaker/issues/539) - score `127`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:45`
+5. [#539 - Mid-mission Customize crashes: gsub on nil ItemId](https://github.com/Ensrick/vermintide-2-tweaker/issues/539) - score `127`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:45`
    - `shared_subsystem_labels` (+60): cross-mod, Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+16): source_first_engine_contract, backend_realm_isolation
    - `shared_code_identifiers` (+40): gut_dev, gut_regression_test
    - `shared_distinctive_terms` (+3): allow
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
-
-5. [#127 - general_tweaker (stable): remove cutscene skip — it belongs in gut now (gt_dev already removed it v0.2.140-dev)](https://github.com/Ensrick/vermintide-2-tweaker/issues/127) - score `126`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 23:01:32`
-   - `shared_subsystem_labels` (+60): cross-mod, Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+24): bounded_transaction_lifecycle, source_first_engine_contract, dynamic_localization_ui_contract
-   - `shared_code_identifiers` (+40): gut_dev, on_setting_changed
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
 
 **Fallback 1**
 
@@ -7457,75 +7467,6 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 - **Evidence/trigger:** The loaded version/hash or canonical ancestry does not contain the claimed fix.
 - **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
 - **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
-
-## #313 - Integrate Crosshair Kill Confirmation mod options into GUT and the normal Options menu.
-
-- Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/313](https://github.com/Ensrick/vermintide-2-tweaker/issues/313)
-- Current labels: `Tweaker: GUI, feature, 1-major, not-started`
-- Evidence class: `network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract, backend_realm_isolation`
-- Current action: scope against source, then implement or arm diagnostics
-- Closed-history status: `ranked-evidence-review`
-
-**Ranked related closed issues (manual review)**
-
-1. [#339 - CRITICAL: integrated mods wrongly rendered as top-level Mod Tweaker tabs; must live inside category collapsibles](https://github.com/Ensrick/vermintide-2-tweaker/issues/339) - score `367`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 03:17:57`
-   - `open_explicitly_references_closed` (+120): #339
-   - `closed_explicitly_references_open` (+120): #313
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
-   - `shared_code_identifiers` (+60): _gut_ckc_bridge.lua, _my_mods, ckc_modtweaker_whitelisted
-   - `shared_distinctive_terms` (+15): confirmation, crosshair, features, gear, integrate
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
-
-2. [#360 - Options Menu - Kill Confirm Crosshair -> Advanced Options Gear Icon Misaligned](https://github.com/Ensrick/vermintide-2-tweaker/issues/360) - score `143`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:06:41`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, source_first_engine_contract
-   - `shared_code_identifiers` (+60): _gut_ckc_bridge.lua, ckc_gear_left_of_field_clears_scrollbar, gut_ckc_bridge
-   - `shared_distinctive_title_terms` (+14): crosshair, kill
-   - `shared_distinctive_terms` (+9): advanced, gear, icon
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
-
-3. [#307 - Free Camera](https://github.com/Ensrick/vermintide-2-tweaker/issues/307) - score `135`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:37:39`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+32): canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+60): /regression_test, gut_dev, regression_test
-   - `shared_distinctive_terms` (+3): called
-   - `closure_verification_evidence` (+10): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed`
-
-4. [#140 - gut: 'A Parting of the Waves' (dlc_dwarf_whaling, NOT dlc_portals) — fade-to-black plays despite auto-skip; standalone Skip Cutscenes mod co-running contaminates every repro](https://github.com/Ensrick/vermintide-2-tweaker/issues/140) - score `128`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 23:29:50`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract
-   - `shared_code_identifiers` (+60): /regression_test, gut_dev, regression_test
-   - `closure_verification_evidence` (+6): completed_state_reason, source_commit_recorded, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, source_commit_recorded, user_confirmed_fixed`
-
-5. [#173 - gut: 'Hero Select' opens the TALENT menu instead of the hero/character selection (change character/career)](https://github.com/Ensrick/vermintide-2-tweaker/issues/173) - score `126`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/02/2026 21:37:51`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract
-   - `shared_code_identifiers` (+60): gut_dev, mod_tweaker_state, mod_tweaker_view
-   - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, source_commit_recorded`
-
-**Fallback 1**
-
-- **Evidence/trigger:** The issue body and cited source establish a bounded acceptance contract.
-- **Change:** Implement that contract on current canonical source with a truth-table regression.
-- **Falsifier:** Source/runtime evidence contradicts a required premise in the accepted contract.
-
-**Fallback 2**
-
-- **Evidence/trigger:** Insufficient evidence: no runtime trace yet distinguishes the candidate engine/UI/inventory boundaries.
-- **Change:** Add a minimal repro and bounded trace at the named boundary, then repair only the first observed divergence.
-- **Falsifier:** Existing evidence already identifies the divergent boundary.
-
-**Fallback 3**
-
-- **Evidence/trigger:** The requested path is blocked by absent provenance/license, resource residency, or external service authority.
-- **Change:** Retain a resident vanilla fallback or keep the feature disabled until the missing evidence/authority exists.
-- **Falsifier:** The required provenance, resource closure, and authority are all positively proved.
 
 ## #314 - Hook and modify the mod: "Simple UI (Abandoned)"
 
@@ -7560,17 +7501,18 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
 
-4. [#537 - gut: on_setting_changed re-latches skippable_cutscenes global](https://github.com/Ensrick/vermintide-2-tweaker/issues/537) - score `114`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:56:55`
+4. [#313 - Integrate Crosshair Kill Confirmation mod options into GUT and the normal Options menu. ](https://github.com/Ensrick/vermintide-2-tweaker/issues/313) - score `114`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:32:21`
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+40): gut_dev, gut_regression_test
+   - `shared_distinctive_terms` (+6): features, sanctioned
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+
+5. [#537 - gut: on_setting_changed re-latches skippable_cutscenes global](https://github.com/Ensrick/vermintide-2-tweaker/issues/537) - score `114`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:56:55`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, source_first_engine_contract
    - `shared_code_identifiers` (+60): gui_tweaker_dev, gut_dev, gut_regression_test
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
-
-5. [#517 - gut: TOML config-read never worked in retail](https://github.com/Ensrick/vermintide-2-tweaker/issues/517) - score `114`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 19:48:18`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
-   - `shared_code_identifiers` (+60): /gut_regression_test, gui_tweaker_dev, gut_dev
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
 
@@ -7664,7 +7606,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #317 - CWV Animation Picker
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/317](https://github.com/Ensrick/vermintide-2-tweaker/issues/317)
-- Current labels: `CWV, tooling, feature, 2-moderate, verify-fix-coop`
+- Current labels: `CWV, feature, 2-moderate, verify-fix-coop`
 - Evidence class: `appearance_surface_fanout, network_peer_parity, canonical_identity_persistence`
 - Current action: two-player in-game verification
 - Closed-history status: `ranked-evidence-review`
@@ -7765,10 +7707,10 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
 
-5. [#360 - Options Menu - Kill Confirm Crosshair -> Advanced Options Gear Icon Misaligned](https://github.com/Ensrick/vermintide-2-tweaker/issues/360) - score `112`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:06:41`
+5. [#313 - Integrate Crosshair Kill Confirmation mod options into GUT and the normal Options menu. ](https://github.com/Ensrick/vermintide-2-tweaker/issues/313) - score `112`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:32:21`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, canonical_identity_persistence
-   - `shared_code_identifiers` (+60): /gut_regression_test, gui_tweaker_dev, gut_dev
+   - `shared_code_identifiers` (+60): gut_dev, gut_regression_test, mod_tweaker_state
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
 
@@ -7826,19 +7768,19 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): regression_coverage
    - Prior closure evidence: `regression_coverage`
 
-4. [#494 - Handoff: Fable agent campaign state 2026-07-11](https://github.com/Ensrick/vermintide-2-tweaker/issues/494) - score `104`, confidence `high`, signal `related-history-review-only`, closed `07/13/2026 08:34:22`
+4. [#625 - Reconcile unmerged agent branches](https://github.com/Ensrick/vermintide-2-tweaker/issues/625) - score `104`, confidence `high`, signal `related-history-review-only`, closed `07/17/2026 08:00:09`
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+60): career_tweaker, master, retired_big_rebalance.md
+   - `shared_distinctive_terms` (+6): doctrine, removal
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
+
+5. [#494 - Handoff: Fable agent campaign state 2026-07-11](https://github.com/Ensrick/vermintide-2-tweaker/issues/494) - score `104`, confidence `high`, signal `related-history-review-only`, closed `07/13/2026 08:34:22`
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
    - `shared_code_identifiers` (+60): career_tweaker, event_tweaker, weapon_tweaker
    - `shared_distinctive_terms` (+6): gates, pattern
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
-
-5. [#17 - et: BR damage hooks have no host/client gating — divergence risk if settings differ](https://github.com/Ensrick/vermintide-2-tweaker/issues/17) - score `100`, confidence `high`, signal `related-history-review-only`, closed `05/25/2026 19:58:11`
-   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, source_first_engine_contract, dynamic_localization_ui_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+60): br_*, enemy_tweaker_big_rebalance, enemy_tweaker_big_rebalance.lua
-   - `shared_distinctive_terms` (+6): rebalance, tested
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
 
 **Fallback 1**
 
@@ -8937,7 +8879,17 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Ranked related closed issues (manual review)**
 
-1. [#175 - gut: save/load loadouts in MODDED realm via the game's native loadout system, modded-scoped (no effect on non-modded)](https://github.com/Ensrick/vermintide-2-tweaker/issues/175) - score `270`, confidence `high`, signal `direct-history-reference`, closed `07/02/2026 22:39:57`
+1. [#375 - gut: modded loadout store partial official import + edits don't update active loadout](https://github.com/Ensrick/vermintide-2-tweaker/issues/375) - score `275`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 17:58:54`
+   - `closed_explicitly_references_open` (+120): #353
+   - `shared_explicit_references` (+24): #175, #287, #354
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
+   - `shared_code_identifiers` (+60): _gut_native_loadouts.lua, gut_native_loadouts, printf
+   - `shared_distinctive_terms` (+15): backendutils, capture, equip, equipped, exit
+   - `closure_verification_evidence` (+2): completed_state_reason
+   - Prior closure evidence: `completed_state_reason`
+
+2. [#175 - gut: save/load loadouts in MODDED realm via the game's native loadout system, modded-scoped (no effect on non-modded)](https://github.com/Ensrick/vermintide-2-tweaker/issues/175) - score `270`, confidence `high`, signal `direct-history-reference`, closed `07/02/2026 22:39:57`
    - `open_explicitly_references_closed` (+120): #175
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
@@ -8946,16 +8898,6 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `shared_distinctive_terms` (+15): gear, loadouts, modded-scoped, save, slots
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, user_confirmed_fixed`
-
-2. [#375 - gut: modded loadout store partial official import + edits don't update active loadout](https://github.com/Ensrick/vermintide-2-tweaker/issues/375) - score `235`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 17:58:54`
-   - `closed_explicitly_references_open` (+120): #353
-   - `shared_explicit_references` (+24): #175, #287, #354
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
-   - `shared_code_identifiers` (+20): printf
-   - `shared_distinctive_terms` (+15): backendutils, capture, equip, equipped, exit
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
 
 3. [#22 - cim: equipped loadout (modded weapons + LA cosmetics) not fully restored across sessions](https://github.com/Ensrick/vermintide-2-tweaker/issues/22) - score `228`, confidence `high`, signal `direct-history-reference`, closed `06/04/2026 06:24:33`
    - `open_explicitly_references_closed` (+120): #22
@@ -8974,13 +8916,12 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-5. [#174 - Bot loadout replaced on startup by base blacksmith (5-power) items in modded realm — something persists/restores loadouts on exit](https://github.com/Ensrick/vermintide-2-tweaker/issues/174) - score `146`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 20:32:02`
+5. [#387 - gut: switching loadouts does not change weapons](https://github.com/Ensrick/vermintide-2-tweaker/issues/387) - score `147`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 02:40:15`
    - `shared_explicit_references` (+8): #175
-   - `shared_subsystem_labels` (+30): cross-mod
-   - `shared_lifecycle_surface_classes` (+24): canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+60): backendutils.set_loadout_item, cosmetics_tweaker, printf
-   - `shared_distinctive_title_terms` (+7): exit
-   - `shared_distinctive_terms` (+15): backendutils, capture, diagnostic, dispatch, equip
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+60): _gut_native_loadouts.lua, cosmetics_tweaker, gut_native_loadouts
+   - `shared_distinctive_terms` (+15): equipped, loadouts, mirror, saved, served
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
@@ -9012,7 +8953,17 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Ranked related closed issues (manual review)**
 
-1. [#175 - gut: save/load loadouts in MODDED realm via the game's native loadout system, modded-scoped (no effect on non-modded)](https://github.com/Ensrick/vermintide-2-tweaker/issues/175) - score `235`, confidence `high`, signal `direct-history-reference`, closed `07/02/2026 22:39:57`
+1. [#375 - gut: modded loadout store partial official import + edits don't update active loadout](https://github.com/Ensrick/vermintide-2-tweaker/issues/375) - score `267`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 17:58:54`
+   - `closed_explicitly_references_open` (+120): #354
+   - `shared_explicit_references` (+24): #175, #287, #353
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
+   - `shared_code_identifiers` (+60): _gut_native_loadouts.lua, gut_native_loadouts, printf
+   - `shared_distinctive_terms` (+15): backendutils, capture, distinct, dropped, equip
+   - `closure_verification_evidence` (+2): completed_state_reason
+   - Prior closure evidence: `completed_state_reason`
+
+2. [#175 - gut: save/load loadouts in MODDED realm via the game's native loadout system, modded-scoped (no effect on non-modded)](https://github.com/Ensrick/vermintide-2-tweaker/issues/175) - score `235`, confidence `high`, signal `direct-history-reference`, closed `07/02/2026 22:39:57`
    - `open_explicitly_references_closed` (+120): #175
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+24): canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
@@ -9020,16 +8971,6 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `shared_distinctive_terms` (+15): directly, loadouts, modded-scoped, persisted, save
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, user_confirmed_fixed`
-
-2. [#375 - gut: modded loadout store partial official import + edits don't update active loadout](https://github.com/Ensrick/vermintide-2-tweaker/issues/375) - score `227`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 17:58:54`
-   - `closed_explicitly_references_open` (+120): #354
-   - `shared_explicit_references` (+24): #175, #287, #353
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
-   - `shared_code_identifiers` (+20): printf
-   - `shared_distinctive_terms` (+15): backendutils, capture, distinct, dropped, equip
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
 
 3. [#174 - Bot loadout replaced on startup by base blacksmith (5-power) items in modded realm — something persists/restores loadouts on exit](https://github.com/Ensrick/vermintide-2-tweaker/issues/174) - score `153`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 20:32:02`
    - `shared_explicit_references` (+8): #175
@@ -9041,21 +8982,22 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-4. [#575 - gut: slider numeric editor caret is offset left](https://github.com/Ensrick/vermintide-2-tweaker/issues/575) - score `109`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:24:59`
+4. [#387 - gut: switching loadouts does not change weapons](https://github.com/Ensrick/vermintide-2-tweaker/issues/387) - score `139`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 02:40:15`
+   - `shared_explicit_references` (+8): #175
    - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
-   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `shared_distinctive_terms` (+15): applying, compare, directly, leading, several
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
+   - `shared_lifecycle_surface_classes` (+24): canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+60): _gut_native_loadouts.lua, gut_native_loadouts, set_loadout_item
+   - `shared_distinctive_terms` (+15): distinct, equipped, fires, loadouts, melee
+   - `closure_verification_evidence` (+2): completed_state_reason
+   - Prior closure evidence: `completed_state_reason`
 
-5. [#539 - Mid-mission Customize crashes: gsub on nil ItemId](https://github.com/Ensrick/vermintide-2-tweaker/issues/539) - score `107`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:45`
-   - `shared_subsystem_labels` (+60): cross-mod, Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+16): source_first_engine_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+20): gut_regression_test
-   - `shared_distinctive_terms` (+3): melee
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
+5. [#379 - gut: hovered loadout preview stale after in-view equip](https://github.com/Ensrick/vermintide-2-tweaker/issues/379) - score `111`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 19:48:58`
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+24): canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+40): _gut_native_loadouts.lua, gut_native_loadouts
+   - `shared_distinctive_terms` (+15): content, equip, loadouts, reads, saved
+   - `closure_verification_evidence` (+2): completed_state_reason
+   - Prior closure evidence: `completed_state_reason`
 
 **Fallback 1**
 
@@ -9078,7 +9020,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #355 - New Commands to Cause Player to be in Downed State or Die
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/355](https://github.com/Ensrick/vermintide-2-tweaker/issues/355)
-- Current labels: `Tweaker: General, tooling, verify-fix, feature, 1-major`
+- Current labels: `Tweaker: General, verify-fix, feature, 1-major`
 - Evidence class: `network_peer_parity, backend_realm_isolation`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
@@ -9326,11 +9268,12 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
 
-5. [#104 - ct_dev: consistent HOST-side FPS drops on injected adventure maps (repro: 'Blood in the Darkness' / dlc_bastion) — suspect per-frame curse-lighting shading_callback](https://github.com/Ensrick/vermintide-2-tweaker/issues/104) - score `111`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 05:10:35`
+5. [#68 - ct: native CW Belakor path variants of Fatshark DLCs render as altar/shrine models on Holseher's map (no mission icon, no curse halo)](https://github.com/Ensrick/vermintide-2-tweaker/issues/68) - score `112`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 18:17:08`
    - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
    - `shared_lifecycle_surface_classes` (+24): network_peer_parity, source_first_engine_contract, backend_realm_isolation
    - `shared_code_identifiers` (+40): chaos_wastes_tweaker_dev, chaos_wastes_tweaker_dev.lua
-   - `shared_distinctive_terms` (+15): applied, chain, fires, like, timing
+   - `shared_distinctive_title_terms` (+7): icon
+   - `shared_distinctive_terms` (+9): generic, show, tweak
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
@@ -9561,7 +9504,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/367](https://github.com/Ensrick/vermintide-2-tweaker/issues/367)
 - Current labels: `enhancement, Tweaker: Career, verify-fix, 3-low`
-- Evidence class: `dynamic_localization_ui_contract, backend_realm_isolation`
+- Evidence class: `source_first_engine_contract, dynamic_localization_ui_contract, backend_realm_isolation`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
@@ -9576,8 +9519,9 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
 
-2. [#507 - crt hygiene: dead restore save, latent hook skip](https://github.com/Ensrick/vermintide-2-tweaker/issues/507) - score `98`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 16:22:00`
+2. [#507 - crt hygiene: dead restore save, latent hook skip](https://github.com/Ensrick/vermintide-2-tweaker/issues/507) - score `106`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 16:22:00`
    - `shared_subsystem_labels` (+30): Tweaker: Career
+   - `shared_lifecycle_surface_classes` (+8): source_first_engine_contract
    - `shared_code_identifiers` (+60): /crt_regression_test, career_tweaker, crt_regression_test
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
@@ -9598,8 +9542,8 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, fixed_label, source_commit_recorded`
 
-5. [#506 - Shared parity lib: callbacks read stale applied_state](https://github.com/Ensrick/vermintide-2-tweaker/issues/506) - score `77`, confidence `medium`, signal `related-history-review-only`, closed `07/14/2026 00:57:20`
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
+5. [#506 - Shared parity lib: callbacks read stale applied_state](https://github.com/Ensrick/vermintide-2-tweaker/issues/506) - score `85`, confidence `medium`, signal `related-history-review-only`, closed `07/14/2026 00:57:20`
+   - `shared_lifecycle_surface_classes` (+16): source_first_engine_contract, backend_realm_isolation
    - `shared_code_identifiers` (+60): /crt_regression_test, career_tweaker, crt_regression_test
    - `shared_distinctive_terms` (+3): notes
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
@@ -9762,7 +9706,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #371 - [cross-mod] Auto-disable network-unsafe features when a lobby peer lacks the mod + grey them out in the gut Mod Tweaker with a 'who's missing it' popup
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/371](https://github.com/Ensrick/vermintide-2-tweaker/issues/371)
-- Current labels: `Tweaker: GUI, Tweaker: General, cim, CWV, cross-mod, feature, 0-critical`
+- Current labels: `Tweaker: GUI, Tweaker: General, cim, CWV, cross-mod, feature, 0-critical, not-started`
 - Evidence class: `custom_unit_behavioral_contract, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract, custom_asset_contract, dynamic_localization_ui_contract, backend_realm_isolation`
 - Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
@@ -10001,11 +9945,11 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, source_commit_recorded, user_confirmed_fixed`
 
-3. [#513 - Model/Husk score screen doesn't have the loremaster override skin on.](https://github.com/Ensrick/vermintide-2-tweaker/issues/513) - score `113`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:57:35`
+3. [#513 - Model/Husk score screen doesn't have the loremaster override skin on.](https://github.com/Ensrick/vermintide-2-tweaker/issues/513) - score `116`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:57:35`
    - `shared_subsystem_labels` (+30): Tweaker: Cosmetics
    - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, network_peer_parity, canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+40): backend_id, cosmetics_tweaker
-   - `shared_distinctive_terms` (+3): override
+   - `shared_distinctive_terms` (+6): override, show
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
 
@@ -10248,53 +10192,54 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/384](https://github.com/Ensrick/vermintide-2-tweaker/issues/384)
 - Current labels: `bug, Tweaker: General, 1-major, verify-fix-coop`
-- Evidence class: `network_peer_parity, source_first_engine_contract, backend_realm_isolation`
+- Evidence class: `network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation`
 - Current action: two-player in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#492 - gt bots lock in aid branch, strand behind](https://github.com/Ensrick/vermintide-2-tweaker/issues/492) - score `135`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 21:46:28`
+1. [#492 - gt bots lock in aid branch, strand behind](https://github.com/Ensrick/vermintide-2-tweaker/issues/492) - score `263`, confidence `high`, signal `direct-history-reference`, closed `07/12/2026 21:46:28`
+   - `open_explicitly_references_closed` (+120): #492
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, source_first_engine_contract, backend_realm_isolation
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
    - `shared_code_identifiers` (+60): _gt_bot_fixes.lua, bt_bot_conditions, bt_bot_conditions.lua
    - `shared_distinctive_terms` (+15): ally, bots, down, exception, fixes
    - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, fixed_label, source_commit_recorded`
 
-2. [#515 - gt bots: allow teleport past no-return thresholds](https://github.com/Ensrick/vermintide-2-tweaker/issues/515) - score `132`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 21:46:29`
+2. [#337 - gt_dev: /recall_position_N teleports but reports 'teleport failed' - POSITION_LOOKUP dead temporary in chat-command phase](https://github.com/Ensrick/vermintide-2-tweaker/issues/337) - score `132`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:06`
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
-   - `shared_code_identifiers` (+60): bt_bot_conditions, bt_bot_conditions.lua, gt_dev
-   - `shared_distinctive_title_terms` (+7): teleport
-   - `shared_distinctive_terms` (+15): ally, bots, conditions, exception, ledge
-   - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
-   - Prior closure evidence: `completed_state_reason, fixed_label`
-
-3. [#261 - gt_dev: split follow mode - bots pursue objectives outside the follow radius, then get leash-yanked; radius should constrain ALL bot behavior](https://github.com/Ensrick/vermintide-2-tweaker/issues/261) - score `130`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 22:09:26`
-   - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, source_first_engine_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+60): _gt_bot_fixes.lua, _gt_unit_needs_aid, gt_bot_fixes
-   - `shared_distinctive_terms` (+12): bots, fixes, gets, teleport
-   - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, source_commit_recorded`
-
-4. [#383 - Split mode: movement and leash anchors disagree](https://github.com/Ensrick/vermintide-2-tweaker/issues/383) - score `129`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:35:07`
-   - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+16): source_first_engine_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+60): _gt_bot_fixes.lua, bt_bot_conditions, bt_bot_conditions.lua
-   - `shared_distinctive_terms` (+15): bots, conditions, console-2026-07-06-20, ensrick, fixes
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
-
-5. [#337 - gt_dev: /recall_position_N teleports but reports 'teleport failed' - POSITION_LOOKUP dead temporary in chat-command phase](https://github.com/Ensrick/vermintide-2-tweaker/issues/337) - score `124`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:06`
-   - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
+   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+60): generic_status_extension, generic_status_extension.lua, gt_dev
    - `shared_distinctive_title_terms` (+7): teleport
    - `shared_distinctive_terms` (+15): ally, dead, extension, generic, ledge
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
+
+3. [#515 - gt bots: allow teleport past no-return thresholds](https://github.com/Ensrick/vermintide-2-tweaker/issues/515) - score `132`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 21:46:29`
+   - `shared_subsystem_labels` (+30): Tweaker: General
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
+   - `shared_code_identifiers` (+60): bt_bot_conditions, bt_bot_conditions.lua, btconditions.should_teleport
+   - `shared_distinctive_title_terms` (+7): teleport
+   - `shared_distinctive_terms` (+15): ally, bots, conditions, exception, ledge
+   - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
+   - Prior closure evidence: `completed_state_reason, fixed_label`
+
+4. [#261 - gt_dev: split follow mode - bots pursue objectives outside the follow radius, then get leash-yanked; radius should constrain ALL bot behavior](https://github.com/Ensrick/vermintide-2-tweaker/issues/261) - score `130`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 22:09:26`
+   - `shared_subsystem_labels` (+30): Tweaker: General
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, source_first_engine_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+60): _gt_bot_fixes.lua, _gt_unit_needs_aid, /gt_regression_test
+   - `shared_distinctive_terms` (+12): bots, fixes, gets, teleport
+   - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, source_commit_recorded`
+
+5. [#383 - Split mode: movement and leash anchors disagree](https://github.com/Ensrick/vermintide-2-tweaker/issues/383) - score `129`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:35:07`
+   - `shared_subsystem_labels` (+30): Tweaker: General
+   - `shared_lifecycle_surface_classes` (+16): source_first_engine_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+60): _gt_bot_fixes.lua, assign_destination_points, bt_bot_conditions
+   - `shared_distinctive_terms` (+15): bots, conditions, console-2026-07-06-20, ensrick, fixes
+   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
 
 **Fallback 1**
 
@@ -10318,48 +10263,49 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/385](https://github.com/Ensrick/vermintide-2-tweaker/issues/385)
 - Current labels: `bug, Tweaker: General, verify-fix, 2-moderate`
-- Evidence class: `custom_unit_behavioral_contract, network_peer_parity, bounded_transaction_lifecycle`
+- Evidence class: `custom_unit_behavioral_contract, network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#261 - gt_dev: split follow mode - bots pursue objectives outside the follow radius, then get leash-yanked; radius should constrain ALL bot behavior](https://github.com/Ensrick/vermintide-2-tweaker/issues/261) - score `125`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 22:09:26`
+1. [#261 - gt_dev: split follow mode - bots pursue objectives outside the follow radius, then get leash-yanked; radius should constrain ALL bot behavior](https://github.com/Ensrick/vermintide-2-tweaker/issues/261) - score `133`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 22:09:26`
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+16): custom_unit_behavioral_contract, network_peer_parity
+   - `shared_lifecycle_surface_classes` (+24): custom_unit_behavioral_contract, network_peer_parity, backend_realm_isolation
    - `shared_code_identifiers` (+60): /gt_regression_test, gt_regression_test, should_teleport
    - `shared_distinctive_terms` (+15): action, capture, distance, follow, leash
    - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, source_commit_recorded`
 
-2. [#515 - gt bots: allow teleport past no-return thresholds](https://github.com/Ensrick/vermintide-2-tweaker/issues/515) - score `124`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 21:46:29`
+2. [#515 - gt bots: allow teleport past no-return thresholds](https://github.com/Ensrick/vermintide-2-tweaker/issues/515) - score `132`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 21:46:29`
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
-   - `shared_code_identifiers` (+60): bt_bot_conditions, bt_bot_conditions.lua, should_teleport
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
+   - `shared_code_identifiers` (+60): bt_bot_conditions, bt_bot_conditions.lua, cant_reach_ally
    - `shared_distinctive_title_terms` (+7): teleport
    - `shared_distinctive_terms` (+15): action, conditions, distance, extend, segment
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
 
-3. [#383 - Split mode: movement and leash anchors disagree](https://github.com/Ensrick/vermintide-2-tweaker/issues/383) - score `120`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:35:07`
+3. [#383 - Split mode: movement and leash anchors disagree](https://github.com/Ensrick/vermintide-2-tweaker/issues/383) - score `128`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:35:07`
    - `shared_subsystem_labels` (+30): Tweaker: General
+   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
    - `shared_code_identifiers` (+60): bt_bot_conditions, bt_bot_conditions.lua, console-2026-07-06-20.23.14
    - `shared_distinctive_title_terms` (+7): leash
    - `shared_distinctive_terms` (+15): conditions, console-2026-07-06-20, follow, forensics, slider
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
 
-4. [#492 - gt bots lock in aid branch, strand behind](https://github.com/Ensrick/vermintide-2-tweaker/issues/492) - score `116`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 21:46:28`
+4. [#492 - gt bots lock in aid branch, strand behind](https://github.com/Ensrick/vermintide-2-tweaker/issues/492) - score `124`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 21:46:28`
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
    - `shared_code_identifiers` (+60): bt_bot_conditions, bt_bot_conditions.lua, gt_bot
    - `shared_distinctive_terms` (+12): branch, down, teammate, teleport
    - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, fixed_label, source_commit_recorded`
 
-5. [#295 - [crash] gt: game crashes shortly after enabling the bot testing tools (bot-teleport-lab) — no Lua crash block captured](https://github.com/Ensrick/vermintide-2-tweaker/issues/295) - score `103`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:35:44`
+5. [#295 - [crash] gt: game crashes shortly after enabling the bot testing tools (bot-teleport-lab) — no Lua crash block captured](https://github.com/Ensrick/vermintide-2-tweaker/issues/295) - score `111`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:35:44`
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, bounded_transaction_lifecycle
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation
    - `shared_code_identifiers` (+40): /gt_regression_test, gt_regression_test
    - `shared_distinctive_terms` (+9): follow, leash, markus
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
@@ -10540,7 +10486,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 2. [#594 - WT exposes Bardin Hammer+Shield to Saltzpyre](https://github.com/Ensrick/vermintide-2-tweaker/issues/594) - score `129`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 19:50:22`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
-   - `shared_code_identifiers` (+60): can_wield, weapon_tweaker, wt_unlock_data
+   - `shared_code_identifiers` (+60): can_wield, weapon_tweaker, wt_availability
    - `shared_distinctive_terms` (+15): absent, availability, bardin, careers, entries
    - `closure_verification_evidence` (+8): completed_state_reason, source_commit_recorded, user_confirmed_fixed, verification_passed
    - Prior closure evidence: `completed_state_reason, source_commit_recorded, user_confirmed_fixed, verification_passed`
@@ -11832,9 +11778,9 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #419 - CWV: illusion browser previews base mesh, no swap
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/419](https://github.com/Ensrick/vermintide-2-tweaker/issues/419)
-- Current labels: `bug, CWV, verify-fix, 2-moderate`
+- Current labels: `bug, CWV, diagnostics-armed, 2-moderate`
 - Evidence class: `shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, source_first_engine_contract, custom_asset_contract, backend_realm_isolation`
-- Current action: solo in-game verification
+- Current action: run documented repro and collect bounded diagnostics
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
@@ -11851,7 +11797,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 2. [#597 - CWV: replace Poleaxe with Kruber Greataxe models](https://github.com/Ensrick/vermintide-2-tweaker/issues/597) - score `144`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 04:44:36`
    - `shared_subsystem_labels` (+30): CWV
    - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence
-   - `shared_code_identifiers` (+60): backendutils.get_item_units, cwv_regression_test, get_item_units
+   - `shared_code_identifiers` (+60): /cwv_regression_test, backendutils.get_item_units, cwv_regression_test
    - `shared_distinctive_terms` (+12): absent, illusion, illusions, scale
    - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
@@ -11882,21 +11828,21 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Fallback 1**
 
-- **Evidence/trigger:** The issue's posted build-specific verification fails at a named invariant or surface.
-- **Change:** Repair the first failed invariant in the current implementation, scoped to that surface.
-- **Falsifier:** The invariant passes while the reported symptom remains.
+- **Evidence/trigger:** The issue's bounded armed repro records a first state divergence.
+- **Change:** Repair only the layer named by that trace.
+- **Falsifier:** The trace remains healthy through the observed symptom.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract.
-- **Change:** Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior.
-- **Falsifier:** The custom and vanilla boundary inputs/outputs are identical.
+- **Evidence/trigger:** Captured runtime state differs from the issue's cited vanilla/decompiled consumer contract.
+- **Change:** Repair the first contract mismatch and retain the probe as regression evidence.
+- **Falsifier:** Captured state matches the source contract at every sampled boundary.
 
 **Fallback 3**
 
-- **Evidence/trigger:** The loaded version/hash or canonical ancestry does not contain the claimed fix.
-- **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
-- **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
+- **Evidence/trigger:** Insufficient evidence: the current probe is silent or cannot distinguish the remaining candidates.
+- **Change:** Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix.
+- **Falsifier:** The existing probe already identifies one causal boundary.
 
 ## #420 - Extract shared WeaponAppearance module across cwv/cosmetics/wt
 
@@ -12329,7 +12275,15 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-2. [#500 - Stale probes for closed issues still running](https://github.com/Ensrick/vermintide-2-tweaker/issues/500) - score `133`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 05:54:15`
+2. [#301 - New Doctrine on Issues/Localization!](https://github.com/Ensrick/vermintide-2-tweaker/issues/301) - score `147`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 01:33:38`
+   - `shared_subsystem_labels` (+60): audit, cross-mod
+   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
+   - `shared_code_identifiers` (+60): event_tweaker, gt_dev, weapon_tweaker
+   - `shared_distinctive_terms` (+15): contain, edit, like, rules, single
+   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
+   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
+
+3. [#500 - Stale probes for closed issues still running](https://github.com/Ensrick/vermintide-2-tweaker/issues/500) - score `133`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 05:54:15`
    - `shared_subsystem_labels` (+60): cross-mod, refactor
    - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation
    - `shared_code_identifiers` (+40): dbg_alert, gt_dev
@@ -12337,31 +12291,23 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, regression_coverage
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage`
 
-3. [#301 - New Doctrine on Issues/Localization!](https://github.com/Ensrick/vermintide-2-tweaker/issues/301) - score `127`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 01:33:38`
-   - `shared_subsystem_labels` (+60): audit, cross-mod
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
-   - `shared_code_identifiers` (+40): event_tweaker, gt_dev
-   - `shared_distinctive_terms` (+15): contain, edit, like, rules, single
-   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
-
-4. [#69 - bt: no runtime peer-handshake — cross-peer BR registration-index divergence is undefended](https://github.com/Ensrick/vermintide-2-tweaker/issues/69) - score `112`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `06/13/2026 18:47:59`
-   - `shared_subsystem_labels` (+30): audit
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
-   - `shared_code_identifiers` (+60): _dbg_alert, dbg_alert, rt_register
-   - `shared_distinctive_terms` (+12): alert, count, shared, single
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
-
-5. [#506 - Shared parity lib: callbacks read stale applied_state](https://github.com/Ensrick/vermintide-2-tweaker/issues/506) - score `107`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:57:20`
+4. [#506 - Shared parity lib: callbacks read stale applied_state](https://github.com/Ensrick/vermintide-2-tweaker/issues/506) - score `127`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:57:20`
    - `shared_explicit_references` (+8): #371
    - `shared_subsystem_labels` (+30): cross-mod
    - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation
-   - `shared_code_identifiers` (+20): shared_lib
+   - `shared_code_identifiers` (+40): lib_peer_parity, shared_lib
    - `shared_distinctive_title_terms` (+7): shared
    - `shared_distinctive_terms` (+12): copies, copy, found, tools
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+
+5. [#494 - Handoff: Fable agent campaign state 2026-07-11](https://github.com/Ensrick/vermintide-2-tweaker/issues/494) - score `121`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 08:34:22`
+   - `shared_subsystem_labels` (+30): audit
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
+   - `shared_code_identifiers` (+60): event_tweaker, gt_dev, lib_peer_parity
+   - `shared_distinctive_terms` (+9): docs, linked, step
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
 
 **Fallback 1**
 
@@ -12546,19 +12492,20 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
 
-4. [#609 - Mods query players after network teardown](https://github.com/Ensrick/vermintide-2-tweaker/issues/609) - score `68`, confidence `medium`, signal `related-history-review-only`, closed `07/15/2026 19:47:27`
+4. [#513 - Model/Husk score screen doesn't have the loremaster override skin on.](https://github.com/Ensrick/vermintide-2-tweaker/issues/513) - score `70`, confidence `medium`, signal `related-history-review-only`, closed `07/14/2026 00:57:35`
+   - `shared_lifecycle_surface_classes` (+32): appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, custom_asset_contract
+   - `shared_code_identifiers` (+20): peer_id
+   - `shared_distinctive_title_terms` (+7): override
+   - `shared_distinctive_terms` (+3): show
+   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
+
+5. [#609 - Mods query players after network teardown](https://github.com/Ensrick/vermintide-2-tweaker/issues/609) - score `68`, confidence `medium`, signal `related-history-review-only`, closed `07/15/2026 19:47:27`
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
    - `shared_code_identifiers` (+40): dcp_regression_test, dynamic_cosmetic_portraits
    - `shared_distinctive_terms` (+6): dynamic, portraits
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
-
-5. [#513 - Model/Husk score screen doesn't have the loremaster override skin on.](https://github.com/Ensrick/vermintide-2-tweaker/issues/513) - score `67`, confidence `medium`, signal `related-history-review-only`, closed `07/14/2026 00:57:35`
-   - `shared_lifecycle_surface_classes` (+32): appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, custom_asset_contract
-   - `shared_code_identifiers` (+20): peer_id
-   - `shared_distinctive_title_terms` (+7): override
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
 
 **Fallback 1**
 
@@ -12971,41 +12918,43 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Ranked related closed issues (manual review)**
 
-1. [#360 - Options Menu - Kill Confirm Crosshair -> Advanced Options Gear Icon Misaligned](https://github.com/Ensrick/vermintide-2-tweaker/issues/360) - score `104`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:06:41`
+1. [#173 - gut: 'Hero Select' opens the TALENT menu instead of the hero/character selection (change character/career)](https://github.com/Ensrick/vermintide-2-tweaker/issues/173) - score `108`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/02/2026 21:37:51`
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
+   - `shared_code_identifiers` (+60): _mod_tweaker_view.lua, gut_dev, mod_tweaker_view
+   - `shared_distinctive_terms` (+6): talent, talents
+   - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, source_commit_recorded`
+
+2. [#123 - gut Mod Tweaker: keybind widgets are read-only (can't set/rebind) + render like title text — implement settable keybinds](https://github.com/Ensrick/vermintide-2-tweaker/issues/123) - score `108`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/01/2026 22:41:50`
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
+   - `shared_code_identifiers` (+60): _mod_tweaker_view.lua, gut_dev, mod_tweaker_view
+   - `shared_distinctive_terms` (+6): like, such
+   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
+   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
+
+3. [#313 - Integrate Crosshair Kill Confirmation mod options into GUT and the normal Options menu. ](https://github.com/Ensrick/vermintide-2-tweaker/issues/313) - score `107`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:32:21`
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
+   - `shared_code_identifiers` (+60): gut_dev, gut_regression_test, mod_tweaker_view
+   - `shared_distinctive_terms` (+3): features
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+
+4. [#339 - CRITICAL: integrated mods wrongly rendered as top-level Mod Tweaker tabs; must live inside category collapsibles](https://github.com/Ensrick/vermintide-2-tweaker/issues/339) - score `105`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:17:57`
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_code_identifiers` (+60): _mod_tweaker_view.lua, gut_dev, mod_tweaker_view
+   - `shared_distinctive_terms` (+9): collapsible, features, tweaks
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
+
+5. [#360 - Options Menu - Kill Confirm Crosshair -> Advanced Options Gear Icon Misaligned](https://github.com/Ensrick/vermintide-2-tweaker/issues/360) - score `104`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:06:41`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
    - `shared_code_identifiers` (+60): /gut_regression_test, gut_dev, gut_regression_test
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
-
-2. [#517 - gut: TOML config-read never worked in retail](https://github.com/Ensrick/vermintide-2-tweaker/issues/517) - score `101`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 19:48:18`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_code_identifiers` (+60): /gut_regression_test, gut_dev, gut_regression_test
-   - `shared_distinctive_terms` (+3): none
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
-
-3. [#352 - Implement Original Temporary Health Talent Names](https://github.com/Ensrick/vermintide-2-tweaker/issues/352) - score `91`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:21:26`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `shared_distinctive_terms` (+3): talent
-   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
-
-4. [#525 - Rename Modded Progression Tab](https://github.com/Ensrick/vermintide-2-tweaker/issues/525) - score `90`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 00:45:10`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `closure_verification_evidence` (+12): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed`
-
-5. [#537 - gut: on_setting_changed re-latches skippable_cutscenes global](https://github.com/Ensrick/vermintide-2-tweaker/issues/537) - score `86`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:56:55`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+40): gut_dev, gut_regression_test
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
 
 **Fallback 1**
 
@@ -13662,11 +13611,12 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Ranked related closed issues (manual review)**
 
-1. [#556 - Granting talents as starting boons](https://github.com/Ensrick/vermintide-2-tweaker/issues/556) - score `144`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:26:28`
+1. [#556 - Granting talents as starting boons](https://github.com/Ensrick/vermintide-2-tweaker/issues/556) - score `147`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:26:28`
    - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, dynamic_localization_ui_contract, backend_realm_isolation
    - `shared_code_identifiers` (+60): /ct_regression_test, ct_regression_test, ingameplayerlistui._draw
    - `shared_distinctive_title_terms` (+14): boons, starting
+   - `shared_distinctive_terms` (+3): show
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
 
@@ -14041,9 +13991,9 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #469 - Bots should be immune to AOE damage from Mutators like Exploding Skulls and Lightning
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/469](https://github.com/Ensrick/vermintide-2-tweaker/issues/469)
-- Current labels: `enhancement, Tweaker: General, verify-fix, 1-major`
+- Current labels: `enhancement, Tweaker: General, 1-major, not-started`
 - Evidence class: `network_peer_parity, backend_realm_isolation`
-- Current action: solo in-game verification
+- Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
@@ -14089,21 +14039,21 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Fallback 1**
 
-- **Evidence/trigger:** The issue's posted build-specific verification fails at a named invariant or surface.
-- **Change:** Repair the first failed invariant in the current implementation, scoped to that surface.
-- **Falsifier:** The invariant passes while the reported symptom remains.
+- **Evidence/trigger:** The issue body and cited source establish a bounded acceptance contract.
+- **Change:** Implement that contract on current canonical source with a truth-table regression.
+- **Falsifier:** Source/runtime evidence contradicts a required premise in the accepted contract.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract.
-- **Change:** Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior.
-- **Falsifier:** The custom and vanilla boundary inputs/outputs are identical.
+- **Evidence/trigger:** Insufficient evidence: no runtime trace yet distinguishes the candidate engine/UI/inventory boundaries.
+- **Change:** Add a minimal repro and bounded trace at the named boundary, then repair only the first observed divergence.
+- **Falsifier:** Existing evidence already identifies the divergent boundary.
 
 **Fallback 3**
 
-- **Evidence/trigger:** The loaded version/hash or canonical ancestry does not contain the claimed fix.
-- **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
-- **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
+- **Evidence/trigger:** The requested path is blocked by absent provenance/license, resource residency, or external service authority.
+- **Change:** Retain a resident vanilla fallback or keep the feature disabled until the missing evidence/authority exists.
+- **Falsifier:** The required provenance, resource closure, and authority are all positively proved.
 
 ## #470 - Crash, this log is the one associated with the last small batch of chaos wastes issues.
 
@@ -14865,22 +14815,46 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #484 - Yet more CWV Musket issues
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/484](https://github.com/Ensrick/vermintide-2-tweaker/issues/484)
-- Current labels: `bug, CWV, diagnostics-armed, 0-critical, coop-required`
-- Evidence class: `network_peer_parity, canonical_identity_persistence, custom_asset_contract, backend_realm_isolation`
-- Current action: run documented repro and collect bounded diagnostics
+- Current labels: `bug, CWV, 0-critical, verify-fix-coop`
+- Evidence class: `shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, custom_asset_contract, backend_realm_isolation`
+- Current action: two-player in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#397 - CWV transforms (offset/scale/rotation) not applied on husks](https://github.com/Ensrick/vermintide-2-tweaker/issues/397) - score `131`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 23:01:57`
+1. [#397 - CWV transforms (offset/scale/rotation) not applied on husks](https://github.com/Ensrick/vermintide-2-tweaker/issues/397) - score `139`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 23:01:57`
    - `shared_subsystem_labels` (+30): CWV
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
+   - `shared_lifecycle_surface_classes` (+32): appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+60): backend_id, cwv_es_musket_old, item_data
    - `shared_distinctive_terms` (+15): applied, bayonet, even, musket, rotation
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-2. [#392 - CWV blacksmith/template items resolve to base weapon](https://github.com/Ensrick/vermintide-2-tweaker/issues/392) - score `118`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:47`
+2. [#617 - Custom preview/icon resources crash CIM Athanor item selector](https://github.com/Ensrick/vermintide-2-tweaker/issues/617) - score `138`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:21:31`
+   - `shared_subsystem_labels` (+30): CWV
+   - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, network_peer_parity, canonical_identity_persistence, custom_asset_contract
+   - `shared_code_identifiers` (+60): /cim_regression_test, cim_regression_test, cwv_es_musket_old
+   - `shared_distinctive_terms` (+6): craft, musket
+   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
+
+3. [#597 - CWV: replace Poleaxe with Kruber Greataxe models](https://github.com/Ensrick/vermintide-2-tweaker/issues/597) - score `124`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 04:44:36`
+   - `shared_subsystem_labels` (+30): CWV
+   - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence
+   - `shared_code_identifiers` (+40): /cwv_regression_test, cwv_regression_test
+   - `shared_distinctive_terms` (+12): instances, musket, person, rotation
+   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
+
+4. [#596 - CWV: add Kruber Infantry Spear](https://github.com/Ensrick/vermintide-2-tweaker/issues/596) - score `120`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 04:45:48`
+   - `shared_subsystem_labels` (+30): CWV
+   - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence
+   - `shared_code_identifiers` (+40): /cwv_regression_test, cwv_regression_test
+   - `shared_distinctive_terms` (+12): applied, instances, person, used
+   - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, verification_passed
+   - Prior closure evidence: `completed_state_reason, fixed_label, verification_passed`
+
+5. [#392 - CWV blacksmith/template items resolve to base weapon](https://github.com/Ensrick/vermintide-2-tweaker/issues/392) - score `118`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:47`
    - `shared_subsystem_labels` (+30): CWV
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, custom_asset_contract, backend_realm_isolation
    - `shared_code_identifiers` (+40): backend_id, item_data
@@ -14888,43 +14862,23 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
 
-3. [#390 - CIM crafts CWV weapons as base vanilla item](https://github.com/Ensrick/vermintide-2-tweaker/issues/390) - score `110`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 15:10:16`
-   - `shared_subsystem_labels` (+30): CWV
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, custom_asset_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+40): build_entry, item_data
-   - `shared_distinctive_terms` (+12): craft, crafted, offsets, sword
-   - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
-   - Prior closure evidence: `completed_state_reason, fixed_label`
-
-4. [#486 - CWV test logs](https://github.com/Ensrick/vermintide-2-tweaker/issues/486) - score `109`, confidence `high`, signal `same-subsystem-surface`, closed `07/12/2026 16:05:17`
-   - `shared_subsystem_labels` (+30): CWV
-   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
-   - `shared_code_identifiers` (+60): [cwv musket-bayonet], cwv_es_musket_old, es_handgun
-   - `shared_distinctive_terms` (+3): testing
-
-5. [#415 - cwv: Imperial Longsword shield offhand absent for host](https://github.com/Ensrick/vermintide-2-tweaker/issues/415) - score `108`, confidence `high`, signal `same-subsystem-surface`, closed `07/07/2026 18:49:20`
-   - `shared_subsystem_labels` (+30): CWV
-   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, custom_asset_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+40): build_entry, item_data
-   - `shared_distinctive_terms` (+6): items, sword
-
 **Fallback 1**
 
-- **Evidence/trigger:** The issue's bounded armed repro records a first state divergence.
-- **Change:** Repair only the layer named by that trace.
-- **Falsifier:** The trace remains healthy through the observed symptom.
+- **Evidence/trigger:** The posted host/client verification for #484 fails and paired logs identify the first divergent peer/state.
+- **Change:** Repair that first owner/husk/RPC/lookup divergence at the existing issue-scoped boundary.
+- **Falsifier:** Both peers log identical authoritative state before the visible failure.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Captured runtime state differs from the issue's cited vanilla/decompiled consumer contract.
-- **Change:** Repair the first contract mismatch and retain the probe as regression evidence.
-- **Falsifier:** Captured state matches the source contract at every sampled boundary.
+- **Evidence/trigger:** Paired evidence shows authority or replay occurs on the wrong peer/lifecycle edge.
+- **Change:** Move ownership to the source-backed vanilla authority and transmit only bounded lookup-safe identity/state.
+- **Falsifier:** Authority, sender authentication, and lifecycle replay are already identical on both peers.
 
 **Fallback 3**
 
-- **Evidence/trigger:** Insufficient evidence: the current probe is silent or cannot distinguish the remaining candidates.
-- **Change:** Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix.
-- **Falsifier:** The existing probe already identifies one causal boundary.
+- **Evidence/trigger:** Failure occurs only when a peer lacks the mod, capability, lookup entry, or renderer resource.
+- **Change:** Parity-gate the optional feature and select a resident vanilla fallback for that peer.
+- **Falsifier:** The failing peer proves positive parity and local resource closure.
 
 ## #485 - Unlock Option of Heroic Poses in Modded
 
@@ -15262,44 +15216,45 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/498](https://github.com/Ensrick/vermintide-2-tweaker/issues/498)
 - Current labels: `enhancement, tooling, 2-moderate, not-started`
-- Evidence class: `network_peer_parity`
+- Evidence class: `network_peer_parity, backend_realm_isolation`
 - Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#494 - Handoff: Fable agent campaign state 2026-07-11](https://github.com/Ensrick/vermintide-2-tweaker/issues/494) - score `193`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 08:34:22`
+1. [#494 - Handoff: Fable agent campaign state 2026-07-11](https://github.com/Ensrick/vermintide-2-tweaker/issues/494) - score `201`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 08:34:22`
    - `open_explicitly_references_closed` (+120): #494
    - `shared_explicit_references` (+24): #413, #424, #479
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
    - `shared_code_identifiers` (+20): ship.ps1
    - `shared_distinctive_terms` (+15): changelog, commit, labels, lifecycle, project
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
 
-2. [#486 - CWV test logs](https://github.com/Ensrick/vermintide-2-tweaker/issues/486) - score `131`, confidence `high`, signal `direct-history-reference`, closed `07/12/2026 16:05:17`
+2. [#625 - Reconcile unmerged agent branches](https://github.com/Ensrick/vermintide-2-tweaker/issues/625) - score `150`, confidence `high`, signal `direct-history-reference`, closed `07/17/2026 08:00:09`
+   - `closed_explicitly_references_open` (+120): #498
+   - `shared_explicit_references` (+8): #528
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
+
+3. [#313 - Integrate Crosshair Kill Confirmation mod options into GUT and the normal Options menu. ](https://github.com/Ensrick/vermintide-2-tweaker/issues/313) - score `145`, confidence `high`, signal `direct-history-reference`, closed `07/17/2026 06:32:21`
+   - `open_explicitly_references_closed` (+120): #313
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
+   - `shared_distinctive_terms` (+3): created
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+
+4. [#486 - CWV test logs](https://github.com/Ensrick/vermintide-2-tweaker/issues/486) - score `139`, confidence `high`, signal `direct-history-reference`, closed `07/12/2026 16:05:17`
    - `open_explicitly_references_closed` (+120): #486
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
    - `shared_distinctive_terms` (+3): diagnostics-armed
 
-3. [#600 - Fix Bot "Wait!" Command in Command Wheel Not Stopping Bot Where the Player is Looking](https://github.com/Ensrick/vermintide-2-tweaker/issues/600) - score `128`, confidence `high`, signal `direct-history-reference`, closed `07/16/2026 20:11:14`
+5. [#600 - Fix Bot "Wait!" Command in Command Wheel Not Stopping Bot Where the Player is Looking](https://github.com/Ensrick/vermintide-2-tweaker/issues/600) - score `136`, confidence `high`, signal `direct-history-reference`, closed `07/16/2026 20:11:14`
    - `open_explicitly_references_closed` (+120): #600
+   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
-
-4. [#326 - Mechanize ship-time status labeling + loc-tag/label sync check](https://github.com/Ensrick/vermintide-2-tweaker/issues/326) - score `91`, confidence `medium`, signal `related-history-review-only`, closed `07/13/2026 14:58:30`
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
-   - `shared_code_identifiers` (+60): check_issue_status_labels, diagnostics-armed, qa/check_issue_status_labels.ps1
-   - `shared_distinctive_terms` (+15): changelog, diagnostics-armed, extend, label, labels
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
-5. [#525 - Rename Modded Progression Tab](https://github.com/Ensrick/vermintide-2-tweaker/issues/525) - score `75`, confidence `medium`, signal `related-history-review-only`, closed `07/15/2026 00:45:10`
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
-   - `shared_code_identifiers` (+40): not-started, verify-fix
-   - `shared_distinctive_terms` (+15): commit, label, labels, not-started, replace
-   - `closure_verification_evidence` (+12): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed`
 
 **Fallback 1**
 
@@ -15389,7 +15344,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #504 - OOP decomposition umbrella: remaining phases
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/504](https://github.com/Ensrick/vermintide-2-tweaker/issues/504)
-- Current labels: `enhancement, audit, refactor, 1-major`
+- Current labels: `enhancement, audit, refactor, 1-major, not-started`
 - Evidence class: `network_peer_parity, canonical_identity_persistence`
 - Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
@@ -15934,36 +15889,37 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Ranked related closed issues (manual review)**
 
-1. [#336 - gut_dev: in-mission mission map CTD - background window mounts levels/ui_keep_menu/world (Level not loaded)](https://github.com/Ensrick/vermintide-2-tweaker/issues/336) - score `58`, confidence `medium`, signal `related-history-review-only`, closed `07/06/2026 05:13:29`
+1. [#609 - Mods query players after network teardown](https://github.com/Ensrick/vermintide-2-tweaker/issues/609) - score `65`, confidence `medium`, signal `related-history-review-only`, closed `07/15/2026 19:47:27`
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
+   - `shared_code_identifiers` (+40): dcp_regression_test, dynamic_cosmetic_portraits
+   - `shared_distinctive_terms` (+3): portraits
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+
+2. [#336 - gut_dev: in-mission mission map CTD - background window mounts levels/ui_keep_menu/world (Level not loaded)](https://github.com/Ensrick/vermintide-2-tweaker/issues/336) - score `58`, confidence `medium`, signal `related-history-review-only`, closed `07/06/2026 05:13:29`
    - `shared_lifecycle_surface_classes` (+32): appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+20): ui_renderer
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
 
-2. [#81 - cim: in-mission forge (B-hotkey + allow_in_mission) crashes on LA armoury_atlas in HDR world create](https://github.com/Ensrick/vermintide-2-tweaker/issues/81) - score `58`, confidence `medium`, signal `related-history-review-only`, closed `06/28/2026 02:28:32`
+3. [#81 - cim: in-mission forge (B-hotkey + allow_in_mission) crashes on LA armoury_atlas in HDR world create](https://github.com/Ensrick/vermintide-2-tweaker/issues/81) - score `58`, confidence `medium`, signal `related-history-review-only`, closed `06/28/2026 02:28:32`
    - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+40): gui.material, ui_renderer
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-3. [#173 - gut: 'Hero Select' opens the TALENT menu instead of the hero/character selection (change character/career)](https://github.com/Ensrick/vermintide-2-tweaker/issues/173) - score `56`, confidence `medium`, signal `related-history-review-only`, closed `07/02/2026 21:37:51`
+4. [#173 - gut: 'Hero Select' opens the TALENT menu instead of the hero/character selection (change character/career)](https://github.com/Ensrick/vermintide-2-tweaker/issues/173) - score `56`, confidence `medium`, signal `related-history-review-only`, closed `07/02/2026 21:37:51`
    - `shared_lifecycle_surface_classes` (+32): appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+20): ingame_ui
    - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, source_commit_recorded`
 
-4. [#575 - gut: slider numeric editor caret is offset left](https://github.com/Ensrick/vermintide-2-tweaker/issues/575) - score `55`, confidence `medium`, signal `related-history-review-only`, closed `07/14/2026 00:24:59`
+5. [#575 - gut: slider numeric editor caret is offset left](https://github.com/Ensrick/vermintide-2-tweaker/issues/575) - score `55`, confidence `medium`, signal `related-history-review-only`, closed `07/14/2026 00:24:59`
    - `shared_lifecycle_surface_classes` (+24): asset_alpha_mip_material_contract, canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+20): ui_renderer
    - `shared_distinctive_terms` (+3): characters
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
-5. [#83 - Crafting in Modded v0.8.7 - Crash in map when opening the UI](https://github.com/Ensrick/vermintide-2-tweaker/issues/83) - score `54`, confidence `low`, signal `related-history-review-only`, closed `07/16/2026 07:21:14`
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
-   - `shared_code_identifiers` (+40): ingame_ui, ui_renderer
-   - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, fixed_label, source_commit_recorded`
 
 **Fallback 1**
 
@@ -16002,34 +15958,34 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
 
-2. [#575 - gut: slider numeric editor caret is offset left](https://github.com/Ensrick/vermintide-2-tweaker/issues/575) - score `114`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:24:59`
+2. [#625 - Reconcile unmerged agent branches](https://github.com/Ensrick/vermintide-2-tweaker/issues/625) - score `158`, confidence `high`, signal `direct-history-reference`, closed `07/17/2026 08:00:09`
+   - `closed_explicitly_references_open` (+120): #528
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
+
+3. [#313 - Integrate Crosshair Kill Confirmation mod options into GUT and the normal Options menu. ](https://github.com/Ensrick/vermintide-2-tweaker/issues/313) - score `152`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:32:21`
+   - `shared_subsystem_labels` (+30): Tweaker: GUI
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+60): gut_dev, gut_regression_test, issue528_ckc_vanilla_options_isolated
+   - `shared_distinctive_title_terms` (+21): confirmation, crosshair, kill
+   - `shared_distinctive_terms` (+3): available
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+
+4. [#575 - gut: slider numeric editor caret is offset left](https://github.com/Ensrick/vermintide-2-tweaker/issues/575) - score `114`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:24:59`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+60): /gut_regression_test, gut_regression_test, ui_passes
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
 
-3. [#517 - gut: TOML config-read never worked in retail](https://github.com/Ensrick/vermintide-2-tweaker/issues/517) - score `114`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 19:48:18`
+5. [#517 - gut: TOML config-read never worked in retail](https://github.com/Ensrick/vermintide-2-tweaker/issues/517) - score `114`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 19:48:18`
    - `shared_subsystem_labels` (+30): Tweaker: GUI
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
    - `shared_code_identifiers` (+60): /gut_regression_test, gut_dev, gut_regression_test
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
-
-4. [#363 - [crash] gut/cim: in-mission Crafting Salvage page crashes - gui_store_menu_atlas not in ingame Gui (draw fatal)](https://github.com/Ensrick/vermintide-2-tweaker/issues/363) - score `112`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 01:07:08`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+16): renderer_specific_material_closure, source_first_engine_contract
-   - `shared_code_identifiers` (+60): gut_dev, scripts/ui/ui_passes.lua, ui_passes
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, user_confirmed_fixed`
-
-5. [#77 - gut Mod Tweaker: port native settings-menu control fidelity (ON/OFF stepper switch, moving slider thumb, texture arrows, hover highlight, Wwise sounds)](https://github.com/Ensrick/vermintide-2-tweaker/issues/77) - score `111`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/01/2026 22:41:45`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+16): renderer_specific_material_closure, backend_realm_isolation
-   - `shared_code_identifiers` (+60): checkbox_checked, gui_settings_atlas, local_offset
-   - `shared_distinctive_terms` (+3): available
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
 
 **Fallback 1**
 
@@ -16184,14 +16140,23 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #540 - Harden CI and protect master
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/540](https://github.com/Ensrick/vermintide-2-tweaker/issues/540)
-- Current labels: `enhancement, audit, tooling, diagnostics-armed, 1-major`
-- Evidence class: `canonical_identity_persistence`
-- Current action: run documented repro and collect bounded diagnostics
+- Current labels: `enhancement, audit, blocked, tooling, 1-major, not-started`
+- Evidence class: `canonical_identity_persistence, source_first_engine_contract`
+- Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#591 - Gate every ship with headless QA](https://github.com/Ensrick/vermintide-2-tweaker/issues/591) - score `198`, confidence `high`, signal `direct-history-reference`, closed `07/14/2026 00:36:10`
+1. [#625 - Reconcile unmerged agent branches](https://github.com/Ensrick/vermintide-2-tweaker/issues/625) - score `297`, confidence `high`, signal `direct-history-reference`, closed `07/17/2026 08:00:09`
+   - `open_explicitly_references_closed` (+120): #625
+   - `closed_explicitly_references_open` (+120): #540
+   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, source_first_engine_contract
+   - `shared_code_identifiers` (+20): master
+   - `shared_distinctive_terms` (+15): branch, completed, master, some, workflow
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
+
+2. [#591 - Gate every ship with headless QA](https://github.com/Ensrick/vermintide-2-tweaker/issues/591) - score `198`, confidence `high`, signal `direct-history-reference`, closed `07/14/2026 00:36:10`
    - `closed_explicitly_references_open` (+120): #540
    - `shared_subsystem_labels` (+30): audit
    - `shared_code_identifiers` (+40): checks.md, qa/checks.md
@@ -16199,64 +16164,67 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-2. [#429 - tooling: CI bypasses the QA gate engine](https://github.com/Ensrick/vermintide-2-tweaker/issues/429) - score `144`, confidence `high`, signal `direct-history-reference`, closed `07/08/2026 06:59:20`
+3. [#429 - tooling: CI bypasses the QA gate engine](https://github.com/Ensrick/vermintide-2-tweaker/issues/429) - score `152`, confidence `high`, signal `direct-history-reference`, closed `07/08/2026 06:59:20`
    - `open_explicitly_references_closed` (+120): #429
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
+   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, source_first_engine_contract
    - `shared_distinctive_terms` (+12): block, checks, file, full
    - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, source_commit_recorded`
 
-3. [#544 - Add pure Lua unit test layer](https://github.com/Ensrick/vermintide-2-tweaker/issues/544) - score `99`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 18:03:10`
+4. [#544 - Add pure Lua unit test layer](https://github.com/Ensrick/vermintide-2-tweaker/issues/544) - score `107`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 18:03:10`
    - `shared_explicit_references` (+8): #429
    - `shared_subsystem_labels` (+30): audit
+   - `shared_lifecycle_surface_classes` (+8): source_first_engine_contract
    - `shared_code_identifiers` (+40): checks.md, qa/checks.md
    - `shared_distinctive_terms` (+15): actions, checks, document, github, powershell
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
 
-4. [#494 - Handoff: Fable agent campaign state 2026-07-11](https://github.com/Ensrick/vermintide-2-tweaker/issues/494) - score `59`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 08:34:22`
-   - `shared_subsystem_labels` (+30): audit
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_distinctive_terms` (+15): assets, branch, checks, document, full
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
-
-5. [#74 - wt: BR true-flight reimpl divergences vs vanilla + regression-harness 'skip:' handling + stale cfg description version](https://github.com/Ensrick/vermintide-2-tweaker/issues/74) - score `52`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 09:37:16`
-   - `shared_subsystem_labels` (+30): audit
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_distinctive_terms` (+12): block, file, returns, skip
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
+5. [#4 - career_tweaker: fill 27 remaining BR_TOGGLES stubs](https://github.com/Ensrick/vermintide-2-tweaker/issues/4) - score `68`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 09:37:14`
+   - `shared_subsystem_labels` (+60): audit, blocked
+   - `shared_distinctive_terms` (+6): execution, full
+   - `closure_verification_evidence` (+2): regression_coverage
+   - Prior closure evidence: `regression_coverage`
 
 **Fallback 1**
 
-- **Evidence/trigger:** The issue's bounded armed repro records a first state divergence.
-- **Change:** Repair only the layer named by that trace.
-- **Falsifier:** The trace remains healthy through the observed symptom.
+- **Evidence/trigger:** The issue body and cited source establish a bounded acceptance contract.
+- **Change:** Implement that contract on current canonical source with a truth-table regression.
+- **Falsifier:** Source/runtime evidence contradicts a required premise in the accepted contract.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Captured runtime state differs from the issue's cited vanilla/decompiled consumer contract.
-- **Change:** Repair the first contract mismatch and retain the probe as regression evidence.
-- **Falsifier:** Captured state matches the source contract at every sampled boundary.
+- **Evidence/trigger:** Insufficient evidence: no runtime trace yet distinguishes the candidate engine/UI/inventory boundaries.
+- **Change:** Add a minimal repro and bounded trace at the named boundary, then repair only the first observed divergence.
+- **Falsifier:** Existing evidence already identifies the divergent boundary.
 
 **Fallback 3**
 
-- **Evidence/trigger:** Insufficient evidence: the current probe is silent or cannot distinguish the remaining candidates.
-- **Change:** Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix.
-- **Falsifier:** The existing probe already identifies one causal boundary.
+- **Evidence/trigger:** The requested path is blocked by absent provenance/license, resource residency, or external service authority.
+- **Change:** Retain a resident vanilla fallback or keep the feature disabled until the missing evidence/authority exists.
+- **Falsifier:** The required provenance, resource closure, and authority are all positively proved.
 
 ## #546 - Professionalize repository engineering and contributor workflow
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/546](https://github.com/Ensrick/vermintide-2-tweaker/issues/546)
-- Current labels: `enhancement, audit, tooling, verify-fix, 1-major`
+- Current labels: `enhancement, audit, tooling, 1-major, not-started`
 - Evidence class: `custom_unit_behavioral_contract, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, backend_realm_isolation`
-- Current action: solo in-game verification
+- Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#591 - Gate every ship with headless QA](https://github.com/Ensrick/vermintide-2-tweaker/issues/591) - score `231`, confidence `high`, signal `direct-history-reference`, closed `07/14/2026 00:36:10`
+1. [#625 - Reconcile unmerged agent branches](https://github.com/Ensrick/vermintide-2-tweaker/issues/625) - score `363`, confidence `high`, signal `direct-history-reference`, closed `07/17/2026 08:00:09`
+   - `open_explicitly_references_closed` (+120): #625
+   - `closed_explicitly_references_open` (+120): #546
+   - `shared_explicit_references` (+24): #498, #528, #540
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
+   - `shared_code_identifiers` (+60): agent/*, master, open_issue_contingencies.generated.md
+   - `shared_distinctive_terms` (+9): canonical, master, workflow
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
+
+2. [#591 - Gate every ship with headless QA](https://github.com/Ensrick/vermintide-2-tweaker/issues/591) - score `231`, confidence `high`, signal `direct-history-reference`, closed `07/14/2026 00:36:10`
    - `closed_explicitly_references_open` (+120): #546
    - `shared_explicit_references` (+8): #540
    - `shared_subsystem_labels` (+30): audit
@@ -16266,7 +16234,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-2. [#544 - Add pure Lua unit test layer](https://github.com/Ensrick/vermintide-2-tweaker/issues/544) - score `189`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 18:03:10`
+3. [#544 - Add pure Lua unit test layer](https://github.com/Ensrick/vermintide-2-tweaker/issues/544) - score `189`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 18:03:10`
    - `open_explicitly_references_closed` (+120): #544
    - `shared_subsystem_labels` (+30): audit
    - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation
@@ -16274,7 +16242,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
 
-3. [#545 - Add source-to-bundle release provenance](https://github.com/Ensrick/vermintide-2-tweaker/issues/545) - score `175`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 18:03:14`
+4. [#545 - Add source-to-bundle release provenance](https://github.com/Ensrick/vermintide-2-tweaker/issues/545) - score `175`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 18:03:14`
    - `open_explicitly_references_closed` (+120): #545
    - `shared_subsystem_labels` (+30): audit
    - `shared_lifecycle_surface_classes` (+8): bounded_transaction_lifecycle
@@ -16282,7 +16250,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-4. [#541 - Build canonical human contributor documentation](https://github.com/Ensrick/vermintide-2-tweaker/issues/541) - score `174`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 17:56:30`
+5. [#541 - Build canonical human contributor documentation](https://github.com/Ensrick/vermintide-2-tweaker/issues/541) - score `174`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 17:56:30`
    - `open_explicitly_references_closed` (+120): #541
    - `shared_subsystem_labels` (+30): audit
    - `shared_distinctive_title_terms` (+7): contributor
@@ -16290,30 +16258,23 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-5. [#543 - Pin decompiled source provenance automatically](https://github.com/Ensrick/vermintide-2-tweaker/issues/543) - score `173`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 17:56:33`
-   - `open_explicitly_references_closed` (+120): #543
-   - `shared_subsystem_labels` (+30): audit
-   - `shared_distinctive_terms` (+15): decompiled, documentation, fields, lifecycle, provenance
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
 **Fallback 1**
 
-- **Evidence/trigger:** The issue's posted build-specific verification fails at a named invariant or surface.
-- **Change:** Repair the first failed invariant in the current implementation, scoped to that surface.
-- **Falsifier:** The invariant passes while the reported symptom remains.
+- **Evidence/trigger:** The issue body and cited source establish a bounded acceptance contract.
+- **Change:** Implement that contract on current canonical source with a truth-table regression.
+- **Falsifier:** Source/runtime evidence contradicts a required premise in the accepted contract.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract.
-- **Change:** Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior.
-- **Falsifier:** The custom and vanilla boundary inputs/outputs are identical.
+- **Evidence/trigger:** Insufficient evidence: no runtime trace yet distinguishes the candidate engine/UI/inventory boundaries.
+- **Change:** Add a minimal repro and bounded trace at the named boundary, then repair only the first observed divergence.
+- **Falsifier:** Existing evidence already identifies the divergent boundary.
 
 **Fallback 3**
 
-- **Evidence/trigger:** The loaded version/hash or canonical ancestry does not contain the claimed fix.
-- **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
-- **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
+- **Evidence/trigger:** The requested path is blocked by absent provenance/license, resource residency, or external service authority.
+- **Change:** Retain a resident vanilla fallback or keep the feature disabled until the missing evidence/authority exists.
+- **Falsifier:** The required provenance, resource closure, and authority are all positively proved.
 
 ## #547 - HUD edit drag box offset from element
 
@@ -16446,72 +16407,6 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 - **Change:** Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix.
 - **Falsifier:** The existing probe already identifies one causal boundary.
 
-## #556 - Granting talents as starting boons
-
-- Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/556](https://github.com/Ensrick/vermintide-2-tweaker/issues/556)
-- Current labels: `bug, Tweaker: Chaos Wastes, 2-moderate, Fixed`
-- Evidence class: `network_peer_parity, canonical_identity_persistence, dynamic_localization_ui_contract, backend_realm_isolation`
-- Current action: post-fix hardening, regression coverage, then close
-- Closed-history status: `ranked-evidence-review`
-
-**Ranked related closed issues (manual review)**
-
-1. [#556 - Granting talents as starting boons](https://github.com/Ensrick/vermintide-2-tweaker/issues/556) - score `173`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:26:28`
-   - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
-   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, dynamic_localization_ui_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+60): /ct_regression_test, ct_regression_test, issue556_starting_talent_identity
-   - `shared_distinctive_title_terms` (+28): boons, granting, starting, talents
-   - `shared_distinctive_terms` (+15): adding, applied, applying, area, boon
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
-
-2. [#291 - [crash] CW journey-complete CTD on Cataclysm 3 — vanilla statistics_util.lua:997 'compare number with nil' (difficulty_index nil), won Slaanesh Citadel](https://github.com/Ensrick/vermintide-2-tweaker/issues/291) - score `108`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 05:57:33`
-   - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
-   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, dynamic_localization_ui_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+40): /ct_regression_test, ct_regression_test
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
-
-3. [#143 - ct_dev: Morgrim's Bomb appears too often](https://github.com/Ensrick/vermintide-2-tweaker/issues/143) - score `103`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 00:02:28`
-   - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
-   - `shared_code_identifiers` (+40): /ct_regression_test, ct_regression_test
-   - `shared_distinctive_terms` (+3): boon
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
-
-4. [#262 - [crash] ct_dev: host NetworkedFlowStateManager 'Too many object states(512)' overflow during Chest of Trials + raised enemy caps](https://github.com/Ensrick/vermintide-2-tweaker/issues/262) - score `100`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 05:26:41`
-   - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, dynamic_localization_ui_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+40): /ct_regression_test, ct_regression_test
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
-
-5. [#145 - ct_dev: Citadel of Eternity — dominant god differs between mission (Tzeentch) and finale (Nurgle); dominant-god-disable may conflict with the override](https://github.com/Ensrick/vermintide-2-tweaker/issues/145) - score `100`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 20:24:08`
-   - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
-   - `shared_code_identifiers` (+40): /ct_regression_test, ct_regression_test
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
-
-**Fallback 1**
-
-- **Evidence/trigger:** The documented closure test fails on the current named build.
-- **Change:** Repair the first regressed invariant covered by the existing issue regression.
-- **Falsifier:** The current closure test passes; close the stale issue instead.
-
-**Fallback 2**
-
-- **Evidence/trigger:** The symptom returns after a known-good version.
-- **Change:** Bisect the documented introduction/fix range and patch the first regressing commit.
-- **Falsifier:** No commit in that range changes the failing path.
-
-**Fallback 3**
-
-- **Evidence/trigger:** The current repair cannot be made safe on the present tree.
-- **Change:** Roll back the isolated issue fix and restore the last user-verified vanilla/mod behavior while preparing a current-tree repair.
-- **Falsifier:** The fix cannot be isolated without removing unrelated verified work.
-
 ## #557 - [mod] Tweaker: GUI layout wrong for mod settings
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/557](https://github.com/Ensrick/vermintide-2-tweaker/issues/557)
@@ -16573,9 +16468,9 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #558 - Stop tracking generated bundle outputs
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/558](https://github.com/Ensrick/vermintide-2-tweaker/issues/558)
-- Current labels: `enhancement, audit, tooling, diagnostics-armed, 2-moderate`
+- Current labels: `enhancement, audit, tooling, 2-moderate, not-started`
 - Evidence class: `bounded_transaction_lifecycle`
-- Current action: run documented repro and collect bounded diagnostics
+- Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
@@ -16599,14 +16494,22 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-3. [#612 - Add Encarmine Helmet cosmetic](https://github.com/Ensrick/vermintide-2-tweaker/issues/612) - score `84`, confidence `medium`, signal `related-history-review-only`, closed `07/15/2026 22:58:37`
+3. [#503 - ENGINE_SURFACE docs for remaining active mods](https://github.com/Ensrick/vermintide-2-tweaker/issues/503) - score `85`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 18:25:22`
+   - `shared_subsystem_labels` (+30): audit
+   - `shared_lifecycle_surface_classes` (+8): bounded_transaction_lifecycle
+   - `shared_code_identifiers` (+40): enemy_tweaker, readme.md
+   - `shared_distinctive_terms` (+3): readme
+   - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, source_commit_recorded`
+
+4. [#612 - Add Encarmine Helmet cosmetic](https://github.com/Ensrick/vermintide-2-tweaker/issues/612) - score `84`, confidence `medium`, signal `related-history-review-only`, closed `07/15/2026 22:58:37`
    - `shared_lifecycle_surface_classes` (+8): bounded_transaction_lifecycle
    - `shared_code_identifiers` (+60): .mod_bundle, mod_bundle, readme.md
    - `shared_distinctive_terms` (+6): maps, readme
    - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
 
-4. [#185 - ct_dev deploy gap: GitHub release published but Workshop upload skipped → host loaded stale pre-fix bundle](https://github.com/Ensrick/vermintide-2-tweaker/issues/185) - score `74`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 21:11:23`
+5. [#185 - ct_dev deploy gap: GitHub release published but Workshop upload skipped → host loaded stale pre-fix bundle](https://github.com/Ensrick/vermintide-2-tweaker/issues/185) - score `74`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 21:11:23`
    - `shared_subsystem_labels` (+30): audit
    - `shared_code_identifiers` (+20): mod_bundle
    - `shared_distinctive_title_terms` (+7): bundle
@@ -16614,30 +16517,23 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-5. [#543 - Pin decompiled source provenance automatically](https://github.com/Ensrick/vermintide-2-tweaker/issues/543) - score `73`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 17:56:33`
-   - `shared_subsystem_labels` (+30): audit
-   - `shared_code_identifiers` (+20): readme.md
-   - `shared_distinctive_terms` (+15): checkout, commit, manifest, provenance, readme
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
 **Fallback 1**
 
-- **Evidence/trigger:** The issue's bounded armed repro records a first state divergence.
-- **Change:** Repair only the layer named by that trace.
-- **Falsifier:** The trace remains healthy through the observed symptom.
+- **Evidence/trigger:** The issue body and cited source establish a bounded acceptance contract.
+- **Change:** Implement that contract on current canonical source with a truth-table regression.
+- **Falsifier:** Source/runtime evidence contradicts a required premise in the accepted contract.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Captured runtime state differs from the issue's cited vanilla/decompiled consumer contract.
-- **Change:** Repair the first contract mismatch and retain the probe as regression evidence.
-- **Falsifier:** Captured state matches the source contract at every sampled boundary.
+- **Evidence/trigger:** Insufficient evidence: no runtime trace yet distinguishes the candidate engine/UI/inventory boundaries.
+- **Change:** Add a minimal repro and bounded trace at the named boundary, then repair only the first observed divergence.
+- **Falsifier:** Existing evidence already identifies the divergent boundary.
 
 **Fallback 3**
 
-- **Evidence/trigger:** Insufficient evidence: the current probe is silent or cannot distinguish the remaining candidates.
-- **Change:** Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix.
-- **Falsifier:** The existing probe already identifies one causal boundary.
+- **Evidence/trigger:** The requested path is blocked by absent provenance/license, resource residency, or external service authority.
+- **Change:** Retain a resident vanilla fallback or keep the feature disabled until the missing evidence/authority exists.
+- **Falsifier:** The required provenance, resource closure, and authority are all positively proved.
 
 ## #564 - CT mission depth localization throws five exceptions
 
@@ -16943,11 +16839,11 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
 
-4. [#556 - Granting talents as starting boons](https://github.com/Ensrick/vermintide-2-tweaker/issues/556) - score `97`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:26:28`
+4. [#556 - Granting talents as starting boons](https://github.com/Ensrick/vermintide-2-tweaker/issues/556) - score `100`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 06:26:28`
    - `shared_subsystem_labels` (+30): Tweaker: Chaos Wastes
    - `shared_lifecycle_surface_classes` (+16): dynamic_localization_ui_contract, backend_realm_isolation
    - `shared_code_identifiers` (+40): /ct_regression_test, ct_regression_test
-   - `shared_distinctive_terms` (+3): area
+   - `shared_distinctive_terms` (+6): area, show
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
 
@@ -17599,7 +17495,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #602 - Add CWV Dawi Mace weapon family
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/602](https://github.com/Ensrick/vermintide-2-tweaker/issues/602)
-- Current labels: `enhancement, blocked, Tweaker: Weapons, CWV, 2-moderate`
+- Current labels: `enhancement, blocked, Tweaker: Weapons, CWV, 2-moderate, not-started`
 - Evidence class: `renderer_specific_material_closure, shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, custom_asset_contract, dynamic_localization_ui_contract, backend_realm_isolation`
 - Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
@@ -17798,32 +17694,32 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/607](https://github.com/Ensrick/vermintide-2-tweaker/issues/607)
 - Current labels: `Progression, diagnostics-armed, feature, 1-major`
-- Evidence class: `network_peer_parity, canonical_identity_persistence, backend_realm_isolation`
+- Evidence class: `network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation`
 - Current action: run documented repro and collect bounded diagnostics
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#525 - Rename Modded Progression Tab](https://github.com/Ensrick/vermintide-2-tweaker/issues/525) - score `81`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 00:45:10`
+1. [#568 - Modded Progression: simulated daily claim calls PlayFab and forces game exit](https://github.com/Ensrick/vermintide-2-tweaker/issues/568) - score `85`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 20:21:22`
+   - `shared_subsystem_labels` (+30): Progression
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
+   - `shared_distinctive_terms` (+15): claim, completion, duplicate, fatshark, generation
+   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed`
+
+2. [#581 - mp: synthetic daily statistic crashes startup](https://github.com/Ensrick/vermintide-2-tweaker/issues/581) - score `82`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:23:09`
+   - `shared_subsystem_labels` (+30): Progression
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
+   - `shared_distinctive_terms` (+12): claim, crashes, progression, realm
+   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
+
+3. [#525 - Rename Modded Progression Tab](https://github.com/Ensrick/vermintide-2-tweaker/issues/525) - score `81`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 00:45:10`
    - `shared_subsystem_labels` (+30): Progression
    - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
    - `shared_distinctive_terms` (+15): generated, presentation, progression, result, retain
    - `closure_verification_evidence` (+12): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed`
-
-2. [#568 - Modded Progression: simulated daily claim calls PlayFab and forces game exit](https://github.com/Ensrick/vermintide-2-tweaker/issues/568) - score `77`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 20:21:22`
-   - `shared_subsystem_labels` (+30): Progression
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
-   - `shared_distinctive_terms` (+15): claim, completion, duplicate, fatshark, generation
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed`
-
-3. [#581 - mp: synthetic daily statistic crashes startup](https://github.com/Ensrick/vermintide-2-tweaker/issues/581) - score `74`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:23:09`
-   - `shared_subsystem_labels` (+30): Progression
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
-   - `shared_distinctive_terms` (+12): claim, crashes, progression, realm
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
 
 4. [#589 - mp: Login reward claim forces exit](https://github.com/Ensrick/vermintide-2-tweaker/issues/589) - score `71`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 19:51:46`
    - `shared_subsystem_labels` (+30): Progression
@@ -17833,9 +17729,9 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, user_confirmed_fixed`
 
-5. [#174 - Bot loadout replaced on startup by base blacksmith (5-power) items in modded realm — something persists/restores loadouts on exit](https://github.com/Ensrick/vermintide-2-tweaker/issues/174) - score `63`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 20:32:02`
+5. [#174 - Bot loadout replaced on startup by base blacksmith (5-power) items in modded realm — something persists/restores loadouts on exit](https://github.com/Ensrick/vermintide-2-tweaker/issues/174) - score `71`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/03/2026 20:32:02`
    - `shared_subsystem_labels` (+30): Progression
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
+   - `shared_lifecycle_surface_classes` (+24): canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
    - `shared_distinctive_terms` (+15): equipment, items, persistence, power, progression
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
@@ -18005,7 +17901,22 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Ranked related closed issues (manual review)**
 
-1. [#582 - WT: hide native Bardin Dual Axes](https://github.com/Ensrick/vermintide-2-tweaker/issues/582) - score `127`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:17:06`
+1. [#647 - Bind Ships to Their Source Worktree](https://github.com/Ensrick/vermintide-2-tweaker/issues/647) - score `314`, confidence `high`, signal `direct-history-reference`, closed `07/17/2026 08:44:53`
+   - `open_explicitly_references_closed` (+120): #647
+   - `closed_explicitly_references_open` (+120): #611
+   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
+   - `shared_code_identifiers` (+60): projectroot, v0.12.267-dev, v0.12.268-dev
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+
+2. [#646 - Normalize Descriptor Hashes Across Steam Line Endings](https://github.com/Ensrick/vermintide-2-tweaker/issues/646) - score `154`, confidence `high`, signal `direct-history-reference`, closed `07/17/2026 08:44:51`
+   - `open_explicitly_references_closed` (+120): #646
+   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
+   - `shared_code_identifiers` (+20): .mod
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+
+3. [#582 - WT: hide native Bardin Dual Axes](https://github.com/Ensrick/vermintide-2-tweaker/issues/582) - score `127`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:17:06`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+60): /wt_regression_test, verify-fix, wt_regression_test
@@ -18013,35 +17924,20 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, user_confirmed_fixed`
 
-2. [#536 - wt: wh careers missing empty-wield network patch](https://github.com/Ensrick/vermintide-2-tweaker/issues/536) - score `117`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 22:03:18`
+4. [#536 - wt: wh careers missing empty-wield network patch](https://github.com/Ensrick/vermintide-2-tweaker/issues/536) - score `117`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 22:03:18`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
-   - `shared_code_identifiers` (+60): /wt_regression_test, weapon_tweaker, wt_regression_test
+   - `shared_code_identifiers` (+60): /wt_regression_test, weapon_tweaker, weapon_tweaker.lua
    - `shared_distinctive_terms` (+3): saltzpyre
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
 
-3. [#319 - Axe+Falchion on Kruber; Larger Issue FAILING TO GET ANIMATIONS PROPERLY FROM CONFIG](https://github.com/Ensrick/vermintide-2-tweaker/issues/319) - score `112`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:27:38`
+5. [#319 - Axe+Falchion on Kruber; Larger Issue FAILING TO GET ANIMATIONS PROPERLY FROM CONFIG](https://github.com/Ensrick/vermintide-2-tweaker/issues/319) - score `112`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:27:38`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+60): /wt_regression_test, weapon_tweaker, wt_regression_test
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
-
-4. [#594 - WT exposes Bardin Hammer+Shield to Saltzpyre](https://github.com/Ensrick/vermintide-2-tweaker/issues/594) - score `109`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 19:50:22`
-   - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
-   - `shared_code_identifiers` (+40): verify-fix, weapon_tweaker
-   - `shared_distinctive_terms` (+15): availability, available, bardin, master, saltzpyre
-   - `closure_verification_evidence` (+8): completed_state_reason, source_commit_recorded, user_confirmed_fixed, verification_passed
-   - Prior closure evidence: `completed_state_reason, source_commit_recorded, user_confirmed_fixed, verification_passed`
-
-5. [#74 - wt: BR true-flight reimpl divergences vs vanilla + regression-harness 'skip:' handling + stale cfg description version](https://github.com/Ensrick/vermintide-2-tweaker/issues/74) - score `108`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 09:37:16`
-   - `shared_subsystem_labels` (+30): Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
-   - `shared_code_identifiers` (+60): /wt_regression_test, weapon_tweaker, wt_regression_test
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
 
 **Fallback 1**
 
@@ -18318,69 +18214,6 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 - **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
 - **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
 
-## #625 - Reconcile unmerged agent branches
-
-- Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/625](https://github.com/Ensrick/vermintide-2-tweaker/issues/625)
-- Current labels: `enhancement, tooling, 1-major, not-started`
-- Evidence class: `source_first_engine_contract, backend_realm_isolation`
-- Current action: scope against source, then implement or arm diagnostics
-- Closed-history status: `ranked-evidence-review`
-
-**Ranked related closed issues (manual review)**
-
-1. [#595 - Weapons of Chaos startup crash: wire policy helper omitted from bundle](https://github.com/Ensrick/vermintide-2-tweaker/issues/595) - score `55`, confidence `medium`, signal `related-history-review-only`, closed `07/15/2026 00:01:56`
-   - `shared_lifecycle_surface_classes` (+16): source_first_engine_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+20): master
-   - `shared_distinctive_terms` (+9): exists, returned, workshop
-   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed, verification_passed`
-
-2. [#620 - Add per-item combat style switching](https://github.com/Ensrick/vermintide-2-tweaker/issues/620) - score `50`, confidence `low`, signal `related-history-review-only`, closed `07/16/2026 20:11:23`
-   - `shared_lifecycle_surface_classes` (+16): source_first_engine_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+20): origin/master
-   - `shared_distinctive_terms` (+6): canonical, produce
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded`
-
-3. [#574 - cosmetics: RGB glow edits never expose Apply or persist per variant](https://github.com/Ensrick/vermintide-2-tweaker/issues/574) - score `47`, confidence `low`, signal `related-history-review-only`, closed `07/14/2026 00:59:31`
-   - `shared_lifecycle_surface_classes` (+16): source_first_engine_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+20): master
-   - `shared_distinctive_terms` (+3): diagnostics
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
-4. [#536 - wt: wh careers missing empty-wield network patch](https://github.com/Ensrick/vermintide-2-tweaker/issues/536) - score `47`, confidence `low`, signal `related-history-review-only`, closed `07/13/2026 22:03:18`
-   - `shared_lifecycle_surface_classes` (+16): source_first_engine_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+20): origin/master
-   - `shared_distinctive_terms` (+3): patch
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
-5. [#563 - Primary weapon illusion changes do not persist](https://github.com/Ensrick/vermintide-2-tweaker/issues/563) - score `45`, confidence `low`, signal `related-history-review-only`, closed `07/13/2026 23:24:53`
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
-   - `shared_code_identifiers` (+20): master
-   - `shared_distinctive_terms` (+9): exists, reconciliation, remain
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
-
-**Fallback 1**
-
-- **Evidence/trigger:** The issue body and cited source establish a bounded acceptance contract.
-- **Change:** Implement that contract on current canonical source with a truth-table regression.
-- **Falsifier:** Source/runtime evidence contradicts a required premise in the accepted contract.
-
-**Fallback 2**
-
-- **Evidence/trigger:** Insufficient evidence: no runtime trace yet distinguishes the candidate engine/UI/inventory boundaries.
-- **Change:** Add a minimal repro and bounded trace at the named boundary, then repair only the first observed divergence.
-- **Falsifier:** Existing evidence already identifies the divergent boundary.
-
-**Fallback 3**
-
-- **Evidence/trigger:** The requested path is blocked by absent provenance/license, resource residency, or external service authority.
-- **Change:** Retain a resident vanilla fallback or keep the feature disabled until the missing evidence/authority exists.
-- **Falsifier:** The required provenance, resource closure, and authority are all positively proved.
-
 ## #626 - ET: Dissect Feast mission activation
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/626](https://github.com/Ensrick/vermintide-2-tweaker/issues/626)
@@ -18514,51 +18347,51 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/628](https://github.com/Ensrick/vermintide-2-tweaker/issues/628)
 - Current labels: `bug, cim, CWV, cross-mod, verify-fix, 1-major`
-- Evidence class: `shared_preview_presentation_descriptor, canonical_identity_persistence, backend_realm_isolation`
+- Evidence class: `shared_preview_presentation_descriptor, network_peer_parity, canonical_identity_persistence, backend_realm_isolation`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#563 - Primary weapon illusion changes do not persist](https://github.com/Ensrick/vermintide-2-tweaker/issues/563) - score `159`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 23:24:53`
+1. [#563 - Primary weapon illusion changes do not persist](https://github.com/Ensrick/vermintide-2-tweaker/issues/563) - score `167`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 23:24:53`
    - `shared_subsystem_labels` (+60): cim, cross-mod
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+60): /cim_regression_test, cim_regression_test, crafting_in_modded_dev
    - `shared_distinctive_terms` (+15): equipped, marker, override, persist, persistence
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
 
-2. [#390 - CIM crafts CWV weapons as base vanilla item](https://github.com/Ensrick/vermintide-2-tweaker/issues/390) - score `147`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 15:10:16`
+2. [#390 - CIM crafts CWV weapons as base vanilla item](https://github.com/Ensrick/vermintide-2-tweaker/issues/390) - score `155`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 15:10:16`
    - `shared_subsystem_labels` (+60): cim, CWV
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
    - `shared_code_identifiers` (+60): character_weapon_variants, character_weapon_variants.lua, crafting_in_modded_dev
    - `shared_distinctive_terms` (+15): blacksmith, builds, craft, crafted, equipped
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
 
-3. [#617 - Custom preview/icon resources crash CIM Athanor item selector](https://github.com/Ensrick/vermintide-2-tweaker/issues/617) - score `143`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:21:31`
+3. [#617 - Custom preview/icon resources crash CIM Athanor item selector](https://github.com/Ensrick/vermintide-2-tweaker/issues/617) - score `151`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:21:31`
    - `shared_subsystem_labels` (+60): cim, cross-mod, CWV
-   - `shared_lifecycle_surface_classes` (+24): shared_preview_presentation_descriptor, canonical_identity_persistence, backend_realm_isolation
+   - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, network_peer_parity, canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+40): /cim_regression_test, cim_regression_test
    - `shared_distinctive_terms` (+9): athanor, craft, screen
    - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
 
-4. [#538 - cwv_give registers skin_only illusion keys as items](https://github.com/Ensrick/vermintide-2-tweaker/issues/538) - score `127`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:47:35`
+4. [#392 - CWV blacksmith/template items resolve to base weapon](https://github.com/Ensrick/vermintide-2-tweaker/issues/392) - score `133`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:47`
    - `shared_subsystem_labels` (+30): CWV
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
-   - `shared_code_identifiers` (+60): backend_id, character_weapon_variants, character_weapon_variants.lua
-   - `shared_distinctive_terms` (+15): builds, excluded, itemmasterlist, items, skin
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
-
-5. [#392 - CWV blacksmith/template items resolve to base weapon](https://github.com/Ensrick/vermintide-2-tweaker/issues/392) - score `125`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:47`
-   - `shared_subsystem_labels` (+30): CWV
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
    - `shared_code_identifiers` (+60): backend_id, character_weapon_variants, character_weapon_variants.lua
    - `shared_distinctive_terms` (+15): blacksmith, consumes, craft, family, forge
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
+
+5. [#284 - cwv: compile FAILS - 'main function has more than 200 local variables' (character_weapon_variants.lua:10203) - blocks every dev ship's GitHub-release stage](https://github.com/Ensrick/vermintide-2-tweaker/issues/284) - score `129`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 05:14:07`
+   - `shared_subsystem_labels` (+30): CWV
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
+   - `shared_code_identifiers` (+60): character_weapon_variants, character_weapon_variants.lua, verify-fix
+   - `shared_distinctive_terms` (+9): canonical, rebuilds, standard
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
 
 **Fallback 1**
 
@@ -18581,7 +18414,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #629 - Cosmetics: complete Grail Knight Purpure and Azure set
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/629](https://github.com/Ensrick/vermintide-2-tweaker/issues/629)
-- Current labels: `enhancement, Tweaker: Cosmetics, diagnostics-armed, feature, 2-moderate, coop-required`
+- Current labels: `Tweaker: Cosmetics, diagnostics-armed, feature, 2-moderate, coop-required`
 - Evidence class: `renderer_specific_material_closure, shared_preview_presentation_descriptor, custom_unit_behavioral_contract, asset_alpha_mip_material_contract, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, custom_asset_contract, dynamic_localization_ui_contract, backend_realm_isolation`
 - Current action: run documented repro and collect bounded diagnostics
 - Closed-history status: `ranked-evidence-review`
@@ -18650,7 +18483,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #630 - Renderer freeze: DX12 fence timeout after entering Mod Tweaker Weapons tab
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/630](https://github.com/Ensrick/vermintide-2-tweaker/issues/630)
-- Current labels: `crash, Tweaker: GUI, Tweaker: Weapons, cross-mod, diagnostics-armed, 0-critical`
+- Current labels: `bug, crash, Tweaker: GUI, Tweaker: Weapons, cross-mod, diagnostics-armed, 0-critical`
 - Evidence class: `unsafe_native_call_preflight, canonical_identity_persistence, bounded_transaction_lifecycle, backend_realm_isolation`
 - Current action: run documented repro and collect bounded diagnostics
 - Closed-history status: `ranked-evidence-review`
@@ -18712,69 +18545,6 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 - **Evidence/trigger:** Insufficient evidence: the current probe is silent or cannot distinguish the remaining candidates.
 - **Change:** Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix.
 - **Falsifier:** The existing probe already identifies one causal boundary.
-
-## #631 - Allow GUI Tweaker Hot Keys to Track Mouse Key Binds
-
-- Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/631](https://github.com/Ensrick/vermintide-2-tweaker/issues/631)
-- Current labels: `enhancement, Tweaker: GUI, 3-low, Fixed`
-- Evidence class: `custom_unit_behavioral_contract, backend_realm_isolation`
-- Current action: post-fix hardening, regression coverage, then close
-- Closed-history status: `ranked-evidence-review`
-
-**Ranked related closed issues (manual review)**
-
-1. [#517 - gut: TOML config-read never worked in retail](https://github.com/Ensrick/vermintide-2-tweaker/issues/517) - score `106`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 19:48:18`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
-   - `shared_code_identifiers` (+60): /gut_regression_test, gui_tweaker_dev, gut_regression_test
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
-
-2. [#360 - Options Menu - Kill Confirm Crosshair -> Advanced Options Gear Icon Misaligned](https://github.com/Ensrick/vermintide-2-tweaker/issues/360) - score `96`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:06:41`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_code_identifiers` (+60): /gut_regression_test, gui_tweaker_dev, gut_regression_test
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
-
-3. [#352 - Implement Original Temporary Health Talent Names](https://github.com/Ensrick/vermintide-2-tweaker/issues/352) - score `91`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:21:26`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
-   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `shared_distinctive_terms` (+3): allow
-   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
-
-4. [#525 - Rename Modded Progression Tab](https://github.com/Ensrick/vermintide-2-tweaker/issues/525) - score `90`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 00:45:10`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
-   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `closure_verification_evidence` (+12): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed`
-
-5. [#575 - gut: slider numeric editor caret is offset left](https://github.com/Ensrick/vermintide-2-tweaker/issues/575) - score `86`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:24:59`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
-   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
-**Fallback 1**
-
-- **Evidence/trigger:** The documented closure test fails on the current named build.
-- **Change:** Repair the first regressed invariant covered by the existing issue regression.
-- **Falsifier:** The current closure test passes; close the stale issue instead.
-
-**Fallback 2**
-
-- **Evidence/trigger:** The symptom returns after a known-good version.
-- **Change:** Bisect the documented introduction/fix range and patch the first regressing commit.
-- **Falsifier:** No commit in that range changes the failing path.
-
-**Fallback 3**
-
-- **Evidence/trigger:** The current repair cannot be made safe on the present tree.
-- **Change:** Roll back the isolated issue fix and restore the last user-verified vanilla/mod behavior while preparing a current-tree repair.
-- **Falsifier:** The fix cannot be isolated without removing unrelated verified work.
 
 ## #632 - WOC: make Blightreaper a cursed Shyish weapon
 
@@ -18918,7 +18688,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #634 - WT: refresh dev stream after beta
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/634](https://github.com/Ensrick/vermintide-2-tweaker/issues/634)
-- Current labels: `enhancement, Tweaker: Weapons, tooling, verify-fix, 2-moderate`
+- Current labels: `enhancement, Tweaker: Weapons, verify-fix, 2-moderate`
 - Evidence class: `canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation`
 - Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
@@ -19048,63 +18818,6 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 - **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
 - **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
 
-## #636 - WT v0.12.139-dev Missing Weapons Tab on GUI Tweaker
-
-- Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/636](https://github.com/Ensrick/vermintide-2-tweaker/issues/636)
-- Current labels: `bug, Tweaker: GUI, Tweaker: Weapons, cross-mod, 1-major, Fixed`
-- Evidence class: `network_peer_parity`
-- Current action: post-fix hardening, regression coverage, then close
-- Closed-history status: `ranked-evidence-review`
-
-**Ranked related closed issues (manual review)**
-
-1. [#339 - CRITICAL: integrated mods wrongly rendered as top-level Mod Tweaker tabs; must live inside category collapsibles](https://github.com/Ensrick/vermintide-2-tweaker/issues/339) - score `74`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 03:17:57`
-   - `shared_subsystem_labels` (+60): cross-mod, Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
-
-2. [#475 - Wielding the Bretonian Longsword and Shield on Kruber uses the wrong weapon](https://github.com/Ensrick/vermintide-2-tweaker/issues/475) - score `72`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 23:17:11`
-   - `shared_subsystem_labels` (+60): cross-mod, Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
-   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
-
-3. [#131 - ct_dev/wt: Moonfire bow can fire more shots than normal in Chaos Wastes](https://github.com/Ensrick/vermintide-2-tweaker/issues/131) - score `72`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 18:30:42`
-   - `shared_subsystem_labels` (+60): cross-mod, Tweaker: Weapons
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
-   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
-
-4. [#84 - gut/cim: defer in-mission weapon-cosmetic change via the equipment gear/cog icon](https://github.com/Ensrick/vermintide-2-tweaker/issues/84) - score `70`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/02/2026 19:51:07`
-   - `shared_subsystem_labels` (+60): cross-mod, Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
-
-5. [#126 - gut: confirm cutscene skip + auto-skip are fully migrated & FUNCTIONAL in-game (code present since v0.2.93-dev)](https://github.com/Ensrick/vermintide-2-tweaker/issues/126) - score `68`, confidence `medium`, signal `related-history-review-only`, closed `07/16/2026 07:21:17`
-   - `shared_subsystem_labels` (+60): cross-mod, Tweaker: GUI
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed`
-
-**Fallback 1**
-
-- **Evidence/trigger:** The documented closure test fails on the current named build.
-- **Change:** Repair the first regressed invariant covered by the existing issue regression.
-- **Falsifier:** The current closure test passes; close the stale issue instead.
-
-**Fallback 2**
-
-- **Evidence/trigger:** The symptom returns after a known-good version.
-- **Change:** Bisect the documented introduction/fix range and patch the first regressing commit.
-- **Falsifier:** No commit in that range changes the failing path.
-
-**Fallback 3**
-
-- **Evidence/trigger:** The current repair cannot be made safe on the present tree.
-- **Change:** Roll back the isolated issue fix and restore the last user-verified vanilla/mod behavior while preparing a current-tree repair.
-- **Falsifier:** The fix cannot be isolated without removing unrelated verified work.
-
 ## #637 - Make WOC items unique inventory relics
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/637](https://github.com/Ensrick/vermintide-2-tweaker/issues/637)
@@ -19198,10 +18911,10 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
 
-3. [#513 - Model/Husk score screen doesn't have the loremaster override skin on.](https://github.com/Ensrick/vermintide-2-tweaker/issues/513) - score `76`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:57:35`
+3. [#513 - Model/Husk score screen doesn't have the loremaster override skin on.](https://github.com/Ensrick/vermintide-2-tweaker/issues/513) - score `79`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:57:35`
    - `shared_subsystem_labels` (+30): Tweaker: Cosmetics
    - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, appearance_surface_fanout, canonical_identity_persistence, custom_asset_contract
-   - `shared_distinctive_terms` (+6): grail, knight
+   - `shared_distinctive_terms` (+9): grail, knight, show
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
 
@@ -19308,7 +19021,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #641 - Cosmetics: Resolve offhand and shield names and flavor text independently
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/641](https://github.com/Ensrick/vermintide-2-tweaker/issues/641)
-- Current labels: `bug, Tweaker: Cosmetics, diagnostics-armed, feature, 2-moderate, coop-required`
+- Current labels: `bug, Tweaker: Cosmetics, diagnostics-armed, 2-moderate, coop-required`
 - Evidence class: `shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, custom_asset_contract, dynamic_localization_ui_contract, backend_realm_isolation`
 - Current action: run documented repro and collect bounded diagnostics
 - Closed-history status: `ranked-evidence-review`
@@ -19508,213 +19221,26 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 - **Change:** Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix.
 - **Falsifier:** The existing probe already identifies one causal boundary.
 
-## #646 - Normalize Descriptor Hashes Across Steam Line Endings
-
-- Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/646](https://github.com/Ensrick/vermintide-2-tweaker/issues/646)
-- Current labels: `bug, tooling, verify-fix, 2-moderate`
-- Evidence class: `canonical_identity_persistence`
-- Current action: solo in-game verification
-- Closed-history status: `ranked-evidence-review`
-
-**Ranked related closed issues (manual review)**
-
-1. [#612 - Add Encarmine Helmet cosmetic](https://github.com/Ensrick/vermintide-2-tweaker/issues/612) - score `64`, confidence `medium`, signal `related-history-review-only`, closed `07/15/2026 22:58:37`
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+40): .mod_bundle, mod_bundle
-   - `shared_distinctive_terms` (+6): bounded, required
-   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
-
-2. [#545 - Add source-to-bundle release provenance](https://github.com/Ensrick/vermintide-2-tweaker/issues/545) - score `57`, confidence `medium`, signal `related-history-review-only`, closed `07/13/2026 18:03:14`
-   - `shared_code_identifiers` (+40): .mod_bundle, mod_bundle
-   - `shared_distinctive_terms` (+15): binary, bundle, bundles, content, github
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
-
-3. [#595 - Weapons of Chaos startup crash: wire policy helper omitted from bundle](https://github.com/Ensrick/vermintide-2-tweaker/issues/595) - score `50`, confidence `low`, signal `related-history-review-only`, closed `07/15/2026 00:01:56`
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+20): master
-   - `shared_distinctive_terms` (+12): bundle, required, text, workshop
-   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed, verification_passed`
-
-4. [#588 - CWV: Dual Maces crash clients on wield](https://github.com/Ensrick/vermintide-2-tweaker/issues/588) - score `46`, confidence `low`, signal `related-history-review-only`, closed `07/17/2026 04:19:47`
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+20): master
-   - `shared_distinctive_terms` (+12): failed, preserve, release, required
-   - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, regression_coverage
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage`
-
-5. [#574 - cosmetics: RGB glow edits never expose Apply or persist per variant](https://github.com/Ensrick/vermintide-2-tweaker/issues/574) - score `42`, confidence `low`, signal `related-history-review-only`, closed `07/14/2026 00:59:31`
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+20): master
-   - `shared_distinctive_terms` (+6): bounded, copy
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
-**Fallback 1**
-
-- **Evidence/trigger:** The issue's posted build-specific verification fails at a named invariant or surface.
-- **Change:** Repair the first failed invariant in the current implementation, scoped to that surface.
-- **Falsifier:** The invariant passes while the reported symptom remains.
-
-**Fallback 2**
-
-- **Evidence/trigger:** Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract.
-- **Change:** Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior.
-- **Falsifier:** The custom and vanilla boundary inputs/outputs are identical.
-
-**Fallback 3**
-
-- **Evidence/trigger:** The loaded version/hash or canonical ancestry does not contain the claimed fix.
-- **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
-- **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
-
-## #647 - Bind Ships to Their Source Worktree
-
-- Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/647](https://github.com/Ensrick/vermintide-2-tweaker/issues/647)
-- Current labels: `bug, regression, tooling, verify-fix, 1-major`
-- Evidence class: `canonical_identity_persistence, source_first_engine_contract`
-- Current action: solo in-game verification
-- Closed-history status: `ranked-evidence-review`
-
-**Ranked related closed issues (manual review)**
-
-1. [#45 - Propagate RPC schema_version pattern to cosmetics_tweaker (4 RPCs)](https://github.com/Ensrick/vermintide-2-tweaker/issues/45) - score `60`, confidence `medium`, signal `related-history-review-only`, closed `07/07/2026 00:30:20`
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, source_first_engine_contract
-   - `shared_code_identifiers` (+40): all, mod_version
-   - `closure_verification_evidence` (+4): completed_state_reason, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, user_confirmed_fixed`
-
-2. [#595 - Weapons of Chaos startup crash: wire policy helper omitted from bundle](https://github.com/Ensrick/vermintide-2-tweaker/issues/595) - score `55`, confidence `medium`, signal `related-history-review-only`, closed `07/15/2026 00:01:56`
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, source_first_engine_contract
-   - `shared_code_identifiers` (+20): master
-   - `shared_distinctive_terms` (+9): required, therefore, workshop
-   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, user_confirmed_fixed, verification_passed`
-
-3. [#574 - cosmetics: RGB glow edits never expose Apply or persist per variant](https://github.com/Ensrick/vermintide-2-tweaker/issues/574) - score `53`, confidence `low`, signal `related-history-review-only`, closed `07/14/2026 00:59:31`
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, source_first_engine_contract
-   - `shared_code_identifiers` (+20): master
-   - `shared_distinctive_terms` (+9): dirty, payload, restore
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
-4. [#326 - Mechanize ship-time status labeling + loc-tag/label sync check](https://github.com/Ensrick/vermintide-2-tweaker/issues/326) - score `51`, confidence `low`, signal `related-history-review-only`, closed `07/13/2026 14:58:30`
-   - `shared_lifecycle_surface_classes` (+8): source_first_engine_contract
-   - `shared_code_identifiers` (+20): tools/ship/ship.ps1
-   - `shared_distinctive_terms` (+15): including, ship, ships, stale, upload
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
-5. [#344 - tooling: gui_tweaker_dev itemV2.cfg transiently carried ct_dev's published_id during a ship - Workshop item hijack (recovered)](https://github.com/Ensrick/vermintide-2-tweaker/issues/344) - score `51`, confidence `low`, signal `related-history-review-only`, closed `07/12/2026 16:43:15`
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+20): published_id
-   - `shared_distinctive_terms` (+15): canonical, content, launcher, manifest, ship
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
-**Fallback 1**
-
-- **Evidence/trigger:** The issue's posted build-specific verification fails at a named invariant or surface.
-- **Change:** Repair the first failed invariant in the current implementation, scoped to that surface.
-- **Falsifier:** The invariant passes while the reported symptom remains.
-
-**Fallback 2**
-
-- **Evidence/trigger:** Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract.
-- **Change:** Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior.
-- **Falsifier:** The custom and vanilla boundary inputs/outputs are identical.
-
-**Fallback 3**
-
-- **Evidence/trigger:** The loaded version/hash or canonical ancestry does not contain the claimed fix.
-- **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
-- **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
-
-## #649 - Major Crash when Selecting Helmgart Campaign in Mission Select
-
-- Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/649](https://github.com/Ensrick/vermintide-2-tweaker/issues/649)
-- Current labels: `bug, crash, Tweaker: GUI, 0-critical, Fixed`
-- Evidence class: `canonical_identity_persistence, source_first_engine_contract`
-- Current action: post-fix hardening, regression coverage, then close
-- Closed-history status: `ranked-evidence-review`
-
-**Ranked related closed issues (manual review)**
-
-1. [#525 - Rename Modded Progression Tab](https://github.com/Ensrick/vermintide-2-tweaker/issues/525) - score `93`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 00:45:10`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `shared_distinctive_terms` (+3): select
-   - `closure_verification_evidence` (+12): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed`
-
-2. [#360 - Options Menu - Kill Confirm Crosshair -> Advanced Options Gear Icon Misaligned](https://github.com/Ensrick/vermintide-2-tweaker/issues/360) - score `92`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:06:41`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, source_first_engine_contract
-   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
-
-3. [#352 - Implement Original Temporary Health Talent Names](https://github.com/Ensrick/vermintide-2-tweaker/issues/352) - score `88`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 07:21:26`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
-
-4. [#575 - gut: slider numeric editor caret is offset left](https://github.com/Ensrick/vermintide-2-tweaker/issues/575) - score `86`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:24:59`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_lifecycle_surface_classes` (+8): canonical_identity_persistence
-   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
-
-5. [#517 - gut: TOML config-read never worked in retail](https://github.com/Ensrick/vermintide-2-tweaker/issues/517) - score `78`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 19:48:18`
-   - `shared_subsystem_labels` (+30): Tweaker: GUI
-   - `shared_code_identifiers` (+40): /gut_regression_test, gut_regression_test
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
-
-**Fallback 1**
-
-- **Evidence/trigger:** The documented closure test fails on the current named build.
-- **Change:** Repair the first regressed invariant covered by the existing issue regression.
-- **Falsifier:** The current closure test passes; close the stale issue instead.
-
-**Fallback 2**
-
-- **Evidence/trigger:** The symptom returns after a known-good version.
-- **Change:** Bisect the documented introduction/fix range and patch the first regressing commit.
-- **Falsifier:** No commit in that range changes the failing path.
-
-**Fallback 3**
-
-- **Evidence/trigger:** The current repair cannot be made safe on the present tree.
-- **Change:** Roll back the isolated issue fix and restore the last user-verified vanilla/mod behavior while preparing a current-tree repair.
-- **Falsifier:** The fix cannot be isolated without removing unrelated verified work.
-
 ## #650 - Tweaker: Cosmetics: composite primary, shield, and RGB glow icon layers
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/650](https://github.com/Ensrick/vermintide-2-tweaker/issues/650)
-- Current labels: `Tweaker: Cosmetics, diagnostics-armed, feature, 2-moderate`
-- Evidence class: `asset_alpha_mip_material_contract, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract, custom_asset_contract, dynamic_localization_ui_contract, backend_realm_isolation`
-- Current action: run documented repro and collect bounded diagnostics
+- Current labels: `Tweaker: Cosmetics, verify-fix, feature, 2-moderate`
+- Evidence class: `shared_preview_presentation_descriptor, asset_alpha_mip_material_contract, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract, custom_asset_contract, dynamic_localization_ui_contract, backend_realm_isolation`
+- Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
 1. [#612 - Add Encarmine Helmet cosmetic](https://github.com/Ensrick/vermintide-2-tweaker/issues/612) - score `107`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 22:58:37`
    - `shared_subsystem_labels` (+30): Tweaker: Cosmetics
-   - `shared_lifecycle_surface_classes` (+32): asset_alpha_mip_material_contract, network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle
+   - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, asset_alpha_mip_material_contract, appearance_surface_fanout, network_peer_parity
    - `shared_code_identifiers` (+20): verify-fix
    - `shared_distinctive_terms` (+15): applicable, icon, identity, instance, peers
    - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
 
 2. [#620 - Add per-item combat style switching](https://github.com/Ensrick/vermintide-2-tweaker/issues/620) - score `95`, confidence `medium`, signal `related-history-review-only`, closed `07/16/2026 20:11:23`
-   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract
+   - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence
    - `shared_code_identifiers` (+40): origin/master, ui_passes
    - `shared_distinctive_terms` (+15): bretonnian, closed, criteria, duplicate, exact-instance
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded
@@ -19722,7 +19248,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 3. [#574 - cosmetics: RGB glow edits never expose Apply or persist per variant](https://github.com/Ensrick/vermintide-2-tweaker/issues/574) - score `92`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:59:31`
    - `shared_subsystem_labels` (+30): Tweaker: Cosmetics
-   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, source_first_engine_contract
+   - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence
    - `shared_distinctive_title_terms` (+7): glow
    - `shared_distinctive_terms` (+15): changing, color, criteria, duplicate, identity
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
@@ -19745,21 +19271,21 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Fallback 1**
 
-- **Evidence/trigger:** The issue's bounded armed repro records a first state divergence.
-- **Change:** Repair only the layer named by that trace.
-- **Falsifier:** The trace remains healthy through the observed symptom.
+- **Evidence/trigger:** The issue's posted build-specific verification fails at a named invariant or surface.
+- **Change:** Repair the first failed invariant in the current implementation, scoped to that surface.
+- **Falsifier:** The invariant passes while the reported symptom remains.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Captured runtime state differs from the issue's cited vanilla/decompiled consumer contract.
-- **Change:** Repair the first contract mismatch and retain the probe as regression evidence.
-- **Falsifier:** Captured state matches the source contract at every sampled boundary.
+- **Evidence/trigger:** Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract.
+- **Change:** Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior.
+- **Falsifier:** The custom and vanilla boundary inputs/outputs are identical.
 
 **Fallback 3**
 
-- **Evidence/trigger:** Insufficient evidence: the current probe is silent or cannot distinguish the remaining candidates.
-- **Change:** Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix.
-- **Falsifier:** The existing probe already identifies one causal boundary.
+- **Evidence/trigger:** The loaded version/hash or canonical ancestry does not contain the claimed fix.
+- **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
+- **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
 
 ## #653 - General Tweaker: bot follow utility crashes when ally_distance is nil
 
@@ -19771,7 +19297,15 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Ranked related closed issues (manual review)**
 
-1. [#59 - gt: Drachenfels boss BT crash on CW dlc_castle_*_path missions — bt_conditions.lua:309 attempt to compare nil with number](https://github.com/Ensrick/vermintide-2-tweaker/issues/59) - score `141`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/04/2026 02:51:42`
+1. [#625 - Reconcile unmerged agent branches](https://github.com/Ensrick/vermintide-2-tweaker/issues/625) - score `185`, confidence `high`, signal `direct-history-reference`, closed `07/17/2026 08:00:09`
+   - `closed_explicitly_references_open` (+120): #653
+   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, source_first_engine_contract
+   - `shared_code_identifiers` (+40): get_action_utility, utility.get_action_utility
+   - `shared_distinctive_terms` (+3): ship
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
+
+2. [#59 - gt: Drachenfels boss BT crash on CW dlc_castle_*_path missions — bt_conditions.lua:309 attempt to compare nil with number](https://github.com/Ensrick/vermintide-2-tweaker/issues/59) - score `141`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/04/2026 02:51:42`
    - `shared_subsystem_labels` (+30): Tweaker: General
    - `shared_lifecycle_surface_classes` (+32): custom_unit_behavioral_contract, network_peer_parity, bounded_transaction_lifecycle, source_first_engine_contract
    - `shared_code_identifiers` (+60): _gt_creature_spawner.lua, gt_creature_spawner, nil
@@ -19779,16 +19313,16 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+4): completed_state_reason, regression_coverage
    - Prior closure evidence: `completed_state_reason, regression_coverage`
 
-2. [#261 - gt_dev: split follow mode - bots pursue objectives outside the follow radius, then get leash-yanked; radius should constrain ALL bot behavior](https://github.com/Ensrick/vermintide-2-tweaker/issues/261) - score `120`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 22:09:26`
+3. [#261 - gt_dev: split follow mode - bots pursue objectives outside the follow radius, then get leash-yanked; radius should constrain ALL bot behavior](https://github.com/Ensrick/vermintide-2-tweaker/issues/261) - score `140`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 22:09:26`
    - `shared_subsystem_labels` (+30): Tweaker: General
    - `shared_lifecycle_surface_classes` (+24): custom_unit_behavioral_contract, network_peer_parity, source_first_engine_contract
-   - `shared_code_identifiers` (+40): /gt_regression_test, gt_regression_test
+   - `shared_code_identifiers` (+60): _gt_bot_fixes.lua, /gt_regression_test, gt_bot_fixes
    - `shared_distinctive_title_terms` (+7): follow
    - `shared_distinctive_terms` (+15): action, actions, bots, diagnostic, distance
    - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, source_commit_recorded`
 
-3. [#295 - [crash] gt: game crashes shortly after enabling the bot testing tools (bot-teleport-lab) — no Lua crash block captured](https://github.com/Ensrick/vermintide-2-tweaker/issues/295) - score `116`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:35:44`
+4. [#295 - [crash] gt: game crashes shortly after enabling the bot testing tools (bot-teleport-lab) — no Lua crash block captured](https://github.com/Ensrick/vermintide-2-tweaker/issues/295) - score `116`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:35:44`
    - `shared_subsystem_labels` (+30): Tweaker: General
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, bounded_transaction_lifecycle
    - `shared_code_identifiers` (+40): /gt_regression_test, gt_regression_test
@@ -19797,21 +19331,13 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
 
-4. [#275 - gut: The Enchanter's Lair (Drachenfels 3) - Skip Cutscenes auto-skips Nurgloth's phase cutscene, boss jumps to final phase and softlocks (health stuck at phase-1 amount)](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) - score `116`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 21:32:17`
+5. [#275 - gut: The Enchanter's Lair (Drachenfels 3) - Skip Cutscenes auto-skips Nurgloth's phase cutscene, boss jumps to final phase and softlocks (health stuck at phase-1 amount)](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) - score `116`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 21:32:17`
    - `shared_subsystem_labels` (+30): Tweaker: General
    - `shared_lifecycle_surface_classes` (+32): custom_unit_behavioral_contract, network_peer_parity, bounded_transaction_lifecycle, source_first_engine_contract
    - `shared_code_identifiers` (+40): _gt_creature_spawner.lua, gt_creature_spawner
    - `shared_distinctive_terms` (+6): adventure, diagnostic
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
-
-5. [#320 - Bots using potions](https://github.com/Ensrick/vermintide-2-tweaker/issues/320) - score `115`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:31:35`
-   - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+16): custom_unit_behavioral_contract, network_peer_parity
-   - `shared_code_identifiers` (+60): /gt_regression_test, gt_regression_test, math.huge
-   - `shared_distinctive_terms` (+3): bots
-   - `closure_verification_evidence` (+6): completed_state_reason, source_commit_recorded, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, source_commit_recorded, user_confirmed_fixed`
 
 **Fallback 1**
 
@@ -19834,7 +19360,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #655 - WOC+CIM: Blightreaper poison and Shyish health-curse traits
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/655](https://github.com/Ensrick/vermintide-2-tweaker/issues/655)
-- Current labels: `cim, cross-mod, feature, 2-moderate, WOC`
+- Current labels: `cim, cross-mod, feature, 2-moderate, WOC, not-started`
 - Evidence class: `network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, dynamic_localization_ui_contract, backend_realm_isolation`
 - Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
@@ -19904,7 +19430,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #656 - Cosmetics: add Reikland red-and-black griffin to red Foot Knight cape
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/656](https://github.com/Ensrick/vermintide-2-tweaker/issues/656)
-- Current labels: `Tweaker: Cosmetics, feature, 3-low`
+- Current labels: `Tweaker: Cosmetics, feature, 3-low, not-started`
 - Evidence class: `shared_preview_presentation_descriptor, asset_alpha_mip_material_contract, appearance_surface_fanout`
 - Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
@@ -20036,7 +19562,7 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #658 - "Couronne da la Lune" and "Midnight Purpure and Azure" Cosmetics Available on Other Kruber Careers
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/658](https://github.com/Ensrick/vermintide-2-tweaker/issues/658)
-- Current labels: `enhancement, Tweaker: Cosmetics, 2-moderate`
+- Current labels: `enhancement, Tweaker: Cosmetics, 2-moderate, not-started`
 - Evidence class: `general_regression_and_verification_discipline`
 - Current action: scope against source, then implement or arm diagnostics
 - Closed-history status: `ranked-evidence-review`
@@ -20095,18 +19621,18 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #659 - gt: Necromancer cannot raise dead in keep
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/659](https://github.com/Ensrick/vermintide-2-tweaker/issues/659)
-- Current labels: `bug, Tweaker: General, 2-moderate, not-started`
+- Current labels: `bug, Tweaker: General, verify-fix, 2-moderate`
 - Evidence class: `custom_unit_behavioral_contract, network_peer_parity, bounded_transaction_lifecycle, source_first_engine_contract, backend_realm_isolation`
-- Current action: scope against source, then implement or arm diagnostics
+- Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#297 - Bot Behaivor Improvement Options](https://github.com/Ensrick/vermintide-2-tweaker/issues/297) - score `190`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 05:27:22`
+1. [#297 - Bot Behaivor Improvement Options](https://github.com/Ensrick/vermintide-2-tweaker/issues/297) - score `230`, confidence `high`, signal `direct-history-reference`, closed `07/06/2026 05:27:22`
    - `open_explicitly_references_closed` (+120): #297
    - `shared_subsystem_labels` (+30): Tweaker: General
    - `shared_lifecycle_surface_classes` (+8): source_first_engine_contract
-   - `shared_code_identifiers` (+20): gt_dev
+   - `shared_code_identifiers` (+60): /gt_regression_test, gt_dev, gt_regression_test
    - `shared_distinctive_terms` (+6): bots, necromancer
    - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
@@ -20119,47 +19645,47 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+2): completed_state_reason
    - Prior closure evidence: `completed_state_reason`
 
-3. [#65 - gt: bots_in_keep — two crash classes, feature disabled in v0.2.74-dev pending fix](https://github.com/Ensrick/vermintide-2-tweaker/issues/65) - score `109`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 18:16:42`
+3. [#261 - gt_dev: split follow mode - bots pursue objectives outside the follow radius, then get leash-yanked; radius should constrain ALL bot behavior](https://github.com/Ensrick/vermintide-2-tweaker/issues/261) - score `132`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 22:09:26`
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, source_first_engine_contract
-   - `shared_code_identifiers` (+40): gt_bots_in_keep, gt_dev
-   - `shared_distinctive_terms` (+9): bots, returns, spawned
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+   - `shared_lifecycle_surface_classes` (+32): custom_unit_behavioral_contract, network_peer_parity, source_first_engine_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+60): /gt_regression_test, gt_dev, gt_regression_test
+   - `shared_distinctive_terms` (+6): bots, probe
+   - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, source_commit_recorded`
 
-4. [#275 - gut: The Enchanter's Lair (Drachenfels 3) - Skip Cutscenes auto-skips Nurgloth's phase cutscene, boss jumps to final phase and softlocks (health stuck at phase-1 amount)](https://github.com/Ensrick/vermintide-2-tweaker/issues/275) - score `99`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/06/2026 21:32:17`
+4. [#508 - gt_dev: debug_highlights error spam before backend ready](https://github.com/Ensrick/vermintide-2-tweaker/issues/508) - score `125`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 18:29:25`
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+32): custom_unit_behavioral_contract, network_peer_parity, bounded_transaction_lifecycle, source_first_engine_contract
-   - `shared_code_identifiers` (+20): gt_dev
-   - `shared_distinctive_terms` (+9): dead, levels, probe
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation
+   - `shared_code_identifiers` (+60): /gt_regression_test, gt_dev, gt_regression_test
+   - `shared_distinctive_terms` (+3): immediately
+   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
 
-5. [#59 - gt: Drachenfels boss BT crash on CW dlc_castle_*_path missions — bt_conditions.lua:309 attempt to compare nil with number](https://github.com/Ensrick/vermintide-2-tweaker/issues/59) - score `95`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/04/2026 02:51:42`
+5. [#320 - Bots using potions](https://github.com/Ensrick/vermintide-2-tweaker/issues/320) - score `123`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 00:31:35`
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+32): custom_unit_behavioral_contract, network_peer_parity, bounded_transaction_lifecycle, source_first_engine_contract
-   - `shared_code_identifiers` (+20): gt_dev
-   - `shared_distinctive_terms` (+9): levels, returns, sets
-   - `closure_verification_evidence` (+4): completed_state_reason, regression_coverage
-   - Prior closure evidence: `completed_state_reason, regression_coverage`
+   - `shared_lifecycle_surface_classes` (+24): custom_unit_behavioral_contract, network_peer_parity, backend_realm_isolation
+   - `shared_code_identifiers` (+60): /gt_regression_test, gt_dev, gt_regression_test
+   - `shared_distinctive_terms` (+3): bots
+   - `closure_verification_evidence` (+6): completed_state_reason, source_commit_recorded, user_confirmed_fixed
+   - Prior closure evidence: `completed_state_reason, source_commit_recorded, user_confirmed_fixed`
 
 **Fallback 1**
 
-- **Evidence/trigger:** The issue body and cited source establish a bounded acceptance contract.
-- **Change:** Implement that contract on current canonical source with a truth-table regression.
-- **Falsifier:** Source/runtime evidence contradicts a required premise in the accepted contract.
+- **Evidence/trigger:** The issue's posted build-specific verification fails at a named invariant or surface.
+- **Change:** Repair the first failed invariant in the current implementation, scoped to that surface.
+- **Falsifier:** The invariant passes while the reported symptom remains.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Insufficient evidence: no runtime trace yet distinguishes the candidate engine/UI/inventory boundaries.
-- **Change:** Add a minimal repro and bounded trace at the named boundary, then repair only the first observed divergence.
-- **Falsifier:** Existing evidence already identifies the divergent boundary.
+- **Evidence/trigger:** Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract.
+- **Change:** Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior.
+- **Falsifier:** The custom and vanilla boundary inputs/outputs are identical.
 
 **Fallback 3**
 
-- **Evidence/trigger:** The requested path is blocked by absent provenance/license, resource residency, or external service authority.
-- **Change:** Retain a resident vanilla fallback or keep the feature disabled until the missing evidence/authority exists.
-- **Falsifier:** The required provenance, resource closure, and authority are all positively proved.
+- **Evidence/trigger:** The loaded version/hash or canonical ancestry does not contain the claimed fix.
+- **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
+- **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
 
 ## #660 - Critical: Unify Appearance Across Render Surfaces
 
@@ -20171,7 +19697,8 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Ranked related closed issues (manual review)**
 
-1. [#390 - CIM crafts CWV weapons as base vanilla item](https://github.com/Ensrick/vermintide-2-tweaker/issues/390) - score `165`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 15:10:16`
+1. [#390 - CIM crafts CWV weapons as base vanilla item](https://github.com/Ensrick/vermintide-2-tweaker/issues/390) - score `285`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 15:10:16`
+   - `open_explicitly_references_closed` (+120): #390
    - `shared_subsystem_labels` (+60): cim, CWV
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, source_first_engine_contract, custom_asset_contract, backend_realm_isolation
    - `shared_code_identifiers` (+60): character_weapon_variants, character_weapon_variants.lua, item_data
@@ -20179,37 +19706,43 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
 
-2. [#1 - CWV: refactor 22 bare-global declarations to local forward-decl pattern](https://github.com/Ensrick/vermintide-2-tweaker/issues/1) - score `147`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/04/2026 02:50:31`
-   - `shared_subsystem_labels` (+60): audit, CWV, refactor
-   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
-   - `shared_code_identifiers` (+40): character_weapon_variants, character_weapon_variants.lua
-   - `shared_distinctive_terms` (+9): names, transform, transforms
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+2. [#620 - Add per-item combat style switching](https://github.com/Ensrick/vermintide-2-tweaker/issues/620) - score `283`, confidence `high`, signal `direct-history-reference`, closed `07/16/2026 20:11:23`
+   - `open_explicitly_references_closed` (+120): #620
+   - `shared_explicit_references` (+8): #645
+   - `shared_subsystem_labels` (+60): cross-mod, CWV
+   - `shared_lifecycle_surface_classes` (+32): renderer_specific_material_closure, shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity
+   - `shared_code_identifiers` (+40): /cwv_regression_test, cwv_regression_test
+   - `shared_distinctive_terms` (+15): animation, bounded, closed, co-op, combat
+   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded`
 
-3. [#418 - CWV: residency ref string duplicated, base-mesh risk](https://github.com/Ensrick/vermintide-2-tweaker/issues/418) - score `141`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 16:22:45`
+3. [#392 - CWV blacksmith/template items resolve to base weapon](https://github.com/Ensrick/vermintide-2-tweaker/issues/392) - score `274`, confidence `high`, signal `direct-history-reference`, closed `07/14/2026 02:57:47`
+   - `open_explicitly_references_closed` (+120): #392
+   - `shared_explicit_references` (+16): #390, #397
+   - `shared_subsystem_labels` (+30): CWV
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, custom_asset_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+60): character_weapon_variants, character_weapon_variants.lua, item_data
+   - `shared_distinctive_terms` (+12): consumer, grip, illusion, transforms
+   - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
+   - Prior closure evidence: `completed_state_reason, fixed_label`
+
+4. [#422 - WOC: Blightreaper CTDs non-WOC peers on equip](https://github.com/Ensrick/vermintide-2-tweaker/issues/422) - score `263`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 02:27:50`
+   - `open_explicitly_references_closed` (+120): #422
+   - `shared_subsystem_labels` (+30): WOC
+   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, source_first_engine_contract, backend_realm_isolation
+   - `shared_code_identifiers` (+60): character_weapon_variants, character_weapon_variants.lua, hot_join_sync
+   - `shared_distinctive_terms` (+15): blightreaper, equip, index, join, lobby
+   - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, fixed_label, source_commit_recorded`
+
+5. [#418 - CWV: residency ref string duplicated, base-mesh risk](https://github.com/Ensrick/vermintide-2-tweaker/issues/418) - score `261`, confidence `high`, signal `direct-history-reference`, closed `07/13/2026 16:22:45`
+   - `open_explicitly_references_closed` (+120): #418
    - `shared_subsystem_labels` (+30): CWV
    - `shared_lifecycle_surface_classes` (+32): shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity, canonical_identity_persistence
    - `shared_code_identifiers` (+60): _force_load_axe_shield_husk_units, _force_load_husk_override_units, character_weapon_variants
    - `shared_distinctive_terms` (+15): appearance, consumer, divergent, inventory-preview, swap
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
-
-4. [#397 - CWV transforms (offset/scale/rotation) not applied on husks](https://github.com/Ensrick/vermintide-2-tweaker/issues/397) - score `139`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 23:01:57`
-   - `shared_subsystem_labels` (+30): CWV
-   - `shared_lifecycle_surface_classes` (+32): appearance_surface_fanout, network_peer_parity, canonical_identity_persistence, source_first_engine_contract
-   - `shared_code_identifiers` (+60): character_weapon_variants, character_weapon_variants.lua, item_data
-   - `shared_distinctive_terms` (+15): covers, grip, husks, offset, remote
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
-
-5. [#409 - cwv: Old Musket mis-posed on inventory preview only](https://github.com/Ensrick/vermintide-2-tweaker/issues/409) - score `139`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/07/2026 17:42:40`
-   - `shared_subsystem_labels` (+30): CWV
-   - `shared_lifecycle_surface_classes` (+32): renderer_specific_material_closure, shared_preview_presentation_descriptor, appearance_surface_fanout, network_peer_parity
-   - `shared_code_identifiers` (+60): _transform_map, character_weapon_variants, character_weapon_variants.lua
-   - `shared_distinctive_terms` (+15): closed, lobby, offset, transform, transforms
-   - `closure_verification_evidence` (+2): completed_state_reason
-   - Prior closure evidence: `completed_state_reason`
 
 **Fallback 1**
 
@@ -20305,16 +19838,32 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 
 **Ranked related closed issues (manual review)**
 
-1. [#508 - gt_dev: debug_highlights error spam before backend ready](https://github.com/Ensrick/vermintide-2-tweaker/issues/508) - score `152`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 18:29:25`
+1. [#625 - Reconcile unmerged agent branches](https://github.com/Ensrick/vermintide-2-tweaker/issues/625) - score `182`, confidence `high`, signal `direct-history-reference`, closed `07/17/2026 08:00:09`
+   - `closed_explicitly_references_open` (+120): #662
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, canonical_identity_persistence, backend_realm_isolation
+   - `shared_code_identifiers` (+20): local_player
+   - `shared_distinctive_terms` (+12): exists, fixes, reconcile, reconciliation
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded`
+
+2. [#508 - gt_dev: debug_highlights error spam before backend ready](https://github.com/Ensrick/vermintide-2-tweaker/issues/508) - score `152`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/12/2026 18:29:25`
    - `shared_subsystem_labels` (+30): Tweaker: General
    - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, backend_realm_isolation
-   - `shared_code_identifiers` (+60): local_player, local_player_safe, managers.player
+   - `shared_code_identifiers` (+60): gt_debug_highlights, local_player, local_player_safe
    - `shared_distinctive_title_terms` (+7): ready
    - `shared_distinctive_terms` (+15): been, calls, consumer, dispatcher, errors
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
 
-2. [#549 - Give more damage in godmode](https://github.com/Ensrick/vermintide-2-tweaker/issues/549) - score `103`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 04:31:22`
+3. [#337 - gt_dev: /recall_position_N teleports but reports 'teleport failed' - POSITION_LOOKUP dead temporary in chat-command phase](https://github.com/Ensrick/vermintide-2-tweaker/issues/337) - score `116`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:06`
+   - `shared_subsystem_labels` (+30): Tweaker: General
+   - `shared_lifecycle_surface_classes` (+16): canonical_identity_persistence, backend_realm_isolation
+   - `shared_code_identifiers` (+60): _gt_saved_positions.lua, gt_debug_highlights, gt_saved_positions
+   - `shared_distinctive_terms` (+6): frame, message
+   - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
+   - Prior closure evidence: `completed_state_reason, fixed_label`
+
+4. [#549 - Give more damage in godmode](https://github.com/Ensrick/vermintide-2-tweaker/issues/549) - score `103`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 04:31:22`
    - `shared_subsystem_labels` (+30): Tweaker: General
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, backend_realm_isolation
    - `shared_code_identifiers` (+40): /infinite_ammo, infinite_ammo
@@ -20322,27 +19871,13 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
 
-3. [#173 - gut: 'Hero Select' opens the TALENT menu instead of the hero/character selection (change character/career)](https://github.com/Ensrick/vermintide-2-tweaker/issues/173) - score `96`, confidence `medium`, signal `related-history-review-only`, closed `07/02/2026 21:37:51`
-   - `shared_lifecycle_surface_classes` (+32): network_peer_parity, canonical_identity_persistence, bounded_transaction_lifecycle, backend_realm_isolation
-   - `shared_code_identifiers` (+60): local_player, managers.player, peer_id
-   - `closure_verification_evidence` (+4): completed_state_reason, source_commit_recorded
-   - Prior closure evidence: `completed_state_reason, source_commit_recorded`
-
-4. [#609 - Mods query players after network teardown](https://github.com/Ensrick/vermintide-2-tweaker/issues/609) - score `92`, confidence `medium`, signal `related-history-review-only`, closed `07/15/2026 19:47:27`
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation
-   - `shared_code_identifiers` (+40): local_player_safe, network backend has not been set
-   - `shared_distinctive_title_terms` (+7): network
-   - `shared_distinctive_terms` (+15): been, calls, exists, floods, lifecycle
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
-
-5. [#65 - gt: bots_in_keep — two crash classes, feature disabled in v0.2.74-dev pending fix](https://github.com/Ensrick/vermintide-2-tweaker/issues/65) - score `87`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/05/2026 18:16:42`
+5. [#308 - Melee Latency Smoothing (Client-Side Prediction Layer)](https://github.com/Ensrick/vermintide-2-tweaker/issues/308) - score `103`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:07`
    - `shared_subsystem_labels` (+30): Tweaker: General
-   - `shared_lifecycle_surface_classes` (+16): network_peer_parity, bounded_transaction_lifecycle
-   - `shared_code_identifiers` (+20): managers.player
-   - `shared_distinctive_terms` (+15): been, begins, calls, correctly, fixes
-   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation
+   - `shared_code_identifiers` (+40): _gt_melee_warning.lua, gt_melee_warning
+   - `shared_distinctive_terms` (+3): reconcile
+   - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, source_commit_recorded
+   - Prior closure evidence: `completed_state_reason, fixed_label, source_commit_recorded`
 
 **Fallback 1**
 
@@ -20365,14 +19900,23 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
 ## #663 - crt: Foot Knight aura buffs flicker
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/663](https://github.com/Ensrick/vermintide-2-tweaker/issues/663)
-- Current labels: `bug, Tweaker: Career, 1-major, not-started, coop-required`
+- Current labels: `bug, Tweaker: Career, 1-major, verify-fix-coop`
 - Evidence class: `network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation`
-- Current action: scope against source, then implement or arm diagnostics
+- Current action: two-player in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#334 - crt: Ironbreaker Gromril Armour, Necromancer Cursed Armor, and Unchained's Blood Magic shouldn't be triggered by Unquenchable Thirst](https://github.com/Ensrick/vermintide-2-tweaker/issues/334) - score `135`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:44`
+1. [#425 - crt: rework talent buffs CTD non-crt peers](https://github.com/Ensrick/vermintide-2-tweaker/issues/425) - score `144`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 22:55:35`
+   - `shared_subsystem_labels` (+30): Tweaker: Career
+   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation
+   - `shared_code_identifiers` (+60): buff_system, buff_system.lua, crt_regression_test
+   - `shared_distinctive_title_terms` (+7): buffs
+   - `shared_distinctive_terms` (+15): buff, buffsystem, names, system, templates
+   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, source_commit_recorded, user_confirmed_fixed
+   - Prior closure evidence: `completed_state_reason, fixed_label, source_commit_recorded, user_confirmed_fixed`
+
+2. [#334 - crt: Ironbreaker Gromril Armour, Necromancer Cursed Armor, and Unchained's Blood Magic shouldn't be triggered by Unquenchable Thirst](https://github.com/Ensrick/vermintide-2-tweaker/issues/334) - score `135`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 02:57:44`
    - `shared_subsystem_labels` (+30): Tweaker: Career
    - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation
    - `shared_code_identifiers` (+60): attacker_unit, buff_function_templates, buff_function_templates.lua
@@ -20380,113 +19924,110 @@ Open issues audited: **303**. Closed issues compared: **354**. Open issues with 
    - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, source_commit_recorded
    - Prior closure evidence: `completed_state_reason, fixed_label, source_commit_recorded`
 
-2. [#425 - crt: rework talent buffs CTD non-crt peers](https://github.com/Ensrick/vermintide-2-tweaker/issues/425) - score `124`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 22:55:35`
+3. [#507 - crt hygiene: dead restore save, latent hook skip](https://github.com/Ensrick/vermintide-2-tweaker/issues/507) - score `86`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 16:22:00`
    - `shared_subsystem_labels` (+30): Tweaker: Career
+   - `shared_lifecycle_surface_classes` (+8): bounded_transaction_lifecycle
+   - `shared_code_identifiers` (+40): /crt_regression_test, crt_regression_test
+   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, verification_passed`
+
+4. [#506 - Shared parity lib: callbacks read stale applied_state](https://github.com/Ensrick/vermintide-2-tweaker/issues/506) - score `79`, confidence `medium`, signal `related-history-review-only`, closed `07/14/2026 00:57:20`
    - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation
-   - `shared_code_identifiers` (+40): buff_system, buff_system.lua
-   - `shared_distinctive_title_terms` (+7): buffs
-   - `shared_distinctive_terms` (+15): buff, buffsystem, names, system, templates
-   - `closure_verification_evidence` (+8): completed_state_reason, fixed_label, source_commit_recorded, user_confirmed_fixed
-   - Prior closure evidence: `completed_state_reason, fixed_label, source_commit_recorded, user_confirmed_fixed`
+   - `shared_code_identifiers` (+40): /crt_regression_test, crt_regression_test
+   - `shared_distinctive_terms` (+9): remove, shared, transition
+   - `closure_verification_evidence` (+6): completed_state_reason, regression_coverage, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, verification_passed`
 
-3. [#612 - Add Encarmine Helmet cosmetic](https://github.com/Ensrick/vermintide-2-tweaker/issues/612) - score `69`, confidence `medium`, signal `related-history-review-only`, closed `07/15/2026 22:58:37`
-   - `shared_lifecycle_surface_classes` (+24): network_peer_parity, bounded_transaction_lifecycle, backend_realm_isolation
-   - `shared_code_identifiers` (+20): es_knight
-   - `shared_distinctive_terms` (+15): foot, instance, knight, shared, stable
-   - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
-   - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
-
-4. [#4 - career_tweaker: fill 27 remaining BR_TOGGLES stubs](https://github.com/Ensrick/vermintide-2-tweaker/issues/4) - score `63`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 09:37:14`
+5. [#405 - crt: client CTD on Fires from Ash THP heal](https://github.com/Ensrick/vermintide-2-tweaker/issues/405) - score `71`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 02:28:28`
    - `shared_subsystem_labels` (+30): Tweaker: Career
-   - `shared_lifecycle_surface_classes` (+16): bounded_transaction_lifecycle, backend_realm_isolation
-   - `shared_distinctive_terms` (+15): buff, function, reference, remaining, section
-   - `closure_verification_evidence` (+2): regression_coverage
-   - Prior closure evidence: `regression_coverage`
-
-5. [#366 - [crt] Bardin ale buff should decay one stack at a time instead of dropping all 3 at once](https://github.com/Ensrick/vermintide-2-tweaker/issues/366) - score `54`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/16/2026 20:11:03`
-   - `shared_subsystem_labels` (+30): Tweaker: Career
-   - `shared_lifecycle_surface_classes` (+8): backend_realm_isolation
-   - `shared_distinctive_terms` (+12): buff, buffs, shared, templates
+   - `shared_lifecycle_surface_classes` (+8): network_peer_parity
+   - `shared_code_identifiers` (+20): crt_regression_test
+   - `shared_distinctive_terms` (+9): buff, instance, templates
    - `closure_verification_evidence` (+4): completed_state_reason, fixed_label
    - Prior closure evidence: `completed_state_reason, fixed_label`
 
 **Fallback 1**
 
-- **Evidence/trigger:** The issue body and cited source establish a bounded acceptance contract.
-- **Change:** Implement that contract on current canonical source with a truth-table regression.
-- **Falsifier:** Source/runtime evidence contradicts a required premise in the accepted contract.
+- **Evidence/trigger:** The posted host/client verification for #663 fails and paired logs identify the first divergent peer/state.
+- **Change:** Repair that first owner/husk/RPC/lookup divergence at the existing issue-scoped boundary.
+- **Falsifier:** Both peers log identical authoritative state before the visible failure.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Insufficient evidence: no runtime trace yet distinguishes the candidate engine/UI/inventory boundaries.
-- **Change:** Add a minimal repro and bounded trace at the named boundary, then repair only the first observed divergence.
-- **Falsifier:** Existing evidence already identifies the divergent boundary.
+- **Evidence/trigger:** Paired evidence shows authority or replay occurs on the wrong peer/lifecycle edge.
+- **Change:** Move ownership to the source-backed vanilla authority and transmit only bounded lookup-safe identity/state.
+- **Falsifier:** Authority, sender authentication, and lifecycle replay are already identical on both peers.
 
 **Fallback 3**
 
-- **Evidence/trigger:** The requested path is blocked by absent provenance/license, resource residency, or external service authority.
-- **Change:** Retain a resident vanilla fallback or keep the feature disabled until the missing evidence/authority exists.
-- **Falsifier:** The required provenance, resource closure, and authority are all positively proved.
+- **Evidence/trigger:** Failure occurs only when a peer lacks the mod, capability, lookup entry, or renderer resource.
+- **Change:** Parity-gate the optional feature and select a resident vanilla fallback for that peer.
+- **Falsifier:** The failing peer proves positive parity and local resource closure.
 
 ## #664 - wt: Executioner's Sword light attacks +30% headshot damage toggle
 
 - Tracker: [https://github.com/Ensrick/vermintide-2-tweaker/issues/664](https://github.com/Ensrick/vermintide-2-tweaker/issues/664)
-- Current labels: `Tweaker: Weapons, feature, 1-major`
+- Current labels: `Tweaker: Weapons, verify-fix, feature, 1-major`
 - Evidence class: `network_peer_parity, canonical_identity_persistence`
-- Current action: scope against source, then implement or arm diagnostics
+- Current action: solo in-game verification
 - Closed-history status: `ranked-evidence-review`
 
 **Ranked related closed issues (manual review)**
 
-1. [#597 - CWV: replace Poleaxe with Kruber Greataxe models](https://github.com/Ensrick/vermintide-2-tweaker/issues/597) - score `71`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 04:44:36`
+1. [#597 - CWV: replace Poleaxe with Kruber Greataxe models](https://github.com/Ensrick/vermintide-2-tweaker/issues/597) - score `111`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 04:44:36`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, canonical_identity_persistence
+   - `shared_code_identifiers` (+40): /wt_regression_test, wt_regression_test
    - `shared_distinctive_terms` (+15): attack, criteria, exactly, heavy, project
    - `closure_verification_evidence` (+10): completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, regression_coverage, source_commit_recorded, verification_passed`
 
-2. [#569 - wt: Saltzpyre weapons using Warrior Priest greathammer anims face backwards in 3P](https://github.com/Ensrick/vermintide-2-tweaker/issues/569) - score `71`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 23:17:14`
+2. [#569 - wt: Saltzpyre weapons using Warrior Priest greathammer anims face backwards in 3P](https://github.com/Ensrick/vermintide-2-tweaker/issues/569) - score `111`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/13/2026 23:17:14`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, canonical_identity_persistence
+   - `shared_code_identifiers` (+40): /wt_regression_test, wt_regression_test
    - `shared_distinctive_terms` (+15): attacks, checks, control, criteria, exactly
    - `closure_verification_evidence` (+10): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed, verification_passed`
 
-3. [#596 - CWV: add Kruber Infantry Spear](https://github.com/Ensrick/vermintide-2-tweaker/issues/596) - score `67`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 04:45:48`
+3. [#596 - CWV: add Kruber Infantry Spear](https://github.com/Ensrick/vermintide-2-tweaker/issues/596) - score `107`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 04:45:48`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, canonical_identity_persistence
+   - `shared_code_identifiers` (+40): /wt_regression_test, wt_regression_test
    - `shared_distinctive_terms` (+15): action, actions, attack, balance, cleave
    - `closure_verification_evidence` (+6): completed_state_reason, fixed_label, verification_passed
    - Prior closure evidence: `completed_state_reason, fixed_label, verification_passed`
 
-4. [#576 - wt: audit missing Saltzpyre animation-tuner ports; crowbill falsely confirmed](https://github.com/Ensrick/vermintide-2-tweaker/issues/576) - score `66`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 05:24:28`
+4. [#576 - wt: audit missing Saltzpyre animation-tuner ports; crowbill falsely confirmed](https://github.com/Ensrick/vermintide-2-tweaker/issues/576) - score `106`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/17/2026 05:24:28`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, canonical_identity_persistence
+   - `shared_code_identifiers` (+40): /wt_regression_test, wt_regression_test
    - `shared_distinctive_terms` (+12): action, actions, attack, criteria
    - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed
    - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, user_confirmed_fixed`
 
-5. [#584 - WT: Moonfire stops recharging while stowed](https://github.com/Ensrick/vermintide-2-tweaker/issues/584) - score `66`, confidence `medium`, signal `same-subsystem-surface-after-verified-closure`, closed `07/14/2026 00:17:09`
+5. [#616 - Add scaling controls to dev Weapon Hold-Pose tuner](https://github.com/Ensrick/vermintide-2-tweaker/issues/616) - score `103`, confidence `high`, signal `same-subsystem-surface-after-verified-closure`, closed `07/15/2026 19:46:37`
    - `shared_subsystem_labels` (+30): Tweaker: Weapons
    - `shared_lifecycle_surface_classes` (+16): network_peer_parity, canonical_identity_persistence
-   - `shared_distinctive_terms` (+12): action, bounded, criteria, receives
-   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, user_confirmed_fixed, verification_passed
-   - Prior closure evidence: `completed_state_reason, regression_coverage, user_confirmed_fixed, verification_passed`
+   - `shared_code_identifiers` (+40): /wt_regression_test, wt_regression_test
+   - `shared_distinctive_terms` (+9): policy, restores, shared
+   - `closure_verification_evidence` (+8): completed_state_reason, regression_coverage, source_commit_recorded, verification_passed
+   - Prior closure evidence: `completed_state_reason, regression_coverage, source_commit_recorded, verification_passed`
 
 **Fallback 1**
 
-- **Evidence/trigger:** The issue body and cited source establish a bounded acceptance contract.
-- **Change:** Implement that contract on current canonical source with a truth-table regression.
-- **Falsifier:** Source/runtime evidence contradicts a required premise in the accepted contract.
+- **Evidence/trigger:** The issue's posted build-specific verification fails at a named invariant or surface.
+- **Change:** Repair the first failed invariant in the current implementation, scoped to that surface.
+- **Falsifier:** The invariant passes while the reported symptom remains.
 
 **Fallback 2**
 
-- **Evidence/trigger:** Insufficient evidence: no runtime trace yet distinguishes the candidate engine/UI/inventory boundaries.
-- **Change:** Add a minimal repro and bounded trace at the named boundary, then repair only the first observed divergence.
-- **Falsifier:** Existing evidence already identifies the divergent boundary.
+- **Evidence/trigger:** Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract.
+- **Change:** Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior.
+- **Falsifier:** The custom and vanilla boundary inputs/outputs are identical.
 
 **Fallback 3**
 
-- **Evidence/trigger:** The requested path is blocked by absent provenance/license, resource residency, or external service authority.
-- **Change:** Retain a resident vanilla fallback or keep the feature disabled until the missing evidence/authority exists.
-- **Falsifier:** The required provenance, resource closure, and authority are all positively proved.
+- **Evidence/trigger:** The loaded version/hash or canonical ancestry does not contain the claimed fix.
+- **Change:** Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.
+- **Falsifier:** The failing log and deployed hash prove the current canonical commit was running.
