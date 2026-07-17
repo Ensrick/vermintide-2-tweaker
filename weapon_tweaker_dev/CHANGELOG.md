@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.272-dev (2026-07-17) - runtime-check module boundary (#2) [tooling]
+
+- Moved the runtime regression and verification catalogue behind one explicit installer while preserving all dev-only checks, their order, and command ownership.
+- Reduced the entry point below its frozen size ceiling and retained byte-normalized public/dev parity for shared behavior.
+- Added focused coverage for module loading, registration counts, and the availability-sort verifier.
+
 ## 0.12.271-dev (2026-07-17) - #664 Executioner's Sword light-headshot parity [verify-fix]
 
 - Mirrored public beta 0.12.270's default-off **Executioner's Sword: +30% Light Headshot Damage** toggle into the friends-only development stream without changing the dev animation/hold-pose overlay.

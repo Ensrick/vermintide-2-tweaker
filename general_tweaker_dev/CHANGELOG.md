@@ -1,5 +1,11 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.245-dev (2026-07-17) -- runtime module boundaries (#2) [tooling]
+
+- Extracted the runtime regression catalogue from the entry point without changing registration order or command ownership.
+- Extracted the consolidated bot-update policies from `_gt_bot_fixes.lua`; the entry point and bot owner are back below their frozen size ceilings.
+- Added focused module-boundary coverage so future hooks cannot silently duplicate registration or update ownership.
+
 ## v0.2.244-dev (2026-07-17) -- correlated bot aid teleport diagnostics (#139, #384) [diag] [coop-required]
 
 - Replaced the structurally ambiguous issue-139 veto line with one bounded `[gt:139:chain]` event carrying the bot, preserved aid ally, final follow target, teleport reason, `target_ally_need_type`, and issue-492 bailout state. A later teleport by the same bot now reports the prior veto age and whether the aid identity is unchanged.

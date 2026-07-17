@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.271-beta (2026-07-17) - runtime-check module boundary (#2) [tooling]
+
+- Moved the runtime regression and verification catalogue behind one explicit installer while preserving check order and command ownership.
+- Reduced the entry point below its frozen size ceiling without changing the public beta feature surface.
+- Added parity and module-boundary tests shared with the friends-only development stream.
+
 ## 0.12.270-beta (2026-07-17) - #664 Executioner's Sword light headshots [verify-fix]
 
 - Added the default-off **Executioner's Sword: +30% Light Headshot Damage** option under Weapon Tweaks. Every light sweep, including the push follow-up, deals exactly 1.30x its otherwise-final damage when VT2 classifies the hit zone as a headshot.
