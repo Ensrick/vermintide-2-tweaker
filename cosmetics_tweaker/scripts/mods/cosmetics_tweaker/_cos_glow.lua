@@ -531,6 +531,43 @@ local function _apply_glow_override(units, owner_peer_id)
     for _, u in pairs(units) do _apply_glow_to_unit(u, owner_peer_id) end
 end
 
+-- #650 exact composed appearance consumer. Unlike the general glow path this
+-- does not re-resolve backend, skin, or offhand identity from a spawned unit.
+-- The canonical descriptor already proved the exact instance and compatible
+-- runed shield; this adapter only translates its immutable material write.
+local function _apply_composed_shield_glow(units, descriptor)
+    local glow = type(descriptor) == "table" and descriptor.shield_glow or nil
+    if type(glow) ~= "table" or type(glow.unit_path) ~= "string"
+            or type(glow.variable) ~= "string"
+            or type(glow.brightness) ~= "number" or type(glow.r) ~= "number"
+            or type(glow.g) ~= "number" or type(glow.b) ~= "number"
+            or type(glow.intensity) ~= "number"
+            or (glow.clear ~= true and glow.intensity <= 0) then
+        return 0
+    end
+    local intensity = math.max(0, math.min(5, glow.intensity))
+    local scale = glow.brightness * intensity / 255
+    local painted = 0
+    for _, unit in pairs(units or {}) do
+        if unit and _is_unit(unit) then
+            local ok_name, unit_path = pcall(function()
+                return Unit.has_data and Unit.has_data(unit, "unit_name")
+                    and Unit.get_data(unit, "unit_name") or nil
+            end)
+            if ok_name and (unit_path == glow.unit_path
+                    or unit_path == glow.unit_path .. "_3p") then
+                local r = glow.clear == true and 0 or glow.r * scale
+                local g = glow.clear == true and 0 or glow.g * scale
+                local b = glow.clear == true and 0 or glow.b * scale
+                pcall(Unit.set_vector3_for_materials, unit, glow.variable,
+                    Vector3(r, g, b))
+                painted = painted + 1
+            end
+        end
+    end
+    return painted
+end
+
 -- Glow override (v0.8.16-dev): TEMPLATE MUTATION approach.
 --
 -- Why we changed mechanism: hook_safe-overlay (v0.8.4-v0.8.15) reliably painted
@@ -707,6 +744,7 @@ end)
 -- local viewer, historical behavior for non-owned preview units). Same consumption
 -- pattern as the Phase 2 scale/grip exports (mod._cos.scale_units etc.).
 mod._cos.apply_glow_override = _apply_glow_override
+mod._cos.apply_composed_shield_glow = _apply_composed_shield_glow
 mod._cos.glow_owner_peer_for_unit = _glow_owner_peer_for_unit
 mod._cos.bind_glow_unit = _bind_glow_unit
 mod._cos.remote_glow_matches = _remote_glow_matches

@@ -16,7 +16,7 @@ local function proof_args(backend_id)
         skin = "es_1h_mace_shield_skin_03_runed_01",
         offhand_unit = "units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02_runed_01",
         glow_state = { rune = { r = 64, g = 128, b = 255, intensity = 1 } },
-        local_resource_available = available,
+        glow_source = "committed",
     }
 end
 
@@ -28,6 +28,14 @@ Harness.test("#650 composite proof preserves declared layer order and exact RGB"
     Harness.equal(table.concat(descriptor.layer_order, ","),
         "native_background,primary_weapon,offhand,glow_mask,native_frame")
     Harness.equal(table.concat(descriptor.glow_color, ","), "255,64,128,255")
+    Harness.equal(descriptor.glow_source, "committed")
+    Harness.equal(descriptor.shield_glow.variable, "rune_emissive_color")
+    Harness.equal(descriptor.shield_glow.unit_path, proof_args().offhand_unit)
+    Harness.equal(descriptor.shield_glow.brightness, 9)
+    Harness.equal(descriptor.shield_glow.r, descriptor.glow_color[2])
+    Harness.equal(descriptor.shield_glow.g, descriptor.glow_color[3])
+    Harness.equal(descriptor.shield_glow.b, descriptor.glow_color[4])
+    Harness.equal(descriptor.shield_glow.intensity, 1)
 end)
 
 Harness.test("#650 GOTWF skin_03 variant keeps the same authored mace layer", function()
@@ -58,16 +66,25 @@ Harness.test("#650 detailed resolver exposes bounded diagnostic outcomes", funct
     Harness.equal(reason, "composed")
 end)
 
-Harness.test("#650 descriptors fail closed without exact instance or local assets", function()
+Harness.test("#650 descriptors fail closed without exact instance", function()
     local compositor = Factory.new(Catalog)
     local args = proof_args()
     args.exact_instance = false
     Harness.equal(compositor.resolve(args), nil)
-    args = proof_args()
-    args.local_resource_available = function(name)
+end)
+
+Harness.test("#650 icon residency cannot suppress the held appearance descriptor", function()
+    local compositor = Factory.new(Catalog)
+    local descriptor = compositor.resolve(proof_args())
+    local ready, reason = compositor.icon_ready(descriptor, function(name)
         return name ~= "icon_cos_breton_shield_02"
-    end
-    Harness.equal(compositor.resolve(args), nil)
+    end)
+    Harness.equal(ready, false)
+    Harness.equal(reason, "missing-offhand-resource")
+    Harness.truthy(descriptor.shield_glow)
+    ready, reason = compositor.icon_ready(descriptor, available)
+    Harness.truthy(ready)
+    Harness.equal(reason, "ready")
 end)
 
 Harness.test("#650 cache is instance isolated, copy safe, and fingerprint refreshed", function()
@@ -112,6 +129,19 @@ Harness.test("#650 dormant rune state does not emit a glow layer", function()
     Harness.equal(descriptor.offhand_texture, "icon_cos_breton_shield_02")
     Harness.equal(descriptor.glow_texture, nil)
     Harness.equal(descriptor.glow_color, nil)
+    Harness.truthy(descriptor.shield_glow.clear)
+    Harness.equal(descriptor.shield_glow.intensity, 0)
+    Harness.equal(descriptor.shield_glow.r, 0)
+end)
+
+Harness.test("#650 native primary glow uses the same shield and icon contract", function()
+    local args = proof_args("native")
+    args.glow_source = "native"
+    local descriptor = Factory.new(Catalog).resolve(args)
+    Harness.equal(descriptor.glow_source, "native")
+    Harness.equal(descriptor.shield_glow.r, descriptor.glow_color[2])
+    Harness.equal(descriptor.shield_glow.g, descriptor.glow_color[3])
+    Harness.equal(descriptor.shield_glow.b, descriptor.glow_color[4])
 end)
 
 Harness.test("#650 reused grid cell restores its unsupported item's native icon", function()
@@ -137,7 +167,7 @@ Harness.test("#650 UIUtils publishes descriptors without leaking mace-only icons
     local file = assert(io.open(path, "rb"))
     local source = file:read("*a")
     file:close()
-    Harness.truthy(source:find("_cos_refresh_composite_descriptor%(item, record%)"))
+    Harness.truthy(source:find("_cos_resolve_composed_appearance%(item, record%)"))
     Harness.truthy(source:find("COMPOSITE_ICONS%.publish%(item, descriptor%)"))
     Harness.truthy(source:find("COMPOSITE_ICONS%.descriptor_for%(item%)"))
     Harness.equal(source:find("_composite_icon_descriptor_by_item"), nil)
@@ -146,6 +176,15 @@ Harness.test("#650 UIUtils publishes descriptors without leaking mace-only icons
     Harness.truthy(source:find('content%["hotspot" %.%. suffix%]'))
     Harness.truthy(source:find("hotspot_content%[icon_name%] = resolved_icon"))
     Harness.equal(source:find("current_icon = content%[icon_name%]"), nil)
+    Harness.truthy(source:find("GlowPicker%.native_state_for%(%{ skin = skin %}%)"))
+    Harness.truthy(source:find("apply_composed_shield_glow"))
+    local glow_path = repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow.lua"
+    local glow_file = assert(io.open(glow_path, "rb"))
+    local glow_source = glow_file:read("*a")
+    glow_file:close()
+    Harness.truthy(glow_source:find('Unit%.has_data%(unit, "unit_name"%)'))
+    Harness.truthy(glow_source:find('unit_path == glow%.unit_path %.%. "_3p"'))
 end)
 
 Harness.test("#650 renderer publication stays weak and renderer-local", function()

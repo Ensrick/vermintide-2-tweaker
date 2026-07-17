@@ -83,7 +83,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.136-dev"
+local MOD_VERSION = "0.9.137-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -822,7 +822,7 @@ local _glow_badge_texture_missing_logged = false
 local _glow_badge_grids = setmetatable({}, { __mode = "k" })
 local _glow_badge_customization_windows = setmetatable({}, { __mode = "k" })
 local _composite_icon_grids = setmetatable({}, { __mode = "k" })
-local _cos_refresh_composite_descriptor
+local _cos_resolve_composed_appearance
 
 local function _glow_badge_texture_available()
     local available = UIAtlasHelper and UIAtlasHelper.has_texture_by_name
@@ -1022,8 +1022,8 @@ local function _refresh_item_grid_composite_icons(self)
         for column = 1, content.columns or 0 do
             local suffix = "_" .. row .. "_" .. column
             local item = content["item" .. suffix]
-            if type(item) == "table" and _cos_refresh_composite_descriptor then
-                _cos_refresh_composite_descriptor(item)
+            if type(item) == "table" and _cos_resolve_composed_appearance then
+                _cos_resolve_composed_appearance(item)
             end
             local descriptor = COMPOSITE_ICONS.descriptor_for(item)
             local offhand_name = "ct_composite_offhand" .. suffix
@@ -3073,12 +3073,12 @@ local function _cos_active_skin(item, backend_id)
     return skin
 end
 
--- Shared #650 descriptor publication seam. The ItemGrid adapter consumes this
--- field, while future crafting/Hold-Tab adapters can call the public compositor
--- only when they possess the same exact backend instance identity.
-_cos_refresh_composite_descriptor = function(item, record)
+-- Shared #650 exact-instance appearance resolver. Icon publication and held
+-- shield material application both consume this descriptor; neither surface
+-- may independently infer primary glow or offhand compatibility.
+_cos_resolve_composed_appearance = function(item, record, publish_for_icon)
     if type(item) ~= "table" then return nil end
-    COMPOSITE_ICONS.publish(item, nil)
+    if publish_for_icon ~= false then COMPOSITE_ICONS.publish(item, nil) end
     local backend_id = item.backend_id or item.ItemInstanceId
     if backend_id == nil then return nil end
     local item_data = item.data or (item.key and ItemMasterList
@@ -3105,6 +3105,11 @@ _cos_refresh_composite_descriptor = function(item, record)
         offhand_unit = skin_data and skin_data.left_hand_unit
     end
     local glow_state = GlowPicker.committed_state_for(backend_id, { skin = skin })
+    local glow_source = glow_state and "committed" or nil
+    if not glow_state then
+        glow_state = GlowPicker.native_state_for({ skin = skin })
+        if glow_state then glow_source = "native" end
+    end
     local resolve_args = {
         backend_id = backend_id,
         exact_instance = true,
@@ -3113,20 +3118,31 @@ _cos_refresh_composite_descriptor = function(item, record)
         offhand_unit = offhand_unit,
         offhand_armoury_key = offhand_armoury_key,
         glow_state = glow_state,
-        local_resource_available = _cos_ui_icon_available,
+        glow_source = glow_source,
     }
     local descriptor, reason = COMPOSITE_ICONS.resolve_detailed(resolve_args)
+    if descriptor and publish_for_icon ~= false then
+        local ready, icon_reason = COMPOSITE_ICONS.icon_ready(
+            descriptor, _cos_ui_icon_available)
+        if not ready then
+            descriptor = nil
+            reason = icon_reason
+        end
+    end
     if COMPOSITE_ICONS.claim_diagnostic(reason, resolve_args) then
-        mod:info("[cosmetics:650] descriptor %s bid=%s type=%s skin=%s offhand=%s armoury=%s primary=%s shield=%s",
+        mod:info("[cosmetics:650] descriptor %s bid=%s type=%s skin=%s offhand=%s armoury=%s glow=%s held=%s primary=%s shield=%s",
             tostring(reason), tostring(resolve_args.backend_id),
             tostring(resolve_args.item_type), tostring(resolve_args.skin),
             tostring(resolve_args.offhand_unit),
             tostring(resolve_args.offhand_armoury_key),
+            tostring(resolve_args.glow_source),
+            tostring(descriptor and descriptor.shield_glow
+                and descriptor.shield_glow.variable),
             tostring(descriptor and descriptor.primary_texture),
             tostring(descriptor and descriptor.offhand_texture))
     end
-    COMPOSITE_ICONS.publish(item, descriptor)
-    return descriptor
+    if publish_for_icon ~= false then COMPOSITE_ICONS.publish(item, descriptor) end
+    return descriptor, reason
 end
 
 local function _cos_localized_name(key)
@@ -3280,7 +3296,7 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
             -- Publish for the exact ItemGrid cell only. UIUtils also feeds
             -- crafting and Hold-Tab, whose widgets do not own the shield/glow
             -- passes; their returned vanilla/owned icon must stay unchanged.
-            _cos_refresh_composite_descriptor(item, record)
+            _cos_resolve_composed_appearance(item, record)
         end
         return inventory_icon, display_name, description, store_icon
     end)
@@ -5181,6 +5197,7 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
         -- player_unit here, so :owner(unit_3p) resolves the peer correctly
         -- for both local + remote husk equips.
         local owner_peer_id = mod._cos.glow_owner_peer_for_unit(unit_3p)
+        local composed_appearance
         if item_data and item_data.backend_id then
             local restore_skin = result.skin or item_data.skin
             if (not restore_skin or restore_skin == "") and Managers and Managers.backend then
@@ -5195,11 +5212,26 @@ mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_
                 _cos574_log("rehydrate path=create_equipment bid=%s skin=%s slot=%s",
                     tostring(item_data.backend_id), tostring(restore_skin), tostring(slot_name))
             end
+            composed_appearance = _cos_resolve_composed_appearance({
+                backend_id = item_data.backend_id,
+                data = item_data,
+                skin = restore_skin,
+            }, nil, false)
         end
         mod._cos.apply_glow_override({
-            result.right_unit_3p, result.left_unit_3p,
-            result.right_unit_1p, result.left_unit_1p,
+            result.right_unit_3p, result.right_unit_1p,
         }, owner_peer_id)
+        if composed_appearance then
+            if composed_appearance.shield_glow then
+                mod._cos.apply_composed_shield_glow({
+                    result.left_unit_3p, result.left_unit_1p,
+                }, composed_appearance)
+            end
+        else
+            mod._cos.apply_glow_override({
+                result.left_unit_3p, result.left_unit_1p,
+            }, owner_peer_id)
+        end
     end
     return result
 end)
@@ -5633,7 +5665,20 @@ local function _spawn_item_post(self, item_name, spawn_data)
                     mod._cos.bind_glow_unit(slot.left, bid, skin, slot_type,
                         info.name, item_data and item_data.template)
                 end
-                mod._cos.apply_glow_override({ slot.right, slot.left })
+                local composed_appearance = bid and _cos_resolve_composed_appearance({
+                    backend_id = bid,
+                    data = item_data,
+                    skin = skin,
+                }, nil, false) or nil
+                mod._cos.apply_glow_override({ slot.right })
+                if composed_appearance then
+                    if composed_appearance.shield_glow then
+                        mod._cos.apply_composed_shield_glow(
+                            { slot.left }, composed_appearance)
+                    end
+                else
+                    mod._cos.apply_glow_override({ slot.left })
+                end
                 if restored then
                     _cos574_log("rehydrate path=hero_preview bid=%s skin=%s slot=%s",
                         tostring(bid), tostring(skin), tostring(slot_type))
@@ -11022,6 +11067,15 @@ _rt_register("issue650_composite_icon_contract", function()
             or descriptor.offhand_texture ~= "icon_cos_breton_shield_02"
             or descriptor.glow_texture ~= "icon_cos_breton_shield_rune_glow"
             or table.concat(descriptor.glow_color or {}, ",") ~= "255,64,128,255"
+            or not descriptor.shield_glow
+            or descriptor.shield_glow.unit_path
+                ~= "units/weapons/player/wpn_emp_gk_shield_02/wpn_emp_gk_shield_02_runed_01"
+            or descriptor.shield_glow.variable ~= "rune_emissive_color"
+            or descriptor.shield_glow.brightness ~= 9
+            or descriptor.shield_glow.r ~= descriptor.glow_color[2]
+            or descriptor.shield_glow.g ~= descriptor.glow_color[3]
+            or descriptor.shield_glow.b ~= descriptor.glow_color[4]
+            or descriptor.shield_glow.intensity ~= 1
             or table.concat(descriptor.layer_order or {}, ",")
                 ~= "native_background,primary_weapon,offhand,glow_mask,native_frame" then
         return "Mace + Shield layered proof descriptor drifted"

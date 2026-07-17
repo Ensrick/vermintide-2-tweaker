@@ -13,9 +13,11 @@ Last updated: 2026-07-16.
 |---|---|
 | Identity | A custom descriptor requires the exact backend instance, mapped primary skin (including GOTWF 2026 `skin_03_runed_05`), and exact saved offhand unit/armoury key. Missing or mixed-peer identity stays native and emits one bounded reason tuple. |
 | Order | Native rarity/background -> authored primary -> authored offhand -> optional glow mask -> native frame. |
-| Glow | Only `wpn_emp_gk_shield_02_runed_01` is rune-eligible; tint is the durable Apply state's exact rune RGB bytes and requires saved intensity above zero. A non-runed shield remains unlit even when the item has saved rune state. |
+| Glow | Only the exact compatible `wpn_emp_gk_shield_02_runed_01` offhand accepts inherited primary glow. One descriptor supplies both its `rune_emissive_color` material write and icon-mask RGB. A committed override wins; otherwise a source-defined native primary glow may supply the value. A non-runed shield remains unlit. |
+| Held parity | Owner 1P, owner 3P, and inventory hero preview consume the same descriptor as the icon adapter. Tests compare icon RGB byte-for-byte with the held-shield write. GUI texture residency may suppress only the icon layers, never the held descriptor. |
 | Cell reuse | Removing a descriptor or reusing a grid cell restores the new item's native icon and clears both optional passes. |
 | Scope | Inventory/equipment `ItemGridUI` is the proof adapter. It must replace the native primary at `content[hotspot_*][item_icon_*]`; a top-level `content[item_icon_*]` write is inert. Crafting and Hold-Tab stay native pending exact identity and renderer-material proof. |
+| Peer safety | This contract adds no RPC and never transports custom texture names or owner-local backend IDs. Unsupported or unmodded peers stay on the existing native wire fallback. |
 | Detection | Offline `test_cos_composite_icons.lua`; `/cos_regression_test` passes `issue650_composite_icon_contract`. Tracking: GitHub issue #650. |
 
 ---

@@ -61,6 +61,8 @@ return {
         breton_rune = {
             texture = "icon_cos_breton_shield_rune_glow",
             component = "rune",
+            material_variable = "rune_emissive_color",
+            material_brightness = 9,
         },
     },
 }

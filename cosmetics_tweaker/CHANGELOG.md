@@ -1,5 +1,40 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.137-dev - 2026-07-16 - #650 composed shield glow contract [verify-fix]
+
+### Changed
+
+- The exact Mace + Shield instance now resolves one composed appearance
+  descriptor containing primary skin, selected Bretonnian offhand, effective
+  primary glow, icon layers, and the compatible shield material write.
+- A committed custom glow remains authoritative. When no override exists, a
+  glow-capable primary may contribute its source-defined native color; unknown
+  or template-less native glows still fail closed.
+- The runed Bretonnian shield's owner 1P/3P units and inventory hero preview
+  consume the descriptor's `rune_emissive_color` write. The item-card glow mask
+  consumes the same RGB bytes, so held shield and icon can no longer resolve
+  different colors.
+- GUI texture residency is now checked only by the icon adapter. A missing
+  renderer material restores the native card but cannot suppress the held
+  shield appearance.
+- No new RPC, custom asset path, or backend ID enters peer transport.
+
+### Regression coverage
+
+- Offline tests require icon tint and held-shield RGB to agree, cover committed
+  and native primary states, prove renderer-local icon failure does not erase
+  the held descriptor, and retain exact-instance/cache/native-cell safeguards.
+- `/cos_regression_test` now pins the composed shield material variable,
+  brightness, intensity, and RGB alongside the icon layers.
+
+### Verification
+
+Equip Mace + Shield with a glow-capable mapped primary and `GK Shield (Red,
+Runed)`. Confirm the shield glows in owner first person, owner third person,
+and the inventory character preview, while the composed item icon shows the
+same color. Apply a distinct RGB and repeat; an ordinary shield and an
+unsupported item must remain unchanged. Tracking: GitHub issue #650.
+
 ## 0.9.136-dev - 2026-07-16 - #650 Lua compile-limit hardening
 
 The unshipped 0.9.135 implementation crossed Lua 5.1's 200-local function

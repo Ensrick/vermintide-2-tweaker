@@ -1,7 +1,8 @@
 # Glow System — cosmetics_tweaker
 
-State as of v0.9.103-dev (2026-07-14); glow sync is verified in co-op and the
-manual editor control plus committed-state badges await solo verification.
+State as of v0.9.137-dev (2026-07-16); glow sync is verified in co-op, while
+the exact-instance Mace + Bretonnian runed-shield inheritance candidate awaits
+solo verification.
 
 This is the canonical reference for how the glow customization system is
 wired today: which shader variables drive what visually, how the popup UI
@@ -31,7 +32,7 @@ and where to extend.
 | Restore to Default (clear override, reapply native, drop badge) | ✅ (v0.9.125-dev, issue 610) |
 | Toggle the per-item glow off entirely | ❌ (M3) |
 | Hide vanilla glow-cousin items from cosmetic menu | ❌ (M3) |
-| Cross-slot inheritance (main weapon glow → compatible shield) | ❌ (M3) |
+| Cross-slot inheritance (main weapon glow → compatible runed Bretonnian shield) | 🧪 v0.9.137 candidate (#650) |
 | Host-authoritative coop broadcast of active per-item glow | ✅ |
 
 ## 2. The two glow families
@@ -238,10 +239,13 @@ global override.
 
 ### c. Cross-slot inheritance
 
-When you customize the main weapon's rune glow, the shield in the offhand
-slot DOES NOT receive the same glow automatically. They're separately
-keyed by their own backend_ids. M3 will look up cousin items in the same
-"glow family" and propagate.
+For the exact Mace + Shield proof tuple, the primary instance is the glow
+authority and the compatible runed Bretonnian shield is a consumer. One
+composed appearance descriptor carries the effective primary glow to both the
+shield material and the layered item icon. A committed override wins; otherwise
+a source-defined native primary glow may be used. Ordinary shields are not
+declared compatible because their materials do not carry the proven rune glow
+contract. This path is local presentation only and adds no peer payload.
 
 ### e. Weavebound + LA reversion
 

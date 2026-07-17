@@ -28,6 +28,17 @@ local function _copy_descriptor(value)
         offhand_texture = value.offhand_texture,
         glow_texture = value.glow_texture,
         glow_color = _copy_color(value.glow_color),
+        glow_source = value.glow_source,
+        shield_glow = value.shield_glow and {
+            unit_path = value.shield_glow.unit_path,
+            variable = value.shield_glow.variable,
+            brightness = value.shield_glow.brightness,
+            clear = value.shield_glow.clear,
+            r = value.shield_glow.r,
+            g = value.shield_glow.g,
+            b = value.shield_glow.b,
+            intensity = value.shield_glow.intensity,
+        } or nil,
         layer_order = _copy_array(value.layer_order),
     }
 end
@@ -65,7 +76,7 @@ function M.new(catalog)
         end
         local key = table.concat({
             tostring(reason), tostring(args.skin), tostring(args.offhand_unit),
-            tostring(args.offhand_armoury_key),
+            tostring(args.offhand_armoury_key), tostring(args.glow_source),
         }, "|")
         if diagnostic_seen[key] or diagnostic_count >= 32 then return false end
         diagnostic_seen[key] = true
@@ -96,18 +107,7 @@ function M.new(catalog)
         if type(offhand) ~= "table" or type(offhand.texture) ~= "string" then
             return nil, "unmapped-offhand"
         end
-        local available = args.local_resource_available
-        if type(available) ~= "function" then
-            return nil, "missing-resource-check"
-        end
-        if available(primary) ~= true then
-            return nil, "missing-primary-resource"
-        end
-        if available(offhand.texture) ~= true then
-            return nil, "missing-offhand-resource"
-        end
-
-        local glow_texture, glow_color
+        local glow_texture, glow_color, shield_glow
         local glow = offhand.glow_style and catalog.glow_styles
             and catalog.glow_styles[offhand.glow_style]
         local component = glow and type(args.glow_state) == "table"
@@ -116,16 +116,47 @@ function M.new(catalog)
                 and (tonumber(component.intensity) or 0) > 0 then
             local r, g, b = _byte(component.r), _byte(component.g), _byte(component.b)
             if r and g and b and type(glow.texture) == "string"
-                    and available(glow.texture) == true then
+                    and type(glow.material_variable) == "string"
+                    and type(glow.material_brightness) == "number" then
                 glow_texture = glow.texture
                 glow_color = { 255, r, g, b }
+                shield_glow = {
+                    unit_path = args.offhand_unit,
+                    variable = glow.material_variable,
+                    brightness = glow.material_brightness,
+                    r = r,
+                    g = g,
+                    b = b,
+                    intensity = tonumber(component.intensity),
+                }
             end
+        elseif glow and args.glow_source == "committed"
+                and type(args.glow_state) == "table"
+                and type(glow.material_variable) == "string" then
+            -- A committed disabled/zero state is an explicit material clear,
+            -- not absence of policy. The icon mask disappears while the held
+            -- runed shield is zeroed through this same descriptor.
+            shield_glow = {
+                unit_path = args.offhand_unit,
+                variable = glow.material_variable,
+                brightness = tonumber(glow.material_brightness) or 0,
+                clear = true,
+                r = 0,
+                g = 0,
+                b = 0,
+                intensity = 0,
+            }
         end
 
         local fingerprint = table.concat({
             tostring(backend_id), tostring(args.skin), tostring(args.offhand_unit),
             tostring(args.offhand_armoury_key), primary, offhand.texture,
             tostring(glow_texture), glow_color and table.concat(glow_color, ",") or "",
+            tostring(shield_glow and shield_glow.variable),
+            tostring(shield_glow and shield_glow.unit_path),
+            tostring(shield_glow and shield_glow.clear),
+            tostring(shield_glow and shield_glow.intensity),
+            tostring(args.glow_source),
         }, "|")
         local key = tostring(backend_id)
         if cache[key] and cache[key].fingerprint == fingerprint then
@@ -139,6 +170,8 @@ function M.new(catalog)
             offhand_texture = offhand.texture,
             glow_texture = glow_texture,
             glow_color = glow_color,
+            glow_source = args.glow_source,
+            shield_glow = shield_glow,
             layer_order = _copy_array(catalog.layer_order),
         }
         cache[key] = descriptor
@@ -148,6 +181,24 @@ function M.new(catalog)
     function api.resolve(args)
         local descriptor = api.resolve_detailed(args)
         return descriptor
+    end
+
+    -- Renderer residency is a consumer concern, not part of the canonical
+    -- exact-instance appearance. Held material application must not disappear
+    -- merely because a particular Gui cannot draw one of the icon layers.
+    function api.icon_ready(descriptor, available)
+        if type(descriptor) ~= "table" then return false, "missing-descriptor" end
+        if type(available) ~= "function" then return false, "missing-resource-check" end
+        if available(descriptor.primary_texture) ~= true then
+            return false, "missing-primary-resource"
+        end
+        if available(descriptor.offhand_texture) ~= true then
+            return false, "missing-offhand-resource"
+        end
+        if descriptor.glow_texture and available(descriptor.glow_texture) ~= true then
+            return false, "missing-glow-resource"
+        end
+        return true, "ready"
     end
 
     function api.invalidate(backend_id)
