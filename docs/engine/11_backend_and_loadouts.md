@@ -273,11 +273,14 @@ check pins all five write hooks, :1209-1224). Remaining friction:
    pushes via the un-gated `updateHeroAttributes` (2.3). Values are benign (career selection),
    but if #402's isolation is meant to be absolute, capture these too (store
    `selected career` modded-side and no-op vanilla); at minimum document the exception.
-3. **Post-scrub commit is left to chance.** `/scrub_official_loadouts apply` writes via
-   `mirror:set_character_data` then tells the user to "stay in the menu a moment" (:1084,
-   :1107). Engine-idiomatic: call `Managers.backend:commit(true, cb)`
-   (backend_manager_playfab.lua:933-937) and report the commit status from the callback
-   (statuses from `_check_current_commit`, playfab_mirror_base.lua:1842-1868).
+3. **Post-scrub commit is deterministic.** After at least one verified replacement is
+   written, `/scrub_official_loadouts apply` calls `Managers.backend:commit(true, cb)`
+   exactly once and reports both the returned commit id and callback status. Only the
+   engine's `success` status is accepted as committed; `commit_error`, a missing mirror,
+   and a thrown or unavailable backend interface are reported as local-only repairs rather
+   than false cloud success (`backend_manager_playfab.lua:933-937`;
+   `playfab_mirror_base.lua:1842-1868, :2703-2753`). Report-only, clean, and zero-repair
+   runs never request a commit.
 4. **Bot designation store vs engine local store**: gut skips the `PlayerData.loadout_selection`
    write and keeps `bot_index` modded-side (:765-794) - correct, since PlayerData is
    realm-shared. Keep the `refresh_bot_loadouts` overlay hook as the ONLY bot read path;

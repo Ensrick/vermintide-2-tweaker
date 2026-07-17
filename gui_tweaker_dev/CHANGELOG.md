@@ -1,5 +1,11 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.285-dev (2026-07-17) -- #402 deterministic official-loadout repair commit
+
+- `/scrub_official_loadouts apply` now requests one immediate backend commit after a bounded repair and reports the engine callback result instead of asking the player to idle and hope the cloud write completes.
+- Report-only, clean, and zero-repair runs do not commit. Missing, throwing, and unavailable backend paths report the repair as local-only and never claim cloud success.
+- Added engine-free regression coverage for the forced-commit call shape, one-call bound, unavailable backend paths, and `success` versus `commit_error` classification.
+
 ## 0.2.284-dev (2026-07-17) -- GUI hard-limit recovery
 
 - Extracted both Mod Tweaker presentation interaction surfaces into explicit owner-installed modules, preserving search, profile, numeric-editor, and Dialogue media behavior.

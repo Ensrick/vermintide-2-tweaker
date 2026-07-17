@@ -52,6 +52,7 @@
 local mod = get_mod("gut_dev")
 local Policy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_native_loadout_policy")
 local WTTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_wt_loadout_trace_core")
+local BackendCommit = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_backend_commit")
 
 local MARKER = "native_loadouts_v1"
 
@@ -1293,8 +1294,40 @@ mod:command("scrub_official_loadouts", "Repair modded/dangling weapon+frame ids 
     if broken == 0 then
         mod:echo("[scrub] official loadouts clean -- no broken weapon/frame ids")
     elseif do_apply then
-        mod:echo(string.format("[scrub] repaired %d/%d broken slot(s)%s; stay in the menu a moment so it commits to the cloud",
-            fixed, broken, skipped > 0 and string.format(" (%d skipped -- re-equip manually)", skipped) or ""))
+        local skipped_suffix = skipped > 0 and string.format(" (%d skipped -- re-equip manually)", skipped) or ""
+        if fixed == 0 then
+            mod:echo(string.format("[scrub] repaired 0/%d broken slot(s)%s; no cloud commit was requested",
+                broken, skipped_suffix))
+            return
+        end
+
+        local function commit_complete(status)
+            local committed, detail = BackendCommit.classify_status(status)
+            if committed then
+                mod:echo(string.format("[scrub] cloud commit complete -- repaired %d/%d broken slot(s)%s",
+                    fixed, broken, skipped_suffix))
+                printf("[gut_dev:NATIVE_LOADOUTS] #402 cloud commit SUCCESS fixed=%d broken=%d skipped=%d status=%s",
+                    fixed, broken, skipped, tostring(status))
+            else
+                mod:echo(string.format("[scrub] repair is local but cloud commit FAILED (%s); retry /scrub_official_loadouts apply",
+                    detail))
+                printf("[gut_dev:NATIVE_LOADOUTS] #402 cloud commit FAILED fixed=%d broken=%d skipped=%d status=%s",
+                    fixed, broken, skipped, detail)
+            end
+        end
+
+        local requested, commit_id = BackendCommit.request(Managers and Managers.backend, commit_complete)
+        if requested then
+            mod:echo(string.format("[scrub] repaired %d/%d broken slot(s)%s; cloud commit requested (id=%s)",
+                fixed, broken, skipped_suffix, tostring(commit_id)))
+            printf("[gut_dev:NATIVE_LOADOUTS] #402 cloud commit REQUESTED id=%s fixed=%d broken=%d skipped=%d",
+                tostring(commit_id), fixed, broken, skipped)
+        else
+            mod:echo(string.format("[scrub] repaired %d/%d locally%s, but cloud commit could not start (%s)",
+                fixed, broken, skipped_suffix, tostring(commit_id)))
+            printf("[gut_dev:NATIVE_LOADOUTS] #402 cloud commit NOT-STARTED fixed=%d broken=%d skipped=%d reason=%s",
+                fixed, broken, skipped, tostring(commit_id))
+        end
     else
         mod:echo(string.format("[scrub] found %d broken slot(s) -- see console for ids. To fix: enter the OFFICIAL realm and run /scrub_official_loadouts apply", broken))
     end
