@@ -48,13 +48,20 @@ return function(H, repo_root)
 			.. "/character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md")
 		H.truthy(audit:find("7cc646d8e8084a5fb2961855bca284e8", 1, true))
 		H.truthy(audit:find(
+			"7929EADFF79A10BF6C5FC8C568EEE8F3E6F367C8DA2713274D3392FC4F4ADF2D",
+			1, true))
+		H.truthy(audit:find(
 			"6D4CF23FF13C38AEED071DD3899FDF2DB6303C501C8EEEC04923923395C2CABF",
+			1, true))
+		H.truthy(audit:find(
+			"F692447957312B18C976897BF50409108EEC8E3799DB023C75B5BE622F1CE0B8",
 			1, true))
 		H.truthy(audit:find(
 			"16054F14B2A9E3CFB98915BD027C89AD9F74D76976AAE080689F6C2D376FC655",
 			1, true))
 		H.truthy(audit:find("500,000 polygons", 1, true))
 		H.truthy(audit:find("issue #628", 1, true))
+		H.truthy(audit:find("Empirical unblock routes", 1, true))
 
 		local package = read(repo_root
 			.. "/character_weapon_variants/resource_packages/character_weapon_variants/character_weapon_variants.package")

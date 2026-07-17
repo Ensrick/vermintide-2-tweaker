@@ -12,7 +12,7 @@ public package as of 2026-07-15.
 | Candidate | Technical payload | Provenance and license | Result |
 |---|---|---|---|
 | Tower Mace | Complete DAE plus five 2048x2048 PBR maps | Identified as *Tower Mace* by iceboxX708, Sketchfab UID `7cc646d8e8084a5fb2961855bca284e8`, offered under CC Attribution-NonCommercial | Blocked until the project explicitly approves that license for source and Workshop redistribution |
-| UUID model | FBX plus 4096x4096 base-color, normal, and packed metallic/roughness maps | No author, title, source URL, stable asset ID, license, original archive, receipt, or download metadata | Rejected from conversion until provenance is supplied; it also needs a low-poly game mesh and documented packed-map channels |
+| UUID model | FBX plus 4096x4096 base-color, normal, and packed metallic/roughness maps | No author, title, source URL, stable asset ID, license, receipt, or attributable download metadata | Rejected from conversion until provenance is supplied; it also needs a low-poly game mesh and documented packed-map channels |
 
 The shipped Bardin hammer and shield placeholders therefore remain the only
 safe presentation. This is an asset-boundary decision, not permission to clone
@@ -25,12 +25,18 @@ exact-hand contract remain unchanged.
 - Source page: `https://sketchfab.com/3d-models/tower-mace-7cc646d8e8084a5fb2961855bca284e8`
 - Author/profile: iceboxX708, `https://sketchfab.com/iceboxX708`
 - Source page publication date: 2019-07-19
-- Original archive SHA-256:
+- Downloaded outer archive SHA-256:
+  `7929EADFF79A10BF6C5FC8C568EEE8F3E6F367C8DA2713274D3392FC4F4ADF2D`
+- Selected nested source archive (`source/model.zip`) SHA-256:
   `6D4CF23FF13C38AEED071DD3899FDF2DB6303C501C8EEEC04923923395C2CABF`
 - Selected DAE SHA-256:
   `6C2237CF0A4B701DCE655A5C9322A185C77BAEB149567B1DA63009FC76270F81`
 - The DAE names one `Tower_Mace_SG` material and records an Assimp export at
   `2019-07-19T21:38:53`, matching the source page and texture stems.
+- The downloaded outer archive's Windows zone metadata points to Sketchfab's
+  archive host and embeds the same `7cc646d8e8084a5fb2961855bca284e8`
+  model UID. This proves acquisition identity, not permission beyond the
+  page's CC Attribution-NonCommercial license.
 - Blender 4.4.0 imports one mesh with 5,531 vertices and 3,852 polygons. The
   payload contains albedo, AO, metallic, normal, and roughness maps, all
   2048x2048. This is technically suitable for the normal scripted conversion
@@ -50,6 +56,11 @@ The duplicate texture folder outside `model.zip` is not byte-identical to the
 selected nested JPEG/PNG set, so it must not silently replace those inputs.
 
 ## UUID model evidence
+
+Downloaded outer archive SHA-256:
+`F692447957312B18C976897BF50409108EEC8E3799DB023C75B5BE622F1CE0B8`.
+Its Windows zone metadata records only `HostUrl=about:internet`; it supplies no
+origin page or rights statement.
 
 | File | SHA-256 |
 |---|---|
@@ -71,6 +82,28 @@ of the third image are metallic and roughness. These are independent blockers:
    retopology/bake recipe rather than shipping the 500,000-polygon source;
 3. document the packed-map channel layout and derive explicit linear metallic
    and roughness maps.
+
+## Empirical unblock routes
+
+No code or asset conversion may begin until one of these routes produces a
+recorded redistribution decision:
+
+1. the project owner explicitly accepts the Tower Mace's CC BY-NC terms for
+   this public-source, donation-linked Workshop project, records the decision,
+   and includes the required attribution and license notice;
+2. the Tower Mace author grants separate written permission compatible with
+   the repository and Workshop distribution, with that permission archived in
+   the source manifest;
+3. the UUID/AI candidate receives an attributable generation or download
+   record, an applicable license, a documented packed-map layout, and an
+   approved reproducible low-poly/texture bake, or it is replaced by a CC0 or
+   CC-BY mace with complete provenance.
+
+The user's request to use a supplied mace is acceptance criteria for the
+feature, but it does not identify which of the two archives should ship and
+does not replace the missing license decision. Until one route closes, keeping
+the resident vanilla fallback is the only policy that satisfies the repository
+asset gate.
 
 ## Exact integration contract after approval
 
