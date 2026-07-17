@@ -83,7 +83,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.138-dev"
+local MOD_VERSION = "0.9.139-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -9485,6 +9485,27 @@ if not (_net_safe_hook_status.CosmeticUtils and _net_safe_hook_status.LoadoutUti
     mod:info("[startup] LA peer-sync hook registration incomplete; see hook status above")
 end
 
+-- #233/#267: a restored offhand is keyed by exact backend item, so its
+-- authoritative replay cannot be built until the local inventory has at least
+-- one realized weapon slot. PlayerUnit readiness precedes equipment readiness
+-- during startup and transitions; consuming the one-shot replay flag in that
+-- gap permanently loses the persisted state until the user edits it again.
+-- Keep this helper engine-free so the runtime regression can exercise the
+-- precise readiness boundary.
+mod._la_rebroadcast_inventory_ready = function(inventory)
+    local equipment = type(inventory) == "table"
+        and (inventory._equipment or inventory.equipment) or nil
+    local slots = type(equipment) == "table" and equipment.slots or nil
+    if type(slots) ~= "table" then return false end
+    for _, slot_name in ipairs({ "slot_melee", "slot_ranged" }) do
+        local slot = slots[slot_name]
+        if type(slot) == "table" and type(slot.item_data) == "table" then
+            return true
+        end
+    end
+    return false
+end
+
 -- VMF calls mod.update once per frame.
 -- CLARIFY: la_bridge initialization is deferred to first frame where:
 --   1. ItemMasterList is loaded
@@ -9515,6 +9536,7 @@ mod.update = function(dt)
         local pu = lp and lp.player_unit
         if pu and Unit.alive(pu) then
             local n = 0
+            local replay_ready = true
             -- (A) Hats / armor via _local_la_equips (populated by
             -- CosmeticUtils.update_cosmetic_slot hook).
             if _local_la_equips then
@@ -9546,9 +9568,12 @@ mod.update = function(dt)
             -- up _offhand_selection[slot.backend_id], emit if matched.
             -- Avoids replaying stale selections for items no longer
             -- equipped.
-            if _offhand_selection and ScriptUnit and ScriptUnit.has_extension then
-                local inv = ScriptUnit.has_extension(pu, "inventory_system")
-                if inv and inv._equipment and inv._equipment.slots then
+            if _offhand_selection and next(_offhand_selection) ~= nil then
+                local inv = ScriptUnit and ScriptUnit.has_extension
+                    and ScriptUnit.has_extension(pu, "inventory_system") or nil
+                if not mod._la_rebroadcast_inventory_ready(inv) then
+                    replay_ready = false
+                else
                     for _, slot_data in pairs(inv._equipment.slots) do
                         local sd_item = slot_data and slot_data.item_data
                         local sd_bid = sd_item and sd_item.backend_id
@@ -9575,9 +9600,11 @@ mod.update = function(dt)
                     end
                 end
             end
-            mod._la_self_rebroadcast_pending = false
-            if n > 0 then
-                _dbg("[ct la-rebroadcast] re-emitted %d local LA equip(s) on state change (hats/armor + offhand)", n)
+            if replay_ready then
+                mod._la_self_rebroadcast_pending = false
+                if n > 0 then
+                    _dbg("[ct la-rebroadcast] re-emitted %d local LA equip(s) on state change (hats/armor + offhand)", n)
+                end
             end
         end
         -- If player_unit not yet ready, keep flag pending and retry next frame.
