@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "source_commit": "c5e4968b1fbb00c49884e56d640ef990a9c04dd0",
+  "keys": [
+    {
+      "key": "options_menu_button_name",
+      "evidence": "scripts/ui/views/ingame_view_menu_layout.lua:77"
+    },
+    {
+      "key": "quit_menu_button_name",
+      "evidence": "scripts/ui/views/ingame_view_menu_layout.lua:578"
+    },
+    {
+      "key": "return_to_game_button_name",
+      "evidence": "scripts/ui/views/ingame_view_menu_layout.lua:57"
+    }
+  ]
+}

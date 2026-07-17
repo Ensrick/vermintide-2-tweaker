@@ -55,9 +55,10 @@ function Log($msg, $color = "DarkGray") { if (-not $Quiet) { Write-Host $msg -Fo
 
 # ---- ratchet baseline (issue #429) ----
 # CI checks out ONLY this repo, so the decompiled Vermintide-2-Source-Code is
-# absent and check #2's vanilla-loc-key resolution is empty — which surfaces
+# absent and check #2's source-derived vanilla-loc-key resolution is incomplete — which surfaces
 # MORE errors in CI than locally (a mod's reference to a real vanilla key looks
-# unresolvable). The baseline is therefore FROZEN as the no-VtSrc SUPERSET so
+# unresolvable). A small committed oracle records source-proven vanilla keys used
+# by this repository, while the baseline freezes the remaining no-VtSrc superset so
 # the same file covers both environments: locally (VtSrc present) fewer errors
 # fire, all a subset of the baseline; in CI the full superset fires and still
 # matches. Only NEW errors (a genuinely typo'd/orphan key that resolves in no
@@ -65,10 +66,18 @@ function Log($msg, $color = "DarkGray") { if (-not $Quiet) { Write-Host $msg -Fo
 # the no-VtSrc view so the committed baseline always matches CI regardless of
 # whether the maintainer has the sibling repo checked out.
 $baselinePath = Join-Path $PSScriptRoot "baselines\name_integrity.json"
+$vanillaOraclePath = Join-Path $PSScriptRoot "oracles\vanilla_loc_keys.json"
 
-# Error signatures embed a repo-relative path; normalize separators so the
-# baseline compares equal on Windows (backslash) and Linux (forward-slash).
-function Normalize-Sig([string]$s) { return $s.Replace('\', '/') }
+# Check #2 diagnoses the unresolved localization value; its source path is
+# evidence, not identity. Keep the path in diagnostics, but exclude it from the
+# ratchet key so a module extraction cannot manufacture a new localization bug.
+function Normalize-Sig([string]$s) {
+    $normalized = $s.Replace('\', '/')
+    if ($normalized -match '^\[check2\]') {
+        $normalized = $normalized -replace ' \([^()]+\)(?= resolves in no loc table)', ''
+    }
+    return $normalized
+}
 
 function Load-NameIntegrityBaseline {
     if (-not (Test-Path $baselinePath)) { return @{} }
@@ -76,6 +85,25 @@ function Load-NameIntegrityBaseline {
     $set = @{}
     foreach ($e in $j.errors) { $set[(Normalize-Sig $e)] = $true }
     return $set
+}
+
+function Load-CommittedVanillaLocKeys {
+    $keys = @{}
+    if (-not (Test-Path $vanillaOraclePath)) { return $keys }
+
+    $j = Get-Content $vanillaOraclePath -Raw | ConvertFrom-Json
+    if ($j.schema_version -ne 1 -or -not $j.source_commit -or -not $j.keys) {
+        throw "Invalid committed vanilla loc-key oracle: $vanillaOraclePath"
+    }
+    foreach ($entry in $j.keys) {
+        $key = [string]$entry.key
+        if ($key -notmatch '^[a-z_][a-z0-9_]*$' -or -not $entry.evidence) {
+            throw "Invalid committed vanilla loc-key entry: $($entry | ConvertTo-Json -Compress)"
+        }
+        if ($keys.ContainsKey($key)) { throw "Duplicate committed vanilla loc key: $key" }
+        $keys[$key] = $true
+    }
+    return $keys
 }
 
 # --- loc parser (same three patterns as check_localization.ps1) ---
@@ -362,24 +390,35 @@ entry.description = "planted_annotated_fixture_key" -- name-integrity: non-rende
 "@
         [System.IO.File]::WriteAllText((Join-Path $scriptsDir "${modName}.lua"), $main, (New-Object System.Text.UTF8Encoding $false))
 
+        $committedKeys = Load-CommittedVanillaLocKeys
         $vanillaKeys = @{ weapon_skin = $true }   # minimal vanilla key set for the test
+        foreach ($key in $committedKeys.Keys) { $vanillaKeys[$key] = $true }
         $res = Invoke-IntegrityChecks -repoRoot $tmp -vanillaKeys $vanillaKeys -onlyMods @($modName)
 
         $check1Fired = ($res.errors | Where-Object { $_ -match '\[check1\].*planted_missing_setting' }).Count -gt 0
         $check2Fired = ($res.errors | Where-Object { $_ -match '\[check2\].*planted_unresolvable_locless_key' }).Count -gt 0
         $check2FalsePos = ($res.errors | Where-Object { $_ -match '\[check2\].*weapon_skin' }).Count -gt 0
         $annotatedFalsePos = ($res.errors | Where-Object { $_ -match 'planted_annotated_fixture_key|planted_commented_example_key' }).Count -gt 0
+        $movedCheck2MatchesBaseline = (Normalize-Sig '[check2] selftest_mod: display_name = "same_key" (scripts/mods/selftest_mod/old.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string') -eq `
+            (Normalize-Sig '[check2] selftest_mod: display_name = "same_key" (scripts/mods/selftest_mod/new.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string')
+        $offlineOracleComplete = @(
+            'return_to_game_button_name',
+            'options_menu_button_name',
+            'quit_menu_button_name'
+        ) | ForEach-Object { $committedKeys.ContainsKey($_) } | Where-Object { -not $_ } | Measure-Object | Select-Object -ExpandProperty Count
 
         Write-Host ""
         Write-Host ("  CHECK 1 (missing setting_id loc entry) fired:        {0}" -f ($check1Fired ? 'PASS' : 'FAIL')) -ForegroundColor ($check1Fired ? 'Green' : 'Red')
         Write-Host ("  CHECK 2 (unresolvable display_name) fired:           {0}" -f ($check2Fired ? 'PASS' : 'FAIL')) -ForegroundColor ($check2Fired ? 'Green' : 'Red')
         Write-Host ("  CHECK 2 did NOT false-positive on vanilla item_type: {0}" -f (-not $check2FalsePos ? 'PASS' : 'FAIL')) -ForegroundColor ((-not $check2FalsePos) ? 'Green' : 'Red')
         Write-Host ("  CHECK 2 ignores annotated fixtures and comments:       {0}" -f (-not $annotatedFalsePos ? 'PASS' : 'FAIL')) -ForegroundColor ((-not $annotatedFalsePos) ? 'Green' : 'Red')
+        Write-Host ("  Offline vanilla oracle has source-proven menu keys:    {0}" -f ($offlineOracleComplete -eq 0 ? 'PASS' : 'FAIL')) -ForegroundColor ($offlineOracleComplete -eq 0 ? 'Green' : 'Red')
+        Write-Host ("  CHECK 2 ratchet survives source-file moves:             {0}" -f ($movedCheck2MatchesBaseline ? 'PASS' : 'FAIL')) -ForegroundColor ($movedCheck2MatchesBaseline ? 'Green' : 'Red')
         Write-Host ""
         Write-Host "  Raised errors:" -ForegroundColor DarkGray
         foreach ($e in $res.errors) { Write-Host "    - $e" -ForegroundColor DarkGray }
 
-        if ($check1Fired -and $check2Fired -and -not $check2FalsePos -and -not $annotatedFalsePos) {
+        if ($check1Fired -and $check2Fired -and -not $check2FalsePos -and -not $annotatedFalsePos -and $offlineOracleComplete -eq 0 -and $movedCheck2MatchesBaseline) {
             Write-Host "[check_name_integrity] SELF-TEST PASSED" -ForegroundColor Green
             return 0
         } else {
@@ -408,10 +447,12 @@ if ($oracle.keys.Count -gt 0) { Log "Loaded $($oracle.keys.Count) mod keys from 
 else { Log "NOTE: docs/generated/NAME_MAP.generated.json not found — runtime-registered mod names (cwv/cosmetics) may over-report in check #2. Run gen-name-map.ps1 first." "Yellow" }
 
 # --- -UpdateBaseline: freeze the no-VtSrc SUPERSET and exit (explicit only) ---
-# We force vanillaKeys empty so the committed baseline is the CI-matching
-# superset regardless of whether this machine has the decompiled source.
+# We retain the committed source-proven oracle but omit the optional source tree,
+# so the baseline is the CI-matching superset on every maintainer machine.
+$committedVanillaKeys = Load-CommittedVanillaLocKeys
+Log "Loaded $($committedVanillaKeys.Count) source-proven vanilla loc keys from the committed offline oracle."
 if ($UpdateBaseline) {
-    $res = Invoke-IntegrityChecks -repoRoot $repoRoot -vanillaKeys @{} -oracle $oracle
+    $res = Invoke-IntegrityChecks -repoRoot $repoRoot -vanillaKeys $committedVanillaKeys -oracle $oracle
     $sigs = @($res.errors | ForEach-Object { Normalize-Sig $_ } | Sort-Object -Unique)
     $payload = [ordered]@{
         '_comment' = "Frozen check_name_integrity ERRORS. Generated in the no-decompiled-source (CI) view — the SUPERSET — so it matches both CI and local runs. Regenerate ONLY with check_name_integrity.ps1 -UpdateBaseline. The gate fails only on NEW errors (keys that resolve in NO environment). Issue #429."
@@ -427,20 +468,31 @@ if ($UpdateBaseline) {
 }
 
 $vanillaKeys = @{}
+foreach ($key in $committedVanillaKeys.Keys) { $vanillaKeys[$key] = $true }
 if (Test-Path $VtSrc) {
-    $vanillaKeys = Build-VanillaLocKeys (Resolve-Path $VtSrc).Path
-    Log "Loaded $($vanillaKeys.Count) known vanilla loc keys for check #2 resolution."
+    $sourceVanillaKeys = Build-VanillaLocKeys (Resolve-Path $VtSrc).Path
+    foreach ($key in $sourceVanillaKeys.Keys) { $vanillaKeys[$key] = $true }
+    Log "Loaded $($vanillaKeys.Count) known vanilla loc keys for check #2 resolution (committed + source checkout)."
 } else {
-    Log "WARNING: Vermintide-2-Source-Code not at $VtSrc — check #2 will lack the vanilla loc-key inventory and may over-report (expected in CI; the baseline is the no-VtSrc superset)." "Yellow"
+    Log "WARNING: Vermintide-2-Source-Code not at $VtSrc — using the committed vanilla-key oracle plus the frozen no-source baseline." "Yellow"
 }
 
 $result = Invoke-IntegrityChecks -repoRoot $repoRoot -vanillaKeys $vanillaKeys -oracle $oracle
+
+# Always evaluate the blocking ratchet in the same source-less view as CI. The
+# committed oracle remains active, so source-proven keys stay resolved in both
+# environments while optional source-only discoveries cannot hide baseline drift.
+$ratchetErrors = $result.errors
+if (Test-Path $VtSrc) {
+    $ratchetResult = Invoke-IntegrityChecks -repoRoot $repoRoot -vanillaKeys $committedVanillaKeys -oracle $oracle
+    $ratchetErrors = $ratchetResult.errors
+}
 
 # Split errors against the frozen baseline: only NEW errors block.
 $baseline = Load-NameIntegrityBaseline
 $newErrors = @()
 $baselinedCount = 0
-foreach ($e in $result.errors) {
+foreach ($e in $ratchetErrors) {
     if ($baseline.ContainsKey((Normalize-Sig $e))) { $baselinedCount++ } else { $newErrors += $e }
 }
 

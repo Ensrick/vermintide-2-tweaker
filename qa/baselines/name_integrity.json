@@ -1,6 +1,6 @@
 {
   "_comment": "Frozen check_name_integrity ERRORS. Generated in the no-decompiled-source (CI) view — the SUPERSET — so it matches both CI and local runs. Regenerate ONLY with check_name_integrity.ps1 -UpdateBaseline. The gate fails only on NEW errors (keys that resolve in NO environment). Issue #429.",
-  "generated": "2026-07-07",
+  "generated": "2026-07-17",
   "errors": [
     "[check1] gui_tweaker_dev: setting_id 'gut_hide_hud_ui_group' in gui_tweaker_dev_data.lua has NO loc entry in gui_tweaker_dev_localization.lua",
     "[check1] gui_tweaker_dev: setting_id 'gut_use_non_modded_loadouts' in gui_tweaker_dev_data.lua has NO loc entry in gui_tweaker_dev_localization.lua",
@@ -8,13 +8,6 @@
     "[check2] career_tweaker: display_name = \"crt_abandon_perk_name\" (scripts/mods/career_tweaker/career_tweaker_balance.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string",
     "[check2] character_weapon_variants: item_type = \"grenade\" (scripts/mods/character_weapon_variants/character_weapon_variants.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string",
     "[check2] gui_tweaker_dev: display_name = \"interact_open_inventory_chest\" (scripts/mods/gui_tweaker_dev/_gut_mission_inventory.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string",
-    "[check2] gui_tweaker_dev: display_name = \"options_menu_button_name\" (scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string",
-    "[check2] gui_tweaker_dev: display_name = \"quit_menu_button_name\" (scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string",
-    "[check2] gui_tweaker_dev: display_name = \"return_to_game_button_name\" (scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string",
-    "[check2] gui_tweaker: display_name = \"interact_open_inventory_chest\" (scripts/mods/gui_tweaker/_gut_mission_inventory.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string",
-    "[check2] gui_tweaker: display_name = \"options_menu_button_name\" (scripts/mods/gui_tweaker/gui_tweaker.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string",
-    "[check2] gui_tweaker: display_name = \"quit_menu_button_name\" (scripts/mods/gui_tweaker/gui_tweaker.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string",
-    "[check2] gui_tweaker: display_name = \"return_to_game_button_name\" (scripts/mods/gui_tweaker/gui_tweaker.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string",
-    "[check2] weapon_tweaker: display_name = \"dw_2h_pick_skin_01_name\" (scripts/mods/weapon_tweaker/wt_dev_anim_picker.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string"
+    "[check2] gui_tweaker: display_name = \"interact_open_inventory_chest\" (scripts/mods/gui_tweaker/_gut_mission_inventory.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string"
   ]
 }
