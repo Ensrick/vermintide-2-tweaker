@@ -50,7 +50,7 @@ mod.warning = function(self, fmt, ...)
     return _orig_warning(self, fmt, ...)
 end
 
-local MOD_VERSION = "0.8.90-dev"
+local MOD_VERSION = "0.8.91-dev"
 mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 
 -- RPC schema version for cim's mod-to-mod VMF RPCs (VMF_RECIPES.md § 10,
@@ -63,23 +63,10 @@ mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
 -- the payload shape of any cim RPC changes.
 local CIM_RPC_SCHEMA = 1
 
--- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- `_dbg` is for confirmation / expected behavior — file only (mod:debug
--- channel, gated by VMF output_mode_debug).
--- `_dbg_alert` is for unexpected / wrong / mismatch — LOG-ONLY via
--- pcall-guarded engine printf (#427/issue 240: mod:warning posts to CHAT
--- under VMF defaults; printf always lands in console-*.log, even with mod
--- logging OFF, and never in chat; pcall so a format slip never faults the
--- caller).
-local function _dbg(fmt, ...)
-    mod:debug("[cim:dbg] " .. fmt, ...)
-end
-
-local function _dbg_alert(fmt, ...)
-    if not pcall(printf, "[cim:dbg] " .. fmt, ...) then
-        pcall(printf, "[cim:dbg] (alert format error: %s)", tostring(fmt))
-    end
-end
+-- Copied shared debug helper (master: tools/shared_lib/_lib_debug.lua). The
+-- bundled copy keeps cim_dev standalone while exact-drift QA prevents a local
+-- edit from returning issue 240's mod:warning chat spam.
+local _dbg, _dbg_alert = mod:dofile("scripts/mods/crafting_in_modded_dev/_lib_debug")(mod, "[cim:dbg]")
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
 -- Walks the data widget tree, FNV-1a-32 hashes setting=value pairs, prints

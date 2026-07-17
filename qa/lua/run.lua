@@ -41,6 +41,7 @@ end
 local suites = {
 	"test_shared_weapon_appearance",
 	"test_shared_career_weapon_actions",
+	"test_shared_debug",
     "test_attack_labeler",
     "test_crt_ale_decay",
     "test_crt_ale_animation",

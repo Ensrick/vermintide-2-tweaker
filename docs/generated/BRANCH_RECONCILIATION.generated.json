@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "report_kind": "branch-reconciliation-census",
-  "generated_at_utc": "2026-07-17T07:46:41.8170379Z",
+  "generated_at_utc": "2026-07-17T12:20:26.0414340Z",
   "report_only": true,
   "generator": {
     "path": "tools/github/branch-reconciliation-census.ps1",
@@ -9,7 +9,7 @@
   },
   "base": {
     "requested_ref": "origin/master",
-    "commit": "e6d8f9a811602767e33289a186c4303b9f891133"
+    "commit": "3947e70e7818f1e92e209d8375219b5eb9d9c612"
   },
   "source": {
     "ref_patterns": [
@@ -18,17 +18,17 @@
       "refs/remotes/*/agent/*",
       "refs/remotes/*/codex/*"
     ],
-    "ref_count": 267,
-    "unique_tip_count": 200,
+    "ref_count": 287,
+    "unique_tip_count": 220,
     "identical_tip_refs_collapsed": 67,
-    "ref_inventory_sha256": "c6a1b2cbb6939afc9558b95245829821728a24e7a79d3b70d01d663de06cbf8b"
+    "ref_inventory_sha256": "62bfbbcbcca51e9968f479a05a36fb6d7a7dab3d883d22fe010de64de4e12fd6"
   },
   "summary": {
-    "integrated_ancestor": 46,
-    "patch_equivalent": 107,
-    "review_required": 47
+    "integrated_ancestor": 54,
+    "patch_equivalent": 117,
+    "review_required": 49
   },
-  "census_fingerprint": "ee6686505922bdbd161c8e319cdc877a231b346fa7da984161bedadd57750abf",
+  "census_fingerprint": "4bd4591474597b4001f4fe3968dbf7b7a032ce0e170908ed2797beb96f374a11",
   "disposition_policy": {
     "automatic_states": [
       "integrated-ancestor",
@@ -69,7 +69,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 379
+        "behind": 428
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -94,7 +94,7 @@
         "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
         "character_weapon_variants/TODO.md"
       ],
-      "current_source_changed_path_count": 1198,
+      "current_source_changed_path_count": 1251,
       "current_source_overlap": [
         "CHANGELOG.md",
         "character_weapon_variants/bundleV2/0f038849957ad1b7.mod_bundle",
@@ -181,7 +181,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 395
+        "behind": 444
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -203,7 +203,7 @@
         "modded_progression/REGRESSION_CHECKLIST.md",
         "modded_progression/scripts/mods/modded_progression/modded_progression.lua"
       ],
-      "current_source_changed_path_count": 1205,
+      "current_source_changed_path_count": 1258,
       "current_source_overlap": [
         "modded_progression/CHANGELOG.md",
         "modded_progression/ENGINE_SURFACE.md",
@@ -265,7 +265,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 110
+        "behind": 159
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -280,7 +280,7 @@
         600
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 339,
+      "current_source_changed_path_count": 424,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -317,7 +317,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 320
+        "behind": 369
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -344,7 +344,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gt_disconnect_grace.lua"
       ],
-      "current_source_changed_path_count": 1171,
+      "current_source_changed_path_count": 1229,
       "current_source_overlap": [
         "docs/COMMANDS.md",
         "general_tweaker_dev/CHANGELOG.md",
@@ -423,7 +423,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 424
+        "behind": 473
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -444,7 +444,7 @@
         "qa/CHECKS.md",
         "qa/run_all.ps1"
       ],
-      "current_source_changed_path_count": 1248,
+      "current_source_changed_path_count": 1299,
       "current_source_overlap": [
         "docs/engine/README.md",
         "docs/engine/SOURCE_PROVENANCE.json",
@@ -500,7 +500,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 287
+        "behind": 336
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -526,7 +526,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_mp_emporium_purchase.lua"
       ],
-      "current_source_changed_path_count": 1156,
+      "current_source_changed_path_count": 1214,
       "current_source_overlap": [
         "modded_progression/CHANGELOG.md",
         "modded_progression/ENGINE_SURFACE.md",
@@ -598,7 +598,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 68
+        "behind": 117
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -622,7 +622,7 @@
         "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
         "qa/lua/tests/test_cwv_combat_styles.lua"
       ],
-      "current_source_changed_path_count": 256,
+      "current_source_changed_path_count": 350,
       "current_source_overlap": [
         "character_weapon_variants/bundleV2/0f038849957ad1b7.mod_bundle",
         "character_weapon_variants/CHANGELOG.md",
@@ -686,7 +686,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 85
+        "behind": 134
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -705,7 +705,7 @@
         "character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md",
         "qa/lua/tests/test_cwv_dawi_maces.lua"
       ],
-      "current_source_changed_path_count": 280,
+      "current_source_changed_path_count": 370,
       "current_source_overlap": [
         "character_weapon_variants/DAWI_MACE_FAMILY.md",
         "character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md",
@@ -765,7 +765,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 393
+        "behind": 442
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -788,7 +788,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_backend.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1205,
+      "current_source_changed_path_count": 1258,
       "current_source_overlap": [
         "weapon_tweaker/ANIMATION_COVERAGE.md",
         "weapon_tweaker/CHANGELOG.md",
@@ -857,7 +857,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 393
+        "behind": 442
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -880,7 +880,7 @@
         "enemy_tweaker/scripts/mods/enemy_tweaker/_et_protect.lua",
         "enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1205,
+      "current_source_changed_path_count": 1258,
       "current_source_overlap": [
         "enemy_tweaker/CHANGELOG.md",
         "enemy_tweaker/ENGINE_SURFACE.md",
@@ -925,6 +925,74 @@
       }
     },
     {
+      "tip": "0f80955c9389ea3c021e51a5a33b781f2e865c46",
+      "primary_ref": "refs/heads/codex/ci-name-integrity",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/ci-name-integrity",
+          "short_name": "codex/ci-name-integrity",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T05:00:46-05:00",
+        "author": "Ensrick",
+        "subject": "fix(qa): align name-integrity ratchet across CI"
+      },
+      "ancestry": {
+        "merge_base": "c6fa98e7df3351d748960682872e9a7ee55cdf36",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 30
+      },
+      "cherry": {
+        "plus_unique_count": 1,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [],
+      "changed_paths": "qa/check_name_integrity.ps1",
+      "current_source_changed_path_count": 66,
+      "current_source_overlap": [
+        "qa/check_name_integrity.ps1"
+      ],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [
+        {
+          "sha": "0f80955c9389ea3c021e51a5a33b781f2e865c46",
+          "parents": [
+            "c6fa98e7df3351d748960682872e9a7ee55cdf36"
+          ],
+          "author_date_utc": "2026-07-17T05:00:46-05:00",
+          "subject": "fix(qa): align name-integrity ratchet across CI",
+          "patch_status": "unique",
+          "issue_refs": []
+        }
+      ],
+      "disposition": {
+        "state": "review-required",
+        "automatic": false,
+        "reason": "not-proven-by-ancestry-or-pure-patch-equivalence",
+        "review_signals": [
+          "ahead-of-base",
+          "current-source-overlap",
+          "diverged-from-current-base",
+          "unique-patches"
+        ]
+      }
+    },
+    {
       "tip": "104b6418584da5f29ca39e4a154745af24a6a41d",
       "primary_ref": "refs/heads/codex/issue-649-composite-icons-20260716",
       "aliases": [
@@ -955,7 +1023,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 66
+        "behind": 115
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -1017,7 +1085,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cos_composite_icons.lua"
       ],
-      "current_source_changed_path_count": 251,
+      "current_source_changed_path_count": 346,
       "current_source_overlap": [
         "cosmetics_tweaker/bundleV2/6448e4de51a26af1.mod_bundle",
         "cosmetics_tweaker/CHANGELOG.md",
@@ -1121,7 +1189,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 318
+        "behind": 367
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -1148,7 +1216,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gt_dummy_collision_policy.lua"
       ],
-      "current_source_changed_path_count": 1171,
+      "current_source_changed_path_count": 1229,
       "current_source_overlap": [
         "general_tweaker_dev/CHANGELOG.md",
         "general_tweaker_dev/ENGINE_SURFACE.md",
@@ -1191,6 +1259,73 @@
       }
     },
     {
+      "tip": "12c1313cc239a4f740835c6e96a24c04bc213521",
+      "primary_ref": "refs/heads/codex/open-closed-audit-live-final2-20260717",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/open-closed-audit-live-final2-20260717",
+          "short_name": "codex/open-closed-audit-live-final2-20260717",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T05:57:51-05:00",
+        "author": "Ensrick",
+        "subject": "docs(audit): refresh final live issue state"
+      },
+      "ancestry": {
+        "merge_base": "3dfc52568c81f63f12105332252208e88f41ad36",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 16
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 1,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": true
+      },
+      "issue_refs": [],
+      "changed_paths": [
+        "docs/generated/OPEN_ISSUE_AUDIT.generated.json",
+        "docs/generated/OPEN_ISSUE_CONTINGENCIES.generated.md"
+      ],
+      "current_source_changed_path_count": 22,
+      "current_source_overlap": [
+        "docs/generated/OPEN_ISSUE_AUDIT.generated.json",
+        "docs/generated/OPEN_ISSUE_CONTINGENCIES.generated.md"
+      ],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [
+        {
+          "sha": "12c1313cc239a4f740835c6e96a24c04bc213521",
+          "parents": [
+            "3dfc52568c81f63f12105332252208e88f41ad36"
+          ],
+          "author_date_utc": "2026-07-17T05:57:51-05:00",
+          "subject": "docs(audit): refresh final live issue state",
+          "patch_status": "equivalent",
+          "issue_refs": []
+        }
+      ],
+      "disposition": {
+        "state": "patch-equivalent",
+        "automatic": true,
+        "reason": "all-divergent-nonmerge-patches-are-git-cherry-minus",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "135ccd16ec4ca180bb15693a11e32043ec578810",
       "primary_ref": "refs/heads/agent/ship-coop-label-doctrine",
       "aliases": [
@@ -1215,7 +1350,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 351
+        "behind": 400
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -1234,7 +1369,7 @@
         "qa/CHECKS.md",
         "tools/ship/ship.ps1"
       ],
-      "current_source_changed_path_count": 1186,
+      "current_source_changed_path_count": 1240,
       "current_source_overlap": [
         "CLAUDE.md",
         "PROJECT_STANDARDS.md",
@@ -1288,7 +1423,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 22
+        "behind": 71
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -1301,7 +1436,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 88,
+      "current_source_changed_path_count": 216,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -1338,7 +1473,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 31
+        "behind": 80
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -1364,7 +1499,7 @@
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua",
         "qa/lua/tests/test_cos_composite_icons.lua"
       ],
-      "current_source_changed_path_count": 145,
+      "current_source_changed_path_count": 254,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/DEVELOPMENT.md",
@@ -1430,7 +1565,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 113
+        "behind": 162
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -1443,7 +1578,57 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 345,
+      "current_source_changed_path_count": 430,
+      "current_source_overlap": [],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [],
+      "disposition": {
+        "state": "integrated-ancestor",
+        "automatic": true,
+        "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
+      "tip": "167940ed090a968a8bb7cb381312238008a81d9e",
+      "primary_ref": "refs/heads/codex/integrate-664",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/integrate-664",
+          "short_name": "codex/integrate-664",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T05:08:56-05:00",
+        "author": "Ensrick",
+        "subject": "feat(qa): add G-APPEARANCE contract gate"
+      },
+      "ancestry": {
+        "merge_base": "167940ed090a968a8bb7cb381312238008a81d9e",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": true,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 0,
+        "behind": 28
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 0,
+        "nonmerge_commit_count": 0,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [],
+      "changed_paths": null,
+      "current_source_changed_path_count": 62,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -1480,7 +1665,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 365
+        "behind": 414
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -1506,7 +1691,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cwv_remote_audio.lua"
       ],
-      "current_source_changed_path_count": 1193,
+      "current_source_changed_path_count": 1246,
       "current_source_overlap": [
         "CHANGELOG.md",
         "character_weapon_variants/ANIMATION_FIX_PLAYBOOK.md",
@@ -1549,6 +1734,58 @@
       }
     },
     {
+      "tip": "1a1cbadcc1a77125111f611bc741a5c794b770c0",
+      "primary_ref": "refs/heads/codex/issue-233-peer-ready",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/issue-233-peer-ready",
+          "short_name": "codex/issue-233-peer-ready",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T05:23:20-05:00",
+        "author": "Ensrick",
+        "subject": "build(cosmetics): sync v0.9.139 Workshop bundle"
+      },
+      "ancestry": {
+        "merge_base": "1a1cbadcc1a77125111f611bc741a5c794b770c0",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": true,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 0,
+        "behind": 25
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 0,
+        "nonmerge_commit_count": 0,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [
+        233
+      ],
+      "changed_paths": null,
+      "current_source_changed_path_count": 54,
+      "current_source_overlap": [],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [],
+      "disposition": {
+        "state": "integrated-ancestor",
+        "automatic": true,
+        "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "1b64f7edaba39e8ca713a52b570f4810e0ede1db",
       "primary_ref": "refs/heads/agent/issue-651-release-503",
       "aliases": [
@@ -1579,7 +1816,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 65
+        "behind": 114
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -1602,7 +1839,7 @@
         "tools/publish-release/README.md",
         "tools/ship/ship.ps1"
       ],
-      "current_source_changed_path_count": 250,
+      "current_source_changed_path_count": 345,
       "current_source_overlap": [
         "docs/BUG_CLASSES.md",
         "qa/check_github_release_fallback.ps1",
@@ -1658,7 +1895,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 31
+        "behind": 80
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -1682,12 +1919,13 @@
         "qa/lua/tests/test_cwv_crowbill_family.lua",
         "qa/lua/tests/test_cwv_remote_identity.lua"
       ],
-      "current_source_changed_path_count": 145,
+      "current_source_changed_path_count": 254,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/itemV2.cfg",
         "character_weapon_variants/REGRESSION_CHECKLIST.md",
         "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
+        "qa/lua/tests/test_cwv_crowbill_family.lua",
         "qa/lua/tests/test_cwv_remote_identity.lua"
       ],
       "version_paths": [
@@ -1755,7 +1993,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 383
+        "behind": 432
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -1778,7 +2016,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_dev_hold_pose.lua"
       ],
-      "current_source_changed_path_count": 1200,
+      "current_source_changed_path_count": 1253,
       "current_source_overlap": [
         "weapon_tweaker/CHANGELOG.md",
         "weapon_tweaker/ENGINE_SURFACE.md",
@@ -1847,7 +2085,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 80
+        "behind": 129
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -1862,7 +2100,7 @@
         367
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 266,
+      "current_source_changed_path_count": 356,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -1905,7 +2143,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 415
+        "behind": 464
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -1925,7 +2163,7 @@
         "tools/publish-release/README.md",
         "tools/publish-release/release-manifest.ps1"
       ],
-      "current_source_changed_path_count": 1233,
+      "current_source_changed_path_count": 1285,
       "current_source_overlap": [
         "qa/check_release_manifest.ps1",
         "tools/publish-release/publish-release.ps1",
@@ -1980,7 +2218,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 332
+        "behind": 381
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -2008,7 +2246,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_unlock_data.lua"
       ],
-      "current_source_changed_path_count": 1181,
+      "current_source_changed_path_count": 1235,
       "current_source_overlap": [
         "CHANGELOG.md",
         "qa/lua/run.lua",
@@ -2077,7 +2315,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 44
+        "behind": 93
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -2108,7 +2346,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_event_curse_join_policy.lua"
       ],
-      "current_source_changed_path_count": 173,
+      "current_source_changed_path_count": 279,
       "current_source_overlap": [
         "docs/BUG_CLASSES.md",
         "event_tweaker/CHANGELOG.md",
@@ -2177,7 +2415,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 332
+        "behind": 381
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -2201,7 +2439,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_ct_boon_catalog.lua"
       ],
-      "current_source_changed_path_count": 1181,
+      "current_source_changed_path_count": 1235,
       "current_source_overlap": [
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
         "chaos_wastes_tweaker_dev/ENGINE_SURFACE.md",
@@ -2265,7 +2503,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 325
+        "behind": 374
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -2286,7 +2524,7 @@
         "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev_localization.lua",
         "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
       ],
-      "current_source_changed_path_count": 1175,
+      "current_source_changed_path_count": 1231,
       "current_source_overlap": [
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
         "chaos_wastes_tweaker_dev/itemV2.cfg",
@@ -2347,7 +2585,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 56
+        "behind": 105
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -2372,7 +2610,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gt_bot_utility_policy.lua"
       ],
-      "current_source_changed_path_count": 194,
+      "current_source_changed_path_count": 292,
       "current_source_overlap": [
         "CHANGELOG.md",
         "general_tweaker_dev/CHANGELOG.md",
@@ -2444,7 +2682,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 364
+        "behind": 413
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -2463,7 +2701,7 @@
         "character_weapon_variants/REGRESSION_CHECKLIST.md",
         "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
       ],
-      "current_source_changed_path_count": 1191,
+      "current_source_changed_path_count": 1245,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/ENGINE_SURFACE.md",
@@ -2522,7 +2760,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 346
+        "behind": 395
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -2548,7 +2786,7 @@
         "qa/run_all.ps1",
         "tools/publish-release/publish-release.ps1"
       ],
-      "current_source_changed_path_count": 1186,
+      "current_source_changed_path_count": 1240,
       "current_source_overlap": [
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
         "chaos_wastes_tweaker_dev/DEVELOPMENT.md",
@@ -2614,7 +2852,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 316
+        "behind": 365
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -2640,7 +2878,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gt_chest_pickup_probe.lua"
       ],
-      "current_source_changed_path_count": 1166,
+      "current_source_changed_path_count": 1224,
       "current_source_overlap": [
         "docs/COMMANDS.md",
         "general_tweaker_dev/CHANGELOG.md",
@@ -2688,6 +2926,58 @@
       }
     },
     {
+      "tip": "309e3748dd84cbdfe6a4aee305e75ae7e031d4f3",
+      "primary_ref": "refs/heads/codex/issue-628-synthetic-contract",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/issue-628-synthetic-contract",
+          "short_name": "codex/issue-628-synthetic-contract",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T06:18:02-05:00",
+        "author": "Ensrick",
+        "subject": "fix(cim): unify synthetic normalization identity (#628)"
+      },
+      "ancestry": {
+        "merge_base": "309e3748dd84cbdfe6a4aee305e75ae7e031d4f3",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": true,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 0,
+        "behind": 15
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 0,
+        "nonmerge_commit_count": 0,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [
+        628
+      ],
+      "changed_paths": null,
+      "current_source_changed_path_count": 15,
+      "current_source_overlap": [],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [],
+      "disposition": {
+        "state": "integrated-ancestor",
+        "automatic": true,
+        "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "322eb3c1bac255d34f07e40a4c94e98a7d5a0ea5",
       "primary_ref": "refs/heads/agent/professional-docs",
       "aliases": [
@@ -2718,7 +3008,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 423
+        "behind": 472
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -2742,7 +3032,7 @@
         "CONTRIBUTING.md",
         "README.md"
       ],
-      "current_source_changed_path_count": 1248,
+      "current_source_changed_path_count": 1299,
       "current_source_overlap": [
         ".github/ISSUE_TEMPLATE/bug_report.yml",
         ".github/ISSUE_TEMPLATE/config.yml",
@@ -2813,7 +3103,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 363
+        "behind": 412
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -2835,7 +3125,7 @@
         "weapon_tweaker/REGRESSION_CHECKLIST.md",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1191,
+      "current_source_changed_path_count": 1245,
       "current_source_overlap": [
         "weapon_tweaker/CHANGELOG.md",
         "weapon_tweaker/ENGINE_SURFACE.md",
@@ -2903,7 +3193,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 398
+        "behind": 447
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -2925,7 +3215,7 @@
         "character_weapon_variants/REGRESSION_CHECKLIST.md",
         "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
       ],
-      "current_source_changed_path_count": 1208,
+      "current_source_changed_path_count": 1260,
       "current_source_overlap": [
         "CHANGELOG.md",
         "character_weapon_variants/CHANGELOG.md",
@@ -3000,7 +3290,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 405
+        "behind": 454
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -3028,7 +3318,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_mod_tweaker_profiles.lua"
       ],
-      "current_source_changed_path_count": 1214,
+      "current_source_changed_path_count": 1266,
       "current_source_overlap": [
         "docs/REGRESSION_CHECKLIST.md",
         "gui_tweaker_dev/CHANGELOG.md",
@@ -3108,7 +3398,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 424
+        "behind": 473
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -3129,7 +3419,7 @@
         ".vmbrc.example",
         "docs/PORTABLE_SETUP.md"
       ],
-      "current_source_changed_path_count": 1248,
+      "current_source_changed_path_count": 1299,
       "current_source_overlap": [
         ".editorconfig",
         ".gitattributes",
@@ -3185,7 +3475,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 187
+        "behind": 236
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -3207,7 +3497,7 @@
         "docs/WEAPON_APPEARANCE_STANDARD.md",
         "qa/lua/tests/test_cwv_old_musket_presentation.lua"
       ],
-      "current_source_changed_path_count": 616,
+      "current_source_changed_path_count": 691,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/itemV2.cfg",
@@ -3281,7 +3571,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 69
+        "behind": 118
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -3296,7 +3586,7 @@
         633
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 256,
+      "current_source_changed_path_count": 350,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -3333,7 +3623,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 274
+        "behind": 323
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -3360,7 +3650,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gt_teleport_loop_policy.lua"
       ],
-      "current_source_changed_path_count": 1127,
+      "current_source_changed_path_count": 1187,
       "current_source_overlap": [
         "CHANGELOG.md",
         "general_tweaker_dev/CHANGELOG.md",
@@ -3428,7 +3718,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 37
+        "behind": 86
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -3452,7 +3742,7 @@
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua",
         "qa/lua/tests/test_cos_composite_icons.lua"
       ],
-      "current_source_changed_path_count": 149,
+      "current_source_changed_path_count": 257,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/DEVELOPMENT.md",
@@ -3504,6 +3794,56 @@
       }
     },
     {
+      "tip": "3947e70e7818f1e92e209d8375219b5eb9d9c612",
+      "primary_ref": "refs/heads/codex/issue-evidence-refresh",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/issue-evidence-refresh",
+          "short_name": "codex/issue-evidence-refresh",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T07:16:20-05:00",
+        "author": "Ensrick",
+        "subject": "Merge pull request #667 from Ensrick/codex/final-audit-snapshot"
+      },
+      "ancestry": {
+        "merge_base": "3947e70e7818f1e92e209d8375219b5eb9d9c612",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": true,
+        "base_is_ancestor_of_tip": true
+      },
+      "ahead_behind": {
+        "ahead": 0,
+        "behind": 0
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 0,
+        "nonmerge_commit_count": 0,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [],
+      "changed_paths": null,
+      "current_source_changed_path_count": 0,
+      "current_source_overlap": [],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [],
+      "disposition": {
+        "state": "integrated-ancestor",
+        "automatic": true,
+        "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "3a69826fb9aa428c757ccea87523170c99fa6847",
       "primary_ref": "refs/heads/agent/lua-unit-tests",
       "aliases": [
@@ -3534,7 +3874,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 424
+        "behind": 473
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -3570,7 +3910,7 @@
         "qa/lua/vendor/lua-5.1.5-win64/README.md",
         "qa/run_all.ps1"
       ],
-      "current_source_changed_path_count": 1248,
+      "current_source_changed_path_count": 1299,
       "current_source_overlap": [
         "docs/engine/README.md",
         "docs/engine/SOURCE_PROVENANCE.json",
@@ -3652,7 +3992,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 313
+        "behind": 362
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -3677,7 +4017,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cim_bulk_cleanup.lua"
       ],
-      "current_source_changed_path_count": 1159,
+      "current_source_changed_path_count": 1217,
       "current_source_overlap": [
         "crafting_in_modded_dev/CHANGELOG.md",
         "crafting_in_modded_dev/ENGINE_SURFACE.md",
@@ -3742,7 +4082,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 331
+        "behind": 380
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -3768,7 +4108,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cwv_javelin_pickup.lua"
       ],
-      "current_source_changed_path_count": 1181,
+      "current_source_changed_path_count": 1235,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/DEFINITION_OF_DONE.md",
@@ -3840,7 +4180,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 411
+        "behind": 460
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -3860,7 +4200,7 @@
         "tools/publish-release/README.md",
         "tools/publish-release/release-manifest.ps1"
       ],
-      "current_source_changed_path_count": 1220,
+      "current_source_changed_path_count": 1272,
       "current_source_overlap": [
         "docs/REGRESSION_CHECKLIST.md",
         "qa/check_release_reproducibility.ps1",
@@ -3915,7 +4255,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 74
+        "behind": 123
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -3930,7 +4270,7 @@
         647
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 261,
+      "current_source_changed_path_count": 354,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -3967,7 +4307,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 332
+        "behind": 381
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -3992,7 +4332,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cos_offhand_preload_lifecycle.lua"
       ],
-      "current_source_changed_path_count": 1181,
+      "current_source_changed_path_count": 1235,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/DEVELOPMENT.md",
@@ -4050,6 +4390,73 @@
       }
     },
     {
+      "tip": "40f7609ba991457a08520c07ec40b4fb4f733024",
+      "primary_ref": "refs/heads/codex/open-closed-audit-live-20260717",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/open-closed-audit-live-20260717",
+          "short_name": "codex/open-closed-audit-live-20260717",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T05:35:27-05:00",
+        "author": "Ensrick",
+        "subject": "docs(audit): refresh live closed-history register"
+      },
+      "ancestry": {
+        "merge_base": "60f0f1a5c457bb8b5ca33aaa41003ba5e69d71ce",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 24
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 1,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": true
+      },
+      "issue_refs": [],
+      "changed_paths": [
+        "docs/generated/OPEN_ISSUE_AUDIT.generated.json",
+        "docs/generated/OPEN_ISSUE_CONTINGENCIES.generated.md"
+      ],
+      "current_source_changed_path_count": 54,
+      "current_source_overlap": [
+        "docs/generated/OPEN_ISSUE_AUDIT.generated.json",
+        "docs/generated/OPEN_ISSUE_CONTINGENCIES.generated.md"
+      ],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [
+        {
+          "sha": "40f7609ba991457a08520c07ec40b4fb4f733024",
+          "parents": [
+            "60f0f1a5c457bb8b5ca33aaa41003ba5e69d71ce"
+          ],
+          "author_date_utc": "2026-07-17T05:35:27-05:00",
+          "subject": "docs(audit): refresh live closed-history register",
+          "patch_status": "equivalent",
+          "issue_refs": []
+        }
+      ],
+      "disposition": {
+        "state": "patch-equivalent",
+        "automatic": true,
+        "reason": "all-divergent-nonmerge-patches-are-git-cherry-minus",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "4121d6eb3a10a8d7f0859d9357a64444229c652d",
       "primary_ref": "refs/heads/agent/flamestorm-3p-400",
       "aliases": [
@@ -4074,7 +4481,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 278
+        "behind": 327
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -4100,7 +4507,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_flamestorm_fx.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1135,
+      "current_source_changed_path_count": 1195,
       "current_source_overlap": [
         "qa/lua/run.lua",
         "qa/lua/tests/test_wt_flamestorm_fx.lua",
@@ -4178,7 +4585,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 78
+        "behind": 127
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -4193,7 +4600,7 @@
         644
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 265,
+      "current_source_changed_path_count": 355,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -4230,7 +4637,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 106
+        "behind": 155
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -4243,7 +4650,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 338,
+      "current_source_changed_path_count": 424,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -4280,7 +4687,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 37
+        "behind": 86
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -4309,7 +4716,7 @@
         "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua",
         "weapons_of_chaos/tools/BLIGHTREAPER_ASSET_PIPELINE.md"
       ],
-      "current_source_changed_path_count": 149,
+      "current_source_changed_path_count": 257,
       "current_source_overlap": [
         "docs/BUG_CLASSES.md",
         "docs/WEAPON_APPEARANCE_STANDARD.md",
@@ -4391,7 +4798,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 352
+        "behind": 401
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -4412,7 +4819,7 @@
         "character_weapon_variants/REGRESSION_CHECKLIST.md",
         "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
       ],
-      "current_source_changed_path_count": 1188,
+      "current_source_changed_path_count": 1242,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/DEVELOPMENT.md",
@@ -4485,7 +4892,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 379
+        "behind": 428
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -4505,7 +4912,7 @@
         "cosmetics_tweaker/REGRESSION_CHECKLIST.md",
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1198,
+      "current_source_changed_path_count": 1251,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/itemV2.cfg",
@@ -4571,7 +4978,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 104
+        "behind": 153
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -4586,7 +4993,7 @@
         640
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 329,
+      "current_source_changed_path_count": 415,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -4629,7 +5036,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 110
+        "behind": 159
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -4653,7 +5060,7 @@
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua",
         "qa/lua/tests/test_cos_grail_knight_set.lua"
       ],
-      "current_source_changed_path_count": 339,
+      "current_source_changed_path_count": 424,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/DEVELOPMENT.md",
@@ -4717,7 +5124,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 54
+        "behind": 103
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -4754,7 +5161,7 @@
         "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos_localization.lua",
         "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
       ],
-      "current_source_changed_path_count": 191,
+      "current_source_changed_path_count": 289,
       "current_source_overlap": [
         "CHANGELOG.md",
         "crafting_in_modded_dev/CHANGELOG.md",
@@ -4835,7 +5242,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 309
+        "behind": 358
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -4861,7 +5268,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_mod_tweaker_tab_labels.lua"
       ],
-      "current_source_changed_path_count": 1157,
+      "current_source_changed_path_count": 1215,
       "current_source_overlap": [
         "gui_tweaker_dev/CHANGELOG.md",
         "gui_tweaker_dev/ENGINE_SURFACE.md",
@@ -4933,7 +5340,7 @@
       },
       "ahead_behind": {
         "ahead": 4,
-        "behind": 428
+        "behind": 477
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -4962,7 +5369,7 @@
         "qa/check_localization.ps1",
         "qa/CHECKS.md"
       ],
-      "current_source_changed_path_count": 1249,
+      "current_source_changed_path_count": 1300,
       "current_source_overlap": [
         "general_tweaker_dev/CHANGELOG.md",
         "general_tweaker_dev/ENGINE_SURFACE.md",
@@ -5071,7 +5478,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 22
+        "behind": 71
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -5092,7 +5499,7 @@
         "qa/run_selftests.ps1",
         "tools/github/audit-open-issues.ps1"
       ],
-      "current_source_changed_path_count": 109,
+      "current_source_changed_path_count": 227,
       "current_source_overlap": [
         "docs/generated/OPEN_ISSUE_AUDIT.generated.json",
         "docs/generated/OPEN_ISSUE_CONTINGENCIES.generated.md",
@@ -5114,6 +5521,96 @@
           "subject": "feat(tooling): crosscheck open issues against closed history",
           "patch_status": "equivalent",
           "issue_refs": []
+        }
+      ],
+      "disposition": {
+        "state": "patch-equivalent",
+        "automatic": true,
+        "reason": "all-divergent-nonmerge-patches-are-git-cherry-minus",
+        "review_signals": []
+      }
+    },
+    {
+      "tip": "5380a65971f85e46ea65f270510a40ef5abd4a50",
+      "primary_ref": "refs/heads/codex/cim-size-refactor",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/cim-size-refactor",
+          "short_name": "codex/cim-size-refactor",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T03:20:16-05:00",
+        "author": "Ensrick",
+        "subject": "refactor(cim-dev): extract runtime regression checks (#540)"
+      },
+      "ancestry": {
+        "merge_base": "fb7bd4fb16d01ade758c202cf8811c71fefb318f",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 43
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 1,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": true
+      },
+      "issue_refs": [
+        540
+      ],
+      "changed_paths": [
+        "crafting_in_modded_dev/CHANGELOG.md",
+        "crafting_in_modded_dev/DEVELOPMENT.md",
+        "crafting_in_modded_dev/ENGINE_SURFACE.md",
+        "crafting_in_modded_dev/itemV2.cfg",
+        "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_mission_forge_safety.lua",
+        "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_regression_checks.lua",
+        "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua",
+        "qa/lua/run.lua",
+        "qa/lua/tests/test_cim_regression_module.lua"
+      ],
+      "current_source_changed_path_count": 148,
+      "current_source_overlap": [
+        "crafting_in_modded_dev/CHANGELOG.md",
+        "crafting_in_modded_dev/DEVELOPMENT.md",
+        "crafting_in_modded_dev/ENGINE_SURFACE.md",
+        "crafting_in_modded_dev/itemV2.cfg",
+        "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_mission_forge_safety.lua",
+        "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_regression_checks.lua",
+        "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua",
+        "qa/lua/run.lua",
+        "qa/lua/tests/test_cim_regression_module.lua"
+      ],
+      "version_paths": [
+        "crafting_in_modded_dev/CHANGELOG.md",
+        "crafting_in_modded_dev/itemV2.cfg"
+      ],
+      "manifest_paths": [
+        "crafting_in_modded_dev/itemV2.cfg"
+      ],
+      "divergent_commits": [
+        {
+          "sha": "5380a65971f85e46ea65f270510a40ef5abd4a50",
+          "parents": [
+            "fb7bd4fb16d01ade758c202cf8811c71fefb318f"
+          ],
+          "author_date_utc": "2026-07-17T03:20:16-05:00",
+          "subject": "refactor(cim-dev): extract runtime regression checks (#540)",
+          "patch_status": "equivalent",
+          "issue_refs": [
+            540
+          ]
         }
       ],
       "disposition": {
@@ -5154,7 +5651,7 @@
       },
       "ahead_behind": {
         "ahead": 4,
-        "behind": 373
+        "behind": 422
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -5196,7 +5693,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_port_status.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_unlock_data.lua"
       ],
-      "current_source_changed_path_count": 1198,
+      "current_source_changed_path_count": 1251,
       "current_source_overlap": [
         "CHANGELOG.md",
         "character_weapon_variants/CHANGELOG.md",
@@ -5320,7 +5817,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 341
+        "behind": 390
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -5345,7 +5842,7 @@
         "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua",
         "qa/lua/tests/test_mod_tweaker_search.lua"
       ],
-      "current_source_changed_path_count": 1183,
+      "current_source_changed_path_count": 1237,
       "current_source_overlap": [
         "CHANGELOG.md",
         "gui_tweaker_dev/CHANGELOG.md",
@@ -5411,7 +5908,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 117
+        "behind": 166
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -5424,7 +5921,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 351,
+      "current_source_changed_path_count": 436,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -5467,7 +5964,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 23
+        "behind": 72
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -5480,7 +5977,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 111,
+      "current_source_changed_path_count": 227,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -5517,7 +6014,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 14
+        "behind": 63
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -5540,7 +6037,7 @@
         "docs/WEAPON_APPEARANCE_STANDARD.md",
         "qa/lua/tests/test_cwv_exact_appearance.lua"
       ],
-      "current_source_changed_path_count": 45,
+      "current_source_changed_path_count": 199,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/itemV2.cfg",
@@ -5603,7 +6100,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 398
+        "behind": 447
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -5616,7 +6113,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 1208,
+      "current_source_changed_path_count": 1260,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -5653,7 +6150,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 341
+        "behind": 390
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -5675,7 +6172,7 @@
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_persistence.lua",
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1183,
+      "current_source_changed_path_count": 1237,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/DEVELOPMENT.md",
@@ -5749,7 +6246,7 @@
       },
       "ahead_behind": {
         "ahead": 3,
-        "behind": 411
+        "behind": 460
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -5777,7 +6274,7 @@
         "qa/CHECKS.md",
         "qa/rt_textual_invariants.psd1"
       ],
-      "current_source_changed_path_count": 1220,
+      "current_source_changed_path_count": 1272,
       "current_source_overlap": [
         "general_tweaker_dev/CHANGELOG.md",
         "general_tweaker_dev/ENGINE_SURFACE.md",
@@ -5874,7 +6371,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 406
+        "behind": 455
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -5907,7 +6404,7 @@
         "qa/lua/tests/test_et_settings_queue.lua",
         "qa/lua/tests/test_mod_tweaker_transaction.lua"
       ],
-      "current_source_changed_path_count": 1218,
+      "current_source_changed_path_count": 1270,
       "current_source_overlap": [
         "enemy_tweaker/CHANGELOG.md",
         "enemy_tweaker/DEVELOPMENT.md",
@@ -5959,6 +6456,56 @@
       }
     },
     {
+      "tip": "60f0f1a5c457bb8b5ca33aaa41003ba5e69d71ce",
+      "primary_ref": "refs/heads/codex/open-closed-audit-live-final-20260717",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/open-closed-audit-live-final-20260717",
+          "short_name": "codex/open-closed-audit-live-final-20260717",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T05:26:24-05:00",
+        "author": "Ensrick",
+        "subject": "Merge pull request #665 from Ensrick/codex/issue-233-peer-ready"
+      },
+      "ancestry": {
+        "merge_base": "60f0f1a5c457bb8b5ca33aaa41003ba5e69d71ce",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": true,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 0,
+        "behind": 24
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 0,
+        "nonmerge_commit_count": 0,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [],
+      "changed_paths": null,
+      "current_source_changed_path_count": 54,
+      "current_source_overlap": [],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [],
+      "disposition": {
+        "state": "integrated-ancestor",
+        "automatic": true,
+        "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "633a0572859c44f603b774f2b15e7ebd87337182",
       "primary_ref": "refs/heads/agent/cos-glow-join-rehydrate-574",
       "aliases": [
@@ -5983,7 +6530,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 362
+        "behind": 411
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -6006,7 +6553,7 @@
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow.lua",
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1191,
+      "current_source_changed_path_count": 1245,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/ENGINE_SURFACE.md",
@@ -6069,7 +6616,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 22
+        "behind": 71
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -6100,7 +6647,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 109,
+      "current_source_changed_path_count": 227,
       "current_source_overlap": [
         "qa/lua/tests/test_cwv_axe_balance.lua",
         "weapon_tweaker_dev/CHANGELOG.md",
@@ -6180,7 +6727,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 65
+        "behind": 114
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -6195,7 +6742,7 @@
         649
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 250,
+      "current_source_changed_path_count": 345,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -6232,7 +6779,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 335
+        "behind": 384
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -6256,7 +6803,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cwv_exact_pair_state.lua"
       ],
-      "current_source_changed_path_count": 1181,
+      "current_source_changed_path_count": 1235,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/ENGINE_SURFACE.md",
@@ -6332,7 +6879,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 398
+        "behind": 447
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -6358,7 +6905,7 @@
         "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev_localization.lua",
         "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
       ],
-      "current_source_changed_path_count": 1208,
+      "current_source_changed_path_count": 1260,
       "current_source_overlap": [
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
         "chaos_wastes_tweaker_dev/ENGINE_SURFACE.md",
@@ -6435,7 +6982,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 284
+        "behind": 333
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -6460,7 +7007,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gut_wt_loadout_trace.lua"
       ],
-      "current_source_changed_path_count": 1152,
+      "current_source_changed_path_count": 1210,
       "current_source_overlap": [
         "gui_tweaker_dev/CHANGELOG.md",
         "gui_tweaker_dev/ENGINE_SURFACE.md",
@@ -6525,7 +7072,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 9
+        "behind": 58
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -6552,7 +7099,7 @@
         "qa/lua/tests/test_cwv_old_musket_presentation.lua",
         "qa/lua/tests/test_cwv_old_musket_preview.lua"
       ],
-      "current_source_changed_path_count": 36,
+      "current_source_changed_path_count": 196,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/itemV2.cfg",
@@ -6626,7 +7173,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 398
+        "behind": 447
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -6650,7 +7197,7 @@
         "enemy_tweaker/scripts/mods/enemy_tweaker/_et_boss_grudge.lua",
         "enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1208,
+      "current_source_changed_path_count": 1260,
       "current_source_overlap": [
         "enemy_tweaker/CHANGELOG.md",
         "enemy_tweaker/DEVELOPMENT.md",
@@ -6714,7 +7261,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 81
+        "behind": 130
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -6727,7 +7274,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 269,
+      "current_source_changed_path_count": 359,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -6764,7 +7311,7 @@
       },
       "ahead_behind": {
         "ahead": 6,
-        "behind": 355
+        "behind": 404
       },
       "cherry": {
         "plus_unique_count": 4,
@@ -6812,7 +7359,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1189,
+      "current_source_changed_path_count": 1243,
       "current_source_overlap": [
         "CHANGELOG.md",
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
@@ -6963,7 +7510,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 278
+        "behind": 327
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -6990,7 +7537,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_backend.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1135,
+      "current_source_changed_path_count": 1195,
       "current_source_overlap": [
         "qa/lua/run.lua",
         "qa/lua/tests/test_wt_overcharge_presentation.lua",
@@ -7057,7 +7604,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 56
+        "behind": 105
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -7088,7 +7635,7 @@
         "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_peer_parity.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/_lib_peer_parity.lua"
       ],
-      "current_source_changed_path_count": 194,
+      "current_source_changed_path_count": 292,
       "current_source_overlap": [
         "career_tweaker/scripts/mods/career_tweaker/_lib_peer_parity.lua",
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
@@ -7159,7 +7706,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 355
+        "behind": 404
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -7181,7 +7728,7 @@
         "cosmetics_tweaker/REGRESSION_CHECKLIST.md",
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1189,
+      "current_source_changed_path_count": 1243,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/ENGINE_SURFACE.md",
@@ -7249,7 +7796,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 398
+        "behind": 447
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -7270,7 +7817,7 @@
         "cosmetics_tweaker/REGRESSION_CHECKLIST.md",
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1208,
+      "current_source_changed_path_count": 1260,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/itemV2.cfg",
@@ -7331,7 +7878,7 @@
       },
       "ahead_behind": {
         "ahead": 3,
-        "behind": 31
+        "behind": 80
       },
       "cherry": {
         "plus_unique_count": 3,
@@ -7363,7 +7910,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_cwv_effective_template.lua"
       ],
-      "current_source_changed_path_count": 145,
+      "current_source_changed_path_count": 254,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/COMBAT_STYLES.md",
@@ -7460,7 +8007,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 341
+        "behind": 390
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -7484,7 +8031,7 @@
         "qa/lua/tests/test_cos_glow_lifecycle.lua",
         "qa/rt_textual_invariants.psd1"
       ],
-      "current_source_changed_path_count": 1183,
+      "current_source_changed_path_count": 1237,
       "current_source_overlap": [
         "CHANGELOG.md",
         "cosmetics_tweaker/CHANGELOG.md",
@@ -7552,7 +8099,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 14
+        "behind": 63
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -7565,7 +8112,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 45,
+      "current_source_changed_path_count": 199,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -7602,7 +8149,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 335
+        "behind": 384
       },
       "cherry": {
         "plus_unique_count": 2,
@@ -7627,7 +8174,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cos_dual_offhands.lua"
       ],
-      "current_source_changed_path_count": 1181,
+      "current_source_changed_path_count": 1235,
       "current_source_overlap": [
         "CHANGELOG.md",
         "cosmetics_tweaker/CHANGELOG.md",
@@ -7711,7 +8258,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 68
+        "behind": 117
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -7724,7 +8271,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 256,
+      "current_source_changed_path_count": 350,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -7761,7 +8308,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 302
+        "behind": 351
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -7788,7 +8335,7 @@
         "docs/MECHANICS.md",
         "qa/lua/tests/test_crt_talent_selection.lua"
       ],
-      "current_source_changed_path_count": 1148,
+      "current_source_changed_path_count": 1206,
       "current_source_overlap": [
         "career_tweaker/CHANGELOG.md",
         "career_tweaker/DEVELOPMENT.md",
@@ -7861,7 +8408,7 @@
       },
       "ahead_behind": {
         "ahead": 4,
-        "behind": 393
+        "behind": 442
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -7905,7 +8452,7 @@
         "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua",
         "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/hb/mod_events.lua"
       ],
-      "current_source_changed_path_count": 1205,
+      "current_source_changed_path_count": 1258,
       "current_source_overlap": [
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
         "chaos_wastes_tweaker_dev/ENGINE_SURFACE.md",
@@ -8043,7 +8590,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 63
+        "behind": 112
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -8063,7 +8610,7 @@
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua",
         "qa/lua/tests/test_cos_composite_icons.lua"
       ],
-      "current_source_changed_path_count": 210,
+      "current_source_changed_path_count": 306,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/itemV2.cfg",
@@ -8123,7 +8670,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 316
+        "behind": 365
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -8149,7 +8696,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gut_simple_ui_bounds.lua"
       ],
-      "current_source_changed_path_count": 1166,
+      "current_source_changed_path_count": 1224,
       "current_source_overlap": [
         "gui_tweaker_dev/CHANGELOG.md",
         "gui_tweaker_dev/ENGINE_SURFACE.md",
@@ -8215,7 +8762,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 293
+        "behind": 342
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -8265,7 +8812,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_dcp_portrait_materials.lua"
       ],
-      "current_source_changed_path_count": 1139,
+      "current_source_changed_path_count": 1197,
       "current_source_overlap": [
         "dynamic_cosmetic_portraits/bundleV2/4b0d338589a2926c.mod_bundle",
         "dynamic_cosmetic_portraits/CHANGELOG.md",
@@ -8339,7 +8886,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 297
+        "behind": 346
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -8366,7 +8913,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_ct_cot_early_reward.lua"
       ],
-      "current_source_changed_path_count": 1143,
+      "current_source_changed_path_count": 1201,
       "current_source_overlap": [
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
         "chaos_wastes_tweaker_dev/ENGINE_SURFACE.md",
@@ -8433,7 +8980,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 115
+        "behind": 164
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -8446,7 +8993,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 351,
+      "current_source_changed_path_count": 436,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -8489,7 +9036,7 @@
       },
       "ahead_behind": {
         "ahead": 3,
-        "behind": 426
+        "behind": 475
       },
       "cherry": {
         "plus_unique_count": 3,
@@ -8514,7 +9061,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_dev_anim_picker.lua"
       ],
-      "current_source_changed_path_count": 1248,
+      "current_source_changed_path_count": 1299,
       "current_source_overlap": [
         "weapon_tweaker/ANIMATION_COVERAGE.md",
         "weapon_tweaker/CHANGELOG.md",
@@ -8607,7 +9154,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 73
+        "behind": 122
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -8622,7 +9169,7 @@
         647
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 261,
+      "current_source_changed_path_count": 354,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -8659,7 +9206,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 341
+        "behind": 390
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -8688,7 +9235,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_unlock_data.lua"
       ],
-      "current_source_changed_path_count": 1183,
+      "current_source_changed_path_count": 1237,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/itemV2.cfg",
@@ -8742,6 +9289,56 @@
       }
     },
     {
+      "tip": "868b18607bc651a420cc7b3c309d5c6df90e052c",
+      "primary_ref": "refs/heads/codex/ship-cim-090",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/ship-cim-090",
+          "short_name": "codex/ship-cim-090",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T06:37:14-05:00",
+        "author": "Ensrick",
+        "subject": "build(cim): sync v0.8.90 Workshop bundle"
+      },
+      "ancestry": {
+        "merge_base": "868b18607bc651a420cc7b3c309d5c6df90e052c",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": true,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 0,
+        "behind": 10
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 0,
+        "nonmerge_commit_count": 0,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [],
+      "changed_paths": null,
+      "current_source_changed_path_count": 7,
+      "current_source_overlap": [],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [],
+      "disposition": {
+        "state": "integrated-ancestor",
+        "automatic": true,
+        "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "88641e0c02cfde53efbfd21ea140070bde9a3b3d",
       "primary_ref": "refs/heads/codex/audit-major-regressions",
       "aliases": [
@@ -8766,7 +9363,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 18
+        "behind": 67
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -8782,7 +9379,7 @@
         "docs/audits/2026-07-17_MAJOR_OPEN_CLOSED_REGRESSION_AUDIT_PART2.md",
         "docs/audits/2026-07-17_MAJOR_OPEN_CLOSED_REGRESSION_AUDIT.md"
       ],
-      "current_source_changed_path_count": 72,
+      "current_source_changed_path_count": 212,
       "current_source_overlap": [
         "docs/audits/2026-07-17_MAJOR_OPEN_CLOSED_REGRESSION_AUDIT_PART2.md",
         "docs/audits/2026-07-17_MAJOR_OPEN_CLOSED_REGRESSION_AUDIT.md"
@@ -8843,7 +9440,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 307
+        "behind": 356
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -8872,7 +9469,7 @@
         "career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua",
         "qa/lua/tests/test_crt_damage_classification.lua"
       ],
-      "current_source_changed_path_count": 1154,
+      "current_source_changed_path_count": 1212,
       "current_source_overlap": [
         "career_tweaker/CHANGELOG.md",
         "career_tweaker/DEVELOPMENT.md",
@@ -8941,7 +9538,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 31
+        "behind": 80
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -8968,7 +9565,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_cwv_effective_template.lua"
       ],
-      "current_source_changed_path_count": 145,
+      "current_source_changed_path_count": 254,
       "current_source_overlap": [
         "character_weapon_variants/COMBAT_STYLES.md",
         "character_weapon_variants/REGRESSION_CHECKLIST.md",
@@ -9046,7 +9643,7 @@
       },
       "ahead_behind": {
         "ahead": 3,
-        "behind": 406
+        "behind": 455
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -9071,7 +9668,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_dev_anim_picker.lua"
       ],
-      "current_source_changed_path_count": 1218,
+      "current_source_changed_path_count": 1270,
       "current_source_overlap": [
         "weapon_tweaker/ANIMATION_COVERAGE.md",
         "weapon_tweaker/CHANGELOG.md",
@@ -9158,7 +9755,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 289
+        "behind": 338
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -9182,7 +9779,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gut_hud_drag_geometry.lua"
       ],
-      "current_source_changed_path_count": 1157,
+      "current_source_changed_path_count": 1215,
       "current_source_overlap": [
         "gui_tweaker_dev/CHANGELOG.md",
         "gui_tweaker_dev/ENGINE_SURFACE.md",
@@ -9252,7 +9849,7 @@
       },
       "ahead_behind": {
         "ahead": 3,
-        "behind": 373
+        "behind": 422
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -9290,7 +9887,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_port_status.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_unlock_data.lua"
       ],
-      "current_source_changed_path_count": 1198,
+      "current_source_changed_path_count": 1251,
       "current_source_overlap": [
         "CHANGELOG.md",
         "character_weapon_variants/CHANGELOG.md",
@@ -9369,6 +9966,56 @@
       }
     },
     {
+      "tip": "8d6eddab62009a64d8b8f5ddd6c366f81fe206a0",
+      "primary_ref": "refs/heads/codex/overnight-audit-refresh",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/overnight-audit-refresh",
+          "short_name": "codex/overnight-audit-refresh",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T05:47:41-05:00",
+        "author": "Ensrick",
+        "subject": "build(woc): sync v0.1.27 Workshop bundle"
+      },
+      "ancestry": {
+        "merge_base": "8d6eddab62009a64d8b8f5ddd6c366f81fe206a0",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": true,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 0,
+        "behind": 17
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 0,
+        "nonmerge_commit_count": 0,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [],
+      "changed_paths": null,
+      "current_source_changed_path_count": 22,
+      "current_source_overlap": [],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [],
+      "disposition": {
+        "state": "integrated-ancestor",
+        "automatic": true,
+        "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "8d987dcf8aad5c4da8778b879be4a9ed0a8cfc74",
       "primary_ref": "refs/heads/agent/gut-la-cosmetic-loadouts-353",
       "aliases": [
@@ -9393,7 +10040,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 281
+        "behind": 330
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -9418,7 +10065,7 @@
         "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua",
         "qa/lua/tests/test_gut_native_loadout_policy.lua"
       ],
-      "current_source_changed_path_count": 1142,
+      "current_source_changed_path_count": 1200,
       "current_source_overlap": [
         "docs/engine/11_backend_and_loadouts.md",
         "gui_tweaker_dev/CHANGELOG.md",
@@ -9483,7 +10130,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 287
+        "behind": 336
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -9509,7 +10156,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gut_ckc_checkbox.lua"
       ],
-      "current_source_changed_path_count": 1156,
+      "current_source_changed_path_count": 1214,
       "current_source_overlap": [
         "gui_tweaker_dev/CHANGELOG.md",
         "gui_tweaker_dev/ENGINE_SURFACE.md",
@@ -9573,7 +10220,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 297
+        "behind": 346
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -9600,7 +10247,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1143,
+      "current_source_changed_path_count": 1201,
       "current_source_overlap": [
         "qa/lua/run.lua",
         "qa/lua/tests/test_wt_bolt_staff_overcharge.lua",
@@ -9667,7 +10314,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 322
+        "behind": 371
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -9700,7 +10347,7 @@
         "weapon_tweaker/itemV2.cfg",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1171,
+      "current_source_changed_path_count": 1229,
       "current_source_overlap": [
         "career_tweaker/CHANGELOG.md",
         "career_tweaker/itemV2.cfg",
@@ -9794,7 +10441,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 371
+        "behind": 420
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -9820,7 +10467,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_mod_tweaker_numeric_editor.lua"
       ],
-      "current_source_changed_path_count": 1197,
+      "current_source_changed_path_count": 1250,
       "current_source_overlap": [
         "gui_tweaker_dev/CHANGELOG.md",
         "gui_tweaker_dev/ENGINE_SURFACE.md",
@@ -9886,7 +10533,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 346
+        "behind": 395
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -9913,7 +10560,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cwv_acquisition.lua"
       ],
-      "current_source_changed_path_count": 1186,
+      "current_source_changed_path_count": 1240,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/DEVELOPMENT.md",
@@ -9989,7 +10636,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 105
+        "behind": 154
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -10002,7 +10649,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 338,
+      "current_source_changed_path_count": 424,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -10045,7 +10692,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 63
+        "behind": 112
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -10078,7 +10725,7 @@
         "qa/lua/tests/test_character_dialogue.lua",
         "tools/dialogue/generate_catalogue.py"
       ],
-      "current_source_changed_path_count": 210,
+      "current_source_changed_path_count": 306,
       "current_source_overlap": [
         "character_dialogue/CHANGELOG.md",
         "character_dialogue/itemV2.cfg",
@@ -10160,7 +10807,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 77
+        "behind": 126
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -10175,7 +10822,7 @@
         646
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 264,
+      "current_source_changed_path_count": 355,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -10212,7 +10859,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 66
+        "behind": 115
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -10227,7 +10874,7 @@
         649
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 251,
+      "current_source_changed_path_count": 346,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -10264,7 +10911,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 292
+        "behind": 341
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -10297,7 +10944,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_mod_tweaker_ordering.lua"
       ],
-      "current_source_changed_path_count": 1163,
+      "current_source_changed_path_count": 1221,
       "current_source_overlap": [
         "gui_tweaker_dev/CHANGELOG.md",
         "gui_tweaker_dev/ENGINE_SURFACE.md",
@@ -10371,7 +11018,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 9
+        "behind": 58
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -10398,7 +11045,7 @@
         "general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua",
         "qa/lua/tests/test_gt_teleport_loop_policy.lua"
       ],
-      "current_source_changed_path_count": 36,
+      "current_source_changed_path_count": 196,
       "current_source_overlap": [
         "docs/BUG_CLASSES.md",
         "general_tweaker_dev/CHANGELOG.md",
@@ -10471,7 +11118,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 24
+        "behind": 73
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -10498,7 +11145,7 @@
         "docs/engine/10_damage_buffs_and_talents.md",
         "qa/lua/tests/test_crt_foot_knight_policy.lua"
       ],
-      "current_source_changed_path_count": 121,
+      "current_source_changed_path_count": 237,
       "current_source_overlap": [
         "career_tweaker/bundleV2/92ad046507348beb.mod_bundle",
         "career_tweaker/CHANGELOG.md",
@@ -10549,6 +11196,58 @@
       }
     },
     {
+      "tip": "a12bd55561ced3ed2ecbea37753931ba88d5e9b6",
+      "primary_ref": "refs/heads/codex/660-architecture-audit-2",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/660-architecture-audit-2",
+          "short_name": "codex/660-architecture-audit-2",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T06:17:28-05:00",
+        "author": "Ensrick",
+        "subject": "qa: harden appearance architecture census (#660)"
+      },
+      "ancestry": {
+        "merge_base": "a12bd55561ced3ed2ecbea37753931ba88d5e9b6",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": true,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 0,
+        "behind": 15
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 0,
+        "nonmerge_commit_count": 0,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [
+        660
+      ],
+      "changed_paths": null,
+      "current_source_changed_path_count": 15,
+      "current_source_overlap": [],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [],
+      "disposition": {
+        "state": "integrated-ancestor",
+        "automatic": true,
+        "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "a28ebc96e60052ee05a2d379c9736d6ee223b489",
       "primary_ref": "refs/heads/agent/gut-video-profiles-292",
       "aliases": [
@@ -10573,7 +11272,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 325
+        "behind": 374
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -10600,7 +11299,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gut_video_profiles.lua"
       ],
-      "current_source_changed_path_count": 1175,
+      "current_source_changed_path_count": 1231,
       "current_source_overlap": [
         "docs/COMMANDS.md",
         "gui_tweaker_dev/CHANGELOG.md",
@@ -10679,7 +11378,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 94
+        "behind": 143
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -10692,57 +11391,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 306,
-      "current_source_overlap": [],
-      "version_paths": [],
-      "manifest_paths": [],
-      "divergent_commits": [],
-      "disposition": {
-        "state": "integrated-ancestor",
-        "automatic": true,
-        "reason": "tip-is-ancestor-of-base",
-        "review_signals": []
-      }
-    },
-    {
-      "tip": "a391c67faa3b416102e22213be96f85204399c3c",
-      "primary_ref": "refs/heads/codex/gui-size-540",
-      "aliases": [
-        {
-          "ref": "refs/heads/codex/gui-size-540",
-          "short_name": "codex/gui-size-540",
-          "kind": "local",
-          "remote": null
-        }
-      ],
-      "identical_tip_ref_count": 1,
-      "tip_metadata": {
-        "committed_at_utc": "2026-07-17T02:16:06-05:00",
-        "author": "Ensrick",
-        "subject": "fix(cwv): preserve crafted Old Musket identity"
-      },
-      "ancestry": {
-        "merge_base": "a391c67faa3b416102e22213be96f85204399c3c",
-        "has_common_history": true,
-        "tip_is_ancestor_of_base": true,
-        "base_is_ancestor_of_tip": false
-      },
-      "ahead_behind": {
-        "ahead": 0,
-        "behind": 5
-      },
-      "cherry": {
-        "plus_unique_count": 0,
-        "minus_equivalent_count": 0,
-        "evaluated_nonmerge_count": 0,
-        "nonmerge_commit_count": 0,
-        "merge_commit_count": 0,
-        "complete": true,
-        "pure_patch_equivalent": false
-      },
-      "issue_refs": [],
-      "changed_paths": null,
-      "current_source_changed_path_count": 24,
+      "current_source_changed_path_count": 395,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -10779,7 +11428,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 31
+        "behind": 80
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -10794,7 +11443,7 @@
         579
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 145,
+      "current_source_changed_path_count": 254,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -10837,7 +11486,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 396
+        "behind": 445
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -10859,7 +11508,7 @@
         "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua",
         "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/illusion_swap.lua"
       ],
-      "current_source_changed_path_count": 1205,
+      "current_source_changed_path_count": 1258,
       "current_source_overlap": [
         "crafting_in_modded_dev/CHANGELOG.md",
         "crafting_in_modded_dev/ENGINE_SURFACE.md",
@@ -10927,7 +11576,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 307
+        "behind": 356
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -10949,7 +11598,7 @@
         "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua",
         "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/modded_rarities.lua"
       ],
-      "current_source_changed_path_count": 1154,
+      "current_source_changed_path_count": 1212,
       "current_source_overlap": [
         "crafting_in_modded_dev/CHANGELOG.md",
         "crafting_in_modded_dev/ENGINE_SURFACE.md",
@@ -11011,7 +11660,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 18
+        "behind": 67
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -11026,7 +11675,7 @@
         611
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 72,
+      "current_source_changed_path_count": 212,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -11063,7 +11712,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 275
+        "behind": 324
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -11088,7 +11737,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cwv_old_musket_interrupt.lua"
       ],
-      "current_source_changed_path_count": 1129,
+      "current_source_changed_path_count": 1189,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/DEVELOPMENT.md",
@@ -11153,7 +11802,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 16
+        "behind": 65
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -11166,7 +11815,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 62,
+      "current_source_changed_path_count": 207,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -11175,6 +11824,108 @@
         "state": "integrated-ancestor",
         "automatic": true,
         "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
+      "tip": "a7e6be012c50d5ac508518cad1a4403b45108e63",
+      "primary_ref": "refs/heads/codex/ct-size-refactor",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/ct-size-refactor",
+          "short_name": "codex/ct-size-refactor",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T03:46:57-05:00",
+        "author": "Ensrick",
+        "subject": "refactor(ct): extract boon runtime modules (#2)"
+      },
+      "ancestry": {
+        "merge_base": "ddaff3897911588264c26e2dc482c2232ff29d9e",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 46
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 1,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": true
+      },
+      "issue_refs": [
+        2
+      ],
+      "changed_paths": [
+        "chaos_wastes_tweaker_dev/CHANGELOG.md",
+        "chaos_wastes_tweaker_dev/DEVELOPMENT.md",
+        "chaos_wastes_tweaker_dev/ENGINE_SURFACE.md",
+        "chaos_wastes_tweaker_dev/itemV2.cfg",
+        "chaos_wastes_tweaker_dev/REGRESSION_CHECKLIST.md",
+        "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua",
+        "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_registry.lua",
+        "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua",
+        "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua",
+        "qa/lua/run.lua",
+        "qa/lua/tests/test_ct_bomb_cooldown_display.lua",
+        "qa/lua/tests/test_ct_boon_catalog.lua",
+        "qa/lua/tests/test_ct_boon_split.lua",
+        "qa/lua/tests/test_ct_umbrella_policy.lua",
+        "qa/lua/tests/test_peer_parity_transition.lua"
+      ],
+      "current_source_changed_path_count": 155,
+      "current_source_overlap": [
+        "chaos_wastes_tweaker_dev/CHANGELOG.md",
+        "chaos_wastes_tweaker_dev/DEVELOPMENT.md",
+        "chaos_wastes_tweaker_dev/ENGINE_SURFACE.md",
+        "chaos_wastes_tweaker_dev/itemV2.cfg",
+        "chaos_wastes_tweaker_dev/REGRESSION_CHECKLIST.md",
+        "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua",
+        "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_registry.lua",
+        "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua",
+        "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua",
+        "qa/lua/run.lua",
+        "qa/lua/tests/test_ct_bomb_cooldown_display.lua",
+        "qa/lua/tests/test_ct_boon_catalog.lua",
+        "qa/lua/tests/test_ct_boon_split.lua",
+        "qa/lua/tests/test_ct_umbrella_policy.lua",
+        "qa/lua/tests/test_peer_parity_transition.lua"
+      ],
+      "version_paths": [
+        "chaos_wastes_tweaker_dev/CHANGELOG.md",
+        "chaos_wastes_tweaker_dev/itemV2.cfg"
+      ],
+      "manifest_paths": [
+        "chaos_wastes_tweaker_dev/itemV2.cfg"
+      ],
+      "divergent_commits": [
+        {
+          "sha": "a7e6be012c50d5ac508518cad1a4403b45108e63",
+          "parents": [
+            "ddaff3897911588264c26e2dc482c2232ff29d9e"
+          ],
+          "author_date_utc": "2026-07-17T03:46:57-05:00",
+          "subject": "refactor(ct): extract boon runtime modules (#2)",
+          "patch_status": "equivalent",
+          "issue_refs": [
+            2
+          ]
+        }
+      ],
+      "disposition": {
+        "state": "patch-equivalent",
+        "automatic": true,
+        "reason": "all-divergent-nonmerge-patches-are-git-cherry-minus",
         "review_signals": []
       }
     },
@@ -11203,7 +11954,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 358
+        "behind": 407
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -11229,7 +11980,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cos_score_identity.lua"
       ],
-      "current_source_changed_path_count": 1189,
+      "current_source_changed_path_count": 1243,
       "current_source_overlap": [
         "CHANGELOG.md",
         "cosmetics_tweaker/CHANGELOG.md",
@@ -11302,7 +12053,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 278
+        "behind": 327
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -11328,7 +12079,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cos_la_instance_policy.lua"
       ],
-      "current_source_changed_path_count": 1135,
+      "current_source_changed_path_count": 1195,
       "current_source_overlap": [
         "CHANGELOG.md",
         "cosmetics_tweaker/CHANGELOG.md",
@@ -11395,7 +12146,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 313
+        "behind": 362
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -11423,7 +12174,7 @@
         "qa/lua/tests/test_mp_dailies.lua",
         "qa/lua/tests/test_mp_shilling_ui_policy.lua"
       ],
-      "current_source_changed_path_count": 1159,
+      "current_source_changed_path_count": 1217,
       "current_source_overlap": [
         "docs/MECHANICS.md",
         "modded_progression/CHANGELOG.md",
@@ -11491,7 +12242,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 282
+        "behind": 331
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -11515,7 +12266,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_ct_collectible_conversion.lua"
       ],
-      "current_source_changed_path_count": 1144,
+      "current_source_changed_path_count": 1202,
       "current_source_overlap": [
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
         "chaos_wastes_tweaker_dev/ENGINE_SURFACE.md",
@@ -11579,7 +12330,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 31
+        "behind": 80
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -11605,7 +12356,7 @@
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua",
         "qa/lua/tests/test_cos_composite_icons.lua"
       ],
-      "current_source_changed_path_count": 145,
+      "current_source_changed_path_count": 254,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/DEVELOPMENT.md",
@@ -11647,6 +12398,56 @@
       }
     },
     {
+      "tip": "ad47e6e3efb5c04d09ace349923c56911bc448dc",
+      "primary_ref": "refs/heads/codex/ship-clean-worktree-preflight",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/ship-clean-worktree-preflight",
+          "short_name": "codex/ship-clean-worktree-preflight",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T06:54:10-05:00",
+        "author": "Ensrick",
+        "subject": "fix(ship): support clean worktree dependencies"
+      },
+      "ancestry": {
+        "merge_base": "ad47e6e3efb5c04d09ace349923c56911bc448dc",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": true,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 0,
+        "behind": 8
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 0,
+        "nonmerge_commit_count": 0,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [],
+      "changed_paths": null,
+      "current_source_changed_path_count": 5,
+      "current_source_overlap": [],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [],
+      "disposition": {
+        "state": "integrated-ancestor",
+        "automatic": true,
+        "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "ae7dd48664fed14fb25f32e44c5c2465c0c07ef7",
       "primary_ref": "refs/heads/agent/moonfire-energy-hud-585",
       "aliases": [
@@ -11677,7 +12478,7 @@
       },
       "ahead_behind": {
         "ahead": 5,
-        "behind": 373
+        "behind": 422
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -11720,7 +12521,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_port_status.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_unlock_data.lua"
       ],
-      "current_source_changed_path_count": 1198,
+      "current_source_changed_path_count": 1251,
       "current_source_overlap": [
         "CHANGELOG.md",
         "character_weapon_variants/CHANGELOG.md",
@@ -11862,7 +12663,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 105
+        "behind": 154
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -11885,7 +12686,7 @@
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua",
         "qa/lua/tests/test_cos_grail_knight_set.lua"
       ],
-      "current_source_changed_path_count": 338,
+      "current_source_changed_path_count": 424,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/itemV2.cfg",
@@ -11948,7 +12749,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 348
+        "behind": 397
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -11967,7 +12768,7 @@
         "character_weapon_variants/REGRESSION_CHECKLIST.md",
         "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
       ],
-      "current_source_changed_path_count": 1186,
+      "current_source_changed_path_count": 1240,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/REGRESSION_CHECKLIST.md",
@@ -12029,7 +12830,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 274
+        "behind": 323
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -12056,7 +12857,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cim_trait_slot_policy.lua"
       ],
-      "current_source_changed_path_count": 1127,
+      "current_source_changed_path_count": 1187,
       "current_source_overlap": [
         "crafting_in_modded_dev/CHANGELOG.md",
         "crafting_in_modded_dev/DEVELOPMENT.md",
@@ -12099,6 +12900,107 @@
       }
     },
     {
+      "tip": "b668264abe61c52782c13e7db0aaee7a312022db",
+      "primary_ref": "refs/heads/codex/career-action-regression",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/career-action-regression",
+          "short_name": "codex/career-action-regression",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T05:33:48-05:00",
+        "author": "Ensrick",
+        "subject": "fix(cross-mod): reconcile career weapon actions (#661)"
+      },
+      "ancestry": {
+        "merge_base": "167940ed090a968a8bb7cb381312238008a81d9e",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 28
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 1,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": true
+      },
+      "issue_refs": [
+        661
+      ],
+      "changed_paths": [
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_career_weapon_actions.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_career_weapon_actions.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
+        "docs/BUG_CLASSES.md",
+        "qa/lua/tests/test_shared_career_weapon_actions.lua",
+        "tools/shared_lib/_lib_career_weapon_actions.lua",
+        "tools/shared_lib/manifest.psd1",
+        "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_career_weapon_actions.lua",
+        "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_availability.lua",
+        "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_runtime_checks.lua",
+        "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_backend.lua",
+        "weapon_tweaker/scripts/mods/weapon_tweaker/_lib_career_weapon_actions.lua",
+        "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_availability.lua",
+        "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_runtime_checks.lua",
+        "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_backend.lua",
+        "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_career_weapon_actions.lua",
+        "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+      ],
+      "current_source_changed_path_count": 62,
+      "current_source_overlap": [
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_career_weapon_actions.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_career_weapon_actions.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
+        "docs/BUG_CLASSES.md",
+        "qa/lua/tests/test_shared_career_weapon_actions.lua",
+        "tools/shared_lib/_lib_career_weapon_actions.lua",
+        "tools/shared_lib/manifest.psd1",
+        "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_career_weapon_actions.lua",
+        "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_availability.lua",
+        "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_runtime_checks.lua",
+        "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_backend.lua",
+        "weapon_tweaker/scripts/mods/weapon_tweaker/_lib_career_weapon_actions.lua",
+        "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_availability.lua",
+        "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_runtime_checks.lua",
+        "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_backend.lua",
+        "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_career_weapon_actions.lua",
+        "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+      ],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [
+        {
+          "sha": "b668264abe61c52782c13e7db0aaee7a312022db",
+          "parents": [
+            "167940ed090a968a8bb7cb381312238008a81d9e"
+          ],
+          "author_date_utc": "2026-07-17T05:33:48-05:00",
+          "subject": "fix(cross-mod): reconcile career weapon actions (#661)",
+          "patch_status": "equivalent",
+          "issue_refs": [
+            661
+          ]
+        }
+      ],
+      "disposition": {
+        "state": "patch-equivalent",
+        "automatic": true,
+        "reason": "all-divergent-nonmerge-patches-are-git-cherry-minus",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "b84428999bd801731683dea64580581e22fefed9",
       "primary_ref": "refs/heads/agent/woc-blightreaper-icon",
       "aliases": [
@@ -12123,7 +13025,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 85
+        "behind": 134
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -12136,7 +13038,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 280,
+      "current_source_changed_path_count": 370,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -12145,6 +13047,133 @@
         "state": "integrated-ancestor",
         "automatic": true,
         "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
+      "tip": "b860d164b463ec9bb58586ec459ee81f3572ea85",
+      "primary_ref": "refs/heads/codex/gui-size-540",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/gui-size-540",
+          "short_name": "codex/gui-size-540",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T02:53:58-05:00",
+        "author": "Ensrick",
+        "subject": "refactor(gut): extract Mod Tweaker GUI modules (#540)"
+      },
+      "ancestry": {
+        "merge_base": "e8f823f46154701a349726fc1564d007ea95c6de",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 48
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 1,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": true
+      },
+      "issue_refs": [
+        540
+      ],
+      "changed_paths": [
+        "gui_tweaker_dev/CHANGELOG.md",
+        "gui_tweaker_dev/ENGINE_SURFACE.md",
+        "gui_tweaker_dev/itemV2.cfg",
+        "gui_tweaker_dev/REGRESSION_CHECKLIST.md",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_contracts.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_ui_tweaks_integration.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state_interaction.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view_interaction.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua",
+        "gui_tweaker/CHANGELOG.md",
+        "gui_tweaker/itemV2.cfg",
+        "gui_tweaker/scripts/mods/gui_tweaker/_gut_mod_tweaker_contracts.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/_gut_ui_tweaks_integration.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_state_interaction.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_state.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view_interaction.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker.lua",
+        "qa/lua/run.lua",
+        "qa/lua/tests/test_character_dialogue.lua",
+        "qa/lua/tests/test_gut_cosmetics_mission_mount.lua",
+        "qa/lua/tests/test_gut_module_extraction.lua",
+        "qa/lua/tests/test_mod_tweaker_profiles.lua",
+        "qa/lua/tests/test_mod_tweaker_search.lua"
+      ],
+      "current_source_changed_path_count": 177,
+      "current_source_overlap": [
+        "gui_tweaker_dev/CHANGELOG.md",
+        "gui_tweaker_dev/ENGINE_SURFACE.md",
+        "gui_tweaker_dev/itemV2.cfg",
+        "gui_tweaker_dev/REGRESSION_CHECKLIST.md",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_contracts.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_ui_tweaks_integration.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state_interaction.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view_interaction.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua",
+        "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua",
+        "gui_tweaker/CHANGELOG.md",
+        "gui_tweaker/itemV2.cfg",
+        "gui_tweaker/scripts/mods/gui_tweaker/_gut_mod_tweaker_contracts.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/_gut_ui_tweaks_integration.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_state_interaction.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_state.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view_interaction.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view.lua",
+        "gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker.lua",
+        "qa/lua/run.lua",
+        "qa/lua/tests/test_character_dialogue.lua",
+        "qa/lua/tests/test_gut_cosmetics_mission_mount.lua",
+        "qa/lua/tests/test_gut_module_extraction.lua",
+        "qa/lua/tests/test_mod_tweaker_profiles.lua",
+        "qa/lua/tests/test_mod_tweaker_search.lua"
+      ],
+      "version_paths": [
+        "gui_tweaker_dev/CHANGELOG.md",
+        "gui_tweaker_dev/itemV2.cfg",
+        "gui_tweaker/CHANGELOG.md",
+        "gui_tweaker/itemV2.cfg"
+      ],
+      "manifest_paths": [
+        "gui_tweaker_dev/itemV2.cfg",
+        "gui_tweaker/itemV2.cfg"
+      ],
+      "divergent_commits": [
+        {
+          "sha": "b860d164b463ec9bb58586ec459ee81f3572ea85",
+          "parents": [
+            "e8f823f46154701a349726fc1564d007ea95c6de"
+          ],
+          "author_date_utc": "2026-07-17T02:48:24-05:00",
+          "subject": "refactor(gut): extract Mod Tweaker GUI modules (#540)",
+          "patch_status": "equivalent",
+          "issue_refs": [
+            540
+          ]
+        }
+      ],
+      "disposition": {
+        "state": "patch-equivalent",
+        "automatic": true,
+        "reason": "all-divergent-nonmerge-patches-are-git-cherry-minus",
         "review_signals": []
       }
     },
@@ -12179,7 +13208,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 70
+        "behind": 119
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -12192,7 +13221,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 256,
+      "current_source_changed_path_count": 350,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -12229,7 +13258,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 329
+        "behind": 378
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -12256,7 +13285,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_mod_tweaker_disabled_sections.lua"
       ],
-      "current_source_changed_path_count": 1178,
+      "current_source_changed_path_count": 1233,
       "current_source_overlap": [
         "gui_tweaker_dev/CHANGELOG.md",
         "gui_tweaker_dev/itemV2.cfg",
@@ -12329,7 +13358,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 415
+        "behind": 464
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -12352,7 +13381,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1233,
+      "current_source_changed_path_count": 1285,
       "current_source_overlap": [
         "qa/rt_textual_invariants.psd1",
         "weapon_tweaker/CHANGELOG.md",
@@ -12415,7 +13444,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 400
+        "behind": 449
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -12428,7 +13457,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 1209,
+      "current_source_changed_path_count": 1261,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -12471,7 +13500,7 @@
       },
       "ahead_behind": {
         "ahead": 3,
-        "behind": 393
+        "behind": 442
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -12499,7 +13528,7 @@
         "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev_localization.lua",
         "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
       ],
-      "current_source_changed_path_count": 1205,
+      "current_source_changed_path_count": 1258,
       "current_source_overlap": [
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
         "chaos_wastes_tweaker_dev/ENGINE_SURFACE.md",
@@ -12589,7 +13618,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 336
+        "behind": 385
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -12611,7 +13640,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cwv_old_musket_presentation.lua"
       ],
-      "current_source_changed_path_count": 1181,
+      "current_source_changed_path_count": 1235,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/ENGINE_SURFACE.md",
@@ -12685,7 +13714,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 373
+        "behind": 422
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -12708,7 +13737,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_reload_3p.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1198,
+      "current_source_changed_path_count": 1251,
       "current_source_overlap": [
         "weapon_tweaker/CHANGELOG.md",
         "weapon_tweaker/ENGINE_SURFACE.md",
@@ -12771,7 +13800,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 301
+        "behind": 350
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -12791,7 +13820,7 @@
         "weapon_tweaker/itemV2.cfg",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1145,
+      "current_source_changed_path_count": 1203,
       "current_source_overlap": [
         "weapon_tweaker/CHANGELOG.md",
         "weapon_tweaker/ENGINE_SURFACE.md",
@@ -12851,7 +13880,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 366
+        "behind": 415
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -12874,7 +13903,7 @@
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua",
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1193,
+      "current_source_changed_path_count": 1246,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/GLOW_SYSTEM.md",
@@ -12943,7 +13972,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 398
+        "behind": 447
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -12971,7 +14000,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_mod_tweaker_profiles.lua"
       ],
-      "current_source_changed_path_count": 1208,
+      "current_source_changed_path_count": 1260,
       "current_source_overlap": [
         "docs/REGRESSION_CHECKLIST.md",
         "gui_tweaker_dev/CHANGELOG.md",
@@ -13045,7 +14074,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 99
+        "behind": 148
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -13058,7 +14087,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 317,
+      "current_source_changed_path_count": 405,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -13095,7 +14124,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 86
+        "behind": 135
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -13108,7 +14137,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 284,
+      "current_source_changed_path_count": 374,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -13151,7 +14180,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 399
+        "behind": 448
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -13175,7 +14204,7 @@
         "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev_localization.lua",
         "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua"
       ],
-      "current_source_changed_path_count": 1208,
+      "current_source_changed_path_count": 1260,
       "current_source_overlap": [
         "CHANGELOG.md",
         "crafting_in_modded_dev/CHANGELOG.md",
@@ -13246,7 +14275,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 105
+        "behind": 154
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -13270,7 +14299,7 @@
         "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos_localization.lua",
         "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
       ],
-      "current_source_changed_path_count": 338,
+      "current_source_changed_path_count": 424,
       "current_source_overlap": [
         "qa/lua/run.lua",
         "qa/lua/tests/test_woc_blightreaper_audio.lua",
@@ -13317,6 +14346,87 @@
       }
     },
     {
+      "tip": "c71d894c169170e41e34ba1b3bd7f3f3ee415c21",
+      "primary_ref": "refs/heads/codex/critical-crash-audit",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/critical-crash-audit",
+          "short_name": "codex/critical-crash-audit",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T05:21:40-05:00",
+        "author": "Ensrick",
+        "subject": "fix(gt): promote utility crash floor (#653)"
+      },
+      "ancestry": {
+        "merge_base": "167940ed090a968a8bb7cb381312238008a81d9e",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 28
+      },
+      "cherry": {
+        "plus_unique_count": 1,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [
+        653
+      ],
+      "changed_paths": [
+        "general_tweaker/CHANGELOG.md",
+        "general_tweaker/itemV2.cfg",
+        "general_tweaker/scripts/mods/general_tweaker/_gt_creature_spawner.lua",
+        "general_tweaker/scripts/mods/general_tweaker/general_tweaker.lua",
+        "qa/lua/tests/test_gt_bot_utility_policy.lua"
+      ],
+      "current_source_changed_path_count": 62,
+      "current_source_overlap": [],
+      "version_paths": [
+        "general_tweaker/CHANGELOG.md",
+        "general_tweaker/itemV2.cfg"
+      ],
+      "manifest_paths": [
+        "general_tweaker/itemV2.cfg"
+      ],
+      "divergent_commits": [
+        {
+          "sha": "c71d894c169170e41e34ba1b3bd7f3f3ee415c21",
+          "parents": [
+            "167940ed090a968a8bb7cb381312238008a81d9e"
+          ],
+          "author_date_utc": "2026-07-17T05:21:40-05:00",
+          "subject": "fix(gt): promote utility crash floor (#653)",
+          "patch_status": "unique",
+          "issue_refs": [
+            653
+          ]
+        }
+      ],
+      "disposition": {
+        "state": "review-required",
+        "automatic": false,
+        "reason": "not-proven-by-ancestry-or-pure-patch-equivalence",
+        "review_signals": [
+          "ahead-of-base",
+          "diverged-from-current-base",
+          "unique-patches",
+          "version-or-manifest-paths"
+        ]
+      }
+    },
+    {
       "tip": "c7e4e0a51ba29043611c08a58394da92332da3a5",
       "primary_ref": "refs/heads/agent/cos-glow-rgb-574",
       "aliases": [
@@ -13347,7 +14457,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 379
+        "behind": 428
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -13371,7 +14481,7 @@
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua",
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1198,
+      "current_source_changed_path_count": 1251,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/GLOW_SYSTEM.md",
@@ -13452,7 +14562,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 105
+        "behind": 154
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -13471,7 +14581,7 @@
         "character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md",
         "qa/lua/tests/test_cwv_dawi_maces.lua"
       ],
-      "current_source_changed_path_count": 338,
+      "current_source_changed_path_count": 424,
       "current_source_overlap": [
         "character_weapon_variants/DAWI_MACE_FAMILY.md",
         "character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md",
@@ -13501,31 +14611,31 @@
       }
     },
     {
-      "tip": "c9477f3351237b7ec65acaeb02a0bd5a0d97ba89",
-      "primary_ref": "refs/heads/codex/issue-625-branch-census",
+      "tip": "c7fd6c2314dfc3375140d439f55d20324a08e33a",
+      "primary_ref": "refs/heads/codex/final-audit-snapshot",
       "aliases": [
         {
-          "ref": "refs/heads/codex/issue-625-branch-census",
-          "short_name": "codex/issue-625-branch-census",
+          "ref": "refs/heads/codex/final-audit-snapshot",
+          "short_name": "codex/final-audit-snapshot",
           "kind": "local",
           "remote": null
         }
       ],
       "identical_tip_ref_count": 1,
       "tip_metadata": {
-        "committed_at_utc": "2026-07-17T02:04:32-05:00",
+        "committed_at_utc": "2026-07-17T07:06:42-05:00",
         "author": "Ensrick",
-        "subject": "build(gt-dev): sync Necromancer keep-pet bundle (#659)"
+        "subject": "docs(audit): publish exhaustive live crosscheck"
       },
       "ancestry": {
-        "merge_base": "c9477f3351237b7ec65acaeb02a0bd5a0d97ba89",
+        "merge_base": "c7fd6c2314dfc3375140d439f55d20324a08e33a",
         "has_common_history": true,
         "tip_is_ancestor_of_base": true,
         "base_is_ancestor_of_tip": false
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 7
+        "behind": 4
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -13536,11 +14646,9 @@
         "complete": true,
         "pure_patch_equivalent": false
       },
-      "issue_refs": [
-        625
-      ],
+      "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 35,
+      "current_source_changed_path_count": 2,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -13577,7 +14685,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 5
+        "behind": 54
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -13604,7 +14712,7 @@
         "qa/lua/tests/test_cwv_exact_appearance.lua",
         "qa/lua/tests/test_cwv_remote_identity.lua"
       ],
-      "current_source_changed_path_count": 24,
+      "current_source_changed_path_count": 192,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/itemV2.cfg",
@@ -13647,6 +14755,91 @@
       }
     },
     {
+      "tip": "c9fa6180d72a15a1935ffe66a0cea769be992bb9",
+      "primary_ref": "refs/heads/codex/issue-625-branch-census",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/issue-625-branch-census",
+          "short_name": "codex/issue-625-branch-census",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T02:50:34-05:00",
+        "author": "Ensrick",
+        "subject": "tools(git): add report-only branch reconciliation census (#625)"
+      },
+      "ancestry": {
+        "merge_base": "c9477f3351237b7ec65acaeb02a0bd5a0d97ba89",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 56
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 1,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": true
+      },
+      "issue_refs": [
+        625
+      ],
+      "changed_paths": [
+        "docs/BRANCH_RECONCILIATION_WORKFLOW.md",
+        "docs/generated/BRANCH_RECONCILIATION.generated.json",
+        "docs/generated/BRANCH_RECONCILIATION.generated.md",
+        "docs/generated/README.md",
+        "qa/check_branch_reconciliation_census.ps1",
+        "qa/CHECKS.md",
+        "qa/run_all.ps1",
+        "qa/run_selftests.ps1",
+        "tools/github/branch-reconciliation-census.ps1"
+      ],
+      "current_source_changed_path_count": 195,
+      "current_source_overlap": [
+        "docs/BRANCH_RECONCILIATION_WORKFLOW.md",
+        "docs/generated/BRANCH_RECONCILIATION.generated.json",
+        "docs/generated/BRANCH_RECONCILIATION.generated.md",
+        "docs/generated/README.md",
+        "qa/check_branch_reconciliation_census.ps1",
+        "qa/CHECKS.md",
+        "qa/run_all.ps1",
+        "qa/run_selftests.ps1",
+        "tools/github/branch-reconciliation-census.ps1"
+      ],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [
+        {
+          "sha": "c9fa6180d72a15a1935ffe66a0cea769be992bb9",
+          "parents": [
+            "c9477f3351237b7ec65acaeb02a0bd5a0d97ba89"
+          ],
+          "author_date_utc": "2026-07-17T02:50:34-05:00",
+          "subject": "tools(git): add report-only branch reconciliation census (#625)",
+          "patch_status": "equivalent",
+          "issue_refs": [
+            625
+          ]
+        }
+      ],
+      "disposition": {
+        "state": "patch-equivalent",
+        "automatic": true,
+        "reason": "all-divergent-nonmerge-patches-are-git-cherry-minus",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "cc530b43c37eb039441dc9d2bf9e2f51939b0d08",
       "primary_ref": "refs/heads/agent/noclip-oob-death-241",
       "aliases": [
@@ -13671,7 +14864,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 287
+        "behind": 336
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -13696,7 +14889,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gt_noclip_boundary_policy.lua"
       ],
-      "current_source_changed_path_count": 1156,
+      "current_source_changed_path_count": 1214,
       "current_source_overlap": [
         "general_tweaker_dev/CHANGELOG.md",
         "general_tweaker_dev/ENGINE_SURFACE.md",
@@ -13761,7 +14954,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 20
+        "behind": 69
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -13774,7 +14967,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 86,
+      "current_source_changed_path_count": 216,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -13811,7 +15004,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 185
+        "behind": 234
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -13831,7 +15024,7 @@
         "character_dialogue/scripts/mods/character_dialogue/character_dialogue.lua",
         "qa/lua/tests/test_character_dialogue.lua"
       ],
-      "current_source_changed_path_count": 603,
+      "current_source_changed_path_count": 678,
       "current_source_overlap": [
         "character_dialogue/CHANGELOG.md",
         "character_dialogue/itemV2.cfg",
@@ -13891,7 +15084,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 347
+        "behind": 396
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -13914,7 +15107,7 @@
         "modded_progression/scripts/mods/modded_progression/modded_progression.lua",
         "qa/rt_textual_invariants.psd1"
       ],
-      "current_source_changed_path_count": 1186,
+      "current_source_changed_path_count": 1240,
       "current_source_overlap": [
         "modded_progression/CHANGELOG.md",
         "modded_progression/ENGINE_SURFACE.md",
@@ -13977,7 +15170,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 331
+        "behind": 380
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -14001,7 +15194,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_longbow_zoom_probe.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1181,
+      "current_source_changed_path_count": 1235,
       "current_source_overlap": [
         "qa/lua/run.lua",
         "qa/lua/tests/test_wt_longbow_zoom_probe.lua",
@@ -14046,6 +15239,85 @@
       }
     },
     {
+      "tip": "d203cbddcc692f9439452b6ace13a38ec1f972d6",
+      "primary_ref": "refs/heads/codex/g-appearance-gate",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/g-appearance-gate",
+          "short_name": "codex/g-appearance-gate",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T05:01:17-05:00",
+        "author": "Ensrick",
+        "subject": "feat(qa): add G-APPEARANCE contract gate"
+      },
+      "ancestry": {
+        "merge_base": "c6fa98e7df3351d748960682872e9a7ee55cdf36",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 30
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 1,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": true
+      },
+      "issue_refs": [],
+      "changed_paths": [
+        "character_weapon_variants/DEFINITION_OF_DONE.md",
+        "character_weapon_variants/REGRESSION_CHECKLIST.md",
+        "docs/WEAPON_APPEARANCE_STANDARD.md",
+        "PROJECT_STANDARDS.md",
+        "qa/appearance_contracts.psd1",
+        "qa/check_appearance_contracts.ps1",
+        "qa/CHECKS.md",
+        "qa/run_all.ps1"
+      ],
+      "current_source_changed_path_count": 66,
+      "current_source_overlap": [
+        "character_weapon_variants/DEFINITION_OF_DONE.md",
+        "character_weapon_variants/REGRESSION_CHECKLIST.md",
+        "docs/WEAPON_APPEARANCE_STANDARD.md",
+        "PROJECT_STANDARDS.md",
+        "qa/appearance_contracts.psd1",
+        "qa/check_appearance_contracts.ps1",
+        "qa/CHECKS.md",
+        "qa/run_all.ps1"
+      ],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [
+        {
+          "sha": "d203cbddcc692f9439452b6ace13a38ec1f972d6",
+          "parents": [
+            "c6fa98e7df3351d748960682872e9a7ee55cdf36"
+          ],
+          "author_date_utc": "2026-07-17T05:01:17-05:00",
+          "subject": "feat(qa): add G-APPEARANCE contract gate",
+          "patch_status": "equivalent",
+          "issue_refs": []
+        }
+      ],
+      "disposition": {
+        "state": "patch-equivalent",
+        "automatic": true,
+        "reason": "all-divergent-nonmerge-patches-are-git-cherry-minus",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "d24b7fd499c28ab301d8b3306842ddd376003c6d",
       "primary_ref": "refs/heads/agent/issue-636-missing-collapsible",
       "aliases": [
@@ -14076,7 +15348,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 105
+        "behind": 154
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -14101,7 +15373,7 @@
         "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua",
         "qa/lua/tests/test_mod_tweaker_disabled_sections.lua"
       ],
-      "current_source_changed_path_count": 338,
+      "current_source_changed_path_count": 424,
       "current_source_overlap": [
         "gui_tweaker_dev/CHANGELOG.md",
         "gui_tweaker_dev/itemV2.cfg",
@@ -14166,7 +15438,7 @@
       },
       "ahead_behind": {
         "ahead": 3,
-        "behind": 362
+        "behind": 411
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -14185,7 +15457,7 @@
         "character_weapon_variants/REGRESSION_CHECKLIST.md",
         "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
       ],
-      "current_source_changed_path_count": 1191,
+      "current_source_changed_path_count": 1245,
       "current_source_overlap": [
         "character_weapon_variants/CHANGELOG.md",
         "character_weapon_variants/ENGINE_SURFACE.md",
@@ -14264,7 +15536,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 280
+        "behind": 329
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -14293,7 +15565,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_et_health_multiplier.lua"
       ],
-      "current_source_changed_path_count": 1142,
+      "current_source_changed_path_count": 1200,
       "current_source_overlap": [
         "enemy_tweaker/CHANGELOG.md",
         "enemy_tweaker/DEVELOPMENT.md",
@@ -14368,7 +15640,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 398
+        "behind": 447
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -14388,7 +15660,7 @@
         "cosmetics_tweaker/REGRESSION_CHECKLIST.md",
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1208,
+      "current_source_changed_path_count": 1260,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/itemV2.cfg",
@@ -14454,7 +15726,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 22
+        "behind": 71
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -14469,7 +15741,7 @@
         619
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 109,
+      "current_source_changed_path_count": 227,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -14512,7 +15784,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 400
+        "behind": 449
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -14537,7 +15809,7 @@
         "verminious_dreams_lighting_dev/scripts/mods/verminious_dreams_lighting_dev/_lib_debug.lua",
         "verminious_dreams_lighting_dev/scripts/mods/verminious_dreams_lighting_dev/verminious_dreams_lighting_dev.lua"
       ],
-      "current_source_changed_path_count": 1209,
+      "current_source_changed_path_count": 1261,
       "current_source_overlap": [
         "crafting_in_modded_dev/CHANGELOG.md",
         "crafting_in_modded_dev/itemV2.cfg",
@@ -14606,7 +15878,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 25
+        "behind": 74
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -14621,7 +15893,7 @@
         662
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 124,
+      "current_source_changed_path_count": 239,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -14658,7 +15930,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 332
+        "behind": 381
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -14681,7 +15953,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_mp_quest_boundary.lua"
       ],
-      "current_source_changed_path_count": 1181,
+      "current_source_changed_path_count": 1235,
       "current_source_overlap": [
         "modded_progression/CHANGELOG.md",
         "modded_progression/itemV2.cfg",
@@ -14726,6 +15998,86 @@
       }
     },
     {
+      "tip": "d535f9958a1ef6b93867e13b7fc103376be1e2e9",
+      "primary_ref": "refs/heads/agent/issue-233-peerready",
+      "aliases": [
+        {
+          "ref": "refs/heads/agent/issue-233-peerready",
+          "short_name": "agent/issue-233-peerready",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T05:04:06-05:00",
+        "author": "Ensrick",
+        "subject": "fix(cosmetics): retain persisted offhand replay until inventory ready (#233)"
+      },
+      "ancestry": {
+        "merge_base": "c6fa98e7df3351d748960682872e9a7ee55cdf36",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 30
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 1,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": true
+      },
+      "issue_refs": [
+        233
+      ],
+      "changed_paths": [
+        "cosmetics_tweaker/CHANGELOG.md",
+        "cosmetics_tweaker/itemV2.cfg",
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua",
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
+      ],
+      "current_source_changed_path_count": 66,
+      "current_source_overlap": [
+        "cosmetics_tweaker/CHANGELOG.md",
+        "cosmetics_tweaker/itemV2.cfg",
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua",
+        "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
+      ],
+      "version_paths": [
+        "cosmetics_tweaker/CHANGELOG.md",
+        "cosmetics_tweaker/itemV2.cfg"
+      ],
+      "manifest_paths": [
+        "cosmetics_tweaker/itemV2.cfg"
+      ],
+      "divergent_commits": [
+        {
+          "sha": "d535f9958a1ef6b93867e13b7fc103376be1e2e9",
+          "parents": [
+            "c6fa98e7df3351d748960682872e9a7ee55cdf36"
+          ],
+          "author_date_utc": "2026-07-17T05:04:06-05:00",
+          "subject": "fix(cosmetics): retain persisted offhand replay until inventory ready (#233)",
+          "patch_status": "equivalent",
+          "issue_refs": [
+            233
+          ]
+        }
+      ],
+      "disposition": {
+        "state": "patch-equivalent",
+        "automatic": true,
+        "reason": "all-divergent-nonmerge-patches-are-git-cherry-minus",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "d66ced9b4910a2d70ba834ae0fe15076dd291d5c",
       "primary_ref": "refs/heads/agent/issue-641-offhand-names",
       "aliases": [
@@ -14756,7 +16108,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 105
+        "behind": 154
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -14784,7 +16136,7 @@
         "qa/lua/tests/test_cos_grail_knight_set.lua",
         "qa/lua/tests/test_cos_offhand_names.lua"
       ],
-      "current_source_changed_path_count": 338,
+      "current_source_changed_path_count": 424,
       "current_source_overlap": [
         "cosmetics_tweaker/DEVELOPMENT.md",
         "cosmetics_tweaker/OFFHAND_ILLUSION_NAMES.md",
@@ -14852,7 +16204,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 335
+        "behind": 384
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -14893,7 +16245,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/_lib_peer_parity.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1181,
+      "current_source_changed_path_count": 1235,
       "current_source_overlap": [
         "career_tweaker/CHANGELOG.md",
         "career_tweaker/itemV2.cfg",
@@ -14998,7 +16350,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 373
+        "behind": 422
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -15024,7 +16376,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_reload_3p.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1198,
+      "current_source_changed_path_count": 1251,
       "current_source_overlap": [
         "CHANGELOG.md",
         "weapon_tweaker/ANIMATION_COVERAGE.md",
@@ -15102,7 +16454,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 364
+        "behind": 413
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -15127,7 +16479,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cim_skin_persistence.lua"
       ],
-      "current_source_changed_path_count": 1191,
+      "current_source_changed_path_count": 1245,
       "current_source_overlap": [
         "CHANGELOG.md",
         "crafting_in_modded_dev/CHANGELOG.md",
@@ -15199,7 +16551,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 192
+        "behind": 241
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -15232,7 +16584,7 @@
         "qa/lua/tests/test_gut_ckc_checkbox.lua",
         "qa/lua/tests/test_gut_ckc_options_isolation.lua"
       ],
-      "current_source_changed_path_count": 645,
+      "current_source_changed_path_count": 720,
       "current_source_overlap": [
         "docs/engine/09_ui_views_and_widgets.md",
         "gui_tweaker_dev/CHANGELOG.md",
@@ -15311,7 +16663,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 72
+        "behind": 121
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -15326,7 +16678,7 @@
         604
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 256,
+      "current_source_changed_path_count": 350,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -15363,7 +16715,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 107
+        "behind": 156
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -15376,7 +16728,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 338,
+      "current_source_changed_path_count": 424,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -15413,7 +16765,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 291
+        "behind": 340
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -15438,7 +16790,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_ct_chest_count_audit.lua"
       ],
-      "current_source_changed_path_count": 1160,
+      "current_source_changed_path_count": 1218,
       "current_source_overlap": [
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
         "chaos_wastes_tweaker_dev/ENGINE_SURFACE.md",
@@ -15503,7 +16855,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 31
+        "behind": 80
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -15561,7 +16913,7 @@
         "weapons_of_chaos/units/woc_blightreaper/blightreaper_3p.fbx",
         "weapons_of_chaos/units/woc_blightreaper/blightreaper.fbx"
       ],
-      "current_source_changed_path_count": 145,
+      "current_source_changed_path_count": 254,
       "current_source_overlap": [
         "CHANGELOG.md",
         "docs/BUG_CLASSES.md",
@@ -15674,7 +17026,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 303
+        "behind": 352
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -15699,7 +17051,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_gut_cutscene_probe.lua"
       ],
-      "current_source_changed_path_count": 1148,
+      "current_source_changed_path_count": 1206,
       "current_source_overlap": [
         "gui_tweaker_dev/CHANGELOG.md",
         "gui_tweaker_dev/ENGINE_SURFACE.md",
@@ -15776,7 +17128,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 76
+        "behind": 125
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -15791,7 +17143,7 @@
         645
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 262,
+      "current_source_changed_path_count": 354,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -15828,7 +17180,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 67
+        "behind": 116
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -15841,7 +17193,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 256,
+      "current_source_changed_path_count": 350,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -15878,7 +17230,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 316
+        "behind": 365
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -15902,7 +17254,7 @@
         "general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev_localization.lua",
         "general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua"
       ],
-      "current_source_changed_path_count": 1166,
+      "current_source_changed_path_count": 1224,
       "current_source_overlap": [
         "general_tweaker_dev/CHANGELOG.md",
         "general_tweaker_dev/ENGINE_SURFACE.md",
@@ -15972,7 +17324,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 290
+        "behind": 339
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -15997,7 +17349,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cim_cwv_template_selector.lua"
       ],
-      "current_source_changed_path_count": 1157,
+      "current_source_changed_path_count": 1215,
       "current_source_overlap": [
         "crafting_in_modded_dev/CHANGELOG.md",
         "crafting_in_modded_dev/ENGINE_SURFACE.md",
@@ -16060,7 +17412,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 298
+        "behind": 347
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16086,7 +17438,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cos_la_shield_parity.lua"
       ],
-      "current_source_changed_path_count": 1143,
+      "current_source_changed_path_count": 1201,
       "current_source_overlap": [
         "cosmetics_tweaker/CHANGELOG.md",
         "cosmetics_tweaker/DEVELOPMENT.md",
@@ -16158,7 +17510,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 383
+        "behind": 432
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16187,7 +17539,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_port_status.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/wt_unlock_data.lua"
       ],
-      "current_source_changed_path_count": 1200,
+      "current_source_changed_path_count": 1253,
       "current_source_overlap": [
         "weapon_tweaker/ANIMATION_COVERAGE.md",
         "weapon_tweaker/CHANGELOG.md",
@@ -16272,7 +17624,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 75
+        "behind": 124
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16287,57 +17639,7 @@
         611
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 262,
-      "current_source_overlap": [],
-      "version_paths": [],
-      "manifest_paths": [],
-      "divergent_commits": [],
-      "disposition": {
-        "state": "integrated-ancestor",
-        "automatic": true,
-        "reason": "tip-is-ancestor-of-base",
-        "review_signals": []
-      }
-    },
-    {
-      "tip": "e6d8f9a811602767e33289a186c4303b9f891133",
-      "primary_ref": "refs/heads/codex/integrate-664",
-      "aliases": [
-        {
-          "ref": "refs/heads/codex/integrate-664",
-          "short_name": "codex/integrate-664",
-          "kind": "local",
-          "remote": null
-        }
-      ],
-      "identical_tip_ref_count": 1,
-      "tip_metadata": {
-        "committed_at_utc": "2026-07-17T02:39:17-05:00",
-        "author": "Ensrick",
-        "subject": "build(cwv): sync exact world appearance lifecycle bundle (#660)"
-      },
-      "ancestry": {
-        "merge_base": "e6d8f9a811602767e33289a186c4303b9f891133",
-        "has_common_history": true,
-        "tip_is_ancestor_of_base": true,
-        "base_is_ancestor_of_tip": true
-      },
-      "ahead_behind": {
-        "ahead": 0,
-        "behind": 0
-      },
-      "cherry": {
-        "plus_unique_count": 0,
-        "minus_equivalent_count": 0,
-        "evaluated_nonmerge_count": 0,
-        "nonmerge_commit_count": 0,
-        "merge_commit_count": 0,
-        "complete": true,
-        "pure_patch_equivalent": false
-      },
-      "issue_refs": [],
-      "changed_paths": null,
-      "current_source_changed_path_count": 0,
+      "current_source_changed_path_count": 354,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -16374,7 +17676,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 383
+        "behind": 432
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16397,7 +17699,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_mp_dailies.lua"
       ],
-      "current_source_changed_path_count": 1200,
+      "current_source_changed_path_count": 1253,
       "current_source_overlap": [
         "modded_progression/CHANGELOG.md",
         "modded_progression/itemV2.cfg",
@@ -16460,7 +17762,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 24
+        "behind": 73
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16473,7 +17775,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 121,
+      "current_source_changed_path_count": 237,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -16510,7 +17812,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 111
+        "behind": 160
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16523,7 +17825,7 @@
       },
       "issue_refs": [],
       "changed_paths": null,
-      "current_source_changed_path_count": 344,
+      "current_source_changed_path_count": 429,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -16560,7 +17862,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 85
+        "behind": 134
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16579,7 +17881,7 @@
         "character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md",
         "qa/lua/tests/test_cwv_dawi_maces.lua"
       ],
-      "current_source_changed_path_count": 280,
+      "current_source_changed_path_count": 370,
       "current_source_overlap": [
         "character_weapon_variants/DAWI_MACE_FAMILY.md",
         "character_weapon_variants/tools/DAWI_MACE_ASSET_AUDIT.md",
@@ -16645,7 +17947,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 313
+        "behind": 362
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16669,7 +17971,7 @@
         "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap.lua",
         "weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua"
       ],
-      "current_source_changed_path_count": 1159,
+      "current_source_changed_path_count": 1217,
       "current_source_overlap": [
         "qa/rt_textual_invariants.psd1",
         "weapon_tweaker/CHANGELOG.md",
@@ -16733,7 +18035,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 63
+        "behind": 112
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16760,7 +18062,7 @@
         "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos_localization.lua",
         "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
       ],
-      "current_source_changed_path_count": 210,
+      "current_source_changed_path_count": 306,
       "current_source_overlap": [
         "CHANGELOG.md",
         "qa/lua/tests/test_woc_blightreaper_audio.lua",
@@ -16805,17 +18107,17 @@
     },
     {
       "tip": "ef2e1837739c9bf07740eaa51711b107f05c43e7",
-      "primary_ref": "refs/heads/codex/integrate-live-20260716",
+      "primary_ref": "refs/heads/codex/issue-548-godmode-flies",
       "aliases": [
         {
-          "ref": "refs/heads/codex/integrate-live-20260716",
-          "short_name": "codex/integrate-live-20260716",
+          "ref": "refs/heads/codex/issue-548-godmode-flies",
+          "short_name": "codex/issue-548-godmode-flies",
           "kind": "local",
           "remote": null
         },
         {
-          "ref": "refs/heads/codex/issue-548-godmode-flies",
-          "short_name": "codex/issue-548-godmode-flies",
+          "ref": "refs/heads/codex/integrate-live-20260716",
+          "short_name": "codex/integrate-live-20260716",
           "kind": "local",
           "remote": null
         },
@@ -16840,7 +18142,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 26
+        "behind": 75
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16856,7 +18158,7 @@
         641
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 127,
+      "current_source_changed_path_count": 242,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -16893,7 +18195,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 360
+        "behind": 409
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16916,7 +18218,7 @@
         "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua",
         "qa/lua/tests/test_mod_tweaker_search.lua"
       ],
-      "current_source_changed_path_count": 1189,
+      "current_source_changed_path_count": 1243,
       "current_source_overlap": [
         "CHANGELOG.md",
         "gui_tweaker_dev/CHANGELOG.md",
@@ -16980,7 +18282,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 71
+        "behind": 120
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -16995,7 +18297,7 @@
         604
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 256,
+      "current_source_changed_path_count": 350,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -17032,7 +18334,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 336
+        "behind": 385
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -17061,7 +18363,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cwv_remote_identity.lua"
       ],
-      "current_source_changed_path_count": 1181,
+      "current_source_changed_path_count": 1235,
       "current_source_overlap": [
         "CHANGELOG.md",
         "character_weapon_variants/CHANGELOG.md",
@@ -17137,7 +18439,7 @@
       },
       "ahead_behind": {
         "ahead": 2,
-        "behind": 56
+        "behind": 105
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -17162,7 +18464,7 @@
         "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
         "qa/lua/tests/test_cwv_combat_styles.lua"
       ],
-      "current_source_changed_path_count": 194,
+      "current_source_changed_path_count": 292,
       "current_source_overlap": [
         "character_weapon_variants/bundleV2/0f038849957ad1b7.mod_bundle",
         "character_weapon_variants/CHANGELOG.md",
@@ -17239,7 +18541,7 @@
       },
       "ahead_behind": {
         "ahead": 3,
-        "behind": 56
+        "behind": 105
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -17268,7 +18570,7 @@
         "qa/lua/tests/test_cwv_combat_styles.lua",
         "qa/lua/tests/test_cwv_damage_profile_wire.lua"
       ],
-      "current_source_changed_path_count": 194,
+      "current_source_changed_path_count": 292,
       "current_source_overlap": [
         "character_weapon_variants/bundleV2/0f038849957ad1b7.mod_bundle",
         "character_weapon_variants/CHANGELOG.md",
@@ -17336,6 +18638,132 @@
       }
     },
     {
+      "tip": "f6b6588603b9cafd2a504c2ba21cac59a1cae80e",
+      "primary_ref": "refs/heads/codex/cwv-size-refactor",
+      "aliases": [
+        {
+          "ref": "refs/heads/codex/cwv-size-refactor",
+          "short_name": "codex/cwv-size-refactor",
+          "kind": "local",
+          "remote": null
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T04:06:36-05:00",
+        "author": "Ensrick",
+        "subject": "refactor(cwv): decompose oversized entry module"
+      },
+      "ancestry": {
+        "merge_base": "a31169c7a92cb60922f0d047304b5e9b661a84d9",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": false,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 1,
+        "behind": 34
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 1,
+        "evaluated_nonmerge_count": 1,
+        "nonmerge_commit_count": 1,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": true
+      },
+      "issue_refs": [],
+      "changed_paths": [
+        "character_weapon_variants/CHANGELOG.md",
+        "character_weapon_variants/DEVELOPMENT.md",
+        "character_weapon_variants/ENGINE_SURFACE.md",
+        "character_weapon_variants/itemV2.cfg",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_commands_lifecycle.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_cross_access.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_variant_catalog.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
+        "qa/lua/cwv_source.lua",
+        "qa/lua/run.lua",
+        "qa/lua/tests/test_cos_dual_offhands.lua",
+        "qa/lua/tests/test_cwv_anim_picker.lua",
+        "qa/lua/tests/test_cwv_appearance_lifecycle.lua",
+        "qa/lua/tests/test_cwv_combat_styles.lua",
+        "qa/lua/tests/test_cwv_crowbill_family.lua",
+        "qa/lua/tests/test_cwv_crowbill_runtime.lua",
+        "qa/lua/tests/test_cwv_dawi_maces.lua",
+        "qa/lua/tests/test_cwv_dual_icons.lua",
+        "qa/lua/tests/test_cwv_entry_decomposition.lua",
+        "qa/lua/tests/test_cwv_exact_appearance.lua",
+        "qa/lua/tests/test_cwv_exact_pair_state.lua",
+        "qa/lua/tests/test_cwv_infantry_spear.lua",
+        "qa/lua/tests/test_cwv_javelin_pickup.lua",
+        "qa/lua/tests/test_cwv_mace_hammer_identity.lua",
+        "qa/lua/tests/test_cwv_old_musket_presentation.lua",
+        "qa/lua/tests/test_cwv_remote_audio.lua",
+        "qa/lua/tests/test_cwv_remote_identity.lua"
+      ],
+      "current_source_changed_path_count": 95,
+      "current_source_overlap": [
+        "character_weapon_variants/CHANGELOG.md",
+        "character_weapon_variants/DEVELOPMENT.md",
+        "character_weapon_variants/ENGINE_SURFACE.md",
+        "character_weapon_variants/itemV2.cfg",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_commands_lifecycle.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_cross_access.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_variant_catalog.lua",
+        "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
+        "qa/lua/cwv_source.lua",
+        "qa/lua/run.lua",
+        "qa/lua/tests/test_cos_dual_offhands.lua",
+        "qa/lua/tests/test_cwv_anim_picker.lua",
+        "qa/lua/tests/test_cwv_appearance_lifecycle.lua",
+        "qa/lua/tests/test_cwv_combat_styles.lua",
+        "qa/lua/tests/test_cwv_crowbill_family.lua",
+        "qa/lua/tests/test_cwv_crowbill_runtime.lua",
+        "qa/lua/tests/test_cwv_dawi_maces.lua",
+        "qa/lua/tests/test_cwv_dual_icons.lua",
+        "qa/lua/tests/test_cwv_entry_decomposition.lua",
+        "qa/lua/tests/test_cwv_exact_appearance.lua",
+        "qa/lua/tests/test_cwv_exact_pair_state.lua",
+        "qa/lua/tests/test_cwv_infantry_spear.lua",
+        "qa/lua/tests/test_cwv_javelin_pickup.lua",
+        "qa/lua/tests/test_cwv_mace_hammer_identity.lua",
+        "qa/lua/tests/test_cwv_old_musket_presentation.lua",
+        "qa/lua/tests/test_cwv_remote_audio.lua",
+        "qa/lua/tests/test_cwv_remote_identity.lua"
+      ],
+      "version_paths": [
+        "character_weapon_variants/CHANGELOG.md",
+        "character_weapon_variants/itemV2.cfg"
+      ],
+      "manifest_paths": [
+        "character_weapon_variants/itemV2.cfg"
+      ],
+      "divergent_commits": [
+        {
+          "sha": "f6b6588603b9cafd2a504c2ba21cac59a1cae80e",
+          "parents": [
+            "a31169c7a92cb60922f0d047304b5e9b661a84d9"
+          ],
+          "author_date_utc": "2026-07-17T04:06:17-05:00",
+          "subject": "refactor(cwv): decompose oversized entry module",
+          "patch_status": "equivalent",
+          "issue_refs": []
+        }
+      ],
+      "disposition": {
+        "state": "patch-equivalent",
+        "automatic": true,
+        "reason": "all-divergent-nonmerge-patches-are-git-cherry-minus",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "f7825f3e9f1fb16cacb07c3f5fbf7b80494416e7",
       "primary_ref": "refs/heads/agent/gut-lowmod",
       "aliases": [
@@ -17366,7 +18794,7 @@
       },
       "ahead_behind": {
         "ahead": 3,
-        "behind": 420
+        "behind": 469
       },
       "cherry": {
         "plus_unique_count": 3,
@@ -17393,7 +18821,7 @@
         "gui_tweaker_dev/tools/gut-settings.ps1",
         "qa/rt_textual_invariants.psd1"
       ],
-      "current_source_changed_path_count": 1247,
+      "current_source_changed_path_count": 1298,
       "current_source_overlap": [
         "docs/COMMANDS.md",
         "gui_tweaker_dev/CHANGELOG.md",
@@ -17463,6 +18891,56 @@
       }
     },
     {
+      "tip": "f94bc665ecbef4d114d7a84b92aa652715ae4c30",
+      "primary_ref": "refs/remotes/origin/codex/final-audit-snapshot",
+      "aliases": [
+        {
+          "ref": "refs/remotes/origin/codex/final-audit-snapshot",
+          "short_name": "origin/codex/final-audit-snapshot",
+          "kind": "remote",
+          "remote": "origin"
+        }
+      ],
+      "identical_tip_ref_count": 1,
+      "tip_metadata": {
+        "committed_at_utc": "2026-07-17T07:12:26-05:00",
+        "author": "Ensrick",
+        "subject": "Merge branch 'master' into codex/final-audit-snapshot"
+      },
+      "ancestry": {
+        "merge_base": "f94bc665ecbef4d114d7a84b92aa652715ae4c30",
+        "has_common_history": true,
+        "tip_is_ancestor_of_base": true,
+        "base_is_ancestor_of_tip": false
+      },
+      "ahead_behind": {
+        "ahead": 0,
+        "behind": 1
+      },
+      "cherry": {
+        "plus_unique_count": 0,
+        "minus_equivalent_count": 0,
+        "evaluated_nonmerge_count": 0,
+        "nonmerge_commit_count": 0,
+        "merge_commit_count": 0,
+        "complete": true,
+        "pure_patch_equivalent": false
+      },
+      "issue_refs": [],
+      "changed_paths": null,
+      "current_source_changed_path_count": 0,
+      "current_source_overlap": [],
+      "version_paths": [],
+      "manifest_paths": [],
+      "divergent_commits": [],
+      "disposition": {
+        "state": "integrated-ancestor",
+        "automatic": true,
+        "reason": "tip-is-ancestor-of-base",
+        "review_signals": []
+      }
+    },
+    {
       "tip": "f95a678501b908d37917f6a86ce78d6a691e22e6",
       "primary_ref": "refs/heads/agent/search-transaction-559",
       "aliases": [
@@ -17493,7 +18971,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 401
+        "behind": 450
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -17519,7 +18997,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_mod_tweaker_search.lua"
       ],
-      "current_source_changed_path_count": 1209,
+      "current_source_changed_path_count": 1261,
       "current_source_overlap": [
         "gui_tweaker_dev/CHANGELOG.md",
         "gui_tweaker_dev/ENGINE_SURFACE.md",
@@ -17585,7 +19063,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 303
+        "behind": 352
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -17611,7 +19089,7 @@
         "qa/lua/run.lua",
         "qa/lua/tests/test_cim_tab_preview.lua"
       ],
-      "current_source_changed_path_count": 1148,
+      "current_source_changed_path_count": 1206,
       "current_source_overlap": [
         "crafting_in_modded_dev/CHANGELOG.md",
         "crafting_in_modded_dev/DEVELOPMENT.md",
@@ -17677,7 +19155,7 @@
       },
       "ahead_behind": {
         "ahead": 0,
-        "behind": 193
+        "behind": 242
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -17692,7 +19170,7 @@
         611
       ],
       "changed_paths": null,
-      "current_source_changed_path_count": 645,
+      "current_source_changed_path_count": 720,
       "current_source_overlap": [],
       "version_paths": [],
       "manifest_paths": [],
@@ -17729,7 +19207,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 31
+        "behind": 80
       },
       "cherry": {
         "plus_unique_count": 1,
@@ -17748,7 +19226,7 @@
         "general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bots_keep.lua",
         "general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua"
       ],
-      "current_source_changed_path_count": 145,
+      "current_source_changed_path_count": 254,
       "current_source_overlap": [
         "general_tweaker_dev/CHANGELOG.md",
         "general_tweaker_dev/ENGINE_SURFACE.md",
@@ -17819,7 +19297,7 @@
       },
       "ahead_behind": {
         "ahead": 1,
-        "behind": 398
+        "behind": 447
       },
       "cherry": {
         "plus_unique_count": 0,
@@ -17840,7 +19318,7 @@
         "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission_catalog.lua",
         "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
       ],
-      "current_source_changed_path_count": 1208,
+      "current_source_changed_path_count": 1260,
       "current_source_overlap": [
         "chaos_wastes_tweaker_dev/CHANGELOG.md",
         "chaos_wastes_tweaker_dev/itemV2.cfg",
