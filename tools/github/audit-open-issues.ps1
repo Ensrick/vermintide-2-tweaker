@@ -116,10 +116,10 @@ function Test-CommentRequiresCoop($Issue) {
     # particular, "a solo host cannot reproduce this" is co-op evidence, not a
     # solo test declaration, while a solo diagnostic may mention that a later
     # implementation will require co-op verification.
-    if ($text -match '(?im)^\s*(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*solo\s*\)') {
+    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*solo\s*\)') {
         return $false
     }
-    if ($text -match '(?im)^\s*(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*co-?op\s*\)') {
+    if ($text -match '(?im)^\s*(?:#{1,6}\s+)?(?:\*\*)?(?:test|diagnostics?) method\s*\(\s*co-?op\s*\)') {
         return $true
     }
     if ($text -match '(?i)verify solo|solo verification|no (?:second|2nd) player|co-?op (?:is )?not required|\b(?:one|1) tester\b') {
@@ -884,6 +884,10 @@ function Invoke-SelfTest {
         comments = @([PSCustomObject]@{ body = "**Diagnostic method (solo):** Capture the bounded probe. Rendered parity will later require co-op verification." })
     }
     if (Test-CommentRequiresCoop $scopedSoloWording) { throw "explicit solo method header was overridden by future co-op prose" }
+    $markdownScopedCoopWording = [PSCustomObject]@{
+        comments = @([PSCustomObject]@{ body = "### Test method (co-op)`nBoth peers confirm the result. Expected: PASS." })
+    }
+    if (-not (Test-CommentRequiresCoop $markdownScopedCoopWording)) { throw "Markdown-prefixed co-op method header was missed" }
     $soloCannotRepro = [PSCustomObject]@{
         comments = @([PSCustomObject]@{ body = "Test method corrected: a solo host cannot reproduce this reliable queue; use a remote peer. Expected: no crash." })
     }
