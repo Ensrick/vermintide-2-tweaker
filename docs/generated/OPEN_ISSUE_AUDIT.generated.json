@@ -1,34 +1,34 @@
 {
   "schema": 4,
-  "generated_utc": "2026-07-17T10:33:34.7991039Z",
+  "generated_utc": "2026-07-17T10:57:07.7418321Z",
   "repository": "Ensrick/vermintide-2-tweaker",
   "open_issue_count": 294,
   "closed_issue_count": 362,
   "clean_issue_count": 70,
   "open_issues_with_related_closed": 294,
   "open_issues_without_related_closed": 0,
-  "high_confidence_relation_count": 1004,
+  "high_confidence_relation_count": 1008,
   "finding_counts": {
     "title_over_8_words": 149,
     "heading_format_in_body": 108,
     "body_over_220_words": 86,
     "missing_test_method_comment": 58,
-    "coop_label_without_coop_test_evidence": 28,
+    "coop_label_without_coop_test_evidence": 27,
     "coop_qualifier_without_test_evidence": 2
   },
   "lesson_counts": {
     "shared_preview_presentation_descriptor": 51,
-    "custom_unit_behavioral_contract": 52,
+    "custom_unit_behavioral_contract": 53,
     "asset_alpha_mip_material_contract": 25,
     "appearance_surface_fanout": 59,
     "network_peer_parity": 220,
     "canonical_identity_persistence": 182,
-    "bounded_transaction_lifecycle": 95,
+    "bounded_transaction_lifecycle": 96,
     "source_first_engine_contract": 142,
-    "custom_asset_contract": 58,
+    "custom_asset_contract": 59,
     "dynamic_localization_ui_contract": 55,
-    "backend_realm_isolation": 210,
-    "renderer_specific_material_closure": 28,
+    "backend_realm_isolation": 211,
+    "renderer_specific_material_closure": 29,
     "unsafe_native_call_preflight": 7,
     "general_regression_and_verification_discipline": 8
   },
@@ -12026,10 +12026,17 @@
           "title": "cosmetics_tweaker: LA shield picker auto-applies the first option (yellow dragon Reiland) on browse",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/37",
           "closed_at": "06/13/2026 18:47:50",
-          "score": 111,
+          "score": 231,
           "confidence": "high",
-          "regression_signal": "related-history-review-only",
+          "regression_signal": "direct-history-reference",
           "reasons": [
+            {
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
+              "evidence": [
+                "#37"
+              ]
+            },
             {
               "kind": "shared_lifecycle_surface_classes",
               "score": 32,
@@ -12088,10 +12095,17 @@
           "title": "Crafting in Modded v0.8.7 - Crash in map when opening the UI",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/83",
           "closed_at": "07/16/2026 07:21:14",
-          "score": 108,
+          "score": 228,
           "confidence": "high",
-          "regression_signal": "same-subsystem-surface-after-verified-closure",
+          "regression_signal": "direct-history-reference",
           "reasons": [
+            {
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
+              "evidence": [
+                "#83"
+              ]
+            },
             {
               "kind": "shared_subsystem_labels",
               "score": 30,
@@ -12151,10 +12165,17 @@
           "title": "cim: CRASH in HeroWindowItemCustomization mid-mission gear-icon click (object_set_names on un-loaded ui_store_preview level)",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/50",
           "closed_at": "06/04/2026 06:24:51",
-          "score": 106,
+          "score": 226,
           "confidence": "high",
-          "regression_signal": "related-history-review-only",
+          "regression_signal": "direct-history-reference",
           "reasons": [
+            {
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
+              "evidence": [
+                "#50"
+              ]
+            },
             {
               "kind": "shared_lifecycle_surface_classes",
               "score": 32,
@@ -13232,10 +13253,17 @@
           "title": "[crash] gut/cim: in-mission Crafting Salvage page crashes - gui_store_menu_atlas not in ingame Gui (draw fatal)",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/363",
           "closed_at": "07/06/2026 01:07:08",
-          "score": 261,
+          "score": 381,
           "confidence": "high",
           "regression_signal": "direct-history-reference",
           "reasons": [
+            {
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
+              "evidence": [
+                "#363"
+              ]
+            },
             {
               "kind": "closed_explicitly_references_open",
               "score": 120,
@@ -13320,10 +13348,17 @@
           "title": "CRASH: in-mission loadout-management window (HeroView) fatals in UIRenderer_draw_texture (Adventure)",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/193",
           "closed_at": "07/07/2026 00:34:03",
-          "score": 253,
+          "score": 373,
           "confidence": "high",
           "regression_signal": "direct-history-reference",
           "reasons": [
+            {
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
+              "evidence": [
+                "#193"
+              ]
+            },
             {
               "kind": "closed_explicitly_references_open",
               "score": 120,
@@ -13462,6 +13497,76 @@
           "review_policy": "manual review only; never auto-reopen from similarity"
         },
         {
+          "number": 372,
+          "title": "CRASH (gut loadout manager): hovering a saved loadout in the keep fatals in vanilla get_ui_information_from_item (nil equipment item; gut should own modded loadouts)",
+          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/372",
+          "closed_at": "07/06/2026 16:30:35",
+          "score": 147,
+          "confidence": "high",
+          "regression_signal": "same-subsystem-surface-after-verified-closure",
+          "reasons": [
+            {
+              "kind": "shared_explicit_references",
+              "score": 8,
+              "evidence": [
+                "#193"
+              ]
+            },
+            {
+              "kind": "shared_subsystem_labels",
+              "score": 30,
+              "evidence": [
+                "Tweaker: GUI"
+              ]
+            },
+            {
+              "kind": "shared_lifecycle_surface_classes",
+              "score": 32,
+              "evidence": [
+                "renderer_specific_material_closure",
+                "network_peer_parity",
+                "canonical_identity_persistence",
+                "source_first_engine_contract"
+              ]
+            },
+            {
+              "kind": "shared_code_identifiers",
+              "score": 60,
+              "evidence": [
+                "_gut_mission_inventory.lua",
+                "gut_dev",
+                "gut_mission_inventory"
+              ]
+            },
+            {
+              "kind": "shared_distinctive_terms",
+              "score": 15,
+              "evidence": [
+                "console",
+                "crashes",
+                "direction",
+                "draw",
+                "fatals"
+              ]
+            },
+            {
+              "kind": "closure_verification_evidence",
+              "score": 2,
+              "evidence": [
+                "completed_state_reason"
+              ]
+            }
+          ],
+          "closure_evidence": [
+            {
+              "kind": "completed_state_reason",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/372",
+              "excerpt": "GitHub stateReason is COMPLETED."
+            }
+          ],
+          "review_policy": "manual review only; never auto-reopen from similarity"
+        },
+        {
           "number": 76,
           "title": "gut: Mod Tweaker renderer recreation — LA armoury_atlas crash on repeated open + deprecated IngameView look on exit (proper fix: HeroView sub-state)",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/76",
@@ -13532,81 +13637,6 @@
             {
               "kind": "completed_state_reason",
               "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/76",
-              "excerpt": "GitHub stateReason is COMPLETED."
-            }
-          ],
-          "review_policy": "manual review only; never auto-reopen from similarity"
-        },
-        {
-          "number": 336,
-          "title": "gut_dev: in-mission mission map CTD - background window mounts levels/ui_keep_menu/world (Level not loaded)",
-          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/336",
-          "closed_at": "07/06/2026 05:13:29",
-          "score": 143,
-          "confidence": "high",
-          "regression_signal": "same-subsystem-surface-after-verified-closure",
-          "reasons": [
-            {
-              "kind": "shared_subsystem_labels",
-              "score": 30,
-              "evidence": [
-                "Tweaker: GUI"
-              ]
-            },
-            {
-              "kind": "shared_lifecycle_surface_classes",
-              "score": 32,
-              "evidence": [
-                "renderer_specific_material_closure",
-                "unsafe_native_call_preflight",
-                "network_peer_parity",
-                "canonical_identity_persistence"
-              ]
-            },
-            {
-              "kind": "shared_code_identifiers",
-              "score": 60,
-              "evidence": [
-                "_gut_gui_material_guard.lua",
-                "application.can_get",
-                "can_get"
-              ]
-            },
-            {
-              "kind": "shared_distinctive_terms",
-              "score": 15,
-              "evidence": [
-                "console",
-                "hero",
-                "in-mission",
-                "opens",
-                "resident"
-              ]
-            },
-            {
-              "kind": "closure_verification_evidence",
-              "score": 6,
-              "evidence": [
-                "completed_state_reason",
-                "regression_coverage",
-                "source_commit_recorded"
-              ]
-            }
-          ],
-          "closure_evidence": [
-            {
-              "kind": "regression_coverage",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/336#issuecomment-4889322216",
-              "excerpt": "**CLOSED - user confirmed in-game on gut_dev v0.2.206-dev (2026-07-06):** the mid-mission map opens over the inventory-preview menu stage (no black plate, no button-glow trails)..."
-            },
-            {
-              "kind": "source_commit_recorded",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/336#issuecomment-4888966124",
-              "excerpt": "**Shipped v0.2.206-dev** (Workshop upload confirmed, commit 1b2cea8) - fixes both follow-up reports on this issue. Needs in-game verify. **1. CRASH (0-critical): mid-mission map..."
-            },
-            {
-              "kind": "completed_state_reason",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/336",
               "excerpt": "GitHub stateReason is COMPLETED."
             }
           ],
@@ -23453,6 +23483,7 @@
         "verify-fix"
       ],
       "applicable_lessons": [
+        "renderer_specific_material_closure",
         "unsafe_native_call_preflight",
         "shared_preview_presentation_descriptor",
         "custom_unit_behavioral_contract",
@@ -23561,6 +23592,82 @@
           "review_policy": "manual review only; never auto-reopen from similarity"
         },
         {
+          "number": 193,
+          "title": "CRASH: in-mission loadout-management window (HeroView) fatals in UIRenderer_draw_texture (Adventure)",
+          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/193",
+          "closed_at": "07/07/2026 00:34:03",
+          "score": 239,
+          "confidence": "high",
+          "regression_signal": "direct-history-reference",
+          "reasons": [
+            {
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
+              "evidence": [
+                "#193"
+              ]
+            },
+            {
+              "kind": "shared_explicit_references",
+              "score": 8,
+              "evidence": [
+                "#155"
+              ]
+            },
+            {
+              "kind": "shared_lifecycle_surface_classes",
+              "score": 32,
+              "evidence": [
+                "renderer_specific_material_closure",
+                "canonical_identity_persistence",
+                "source_first_engine_contract",
+                "backend_realm_isolation"
+              ]
+            },
+            {
+              "kind": "shared_code_identifiers",
+              "score": 60,
+              "evidence": [
+                "_gut_mission_inventory.lua",
+                "gut_dev",
+                "gut_mission_inventory"
+              ]
+            },
+            {
+              "kind": "shared_distinctive_terms",
+              "score": 15,
+              "evidence": [
+                "access",
+                "dump",
+                "mirror",
+                "opened",
+                "window"
+              ]
+            },
+            {
+              "kind": "closure_verification_evidence",
+              "score": 4,
+              "evidence": [
+                "completed_state_reason",
+                "user_confirmed_fixed"
+              ]
+            }
+          ],
+          "closure_evidence": [
+            {
+              "kind": "user_confirmed_fixed",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/193#issuecomment-4898904381",
+              "excerpt": "Confirmed fixed in-game by user (2026-07-06). Fix landed in gut_dev (`_gut_mission_inventory.lua:448-455`): hooks `HeroWindowLoadoutSelectionConsole._show_context_menu` and retu..."
+            },
+            {
+              "kind": "completed_state_reason",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/193",
+              "excerpt": "GitHub stateReason is COMPLETED."
+            }
+          ],
+          "review_policy": "manual review only; never auto-reopen from similarity"
+        },
+        {
           "number": 84,
           "title": "gut/cim: defer in-mission weapon-cosmetic change via the equipment gear/cog icon",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/84",
@@ -23654,10 +23761,10 @@
               "kind": "shared_lifecycle_surface_classes",
               "score": 32,
               "evidence": [
+                "renderer_specific_material_closure",
                 "unsafe_native_call_preflight",
                 "shared_preview_presentation_descriptor",
-                "source_first_engine_contract",
-                "backend_realm_isolation"
+                "source_first_engine_contract"
               ]
             },
             {
@@ -23699,123 +23806,77 @@
           "review_policy": "manual review only; never auto-reopen from similarity"
         },
         {
-          "number": 174,
-          "title": "Bot loadout replaced on startup by base blacksmith (5-power) items in modded realm — something persists/restores loadouts on exit",
-          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/174",
-          "closed_at": "07/03/2026 20:32:02",
-          "score": 130,
+          "number": 363,
+          "title": "[crash] gut/cim: in-mission Crafting Salvage page crashes - gui_store_menu_atlas not in ingame Gui (draw fatal)",
+          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/363",
+          "closed_at": "07/06/2026 01:07:08",
+          "score": 199,
           "confidence": "high",
-          "regression_signal": "same-subsystem-surface-after-verified-closure",
+          "regression_signal": "direct-history-reference",
           "reasons": [
             {
-              "kind": "shared_subsystem_labels",
-              "score": 30,
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
               "evidence": [
-                "Tweaker: Cosmetics"
+                "#363"
+              ]
+            },
+            {
+              "kind": "shared_explicit_references",
+              "score": 8,
+              "evidence": [
+                "#155"
               ]
             },
             {
               "kind": "shared_lifecycle_surface_classes",
-              "score": 32,
+              "score": 16,
               "evidence": [
-                "custom_unit_behavioral_contract",
-                "canonical_identity_persistence",
-                "source_first_engine_contract",
-                "backend_realm_isolation"
-              ]
-            },
-            {
-              "kind": "shared_code_identifiers",
-              "score": 60,
-              "evidence": [
-                "cim_dev",
-                "cosmetics_tweaker",
-                "crafting_in_modded_dev"
-              ]
-            },
-            {
-              "kind": "shared_distinctive_terms",
-              "score": 6,
-              "evidence": [
-                "exit",
-                "mirror"
-              ]
-            },
-            {
-              "kind": "closure_verification_evidence",
-              "score": 2,
-              "evidence": [
-                "completed_state_reason"
-              ]
-            }
-          ],
-          "closure_evidence": [
-            {
-              "kind": "completed_state_reason",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/174",
-              "excerpt": "GitHub stateReason is COMPLETED."
-            }
-          ],
-          "review_policy": "manual review only; never auto-reopen from similarity"
-        },
-        {
-          "number": 81,
-          "title": "cim: in-mission forge (B-hotkey + allow_in_mission) crashes on LA armoury_atlas in HDR world create",
-          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/81",
-          "closed_at": "06/28/2026 02:28:32",
-          "score": 120,
-          "confidence": "high",
-          "regression_signal": "related-history-review-only",
-          "reasons": [
-            {
-              "kind": "shared_lifecycle_surface_classes",
-              "score": 32,
-              "evidence": [
-                "unsafe_native_call_preflight",
-                "custom_unit_behavioral_contract",
-                "canonical_identity_persistence",
+                "renderer_specific_material_closure",
                 "source_first_engine_contract"
               ]
             },
             {
               "kind": "shared_code_identifiers",
-              "score": 60,
+              "score": 40,
               "evidence": [
                 "cim_dev",
-                "crafting_in_modded_dev",
-                "crafting_in_modded_dev.lua"
-              ]
-            },
-            {
-              "kind": "shared_distinctive_title_terms",
-              "score": 14,
-              "evidence": [
-                "forge",
-                "world"
+                "gut_dev"
               ]
             },
             {
               "kind": "shared_distinctive_terms",
-              "score": 12,
+              "score": 9,
               "evidence": [
-                "loaded",
-                "manager",
+                "injected",
                 "script",
-                "stack"
+                "window"
               ]
             },
             {
               "kind": "closure_verification_evidence",
-              "score": 2,
+              "score": 6,
               "evidence": [
-                "completed_state_reason"
+                "completed_state_reason",
+                "regression_coverage",
+                "user_confirmed_fixed"
               ]
             }
           ],
           "closure_evidence": [
             {
+              "kind": "user_confirmed_fixed",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/363#issuecomment-4888692367",
+              "excerpt": "Confirmed fixed in-game by the user (2026-07-05): the in-mission Crafting → Salvage page renders without crashing. Fix shipped in gut_dev v0.2.202-dev; regression guard `salvage..."
+            },
+            {
+              "kind": "regression_coverage",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/363#issuecomment-4888692367",
+              "excerpt": "Confirmed fixed in-game by the user (2026-07-05): the in-mission Crafting → Salvage page renders without crashing. Fix shipped in gut_dev v0.2.202-dev; regression guard `salvage..."
+            },
+            {
               "kind": "completed_state_reason",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/81",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/363",
               "excerpt": "GitHub stateReason is COMPLETED."
             }
           ],
@@ -66933,10 +66994,13 @@
       ],
       "applicable_lessons": [
         "network_peer_parity",
+        "bounded_transaction_lifecycle",
         "source_first_engine_contract",
-        "custom_asset_contract"
+        "custom_asset_contract",
+        "backend_realm_isolation"
       ],
       "umbrella_issues": [
+        428,
         504,
         546
       ],
@@ -66945,11 +67009,157 @@
       "recommended_next_action": "solo in-game verification",
       "related_closed_issues": [
         {
+          "number": 294,
+          "title": "[crash] ct: CTD spawning skulls_2023 'pup_skull_of_fury' pickup via _spawn_pickup hook — entity_manager2.lua:114 table index is nil",
+          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/294",
+          "closed_at": "07/06/2026 05:19:34",
+          "score": 205,
+          "confidence": "high",
+          "regression_signal": "direct-history-reference",
+          "reasons": [
+            {
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
+              "evidence": [
+                "#294"
+              ]
+            },
+            {
+              "kind": "shared_lifecycle_surface_classes",
+              "score": 24,
+              "evidence": [
+                "network_peer_parity",
+                "source_first_engine_contract",
+                "backend_realm_isolation"
+              ]
+            },
+            {
+              "kind": "shared_code_identifiers",
+              "score": 40,
+              "evidence": [
+                "spawn_unit",
+                "world.spawn_unit"
+              ]
+            },
+            {
+              "kind": "shared_distinctive_terms",
+              "score": 15,
+              "evidence": [
+                "context",
+                "direction",
+                "managers",
+                "mutator",
+                "package"
+              ]
+            },
+            {
+              "kind": "closure_verification_evidence",
+              "score": 6,
+              "evidence": [
+                "completed_state_reason",
+                "regression_coverage",
+                "source_commit_recorded"
+              ]
+            }
+          ],
+          "closure_evidence": [
+            {
+              "kind": "regression_coverage",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/294#issuecomment-4889351719",
+              "excerpt": "## Closed as fixed for now (user call, 2026-07-06) The CTD is guarded. Closing. **Fix (shipped + committed, ct_dev v0.7.222-dev, commit c718ddc):** ct's `_spawn_pickup` hook now..."
+            },
+            {
+              "kind": "source_commit_recorded",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/294#issuecomment-4889351719",
+              "excerpt": "## Closed as fixed for now (user call, 2026-07-06) The CTD is guarded. Closing. **Fix (shipped + committed, ct_dev v0.7.222-dev, commit c718ddc):** ct's `_spawn_pickup` hook now..."
+            },
+            {
+              "kind": "completed_state_reason",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/294",
+              "excerpt": "GitHub stateReason is COMPLETED."
+            }
+          ],
+          "review_policy": "manual review only; never auto-reopen from similarity"
+        },
+        {
+          "number": 270,
+          "title": "[CRITICAL crash] cosmetics/LA hats: wearer's hat swap CRASHES other players - headpiece unit not resident on viewer machines; mh_embed guard bypassed by second spawn path + unguarded Unit.node j_head attach",
+          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/270",
+          "closed_at": "07/06/2026 19:13:54",
+          "score": 190,
+          "confidence": "high",
+          "regression_signal": "direct-history-reference",
+          "reasons": [
+            {
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
+              "evidence": [
+                "#270"
+              ]
+            },
+            {
+              "kind": "shared_lifecycle_surface_classes",
+              "score": 24,
+              "evidence": [
+                "network_peer_parity",
+                "source_first_engine_contract",
+                "backend_realm_isolation"
+              ]
+            },
+            {
+              "kind": "shared_code_identifiers",
+              "score": 20,
+              "evidence": [
+                "spawn_unit"
+              ]
+            },
+            {
+              "kind": "shared_distinctive_title_terms",
+              "score": 7,
+              "evidence": [
+                "crashes"
+              ]
+            },
+            {
+              "kind": "shared_distinctive_terms",
+              "score": 15,
+              "evidence": [
+                "context",
+                "declares",
+                "head",
+                "known",
+                "later"
+              ]
+            },
+            {
+              "kind": "closure_verification_evidence",
+              "score": 4,
+              "evidence": [
+                "completed_state_reason",
+                "regression_coverage"
+              ]
+            }
+          ],
+          "closure_evidence": [
+            {
+              "kind": "regression_coverage",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/270#issuecomment-4896715429",
+              "excerpt": "Hotfix shipped 0.9.67-dev (create_attachment residency gate + Unit.has_node link guard + spawn refusal returns nil). No CTD across the three multi-peer sessions of 2026-07-06 (1..."
+            },
+            {
+              "kind": "completed_state_reason",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/270",
+              "excerpt": "GitHub stateReason is COMPLETED."
+            }
+          ],
+          "review_policy": "manual review only; never auto-reopen from similarity"
+        },
+        {
           "number": 494,
           "title": "Handoff: Fable agent campaign state 2026-07-11",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/494",
           "closed_at": "07/13/2026 08:34:22",
-          "score": 171,
+          "score": 179,
           "confidence": "high",
           "regression_signal": "direct-history-reference",
           "reasons": [
@@ -66962,10 +67172,11 @@
             },
             {
               "kind": "shared_lifecycle_surface_classes",
-              "score": 16,
+              "score": 24,
               "evidence": [
                 "network_peer_parity",
-                "source_first_engine_contract"
+                "source_first_engine_contract",
+                "backend_realm_isolation"
               ]
             },
             {
@@ -67157,144 +67368,6 @@
             {
               "kind": "completed_state_reason",
               "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/455",
-              "excerpt": "GitHub stateReason is COMPLETED."
-            }
-          ],
-          "review_policy": "manual review only; never auto-reopen from similarity"
-        },
-        {
-          "number": 275,
-          "title": "gut: The Enchanter's Lair (Drachenfels 3) - Skip Cutscenes auto-skips Nurgloth's phase cutscene, boss jumps to final phase and softlocks (health stuck at phase-1 amount)",
-          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/275",
-          "closed_at": "07/06/2026 21:32:17",
-          "score": 99,
-          "confidence": "medium",
-          "regression_signal": "related-history-review-only",
-          "reasons": [
-            {
-              "kind": "shared_lifecycle_surface_classes",
-              "score": 16,
-              "evidence": [
-                "network_peer_parity",
-                "source_first_engine_contract"
-              ]
-            },
-            {
-              "kind": "shared_code_identifiers",
-              "score": 60,
-              "evidence": [
-                "event_tweaker",
-                "high_intensity",
-                "is_server"
-              ]
-            },
-            {
-              "kind": "shared_distinctive_terms",
-              "score": 15,
-              "evidence": [
-                "activate",
-                "adventure",
-                "field",
-                "high",
-                "including"
-              ]
-            },
-            {
-              "kind": "closure_verification_evidence",
-              "score": 8,
-              "evidence": [
-                "completed_state_reason",
-                "regression_coverage",
-                "source_commit_recorded",
-                "user_confirmed_fixed"
-              ]
-            }
-          ],
-          "closure_evidence": [
-            {
-              "kind": "user_confirmed_fixed",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/275#issuecomment-4897803875",
-              "excerpt": "## CLOSED - user-confirmed fixed in-game (2026-07-06) **Root cause**: gt_dev's Creature Spawner hook on `BTConditions.transitioned_one_third_health` used `(in_arena and func(......"
-            },
-            {
-              "kind": "regression_coverage",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/275#issuecomment-4897803875",
-              "excerpt": "## CLOSED - user-confirmed fixed in-game (2026-07-06) **Root cause**: gt_dev's Creature Spawner hook on `BTConditions.transitioned_one_third_health` used `(in_arena and func(......"
-            },
-            {
-              "kind": "source_commit_recorded",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/275#issuecomment-4897803875",
-              "excerpt": "## CLOSED - user-confirmed fixed in-game (2026-07-06) **Root cause**: gt_dev's Creature Spawner hook on `BTConditions.transitioned_one_third_health` used `(in_arena and func(......"
-            },
-            {
-              "kind": "completed_state_reason",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/275",
-              "excerpt": "GitHub stateReason is COMPLETED."
-            }
-          ],
-          "review_policy": "manual review only; never auto-reopen from similarity"
-        },
-        {
-          "number": 291,
-          "title": "[crash] CW journey-complete CTD on Cataclysm 3 — vanilla statistics_util.lua:997 'compare number with nil' (difficulty_index nil), won Slaanesh Citadel",
-          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/291",
-          "closed_at": "07/06/2026 05:57:33",
-          "score": 97,
-          "confidence": "medium",
-          "regression_signal": "related-history-review-only",
-          "reasons": [
-            {
-              "kind": "shared_lifecycle_surface_classes",
-              "score": 16,
-              "evidence": [
-                "network_peer_parity",
-                "source_first_engine_contract"
-              ]
-            },
-            {
-              "kind": "shared_code_identifiers",
-              "score": 60,
-              "evidence": [
-                "is_server",
-                "state_ingame",
-                "state_ingame.lua"
-              ]
-            },
-            {
-              "kind": "shared_distinctive_terms",
-              "score": 15,
-              "evidence": [
-                "cataclysm",
-                "decompiled",
-                "difficulty",
-                "function",
-                "ingame"
-              ]
-            },
-            {
-              "kind": "closure_verification_evidence",
-              "score": 6,
-              "evidence": [
-                "completed_state_reason",
-                "regression_coverage",
-                "source_commit_recorded"
-              ]
-            }
-          ],
-          "closure_evidence": [
-            {
-              "kind": "regression_coverage",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/291#issuecomment-4889521359",
-              "excerpt": "## Closed as fixed (user-confirmed in-game, 2026-07-06) Winning a CW journey (Citadel) with Progressive Difficulty ramped to Cataclysm 3 no longer CTDs at the journey-completion..."
-            },
-            {
-              "kind": "source_commit_recorded",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/291#issuecomment-4889521359",
-              "excerpt": "## Closed as fixed (user-confirmed in-game, 2026-07-06) Winning a CW journey (Citadel) with Progressive Difficulty ramped to Cataclysm 3 no longer CTDs at the journey-completion..."
-            },
-            {
-              "kind": "completed_state_reason",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/291",
               "excerpt": "GitHub stateReason is COMPLETED."
             }
           ],
@@ -72467,14 +72540,21 @@
           "review_policy": "manual review only; never auto-reopen from similarity"
         },
         {
-          "number": 422,
-          "title": "WOC: Blightreaper CTDs non-WOC peers on equip",
-          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/422",
-          "closed_at": "07/13/2026 02:27:50",
-          "score": 114,
+          "number": 569,
+          "title": "wt: Saltzpyre weapons using Warrior Priest greathammer anims face backwards in 3P",
+          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/569",
+          "closed_at": "07/13/2026 23:17:14",
+          "score": 115,
           "confidence": "high",
-          "regression_signal": "related-history-review-only",
+          "regression_signal": "same-subsystem-surface-after-verified-closure",
           "reasons": [
+            {
+              "kind": "shared_subsystem_labels",
+              "score": 30,
+              "evidence": [
+                "Tweaker: Weapons"
+              ]
+            },
             {
               "kind": "shared_lifecycle_surface_classes",
               "score": 32,
@@ -72487,53 +72567,55 @@
             },
             {
               "kind": "shared_code_identifiers",
-              "score": 60,
+              "score": 40,
               "evidence": [
-                "__index",
-                "character_weapon_variants",
-                "character_weapon_variants.lua"
-              ]
-            },
-            {
-              "kind": "shared_distinctive_title_terms",
-              "score": 7,
-              "evidence": [
-                "peers"
+                "verify-fix-coop",
+                "wt_regression_test"
               ]
             },
             {
               "kind": "shared_distinctive_terms",
-              "score": 9,
+              "score": 3,
               "evidence": [
-                "index",
-                "networklookup",
-                "strict"
+                "axis"
               ]
             },
             {
               "kind": "closure_verification_evidence",
-              "score": 6,
+              "score": 10,
               "evidence": [
                 "completed_state_reason",
-                "fixed_label",
-                "source_commit_recorded"
+                "regression_coverage",
+                "source_commit_recorded",
+                "user_confirmed_fixed",
+                "verification_passed"
               ]
             }
           ],
           "closure_evidence": [
             {
-              "kind": "source_commit_recorded",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/422#issuecomment-4911573580",
-              "excerpt": "Hardening shipped in weapons_of_chaos 0.1.7-dev (commit 1d9cb95): _wire_safe_item helper, unresolvable base now skips the sync instead of emitting raw woc_ key; wire_woc_never_l..."
+              "kind": "user_confirmed_fixed",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/569#issuecomment-4963733527",
+              "excerpt": "Previously confirmed working by the user: Saltzpyre's remapped weapons retain the canonical 180-degree correction and face the intended direction in third person. Closing as ver..."
             },
             {
-              "kind": "fixed_label",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/422",
-              "excerpt": "Closed issue carries the Fixed lifecycle label."
+              "kind": "verification_passed",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/569#issuecomment-4962515535",
+              "excerpt": "Follow-up fix is committed and pushed on `agent/wt-hold-pose-569` at `2199542` (not shipped). ## Confirmed cause The latest two logs prove `0.12.221-dev` applies the #569 correc..."
+            },
+            {
+              "kind": "source_commit_recorded",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/569#issuecomment-4962249850",
+              "excerpt": "Implemented on branch `agent/wt-saltz-wp-remap-569` in commit `0d57726` (not shipped). Source-grounded diagnosis - Vanilla `AttachmentNodeLinking.two_handed_melee_weapon.third_p..."
+            },
+            {
+              "kind": "regression_coverage",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/569",
+              "excerpt": "## Summary Weapons equipped on Saltzpyre's standard/non-Warrior-Priest third-person character model render backwards when Weapon Tweaker remaps them to the Warrior Priest greath..."
             },
             {
               "kind": "completed_state_reason",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/422",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/569",
               "excerpt": "GitHub stateReason is COMPLETED."
             }
           ],
@@ -88111,6 +88193,7 @@
         "network_peer_parity",
         "canonical_identity_persistence",
         "source_first_engine_contract",
+        "custom_asset_contract",
         "backend_realm_isolation"
       ],
       "umbrella_issues": [
@@ -88218,7 +88301,7 @@
           "title": "Wielding the Bretonian Longsword and Shield on Kruber uses the wrong weapon",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/475",
           "closed_at": "07/13/2026 23:17:11",
-          "score": 214,
+          "score": 222,
           "confidence": "high",
           "regression_signal": "direct-history-reference",
           "reasons": [
@@ -88246,9 +88329,10 @@
             },
             {
               "kind": "shared_lifecycle_surface_classes",
-              "score": 16,
+              "score": 24,
               "evidence": [
                 "network_peer_parity",
+                "custom_asset_contract",
                 "backend_realm_isolation"
               ]
             },
@@ -88288,7 +88372,7 @@
           "title": "CWV blacksmith/template items resolve to base weapon",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/392",
           "closed_at": "07/14/2026 02:57:47",
-          "score": 124,
+          "score": 132,
           "confidence": "high",
           "regression_signal": "same-subsystem-surface-after-verified-closure",
           "reasons": [
@@ -88301,10 +88385,11 @@
             },
             {
               "kind": "shared_lifecycle_surface_classes",
-              "score": 24,
+              "score": 32,
               "evidence": [
                 "network_peer_parity",
                 "canonical_identity_persistence",
+                "custom_asset_contract",
                 "backend_realm_isolation"
               ]
             },
@@ -88511,8 +88596,7 @@
         }
       ],
       "findings": [
-        "title_over_8_words",
-        "coop_label_without_coop_test_evidence"
+        "title_over_8_words"
       ],
       "clean": false
     },
@@ -111006,6 +111090,127 @@
       "recommended_next_action": "solo in-game verification",
       "related_closed_issues": [
         {
+          "number": 270,
+          "title": "[CRITICAL crash] cosmetics/LA hats: wearer's hat swap CRASHES other players - headpiece unit not resident on viewer machines; mh_embed guard bypassed by second spawn path + unguarded Unit.node j_head attach",
+          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/270",
+          "closed_at": "07/06/2026 19:13:54",
+          "score": 164,
+          "confidence": "high",
+          "regression_signal": "direct-history-reference",
+          "reasons": [
+            {
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
+              "evidence": [
+                "#270"
+              ]
+            },
+            {
+              "kind": "shared_lifecycle_surface_classes",
+              "score": 24,
+              "evidence": [
+                "unsafe_native_call_preflight",
+                "network_peer_parity",
+                "source_first_engine_contract"
+              ]
+            },
+            {
+              "kind": "shared_distinctive_title_terms",
+              "score": 7,
+              "evidence": [
+                "crashes"
+              ]
+            },
+            {
+              "kind": "shared_distinctive_terms",
+              "score": 9,
+              "evidence": [
+                "dies",
+                "failed",
+                "stingray"
+              ]
+            },
+            {
+              "kind": "closure_verification_evidence",
+              "score": 4,
+              "evidence": [
+                "completed_state_reason",
+                "regression_coverage"
+              ]
+            }
+          ],
+          "closure_evidence": [
+            {
+              "kind": "regression_coverage",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/270#issuecomment-4896715429",
+              "excerpt": "Hotfix shipped 0.9.67-dev (create_attachment residency gate + Unit.has_node link guard + spawn refusal returns nil). No CTD across the three multi-peer sessions of 2026-07-06 (1..."
+            },
+            {
+              "kind": "completed_state_reason",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/270",
+              "excerpt": "GitHub stateReason is COMPLETED."
+            }
+          ],
+          "review_policy": "manual review only; never auto-reopen from similarity"
+        },
+        {
+          "number": 59,
+          "title": "gt: Drachenfels boss BT crash on CW dlc_castle_*_path missions — bt_conditions.lua:309 attempt to compare nil with number",
+          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/59",
+          "closed_at": "07/04/2026 02:51:42",
+          "score": 157,
+          "confidence": "high",
+          "regression_signal": "direct-history-reference",
+          "reasons": [
+            {
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
+              "evidence": [
+                "#59"
+              ]
+            },
+            {
+              "kind": "shared_lifecycle_surface_classes",
+              "score": 24,
+              "evidence": [
+                "unsafe_native_call_preflight",
+                "network_peer_parity",
+                "source_first_engine_contract"
+              ]
+            },
+            {
+              "kind": "shared_distinctive_terms",
+              "score": 9,
+              "evidence": [
+                "calls",
+                "including",
+                "stack"
+              ]
+            },
+            {
+              "kind": "closure_verification_evidence",
+              "score": 4,
+              "evidence": [
+                "completed_state_reason",
+                "regression_coverage"
+              ]
+            }
+          ],
+          "closure_evidence": [
+            {
+              "kind": "regression_coverage",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/59#issuecomment-4860606673",
+              "excerpt": "**Re-verification (no new code change) — the defensive guard is present and intact.** Confirmed this session that the fix shipped in **v0.2.149-dev** is still present in gt_dev ..."
+            },
+            {
+              "kind": "completed_state_reason",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/59",
+              "excerpt": "GitHub stateReason is COMPLETED."
+            }
+          ],
+          "review_policy": "manual review only; never auto-reopen from similarity"
+        },
+        {
           "number": 213,
           "title": "et: 'Tried to freeze unit twice in the same frame' engine ERROR under enemy_recycler.deactivate_area with raised grunt caps",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/213",
@@ -111217,133 +111422,6 @@
             {
               "kind": "completed_state_reason",
               "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/128",
-              "excerpt": "GitHub stateReason is COMPLETED."
-            }
-          ],
-          "review_policy": "manual review only; never auto-reopen from similarity"
-        },
-        {
-          "number": 67,
-          "title": "enemy_tweaker: silent pcall in SpawnZoneBaker.inject_special_packs hook + 10x rat scaling causes vanilla spawn_zone_baker.lua:563 nil-zone crash",
-          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/67",
-          "closed_at": "06/04/2026 05:16:26",
-          "score": 80,
-          "confidence": "medium",
-          "regression_signal": "related-history-review-only",
-          "reasons": [
-            {
-              "kind": "shared_lifecycle_surface_classes",
-              "score": 16,
-              "evidence": [
-                "network_peer_parity",
-                "source_first_engine_contract"
-              ]
-            },
-            {
-              "kind": "shared_code_identifiers",
-              "score": 40,
-              "evidence": [
-                "enemy_tweaker",
-                "pcall"
-              ]
-            },
-            {
-              "kind": "shared_distinctive_title_terms",
-              "score": 7,
-              "evidence": [
-                "enemy"
-              ]
-            },
-            {
-              "kind": "shared_distinctive_terms",
-              "score": 15,
-              "evidence": [
-                "area",
-                "crashes",
-                "pcall",
-                "scaling",
-                "stack"
-              ]
-            },
-            {
-              "kind": "closure_verification_evidence",
-              "score": 2,
-              "evidence": [
-                "completed_state_reason"
-              ]
-            }
-          ],
-          "closure_evidence": [
-            {
-              "kind": "completed_state_reason",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/67",
-              "excerpt": "GitHub stateReason is COMPLETED."
-            }
-          ],
-          "review_policy": "manual review only; never auto-reopen from similarity"
-        },
-        {
-          "number": 42,
-          "title": "Propagate RPC schema_version pattern to enemy_tweaker (et_br_fingerprint)",
-          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/42",
-          "closed_at": "07/07/2026 00:30:19",
-          "score": 79,
-          "confidence": "medium",
-          "regression_signal": "same-subsystem-surface-after-verified-closure",
-          "reasons": [
-            {
-              "kind": "shared_subsystem_labels",
-              "score": 30,
-              "evidence": [
-                "Tweaker: Enemies"
-              ]
-            },
-            {
-              "kind": "shared_lifecycle_surface_classes",
-              "score": 16,
-              "evidence": [
-                "network_peer_parity",
-                "source_first_engine_contract"
-              ]
-            },
-            {
-              "kind": "shared_code_identifiers",
-              "score": 20,
-              "evidence": [
-                "enemy_tweaker"
-              ]
-            },
-            {
-              "kind": "shared_distinctive_title_terms",
-              "score": 7,
-              "evidence": [
-                "enemy"
-              ]
-            },
-            {
-              "kind": "closure_verification_evidence",
-              "score": 6,
-              "evidence": [
-                "completed_state_reason",
-                "regression_coverage",
-                "user_confirmed_fixed"
-              ]
-            }
-          ],
-          "closure_evidence": [
-            {
-              "kind": "user_confirmed_fixed",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/42#issuecomment-4898885656",
-              "excerpt": "Verified in code: `ET_RPC_SCHEMA = 1` (enemy_tweaker.lua:11), prepended as first positional in the `et_br_fingerprint` sender (:316), receiver drops on `schema_version ~= ET_RPC..."
-            },
-            {
-              "kind": "regression_coverage",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/42#issuecomment-4860583131",
-              "excerpt": "Applied the VMF_RECIPES § 10 RPC schema pattern to the `et_br_fingerprint` channel (matching the ct v0.7.114-dev pilot / Issue #27). **What changed:** - Added `local ET_RPC_SCHE..."
-            },
-            {
-              "kind": "completed_state_reason",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/42",
               "excerpt": "GitHub stateReason is COMPLETED."
             }
           ],
@@ -116099,30 +116177,118 @@
         "Tweaker: Weapons",
         "CWV",
         "cross-mod",
-        "diagnostics-armed",
+        "verify-fix",
         "0-critical",
         "WOC"
       ],
       "applicable_lessons": [
+        "custom_unit_behavioral_contract",
         "network_peer_parity",
         "canonical_identity_persistence",
         "bounded_transaction_lifecycle",
         "backend_realm_isolation"
       ],
       "umbrella_issues": [
+        420,
         428,
         546
       ],
       "risk_tier": "moderate",
       "verification_scope": "solo",
-      "recommended_next_action": "run documented repro and collect bounded diagnostics",
+      "recommended_next_action": "solo in-game verification",
       "related_closed_issues": [
+        {
+          "number": 506,
+          "title": "Shared parity lib: callbacks read stale applied_state",
+          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/506",
+          "closed_at": "07/14/2026 00:57:20",
+          "score": 257,
+          "confidence": "high",
+          "regression_signal": "direct-history-reference",
+          "reasons": [
+            {
+              "kind": "open_explicitly_references_closed",
+              "score": 120,
+              "evidence": [
+                "#506"
+              ]
+            },
+            {
+              "kind": "shared_explicit_references",
+              "score": 8,
+              "evidence": [
+                "#425"
+              ]
+            },
+            {
+              "kind": "shared_subsystem_labels",
+              "score": 30,
+              "evidence": [
+                "cross-mod"
+              ]
+            },
+            {
+              "kind": "shared_lifecycle_surface_classes",
+              "score": 24,
+              "evidence": [
+                "network_peer_parity",
+                "bounded_transaction_lifecycle",
+                "backend_realm_isolation"
+              ]
+            },
+            {
+              "kind": "shared_code_identifiers",
+              "score": 60,
+              "evidence": [
+                "/cwv_regression_test",
+                "character_weapon_variants",
+                "cwv_regression_test"
+              ]
+            },
+            {
+              "kind": "shared_distinctive_terms",
+              "score": 9,
+              "evidence": [
+                "remove",
+                "shared",
+                "transition"
+              ]
+            },
+            {
+              "kind": "closure_verification_evidence",
+              "score": 6,
+              "evidence": [
+                "completed_state_reason",
+                "regression_coverage",
+                "verification_passed"
+              ]
+            }
+          ],
+          "closure_evidence": [
+            {
+              "kind": "regression_coverage",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/506#issuecomment-4964345263",
+              "excerpt": "Verified from the July 13 co-op session and the latest retained log. With Rain missing Career Tweaker, the host recorded `Peer-parity: disabled networked talent reworks`; after ..."
+            },
+            {
+              "kind": "verification_passed",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/506#issuecomment-4952439539",
+              "excerpt": "Shipped: master lib + verbatim re-copies in career_tweaker 0.3.58-dev, character_weapon_variants 0.1.382-dev, chaos_wastes_tweaker_dev 0.7.244-dev (all uploads confirmed). crt''..."
+            },
+            {
+              "kind": "completed_state_reason",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/506",
+              "excerpt": "GitHub stateReason is COMPLETED."
+            }
+          ],
+          "review_policy": "manual review only; never auto-reopen from similarity"
+        },
         {
           "number": 536,
           "title": "wt: wh careers missing empty-wield network patch",
           "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/536",
           "closed_at": "07/13/2026 22:03:18",
-          "score": 236,
+          "score": 256,
           "confidence": "high",
           "regression_signal": "direct-history-reference",
           "reasons": [
@@ -116152,8 +116318,9 @@
             },
             {
               "kind": "shared_code_identifiers",
-              "score": 40,
+              "score": 60,
               "evidence": [
+                "/wt_regression_test",
                 "weapon_tweaker",
                 "weapon_tweaker.lua"
               ]
@@ -116286,188 +116453,39 @@
           "review_policy": "manual review only; never auto-reopen from similarity"
         },
         {
-          "number": 506,
-          "title": "Shared parity lib: callbacks read stale applied_state",
-          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/506",
-          "closed_at": "07/14/2026 00:57:20",
-          "score": 217,
-          "confidence": "high",
-          "regression_signal": "direct-history-reference",
-          "reasons": [
-            {
-              "kind": "open_explicitly_references_closed",
-              "score": 120,
-              "evidence": [
-                "#506"
-              ]
-            },
-            {
-              "kind": "shared_explicit_references",
-              "score": 8,
-              "evidence": [
-                "#425"
-              ]
-            },
-            {
-              "kind": "shared_subsystem_labels",
-              "score": 30,
-              "evidence": [
-                "cross-mod"
-              ]
-            },
-            {
-              "kind": "shared_lifecycle_surface_classes",
-              "score": 24,
-              "evidence": [
-                "network_peer_parity",
-                "bounded_transaction_lifecycle",
-                "backend_realm_isolation"
-              ]
-            },
-            {
-              "kind": "shared_code_identifiers",
-              "score": 20,
-              "evidence": [
-                "character_weapon_variants"
-              ]
-            },
-            {
-              "kind": "shared_distinctive_terms",
-              "score": 9,
-              "evidence": [
-                "remove",
-                "shared",
-                "transition"
-              ]
-            },
-            {
-              "kind": "closure_verification_evidence",
-              "score": 6,
-              "evidence": [
-                "completed_state_reason",
-                "regression_coverage",
-                "verification_passed"
-              ]
-            }
-          ],
-          "closure_evidence": [
-            {
-              "kind": "regression_coverage",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/506#issuecomment-4964345263",
-              "excerpt": "Verified from the July 13 co-op session and the latest retained log. With Rain missing Career Tweaker, the host recorded `Peer-parity: disabled networked talent reworks`; after ..."
-            },
-            {
-              "kind": "verification_passed",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/506#issuecomment-4952439539",
-              "excerpt": "Shipped: master lib + verbatim re-copies in career_tweaker 0.3.58-dev, character_weapon_variants 0.1.382-dev, chaos_wastes_tweaker_dev 0.7.244-dev (all uploads confirmed). crt''..."
-            },
-            {
-              "kind": "completed_state_reason",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/506",
-              "excerpt": "GitHub stateReason is COMPLETED."
-            }
-          ],
-          "review_policy": "manual review only; never auto-reopen from similarity"
-        },
-        {
-          "number": 392,
-          "title": "CWV blacksmith/template items resolve to base weapon",
-          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/392",
-          "closed_at": "07/14/2026 02:57:47",
-          "score": 130,
+          "number": 597,
+          "title": "CWV: replace Poleaxe with Kruber Greataxe models",
+          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/597",
+          "closed_at": "07/15/2026 04:44:36",
+          "score": 177,
           "confidence": "high",
           "regression_signal": "same-subsystem-surface-after-verified-closure",
           "reasons": [
             {
               "kind": "shared_subsystem_labels",
-              "score": 30,
+              "score": 60,
               "evidence": [
-                "CWV"
+                "CWV",
+                "Tweaker: Weapons"
               ]
             },
             {
               "kind": "shared_lifecycle_surface_classes",
-              "score": 24,
+              "score": 32,
               "evidence": [
+                "custom_unit_behavioral_contract",
                 "network_peer_parity",
                 "canonical_identity_persistence",
-                "backend_realm_isolation"
+                "bounded_transaction_lifecycle"
               ]
             },
             {
               "kind": "shared_code_identifiers",
               "score": 60,
               "evidence": [
-                "character_weapon_variants",
-                "character_weapon_variants.lua",
-                "item_data"
-              ]
-            },
-            {
-              "kind": "shared_distinctive_terms",
-              "score": 12,
-              "evidence": [
-                "distinct",
-                "instance",
-                "registration",
-                "templates"
-              ]
-            },
-            {
-              "kind": "closure_verification_evidence",
-              "score": 4,
-              "evidence": [
-                "completed_state_reason",
-                "fixed_label"
-              ]
-            }
-          ],
-          "closure_evidence": [
-            {
-              "kind": "fixed_label",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/392",
-              "excerpt": "Closed issue carries the Fixed lifecycle label."
-            },
-            {
-              "kind": "completed_state_reason",
-              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/392",
-              "excerpt": "GitHub stateReason is COMPLETED."
-            }
-          ],
-          "review_policy": "manual review only; never auto-reopen from similarity"
-        },
-        {
-          "number": 415,
-          "title": "cwv: Imperial Longsword shield offhand absent for host",
-          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/415",
-          "closed_at": "07/07/2026 18:49:20",
-          "score": 129,
-          "confidence": "high",
-          "regression_signal": "same-subsystem-surface",
-          "reasons": [
-            {
-              "kind": "shared_subsystem_labels",
-              "score": 30,
-              "evidence": [
-                "CWV"
-              ]
-            },
-            {
-              "kind": "shared_lifecycle_surface_classes",
-              "score": 24,
-              "evidence": [
-                "network_peer_parity",
-                "canonical_identity_persistence",
-                "backend_realm_isolation"
-              ]
-            },
-            {
-              "kind": "shared_code_identifiers",
-              "score": 60,
-              "evidence": [
-                "character_weapon_variants",
-                "character_weapon_variants.lua",
-                "item_data"
+                "/cwv_regression_test",
+                "/wt_regression_test",
+                "cwv_regression_test"
               ]
             },
             {
@@ -116475,33 +116493,152 @@
               "score": 15,
               "evidence": [
                 "careers",
-                "distinct",
-                "equipped",
-                "fail",
-                "known"
+                "closed",
+                "diagnostics",
+                "disable",
+                "distinct"
+              ]
+            },
+            {
+              "kind": "closure_verification_evidence",
+              "score": 10,
+              "evidence": [
+                "completed_state_reason",
+                "fixed_label",
+                "regression_coverage",
+                "source_commit_recorded",
+                "verification_passed"
               ]
             }
           ],
-          "closure_evidence": [],
+          "closure_evidence": [
+            {
+              "kind": "verification_passed",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/597#issuecomment-4976941571",
+              "excerpt": "**User verification:** Confirmed completed in-game on 2026-07-14. The Kruber Greataxe replacement, custom models, crafting/equip path, and final Model 01 transform now satisfy t..."
+            },
+            {
+              "kind": "source_commit_recorded",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/597#issuecomment-4976632178",
+              "excerpt": "Deployed in **Character Weapon Variants v0.1.417-dev** (commit `158f9a4`, Workshop manifest `9208090598682727504`). Model 01 now owns this exact Kruber third-person transform fr..."
+            },
+            {
+              "kind": "regression_coverage",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/597#issuecomment-4973859358",
+              "excerpt": "Ownership follow-up implemented for the existing Greataxe family. The WT/CWV boundary now treats `cwv_es_greataxe` as the canonical Kruber and standard-Saltzpyre Greataxe whenev..."
+            },
+            {
+              "kind": "fixed_label",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/597",
+              "excerpt": "Closed issue carries the Fixed lifecycle label."
+            },
+            {
+              "kind": "completed_state_reason",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/597",
+              "excerpt": "GitHub stateReason is COMPLETED."
+            }
+          ],
+          "review_policy": "manual review only; never auto-reopen from similarity"
+        },
+        {
+          "number": 620,
+          "title": "Add per-item combat style switching",
+          "url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/620",
+          "closed_at": "07/16/2026 20:11:23",
+          "score": 175,
+          "confidence": "high",
+          "regression_signal": "same-subsystem-surface-after-verified-closure",
+          "reasons": [
+            {
+              "kind": "shared_subsystem_labels",
+              "score": 60,
+              "evidence": [
+                "cross-mod",
+                "CWV"
+              ]
+            },
+            {
+              "kind": "shared_lifecycle_surface_classes",
+              "score": 32,
+              "evidence": [
+                "network_peer_parity",
+                "canonical_identity_persistence",
+                "bounded_transaction_lifecycle",
+                "backend_realm_isolation"
+              ]
+            },
+            {
+              "kind": "shared_code_identifiers",
+              "score": 60,
+              "evidence": [
+                "/cwv_regression_test",
+                "/wt_regression_test",
+                "cwv_regression_test"
+              ]
+            },
+            {
+              "kind": "shared_distinctive_terms",
+              "score": 15,
+              "evidence": [
+                "action",
+                "closed",
+                "equipped",
+                "expose",
+                "fail"
+              ]
+            },
+            {
+              "kind": "closure_verification_evidence",
+              "score": 8,
+              "evidence": [
+                "completed_state_reason",
+                "fixed_label",
+                "regression_coverage",
+                "source_commit_recorded"
+              ]
+            }
+          ],
+          "closure_evidence": [
+            {
+              "kind": "regression_coverage",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/620#issuecomment-4985655607",
+              "excerpt": "The loadout-menu crash is fixed in CWV `0.1.428-dev` (`ffbc1f4`). Root cause: the style feature appended `special_1` as an eighth generic action, while the vanilla console loado..."
+            },
+            {
+              "kind": "source_commit_recorded",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/620#issuecomment-4983461375",
+              "excerpt": "The same candidate behavior is now available in the public **Tweaker: Weapons 0.12.262-beta** rollup (commit `d63caa7`, Workshop manifest `3028512753609967357`). Use the existin..."
+            },
+            {
+              "kind": "fixed_label",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/620",
+              "excerpt": "Closed issue carries the Fixed lifecycle label."
+            },
+            {
+              "kind": "completed_state_reason",
+              "source_url": "https://github.com/Ensrick/vermintide-2-tweaker/issues/620",
+              "excerpt": "GitHub stateReason is COMPLETED."
+            }
+          ],
           "review_policy": "manual review only; never auto-reopen from similarity"
         }
       ],
       "related_closed_status": "ranked-evidence-review",
       "fallbacks": [
         {
-          "trigger": "The issue's bounded armed repro records a first state divergence.",
-          "change": "Repair only the layer named by that trace.",
-          "falsifier": "The trace remains healthy through the observed symptom."
+          "trigger": "The issue's posted build-specific verification fails at a named invariant or surface.",
+          "change": "Repair the first failed invariant in the current implementation, scoped to that surface.",
+          "falsifier": "The invariant passes while the reported symptom remains."
         },
         {
-          "trigger": "Captured runtime state differs from the issue's cited vanilla/decompiled consumer contract.",
-          "change": "Repair the first contract mismatch and retain the probe as regression evidence.",
-          "falsifier": "Captured state matches the source contract at every sampled boundary."
+          "trigger": "Runtime evidence shows the custom hook/adapter disagrees with the cited vanilla consumer contract.",
+          "change": "Replace or move the custom seam to that source-backed vanilla boundary, preserving fail-closed behavior.",
+          "falsifier": "The custom and vanilla boundary inputs/outputs are identical."
         },
         {
-          "trigger": "Insufficient evidence: the current probe is silent or cannot distinguish the remaining candidates.",
-          "change": "Move bounded instrumentation one lifecycle edge earlier and later; promote only the proven edge to a fix.",
-          "falsifier": "The existing probe already identifies one causal boundary."
+          "trigger": "The loaded version/hash or canonical ancestry does not contain the claimed fix.",
+          "change": "Reconcile the issue commit onto current master, rebuild, deploy, and hash-verify before changing behavior.",
+          "falsifier": "The failing log and deployed hash prove the current canonical commit was running."
         }
       ],
       "findings": [
