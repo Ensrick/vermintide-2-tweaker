@@ -190,9 +190,10 @@ local function _pose_text(snapshot)
 		r[1] or 0, r[2] or 0, r[3] or 0, r[4] or 0)
 end
 
--- The local dev tuner intentionally owns a non-identity live edit. Yield only
--- for that exact channel/slot so WOC's durable baseline neither fights the
--- tuner nor abandons the baked pose when the tool is merely installed.
+-- The local dev tuner intentionally owns a non-identity edit, including a
+-- one-shot /wt_dev_hp_apply while live apply is off. Yield only for that exact
+-- channel/slot so WOC neither fights the tuner nor abandons the baked pose when
+-- the tool is merely installed or every tuner value is identity.
 local function _dev_tuner_claims(record)
 	if record.surface ~= "owner-spawn" then return false end
 	local get_mod_fn = rawget(_G, "get_mod")
@@ -205,26 +206,7 @@ local function _dev_tuner_claims(record)
 		local ok, value = pcall(wt.get, wt, key)
 		return ok and value ~= nil and value or fallback
 	end
-	if setting("wt_dev_hp_enabled", false) ~= true
-			or setting("wt_dev_hp_live_apply", false) ~= true then return false end
-	local target_slot = setting("wt_dev_hp_target_slot", "auto")
-	if target_slot ~= "auto" and target_slot ~= "slot_melee" then return false end
-	local prefix
-	if record.perspective == "1p" then
-		if setting("wt_dev_hp_enable_1p", false) ~= true then return false end
-		prefix = "wt_dev_hp_fp_rh_"
-	else
-		if setting("wt_dev_hp_enable_3p", true) == false then return false end
-		prefix = "wt_dev_hp_rh_"
-	end
-	for _, suffix in ipairs({ "offset_x", "offset_y", "offset_z",
-			"rot_pitch", "rot_yaw", "rot_roll" }) do
-		if setting(prefix .. suffix, 0) ~= 0 then return true end
-	end
-	for _, suffix in ipairs({ "scale_x", "scale_y", "scale_z" }) do
-		if setting(prefix .. suffix, 1) ~= 1 then return true end
-	end
-	return false
+	return _durable_transform_lib.dev_tuner_claims(record, setting)
 end
 
 local _transform_owner = _durable_transform_lib.new({

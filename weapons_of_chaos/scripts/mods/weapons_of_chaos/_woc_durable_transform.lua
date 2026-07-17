@@ -30,6 +30,33 @@ function M.classify_surface(owner_unit_1p, owner_unit_3p)
 	return "preview-spawn"
 end
 
+-- A non-identity hold-pose value is authored tuner ownership whether it was
+-- applied continuously or through /wt_dev_hp_apply. Live-apply controls when
+-- WT writes; it does not revoke a one-shot pose that is already on the unit.
+function M.dev_tuner_claims(record, setting)
+	if type(record) ~= "table" or record.surface ~= "owner-spawn"
+			or type(setting) ~= "function"
+			or setting("wt_dev_hp_enabled", false) ~= true then return false end
+	local target_slot = setting("wt_dev_hp_target_slot", "auto")
+	if target_slot ~= "auto" and target_slot ~= "slot_melee" then return false end
+	local prefix
+	if record.perspective == "1p" then
+		if setting("wt_dev_hp_enable_1p", false) ~= true then return false end
+		prefix = "wt_dev_hp_fp_rh_"
+	else
+		if setting("wt_dev_hp_enable_3p", true) == false then return false end
+		prefix = "wt_dev_hp_rh_"
+	end
+	for _, suffix in ipairs({ "offset_x", "offset_y", "offset_z",
+			"rot_pitch", "rot_yaw", "rot_roll" }) do
+		if setting(prefix .. suffix, 0) ~= 0 then return true end
+	end
+	for _, suffix in ipairs({ "scale_x", "scale_y", "scale_z" }) do
+		if setting(prefix .. suffix, 1) ~= 1 then return true end
+	end
+	return false
+end
+
 local function triplet(value)
 	return type(value) == "table"
 		and type(value[1]) == "number"

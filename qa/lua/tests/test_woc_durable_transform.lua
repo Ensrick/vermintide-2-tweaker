@@ -77,6 +77,27 @@ return function(H, repo_root)
 		H.equal(module.classify_surface(nil, nil), "preview-spawn")
 	end)
 
+	H.test("WOC #613 preserves one-shot tuner poses with live apply off", function()
+		local values = {
+			wt_dev_hp_enabled = true,
+			wt_dev_hp_live_apply = false,
+			wt_dev_hp_target_slot = "slot_melee",
+			wt_dev_hp_enable_3p = true,
+			wt_dev_hp_rh_offset_z = -0.2,
+		}
+		local function setting(key, fallback)
+			local value = values[key]
+			return value == nil and fallback or value
+		end
+		H.equal(module.dev_tuner_claims({
+			surface = "owner-spawn", perspective = "3p",
+		}, setting), true)
+		values.wt_dev_hp_rh_offset_z = 0
+		H.equal(module.dev_tuner_claims({
+			surface = "owner-spawn", perspective = "3p",
+		}, setting), false)
+	end)
+
 	H.test("WOC #613 repairs animation-stomped owner 1P and 3P poses", function()
 		for _, perspective in ipairs({ "1p", "3p" }) do
 			local owner, unit, state, _, stomp, writes, events = fixture()

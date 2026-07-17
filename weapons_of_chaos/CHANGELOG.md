@@ -11,7 +11,8 @@
   and linked-position Z offset `-0.3`.
 - Added a weak gameplay owner that reads retained node-0 state and writes only
   after numeric drift. Preview surfaces remain one-shot, no transform RPC is
-  sent, dead units are pruned, and an intentional WT live-tuner edit wins.
+  sent, dead units are pruned, and intentional WT live or one-shot tuner edits
+  win while their relevant channel contains a non-identity value.
 - Replaced success-only diagnostics with bounded numeric before/after/target
   proof and added offline coverage for owner 1P/3P, husks, animation resets,
   previews, tuner ownership, and quaternion equivalence.
