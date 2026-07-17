@@ -9,6 +9,8 @@ param(
     [string]$Repository = "Ensrick/vermintide-2-tweaker",
     [string]$OutputPath,
     [string]$MarkdownPath,
+    # Minimum review slots per open issue. Every high-confidence relation is
+    # retained even when that exceeds this weaker-match floor.
     [ValidateRange(1, 20)]
     [int]$MaxClosedMatches = 5,
     [switch]$SelfTest
@@ -25,6 +27,8 @@ $LifecycleLabels = @(
 )
 
 $TypeLabels = @("bug", "enhancement", "feature")
+
+$SeverityLabels = @("0-critical", "1-major", "2-moderate", "3-low")
 
 # Broad evidence terms intentionally produce a review queue, not an automatic
 # implementation claim.  Each code names a concrete lesson paid for by prior
@@ -57,7 +61,7 @@ $NonSubsystemLabels = @(
     "tooling", "not-started", "verify-fix", "verify-fix-coop",
     "diagnostics-armed", "coop-required", "Fixed", "duplicate", "wontfix",
     "invalid", "question", "help wanted", "good first issue", "waiting-user",
-    "0-critical", "1-major", "2-moderate", "3-minor", "4-low"
+    "0-critical", "1-major", "2-moderate", "3-low", "3-minor", "4-low"
 )
 
 $TermStopWords = @(
@@ -118,6 +122,7 @@ function Get-IssueFindings($Issue) {
     $labels = Get-LabelNames $Issue
     $lifecycle = @($labels | Where-Object { $LifecycleLabels -contains $_ })
     $types = @($labels | Where-Object { $TypeLabels -contains $_ })
+    $severities = @($labels | Where-Object { $SeverityLabels -contains $_ })
     $findings = New-Object System.Collections.Generic.List[string]
 
     if ($lifecycle.Count -ne 1) {
@@ -125,6 +130,9 @@ function Get-IssueFindings($Issue) {
     }
     if ($types.Count -ne 1) {
         $findings.Add("type_count_$($types.Count)")
+    }
+    if ($severities.Count -ne 1) {
+        $findings.Add("severity_count_$($severities.Count)")
     }
     if (@($labels | Where-Object { $ToolingLabels -contains $_ }).Count -gt 0 -and
         @($lifecycle | Where-Object { $_ -ne "not-started" }).Count -gt 0) {
@@ -639,7 +647,11 @@ function Get-RelatedClosedIssues($OpenProfile, $RelationContext) {
         })
     }
 
-    return @($candidates | ForEach-Object { $_ } | Sort-Object -Property @{ Expression = 'score'; Descending = $true }, @{ Expression = 'closed_at'; Descending = $true }, @{ Expression = 'number'; Descending = $true } | Select-Object -First $MaxClosedMatches)
+    $sorted = @($candidates | ForEach-Object { $_ } | Sort-Object -Property @{ Expression = 'score'; Descending = $true }, @{ Expression = 'closed_at'; Descending = $true }, @{ Expression = 'number'; Descending = $true })
+    $evidenceBacked = @($sorted | Where-Object { $_.confidence -eq 'high' })
+    $weakSlots = [Math]::Max(0, $MaxClosedMatches - $evidenceBacked.Count)
+    $weakReview = @($sorted | Where-Object { $_.confidence -ne 'high' } | Select-Object -First $weakSlots)
+    return @($evidenceBacked + $weakReview | Sort-Object -Property @{ Expression = 'score'; Descending = $true }, @{ Expression = 'closed_at'; Descending = $true }, @{ Expression = 'number'; Descending = $true })
 }
 
 function Invoke-Audit($Issues, $ClosedIssues = @()) {
@@ -766,8 +778,8 @@ function Convert-AuditToMarkdown($Report) {
 function Invoke-SelfTest {
     $fixture = @(
         [PSCustomObject]@{
-            number = 1; title = "Blightreaper husk transform"; body = "**Symptom:** remote husk drifts after #90. ``SimpleHuskInventoryExtension._wield_slot`` differs."; url = "u1"
-            labels = @(@{ name = "bug" }, @{ name = "verify-fix-coop" }, @{ name = "WOC" })
+            number = 1; title = "Blightreaper husk transform"; body = "**Symptom:** remote husk drifts after #90, #92, #93, #94, #95, #96, and #97. ``SimpleHuskInventoryExtension._wield_slot`` differs."; url = "u1"
+            labels = @(@{ name = "bug" }, @{ name = "verify-fix-coop" }, @{ name = "WOC" }, @{ name = "0-critical" })
             comments = @(@{ body = "Test method: host + client. Expected: remote peer keeps the Blightreaper transform." })
         },
         [PSCustomObject]@{
@@ -777,7 +789,7 @@ function Invoke-SelfTest {
         },
         [PSCustomObject]@{
             number = 3; title = "Missing method"; body = "**Symptom:** x"; url = "u3"
-            labels = @(@{ name = "feature" }, @{ name = "verify-fix" })
+            labels = @(@{ name = "feature" }, @{ name = "verify-fix" }, @{ name = "2-moderate" })
             comments = @(@{ body = "Shipped today." })
         }
     )
@@ -793,24 +805,39 @@ function Invoke-SelfTest {
             comments = @()
         }
     )
+    foreach ($number in 92..97) {
+        $closedFixture += [PSCustomObject]@{
+            number = $number; title = "Blightreaper history $number"; body = "Prior #1 remote husk transform repair."; url = "c$number"; closedAt = "2026-07-12T00:00:00Z"; stateReason = "COMPLETED"
+            labels = @(@{ name = "bug" }, @{ name = "Fixed" }, @{ name = "WOC" })
+            comments = @(@{ body = "Regression coverage passed."; url = "c$number-comment" })
+        }
+    }
     $result = Invoke-Audit $fixture $closedFixture
     if ($result.open_issue_count -ne 3) { throw "fixture count drift" }
     if (-not $result.issues[0].clean) { throw "valid coop issue was rejected" }
     if ($result.issues[1].findings -notcontains "lifecycle_count_0") { throw "missing lifecycle not found" }
     if ($result.issues[1].findings -notcontains "type_count_2") { throw "duplicate type not found" }
+    if ($result.issues[1].findings -notcontains "severity_count_0") { throw "missing severity not found" }
     if ($result.issues[1].findings -notcontains "literal_escaped_newline_in_body") { throw "escaped newline not found" }
     if ($result.issues[2].findings -notcontains "missing_test_method_comment") { throw "missing method not found" }
     if ($result.issues[0].applicable_lessons -notcontains "network_peer_parity") { throw "coop lesson not classified" }
     if ($result.issues[0].verification_scope -ne "coop") { throw "coop verification scope drift" }
     if ($result.issues[0].recommended_next_action -ne "two-player in-game verification") { throw "coop action drift" }
     if ($result.issues[1].risk_tier -notin @("low", "moderate", "high", "critical")) { throw "risk classification drift" }
-    if ($result.closed_issue_count -ne 2) { throw "closed fixture count drift" }
+    if ($result.closed_issue_count -ne 8) { throw "closed fixture count drift" }
     $related = @($result.issues[0].related_closed_issues)
-    if ($related.Count -lt 1 -or $related[0].number -ne 90) { throw "directly referenced closed issue was not ranked first" }
+    if ($related.Count -lt 7) { throw "high-confidence relations were truncated by the weak-match floor" }
+    foreach ($number in @(90, 92, 93, 94, 95, 96, 97)) {
+        if (@($related | Where-Object { $_.number -eq $number }).Count -ne 1) {
+            throw "evidence-backed relation #$number was not retained"
+        }
+    }
+    $related90 = @($related | Where-Object { $_.number -eq 90 })[0]
+    if ($related.Count -lt 1 -or $related[0].confidence -ne 'high') { throw "directly referenced closed issues did not rank first" }
     if ($related[0].confidence -ne 'high') { throw "direct reference must be high confidence" }
     if (@($related[0].reasons.kind) -notcontains 'open_explicitly_references_closed') { throw "direct reference reason missing" }
-    if (@($related[0].reasons.kind) -notcontains 'shared_subsystem_labels') { throw "subsystem reason missing" }
-    if (@($related[0].reasons.kind) -notcontains 'shared_code_identifiers') { throw "code identifier reason missing" }
+    if (@($related90.reasons.kind) -notcontains 'shared_subsystem_labels') { throw "subsystem reason missing" }
+    if (@($related90.reasons.kind) -notcontains 'shared_code_identifiers') { throw "code identifier reason missing" }
     $roundTrip = $result | ConvertTo-Json -Depth 18 | ConvertFrom-Json
     if ($roundTrip.issues[0].related_closed_issues[0].reasons[0] -is [string]) {
         throw "JSON relation reasons were stringified"
@@ -821,7 +848,7 @@ function Invoke-SelfTest {
     if ($roundTrip.issues[0].related_closed_issues[0].closure_evidence[0] -is [string]) {
         throw "JSON closure evidence was stringified"
     }
-    if (@($related[0].closure_evidence.kind) -notcontains 'user_confirmed_fixed') { throw "closure evidence missing" }
+    if (@($related90.closure_evidence.kind) -notcontains 'user_confirmed_fixed') { throw "closure evidence missing" }
     if (@($result.issues[1].related_closed_issues | Where-Object { $_.number -eq 91 }).Count -ne 0) { throw "closure evidence created an unrelated relation" }
     foreach ($row in @($result.issues)) {
         if (@($row.fallbacks).Count -ne 3) { throw "issue $($row.number) fallback count drift" }
