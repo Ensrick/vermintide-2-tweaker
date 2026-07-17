@@ -26,7 +26,7 @@ local mod = get_mod("mp")
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.28-dev"
+local MOD_VERSION = "0.2.29-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -596,9 +596,13 @@ local function _mp577_sync_overlay(peddler)
         return false, "official_realm"
     end
     if not peddler then
+        -- Issue 695: this runs per frame from mod.update, and get_interface on a
+        -- not-yet-created interface emits an engine warning per call
+        -- (backend_manager_playfab.lua:203) - thousands of log lines during the
+        -- pre-login window. Probe _interfaces directly; call only when present.
         local backend = Managers and Managers.backend
-        local ok, interface = backend and pcall(backend.get_interface, backend, "peddler")
-        peddler = ok and interface
+        local ifaces = backend and backend._interfaces
+        peddler = ifaces and ifaces.peddler and backend:get_interface("peddler") or nil
     end
     local mirror = peddler and peddler._backend_mirror
     if not _mp577_mirror_ready(mirror) then return false, "mirror_not_ready" end

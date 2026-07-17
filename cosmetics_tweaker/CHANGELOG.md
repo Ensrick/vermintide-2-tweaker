@@ -1,5 +1,12 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.142-dev - 2026-07-17 - pre-login backend warning flood fix (issue 695) [verify-fix]
+
+- Silenced two per-frame `BackendManagerPlayFab:get_interface: Requesting unknown interface items` warning sources during the pre-login window: the offhand-selection restore retry (`_la_restore_offhand_selections`) and the 10s-deferred LA_PERSIST instance prune, both driven from `mod.update`. Each now probes `Managers.backend._interfaces` directly and only calls `get_interface` once the interface exists.
+- No behavior change: both paths already tolerated the nil return and retried next frame; only the engine warning per call (backend_manager_playfab.lua:203, ~2 lines per frame for ~35s = ~3,400 log lines per session) is eliminated.
+
+**Test:** start the game into the modded realm, wait for the character screen, then check the newest console log: `Requesting unknown interface items` must be absent (previously ~3,400 lines between mod load and `[backend_ready]`).
+
 ## 0.9.141-dev - 2026-07-17 - independent component flavor text (#641) [diagnostics-armed]
 
 - Extended the shared item-card component descriptor from icon/name to icon/name/description, so an independently selected shield or offhand no longer inherits the primary weapon's flavor text.
