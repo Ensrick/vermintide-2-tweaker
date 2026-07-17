@@ -2,12 +2,16 @@
 -- Availability.
 --
 -- Adds one master checkbox per (receiving CAREER, melee/ranged slot, SOURCE
--- character) at the top of each `melee_<career>` / `ranged_<career>` leaf in
--- the Weapon Availability tree, and owns the cascade + derived-state logic:
+-- character) inside each `melee_<career>` / `ranged_<career>` leaf. Each
+-- master's exact weapon rows are its `sub_widgets`, so GUI Tweaker renders the
+-- established gear/advanced-options control: the main checkbox is select-all,
+-- while the gear exposes independent per-weapon choices.
 --   * build_widgets(mod, data)  -- called from _data.lua AFTER the availability
 --       sort and CWV strip. Buckets only the unlock rows inside one career leaf,
---       prepends its source masters in Kruber/Bardin/Kerillian/Saltzpyre/Sienna
---       order, and records the exact forward/reverse maps.
+--       replaces the flat weapon rows with source masters in
+--       Kruber/Bardin/Kerillian/Saltzpyre/Sienna order, nests each source's
+--       weapon rows beneath its master, and records the exact forward/reverse
+--       maps.
 --   * seed(mod)                 -- derives every master's stored value from its
 --       own career-scoped children at load.
 --   * on_master_changed(mod,id) -- cascades one master to its own career only.
@@ -81,39 +85,31 @@ local function _source_char_of(mod, child_id)
 end
 M.source_char_of = _source_char_of
 
-local function _gather_unlock_nodes(node, out)
-    if type(node) ~= "table" then return end
-    local sid = node.setting_id
-    if type(sid) == "string" and sid:sub(1, 7) == "unlock_"
-            and node.type == "checkbox" then
-        out[#out + 1] = node
-    end
-    if type(node.sub_widgets) == "table" then
-        for _, child in ipairs(node.sub_widgets) do
-            _gather_unlock_nodes(child, out)
-        end
-    end
-end
-
 -- Insert master rows into one exact career/slot leaf and record its maps.
 local function _process_career_leaf(mod, leaf, career, slot, master_children,
-        child_to_master, order_by_leaf)
-    local nodes = {}
-    _gather_unlock_nodes(leaf, nodes)
-
-    local buckets = {}        -- src_char -> { child ids }
+        child_to_master, order_by_leaf, widget_children)
+    local buckets = {}        -- src_char -> { child widget nodes }
+    local bucket_ids = {}     -- src_char -> { child ids }
     local all_default_on = {} -- src_char -> bool (every child defaults ON)
-    for _, node in ipairs(nodes) do
-        local src = _source_char_of(mod, node.setting_id)
-        if src then
+    local passthrough = {}    -- unknown/non-unlock rows are never discarded
+    for _, node in ipairs(leaf.sub_widgets) do
+        local child_id = type(node) == "table" and node.setting_id
+        local is_unlock = type(child_id) == "string"
+            and child_id:sub(1, 7) == "unlock_" and node.type == "checkbox"
+        local src = is_unlock and _source_char_of(mod, child_id)
+        if is_unlock and src then
             local bucket = buckets[src]
             if not bucket then
                 bucket = {}
                 buckets[src] = bucket
+                bucket_ids[src] = {}
                 all_default_on[src] = true
             end
-            bucket[#bucket + 1] = node.setting_id
+            bucket[#bucket + 1] = node
+            bucket_ids[src][#bucket_ids[src] + 1] = child_id
             if node.default_value ~= true then all_default_on[src] = false end
+        else
+            passthrough[#passthrough + 1] = node
         end
     end
 
@@ -124,23 +120,30 @@ local function _process_career_leaf(mod, leaf, career, slot, master_children,
         local bucket = buckets[src]
         if bucket and #bucket > 0 then
             local mid = _master_id(career, slot, src)
-            master_children[mid] = bucket
+            local ids = bucket_ids[src]
+            master_children[mid] = ids
+            widget_children[mid] = bucket
             leaf_order[#leaf_order + 1] = mid
-            for _, child_id in ipairs(bucket) do
+            for _, child_id in ipairs(ids) do
                 child_to_master[child_id] = mid
             end
             new_masters[#new_masters + 1] = {
                 setting_id = mid,
                 type = "checkbox",
                 default_value = all_default_on[src] == true,
+                sub_widgets = bucket,
             }
             created = created + 1
         end
     end
 
-    -- Prepend while preserving the explicit source order above the weapon rows.
-    for i = #new_masters, 1, -1 do
-        table.insert(leaf.sub_widgets, 1, new_masters[i])
+    -- The master rows are now the only normal-list rows for known weapon
+    -- sources. Their sub_widgets remain reachable through the gear/advanced
+    -- view (and through search). Preserve any unknown/non-unlock nodes after
+    -- them instead of silently dropping future widget kinds.
+    leaf.sub_widgets = new_masters
+    for _, node in ipairs(passthrough) do
+        leaf.sub_widgets[#leaf.sub_widgets + 1] = node
     end
     order_by_leaf[leaf.setting_id] = leaf_order
     return created
@@ -150,6 +153,7 @@ function M.build_widgets(mod, data)
     local master_children = {}
     local child_to_master = {}
     local order_by_leaf = {}
+    local widget_children = {}
     local created = 0
 
     local function walk(node)
@@ -165,7 +169,7 @@ function M.build_widgets(mod, data)
             if career then
                 created = created + _process_career_leaf(
                     mod, node, career, slot, master_children, child_to_master,
-                    order_by_leaf)
+                    order_by_leaf, widget_children)
                 return -- this career leaf owns the complete bounded child set
             end
         end
@@ -186,6 +190,7 @@ function M.build_widgets(mod, data)
     mod._wt_master_children = master_children
     mod._wt_child_to_master = child_to_master
     mod._wt_master_order_by_leaf = order_by_leaf
+    mod._wt_master_widget_children = widget_children
     return created
 end
 

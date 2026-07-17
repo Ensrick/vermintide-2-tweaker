@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.269-beta (2026-07-17) - #611 [verify-fix] gear-style availability masters
+
+- Replaced each career/slot's flat source-character master plus duplicated weapon rows with the established advanced-options pattern: the visible master checkbox selects or clears the whole source set, and its gear opens the exact individual weapon choices.
+- Manual child choices remain independent. A partial selection keeps those weapons enabled while the derived master stays off; selecting the final child turns the master on, and clearing any child turns it back off without touching its siblings.
+- Preserved per-career scope, melee/ranged separation, Kruber/Bardin/Kerillian/Saltzpyre/Sienna order, bounded cascade/repaint, and unknown future widget rows.
+- Added an explicit master-to-widget-child contract to `/wt_regression_test`; offline coverage rejects flat duplication, missing advanced children, cross-career writes, and partial-selection churn.
+
+**Solo verification:** Open Mod Tweaker > Weapons > Weapon Availability, then one career's Melee or Ranged group. Confirm only the source-character master rows are shown and each has a gear. Toggle a master on/off and confirm all children change. Open its gear, enable only some weapons, return, and confirm the selected weapons remain on while the master remains off. Enable the last child and confirm the master becomes on. Run `/wt_regression_test` and require `PASS: issue611_master_toggle_wiring`.
+
 ## 0.12.268-beta (2026-07-16) - weapon-bound career ability integration [verify-fix]
 
 - Replaced first-row-only career-action injection with the same engine-free

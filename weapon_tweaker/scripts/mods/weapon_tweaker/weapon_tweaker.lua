@@ -86,7 +86,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.268-beta"
+local MOD_VERSION = "0.12.269-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -5053,8 +5053,10 @@ _rt_register("issue611_master_toggle_wiring", function()
     local mc = mod._wt_master_children
     local c2m = mod._wt_child_to_master
     local leaf_orders = mod._wt_master_order_by_leaf
-    if type(mc) ~= "table" or type(c2m) ~= "table" or type(leaf_orders) ~= "table" then
-        return "master toggle maps not built (children/reverse/leaf-order)"
+    local widget_children = mod._wt_master_widget_children
+    if type(mc) ~= "table" or type(c2m) ~= "table"
+            or type(leaf_orders) ~= "table" or type(widget_children) ~= "table" then
+        return "master toggle maps not built (children/reverse/leaf-order/gear)"
     end
     local leaf_count = 0
     for leaf_id, masters in pairs(leaf_orders) do
@@ -5085,12 +5087,16 @@ _rt_register("issue611_master_toggle_wiring", function()
         if type(children) ~= "table" or #children == 0 then
             return "master has no children: " .. master_id
         end
+        local nested = widget_children[master_id]
+        if type(nested) ~= "table" or #nested ~= #children then
+            return "master advanced-options gear children missing: " .. master_id
+        end
         local raw = mod._wt_loc_raw
         if not (type(raw) == "table" and type(raw[master_id]) == "table"
                 and type(raw[master_id].en) == "string") then
             return "master lacks localization owner: " .. master_id
         end
-        for _, child in ipairs(children) do
+        for index, child in ipairs(children) do
             if type(child) ~= "string" or child:sub(1, 7) ~= "unlock_" then
                 return "master child is not an unlock row: " .. tostring(child)
             end
@@ -5103,6 +5109,9 @@ _rt_register("issue611_master_toggle_wiring", function()
             end
             if _wt_master_toggles.source_char_of(mod, child) ~= src then
                 return "child source char disagrees with master for " .. child
+            end
+            if type(nested[index]) ~= "table" or nested[index].setting_id ~= child then
+                return "master gear child disagrees with runtime map for " .. child
             end
         end
     end

@@ -1,5 +1,10 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.283-dev (2026-07-17) -- #611 advanced-option master presentation [untested]
+
+- Gear/advanced-option parent rows now use the established warm-tan menu accent, clearly separating bulk/master controls from their individual child settings.
+- Disabled gear parents remain grey, and the rule applies consistently to every advanced-options parent rather than hard-coding one mod's setting IDs.
+
 ## 0.2.282-dev (2026-07-16) -- #605 Dialogue media controls [not-started]
 
 - Replaced the separate Play and Pause/Resume text buttons on every virtual
