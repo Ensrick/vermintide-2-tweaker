@@ -2,17 +2,22 @@ return function(H, repo_root)
     local policy = dofile(repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_item_presentation.lua")
 
-    H.test("shield owns locally resident icon and independent name", function()
+    H.test("shield owns locally resident icon and independent text", function()
         local result = policy.resolve({
             base_icon = "sword_icon",
             primary_name = "Sword",
-            secondary_option = { name = "Named Shield", inventory_icon = "shield_icon" },
+            secondary_option = {
+                name = "Named Shield",
+                description = "Shield-authored flavor text.",
+                inventory_icon = "shield_icon",
+            },
             ownership = "shield",
             local_resource_available = function(icon) return icon == "shield_icon" end,
         })
         H.equal(result.icon, "shield_icon")
         H.equal(result.primary_name, "Sword")
         H.equal(result.secondary_name, "Named Shield")
+        H.equal(result.secondary_description, "Shield-authored flavor text.")
         H.truthy(result.changed)
     end)
 
@@ -38,6 +43,20 @@ return function(H, repo_root)
         })
         H.equal(result.icon, "vanilla_icon")
         H.equal(result.secondary_name, "Mod Shield")
+    end)
+
+    H.test("component description never falls back to primary text", function()
+        local result = policy.resolve({
+            base_icon = "primary_icon",
+            primary_name = "Primary Weapon",
+            secondary_option = {
+                name = "Independent Offhand",
+                description = "Offhand source description.",
+            },
+            ownership = "dual",
+        })
+        H.equal(result.secondary_description, "Offhand source description.")
+        H.equal(result.secondary_description == "Primary weapon description.", false)
     end)
 
     H.test("Hold-Tab peer identity resolves only from existing local caches", function()

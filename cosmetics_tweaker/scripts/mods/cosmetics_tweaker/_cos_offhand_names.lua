@@ -62,6 +62,11 @@ function M.localization_key(source_identity, hand_field, component_kind)
     return prefix .. token .. "_" .. suffix .. "_name"
 end
 
+function M.description_localization_key(source_identity, hand_field, component_kind)
+    local key = M.localization_key(source_identity, hand_field, component_kind)
+    return key and key:gsub("_name$", "_description") or nil
+end
+
 function M.readable_source_name(source_identity)
     if type(source_identity) ~= "string" or source_identity == "" then return "Cosmetic Component" end
     local words = {}
@@ -96,6 +101,38 @@ function M.resolve(source_identity, hand_field, fallback_name, localize, compone
     return M.readable_source_name(source_identity), localization_key, "generated"
 end
 
+-- Returns localized_description, localization_key, resolution_source.
+-- Component-authored text wins, then the source illusion's own description.
+-- If neither exists, generate readable component copy rather than leaking the
+-- primary weapon description or an internal localization key.
+function M.resolve_description(source_identity, hand_field, fallback_description,
+        localize, component_kind, explicit_key, source_key, fallback_name)
+    component_kind = component_kind or "weapon_offhand"
+    local localization_key = explicit_key
+        or M.description_localization_key(source_identity, hand_field, component_kind)
+    local candidates = { localization_key, source_key }
+    local seen = {}
+    if type(localize) == "function" then
+        for _, key in ipairs(candidates) do
+            if type(key) == "string" and key ~= "" and not seen[key] then
+                seen[key] = true
+                local ok, localized = pcall(localize, key)
+                if ok and not _is_missing_localization(localized, key) then
+                    return _trim(localized), key,
+                        key == localization_key and "authored" or "source"
+                end
+            end
+        end
+    end
+    local fallback = _trim(fallback_description)
+    if fallback and not seen[fallback] then
+        return fallback, source_key or localization_key, "source"
+    end
+    local readable = _trim(fallback_name) or M.readable_source_name(source_identity)
+    return "An independently selected " .. readable .. " cosmetic component.",
+        localization_key, "generated"
+end
+
 function M.decorate(option, source_identity, hand_field, fallback_name,
         source_display_key, localize, component_kind, explicit_key)
     if type(option) ~= "table" then return option end
@@ -112,6 +149,19 @@ function M.decorate(option, source_identity, hand_field, fallback_name,
     -- Compatibility aliases for the first #641 implementation.
     option.offhand_localization_key = localization_key
     option.offhand_name_source = resolution_source
+
+    local explicit_description_key = option.description_localization_key
+        or option.description_key
+    if not explicit_description_key and type(explicit_key) == "string"
+            and explicit_key:match("_name$") then
+        explicit_description_key = explicit_key:gsub("_name$", "_description")
+    end
+    local description, description_key, description_source = M.resolve_description(
+        source_identity, hand_field, option.description, localize, component_kind,
+        explicit_description_key, option.source_description_key, name)
+    option.description = description
+    option.component_description_localization_key = description_key
+    option.component_description_source = description_source
     return option
 end
 
@@ -128,6 +178,12 @@ function M.presentation_key(primary_name, secondary_name)
     local combined = M.compose(primary_name, secondary_name)
     if not combined then return nil end
     return "cos_component_presentation_" .. _stable_hash(combined), combined
+end
+
+function M.description_presentation_key(description)
+    description = _trim(description)
+    if not description then return nil end
+    return "cos_component_description_" .. _stable_hash(description), description
 end
 
 function M.match_option(record, options)

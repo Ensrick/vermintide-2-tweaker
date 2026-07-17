@@ -172,6 +172,8 @@ function M.offhand_option()
     return {
         name = M.ITEM_LOCALIZATION.cos_gk_purpure_azure_shield_name,
         localization_key = "cos_gk_purpure_azure_shield_name",
+        description = M.ITEM_LOCALIZATION.cos_gk_purpure_azure_shield_description,
+        description_key = "cos_gk_purpure_azure_shield_description",
         la_armoury_key = M.SHIELD_VARIANT_KEY,
         vanilla_skin = M.SHIELD_BASE_KEY,
         intended_unit = M.SHIELD_BASE_UNIT,

@@ -40,6 +40,7 @@ function M.resolve(args)
         icon = args.base_icon,
         primary_name = args.primary_name,
         secondary_name = nil,
+        secondary_description = nil,
         ownership = args.ownership,
         changed = false,
     }
@@ -48,6 +49,10 @@ function M.resolve(args)
 
     if type(option.name) == "string" and option.name ~= "" then
         out.secondary_name = option.name
+        out.changed = true
+    end
+    if type(option.description) == "string" and option.description ~= "" then
+        out.secondary_description = option.description
         out.changed = true
     end
     if args.ownership == "shield" then

@@ -2032,8 +2032,26 @@ local function _source_illusion_name(skin_key, data)
     return OFFHAND_NAMES.readable_source_name(skin_key), display_key
 end
 
+local function _source_illusion_description(data)
+    local description_key = data and data.description
+    local L = rawget(_G, "Localize")
+    if type(description_key) == "string" and description_key ~= ""
+            and type(L) == "function" then
+        local ok, localized = pcall(L, description_key)
+        if ok and type(localized) == "string" and localized ~= ""
+                and localized ~= description_key
+                and localized ~= "<" .. description_key .. ">" then
+            return localized, description_key
+        end
+    end
+    return nil, description_key
+end
+
 local function _decorate_dual_component(option, skin_key, hand_field, data)
     local source_name, display_key = _source_illusion_name(skin_key, data)
+    local source_description, description_key = _source_illusion_description(data)
+    option.description = source_description
+    option.source_description_key = description_key
     if hand_field == "left_hand_unit" then
         return OFFHAND_NAMES.decorate(option, skin_key, hand_field, source_name,
             display_key, function(key) return mod:localize(key) end)
@@ -3168,13 +3186,14 @@ end
 
 local function _cos_option_for_record(item_type, record)
     if type(record) ~= "table" then return nil end
-    if record.name and (record.unit or record.intended_unit or record.la_armoury_key) then
-        return record
-    end
     local pools = mod._ensure_independent_dual_pool
         and mod._ensure_independent_dual_pool(item_type) or _offhand_options[item_type]
     local option = OFFHAND_NAMES.match_option(record,
         pools and pools.left_hand_unit)
+    if not option and record.name
+            and (record.unit or record.intended_unit or record.la_armoury_key) then
+        option = record
+    end
     if not option then return nil end
     if not option.inventory_icon and (option.unit or option.intended_unit) then
         local recovered = _inventory_icon_for_offhand_unit(
@@ -3220,10 +3239,17 @@ local function _cos_publish_presentation_name(primary_name, secondary_name)
     return key
 end
 
+local function _cos_publish_presentation_description(description)
+    local key, text = OFFHAND_NAMES.description_presentation_key(description)
+    if not key then return nil end
+    mod._cos.presentation_localization[key] = text
+    return key
+end
+
 local function _cos_resolve_presentation(item, base_icon, display_name,
-        ownership, record, saved_illusion)
+        base_description, ownership, record, saved_illusion)
     local option = _cos_option_for_record(item and item.data and item.data.item_type, record)
-    if not option then return base_icon, display_name, false end
+    if not option then return base_icon, display_name, base_description, false end
     local primary = _cos_primary_component_name(item, display_name, ownership, saved_illusion)
     local descriptor = ITEM_PRESENTATION.resolve({
         base_icon = base_icon,
@@ -3232,10 +3258,15 @@ local function _cos_resolve_presentation(item, base_icon, display_name,
         ownership = ownership,
         local_resource_available = _cos_ui_icon_available,
     })
-    if not descriptor.changed then return base_icon, display_name, false end
+    if not descriptor.changed then
+        return base_icon, display_name, base_description, false
+    end
     local name_key = _cos_publish_presentation_name(
         descriptor.primary_name, descriptor.secondary_name)
-    return descriptor.icon, name_key or display_name, true
+    local description_key = _cos_publish_presentation_description(
+        descriptor.secondary_description)
+    return descriptor.icon, name_key or display_name,
+        description_key or base_description, true
 end
 
 -- #376 exact-instance icon seam. Vanilla passes the full backend item into
@@ -3292,8 +3323,8 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
             local live_hands = _offhand_selection[backend_id]
             local record = live_hands and live_hands.left_hand_unit
                 or (saved_offhands and saved_offhands.left_hand_unit)
-            inventory_icon, display_name = _cos_resolve_presentation(item,
-                inventory_icon, display_name, ownership, record,
+            inventory_icon, display_name, description = _cos_resolve_presentation(item,
+                inventory_icon, display_name, description, ownership, record,
                 LA_PERSIST.get_saved_illusion(backend_id))
             -- Publish for the exact ItemGrid cell only. UIUtils also feeds
             -- crafting and Hold-Tab, whose widgets do not own the shield/glow
@@ -3302,6 +3333,11 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
         end
         return inventory_icon, display_name, description, store_icon
     end)
+    local engine_printf = rawget(_G, "printf")
+    if type(engine_printf) == "function" then
+        pcall(engine_printf,
+            "[cos:641] component item-card resolver installed fields=icon,name,description")
+    end
 end
 
 local function _get_offhand_options(item_key)
@@ -8405,7 +8441,7 @@ end)
 -- independently selected hand. Reuse the existing parity-gated peer caches;
 -- never add component names or resource paths to a vanilla/network payload.
 mod._cos.resolve_peer_item_presentation = function(wearer_peer, ui_slot_name,
-        item, base_icon, base_display_name)
+        item, base_icon, base_display_name, base_description)
     local item_data = item and item.data
     local item_type = item_data and item_data.item_type
     local ownership = _cos_presentation_ownership(item_type)
@@ -8430,17 +8466,19 @@ mod._cos.resolve_peer_item_presentation = function(wearer_peer, ui_slot_name,
         candidate_keys, _la_equips_by_peer, mod._offhand_mesh_by_peer)
     if not record then return nil end
 
-    if base_icon == nil or base_display_name == nil then
-        local icon, name = UIUtils.get_ui_information_from_item(item)
+    if base_icon == nil or base_display_name == nil or base_description == nil then
+        local icon, name, description = UIUtils.get_ui_information_from_item(item)
         base_icon = base_icon or icon
         base_display_name = base_display_name or name
+        base_description = base_description or description
     end
-    local icon, display_name, changed = _cos_resolve_presentation(item,
-        base_icon, base_display_name, ownership, record, nil)
+    local icon, display_name, description, changed = _cos_resolve_presentation(item,
+        base_icon, base_display_name, base_description, ownership, record, nil)
     if not changed then return nil end
     return {
         icon = icon,
         display_name = display_name,
+        description = description,
         ownership = ownership,
         source = "peer_cache",
     }
