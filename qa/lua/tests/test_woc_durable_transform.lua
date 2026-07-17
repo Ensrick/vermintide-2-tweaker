@@ -42,7 +42,10 @@ return function(H, repo_root)
 				state.position = copy(spec.position)
 				state.scale = copy(spec.scale)
 				state.rotation = copy(expected_rotation)
-				return true
+				return true, {
+					ok = true, transform_mode = "atomic-local-pose",
+					channels = { scale = true, position = true, rotation = true },
+				}
 			end,
 			should_track = function(value)
 				return value == "owner-spawn" or value == "husk-spawn"
@@ -69,6 +72,7 @@ return function(H, repo_root)
 		H.equal(module.CONTRACT.position, "linked_baseline_plus_offset")
 		H.equal(module.CONTRACT.scale, "absolute")
 		H.equal(module.CONTRACT.rotation, "absolute_euler_xyz")
+		H.equal(module.CONTRACT.write_mode, "atomic_local_pose")
 	end)
 
 	H.test("WOC #613 tracks only positively identified gameplay spawns", function()
@@ -163,5 +167,16 @@ return function(H, repo_root)
 			rotation = { -0.5, 0.5, 0.5, -0.5 },
 		}
 		H.equal(module.matches(snapshot, target), true)
+	end)
+
+	H.test("WOC #613 production diagnostics retain the shared write report", function()
+		local path = repo_root
+			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+		local file = assert(io.open(path, "rb"))
+		local source = file:read("*a")
+		file:close()
+		H.truthy(source:find("record.write_report", 1, true))
+		H.truthy(source:find("mode=%s ok=%s scale=%s position=%s offset=%s rotation=%s",
+			1, true))
 	end)
 end

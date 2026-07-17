@@ -296,7 +296,15 @@ across all four paths (v0.1.369-dev). Conventions:
   touch the 1P grip. Husks and both previewers apply 3P only.
 
 Call `WA.apply(unit, { scale=, offset=, position=, rotation= })`. Never
-re-implement `Unit.set_local_scale/position/rotation` at a call site.
+re-implement `Unit.set_local_scale/position/rotation` at a call site. When the
+complete matrix API is present, `WA` builds the requested local rotation,
+position, and scale into one matrix and writes node 0 through
+`Unit.set_local_pose`. This is the same primitive vanilla uses to restore a
+linked weapon node (`gear_utils.lua:321-327`). The per-channel setters are a
+compatibility fallback only: `WA.apply` succeeds only when every requested
+channel succeeds, and its second return is a channel report. An OR of setter
+results is forbidden because one retained rotation must not mask rejected
+position or scale (BUG_CLASSES 58 / WOC #613).
 
 **Animated retention boundary.** `WA.apply` owns pose math, but a successful
 one-shot write is not retained proof for an animated gameplay unit. Source

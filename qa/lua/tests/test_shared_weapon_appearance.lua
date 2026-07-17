@@ -2,7 +2,8 @@ return function(H, repo_root)
     local source_path = repo_root .. "/tools/shared_lib/_lib_weapon_appearance.lua"
     local Library = dofile(source_path)
 
-    local function fixture()
+    local function fixture(options)
+        options = options or {}
         local calls = {}
         local alive = setmetatable({}, { __mode = "k" })
         local api = {
@@ -17,50 +18,102 @@ return function(H, repo_root)
         }
         function api.unit.alive(unit) return alive[unit] == true end
         function api.unit.local_position(unit) return unit.position end
+        function api.unit.local_scale(unit) return unit.scale end
+        function api.unit.local_rotation(unit) return unit.rotation end
         function api.unit.set_local_position(unit, node, value)
-            unit.position = value
+            if options.fail_position then error("position rejected") end
+            if not options.channel_noop then unit.position = value end
             calls[#calls + 1] = { "position", node, value }
         end
         function api.unit.set_local_scale(unit, node, value)
+            if options.fail_scale then error("scale rejected") end
+            if not options.channel_noop then unit.scale = value end
             calls[#calls + 1] = { "scale", node, value }
         end
         function api.unit.set_local_rotation(unit, node, value)
+            if options.fail_rotation then error("rotation rejected") end
+            if not options.channel_noop then unit.rotation = value end
             calls[#calls + 1] = { "rotation", node, value }
         end
         function api.unit.set_texture_for_materials(unit, slot, texture)
             calls[#calls + 1] = { "texture", slot, texture }
         end
-        local unit = { position = { 1, 2, 3 } }
+        if options.atomic ~= false then
+            api.matrix4x4 = {
+                from_quaternion_position_scale = function(rotation, position, scale)
+                    return { rotation = rotation, position = position, scale = scale }
+                end,
+            }
+            function api.unit.set_local_pose(unit, node, pose)
+                unit.position = pose.position
+                unit.scale = pose.scale
+                unit.rotation = pose.rotation
+                calls[#calls + 1] = { "pose", node, pose }
+            end
+        end
+        local unit = {
+            position = { 1, 2, 3 }, scale = { 1, 1, 1 },
+            rotation = { kind = "quaternion", 0, 0, 0 },
+        }
         alive[unit] = true
         return Library.new(api), unit, calls, alive
     end
 
     H.test("shared WeaponAppearance composes absolute transforms and one additive offset", function()
         local WA, unit, calls = fixture()
-        H.truthy(WA.apply(unit, {
+        local ok, report = WA.apply(unit, {
             scale = { 2, 3, 4 },
             offset = { 0.5, -1, 2 },
             rotation = { 10, 20, 30 },
-        }))
-        H.equal(#calls, 3)
-        H.equal(calls[1][1], "scale")
-        H.equal(calls[2][1], "position")
+        })
+        H.equal(ok, true)
+        H.equal(report.transform_mode, "atomic-local-pose")
+        H.equal(#calls, 1)
+        H.equal(calls[1][1], "pose")
         H.equal(unit.position[1], 1.5)
         H.equal(unit.position[2], 1)
         H.equal(unit.position[3], 5)
-        H.equal(calls[3][1], "rotation")
-        H.equal(calls[3][3].kind, "quaternion")
+        H.equal(unit.scale[2], 3)
+        H.equal(unit.rotation.kind, "quaternion")
         H.equal(WA.apply_offset(unit, { 9, 9, 9 }), false)
-        H.equal(#calls, 3)
+        H.equal(#calls, 1)
     end)
 
     H.test("shared WeaponAppearance gives absolute position precedence over offset", function()
         local WA, unit, calls = fixture()
         H.truthy(WA.apply(unit, { position = { 4, 5, 6 }, offset = { 9, 9, 9 } }))
         H.equal(#calls, 1)
+        H.equal(calls[1][1], "pose")
         H.equal(unit.position[1], 4)
         H.equal(unit.position[2], 5)
         H.equal(unit.position[3], 6)
+    end)
+
+    H.test("shared WeaponAppearance cannot mask a failed transform channel", function()
+        local WA, unit, calls = fixture({ atomic = false, fail_scale = true })
+        local ok, report = WA.apply(unit, {
+            scale = { 2, 2, 2 }, position = { 4, 5, 6 }, rotation = { 1, 2, 3 },
+        })
+        H.equal(ok, false)
+        H.equal(report.transform_mode, "per-channel-fallback")
+        H.equal(report.channels.scale, false)
+        H.equal(report.channels.position, true)
+        H.equal(report.channels.rotation, true)
+        H.equal(#calls, 2)
+    end)
+
+    H.test("shared WeaponAppearance uses one pose write for a linked root", function()
+        local WA, unit, calls = fixture({ channel_noop = true })
+        local ok, report = WA.apply(unit, {
+            scale = { 0.9, 0.9, 0.9 },
+            position = { 0, 0, -0.3 },
+            rotation = { -90, -90, -90 },
+        })
+        H.equal(ok, true)
+        H.equal(report.transform_mode, "atomic-local-pose")
+        H.equal(#calls, 1)
+        H.deep_equal(unit.position, { 0, 0, -0.3 })
+        H.deep_equal(unit.scale, { 0.9, 0.9, 0.9 })
     end)
 
     H.test("shared WeaponAppearance normalizes Euler and boxed rotations", function()
@@ -112,6 +165,8 @@ return function(H, repo_root)
             "/character_weapon_variants/scripts/mods/character_weapon_variants/_lib_weapon_appearance.lua",
             "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_weapon_appearance.lua",
             "/weapon_tweaker/scripts/mods/weapon_tweaker/_lib_weapon_appearance.lua",
+            "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_weapon_appearance.lua",
+            "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_weapon_appearance.lua",
         }) do
             H.equal(read(repo_root .. path), canonical, path .. " drifted")
         end

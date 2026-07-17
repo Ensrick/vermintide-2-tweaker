@@ -270,6 +270,15 @@ verbatim; only the mesh source differs.
   The authored Blightreaper is an explicit exception: its reviewed canonical
   transform applies to its separate 1P and 3P units as one presentation policy.
 
+- **Linked roots require one complete local pose.** Vanilla links the wielded
+  weapon's target node `0` (`gear_utils.lua:293-308`; one-handed mapping at
+  `attachment_node_linking.lua:2726-2753`) and restores a saved linked transform
+  with `Unit.set_local_pose` (`gear_utils.lua:321-327`). Blightreaper
+  `0.1.24-dev` proved the separate-setter dead end: its immediate read retained
+  rotation while position and scale remained native on owner 1P/3P and husks.
+  Use the shared `WeaponAppearance.apply` atomic-pose path and require its full
+  channel report; never infer complete delivery from any one successful setter.
+
 - **Lua module packaging.** Every literal
   `mod:dofile("scripts/mods/weapons_of_chaos/<module>")` target must also appear
   in `resource_packages/weapons_of_chaos/weapons_of_chaos.package`. Loose-source

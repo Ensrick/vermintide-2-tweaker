@@ -1,5 +1,27 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.25-dev (2026-07-17) - #613 atomic linked-root transform [verify-fix-coop]
+
+- Fixed the log-proven residual in `0.1.24-dev`: an immediate read after the
+  three nominally successful node-0 setters retained rotation but left position
+  at `0,0,0` and scale at `1,1,1` on owner 1P, owner 3P, and husk 3P.
+- Changed the shared WeaponAppearance consumer to build the complete
+  rotation/position/scale matrix and issue one `Unit.set_local_pose` write, the
+  same linked-node primitive vanilla uses in `GearUtils.restore_scene_graph`.
+- Hardened `WA.apply`: it now returns false when any requested channel fails and
+  supplies a per-channel report. WOC's bounded proof line records the atomic or
+  fallback write mode so a partially accepted write can no longer masquerade as
+  a delivered transform.
+- Added offline coverage for atomic linked-root composition and partial-channel
+  failure, while retaining the existing next-update durability, tuner-yield,
+  preview, husk, and quaternion-sign checks.
+
+Verification: with two players on WOC `0.1.25-dev`, equip Blightreaper and
+compare owner 1P, owner 3P, inventory preview, and remote husk after an attack
+and mission transition. The log's `[WOC:613] transform proof` must report
+`mode=atomic-local-pose`, position Z `-0.300`, scale `0.900` on every axis, and
+never `drift-unrepaired`.
+
 ## 0.1.24-dev (2026-07-16) - #613 Blightreaper durable grip transform [verify-fix-coop]
 
 - Fixed the Blightreaper grip transform being reset after its successful

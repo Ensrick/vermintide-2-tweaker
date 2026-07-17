@@ -14,6 +14,7 @@ M.CONTRACT = {
 	position = "linked_baseline_plus_offset",
 	scale = "absolute",
 	rotation = "absolute_euler_xyz",
+	write_mode = "atomic_local_pose",
 	gameplay = "retained_check_then_reapply",
 	preview = "one_shot",
 	transport = "none",
@@ -159,7 +160,9 @@ function M.new(api)
 			base = base,
 			target = target,
 		}
-		local wrote = api.apply(unit, target.apply_spec) == true
+		local wrote, write_report = api.apply(unit, target.apply_spec)
+		wrote = wrote == true
+		record.write_report = write_report
 		local after = read(unit)
 		local retained = wrote and M.matches(after, target)
 		emit(retained and "initial-retained" or "initial-miss", record, base, after)
@@ -182,7 +185,9 @@ function M.new(api)
 					local before = read(unit)
 					local retained = M.matches(before, record.target)
 					if not retained then
-						local wrote = api.apply(unit, record.target.apply_spec) == true
+						local wrote, write_report = api.apply(unit, record.target.apply_spec)
+						wrote = wrote == true
+						record.write_report = write_report
 						local after = read(unit)
 						if wrote then applied = applied + 1 end
 						if not record.drift_proof_logged then

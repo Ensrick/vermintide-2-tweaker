@@ -2039,3 +2039,40 @@ linked weapon node only at spawn.
 - Yield to explicit live development-tuner ownership so two writers do not
   fight. Cover animation overwrite, all consumers, and quaternion sign
   equivalence offline. WOC 0.1.24-dev is the reference implementation.
+
+## 58. Linked weapon transform reports partial setter success
+
+**First confirmed:** Weapons of Chaos issue #613, WOC `0.1.24-dev`
+(2026-07-17).
+**Lives in:** custom weapon transforms applied to the target root after
+`GearUtils.link_units`.
+
+### Symptoms
+- Immediate readback after an apparently successful transform retains rotation
+  but position and scale remain native.
+- Repeating the writes every update produces `drift-unrepaired`; this is not a
+  later animation reset.
+- A helper returns true because it ORs three setter results, masking the two
+  channels that did not retain their values.
+
+### Diagnosis pattern
+1. Log every channel before, immediately after, and at the next update. In the
+   #613 log, both owner perspectives and husks kept Z `0` / scale `1` while the
+   quaternion reached the target.
+2. Confirm the linked node from source. One-handed gear targets node `0`
+   (`attachment_node_linking.lua:2726-2753`); changing nodes is not supported by
+   this signature.
+3. Follow vanilla's complete-pose contract. `GearUtils.link_units` saves
+   `Unit.local_pose` (`gear_utils.lua:300-305`) and
+   `restore_scene_graph` restores it through one `Unit.set_local_pose`
+   (`:321-327`).
+
+### Fix template
+- Compose rotation, position, and scale into one
+  `Matrix4x4.from_quaternion_position_scale` and write node 0 atomically with
+  `Unit.set_local_pose` through the shared WeaponAppearance helper.
+- Return success only when every requested channel succeeds. Preserve a
+  per-channel/mode report for diagnostics; never OR setter results.
+- Keep class 57's retained-state comparison for later animation drift. Test the
+  atomic path and a fallback where one channel raises. WOC `0.1.25-dev` is the
+  reference implementation.

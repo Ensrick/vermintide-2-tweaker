@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.24-dev"
+local MOD_VERSION = "0.1.25-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -189,6 +189,14 @@ local function _pose_text(snapshot)
 		s[1] or 0, s[2] or 0, s[3] or 0,
 		r[1] or 0, r[2] or 0, r[3] or 0, r[4] or 0)
 end
+local function _write_report_text(report)
+	if type(report) ~= "table" then return "unavailable" end
+	local channels = report.channels or {}
+	return string.format("mode=%s ok=%s scale=%s position=%s offset=%s rotation=%s",
+		tostring(report.transform_mode), tostring(report.ok),
+		tostring(channels.scale), tostring(channels.position),
+		tostring(channels.offset), tostring(channels.rotation))
+end
 
 -- The local dev tuner intentionally owns a non-identity edit, including a
 -- one-shot /wt_dev_hp_apply while live apply is off. Yield only for that exact
@@ -222,9 +230,10 @@ local _transform_owner = _durable_transform_lib.new({
 		if _transform_diag_budget <= 0 then return end
 		_transform_diag_budget = _transform_diag_budget - 1
 		pcall(printf,
-			"[WOC:613] transform proof kind=%s surface=%s perspective=%s before=%s after=%s target=%s durable=true node=0",
+			"[WOC:613] transform proof kind=%s surface=%s perspective=%s before=%s after=%s target=%s write={%s} durable=true node=0",
 			tostring(kind), tostring(record.surface), tostring(record.perspective),
-			_pose_text(before), _pose_text(after), _pose_text(record.target))
+			_pose_text(before), _pose_text(after), _pose_text(record.target),
+			_write_report_text(record.write_report))
 	end,
 })
 local _wa = _pulse_lib.new(_appearance, _transform_owner)
@@ -1614,6 +1623,7 @@ _rt_register("issue613_blightreaper_appearance_contract", function()
 			or durable.position ~= "linked_baseline_plus_offset"
 			or durable.scale ~= "absolute"
 			or durable.rotation ~= "absolute_euler_xyz"
+			or durable.write_mode ~= "atomic_local_pose"
 			or durable.gameplay ~= "retained_check_then_reapply"
 			or durable.preview ~= "one_shot" or durable.transport ~= "none" then
 		return "durable transform-retention contract drifted"
