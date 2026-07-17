@@ -1900,6 +1900,9 @@ worktrees share `%APPDATA%\VMBLauncher\settings.json`.
   `ProjectRoot` still named another checkout.
 - Local post-ship checks can compare against the invoking checkout even though
   VMBLauncher built and uploaded files from the configured checkout.
+- A clean-worktree ship builds/uploads successfully, then its GitHub-release
+  phase fails because that phase hardcodes an ignored launcher path inside the
+  invoking worktree instead of consuming the already-approved dependency.
 
 ### Fix template
 - At the wrapper boundary, temporarily bind the launcher's ProjectRoot to the
@@ -1911,9 +1914,17 @@ worktrees share `%APPDATA%\VMBLauncher\settings.json`.
 - Preserve the machine-global settings bytes and restore them in `finally` on
   success and failure. Hold a named OS mutex across binding, the launcher
   action, and restoration so concurrent ships cannot swap the root underneath
-  each other. Test two distinct worktree roots, every identity field, action
-  failure, mutex cleanup, and byte-exact restoration. Issue #647 owns the
-  wrapper gate.
+  each other.
+- Resolve launcher bytes once through a shared approved-candidate policy, pass
+  the exact path, provenance source, and approval anchor into every later
+  phase, and revalidate that immutable snapshot before reading version
+  metadata. Do not reread mutable global settings during the handoff. A direct
+  sub-tool may perform the same bounded fallback, but an explicit unapproved
+  path or source mismatch must fail closed.
+- Test two distinct worktree roots, every identity field, action failure, mutex
+  cleanup, byte-exact restoration, clean external dependency handoff, invalid
+  explicit paths, and provenance mismatch. Issues #647 and #683 own the wrapper
+  and cross-phase gates.
 
 ## 54. Late registry extension misses boot-time derived definitions
 
