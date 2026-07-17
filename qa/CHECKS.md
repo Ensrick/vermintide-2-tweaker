@@ -121,7 +121,7 @@ of the local checkout.
 | 9 | Missing preview file referenced by cfg | various | `check_cfg.ps1` file-exists check | AUTO (script) |
 | 10 | MOD_VERSION constant missing in main lua | `feedback_version_in_workshop_title.md` + CLAUDE.md §"Version bumping" | `check_versions.ps1` regex scan | AUTO (script) |
 | 10a | 4-segment MOD_VERSION (e.g. `0.9.9.4-dev`) — the retired within-patch-hotfix anti-pattern; semver is 3-segment `MAJOR.MINOR.PATCH[-track]`. Burned cosmetics_tweaker 2026-05-23. | CLAUDE.md §"Version bumping" | `check_versions.ps1` — flags a 4th numeric segment as a WARNING (exit 1) instead of silently stripping it (issue #429). Normalize on the next bump. | AUTO (script) |
-| 11 | cfg title doesn't carry current version suffix | `feedback_version_in_workshop_title.md` | `check_versions.ps1` cross-check | AUTO (script) |
+| 11 | cfg title doesn't carry the current version suffix, or an optional leading tester-visible `[b]... vX[/b]` description banner drifts from `MOD_VERSION` | `feedback_version_in_workshop_title.md` | `check_versions.ps1` cross-check; new banner drift is blocking, while three exact pre-existing metadata triplets are frozen as a ratchet until intentionally updated. `-SelfTest` plants a stale banner. | AUTO (script) |
 | 12 | Visibility accidentally flipped to public | `feedback_workshop_metadata_user_dictates.md` | `check_cfg.ps1` whitelist visibility per mod | AUTO (script) |
 | 13 | Description doesn't include bug-reporting block | (PROJECT_STANDARDS §7) | `check_cfg.ps1` regex for "issues" link + log path | AUTO (script) |
 | 14 | BMC link missing or modified | `reference_bmc_button.md` | `check_cfg.ps1` regex for BMC SVG URL | AUTO (script) |

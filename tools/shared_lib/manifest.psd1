@@ -14,7 +14,9 @@
         @{
             Source = "_lib_debug.lua"
             Consumers = @(
+                "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_debug.lua"
                 "general_tweaker_dev/scripts/mods/general_tweaker_dev/_lib_debug.lua"
+                "verminious_dreams_lighting_dev/scripts/mods/verminious_dreams_lighting_dev/_lib_debug.lua"
             )
         }
         @{
