@@ -85,6 +85,20 @@ Last updated: 2026-07-15.
 
 ---
 
+### athanor-dynamic-widget-resource-closure - issue #83
+
+| Field | Value |
+|---|---|
+| Symptom | Opening CIM in a mission and selecting a shield weapon crashes in `HeroWindowWeaveForgeWeapons._draw` because `icon_block_arch_masked` is absent from the mission Gui. |
+| Root cause | `_setup_weapon_stats` appends freshly created widgets to `_scrollbars.stats.list_widgets` after `create_ui_elements`; the older safety layer inspected only static `_bottom_widgets`/`_top_widgets` arrays. |
+| Fix version(s) | cim_dev 0.8.92-dev |
+| Category | SOLO |
+| Repro | Enter a mission, open CIM's Athanor, select a melee weapon with a block angle, and leave the stats list visible. |
+| Expected post-fix | The view remains open. Only texture passes not resident in the exact top renderer are hidden; safe icons, text and controls remain. Keep rendering is unchanged. |
+| Detection | Offline `test_cim_mission_forge_widget_safety.lua` passes and `/cim_regression_test` passes `issue83_dynamic_forge_widget_material_closure`. The log may contain one bounded `[cim:83] suppressed non-resident dynamic forge material` line, never the Gui fatal. |
+
+---
+
 ### athanor-tooltip-slot-anchor - issue #521
 
 | Field | Value |
