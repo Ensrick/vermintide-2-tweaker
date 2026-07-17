@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.433-dev"
+local MOD_VERSION = "0.1.434-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_javelin_pickup = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_pickup")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
@@ -11702,6 +11702,14 @@ do
 				right_hand_scale = _type_transforms.cwv_imperial_longsword.right_hand_scale,
 				right_hand_offset = _type_transforms.cwv_imperial_longsword.right_hand_offset,
 			},
+			greatsword_bretonnian = {
+				item_key = "cwv_style_greatsword_bretonnian",
+				-- Reuse the reviewed Imperial Longsword proportions only on
+				-- third-person/presentation consumers. The first-person Greatsword
+				-- unit remains untouched and follows the Bretonnian state machine.
+				right_hand_scale_3p = _type_transforms.cwv_imperial_longsword.right_hand_scale,
+				right_hand_offset_3p = _type_transforms.cwv_imperial_longsword.right_hand_offset,
+			},
 		},
 		owns_dlc = function(dlc_name)
 			local unlock = Managers and Managers.unlock
@@ -12337,7 +12345,7 @@ do
 		local skin = item_units and item_units.skin
 		local style_decision
 		if _om.combat_styles and _om.combat_styles.remote_transform then
-			style_decision = _om.combat_styles:remote_transform(owner_unit_3p, slot_name)
+			style_decision = _om.combat_styles:remote_transform(owner_unit_3p, slot_name, item_data)
 		end
 		if style_decision == false then return end
 		local resolved_unit_name = item_units and item_units[
@@ -14351,7 +14359,7 @@ _rt_register("issue620_per_instance_combat_styles", function()
 		return "Combat Style policy/runtime is not installed"
 	end
 	local expected = {
-		es_2h_sword = { "greatsword", "longsword", "bretonnian", "kerillian" },
+		es_2h_sword = { "greatsword", "kerillian", "bretonnian" },
 		es_bastard_sword = { "bretonnian", "greatsword", "kerillian" },
 		cwv_es_longsword = { "longsword", "bretonnian", "kerillian", "greatsword" },
 		es_2h_hammer = { "kruber", "warrior_priest" },
@@ -14376,6 +14384,16 @@ _rt_register("issue620_per_instance_combat_styles", function()
 	end
 	if runtime:moveset_indicator("es_bastard_sword", "greatsword") ~= "Moveset 2 / 3" then
 		return "Bretonnian Longsword moveset indicator drifted"
+	end
+	if runtime:moveset_indicator("es_2h_sword", "bretonnian") ~= "Moveset 3 / 3" then
+		return "Greatsword deduplicated moveset indicator drifted"
+	end
+	local bret_package = policy.package("es_2h_sword", "bretonnian")
+	local native_bret_package = policy.package("es_bastard_sword", "bretonnian")
+	if not bret_package or not bret_package.presentation
+			or bret_package.presentation.transform_key ~= "greatsword_bretonnian"
+			or (native_bret_package and native_bret_package.presentation ~= nil) then
+		return "Greatsword Bretonnian receiver presentation drifted"
 	end
 	local imperial = rawget(Weapons, "imperial_longsword_template")
 	local greatsword = rawget(Weapons, "two_handed_swords_template_1")

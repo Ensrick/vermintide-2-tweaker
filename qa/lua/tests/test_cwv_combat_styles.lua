@@ -23,13 +23,14 @@ return function(H, repo_root)
 		H.equal(family_policy.styles.bretonnian.template, "bastard_sword_template")
 		H.equal(family_policy.styles.kerillian.template, policy.KERILLIAN_TEMPLATE)
 		local next_id = policy.next_style("es_2h_sword", current)
-		H.equal(next_id, "longsword")
+		H.equal(next_id, "kerillian")
 		next_id = policy.next_style("es_2h_sword", next_id)
 		H.equal(next_id, "bretonnian")
 		next_id = policy.next_style("es_2h_sword", next_id)
-		H.equal(next_id, "kerillian")
-		next_id = policy.next_style("es_2h_sword", next_id)
 		H.equal(next_id, "greatsword")
+		local bret_package = policy.package("es_2h_sword", "bretonnian")
+		H.equal(bret_package.presentation.transform_key, "greatsword_bretonnian")
+		H.equal(policy.package("es_bastard_sword", "bretonnian").presentation, nil)
 		H.equal(policy.style("cwv_es_longsword"), "longsword")
 		H.equal(policy.style("es_bastard_sword"), "bretonnian")
 		H.equal(policy.next_style("es_bastard_sword", "bretonnian"), "greatsword")
@@ -53,7 +54,9 @@ return function(H, repo_root)
 		H.equal(policy.moveset_indicator("es_bastard_sword", "bretonnian"), "Moveset 1 / 3")
 		H.equal(policy.moveset_indicator("es_bastard_sword", "greatsword"), "Moveset 2 / 3")
 		H.equal(policy.moveset_indicator("es_bastard_sword", "kerillian", nil, true), "3 / 3")
-		H.equal(policy.moveset_indicator("es_2h_sword", "greatsword"), "Moveset 1 / 4")
+		H.equal(policy.moveset_indicator("es_2h_sword", "greatsword"), "Moveset 1 / 3")
+		H.equal(policy.moveset_indicator("es_2h_sword", "kerillian"), "Moveset 2 / 3")
+		H.equal(policy.moveset_indicator("es_2h_sword", "bretonnian"), "Moveset 3 / 3")
 		H.equal(policy.moveset_indicator("es_handgun", "greatsword"), nil)
 	end)
 
@@ -217,7 +220,7 @@ return function(H, repo_root)
 			item_1_1 = button_item,
 			cwv_style_hotspot_1_1 = { cwv_visible = true },
 		}
-		local expected = { "longsword", "bretonnian", "kerillian", "greatsword" }
+		local expected = { "kerillian", "bretonnian", "greatsword" }
 		for index, style_id in ipairs(expected) do
 			local hotspot = content.cwv_style_hotspot_1_1
 			hotspot.on_pressed = true
@@ -467,13 +470,17 @@ return function(H, repo_root)
 
 	H.test("CWV Combat Style runtime resolves exact IDs and legacy defaults", function()
 		local saved
+		local registered
 		local fake_mod = {
 			get = function(_, key)
 				if key == policy.SETTING_KEY then
-					return { schema = 1, items = { uuid_a = "kerillian" } }
+					return { schema = 1, items = { uuid_a = "kerillian", uuid_c = "bretonnian" } }
 				end
 			end,
 			set = function(_, key, value) saved = { key = key, value = clone(value) } end,
+			network_register = function(_, channel, callback)
+				registered = { channel = channel, callback = callback }
+			end,
 		}
 		local runtime = policy.install(fake_mod, {
 			cwv_key_for_item = function(backend_id)
@@ -481,7 +488,15 @@ return function(H, repo_root)
 			end,
 			presentations = {
 				imperial_longsword = { item_key = "imperial_test", right_hand_scale = { 1, 0.8, 0.9 } },
+				greatsword_bretonnian = {
+					item_key = "greatsword_bret_test",
+					right_hand_scale_3p = { 1, 0.8, 0.9 },
+					right_hand_offset_3p = { 0, 0, -0.065 },
+				},
 			},
+			peer_for_owner = function(owner)
+				return owner == "remote_owner" and "peer_a" or nil
+			end,
 		})
 		local a = runtime:describe({ backend_id = "uuid_a", name = "es_2h_sword" })
 		H.equal(a.style_id, "kerillian")
@@ -491,6 +506,17 @@ return function(H, repo_root)
 		H.equal(legacy.style_id, "longsword")
 		H.equal(runtime:transform_decision({ backend_id = "legacy_cwv", name = "es_bastard_sword" }).item_key,
 			"imperial_test")
+		local receiver_transform = runtime:transform_decision({ backend_id = "uuid_c", name = "es_2h_sword" })
+		H.equal(receiver_transform.item_key, "greatsword_bret_test")
+		H.equal(receiver_transform.right_hand_scale, nil)
+		H.equal(receiver_transform.right_hand_scale_3p[2], 0.8)
+		H.equal(receiver_transform.right_hand_offset_3p[3], -0.065)
+		H.equal(registered.channel, policy.CHANNEL)
+		registered.callback("peer_a", policy.SCHEMA, "state", "slot_melee", "greatsword", "bretonnian")
+		H.equal(runtime:remote_transform("remote_owner", "slot_melee",
+			{ name = "es_2h_sword" }).item_key, "greatsword_bret_test")
+		H.equal(runtime:remote_transform("remote_owner", "slot_melee",
+			{ name = "es_bastard_sword" }), false)
 		local changed = runtime:set_item_style({ backend_id = "uuid_b", name = "es_2h_sword" },
 			nil, "longsword", "test", false)
 		H.equal(changed, true)
@@ -538,6 +564,7 @@ return function(H, repo_root)
 		H.truthy(main:find('_rt_register("issue620_per_instance_combat_styles"', 1, true))
 		H.truthy(main:find("_om.combat_styles:resolve_template(item_data, backend_id)", 1, true))
 		H.truthy(main:find("_om.combat_styles:on_local_wield(self, slot_name, item_data)", 1, true))
+		H.truthy(main:find("remote_transform(owner_unit_3p, slot_name, item_data)", 1, true))
 		H.truthy(module:find('if op == "query" then runtime:publish_loadout(sender_peer_id, "query_reply"); return end', 1, true))
 		H.equal(module:find('if op == "query" then runtime:request_states', 1, true), nil)
 		H.truthy(module:find('"Switch to: " ..', 1, true))

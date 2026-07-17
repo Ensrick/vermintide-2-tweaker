@@ -9,7 +9,7 @@ properties, traits, and CWV identity do not change.
 
 | Family | Supported items | Cycle (rotated to native style first) |
 |---|---|---|
-| Greatsword | Native Empire Greatsword and Bretonnian Longsword; migrated Imperial/Black Guard UUIDs | Empire: Greatsword, Imperial Longsword, Bretonnian, Kerillian. Bretonnian: Bretonnian, Greatsword, Kerillian. |
+| Greatsword | Native Empire Greatsword and Bretonnian Longsword; migrated Imperial/Black Guard UUIDs | Empire: Greatsword, Kerillian, Bretonnian. Bretonnian: Bretonnian, Greatsword, Kerillian. |
 | Greathammer | Kruber Greathammer, Warrior Priest Greathammer, CWV Sigmarite Greathammer | Kruber, Warrior Priest |
 | Tuskgor Spear | Native Kruber Tuskgor Spear; migrated legacy Infantry Spear UUIDs | Hunter, Infantry |
 | Spear and Shield | Native Kruber Chaos Wastes Spear and Shield and Kerillian Spear and Shield | Kruber, Elven |
@@ -30,9 +30,18 @@ Imperial Longsword style deep-clones Kruber's native
 `two_handed_swords_template_1` action graph, not the Bretonnian
 `bastard_sword_template`. It applies 15% faster attack actions, 15% less
 damage, 15% less stagger, and 15% more cleave while retaining the Imperial
-model transform. This makes the four entries semantically ordered as native
-Greatsword, Imperial-tuned Greatsword, Bretonnian Longsword, and Kerillian
-Greatsword rather than placing the Bretonnian graph twice in succession.
+model transform. Because that is still the native Greatsword action graph, the
+Imperial entry is not exposed as a second public moveset on a native Greatsword.
+It remains a valid hidden persistence state for legacy Imperial Longsword and
+Black Guard UUID migration, so existing exact instances lose no authored
+balance or presentation.
+
+Native Greatsword's Bretonnian style owns a receiver-specific, 3P-only
+presentation descriptor. Owner/bot third person, remote husks, inventory,
+lobby/score, and item/Athanor previews reuse Imperial Longsword's reviewed
+scale `{1.0, 0.8, 0.9}` and grip offset `{0, 0, -0.065}`. First person remains
+owned by the Bretonnian donor state machine, and a native Bretonnian Longsword
+does not consume the Greatsword receiver transform.
 
 Infantry style reuses #596's cloned Kerillian spear package: 15% slower attack
 actions, 15% more stagger, 15% more cleave, and 7.5% more damage. Hunter style
@@ -118,13 +127,15 @@ CWV peers exchange only schema, operation, slot, family id, and style id over
 and a bounded hot-join query/reply, never per frame. Query replies publish
 directly to the requesting peer and do not emit another query.
 
-Imperial Longsword proportions are a style-owned transform. The existing
-shared CWV transform consumers apply it to owner/bot third person, remote
-husks, inventory/lobby/score character previews, and item/Athanor previews.
-Other styles explicitly suppress the legacy Imperial transform so switching
-back cannot leave stale scale or grip. First-person donor state machines come
-from the selected template; existing CWV network-bound animation redirects
-remain the receiver-side 3P owner.
+Presentation can be style-owned or receiver-specific. The existing shared CWV
+transform consumers apply the resolved descriptor to owner/bot third person,
+remote husks, inventory/lobby/score character previews, and item/Athanor
+previews. Receiver resolution combines the bounded synchronized family/style
+edge with the concrete native item already being rendered; no item key is added
+to the wire. Styles without a descriptor explicitly suppress the legacy
+Imperial transform so switching back cannot leave stale scale or grip.
+First-person donor state machines come from the selected template; existing
+CWV network-bound animation redirects remain the receiver-side 3P owner.
 
 ## Source seams
 
@@ -141,9 +152,11 @@ remain the receiver-side 3P owner.
 
 Add a style as an immutable catalogue row containing its label, registered
 template, source-audited resource, DLC gate, optional presentation descriptor,
-and bounded receiver remap key. Add an item member with an explicit default and
-deterministic cycle, then extend the catalogue-validation test. Never mutate a
-donor template, persist a table/function, send a template over the wire, poll
-per frame, or special-case another preview surface outside the shared
-appearance consumers. A candidate without complete remap/transform evidence
-belongs in `DIAGNOSTIC_CANDIDATES`, not `FAMILIES`.
+and bounded receiver overrides for template, remap, or presentation. Add an
+item member with an explicit default and deterministic cycle, then extend the
+catalogue-validation test. Do not put two entries with the same action graph in
+one public member order; legacy-only style IDs may remain outside that order for
+lossless migration. Never mutate a donor template, persist a table/function,
+send a template over the wire, poll per frame, or special-case another preview
+surface outside the shared appearance consumers. A candidate without complete
+remap/transform evidence belongs in `DIAGNOSTIC_CANDIDATES`, not `FAMILIES`.

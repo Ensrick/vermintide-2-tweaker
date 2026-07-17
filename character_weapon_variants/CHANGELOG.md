@@ -1,5 +1,35 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.434-dev - 2026-07-16 - #644/#648 Greatsword style deduplication [verify-fix-coop]
+
+- Removed Imperial Longsword from the native Greatsword's public cycle because
+  it shares the exact Kruber Greatsword action graph with the default style.
+  The visible cycle is now Greatsword, Kerillian, Bretonnian, so every step has
+  a distinct moveset and Bretonnian remains `Moveset 3 / 3`. The Imperial style
+  remains valid only as the lossless persistence/migration state for existing
+  pre-#620 Imperial Longsword and Black Guard instances.
+- Added a receiver-specific presentation descriptor to Greatsword's Bretonnian
+  style. It reuses the reviewed Imperial Longsword scale `{1.0, 0.8, 0.9}` and
+  Z offset `-0.065` on third-person and presentation consumers only. Native
+  Bretonnian Longsword and Greatsword first person remain untouched.
+- Routed the same member-specific descriptor through remote-husk resolution by
+  combining the synchronized family/style edge with the concrete native item
+  already being spawned. No new RPC field or per-frame traffic was added.
+- Extended offline and runtime coverage for the deduplicated order, `3 / 3`
+  ordinal, 3P-only transform fields, native Bretonnian isolation, and owner/
+  remote use of the same receiver descriptor.
+
+**Verification (two players; confirm `[cwv:LOAD] v0.1.434-dev` first):**
+
+1. Equip native Kruber Greatsword and cycle with both controls. Confirm exactly
+   Greatsword, Kerillian, Bretonnian, then Greatsword; the label must read
+   `1 / 3`, `2 / 3`, `3 / 3` with no duplicate moveset.
+2. On Bretonnian (`3 / 3`), compare owner 3P, inventory/lobby preview, and the
+   other player's remote husk. All must use the Imperial Longsword proportions
+   and Z grip offset. First person and a native Bretonnian Longsword control
+   must not inherit that transform.
+3. Run `/cwv_regression_test`; `issue620_per_instance_combat_styles` must PASS.
+
 ## 0.1.433-dev - 2026-07-16 - #648 Bretonnian Longsword combat styles [verify-fix]
 
 - Reduced Bretonnian Longsword's cycle to three intentional movesets:

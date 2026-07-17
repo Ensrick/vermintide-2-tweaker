@@ -118,8 +118,20 @@ M.FAMILIES = {
 			longsword = { label = "Longsword Combat Style", template = "imperial_longsword_template",
 				presentation = { transform_key = "imperial_longsword" },
 				resource = "units/beings/player/first_person_base/state_machines/melee/2h_sword" },
-			bretonnian = { label = "Bretonnian Combat Style", template = "bastard_sword_template",
-				resource = "units/beings/player/first_person_base/state_machines/melee/bastard_sword" },
+			bretonnian = {
+				label = "Bretonnian Combat Style",
+				template = "bastard_sword_template",
+				resource = "units/beings/player/first_person_base/state_machines/melee/bastard_sword",
+				receivers = {
+					-- The native Greatsword mesh needs the proven Imperial
+					-- Longsword proportions when the Bretonnian grip graph owns it.
+					-- This presentation is 3P-only; first person remains wholly
+					-- owned by the selected donor state machine.
+					es_2h_sword = {
+						presentation = { transform_key = "greatsword_bretonnian" },
+					},
+				},
+			},
 			kerillian = {
 				label = "Kerillian Greatsword Combat Style",
 				template = M.KERILLIAN_TEMPLATE,
@@ -129,7 +141,11 @@ M.FAMILIES = {
 			},
 		},
 		members = {
-			es_2h_sword = { default = "greatsword", order = { "greatsword", "longsword", "bretonnian", "kerillian" } },
+			-- Imperial Longsword remains a persistence/migration style for
+			-- pre-#620 exact instances, but it shares the native Greatsword
+			-- action graph and therefore is not a second public moveset choice.
+			-- Keep Bretonnian third, matching the authored equipment ordinal.
+			es_2h_sword = { default = "greatsword", order = { "greatsword", "kerillian", "bretonnian" } },
 			es_bastard_sword = { default = "bretonnian", order = { "bretonnian", "greatsword", "kerillian" } },
 			cwv_es_longsword = { default = "longsword", order = { "longsword", "bretonnian", "kerillian", "greatsword" } },
 			cwv_es_longsword_blackguard = { default = "longsword", order = { "longsword", "bretonnian", "kerillian", "greatsword" } },
@@ -276,7 +292,7 @@ function M.package(item_key, stored_style)
 		template = receiver and receiver.template or style.template,
 		resource = style.resource,
 		required_dlc = style.required_dlc,
-		presentation = style.presentation,
+		presentation = receiver and receiver.presentation or style.presentation,
 		remap_key = receiver and receiver.remap_key or style.remap_key,
 	}
 end
@@ -365,7 +381,10 @@ function M.validate_catalogue()
 			for member_key, receiver in pairs(style.receivers or {}) do
 				local remap_valid = receiver.remap_key == nil or M.REMAPS[receiver.remap_key] ~= nil
 				local template_valid = receiver.template == nil or valid_token(receiver.template)
-				if not family.members[member_key] or not remap_valid or not template_valid then
+				local presentation_valid = receiver.presentation == nil
+					or valid_token(receiver.presentation.transform_key)
+				if not family.members[member_key] or not remap_valid or not template_valid
+						or not presentation_valid then
 					return false, "invalid receiver remap " .. tostring(family_id) .. ":" .. tostring(style_id)
 				end
 			end
@@ -894,14 +913,27 @@ function M.install(mod, deps)
 		return true
 	end
 
-	function runtime:remote_transform(owner_unit, slot_name)
+	function runtime:remote_transform(owner_unit, slot_name, item)
 		if type(deps.peer_for_owner) ~= "function" then return nil end
 		local peer_id = deps.peer_for_owner(owner_unit)
 		local row = peer_id and remote[peer_id] and remote[peer_id][slot_name]
 		if not row then return nil end
-		local family = M.FAMILIES[row.family_id]
-		local style = family and family.styles[row.style_id]
-		local key = style and style.presentation and style.presentation.transform_key
+		local presentation
+		if item ~= nil then
+			local key = item_key(item)
+			local family_id = key and M.member(key)
+			if family_id ~= row.family_id then return nil end
+			local package = M.package(key, row.style_id)
+			presentation = package and package.presentation
+		else
+			-- Compatibility for observation-only callers that do not own the
+			-- spawned item. Receiver-specific presentation requires the concrete
+			-- member and is resolved by the husk transform consumer below.
+			local family = M.FAMILIES[row.family_id]
+			local style = family and family.styles[row.style_id]
+			presentation = style and style.presentation
+		end
+		local key = presentation and presentation.transform_key
 		return key and presentations[key] or false
 	end
 
