@@ -51,8 +51,14 @@ function M.resolve(args)
         out.secondary_name = option.name
         out.changed = true
     end
-    if type(option.description) == "string" and option.description ~= "" then
-        out.secondary_description = option.description
+    local component_description = option.description
+    if (type(component_description) ~= "string" or component_description == "")
+            and out.secondary_name then
+        component_description = "An independently selected "
+            .. out.secondary_name .. " cosmetic component."
+    end
+    if type(component_description) == "string" and component_description ~= "" then
+        out.secondary_description = component_description
         out.changed = true
     end
     if args.ownership == "shield" then

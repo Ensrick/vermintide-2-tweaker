@@ -59,6 +59,19 @@ return function(H, repo_root)
         H.equal(result.secondary_description == "Primary weapon description.", false)
     end)
 
+    H.test("name-only legacy record generates component-owned description", function()
+        local result = policy.resolve({
+            base_icon = "primary_icon",
+            primary_name = "Primary Weapon",
+            base_description = "Primary weapon description.",
+            secondary_option = { name = "Legacy Shield" },
+            ownership = "shield",
+        })
+        H.equal(result.secondary_description,
+            "An independently selected Legacy Shield cosmetic component.")
+        H.equal(result.secondary_description == "Primary weapon description.", false)
+    end)
+
     H.test("Hold-Tab peer identity resolves only from existing local caches", function()
         local la = {
             peer_a = {

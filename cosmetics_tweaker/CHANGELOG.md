@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.141-dev - 2026-07-17 - independent component flavor text (#641) [diagnostics-armed]
+
+- Extended the shared item-card component descriptor from icon/name to icon/name/description, so an independently selected shield or offhand no longer inherits the primary weapon's flavor text.
+- Component text resolves in one bounded order: authored component description, source illusion description, then readable component-safe fallback. It never exposes an internal localization key or falls back to primary-weapon copy.
+- Added the authored Blood-Bloomed Bouclier description to its canonical shield option and enrich persisted selections from that canonical pool before using stale saved metadata.
+- Preserved the existing singleton `UIUtils.get_ui_information_from_item` hook, all four vanilla return values, persistence schema, and RPC payloads. No new hook, wire field, or per-frame owner was added.
+
+**Co-op diagnostic verify:** with two parity-matched players, select The Blood-Bloomed Bouclier and confirm owner inventory/equipment/customization item cards show the shield description, not the primary weapon description. Repeat with a dual offhand that has only source illusion text, restart, transition keep -> mission -> keep, and confirm Hold-Tab titles and mixed-mod parity remain vanilla-safe. Draft PR evidence is structural; no in-game verification is claimed.
+
 ## 0.9.140-dev - 2026-07-17 - CWV dual-offhand remote identity (#583/#660) [verify-fix-coop]
 
 - Fixed the exact failure recorded in `console-2026-07-17-04.34.02-36c165bb-5404-48cb-9b75-d8301c460b79.log`: Rain's Dual Axes offhand reached the host, but the husk validator compared its Saltzpyre axe unit with Bardin's vanilla `dr_dual_axes` pool and logged `SKIP(incompatible-hand-mesh)`.

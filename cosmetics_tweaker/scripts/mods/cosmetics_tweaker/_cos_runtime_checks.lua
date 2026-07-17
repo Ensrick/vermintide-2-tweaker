@@ -1141,6 +1141,11 @@ _rt_register("issue641_independent_offhand_names", function()
     if source_description ~= "Source description" or description_kind ~= "source" then
         return "missing authored description did not fall back to source component"
     end
+    local legacy = ITEM_PRESENTATION.resolve({
+        secondary_option = { name = "Legacy Shield" }, ownership = "shield" })
+    if type(legacy.secondary_description) ~= "string" then
+        return "name-only legacy component leaked the primary description"
+    end
     if type(mod._cos.offhand_name_inventory) ~= "function" then
         return "generated naming inventory unavailable"
     end

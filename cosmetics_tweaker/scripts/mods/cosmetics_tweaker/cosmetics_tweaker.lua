@@ -85,7 +85,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.140-dev"
+local MOD_VERSION = "0.9.141-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -2032,26 +2032,9 @@ local function _source_illusion_name(skin_key, data)
     return OFFHAND_NAMES.readable_source_name(skin_key), display_key
 end
 
-local function _source_illusion_description(data)
-    local description_key = data and data.description
-    local L = rawget(_G, "Localize")
-    if type(description_key) == "string" and description_key ~= ""
-            and type(L) == "function" then
-        local ok, localized = pcall(L, description_key)
-        if ok and type(localized) == "string" and localized ~= ""
-                and localized ~= description_key
-                and localized ~= "<" .. description_key .. ">" then
-            return localized, description_key
-        end
-    end
-    return nil, description_key
-end
-
 local function _decorate_dual_component(option, skin_key, hand_field, data)
     local source_name, display_key = _source_illusion_name(skin_key, data)
-    local source_description, description_key = _source_illusion_description(data)
-    option.description = source_description
-    option.source_description_key = description_key
+    option.source_description_key = data and data.description
     if hand_field == "left_hand_unit" then
         return OFFHAND_NAMES.decorate(option, skin_key, hand_field, source_name,
             display_key, function(key) return mod:localize(key) end)
@@ -3239,13 +3222,6 @@ local function _cos_publish_presentation_name(primary_name, secondary_name)
     return key
 end
 
-local function _cos_publish_presentation_description(description)
-    local key, text = OFFHAND_NAMES.description_presentation_key(description)
-    if not key then return nil end
-    mod._cos.presentation_localization[key] = text
-    return key
-end
-
 local function _cos_resolve_presentation(item, base_icon, display_name,
         base_description, ownership, record, saved_illusion)
     local option = _cos_option_for_record(item and item.data and item.data.item_type, record)
@@ -3258,13 +3234,12 @@ local function _cos_resolve_presentation(item, base_icon, display_name,
         ownership = ownership,
         local_resource_available = _cos_ui_icon_available,
     })
-    if not descriptor.changed then
-        return base_icon, display_name, base_description, false
-    end
+    if not descriptor.changed then return base_icon, display_name, base_description, false end
     local name_key = _cos_publish_presentation_name(
         descriptor.primary_name, descriptor.secondary_name)
-    local description_key = _cos_publish_presentation_description(
+    local description_key, description_text = OFFHAND_NAMES.description_presentation_key(
         descriptor.secondary_description)
+    if description_key then mod._cos.presentation_localization[description_key] = description_text end
     return descriptor.icon, name_key or display_name,
         description_key or base_description, true
 end
@@ -3333,11 +3308,6 @@ if UIUtils and type(UIUtils.get_ui_information_from_item) == "function" then
         end
         return inventory_icon, display_name, description, store_icon
     end)
-    local engine_printf = rawget(_G, "printf")
-    if type(engine_printf) == "function" then
-        pcall(engine_printf,
-            "[cos:641] component item-card resolver installed fields=icon,name,description")
-    end
 end
 
 local function _get_offhand_options(item_key)
