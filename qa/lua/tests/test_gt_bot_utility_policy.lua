@@ -1,5 +1,6 @@
 return function(H, repo_root)
     local root = repo_root .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/"
+    local stable_root = repo_root .. "/general_tweaker/scripts/mods/general_tweaker/"
     local Policy = assert(loadfile(root .. "_gt_bot_utility_policy.lua"))()
 
     local function numeric_consideration(input)
@@ -63,11 +64,35 @@ return function(H, repo_root)
             return source
         end
 
+        local function utility_hook_count(source)
+            local hook_forms = {
+                'mod:hook(Utility, "get_action_utility"',
+                'mod:hook_safe(Utility, "get_action_utility"',
+                'mod:hook("Utility", "get_action_utility"',
+                'mod:hook_safe("Utility", "get_action_utility"',
+            }
+            local count = 0
+            for _, hook_form in ipairs(hook_forms) do
+                local cursor = 1
+                while true do
+                    local first, last = source:find(hook_form, cursor, true)
+                    if not first then
+                        break
+                    end
+                    count = count + 1
+                    cursor = last + 1
+                end
+            end
+            return count
+        end
+
         local bot_source = read(root .. "_gt_bot_fixes.lua")
-        local spawner_source = read(root .. "_gt_creature_spawner.lua")
-        H.truthy(bot_source:find('mod:hook(Utility, "get_action_utility"', 1, true))
+        local dev_spawner_source = read(root .. "_gt_creature_spawner.lua")
+        local stable_spawner_source = read(stable_root .. "_gt_creature_spawner.lua")
+        H.equal(utility_hook_count(bot_source), 1)
         H.truthy(bot_source:find("return 0", 1, true))
         H.truthy(bot_source:find("return nil, math.huge, nil, nil", 1, true))
-        H.equal(spawner_source:find('mod:hook(Utility, "get_action_utility"', 1, true), nil)
+        H.equal(utility_hook_count(dev_spawner_source), 0)
+        H.equal(utility_hook_count(stable_spawner_source), 0)
     end)
 end
