@@ -1,5 +1,14 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.136-dev - 2026-07-16 - #650 Lua compile-limit hardening
+
+The unshipped 0.9.135 implementation crossed Lua 5.1's 200-local function
+limit in the monolithic entry chunk. Renderer descriptor publication and the
+bounded diagnostic ledger now live in `_cos_composite_icons.lua`, preserving
+the live Mace + Shield behavior without consuming entry-chunk locals. An exact
+`loadfile` regression test now compiles the entry during QA so this class of
+failure blocks before packaging.
+
 ## 0.9.135-dev - 2026-07-16 - #650 live Mace + Shield composition [verify-fix]
 
 ### Fixed

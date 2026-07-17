@@ -41,7 +41,37 @@ end
 function M.new(catalog)
     catalog = type(catalog) == "table" and catalog or {}
     local cache = {}
+    -- Renderer publication and bounded telemetry belong to this extracted
+    -- subsystem. Keeping them here avoids spending top-level locals in the
+    -- already-large VMF entry chunk (Lua 5.1 hard-limits a function to 200).
+    local descriptors = setmetatable({}, { __mode = "k" })
+    local diagnostic_seen = {}
+    local diagnostic_count = 0
     local api = {}
+
+    function api.publish(item, descriptor)
+        if type(item) ~= "table" then return end
+        descriptors[item] = descriptor
+    end
+
+    function api.descriptor_for(item)
+        if type(item) ~= "table" then return nil end
+        return descriptors[item]
+    end
+
+    function api.claim_diagnostic(reason, args)
+        if type(args) ~= "table" or args.item_type ~= "es_1h_mace_shield" then
+            return false
+        end
+        local key = table.concat({
+            tostring(reason), tostring(args.skin), tostring(args.offhand_unit),
+            tostring(args.offhand_armoury_key),
+        }, "|")
+        if diagnostic_seen[key] or diagnostic_count >= 32 then return false end
+        diagnostic_seen[key] = true
+        diagnostic_count = diagnostic_count + 1
+        return true
+    end
 
     function api.resolve_detailed(args)
         args = type(args) == "table" and args or {}

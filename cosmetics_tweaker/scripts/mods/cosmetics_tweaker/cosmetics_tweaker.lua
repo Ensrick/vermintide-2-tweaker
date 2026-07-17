@@ -83,7 +83,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.135-dev"
+local MOD_VERSION = "0.9.136-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -822,32 +822,7 @@ local _glow_badge_texture_missing_logged = false
 local _glow_badge_grids = setmetatable({}, { __mode = "k" })
 local _glow_badge_customization_windows = setmetatable({}, { __mode = "k" })
 local _composite_icon_grids = setmetatable({}, { __mode = "k" })
--- Renderer-local only: never decorate the backend item with custom texture
--- names that could be observed by a serializer or another mod's wire adapter.
-local _composite_icon_descriptor_by_item = setmetatable({}, { __mode = "k" })
 local _cos_refresh_composite_descriptor
-local _composite_icon_diag_seen = {}
-local _composite_icon_diag_count = 0
-
--- Bounded #650 evidence. A compatible item produces at most one line per
--- distinct skin/offhand/outcome tuple, so unsupported catalogue identities are
--- diagnosable without turning inventory pagination into log spam.
-local function _composite_icon_diag(reason, args, descriptor)
-    if type(args) ~= "table" or args.item_type ~= "es_1h_mace_shield" then return end
-    local key = table.concat({
-        tostring(reason), tostring(args.skin), tostring(args.offhand_unit),
-        tostring(args.offhand_armoury_key),
-    }, "|")
-    if _composite_icon_diag_seen[key] or _composite_icon_diag_count >= 32 then return end
-    _composite_icon_diag_seen[key] = true
-    _composite_icon_diag_count = _composite_icon_diag_count + 1
-    mod:info("[cosmetics:650] descriptor %s bid=%s type=%s skin=%s offhand=%s armoury=%s primary=%s shield=%s",
-        tostring(reason), tostring(args.backend_id), tostring(args.item_type),
-        tostring(args.skin), tostring(args.offhand_unit),
-        tostring(args.offhand_armoury_key),
-        tostring(descriptor and descriptor.primary_texture),
-        tostring(descriptor and descriptor.offhand_texture))
-end
 
 local function _glow_badge_texture_available()
     local available = UIAtlasHelper and UIAtlasHelper.has_texture_by_name
@@ -1050,8 +1025,7 @@ local function _refresh_item_grid_composite_icons(self)
             if type(item) == "table" and _cos_refresh_composite_descriptor then
                 _cos_refresh_composite_descriptor(item)
             end
-            local descriptor = type(item) == "table"
-                and _composite_icon_descriptor_by_item[item] or nil
+            local descriptor = COMPOSITE_ICONS.descriptor_for(item)
             local offhand_name = "ct_composite_offhand" .. suffix
             local glow_name = "ct_composite_glow" .. suffix
             if style[offhand_name] then
@@ -3104,7 +3078,7 @@ end
 -- only when they possess the same exact backend instance identity.
 _cos_refresh_composite_descriptor = function(item, record)
     if type(item) ~= "table" then return nil end
-    _composite_icon_descriptor_by_item[item] = nil
+    COMPOSITE_ICONS.publish(item, nil)
     local backend_id = item.backend_id or item.ItemInstanceId
     if backend_id == nil then return nil end
     local item_data = item.data or (item.key and ItemMasterList
@@ -3142,8 +3116,16 @@ _cos_refresh_composite_descriptor = function(item, record)
         local_resource_available = _cos_ui_icon_available,
     }
     local descriptor, reason = COMPOSITE_ICONS.resolve_detailed(resolve_args)
-    _composite_icon_diag(reason, resolve_args, descriptor)
-    _composite_icon_descriptor_by_item[item] = descriptor
+    if COMPOSITE_ICONS.claim_diagnostic(reason, resolve_args) then
+        mod:info("[cosmetics:650] descriptor %s bid=%s type=%s skin=%s offhand=%s armoury=%s primary=%s shield=%s",
+            tostring(reason), tostring(resolve_args.backend_id),
+            tostring(resolve_args.item_type), tostring(resolve_args.skin),
+            tostring(resolve_args.offhand_unit),
+            tostring(resolve_args.offhand_armoury_key),
+            tostring(descriptor and descriptor.primary_texture),
+            tostring(descriptor and descriptor.offhand_texture))
+    end
+    COMPOSITE_ICONS.publish(item, descriptor)
     return descriptor
 end
 

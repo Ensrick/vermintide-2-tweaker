@@ -138,12 +138,48 @@ Harness.test("#650 UIUtils publishes descriptors without leaking mace-only icons
     local source = file:read("*a")
     file:close()
     Harness.truthy(source:find("_cos_refresh_composite_descriptor%(item, record%)"))
-    Harness.truthy(source:find("_composite_icon_descriptor_by_item%[item%] = descriptor"))
+    Harness.truthy(source:find("COMPOSITE_ICONS%.publish%(item, descriptor%)"))
+    Harness.truthy(source:find("COMPOSITE_ICONS%.descriptor_for%(item%)"))
+    Harness.equal(source:find("_composite_icon_descriptor_by_item"), nil)
     Harness.equal(source:find("item%._cos_composite_icon_descriptor"), nil)
     Harness.equal(source:find("inventory_icon%s*=%s*composite%.inventory_icon"), nil)
     Harness.truthy(source:find('content%["hotspot" %.%. suffix%]'))
     Harness.truthy(source:find("hotspot_content%[icon_name%] = resolved_icon"))
     Harness.equal(source:find("current_icon = content%[icon_name%]"), nil)
+end)
+
+Harness.test("#650 renderer publication stays weak and renderer-local", function()
+    local compositor = Factory.new(Catalog)
+    local item = {}
+    local descriptor = compositor.resolve(proof_args("published"))
+    compositor.publish(item, descriptor)
+    Harness.equal(compositor.descriptor_for(item).fingerprint, descriptor.fingerprint)
+    compositor.publish(item, nil)
+    Harness.equal(compositor.descriptor_for(item), nil)
+end)
+
+Harness.test("#650 diagnostic claims are deduplicated, compatible, and bounded", function()
+    local compositor = Factory.new(Catalog)
+    local args = proof_args("diagnostic")
+    Harness.truthy(compositor.claim_diagnostic("composed", args))
+    Harness.equal(compositor.claim_diagnostic("composed", args), false)
+    args.item_type = "es_2h_sword"
+    Harness.equal(compositor.claim_diagnostic("composed", args), false)
+    for index = 1, 31 do
+        args = proof_args("diagnostic-" .. index)
+        args.skin = "skin-" .. index
+        Harness.truthy(compositor.claim_diagnostic("unmapped-primary", args))
+    end
+    args = proof_args("diagnostic-overflow")
+    args.skin = "skin-overflow"
+    Harness.equal(compositor.claim_diagnostic("unmapped-primary", args), false)
+end)
+
+Harness.test("#650 Cosmetics entry compiles within Lua 5.1 function limits", function()
+    local path = repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua"
+    local chunk, compile_error = loadfile(path)
+    if not chunk then error(compile_error, 0) end
 end)
 
 Harness.test("#650 compositor is renderer-local and has no peer transport", function()
