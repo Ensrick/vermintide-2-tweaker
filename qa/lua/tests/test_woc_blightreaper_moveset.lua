@@ -212,6 +212,42 @@ return function(H, repo_root)
 		end).skipped, "clone_failed")
 	end)
 
+	H.test("WOC restores only donor-inherited canonical career-action identity", function()
+		local canonical = { name = "action_career_es_1" }
+		local foreign = { name = "foreign_provider" }
+		local source = {
+			actions = {
+				action_career_es_1 = canonical,
+				action_career_dr_1 = foreign,
+			},
+		}
+		local template = deep_clone(source)
+		local required = {
+			names = { "action_career_es_1", "action_career_dr_1",
+				"action_career_we_1" },
+			actions = {
+				action_career_es_1 = canonical,
+				action_career_dr_1 = { name = "action_career_dr_1" },
+				action_career_we_1 = { name = "action_career_we_1" },
+			},
+		}
+		local cloned_dr = template.actions.action_career_dr_1
+		local report = moveset.restore_inherited_career_action_identity(
+			template, source, required)
+		H.equal(report.ok, false)
+		H.deep_equal(report.restored_names, { "action_career_es_1" })
+		H.deep_equal(report.conflicting_names, { "action_career_dr_1" })
+		H.equal(template.actions.action_career_es_1, canonical)
+		H.equal(template.actions.action_career_dr_1, cloned_dr,
+			"a genuine donor/provider mismatch must not be overwritten")
+		H.equal(template.actions.action_career_we_1, nil)
+
+		report = moveset.restore_inherited_career_action_identity(
+			template, source, nil)
+		H.equal(report.ok, false)
+		H.equal(report.skipped, "career_action_tables_unavailable")
+	end)
+
 	H.test("WOC Blightreaper intrinsic property rows are display-only", function()
 		local properties = { properties = {} }
 		local buffs = {}

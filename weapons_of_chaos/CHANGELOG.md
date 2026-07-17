@@ -1,5 +1,23 @@
 # Weapons of Chaos — Changelog
 
+## 0.1.28-dev (2026-07-17) - #690 Blightreaper registration regression
+
+- Reconciled only deep-cloned career-action rows that can be proven to inherit
+  the donor's canonical `ActionTemplates` identity. The v0.1.27 shared
+  ownership guard now distinguishes those safe inherited rows from genuine
+  provider conflicts instead of aborting Blightreaper registration.
+- Added one-per-distinct-gate, 12-line-budget `printf` diagnostics for deferred
+  registration. Retries remain limited to the existing keep/mission entry
+  lifecycle boundary; no frame/update retry was added.
+- Added offline integration coverage for the exact clone/identity failure and
+  a live `issue690_blightreaper_registration_gate_contract` check.
+
+**Solo verify:** start with Blightreaper enabled and More Items Library above
+WOC. The log must contain `[WOC] registered Blightreaper`, CIM must not report a
+missing `ItemMasterList` row, and `/woc_regression_test` must report
+`issue690_blightreaper_registration_gate_contract` PASS with zero failures.
+This fix is offline-verified only until that in-game evidence is attached.
+
 ## 0.1.27-dev (2026-07-17) - #661 shared career-action ownership [verify-fix]
 
 - Registered Blightreaper career actions through the shared WT/CWV/WOC claim contract so another provider cannot remove a still-required ability row.
