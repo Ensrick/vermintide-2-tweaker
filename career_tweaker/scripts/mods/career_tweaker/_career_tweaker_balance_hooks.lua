@@ -2,6 +2,11 @@ local mod = get_mod("crt")
 
 -- Behavior-preserving extraction from career_tweaker_balance.lua.
 -- Owns hook-only talent presentation, crit policy, and hot-join wire safety.
+
+-- The policy module is engine-free and stateless; each consumer instantiates
+-- its own copy via mod:dofile (same pattern as _crt_foot_knight.lua).
+local foot_knight_policy = mod:dofile("scripts/mods/career_tweaker/_crt_foot_knight_policy")
+
 local _HELLBORGS_CRIT_PENALTY = 0.10
 
 -- ============================================================
