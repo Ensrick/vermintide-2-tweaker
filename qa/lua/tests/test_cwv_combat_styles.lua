@@ -451,8 +451,12 @@ return function(H, repo_root)
 	end)
 
 	H.test("CWV Spear and Shield styles clone donors with reciprocal receiver wield routes", function()
-		local empire = { wield_anim = "to_es_deus_01", actions = { action_one = { marker = "empire" } } }
-		local elven = { wield_anim = "to_1h_spear_shield", actions = { action_one = { marker = "elven" } } }
+		local empire = { wield_anim = "to_es_deus_01", state_machine = "melee/es_deus_01",
+			actions = { action_one = { marker = "empire" }, action_two = { default = {
+				kind = "block", anim_event = "parry_pose", weapon_action_hand = "left" } } } }
+		local elven = { wield_anim = "to_1h_spear_shield", state_machine = "melee/1h_spear_shield",
+			actions = { action_one = { marker = "elven" }, action_two = { default = {
+				kind = "block", anim_event = "parry_pose", weapon_action_hand = "left" } } } }
 		local built, err = policy.build_spear_shield_templates({
 			es_deus_01_template = empire,
 			one_handed_spears_shield_template = elven,
@@ -462,6 +466,14 @@ return function(H, repo_root)
 		H.equal(built[policy.EMPIRE_SPEAR_SHIELD_TEMPLATE].wield_anim_career_3p.we_maidenguard,
 			"to_1h_spear_shield")
 		H.equal(built[policy.ELVEN_SPEAR_SHIELD_TEMPLATE].wield_anim, "to_1h_spear_shield")
+		H.equal(built[policy.ELVEN_SPEAR_SHIELD_TEMPLATE].state_machine,
+			"melee/1h_spear_shield")
+		H.equal(built[policy.ELVEN_SPEAR_SHIELD_TEMPLATE].actions.action_two.default.kind,
+			"block")
+		H.equal(built[policy.ELVEN_SPEAR_SHIELD_TEMPLATE].actions.action_two.default.anim_event,
+			"parry_pose")
+		H.equal(built[policy.ELVEN_SPEAR_SHIELD_TEMPLATE].actions.action_two.default.weapon_action_hand,
+			"left")
 		H.equal(built[policy.ELVEN_SPEAR_SHIELD_TEMPLATE].wield_anim_career_3p.es_knight,
 			"to_es_deus_01")
 		H.equal(empire.wield_anim_career_3p, nil)

@@ -133,6 +133,16 @@ Kerillian's uses `one_handed_spears_shield_template`, `scorpion`,
 The bidirectional event translations are the existing source-audited WT
 contract [repo: `docs/WEAPON_CATALOG.md:310-322`].
 
+The CWV-to-WT effective-template contract below is a third-person animation
+handoff only; it does not repair first-person donor-state-machine events. A
+reciprocal Spear and Shield style is not verification-ready until its receiver
+plays `parry_pose` while blocking in first person as well as its attack chain.
+Both vanilla donors declare `action_two.default` as a left-hand `block` using
+`parry_pose`, so a missing Kruber block after selecting Elven style is a live
+state-machine/package/rebuild boundary, not a WT 3P remap symptom.
+[src: `scripts/settings/equipment/weapon_templates/1h_spears_shield.lua:1425-1433,1484-1485`;
+`scripts/settings/equipment/weapon_templates/es_deus_01.lua:1371-1379,1749-1750`]
+
 One-handed axes, Glaive/Great Axe, Empire/Elven one-handed swords, and
 Elf/Tuskgor spears are not registered as styles yet. They remain in a separate
 diagnostic allow-list. The existing pre-RPC 3P action seam records each distinct
