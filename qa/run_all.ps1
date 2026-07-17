@@ -122,6 +122,11 @@ Run-Check "check_dofile_package_coverage"      { & (Join-Path $here "check_dofil
 Run-Check "check_custom_unit_bundle_reachability" { & (Join-Path $here "check_custom_unit_bundle_reachability.ps1") -Quiet:$Quiet }
 Run-Check "check_level_lookup_budget"          { & (Join-Path $here "check_level_lookup_budget.ps1")          -Quiet:$Quiet }
 Run-Check "check_retired_big_rebalance"        { & (Join-Path $here "check_retired_big_rebalance.ps1")        -Quiet:$Quiet }
+# The branch census is a committed, report-only snapshot. CI clones do not
+# carry the maintainer's local agent/* refs, so this offline gate validates
+# schema, age, generator hash, and exact automatic-disposition proofs without
+# attempting to regenerate or infer from an incomplete CI ref inventory.
+Run-Check "check_branch_reconciliation_census" { & (Join-Path $here "check_branch_reconciliation_census.ps1") -Quiet:$Quiet }
 Run-Check "check_in_progress"                 { & (Join-Path $here "check_in_progress.ps1")                 -Quiet:$Quiet } -Policy 'Advisory'
 # Pure Lua transformations run under the pinned, offline Lua 5.1 host runtime.
 # Keep this before the Quick return: it is deliberately part of both fast local

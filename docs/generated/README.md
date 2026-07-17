@@ -13,6 +13,8 @@ hand-maintained catalogs drift and then get trusted while stale).
 | `NAME_MAP.generated.md` | Human/Claude-readable view of the same data, grouped by source then kind. **Grep THIS instead of the legacy hand-maintained catalogs.** |
 | `OPEN_ISSUE_AUDIT.generated.json` | Live open-issue doctrine audit plus ranked closed-issue ancestry. Every relationship carries its exact score inputs and prior closure evidence; similarity is review-only and never auto-reopens an issue. |
 | `OPEN_ISSUE_CONTINGENCIES.generated.md` | Human-readable form of the open/closed audit. Every open issue retains three evidence-triggered fallback approaches and its top closed-history candidates. |
+| `BRANCH_RECONCILIATION.generated.json` | Machine-readable, report-only census of local and remote `agent/*` and `codex/*` refs. Identical tips are deduplicated; ancestry, `git cherry`, issue, path-overlap, version, and manifest evidence remain explicit. |
+| `BRANCH_RECONCILIATION.generated.md` | Concise human view of the same branch census. Only exact ancestors and complete pure patch-equivalent tips are automatic; all semantic cases require review. |
 
 ## Regenerate
 
@@ -25,6 +27,14 @@ pwsh -NoProfile -File tools/gen-name-map/gen-name-map.ps1 -GenDate 2026-05-30
 pwsh -NoProfile -File tools/github/audit-open-issues.ps1 `
   -OutputPath docs/generated/OPEN_ISSUE_AUDIT.generated.json `
   -MarkdownPath docs/generated/OPEN_ISSUE_CONTINGENCIES.generated.md
+
+# Report-only: reads existing refs and never checks out, merges, deletes, or pushes.
+# Fetch/prune is deliberately separate and explicit.
+git fetch origin --prune
+pwsh -NoProfile -File tools/github/branch-reconciliation-census.ps1 `
+  -BaseRef origin/master `
+  -OutputPath docs/generated/BRANCH_RECONCILIATION.generated.json `
+  -MarkdownPath docs/generated/BRANCH_RECONCILIATION.generated.md
 ```
 
 Deterministic + sorted output → regeneration produces a clean, reviewable diff.
