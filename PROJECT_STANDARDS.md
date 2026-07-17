@@ -726,6 +726,21 @@ When writing any fix that mutates a runtime table or installs a hook:
 
 If any of these is impractical (e.g. nothing observable from the keep), say so explicitly in the changelog — but the default is full coverage.
 
+### 5.1b Appearance architecture census (binding, issue #660)
+
+Any change that introduces or migrates a weapon/cosmetic appearance concern
+(unit identity, transform, material, glow, pose, effective template, icon, or
+name) must register that concern in `qa/appearance_contracts.psd1` in the same
+commit. The entry must declare every canonical render surface and lifecycle
+replay edge, including honest `deferred` or `not-applicable` cells with reasons,
+and map every `covered` cell to an existing named offline test.
+
+`qa/check_appearance_contracts.ps1` is a blocking Quick/full gate. Passing it
+means only that the architectural census and referenced structural tests are
+complete. It never means a renderer, transition, retained engine state, or
+peer observer passed in-game; those remain subject to G-APPEARANCE's live and
+co-op verification matrix.
+
 ### 5.2 Manual smoke test expectation
 For changes affecting load-bearing systems (cosmetics, weapon hooks, attachment
 system, network RPCs), the user is expected to do at least one in-game test

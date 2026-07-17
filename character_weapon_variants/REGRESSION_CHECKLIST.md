@@ -6,6 +6,14 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-07-17.
 
+## #660 Executable G-APPEARANCE census
+
+| Field | Check |
+|---|---|
+| Scope | Architecture declarations only. This does not change a renderer, descriptor, replay coordinator, or peer transport and does not make #660 verification-ready. |
+| Registry | `qa/appearance_contracts.psd1` initially records the migrated CWV exact-unit-identity concern across owner 1P/3P, bot, remote husk, inventory preview, and item browser. Spawn/equip/transition/hot-join/parity edges are structurally covered; respawn remains explicitly deferred and preview-open is synchronous rather than a world replay edge. |
+| Detection | `qa/check_appearance_contracts.ps1` blocks when any registered concern omits a canonical surface, replay edge, or test list; a covered cell must map to an existing named test. `-SelfTest` plants all failure classes. Passing means registry/test wiring is complete, not that the in-game matrix passed. |
+
 ## #660 Canonical preview-unit descriptor slice
 
 | Field | Check |

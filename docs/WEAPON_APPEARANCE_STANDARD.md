@@ -659,3 +659,23 @@ Walk:
    `force_register`, or override unit) so paths 3 & 4 resolve it.
 
 CHANGELOG footer: `**DoD:** ... Gates: G-APPEARANCE (matrix cells verified: <list>).`
+
+### §8a Executable architecture census
+
+`qa/appearance_contracts.psd1` is the machine-readable G-APPEARANCE registry.
+Each registered concern must enumerate every canonical surface and replay edge
+as `covered`, `deferred`, or `not-applicable`. Covered cells require evidence
+text and a mapping to an existing named offline test; non-covered cells require
+an explicit reason. Owner and test paths are repo-rooted and must exist.
+
+`qa/check_appearance_contracts.ps1` runs in Quick and full QA and fails closed
+on a missing surface, missing replay edge, absent test list, covered cell with
+no test mapping, or stale named-test reference. Its self-test plants each of
+those failures. A contract must declare `Claim = 'structural-only'`: this gate
+proves census completeness and source-level evidence wiring, not retained
+rendered state, multiplayer observation, or in-game verification.
+
+The initial registry entry records only #660's migrated CWV exact-unit-identity
+slice. It deliberately records respawn as deferred and does not register the
+still-unmigrated transform/material/glow/pose/template/icon/name concerns as
+covered. Add those concerns only with their real owner/adapters and tests.

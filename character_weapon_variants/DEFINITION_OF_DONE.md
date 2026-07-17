@@ -546,6 +546,16 @@ paths, the five appearance concerns as one interface, the concern×path matrix).
 CHANGELOG footer add-on when this gate applies:
 `Gates: G-APPEARANCE (matrix cells verified: <list; e.g. owner-keep, preview>).`
 
+### Executable census prerequisite
+
+- [ ] The changed appearance concern is registered in
+  `qa/appearance_contracts.psd1`; every canonical surface and replay edge is
+  explicitly covered, deferred, or not-applicable.
+- [ ] Every covered cell maps to a named offline test and
+  `qa/check_appearance_contracts.ps1` passes.
+- [ ] Treat that pass as structural evidence only. Live owner/peer observation
+  and retained postconditions above are still required before verification.
+
 ---
 
 ## Definition of Done footer (paste into CHANGELOG entry)
