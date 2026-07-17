@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.242-dev"
+local MOD_VERSION = "0.2.243-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -1889,14 +1889,19 @@ _rt_register("bots_in_keep_crashfix_marker_present", function()
     end
 end)
 
-_rt_register("bots_in_keep_necro_pets_marker_present", function()
-    -- v0.2.147-dev: necromancer BOT keep-skeletons sub-feature. With Bots in Keep
-    -- on, a bot necromancer's raise-dead AI loops against the vanilla hub pet ban
-    -- (PassiveAbilityNecromancerCharges._pets_forbidden_in_level). We post-hook
-    -- _on_talents_changed and clear that flag for bot necromancers only. If this
-    -- marker disappears, the sub-feature (or its hook) was removed.
-    if GT_BIK_NECRO_KEEP_PETS_MARKER_v0_2_147 ~= "gt-bik-necro-bot-keep-pets" then
-        return "necromancer keep-pets marker absent — was the v0.2.147-dev sub-feature reverted?"
+_rt_register("necromancer_keep_pet_policy_659", function()
+    -- #659: human Necromancers may raise in the keep independently of Bots in
+    -- Keep. Bot Necromancers retain the roster-toggle gate. A false vanilla
+    -- forbidden flag (mission behavior) is never mutated.
+    local policy = mod._gt_necro_should_clear_keep_ban
+    if type(policy) ~= "function" then return "necromancer keep-pet policy helper missing" end
+    if policy(false, false, true) ~= true then return "human keep owner blocked with bots setting off" end
+    if policy(false, true, true) ~= true then return "human keep owner blocked with bots setting on" end
+    if policy(true, true, true) ~= true then return "bot keep owner blocked while Bots in Keep is on" end
+    if policy(true, false, true) ~= false then return "bot keep owner allowed while Bots in Keep is off" end
+    if policy(false, true, false) ~= false then return "mission/non-hub state would be mutated" end
+    if GT_NECRO_KEEP_PETS_MARKER_v0_2_242 ~= "gt-necro-human-and-bot-keep-pets" then
+        return "necromancer human/bot keep-pet marker absent"
     end
 end)
 

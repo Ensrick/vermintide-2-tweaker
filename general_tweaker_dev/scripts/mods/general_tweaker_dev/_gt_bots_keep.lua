@@ -13,9 +13,9 @@ local mod = get_mod("gt_dev")
 --       cleanup_game_mode_units (fixes the venture-end stat-leak crash), fill
 --       gated on the host already holding its party-1 slot (fixes the slot-1
 --       startup-race crash). v0.2.147-dev adds a sub-feature: lift the vanilla
---       hub pet ban for BOT necromancers so they can raise skeletons in the keep
---       (else the bot AI loops its raise-dead action forever against the
---       _pets_forbidden_in_level early-return).
+--       hub pet ban for human Necromancers, plus BOT necromancers while Bots in
+--       Keep is enabled (else Raise Dead hits the _pets_forbidden_in_level
+--       early-return).
 --   (2) Disable Bots (Solo) — sets script_data.ai_bots_disabled (+ enforce
 --       hooks on the three game modes' _handle_bots) to despawn existing bots
 --       mid-mission and block re-fill.
@@ -280,7 +280,7 @@ mod:hook_safe("GameModeInnDeus", "cleanup_game_mode_units", _bik_cleanup)
 GT_BIK_CRASHFIX_MARKER_v0_2_146 = "gt-bik-cleanup-and-host-slot-gate"
 
 -- ------------------------------------------------------------
--- (3) NECROMANCER KEEP SKELETONS (v0.2.147-dev) — sub-feature of Bots in Keep.
+-- (3) NECROMANCER KEEP SKELETONS (v0.2.147-dev; human parity #659 in v0.2.242-dev).
 -- ------------------------------------------------------------
 -- Fatshark forbids necromancer pets in the hub BY DESIGN: a necromancer (player
 -- or bot) cannot raise skeletons in the keep / CW hub. The gate is
@@ -293,11 +293,12 @@ GT_BIK_CRASHFIX_MARKER_v0_2_146 = "gt-bik-cleanup-and-host-slot-gate"
 -- on a loop, but every spawn_pet hits that early-return -> "keeps trying over and
 -- over but can't raise skeletons" (user report 2026-06-29).
 --
--- FIX: clear the gate for BOT necromancers only (scoped tight: human-player keep
--- behavior is left exactly as vanilla) while Bots in Keep is active. We post-hook
--- _on_talents_changed — the method where vanilla SETS the flag, and which fires
--- when the bot's passive ability initializes as it spawns into the keep — and
--- flip _pets_forbidden_in_level back to false.
+-- FIX: clear the gate for human Necromancers whenever vanilla identifies a hub,
+-- and for bot Necromancers only while Bots in Keep is active. We post-hook
+-- _on_talents_changed — the method where vanilla SETS the flag — and flip
+-- _pets_forbidden_in_level back to false according to that policy. The human
+-- branch is independent of the bot-roster toggle; the bot branch retains its
+-- existing lifecycle gate.
 --
 -- Why this can actually spawn skeletons in the keep: the real spawn path
 -- (_spawn_pet_server -> Managers.state.conflict:spawn_queued_unit) relies on
@@ -312,28 +313,40 @@ GT_BIK_CRASHFIX_MARKER_v0_2_146 = "gt-bik-cleanup-and-host-slot-gate"
 -- VMF hook_safe CHAINS across mods, so this coexists with any other necromancer
 -- mod. EXPERIMENTAL: if skeletons spawning in the keep proves unstable in-game,
 -- fall back to suppressing the bot's raise-dead loop instead.
-local function _bik_owner_is_bot(owner_unit)
-    local pm = Managers.player
-    if not (pm and owner_unit) then return false end
-    local player = pm:owner(owner_unit)
-    return player ~= nil and player.bot_player == true
+local function _bik_necro_should_clear_keep_ban(is_bot, bots_in_keep, pets_forbidden)
+    return pets_forbidden == true and (is_bot ~= true or bots_in_keep == true)
 end
+mod._gt_necro_should_clear_keep_ban = _bik_necro_should_clear_keep_ban
 
 local function _bik_necro_allow_keep_pets(self, unit, talent_extension)   -- luacheck: ignore unit talent_extension
-    if not _bik_active() then return end
-    if not _bik_owner_is_bot(self._owner_unit) then return end
-    if self._pets_forbidden_in_level then
-        self._pets_forbidden_in_level = false
-        if rawget(_G, "printf") then
-            printf("[gt_bots_in_keep] necromancer bot: keep skeleton-raise enabled")
-        end
+    -- Vanilla assigns `_player` in init before extensions_ready invokes
+    -- _on_talents_changed (source lines 13-16, 56-76). Reading it directly
+    -- avoids the unit->player reverse-association timing gap at player spawn.
+    local player = self._player
+    if not player then return end
+
+    local is_bot = player.bot_player == true
+    local bots_in_keep = _bik_active()
+    if not _bik_necro_should_clear_keep_ban(is_bot, bots_in_keep, self._pets_forbidden_in_level) then
+        return
+    end
+
+    self._pets_forbidden_in_level = false
+    if rawget(_G, "printf") then
+        printf(
+            "[gt:659] necromancer keep pets allowed owner=%s bots_in_keep=%s server=%s local=%s",
+            is_bot and "bot" or "human",
+            tostring(bots_in_keep),
+            tostring(self._is_server == true),
+            tostring(self._is_local == true)
+        )
     end
 end
 mod:hook_safe("PassiveAbilityNecromancerCharges", "_on_talents_changed", _bik_necro_allow_keep_pets)
 
--- Regression marker for the v0.2.147-dev necromancer-keep-skeletons sub-feature
--- (read by bots_in_keep_necro_pets_marker_present in the main file).
-GT_BIK_NECRO_KEEP_PETS_MARKER_v0_2_147 = "gt-bik-necro-bot-keep-pets"
+-- Regression marker for the v0.2.242-dev human + bot keep-skeleton policy
+-- (read by necromancer_keep_pet_policy_659 in the main file).
+GT_NECRO_KEEP_PETS_MARKER_v0_2_242 = "gt-necro-human-and-bot-keep-pets"
 
 mod:command("bots_in_keep", "Toggle 'Allow Bots in Keep' (host fills the heroes party with bots while in the keep / CW hub / Versus inn).", function()
     mod:set("gt_bots_in_keep", not mod:get("gt_bots_in_keep"))

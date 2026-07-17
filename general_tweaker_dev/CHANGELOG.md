@@ -1,5 +1,15 @@
 ﻿# General Tweaker Changelog
 
+## v0.2.243-dev (2026-07-17) -- #659 human Necromancer keep skeletons [verify-fix]
+
+- Extended GT's existing Necromancer keep-pet policy to human owners. Fatshark's `_pets_forbidden_in_level` hub flag previously remained true for the local player, so `spawn_pet` returned before queuing any Raise Dead skeleton.
+- Preserved the original bot contract: bot Necromancers are allowed only while **Allow Bots in Keep** is enabled. Mission and other non-hub states are never mutated.
+- Added bounded `[gt:659]` apply evidence with owner/server/local state, runtime truth-table coverage for human, bot-enabled, bot-disabled, and mission cases, and updated the engine-surface contract.
+
+### Solo verify
+
+Enter the keep as Necromancer and use Raise Dead. Skeletons should spawn and the log should contain one `[gt:659] necromancer keep pets allowed owner=human` row. Run `/gt_regression_test` and confirm `necromancer_keep_pet_policy_659` passes.
+
 ## v0.2.242-dev (2026-07-16) -- startup-safe ammo reconciliation (#662)
 
 - Stopped the persisted Godmode unlimited-ammo child from calling `PlayerManager:local_player()` while the title/loading state has no network backend. The shared reconciler now uses a network-game-gated, `pcall`-contained `local_player_safe` policy and remains dormant until a real local player exists.
